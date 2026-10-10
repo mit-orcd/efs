@@ -1,0 +1,24 @@
+[
+  {
+    "node": 3,
+    "command": "enable",
+    "ack": "ack\n\u0000",
+    "mono_us": 58227793016
+  },
+  {
+    "command": "enable",
+    "begin_mono_us": 58227760257,
+    "end_mono_us": 58227793024
+  },
+  {
+    "node": 3,
+    "command": "disable",
+    "ack": "ack\n\u0000",
+    "mono_us": 58228793609
+  },
+  {
+    "command": "disable",
+    "begin_mono_us": 58228793170,
+    "end_mono_us": 58228793617
+  }
+]

@@ -1,0 +1,2 @@
+marker-failure-read: /data1/efs/w93-closure-20261010/marker-failure-read.c:18: main: Assertion `efs_meta_apply_lookup(kv,parent,name,&a)==EFS_OK' failed.
+exit=-6

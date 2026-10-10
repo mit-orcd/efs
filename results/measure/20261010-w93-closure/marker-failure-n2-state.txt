@@ -1,0 +1,2 @@
+marker-failure-read: /data1/efs/w93-closure-20261010/marker-failure-read.c:22: main: Assertion `efs_meta_apply_getattr(kv,a.ino,NULL,NULL,&st)==EFS_OK' failed.
+exit=-6

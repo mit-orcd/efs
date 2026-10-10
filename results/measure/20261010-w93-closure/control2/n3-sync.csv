@@ -1,0 +1,5 @@
+Events disabled
+Events enabled
+Events disabled
+119044,,syscalls:sys_enter_fdatasync,37690181992,100.00,,
+613637,,syscalls:sys_enter_fsync,37690181992,100.00,,

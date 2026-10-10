@@ -1,0 +1,30 @@
+[
+  {
+    "pid": 1176184,
+    "command": "/data1/efs/w93-closure-build/efsd --node-id 1 --addr 127.0.0.1 --port 23190 --storage /data1/efs/gc-direct-3azvg3xm/n1 --quota 1G --direct-io ",
+    "applied_interval_ms": "1000",
+    "fault_scope": null,
+    "preload": null
+  },
+  {
+    "pid": 1176244,
+    "command": "/data1/efs/w93-closure-build/efsd --node-id 2 --addr 127.0.0.1 --port 23191 --storage /data1/efs/gc-direct-3azvg3xm/n2 --quota 1G --direct-io --join 127.0.0.1:23190 ",
+    "applied_interval_ms": "1000",
+    "fault_scope": null,
+    "preload": null
+  },
+  {
+    "pid": 1176256,
+    "command": "/data1/efs/w93-closure-build/efsd --node-id 3 --addr 127.0.0.1 --port 23192 --storage /data2/efs/gc-direct-j8nq2ytx/n3 --quota 1G --direct-io --join 127.0.0.1:23190 ",
+    "applied_interval_ms": "1000",
+    "fault_scope": "/data1/efs/gc-direct-3azvg3xm/applied-marker-fault",
+    "preload": "/data1/efs/gc-direct-3azvg3xm/applied-checkpoint-fault.so"
+  },
+  {
+    "pid": 1176283,
+    "command": "/data1/efs/w93-closure-build/efsd --node-id 4 --addr 127.0.0.1 --port 23193 --storage /data2/efs/gc-direct-j8nq2ytx/n4 --quota 1G --direct-io --join 127.0.0.1:23190 ",
+    "applied_interval_ms": "1000",
+    "fault_scope": null,
+    "preload": null
+  }
+]

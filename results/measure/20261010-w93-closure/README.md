@@ -41,4 +41,18 @@ mounts. No physical power-loss, distributed-RDMA or hardware-ceiling claim.
 Remote root: `/data1/efs/w93-closure-20261010`. Original failed stores and copied
 follower KV remain on NUC. `collect-fixtures.py` retains only small fixture
 metadata and compressed logs; it neither removes nor copies service stores.
-Final performance acceptance and closure are pending until all four cells finish.
+All four cells pass: control/candidate/candidate/control rates are
+66.56 / 82.33 / 81.39 / 60.45 files/s (+28.9% across means), with lower candidate
+operation/mixed-read tails. The separate 6,000-read/group default/cadence/bundle/
+default matrix resolves the initial short-sample idle-tail concern. All final
+exits are zero; final restored state and another 512 exact cold checks pass.
+W93 is closed with scope and limits in `docs/status/w93-atomic-apply-20261010.md`.
+
+`harness-provenance.json` records the final control's bounded pre-load diagnostic
+readiness retry. No loader existed during its first failed startup attempt;
+timed work and sampling are unchanged. `original-cohort-matrix/` retains the
+initial controlled matrix; the final repetition adds explicit `by_group` sync
+and readiness-to-ACK fields. `cohort-original-source.c` retains its source.
+`29afbe1e` later corrects only an explanatory engine comment; executable code
+remains the frozen build above. Original failed gates, negative controls and
+raw fixture artefacts remain retained; they are not counted as final passes.

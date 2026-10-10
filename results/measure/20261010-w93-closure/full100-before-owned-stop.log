@@ -1,0 +1,82 @@
+Evidence directory: /data1/efs/gc-direct-88mo1azj
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=11855689220154727262
+client serving PASS
+sync peer mounted PASS
+Unmounting /data1/efs/w93-checkpoint-replay-mnt2
+Retiring drained efs-fuse PID 1018733 for /data1/efs/w93-checkpoint-replay-mnt2
+Unmounted /data1/efs/w93-checkpoint-replay-mnt2
+Unmounting /data1/efs/w93-checkpoint-replay-mnt
+Retiring drained efs-fuse PID 1018713 for /data1/efs/w93-checkpoint-replay-mnt
+Unmounted /data1/efs/w93-checkpoint-replay-mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+synchronous write physical deletion drained PASS
+O_SYNC/O_DSYNC small/queued/append before close and cold crash bytes PASS
+Unmounting /data1/efs/w93-checkpoint-replay-mnt
+Retiring drained efs-fuse PID 1019835 for /data1/efs/w93-checkpoint-replay-mnt
+Unmounted /data1/efs/w93-checkpoint-replay-mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+Unmounting /data1/efs/w93-checkpoint-replay-mnt
+Retiring drained efs-fuse PID 1020945 for /data1/efs/w93-checkpoint-replay-mnt
+Unmounted /data1/efs/w93-checkpoint-replay-mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+Unmounting /data1/efs/w93-checkpoint-replay-mnt
+Retiring drained efs-fuse PID 1022878 for /data1/efs/w93-checkpoint-replay-mnt
+Unmounted /data1/efs/w93-checkpoint-replay-mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+identical append RPC physical deletion drained PASS
+durable append lost replies, 32 identical RPCs, ACK retirement and exact cold bytes PASS
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+Unmounting /data1/efs/w93-checkpoint-replay-mnt
+Retiring drained efs-fuse PID 1024062 for /data1/efs/w93-checkpoint-replay-mnt
+Unmounted /data1/efs/w93-checkpoint-replay-mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+synchronous failed-write recovery physically reclaimed PASS
+O_SYNC/O_DSYNC offline callback failure retains exact bytes for fsync and cold recovery PASS
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+Traceback (most recent call last):
+  File "/data1/efs/w93-closure-build/tests/live/gc_reclamation.py", line 1335, in <module>
+    started=time.monotonic();unmount(timeout=30);elapsed=time.monotonic()-started
+                             ^^^^^^^^^^^^^^^^^^^
+  File "/data1/efs/w93-closure-build/tests/live/gc_reclamation.py", line 325, in unmount
+    client.wait(timeout=timeout);client=None
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.12/subprocess.py", line 1264, in wait
+    return self._wait(timeout=timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.12/subprocess.py", line 2045, in _wait
+    raise TimeoutExpired(self.args, timeout)
+subprocess.TimeoutExpired: Command '['/data1/efs/w93-closure-build/efs-fuse', '127.0.0.1:22790', 'default', '/data1/efs/w93-checkpoint-replay-mnt', '-f']' timed out after 30 seconds

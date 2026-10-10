@@ -1,0 +1,7 @@
+{
+  "duration_seconds": 900,
+  "tag": "control1",
+  "applied_interval_ms": 10,
+  "root": "/data1/efs/mnt/tiny-w93-closure-control1-20261010",
+  "drained": true
+}

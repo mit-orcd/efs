@@ -1,0 +1,20 @@
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 1956013 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 1956048 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+cluster ready: flow=1 observations=1
+Traceback (most recent call last):
+  File "/data1/efs/w93-closure-20261010/balanced-capture.py", line 30, in <module>
+    (cell/'gc-before.json').write_text(json.dumps(gc_status(),indent=2))
+                                                  ^^^^^^^^^^^
+  File "/data1/efs/w93-closure-20261010/balanced-capture.py", line 29, in gc_status
+    return {n:subprocess.check_output(['/data1/efs/src/efs-mgmt','gc-status',f'127.0.0.1:{17431+n}'],text=True,timeout=10) for n in servers}
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.12/subprocess.py", line 466, in check_output
+    return run(*popenargs, stdout=PIPE, timeout=timeout, check=True,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/data1/efs/src/efs-mgmt', 'gc-status', '127.0.0.1:17435']' returned non-zero exit status 1.

@@ -1,0 +1,5133 @@
+{
+  "groups": {
+    "0": [
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1",
+        "ino": 8571389,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d3",
+        "ino": 3554995,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d5",
+        "ino": 4104961,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d7",
+        "ino": 93511,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d9",
+        "ino": 4052261,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d10",
+        "ino": 197787,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d12",
+        "ino": 202853,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d14",
+        "ino": 32175,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d16",
+        "ino": 3493993,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d18",
+        "ino": 70131,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d21",
+        "ino": 1118339,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d23",
+        "ino": 3901389,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d25",
+        "ino": 6787799,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d27",
+        "ino": 1288849,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d29",
+        "ino": 358635,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d30",
+        "ino": 673373,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d32",
+        "ino": 2321939,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d34",
+        "ino": 706273,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d36",
+        "ino": 57767,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d38",
+        "ino": 3049605,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d41",
+        "ino": 166141,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d43",
+        "ino": 8969651,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d45",
+        "ino": 2331137,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d47",
+        "ino": 3148871,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d49",
+        "ino": 70693,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d50",
+        "ino": 2036695,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d52",
+        "ino": 68497,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d54",
+        "ino": 9269635,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d56",
+        "ino": 805069,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d58",
+        "ino": 3823167,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d61",
+        "ino": 87423,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d63",
+        "ino": 6191289,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d65",
+        "ino": 7298091,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d67",
+        "ino": 4141045,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d69",
+        "ino": 1593111,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d70",
+        "ino": 152649,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d72",
+        "ino": 3323407,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d74",
+        "ino": 9087941,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d76",
+        "ino": 6783611,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d78",
+        "ino": 9035297,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d81",
+        "ino": 8647017,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d83",
+        "ino": 5684911,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d85",
+        "ino": 4110693,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d87",
+        "ino": 2815387,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d89",
+        "ino": 3140161,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d90",
+        "ino": 4302547,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d92",
+        "ino": 6182429,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d94",
+        "ino": 3964775,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d96",
+        "ino": 844705,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d98",
+        "ino": 155131,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d100",
+        "ino": 3654869,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d102",
+        "ino": 178827,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d104",
+        "ino": 2536601,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d106",
+        "ino": 420703,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d108",
+        "ino": 2794733,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d111",
+        "ino": 159227,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d113",
+        "ino": 776005,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d115",
+        "ino": 8940431,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d117",
+        "ino": 1486281,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d119",
+        "ino": 4306643,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d120",
+        "ino": 1859219,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d122",
+        "ino": 1092829,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d124",
+        "ino": 3241511,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d126",
+        "ino": 9474913,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d128",
+        "ino": 9168827,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d131",
+        "ino": 1473833,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d133",
+        "ino": 58223,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d135",
+        "ino": 4056357,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d137",
+        "ino": 567899,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d139",
+        "ino": 4109057,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d140",
+        "ino": 1381313,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d142",
+        "ino": 4265223,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d144",
+        "ino": 1026493,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d146",
+        "ino": 58995,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d148",
+        "ino": 4431593,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d151",
+        "ino": 1353783,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d153",
+        "ino": 2082417,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d155",
+        "ino": 2002659,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d157",
+        "ino": 3495341,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d159",
+        "ino": 5918495,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d160",
+        "ino": 3546255,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d162",
+        "ino": 77513,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d164",
+        "ino": 245499,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d166",
+        "ino": 79941,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d168",
+        "ino": 1568871,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d171",
+        "ino": 3791989,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d173",
+        "ino": 11313835,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d175",
+        "ino": 267577,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d177",
+        "ino": 2104319,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d179",
+        "ino": 157837,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d180",
+        "ino": 62749,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d182",
+        "ino": 2966995,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d184",
+        "ino": 119457,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d186",
+        "ino": 85607,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d188",
+        "ino": 202309,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d191",
+        "ino": 3767107,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d193",
+        "ino": 239245,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d195",
+        "ino": 236439,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d197",
+        "ino": 56913,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d199",
+        "ino": 32939,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d201",
+        "ino": 4310739,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d203",
+        "ino": 6186525,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d205",
+        "ino": 3968871,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d207",
+        "ino": 848801,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d209",
+        "ino": 163323,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d210",
+        "ino": 2798829,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d212",
+        "ino": 4892195,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d214",
+        "ino": 4903601,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d216",
+        "ino": 4049527,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d218",
+        "ino": 3658965,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d221",
+        "ino": 4113153,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d223",
+        "ino": 97607,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d225",
+        "ino": 8575485,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d227",
+        "ino": 3559091,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d229",
+        "ino": 1477929,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d230",
+        "ino": 4168427,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d232",
+        "ino": 7898805,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d234",
+        "ino": 7096127,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d236",
+        "ino": 4737913,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d238",
+        "ino": 78467,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d241",
+        "ino": 924623,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d243",
+        "ino": 1573385,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d245",
+        "ino": 5434171,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d247",
+        "ino": 162437,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d249",
+        "ino": 8246183,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d250",
+        "ino": 5440985,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d252",
+        "ino": 96927,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d254",
+        "ino": 6362133,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d256",
+        "ino": 131019,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d258",
+        "ino": 17433585,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d261",
+        "ino": 161933,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d263",
+        "ino": 2391363,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d265",
+        "ino": 1708113,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d267",
+        "ino": 3628439,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d269",
+        "ino": 3796085,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d270",
+        "ino": 1572967,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d272",
+        "ino": 2983073,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d274",
+        "ino": 3385299,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d276",
+        "ino": 591645,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d278",
+        "ino": 3550351,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d281",
+        "ino": 146315,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d283",
+        "ino": 4077013,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d285",
+        "ino": 158815,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d287",
+        "ino": 918937,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d289",
+        "ino": 2451235,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d290",
+        "ino": 4986405,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d292",
+        "ino": 2026331,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d294",
+        "ino": 253481,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d296",
+        "ino": 58479,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d298",
+        "ino": 3848957,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d300",
+        "ino": 6366075,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d302",
+        "ino": 7494853,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d304",
+        "ino": 3778319,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d306",
+        "ino": 1463625,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d308",
+        "ino": 4633171,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d311",
+        "ino": 508625,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d313",
+        "ino": 77847,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d315",
+        "ino": 5965069,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d317",
+        "ino": 1329091,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d319",
+        "ino": 39353,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d320",
+        "ino": 2683965,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d322",
+        "ino": 5505779,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d324",
+        "ino": 3144257,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d326",
+        "ino": 6893959,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d328",
+        "ino": 4114789,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d331",
+        "ino": 9179491,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d333",
+        "ino": 364589,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d335",
+        "ino": 2736823,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d337",
+        "ino": 381681,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d339",
+        "ino": 1367755,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d340",
+        "ino": 4150199,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d342",
+        "ino": 17437681,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d344",
+        "ino": 4977251,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d346",
+        "ino": 1921325,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d348",
+        "ino": 101023,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d351",
+        "ino": 9123933,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d353",
+        "ino": 9699347,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d355",
+        "ino": 4335841,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d357",
+        "ino": 8250279,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d359",
+        "ino": 166533,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d360",
+        "ino": 3802281,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d362",
+        "ino": 172271,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d364",
+        "ino": 181925,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d366",
+        "ino": 9169883,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d368",
+        "ino": 7675521,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d371",
+        "ino": 8009439,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d373",
+        "ino": 3791385,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d375",
+        "ino": 10656779,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d377",
+        "ino": 798805,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d379",
+        "ino": 6929911,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d380",
+        "ino": 3612595,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d382",
+        "ino": 3853053,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d384",
+        "ino": 147015,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d386",
+        "ino": 3367937,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d388",
+        "ino": 2030427,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d391",
+        "ino": 3053129,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d393",
+        "ino": 7235599,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d395",
+        "ino": 4156869,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d397",
+        "ino": 8889467,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d399",
+        "ino": 40993,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d401",
+        "ino": 827121,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d403",
+        "ino": 2301623,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d405",
+        "ino": 273453,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d407",
+        "ino": 8346979,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d409",
+        "ino": 4075737,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d410",
+        "ino": 4628891,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d412",
+        "ino": 71013,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d414",
+        "ino": 1567407,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d416",
+        "ino": 2051433,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d418",
+        "ino": 3473139,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d421",
+        "ino": 163203,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d423",
+        "ino": 4703437,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d425",
+        "ino": 102359,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d427",
+        "ino": 4667281,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d429",
+        "ino": 54763,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d430",
+        "ino": 4576093,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d432",
+        "ino": 60179,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d434",
+        "ino": 5387233,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d436",
+        "ino": 6225575,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d438",
+        "ino": 157061,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d441",
+        "ino": 148989,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d443",
+        "ino": 150195,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d445",
+        "ino": 3075841,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d447",
+        "ino": 6052167,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d449",
+        "ino": 1114405,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d450",
+        "ino": 598231,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d452",
+        "ino": 1530001,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d454",
+        "ino": 7421571,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d456",
+        "ino": 3179981,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d458",
+        "ino": 3711807,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d461",
+        "ino": 2413183,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d463",
+        "ino": 259513,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d465",
+        "ino": 2181419,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d467",
+        "ino": 1375477,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d469",
+        "ino": 44055,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d470",
+        "ino": 5570889,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d472",
+        "ino": 1286927,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d474",
+        "ino": 186565,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d476",
+        "ino": 475003,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d478",
+        "ino": 150305,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d481",
+        "ino": 4468329,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d483",
+        "ino": 1928111,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d485",
+        "ino": 67173,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d487",
+        "ino": 3306139,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d489",
+        "ino": 2254657,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d490",
+        "ino": 46035,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d492",
+        "ino": 12194589,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d494",
+        "ino": 2829415,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d496",
+        "ino": 7450785,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d498",
+        "ino": 154363,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d500",
+        "ino": 2189529,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d502",
+        "ino": 69023,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d504",
+        "ino": 1742613,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d506",
+        "ino": 58059,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d508",
+        "ino": 182001,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d511",
+        "ino": 2580175,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d513",
+        "ino": 6771977,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d515",
+        "ino": 2096699,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d517",
+        "ino": 2809221,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d519",
+        "ino": 91815,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d520",
+        "ino": 2253671,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d522",
+        "ino": 51105,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d524",
+        "ino": 4127443,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d526",
+        "ino": 5003805,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d528",
+        "ino": 7266191,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d531",
+        "ino": 35725,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d533",
+        "ino": 2277443,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d535",
+        "ino": 287569,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d537",
+        "ino": 217239,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d539",
+        "ino": 4157301,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d540",
+        "ino": 817133,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d542",
+        "ino": 1304867,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d544",
+        "ino": 3020209,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d546",
+        "ino": 1756535,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d548",
+        "ino": 673749,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d551",
+        "ino": 2382291,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d553",
+        "ino": 3111197,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d555",
+        "ino": 66151,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d557",
+        "ino": 345761,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d559",
+        "ino": 61691,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d560",
+        "ino": 73195,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d562",
+        "ino": 68021,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d564",
+        "ino": 133695,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d566",
+        "ino": 56953,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d568",
+        "ino": 46467,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d571",
+        "ino": 128513,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d573",
+        "ino": 307271,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d575",
+        "ino": 187645,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d577",
+        "ino": 2695603,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d579",
+        "ino": 3379241,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d580",
+        "ino": 74833,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d582",
+        "ino": 6115735,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d584",
+        "ino": 89229,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d586",
+        "ino": 4092227,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d588",
+        "ino": 3561785,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d591",
+        "ino": 5003527,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d593",
+        "ino": 1980353,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d595",
+        "ino": 3693171,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d597",
+        "ino": 1973693,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d599",
+        "ino": 1781807,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d601",
+        "ino": 8341959,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d603",
+        "ino": 4992385,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d605",
+        "ino": 6102835,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d607",
+        "ino": 5035645,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d609",
+        "ino": 4235247,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d610",
+        "ino": 6841105,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d612",
+        "ino": 5386583,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d614",
+        "ino": 5219917,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d616",
+        "ino": 1422083,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d618",
+        "ino": 882681,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d621",
+        "ino": 532741,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d623",
+        "ino": 1912763,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d625",
+        "ino": 115337,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d627",
+        "ino": 239183,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d629",
+        "ino": 169181,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d630",
+        "ino": 8779551,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d632",
+        "ino": 9610841,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d634",
+        "ino": 4233803,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d636",
+        "ino": 7581333,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d638",
+        "ino": 1044535,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d641",
+        "ino": 4344139,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d643",
+        "ino": 69013,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d645",
+        "ino": 2070047,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d647",
+        "ino": 2753881,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d649",
+        "ino": 5973475,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d650",
+        "ino": 4324325,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d652",
+        "ino": 2859035,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d654",
+        "ino": 8488425,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d656",
+        "ino": 688943,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d658",
+        "ino": 5324989,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d661",
+        "ino": 7273529,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d663",
+        "ino": 5747455,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d665",
+        "ino": 5841781,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d667",
+        "ino": 4532651,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d669",
+        "ino": 2373457,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d670",
+        "ino": 3985571,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d672",
+        "ino": 8187757,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d674",
+        "ino": 6491383,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d676",
+        "ino": 5174577,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d678",
+        "ino": 43787,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d681",
+        "ino": 2216591,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d683",
+        "ino": 29897,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d685",
+        "ino": 468219,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d687",
+        "ino": 3403333,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d689",
+        "ino": 4294247,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d690",
+        "ino": 76697,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d692",
+        "ino": 12895,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d694",
+        "ino": 4062165,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d696",
+        "ino": 49547,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d698",
+        "ino": 1104305,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d700",
+        "ino": 4152175,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d702",
+        "ino": 4326697,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d704",
+        "ino": 4272731,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d706",
+        "ino": 6356261,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d708",
+        "ino": 902471,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d711",
+        "ino": 2698453,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d713",
+        "ino": 258699,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d715",
+        "ino": 89241,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d717",
+        "ino": 4174687,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d719",
+        "ino": 6311149,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d720",
+        "ino": 6663073,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d722",
+        "ino": 4118375,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d724",
+        "ino": 5729821,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d726",
+        "ino": 2068179,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d728",
+        "ino": 3888585,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d731",
+        "ino": 7242903,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d733",
+        "ino": 2377553,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d735",
+        "ino": 4351043,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d737",
+        "ino": 7479181,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d739",
+        "ino": 5751551,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d740",
+        "ino": 4238707,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d742",
+        "ino": 5329085,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d744",
+        "ino": 4148231,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d746",
+        "ino": 8116929,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d748",
+        "ino": 2863131,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d751",
+        "ino": 39177,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d753",
+        "ino": 4113103,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d755",
+        "ino": 2384261,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d757",
+        "ino": 3359291,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d759",
+        "ino": 872417,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d760",
+        "ino": 3165621,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d762",
+        "ino": 528875,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d764",
+        "ino": 5919353,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d766",
+        "ino": 1494591,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d768",
+        "ino": 442573,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d771",
+        "ino": 106843,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d773",
+        "ino": 19493,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d775",
+        "ino": 232047,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d777",
+        "ino": 2819113,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d779",
+        "ino": 914867,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d780",
+        "ino": 110967,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d782",
+        "ino": 1108401,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d784",
+        "ino": 2215203,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d786",
+        "ino": 187373,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d788",
+        "ino": 16991,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d791",
+        "ino": 1641757,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d793",
+        "ino": 2399699,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d795",
+        "ino": 3758753,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d797",
+        "ino": 4298343,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d799",
+        "ino": 3407429,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d801",
+        "ino": 4161397,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d803",
+        "ino": 3532203,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d805",
+        "ino": 133177,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d807",
+        "ino": 89855,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d809",
+        "ino": 39821,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d810",
+        "ino": 7270287,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d812",
+        "ino": 303561,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d814",
+        "ino": 7795195,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d816",
+        "ino": 1596229,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d818",
+        "ino": 2257767,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d821",
+        "ino": 1436471,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d823",
+        "ino": 3742065,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d825",
+        "ino": 524771,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d827",
+        "ino": 362669,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d829",
+        "ino": 1393183,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d830",
+        "ino": 67265,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d832",
+        "ino": 38919,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d834",
+        "ino": 4869309,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d836",
+        "ino": 289139,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d838",
+        "ino": 61929,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d841",
+        "ino": 3383337,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d843",
+        "ino": 157295,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d845",
+        "ino": 1902629,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d847",
+        "ino": 4689243,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d849",
+        "ino": 132609,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d850",
+        "ino": 4469139,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d852",
+        "ino": 4534237,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d854",
+        "ino": 4458791,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d856",
+        "ino": 1365601,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d858",
+        "ino": 64187,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d861",
+        "ino": 65787,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d863",
+        "ino": 2304581,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d865",
+        "ino": 36495,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d867",
+        "ino": 2543817,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d869",
+        "ino": 2386387,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d870",
+        "ino": 677845,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d872",
+        "ino": 3767691,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d874",
+        "ino": 620441,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d876",
+        "ino": 1056351,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d878",
+        "ino": 821229,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d881",
+        "ino": 4131773,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d883",
+        "ino": 4147315,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d885",
+        "ino": 5588417,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d887",
+        "ino": 5850887,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d889",
+        "ino": 7522021,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d890",
+        "ino": 409495,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d892",
+        "ino": 168529,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d894",
+        "ino": 102211,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d896",
+        "ino": 39565,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d898",
+        "ino": 179711,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d900",
+        "ino": 5039741,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d902",
+        "ino": 6106931,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d904",
+        "ino": 4996481,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d906",
+        "ino": 8346055,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d908",
+        "ino": 476581,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d911",
+        "ino": 3989667,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d913",
+        "ino": 8191853,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d915",
+        "ino": 6495479,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d917",
+        "ino": 5178673,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d919",
+        "ino": 47883,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d920",
+        "ino": 1916859,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d922",
+        "ino": 536837,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d924",
+        "ino": 243279,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d926",
+        "ino": 119433,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d928",
+        "ino": 173715,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d931",
+        "ino": 6845201,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d933",
+        "ino": 5390679,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d935",
+        "ino": 5224013,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d937",
+        "ino": 1426179,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d939",
+        "ino": 886777,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d940",
+        "ino": 6780649,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d942",
+        "ino": 7468079,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d944",
+        "ino": 9616613,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d946",
+        "ino": 10068251,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d948",
+        "ino": 4197313,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d951",
+        "ino": 8783647,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d953",
+        "ino": 9614937,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d955",
+        "ino": 4237899,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d957",
+        "ino": 7585429,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d959",
+        "ino": 1048631,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d960",
+        "ino": 6934007,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d962",
+        "ino": 4363825,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d964",
+        "ino": 7192995,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d966",
+        "ino": 4157549,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d968",
+        "ino": 8013535,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d971",
+        "ino": 2610077,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d973",
+        "ino": 4637267,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d975",
+        "ino": 8777505,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d977",
+        "ino": 5260007,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d979",
+        "ino": 7498949,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d980",
+        "ino": 5590069,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d982",
+        "ino": 5967467,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d984",
+        "ino": 3983609,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d986",
+        "ino": 5665983,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d988",
+        "ino": 4192077,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d991",
+        "ino": 9173979,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d993",
+        "ino": 186021,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d995",
+        "ino": 176367,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d997",
+        "ino": 3806377,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d999",
+        "ino": 3625011,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1000",
+        "ino": 72323,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1002",
+        "ino": 324045,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1004",
+        "ino": 4799703,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1006",
+        "ino": 83089,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1008",
+        "ino": 791275,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1011",
+        "ino": 2212377,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1013",
+        "ino": 4562655,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1015",
+        "ino": 190549,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1017",
+        "ino": 2262027,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1019",
+        "ino": 253489,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1020",
+        "ino": 3187909,
+        "group": 0
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1022",
+        "ino": 2141051,
+        "group": 0
+      }
+    ],
+    "2": [
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d0",
+        "ino": 6769210,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d2",
+        "ino": 3215392,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d4",
+        "ino": 2079774,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d6",
+        "ino": 2149460,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d8",
+        "ino": 1872194,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d11",
+        "ino": 455400,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d13",
+        "ino": 81026,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d15",
+        "ino": 3396060,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d17",
+        "ino": 1366310,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d19",
+        "ino": 11010400,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d20",
+        "ino": 5927728,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d22",
+        "ino": 3327498,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d24",
+        "ino": 2850532,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d26",
+        "ino": 3752622,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d28",
+        "ino": 204600,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d31",
+        "ino": 4646170,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d33",
+        "ino": 169216,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d35",
+        "ino": 2147070,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d37",
+        "ino": 87988,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d39",
+        "ino": 4084386,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d40",
+        "ino": 4069690,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d42",
+        "ino": 3325728,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d44",
+        "ino": 2296606,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d46",
+        "ino": 2833236,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d48",
+        "ino": 651330,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d51",
+        "ino": 3788772,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d53",
+        "ino": 86958,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d55",
+        "ino": 8586288,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d57",
+        "ino": 4269834,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d59",
+        "ino": 188652,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d60",
+        "ino": 318764,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d62",
+        "ino": 4165174,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d64",
+        "ino": 453496,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d66",
+        "ino": 49554,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d68",
+        "ino": 3487012,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d71",
+        "ino": 155142,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d73",
+        "ino": 4393660,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d75",
+        "ino": 6062562,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d77",
+        "ino": 3285320,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d79",
+        "ino": 996926,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d80",
+        "ino": 3938854,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d82",
+        "ino": 4031196,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d84",
+        "ino": 6405506,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d86",
+        "ino": 3646440,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d88",
+        "ino": 92766,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d91",
+        "ino": 2776512,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d93",
+        "ino": 3927258,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d95",
+        "ino": 10177908,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d97",
+        "ino": 4122046,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d99",
+        "ino": 104136,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d101",
+        "ino": 3019890,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d103",
+        "ino": 6488280,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d105",
+        "ino": 11459862,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d107",
+        "ino": 138508,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d109",
+        "ino": 49706,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d110",
+        "ino": 108232,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d112",
+        "ino": 7808354,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d114",
+        "ino": 3742268,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d116",
+        "ino": 3257222,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d118",
+        "ino": 2780608,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d121",
+        "ino": 5085568,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d123",
+        "ino": 3353498,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d125",
+        "ino": 3873844,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d127",
+        "ino": 3520894,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d129",
+        "ino": 6035592,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d130",
+        "ino": 1179622,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d132",
+        "ino": 1645468,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d134",
+        "ino": 1876290,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d136",
+        "ino": 4180392,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d138",
+        "ino": 2083870,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d141",
+        "ino": 73694,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d143",
+        "ino": 1039892,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d145",
+        "ino": 2549498,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d147",
+        "ino": 4646368,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d149",
+        "ino": 95142,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d150",
+        "ino": 3360580,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d152",
+        "ino": 1731470,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d154",
+        "ino": 6673936,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d156",
+        "ino": 1253866,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d158",
+        "ino": 2168012,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d161",
+        "ino": 678716,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d163",
+        "ino": 5043334,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d165",
+        "ino": 128968,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d167",
+        "ino": 63074,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d169",
+        "ino": 917108,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d170",
+        "ino": 359442,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d172",
+        "ino": 1237496,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d174",
+        "ino": 74934,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d176",
+        "ino": 1000364,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d178",
+        "ino": 1902282,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d181",
+        "ino": 4565978,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d183",
+        "ino": 4684992,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d185",
+        "ino": 87230,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d187",
+        "ino": 4521076,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d189",
+        "ino": 1688674,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d190",
+        "ino": 3090160,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d192",
+        "ino": 70858,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d194",
+        "ino": 434596,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d196",
+        "ino": 504430,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d198",
+        "ino": 45048,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d200",
+        "ino": 2784704,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d202",
+        "ino": 3931354,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d204",
+        "ino": 10182004,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d206",
+        "ino": 4126142,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d208",
+        "ino": 112328,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d211",
+        "ino": 53802,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d213",
+        "ino": 4888656,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d215",
+        "ino": 7156174,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d217",
+        "ino": 45700,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d219",
+        "ino": 3023986,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d220",
+        "ino": 2087966,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d222",
+        "ino": 2153556,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d224",
+        "ino": 6773306,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d226",
+        "ino": 3219488,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d228",
+        "ino": 1183718,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d231",
+        "ino": 3580216,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d233",
+        "ino": 1907026,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d235",
+        "ino": 4391404,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d237",
+        "ino": 32758,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d239",
+        "ino": 3142960,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d240",
+        "ino": 33148,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d242",
+        "ino": 1000134,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d244",
+        "ino": 3017224,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d246",
+        "ino": 865442,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d248",
+        "ino": 9877940,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d251",
+        "ino": 18774,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d253",
+        "ino": 1583692,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d255",
+        "ino": 4049586,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d257",
+        "ino": 1571864,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d259",
+        "ino": 4318990,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d260",
+        "ino": 1906378,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d262",
+        "ino": 874736,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d264",
+        "ino": 2462830,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d266",
+        "ino": 58276,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d268",
+        "ino": 363538,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d271",
+        "ino": 921204,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d273",
+        "ino": 1033918,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d275",
+        "ino": 429760,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d277",
+        "ino": 3407322,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d279",
+        "ino": 682812,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d280",
+        "ino": 8335832,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d282",
+        "ino": 415090,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d284",
+        "ino": 3022348,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d286",
+        "ino": 3255830,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d288",
+        "ino": 1538384,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d291",
+        "ino": 5243458,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d293",
+        "ino": 772776,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d295",
+        "ino": 934118,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d297",
+        "ino": 3394716,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d299",
+        "ino": 338746,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d301",
+        "ino": 184904,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d303",
+        "ino": 213730,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d305",
+        "ino": 2997180,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d307",
+        "ino": 5254918,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d309",
+        "ino": 7023424,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d310",
+        "ino": 4180718,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d312",
+        "ino": 177700,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d314",
+        "ino": 4507978,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d316",
+        "ino": 514416,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d318",
+        "ino": 6995766,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d321",
+        "ino": 1476986,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d323",
+        "ino": 9208416,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d325",
+        "ino": 96862,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d327",
+        "ino": 4156052,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d329",
+        "ino": 6409602,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d330",
+        "ino": 3642000,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d332",
+        "ino": 1724010,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d334",
+        "ino": 775108,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d336",
+        "ino": 5068302,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d338",
+        "ino": 3427096,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d341",
+        "ino": 2438340,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d343",
+        "ino": 4323086,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d345",
+        "ino": 3617680,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d347",
+        "ino": 986986,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d349",
+        "ino": 1587788,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d350",
+        "ino": 210714,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d352",
+        "ino": 1304320,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d354",
+        "ino": 410878,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d356",
+        "ino": 9882036,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d358",
+        "ino": 869538,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d361",
+        "ino": 827750,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d363",
+        "ino": 3501852,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d365",
+        "ino": 367810,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d367",
+        "ino": 3830056,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d369",
+        "ino": 7116702,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d370",
+        "ino": 462988,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d372",
+        "ino": 5425302,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d374",
+        "ino": 1853528,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d376",
+        "ino": 63474,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d378",
+        "ino": 3234308,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d381",
+        "ino": 61728,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d383",
+        "ino": 342842,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d385",
+        "ino": 163156,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d387",
+        "ino": 68894,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d389",
+        "ino": 776872,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d390",
+        "ino": 778246,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d392",
+        "ino": 4353212,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d394",
+        "ino": 721890,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d396",
+        "ino": 320328,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d398",
+        "ino": 641086,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d400",
+        "ino": 6668814,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d402",
+        "ino": 5386180,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d404",
+        "ino": 3979882,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d406",
+        "ino": 888464,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d408",
+        "ino": 2278486,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d411",
+        "ino": 3514344,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d413",
+        "ino": 1096066,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d415",
+        "ino": 3006172,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d417",
+        "ino": 4290086,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d419",
+        "ino": 65120,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d420",
+        "ino": 49200,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d422",
+        "ino": 246538,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d424",
+        "ino": 220132,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d426",
+        "ino": 1691566,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d428",
+        "ino": 4045880,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d431",
+        "ino": 1069594,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d433",
+        "ino": 74240,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d435",
+        "ino": 593918,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d437",
+        "ino": 2540724,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d439",
+        "ino": 1015714,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d440",
+        "ino": 509498,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d442",
+        "ino": 68640,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d444",
+        "ino": 96286,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d446",
+        "ino": 3307604,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d448",
+        "ino": 52546,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d451",
+        "ino": 2116836,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d453",
+        "ino": 356526,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d455",
+        "ino": 880944,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d457",
+        "ino": 4477962,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d459",
+        "ino": 1097196,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d460",
+        "ino": 150060,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d462",
+        "ino": 400182,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d464",
+        "ino": 288888,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d466",
+        "ino": 5840530,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d468",
+        "ino": 238116,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d471",
+        "ino": 2018054,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d473",
+        "ino": 75708,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d475",
+        "ino": 233186,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d477",
+        "ino": 331336,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d479",
+        "ino": 3294014,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d480",
+        "ino": 4011814,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d482",
+        "ino": 225244,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d484",
+        "ino": 248450,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d486",
+        "ino": 1999080,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d488",
+        "ino": 83806,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d491",
+        "ino": 142016,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d493",
+        "ino": 68058,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d495",
+        "ino": 1006196,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d497",
+        "ino": 209598,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d499",
+        "ino": 2757576,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d501",
+        "ino": 597078,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d503",
+        "ino": 4132172,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d505",
+        "ino": 3251634,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d507",
+        "ino": 532248,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d509",
+        "ino": 5192206,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d510",
+        "ino": 1815676,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d512",
+        "ino": 157126,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d514",
+        "ino": 699656,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d516",
+        "ino": 161698,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d518",
+        "ino": 3394740,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d521",
+        "ino": 3338612,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d523",
+        "ino": 4315582,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d525",
+        "ino": 905664,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d527",
+        "ino": 5128410,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d529",
+        "ino": 3042876,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d530",
+        "ino": 2234826,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d532",
+        "ino": 162800,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d534",
+        "ino": 38766,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d536",
+        "ino": 3471012,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d538",
+        "ino": 483090,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d541",
+        "ino": 62762,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d543",
+        "ino": 72528,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d545",
+        "ino": 1164494,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d547",
+        "ino": 161156,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d549",
+        "ino": 128882,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d550",
+        "ino": 61632,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d552",
+        "ino": 85978,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d554",
+        "ino": 172148,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d556",
+        "ino": 71870,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d558",
+        "ino": 5392840,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d561",
+        "ino": 463928,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d563",
+        "ino": 183378,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d565",
+        "ino": 333036,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d567",
+        "ino": 2953974,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d569",
+        "ino": 4163632,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d570",
+        "ino": 155422,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d572",
+        "ino": 139092,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d574",
+        "ino": 3067194,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d576",
+        "ino": 156448,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d578",
+        "ino": 164582,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d581",
+        "ino": 2541678,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d583",
+        "ino": 239524,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d585",
+        "ino": 92874,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d587",
+        "ino": 1936624,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d589",
+        "ino": 2705590,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d590",
+        "ino": 250388,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d592",
+        "ino": 6783966,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d594",
+        "ino": 719328,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d596",
+        "ino": 101114,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d598",
+        "ino": 207452,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d600",
+        "ino": 1491156,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d602",
+        "ino": 5011102,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d604",
+        "ino": 4337824,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d606",
+        "ino": 4259002,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d608",
+        "ino": 5778972,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d611",
+        "ino": 770350,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d613",
+        "ino": 1318244,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d615",
+        "ino": 1341578,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d617",
+        "ino": 8226224,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d619",
+        "ino": 4680310,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d620",
+        "ino": 83746,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d622",
+        "ino": 225416,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d624",
+        "ino": 5640006,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d626",
+        "ino": 271356,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d628",
+        "ino": 66458,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d631",
+        "ino": 769228,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d633",
+        "ino": 5227990,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d635",
+        "ino": 5216408,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d637",
+        "ino": 1266994,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d639",
+        "ino": 2735940,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d640",
+        "ino": 5031832,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d642",
+        "ino": 152626,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d644",
+        "ino": 1874892,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d646",
+        "ino": 3929302,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d648",
+        "ino": 1453328,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d651",
+        "ino": 6907906,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d653",
+        "ino": 8254568,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d655",
+        "ino": 4053670,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d657",
+        "ino": 2473308,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d659",
+        "ino": 8314362,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d660",
+        "ino": 7711670,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d662",
+        "ino": 3095212,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d664",
+        "ino": 6873874,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d666",
+        "ino": 51448,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d668",
+        "ino": 4078446,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d671",
+        "ino": 4025040,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d673",
+        "ino": 179370,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d675",
+        "ino": 5261572,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d677",
+        "ino": 8007246,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d679",
+        "ino": 63320,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d680",
+        "ino": 69948,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d682",
+        "ino": 1993350,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d684",
+        "ino": 2907592,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d686",
+        "ino": 60514,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d688",
+        "ino": 58484,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d691",
+        "ino": 418838,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d693",
+        "ino": 3847180,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d695",
+        "ino": 3103602,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d697",
+        "ino": 75736,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d699",
+        "ino": 4577486,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d701",
+        "ino": 82844,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d703",
+        "ino": 157670,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d705",
+        "ino": 45480,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d707",
+        "ino": 624962,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d709",
+        "ino": 54356,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d710",
+        "ino": 3742834,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d712",
+        "ino": 35032,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d714",
+        "ino": 87318,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d716",
+        "ino": 1955084,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d718",
+        "ino": 4201002,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d721",
+        "ino": 5123518,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d723",
+        "ino": 2717044,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d725",
+        "ino": 341210,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d727",
+        "ino": 4150720,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d729",
+        "ino": 2001798,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d730",
+        "ino": 4598436,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d732",
+        "ino": 4082542,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d734",
+        "ino": 9998320,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d736",
+        "ino": 11308490,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d738",
+        "ino": 3099308,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d741",
+        "ino": 2346208,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d743",
+        "ino": 8318458,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d745",
+        "ino": 3728660,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d747",
+        "ino": 173790,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d749",
+        "ino": 8258664,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d750",
+        "ino": 952774,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d752",
+        "ino": 1759356,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d754",
+        "ino": 2460578,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d756",
+        "ino": 3019016,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d758",
+        "ino": 10107902,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d761",
+        "ino": 4878418,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d763",
+        "ino": 1628216,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d765",
+        "ino": 558838,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d767",
+        "ino": 4065516,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d769",
+        "ino": 1498890,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d770",
+        "ino": 2076840,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d772",
+        "ino": 583746,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d774",
+        "ino": 2347676,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d776",
+        "ino": 5457638,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d778",
+        "ino": 358176,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d781",
+        "ino": 3414404,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d783",
+        "ino": 4581582,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d785",
+        "ino": 94032,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d787",
+        "ino": 1825066,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d789",
+        "ino": 3851276,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d790",
+        "ino": 197594,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d792",
+        "ino": 7656640,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d794",
+        "ino": 7122110,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d796",
+        "ino": 62580,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d798",
+        "ino": 64610,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d800",
+        "ino": 487186,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d802",
+        "ino": 3142904,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d804",
+        "ino": 30646,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d806",
+        "ino": 1824428,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d808",
+        "ino": 2238922,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d811",
+        "ino": 3046972,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d813",
+        "ino": 3618694,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d815",
+        "ino": 47816,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d817",
+        "ino": 76130,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d819",
+        "ino": 3342708,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d820",
+        "ino": 35396,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d822",
+        "ino": 1519246,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d824",
+        "ino": 2193680,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d826",
+        "ino": 95466,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d828",
+        "ino": 104396,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d831",
+        "ino": 2257630,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d833",
+        "ino": 78100,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d835",
+        "ino": 68090,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d837",
+        "ino": 47328,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d839",
+        "ino": 7550630,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d840",
+        "ino": 168678,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d842",
+        "ino": 4595356,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d844",
+        "ino": 46146,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d846",
+        "ino": 519336,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d848",
+        "ino": 159518,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d851",
+        "ino": 3640448,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d853",
+        "ino": 4165274,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d855",
+        "ino": 4472628,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d857",
+        "ino": 3230846,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d859",
+        "ino": 4127624,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d860",
+        "ino": 5396936,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d862",
+        "ino": 4110434,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d864",
+        "ino": 3571004,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d866",
+        "ino": 1201798,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d868",
+        "ino": 65728,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d871",
+        "ino": 132978,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d873",
+        "ino": 132056,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d875",
+        "ino": 122902,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d877",
+        "ino": 9244684,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d879",
+        "ino": 66858,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d880",
+        "ino": 243962,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d882",
+        "ino": 3266528,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d884",
+        "ino": 2757086,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d886",
+        "ino": 1159188,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d888",
+        "ino": 1217282,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d891",
+        "ino": 2971044,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d893",
+        "ino": 63086,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d895",
+        "ino": 3873520,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d897",
+        "ino": 63690,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d899",
+        "ino": 3868076,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d901",
+        "ino": 4263098,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d903",
+        "ino": 4341920,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d905",
+        "ino": 5015198,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d907",
+        "ino": 1495252,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d909",
+        "ino": 5696450,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d910",
+        "ino": 4029136,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d912",
+        "ino": 183466,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d914",
+        "ino": 5265668,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d916",
+        "ino": 8011342,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d918",
+        "ino": 67416,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d921",
+        "ino": 229512,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d923",
+        "ino": 87842,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d925",
+        "ino": 275452,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d927",
+        "ino": 5644102,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d929",
+        "ino": 3297664,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d930",
+        "ino": 774446,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d932",
+        "ino": 1322340,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d934",
+        "ino": 1345674,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d936",
+        "ino": 8230320,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d938",
+        "ino": 4684406,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d941",
+        "ino": 678822,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d943",
+        "ino": 2645596,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d945",
+        "ino": 3426562,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d947",
+        "ino": 3044712,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d949",
+        "ino": 636894,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d950",
+        "ino": 773324,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d952",
+        "ino": 5232086,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d954",
+        "ino": 5220504,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d956",
+        "ino": 1271090,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d958",
+        "ino": 2740036,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d961",
+        "ino": 3238404,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d963",
+        "ino": 4955982,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d965",
+        "ino": 2386896,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d967",
+        "ino": 3427754,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d969",
+        "ino": 467084,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d970",
+        "ino": 9853018,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d972",
+        "ino": 7027520,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d974",
+        "ino": 1795902,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d976",
+        "ino": 5619956,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d978",
+        "ino": 217826,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d981",
+        "ino": 3641042,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d983",
+        "ino": 2102968,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d985",
+        "ino": 453494,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d987",
+        "ino": 2201964,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d989",
+        "ino": 403850,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d990",
+        "ino": 3834152,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d992",
+        "ino": 371906,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d994",
+        "ino": 3505948,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d996",
+        "ino": 831846,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d998",
+        "ino": 3309984,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1001",
+        "ino": 1666352,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1003",
+        "ino": 1413130,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1005",
+        "ino": 3098852,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1007",
+        "ino": 81070,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1009",
+        "ino": 3701048,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1010",
+        "ino": 8151190,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1012",
+        "ino": 620684,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1014",
+        "ino": 2306034,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1016",
+        "ino": 6119512,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1018",
+        "ino": 735054,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1021",
+        "ino": 428770,
+        "group": 2
+      },
+      {
+        "path": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1023",
+        "ino": 162376,
+        "group": 2
+      }
+    ]
+  },
+  "extras": [],
+  "probes": {
+    "0": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d1/read-probe",
+    "2": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010/d0/read-probe"
+  }
+}

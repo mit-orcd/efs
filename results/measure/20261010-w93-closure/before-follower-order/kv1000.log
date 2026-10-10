@@ -1,0 +1,25 @@
+Evidence directory: /data1/efs/gc-direct-6je96pml
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=2 index=2 salt=17284948762914851655
+client serving PASS
+Traceback (most recent call last):
+  File "/data1/efs/w93-closure-build/tests/live/gc_reclamation.py", line 427, in <module>
+    exercise(a,work,roots,mount,run,start,stop,mount_client,unmount,wait,drained)
+  File "/data1/efs/w93-closure-build/tests/live/kv_wal_persistence.py", line 21, in exercise
+    wait(lambda:all(c==a for c,a in state()),'WAL fault follower caught up',60)
+  File "/data1/efs/w93-closure-build/tests/live/gc_reclamation.py", line 227, in wait
+    if predicate():
+       ^^^^^^^^^^^
+  File "/data1/efs/w93-closure-build/tests/live/kv_wal_persistence.py", line 21, in <lambda>
+    wait(lambda:all(c==a for c,a in state()),'WAL fault follower caught up',60)
+                                    ^^^^^^^
+  File "/data1/efs/w93-closure-build/tests/live/kv_wal_persistence.py", line 17, in state
+    assert len(roles)==2 and len(pairs)==2 and 'LEADER' not in roles,text
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: node 3 root=1 salt=17284948762914851655 groups=2
+  group 0 hosted=1 role=FOLLOWER leader=0 term=1 commit=13 applied=13 voters=0x7 joint=0
+  group 2 hosted=1 role=LEADER leader=2 term=1 commit=4 applied=4 voters=0xe joint=0
+
