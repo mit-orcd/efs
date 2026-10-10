@@ -78,6 +78,15 @@ int main(void)
     CHECK(!disk_io(d,0,'r',got,sizeof(got),13,0));CHECK(!memcmp(got,data+13,sizeof(got)));
     CHECK(disk_io(d,0,'r',got,18,sizeof(data)-17,0)==EFS_ERR_IO);
     CHECK(disk_io(d,0,'r',got,2,INT64_MAX,0)==EFS_ERR_OVERFLOW);
+    /* Four disjoint blocks remain hot while binary searches alternate.
+     * Warm all ways, then prove repeats issue no reads (including EOF tail). */
+    for(unsigned i=0;i<READ_WAYS;i++)CHECK(!disk_io(d,0,'r',got,17,i*READ_WINDOW,0));
+    read_calls=0;
+    for(unsigned i=0;i<READ_WAYS*3;i++){
+        size_t off=(i%READ_WAYS)*READ_WINDOW;
+        CHECK(!disk_io(d,0,'r',got,17,off,0));CHECK(!memcmp(got,data+off,17));
+    }
+    CHECK(read_calls==0);
     /* Warm a window, write inside it, then write across its end. */
     CHECK(!disk_io(d,0,'r',got,17,20,0));
     CHECK(!disk_io(d,0,'r',change,sizeof(change),23,1));memcpy(data+23,change,sizeof(change));
@@ -88,6 +97,24 @@ int main(void)
     CHECK(!disk_io(d,0,'r',got,17,100,0));partial_write=1;
     CHECK(disk_io(d,0,'r',change,10,100,1)==EFS_ERR_IO);memcpy(data+100,change,3);
     CHECK(!disk_io(d,0,'r',got,17,100,0));CHECK(!memcmp(got,data+100,17));
+    /* Both resident blocks overlapping a short failed write must be
+     * invalidated, including the block containing its changed prefix tail. */
+    CHECK(!disk_io(d,0,'r',got,17,READ_WINDOW-17,0));
+    CHECK(!disk_io(d,0,'r',got,17,READ_WINDOW,0));partial_write=1;
+    CHECK(disk_io(d,0,'r',change,10,READ_WINDOW-2,1)==EFS_ERR_IO);
+    memcpy(data+READ_WINDOW-2,change,3);
+    CHECK(!disk_io(d,0,'r',got,17,READ_WINDOW-17,0));CHECK(!memcmp(got,data+READ_WINDOW-17,17));
+    CHECK(!disk_io(d,0,'r',got,17,READ_WINDOW,0));CHECK(!memcmp(got,data+READ_WINDOW,17));
+    /* Extending the cached short EOF block exposes the newly written bytes. */
+    CHECK(!disk_io(d,0,'r',got,17,READ_WINDOW*3,0));
+    CHECK(!disk_io(d,0,'r',change,sizeof(change),sizeof(data)-5,1));
+    memcpy(data+sizeof(data)-5,change,5);
+    CHECK(!disk_io(d,0,'r',got,sizeof(change),sizeof(data)-5,0));CHECK(!memcmp(got,change,sizeof(change)));
+    /* Extending in another block fills the cached EOF gap with zeros. */
+    CHECK(!disk_io(d,0,'r',change,17,READ_WINDOW*4,1));
+    CHECK(!disk_io(d,0,'r',got,17,READ_WINDOW*3+100,0));
+    for(unsigned i=0;i<17;i++)CHECK(got[i]==0);
+    CHECK(!disk_io(d,0,'r',got,17,READ_WINDOW*4,0));CHECK(!memcmp(got,change,17));
     /* Exact median lookup needs one cold window; gaps and end misses must
      * still report NOT_FOUND rather than returning a neighboring inode. */
     struct disk_node nodes[31]={0},found;uint64_t at=UINT64_MAX;
@@ -142,6 +169,7 @@ int main(void)
         uint8_t byte=(uint8_t)shard;fd=make_file(d,shard,'r');CHECK(fd>=0);
         if(fd>=0){CHECK(!io_at(fd,&byte,1,0,1));close(fd);}
         CHECK(!disk_io(d,shard,'r',got,1,0,0));CHECK(got[0]==byte);
+        CHECK(disk_io(d,shard,'r',got,17,READ_WINDOW,0)==EFS_ERR_IO);
     }
     CHECK(!disk_io(d,0,'r',got,17,100,0));CHECK(!memcmp(got,data+100,17));
     efs_query_disk_free(d);

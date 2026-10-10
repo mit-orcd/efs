@@ -23,6 +23,7 @@
 #define KINDS 6
 #define FD_CACHE 32
 #define READ_WINDOW 8192
+#define READ_WAYS 4
 #define SORT_ROWS 2048
 #define NODE_BATCH 8
 #define VALUE_MAX 16384
@@ -38,10 +39,13 @@ struct disk_node {
     struct efs_name_entry link;
     uint64_t children;
 };
+struct read_window {
+    uint64_t offset,tick;size_t size;
+    uint8_t data[READ_WINDOW];
+};
 struct fd_slot {
-    int fd;uint32_t shard;char kind;uint64_t tick;
-    uint64_t window_offset;size_t window_size;
-    uint8_t window[READ_WINDOW];
+    int fd;uint32_t shard;char kind;uint64_t tick,window_tick;
+    struct read_window windows[READ_WAYS];
 };
 struct efs_query_disk {
     char path[EFS_MAX_PATH];
@@ -120,30 +124,39 @@ static int filename(const struct efs_query_disk *d,uint32_t shard,char kind,char
 }
 /* The descriptor cannot be evicted while pread/pwrite is using it. Reads use
  * independent offsets, and this lock never spans callbacks or recursive KV. */
-/* Fixed read windows amortize binary-search and adjacent-record syscalls.
+/* Four fixed LRU windows per descriptor amortize binary-search and adjacent-record syscalls.
  * Files are immutable except for this candidate's derived rows. Writes remain
  * synchronous to the descriptor; no dirty data is retained only in this cache. */
 static int window_read(struct fd_slot *f,void *buf,size_t n,uint64_t off)
 {
     uint64_t base=off & ~(uint64_t)(READ_WINDOW-1);
     if(n>READ_WINDOW-(off-base))return io_at(f->fd,buf,n,off,0);
-    if(!f->window_size || off<f->window_offset ||
-       off-f->window_offset>f->window_size || n>f->window_size-(off-f->window_offset)) {
-        f->window_offset=base;f->window_size=0;
+    struct read_window *w=NULL,*victim=&f->windows[0];
+    for(unsigned i=0;i<READ_WAYS;i++){
+        struct read_window *candidate=&f->windows[i];
+        if(candidate->size && candidate->offset==base){w=candidate;break;}
+        if(!candidate->size || (victim->size && candidate->tick<victim->tick))victim=candidate;
+    }
+    size_t at=(size_t)(off-base);
+    /* A later write may extend a formerly short EOF block, even through
+     * a sparse gap. Refill when the requested bytes exceed that old tail. */
+    if(w && (at>w->size || n>w->size-at))w->size=0;
+    if(!w || !w->size){
+        if(!w)w=victim;
+        w->offset=base;w->size=0;
         size_t cap=READ_WINDOW;
         if((uint64_t)cap>INT64_MAX-base)cap=(size_t)(INT64_MAX-base);
-        while(f->window_size<cap) {
-            ssize_t got=pread(f->fd,f->window+f->window_size,cap-f->window_size,
-                              (off_t)(base+f->window_size));
+        while(w->size<cap){
+            ssize_t got=pread(f->fd,w->data+w->size,cap-w->size,(off_t)(base+w->size));
             if(got<0 && errno==EINTR)continue;
-            if(got<0){f->window_size=0;return EFS_ERR_IO;}
+            if(got<0){w->size=0;return EFS_ERR_IO;}
             if(!got)break;
-            f->window_size+=(size_t)got;
+            w->size+=(size_t)got;
         }
     }
-    size_t at=(size_t)(off-f->window_offset);
-    if(at>f->window_size || n>f->window_size-at)return EFS_ERR_IO;
-    memcpy(buf,f->window+at,n);return EFS_OK;
+    w->tick=++f->window_tick;
+    if(at>w->size || n>w->size-at)return EFS_ERR_IO;
+    memcpy(buf,w->data+at,n);return EFS_OK;
 }
 static int disk_io(struct efs_query_disk *d,uint32_t shard,char kind,void *buf,size_t n,uint64_t off,int write)
 {
@@ -160,7 +173,8 @@ static int disk_io(struct efs_query_disk *d,uint32_t shard,char kind,void *buf,s
         char path[EFS_MAX_PATH];rc=filename(d,shard,kind,path,sizeof(path));
         if(!rc) {
             f=victim;if(f->fd>=0)close(f->fd);
-            f->window_size=0;
+            f->window_tick=0;
+            for(unsigned i=0;i<READ_WAYS;i++)f->windows[i].size=0;
             f->fd=open(path,O_RDWR|O_CLOEXEC);f->shard=shard;f->kind=kind;
             if(f->fd<0)rc=EFS_ERR_IO;
         }
@@ -170,12 +184,14 @@ static int disk_io(struct efs_query_disk *d,uint32_t shard,char kind,void *buf,s
         if(!write)rc=window_read(f,buf,n,off);
         else {
             rc=io_at(f->fd,buf,n,off,1);
-            if(rc)f->window_size=0; /* A failed write may have changed a prefix. */
-            else if(f->window_size && off<f->window_offset+f->window_size &&
-                    off+n>f->window_offset) {
-                uint64_t lo=off>f->window_offset?off:f->window_offset;
-                uint64_t hi=off+n<f->window_offset+f->window_size?off+n:f->window_offset+f->window_size;
-                memcpy(f->window+(size_t)(lo-f->window_offset),(uint8_t *)buf+(size_t)(lo-off),(size_t)(hi-lo));
+            for(unsigned i=0;i<READ_WAYS;i++){
+                struct read_window *w=&f->windows[i];
+                if(rc)w->size=0; /* A failed write may have changed a prefix. */
+                else if(w->size && off<w->offset+w->size && off+n>w->offset){
+                    uint64_t lo=off>w->offset?off:w->offset;
+                    uint64_t hi=off+n<w->offset+w->size?off+n:w->offset+w->size;
+                    memcpy(w->data+(size_t)(lo-w->offset),(uint8_t *)buf+(size_t)(lo-off),(size_t)(hi-lo));
+                }
             }
         }
     }
