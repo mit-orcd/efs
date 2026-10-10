@@ -1,7 +1,7 @@
 /* Included only by query_disk.c: candidate-only bounded scratch. A positive
  * FULL result is a resource/coverage fallback, never an IO-error fallback. */
 #define INCREMENTAL_FULL 1
-#define CHANGE_MAX 512
+#define CHANGE_MAX 1024
 struct dirty_dir { struct disk_node node;uint64_t at;unsigned pending,done; };
 struct incremental {
     efs_ino_t changed[CHANGE_MAX];unsigned changes,count;

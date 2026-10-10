@@ -380,6 +380,13 @@ int main(void)
     CHECK(!capture(kv,NULL,&newer),"incremental both rename parents");efs_query_catalog_free(newer);newer=NULL;
     CHECK(!efs_meta_apply_rmdir(kv,EFS_ROOT_INO,"extrema",403),"remove empty directory");
     CHECK(!capture(kv,NULL,&newer),"incremental removed directory");efs_query_catalog_free(newer);newer=NULL;
+    for(unsigned i=0;i<1100;i++){
+        char name[32];efs_ino_t added;snprintf(name,sizeof(name),"cap-fallback-%u",i);
+        CHECK(!efs_meta_apply_create_file(kv,&attrs,EFS_ROOT_INO,S_IFREG|0644,name,&added),"bounded-set overflow fixture");
+    }
+    CHECK(!capture(kv,NULL,&newer),"oversized incremental change set falls back exactly");
+    CHECK(disk_previous && efs_query_catalog_refolded(disk_previous)>=1100,"fallback really performs a full attribute build");
+    efs_query_catalog_free(newer);newer=NULL;
     CHECK(!efs_meta_apply_get_inode(kv,b,&r),"dir for corruption");
     r.parent=a;row_put(kv,&r);
     CHECK(capture(kv,c,&newer)==EFS_ERR_PROTO && !newer,"mismatched parent fails closed");
