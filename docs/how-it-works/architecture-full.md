@@ -1731,7 +1731,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | container-engine | **P4.1** · experimental daemon files/containers selector and VM A/B | storage feature | implemented experimentally on `devel-storage-engine`; 16 VM A/B cases and full Linux suite pass; files remains default; read-index waits limit read-speed attribution | [checkpoint](../status/container-engine-20261008.md) |
 | bench-churn | **W90** · independent steady-state storage churn benchmark | benchmark enhancement | implemented on `devel-bench`; functional gates pass; initial matched 50/80/95-percent evidence; 64 KiB scaling, shared ranges and five profiling rounds recorded; bounded punch batching retained; merged into isolated `devel-storage-engine`; matched simulator comparison validated; 8 longer cases favor punch at 95%/QD4 (same-device roots); no production changes | [work item](#w90) · [ranges](../status/bench-scaling-ranges-20261008.md) · [profiles](../status/bench-perf-five-rounds-20261008.md) · [comparison](../status/bench-layout-comparison-20261008.md) |
 | P4.1–P4.4 | fragment on-disk layout (**wipe**), W40 FUSE write copy, RDMA zero-copy receive, 9-client scaling | performance | deferred until P3's numbers | [full text](#p4--deferred-until-p3s-numbers-long-one-is-a-wipe) |
-| meta-scale | **W66** · metadata leadership distribution and topology-independent routing | scalability | open — Oct 5 implementation gap recorded; correctness work first, then baseline measurement and staged multi-Raft implementation | [evidence, phases and gates](../status/metadata-scaling.md) |
+| meta-scale | **W66** · metadata leadership distribution and topology-independent routing | scalability | open — Oct 10 AMD private four-voter host/engine and persistence/failover fixes pass; POSIX 212/212 + peer 64/64; default two-group topology unchanged; D36 commit authority/recovery choice, routing/migration and scale remain | [evidence, phases and gates](../status/metadata-scaling.md) |
 | tiny-raft | **W93** · broader durable Raft group commit | performance | implemented — covered AMD batching/fault/cold and balanced long mixed-load gates pass | [work item](#w93) |
 | tiny-create | **W94** · atomic CREATE plus open lease | performance / lifecycle | partial — retained FUSE CREATE/adoption, sequenced lease edges and cleanup AMD gated; REPORT session fences AMD gated; data-plane/per-publication integration and measured consensus/throughput gate remain open | [work item](#w94) |
 | tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | partial — tiny/durable/cold/crash/churn gates pass; indexed packing and P4.1 decision remain | [work item](#w95) |
@@ -4888,7 +4888,12 @@ never substitute a five-node minimum for the accepted requirement. Larger
 clusters must scale metadata service while retaining the same protection target.
 See [binding decision](../status/node-count-protection-20261009.md).
 
-**Evidence/current state:** Two fixed parity Raft groups and dual-group routing remain implemented; logical shard count is not independent leadership capacity.
+**Evidence/current state:** Oct 10 AMD engine and explicit private host four-voter
+membership, persistence-error fencing, snapshot ordering and GETCHUNKS endpoint
+failover gates pass. Full native/docs, POSIX 212/212 and peer 64/64 pass. Default
+two fixed parity groups/dual-group routing remain; durable two-loss commit
+identity/recovery, versioned routing/migration and measured scale are open.
+Logical shard count is not independent leadership capacity.
 
 **Home:** [current detail](../status/metadata-scaling.md).
 

@@ -819,11 +819,109 @@ static void test_backlog_byte_accounting(void)
     efs_raft_disk_close(d);rmtree(g_dir);
 }
 
+/* Engine foundation only: fsynced command copies survive permanent removal
+ * of any two directories. This does not make an unmarked WAL tail an
+ * authoritative committed history, or authorize reads with two survivors. */
+struct four_disk_net { struct efs_raft *r[4]; int omitted; };
+static int four_disk_send(void *arg, const struct efs_raft_msg *msg)
+{
+    struct four_disk_net *n = arg;
+    if (msg->to < 0 || msg->to >= 4) return EFS_ERR_INVAL;
+    if (msg->to == n->omitted || !n->r[msg->to]) return EFS_OK;
+    return efs_raft_recv(n->r[msg->to], msg);
+}
+static void test_four_voter_permanent_loss(void)
+{
+    int omitted, a, b;
+    for (omitted = 0; omitted < 4; omitted++) {
+        for (a = 0; a < 4; a++) {
+            for (b = a + 1; b < 4; b++) {
+                char dirs[4][640];
+                int pipefd[2], status = 0, i, copies = 0;
+                uint64_t evidence[2] = {0,0}; /* Test oracle, never recovery authority. */
+                pid_t pid;
+                for (i = 0; i < 4; i++) {
+                    snprintf(dirs[i], sizeof(dirs[i]), "%s-four-%d", g_dir, i);
+                    rmtree(dirs[i]);
+                }
+                if (pipe(pipefd) != 0) {
+                    CHECK(0, "four-voter evidence pipe");
+                    return;
+                }
+                pid = fork();
+                CHECK(pid >= 0, "fork four-voter disk writer");
+                if (pid < 0) { close(pipefd[0]); close(pipefd[1]); return; }
+                if (pid == 0) {
+                    struct four_disk_net net = {{0}, omitted};
+                    struct efs_raft_disk *disk[4];
+                    struct efs_raft_cfg cfg = {0};
+                    uint8_t cmd = 'P';
+                    int applied[4] = {0}, t, lid = -1;
+                    close(pipefd[0]);
+                    cfg.n = 4; cfg.voters = 0xf; cfg.boot_id = 1;
+                    cfg.heartbeat_ticks = 1; cfg.send = four_disk_send;
+                    cfg.net = &net; cfg.apply = count_apply;
+                    for (i = 0; i < 4; i++) {
+                        disk[i] = efs_raft_disk_open(dirs[i], EFS_RAFT_DISK_SYNC);
+                        if (!disk[i]) _exit(2);
+                        cfg.id = i; cfg.election_ticks = (uint32_t)(4+i*4);
+                        cfg.store = efs_raft_disk_group(disk[i], EFS_RAFT_GROUP_SHARD);
+                        cfg.store_ctx = cfg.store; cfg.app = &applied[i];
+                        net.r[i] = efs_raft_new(&cfg);
+                        if (!net.r[i]) _exit(3);
+                    }
+                    for (t = 0; t < 40; t++) {
+                        for (i = 0; i < 4; i++) {
+                            if (i != omitted && efs_raft_tick(net.r[i]) != EFS_OK)
+                                _exit(4);
+                        }
+                    }
+                    for (i = 0; i < 4; i++) {
+                        if (i != omitted && efs_raft_role(net.r[i]) == EFS_RAFT_LEADER)
+                            lid = i;
+                    }
+                    if (lid < 0) _exit(5);
+                    if (efs_raft_propose(net.r[lid], &cmd, 1, &evidence[0]) != EFS_OK)
+                        _exit(6);
+                    for (t = 0; t < 8; t++) for (i = 0; i < 4; i++)
+                        if (i != omitted && efs_raft_tick(net.r[i]) != EFS_OK) _exit(7);
+                    if (efs_raft_commit(net.r[lid]) < evidence[0]) _exit(8);
+                    evidence[1] = efs_raft_term(net.r[lid]);
+                    if (write(pipefd[1], evidence, sizeof(evidence)) != sizeof(evidence))
+                        _exit(9);
+                    _exit(0); /* No graceful store close/flush. */
+                }
+                close(pipefd[1]);
+                CHECK(read(pipefd[0], evidence, sizeof(evidence)) == sizeof(evidence),
+                      "receive acknowledged index and term oracle");
+                close(pipefd[0]);
+                CHECK(waitpid(pid, &status, 0) == pid && WIFEXITED(status) &&
+                      WEXITSTATUS(status) == 0, "fsynced four-voter child committed");
+                rmtree(dirs[a]); rmtree(dirs[b]); /* Permanent loss, not a partition. */
+                for (i = 0; i < 4; i++) {
+                    struct efs_raft_disk *disk;
+                    struct efs_raft_store *store;
+                    if (i == a || i == b) continue;
+                    disk = efs_raft_disk_open(dirs[i], EFS_RAFT_DISK_SYNC);
+                    CHECK(disk != NULL, "cold reopen surviving directory");
+                    if (!disk) continue;
+                    store = efs_raft_disk_group(disk, EFS_RAFT_GROUP_SHARD);
+                    if (st_check(store, evidence[0], evidence[1], "P")) copies++;
+                    efs_raft_disk_close(disk);
+                }
+                CHECK(copies >= 1, "all six permanent-loss pairs retain fsynced command");
+                for (i = 0; i < 4; i++) rmtree(dirs[i]);
+            }
+        }
+    }
+}
+
 int main(void)
 {
     snprintf(g_dir, sizeof(g_dir), "/tmp/efs-raftstore-test-%d", (int)getpid());
     rmtree(g_dir);
 
+    test_four_voter_permanent_loss();
     test_backlog_byte_accounting();
     test_recv_batch_crash(0);
     test_recv_batch_crash(1);

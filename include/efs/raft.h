@@ -18,7 +18,15 @@
 #define EFS_RAFT_CANDIDATE 1
 #define EFS_RAFT_LEADER    2
 
-#define EFS_RAFT_MAX_PEERS 7 /* RF = 2f+1, f ≤ 3 */
+#define EFS_RAFT_MAX_PEERS 7 /* Any nonempty voter set; quorum = floor(N/2)+1. */
+
+/* Engine and host must accept exactly the same membership masks. Even sets
+ * retain strict majorities; accepting a mask does not select protection policy. */
+static inline int efs_raft_voters_valid(uint32_t voters)
+{
+    return voters != 0 && !(voters >> EFS_RAFT_MAX_PEERS);
+}
+
 
 #define EFS_RAFT_MSG_VOTE_REQ 1
 #define EFS_RAFT_MSG_VOTE_REP 2
