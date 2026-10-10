@@ -26,6 +26,19 @@ static void drop_reply(const struct efs_msg_publication *request,int retire)
         close(fd);
     }
 }
+static int publication_retry(const struct efs_msg_publication *request,int mode,
+                              struct efs_msg_publication_reply *reply)
+{
+    int rc=EFS_ERR_BUSY;
+    for(unsigned attempt=0;attempt<40;attempt++) {
+        rc=efs_client_rpc_publication(request,mode,reply);
+        if(!rc)return rc;
+        if(rc!=EFS_ERR_BUSY && rc!=EFS_ERR_NET && rc!=EFS_ERR_NOT_PRIMARY && rc!=EFS_ERR_NO_QUORUM)break;
+        usleep(100000);
+    }
+    fprintf(stderr,"publication retry mode=%d rc=%d state=%u\n",mode,rc,reply->state);
+    return rc;
+}
 static struct efs_chunk_rec upload(efs_ino_t ino,uint32_t ci,uint64_t object,const uint8_t *body)
 {
     struct efs_chunk_rec rec={0};rec.ino=ino;rec.chunk_index=ci;rec.chunk_generation=object;
@@ -72,13 +85,14 @@ int main(int argc,char **argv)
         assert(file && fread(saved,sizeof(saved),1,file)==1);fclose(file);
         for(unsigned i=0;i<2;i++) {
             struct efs_msg_publication_reply result;
-            assert(!efs_client_rpc_publication(&saved[i],1,&result) && result.state==EFS_PUBLICATION_RETIRED);
-            assert(!efs_client_rpc_publication(&saved[i],0,&result) && result.state==EFS_PUBLICATION_RETIRED);
+            assert(!publication_retry(&saved[i],1,&result) && result.state==EFS_PUBLICATION_RETIRED);
+            assert(!publication_retry(&saved[i],0,&result) && result.state==EFS_PUBLICATION_RETIRED);
         }
         struct efs_chunk_rec rec;uint32_t n=1;uint64_t gen=0;
         assert(!efs_client_rpc_getchunks_fileid(1,ino,saved[1].rec.file_generation,saved[1].rec.chunk_index,&rec,&n,&gen));
         assert(n==1 && gen==saved[1].rec.file_generation && rec.chunk_generation==saved[1].rec.chunk_generation);
         puts("cold retired exact replay cannot resurrect superseded mapping PASS");
+        if(!strcmp(argv[4],"receipt-only"))return 0;
         uint32_t ci=saved[1].rec.chunk_index;
         struct efs_msg_lane_writer_view_reply view;
         struct efs_msg_inode_getchunks_reply *base=calloc(1,sizeof(*base));assert(base);
@@ -178,6 +192,6 @@ int main(int argc,char **argv)
     assert(!efs_client_publication_retire(queue) && queue->count==1);
     assert(!efs_client_publication_retire(queue) && !queue->count);
     assert(!efs_client_publication_ack_free(queue));efs_dcache_drop(ino,ci);
-    printf("typed cache lost publication/retirement ACK, exact newer-range ownership and peer preservation PASS ci=%u\n",ci);
+    printf("typed cache lost publication/retirement ACK, exact newer-range ownership and peer preservation PASS ci=%u group=%u\n",ci,efs_raft_shard_group(efs_kv_lane_shard(ino,ci%EFS_META_LANES)));
     free(body);free(owned);free(image);free(peer);free(mapping);return 0;
 }

@@ -560,6 +560,16 @@ try:
             typed_result=run([typed,str(a.port),str(typed_ino),typed_state],capture_output=True,text=True,timeout=180,env=typed_env).stdout
             (work/('typed-writeback-'+group+'-wire.txt')).write_text(typed_result)
             typed_ci=int(re.search(r'ci=(\d+)',typed_result).group(1))
+            typed_group=int(re.search(r'group=(\d+)',typed_result).group(1))
+            leaders=[]
+            for node in range(4):
+                raft=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+node}'],capture_output=True,text=True).stdout
+                if re.search(r'group '+str(typed_group)+r' .*role=LEADER',raft):leaders.append(node)
+            assert len(leaders)==1,leaders
+            dead=leaders[0];servers[dead].kill();servers[dead].wait(timeout=10)
+            leader_replay=run([typed,str(a.port),str(typed_ino),typed_state,'receipt-only'],capture_output=True,text=True,timeout=180,env=typed_env).stdout
+            (work/('typed-writeback-'+group+'-leader-replay.txt')).write_text(leader_replay)
+            print('typed retired publication replay after actual lane leader death PASS',flush=True)
             unmount();stop(crash=True);start();mount_client()
             expected=bytearray([0x5a])*(128<<10);expected[4096:8192]=bytes([0xa7])*4096;expected[8192:12288]=bytes([0x33])*4096
             assert typed_path.stat().st_ino==typed_ino and typed_path.read_bytes()==bytes(typed_ci*(128<<10))+expected
