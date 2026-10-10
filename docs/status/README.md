@@ -85,7 +85,11 @@ pass focused and full native private-build gates; live validation is pending.
 A fixed dependency filter also passes differential/fault gates; the ten-million
 synthetic-file case passes complete export and cold oracles. Compact alias seeks
 and affected-parent folds pass focused and full native gates; their live and
-scale repeat validation remains pending. Large-export total lifetime is now
+live validation remains pending. The version-5 ten-million repeat passes full
+exports before/after mutation, retained totals and cold restore (3.69 MiB builder,
+40.04 MiB peak process RSS). Sequential lookup regressions pass; a repeat is
+running on a newly provisioned isolated scale disk before the actual 2^32 gate.
+Large-export total lifetime is now
 configurable with bounded retention and unchanged idle/permission checks.
 
 [W92 incremental-cache implementation](query-cache-incremental-20261010.md)
