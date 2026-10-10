@@ -1,0 +1,95 @@
+2026-10-09T21:35:48.245Z query-publish: generation=7 g0=965 g2=939 rebuilt=16 refolded=474 edge_reused=0 bytes=1823752 pin_ms=0 build_ms=106 root_rc=0 files=456 dirs=17 logical=14496
+2026-10-09T21:35:48.490Z query-publish: generation=8 g0=1084 g2=1052 rebuilt=16 refolded=531 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=144 root_rc=0 files=513 dirs=17 logical=16352
+2026-10-09T21:35:48.696Z query-publish: generation=9 g0=1208 g2=1182 rebuilt=16 refolded=595 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=105 root_rc=0 files=577 dirs=17 logical=18400
+2026-10-09T21:35:48.903Z query-publish: generation=10 g0=1319 g2=1293 rebuilt=16 refolded=650 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=106 root_rc=0 files=632 dirs=17 logical=20160
+2026-10-09T21:35:49.131Z query-publish: generation=11 g0=1441 g2=1417 rebuilt=16 refolded=712 edge_reused=0 bytes=1823752 pin_ms=0 build_ms=126 root_rc=0 files=694 dirs=17 logical=22112
+2026-10-09T21:35:49.350Z query-publish: generation=12 g0=1576 g2=1553 rebuilt=16 refolded=779 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=118 root_rc=0 files=761 dirs=17 logical=24288
+2026-10-09T21:35:49.563Z query-publish: generation=13 g0=1705 g2=1680 rebuilt=16 refolded=844 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=111 root_rc=0 files=826 dirs=17 logical=26336
+2026-10-09T21:35:49.797Z query-publish: generation=14 g0=1807 g2=1781 rebuilt=16 refolded=895 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=133 root_rc=0 files=877 dirs=17 logical=27936
+2026-10-09T21:35:50.031Z query-publish: generation=15 g0=1942 g2=1915 rebuilt=16 refolded=962 edge_reused=0 bytes=1823752 pin_ms=0 build_ms=132 root_rc=0 files=944 dirs=17 logical=30112
+2026-10-09T21:35:50.267Z query-publish: generation=16 g0=2079 g2=2053 rebuilt=16 refolded=1030 edge_reused=0 bytes=1823752 pin_ms=0 build_ms=134 root_rc=0 files=1012 dirs=17 logical=32320
+2026-10-09T21:35:50.508Z query-publish: generation=17 g0=2215 g2=2187 rebuilt=16 refolded=1098 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=139 root_rc=0 files=1080 dirs=17 logical=34464
+2026-10-09T21:35:50.774Z query-publish: generation=18 g0=2335 g2=2311 rebuilt=16 refolded=1159 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=165 root_rc=0 files=1141 dirs=17 logical=36416
+2026-10-09T21:35:51.024Z query-publish: generation=19 g0=2464 g2=2441 rebuilt=16 refolded=1224 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=148 root_rc=0 files=1206 dirs=17 logical=38496
+2026-10-09T21:35:51.275Z query-publish: generation=20 g0=2595 g2=2569 rebuilt=16 refolded=1288 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=149 root_rc=0 files=1270 dirs=17 logical=40576
+2026-10-09T21:35:51.551Z query-publish: generation=21 g0=2716 g2=2690 rebuilt=16 refolded=1350 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=174 root_rc=0 files=1332 dirs=17 logical=42496
+2026-10-09T21:35:51.820Z query-publish: generation=22 g0=2878 g2=2852 rebuilt=16 refolded=1430 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=167 root_rc=0 files=1412 dirs=17 logical=45120
+2026-10-09T21:35:52.076Z query-publish: generation=23 g0=3036 g2=3010 rebuilt=16 refolded=1509 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=154 root_rc=0 files=1491 dirs=17 logical=47616
+2026-10-09T21:35:53.682Z query-refresh: rc=-13 cap_mib=256 initial=0 elapsed_ms=2
+2026-10-09T21:35:55.827Z query-publish: generation=24 g0=3880 g2=3564 rebuilt=16 refolded=1443 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=141 root_rc=0 files=1425 dirs=17 logical=45855
+2026-10-09T21:35:58.026Z query-publish: generation=25 g0=3952 g2=3710 rebuilt=1 refolded=1443 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=96 root_rc=0 files=1425 dirs=17 logical=45855
+2026-10-09T21:36:13.716Z efsd 47e7b886 (branch devel-find-stats, built 2026-10-09T21:32:32Z on xefs2), build=47e7b886: node 2 listening on 192.168.122.112:17432, storage=/data1 (1 paths, stripe=none), used=94371840, quota=107374182400, direct_io=on, writers=1 shared
+2026-10-09T21:36:14.081Z query-restore: rc=-14 backend=disk
+2026-10-09T21:36:14.215Z query-publish: generation=1 g0=4024 g2=3769 rebuilt=4096 refolded=1443 edge_reused=0 bytes=1823752 pin_ms=3 build_ms=397 root_rc=0 files=1425 dirs=17 logical=45855
+2026-10-09T23:19:13.342Z query-publish: generation=2 g0=4168 g2=3944 rebuilt=8 refolded=1489 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=148 root_rc=0 files=1464 dirs=24 logical=56020
+2026-10-09T23:19:13.568Z query-publish: generation=3 g0=4241 g2=4095 rebuilt=4 refolded=1545 edge_reused=0 bytes=1823752 pin_ms=2 build_ms=125 root_rc=0 files=1520 dirs=24 logical=71421
+2026-10-09T23:19:13.899Z query-publish: generation=4 g0=4295 g2=4235 rebuilt=7 refolded=1594 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=228 root_rc=0 files=1566 dirs=27 logical=84461
+2026-10-09T23:19:14.197Z query-publish: generation=5 g0=4382 g2=4461 rebuilt=7 refolded=1672 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=196 root_rc=0 files=1641 dirs=30 logical=103199
+2026-10-09T23:19:14.469Z query-publish: generation=6 g0=4515 g2=4592 rebuilt=4 refolded=1738 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=169 root_rc=0 files=1707 dirs=30 logical=120728
+2026-10-09T23:19:14.575Z query-refresh: rc=-13 cap_mib=256 initial=0 elapsed_ms=3
+2026-10-09T23:19:16.835Z query-publish: generation=7 g0=5510 g2=6234 rebuilt=27 refolded=2382 edge_reused=0 bytes=1823752 pin_ms=2 build_ms=257 root_rc=0 files=2328 dirs=53 logical=280389
+2026-10-09T23:19:17.285Z query-publish: generation=8 g0=5697 g2=6318 rebuilt=7 refolded=2450 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=348 root_rc=0 files=2394 dirs=55 logical=296949
+2026-10-09T23:19:17.903Z query-publish: generation=9 g0=5966 g2=6447 rebuilt=4 refolded=2549 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=515 root_rc=0 files=2493 dirs=55 logical=323119
+2026-10-09T23:19:18.281Z query-publish: generation=10 g0=6196 g2=6523 rebuilt=11 refolded=2626 edge_reused=0 bytes=1823752 pin_ms=2 build_ms=275 root_rc=0 files=2564 dirs=61 logical=343994
+2026-10-09T23:19:18.695Z query-publish: generation=11 g0=6387 g2=6688 rebuilt=8 refolded=2713 edge_reused=0 bytes=1823752 pin_ms=2 build_ms=311 root_rc=0 files=2648 dirs=64 logical=365360
+2026-10-09T23:19:19.059Z query-publish: generation=12 g0=6620 g2=6891 rebuilt=4 refolded=2822 edge_reused=0 bytes=1823752 pin_ms=3 build_ms=260 root_rc=0 files=2757 dirs=64 logical=395096
+2026-10-09T23:19:19.433Z query-publish: generation=13 g0=6802 g2=7084 rebuilt=6 refolded=2917 edge_reused=0 bytes=1823752 pin_ms=2 build_ms=271 root_rc=0 files=2851 dirs=65 logical=417709
+2026-10-09T23:19:19.821Z query-publish: generation=14 g0=6940 g2=7331 rebuilt=8 refolded=3011 edge_reused=0 bytes=1823752 pin_ms=3 build_ms=285 root_rc=0 files=2942 dirs=68 logical=440996
+2026-10-09T23:19:20.233Z query-publish: generation=15 g0=7106 g2=7516 rebuilt=7 refolded=3101 edge_reused=0 bytes=1823752 pin_ms=3 build_ms=308 root_rc=0 files=3030 dirs=70 logical=463308
+2026-10-09T23:19:20.742Z query-publish: generation=16 g0=7330 g2=7715 rebuilt=11 refolded=3203 edge_reused=0 bytes=1823752 pin_ms=3 build_ms=405 root_rc=0 files=3126 dirs=76 logical=488186
+2026-10-09T23:19:21.205Z query-publish: generation=17 g0=7581 g2=7896 rebuilt=6 refolded=3312 edge_reused=0 bytes=1823752 pin_ms=2 build_ms=357 root_rc=0 files=3234 dirs=77 logical=515163
+2026-10-09T23:19:21.645Z query-publish: generation=18 g0=7823 g2=8138 rebuilt=7 refolded=3432 edge_reused=0 bytes=1823752 pin_ms=2 build_ms=336 root_rc=0 files=3352 dirs=79 logical=541658
+2026-10-09T23:19:22.088Z query-publish: generation=19 g0=8100 g2=8307 rebuilt=9 refolded=3545 edge_reused=0 bytes=1823752 pin_ms=3 build_ms=337 root_rc=0 files=3461 dirs=83 logical=567736
+2026-10-09T23:19:22.556Z query-publish: generation=20 g0=8454 g2=8369 rebuilt=8 refolded=3647 edge_reused=0 bytes=1823752 pin_ms=3 build_ms=365 root_rc=0 files=3560 dirs=86 logical=595048
+2026-10-09T23:19:23.018Z query-publish: generation=21 g0=8909 g2=8376 rebuilt=8 refolded=3763 edge_reused=0 bytes=1823752 pin_ms=3 build_ms=358 root_rc=0 files=3673 dirs=89 logical=625509
+2026-10-09T23:19:23.524Z query-publish: generation=22 g0=9316 g2=8385 rebuilt=7 refolded=3866 edge_reused=0 bytes=1823752 pin_ms=3 build_ms=400 root_rc=0 files=3774 dirs=91 logical=654686
+2026-10-09T23:19:24.093Z query-publish: generation=23 g0=9650 g2=8564 rebuilt=9 refolded=3994 edge_reused=0 bytes=1823752 pin_ms=3 build_ms=463 root_rc=0 files=3898 dirs=95 logical=686294
+2026-10-09T23:19:24.569Z query-publish: generation=24 g0=9874 g2=8881 rebuilt=7 refolded=4126 edge_reused=0 bytes=1823752 pin_ms=2 build_ms=370 root_rc=0 files=4028 dirs=97 logical=719883
+2026-10-09T23:19:25.092Z query-publish: generation=25 g0=10011 g2=9241 rebuilt=6 refolded=4251 edge_reused=0 bytes=1823752 pin_ms=3 build_ms=414 root_rc=0 files=4152 dirs=98 logical=752686
+2026-10-09T23:19:25.652Z query-publish: generation=26 g0=10277 g2=9483 rebuilt=11 refolded=4376 edge_reused=0 bytes=1823752 pin_ms=3 build_ms=454 root_rc=0 files=4271 dirs=104 logical=782502
+2026-10-09T23:19:26.241Z query-publish: generation=27 g0=10647 g2=9730 rebuilt=17 refolded=4526 edge_reused=0 bytes=1823752 pin_ms=3 build_ms=481 root_rc=0 files=4409 dirs=116 logical=819382
+2026-10-09T23:19:26.798Z query-publish: generation=28 g0=10954 g2=10015 rebuilt=7 refolded=4673 edge_reused=0 bytes=1823752 pin_ms=4 build_ms=450 root_rc=0 files=4554 dirs=118 logical=854949
+2026-10-09T23:19:27.370Z query-publish: generation=29 g0=11226 g2=10231 rebuilt=4 refolded=4795 edge_reused=0 bytes=1823752 pin_ms=0 build_ms=466 root_rc=0 files=4676 dirs=118 logical=887427
+2026-10-09T23:19:28.014Z query-publish: generation=30 g0=11534 g2=10410 rebuilt=11 refolded=4916 edge_reused=0 bytes=1823752 pin_ms=0 build_ms=536 root_rc=0 files=4791 dirs=124 logical=916514
+2026-10-09T23:19:28.625Z query-publish: generation=31 g0=11843 g2=10668 rebuilt=10 refolded=5055 edge_reused=0 bytes=1823752 pin_ms=0 build_ms=504 root_rc=0 files=4925 dirs=129 logical=949675
+2026-10-09T23:19:29.177Z query-publish: generation=32 g0=12219 g2=10876 rebuilt=7 refolded=5200 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=446 root_rc=0 files=5068 dirs=131 logical=988866
+2026-10-09T23:19:29.831Z query-publish: generation=33 g0=12364 g2=11207 rebuilt=11 refolded=5315 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=547 root_rc=0 files=5176 dirs=138 logical=1014695
+2026-10-09T23:19:30.422Z query-publish: generation=34 g0=12555 g2=11656 rebuilt=11 refolded=5473 edge_reused=0 bytes=1823752 pin_ms=0 build_ms=483 root_rc=0 files=5328 dirs=144 logical=1058493
+2026-10-09T23:19:31.115Z query-publish: generation=35 g0=12916 g2=11840 rebuilt=14 refolded=5611 edge_reused=0 bytes=1823752 pin_ms=0 build_ms=582 root_rc=0 files=5457 dirs=153 logical=1093083
+2026-10-09T23:19:31.808Z query-publish: generation=36 g0=13326 g2=12065 rebuilt=7 refolded=5767 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=581 root_rc=0 files=5611 dirs=155 logical=1134585
+2026-10-09T23:19:32.498Z query-publish: generation=37 g0=13645 g2=12387 rebuilt=9 refolded=5928 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=582 root_rc=0 files=5768 dirs=159 logical=1174620
+2026-10-09T23:19:33.202Z query-publish: generation=38 g0=13955 g2=12762 rebuilt=11 refolded=6096 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=596 root_rc=0 files=5930 dirs=165 logical=1219049
+2026-10-09T23:19:33.911Z query-publish: generation=39 g0=14305 g2=13098 rebuilt=8 refolded=6266 edge_reused=0 bytes=1823752 pin_ms=2 build_ms=600 root_rc=0 files=6097 dirs=168 logical=1262946
+2026-10-09T23:19:34.731Z query-publish: generation=40 g0=14650 g2=13451 rebuilt=10 refolded=6437 edge_reused=0 bytes=1823752 pin_ms=2 build_ms=710 root_rc=0 files=6263 dirs=173 logical=1305180
+2026-10-09T23:19:35.519Z query-publish: generation=41 g0=15120 g2=13678 rebuilt=10 refolded=6610 edge_reused=0 bytes=1823752 pin_ms=2 build_ms=678 root_rc=0 files=6431 dirs=178 logical=1346592
+2026-10-09T23:19:36.256Z query-publish: generation=42 g0=15678 g2=13857 rebuilt=8 refolded=6792 edge_reused=0 bytes=1823752 pin_ms=2 build_ms=624 root_rc=0 files=6610 dirs=181 logical=1390041
+2026-10-09T23:19:37.035Z query-publish: generation=43 g0=16163 g2=14070 rebuilt=17 refolded=6961 edge_reused=0 bytes=1823752 pin_ms=2 build_ms=665 root_rc=0 files=6767 dirs=193 logical=1430410
+2026-10-09T23:19:37.795Z query-publish: generation=44 g0=16502 g2=14465 rebuilt=14 refolded=7144 edge_reused=0 bytes=1823752 pin_ms=2 build_ms=648 root_rc=0 files=6941 dirs=202 logical=1475142
+2026-10-09T23:19:38.686Z query-publish: generation=45 g0=16831 g2=14753 rebuilt=6 refolded=7296 edge_reused=0 bytes=1823752 pin_ms=2 build_ms=782 root_rc=0 files=7092 dirs=203 logical=1512097
+2026-10-09T23:19:39.521Z query-publish: generation=46 g0=17259 g2=15067 rebuilt=10 refolded=7480 edge_reused=0 bytes=1823752 pin_ms=2 build_ms=721 root_rc=0 files=7271 dirs=208 logical=1559781
+2026-10-09T23:19:40.413Z query-publish: generation=47 g0=17858 g2=15277 rebuilt=15 refolded=7680 edge_reused=0 bytes=1823752 pin_ms=2 build_ms=777 root_rc=0 files=7461 dirs=218 logical=1608111
+2026-10-09T23:19:41.253Z query-publish: generation=48 g0=18495 g2=15416 rebuilt=13 refolded=7874 edge_reused=0 bytes=1823752 pin_ms=3 build_ms=728 root_rc=0 files=7647 dirs=226 logical=1652020
+2026-10-09T23:19:42.177Z query-publish: generation=49 g0=18885 g2=15798 rebuilt=8 refolded=8064 edge_reused=0 bytes=1823752 pin_ms=3 build_ms=811 root_rc=0 files=7834 dirs=229 logical=1700194
+2026-10-09T23:19:43.119Z query-publish: generation=50 g0=19226 g2=16294 rebuilt=12 refolded=8274 edge_reused=0 bytes=1823752 pin_ms=2 build_ms=825 root_rc=0 files=8037 dirs=236 logical=1750624
+2026-10-09T23:19:44.054Z query-publish: generation=51 g0=19642 g2=16758 rebuilt=16 refolded=8494 edge_reused=0 bytes=1823752 pin_ms=3 build_ms=819 root_rc=0 files=8246 dirs=247 logical=1804027
+2026-10-09T23:19:45.093Z query-publish: generation=52 g0=19889 g2=17419 rebuilt=10 refolded=8721 edge_reused=0 bytes=1823752 pin_ms=2 build_ms=924 root_rc=0 files=8468 dirs=252 logical=1860935
+2026-10-09T23:19:46.126Z query-publish: generation=53 g0=20337 g2=17972 rebuilt=19 refolded=8970 edge_reused=0 bytes=1823752 pin_ms=3 build_ms=919 root_rc=0 files=8703 dirs=266 logical=1920803
+2026-10-09T23:19:46.252Z query-refresh: rc=-13 cap_mib=256 initial=0 elapsed_ms=11
+2026-10-09T23:19:49.494Z query-publish: generation=54 g0=21996 g2=19499 rebuilt=35 refolded=9763 edge_reused=0 bytes=1823752 pin_ms=0 build_ms=1240 root_rc=0 files=9466 dirs=296 logical=2115527
+2026-10-09T23:19:50.637Z query-publish: generation=55 g0=22780 g2=19966 rebuilt=15 refolded=10075 edge_reused=0 bytes=1823752 pin_ms=0 build_ms=1019 root_rc=0 files=9768 dirs=306 logical=2194734
+2026-10-09T23:19:51.768Z query-publish: generation=56 g0=23337 g2=20565 rebuilt=16 refolded=10364 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=1009 root_rc=0 files=10046 dirs=317 logical=2264044
+2026-10-09T23:19:53.032Z query-publish: generation=57 g0=23833 g2=21042 rebuilt=14 refolded=10609 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=1147 root_rc=0 files=10282 dirs=326 logical=2326979
+2026-10-09T23:19:54.236Z query-publish: generation=58 g0=24458 g2=21554 rebuilt=16 refolded=10890 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=1081 root_rc=0 files=10552 dirs=337 logical=2395490
+2026-10-09T23:19:55.453Z query-publish: generation=59 g0=25140 g2=21975 rebuilt=11 refolded=11162 edge_reused=0 bytes=1823752 pin_ms=2 build_ms=1099 root_rc=0 files=10818 dirs=343 logical=2461441
+2026-10-09T23:19:56.743Z query-publish: generation=60 g0=25957 g2=22312 rebuilt=17 refolded=11444 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=1168 root_rc=0 files=11088 dirs=355 logical=2531366
+2026-10-09T23:19:57.981Z query-publish: generation=61 g0=26620 g2=22797 rebuilt=13 refolded=11729 edge_reused=0 bytes=1823752 pin_ms=2 build_ms=1118 root_rc=0 files=11365 dirs=363 logical=2603765
+2026-10-09T23:19:59.296Z query-publish: generation=62 g0=27174 g2=23441 rebuilt=13 refolded=12027 edge_reused=0 bytes=1823752 pin_ms=3 build_ms=1192 root_rc=0 files=11655 dirs=371 logical=2677533
+2026-10-09T23:19:59.424Z query-refresh: rc=-13 cap_mib=256 initial=0 elapsed_ms=5
+2026-10-09T23:20:02.728Z query-publish: generation=63 g0=28782 g2=24942 rebuilt=32 refolded=12796 edge_reused=0 bytes=1823752 pin_ms=2 build_ms=1303 root_rc=0 files=12397 dirs=398 logical=2875723
+2026-10-09T23:20:04.244Z query-publish: generation=64 g0=29139 g2=25854 rebuilt=14 refolded=13112 edge_reused=0 bytes=1823752 pin_ms=3 build_ms=1396 root_rc=0 files=12704 dirs=407 logical=2954295
+2026-10-09T23:20:05.566Z query-publish: generation=65 g0=29635 g2=26703 rebuilt=12 refolded=13447 edge_reused=0 bytes=1823752 pin_ms=3 build_ms=1199 root_rc=0 files=13032 dirs=414 logical=3043666
+2026-10-09T23:20:06.863Z query-publish: generation=66 g0=29893 g2=27613 rebuilt=13 refolded=13740 edge_reused=0 bytes=1823752 pin_ms=3 build_ms=1172 root_rc=0 files=13317 dirs=422 logical=3121810
+2026-10-09T23:20:08.571Z query-publish: generation=67 g0=30064 g2=27892 rebuilt=7 refolded=13850 edge_reused=0 bytes=1823752 pin_ms=3 build_ms=1586 root_rc=0 files=13425 dirs=424 logical=3152014
+2026-10-09T23:27:41.882Z efsd 56b845a4 (branch devel-find-stats, built 2026-10-09T23:26:53Z on xefs2), build=56b845a4: node 2 listening on 192.168.122.112:17432, storage=/data1 (1 paths, stripe=none), used=880803840, quota=107374182400, direct_io=on, writers=1 shared
+2026-10-09T23:27:41.996Z query-restore: rc=-14 backend=disk
+2026-10-09T23:27:43.317Z query-publish: generation=1 g0=30209 g2=28009 rebuilt=4096 refolded=13850 edge_reused=0 bytes=2086408 pin_ms=7 build_ms=1331 root_rc=0 files=13425 dirs=424 logical=3152014
