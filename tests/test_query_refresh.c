@@ -1,4 +1,5 @@
 #include "../src/server/query_refresh.h"
+#include "../src/server/query_export_lease.h"
 #include <assert.h>
 #include <stdio.h>
 int main(void)
@@ -16,6 +17,18 @@ int main(void)
     assert(efs_query_refresh_due(3000,0,1000,0,1,1,256,2000));
     /* A slow completed build has already used the interval; no added delay. */
     assert(efs_query_refresh_due(5000,1001,1000,256,0,0,256,2000));
+    int valid;
+    assert(efs_query_export_lifetime(NULL,&valid)==3600000 && valid);
+    assert(efs_query_export_lifetime("86400000",&valid)==86400000 && valid);
+    assert(efs_query_export_lifetime("604800000",&valid)==604800000 && valid);
+    assert(efs_query_export_lifetime("60000",&valid)==60000 && valid);
+    const char *bad[]={"59999","604800001","-1","18446744073709551616","86400000x"};
+    for(unsigned i=0;i<sizeof(bad)/sizeof(bad[0]);i++)assert(efs_query_export_lifetime(bad[i],&valid)==3600000 && !valid);
+    assert(!efs_query_export_expired(3600001,3599999,0,86400000));
+    assert(efs_query_export_expired(3600001,3599999,0,3600000));
+    assert(efs_query_export_expired(3600001,3500000,0,86400000));
+    assert(!efs_query_export_expired(60000,0,0,60000));
+    assert(efs_query_export_expired(60001,60000,0,60000));
     puts("query refresh: busy coalescing, sparse freshness, startup and retry PASS");
     return 0;
 }

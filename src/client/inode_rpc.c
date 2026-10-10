@@ -1679,7 +1679,7 @@ int efs_client_rpc_getchunks_fileid(efs_export_id_t export_id, efs_ino_t ino,
     uint32_t shard = efs_export_shard_of(ino, EFS_KV_SHARD_BITS);
     struct efs_msg_inode_getchunks_reply *r = NULL;
     void *payload = NULL;
-    efs_node_id_t target = 0;
+    efs_node_id_t target = 0, skip = 0;
     for (int attempt = 0; attempt < 16; attempt++) {
         if (efs_client_rpc_past_deadline())
             return EFS_ERR_BUSY;
@@ -1687,16 +1687,21 @@ int efs_client_rpc_getchunks_fileid(efs_export_id_t export_id, efs_ino_t ino,
         int prof = rpc_prof_enabled();
         unsigned long long t0 = prof ? rpc_prof_now_us() : 0;
         struct efs_conn *conn = target ? efs_client_conn_get(target)
-                                      : rpc_owner_conn_shard(shard, &nid);
+                                      : raft_voter_conn_skip(shard, &nid, skip);
         if (target)
             nid = target;
         unsigned long long t1 = prof ? rpc_prof_now_us() : 0;
-        if (!conn)
-            return EFS_ERR_NET;
-        if (efs_conn_send_msg(conn, EFS_MSG_INODE_GETCHUNKS, &req,
-                              sizeof(req)) != 0) {
-            efs_client_conn_drop(nid, conn);
-            return EFS_ERR_NET;
+        if (!conn || efs_conn_send_msg(conn, EFS_MSG_INODE_GETCHUNKS, &req,
+                                      sizeof(req)) != 0) {
+            if (conn) efs_client_conn_drop(nid, conn);
+            /* This immutable read is safe to repeat after endpoint loss.
+             * Drop a dead leader hint and choose a different live voter;
+             * preserve FileID, range, outputs and the original deadline. */
+            skip = nid; target = 0;
+            if (attempt == 15) return EFS_ERR_NET;
+            if (rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+                return EFS_ERR_BUSY;
+            continue;
         }
         unsigned long long t2 = prof ? rpc_prof_now_us() : 0;
         uint8_t rtype = 0;
@@ -1707,7 +1712,12 @@ int efs_client_rpc_getchunks_fileid(efs_export_id_t export_id, efs_ino_t ino,
         if (rc != 0) {
             free(payload);
             efs_client_conn_drop(nid, conn);
-            return EFS_ERR_NET;
+            payload = NULL;
+            skip = nid; target = 0;
+            if (attempt == 15) return EFS_ERR_NET;
+            if (rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+                return EFS_ERR_BUSY;
+            continue;
         }
         efs_client_conn_release(nid, conn);
         if (efs_client_rpc_past_deadline()) {
@@ -1721,12 +1731,16 @@ int efs_client_rpc_getchunks_fileid(efs_export_id_t export_id, efs_ino_t ino,
             return EFS_ERR_PROTO;
         }
         r = payload;
-        if (r->status == EFS_INODE_RPC_NOT_PRIMARY && r->primary_id &&
-            r->primary_id != nid) {
-            target = r->primary_id;
+        if (r->status == EFS_INODE_RPC_NOT_PRIMARY) {
+            efs_node_id_t hint = r->primary_id;
+            target = hint && hint != nid ? hint : 0;
+            skip = nid;
             free(payload);
             payload = NULL;
             r = NULL;
+            if (!target && (attempt == 15 ||
+                            rpc_writer_retry_pause((unsigned)attempt) != EFS_OK))
+                return EFS_ERR_BUSY;
             continue;
         }
         if (r->status != EFS_INODE_RPC_BUSY)

@@ -19,6 +19,8 @@ source=r'''
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
+#include <errno.h>
+static uint64_t stats_now_ms(void);
 #include "client_internal.h"
 #include "efs/session.h"
 struct efs_client g_client;
@@ -50,7 +52,7 @@ int efs_client_lease_reset(struct efs_client_lease_request *r) {
 # RPC mock references the production mutex, so place bookkeeping first.
 mock=source[source.index('int efs_client_rpc_getchunks_fileid'):]
 source=source[:source.index('int efs_client_rpc_getchunks_fileid')]+s[a:b]+mock
-for name in ('efs_open_note','efs_open_set_leased','efs_close_note','efs_open_release_pending','efs_open_drain_pending','efs_open_acquire_fileid','efs_open_acquire','efs_open_adopt'):
+for name in ('efs_open_note','efs_open_set_leased','efs_close_note','efs_open_release_pending','efs_open_drain_pending','wb_lock_budget','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid','efs_open_acquire','efs_open_adopt'):
  source+='\n'+function(name)
 w=s.index('/* A lost last-close reply must not pin')
 x=s.index('/* Client-cache design Part A, pin rule 2:',w)
@@ -60,6 +62,7 @@ uint64_t efs_client_rpc_deadline_ms(void){return mock_deadline;}
 void efs_client_rpc_set_deadline_ms(uint64_t deadline){mock_deadline=deadline;}
 static int efs_pending_create_drain(void){return EFS_OK;}
 static uint64_t stats_now_ms(void){struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000+t.tv_nsec/1000000;}
+int efs_client_rpc_past_deadline(void){return mock_deadline && stats_now_ms()>=mock_deadline;}
 '''+s[w:x]
 source+=r'''
 int main(void) {

@@ -825,6 +825,231 @@ static void test_grow_3_to_5(void)
     free_n(&n, st, 5);
 }
 
+static int discard_send(void *net, const struct efs_raft_msg *msg)
+{
+    (void)net; (void)msg;
+    return EFS_OK;
+}
+static int fail_cfg_save(void *ctx, uint32_t old, uint32_t next)
+{
+    (void)ctx; (void)old; (void)next;
+    return EFS_ERR_IO;
+}
+static int fail_cfg_load(void *ctx, uint32_t *old, uint32_t *next)
+{
+    (void)ctx; (void)old; (void)next;
+    return EFS_ERR_IO;
+}
+static void test_membership_persistence(void)
+{
+    struct efs_raft_store *st = efs_raft_mem_create();
+    struct efs_raft_cfg cfg = {0};
+    struct efs_raft *r;
+    struct app app = {0};
+    uint64_t idx = 0, snap = 0, term = 0;
+    uint8_t cmd = 'M';
+    int i;
+    cfg.id = 0; cfg.n = 1; cfg.voters = 1; cfg.store = st;
+    cfg.store_ctx = st; cfg.send = discard_send; cfg.apply = apply_cmd;
+    cfg.app = &app; cfg.election_ticks = 2; cfg.heartbeat_ticks = 1;
+    r = efs_raft_new(&cfg);
+    CHECK(r != NULL, "membership persistence fixture");
+    if (!r) { efs_raft_mem_free(st); return; }
+    for (i = 0; i < 8; i++) efs_raft_tick(r);
+    CHECK(efs_raft_propose(r, &cmd, 1, &idx) == EFS_OK, "solo command committed");
+    st->save_cfg = fail_cfg_save;
+    CHECK(efs_raft_snapshot(r) == EFS_ERR_IO, "snapshot reports membership save failure");
+    CHECK(st->load_snap(st, &snap, &term) == EFS_OK && snap == 0,
+          "failed membership save cannot discard log prefix");
+    CHECK(efs_raft_tick(r) == EFS_ERR_IO, "failed membership save fences replica");
+    CHECK(efs_raft_role(r) == EFS_RAFT_FOLLOWER, "fenced replica loses leadership");
+    efs_raft_free(r); efs_raft_mem_free(st);
+
+    st = efs_raft_mem_create(); cfg.store = st; cfg.store_ctx = st;
+    CHECK(st->save_cfg(st, 0, 0) == EFS_OK, "seed invalid empty membership");
+    r = efs_raft_new(&cfg);
+    CHECK(r == NULL, "cold bootstrap rejects invalid stored membership");
+    efs_raft_free(r);
+    CHECK(st->save_cfg(st, 1, 1u << EFS_RAFT_MAX_PEERS) == EFS_OK,
+          "seed invalid joint membership");
+    r = efs_raft_new(&cfg);
+    CHECK(r == NULL, "cold bootstrap rejects invalid stored joint membership");
+    efs_raft_free(r);
+    st->load_cfg = fail_cfg_load;
+    r = efs_raft_new(&cfg);
+    CHECK(r == NULL, "membership load IO cannot silently use bootstrap config");
+    efs_raft_free(r); efs_raft_mem_free(st);
+
+    st = efs_raft_mem_create(); cfg.store = st; cfg.store_ctx = st;
+    cfg.id = 1; cfg.n = 4; cfg.voters = 0x7; cfg.snap_chunk = snap_chunk;
+    r = efs_raft_new(&cfg);
+    CHECK(r != NULL, "follower membership fixture");
+    if (r) {
+        struct efs_raft_msg m = {0};
+        struct efs_raft_entry *entry = &m.entries[0];
+        uint8_t payload[13] = {0};
+        m.type = EFS_RAFT_MSG_SNAP_REQ; m.from = 0; m.to = 1;
+        m.term = 1; m.boot_id = 1; m.last_log_index = 10;
+        m.last_log_term = 1; m.leader_commit = 10; m.success = 1;
+        m.nentries = 1;
+        entry->cmd = payload; entry->clen = sizeof(payload); entry->term = 1;
+        wr32_t(payload, 0); wr32_t(payload+4, 0);
+        CHECK(efs_raft_recv(r, &m) == EFS_OK, "malformed snapshot gets rejection response");
+        CHECK(app.part_resets == 0 && !app.part_applied,
+              "invalid snapshot membership rejected before importing user state");
+        CHECK(efs_raft_voters(r) == 0x7, "invalid snapshot preserves original membership");
+        /* An ordinary committed membership entry must persist before apply
+         * advancement or a successful replication response. */
+        m.type = EFS_RAFT_MSG_AE_REQ; m.last_log_index = 0;
+        m.last_log_term = 0; m.leader_commit = 1; m.success = 0;
+        payload[0] = EFS_RAFT_CMD_JOINT;
+        wr32_t(payload+1, 0x7); wr32_t(payload+5, 0xf); entry->clen = 9;
+        st->save_cfg = fail_cfg_save;
+        CHECK(efs_raft_recv(r, &m) == EFS_ERR_IO, "applied membership IO is propagated");
+        CHECK(efs_raft_applied(r) == 0, "failed membership does not advance apply");
+        CHECK(efs_raft_tick(r) == EFS_ERR_IO, "membership apply IO fences follower");
+        efs_raft_free(r);
+    }
+    efs_raft_mem_free(st);
+}
+
+/* Four-voter engine support is staged. These memory-store checks establish
+ * replication and quorum behavior, not recoverable commit certificates or
+ * production D36 protection. In particular two survivors cannot elect. */
+static void test_four_voters(void)
+{
+    int omitted, lost_a, lost_b;
+
+    CHECK(!efs_raft_voters_valid(0), "empty membership rejected");
+    CHECK(!efs_raft_voters_valid(1u << EFS_RAFT_MAX_PEERS),
+          "out-of-range membership rejected");
+    CHECK(!efs_raft_voters_valid(0xffffffffu), "invalid high bits rejected");
+    CHECK(efs_raft_voters_valid(0xf), "four voters accepted");
+    for (omitted = 0; omitted < 4; omitted++) {
+        struct net n;
+        struct efs_raft_store *st[4];
+        struct app app[4];
+        struct efs_raft_cfg cfg;
+        uint8_t cmd = '4';
+        uint64_t idx = 0, term = 0;
+        int lid, i, copies = 0;
+
+        boot_n(&n, st, app, &cfg, 4, 0xf);
+        for (i = 0; i < 4; i++) {
+            if (!n.r[i]) {
+                free_n(&n, st, 4);
+                return;
+            }
+        }
+        n.drop[omitted] = 1;
+        CHECK(elect(&n, 40) == 1, "three of four elect with any node absent");
+        lid = leader_id(&n);
+        if (lid < 0) {
+            free_n(&n, st, 4);
+            return;
+        }
+        CHECK(efs_raft_propose(n.r[lid], &cmd, 1, &idx) == EFS_OK,
+              "four-voter proposal");
+        CHECK(elect(&n, 8) == 1, "four-voter leader stable");
+        CHECK(efs_raft_commit(n.r[lid]) >= idx, "three of four commit");
+        for (i = 0; i < 4; i++) {
+            uint8_t got = 0;
+            uint32_t len = 1;
+            if (st[i]->get(st[i], idx, &term, &got, &len) == EFS_OK &&
+                len == 1 && got == cmd)
+                copies++;
+        }
+        CHECK(copies == 3, "exact command copied to three reachable stores");
+        /* Independently inspect every two-loss pair: at least one command
+         * copy remains, even when the unavailable replica is a survivor. */
+        for (lost_a = 0; lost_a < 4; lost_a++) {
+            for (lost_b = lost_a + 1; lost_b < 4; lost_b++) {
+                int retained = 0;
+                for (i = 0; i < 4; i++) {
+                    uint8_t got = 0;
+                    uint32_t len = 1;
+                    if (i != lost_a && i != lost_b &&
+                        st[i]->get(st[i], idx, &term, &got, &len) == EFS_OK &&
+                        len == 1 && got == cmd)
+                        retained++;
+                }
+                CHECK(retained >= 1, "every two-loss pair retains a log copy");
+            }
+        }
+        /* A pending read and write must not earn authority from just two
+         * voters. Keep the old leader reachable to test stale leadership. */
+        for (i = 0; i < 4; i++) {
+            if (i != lid && i != omitted) {
+                n.drop[i] = 1;
+                break;
+            }
+        }
+        {
+            uint64_t before = efs_raft_commit(n.r[lid]);
+            uint64_t pending = 0;
+            CHECK(efs_raft_read_begin(n.r[lid]) == EFS_OK,
+                  "read admitted before quorum loss is detected");
+            CHECK(!efs_raft_read_quorum(n.r[lid]) &&
+                  !efs_raft_read_ready(n.r[lid]), "two voters cannot authorize read");
+            CHECK(efs_raft_propose(n.r[lid], &cmd, 1, &pending) == EFS_OK,
+                  "isolated leader may enqueue but cannot commit");
+            CHECK(elect(&n, 40) >= 0, "two-voter ticks succeed");
+            CHECK(efs_raft_commit(n.r[lid]) == before,
+                  "two voters cannot acknowledge a new write");
+            CHECK(!efs_raft_read_quorum(n.r[lid]), "no quorum after timeout");
+        }
+        /* Cold restart all surviving stores with the same four-voter config:
+         * no implicit quorum override or survivor promotion. */
+        for (i = 0; i < 4; i++) {
+            efs_raft_free(n.r[i]);
+            n.r[i] = NULL;
+        }
+        for (i = 0; i < 4; i++) {
+            if (n.drop[i])
+                continue;
+            cfg.id = i; cfg.store = st[i]; cfg.store_ctx = st[i];
+            cfg.app = &app[i]; cfg.boot_id++;
+            n.r[i] = efs_raft_new(&cfg);
+            CHECK(n.r[i] != NULL, "cold four-voter restart");
+        }
+        CHECK(elect(&n, 60) == 0, "two cold survivors cannot elect a leader");
+        free_n(&n, st, 4);
+    }
+}
+
+static void test_grow_3_to_4(void)
+{
+    struct net n;
+    struct efs_raft_store *st[4];
+    struct app app[4];
+    struct efs_raft_cfg cfg;
+    uint8_t cmd = 'J';
+    uint64_t idx = 0;
+    int lid;
+
+    boot_n(&n, st, app, &cfg, 4, 0x7);
+    CHECK(elect(&n, 20) == 1, "elect before four-voter reconfiguration");
+    lid = wait_voters(&n, 0xf, 80);
+    CHECK(lid >= 0, "joint consensus grows three to four");
+    if (lid < 0) {
+        free_n(&n, st, 4);
+        return;
+    }
+    CHECK(efs_raft_propose(n.r[lid], &cmd, 1, &idx) == EFS_OK,
+          "propose after four-voter reconfiguration");
+    elect(&n, 8);
+    CHECK(efs_raft_commit(n.r[lid]) >= idx, "four-voter configuration commits");
+    CHECK(efs_raft_snapshot(n.r[3]) == EFS_OK, "snapshot four-voter membership");
+    efs_raft_free(n.r[3]);
+    cfg.id = 3; cfg.store = st[3]; cfg.store_ctx = st[3]; cfg.app = &app[3];
+    n.r[3] = efs_raft_new(&cfg); /* Bootstrap says three; snapshot is authoritative. */
+    CHECK(n.r[3] && efs_raft_voters(n.r[3]) == 0xf,
+          "cold snapshot restores four-voter membership");
+    lid = wait_voters(&n, 0x7, 80);
+    CHECK(lid >= 0, "joint consensus shrinks four to three");
+    free_n(&n, st, 4);
+}
+
 static void test_i18_joint_quorum(void)
 {
     struct net n;
@@ -1913,6 +2138,9 @@ int main(void)
     test_i3_i4_and_restart();
     test_snapshot();
     test_grow_3_to_5();
+    test_four_voters();
+    test_membership_persistence();
+    test_grow_3_to_4();
     test_solo_durable_cap_then_grow();
     test_i18_joint_quorum();
     test_stale_boot_id();

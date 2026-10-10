@@ -14,7 +14,8 @@ code=r'''
 uint32_t efs_export_shard_of(efs_ino_t ino,uint32_t bits) {(void)ino;(void)bits;return 0;}
 int efs_chunk_size_valid(uint32_t cs) {return cs==EFS_MIN_CHUNK_SIZE;}
 static uint64_t now=1000,deadline;static unsigned calls,sleeps,freed,drops,releases;
-static int busy,fail_recv,bad_type,expire_recv;
+static int busy,fail_recv,bad_type,expire_recv,fail_once,fail_send,no_conn,not_primary;
+static unsigned selections;static efs_node_id_t last_skip;
 struct efs_conn {int unused;};static struct efs_conn connection;
 uint64_t efs_client_rpc_deadline_ms(void) {return deadline;}
 int efs_client_rpc_past_deadline(void) {return deadline&&now>=deadline;}
@@ -25,24 +26,30 @@ static void test_free(void *p) {if(p)freed++;free(p);}
 #define clock_gettime fake_clock
 #define usleep fake_sleep
 static struct efs_conn *efs_client_conn_get(efs_node_id_t n) {(void)n;return &connection;}
-static struct efs_conn *rpc_owner_conn_shard(uint32_t shard,efs_node_id_t *n) {(void)shard;*n=1;return &connection;}
+static struct efs_conn *raft_voter_conn_skip(uint32_t shard,efs_node_id_t *n,efs_node_id_t skip) {(void)shard;selections++;last_skip=skip;*n=skip==1?2:1;return no_conn?NULL:&connection;}
 static void efs_client_conn_drop(efs_node_id_t n,struct efs_conn *c) {(void)n;(void)c;drops++;}
 static void efs_client_conn_release(efs_node_id_t n,struct efs_conn *c) {(void)n;(void)c;releases++;}
 static int rpc_prof_enabled(void) {return 0;}
 static unsigned long long rpc_prof_now_us(void) {return now*1000;}
 static void rpc_prof_add(int type,unsigned long long a,unsigned long long b,unsigned long long c,unsigned long long d) {(void)type;(void)a;(void)b;(void)c;(void)d;}
 static int rpc_status_to_efs(uint8_t status) {return status==EFS_INODE_RPC_OK?EFS_OK:EFS_ERR_BUSY;}
-int efs_conn_send_msg(struct efs_conn *c,uint8_t type,const void *p,uint32_t n) {(void)c;assert(type==EFS_MSG_INODE_GETCHUNKS&&n==sizeof(struct efs_msg_inode_getchunks));const struct efs_msg_inode_getchunks *r=p;assert(r->ino==123&&r->generation==456&&r->start==0&&r->max==2);return 0;}
-int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **p,uint32_t *n) {(void)c;calls++;struct efs_msg_inode_getchunks_reply *r=calloc(1,sizeof(*r));assert(r);r->ino=123;r->generation=456;r->status=busy?EFS_INODE_RPC_BUSY:EFS_INODE_RPC_OK;*p=r;*n=sizeof(*r);*type=bad_type?EFS_MSG_VERSION_REPLY:EFS_MSG_INODE_GETCHUNKS_REPLY;if(expire_recv)now=deadline;return fail_recv;}
+int efs_conn_send_msg(struct efs_conn *c,uint8_t type,const void *p,uint32_t n) {(void)c;assert(type==EFS_MSG_INODE_GETCHUNKS&&n==sizeof(struct efs_msg_inode_getchunks));const struct efs_msg_inode_getchunks *r=p;assert(r->ino==123&&r->generation==456&&r->start==0&&r->max==2);return fail_send;}
+int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **p,uint32_t *n) {(void)c;calls++;struct efs_msg_inode_getchunks_reply *r=calloc(1,sizeof(*r));assert(r);r->ino=123;r->generation=456;r->status=not_primary && calls==1?EFS_INODE_RPC_NOT_PRIMARY:busy?EFS_INODE_RPC_BUSY:EFS_INODE_RPC_OK;r->primary_id=not_primary==2?1:0;*p=r;*n=sizeof(*r);*type=bad_type?EFS_MSG_VERSION_REPLY:EFS_MSG_INODE_GETCHUNKS_REPLY;if(expire_recv)now=deadline;return fail_recv||(fail_once&&calls==1);}
 '''+fn('static int rpc_writer_retry_pause(unsigned attempt)\n{')+fn('int efs_client_rpc_getchunks_fileid(')+r'''
-static void reset(void) {calls=sleeps=freed=drops=releases=0;busy=fail_recv=bad_type=expire_recv=0;now=1000;deadline=0;}
+static void reset(void) {calls=sleeps=freed=drops=releases=0;busy=fail_recv=bad_type=expire_recv=fail_once=fail_send=no_conn=not_primary=0;selections=last_skip=0;now=1000;deadline=0;}
 static int run(uint32_t *count,uint64_t *gen) {struct efs_chunk_rec r[2];return efs_client_rpc_getchunks_fileid(1,123,456,0,r,count,gen);}
 int main(void) {
  uint32_t n=2;uint64_t gen=999;reset();assert(!run(&n,&gen)&&n==0&&gen==456&&calls==1&&freed==1);
  reset();n=2;gen=999;deadline=1000;assert(run(&n,&gen)==EFS_ERR_BUSY&&n==2&&gen==999&&!calls);
  reset();busy=1;deadline=1010;assert(run(&n,&gen)==EFS_ERR_BUSY&&calls==1&&freed==1&&sleeps==1&&now==1010&&n==2&&gen==999);
- reset();fail_recv=1;assert(run(&n,&gen)==EFS_ERR_NET&&calls==1&&freed==1&&drops==1&&!releases);
- reset();bad_type=1;assert(run(&n,&gen)==EFS_ERR_PROTO&&freed==1);
+ reset();fail_recv=1;assert(run(&n,&gen)==EFS_ERR_NET&&calls==16&&freed==16&&drops==16&&!releases&&sleeps==15&&n==2&&gen==999);
+ reset();fail_once=1;assert(!run(&n,&gen)&&calls==2&&freed==2&&drops==1&&releases==1&&last_skip==1&&n==0&&gen==456);
+ reset();n=2;gen=999;fail_send=1;assert(run(&n,&gen)==EFS_ERR_NET&&!calls&&drops==16&&sleeps==15&&n==2&&gen==999);
+ reset();no_conn=1;assert(run(&n,&gen)==EFS_ERR_NET&&!calls&&!drops&&selections==16&&sleeps==15);
+ reset();fail_recv=1;deadline=1010;assert(run(&n,&gen)==EFS_ERR_BUSY&&calls==1&&freed==1&&drops==1&&sleeps==1&&now==1010&&n==2&&gen==999);
+ reset();not_primary=1;assert(!run(&n,&gen)&&calls==2&&last_skip==1&&sleeps==1);
+ reset();n=2;gen=999;not_primary=2;assert(!run(&n,&gen)&&calls==2&&last_skip==1&&sleeps==1);
+ reset();n=2;gen=999;bad_type=1;assert(run(&n,&gen)==EFS_ERR_PROTO&&freed==1);
  reset();deadline=1010;expire_recv=1;assert(run(&n,&gen)==EFS_ERR_BUSY&&freed==1&&n==2&&gen==999);
  reset();busy=1;assert(run(&n,&gen)==EFS_ERR_BUSY&&calls==16&&freed==16&&sleeps==15);
  return 0;
@@ -52,4 +59,4 @@ with tempfile.TemporaryDirectory(prefix='efs-getchunks-budget-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),str(root/'src/kv/kv_key.c'),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True)
-print('GETCHUNKS RPC: whole retry budget, output retention and receive-payload cleanup PASS')
+print('GETCHUNKS RPC: bounded endpoint-loss/no-hint retries, exact FileID, whole deadline, output retention and payload cleanup PASS')

@@ -190,7 +190,11 @@ int main(int argc,char **argv)
             }
         }
         struct efs_chunk_rec rec;uint32_t n=1;uint64_t gen=0;
-        assert(!efs_client_rpc_getchunks_fileid(1,ino,saved[1].rec.file_generation,saved[1].rec.chunk_index,&rec,&n,&gen));
+        int read_rc=efs_client_rpc_getchunks_fileid(1,ino,saved[1].rec.file_generation,saved[1].rec.chunk_index,&rec,&n,&gen);
+        if(read_rc)fprintf(stderr,"cold publication GETCHUNKS ino=%llu generation=%llu ci=%u rc=%d\n",
+                          (unsigned long long)ino,(unsigned long long)saved[1].rec.file_generation,
+                          saved[1].rec.chunk_index,read_rc);
+        assert(!read_rc);
         assert(n==1 && gen==saved[1].rec.file_generation && rec.chunk_generation==saved[1].rec.chunk_generation);
         puts("cold retired exact replay cannot resurrect superseded mapping PASS");
         if(saved[1].ticketed)puts("cold ticket floors: exact retirement ACK replay, status and late admission refusal PASS");

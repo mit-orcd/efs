@@ -1,0 +1,11 @@
+FAIL tests/test_raft.c:862: failed membership save cannot discard log prefix
+FAIL tests/test_raft.c:864: failed membership save fences replica
+FAIL tests/test_raft.c:865: fenced replica loses leadership
+FAIL tests/test_raft.c:871: cold bootstrap rejects invalid stored membership
+FAIL tests/test_raft.c:876: cold bootstrap rejects invalid stored joint membership
+FAIL tests/test_raft.c:880: membership load IO cannot silently use bootstrap config
+FAIL tests/test_raft.c:898: invalid snapshot membership rejected before importing user state
+FAIL tests/test_raft.c:900: invalid snapshot preserves original membership
+FAIL tests/test_raft.c:908: applied membership IO is propagated
+FAIL tests/test_raft.c:909: failed membership does not advance apply
+test_raft: 10 failure(s)

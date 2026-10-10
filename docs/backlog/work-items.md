@@ -2708,7 +2708,12 @@ never substitute a five-node minimum for the accepted requirement. Larger
 clusters must scale metadata service while retaining the same protection target.
 See [binding decision](../status/node-count-protection-20261009.md).
 
-**Evidence/current state:** Two fixed parity Raft groups and dual-group routing remain implemented; logical shard count is not independent leadership capacity.
+**Evidence/current state:** Oct 10 AMD engine and explicit private host four-voter
+membership, persistence-error fencing, snapshot ordering and GETCHUNKS endpoint
+failover gates pass. Full native/docs, POSIX 212/212 and peer 64/64 pass. Default
+two fixed parity groups/dual-group routing remain; durable two-loss commit
+identity/recovery, versioned routing/migration and measured scale are open.
+Logical shard count is not independent leadership capacity.
 
 **Home:** [current detail](../status/metadata-scaling.md).
 
@@ -3662,7 +3667,8 @@ the original record and withdrawn interpretation remain retained.
 ## W92 · .efs/find and .efs/stats server snapshots and large namespace acceptance
 
 Oct 10 closure work is active at the user's request. Aggregate retained-cache
-admission has focused passing gates; durable catch-up and the full scale/fault
+admission has focused and full native passing gates; 100,000/1,000,000 synthetic
+file pilots pass streaming oracles with bounded builder memory. Durable catch-up and the full scale/fault
 acceptance matrix remain open. [Closure ledger](../status/query-cache-closure-20261010.md).
 
 Oct 10 incremental checkpoint: fixed 1024-item change/ancestor sets reuse immutable

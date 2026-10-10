@@ -233,9 +233,12 @@ static int save_hard(struct efs_raft *r)
 
 static int save_cfg(struct efs_raft *r)
 {
+    int rc;
     if (!r->store->save_cfg)
         return EFS_OK;
-    return r->store->save_cfg(r->store_ctx, r->app_old, r->app_new);
+    rc = r->store->save_cfg(r->store_ctx, r->app_old, r->app_new);
+    if (rc != EFS_OK) fence_storage(r);
+    return rc;
 }
 
 static int last_log(struct efs_raft *r, uint64_t *index, uint64_t *term)
@@ -411,7 +414,11 @@ static int apply_committed(struct efs_raft *r)
                 r->app_old = rd32(cmd + 1);
                 r->app_new = 0;
             }
-            save_cfg(r);
+            rc = save_cfg(r);
+            if (rc != EFS_OK) {
+                free(cmd);
+                return rc;
+            }
             maybe_leave(r);
         } else if (r->apply && clen > 0) {
             rc = r->apply(r->app, idx, term, cmd, clen);
@@ -1354,7 +1361,8 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
      * Retry even when this heartbeat proves the same committed prefix;
      * otherwise a quiet follower can remain unreadable until a new write.
      * Batched receives still defer apply until their log durability barrier. */
-    apply_committed(r);
+    rc = apply_committed(r);
+    if (r->storage_failed) return rc;
     m.success = 1;
     /* prev matched, and every entry in this request is in the log.
      * last_i can still sit past that: an uncommitted tail this request
@@ -1457,9 +1465,18 @@ static int snap_installed(struct efs_raft *r, struct efs_raft_msg *m,
     uint64_t last_i = 0, last_t = 0;
     int rc;
 
+    /* Persist membership before save_snap may discard its log entries. */
+    if (take_cfg) {
+        r->app_old = cfg_old;
+        r->app_new = cfg_new;
+    }
+    rc = save_cfg(r);
+    if (rc != EFS_OK) return rc;
     rc = r->store->save_snap(r->store_ctx, incl, incl_t);
-    if (rc != EFS_OK)
+    if (rc != EFS_OK) {
+        fence_storage(r);
         return rc;
+    }
     if (take_cfg) {
         r->last_applied = incl;
         r->app_old = r->log_old = cfg_old;
@@ -1478,8 +1495,12 @@ static int snap_installed(struct efs_raft *r, struct efs_raft_msg *m,
             r->commit_index = r->last_applied;
         apply_committed(r);
     }
-    reload_cfg_from_log(r);
-    save_cfg(r);
+    rc = reload_cfg_from_log(r);
+    if (rc != EFS_OK) {
+        fence_storage(r);
+        return rc;
+    }
+    if (r->storage_failed) return EFS_ERR_IO;
     if (getenv("EFS_RAFT_DBG"))
         fprintf(stderr, "raft[%u]: on_snap_req INSTALLED incl=%llu\n",
                 r->group, (unsigned long long)incl);
@@ -1543,6 +1564,9 @@ static int on_snap_req(struct efs_raft *r, const struct efs_raft_msg *in)
     }
     if (offset == 0) {
         if (plen < 8 || !pay || !r->snap_chunk)
+            return snap_reject(r, &m, last_i);
+        if (!efs_raft_voters_valid(rd32(pay)) ||
+            (rd32(pay + 4) && !efs_raft_voters_valid(rd32(pay + 4))))
             return snap_reject(r, &m, last_i);
         r->rx_incl = incl;
         r->rx_term = incl_t;
@@ -1642,21 +1666,6 @@ static int on_snap_rep(struct efs_raft *r, const struct efs_raft_msg *in)
     return EFS_OK;
 }
 
-static int valid_voters(uint32_t v)
-{
-    int n, i;
-
-    if (v == 0 || (v >> EFS_RAFT_MAX_PEERS))
-        return 0;
-    n = popc(v);
-    if (n < 1 || (n % 2) == 0)
-        return 0;
-    for (i = EFS_RAFT_MAX_PEERS; i < 32; i++) {
-        if (v & (1u << i))
-            return 0;
-    }
-    return 1;
-}
 
 struct efs_raft *efs_raft_new(const struct efs_raft_cfg *cfg)
 {
@@ -1672,7 +1681,7 @@ struct efs_raft *efs_raft_new(const struct efs_raft_cfg *cfg)
     if (!cfg->store->save_hard || !cfg->send)
         return NULL;
     voters = cfg->voters ? cfg->voters : ((1u << cfg->n) - 1);
-    if (!valid_voters(voters))
+    if (!efs_raft_voters_valid(voters))
         return NULL;
     r = calloc(1, sizeof(*r));
     if (!r)
@@ -1711,14 +1720,27 @@ struct efs_raft *efs_raft_new(const struct efs_raft_cfg *cfg)
         free(r);
         return NULL;
     }
-    if (r->store->load_snap)
-        r->store->load_snap(r->store_ctx, &r->snap_idx, &r->snap_term);
+    if (r->store->load_snap) {
+        rc = r->store->load_snap(r->store_ctx, &r->snap_idx, &r->snap_term);
+        if (rc != EFS_OK) {
+            free(r);
+            return NULL;
+        }
+    }
     if (r->store->load_cfg) {
         uint32_t o = 0, n = 0;
         rc = r->store->load_cfg(r->store_ctx, &o, &n);
         if (rc == EFS_OK) {
+            if (!efs_raft_voters_valid(o) ||
+                (n && !efs_raft_voters_valid(n))) {
+                free(r);
+                return NULL;
+            }
             r->app_old = r->log_old = o;
             r->app_new = r->log_new = n;
+        } else if (rc != EFS_ERR_NOT_FOUND) {
+            free(r);
+            return NULL;
         }
     }
     r->admit = cfg->admit;
@@ -2165,7 +2187,7 @@ int efs_raft_change(struct efs_raft *r, uint32_t new_voters)
         return EFS_ERR_INVAL;
     if (r->role != EFS_RAFT_LEADER)
         return EFS_ERR_NOT_PRIMARY;
-    if (!valid_voters(new_voters))
+    if (!efs_raft_voters_valid(new_voters))
         return EFS_ERR_INVAL;
     if (r->log_new)
         return EFS_ERR_BUSY;
@@ -2261,12 +2283,16 @@ int efs_raft_snapshot(struct efs_raft *r)
     rc = log_term(r, r->last_applied, &t);
     if (rc != EFS_OK)
         return rc;
+    rc = save_cfg(r);
+    if (rc != EFS_OK) return rc;
     rc = r->store->save_snap(r->store_ctx, r->last_applied, t);
-    if (rc != EFS_OK)
+    if (rc != EFS_OK) {
+        fence_storage(r);
         return rc;
+    }
     r->snap_idx = r->last_applied;
     r->snap_term = t;
-    return save_cfg(r);
+    return EFS_OK;
 }
 
 int efs_raft_role(const struct efs_raft *r)

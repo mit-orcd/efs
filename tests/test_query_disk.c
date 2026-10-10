@@ -28,8 +28,57 @@ static int compare(struct efs_kv_lsm_snapshot *s,struct efs_query_catalog *memor
     return 0;
 }
 static int cancel(void *p){(void)p;return 1;}
+struct expected_path { const char *path;efs_ino_t ino;unsigned count; };
+static int check_path(void *ctx,const struct efs_name_entry *e,const char *path)
+{
+    struct expected_path *p=ctx;CHECK(!strcmp(p->path,path) && p->ino==e->dentry.ino);p->count++;return 0;
+}
+static void test_restart_catchup(void)
+{
+    char store[]="/tmp/efs-query-catchup-kv-XXXXXX",root[]="/tmp/efs-query-catchup-cache-XXXXXX";
+    CHECK(mkdtemp(store));CHECK(mkdtemp(root));
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_SYNC,0,4};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
+    CHECK(kv);if(!kv)return;
+    struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t dir,file;
+    CHECK(!efs_meta_apply_init(kv,100));
+    CHECK(!efs_meta_apply_mkdir(kv,&attrs,EFS_ROOT_INO,S_IFDIR|0755,"dir",&dir));
+    CHECK(!efs_meta_apply_create_file(kv,&attrs,dir,S_IFREG|0644,"old",&file));
+    CHECK(!efs_kv_lsm_flush(kv) && !efs_kv_lsm_quiesce(kv));
+    struct efs_kv_lsm_snapshot *source=NULL;struct efs_query_catalog *old=NULL,*next=NULL,*memory=NULL;
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));
+    CHECK(!efs_query_catalog_build_disk(root,source,NULL,4<<20,NULL,NULL,&old));
+    uint64_t wm[4]={1,2,3,4};CHECK(!efs_query_catalog_checkpoint(old,wm));
+    efs_kv_lsm_snapshot_release(source);source=NULL;
+    efs_kv_lsm_query_tracking(kv,0);
+    CHECK(!efs_meta_apply_rename(kv,dir,"old",dir,"new",200));
+    efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(store,&cfg);CHECK(kv);if(!kv)return;
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));
+    CHECK(efs_query_catalog_restore_disk(root,source,wm,4<<20,&next)==EFS_ERR_STALE && !next);
+    CHECK(efs_query_catalog_catchup_disk(root,source,4<<20,cancel,NULL,&next)==EFS_ERR_BUSY && !next);
+    CHECK(!efs_query_catalog_catchup_disk(root,source,4<<20,NULL,NULL,&next));
+    CHECK(next && efs_query_catalog_rebuilt(next)>0 && efs_query_catalog_rebuilt(next)<4096);
+    CHECK(!efs_query_catalog_build(source,NULL,32<<20,NULL,NULL,&memory));
+    if(next && memory){compare(source,memory,next,EFS_ROOT_INO);compare(source,memory,next,dir);}
+    struct expected_path expected={"dir/old",file,0};uint64_t cursor=0;
+    CHECK(!efs_query_catalog_page(old,EFS_ROOT_INO,EFS_NAME_EXACT,"old",0,&cursor,4096,NULL,NULL,check_path,&expected) && expected.count==1);
+    expected=(struct expected_path){"dir/new",file,0};cursor=0;
+    CHECK(next && !efs_query_catalog_page(next,EFS_ROOT_INO,EFS_NAME_EXACT,"new",0,&cursor,4096,NULL,NULL,check_path,&expected) && expected.count==1);
+    wm[1]++;CHECK(next && !efs_query_catalog_checkpoint(next,wm));
+    efs_query_catalog_free(next);next=NULL;efs_query_catalog_free(old);old=NULL;
+    efs_kv_lsm_snapshot_release(source);source=NULL;efs_kv_lsm_close(kv);
+    /* Corrupt derived revisions: authority still opens, and equal numeric
+     * counters in a new lineage cannot reuse any previous raw partition. */
+    char sidecar[512];snprintf(sidecar,sizeof(sidecar),"%s/QUERY-REVISIONS",store);CHECK(!unlink(sidecar));
+    kv=efs_kv_lsm_open(store,&cfg);CHECK(kv);if(!kv)return;
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));
+    CHECK(!efs_query_catalog_catchup_disk(root,source,4<<20,NULL,NULL,&next));
+    CHECK(next && efs_query_catalog_rebuilt(next)==4096);
+    if(next && memory)compare(source,memory,next,EFS_ROOT_INO);
+    efs_query_catalog_free(next);efs_query_catalog_free(memory);efs_kv_lsm_snapshot_release(source);efs_kv_lsm_close(kv);
+}
 int main(void)
 {
+    if(!getenv("EFS_QUERY_TEST_QUOTA") && !getenv("EFS_QUERY_TEST_NOSPACE"))test_restart_catchup();
     char store[256],root[256];snprintf(store,sizeof(store),"/tmp/efs-query-disk-kv-%d",getpid());snprintf(root,sizeof(root),"/tmp/efs-query-disk-cache-%d",getpid());
     struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);CHECK(kv);if(!kv)return 1;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t dir,sub,file;

@@ -659,19 +659,6 @@ static uint32_t group_voters(uint8_t group, int n)
     return 0xeu;     /* nodes 2,3,4 = raft ids 1,2,3 */
 }
 
-/* Same rule as raft.c valid_voters: RF = 2f+1, so the popcount is odd. */
-static int cfg_voters_ok(uint32_t v)
-{
-    int n = 0, i;
-
-    if (v == 0 || (v >> EFS_RAFT_MAX_PEERS))
-        return 0;
-    for (i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
-        if (v & (1u << i))
-            n++;
-    }
-    return n >= 1 && (n % 2) == 1;
-}
 
 static int hosts_group(int raft_id, uint32_t voters)
 {
@@ -6463,7 +6450,7 @@ static uint32_t load_desired(struct efs_raft_host *h, uint8_t group,
     }
     close(fd);
     v = rd32be(buf);
-    return cfg_voters_ok(v) ? v : fallback;
+    return efs_raft_voters_valid(v) ? v : fallback;
 }
 
 static int save_desired(struct efs_raft_host *h, uint8_t group, uint32_t voters)
@@ -6619,7 +6606,7 @@ static int host_cfg(struct efs_raft_host *h, uint8_t group,
         return EFS_ERR_INVAL;
     sub = cmd[1];
     voters = rd32be(cmd + 2);
-    if (!cfg_voters_ok(voters))
+    if (!efs_raft_voters_valid(voters))
         return EFS_ERR_INVAL;
     if (sub != EFS_MD_CFG_NOTE && sub != EFS_MD_CFG_CHANGE)
         return EFS_ERR_INVAL;
@@ -8134,6 +8121,7 @@ static void *host_gc_thread(void *arg)
 #define HOST_QUERY_BYTES (256ULL << 20)
 #define HOST_QUERY_MEMTABLE (64ULL << 20)
 #include "query_refresh.h"
+#include "query_export_lease.h"
 #define HOST_QUERY_N 256
 #define HOST_QUERY_T_MS 2000
 #define HOST_QUERY_BUILD_MS 10000
@@ -8145,6 +8133,18 @@ static uint64_t query_mono_ms(void)
 }
 /* One retained export generation per host, bounded by the catalog cap.
  * Fresh per-page permissions still apply. Idle expiry also runs without RPCs. */
+static pthread_once_t query_export_once=PTHREAD_ONCE_INIT;
+static uint64_t query_export_max_ms=3600000;
+static void query_export_configure(void)
+{
+    int valid;query_export_max_ms=efs_query_export_lifetime(getenv("EFS_QUERY_EXPORT_MAX_MS"),&valid);
+    if(!valid)fprintf(stderr,"query-config: invalid EFS_QUERY_EXPORT_MAX_MS; using 3600000 (allowed 60000..604800000)\n");
+}
+static int query_export_expired(uint64_t now,uint64_t touched,uint64_t born)
+{
+    pthread_once(&query_export_once,query_export_configure);
+    return efs_query_export_expired(now,touched,born,query_export_max_ms);
+}
 static pthread_mutex_t query_page_mu=PTHREAD_MUTEX_INITIALIZER;
 static struct {
     uint64_t token,touched,born;
@@ -8163,7 +8163,7 @@ static void query_page_sweep(int force)
     else if (pthread_mutex_trylock(&query_page_mu)) return;
     uint64_t now=query_mono_ms();
     if (force || (query_page_session.token &&
-        (now-query_page_session.touched>60000 || now-query_page_session.born>3600000))) query_page_clear();
+        query_export_expired(now,query_page_session.touched,query_page_session.born))) query_page_clear();
     pthread_mutex_unlock(&query_page_mu);
 }
 static int host_query_cancel(void *ctx)
@@ -8277,7 +8277,16 @@ static void *host_query_thread(void *ctx)
         uint64_t now=query_mono_ms(),dirty=0;
         if (now-last_attempt<200) continue;
         int rc=efs_kv_lsm_metadata_revisions(h->kv,current,4096);
-        if (rc) continue;
+        if (rc) {
+            pthread_rwlock_wrlock(&h->query_lock);
+            h->query_error=rc;
+            pthread_rwlock_unlock(&h->query_lock);
+            if(rc!=last_error || now-last_error_log>=30000){
+                fprintf(stderr,"query-revisions: rc=%d\n",rc);last_error_log=now;
+            }
+            last_error=rc;
+            continue;
+        }
         for (uint32_t i=0;i<4096;i++) {
             uint64_t diff=current[i]>=published[i] ? current[i]-published[i] : HOST_QUERY_N;
             if (diff>=HOST_QUERY_N-dirty) { dirty=HOST_QUERY_N;break; }
@@ -8312,6 +8321,10 @@ static void *host_query_thread(void *ctx)
             if(disk_backend) {
                 int restored=EFS_ERR_NOT_FOUND;
                 if(initial)restored=efs_query_catalog_restore_disk(query_root,source,watermark,catalog_bytes,&candidate);
+                if(initial && restored==EFS_ERR_STALE){
+                    restored=efs_query_catalog_catchup_disk(query_root,source,catalog_bytes,host_query_disk_cancel,h,&candidate);
+                    fprintf(stderr,"query-catchup: rc=%d backend=disk\n",restored);
+                }
                 if(initial)fprintf(stderr,"query-restore: rc=%d backend=disk\n",restored);
                 if(restored)rc=efs_query_catalog_build_disk(query_root,source,h->query_view.catalog,
                     catalog_bytes,host_query_disk_cancel,h,&candidate);
@@ -8767,8 +8780,7 @@ int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void
     if (pthread_mutex_trylock(&query_page_mu)) return EFS_ERR_BUSY;
     int rc=EFS_OK,created=0;
     uint64_t now=query_mono_ms();
-    if (query_page_session.token && (now-query_page_session.touched>60000 ||
-        now-query_page_session.born>3600000)) query_page_clear();
+    if (query_page_session.token && query_export_expired(now,query_page_session.touched,query_page_session.born)) query_page_clear();
     struct efs_msg_query_snapshot_v4 identity=*req;
     identity.token=identity.cursor=0;identity.limit=0;
     if (req->token) {

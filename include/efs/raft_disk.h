@@ -5,9 +5,11 @@
 
 /* On-disk efs_raft_store (architecture.md §10 step 10.5b).
  *
- * The Raft log is the system's durability boundary: an entry that a majority
- * has here is committed, and the applied KV is a materialized view that can
- * be rebuilt by replaying forward from the snapshot point. efs_raft_new()
+ * The Raft log is the system's durability boundary. Durable replication alone
+ * does not prove commitment: Raft advances commit using the active quorum and
+ * current-term rule. Applied KV is a materialized view rebuilt by replaying
+ * through the authorized commit boundary. A surviving WAL tail alone is not
+ * recovery authority after permanent quorum loss. efs_raft_new()
  * already assumes this — it starts with last_applied = snap_idx and re-applies
  * everything above it — so the ONE rule a caller owes is:
  *

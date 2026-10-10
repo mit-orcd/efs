@@ -117,3 +117,17 @@ conservatively per generation; pinned exports can cause refresh admission refusa
 A refusal preserves the old checkpoint and reports a refresh error. Existing
 valid cache reads remain available after a total-limit reduction.
 See [aggregate admission and acceptance](../status/query-cache-closure-20261010.md).
+
+The metadata directory also keeps an optional fixed-size `QUERY-REVISIONS` sidecar
+for restart catch-up. It is derived state paired with the KV manifest; missing or
+invalid hints force rebuilding rather than preventing metadata recovery. Partition
+change counters continue while command serving is disabled, with no accumulated
+per-operation queue. Disk catalog version 5 rebuilds older local cache generations.
+
+For large streaming exports, set server `EFS_QUERY_EXPORT_MAX_MS` to the required
+finite total lifetime (milliseconds, allowed 60000–604800000; default 3600000).
+For example, `86400000` allows a 24-hour active export. The idle timeout stays
+60 seconds; each host retains at most one paged export snapshot, and permission
+checks still run on every page. Longer total lifetimes can retain old cache files
+longer, so provision the aggregate query-cache budget accordingly. Apply the
+setting consistently to potential publishers before starting the export.
