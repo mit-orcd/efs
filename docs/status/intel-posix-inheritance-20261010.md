@@ -48,3 +48,30 @@ output inode untouched. Source `0f540108` fails that deterministic assertion.
 A new peer case synchronizes both clients across eight fresh names and requires
 exactly one successful mkdir and one EEXIST for each. The native macOS two-client
 fixture passes; deployment acceptance follows.
+
+## Supplementary-group bounds repair
+
+The installed Intel libfuse header specifies that `fuse_req_getgroups()` returns
+the total group count even when the caller's buffer is smaller. The permission
+helper supplied 64 slots but iterated over the returned total. A controlled
+100-group request reaches an out-of-bounds stack read in the unmodified source
+under UBSan/ASan.
+
+The helper keeps small lists on the stack, obtains larger lists into bounded
+storage (at most 65536 groups), and refuses unavailable, allocation-failed or
+newly oversized second reads. A valid group beyond the first 64 is recognized;
+only directories/entries whose group matches the complete caller list receive
+the group permission class. Primary-group and no-request paths retain their
+prior behavior. This does not expand the separate query wire group limit.
+
+`tests/test_permission_groups.py` executes the actual helper with sanitizers,
+covering small/large membership, missing groups, list growth/shrink, API errors,
+allocation failure and the upper bound. The baseline's index-64 overread is
+captured as a negative control. Live Intel users currently have short group
+lists; the large-list condition is exercised by the production-function fixture.
+
+The persistence inheritance fixture passes both prepare and verify on native
+Linux on Intel1 and Intel2. Native macOS directory-bit inheritance differs and
+is not used as the Linux oracle. The fixture explicitly sets its new parent's
+group before applying setgid, so the expected ownership is independent of
+native BSD default group inheritance.

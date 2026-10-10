@@ -1223,16 +1223,35 @@ static int caller_in_group(gid_t gid)
         return 0;
     if (ctx->gid == gid)
         return 1;
-    gid_t list[64];
-    int n = t_req ? fuse_req_getgroups(t_req,
-                                       (int)(sizeof(list) / sizeof(list[0])),
-                                       list)
-                  : -1;
-    for (int i = 0; i < n; i++) {
-        if (list[i] == gid)
-            return 1;
+    gid_t small[64];
+    int capacity = (int)(sizeof(small) / sizeof(small[0]));
+    int n = t_req ? fuse_req_getgroups(t_req, capacity, small) : -1;
+    if (n < 0) return 0;
+    gid_t *groups = small;
+    /* libfuse returns the total count even when it exceeds the buffer.
+     * Keep the common path on the stack, and bound the larger Linux list. */
+    if (n > capacity) {
+        if (n > 65536) return 0;
+        capacity = n;
+        groups = malloc((size_t)capacity * sizeof(*groups));
+        if (!groups) return 0;
+        n = fuse_req_getgroups(t_req, capacity, groups);
+        /* Credentials can change between reads. Refuse an unavailable or
+         * newly oversized list rather than read past initialized entries. */
+        if (n < 0 || n > capacity) {
+            free(groups);
+            return 0;
+        }
     }
-    return 0;
+    int found = 0;
+    for (int i = 0; i < n; i++) {
+        if (groups[i] == gid) {
+            found = 1;
+            break;
+        }
+    }
+    if (groups != small) free(groups);
+    return found;
 }
 
 static int check_access(const struct efs_inode *ino, uid_t uid, gid_t gid,
