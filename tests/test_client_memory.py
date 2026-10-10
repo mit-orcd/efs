@@ -31,6 +31,8 @@ source = r'''
 #include "client_internal.h"
 #include "efs/writer_state.h"
 #include "efs/publication.h"
+#include "efs/put_ticket.h"
+#include "efs/kv_key.h"
 #include "efs/write_extent.h"
 #include <limits.h>
 struct efs_client g_client;
@@ -68,7 +70,10 @@ static void dcache_account_extra(efs_ino_t ino, uint32_t ci) { (void)ino;(void)c
 static void dcache_add_range(struct dcache_ent *e,uint32_t off,uint32_t len) { e->nrange=1;e->roff[0]=off;e->rlen[0]=len; }
 void efs_export_present_add(struct efs_export *ex,efs_ino_t ino,int which,int delta) { (void)ex;(void)ino;(void)which;(void)delta; }
 '''
-for name in ['dcache_slot','dcache_mu','dcache_find','dcache_find_meta','dcache_metadata_idle','dcache_chain_reuse','dcache_keep_on_drop','efs_dcache_bind_writer','efs_dcache_write_lane','dcache_snapshot_lane','efs_dcache_snapshot_lane','efs_dcache_snapshot_publication','efs_dcache_begin_publication','efs_dcache_finish_publication','efs_dcache_publication_report','efs_dcache_complete_publication','efs_dcache_publication_request','efs_dcache_consume_publication','efs_dcache_publication_result','dcache_take']:
+ticket_source=(root/'src/meta/put_ticket.c').read_text()
+for name in ['wr32','wr64','ticket_shard','ticket_key','efs_put_ticket_encode','efs_put_ticket_from_pub']:
+    source+='\n'+function(ticket_source,name)
+for name in ['dcache_slot','dcache_mu','dcache_find','dcache_find_meta','dcache_metadata_idle','dcache_chain_reuse','dcache_keep_on_drop','efs_dcache_bind_writer','efs_dcache_write_lane','dcache_snapshot_lane','efs_dcache_snapshot_lane','efs_dcache_snapshot_publication','efs_dcache_begin_publication','efs_dcache_finish_publication','efs_dcache_publication_report','efs_dcache_complete_publication','efs_dcache_publication_request_ticketed','efs_dcache_publication_request','efs_dcache_consume_publication','efs_dcache_publication_result','dcache_take']:
     source += '\n'+function(w,name)
 source += '\n'+function(w,'efs_dcache_trim_metadata')
 source += '\n'+block(w, 'struct dcache_init {')
@@ -297,13 +302,29 @@ int main(void) {
     assert(!owned->writer->has_publication && owned->dirty && owned->pin_held && owned->data);
     assert(owned->writer->ranges.bytes.count && !owned->object_gen);
     assert(efs_dcache_snapshot_publication(1,7,0,&cached_view,cached_base,&cached_plan,cached_copy,owned->len)==EFS_OK);
-    sequence=cached_plan.cache_sequence;uploaded.chunk_generation=11;
-    assert(efs_dcache_begin_publication(1,7,0,&cached_plan,11)==EFS_OK);
-    assert(efs_dcache_finish_publication(1,7,0,11,sequence,EFS_OK,&uploaded)==EFS_OK);
-    assert(efs_dcache_publication_request(1,7,0,11,sequence,101,&request)==EFS_OK && request.size==101);
+    sequence=cached_plan.cache_sequence;
+    struct efs_opid put_identity;assert(!efs_client_publication_id(sequence,&put_identity));
+    uint64_t ticket_object=efs_meta_candidate_gen(put_identity.client_uuid,1,sequence,0,0);
+    uploaded.chunk_generation=ticket_object;uploaded.publish_flags=EFS_CHUNK_REC_F_FRESH_OBJECT;
+    assert(efs_dcache_begin_publication(1,7,0,&cached_plan,ticket_object)==EFS_OK);
+    assert(efs_dcache_finish_publication(1,7,0,ticket_object,sequence,EFS_OK,&uploaded)==EFS_OK);
+    assert(!efs_dcache_publication_report(1,7,0,ticket_object,sequence,&report));
+    struct efs_meta_pub ticket_pub;assert(!efs_publication_from_rec(&report,101,&ticket_pub));
+    ticket_pub.publication_id=put_identity;ticket_pub.put_id=put_identity;
+    ticket_pub.put_fragment_len=EFS_MIN_CHUNK_SIZE/2;ticket_pub.put_member_mask=7;
+    struct efs_put_ticket ticket;assert(!efs_put_ticket_from_pub(&ticket_pub,&ticket));
+    assert(!efs_dcache_publication_request_ticketed(1,7,0,ticket_object,sequence,101,&ticket,&request));
+    assert(request.ticketed && request.size==101 && request.put_id.seq==sequence);
+    uint8_t bound_digest[EFS_HASH_SIZE];memcpy(bound_digest,owned->writer->publication.result_digest,EFS_HASH_SIZE);
+    ticket.body_digest[0]^=1;
+    assert(efs_dcache_publication_request_ticketed(1,7,0,ticket_object,sequence,999,&ticket,&request)==EFS_ERR_STALE);
+    assert(efs_dcache_publication_request(1,7,0,ticket_object,sequence,999,&request)==EFS_ERR_STALE);
+    assert(!memcmp(bound_digest,owned->writer->publication.result_digest,EFS_HASH_SIZE));
+    ticket.body_digest[0]^=1;
+    assert(!efs_dcache_publication_request_ticketed(1,7,0,ticket_object,sequence,999,&ticket,&request) && request.size==101);
     outcome.state=EFS_PUBLICATION_COMMITTED;outcome.verdict=EFS_OK;
     memcpy(outcome.digest,owned->writer->publication.result_digest,EFS_HASH_SIZE);
-    assert(efs_dcache_publication_result(1,7,0,11,sequence,&outcome)==EFS_OK);
+    assert(efs_dcache_publication_result(1,7,0,ticket_object,sequence,&outcome)==EFS_OK);
     assert(!owned->dirty && !owned->pin_held && !owned->data);
     free(cached_base);free(cached_copy);
 
@@ -423,7 +444,7 @@ int main(void) {
 '''
 with tempfile.TemporaryDirectory(prefix='efs-memory-test-') as d:
     p=Path(d)/'test.c';p.write_text(source)
-    cmd=[os.environ.get('CC','cc'),'-std=gnu11','-D_GNU_SOURCE','-O1','-g','-pthread',f'-I{root}/include',f'-I{root}/src/common',f'-I{root}/src/client',str(p),str(root/'src/common/common.c'),'-o',str(p.with_suffix(''))]
+    cmd=[os.environ.get('CC','cc'),'-std=gnu11','-D_GNU_SOURCE','-O1','-g','-pthread',f'-I{root}/include',f'-I{root}/src/common',f'-I{root}/src/client',str(p),str(root/'src/common/common.c'),str(root/'src/kv/kv_key.c'),str(root/'src/sim/opid.c'),'-o',str(p.with_suffix(''))]
     if '--sanitize' in sys.argv: cmd[1:1]=['-fsanitize=address,undefined']
     subprocess.run(cmd,check=True)
     subprocess.run([str(p.with_suffix(''))],check=True)

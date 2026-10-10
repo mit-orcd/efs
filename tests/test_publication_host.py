@@ -8,6 +8,7 @@ fn=s[a:s.index('\n}',a)+2]
 pack_a=s.index('static int pack_publish_cmd(uint8_t *out');pack=s[pack_a:s.index('\n}',pack_a)+2]
 unpack_a=s.index('static void unpack_publication(');unpack=s[unpack_a:s.index('\n}',unpack_a)+2]
 apply_a=s.index('static int apply_one_publish(');apply=s[apply_a:s.index('\n}',apply_a)+2]
+valid_a=s.index('static int host_publication_command_valid(');valid=s[valid_a:s.index('\n}',valid_a)+2]
 source=r'''
 #include "efs/publication.h"
 #include "efs/kv_key.h"
@@ -19,6 +20,8 @@ source=r'''
 #include <stdio.h>
 #define HOST_PUBLISH_LEN 202
 #define HOST_PUBLICATION_LEN 230
+#define HOST_PUBLICATION_TICKET_LEN 266
+#define HOST_PUB_F_TICKETED 4
 #define HOST_PUB_F_LANE_LOCAL 1
 #define HOST_PUB_F_FRESH_OBJECT 2
 #define APPLY_LOG(...) ((void)0)
@@ -31,7 +34,7 @@ struct efs_raft_host {int running,n;struct efs_kv *kv;};
 static struct efs_raft_host host={.running=1,.n=3},*g_host=&host;
 static int owns=1,stored,stored_verdict,wait_rc,read_rc,store_on_propose=1;
 static int session_rc, fence_after_propose, admission_only;
-static unsigned admissions;
+static unsigned admissions;static int ticketed;static uint64_t candidate=789;
 static unsigned gates;
 static unsigned proposals,reads,forwards;static uint8_t group;
 int efs_chunk_size_valid(uint32_t s){return s==EFS_MIN_CHUNK_SIZE;}
@@ -62,17 +65,17 @@ int efs_meta_publication_result(struct efs_kv *kv,const struct efs_meta_pub *p,i
 int efs_meta_publication_receipt(struct efs_kv *kv,const struct efs_meta_pub *p,int *v,struct efs_publication_locator *locator)
 {memset(locator,0,sizeof(*locator));return efs_meta_publication_result(kv,p,v);}
 int efs_meta_apply_publish(struct efs_kv *kv,const struct efs_meta_pub *p)
-{(void)kv;assert(p->receipt_locator.group==group && p->receipt_locator.index==1 && p->receipt_locator.term==1);assert(p->durable_result && p->lane_local && p->candidate_gen==789 &&
+{(void)kv;assert(p->receipt_locator.group==group && p->receipt_locator.index==1 && p->receipt_locator.term==1);assert(p->durable_result && p->lane_local && p->candidate_gen==candidate &&
  p->inode_gen==456 && p->new_size==100 && p->publication_id.seq==77 &&
- p->publication_id.client_uuid[0]==1 && p->publication_id.session_epoch==1);return EFS_OK;}
+ p->publication_id.client_uuid[0]==1 && p->publication_id.session_epoch==1);assert(p->ticketed==ticketed);if(ticketed)assert(p->put_id.seq==66 && p->put_id.session_epoch==1 && p->put_id.client_uuid[0]==1 && p->put_fragment_len==64 && p->put_member_mask==15);return EFS_OK;}
 int efs_meta_apply_publication_admit(struct efs_kv *kv,const struct efs_meta_pub *p)
 {(void)kv;(void)p;return EFS_OK;}
 int efs_meta_apply_publication_retire(struct efs_kv *kv,const struct efs_meta_pub *p)
 {assert(efs_meta_apply_publish(kv,p)==EFS_OK);stored_verdict=EFS_META_PUBLICATION_RETIRED;return EFS_OK;}
 int efs_meta_apply_publish_stale_why(void){return 0;}
-''' + pack + '\n' + unpack + '\n' + apply + r'''
+''' + valid + '\n' + pack + '\n' + unpack + '\n' + apply + r'''
 static int host_propose_wait(struct efs_raft_host *h,uint8_t g,const uint8_t *cmd,uint32_t n,int *hint)
-{(void)h;(void)hint;assert(g==group && n==HOST_PUBLICATION_LEN);
+{(void)h;(void)hint;assert(g==group && n==(ticketed?HOST_PUBLICATION_TICKET_LEN:HOST_PUBLICATION_LEN));
  if(cmd[0]==EFS_MD_CMD_PUBLICATION_ADMIT) {
   admissions++;assert(apply_one_publish(h,cmd,1,1,group)==EFS_OK);
   if(store_on_propose){stored=1;stored_verdict=EFS_META_PUBLICATION_PENDING;}
@@ -134,6 +137,26 @@ int main(void)
  assert(out.state==EFS_PUBLICATION_PENDING && proposals==saved && admissions);
  admission_only=0;wait_rc=EFS_OK;server_raft_host_publication(&req,0,&out);
  assert(out.state==EFS_PUBLICATION_COMMITTED && proposals==saved+1);
+ ticketed=1;stored=0;req.ticketed=1;req.put_id=req.id;req.put_id.seq=66;
+ req.put_fragment_len=64;req.put_member_mask=15;req.rec.publish_flags|=EFS_CHUNK_REC_F_FRESH_OBJECT;
+ for(unsigned i=0;i<3;i++)req.rec.nodes[i]=i+1;
+ candidate=efs_meta_candidate_gen(req.put_id.client_uuid,1,66,17,0);req.rec.chunk_generation=candidate;
+ server_raft_host_publication(&req,0,&out);assert(out.state==EFS_PUBLICATION_COMMITTED);
+ saved=proposals;server_raft_host_publication(&req,1,&out);assert(out.state==EFS_PUBLICATION_COMMITTED && proposals==saved);
+ server_raft_host_publication(&req,2,&out);assert(out.state==EFS_PUBLICATION_RETIRED);
+ req.put_id.session_epoch++;saved=proposals;server_raft_host_publication(&req,0,&out);
+ assert(out.rpc.status==EFS_INODE_RPC_INVAL && proposals==saved);
+ uint8_t command[HOST_PUBLICATION_TICKET_LEN]={EFS_MD_CMD_PUBLICATION};
+ assert(host_publication_command_valid(command,HOST_PUBLICATION_LEN));
+ assert(!host_publication_command_valid(command,HOST_PUBLICATION_TICKET_LEN));
+ command[HOST_PUBLISH_LEN-1]=HOST_PUB_F_TICKETED;
+ assert(!host_publication_command_valid(command,HOST_PUBLICATION_TICKET_LEN));
+ command[HOST_PUBLISH_LEN-1]|=HOST_PUB_F_FRESH_OBJECT;
+ assert(host_publication_command_valid(command,HOST_PUBLICATION_TICKET_LEN));
+ assert(!host_publication_command_valid(command,HOST_PUBLICATION_LEN));
+ assert(!host_publication_command_valid(command,HOST_PUBLICATION_TICKET_LEN-1));
+ command[HOST_PUBLISH_LEN-1]|=128;assert(!host_publication_command_valid(command,sizeof(command)));
+ assert(!host_publication_command_valid(NULL,sizeof(command)));
  puts("publication host: lane-only authority, apply-ring loss, terminal recovery and unknown PASS");
 }
 '''

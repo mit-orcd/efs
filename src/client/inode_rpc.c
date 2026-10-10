@@ -219,6 +219,20 @@ int efs_client_publication_id(uint64_t sequence, struct efs_opid *out)
     pthread_mutex_unlock(&opid_mu);return EFS_OK;
 }
 
+int efs_client_put_id(struct efs_opid *out)
+{
+    if (!out) return EFS_ERR_INVAL;
+    memset(out,0,sizeof(*out));
+    pthread_mutex_lock(&opid_mu);opid_seed_locked();
+    if (!g_client.put_next) g_client.put_next=1;
+    if (g_client.put_next==UINT64_MAX) {
+        pthread_mutex_unlock(&opid_mu);return EFS_ERR_BUSY;
+    }
+    memcpy(out->client_uuid,g_client.opid_uuid,EFS_OPID_UUID_LEN);
+    out->session_epoch=g_client.opid_epoch;out->seq=g_client.put_next++;
+    pthread_mutex_unlock(&opid_mu);return EFS_OK;
+}
+
 /* Fill q and take a slot (returned; -1 = none, q left invalid). */
 static int opid_begin(struct efs_opid_req *q)
 {
@@ -1367,8 +1381,7 @@ int efs_client_rpc_publication(const struct efs_msg_publication *request, int qu
     if(query_only<0 || query_only>2 || !out || !request)return EFS_ERR_INVAL;
     struct efs_msg_publication req=*request;
     memset(out,0,sizeof(*out));
-    if(efs_publication_from_rec(&req.rec,req.size,&p)!=EFS_OK)return EFS_ERR_INVAL;
-    p.publication_id=req.id;
+    if(efs_publication_from_request(&req,&p)!=EFS_OK)return EFS_ERR_INVAL;
     if(efs_publication_digest(&p,digest)!=EFS_OK)return EFS_ERR_INVAL;
     uint32_t shard=efs_kv_lane_shard(req.rec.ino,req.rec.chunk_index%EFS_META_LANES);
     efs_node_id_t target=0;

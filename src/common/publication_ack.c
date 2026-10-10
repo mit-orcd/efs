@@ -14,9 +14,8 @@ static int intent_digest(const struct efs_msg_publication *request,
                          uint8_t digest[EFS_HASH_SIZE])
 {
     struct efs_meta_pub p;
-    int rc=efs_publication_from_rec(&request->rec,request->size,&p);
+    int rc=efs_publication_from_request(request,&p);
     if (rc!=EFS_OK) return rc;
-    p.publication_id=request->id;
     return efs_publication_digest(&p,digest);
 }
 int efs_publication_ack_admit(struct efs_publication_ack_queue *q,
