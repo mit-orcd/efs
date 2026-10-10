@@ -40,7 +40,7 @@ while True:
 (cell/'gc-before.json').write_text(json.dumps(gc_before,indent=2))
 clients=subprocess.check_output(['pgrep','-x','efs-fuse'],text=True).split();assert len(clients)==2
 logs={n:Path(f'/data1/efs/logs/efsd-n{n}.log') for n in servers};offsets={n:p.stat().st_size for n,p in logs.items()}
-root=f'/data1/efs/mnt/tiny-w97-latest-{tag}-20261010'
+root=f'/data1/efs/mnt/tiny-w97-latest-{tag}-v2-20261010'
 with (cell/'loader.log').open('w') as out:
  loader=subprocess.Popen(['python3',base/'balanced-load.py',root,cell],stdout=out,stderr=out)
  def drain_owned_loader():
@@ -97,7 +97,7 @@ with (cell/'loader.log').open('w') as out:
    for pid in [v['pid'] for v in servers.values()]+[int(p) for p in clients]+[loader.pid]:row['processes'][pid]={name:Path(f'/proc/{pid}/{name}').read_text() for name in ('stat','io','status')}
    row['host_stat']=Path('/proc/stat').read_text()
    row['meminfo']=Path('/proc/meminfo').read_text()
-   row['pressure']={n:Path('/proc/pressure',n).read_text() for n in ('cpu','io','memory')}
+   row['pressure']={n:Path('/proc/pressure',n).read_text() if Path('/proc/pressure',n).is_file() else None for n in ('cpu','io','memory')}
    row['hwmon']={str(p):p.read_text().strip() for p in Path('/sys/class/hwmon').glob('hwmon*/temp*_input')}
    row['phase']='write1' if i<240 else 'pause' if i<360 else 'write2'
    if 240<=i<360 and row['progress'].get('paused') and row['progress'].get('active_workers')==0:
