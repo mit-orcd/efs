@@ -3579,6 +3579,14 @@ gates cover these primitives. This does not close production PUT validation,
 default flush, durable per-ticket membership or abandoned-member deletion ACKs.
 See the [merged checkpoint](../status/dependency-package-20261009.md#merged-baseline-and-durable-storage-session-barrier--oct-10-utc).
 
+**Oct 10 ticketed receiver progress:** actual typed publication helpers now
+upload via a fixed-endian ticketed receiver. It checks fresh ADMITTED/FileID
+views, exact fragment digest/destination/configured geometry and guards storage
+with the durable session floor. Three real unpublished fragments survive cold
+restart; completed revocation rejects actual late uploads on every destination.
+Default FUSE flush, durable per-ticket membership capture and all-member abandoned
+collection remain open. [Checkpoint](../status/dependency-package-20261009.md#exact-finish-apply-and-ticketed-put-receiver--oct-10-0600-utc).
+
 ## W87 · Buffered concurrent append loses records under broader load
 
 **Oct 8 AMD follow-up:** Retrieved the original NUC failure TSV/manifest: missing W1S0002 and W0S0004 records, beyond first-record loss. AMD broad buffered POSIX 216/0/1 skip and peer 64/64 pass, plus mixed-close append during GC and 800 exact cold records. The separate identical-RPC reservation race is fixed, but is not established as this incident's sole cause.

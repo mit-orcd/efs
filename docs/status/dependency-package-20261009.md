@@ -1027,3 +1027,35 @@ lack Git build identity. The full production package remains open.
 05:25 UTC: the complete `make test` rerun on the final merged private AMD
 checkout exited 0, including docs 5/5. Selected local/AMD source hashes match.
 This does not supersede the live namespace timeout or close the full package.
+
+
+## Exact FINISH apply and ticketed PUT receiver — Oct 10, 06:00 UTC
+
+`bb48c24a` resolves the previous checkpoint's namespace timeout. Returning the
+real incomplete FINISH BUSY/STALE was necessary but insufficient: the committed
+apply-result policy did not classify FINISH as a business result, so group 2
+stopped applying and subsequent ReadIndex waited indefinitely. FINISH now advances
+all business verdicts while IO/NOMEM remain retryable. The isolated exact frozen
+set gate and full AMD core212/212, peer64/64, storage fault/cold GC gate pass.
+
+The staged ticketed data-plane receiver validates immutable ticket framing,
+destination, checksum, ADMITTED authority, fresh FileID and configured geometry
+before storage. Ticket traffic cannot set export geometry. Read-only authority
+RPCs precede the durable storage-session guard, avoiding a seal/apply deadlock;
+revocation racing those reads is caught by the local durable floor. Ambiguous
+retries use exact original bytes and probe all storage roots, without NEW hints.
+The retained client upload has a bounded inherited deadline and retains ownership
+on transport failure or late success. Export 1 is the supported staged namespace.
+
+The actual typed publication gate now uses this receiver, including rejected
+corrupt bytes, discarded successful upload result, exact retry and rejection
+after PUBLISHED/retirement. Another gate uploads three unpublished fragments,
+verifies cold bytes before any retry and proves completed revocation rejects
+late uploads at all destinations. This does not collect those unpublished bodies
+or release an unresolved owner. Native receiver/client tests and targeted
+ASan/UBSan checks pass; the linked library is not fully sanitizer-instrumented.
+
+Default FUSE typed flush, durable captured per-ticket server member identities,
+all-member abandoned-upload deletion acknowledgements, revoked unknown-intent
+reconciliation and active legacy W88 remain open. No activation follows from
+these primitives. [Raw evidence and final gates](../../results/measure/20261010-ticketed-put-hour/README.md).
