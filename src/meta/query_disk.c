@@ -751,8 +751,9 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
     if(!rc && old)rc=incremental_build(d,(struct efs_query_disk *)old);
     else if(!rc)rc=INCREMENTAL_FULL;
     if(rc==INCREMENTAL_FULL){
+        rc=EFS_OK;
         close_cache(d);memset(d->shared_d,0,sizeof(d->shared_d));d->refolded=0;
-        for(uint32_t shard=0;shard<SHARDS;shard++){
+        for(uint32_t shard=0;old && shard<SHARDS;shard++){
             char path[EFS_MAX_PATH];rc=filename(d,shard,'d',path,sizeof(path));
             if(rc)break;
             if(unlink(path) && errno!=ENOENT){rc=EFS_ERR_IO;break;}

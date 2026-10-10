@@ -380,6 +380,11 @@ int main(void)
     CHECK(!capture(kv,NULL,&newer),"incremental both rename parents");efs_query_catalog_free(newer);newer=NULL;
     CHECK(!efs_meta_apply_rmdir(kv,EFS_ROOT_INO,"extrema",403),"remove empty directory");
     CHECK(!capture(kv,NULL,&newer),"incremental removed directory");efs_query_catalog_free(newer);newer=NULL;
+    CHECK(!efs_meta_apply_unlink(kv,EFS_ROOT_INO,"extrema-moved",404),"remove one alias");
+    CHECK(!efs_meta_apply_get_inode(kv,extfile,&r),"remaining aliased inode");r.base_size=888;row_put(kv,&r);
+    CHECK(!capture(kv,NULL,&newer),"removed old alias and changed surviving alias");efs_query_catalog_free(newer);newer=NULL;
+    CHECK(!efs_meta_apply_unlink(kv,EFS_ROOT_INO,"extrema-alias",405),"remove final alias");
+    CHECK(!capture(kv,NULL,&newer),"removed inode dependencies come from changed old edges");efs_query_catalog_free(newer);newer=NULL;
     for(unsigned i=0;i<1100;i++){
         char name[32];efs_ino_t added;snprintf(name,sizeof(name),"cap-fallback-%u",i);
         CHECK(!efs_meta_apply_create_file(kv,&attrs,EFS_ROOT_INO,S_IFREG|0644,name,&added),"bounded-set overflow fixture");

@@ -137,10 +137,11 @@ static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old
         if(lookup){rc=lookup;break;}
         if(S_ISDIR(n.row.mode))rc=dirty_add(d,&s,n.row.ino);
     }
-    /* Every alias of a changed inode matters. This bounded sequential pass
-     * discovers reverse edges without a namespace-sized in-memory map. */
-    for(unsigned version=0;version<2 && !rc && s.changes;version++){
-        struct efs_query_disk *view=version?old:d;
+    /* Every live alias of a changed inode matters. Removed/renamed old edges
+     * already invalidated their parents in changed_dentries; scanning old
+     * aliases again adds no dependency. Keep discovery bounded in RAM. */
+    if(!rc && s.changes){
+        struct efs_query_disk *view=d;
         for(uint32_t shard=0;shard<SHARDS && !rc;shard++)for(uint64_t i=0;i<view->part[shard].names && !rc;i++){
             if(cancelled(d)){rc=EFS_ERR_BUSY;break;}
             struct slot slot;uint8_t key[EFS_KV_KEY_MAX],val[VALUE_MAX];struct efs_name_entry e;

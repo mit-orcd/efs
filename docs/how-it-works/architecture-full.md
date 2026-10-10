@@ -1535,7 +1535,8 @@ verify 78000 files and 724 payload samples, with normal `.efs` opt-out restored.
 
 [W92 incremental-cache implementation](../status/query-cache-incremental-20261010.md)
 tracks bounded change/ancestor sets, immutable partition reuse, exact directory
-recomputation and full-build fallback. Implementation and profiling are in progress.
+recomputation and full-build fallback. Focused incremental/failure gates pass;
+three live profiling rounds are in progress, including refresh coalescing.
 
 [Combined branch integration](../status/find-stats-all-branches-20261009.md) records
 `devel`, W66 and persistence-pressure merges into `devel-find-stats`, preserving
