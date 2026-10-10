@@ -15,6 +15,7 @@ code=r'''
 #include <string.h>
 #include <sys/types.h>
 #include "efs/common.h"
+#define BO_COUNT(key) ((void)0)
 #define HOST_APPLIED_PERSIST_US 10000ull
 #define HOST_APPLIED_MAX_TAIL 1024ull
 struct group {int hosted;void*r;uint64_t applied_saved,applied_saved_us;int applied_fd;uint8_t group;};

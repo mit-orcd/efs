@@ -5831,15 +5831,22 @@ static int persist_applied(struct efs_raft_host *h, int gi, uint64_t idx,
     if (!force && idx>=h->g[gi].applied_saved &&
         idx-h->g[gi].applied_saved<HOST_APPLIED_MAX_TAIL &&
         now>=h->g[gi].applied_saved_us &&
-        now-h->g[gi].applied_saved_us<interval)
+        now-h->g[gi].applied_saved_us<interval) {
+        BO_COUNT(BO_APPLIED_THROTTLE);
         return EFS_OK;
+    }
+    if (!force && idx>=h->g[gi].applied_saved &&
+        idx-h->g[gi].applied_saved>=HOST_APPLIED_MAX_TAIL)
+        BO_COUNT(BO_APPLIED_ENTRY_CAP);
     if (h->g[gi].applied_fd < 0) {
         char path[EFS_MAX_PATH];
 
         applied_path(h, h->g[gi].group, path, sizeof(path));
         h->g[gi].applied_fd = open(path, O_RDWR | O_CREAT, 0644);
-        if (h->g[gi].applied_fd < 0)
+        if (h->g[gi].applied_fd < 0) {
+            BO_COUNT(BO_APPLIED_ERROR);
             return EFS_ERR_IO;
+        }
     }
     wr64be(buf, idx);
     wr64be(buf + 8, ~idx);
@@ -5847,8 +5854,10 @@ static int persist_applied(struct efs_raft_host *h, int gi, uint64_t idx,
     if (n != (int)sizeof(buf) || fdatasync(h->g[gi].applied_fd) != 0) {
         close(h->g[gi].applied_fd);
         h->g[gi].applied_fd = -1;
+        BO_COUNT(BO_APPLIED_ERROR);
         return EFS_ERR_IO;
     }
+    BO_COUNT(BO_APPLIED_SYNC);
     h->g[gi].applied_saved = idx;
     h->g[gi].applied_saved_us = now; /* failed writes must remain retryable */
     return EFS_OK;
