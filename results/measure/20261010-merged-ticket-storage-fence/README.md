@@ -20,3 +20,20 @@ These are staged primitives. Legacy PUT_CHUNK still lacks production ticket
 validation, durable captured per-ticket member IDs and all-member abandoned
 body deletion ACKs; default typed flush and revoked unknown-intent recovery
 remain open. D25 stays staged.
+
+
+Final fixture gc-direct-u6spmd0e: four-member certificates, injected file-sync
+EIO with incomplete global revocation followed by repaired retry, cold floors,
+typed replay/leader death and retained CREATE passed. Namespace completion
+then timed out at 45 seconds; no final POSIX pass is claimed. Its live.log is
+retained verbatim. Stronger unbuffered timeout diagnostics are committed for
+the next reproduction. The final merged Linux code regressions passed;
+merged-regressions.log initially ends at missing private-checkout evidence,
+then merged-docs.log proves the supplied genuine evidence restores 5/5.
+Build emitted no warnings. Both installed mounts and service restoration are
+recorded in merged-source-and-restoration.txt. Do not attribute earlier baseline
+POSIX counts to the subsequent final integration commits.
+
+Final merged-complete-regressions.log: full `make test` exited 0 at 05:25 UTC,
+including documentation 5/5. Selected local/AMD merged source hashes match.
+The independent live namespace timeout remains a failed gate.

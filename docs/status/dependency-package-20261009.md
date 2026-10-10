@@ -992,3 +992,38 @@ all-member abandoned-upload deletion acknowledgements and revoked unknown-intent
 reconciliation. No D25 activation, forced write loss or hardware power-loss
 claim follows from these staged tests. Evidence:
 [merged/storage checkpoint](../../results/measure/20261010-merged-ticket-storage-fence/README.md).
+
+
+### Final merged hour checkpoint — 05:23 UTC
+
+`7243190c` implements the storage-session barrier and epoch-bound FINISH;
+`054647eb` strengthens the exact frozen-shard gate and retains timeout output.
+New branch work arrived during the hour and was also merged: `devel` retained
+CREATE retries, `devel-persistence-pressure` checkpoint cadence/failure/recovery
+work and `devel-find-stats` descriptor indexing/ordered-fold work. Both added
+Makefile regression sets were preserved; generated architecture pages were
+regenerated. `21a47183` is the final integration merge. The independent merged
+AMD Linux build was warning-free, code regressions passed, and docs passed 5/5
+once real linked historical evidence was supplied to that private checkout.
+
+The final storage candidate fixture `gc-direct-u6spmd0e` passed typed same/cross
+lost replies, actual lane leader death/cold replay, completed ticket revocation,
+retained CREATE, certificate-sync EIO recovery, all four rejection certificates
+and preservation of those floors across cold restart. It then timed out (45s)
+in the strengthened raw namespace completion gate. This fixture is **not** a
+full POSIX pass. Earlier merged baseline `gc-direct-ueiiqfa5` remains the
+212/212 plus 64/64 pass; those results must not be attributed to the final merged
+code. After deadline this namespace timeout is the next blocker to reproduce:
+inspect the frozen touched set and the specific ReadIndex/FINISH step, rather
+than relaxing the ACK set or restoring normalized success. The final test adds
+unbuffered output and a retained timeout file for the next reproduction.
+
+Installed AMD service was restored; both allowed mounts serve again. No owned
+fixture remains active. All local branch tips inspected at integration are
+included in `devel-w66`; no push or activation occurred. Evidence records the
+candidate and merged source hashes separately because the private checkouts
+lack Git build identity. The full production package remains open.
+
+05:25 UTC: the complete `make test` rerun on the final merged private AMD
+checkout exited 0, including docs 5/5. Selected local/AMD source hashes match.
+This does not supersede the live namespace timeout or close the full package.
