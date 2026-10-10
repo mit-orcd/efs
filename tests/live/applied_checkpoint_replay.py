@@ -32,7 +32,9 @@ def exercise(args,work,roots,mount,run,start,stop,mount_client,unmount,wait,drai
         first.rename(final);os.link(final,link);os.chmod(final,0o640)
         with final.open('r+b') as out:out.truncate(1024+i);out.flush();os.fsync(out.fileno())
         body=body[:1024+i];expected[i]=body
-        manifest.append(dict(i=i,ino=final.stat().st_ino,size=len(body),sha256=hashlib.sha256(body).hexdigest()))
+        st=final.stat();assert st.st_nlink==2,('pre-crash nlink',i,st.st_nlink)
+        manifest.append(dict(i=i,ino=st.st_ino,size=len(body),nlink=st.st_nlink,sha256=hashlib.sha256(body).hexdigest()))
+    (work/'applied-checkpoint-before.json').write_text(json.dumps(manifest,indent=2))
     removed=root/'removed';removed.write_bytes(b'must remain absent');removed.unlink()
     def caught():
         follower=states(target)
@@ -55,7 +57,10 @@ def exercise(args,work,roots,mount,run,start,stop,mount_client,unmount,wait,drai
         final=root/f'renamed-{i}';link=root/f'linked-{i}'
         assert not (root/f'original-{i}').exists()
         assert final.read_bytes()==body and link.read_bytes()==body
-        a=final.stat();b=link.stat();assert a.st_ino==b.st_ino==manifest[i]['ino'] and a.st_nlink==2
+        a=final.stat();b=link.stat()
+        with (work/'applied-checkpoint-cold-stat.jsonl').open('a') as out:
+            out.write(json.dumps(dict(i=i,expected=manifest[i],ino=a.st_ino,linked=b.st_ino,nlink=a.st_nlink,mode=a.st_mode&0o777,size=a.st_size))+'\n')
+        assert a.st_ino==b.st_ino==manifest[i]['ino'] and a.st_nlink==2,('cold inode/nlink',i,a.st_ino,b.st_ino,a.st_nlink,manifest[i])
         assert a.st_mode&0o777==0o640
     assert not removed.exists() and warm.read_bytes()==b'checkpoint baseline'
     # A leader-served FUSE read alone cannot establish the follower's KV.

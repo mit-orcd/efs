@@ -2545,6 +2545,14 @@ static void host_clear_incomplete(struct host_group *g)
             g->group);
 }
 
+/* Node-local, excluded from group snapshot images (shard prefix > 4095).
+ * This cursor is atomic with the entry's KV effects, unlike applied.N hints. */
+static void host_kv_cursor(uint8_t group,uint64_t index,uint8_t key[7],uint8_t value[16])
+{
+    memcpy(key,"\xff\xffraft",6); key[6]=group;
+    wr64be(value,index); wr64be(value+8,~index);
+}
+
 static int host_apply(void *app, uint64_t index, uint64_t term,
                       const uint8_t *cmd, uint32_t clen)
 {
@@ -2574,6 +2582,9 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     if (raft_obs_on())
         a0 = now_us_();
     h->apply_extra = 0;
+    int scope_rc=efs_kv_lsm_apply_begin(h->kv);
+    if (scope_rc!=EFS_OK) rc=scope_rc;
+    else {
 #if EFS_FAULTS
     if (cmd[0]==0xfe && clen>=10 && getenv("EFS_FAULT_PRESSURE_SEED")) {
         uint8_t key[12]={0x0f,0xff,0xfe,0};
@@ -2590,12 +2601,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     } else
 #endif
     rc = host_apply_dispatch(h, index, term, g->group, cmd, clen);
-    /* A successful CREATE/APPEND means this replica's KV has the row.
-     * Re-enable campaign so one hollow apply cannot leave the group with
-     * zero candidates. */
-    if (rc == EFS_OK &&
-        (cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_APPEND_RSV))
-        host_clear_incomplete(g);
+    }
     /* Only the LEADER steps down on a hollow APPEND apply. Followers that
      * miss a row must stay eligible — marking every voter was how g2 lost
      * all campaigners and APPEND timed out NET. CREATE NOT_FOUND is not
@@ -2603,14 +2609,6 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     if (rc == EFS_ERR_NOT_FOUND && cmd[0] == EFS_MD_CMD_APPEND_RSV &&
         g->r && efs_raft_role(g->r) == EFS_RAFT_LEADER)
         host_mark_incomplete(g);
-    /* Record the apply verdict BEFORE the raft core bumps last_applied, so a
-     * waiter that observes applied >= index always finds the slot. The pump
-     * holds h->mu across apply_committed, and host_propose_wait reads the
-     * ring under h->mu, so this is race-free. */
-    g->arc_idx[index & HOST_APPLY_RC_MASK] = index;
-    g->arc_term[index & HOST_APPLY_RC_MASK] = term;
-    g->arc_rc[index & HOST_APPLY_RC_MASK] = rc;
-    g->arc_extra[index & HOST_APPLY_RC_MASK] = h->apply_extra;
     /* Txn business conflicts never stall the log: their verdict rides the ring to
      * the proposer, it is not a raft-core error. Other cmds keep their
      * historic return (halt-on-error for the few that can fail).
@@ -2667,10 +2665,33 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
          (cmd[0] == EFS_MD_CMD_LOCK && clen >= HOST_LOCK_LEN)) &&
         (rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM))
         ret = rc;
+    /* Finish the atomic apply scope before publishing its verdict. */
+    if (scope_rc!=EFS_OK) ret=rc=scope_rc;
+    if (scope_rc==EFS_OK) {
+        uint8_t key[7],value[16];
+        host_kv_cursor(g->group,index,key,value);
+        struct efs_kv_item cursor={EFS_KV_PUT,key,sizeof(key),value,sizeof(value)};
+        int committed=efs_kv_lsm_apply_end(h->kv,ret==EFS_OK?&cursor:NULL);
+        if (committed!=EFS_OK) ret=rc=committed;
+    }
+    /* A successful CREATE/APPEND means this replica's KV has the row.
+     * Re-enable campaign so one hollow apply cannot leave the group with
+     * zero candidates. */
+    if (rc == EFS_OK &&
+        (cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_APPEND_RSV))
+        host_clear_incomplete(g);
     if (a0) {
         h->obs_apply_cnt++;
         h->obs_apply_cycle_us += now_us_() - a0;
     }
+    /* Record the apply verdict BEFORE the raft core bumps last_applied, so a
+     * waiter that observes applied >= index always finds the slot. The pump
+     * holds h->mu across apply_committed, and host_propose_wait reads the
+     * ring under h->mu, so this is race-free. */
+    g->arc_idx[index & HOST_APPLY_RC_MASK] = index;
+    g->arc_term[index & HOST_APPLY_RC_MASK] = term;
+    g->arc_rc[index & HOST_APPLY_RC_MASK] = rc;
+    g->arc_extra[index & HOST_APPLY_RC_MASK] = h->apply_extra;
     return ret;
 }
 
@@ -5900,6 +5921,14 @@ static int load_applied(struct efs_raft_host *h, int gi, uint64_t *idx)
     int fd, n;
 
     *idx = 0;
+    uint8_t key[7],value[16]; uint32_t length=sizeof(value);
+    host_kv_cursor(h->g[gi].group,0,key,value);
+    int rc=efs_kv_get(h->kv,key,sizeof(key),value,&length);
+    if (rc==EFS_OK) {
+        if (length!=sizeof(value) || rd64be(value+8)!=~rd64be(value))
+            return EFS_ERR_PROTO;
+        *idx=rd64be(value);
+    } else if (rc!=EFS_ERR_NOT_FOUND) return rc;
     applied_path(h, h->g[gi].group, path, sizeof(path));
     fd = open(path, O_RDONLY);
     if (fd < 0)
@@ -5908,14 +5937,14 @@ static int load_applied(struct efs_raft_host *h, int gi, uint64_t *idx)
     close(fd);
     if (n == 8) {
         /* Written by the tmp+rename form; always whole. */
-        *idx = rd64be(buf);
+        if (rd64be(buf)>*idx) *idx = rd64be(buf);
         return EFS_OK;
     }
     if (n != (int)sizeof(buf))
         return EFS_OK;
     if (rd64be(buf + 8) != ~rd64be(buf))
         return EFS_OK;
-    *idx = rd64be(buf);
+    if (rd64be(buf)>*idx) *idx = rd64be(buf);
     return EFS_OK;
 }
 
@@ -6515,8 +6544,12 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
     h->g[gi].voters = efs_raft_voters(h->g[gi].r);
     {
         uint64_t applied = 0;
-        if (load_applied(h, gi, &applied) == EFS_OK && applied > 0) {
-            (void)efs_raft_restore_applied(h->g[gi].r, applied);
+        int recovered=load_applied(h,gi,&applied);
+        if (recovered!=EFS_OK) return recovered;
+        if (applied>0) {
+            recovered=efs_raft_restore_applied(h->g[gi].r,applied);
+            if (recovered!=EFS_OK) return recovered;
+            if (efs_raft_applied(h->g[gi].r)<applied) return EFS_ERR_PROTO;
             h->g[gi].applied_saved = efs_raft_applied(h->g[gi].r);
         }
     }

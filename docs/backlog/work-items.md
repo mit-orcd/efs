@@ -3843,6 +3843,15 @@ find/stats checkpoint; never treat the private fixture as deployed acceptance.
 
 ## W93 · Broader durable Raft group commit for tiny-file metadata
 
+**Oct 10 atomic apply repair in progress:** The final retained-checkpoint fault
+exposed duplicate hardlink application (cold n3 nlink 3 instead of 2). Applied
+KV effects and a node-local group cursor now share one bounded atomic WAL
+record; restart validates that proof before using legacy hints. The initial
+maximum-cadence crash/cold smoke passes. APPEND late-receipt replay is separately
+fixed with negative controls. Full frozen-binary gates and repeated sustained
+NUC acceptance remain required; default settings are unchanged. See
+[repair and current acceptance](../status/w93-atomic-apply-20261010.md).
+
 **Oct 10 checkpoint investigation:** All 16 frozen local branch tips are merged
 into `devel-persistence-pressure`. `4bb7b169` fixes failed applied-marker writes
 advancing their retry timestamp and adds an opt-in 10–1,000 ms checkpoint cadence

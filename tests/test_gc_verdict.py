@@ -10,7 +10,7 @@ def function(name):
     return text[m.start():text.index('\n}', m.end())+2]
 append_len=re.search(r'^#define HOST_APPEND_RSV_LEN (\d+)',text,re.M).group(1)
 lock_len=re.search(r'^#define HOST_LOCK_LEN (\d+)',text,re.M).group(1)
-apply=text[text.index('static int host_apply(void *app'):];apply=apply[apply.index('    ret = (cmd[0]'):apply.index('    if (a0) {')]
+apply=text[text.index('static int host_apply(void *app'):];apply=apply[apply.index('    ret = (cmd[0]'):apply.index('    /* Finish the atomic apply scope')]
 source = '#define HOST_LOCK_LEN '+lock_len+'\n#define HOST_APPEND_RSV_LEN '+append_len+'\n#define HOST_APPEND_RES_LEN 38\n#define APPLY_LOG(...) ((void)0)\n'+r'''
 #include "efs/common.h"
 #include "efs/meta_apply.h"

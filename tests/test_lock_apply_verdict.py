@@ -5,7 +5,7 @@ import os,re,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text()
 a=s.index('static int apply_lock_cmd(');b=s.index('\n}',a)+2
-c=s.index('    ret = (cmd[0] == EFS_MD_CMD_PREPARE');d=s.index('    if (a0)',c)
+c=s.index('    ret = (cmd[0] == EFS_MD_CMD_PREPARE');d=s.index('    /* Finish the atomic apply scope',c)
 def define(name):
     return re.search(r'^#define '+name+r'\s+[^\n]+',s,re.M).group(0)
 code=r'''

@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include "efs/kv_lsm.h"
 #include "efs/meta_apply.h"
+static int decision(void *ctx,const struct efs_txid *t,uint32_t shard,int *out)
+{ return efs_txn_decision_get(ctx,shard,t,out); }
 int main(int argc,char **argv)
 {
     assert(argc==3);
@@ -19,7 +21,7 @@ int main(int argc,char **argv)
         snprintf(name,sizeof(name),"linked-%u",i);
         assert(efs_meta_apply_lookup(kv,parent,name,&b)==EFS_OK);
         struct efs_meta_stat st;
-        assert(efs_meta_apply_getattr(kv,a.ino,NULL,NULL,&st)==EFS_OK);
+        assert(efs_meta_apply_getattr(kv,a.ino,decision,kv,&st)==EFS_OK);
         assert(a.ino==b.ino && st.nlink==2 && (st.mode&0777)==0640 && st.size==1024+i);
         printf("%u %llu %llu %u %u %llu\n",i,(unsigned long long)a.ino,
                (unsigned long long)b.ino,st.nlink,st.mode&0777,(unsigned long long)st.size);
