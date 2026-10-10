@@ -1,0 +1,12 @@
+Unmounting /home/efs/w92-tiny-mnt
+Retiring drained efs-fuse PID 3623164 for /home/efs/w92-tiny-mnt
+Unmounted /home/efs/w92-tiny-mnt
+TARGET   SOURCE   FSTYPE        OPTIONS
+/mnt/efs efs-fuse fuse.efs-fuse rw,nosuid,nodev,relatime,user_id=1001,group_id=1001,allow_other
+ordinary mount .efs disabled PASS
+TARGET   SOURCE   FSTYPE        OPTIONS
+/mnt/efs efs-fuse fuse.efs-fuse rw,nosuid,nodev,relatime,user_id=1001,group_id=1001,allow_other
+ordinary mount .efs disabled PASS
+TARGET   SOURCE   FSTYPE        OPTIONS
+/mnt/efs efs-fuse fuse.efs-fuse rw,nosuid,nodev,relatime,user_id=1001,group_id=1001,allow_other
+ordinary mount .efs disabled PASS

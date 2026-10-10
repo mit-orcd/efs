@@ -1,0 +1,9 @@
+efs: fetch published ino=1 ci=0 rc=-9 then pull rc=0 rc=-9 map before gen=b nd=2 seq=9 (1) after gen=b nd=2 seq=9 (1)
+Assertion failed: (!efs_client_fetch_published_chunk_obs(1,0,buf,CS,&obs,&have)), function main, file test.c, line 368.
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "/Users/mike/Documents/Codex/2026-10-07/i-l/work/efs-find-stats/tests/test_fence_read.py", line 154, in <module>
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 528, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-fence-read-9nzvrmtp/test']' died with <Signals.SIGABRT: 6>.
+Pre-fix actual helper fails the confirmed-absence assertion as expected

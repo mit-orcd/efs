@@ -865,3 +865,82 @@ default FUSE typed flush integration and revoked unknown-intent reconciliation.
 Other ambiguous UNLINK/RMDIR/RENAME/LINK identities also require retained exact
 routed bodies and authoritative results. W88's active legacy eviction/re-PUT
 case remains open; these staged proofs do not activate D25 or close W72/D27/W88.
+
+## Retained PUT ownership and ticketed publications — Oct 10 UTC
+
+The next authorized hour began 02:44:12 UTC on `devel-w66`. `22c8c1f9`
+reserves a budgeted immutable pre-PUT manifest, captures mount UUID/epoch and
+ordered member identities, probes fresh authority on each recovery attempt,
+and retains ambiguous or revoked ownership. `70daa5a4` carries the PUT identity,
+fragment geometry and captured member mask through publication, status,
+retirement and durable Raft replay. Mapping and PUBLISHED ownership now meet in
+the existing atomic metadata batch through the actual host endpoint. Cache
+binding refuses changed/stripped ticket digests; rebuilding a typed publication
+also preserves the fresh-object flag instead of silently dropping it.
+
+PUT identities use a mount-wide monotonic sequence distinct from per-cache
+snapshot counters and namespace ACKs. The concurrent allocator gate proves
+8,192 unique identities and refuses wrap. Legacy persisted 230-byte publication
+commands remain readable; ticketed commands are 266 bytes with explicit flag
+and exact length checks. Staged publication RPC payloads have grown, so older
+staged clients fail the exact-length gate; this does not change default REPORT.
+Do not downgrade a store containing the new ticketed commands to a binary that
+cannot decode them.
+
+AMD direct-I/O/TCP private fixtures `gc-direct-452dqomx` and
+`gc-direct-6rj80dwg` passed core 212/212, peer 64/64, 800 cold append records,
+O_SYNC/O_DSYNC peer-before-close/cold bytes, retained leases, ticket collision
+and completed revocation, physical reclamation and restart gates. Both same-
+and cross-group ticketed writebacks prove exact terminal receipts after lost
+replies, actual lane leader death and cold restart without restoring an older
+mapping or overwriting peer bytes. Linux builds were warning-free; complete
+code regressions and docs 5/5 passed. The fixtures restored the installed
+four-daemon/two-mount service. Compact evidence is in
+[the ticketed writeback run](../../results/measure/20261010-ticketed-writeback/README.md).
+
+This is staged integration, not D25 activation. Test uploads still use legacy
+PUT_CHUNK after ticket admission: storage does not yet validate the ticket or
+persist its session rejection fence. Abandoned uploads still require completed
+global revocation, durable receive/store fencing, stable captured server member
+identities and all-member deletion ACKs. Default FUSE flush integration and
+revoked unknown-intent reconciliation remain open, as do the active legacy W88
+case and retained routed UNLINK/RMDIR/RENAME/LINK recovery. No benchmark sources,
+merge, push, tag or activation were touched.
+
+### Published-only retirement and final checkpoint — Oct 10 UTC
+
+Added a serialized published-only PUT-ticket retirement command and retained
+client retirement retries. A client releases its ticket budget only after
+observing PUBLISHED and obtaining a durable compact-floor acknowledgement.
+ADMITTED and RECLAIMING tickets remain owned; a floor alone cannot release
+application bytes. Lost retirement replies, cold replay and late admission
+refusal passed on AMD direct-I/O/TCP. Both same/cross-group streams completed
+130 extra real upload/publication/retirement cycles, exceeding the 128-ticket
+bound. The live test also exposed an idle typed-cache admission bug: terminal
+consumption left extra-presence accounting that prevented the next accepted
+write. Same-FileID idle reuse now preserves that accounting; other generations
+and pending ownership remain excluded. ASan/UBSan ownership gates passed.
+
+The larger window fixture gc-direct-029di86m subsequently failed default POSIX
+CREATE with persistent BUSY and was cancelled after its write workers exited.
+This batch is not a full POSIX pass; its recorded exit is 143. The unresolved
+identity is not yet established, and debugger attachment was unavailable under
+host policy. Passive exhausted-window counters and opt-in EFS_OPID_TRACE
+CREATE/lease diagnostics preserve ownership while enabling a reproduction.
+The repeated complete Linux code regression suite passed; the build emitted
+no warnings. AMD installed service and both authorized mounts were restored.
+
+The package remains open: default FUSE flush integration, ticket validation at
+PUT receive/store, durable session storage fences, captured server membership,
+all-member abandoned-upload acknowledgements and revoked unknown-intent
+reconciliation are still required. No production D25 activation is authorized
+by these staged gates. Evidence: results/measure/20261010-ticketed-writeback/.
+
+Final focused gate gc-direct-g2hs6cwl passed on committed candidate f626c2ba:
+same/cross-group typed ownership, publication/retirement lost replies, lane
+leader death, cold replay, physical GC and offline-member/rejoin/restart
+fencing. It excluded POSIX and does not supersede the failed window batch.
+Selected local/AMD source hashes match; installed service and both mounts
+were verified restored. This hour produced commits 22c8c1f9, 70daa5a4 and
+f626c2ba. The next gate should reproduce default CREATE BUSY with the retained
+identity tracing before further production activation work.

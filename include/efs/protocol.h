@@ -929,6 +929,11 @@ struct efs_msg_publication {
     struct efs_opid id;
     struct efs_chunk_rec rec;
     uint64_t size;
+    /* Staged ticketed envelope. Zero fields preserve unticketed semantics;
+     * ticketed=1 binds immutable pre-PUT identity separately from CAS identity.
+     * Exact payload length gates older staged clients; default REPORT unchanged. */
+    struct efs_opid put_id;
+    uint32_t put_fragment_len, put_member_mask, ticketed;
 };
 struct efs_msg_publication_reply {
     struct efs_msg_inode_reply rpc;

@@ -7,4 +7,6 @@
 int efs_publication_digest(const struct efs_meta_pub *, uint8_t out[EFS_HASH_SIZE]);
 int efs_publication_from_rec(const struct efs_chunk_rec *, uint64_t size,
                              struct efs_meta_pub *);
+int efs_publication_from_request(const struct efs_msg_publication *,
+                                 struct efs_meta_pub *);
 #endif

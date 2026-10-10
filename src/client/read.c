@@ -499,6 +499,7 @@ int efs_client_fetch_published_chunk_obs(efs_ino_t ino, uint32_t ci,
     {
         struct efs_chunk_entry b, a;
         int hb, ha, prc, rc2;
+        uint8_t absent = 0;
         static uint64_t last_log_us;
         struct timespec ts;
         uint64_t now;
@@ -508,15 +509,15 @@ int efs_client_fetch_published_chunk_obs(efs_ino_t ino, uint32_t ci,
         pthread_mutex_lock(&g_client.idx_mu);
         hb = (efs_export_get_chunk(&g_client.export, ino, ci, &b) == 0);
         pthread_mutex_unlock(&g_client.idx_mu);
-        uint8_t absent = 0;
         prc = efs_client_pull_chunks_range_absent(ino, ci, ci + 1, &absent);
         if (prc != EFS_OK)
             return prc;
         if (absent & 1u) {
-            /* GETCHUNKS proved this row absent after a peer truncate. The
-             * staging table deliberately retains unreported local mappings;
-             * reading it again would retry an obsolete, already reaped span.
-             * Return the observed hole without erasing locally owned bytes. */
+            /* A peer truncate can delete the published row while the local
+             * table retains its old base/spans (or an unreported PUT).
+             * Successful GETCHUNKS absence is authority for this image;
+             * neither a failed RPC nor a failed object GET is a hole.
+             * Leave staging intact for its owner, but don't retry its map. */
             memset(buf, 0, len);
             if (obs) memset(obs, 0, sizeof(*obs));
             if (have_obs) *have_obs = 0;

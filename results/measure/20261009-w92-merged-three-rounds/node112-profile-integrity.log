@@ -1,0 +1,12 @@
+round1 exit=0
+[ perf record: Woken up 3 times to write data ]
+[ perf record: Captured and wrote 0.729 MB /home/admin/w92-merged-three-rounds/round1.data (3535 samples) ]
+c352d9d415567f08864cdb52663b7e6d7206ea1f412783de57d2de2eab4c1408  /home/admin/w92-merged-three-rounds/round1.data
+round2 exit=0
+[ perf record: Woken up 3 times to write data ]
+[ perf record: Captured and wrote 0.761 MB /home/admin/w92-merged-three-rounds/round2.data (3707 samples) ]
+1627bd4748ef9ae72bc2231722e8d673f5d0848fcb5e3e69dfd0d6d66a4747ee  /home/admin/w92-merged-three-rounds/round2.data
+round3 exit=0
+[ perf record: Woken up 3 times to write data ]
+[ perf record: Captured and wrote 0.776 MB /home/admin/w92-merged-three-rounds/round3.data (3764 samples) ]
+8244f27ee601c620afae85a7ac979b28cb41f7e1b72868180583aee47a33490f  /home/admin/w92-merged-three-rounds/round3.data

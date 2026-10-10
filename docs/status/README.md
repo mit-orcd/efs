@@ -47,6 +47,23 @@ quotas and large-scale acceptance remain open.
 [W92 tiny-file profiling](query-cache-tiny-profile-20261009.md) records deployed
 bounded read windows and immutable-file persistence reuse: controlled unchanged
 refresh is 2.07× faster; the mixed live creation-rate drop remains unisolated.
+[W92 three additional tiny-file rounds](query-cache-three-rounds-20261009.md)
+records all-node profiles, exact-match lookup, bounded combined-record writes
+and one checked raw/index persistence barrier; controlled syscall and cold
+correctness evidence stays separate from live throughput observations.
+
+[W92 merged-source suites and three further rounds](query-cache-merged-three-rounds-20261009.md)
+records native, core/concurrent/extras and cold persistence gates, nine all-node
+CPU captures and three logical cache fixes. Frozen-namespace preads fall 78.0%,
+pwrites 23.6% and median process CPU 29.1%, preserving fsync counts; fixed memory
+increases within the tested budget. Live throughput and narrower NFS evidence
+are qualified separately. Runtime `a8a15a14` is restored with ordinary `.efs`
+mount opt-in disabled; eight retained trees pass cold query/payload checks.
+
+[Combined branch integration](find-stats-all-branches-20261009.md) records
+`devel`, W66 and persistence-pressure merges into `devel-find-stats`, preserving
+the cache fixes. Committed branch coverage and private Linux gates are tracked;
+the newer suite/profile checkpoint above records merged-code deployment and live gates.
 
 ## Distributed metadata scaling discussion
 
@@ -232,7 +249,7 @@ positions do not assign an execution order or override the active handoff.
 | proto2 | **W83** · transaction decision records lack safe retirement | metadata lifecycle gap | resolve/drop remove participant records; no decision acknowledgement/GC path found | [evidence and gate](../backlog/work-items.md#w83) |
 | proto3 | **W84** · bounded namespace transactions | namespace completeness | Closed for accepted D32 144-participant envelope: distinct EOVERFLOW, prompt atomic refusal diagnostics, mixed boundaries, full64-lane removal/replacement, exact144 PREPARE/COMMIT cold recovery and AMD normal/fault POSIX/GC gates pass; larger-operation protocol deferred | [closure and limits](w84-closure-20261009.md) |
 | storage1 | **W85** · path-hint eviction loses ambiguous PUT retry history | conditional accounting/storage correctness | Closed: ambiguous PUT placement retained in 389a8baf; direct/buffered real lost-ACK collision and two-root physical/quota/restart gates pass | [evidence and gate](../backlog/work-items.md#w85) |
-| gc-own | **W86** · durable PUT ticket integration | feature / safe reclamation | metadata state machine plus replicated admission/authoritative status transport implemented (`0aaf7d32`), AMD cold replay/body collision/revocation gates pass; production data-plane fences and all-member collection remain staged | [evidence and gate](../backlog/work-items.md#w86) · [D31](decisions.md#d31--recorded-abandoned-upload-policy) |
+| gc-own | **W86** · durable PUT ticket integration | feature / safe reclamation | metadata ledger, budgeted retained admission and ticket-bound durable publication receipts implemented (`22c8c1f9`, `70daa5a4`); AMD same/cross-group lost replies, leader death, cold replay, collision and revocation pass; default PUT/flush, storage fences and all-member abandoned collection remain staged | [evidence and gate](../backlog/work-items.md#w86) · [D31](decisions.md#d31--recorded-abandoned-upload-policy) |
 | append-load | **W87** · buffered concurrent append loses records under load | correctness investigation | failure recorded in private GC fixture; isolated repeats pass; full traced acceptance owed | [evidence and gate](../backlog/work-items.md#w87) |
 | replay-span | **W88** · folded span retry resurrects after bounded history eviction | publication/retry correctness | partial — actual cross-group typed cache/host replay preserves peer bytes and cold mappings on AMD direct/TCP; production flush/ticket integration and full replay gates remain open | [evidence and gate](../backlog/work-items.md#w88) · [Oct9 checkpoint](dependency-package-20261009.md#retained-typed-publication-writeback--staged-amd-gated) |
 | measure-fields | **W89** · W23 TSV field packing shifts derived metrics | verification correctness | TSV schema/reduction repaired; NUC regressions pass; new pressure run and valid bound remain owed | [evidence and gate](../backlog/work-items.md#w89) |

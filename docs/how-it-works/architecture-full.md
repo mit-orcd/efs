@@ -1505,6 +1505,23 @@ quotas and large-scale acceptance remain open.
 [W92 tiny-file profiling](../status/query-cache-tiny-profile-20261009.md) records deployed
 bounded read windows and immutable-file persistence reuse: controlled unchanged
 refresh is 2.07× faster; the mixed live creation-rate drop remains unisolated.
+[W92 three additional tiny-file rounds](../status/query-cache-three-rounds-20261009.md)
+records all-node profiles, exact-match lookup, bounded combined-record writes
+and one checked raw/index persistence barrier; controlled syscall and cold
+correctness evidence stays separate from live throughput observations.
+
+[W92 merged-source suites and three further rounds](../status/query-cache-merged-three-rounds-20261009.md)
+records native, core/concurrent/extras and cold persistence gates, nine all-node
+CPU captures and three logical cache fixes. Frozen-namespace preads fall 78.0%,
+pwrites 23.6% and median process CPU 29.1%, preserving fsync counts; fixed memory
+increases within the tested budget. Live throughput and narrower NFS evidence
+are qualified separately. Runtime `a8a15a14` is restored with ordinary `.efs`
+mount opt-in disabled; eight retained trees pass cold query/payload checks.
+
+[Combined branch integration](../status/find-stats-all-branches-20261009.md) records
+`devel`, W66 and persistence-pressure merges into `devel-find-stats`, preserving
+the cache fixes. Committed branch coverage and private Linux gates are tracked;
+the newer suite/profile checkpoint above records merged-code deployment and live gates.
 
 ### Distributed metadata scaling discussion
 
@@ -1690,7 +1707,7 @@ positions do not assign an execution order or override the active handoff.
 | proto2 | **W83** · transaction decision records lack safe retirement | metadata lifecycle gap | resolve/drop remove participant records; no decision acknowledgement/GC path found | [evidence and gate](#w83) |
 | proto3 | **W84** · bounded namespace transactions | namespace completeness | Closed for accepted D32 144-participant envelope: distinct EOVERFLOW, prompt atomic refusal diagnostics, mixed boundaries, full64-lane removal/replacement, exact144 PREPARE/COMMIT cold recovery and AMD normal/fault POSIX/GC gates pass; larger-operation protocol deferred | [closure and limits](../status/w84-closure-20261009.md) |
 | storage1 | **W85** · path-hint eviction loses ambiguous PUT retry history | conditional accounting/storage correctness | Closed: ambiguous PUT placement retained in 389a8baf; direct/buffered real lost-ACK collision and two-root physical/quota/restart gates pass | [evidence and gate](#w85) |
-| gc-own | **W86** · durable PUT ticket integration | feature / safe reclamation | metadata state machine plus replicated admission/authoritative status transport implemented (`0aaf7d32`), AMD cold replay/body collision/revocation gates pass; production data-plane fences and all-member collection remain staged | [evidence and gate](#w86) · [D31](#d31--recorded-abandoned-upload-policy) |
+| gc-own | **W86** · durable PUT ticket integration | feature / safe reclamation | metadata ledger, budgeted retained admission and ticket-bound durable publication receipts implemented (`22c8c1f9`, `70daa5a4`); AMD same/cross-group lost replies, leader death, cold replay, collision and revocation pass; default PUT/flush, storage fences and all-member abandoned collection remain staged | [evidence and gate](#w86) · [D31](#d31--recorded-abandoned-upload-policy) |
 | append-load | **W87** · buffered concurrent append loses records under load | correctness investigation | failure recorded in private GC fixture; isolated repeats pass; full traced acceptance owed | [evidence and gate](#w87) |
 | replay-span | **W88** · folded span retry resurrects after bounded history eviction | publication/retry correctness | partial — actual cross-group typed cache/host replay preserves peer bytes and cold mappings on AMD direct/TCP; production flush/ticket integration and full replay gates remain open | [evidence and gate](#w88) · [Oct9 checkpoint](../status/dependency-package-20261009.md#retained-typed-publication-writeback--staged-amd-gated) |
 | measure-fields | **W89** · W23 TSV field packing shifts derived metrics | verification correctness | TSV schema/reduction repaired; NUC regressions pass; new pressure run and valid bound remain owed | [evidence and gate](#w89) |
@@ -5660,6 +5677,17 @@ first-send optimization still respects D7 and retries never falsely assert NEW.
 
 <a id="w87"></a>
 
+**Oct 10 UTC progress:** `22c8c1f9` retains budgeted immutable admission manifests
+and captured client membership across ambiguity/revocation. `70daa5a4` binds
+tickets through the actual durable publication/status/retirement endpoint and
+cache consumption; mapping/PUBLISHED ownership is atomic. PUT identities are
+mount-wide, separate from cache snapshot counters and namespace ACKs. AMD
+direct/TCP same/cross-group lost-reply, actual leader-death and cold replay gates
+pass, alongside core212/212 and peer64/64. These uploads still use legacy PUT
+transport after admission: default FUSE flush/PUT, durable storage rejection
+fences, stable server membership capture and abandoned all-member ACKs remain
+open. [Current checkpoint](../status/dependency-package-20261009.md#retained-put-ownership-and-ticketed-publications--oct-10-utc).
+
 ### W87 · Buffered concurrent append loses records under broader load
 
 **Oct 8 AMD follow-up:** Retrieved the original NUC failure TSV/manifest: missing W1S0002 and W0S0004 records, beyond first-record loss. AMD broad buffered POSIX 216/0/1 skip and peer 64/64 pass, plus mixed-close append during GC and 800 exact cold records. The separate identical-RPC reservation race is fixed, but is not established as this incident's sole cause.
@@ -5749,14 +5777,31 @@ unchanged refresh 1.977 → 0.955 seconds. Unit preads fall 50.2%. Live creation
 See [indexed checkpoint](../status/query-cache-tiny-profile-20261009.md).
 Full incremental stats and aggregate disk control remain open.
 
-**Oct 9 user requirement — billions of files:** W92 remains open until the
-server query catalog uses a persistent, partitioned disk-backed index with
-bounded resident memory. Target namespace cardinality is **2^32 files**;
-this is a design/validation target, not a demonstrated EFS capacity. The current
-RAM implementation retains the complete query catalog in RAM. Partition reuse and
-bounded result paging reduce work/output but do not bound resident memory as
-the namespace grows. The latest NUC run reaches the unchanged 1024 MiB catalog
-cap near 1.25 million files and leaves stale snapshots. The earlier recovery
+**Oct 9 additional three rounds:** exact inode matches stop early, raw key/value
+bytes use one bounded write and new raw/index files retain one checked writing-
+handle fsync rather than a duplicate final barrier. See [indexed evidence](../status/query-cache-three-rounds-20261009.md).
+Controlled traces reduce preads and pwrites; no namespace-growing live speedup
+is claimed. Persistence failures retain the old checkpoint.
+
+
+**Oct 9 merged-source further rounds:** exact raw-key slot reuse, eight-row
+candidate writes and four fixed LRU windows reduce controlled preads 78.0% and
+pwrites 23.6%, preserving fsync counts. Three alternating trials show 29.1% lower
+median process CPU; live growing-namespace creation rate is not a speedup claim.
+Fixed candidate scratch is 2897032 bytes, below the tested 4 MiB budget.
+Merged-source native, POSIX core/concurrent/extras and cold persistence evidence
+is [indexed here](../status/query-cache-merged-three-rounds-20261009.md).
+Full derived passes and aggregate cache-space admission remain open.
+
+**Oct 9 user requirement — billions of files:** W92 remains open until the persistent,
+partitioned disk-backed index demonstrates bounded memory and correct operation
+at the required scale. Target namespace cardinality is **2^32 files**;
+this is a design/validation target, not a demonstrated EFS capacity. The RAM reference
+backend retains the complete query catalog in RAM; the default disk backend has
+bounded builder scratch but has not demonstrated that scale. In the RAM reference
+backend, partition reuse and bounded result paging reduce work/output without
+bounding resident memory as the namespace grows. The earlier NUC RAM-backend run
+reached its 1024 MiB catalog cap near 1.25 million files and left stale snapshots. The earlier recovery
 below applied to a smaller namespace and does not resolve this scale issue.
 Raising the cap is not acceptance of the requested architecture.
 
@@ -5880,6 +5925,22 @@ find/stats checkpoint; never treat the private fixture as deployed acceptance.
 <a id="w93"></a>
 
 ### W93 · Broader durable Raft group commit for tiny-file metadata
+
+**Oct 9 late-hour read/credit investigation:** Fixed-file warmed native
+idle off/on/off probes do not reproduce the earlier large group 0 gap:
+p50 6.43/6.62/6.64 ms, p99 approximately 13 ms, over 6,000 samples per group
+per case. Mixed-load tails remain substantial. Default-off early credit return
+`ea23775b` moves completed transport admission before the marker tail, after
+KV release, without changing ACKs. Matched common 180-second late/early/late
+rates are 163.65/157.22/168.15 files/s; no adoption gain or read-tail benefit.
+Keep the experiment off. Functional testing exposes a stale chunk-map recovery
+EIO on peer append/truncate; `437b7890` honors confirmed server absence while
+propagating RPC/published-data errors. Corrected POSIX 212/212, peer 64/64,
+twenty repeated append/truncate and actual-source/sanitizer/negative controls
+pass. All 384 sampled exact cold-payload checks and private sync/append/dirty-stop/
+shutdown/WAL-tail/GC fault gates pass. W93 remains open; prioritize the
+serial KV/marker tail with an explicit recovery contract, not earlier ACKs.
+[Detailed evidence](../status/w93-read-pressure-20261009.md).
 
 **Oct 9 verified-overlap experiment:** `devel-persistence-pressure` adds guarded,
 default-off `EFS_RAFT_BATCH_OVERLAP=1`. Stable follower requests with a verified
@@ -6107,6 +6168,18 @@ or present the Raft improvement as measured KV acceptance.
 <a id="w97"></a>
 
 ### W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
+
+**Oct 9 completed-credit admission candidate:** `ea23775b` adds default-off
+retirement after KV release and before the marker tail, preserving queue caps,
+hysteresis and newly arriving credits. Actual-source arrival/EIO regressions
+pass. Common 180-second late/early/late rates are 163.65/157.22/168.15 files/s;
+no sustained acceptance or read-tail benefit, so keep it disabled. Initial peer
+testing exposes stale-map append/truncate EIO; `437b7890` fixes confirmed-absence
+recovery, passing corrected full and twenty repeated peer gates. All 384 sampled exact cold payloads and private
+sync/append/shutdown/WAL-tail/GC fault gates pass. Retained-store n3 startup takes 33.5 seconds against the
+devops 30-second readiness window; bounded idempotent measurement retries retain
+processes/data. A configurable readiness budget remains a devops follow-up.
+[Evidence and limits](../status/w93-read-pressure-20261009.md).
 
 **Implemented experimental candidate (Oct 9):** Commits 9728d07b,
 eb110217 and ec5b53b3 on `devel-persistence-pressure` implement opt-in

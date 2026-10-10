@@ -3753,25 +3753,6 @@ static int gc_queue(struct efs_kv_item *it, uint32_t *n, uint32_t cap,
     return EFS_OK;
 }
 
-uint64_t efs_meta_candidate_gen(const uint8_t uuid[16], uint32_t session_epoch,
-                                uint64_t seq, uint32_t chunk_index,
-                                uint32_t retry)
-{
-    uint8_t in[16 + 4 + 8 + 4 + 4];
-    uint8_t out[EFS_HASH_SIZE];
-    uint64_t g;
-
-    if (!uuid)
-        return 1;
-    memcpy(in, uuid, 16);
-    be32(in + 16, session_epoch);
-    be64(in + 20, seq);
-    be32(in + 28, chunk_index);
-    be32(in + 32, retry);
-    efs_hash(in, sizeof(in), out);
-    g = rd64(out);
-    return g ? g : 1;
-}
 
 static int evidence_ok(const struct efs_meta_pub *p)
 {

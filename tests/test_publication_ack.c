@@ -18,7 +18,7 @@ static struct efs_msg_publication request(uint64_t seq)
 static struct efs_meta_pub intent(const struct efs_msg_publication *r)
 {
     struct efs_meta_pub p;
-    assert(efs_publication_from_rec(&r->rec,r->size,&p)==EFS_OK);
+    assert(efs_publication_from_request(r,&p)==EFS_OK);
     p.publication_id=r->id;p.durable_result=1;return p;
 }
 static struct efs_msg_publication_reply reply(const struct efs_msg_publication *r,
@@ -144,6 +144,30 @@ static void durable_order(void)
     assert(efs_meta_apply_publish(kv,&pb)==EFS_ERR_STALE);
     efs_kv_mem_free(kv);
 }
+static void ticket_ownership(void)
+{
+    struct efs_msg_publication r=request(99);r.rec.publish_flags|=EFS_CHUNK_REC_F_FRESH_OBJECT;
+    r.ticketed=1;r.put_id=r.id;r.put_id.seq=55;r.put_fragment_len=64;r.put_member_mask=15;
+    r.rec.chunk_generation=efs_meta_candidate_gen(r.put_id.client_uuid,r.put_id.session_epoch,55,r.rec.chunk_index,0);
+    struct efs_publication_ack_queue q={0};assert(!efs_publication_ack_admit(&q,&r));
+    struct efs_publication_ack_queue saved=q;
+    struct efs_msg_publication changed=r;changed.put_member_mask=7;
+    assert(efs_publication_ack_admit(&q,&changed)==EFS_ERR_PROTO);
+    changed=r;changed.put_id.session_epoch++;
+    assert(efs_publication_ack_admit(&q,&changed)==EFS_ERR_INVAL);
+    changed=r;changed.ticketed=0;
+    assert(efs_publication_ack_admit(&q,&changed)==EFS_ERR_INVAL);
+    memset(&changed.put_id,0,sizeof(changed.put_id));changed.put_fragment_len=changed.put_member_mask=0;
+    assert(efs_publication_ack_admit(&q,&changed)==EFS_ERR_PROTO);
+    assert(!memcmp(&saved,&q,sizeof(q)));
+    struct efs_msg_publication_reply wrong=reply(&changed,EFS_PUBLICATION_COMMITTED,EFS_OK);
+    assert(efs_publication_ack_consumed(&q,r.id.seq,&wrong)==EFS_ERR_PROTO);
+    struct efs_msg_publication_reply exact=reply(&r,EFS_PUBLICATION_COMMITTED,EFS_OK);
+    assert(!efs_publication_ack_consumed(&q,r.id.seq,&exact));
+    exact=reply(&r,EFS_PUBLICATION_RETIRED,EFS_META_PUBLICATION_RETIRED);
+    assert(!efs_publication_ack_complete(&q,r.id.seq,&exact) && !q.count);
+}
+
 int main(void)
 {
     struct efs_msg_publication r=request(99);struct efs_meta_pub p=intent(&r);
@@ -163,7 +187,7 @@ int main(void)
     assert(efs_publication_ack_consumed(&pending_q,r.id.seq,&pending_reply)==EFS_ERR_BUSY);
     assert(efs_publication_ack_complete(&pending_q,r.id.seq,&pending_reply)==EFS_ERR_BUSY);
     assert(!memcmp(&saved,&pending_q,sizeof(saved)));
-    ownership();bounded_wrap();durable_order();
+    ownership();bounded_wrap();durable_order();ticket_ownership();
     puts("publication ACK: immutable ownership, ordered retirement, bounded wrap and lost replies PASS");
     return 0;
 }

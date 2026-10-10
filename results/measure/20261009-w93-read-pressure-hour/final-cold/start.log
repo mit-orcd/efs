@@ -1,0 +1,59 @@
+n1 up on 127.0.0.1:17432
+ERROR: n2 did not start; log:
+2026-10-10T03:37:25.387Z raft-host: applied session index=6698789 kind=8 shard=0 ino=2481029
+2026-10-10T03:37:25.392Z raft-host: applied session index=6698790 kind=9 shard=0 ino=2481029
+2026-10-10T03:37:25.397Z raft-host: applied session index=4967319 kind=8 shard=0 ino=955810
+2026-10-10T03:37:25.411Z raft-host: applied session index=4967320 kind=9 shard=0 ino=955810
+2026-10-10T03:37:25.413Z raft-host: applied session index=6698791 kind=8 shard=0 ino=2481029
+2026-10-10T03:37:25.415Z raft-host: applied session index=6698792 kind=9 shard=0 ino=2481029
+2026-10-10T03:37:25.417Z raft-host: applied session index=4967321 kind=8 shard=0 ino=955810
+2026-10-10T03:37:25.426Z raft-host: applied session index=4967322 kind=9 shard=0 ino=955810
+2026-10-10T03:37:25.426Z iostats: get ops=53 bytes=3473408 errors=0 avg_us=1290 p50_us=661 max_us=9255 put ops=22853 bytes=1497694208 errors=0 avg_us=842 p50_us=731 max_us=49706 wdisk ops=22853 bytes=1497694208 errors=0 avg_us=787 p50_us=686 max_us=49657
+2026-10-10T03:37:26.384Z raft-host: gc-pass ms=7 orphan=6 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=4 segs=46 keys=4098 emit=4098 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-10T03:37:58.175Z storage-engine=files direct_io=on
+2026-10-10T03:37:58.176Z Loaded 4 persisted cluster node(s) from /data1/efs/n2/meta/cluster_nodes.bin
+2026-10-10T03:37:58.176Z   persisted node 1: 127.0.0.1:17432
+2026-10-10T03:37:58.176Z   persisted node 2: 127.0.0.1:17433
+2026-10-10T03:37:58.176Z   persisted node 3: 127.0.0.1:17434
+2026-10-10T03:37:58.176Z   persisted node 4: 127.0.0.1:17435
+2026-10-10T03:38:21.089Z Joined cluster with 4 nodes
+2026-10-10T03:38:21.090Z heartbeat: enabled (2000 ms interval)
+2026-10-10T03:38:23.090Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=18446744073709551615 passes=0 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T03:38:27.091Z heartbeat: node 3 (127.0.0.1:17434) unresponsive — marked down for 30s
+start readiness attempt 1 failed; retaining processes for bounded retry
+n1 already running (pid 274566)
+n2 already running (pid 276459)
+ERROR: n3 did not start; log:
+2026-10-10T03:37:25.369Z raft-host: applied session index=6698788 kind=9 shard=0 ino=2481029
+2026-10-10T03:37:25.376Z raft-host: applied session index=4967317 kind=8 shard=0 ino=955810
+2026-10-10T03:37:25.382Z raft-host: applied session index=4967318 kind=9 shard=0 ino=955810
+2026-10-10T03:37:25.389Z raft-host: applied session index=6698789 kind=8 shard=0 ino=2481029
+2026-10-10T03:37:25.393Z raft-host: applied session index=6698790 kind=9 shard=0 ino=2481029
+2026-10-10T03:37:25.404Z raft-host: applied session index=4967319 kind=8 shard=0 ino=955810
+2026-10-10T03:37:25.411Z raft-host: applied session index=4967320 kind=9 shard=0 ino=955810
+2026-10-10T03:37:25.414Z raft-host: applied session index=6698791 kind=8 shard=0 ino=2481029
+2026-10-10T03:37:25.418Z raft-host: applied session index=6698792 kind=9 shard=0 ino=2481029
+2026-10-10T03:37:25.422Z raft-host: applied session index=4967321 kind=8 shard=0 ino=955810
+2026-10-10T03:37:25.427Z raft-host: applied session index=4967322 kind=9 shard=0 ino=955810
+2026-10-10T03:38:36.407Z storage-engine=files direct_io=on
+2026-10-10T03:38:36.407Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/n3/meta/cluster_nodes.bin
+2026-10-10T03:38:36.407Z   persisted node 1: 127.0.0.1:17432
+2026-10-10T03:38:36.407Z   persisted node 2: 127.0.0.1:17433
+2026-10-10T03:38:36.407Z   persisted node 3: 127.0.0.1:17434
+2026-10-10T03:38:36.407Z   persisted node 4: 127.0.0.1:17435
+2026-10-10T03:38:59.481Z Joined cluster with 4 nodes
+2026-10-10T03:38:59.484Z heartbeat: enabled (2000 ms interval)
+2026-10-10T03:39:01.485Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=18446744073709551615 passes=0 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+start readiness attempt 2 failed; retaining processes for bounded retry
+n1 already running (pid 274566)
+n2 already running (pid 276459)
+n3 already running (pid 278767)
+n4 up on 127.0.0.1:17435
+already formatted (rm /data1/efs/.mkfs-done + wipe n* to redo)
+Stop with: /data1/efs/src/scripts/client.sh stop /data1/efs/mnt
+Logging efs-fuse to /data1/efs/efs-fuse-mnt.log
+Mounted /data1/efs/mnt
+Stop with: /data1/efs/src/scripts/client.sh stop /data1/efs/mnt2
+Logging efs-fuse to /data1/efs/efs-fuse-mnt2.log
+Mounted /data1/efs/mnt2
+nuc-efs up: n1..n4 on 127.0.0.1:17432/17433/17434/17435, mounted at /data1/efs/mnt + /data1/efs/mnt2

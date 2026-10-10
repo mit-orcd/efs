@@ -1,0 +1,318 @@
+2026-10-10T03:41:11.703Z storage-engine=files direct_io=on
+2026-10-10T03:41:11.708Z Joined cluster with 4 nodes
+2026-10-10T03:41:11.715Z heartbeat: enabled (2000 ms interval)
+2026-10-10T03:41:11.722Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T03:41:11.722Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-10T03:41:11.722Z raft-host: up raft_id=3 n=4 boot=1157156955537612 salt=15657497306222734892 g0=off g2=hosted
+2026-10-10T03:41:11.722Z efsd 437b7890 (branch devel-persistence-pressure, built 2026-10-10T03:08:18Z on nuc), build=437b7890-read-pressure: node 4 listening on 127.0.0.1:22193, storage=/home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T03:41:13.715Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=986 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T03:41:15.545Z store: put O_DIRECT bounce copy (buf align=3120 len=65536)
+2026-10-10T03:41:15.551Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=6827 p50_us=6827 max_us=6827 wdisk ops=1 bytes=65536 errors=0 avg_us=6685 p50_us=6685 max_us=6685
+2026-10-10T03:41:16.726Z kv-obs: mt_bytes=9899 l0_bytes=0 l0=0 l1=0
+2026-10-10T03:41:18.875Z storage-engine=files direct_io=on
+2026-10-10T03:41:18.876Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4/meta/cluster_nodes.bin
+2026-10-10T03:41:18.876Z   persisted node 1: 127.0.0.1:22190
+2026-10-10T03:41:18.876Z   persisted node 2: 127.0.0.1:22191
+2026-10-10T03:41:18.876Z   persisted node 3: 127.0.0.1:22192
+2026-10-10T03:41:18.876Z   persisted node 4: 127.0.0.1:22193
+2026-10-10T03:41:18.882Z Joined cluster with 4 nodes
+2026-10-10T03:41:18.887Z heartbeat: enabled (2000 ms interval)
+2026-10-10T03:41:18.897Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T03:41:18.898Z raft-host: up raft_id=3 n=4 boot=1157156955537613 salt=2384562247246909305 g0=off g2=hosted
+2026-10-10T03:41:18.898Z efsd 437b7890 (branch devel-persistence-pressure, built 2026-10-10T03:08:18Z on nuc), build=437b7890-read-pressure: node 4 listening on 127.0.0.1:22193, storage=/home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4 (1 paths, stripe=none), used=6291456, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T03:41:18.898Z kv-obs: mt_bytes=26495 l0_bytes=0 l0=0 l1=0
+2026-10-10T03:41:20.888Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=983 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T03:41:22.403Z iostats: get ops=6 bytes=393216 errors=0 avg_us=2327 p50_us=2315 max_us=2439 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T03:41:23.848Z storage-engine=files direct_io=on
+2026-10-10T03:41:23.848Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4/meta/cluster_nodes.bin
+2026-10-10T03:41:23.848Z   persisted node 1: 127.0.0.1:22190
+2026-10-10T03:41:23.848Z   persisted node 2: 127.0.0.1:22191
+2026-10-10T03:41:23.848Z   persisted node 3: 127.0.0.1:22192
+2026-10-10T03:41:23.848Z   persisted node 4: 127.0.0.1:22193
+2026-10-10T03:41:23.869Z Joined cluster with 4 nodes
+2026-10-10T03:41:23.873Z heartbeat: enabled (2000 ms interval)
+2026-10-10T03:41:23.880Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T03:41:23.880Z raft-host: up raft_id=3 n=4 boot=1157156955537614 salt=4919329695557353518 g0=off g2=hosted
+2026-10-10T03:41:23.880Z efsd 437b7890 (branch devel-persistence-pressure, built 2026-10-10T03:08:18Z on nuc), build=437b7890-read-pressure: node 4 listening on 127.0.0.1:22193, storage=/home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4 (1 paths, stripe=none), used=6291456, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T03:41:23.880Z kv-obs: mt_bytes=26495 l0_bytes=0 l0=0 l1=0
+2026-10-10T03:41:24.411Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T03:41:25.873Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=988 passes=2 sampled=0 pending=0,0 reap=0,0 removed=96 file_bytes=6684672 payload_bytes=6291456 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T03:41:29.624Z storage-engine=files direct_io=on
+2026-10-10T03:41:29.625Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4/meta/cluster_nodes.bin
+2026-10-10T03:41:29.625Z   persisted node 1: 127.0.0.1:22190
+2026-10-10T03:41:29.625Z   persisted node 2: 127.0.0.1:22191
+2026-10-10T03:41:29.625Z   persisted node 3: 127.0.0.1:22192
+2026-10-10T03:41:29.625Z   persisted node 4: 127.0.0.1:22193
+2026-10-10T03:41:29.643Z Joined cluster with 4 nodes
+2026-10-10T03:41:29.646Z heartbeat: enabled (2000 ms interval)
+2026-10-10T03:41:29.654Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T03:41:29.654Z kv-obs: mt_bytes=17103 l0_bytes=0 l0=0 l1=0
+2026-10-10T03:41:29.654Z raft-host: up raft_id=3 n=4 boot=1382543890423103 salt=901881729436328803 g0=off g2=hosted
+2026-10-10T03:41:29.654Z efsd 437b7890 (branch devel-persistence-pressure, built 2026-10-10T03:08:18Z on nuc), build=437b7890-read-pressure: node 4 listening on 127.0.0.1:22193, storage=/home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T03:41:31.647Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=986 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T03:41:34.524Z storage-engine=files direct_io=on
+2026-10-10T03:41:34.524Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4/meta/cluster_nodes.bin
+2026-10-10T03:41:34.524Z   persisted node 1: 127.0.0.1:22190
+2026-10-10T03:41:34.524Z   persisted node 2: 127.0.0.1:22191
+2026-10-10T03:41:34.524Z   persisted node 3: 127.0.0.1:22192
+2026-10-10T03:41:34.524Z   persisted node 4: 127.0.0.1:22193
+2026-10-10T03:41:34.542Z Joined cluster with 4 nodes
+2026-10-10T03:41:34.545Z heartbeat: enabled (2000 ms interval)
+2026-10-10T03:41:34.550Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T03:41:34.550Z raft-host: up raft_id=3 n=4 boot=1387023506811833 salt=16504662149839681460 g0=off g2=hosted
+2026-10-10T03:41:34.550Z kv-obs: mt_bytes=17103 l0_bytes=0 l0=0 l1=0
+2026-10-10T03:41:34.550Z efsd 437b7890 (branch devel-persistence-pressure, built 2026-10-10T03:08:18Z on nuc), build=437b7890-read-pressure: node 4 listening on 127.0.0.1:22193, storage=/home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T03:41:36.545Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=990 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T03:41:55.860Z storage-engine=files direct_io=on
+2026-10-10T03:41:55.860Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4/meta/cluster_nodes.bin
+2026-10-10T03:41:55.860Z   persisted node 1: 127.0.0.1:22190
+2026-10-10T03:41:55.860Z   persisted node 2: 127.0.0.1:22191
+2026-10-10T03:41:55.860Z   persisted node 3: 127.0.0.1:22192
+2026-10-10T03:41:55.860Z   persisted node 4: 127.0.0.1:22193
+2026-10-10T03:41:55.865Z Joined cluster with 4 nodes
+2026-10-10T03:41:55.869Z heartbeat: enabled (2000 ms interval)
+2026-10-10T03:41:55.875Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T03:41:55.876Z kv-obs: mt_bytes=17103 l0_bytes=0 l0=0 l1=0
+2026-10-10T03:41:55.876Z raft-host: up raft_id=3 n=4 boot=1387023506811834 salt=4594036319758534 g0=off g2=hosted
+2026-10-10T03:41:55.876Z efsd 437b7890 (branch devel-persistence-pressure, built 2026-10-10T03:08:18Z on nuc), build=437b7890-read-pressure: node 4 listening on 127.0.0.1:22193, storage=/home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T03:41:56.501Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T03:41:57.869Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=988 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T03:42:16.794Z storage-engine=files direct_io=on
+2026-10-10T03:42:16.794Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4/meta/cluster_nodes.bin
+2026-10-10T03:42:16.794Z   persisted node 1: 127.0.0.1:22190
+2026-10-10T03:42:16.794Z   persisted node 2: 127.0.0.1:22191
+2026-10-10T03:42:16.794Z   persisted node 3: 127.0.0.1:22192
+2026-10-10T03:42:16.794Z   persisted node 4: 127.0.0.1:22193
+2026-10-10T03:42:16.799Z Joined cluster with 4 nodes
+2026-10-10T03:42:16.802Z heartbeat: enabled (2000 ms interval)
+2026-10-10T03:42:16.809Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T03:42:16.809Z raft-host: up raft_id=3 n=4 boot=1407252943565487 salt=6329654370463238760 g0=off g2=hosted
+2026-10-10T03:42:16.809Z efsd 437b7890 (branch devel-persistence-pressure, built 2026-10-10T03:08:18Z on nuc), build=437b7890-read-pressure: node 4 listening on 127.0.0.1:22193, storage=/home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T03:42:16.809Z kv-obs: mt_bytes=17103 l0_bytes=0 l0=0 l1=0
+2026-10-10T03:42:18.802Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=985 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T03:42:21.073Z storage-engine=files direct_io=on
+2026-10-10T03:42:21.073Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4/meta/cluster_nodes.bin
+2026-10-10T03:42:21.073Z   persisted node 1: 127.0.0.1:22190
+2026-10-10T03:42:21.073Z   persisted node 2: 127.0.0.1:22191
+2026-10-10T03:42:21.073Z   persisted node 3: 127.0.0.1:22192
+2026-10-10T03:42:21.073Z   persisted node 4: 127.0.0.1:22193
+2026-10-10T03:42:21.092Z Joined cluster with 4 nodes
+2026-10-10T03:42:21.097Z heartbeat: enabled (2000 ms interval)
+2026-10-10T03:42:21.104Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T03:42:21.104Z raft-host: up raft_id=3 n=4 boot=1407252943565488 salt=14467717815143077217 g0=off g2=hosted
+2026-10-10T03:42:21.104Z efsd 437b7890 (branch devel-persistence-pressure, built 2026-10-10T03:08:18Z on nuc), build=437b7890-read-pressure: node 4 listening on 127.0.0.1:22193, storage=/home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T03:42:21.104Z kv-obs: mt_bytes=17103 l0_bytes=0 l0=0 l1=0
+2026-10-10T03:42:21.362Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T03:42:23.097Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=986 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T03:42:25.487Z storage-engine=files direct_io=on
+2026-10-10T03:42:25.487Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4/meta/cluster_nodes.bin
+2026-10-10T03:42:25.487Z   persisted node 1: 127.0.0.1:22190
+2026-10-10T03:42:25.487Z   persisted node 2: 127.0.0.1:22191
+2026-10-10T03:42:25.487Z   persisted node 3: 127.0.0.1:22192
+2026-10-10T03:42:25.487Z   persisted node 4: 127.0.0.1:22193
+2026-10-10T03:42:25.506Z Joined cluster with 4 nodes
+2026-10-10T03:42:25.510Z heartbeat: enabled (2000 ms interval)
+2026-10-10T03:42:25.517Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T03:42:25.517Z raft-host: up raft_id=3 n=4 boot=1407252943565489 salt=16993539783872839912 g0=off g2=hosted
+2026-10-10T03:42:25.517Z efsd 437b7890 (branch devel-persistence-pressure, built 2026-10-10T03:08:18Z on nuc), build=437b7890-read-pressure: node 4 listening on 127.0.0.1:22193, storage=/home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T03:42:25.517Z kv-obs: mt_bytes=17103 l0_bytes=0 l0=0 l1=0
+2026-10-10T03:42:26.047Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T03:42:27.511Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=988 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T03:42:28.772Z store: put O_DIRECT bounce copy (buf align=3744 len=65536)
+2026-10-10T03:42:29.874Z storage-engine=files direct_io=on
+2026-10-10T03:42:29.874Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4/meta/cluster_nodes.bin
+2026-10-10T03:42:29.874Z   persisted node 1: 127.0.0.1:22190
+2026-10-10T03:42:29.874Z   persisted node 2: 127.0.0.1:22191
+2026-10-10T03:42:29.874Z   persisted node 3: 127.0.0.1:22192
+2026-10-10T03:42:29.874Z   persisted node 4: 127.0.0.1:22193
+2026-10-10T03:42:29.894Z Joined cluster with 4 nodes
+2026-10-10T03:42:29.898Z heartbeat: enabled (2000 ms interval)
+2026-10-10T03:42:29.905Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T03:42:29.905Z kv-obs: mt_bytes=17103 l0_bytes=0 l0=0 l1=0
+2026-10-10T03:42:29.905Z raft-host: up raft_id=3 n=4 boot=1407252943565490 salt=15349838765812981104 g0=off g2=hosted
+2026-10-10T03:42:29.906Z efsd 437b7890 (branch devel-persistence-pressure, built 2026-10-10T03:08:18Z on nuc), build=437b7890-read-pressure: node 4 listening on 127.0.0.1:22193, storage=/home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4 (1 paths, stripe=none), used=65536, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T03:42:31.899Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=986 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T03:42:33.434Z raft-host: applied session index=536 kind=8 shard=0 ino=4186
+2026-10-10T03:42:33.437Z store: put O_DIRECT bounce copy (buf align=3120 len=65536)
+2026-10-10T03:42:33.441Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=4611 p50_us=4611 max_us=4611 wdisk ops=1 bytes=65536 errors=0 avg_us=4478 p50_us=4478 max_us=4478
+2026-10-10T03:42:33.448Z raft-host: applied session index=538 kind=9 shard=0 ino=4186
+2026-10-10T03:42:33.455Z raft-host: applied session index=540 kind=8 shard=0 ino=8282
+2026-10-10T03:42:33.465Z raft-host: applied session index=542 kind=9 shard=0 ino=8282
+2026-10-10T03:42:33.471Z raft-host: applied session index=544 kind=8 shard=0 ino=12378
+2026-10-10T03:42:33.482Z raft-host: applied session index=546 kind=9 shard=0 ino=12378
+2026-10-10T03:42:33.493Z raft-host: applied session index=548 kind=8 shard=0 ino=16474
+2026-10-10T03:42:33.505Z raft-host: applied session index=550 kind=9 shard=0 ino=16474
+2026-10-10T03:42:33.513Z raft-host: applied session index=552 kind=8 shard=0 ino=20570
+2026-10-10T03:42:33.525Z raft-host: applied session index=554 kind=9 shard=0 ino=20570
+2026-10-10T03:42:33.530Z raft-host: applied session index=556 kind=8 shard=0 ino=24666
+2026-10-10T03:42:33.538Z raft-host: applied session index=558 kind=9 shard=0 ino=24666
+2026-10-10T03:42:33.544Z raft-host: applied session index=560 kind=8 shard=0 ino=28762
+2026-10-10T03:42:33.559Z raft-host: applied session index=562 kind=9 shard=0 ino=28762
+2026-10-10T03:42:33.566Z raft-host: applied session index=564 kind=8 shard=0 ino=32858
+2026-10-10T03:42:33.578Z raft-host: applied session index=566 kind=9 shard=0 ino=32858
+2026-10-10T03:42:33.587Z raft-host: applied session index=568 kind=8 shard=0 ino=36954
+2026-10-10T03:42:33.598Z raft-host: applied session index=570 kind=9 shard=0 ino=36954
+2026-10-10T03:42:33.604Z raft-host: applied session index=572 kind=8 shard=0 ino=41050
+2026-10-10T03:42:33.613Z raft-host: applied session index=574 kind=9 shard=0 ino=41050
+2026-10-10T03:42:33.627Z raft-host: applied session index=576 kind=8 shard=0 ino=45146
+2026-10-10T03:42:33.637Z raft-host: applied session index=578 kind=9 shard=0 ino=45146
+2026-10-10T03:42:33.643Z raft-host: applied session index=580 kind=8 shard=0 ino=49242
+2026-10-10T03:42:33.656Z raft-host: applied session index=582 kind=9 shard=0 ino=49242
+2026-10-10T03:42:33.664Z raft-host: applied session index=584 kind=8 shard=0 ino=53338
+2026-10-10T03:42:33.672Z raft-host: applied session index=586 kind=9 shard=0 ino=53338
+2026-10-10T03:42:33.680Z raft-host: applied session index=588 kind=8 shard=0 ino=57434
+2026-10-10T03:42:33.694Z raft-host: applied session index=590 kind=9 shard=0 ino=57434
+2026-10-10T03:42:33.702Z raft-host: applied session index=592 kind=8 shard=0 ino=61530
+2026-10-10T03:42:33.714Z raft-host: applied session index=594 kind=9 shard=0 ino=61530
+2026-10-10T03:42:33.722Z raft-host: applied session index=596 kind=8 shard=0 ino=65626
+2026-10-10T03:42:33.731Z raft-host: applied session index=598 kind=9 shard=0 ino=65626
+2026-10-10T03:42:33.739Z raft-host: applied session index=600 kind=8 shard=0 ino=69722
+2026-10-10T03:42:33.755Z raft-host: applied session index=602 kind=9 shard=0 ino=69722
+2026-10-10T03:42:35.475Z storage-engine=files direct_io=on
+2026-10-10T03:42:35.475Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4/meta/cluster_nodes.bin
+2026-10-10T03:42:35.475Z   persisted node 1: 127.0.0.1:22190
+2026-10-10T03:42:35.475Z   persisted node 2: 127.0.0.1:22191
+2026-10-10T03:42:35.475Z   persisted node 3: 127.0.0.1:22192
+2026-10-10T03:42:35.475Z   persisted node 4: 127.0.0.1:22193
+2026-10-10T03:42:35.502Z Joined cluster with 4 nodes
+2026-10-10T03:42:35.509Z heartbeat: enabled (2000 ms interval)
+2026-10-10T03:42:35.527Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T03:42:35.527Z raft-host: up raft_id=3 n=4 boot=1407252943565491 salt=16210888297481313472 g0=off g2=hosted
+2026-10-10T03:42:35.527Z efsd 437b7890 (branch devel-persistence-pressure, built 2026-10-10T03:08:18Z on nuc), build=437b7890-read-pressure: node 4 listening on 127.0.0.1:22193, storage=/home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4 (1 paths, stripe=none), used=1114112, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T03:42:35.527Z kv-obs: mt_bytes=31982 l0_bytes=0 l0=0 l1=0
+2026-10-10T03:42:37.509Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=976 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T03:42:39.000Z raft-host: applied session index=604 kind=8 shard=0 ino=4186
+2026-10-10T03:42:39.012Z iostats: get ops=1 bytes=65536 errors=0 avg_us=601 p50_us=601 max_us=601 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T03:42:39.013Z raft-host: applied session index=605 kind=9 shard=0 ino=4186
+2026-10-10T03:42:39.016Z raft-host: applied session index=606 kind=8 shard=0 ino=8282
+2026-10-10T03:42:39.022Z raft-host: applied session index=607 kind=9 shard=0 ino=8282
+2026-10-10T03:42:39.024Z raft-host: applied session index=608 kind=8 shard=0 ino=12378
+2026-10-10T03:42:39.030Z raft-host: applied session index=609 kind=9 shard=0 ino=12378
+2026-10-10T03:42:39.034Z raft-host: applied session index=610 kind=8 shard=0 ino=16474
+2026-10-10T03:42:39.040Z raft-host: applied session index=611 kind=9 shard=0 ino=16474
+2026-10-10T03:42:39.044Z raft-host: applied session index=612 kind=8 shard=0 ino=20570
+2026-10-10T03:42:39.050Z raft-host: applied session index=613 kind=9 shard=0 ino=20570
+2026-10-10T03:42:39.054Z raft-host: applied session index=614 kind=8 shard=0 ino=24666
+2026-10-10T03:42:39.059Z raft-host: applied session index=615 kind=9 shard=0 ino=24666
+2026-10-10T03:42:39.064Z raft-host: applied session index=616 kind=8 shard=0 ino=28762
+2026-10-10T03:42:39.068Z raft-host: applied session index=617 kind=9 shard=0 ino=28762
+2026-10-10T03:42:39.071Z raft-host: applied session index=618 kind=8 shard=0 ino=32858
+2026-10-10T03:42:39.076Z raft-host: applied session index=619 kind=9 shard=0 ino=32858
+2026-10-10T03:42:39.078Z raft-host: applied session index=620 kind=8 shard=0 ino=36954
+2026-10-10T03:42:39.086Z raft-host: applied session index=621 kind=9 shard=0 ino=36954
+2026-10-10T03:42:39.089Z raft-host: applied session index=622 kind=8 shard=0 ino=41050
+2026-10-10T03:42:39.095Z raft-host: applied session index=623 kind=9 shard=0 ino=41050
+2026-10-10T03:42:39.099Z raft-host: applied session index=624 kind=8 shard=0 ino=45146
+2026-10-10T03:42:39.104Z raft-host: applied session index=625 kind=9 shard=0 ino=45146
+2026-10-10T03:42:39.108Z raft-host: applied session index=626 kind=8 shard=0 ino=49242
+2026-10-10T03:42:39.114Z raft-host: applied session index=627 kind=9 shard=0 ino=49242
+2026-10-10T03:42:39.118Z raft-host: applied session index=628 kind=8 shard=0 ino=53338
+2026-10-10T03:42:39.123Z raft-host: applied session index=629 kind=9 shard=0 ino=53338
+2026-10-10T03:42:39.127Z raft-host: applied session index=630 kind=8 shard=0 ino=57434
+2026-10-10T03:42:39.131Z raft-host: applied session index=631 kind=9 shard=0 ino=57434
+2026-10-10T03:42:39.133Z raft-host: applied session index=632 kind=8 shard=0 ino=61530
+2026-10-10T03:42:39.139Z raft-host: applied session index=633 kind=9 shard=0 ino=61530
+2026-10-10T03:42:39.143Z raft-host: applied session index=634 kind=8 shard=0 ino=65626
+2026-10-10T03:42:39.148Z raft-host: applied session index=635 kind=9 shard=0 ino=65626
+2026-10-10T03:42:39.157Z raft-host: applied session index=636 kind=8 shard=0 ino=69722
+2026-10-10T03:42:39.168Z raft-host: applied session index=637 kind=9 shard=0 ino=69722
+2026-10-10T03:42:39.527Z store: put O_DIRECT bounce copy (buf align=1136 len=65536)
+2026-10-10T03:42:40.532Z kv-obs: mt_bytes=42553 l0_bytes=0 l0=0 l1=0
+2026-10-10T03:42:44.013Z iostats: get ops=157 bytes=10289152 errors=0 avg_us=1835 p50_us=1117 max_us=9230 put ops=87 bytes=5701632 errors=0 avg_us=35600 p50_us=52694 max_us=100045 wdisk ops=87 bytes=5701632 errors=0 avg_us=9981 p50_us=11311 max_us=34774
+2026-10-10T03:42:45.534Z kv-obs: mt_bytes=40184 l0_bytes=0 l0=0 l1=0
+2026-10-10T03:42:49.013Z iostats: get ops=161 bytes=10551296 errors=0 avg_us=1825 p50_us=1567 max_us=9230 put ops=95 bytes=6225920 errors=0 avg_us=33232 p50_us=52694 max_us=100045 wdisk ops=95 bytes=6225920 errors=0 avg_us=9763 p50_us=11311 max_us=34774
+2026-10-10T03:42:53.517Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=890 passes=18 sampled=0 pending=0,0 reap=0,0 removed=54 file_bytes=3760128 payload_bytes=3538944 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T03:42:54.015Z iostats: get ops=165 bytes=10813440 errors=0 avg_us=1819 p50_us=1374 max_us=9230 put ops=103 bytes=6750208 errors=0 avg_us=31258 p50_us=52694 max_us=100045 wdisk ops=103 bytes=6750208 errors=0 avg_us=9604 p50_us=10559 max_us=34774
+2026-10-10T03:42:59.016Z iostats: get ops=171 bytes=11206656 errors=0 avg_us=1946 p50_us=961 max_us=14599 put ops=164 bytes=10747904 errors=0 avg_us=32431 p50_us=29780 max_us=100045 wdisk ops=164 bytes=10747904 errors=0 avg_us=9656 p50_us=10374 max_us=34774
+2026-10-10T03:43:00.540Z kv-obs: mt_bytes=58968 l0_bytes=0 l0=0 l1=0
+2026-10-10T03:43:04.495Z storage-engine=files direct_io=on
+2026-10-10T03:43:04.495Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4/meta/cluster_nodes.bin
+2026-10-10T03:43:04.495Z   persisted node 1: 127.0.0.1:22190
+2026-10-10T03:43:04.495Z   persisted node 2: 127.0.0.1:22191
+2026-10-10T03:43:04.495Z   persisted node 3: 127.0.0.1:22192
+2026-10-10T03:43:04.495Z   persisted node 4: 127.0.0.1:22193
+2026-10-10T03:43:04.502Z Joined cluster with 4 nodes
+2026-10-10T03:43:04.506Z heartbeat: enabled (2000 ms interval)
+2026-10-10T03:43:04.519Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T03:43:04.519Z kv-obs: mt_bytes=56920 l0_bytes=0 l0=0 l1=0
+2026-10-10T03:43:04.519Z raft-host: up raft_id=3 n=4 boot=1407252943565492 salt=11333503902767670063 g0=off g2=hosted
+2026-10-10T03:43:04.519Z efsd 437b7890 (branch devel-persistence-pressure, built 2026-10-10T03:08:18Z on nuc), build=437b7890-read-pressure: node 4 listening on 127.0.0.1:22193, storage=/home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4 (1 paths, stripe=none), used=4194304, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T03:43:06.507Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=981 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T03:43:09.522Z kv-obs: mt_bytes=54904 l0_bytes=0 l0=0 l1=0
+2026-10-10T03:43:15.014Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T03:43:17.415Z store: put O_DIRECT bounce copy (buf align=3216 len=65536)
+2026-10-10T03:43:21.631Z storage-engine=files direct_io=on
+2026-10-10T03:43:21.631Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4/meta/cluster_nodes.bin
+2026-10-10T03:43:21.631Z   persisted node 1: 127.0.0.1:22190
+2026-10-10T03:43:21.631Z   persisted node 2: 127.0.0.1:22191
+2026-10-10T03:43:21.631Z   persisted node 3: 127.0.0.1:22192
+2026-10-10T03:43:21.631Z   persisted node 4: 127.0.0.1:22193
+2026-10-10T03:43:21.652Z Joined cluster with 4 nodes
+2026-10-10T03:43:21.656Z heartbeat: enabled (2000 ms interval)
+2026-10-10T03:43:21.669Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T03:43:21.669Z kv-obs: mt_bytes=66328 l0_bytes=0 l0=0 l1=0
+2026-10-10T03:43:21.669Z raft-host: up raft_id=3 n=4 boot=1407252943565493 salt=2375162989433565402 g0=off g2=hosted
+2026-10-10T03:43:21.669Z efsd 437b7890 (branch devel-persistence-pressure, built 2026-10-10T03:08:18Z on nuc), build=437b7890-read-pressure: node 4 listening on 127.0.0.1:22193, storage=/home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4 (1 paths, stripe=none), used=7077888, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T03:43:22.163Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T03:43:23.656Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=981 passes=2 sampled=0 pending=0,0 reap=0,0 removed=36 file_bytes=2506752 payload_bytes=2359296 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T03:43:26.673Z kv-obs: mt_bytes=62264 l0_bytes=0 l0=0 l1=0
+2026-10-10T03:43:27.167Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T03:43:32.176Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T03:43:36.821Z storage-engine=files direct_io=on
+2026-10-10T03:43:36.821Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4/meta/cluster_nodes.bin
+2026-10-10T03:43:36.821Z   persisted node 1: 127.0.0.1:22190
+2026-10-10T03:43:36.821Z   persisted node 2: 127.0.0.1:22191
+2026-10-10T03:43:36.821Z   persisted node 3: 127.0.0.1:22192
+2026-10-10T03:43:36.821Z   persisted node 4: 127.0.0.1:22193
+2026-10-10T03:43:36.842Z Joined cluster with 4 nodes
+2026-10-10T03:43:36.846Z heartbeat: enabled (2000 ms interval)
+2026-10-10T03:43:36.861Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T03:43:36.861Z raft-host: up raft_id=3 n=4 boot=1407252943565494 salt=887748690264115919 g0=off g2=hosted
+2026-10-10T03:43:36.861Z efsd 437b7890 (branch devel-persistence-pressure, built 2026-10-10T03:08:18Z on nuc), build=437b7890-read-pressure: node 4 listening on 127.0.0.1:22193, storage=/home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T03:43:36.861Z kv-obs: mt_bytes=58200 l0_bytes=0 l0=0 l1=0
+2026-10-10T03:43:38.846Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=977 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T03:43:40.332Z store: put O_DIRECT bounce copy (buf align=3120 len=65536)
+2026-10-10T03:43:40.348Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=13796 p50_us=13796 max_us=13796 wdisk ops=1 bytes=65536 errors=0 avg_us=13667 p50_us=13667 max_us=13667
+2026-10-10T03:43:41.349Z storage-engine=files direct_io=on
+2026-10-10T03:43:41.349Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4/meta/cluster_nodes.bin
+2026-10-10T03:43:41.349Z   persisted node 1: 127.0.0.1:22190
+2026-10-10T03:43:41.349Z   persisted node 2: 127.0.0.1:22191
+2026-10-10T03:43:41.349Z   persisted node 3: 127.0.0.1:22192
+2026-10-10T03:43:41.349Z   persisted node 4: 127.0.0.1:22193
+2026-10-10T03:43:41.355Z Joined cluster with 4 nodes
+2026-10-10T03:43:41.361Z heartbeat: enabled (2000 ms interval)
+2026-10-10T03:43:41.375Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T03:43:41.376Z raft-host: up raft_id=3 n=4 boot=1407252943565495 salt=15840233308572547478 g0=off g2=hosted
+2026-10-10T03:43:41.376Z efsd 437b7890 (branch devel-persistence-pressure, built 2026-10-10T03:08:18Z on nuc), build=437b7890-read-pressure: node 4 listening on 127.0.0.1:22193, storage=/home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4 (1 paths, stripe=none), used=65536, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T03:43:41.376Z kv-obs: mt_bytes=58200 l0_bytes=0 l0=0 l1=0
+2026-10-10T03:43:43.361Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=978 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T03:43:44.880Z iostats: get ops=1 bytes=65536 errors=0 avg_us=14310 p50_us=14310 max_us=14310 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T03:43:44.882Z store: put O_DIRECT bounce copy (buf align=1136 len=65536)
+2026-10-10T03:43:46.921Z storage-engine=files direct_io=on
+2026-10-10T03:43:46.921Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4/meta/cluster_nodes.bin
+2026-10-10T03:43:46.921Z   persisted node 1: 127.0.0.1:22190
+2026-10-10T03:43:46.921Z   persisted node 2: 127.0.0.1:22191
+2026-10-10T03:43:46.921Z   persisted node 3: 127.0.0.1:22192
+2026-10-10T03:43:46.921Z   persisted node 4: 127.0.0.1:22193
+2026-10-10T03:43:46.942Z Joined cluster with 4 nodes
+2026-10-10T03:43:46.945Z heartbeat: enabled (2000 ms interval)
+2026-10-10T03:43:46.956Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T03:43:46.956Z raft-host: up raft_id=3 n=4 boot=1407252943565496 salt=5337391034381581525 g0=off g2=hosted
+2026-10-10T03:43:46.956Z efsd 437b7890 (branch devel-persistence-pressure, built 2026-10-10T03:08:18Z on nuc), build=437b7890-read-pressure: node 4 listening on 127.0.0.1:22193, storage=/home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4 (1 paths, stripe=none), used=131072, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T03:43:46.956Z kv-obs: mt_bytes=58200 l0_bytes=0 l0=0 l1=0
+2026-10-10T03:43:48.946Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=983 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T03:43:50.440Z iostats: get ops=1 bytes=65536 errors=0 avg_us=14552 p50_us=14552 max_us=14552 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T03:43:51.511Z storage-engine=files direct_io=on
+2026-10-10T03:43:51.511Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4/meta/cluster_nodes.bin
+2026-10-10T03:43:51.511Z   persisted node 1: 127.0.0.1:22190
+2026-10-10T03:43:51.511Z   persisted node 2: 127.0.0.1:22191
+2026-10-10T03:43:51.511Z   persisted node 3: 127.0.0.1:22192
+2026-10-10T03:43:51.511Z   persisted node 4: 127.0.0.1:22193
+2026-10-10T03:43:51.530Z Joined cluster with 4 nodes
+2026-10-10T03:43:51.534Z heartbeat: enabled (2000 ms interval)
+2026-10-10T03:43:51.544Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T03:43:51.544Z raft-host: up raft_id=3 n=4 boot=1407252943565497 salt=12996341528246727207 g0=off g2=hosted
+2026-10-10T03:43:51.544Z efsd 437b7890 (branch devel-persistence-pressure, built 2026-10-10T03:08:18Z on nuc), build=437b7890-read-pressure: node 4 listening on 127.0.0.1:22193, storage=/home/efs/additional-work-dir/gc-direct-7hn0ct4r/n4 (1 paths, stripe=none), used=131072, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T03:43:51.544Z kv-obs: mt_bytes=58200 l0_bytes=0 l0=0 l1=0
+2026-10-10T03:43:51.822Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T03:43:53.535Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=983 passes=2 sampled=0 pending=0,0 reap=0,0 removed=2 file_bytes=139264 payload_bytes=131072 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0

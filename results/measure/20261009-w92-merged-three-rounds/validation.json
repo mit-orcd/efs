@@ -1,0 +1,23 @@
+{
+  "merged_baseline": "8aeb9c4b",
+  "final_runtime": "a8a15a14",
+  "profile_captures": 9,
+  "lost_samples": 0,
+  "cold_trees": 8,
+  "cold_exported_files": 60000,
+  "cold_payload_hashes": 526,
+  "root_stats": {
+    "imm_files": 0,
+    "imm_dirs": 12,
+    "imm_bytes": 0,
+    "imm_tmin": 1791581746511952180,
+    "imm_tmax": 1791604362430344328,
+    "tree_files": 62100,
+    "tree_dirs": 2174,
+    "tree_bytes": 177570052,
+    "tree_tmin": 1500000000000000000,
+    "tree_tmax": 1791604363773180621
+  },
+  "refresh_error": 0,
+  "ordinary_mounts_commands_disabled": 3
+}

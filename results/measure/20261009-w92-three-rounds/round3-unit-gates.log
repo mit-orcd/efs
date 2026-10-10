@@ -1,0 +1,5 @@
+query-disk: raw shard=1 rc=-1 errno=5
+query-disk: raw shard=1 rc=-1 errno=5
+query disk I/O: windows, lookup, packed records, partial ENOSPC and FD reuse PASS
+query-disk: unlinked directory ino=36864004096 parent=1 nlink=2
+query disk: RAM oracle, external sort, bounded metadata, retained snapshot, rename and cancellation PASS

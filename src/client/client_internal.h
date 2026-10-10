@@ -106,6 +106,10 @@ struct efs_client {
     uint8_t opid_uuid[EFS_OPID_UUID_LEN]; /* guarded by inode_rpc.c opid_mu */
     uint32_t opid_epoch;
     uint64_t opid_next;                        /* next seq; 0 = unseeded */
+    /* PUT tickets share a stream across all files on each lane shard. A
+     * per-cache snapshot counter is insufficient. Separate from namespace
+     * ACKs; only explicit ticket retirement may advance its server floor. */
+    uint64_t put_next; /* opid_mu; zero initializes fresh mount stream */
     uint64_t opid_inflight[EFS_OPID_INFLIGHT]; /* 0 = free slot */
     /* Successful append session registration, per immutable mount identity.
      * Protected by opid_mu; permission is still checked by the server. */
@@ -310,9 +314,28 @@ int efs_client_lease_resume(struct efs_client_lease_request *,int probe_only);
 int efs_client_lease_reset(struct efs_client_lease_request *);
 
 struct efs_put_ticket;
+struct efs_meta_pub;
+struct efs_client_put_request;
+int efs_client_put_id(struct efs_opid *);
+/* Staged pre-PUT ownership. Reserve an immutable, budgeted manifest before
+ * any admission RPC. Caller serializes the handle and keeps fragment bytes
+ * separately. Membership slots are captured with node IDs, never reinterpreted
+ * after a configuration change. ADMITTED is metadata proof, not a storage
+ * write permit: the data-plane durable fence is still required. */
+int efs_client_put_begin(struct efs_client_put_request **,
+                         const struct efs_meta_pub *);
+int efs_client_put_manifest(const struct efs_client_put_request *,
+                            struct efs_put_ticket *);
+int efs_client_put_resume(struct efs_client_put_request *,int probe_only,
+                          uint32_t *state);
+int efs_client_put_retire(struct efs_client_put_request *);
+/* Ambiguous admission, revocation and RECLAIMING retain ownership. Only a
+ * never-attempted request or an observed PUBLISHED, retired ticket may be freed here. */
+int efs_client_put_free(struct efs_client_put_request *);
 /* Opt-in durable ownership only. Caller retains immutable identity/body on
  * ambiguity. STATUS does not establish a session; state is not a PUT permit. */
 int efs_client_rpc_put_ticket(const struct efs_put_ticket *,int probe_only,uint32_t *state);
+int efs_client_rpc_put_ticket_retire(const struct efs_put_ticket *);
 int efs_client_rpc_publication(const struct efs_msg_publication *, int query_only, /* 0 submit, 1 status, 2 exact retirement */
                                struct efs_msg_publication_reply *);
 int efs_client_rpc_lane_writer_view(efs_ino_t ino, uint64_t generation,
@@ -518,6 +541,11 @@ int efs_dcache_publication_report(efs_ino_t ino, uint64_t generation, uint32_t c
     uint64_t object, uint64_t sequence, struct efs_chunk_rec *out);
 int efs_dcache_publication_request(efs_ino_t ino, uint64_t generation, uint32_t ci,
     uint64_t object, uint64_t sequence, uint64_t size, struct efs_msg_publication *);
+/* Bind exact admitted pre-PUT manifest before first publication send. A
+ * changed ticket or stripping ticket ownership cannot reuse a bound token. */
+int efs_dcache_publication_request_ticketed(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    uint64_t object, uint64_t sequence, uint64_t size,
+    const struct efs_put_ticket *, struct efs_msg_publication *);
 int efs_dcache_publication_result(efs_ino_t ino, uint64_t generation, uint32_t ci,
     uint64_t object, uint64_t sequence, const struct efs_msg_publication_reply *);
 int efs_dcache_complete_publication(efs_ino_t ino, uint64_t generation, uint32_t ci,

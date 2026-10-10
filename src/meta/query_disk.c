@@ -23,8 +23,11 @@
 #define KINDS 6
 #define FD_CACHE 32
 #define READ_WINDOW 8192
+#define READ_WAYS 4
 #define SORT_ROWS 2048
+#define NODE_BATCH 8
 #define VALUE_MAX 16384
+#define RAW_RECORD_MAX (EFS_KV_KEY_MAX+VALUE_MAX)
 static const uint8_t kinds[KINDS]={EFS_KV_KIND_INODE,EFS_KV_KIND_DENTRY,
     EFS_KV_KIND_LANE,EFS_KV_KIND_DSEQ,EFS_KV_KIND_APPEND_CUR,EFS_KV_KIND_PVER};
 struct slot { uint64_t offset;uint32_t key_len,value_len; };
@@ -36,10 +39,13 @@ struct disk_node {
     struct efs_name_entry link;
     uint64_t children;
 };
+struct read_window {
+    uint64_t offset,tick;size_t size;
+    uint8_t data[READ_WINDOW];
+};
 struct fd_slot {
-    int fd;uint32_t shard;char kind;uint64_t tick;
-    uint64_t window_offset;size_t window_size;
-    uint8_t window[READ_WINDOW];
+    int fd;uint32_t shard;char kind;uint64_t tick,window_tick;
+    struct read_window windows[READ_WAYS];
 };
 struct efs_query_disk {
     char path[EFS_MAX_PATH];
@@ -118,30 +124,39 @@ static int filename(const struct efs_query_disk *d,uint32_t shard,char kind,char
 }
 /* The descriptor cannot be evicted while pread/pwrite is using it. Reads use
  * independent offsets, and this lock never spans callbacks or recursive KV. */
-/* Fixed read windows amortize binary-search and adjacent-record syscalls.
+/* Four fixed LRU windows per descriptor amortize binary-search and adjacent-record syscalls.
  * Files are immutable except for this candidate's derived rows. Writes remain
  * synchronous to the descriptor; no dirty data is retained only in this cache. */
 static int window_read(struct fd_slot *f,void *buf,size_t n,uint64_t off)
 {
     uint64_t base=off & ~(uint64_t)(READ_WINDOW-1);
     if(n>READ_WINDOW-(off-base))return io_at(f->fd,buf,n,off,0);
-    if(!f->window_size || off<f->window_offset ||
-       off-f->window_offset>f->window_size || n>f->window_size-(off-f->window_offset)) {
-        f->window_offset=base;f->window_size=0;
+    struct read_window *w=NULL,*victim=&f->windows[0];
+    for(unsigned i=0;i<READ_WAYS;i++){
+        struct read_window *candidate=&f->windows[i];
+        if(candidate->size && candidate->offset==base){w=candidate;break;}
+        if(!candidate->size || (victim->size && candidate->tick<victim->tick))victim=candidate;
+    }
+    size_t at=(size_t)(off-base);
+    /* A later write may extend a formerly short EOF block, even through
+     * a sparse gap. Refill when the requested bytes exceed that old tail. */
+    if(w && (at>w->size || n>w->size-at))w->size=0;
+    if(!w || !w->size){
+        if(!w)w=victim;
+        w->offset=base;w->size=0;
         size_t cap=READ_WINDOW;
         if((uint64_t)cap>INT64_MAX-base)cap=(size_t)(INT64_MAX-base);
-        while(f->window_size<cap) {
-            ssize_t got=pread(f->fd,f->window+f->window_size,cap-f->window_size,
-                              (off_t)(base+f->window_size));
+        while(w->size<cap){
+            ssize_t got=pread(f->fd,w->data+w->size,cap-w->size,(off_t)(base+w->size));
             if(got<0 && errno==EINTR)continue;
-            if(got<0){f->window_size=0;return EFS_ERR_IO;}
+            if(got<0){w->size=0;return EFS_ERR_IO;}
             if(!got)break;
-            f->window_size+=(size_t)got;
+            w->size+=(size_t)got;
         }
     }
-    size_t at=(size_t)(off-f->window_offset);
-    if(at>f->window_size || n>f->window_size-at)return EFS_ERR_IO;
-    memcpy(buf,f->window+at,n);return EFS_OK;
+    w->tick=++f->window_tick;
+    if(at>w->size || n>w->size-at)return EFS_ERR_IO;
+    memcpy(buf,w->data+at,n);return EFS_OK;
 }
 static int disk_io(struct efs_query_disk *d,uint32_t shard,char kind,void *buf,size_t n,uint64_t off,int write)
 {
@@ -158,7 +173,8 @@ static int disk_io(struct efs_query_disk *d,uint32_t shard,char kind,void *buf,s
         char path[EFS_MAX_PATH];rc=filename(d,shard,kind,path,sizeof(path));
         if(!rc) {
             f=victim;if(f->fd>=0)close(f->fd);
-            f->window_size=0;
+            f->window_tick=0;
+            for(unsigned i=0;i<READ_WAYS;i++)f->windows[i].size=0;
             f->fd=open(path,O_RDWR|O_CLOEXEC);f->shard=shard;f->kind=kind;
             if(f->fd<0)rc=EFS_ERR_IO;
         }
@@ -168,12 +184,14 @@ static int disk_io(struct efs_query_disk *d,uint32_t shard,char kind,void *buf,s
         if(!write)rc=window_read(f,buf,n,off);
         else {
             rc=io_at(f->fd,buf,n,off,1);
-            if(rc)f->window_size=0; /* A failed write may have changed a prefix. */
-            else if(f->window_size && off<f->window_offset+f->window_size &&
-                    off+n>f->window_offset) {
-                uint64_t lo=off>f->window_offset?off:f->window_offset;
-                uint64_t hi=off+n<f->window_offset+f->window_size?off+n:f->window_offset+f->window_size;
-                memcpy(f->window+(size_t)(lo-f->window_offset),(uint8_t *)buf+(size_t)(lo-off),(size_t)(hi-lo));
+            for(unsigned i=0;i<READ_WAYS;i++){
+                struct read_window *w=&f->windows[i];
+                if(rc)w->size=0; /* A failed write may have changed a prefix. */
+                else if(w->size && off<w->offset+w->size && off+n>w->offset){
+                    uint64_t lo=off>w->offset?off:w->offset;
+                    uint64_t hi=off+n<w->offset+w->size?off+n:w->offset+w->size;
+                    memcpy(w->data+(size_t)(lo-w->offset),(uint8_t *)buf+(size_t)(lo-off),(size_t)(hi-lo));
+                }
             }
         }
     }
@@ -263,8 +281,9 @@ static int read_record(struct efs_query_disk *d,uint32_t shard,uint64_t at,struc
     if(!rc && value)rc=disk_io(d,shard,'r',value,s->value_len,s->offset+s->key_len,0);
     return rc;
 }
-static int seek(struct efs_query_disk *d,const uint8_t *key,uint32_t kl,uint64_t *at)
+static int seek(struct efs_query_disk *d,const uint8_t *key,uint32_t kl,uint64_t *at,struct slot *exact)
 {
+    if(exact)memset(exact,0,sizeof(*exact));
     if(kl<3 || kl>EFS_KV_KEY_MAX)return EFS_ERR_INVAL;
     uint32_t shard=((uint32_t)key[0]<<8)|key[1];int kind=kind_at(key[2]);
     if(shard>=SHARDS || kind<0)return EFS_ERR_NOT_FOUND;
@@ -272,19 +291,20 @@ static int seek(struct efs_query_disk *d,const uint8_t *key,uint32_t kl,uint64_t
     while(lo<hi) {
         uint64_t mid=lo+(hi-lo)/2;struct slot s;uint8_t k[EFS_KV_KEY_MAX];
         int rc=read_record(d,shard,mid,&s,k,NULL);if(rc)return rc;
-        if(cmpkey(k,s.key_len,key,kl)<0)lo=mid+1;else hi=mid;
+        int order=cmpkey(k,s.key_len,key,kl);
+        /* Snapshot keys are unique. Equality is also the lower bound, so
+         * return the already validated slot instead of reading it again. */
+        if(!order){*at=mid;if(exact)*exact=s;return EFS_OK;}
+        if(order<0)lo=mid+1;else hi=mid;
     }
     *at=lo;return EFS_OK;
 }
 static int raw_get(void *ctx,const uint8_t *key,uint32_t kl,uint8_t *value,uint32_t *vl)
 {
-    struct efs_query_disk *d=ctx;uint64_t at;int rc=seek(d,key,kl,&at);
-    if(rc)return rc;
-    uint32_t shard=((uint32_t)key[0]<<8)|key[1];int kind=kind_at(key[2]);
-    if(at==d->part[shard].end[kind])return EFS_ERR_NOT_FOUND;
-    struct slot s;uint8_t k[EFS_KV_KEY_MAX];rc=read_record(d,shard,at,&s,k,NULL);
-    if(rc)return rc;
-    if(cmpkey(k,s.key_len,key,kl))return EFS_ERR_NOT_FOUND;
+    struct efs_query_disk *d=ctx;uint64_t at;struct slot s;
+    int rc=seek(d,key,kl,&at,&s);if(rc)return rc;
+    if(!s.key_len)return EFS_ERR_NOT_FOUND;
+    uint32_t shard=((uint32_t)key[0]<<8)|key[1];
     if(*vl<s.value_len || (s.value_len && !value)){*vl=s.value_len;return EFS_ERR_INVAL;}
     rc=disk_io(d,shard,'r',value,s.value_len,s.offset+s.key_len,0);*vl=s.value_len;return rc;
 }
@@ -294,7 +314,7 @@ static int raw_scan(void *ctx,const uint8_t *prefix,uint32_t pn,const uint8_t *s
     struct efs_query_disk *d=ctx;uint64_t at;
     if(pn<3)return EFS_ERR_INVAL;
     int kind=kind_at(prefix[2]);if(kind<0)return EFS_OK;
-    int rc=seek(d,sn?start:prefix,sn?sn:pn,&at);if(rc==EFS_ERR_NOT_FOUND)return EFS_OK;if(rc)return rc;
+    int rc=seek(d,sn?start:prefix,sn?sn:pn,&at,NULL);if(rc==EFS_ERR_NOT_FOUND)return EFS_OK;if(rc)return rc;
     uint32_t shard=((uint32_t)prefix[0]<<8)|prefix[1];
     for(;at<d->part[shard].end[kind];at++) {
         struct slot s;uint8_t key[EFS_KV_KEY_MAX],value[VALUE_MAX];
@@ -323,8 +343,12 @@ static int save(void *ctx,const uint8_t *key,uint32_t kl,const uint8_t *val,uint
     if(w->index<0)w->index=make_file(w->d,w->shard,'i');
     if(w->raw<0 || w->index<0)return EFS_ERR_IO;
     struct slot s={w->offset,kl,vl};
-    int rc=io_at(w->raw,(void *)key,kl,w->offset,1);
-    if(!rc)rc=io_at(w->raw,(void *)val,vl,w->offset+kl,1);
+    /* Adjacent key/value bytes form one bounded record. Submit them together
+     * instead of making a disk syscall for each small field. The index is
+     * written only after the complete record succeeds. */
+    uint8_t record[RAW_RECORD_MAX];memcpy(record,key,kl);
+    if(vl)memcpy(record+kl,val,vl);
+    int rc=io_at(w->raw,record,(size_t)kl+vl,w->offset,1);
     if(!rc)rc=io_at(w->index,&s,sizeof(s),w->count*sizeof(s),1);
     if(!rc){w->offset+=kl+vl;w->count++;}return rc;
 }
@@ -441,6 +465,10 @@ static int locate(struct efs_query_disk *d,efs_ino_t ino,struct disk_node *n,uin
     uint32_t shard=efs_kv_inode_shard(ino);uint64_t lo=0,hi=d->part[shard].inodes;
     while(lo<hi) {
         uint64_t mid=lo+(hi-lo)/2;int rc=node_at(d,shard,mid,n,0);if(rc)return rc;
+        /* Build validation requires strictly increasing inode IDs. An exact
+         * match is already the sole answer; do not finish a lower-bound search
+         * and read the same row again. */
+        if(n->row.ino==ino){if(at)*at=mid;return EFS_OK;}
         if(n->row.ino<ino)lo=mid+1;else hi=mid;
     }
     if(lo==d->part[shard].inodes)return EFS_ERR_NOT_FOUND;
@@ -456,6 +484,7 @@ static int nodes_build(struct efs_query_disk *d,uint32_t shard)
     if(!d->part[shard].inodes)return EFS_OK;
     int fd=make_file(d,shard,'d');if(fd<0)return EFS_ERR_IO;
     int rc=EFS_OK;efs_ino_t previous=0;
+    struct disk_node batch[NODE_BATCH];unsigned used=0;
     for(uint64_t i=0;i<d->part[shard].inodes && !rc;i++) {
         if(cancelled(d)){rc=EFS_ERR_BUSY;break;}
         struct slot s;uint8_t key[EFS_KV_KEY_MAX],val[VALUE_MAX];struct disk_node n={0};
@@ -468,7 +497,15 @@ static int nodes_build(struct efs_query_disk *d,uint32_t shard)
         previous=encoded;
         if(!rc)rc=efs_meta_apply_getattr(&d->kv,n.row.ino,refuse_coord,NULL,&n.stat);
         if(!rc && d->refolded<UINT32_MAX)d->refolded++;
-        if(!rc)rc=io_at(fd,&n,sizeof(n),i*sizeof(n),1);
+        if(!rc){
+            batch[used++]=n;
+            /* Sequential candidate rows can share a write. Flush the tail
+             * before folds read this file; final publication still fsyncs it. */
+            if(used==NODE_BATCH || i+1==d->part[shard].inodes){
+                rc=io_at(fd,batch,used*sizeof(*batch),(i+1-used)*sizeof(*batch),1);
+                used=0;
+            }
+        }
     }
     if(rc)fprintf(stderr,"query-disk: nodes shard=%u previous=%llu rc=%d\n",shard,(unsigned long long)previous,rc);
     close(fd);return rc;
@@ -574,7 +611,7 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
     const struct efs_query_disk *old,uint64_t max_bytes,int (*stop)(void *),void *ctx,struct efs_query_disk **out)
 {
     if(out)*out=NULL;
-    uint64_t working=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX;
+    uint64_t working=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX+NODE_BATCH*sizeof(struct disk_node);
     if(!root || !source || !out)return EFS_ERR_INVAL;
     if(max_bytes<working)return EFS_ERR_NOMEM;
     if(mkdir(root,0700) && errno!=EEXIST)return EFS_ERR_IO;
@@ -639,7 +676,11 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
             if(i<3 && old && old->part[shard].revision==revisions[shard])continue;
             char path[EFS_MAX_PATH];rc=filename(d,shard,files[i],path,sizeof(path));if(rc)break;
             int fd=open(path,O_RDONLY|O_CLOEXEC);if(fd<0){rc=EFS_ERR_IO;break;}
-            if(fsync(fd))rc=EFS_ERR_IO;
+            /* raw_build already checked fsync on the writing descriptors for
+             * raw/index; no later stage writes those inodes. Preserve that
+             * first barrier (and its writeback error observation), then hash
+             * here without syncing the same unchanged bytes a second time. */
+            if(i>=2 && fsync(fd))rc=EFS_ERR_IO;
             if(!rc)rc=file_digest(fd,d->part[shard].digest[i]);
             close(fd);
         }
@@ -819,7 +860,7 @@ int efs_query_disk_restore(const char *root,const uint64_t watermark[4],uint64_t
 {
     if(out)*out=NULL;
     if(!root || !watermark || !out)return EFS_ERR_INVAL;
-    uint64_t bytes=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX;
+    uint64_t bytes=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX+NODE_BATCH*sizeof(struct disk_node);
     if(max_bytes<bytes)return EFS_ERR_NOMEM;
     char current[EFS_MAX_PATH],base[256];int n=snprintf(current,sizeof(current),"%s/current",root);
     if(n<0 || (size_t)n>=sizeof(current))return EFS_ERR_NAMETOOLONG;

@@ -1,0 +1,293 @@
+{
+  "duration_seconds": 90.02023450900015,
+  "probes": [
+    {
+      "origin": "baseline",
+      "group": 0,
+      "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+      "ino": 2481029,
+      "latency": {
+        "open": {
+          "n": 3068,
+          "mean_us": 3736.5237940026077,
+          "p50_us": 3548,
+          "p95_us": 5726,
+          "p99_us": 10463,
+          "max_us": 24900
+        },
+        "read": {
+          "n": 3068,
+          "mean_us": 2422.0700782268577,
+          "p50_us": 1605,
+          "p95_us": 5587,
+          "p99_us": 6366,
+          "max_us": 7759
+        },
+        "close": {
+          "n": 3068,
+          "mean_us": 17.673076923076923,
+          "p50_us": 12,
+          "p95_us": 43,
+          "p99_us": 52,
+          "max_us": 162
+        },
+        "total": {
+          "n": 3068,
+          "mean_us": 6177.257170795307,
+          "p50_us": 5633,
+          "p95_us": 9633,
+          "p99_us": 12750,
+          "max_us": 26587
+        }
+      }
+    },
+    {
+      "origin": "baseline",
+      "group": 2,
+      "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+      "ino": 955810,
+      "latency": {
+        "open": {
+          "n": 3068,
+          "mean_us": 2751.7773794002605,
+          "p50_us": 2248,
+          "p95_us": 4315,
+          "p99_us": 7002,
+          "max_us": 24575
+        },
+        "read": {
+          "n": 3068,
+          "mean_us": 5886.652868318122,
+          "p50_us": 6010,
+          "p95_us": 8100,
+          "p99_us": 10664,
+          "max_us": 22664
+        },
+        "close": {
+          "n": 3068,
+          "mean_us": 19.236310299869622,
+          "p50_us": 13,
+          "p95_us": 44,
+          "p99_us": 53,
+          "max_us": 117
+        },
+        "total": {
+          "n": 3068,
+          "mean_us": 8658.670143415906,
+          "p50_us": 8364,
+          "p95_us": 10968,
+          "p99_us": 17560,
+          "max_us": 28308
+        }
+      }
+    },
+    {
+      "origin": "overlap",
+      "group": 0,
+      "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-overlap-20261009/d0/read-probe",
+      "ino": 155737,
+      "latency": {
+        "open": {
+          "n": 3068,
+          "mean_us": 3646.4784876140807,
+          "p50_us": 3416,
+          "p95_us": 5619,
+          "p99_us": 8358,
+          "max_us": 50496
+        },
+        "read": {
+          "n": 3068,
+          "mean_us": 3673.158083441982,
+          "p50_us": 3827,
+          "p95_us": 4358,
+          "p99_us": 6757,
+          "max_us": 16143
+        },
+        "close": {
+          "n": 3068,
+          "mean_us": 18.147979139504564,
+          "p50_us": 12,
+          "p95_us": 45,
+          "p99_us": 53,
+          "max_us": 61
+        },
+        "total": {
+          "n": 3068,
+          "mean_us": 7338.790417209909,
+          "p50_us": 7117,
+          "p95_us": 9627,
+          "p99_us": 15108,
+          "max_us": 53656
+        }
+      }
+    },
+    {
+      "origin": "overlap",
+      "group": 2,
+      "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-overlap-20261009/d1/read-probe",
+      "ino": 147414,
+      "latency": {
+        "open": {
+          "n": 3068,
+          "mean_us": 2963.0479139504564,
+          "p50_us": 2266,
+          "p95_us": 4394,
+          "p99_us": 7328,
+          "max_us": 22235
+        },
+        "read": {
+          "n": 3068,
+          "mean_us": 4147.109191655802,
+          "p50_us": 3692,
+          "p95_us": 5595,
+          "p99_us": 8646,
+          "max_us": 23883
+        },
+        "close": {
+          "n": 3068,
+          "mean_us": 19.157431551499347,
+          "p50_us": 13,
+          "p95_us": 42,
+          "p99_us": 49,
+          "max_us": 93
+        },
+        "total": {
+          "n": 3068,
+          "mean_us": 7130.320078226858,
+          "p50_us": 6946,
+          "p95_us": 9433,
+          "p99_us": 15715,
+          "max_us": 28015
+        }
+      }
+    }
+  ],
+  "groups": {
+    "0": {
+      "open": {
+        "n": 6136,
+        "mean_us": 3691.501140808344,
+        "p50_us": 3481,
+        "p95_us": 5664,
+        "p99_us": 8974,
+        "max_us": 50496
+      },
+      "read": {
+        "n": 6136,
+        "mean_us": 3047.61408083442,
+        "p50_us": 3191,
+        "p95_us": 5086,
+        "p99_us": 6413,
+        "max_us": 16143
+      },
+      "close": {
+        "n": 6136,
+        "mean_us": 17.910528031290742,
+        "p50_us": 12,
+        "p95_us": 44,
+        "p99_us": 53,
+        "max_us": 162
+      },
+      "total": {
+        "n": 6136,
+        "mean_us": 6758.023794002607,
+        "p50_us": 6637,
+        "p95_us": 9633,
+        "p99_us": 13166,
+        "max_us": 53656
+      }
+    },
+    "2": {
+      "open": {
+        "n": 6136,
+        "mean_us": 2857.4126466753587,
+        "p50_us": 2258,
+        "p95_us": 4361,
+        "p99_us": 7051,
+        "max_us": 24575
+      },
+      "read": {
+        "n": 6136,
+        "mean_us": 5016.881029986962,
+        "p50_us": 4723,
+        "p95_us": 7456,
+        "p99_us": 10240,
+        "max_us": 23883
+      },
+      "close": {
+        "n": 6136,
+        "mean_us": 19.196870925684486,
+        "p50_us": 13,
+        "p95_us": 43,
+        "p99_us": 52,
+        "max_us": 117
+      },
+      "total": {
+        "n": 6136,
+        "mean_us": 7894.495110821382,
+        "p50_us": 7669,
+        "p95_us": 10404,
+        "p99_us": 15793,
+        "max_us": 28308
+      }
+    }
+  },
+  "held_reads": [
+    {
+      "origin": "baseline",
+      "group": 0,
+      "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+      "ino": 2481029,
+      "latency": {
+        "n": 1000,
+        "mean_us": 1391.779,
+        "p50_us": 1381,
+        "p95_us": 1456,
+        "p99_us": 1519,
+        "max_us": 3866
+      }
+    },
+    {
+      "origin": "baseline",
+      "group": 2,
+      "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+      "ino": 955810,
+      "latency": {
+        "n": 1000,
+        "mean_us": 926.76,
+        "p50_us": 910,
+        "p95_us": 996,
+        "p99_us": 1062,
+        "max_us": 6274
+      }
+    },
+    {
+      "origin": "overlap",
+      "group": 0,
+      "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-overlap-20261009/d0/read-probe",
+      "ino": 155737,
+      "latency": {
+        "n": 1000,
+        "mean_us": 888.521,
+        "p50_us": 886,
+        "p95_us": 964,
+        "p99_us": 996,
+        "max_us": 3860
+      }
+    },
+    {
+      "origin": "overlap",
+      "group": 2,
+      "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-overlap-20261009/d1/read-probe",
+      "ino": 147414,
+      "latency": {
+        "n": 1000,
+        "mean_us": 1747.081,
+        "p50_us": 1734,
+        "p95_us": 1837,
+        "p99_us": 1918,
+        "max_us": 8328
+      }
+    }
+  ]
+}

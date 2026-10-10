@@ -117,6 +117,8 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
 #define HOST_PUB_F_LANE_LOCAL 1
 #define HOST_PUB_F_FRESH_OBJECT 2
 #define HOST_PUBLICATION_LEN (HOST_PUBLISH_LEN + 28u)
+#define HOST_PUBLICATION_TICKET_LEN (HOST_PUBLICATION_LEN + 36u)
+#define HOST_PUB_F_TICKETED 4
 #define HOST_PUB_TAIL_TRIES  4 /* cross-group truncate tail CAS retries */
 #define HOST_ACTIVATE_LANE_LEN 10 /* tag + ino:8 + lane:1 */
 #define HOST_ACTIVATE_MASK_LEN 17 /* tag + ino:8 + mask:8 */
@@ -400,7 +402,7 @@ struct efs_raft_host {
     int inbox_n;
     uint64_t inbox_bytes, inbox_bytes_hi;
     int pressure_enabled;
-    int flow_enabled, inbox_pressure, group_drain;
+    int flow_enabled, inbox_pressure, group_drain, flow_early_retire;
     unsigned inbox_work_n;
     uint64_t inbox_work_bytes;
     uint64_t inbox_probe_sent[HOST_NGROUPS][EFS_RAFT_MAX_PEERS];
@@ -2259,6 +2261,17 @@ static int apply_lock_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 
 /* Same encoding as sim apply_publish_cmd (plus the host FileID/lane_local
  * tail). clen may be N * HOST_PUBLISH_LEN — one Raft entry, many pubs. */
+static int host_publication_command_valid(const uint8_t *cmd,uint32_t len)
+{
+    if (!cmd || (len!=HOST_PUBLICATION_LEN && len!=HOST_PUBLICATION_TICKET_LEN) ||
+        (cmd[0]!=EFS_MD_CMD_PUBLICATION && cmd[0]!=EFS_MD_CMD_PUBLICATION_ADMIT &&
+         cmd[0]!=EFS_MD_CMD_PUBLICATION_RETIRE)) return 0;
+    uint8_t flags=cmd[HOST_PUBLISH_LEN-1];
+    return !(flags & ~(HOST_PUB_F_LANE_LOCAL|HOST_PUB_F_FRESH_OBJECT|HOST_PUB_F_TICKETED)) &&
+        !!(flags & HOST_PUB_F_TICKETED)==(len==HOST_PUBLICATION_TICKET_LEN) &&
+        (!(flags & HOST_PUB_F_TICKETED) || (flags & HOST_PUB_F_FRESH_OBJECT));
+}
+
 static void unpack_publication(const uint8_t *cmd, struct efs_meta_pub *p,
                                uint64_t index, uint64_t term, uint8_t group)
 {
@@ -2296,6 +2309,14 @@ static void unpack_publication(const uint8_t *cmd, struct efs_meta_pub *p,
         memcpy(p->publication_id.client_uuid,cmd+HOST_PUBLISH_LEN,EFS_OPID_UUID_LEN);
         p->publication_id.session_epoch=rd32be(cmd+HOST_PUBLISH_LEN+16);
         p->publication_id.seq=rd64be(cmd+HOST_PUBLISH_LEN+20);
+        if (q[16] & HOST_PUB_F_TICKETED) {
+            p->ticketed=1;
+            memcpy(p->put_id.client_uuid,cmd+HOST_PUBLICATION_LEN,EFS_OPID_UUID_LEN);
+            p->put_id.session_epoch=rd32be(cmd+HOST_PUBLICATION_LEN+16);
+            p->put_id.seq=rd64be(cmd+HOST_PUBLICATION_LEN+20);
+            p->put_fragment_len=rd32be(cmd+HOST_PUBLICATION_LEN+28);
+            p->put_member_mask=rd32be(cmd+HOST_PUBLICATION_LEN+32);
+        }
     }
 }
 
@@ -2963,15 +2984,18 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return apply_unlink_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_RMDIR)
         return apply_rmdir_cmd(h, cmd, clen, index);
-    if (cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT)
-        return clen == HOST_PUBLICATION_LEN ? apply_one_publish(h,cmd,index,term,group) : EFS_ERR_PROTO;
-    if(cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT) {
+    if (cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT) {
+        if (!host_publication_command_valid(cmd,clen)) return EFS_ERR_PROTO;
+        return apply_one_publish(h,cmd,index,term,group);
+    }
+    if(cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT || cmd[0]==EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED) {
         struct efs_put_ticket ticket;
         int rc=efs_put_ticket_decode(cmd+1,clen-1,&ticket);
         if(rc!=EFS_OK)return rc;
         if(group!=efs_raft_shard_group(efs_kv_lane_shard(ticket.ino,ticket.ci%EFS_META_LANES)))
             return EFS_ERR_INVAL;
-        return efs_put_ticket_admit(h->kv,&ticket);
+        return cmd[0]==EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED?
+            efs_put_ticket_retire_published(h->kv,&ticket):efs_put_ticket_admit(h->kv,&ticket);
     }
     if (cmd[0] == EFS_MD_CMD_REPORT_PUBLISH)
         return apply_report_publish_cmd(h, cmd, clen, group);
@@ -6055,6 +6079,25 @@ static void host_inbox_retire(struct efs_raft_host *h, unsigned n, uint64_t byte
     pthread_mutex_unlock(&h->inbox_mu);
 }
 
+/* KV release has already completed; consumed frames and applied KV work
+ * no longer need inbox credits. The restart checkpoint is a separate tail.
+ * Early credit return changes transport admission only, never a Raft ACK or
+ * the KV-before-marker prerequisite. Failed releases retain prior retirement
+ * semantics and still cannot save an unproven applied index. */
+static int host_checkpoint_retire(struct efs_raft_host *h, const uint64_t *idx,
+                                   uint64_t now, int kv_rc,
+                                   unsigned n, uint64_t bytes)
+{
+    if (h->flow_enabled && h->flow_early_retire && n) {
+        BO_COUNT(BO_FLOW_RETIRE_EARLY);
+        host_inbox_retire(h,n,bytes);
+    }
+    int rc=host_save_applied(h,idx,now,0,kv_rc);
+    if (h->flow_enabled && !h->flow_early_retire && n)
+        host_inbox_retire(h,n,bytes);
+    return rc;
+}
+
 static void *host_pump(void *arg)
 {
     struct efs_raft_host *h = arg;
@@ -6216,12 +6259,11 @@ static void *host_pump(void *arg)
 
             /* pnow is wall time for applied-index persistence; diagnostics
              * use monotonic time, matching cohort/hold measurements. */
-            int durable_rc=host_save_applied(h,applied_now,pnow,0,kv_rc);
+            int durable_rc=host_checkpoint_retire(h,applied_now,pnow,kv_rc,done_n,done_bytes);
             if (durable_rc != EFS_OK && !checkpoint_failed)
                 fprintf(stderr,"raft-host: applied checkpoint not advanced after persistence failure\n");
             checkpoint_failed=durable_rc!=EFS_OK;
         }
-        if (h->flow_enabled && done_n) host_inbox_retire(h,done_n,done_bytes);
         if (batch_obs) {
             BO_HIST(BH_APPLIED_PERSIST_US, efs_batch_obs_now_us() - phase_us);
             efs_batch_obs_dump(efs_batch_obs_now_us());
@@ -8736,6 +8778,9 @@ int server_raft_host_start(struct efsd_server *s)
     int query_enabled=!commands || !strcmp(commands,"1");
     const char *flow=getenv("EFS_RAFT_FLOW");
     if (flow && strcmp(flow,"0") && strcmp(flow,"1")) return EFS_ERR_INVAL;
+    const char *early_retire=getenv("EFS_RAFT_FLOW_EARLY_RETIRE");
+    if (early_retire && strcmp(early_retire,"0") && strcmp(early_retire,"1"))
+        return EFS_ERR_INVAL;
     const char *group_drain=getenv("EFS_RAFT_GROUP_DRAIN");
     if (group_drain && strcmp(group_drain,"0") && strcmp(group_drain,"1"))
         return EFS_ERR_INVAL;
@@ -8760,7 +8805,8 @@ int server_raft_host_start(struct efsd_server *s)
         return EFS_ERR_NOMEM;
     struct efs_admission_limits limits={8ull<<20,1ull<<20,64,8};
     if (efs_admission_init(&h->proposal_queue,&limits) != EFS_OK) { free(h); return EFS_ERR_IO; }
-    h->flow_enabled=flow && !strcmp(flow,"1"); /* candidate opt-in until acceptance */
+    h->flow_enabled=flow && !strcmp(flow,"1");
+    h->flow_early_retire=early_retire && !strcmp(early_retire,"1"); /* candidate opt-in until acceptance */
     h->group_drain=group_drain && !strcmp(group_drain,"1");
     h->pressure_enabled=pressure && !strcmp(pressure,"1");
     h->s = s;
@@ -9372,7 +9418,8 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         group!=efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd+1))))) {
         out->rc=EFS_ERR_INVAL;return;
     }
-    if(clen && (cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT || cmd[0]==EFS_MD_REQ_PUT_TICKET_STATUS)) {
+    if(clen && (cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT || cmd[0]==EFS_MD_REQ_PUT_TICKET_STATUS ||
+               cmd[0]==EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED)) {
         struct efs_put_ticket ticket;
         rc=efs_put_ticket_decode(cmd+1,clen-1,&ticket);
         uint32_t shard=rc==EFS_OK?efs_kv_lane_shard(ticket.ino,ticket.ci%EFS_META_LANES):0;
@@ -9389,14 +9436,18 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         wr32be(admission+18,ticket.id.session_epoch);wr32be(admission+22,shard);
         rc=host_session_establish_admit(h,admission,sizeof(admission),group,&hint);
         if(rc!=EFS_OK){out->rc=rc;out->leader_hint=hint;return;}
-        if(cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT)
+        if(cmd[0]!=EFS_MD_REQ_PUT_TICKET_STATUS)
             rc=host_propose_wait_idx(h,group,cmd,clen,&hint,&idx);
         /* Never grant admission from proposal/apply-ring success alone.
          * Fresh authority plus exact immutable body resolves a lost reply. */
         if(rc==EFS_OK || rc==EFS_ERR_BUSY || rc==EFS_ERR_STALE) {
             int proof=host_read_index(h,group,&hint);uint32_t state=0;
             if(proof==EFS_OK)proof=efs_session_accept(h->kv,shard,ticket.id.client_uuid,ticket.id.session_epoch);
-            if(proof==EFS_OK)proof=efs_put_ticket_get(h->kv,&ticket,&state);
+            if(proof==EFS_OK && cmd[0]==EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED) {
+                int retired=0;proof=efs_put_ticket_retired(h->kv,&ticket,&retired);
+                if(proof==EFS_OK && !retired)proof=EFS_ERR_BUSY;
+                if(proof==EFS_OK)state=EFS_PUT_TICKET_RETIRED;
+            } else if(proof==EFS_OK)proof=efs_put_ticket_get(h->kv,&ticket,&state);
             if(proof==EFS_OK){rc=EFS_OK;salt=state;}
             else if(rc==EFS_OK || proof!=EFS_ERR_NOT_FOUND)rc=proof;
         }
@@ -15266,12 +15317,13 @@ static int host_publication_committed(struct efs_raft_host *h, uint8_t group,
     uint64_t applied=efs_raft_applied(r),top=v.read_index;
     rc=EFS_ERR_BUSY;
     for (unsigned n=0;store && top>applied && n<64;n++,top--) {
-        uint8_t cmd[HOST_PUBLICATION_LEN],got_digest[EFS_HASH_SIZE];
+        uint8_t cmd[HOST_PUBLICATION_TICKET_LEN],got_digest[EFS_HASH_SIZE];
         uint32_t len=sizeof(cmd);uint64_t entry_term=0;
         int grc=store->get(store,top,&entry_term,cmd,&len);
         if ((grc==EFS_ERR_INVAL && len>sizeof(cmd)) || grc==EFS_ERR_NOT_FOUND) continue;
         if (grc!=EFS_OK) { rc=grc;break; }
-        if (len!=sizeof(cmd) || cmd[0]!=EFS_MD_CMD_PUBLICATION || !entry_term) continue;
+        if (cmd[0]!=EFS_MD_CMD_PUBLICATION || !entry_term ||
+            !host_publication_command_valid(cmd,len)) continue;
         struct efs_meta_pub p;unpack_publication(cmd,&p,top,entry_term,group);
         if (p.ino!=request->ino || p.inode_gen!=request->inode_gen ||
             p.chunk_index!=request->chunk_index ||
@@ -15295,8 +15347,7 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
     struct efs_raft_host *h=g_host;struct efs_meta_pub p;int hint=-1,verdict;
     memset(out,0,sizeof(*out));out->rpc.status=EFS_INODE_RPC_INVAL;
     if(query_only<0 || query_only>2 || !h || !h->running || !req ||
-       efs_publication_from_rec(&req->rec,req->size,&p)!=EFS_OK)return;
-    p.publication_id=req->id;
+       efs_publication_from_request(req,&p)!=EFS_OK)return;
     if(efs_publication_digest(&p,out->digest)!=EFS_OK)return;
     uint32_t shard=efs_kv_lane_shard(p.ino,p.chunk_index%EFS_META_LANES);
     uint8_t group=efs_raft_shard_group(shard);
@@ -15320,13 +15371,20 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
          * must have a replicated terminal result, and retries use that result. */
         p.now=now_ns();p.durable_result=1;
         p.lane_local=group!=efs_raft_shard_group(efs_kv_inode_shard(p.ino));
-        uint8_t cmd[HOST_PUBLICATION_LEN];uint32_t len=0;
+        uint8_t cmd[HOST_PUBLICATION_TICKET_LEN];uint32_t len=0;
         rc=pack_publish_cmd(cmd,&len,&p);
         if(rc==EFS_OK) {
             cmd[0]=query_only==2?EFS_MD_CMD_PUBLICATION_RETIRE:EFS_MD_CMD_PUBLICATION;
             memcpy(cmd+len,p.publication_id.client_uuid,EFS_OPID_UUID_LEN);
             wr32be(cmd+len+16,p.publication_id.session_epoch);wr64be(cmd+len+20,p.publication_id.seq);
             len+=28;
+            if (p.ticketed) {
+                cmd[HOST_PUBLISH_LEN-1]|=HOST_PUB_F_TICKETED;
+                memcpy(cmd+len,p.put_id.client_uuid,EFS_OPID_UUID_LEN);
+                wr32be(cmd+len+16,p.put_id.session_epoch);wr64be(cmd+len+20,p.put_id.seq);
+                wr32be(cmd+len+28,p.put_fragment_len);wr32be(cmd+len+32,p.put_member_mask);
+                len+=36;
+            }
             if(!query_only && rc==EFS_OK) {
                 /* Pending is issued only after replicated admission is visible
                  * under fresh authority, never from a proposed index/term. */
