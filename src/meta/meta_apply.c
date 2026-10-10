@@ -5547,11 +5547,48 @@ static void lane_present_sub(uint8_t *v_ln, uint32_t dropped)
     pack_lane(v_ln, &ln);
 }
 
+struct lane_authority_fence {
+    uint8_t ak[EFS_KV_KEY_MAX], av[EFS_META_LANE_AUTHORITY_BYTES];
+    uint8_t hk[EFS_KV_KEY_MAX], hv[EFS_META_FENCE_BYTES];
+    uint32_t akl, hkl, hvl;
+    int present;
+};
+static int stage_lane_authority_fence(struct efs_kv *kv, efs_ino_t ino,
+    uint64_t gen, uint8_t lane, uint64_t old_epoch, uint64_t new_epoch,
+    uint64_t size, struct lane_authority_fence *out)
+{
+    uint32_t avl=sizeof(out->av),cs=0;uint64_t epoch=0,floor=0;
+    struct efs_fence_history history;
+    memset(out,0,sizeof(*out));
+    int rc=lane_authority_key(ino,gen,lane,out->ak,&out->akl);
+    if (rc==EFS_OK) rc=efs_kv_get(kv,out->ak,out->akl,out->av,&avl);
+    if (rc==EFS_ERR_NOT_FOUND) return EFS_OK;
+    if (rc==EFS_OK) rc=unpack_lane_authority(out->av,avl,&cs,&epoch,&floor);
+    if (rc==EFS_OK && epoch!=old_epoch) rc=EFS_ERR_BUSY;
+    if (rc==EFS_OK) rc=efs_meta_get_fence_history(kv,ino,gen,lane,&history);
+    if (rc==EFS_OK && history.count && history.entries[history.count-1].epoch>epoch)
+        rc=EFS_ERR_PROTO;
+    if (rc==EFS_OK) rc=efs_fence_history_append(&history,new_epoch,size);
+    if (rc==EFS_OK) rc=content_fence_key(ino,gen,lane,out->hk,&out->hkl);
+    if (rc==EFS_OK) rc=efs_meta_pack_fence_history(&history,out->hv,sizeof(out->hv),&out->hvl);
+    if (rc!=EFS_OK) return rc;
+    pack_lane_authority(out->av,cs,new_epoch,max_u64(floor,writer_history_floor(new_epoch,&history)));
+    out->present=1;return EFS_OK;
+}
+static void append_lane_authority_fence(struct efs_kv_item *it,uint32_t *n,
+                                       const struct lane_authority_fence *out)
+{
+    if (!out->present) return;
+    it[(*n)++]=(struct efs_kv_item){EFS_KV_PUT,out->hk,out->hkl,out->hv,out->hvl};
+    it[(*n)++]=(struct efs_kv_item){EFS_KV_PUT,out->ak,out->akl,out->av,sizeof(out->av)};
+}
+
 int efs_meta_apply_lane_fence(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                               uint8_t lane, uint64_t new_epoch, uint64_t size,
                               uint32_t tail_ci, uint8_t has_tail)
 {
-    /* One lane fence PUT + up to 32 chunk DELs, each with a GC record.
+    /* One lane fence plus optional history/authority PUTs and up to 32
+     * chunk DELs, each with a GC record.
      * gc_queue indexes by the global item number, so all arrays share the
      * same bound. */
     struct efs_kv_item it[EFS_META_LANE_FENCE_ITEMS];
@@ -5563,7 +5600,8 @@ int efs_meta_apply_lane_fence(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
     uint8_t key[EFS_KV_KEY_MAX], old[LANE_VAL];
     uint32_t n = 0, klen = 0, vn;
     uint32_t nfence, dropped = 0;
-    struct lane_rec ln;
+    struct lane_rec ln = {0};
+    struct lane_authority_fence overlay;
     int rc;
 
     if (!kv || ino == 0 || lane >= EFS_META_LANES)
@@ -5586,11 +5624,16 @@ int efs_meta_apply_lane_fence(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
     } else if (rc != EFS_ERR_NOT_FOUND) {
         return rc;
     }
+    /* Legacy truncate advances stamp/history/authority in one durable batch. */
+    rc=stage_lane_authority_fence(kv,ino,gen,lane,ln.fenced_epoch,new_epoch,size,&overlay);
+    if (rc!=EFS_OK) return rc;
     rc = fence_lane_bits(kv, ino, gen, 1ULL << lane, epoch_lane_upd,
                          &new_epoch, it, &n, k_ln, v_ln);
     if (rc != EFS_OK)
         return rc;
     nfence = n; /* nonzero means the lane stamp is staged for patching */
+    if (overlay.present && !nfence) return EFS_ERR_BUSY;
+    append_lane_authority_fence(it,&n,&overlay);
     rc = truncate_lane_range_del(kv, ino, gen, lane, size, tail_ci, has_tail,
                                  it, del_keys, gc_keys, gc_vals, &n,
                                  (uint32_t)(sizeof(it) / sizeof(it[0])),
@@ -6763,6 +6806,7 @@ static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
     struct append_cur cursor;
     uint8_t k_ln[EFS_META_LANES][EFS_KV_KEY_MAX];
     uint8_t v_ln[EFS_META_LANES][LANE_VAL];
+    struct lane_authority_fence overlay[EFS_META_LANES];
     uint8_t k_tail[EFS_KV_KEY_MAX], v_tail[CHUNK_VAL];
     uint32_t ki = 0, n = 0, i, tail_ci = 0;
     uint64_t new_epoch;
@@ -6816,6 +6860,19 @@ static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
         if (rc != EFS_OK)
             return rc;
         nf = n; /* nf > n0 means lane i's stamp is staged for patching */
+        if (nf>n0) {
+            /* The prior epoch is captured before the staged stamp advances. */
+            struct lane_rec previous;uint8_t key[EFS_KV_KEY_MAX],value[LANE_VAL];
+            uint32_t kl=0,vl=sizeof(value);
+            rc=efs_kv_key_lane(efs_kv_lane_shard(ino,(uint8_t)i),ino,row.generation,(uint8_t)i,key,&kl);
+            if (rc==EFS_OK) rc=efs_kv_get(kv,key,kl,value,&vl);
+            if (rc==EFS_OK) rc=unpack_lane(value,vl,&previous);
+            if (rc==EFS_OK) rc=stage_lane_authority_fence(kv,ino,row.generation,(uint8_t)i,
+                                    previous.fenced_epoch,new_epoch,t->size,&overlay[i]);
+            if (rc!=EFS_OK) return rc;
+            if (n+2>TRUNC_IT_CAP) return EFS_ERR_NOMEM;
+            append_lane_authority_fence(it,&n,&overlay[i]);
+        }
         rc = truncate_lane_range_del(kv, ino, row.generation, (uint8_t)i,
                                    t->size, tail_ci, has_tail, it, del_keys,
                                    gc_keys, gc_vals, &n, TRUNC_IT_CAP,
