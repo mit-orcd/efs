@@ -3,7 +3,7 @@
 
 Two layers:
   sim          tests/faults/fault_sim on the in-process simulator
-  integration  three efsd processes and two FUSE clients, TCP, disposable
+  integration  four efsd processes and two FUSE clients, TCP, disposable
                storage. Simulator success is not this layer.
 
 Repair is a gap. A readable file is not reported as fully protected.
@@ -128,12 +128,16 @@ def fragment_groups(paths):
         m = FRAG_NAME.match(base)
         if not m:
             continue
-        key = (os.path.dirname(path), int(m.group(1)))
+        # Fragments of one inode live on different server roots. Include
+        # the candidate generation so two uploads cannot form a false set.
+        directory = os.path.dirname(path).replace("\\", "/")
+        identity = directory.split("/data/exports/", 1)[-1]
+        key = (identity, int(m.group(1)), m.group(3))
         groups.setdefault(key, {})[int(m.group(2))] = path
     return groups
 
 
-def data_fragment_set(before, after):
+def data_fragment_set(before, after, minimum=3):
     """New data fragments created by one write. Prefer a full 0,1,2 set."""
     new = []
     for path in after - before:
@@ -143,7 +147,7 @@ def data_fragment_set(before, after):
             continue
         new.append(path)
     groups = fragment_groups(new)
-    full = [g for g in groups.values() if {0, 1, 2} <= set(g)]
+    full = [g for g in groups.values() if len(g) >= minimum and set(g) <= {0, 1, 2}]
     if not full:
         return None
     # A user write stores full-size fragments. Prefer the largest file.
@@ -322,7 +326,7 @@ class Cluster(object):
             path = os.path.join(self.binary_dir, name)
             if not os.path.isfile(path) or not os.access(path, os.X_OK):
                 raise RuntimeError("missing binary %s" % path)
-        ports = pick_ports(3)
+        ports = pick_ports(4)
         seed = "127.0.0.1:%d" % ports[0]
         for i, port in enumerate(ports):
             storage = os.path.join(self.work, "s%d" % (i + 1))
@@ -331,11 +335,18 @@ class Cluster(object):
             srv.start()
             self.servers.append(srv)
         self.journal = Journal(os.path.join(self.work, "journal.jsonl"))
-        rc, out, err = run_cmd(
-            [self.mgmt(), "raft-mkfs", seed], timeout=20, env=tcp_env())
-        self.journal.record("raft-mkfs", rc=rc, stdout=out[-400:], stderr=err[-400:])
-        if rc != 0:
-            raise RuntimeError("raft-mkfs failed: %s" % (err or out)[-400:])
+        # A listening socket precedes joining/election. Retry only the
+        # idempotent initialization of this newly owned disposable cluster.
+        deadline = time.monotonic() + 30
+        while True:
+            rc, out, err = run_cmd(
+                [self.mgmt(), "raft-mkfs", seed], timeout=20, env=tcp_env())
+            self.journal.record("raft-mkfs", rc=rc, stdout=out[-400:], stderr=err[-400:])
+            if rc == 0:
+                break
+            if time.monotonic() >= deadline:
+                raise RuntimeError("raft-mkfs failed: %s" % (err or out)[-400:])
+            time.sleep(.2)
         for label in ("a", "b"):
             self.mount(label)
         self.check_transport()
@@ -347,7 +358,7 @@ class Cluster(object):
         log = open(log_path, "ab")
         seed = "127.0.0.1:%d" % self.servers[0].port
         proc = track(subprocess.Popen(
-            [self.fuse(), seed, EXPORT, path],
+            [self.fuse(), seed, EXPORT, path, "-f"],
             stdout=log, stderr=log, env=tcp_env(),
             start_new_session=True))
         deadline = time.monotonic() + 20
@@ -369,6 +380,18 @@ class Cluster(object):
         for path, proc, log_path in self.mounts:
             transport_of(proc.pid, log_path)
             self.journal.record("transport", mount=path, transport="tcp", pid=proc.pid)
+
+    def reset_clients(self):
+        # Each single-node fault must begin with fresh peer health. Otherwise
+        # the previous restored node remains in a 30-second client cooldown,
+        # turning the next case into an unintended two-node read outage.
+        for path, proc, _log in self.mounts:
+            kill_owned_one(proc)
+            subprocess.run(["fusermount3", "-uz", path], check=True, timeout=5)
+        self.mounts = []
+        for label in ("a", "b"):
+            self.mount(label)
+        self.check_transport()
 
     def leader_node_id(self):
         addr = "127.0.0.1:%d" % self.servers[0].port
@@ -502,6 +525,17 @@ def timed_read(mount, name, journal, work, timeout=OP_TIMEOUT_S):
     return data, err
 
 
+
+def recovered_read(mount, name, journal, work):
+    """Require exact bytes after bounded election/connection recovery."""
+    deadline = time.monotonic() + 20
+    while True:
+        got, err = timed_read(mount, name, journal, work, timeout=10)
+        if err is None or time.monotonic() >= deadline:
+            return got, err
+        time.sleep(.2)
+
+
 def row(case, status, **fields):
     out = {
         "layer": "integration",
@@ -520,7 +554,8 @@ def case_one_server_lost(cluster, seed):
     results = []
     mount_a = cluster.mounts[0][0]
     mount_b = cluster.mounts[1][0]
-    for node_id in (1, 2, 3):
+    for node_id in (1, 2, 3, 4):
+        mount_a, mount_b = (item[0] for item in cluster.mounts)
         name = "lost-%d" % node_id
         data = pattern(seed, name, 4096)
         before = cluster.snapshot_exports()
@@ -530,11 +565,12 @@ def case_one_server_lost(cluster, seed):
         srv.stop()
         try:
             try:
-                got, err = timed_read(mount_b, name, cluster.journal, cluster.work)
+                got, err = recovered_read(mount_b, name, cluster.journal, cluster.work)
             except TimeoutError:
                 got, err = b"", "timeout"
             fresh = pattern(seed, "new-%d" % node_id, 4096)
             pub = "error"
+            before_fresh = cluster.snapshot_exports()
             try:
                 timed_publish(mount_b, "new-%d" % node_id, fresh, cluster.journal,
                               cluster.work)
@@ -551,8 +587,19 @@ def case_one_server_lost(cluster, seed):
                 detail = "read after kill node %d errno=%s sha=%s" % (
                     node_id, err, sha256(got))
             elif pub == "ok":
-                status = "FAIL"
-                detail = "fsync succeeded while node %d was down" % node_id
+                # The production contract permits degraded two-ACK writes
+                # (docs/operations/operations.md). Verify the two actual
+                # generation-matched holders and bytes, never claim repair.
+                fragments = data_fragment_set(before_fresh, cluster.snapshot_exports(), minimum=2)
+                if not fragments or any(p.startswith(srv.storage + os.sep) for p in fragments.values()):
+                    status = "FAIL"
+                    detail = "fsync succeeded without two live fragment holders (node %d down)" % node_id
+                else:
+                    fresh_got, fresh_err = timed_read(mount_a, "new-%d" % node_id,
+                        cluster.journal, cluster.work)
+                    if fresh_err is not None or fresh_got != fresh:
+                        status = "FAIL"
+                        detail = "acknowledged replacement stripe was not readable"
             elif pub == "timeout":
                 status = "FAIL"
                 detail = "fsync hung while node %d was down" % node_id
@@ -564,8 +611,11 @@ def case_one_server_lost(cluster, seed):
                                  if not p.endswith(".sum"))))
         finally:
             srv.start()
-        # The restarted node must serve the already-published file.
-        got2, err2 = timed_read(mount_b, name, cluster.journal, cluster.work)
+        # Cold clients prove acknowledged bytes after restart and prevent
+        # a previous fault's cooldown/cache from contaminating the next one.
+        cluster.reset_clients()
+        mount_a, mount_b = (item[0] for item in cluster.mounts)
+        got2, err2 = recovered_read(mount_b, name, cluster.journal, cluster.work)
         if err2 is not None or got2 != data:
             results.append(row(
                 "restart", "FAIL", readable=False,
@@ -660,7 +710,7 @@ def case_missing_checksum(cluster, seed):
         detail = "read returned different bytes after the sidecar was removed and the payload flipped"
     return [row(
         "missing_checksum", status, readable=(status == "PASS" and err is None),
-        detail=detail, fragment=frag, sidecar=side,
+        detail=detail, fragment=frag, checksum_tail_offset=sz - 4096,
         expected_sha256=sha256(data), actual_sha256=sha256(got))]
 
 
@@ -861,9 +911,17 @@ def self_test():
         "/tmp/x/data/exports/1/0000/0.2",
         "/tmp/x/data/exports/1/0000/0.0.sum",
     ])
-    key = ("/tmp/x/data/exports/1/0000", 0)
+    key = ("1/0000", 0, None)
     if set(groups.get(key, {})) != {0, 1, 2}:
         fails.append("fragment grouping %s" % groups)
+    groups = fragment_groups([
+        "/tmp/s1/data/exports/1/0000/0.0.101",
+        "/tmp/s2/data/exports/1/0000/0.1.101",
+        "/tmp/s3/data/exports/1/0000/0.2.101",
+        "/tmp/s3/data/exports/1/0000/0.2.102",
+    ])
+    if set(groups.get(("1/0000", 0, "101"), {})) != {0, 1, 2} or set(groups.get(("1/0000", 0, "102"), {})) != {2}:
+        fails.append("cross-server candidate grouping %s" % groups)
 
     try:
         assert_safe_port(19810)
@@ -910,7 +968,7 @@ def main(argv):
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--out", default="")
     parser.add_argument("--integrate", action="store_true",
-                        help="start a private 3-server TCP cluster")
+                        help="start a private 4-server TCP cluster")
     parser.add_argument("--seed", type=int, default=101)
     args = parser.parse_args(argv)
     if args.self_test:

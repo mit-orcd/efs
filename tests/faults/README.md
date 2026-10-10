@@ -12,8 +12,8 @@ rebuilds a lost fragment. Those cases stay `GAP`. They are not passes.
 
 | Layer | What it runs | What a pass means |
 |---|---|---|
-| `sim` | `fault_sim`, in one process | The protocol reactions in `include/efs/sim.h`: crash, restart, corrupt, drop the sidecar |
-| `integration` | three `efsd` processes, two `efs-fuse` clients | The same observations through real processes, disks, and FUSE |
+| `sim` | `fault_sim`, in one process (strict three-fragment publication) | The protocol reactions in `include/efs/sim.h`: crash, restart, corrupt, drop the sidecar |
+| `integration` | four `efsd` processes, two `efs-fuse` clients | The same observations through real processes, disks, and FUSE |
 
 The simulator reads a crashed server's store directly. A sim pass does not
 prove a FUSE client can rebuild a chunk while that process is gone. Run
@@ -47,8 +47,11 @@ tree when a case fails.
 ## First cases
 
 - One server killed after `fsync`, including the metadata leader. The
-  file stays readable from the other client. A new `fsync` must not
-  succeed. The chunk is not repaired.
+  file stays readable from the other client. A new `fsync` may succeed
+  with two generation-matched live fragment holders under the production
+  degraded-write contract; exact peer bytes are required. The chunk is not
+  repaired. Clients restart between single-node faults so a previous node
+  cooldown does not turn the next case into a two-node outage.
 - That server started again on the same storage. The acknowledged file
   and its name survive.
 - One fragment's bytes flipped, sidecar checksum left as it was. Each

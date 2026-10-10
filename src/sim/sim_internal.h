@@ -121,6 +121,7 @@ struct efs_sim {
     uint32_t inst;
     int hold;
     int last_rc;
+    int last_put_rc; /* first failure of a synchronous fragment batch */
     efs_ino_t last_ino;
     uint64_t last_extra;
     uint32_t nev;
