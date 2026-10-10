@@ -228,11 +228,16 @@ try:
         (work/'publication-receipts.txt').write_text(''.join([prepared,current_receipt,*isolated_receipts]))
         print('PASS: isolated old leader refuses cached publication receipt authority',flush=True)
     fenced = mgmt(new,'raft-session' ,'fence',session_uuid)
-    assert 'status=0' in fenced and 'epoch=2 state=1' in fenced,fenced
+    # Metadata quorum can BEGIN revocation, but cannot certify an unreachable
+    # storage member. The merged storage fence must retain FENCING and refuse
+    # completion until every configured member has sealed its old PUT guards.
+    assert 'status=3 rc=-13' in fenced and 'epoch=2 state=2' in fenced,fenced
+    majority_session=mgmt(new,'raft-session','get',session_uuid)
+    assert 'status=0' in majority_session and 'epoch=2 state=2' in majority_session,majority_session
     session_replies = [mgmt(old,'raft-session','get',session_uuid) for _ in range(3)]
     assert all(re.search(r'rc=-(13|15)\b', reply) and 'status=0' not in reply for reply in session_replies),session_replies
-    (work/'sessions.txt').write_text('\n'.join([session_before,fenced,*session_replies]))
-    print('PASS: isolated former leader refuses old session epoch after majority fence',flush=True)
+    (work/'sessions.txt').write_text('\n'.join([session_before,fenced,majority_session,*session_replies]))
+    print('PASS: majority retains incomplete storage fence; isolated former leader refuses old session authority',flush=True)
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
         replies = list(pool.map(lambda _: mgmt(old,'raft-getattr',1),range(8)))
     (work/'replies.txt').write_text('\n'.join([before,current,*replies]))
@@ -262,6 +267,15 @@ try:
         assert 'rc=0' in restored,restored
         wait(lambda:True if re.search(r'group 0 hosted=1 .*voters=0x7 joint=0',mgmt(new,'raft-status')) else None,'original voter set restored through catch-up')
     wait(lambda: True if 'status=0' in mgmt(old,'raft-lookup',1,'after-rename') else None,'healed renamed lookup')
+    def finish_storage_fence():
+        reply=mgmt(new,'raft-session','fence',session_uuid)
+        if 'status=0' in reply:
+            assert 'epoch=2 state=1' in reply,reply
+            with (work/'sessions.txt').open('a') as out:out.write('\n'+reply)
+            return True
+        assert re.search(r'rc=-(13|15)\b',reply),reply
+        return None
+    wait(finish_storage_fence,'healed storage members complete the same fenced epoch')
     wait(lambda: True if 'epoch=2 state=1' in mgmt(old,'raft-session','get',session_uuid) else None,'healed fenced session')
     wait(lambda: True if 'mode=040700' in mgmt(old,'raft-getattr',1) else None,'healed forwarded read')
 finally:
