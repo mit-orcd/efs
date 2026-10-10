@@ -1,0 +1,9 @@
+raft-rename status=0 primary=2 old_parent=734 old=txn-file new_parent=1157 new=txn-moved ino=4830 mode=0100644 nlink=1
+
+raft-lookup status=0 primary=2 parent=1157 name=txn-moved ino=4830 mode=0100644 nlink=1
+
+raft-lookup status=5 primary=1 parent=734 name=txn-file ino=0 mode=00 nlink=0
+
+raft-lookup status=5 primary=1 parent=1157 name=txn-moved ino=0 mode=00 nlink=0
+
+raft-getattr status=5 primary=1 ino=0 mode=00 nlink=0 size=0 mtime=0

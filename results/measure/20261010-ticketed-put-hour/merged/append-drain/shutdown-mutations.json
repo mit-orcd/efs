@@ -1,0 +1,14 @@
+{
+  "leader_node": 2,
+  "shutdown_seconds": 0.4159694940026384,
+  "acknowledged_before_stop": 70,
+  "acknowledged_files": 71,
+  "writer_active_at_signal": true,
+  "errors": [],
+  "cold_bytes_verified": true,
+  "returncode": 0,
+  "idle_tcp_readers": 16,
+  "partial_tcp_frames": 16,
+  "connection_churn_at_signal": true,
+  "data_transport": "tcp"
+}
