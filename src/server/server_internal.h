@@ -113,6 +113,20 @@ struct efsd_server {
 
 /* Global server instance used by worker threads. */
 extern struct efsd_server *g_server;
+/* Local storage barrier only, never a session or ticket admission permit.
+ * A future ticketed receiver must obtain fresh authoritative ADMITTED proof,
+ * then hold this guard through the complete disk write. FENCE_LOC waits for
+ * old guarded writes before sealing reject_below, and cannot ACK a failed seal.
+ * UUID floors are retained until a durable admission-retirement policy exists. */
+struct efs_put_storage_guard { void *locked; };
+int server_put_session_begin(struct efsd_server *, const uint8_t uuid[16],
+                             uint32_t epoch, struct efs_put_storage_guard *);
+void server_put_session_end(struct efs_put_storage_guard *);
+void server_raft_host_storage_session_fence(const struct efs_msg_storage_session_fence *,
+    struct efs_msg_storage_session_fence_reply *);
+int server_put_session_fence(struct efsd_server *, const uint8_t uuid[16],
+                             uint32_t reject_below);
+
 
 /* Get export by id. */
 struct efs_export *server_get_export(struct efsd_server *s, efs_export_id_t id);

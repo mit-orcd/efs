@@ -403,6 +403,7 @@ struct efs_raft_host {
     uint64_t inbox_bytes, inbox_bytes_hi;
     int pressure_enabled;
     int flow_enabled, inbox_pressure, group_drain, flow_early_retire;
+    uint64_t applied_persist_us; /* pump-only bounded checkpoint cadence */
     unsigned inbox_work_n;
     uint64_t inbox_work_bytes;
     uint64_t inbox_probe_sent[HOST_NGROUPS][EFS_RAFT_MAX_PEERS];
@@ -2100,7 +2101,10 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         shard = rd32be(cmd + 22);
         if (!epoch || shard >= EFS_SESSION_BITS)
             return EFS_ERR_INVAL;
-        rc = efs_session_fence_local(h->kv, shard, uuid, epoch);
+        /* Do not publish a metadata fence before old guarded storage writes
+         * finish and its rejection certificate survives a cold restart. */
+        rc = server_put_session_fence(h->s, uuid, epoch);
+        if (rc == EFS_OK) rc = efs_session_fence_local(h->kv, shard, uuid, epoch);
         /* Abort in-memory waiters of the fenced epoch now (not only at
          * LEASE_DROP): a queued waiter must not GRANT after FENCE_LOC. */
         if (rc == EFS_OK && epoch > 0)
@@ -2113,7 +2117,10 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         rc = efs_session_ack_fence(h->kv, uuid, shard);
         break;
     case EFS_MD_SESS_FINISH:
-        rc = efs_session_finish_fence(h->kv, uuid);
+        if(clen!=HOST_SESS_HDR_LEN && clen!=HOST_SESS_CREATE_LEN)return EFS_ERR_INVAL;
+        rc = clen==HOST_SESS_CREATE_LEN?
+            efs_session_finish_fence_epoch(h->kv,uuid,rd32be(cmd+18)):
+            efs_session_finish_fence(h->kv, uuid);
         break;
     case EFS_MD_SESS_LEASE_LOCK_BATCH: {
         struct efs_session_cleanup_key keys[EFS_SESSION_CLEANUP_MAX];uint32_t n;
@@ -2200,7 +2207,7 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     }
     /* A blocked local fence is not a completed revocation barrier. Preserve
      * its business verdict in the apply ring so the coordinator cannot ACK it. */
-    if (cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
+    if (cmd[1] == EFS_MD_SESS_FINISH || cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
         cmd[1] == EFS_MD_SESS_LEASE_EDGE_DEFERRED || cmd[1] == EFS_MD_SESS_LEASE_OPEN ||
         cmd[1] == EFS_MD_SESS_LEASE_CLOSE) return rc;
     if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_INVAL || rc == EFS_ERR_BUSY ||
@@ -5795,6 +5802,24 @@ static void applied_path(struct efs_raft_host *h, uint8_t group,
  * complement of the first is torn and reads as 0 (replay from the log
  * floor, which apply tolerates). */
 #define HOST_APPLIED_PERSIST_US 10000ull
+#define HOST_APPLIED_MAX_TAIL 1024ull
+
+/* Checkpoints are replay hints, never ACK watermarks. Keep the historical
+ * cadence unless explicitly experimenting; reject malformed/unbounded input. */
+static int host_applied_interval(const char *value, uint64_t *us)
+{
+    unsigned ms=0;
+    *us=HOST_APPLIED_PERSIST_US;
+    if (!value) return EFS_OK;
+    if (!*value) return EFS_ERR_INVAL;
+    for (const char *p=value; *p; p++) {
+        if (*p<'0' || *p>'9' || ms>1000) return EFS_ERR_INVAL;
+        ms=ms*10+(unsigned)(*p-'0');
+    }
+    if (ms<10 || ms>1000) return EFS_ERR_INVAL;
+    *us=(uint64_t)ms*1000;
+    return EFS_OK;
+}
 
 static int persist_applied(struct efs_raft_host *h, int gi, uint64_t idx,
                            uint64_t now, int force)
@@ -5806,16 +5831,28 @@ static int persist_applied(struct efs_raft_host *h, int gi, uint64_t idx,
         return EFS_OK;
     if (idx == 0 || idx == h->g[gi].applied_saved)
         return EFS_OK;
-    if (!force && now - h->g[gi].applied_saved_us < HOST_APPLIED_PERSIST_US)
+    uint64_t interval=h->applied_persist_us ? h->applied_persist_us : HOST_APPLIED_PERSIST_US;
+    /* The entry cap bounds the deliberately deferred replay tail. Timer
+     * cadence is best effort while I/O is blocked; no extra queue is kept. */
+    if (!force && idx>=h->g[gi].applied_saved &&
+        idx-h->g[gi].applied_saved<HOST_APPLIED_MAX_TAIL &&
+        now>=h->g[gi].applied_saved_us &&
+        now-h->g[gi].applied_saved_us<interval) {
+        BO_COUNT(BO_APPLIED_THROTTLE);
         return EFS_OK;
-    h->g[gi].applied_saved_us = now;
+    }
+    if (!force && idx>=h->g[gi].applied_saved &&
+        idx-h->g[gi].applied_saved>=HOST_APPLIED_MAX_TAIL)
+        BO_COUNT(BO_APPLIED_ENTRY_CAP);
     if (h->g[gi].applied_fd < 0) {
         char path[EFS_MAX_PATH];
 
         applied_path(h, h->g[gi].group, path, sizeof(path));
         h->g[gi].applied_fd = open(path, O_RDWR | O_CREAT, 0644);
-        if (h->g[gi].applied_fd < 0)
+        if (h->g[gi].applied_fd < 0) {
+            BO_COUNT(BO_APPLIED_ERROR);
             return EFS_ERR_IO;
+        }
     }
     wr64be(buf, idx);
     wr64be(buf + 8, ~idx);
@@ -5823,9 +5860,12 @@ static int persist_applied(struct efs_raft_host *h, int gi, uint64_t idx,
     if (n != (int)sizeof(buf) || fdatasync(h->g[gi].applied_fd) != 0) {
         close(h->g[gi].applied_fd);
         h->g[gi].applied_fd = -1;
+        BO_COUNT(BO_APPLIED_ERROR);
         return EFS_ERR_IO;
     }
+    BO_COUNT(BO_APPLIED_SYNC);
     h->g[gi].applied_saved = idx;
+    h->g[gi].applied_saved_us = now; /* failed writes must remain retryable */
     return EFS_OK;
 }
 
@@ -8778,6 +8818,11 @@ int server_raft_host_start(struct efsd_server *s)
     int query_enabled=!commands || !strcmp(commands,"1");
     const char *flow=getenv("EFS_RAFT_FLOW");
     if (flow && strcmp(flow,"0") && strcmp(flow,"1")) return EFS_ERR_INVAL;
+    uint64_t applied_interval;
+    if (host_applied_interval(getenv("EFS_RAFT_APPLIED_INTERVAL_MS"),&applied_interval)!=EFS_OK) {
+        fprintf(stderr,"raft-host: EFS_RAFT_APPLIED_INTERVAL_MS must be 10..1000\n");
+        return EFS_ERR_INVAL;
+    }
     const char *early_retire=getenv("EFS_RAFT_FLOW_EARLY_RETIRE");
     if (early_retire && strcmp(early_retire,"0") && strcmp(early_retire,"1"))
         return EFS_ERR_INVAL;
@@ -8805,6 +8850,7 @@ int server_raft_host_start(struct efsd_server *s)
         return EFS_ERR_NOMEM;
     struct efs_admission_limits limits={8ull<<20,1ull<<20,64,8};
     if (efs_admission_init(&h->proposal_queue,&limits) != EFS_OK) { free(h); return EFS_ERR_IO; }
+    h->applied_persist_us=applied_interval;
     h->flow_enabled=flow && !strcmp(flow,"1");
     h->flow_early_retire=early_retire && !strcmp(early_retire,"1"); /* candidate opt-in until acceptance */
     h->group_drain=group_drain && !strcmp(group_drain,"1");
@@ -9385,6 +9431,44 @@ static int host_lease_edge_result(struct efs_raft_host *h,const uint8_t *cmd,
 static int host_dir_migrate(struct efs_raft_host *h, efs_ino_t dir,
                             const uint8_t *cmd, uint32_t clen, int *hint);
 
+/* A metadata quorum is not a storage-member acknowledgement. Every
+ * configured member (including a non-hosting or offline replica) must seal or
+ * prove its certificate. No server lock is held over network/disk I/O. */
+static int host_storage_fence_members(struct efs_raft_host *h,const uint8_t uuid[16],
+                                      uint32_t floor,int check_only)
+{
+    struct efs_node members[EFS_MAX_NODES];uint32_t count;
+    pthread_mutex_lock(&h->s->lock);count=h->s->node_count;
+    if(count<=EFS_MAX_NODES)memcpy(members,h->s->nodes,count*sizeof(*members));
+    pthread_mutex_unlock(&h->s->lock);
+    if(count<EFS_NUM_FRAGMENTS || count>EFS_MAX_NODES)return EFS_ERR_BUSY;
+    for(uint32_t i=0;i<count;i++){
+        if(!members[i].id || members[i].id>EFS_MAX_NODES)return EFS_ERR_INVAL;
+        for(uint32_t j=0;j<i;j++)if(members[j].id==members[i].id)return EFS_ERR_INVAL;
+        struct efs_msg_storage_session_fence request={.floor=floor,.check_only=(uint32_t)check_only};
+        struct efs_msg_storage_session_fence_reply reply={0};memcpy(request.uuid,uuid,16);
+        if(members[i].id==h->s->id)server_raft_host_storage_session_fence(&request,&reply);
+        else if(host_inode_rpc_peer(h,(int)members[i].id-1,EFS_MSG_STORAGE_SESSION_FENCE,
+                    &request,sizeof(request),EFS_MSG_STORAGE_SESSION_FENCE_REPLY,&reply,sizeof(reply))){
+            fprintf(stderr,"storage-fence: member=%u floor=%u check=%d transport unavailable\n",members[i].id,floor,check_only);
+            return EFS_ERR_BUSY;
+        }
+        if(memcmp(reply.uuid,uuid,16) || reply.floor!=floor)return EFS_ERR_PROTO;
+        if(reply.rc!=EFS_OK){
+            fprintf(stderr,"storage-fence: member=%u floor=%u check=%d rc=%d\n",members[i].id,floor,check_only,reply.rc);
+            return reply.rc;
+        }
+    }
+    int same=1;pthread_mutex_lock(&h->s->lock);
+    if(h->s->node_count!=count)same=0;
+    for(uint32_t i=0;i<count && same;i++){
+        unsigned found=0;
+        for(uint32_t j=0;j<count;j++)if(members[i].id==h->s->nodes[j].id)found++;
+        if(found!=1)same=0;
+    }
+    pthread_mutex_unlock(&h->s->lock);return same?EFS_OK:EFS_ERR_BUSY;
+}
+
 /* Payload: group byte, then command bytes (empty command = ReadIndex).
  * A hosted replica proposes (or ReadIndexes) even when it is not the
  * leader; an unhosted node forwards a non-empty command to a voter.
@@ -9396,6 +9480,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     struct efs_raft_host *h = g_host;
     uint8_t group;
     const uint8_t *cmd;
+    uint8_t storage_finish_cmd[HOST_SESS_CREATE_LEN];
     uint8_t sweep_cmd[19+4*EFS_META_SWEEP_BATCH_MAX];
     uint8_t cleanup_cmd[27+66*EFS_SESSION_CLEANUP_MAX];
     uint32_t clen;
@@ -9413,6 +9498,30 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     group = payload[0];
     cmd = payload + 1;
     clen = plen - 1;
+    if(clen>=2 && cmd[0]==EFS_MD_CMD_SESSION &&
+       (cmd[1]==EFS_MD_SESS_STORAGE_FENCE || cmd[1]==EFS_MD_SESS_FINISH)) {
+        if(clen!=HOST_SESS_CREATE_LEN && !(cmd[1]==EFS_MD_SESS_FINISH && clen==HOST_SESS_HDR_LEN)){
+            out->rc=EFS_ERR_INVAL;return;
+        }
+        uint8_t query[1+HOST_SESS_CREATE_LEN]={0};
+        uint32_t ssh=efs_kv_session_shard(cmd+2);
+        if(group!=efs_raft_shard_group(ssh)){out->rc=EFS_ERR_INVAL;return;}
+        query[0]=efs_raft_shard_group(ssh);query[1]=EFS_MD_CMD_SESSION;
+        memcpy(query+3,cmd+2,16);wr32be(query+19,ssh);
+        struct efs_msg_raft_mkfs_reply authority;
+        server_raft_host_submit(query,sizeof(query),&authority);
+        uint32_t epoch=(uint32_t)authority.salt,state=(uint32_t)((authority.salt>>32)&255);
+        rc=authority.rc;
+        if(rc==EFS_OK && (epoch<2 ||
+           (state!=EFS_SESSION_FENCING && !(cmd[1]==EFS_MD_SESS_FINISH && state==EFS_SESSION_ACTIVE))))rc=EFS_ERR_STALE;
+        if(rc==EFS_OK && clen==HOST_SESS_CREATE_LEN && rd32be(cmd+18)!=epoch)rc=EFS_ERR_STALE;
+        if(rc==EFS_OK)rc=host_storage_fence_members(h,cmd+2,epoch,cmd[1]==EFS_MD_SESS_FINISH);
+        if(rc!=EFS_OK || cmd[1]==EFS_MD_SESS_STORAGE_FENCE){out->rc=rc;out->leader_hint=authority.leader_hint;return;}
+        /* Freeze the verified epoch in the log, not just in this RPC's stack.
+         * Another coordinator may finish and BEGIN a later epoch before apply. */
+        memcpy(storage_finish_cmd,cmd,HOST_SESS_HDR_LEN);wr32be(storage_finish_cmd+18,epoch);
+        cmd=storage_finish_cmd;clen=sizeof(storage_finish_cmd);
+    }
     if(clen && cmd[0]==EFS_MD_CMD_CLOSE_STEP &&
        (clen!=46 || !rd64be(cmd+1) ||
         group!=efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd+1))))) {
@@ -9660,6 +9769,29 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     out->term = term; /* 0 unless the PUBLISH branch proposed without waiting */
     if (hint >= 0)
         out->leader_hint = hint;
+}
+
+void server_raft_host_storage_session_fence(const struct efs_msg_storage_session_fence *request,
+    struct efs_msg_storage_session_fence_reply *out)
+{
+    memset(out,0,sizeof(*out));out->rc=EFS_ERR_INVAL;
+    if(!request || !g_host || !g_host->running || request->floor<2 || request->check_only>1)return;
+    memcpy(out->uuid,request->uuid,16);out->floor=request->floor;
+    unsigned nonzero=0;for(unsigned i=0;i<16;i++)nonzero|=request->uuid[i];if(!nonzero)return;
+    uint32_t ssh=efs_kv_session_shard(request->uuid);
+    uint8_t query[1+HOST_SESS_CREATE_LEN]={0};query[0]=efs_raft_shard_group(ssh);query[1]=EFS_MD_CMD_SESSION;
+    memcpy(query+3,request->uuid,16);wr32be(query+19,ssh);
+    struct efs_msg_raft_mkfs_reply authority;server_raft_host_submit(query,sizeof(query),&authority);
+    uint32_t epoch=(uint32_t)authority.salt,state=(uint32_t)((authority.salt>>32)&255);
+    out->rc=authority.rc;
+    if(out->rc==EFS_OK && (epoch!=request->floor || (state!=EFS_SESSION_ACTIVE && state!=EFS_SESSION_FENCING)))out->rc=EFS_ERR_STALE;
+    if(out->rc!=EFS_OK)return;
+    if(!request->check_only)out->rc=server_put_session_fence(g_host->s,request->uuid,request->floor);
+    else {
+        struct efs_put_storage_guard guard={0};
+        int rc=server_put_session_begin(g_host->s,request->uuid,request->floor-1,&guard);
+        server_put_session_end(&guard);out->rc=rc==EFS_ERR_STALE?EFS_OK:rc==EFS_OK?EFS_ERR_BUSY:rc;
+    }
 }
 
 void server_raft_host_status(struct efs_msg_raft_status_reply *out)

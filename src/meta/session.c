@@ -243,8 +243,8 @@ int efs_session_ack_fence(struct efs_kv *kv,
     return store_rec(kv, uuid, &r);
 }
 
-int efs_session_finish_fence(struct efs_kv *kv,
-                             const uint8_t uuid[EFS_OPID_UUID_LEN])
+static int finish_fence(struct efs_kv *kv,
+                         const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t expected_epoch)
 {
     struct efs_session_rec r;
     uint8_t okey[EFS_KV_KEY_MAX];
@@ -256,6 +256,7 @@ int efs_session_finish_fence(struct efs_kv *kv,
     rc = load_rec(kv, uuid, &r);
     if (rc != EFS_OK)
         return rc;
+    if (expected_epoch && r.epoch!=expected_epoch)return EFS_ERR_STALE;
     if (r.state == EFS_SESSION_ACTIVE)
         return EFS_OK;
     if (r.state != EFS_SESSION_FENCING)
@@ -279,6 +280,15 @@ int efs_session_finish_fence(struct efs_kv *kv,
         }
     }
     return rc;
+}
+
+int efs_session_finish_fence(struct efs_kv *kv,const uint8_t uuid[EFS_OPID_UUID_LEN])
+{
+    return finish_fence(kv,uuid,0); /* legacy persisted commands */
+}
+int efs_session_finish_fence_epoch(struct efs_kv *kv,const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch)
+{
+    return epoch<2?EFS_ERR_INVAL:finish_fence(kv,uuid,epoch);
 }
 
 int efs_session_barrier_done(struct efs_kv *kv,

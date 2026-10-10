@@ -104,7 +104,7 @@ TEST_SRCS = tests/test_txn_resolve_faults.c tests/test_namespace_session.c tests
 TEST_BINS = tests/test_txn_resolve_faults tests/test_namespace_session tests/test_admission tests/test_store_containers tests/test_principles_index_fault tests/test_principles_index tests/test_query_catalog tests/test_name_index tests/test_append_transaction tests/test_store_durability tests/test_append_receipt tests/test_put_ticket tests/test_store_gc tests/test_bench_latency tests/test_store_overwrite tests/test_writer_routing tests/test_kv_seg_index tests/test_mtime_barrier tests/test_publication_session tests/test_publication_ack tests/test_publication_recovery tests/test_lane_bootstrap_recovery tests/test_fence_view tests/test_reply_buffers tests/test_bufpool tests/test_erasure tests/test_placement tests/test_rdma_xprt tests/test_wire tests/test_data tests/test_kv tests/test_kv_lsm tests/test_raft_store tests/test_meta_apply tests/test_raft tests/test_sim tests/test_txn tests/test_session tests/test_lock tests/test_stage_evict tests/test_conn_fd tests/test_query_disk tests/test_query_disk_io
 
 
-SERVER_SRCS = src/server/efsd.c src/server/store.c src/server/store_nvme.c src/server/store_containers.c \
+SERVER_SRCS = src/server/put_fence.c src/server/efsd.c src/server/store.c src/server/store_nvme.c src/server/store_containers.c \
               src/server/handler.c \
               src/server/cluster.c \
               src/server/peer_pool.c src/server/writer.c \
@@ -114,6 +114,11 @@ SERVER_OBJS = $(SERVER_SRCS:.c=.o)
 
 CLIENT_SRCS = src/client/efs_fuse.c
 CLIENT_OBJS = $(CLIENT_SRCS:.c=.o)
+
+# Simulator objects embed public Raft/KV layouts too. Keep them on the same
+# header/build boundary as the library, including newly added sim modules.
+SIM_OBJS = $(patsubst %.c,%.o,$(wildcard src/sim/sim*.c))
+$(SIM_OBJS): $(wildcard include/efs/*.h) src/sim/sim_internal.h .build_id.stamp
 
 BENCH_CLIENT_SRC = src/client/efs_bench.c src/bench/bench_local.c src/bench/blake3_bench.c src/bench/io_bench.c src/bench/storage_principles.c src/bench/principles_index.c src/bench/storage_churn.c src/bench/storage_ranges.c
 # Reuse production storage/writer code without linking daemon/network startup.
@@ -287,6 +292,11 @@ docs-check:
 	python3 docs/check-architecture.py
 
 test: all
+	$(MAKE) tests/test_put_storage_fence
+	./tests/test_put_storage_fence
+	python3 tests/test_storage_fence_members.py
+	python3 tests/test_storage_fence_retry.py
+	python3 tests/test_applied_interval.py
 	./tests/test_store_containers
 	python3 tests/test_lookup_errno.py
 	python3 tests/test_fuse_open_reply.py
@@ -521,7 +531,7 @@ clean:
 	rm -f src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o src/sim/opid.o
 	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt efs-query blake3-bench
 	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim
-	rm -f $(TEST_BINS) tests/principles_index_fault.o
+	rm -f $(TEST_BINS) tests/test_put_storage_fence tests/principles_index_fault.o
 	rm -f .build_id.stamp
 
 $(BLAKE3_DIR)/blake3_sse2.o: $(BLAKE3_DIR)/blake3_sse2.c
@@ -585,3 +595,7 @@ tests/test_txn_resolve_faults: tests/test_txn_resolve_faults.o $(LIB)
 
 # Internal I/O fault regression compiles the actual disk-cache implementation.
 tests/test_query_disk_io: src/meta/query_disk.c src/meta/query_disk.h
+
+# Independent production storage-session barrier, including syscall failures.
+tests/test_put_storage_fence: tests/test_put_storage_fence.c src/server/put_fence.c src/server/server_internal.h $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ $< $(LIB) $(LDFLAGS)

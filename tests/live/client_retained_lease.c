@@ -49,6 +49,23 @@ int main(int argc,char **argv)
     assert(efs_client_rpc_identity_revoked(&old,&revoked)==EFS_OK && !revoked);
     char hex[33],address[64];for(unsigned i=0;i<16;i++)snprintf(hex+2*i,3,"%02x",uuid[i]);
     snprintf(address,sizeof(address),"127.0.0.1:%u",port);
+    const char *fault=getenv("EFS_TEST_PUT_FENCE_FAULT_FILE");
+    if(fault){
+        FILE *armed=fopen(fault,"wb");assert(armed && fputc(1,armed)!=EOF && !fclose(armed));
+        pid_t failing=fork();assert(failing>=0);
+        if(!failing){execl(argv[3],argv[3],"raft-session",address,"fence",hex,(char *)NULL);_exit(127);}
+        int failed;assert(waitpid(failing,&failed,0)==failing && WIFEXITED(failed) && WEXITSTATUS(failed));
+        assert(!unlink(fault));
+        /* An applied local retry alone cannot finish the global barrier. */
+        int proof=EFS_ERR_BUSY;
+        for(unsigned attempt=0;attempt<40;attempt++){
+            proof=efs_client_rpc_identity_revoked(&old,&revoked);
+            if(proof==EFS_OK)break;
+            assert(proof==EFS_ERR_BUSY || proof==EFS_ERR_NET || proof==EFS_ERR_NOT_PRIMARY || proof==EFS_ERR_NO_QUORUM);usleep(100000);
+        }
+        assert(proof==EFS_OK && !revoked);
+        puts("certificate fsync EIO: coordinator failed, global revocation remained incomplete, same barrier resumes PASS");
+    }
     pid_t child=fork();assert(child>=0);
     if(!child){execl(argv[3],argv[3],"raft-session",address,"fence",hex,(char *)NULL);_exit(127);}
     int status;assert(waitpid(child,&status,0)==child && WIFEXITED(status) && !WEXITSTATUS(status));
@@ -58,8 +75,20 @@ int main(int argc,char **argv)
     struct efs_opid missing=old;memset(missing.client_uuid,0xfe,16);
     assert(efs_client_rpc_identity_revoked(&missing,&revoked)==EFS_ERR_NOT_FOUND && !revoked);
     assert(efs_client_lease_begin(&r,ino,generation,EFS_LEASE_EDGE_OPEN,0)==EFS_OK);
-    assert(efs_client_lease_resume(&r,0)==EFS_ERR_STALE && r.complete && r.revoked && r.slot==-1 && !r.attempted);
+    struct efs_opid_req revoked_request=r.q;
+    int revoked_rc=efs_client_lease_resume(&r,0);
+    fprintf(stderr,"revoked retained lease: rc=%d complete=%d revoked=%d slot=%d attempted=%d\n",
+        revoked_rc,r.complete,r.revoked,r.slot,r.attempted);
+    assert(revoked_rc==EFS_ERR_STALE && r.complete && r.revoked && r.slot==-1);
+    /* Cached establishment may permit an RPC attempt, but the fresh guarded
+     * edge still rejects this epoch. Neither a cached grant nor missing state
+     * is revocation proof, and a retry cannot acquire a new identity. */
+    assert(!memcmp(&r.q,&revoked_request,sizeof(r.q)));
+    assert(efs_client_lease_resume(&r,0)==EFS_ERR_STALE);
+    uint64_t known=1;
+    assert(efs_client_rpc_lease_edge(ino,generation,&r.q,EFS_LEASE_EDGE_OPEN,0,1,&known)==EFS_ERR_STALE && !known);
     assert(efs_client_lease_reset(&r)==EFS_OK);
+    printf("storage-session-certificate uuid=%s reject_below=%u\n",hex,old.session_epoch+1);
     puts("durably revoked epoch: authoritative global proof, future/missing rejection and terminal retained lease recovery PASS");
     puts("actual retained sequenced client lease: authoritative FileID, full UUID, OPEN/CLOSE stored proof, legacy mutation barrier and safe reset PASS");
     return 0;

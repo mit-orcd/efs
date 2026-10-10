@@ -4,7 +4,7 @@ from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/mgmt/efs_mgmt.c').read_text()
-a=s.index('static int sess_leader_address(');b=s.index('\nstatic void sess_pack_hdr',a)
+a=s.index('static int sess_leader_address(');b=s.index('\n/* Repeating this exact monotonic certificate barrier',a)
 source=r'''
 #include "efs/protocol.h"
 #include <assert.h>

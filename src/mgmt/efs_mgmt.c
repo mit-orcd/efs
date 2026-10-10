@@ -1172,6 +1172,30 @@ static int sess_rpc(const char *host, uint16_t port, const uint8_t *payload,
     return out->rc;
 }
 
+/* Repeating this exact monotonic certificate barrier cannot reopen a session.
+ * A cold peer pool can temporarily reject a configured storage member; retain
+ * the UUID/epoch and cap the entire retry sequence, including socket waits. */
+static int sess_storage_barrier(const char *host, uint16_t port,
+                                const uint8_t *payload, uint32_t plen,
+                                struct efs_msg_raft_mkfs_reply *out)
+{
+    struct timespec now;
+    if(clock_gettime(CLOCK_MONOTONIC,&now)) return EFS_ERR_IO;
+    uint64_t saved=efs_net_deadline_ms();
+    uint64_t deadline=(uint64_t)now.tv_sec*1000+now.tv_nsec/1000000+15000;
+    if(saved && saved<deadline) deadline=saved;
+    efs_net_set_deadline_ms(deadline);
+    int rc;
+    do {
+        rc=sess_rpc(host,port,payload,plen,out);
+        if(rc!=EFS_ERR_BUSY) break;
+        if(efs_net_remaining_ms(0x7fffffff)<=0) break;
+        usleep(100000);
+    } while(efs_net_remaining_ms(0x7fffffff)>0);
+    efs_net_set_deadline_ms(saved);
+    return rc;
+}
+
 static void sess_pack_hdr(uint8_t *payload, uint8_t group, uint8_t sub,
                           const uint8_t uuid[EFS_OPID_UUID_LEN])
 {
@@ -1245,6 +1269,14 @@ static int cmd_raft_session_fence(const char *host, uint16_t port,
         goto out;
     }
     old_epoch = epoch - 1;
+    /* Seal every storage member before acknowledging metadata shards. A
+     * non-hosting member cannot be inferred from the metadata Raft quorum. */
+    memset(payload,0,sizeof(payload));
+    sess_pack_hdr(payload,efs_raft_shard_group(ssh),EFS_MD_SESS_STORAGE_FENCE,uuid);
+    wr32be_mgmt(payload+3+EFS_OPID_UUID_LEN,epoch);
+    rc=sess_storage_barrier(host,port,payload,1+22,&r);
+    if(rc!=EFS_OK)goto out;
+
     for (word = 0; word < (EFS_SESSION_BITMAP / 8u); word++) {
         uint64_t bits;
         uint32_t b;

@@ -1125,8 +1125,25 @@ static void test_legacy_sequenced_handoff(void)
  CHECK(efs_kv_put(kv,key,kl,after,18)==EFS_OK&&efs_lease_open(kv,ino,1,uuid,1)==EFS_ERR_PROTO,"handoff zero sequence rejected");
  efs_kv_mem_free(kv);
 }
+static void test_epoch_bound_finish(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();CHECK(kv,"epoch finish kv");
+    uint8_t uuid[16]={0x71};struct efs_session_rec row;
+    CHECK(efs_session_create(kv,uuid,1)==EFS_OK,"epoch finish session");
+    CHECK(efs_session_begin_fence(kv,uuid)==EFS_OK,"epoch two begins");
+    CHECK(efs_session_finish_fence_epoch(kv,uuid,3)==EFS_ERR_STALE,"future finish refused");
+    CHECK(efs_session_finish_fence_epoch(kv,uuid,2)==EFS_OK,"exact epoch finishes");
+    CHECK(efs_session_finish_fence_epoch(kv,uuid,2)==EFS_OK,"exact epoch retry idempotent");
+    CHECK(efs_session_begin_fence(kv,uuid)==EFS_OK,"next epoch begins");
+    CHECK(efs_session_finish_fence_epoch(kv,uuid,2)==EFS_ERR_STALE,"delayed finish cannot complete later barrier");
+    CHECK(efs_session_get(kv,uuid,&row)==EFS_OK && row.epoch==3 && row.state==EFS_SESSION_FENCING,"later barrier remains fencing");
+    CHECK(efs_session_finish_fence_epoch(kv,uuid,3)==EFS_OK,"later exact epoch completes");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
+    test_epoch_bound_finish();
     test_legacy_sequenced_handoff();
     test_legacy_rejection_floor();
     test_legacy_lease_prepared();

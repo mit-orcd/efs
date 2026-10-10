@@ -12,7 +12,7 @@
 #include <string.h>
 #include <unistd.h>
 static void be(uint8_t *p,uint64_t v,unsigned n){while(n){p[--n]=(uint8_t)v;v>>=8;}}
-static void owner_rpc(unsigned port, const uint8_t *payload, unsigned length, int expected)
+static uint64_t owner_rpc(unsigned port, const uint8_t *payload, unsigned length, int expected)
 {
     for (unsigned a = 0; a < 120; a++) {
         int fd = efs_connect_tcp("127.0.0.1", port + a % 4);
@@ -42,6 +42,14 @@ static void owner_rpc(unsigned port, const uint8_t *payload, unsigned length, in
             usleep(10000);
             continue;
         }
+        /* Fresh ReadIndex can be BUSY on a recovering follower. Reads and
+         * exact epoch-bound completion are safe to retry within this budget;
+         * the deliberate incomplete FINISH must retain its BUSY verdict. */
+        if(expected==EFS_OK && reply.rc==EFS_ERR_BUSY &&
+           payload[1]==EFS_MD_CMD_SESSION &&
+           (payload[2]==0 || (payload[2]==EFS_MD_SESS_FINISH && length==23))) {
+            usleep(10000);continue;
+        }
         /* Sequenced mounted CLOSE can leave its real cleanup obligation
          * queued briefly. An absent-value PREPARE must wait for that work;
          * never replace or overwrite the pre-existing marker. */
@@ -53,9 +61,10 @@ static void owner_rpc(unsigned port, const uint8_t *payload, unsigned length, in
         fprintf(stderr,"owner command=%u rc=%d expected=%d\n", payload[1], reply.rc, expected);
         printf("owner command=%u rc=%d expected=%d\n", payload[1], reply.rc, expected);
         assert(reply.rc == expected);
-        return;
+        return reply.salt;
     }
     assert(!"owner RPC deadline");
+    return 0;
 }
 static void owner_fence(unsigned port, const char *hex, unsigned shard)
 {
@@ -178,11 +187,33 @@ static void namespace_guard(unsigned port)
  tx[0][0]=74;memcpy(prepare+3,tx[0],16);q.id.seq=3;efs_txn_encode_opid(prepare+26+kl,&q,&reply);
  owner_rpc(port,prepare,26+kl+EFS_TXN_REDUCE_OPID_WIRE,EFS_ERR_STALE);
  session[0]=owner;session[2]=EFS_MD_SESS_ACK;be(session+19,0,4);owner_rpc(port,session,sizeof(session),EFS_OK);
- session[2]=EFS_MD_SESS_FINISH;owner_rpc(port,session,23,EFS_OK);
+ /* Completion now carries the checked epoch and requires every storage
+  * member, including the member outside the metadata replica set. */
+ be(session+19,2,4);session[2]=EFS_MD_SESS_STORAGE_FENCE;
+ owner_rpc(port,session,23,EFS_OK);
+ session[2]=EFS_MD_SESS_FINISH;owner_rpc(port,session,23,EFS_ERR_BUSY);
+ /* PREPARE admission may register additional owner shards. Read the exact
+  * frozen set and fence/ACK every bit rather than assuming one shard. */
+ for(unsigned word=0;word<EFS_SESSION_BITMAP/8u;word++) {
+  session[0]=owner;session[2]=0;be(session+19,EFS_SESSION_BITS+word,4);
+  uint64_t bits=owner_rpc(port,session,23,EFS_OK);
+  for(unsigned bit=0;bit<64;bit++)if(bits&(1ull<<bit)) {
+   unsigned touched=word*64+bit;
+   printf("namespace barrier touched shard=%u\n",touched);
+   session[0]=efs_raft_shard_group(touched);session[2]=EFS_MD_SESS_FENCE_LOC;
+   be(session+19,2,4);be(session+23,touched,4);owner_rpc(port,session,sizeof(session),EFS_OK);
+   session[0]=owner;session[2]=EFS_MD_SESS_ACK;be(session+19,touched,4);
+   owner_rpc(port,session,23,EFS_OK);
+  }
+ }
+
+ session[2]=EFS_MD_SESS_FINISH;be(session+19,2,4);owner_rpc(port,session,23,EFS_OK);
+ owner_rpc(port,session,23,EFS_OK); /* exact completed barrier is idempotent */
  puts("namespace wire shared guards: two concurrent receipt PREPAREs block fence through commit/abort; delayed resolve/prepare preserve floor PASS");
 }
 int main(int argc,char **argv)
 {
+ setbuf(stdout,NULL);setbuf(stderr,NULL);
  if(argc==3&&!strcmp(argv[1],"--namespace-fence")){namespace_guard(atoi(argv[2]));return 0;}
  if(argc==4&&!strcmp(argv[1],"--legacy-guard")){legacy_guard(atoi(argv[2]),strtoull(argv[3],NULL,10));return 0;}
  if(argc==5&&!strcmp(argv[1],"--owner-fence")){owner_fence(atoi(argv[2]),argv[3],atoi(argv[4]));return 0;}

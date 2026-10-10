@@ -1,0 +1,317 @@
+make tests/test_put_storage_fence
+make[1]: Entering directory '/data1/efs/merged-storage-src-20261010'
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"' -DEFS_VERSION='"unknown"' -DEFS_GIT_BRANCH='"unknown"' -DEFS_BUILD_TIME='"2026-10-10T05:20:37Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_put_storage_fence tests/test_put_storage_fence.c libefs.a -lpthread -lm -ldl -libverbs
+make[1]: Leaving directory '/data1/efs/merged-storage-src-20261010'
+./tests/test_put_storage_fence
+storage session fence: full UUID, monotonic cold floor, guarded-write ordering, file/directory sync failures and corrupt-certificate rejection PASS
+python3 tests/test_storage_fence_members.py
+storage-fence: member=4 floor=2 check=1 transport unavailable
+storage revocation: every member, exact UUID/floor, offline refusal, changed roster and duplicate identity rejection PASS
+python3 tests/test_storage_fence_retry.py
+storage barrier retry: unchanged identity, bounded BUSY, EIO refusal and prior deadline restoration PASS
+python3 tests/test_applied_interval.py
+applied interval: bounded cadence/tail, durable record, immediate error retry, shutdown force PASS
+./tests/test_store_containers
+storage-engine: incompatible, busy or corrupt root; refusing startup
+containers: retained old extent after punch/sync failure
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+containers: retained old extent after punch/sync failure
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+containers: buffered/direct, multi-root, quota, same-range concurrency, conditional/inode GC, restart, crash boundaries and corruption PASS
+python3 tests/test_lookup_errno.py
+FUSE LOOKUP: IO/network/quorum errors stay IO, BUSY/memory/access preserved, only actual absence ENOENT PASS
+python3 tests/test_fuse_open_reply.py
+FUSE CREATE/OPEN: rejected replies and failed reply construction release exactly once PASS
+python3 tests/test_fuse_lease_retention.py
+FUSE ambiguous OPEN/CLOSE: retained ownership, reopen barrier and clean-stop retry PASS
+python3 tests/test_create_admission_wait.py
+CREATE admission: capacity recovery, inherited deadline, retained identity and terminal errors PASS
+python3 tests/test_lookup_replacement.py
+LOOKUP replacement: missing captured inode retryable locally and forwarded; true absence and IO preserved PASS
+python3 tests/test_w23_samples.py
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.000s
+
+OK
+python3 tests/test_read_verify.py
+parallel GET: valid zero/nonzero and corrupt zero/nonzero replies PASS
+python3 tests/test_opid_admission.py
+opid-admission: BUSY oldest=1 next=17 live=16 window=16
+opid-admission: BUSY oldest=1 next=17 live=16 window=16
+opid-admission: BUSY oldest=1 next=17 live=16 window=16
+opid-admission: BUSY oldest=1 next=17 live=16 window=16
+opid-admission: BUSY oldest=1 next=17 live=15 window=16
+opid-admission: BUSY oldest=18 next=34 live=16 window=16
+opid-admission: BUSY oldest=18 next=34 live=16 window=16
+opid-admission: BUSY oldest=18 next=34 live=16 window=16
+opid-admission: BUSY oldest=18 next=34 live=16 window=16
+16 simultaneous production identity owners: unique slots/sequences, saturation refuses four mutations, released admission recovers PASS
+namespace opid saturation: four mutations send nothing, released admission keeps watermark, sequence overflow refused PASS
+python3 tests/test_server_processes.py
+Invalid PID record /tmp/efs-owner-atbp2dxq/store/log/efsd.pid; no process signaled
+Stopped efsd for storage /tmp/efs-owner-atbp2dxq/store (if any)
+Invalid PID record /tmp/efs-owner-atbp2dxq/store/log/efsd.pid; no process signaled
+Stopped efsd for storage /tmp/efs-owner-atbp2dxq/store (if any)
+Stale daemon identity for PID 381231; process retained
+Stopped efsd for storage /tmp/efs-owner-atbp2dxq/store (if any)
+Stale daemon identity for PID 381232; process retained
+Stopped efsd for storage /tmp/efs-owner-atbp2dxq/store (if any)
+Stale daemon identity for PID 381232; process retained
+Stopped efsd for storage /tmp/efs-owner-atbp2dxq/other (if any)
+Stopping owned efsd PID 381232 (storage /tmp/efs-owner-atbp2dxq/store)
+Stopped efsd for storage /tmp/efs-owner-atbp2dxq/store (if any)
+Stale daemon identity for PID 381286; process retained
+Stale daemon identity for PID 381231; process retained
+Stopping owned perf PID 381286 (perf /tmp/efs-owner-atbp2dxq/efsd.data)
+perf wrapper: unrelated/wrong-output processes retained; owned recorder flushed with SIGINT PASS
+server wrapper: invalid/reused/wrong-storage/stale-start PIDs retained; matching daemon gracefully stopped PASS
+python3 tests/test_mgmt_session_routing.py
+management session routing: advertised leader, exact retries, bounded loop and ambiguous transport PASS
+python3 tests/test_session_admission.py
+session cleanup global barrier, empty phase, local refusal, exact packing and malformed bounds PASS
+session ESTABLISH: authoritative ACTIVE/REGISTER, fencing, routes and failed reads PASS
+python3 tests/test_close_effects.py
+close effects: prepared lock/append BUSY persists obligation, IO retains it, resolution drains PASS
+python3 tests/test_session_cleanup_cli.py
+session CLI: bounded batches, explicit empty proof, ambiguity stops, deadline and work budget PASS
+python3 tests/test_publication_host.py
+publication host: lane-only authority, apply-ring loss, terminal recovery and unknown PASS
+python3 tests/test_txn_read_authority.py
+transaction coordinator: failed quorum authority never becomes decision absence PASS
+python3 tests/test_publication_rpc.py
+publication RPC: exact identity, lane routing, redirects, bounded retries, unknown and lost reply PASS
+python3 tests/test_publication_session_rpc.py
+publication session RPC: ordered admission, redirects, bounded retries, ambiguity, fences and deadline PASS
+python3 tests/test_lease_edge_rpc.py
+lease RPC: immutable body, stored verdict proof, unknown probe, ambiguity, redirects and deadline PASS
+python3 tests/test_lease_request.py
+opid-admission: BUSY oldest=8 next=24 live=16 window=16
+retained sequenced lease: immutable retries, unknown probe, pinned ACK, durable negative proof and capacity PASS
+python3 tests/test_identity_revocation.py
+authoritative revocation proof: newer ACTIVE only; FENCING, missing, transport and malformed views remain unresolved PASS
+python3 tests/test_put_ticket_rpc.py
+PUT ticket RPC: immutable retries, pure probe, exact state, revoked/body-error refusal, redirects and deadlines PASS
+python3 tests/test_put_ticket_owner.py
+retained PUT owner: budget-before-send, immutable manifest, lost admission replies, fresh probes, exact membership and revocation retention PASS
+python3 tests/test_put_identity.py
+PUT identities: 8192 concurrent mount-wide unique sequences, namespace ACK isolation and no-wrap exhaustion PASS
+python3 tests/test_create_request.py
+retained CREATE: immutable body/identity, pure probe, admission ambiguity, cancellation barrier, exact proof and pinned routing PASS
+python3 tests/test_pending_create_cleanup.py
+FUSE pending CREATE cleanup: bounded admission, unattempted cancel, unknown proof retention, old-close barrier, immutable token retry and negative proof PASS
+python3 tests/test_mount_identity_rpc.py
+mount identity RPC: full UUID/epoch, admission before grants, release/query without registration and revoked refusal PASS
+python3 tests/test_pending_create_command.py
+pending CREATE command: full UUID/epoch/token, strict truncation/identity rejection and historical lease replay PASS
+python3 tests/test_lock_apply_verdict.py
+lock apply: audible business verdicts, advancing conflicts and retained IO/NOMEM replay PASS
+python3 tests/test_bench_cli.py
+benchmark CLI: ownership, parsing and scratch protection PASS
+python3 tests/test_bench_profile.py
+.Generating reports for 5 profiles, up to 2 parallel jobs
+[reports 1/5] 0: OK
+[reports 2/5] 1: OK
+[reports 3/5] 2: OK
+[reports 4/5] 3: OK
+[reports 5/5] 4: OK
+....Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+[1/2] data-buffered-w0-qd1
+[2/2] data-direct-w0-qd1
+Generating reports for 2 profiles, up to 4 parallel jobs
+[reports 1/2] data-buffered-w0-qd1: FAIL
+[reports 2/2] data-direct-w0-qd1: FAIL
+Results and analysis: /tmp/profile test 3fdk76v2/output/ANALYSIS.md
+Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+..Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+[1/2] data-buffered-w0-qd1
+[2/2] data-direct-w0-qd1
+Generating reports for 2 profiles, up to 4 parallel jobs
+[reports 1/2] data-direct-w0-qd1: OK
+[reports 2/2] data-buffered-w0-qd1: OK
+Results and analysis: /tmp/profile test 1gcpge8d/output/ANALYSIS.md
+Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+..Reports unavailable: missing: perf.data missing
+Generating reports for 0 profiles, up to 4 parallel jobs
+.......Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+[1/2] data-buffered-w0-qd1
+[2/2] data-direct-w0-qd1
+Generating reports for 2 profiles, up to 4 parallel jobs
+[reports 1/2] data-buffered-w0-qd1: FAIL
+[reports 2/2] data-direct-w0-qd1: FAIL
+Results and analysis: /tmp/profile test _9r2a74x/output/ANALYSIS.md
+Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+....
+----------------------------------------------------------------------
+Ran 20 tests in 1.934s
+
+OK
+Results and analysis: /tmp/tmp4fqdi1cz/ANALYSIS.md
+./tests/test_principles_index
+indexed principles: 18 crash points, conditional identity, 4800 churn operations, cold bytes/quota/physical GC and corrupt-evidence refusal PASS
+./tests/test_principles_index_fault
+indexed fault gates: four publication barriers, ten short-write/ENOSPC boundaries, sticky failure, read-only recovery, inventory errors and GC-sync failure PASS
+python3 tests/test_storage_principles.py
+.............
+----------------------------------------------------------------------
+Ran 13 tests in 0.396s
+
+OK
+python3 tests/test_bench_ranges.py
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.002s
+
+OK
+python3 tests/test_storage_ranges.py
+......
+----------------------------------------------------------------------
+Ran 6 tests in 2.313s
+
+OK
+python3 tests/test_storage_churn.py
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 1.569s
+
+OK
+python3 tests/test_bench_churn.py
+........
+----------------------------------------------------------------------
+Ran 8 tests in 0.166s
+
+OK
+python3 docs/check-architecture.py
+ok    regen-diff: architecture-full.md + architecture.html are current
+FAIL  links: every internal link resolves
+      how-it-works/performance.md:436: link target does not exist: ../../results/measure/20261006-bench-allocation-multiroot/SUMMARY.md
+      how-it-works/performance.md:460: link target does not exist: ../../results/measure/20261007-bench-hot-path-review/SUMMARY.md
+      how-it-works/performance.md:500: link target does not exist: ../../results/measure/20261007-writer-investigation/SUMMARY.md
+      how-it-works/performance.md:516: link target does not exist: ../../results/measure/20261007-sync-writer-investigation/SUMMARY.md
+      how-it-works/performance.md:523: link target does not exist: ../../results/measure/20261007-latency-validation/SUMMARY.md
+      how-it-works/storage-churn.md:149: link target does not exist: ../../results/measure/20261008-w90-xorinox/README.md
+      how-it-works/storage-churn.md:151: link target does not exist: ../../results/measure/20261008-w90-scaling-ranges/README.md
+      how-it-works/storage-churn.md:170: link target does not exist: ../../results/measure/20261008-w90-perf-five-rounds/README.md
+      how-it-works/testing.md:72: link target does not exist: ../../results/measure/20261008-v020-amd/README.md
+      how-it-works/testing.md:177: link target does not exist: ../../results/measure/20261009-xorinox-w55-stress/README.md
+      how-it-works/verification.md:56: link target does not exist: ../../results/measure/20261007-roadmap-rounds/SUMMARY.md
+      status/README.md:226: link target does not exist: ../../results/measure/20261007-latency-validation/SUMMARY.md
+      status/README.md:226: link target does not exist: ../../results/measure/20261007-bench-hot-path-review/SUMMARY.md
+      status/in-flight.md:7: link target does not exist: ../../results/measure/20261007-roadmap-rounds/SUMMARY.md
+      backlog/work-items.md:2084: link target does not exist: ../../results/measure/20261006-xorinox-orphan-unlink/SUMMARY.md
+      backlog/work-items.md:2281: link target does not exist: ../../results/measure/20261009-w60-amd-tree/README.md
+      backlog/work-items.md:4137: link target does not exist: ../../results/measure/20261009-batch-no-efs/README.md
+      backlog/work-items.md:4179: link target does not exist: ../../results/measure/20261008-w90-focused-comparison/README.md
+      backlog/work-items.md:4228: link target does not exist: ../../results/measure/20261008-w90-xorinox/README.md
+      backlog/work-items.md:4242: link target does not exist: ../../results/measure/20261008-w90-scaling-ranges/README.md
+      backlog/storage-engine-v2.md:173: link target does not exist: ../../results/measure/20261008-w90-xorinox/README.md
+      backlog/storage-engine-v2.md:333: link target does not exist: ../../results/measure/20261006-bench-allocation-multiroot/SUMMARY.md
+      backlog/storage-engine-v2.md:340: link target does not exist: ../../results/measure/20261007-bench-hot-path-review/SUMMARY.md
+      status/allocation-gc-fold-gates-20261007.md:103: link target does not exist: ../../results/measure/20261007-three-gates/README.md
+      status/amd-functional-gates-20261008.md:34: link target does not exist: ../../results/measure/20261008-amd-functional/SUMMARY.md
+      status/amd-rxe-gate-closure-20261009.md:100: link target does not exist: ../../results/measure/20261009-amd-w73-w64-rxe/README.md
+      status/batch-internals-profile-20261009.md:43: link target does not exist: ../../results/measure/20261009-batch-internals/README.md
+      status/batch-no-efs-profile-20261009.md:79: link target does not exist: ../../results/measure/20261009-batch-no-efs/README.md
+      status/bench-layout-comparison-20261008.md:46: link target does not exist: ../../results/measure/20261008-w90-layout-comparison/README.md
+      status/bench-layout-comparison-20261008.md:60: link target does not exist: ../../results/measure/20261008-w90-focused-comparison/README.md
+      status/bench-perf-five-rounds-20261008.md:7: link target does not exist: ../../results/measure/20261008-w90-perf-five-rounds/README.md
+      status/bench-scaling-ranges-20261008.md:16: link target does not exist: ../../results/measure/20261008-w90-scaling-ranges/README.md
+      status/bench-scaling-ranges-20261008.md:17: link target does not exist: ../../results/measure/20261008-w90-xorinox/README.md
+      status/container-engine-20261008.md:89: link target does not exist: ../../results/measure/20261008-container-engine-ab/README.md
+      status/container-profiling-rounds7-8-20261008.md:114: link target does not exist: ../../results/measure/20261008-container-rounds7-8/README.md
+      status/d25-admission-routing.md:80: link target does not exist: ../../results/measure/20261006-nuc-ten-rounds/SUMMARY.md
+      status/d25-admission-routing.md:89: link target does not exist: ../../results/measure/20261006-publication-ten-rounds/SUMMARY.md
+      status/d25-admission-routing.md:178: link target does not exist: ../../results/measure/20261006-publication-retirement/SUMMARY.md
+      status/dependency-package-20261009.md:47: link target does not exist: ../../results/measure/20261009-bounded-gc-cleanup/README.md
+      status/dependency-package-20261009.md:225: link target does not exist: ../../results/measure/20261009-atomic-close-locks/README.md
+      status/dependency-package-20261009.md:243: link target does not exist: ../../results/measure/20261009-deferred-close/README.md
+      status/dependency-package-20261009.md:259: link target does not exist: ../../results/measure/20261009-bounded-lease-resume/README.md
+      status/dependency-package-20261009.md:272: link target does not exist: ../../results/measure/20261009-bounded-edge-retirement/README.md
+      status/dependency-package-20261009.md:288: link target does not exist: ../../results/measure/20261009-session-append-cleanup/README.md
+      status/dependency-package-20261009.md:304: link target does not exist: ../../results/measure/20261009-lease-ownership-guards/README.md
+      status/dependency-package-20261009.md:328: link target does not exist: ../../results/measure/20261009-registered-append-revocation/README.md
+      status/dependency-package-20261009.md:345: link target does not exist: ../../results/measure/20261009-revoked-append-retirement/README.md
+      status/dependency-package-20261009.md:363: link target does not exist: ../../results/measure/20261009-client-lease-transport/README.md
+      status/dependency-package-20261009.md:382: link target does not exist: ../../results/measure/20261009-lock-revocation/README.md
+      status/dependency-package-20261009.md:399: link target does not exist: ../../results/measure/20261009-legacy-append-cache-floor/README.md
+      status/devel-integration-20261009.md:12: link target does not exist: ../../results/measure/20261009-devel-integration/README.md
+      status/durability-batching-profile-20261009.md:7: link target does not exist: ../../results/measure/20261009-durability-batching/README.md
+      status/durability-tracepoints-profile-20261009.md:30: link target does not exist: ../../results/measure/20261009-durability-tracepoints/README.md
+      status/efs-command-followups-20261008.md:6: link target does not exist: ../../results/measure/20261008-efs-followups/
+      status/efs-command-options-20261008.md:52: link target does not exist: ../../results/measure/20261008-efs-command-options/
+      status/efs-command-pages-20261009.md:125: link target does not exist: ../../results/measure/20261009-command-pages/
+      status/efs-command-performance-20261008.md:64: link target does not exist: ../../results/measure/20261008-efs-command-perf/
+      status/efs-command-policy-20261008.md:68: link target does not exist: ../../results/measure/20261008-efs-policy/
+      status/efs-commands-20261008.md:103: link target does not exist: ../../results/measure/20261008-efs-commands/
+      status/find-output-overflow-20261009.md:95: link target does not exist: ../../results/measure/20261009-find-output-overflow/
+      status/find-stats-merge-20261008.md:15: link target does not exist: ../../results/measure/20261008-find-stats-merge/README.md
+      status/find-stats-refresh-cpu-20261009.md:15: link target does not exist: ../../results/measure/20261009-catalog-index/README.md
+      status/find-stats-refresh-cpu-20261009.md:30: link target does not exist: ../../results/measure/20261009-catalog-blocks/README.md
+      status/find-stats-refresh-cpu-20261009.md:42: link target does not exist: ../../results/measure/20261009-query-clock/README.md
+      status/find-stats-refresh-cpu-20261009.md:170: link target does not exist: ../../results/measure/20261009-node2-query-cpu/
+      status/find-stats-refresh-cpu-20261009.md:324: link target does not exist: ../../results/measure/20261009-catalog-incremental/
+      status/fuse-memory.md:24: link target does not exist: ../../results/measure/20261007-roadmap-rounds/SUMMARY.md
+      status/fuse-memory.md:50: link target does not exist: ../../results/measure/20261006-d25-w60-ten-rounds/SUMMARY.md
+      status/fuse-memory.md:54: link target does not exist: ../../results/measure/20261009-w60-amd-tree/README.md
+      status/gate-30-rounds-20261007.md:141: link target does not exist: ../../results/measure/20261007-gates30/SUMMARY.md
+      status/help-format-20261008.md:35: link target does not exist: ../../results/measure/20261008-help-format/
+      status/known-bugs-create-negative-verdict-20261008.md:105: link target does not exist: ../../results/measure/20261009-xorinox-w58-w55/README.md
+      status/known-bugs-create-negative-verdict-20261008.md:241: link target does not exist: ../../results/measure/20261009-xorinox-w55-stress/README.md
+      status/known-bugs-validation-20261008.md:54: link target does not exist: ../../results/measure/20261008-xorinox-known-bugs/README.md
+      status/memory-closure-20261007.md:21: link target does not exist: ../../results/measure/20261007-memory-closure/SUMMARY.md
+      status/metadata-group-perf-followup-20261008.md:40: link target does not exist: ../../results/measure/20261008-nuc-engine-ab/README.md
+      status/metadata-group-perf-followup-20261008.md:111: link target does not exist: ../../results/measure/20261008-nuc-read-waits/README.md
+      status/next-five-gates-20261007.md:90: link target does not exist: ../../results/measure/20261007-next-five/SUMMARY.md
+      status/nuc-gate-closure-20261009.md:128: link target does not exist: ../../results/measure/20261009-nuc-w73-w64/
+      status/nuc-storage-engine-ab-20261008.md:156: link target does not exist: ../../results/measure/20261008-nuc-engine-ab/README.md
+      status/nuc-tiny-file-create-20261008.md:120: link target does not exist: ../../results/measure/20261008-nuc-tiny-create/round-6/
+      status/nuc-tiny-file-create-20261008.md:157: link target does not exist: ../../results/measure/20261008-nuc-tiny-create/README.md
+      status/publication-nuc-20261009.md:61: link target does not exist: ../../results/measure/20261009-nuc-publication/README.md
+      status/publication-pending-20261008.md:28: link target does not exist: ../../results/measure/20261008-publication-pending/README.md
+      status/publication-pending-20261008.md:93: link target does not exist: ../../results/measure/20261008-publication-locators/README.md
+      status/publication-pending-20261008.md:126: link target does not exist: ../../results/measure/20261008-publication-apply-pending/README.md
+      status/query-cache-next-three-rounds-20261010.md:9: link target does not exist: ../../results/measure/20261010-w92-next-three-rounds/branch-coverage.tsv
+      status/query-cache-next-three-rounds-20261010.md:125: link target does not exist: ../../results/measure/20261010-w92-next-three-rounds/README.md
+      status/replay-readiness-20261008.md:270: link target does not exist: ../../results/measure/20261008-replay-readiness/README.md
+      status/tcp-five-gates-20261007.md:27: link target does not exist: ../../results/measure/20261007-tcp-five/README.md
+      status/three-package-gates-20261007.md:122: link target does not exist: ../../results/measure/20261007-three-package-gates/SUMMARY.md
+      status/tiny-file-five-minute-profile-20261009.md:27: link target does not exist: ../../results/measure/20261009-tiny-five-minutes/README.md
+      status/v020-amd-release.md:33: link target does not exist: ../../results/measure/20261008-v020-amd/README.md
+      status/w66-readindex-20261008.md:23: link target does not exist: ../../results/measure/20261008-w66-readindex/README.md
+      status/w66-readindex-20261008.md:76: link target does not exist: ../../results/measure/20261008-w66-mac/README.md
+      status/w66-readindex-20261008.md:107: link target does not exist: ../../results/measure/20261009-w66-profiles/README.md
+      status/w84-closure-20261009.md:17: link target does not exist: ../../results/measure/20261009-w84-closure/README.md
+      status/w84-envelope-20261007.md:35: link target does not exist: ../../results/measure/20261007-w84-envelope/README.md
+      status/w93-w96-implementation-20261008.md:70: link target does not exist: ../../results/measure/20261008-w93-w96-implementation/w96-preallocation/README.md
+      status/w93-w96-implementation-20261008.md:93: link target does not exist: ../../results/measure/20261008-w93-w96-implementation/w93-batching/README.md
+      status/w93-w96-implementation-20261008.md:137: link target does not exist: ../../results/measure/20261008-w93-w96-implementation/w95-principles/README.md
+      status/w93-w96-implementation-20261008.md:148: link target does not exist: ../../results/measure/20261008-w93-w96-implementation/w96-nuc/README.md
+      status/w93-w96-implementation-20261008.md:204: link target does not exist: ../../results/measure/20261008-w93-w96-implementation/w93-mixed-load/README.md
+      status/w93-w96-implementation-20261008.md:215: link target does not exist: ../../results/measure/20261008-w93-w96-implementation/w95-cold-principles/README.md
+      status/w93-w96-implementation-20261008.md:241: link target does not exist: ../../results/measure/20261008-w93-w96-implementation/w96-interior-damage/README.md
+      status/w93-w96-implementation-20261008.md:250: link target does not exist: ../../results/measure/20261008-w93-w96-implementation/w95-crash-phases/README.md
+      status/w93-w96-implementation-20261008.md:275: link target does not exist: ../../results/measure/20261008-w93-w96-implementation/w93-mixed-long/README.md
+      status/w93-w96-implementation-20261008.md:289: link target does not exist: ../../results/measure/20261008-w93-w96-implementation/final-live/README.md
+      status/w93-w96-implementation-20261008.md:303: link target does not exist: ../../results/measure/20261008-w93-w96-implementation/w94-atomic-pending/README.md
+      status/w93-w96-implementation-20261008.md:321: link target does not exist: ../../results/measure/20261008-w93-w96-implementation/w94-guarded-edges/README.md
+      status/w93-w96-implementation-20261008.md:360: link target does not exist: ../../results/measure/20261008-w93-w96-review/w94-guarded-wire/
+      status/w95-indexed-model-20261008.md:77: link target does not exist: ../../results/measure/20261008-w93-w96-review/w95-indexed/README.md
+      status/w95-indexed-model-20261008.md:83: link target does not exist: ../../results/measure/20261008-w93-w96-review/w95-churn/README.md
+      status/writeback-hour-20261008.md:28: link target does not exist: ../../results/measure/20261008-writeback-hour/README.md
+ok    invariant-refs: I-references name §4 invariants
+ok    op-matrix-sections: §6 names existing sections
+ok    single-home: normative tables / invariants / formulas defined once
+
+architecture doc gate: 1/5 checks failed
+make: *** [Makefile:338: test] Error 1
