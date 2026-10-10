@@ -718,7 +718,13 @@ try:
         print('actual client sequenced lease OPEN/CLOSE/probe/exact cold replay PASS',flush=True)
         helper=work/'lease-edges'
         run(['cc','-Wall','-Wextra','-I'+str(source/'include'),source/'tests/live/lease_edges.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',helper])
-        namespace_guard=run([helper,'--namespace-fence',str(a.port)],capture_output=True,text=True,timeout=45).stdout
+        try:
+            namespace_guard=run([helper,'--namespace-fence',str(a.port)],capture_output=True,text=True,timeout=45).stdout
+        except subprocess.TimeoutExpired as failure:
+            def diagnostic_text(value):
+                return value.decode(errors='replace') if isinstance(value,bytes) else value or ''
+            (work/'namespace-guard-timeout.txt').write_text(diagnostic_text(failure.stdout)+'\nSTDERR\n'+diagnostic_text(failure.stderr))
+            raise
         assert 'two concurrent receipt PREPAREs' in namespace_guard,namespace_guard
         (work/'namespace-guard-wire.txt').write_text(namespace_guard)
         guard_path=mount/'legacy-close-guard';guard_path.write_bytes(b'guard')

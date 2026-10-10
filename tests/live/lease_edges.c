@@ -42,6 +42,14 @@ static uint64_t owner_rpc(unsigned port, const uint8_t *payload, unsigned length
             usleep(10000);
             continue;
         }
+        /* Fresh ReadIndex can be BUSY on a recovering follower. Reads and
+         * exact epoch-bound completion are safe to retry within this budget;
+         * the deliberate incomplete FINISH must retain its BUSY verdict. */
+        if(expected==EFS_OK && reply.rc==EFS_ERR_BUSY &&
+           payload[1]==EFS_MD_CMD_SESSION &&
+           (payload[2]==0 || (payload[2]==EFS_MD_SESS_FINISH && length==23))) {
+            usleep(10000);continue;
+        }
         /* Sequenced mounted CLOSE can leave its real cleanup obligation
          * queued briefly. An absent-value PREPARE must wait for that work;
          * never replace or overwrite the pre-existing marker. */
@@ -205,6 +213,7 @@ static void namespace_guard(unsigned port)
 }
 int main(int argc,char **argv)
 {
+ setbuf(stdout,NULL);setbuf(stderr,NULL);
  if(argc==3&&!strcmp(argv[1],"--namespace-fence")){namespace_guard(atoi(argv[2]));return 0;}
  if(argc==4&&!strcmp(argv[1],"--legacy-guard")){legacy_guard(atoi(argv[2]),strtoull(argv[3],NULL,10));return 0;}
  if(argc==5&&!strcmp(argv[1],"--owner-fence")){owner_fence(atoi(argv[2]),argv[3],atoi(argv[4]));return 0;}
