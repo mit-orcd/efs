@@ -7237,22 +7237,27 @@ static int append_receipt_load(struct efs_kv *kv, efs_ino_t ino,
     return rc;
 }
 
-int efs_meta_append_result(struct efs_kv *kv, efs_ino_t ino, uint64_t len,
-                           const struct efs_opid_req *q, uint64_t *off)
+static int append_receipt_result(const uint8_t *value, uint32_t vl,
+                                  uint64_t len, const struct efs_opid_req *q,
+                                  uint64_t *off)
 {
-    uint8_t key[EFS_KV_KEY_MAX], value[EFS_OPID_VAL_MAX];
-    uint32_t kl = 0, vl = sizeof(value);
     struct efs_opid_reply rep;
-    int rc;
-    if (!len || !off) return EFS_ERR_INVAL;
-    rc = append_receipt_load(kv, ino, q, key, &kl, value, &vl);
-    if (rc != EFS_OK) return rc;
-    rc = efs_opid_probe(value, vl, &q->id, &rep);
+    int rc = efs_opid_probe(value, vl, &q->id, &rep);
     if (rc <= 0) return rc < 0 ? rc : EFS_ERR_NOT_FOUND;
     if (!rep.ino) return EFS_ERR_STALE; /* retired, exact offset unavailable */
     if (rep.ino != len) return EFS_ERR_INVAL;
     if (rep.rc == EFS_OK) *off = rep.extra;
     return rep.rc;
+}
+
+int efs_meta_append_result(struct efs_kv *kv, efs_ino_t ino, uint64_t len,
+                           const struct efs_opid_req *q, uint64_t *off)
+{
+    uint8_t key[EFS_KV_KEY_MAX], value[EFS_OPID_VAL_MAX];
+    uint32_t kl = 0, vl = sizeof(value);
+    if (!len || !off) return EFS_ERR_INVAL;
+    int rc = append_receipt_load(kv, ino, q, key, &kl, value, &vl);
+    return rc == EFS_OK ? append_receipt_result(value, vl, len, q, off) : rc;
 }
 
 static int append_reserve_inner(struct efs_kv *kv, efs_ino_t ino, uint64_t len,
@@ -7371,6 +7376,10 @@ static int append_reserve_inner(struct efs_kv *kv, efs_ino_t ino, uint64_t len,
         rc = append_receipt_load(kv, ino, durable, k_opid, &receipt_kl,
                                  receipt_cur, &receipt_vl);
         if (rc != EFS_OK) return rc;
+        /* A completion may have materialized while EOF was collected. Never
+         * fold a different offset over an already completed/retired ticket. */
+        rc = append_receipt_result(receipt_cur, receipt_vl, len, durable, off_out);
+        if (rc != EFS_ERR_NOT_FOUND) return rc;
         memset(&rep, 0, sizeof(rep));
         rep.rc = EFS_OK; rep.ino = len; rep.extra = eof;
         rc = efs_opid_fold(receipt_cur, receipt_vl, op->client_uuid,
@@ -7522,6 +7531,17 @@ int efs_meta_capture_append(struct efs_kv *kv, efs_ino_t ino, uint64_t len,
     rc = append_receipt_load(kv, ino, q, image->key, &image->klen,
                              image->expected, &n);
     if (rc != EFS_OK) return rc;
+    /* The first receipt probe precedes authoritative EOF collection. Another
+     * dual-host handler can complete this ticket in between. Recheck the exact
+     * receipt image guarded by PREPARE; if complete, discard the new plan and
+     * return its canonical result. A later race is rejected by that image CAS. */
+    uint64_t completed = 0;
+    rc = append_receipt_result(image->expected, n, len, q, &completed);
+    if (rc == EFS_OK) {
+        memset(out, 0, sizeof(*out)); out->offset = completed;
+        return EFS_OK;
+    }
+    if (rc != EFS_ERR_NOT_FOUND) return rc;
     image->expected_len = n ? n : EFS_TXN_ABSENT;
     reply.rc = EFS_OK; reply.ino = len; reply.extra = out->offset;
     image->new_len = sizeof(image->value); image->op = EFS_TXN_PUT;

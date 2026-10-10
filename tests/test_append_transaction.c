@@ -102,6 +102,60 @@ static void unit(void)
  assert(efs_meta_apply_check(kv)==EFS_OK);
  free(a);free(b);efs_kv_mem_free(kv);
 }
+/* Two dual-host handlers have independent striped locks. Materialize a peer's
+ * exact transaction after our first receipt miss, before our EOF capture. */
+static struct {
+ struct efs_kv *kv;
+ const struct efs_kv_ops *original;
+ struct efs_kv_ops intercepted;
+ struct efs_meta_append_plan *peer;
+ struct efs_txid tx;
+ unsigned fired;
+} receipt_race;
+static int receipt_race_get(void *ctx,const uint8_t *key,uint32_t kl,uint8_t *value,uint32_t *vl)
+{
+ if(!receipt_race.fired && kl>=3 && key[2]==EFS_KV_KIND_INODE) {
+  receipt_race.fired=1;
+  receipt_race.kv->ops=receipt_race.original;
+  assert(efs_meta_execute_append(receipt_race.peer,&receipt_race.tx,&ops,receipt_race.kv)==EFS_OK);
+  receipt_race.kv->ops=&receipt_race.intercepted;
+ }
+ return receipt_race.original->get(ctx,key,kl,value,vl);
+}
+static void receipt_capture_race(unsigned variant, int direct)
+{
+ struct efs_kv *kv=efs_kv_mem_create();assert(kv);efs_ino_t ino;uint64_t gen;
+ fixture(kv,&ino,&gen);
+ struct efs_meta_append_plan *first=malloc(sizeof(*first)),*peer=malloc(sizeof(*peer));assert(first&&peer);
+ struct efs_opid_req q=identity(1,0);struct efs_txid tx={{221}};
+ assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,first)==EFS_OK);
+ assert(efs_meta_execute_append(first,&tx,&ops,kv)==EFS_OK);
+ q=identity(2,1);struct efs_opid_req competitor=variant==2?identity(3,2):q;
+ assert(efs_meta_capture_append(kv,ino,8,&competitor,decision,kv,peer)==EFS_OK && peer->offset==208);
+ memset(&receipt_race,0,sizeof(receipt_race));receipt_race.kv=kv;
+ receipt_race.original=kv->ops;receipt_race.intercepted=*kv->ops;
+ receipt_race.intercepted.get=receipt_race_get;receipt_race.peer=peer;receipt_race.tx.bytes[0]=222;
+ kv->ops=&receipt_race.intercepted;
+ uint64_t direct_offset=999;
+ int rc=direct?efs_meta_apply_append_reserve_durable(kv,ino,variant==1?9:8,&q,decision,kv,&direct_offset):
+                efs_meta_capture_append(kv,ino,variant==1?9:8,&q,decision,kv,first);
+ kv->ops=receipt_race.original;
+ assert(receipt_race.fired);
+ if(variant==0) {
+  assert(rc==EFS_OK);
+  if(direct)assert(direct_offset==208);
+  else {
+   assert(!first->count && first->offset==208);
+   tx.bytes[0]=223;assert(efs_meta_execute_append(first,&tx,&ops,kv)==EFS_OK);
+  }
+ }else assert(rc==(variant==1?EFS_ERR_INVAL:EFS_ERR_STALE));
+ uint64_t wm;uint32_t open;
+ assert(efs_meta_apply_append_state(kv,ino,&wm,NULL,&open)==EFS_OK && wm==216 && open==2);
+ uint64_t off=999;
+ assert(efs_meta_append_result(kv,ino,8,&competitor,&off)==EFS_OK && off==208);
+ assert(efs_meta_apply_check(kv)==EFS_OK);
+ free(first);free(peer);efs_kv_mem_free(kv);
+}
 static void bounds_and_pending(void)
 {
  struct efs_kv *kv=efs_kv_mem_create();assert(kv);efs_ino_t ino;uint64_t gen,off=999;
@@ -533,4 +587,4 @@ static void session_owned_completion(int cold)
 }
 
 int main(void)
-{session_owned_completion(0);session_owned_completion(1);retired_append_receipts(0);retired_append_receipts(1);session_owned_append(0);session_owned_append(1);fenced_completion();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}
+{for(unsigned v=0;v<3;v++){receipt_capture_race(v,0);receipt_capture_race(v,1);}session_owned_completion(0);session_owned_completion(1);retired_append_receipts(0);retired_append_receipts(1);session_owned_append(0);session_owned_append(1);fenced_completion();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}
