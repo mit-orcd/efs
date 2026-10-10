@@ -935,3 +935,54 @@ capacity writer were not interrupted. At 12:47 UTC the real writer had synced
 413184 files / 100.875 GiB; its complete cold-verification gate remains pending.
 
 [Focused merge evidence](../../results/measure/20261010-w92-closure/buffered-merge/).
+
+
+## Reuse completed 2^32 source with the batched implementation
+
+The harness now accepts explicit `--populate-only` and `--resume-build` modes.
+The latter requires an existing real source directory and skips source generation;
+it emits `source_reused`, never a fabricated `populated` verdict. All original
+build, complete export, unchanged refresh, close/reopen restore, retained-view
+mutation and complete postmutation export checks still run. The separate fresh
+kernel-cold oracle also remains mandatory. This harness is Linux-specific because
+its cache-dropping helper uses `posix_fadvise`; the existing Mac product gates
+are separate. Linux harness compilation with warnings as errors passes.
+
+A fresh 100000-file pilot completes population, reused-source build, unchanged
+refresh, cold restore, mutation and full recovery, all rc 0. The first build took
+106.082 s on the concurrently loaded VM; this is not a before/after performance
+comparison. It accounts for 3864520 fixed builder bytes. Full exports verify
+100000 entries before and after mutation; the stronger directory/inode oracle
+is used throughout. Raw logs and exit marker are retained.
+
+The old 2^32 process (PID 6246) was deliberately superseded after its complete
+4294967296-file population verdict was checked and the guest synced. Its old
+kernel-cold watcher was retired first. The source population, cache candidate,
+log, time and explicit superseded marker are preserved; old exit 143 is the
+intentional termination, not an acceptance failure. No source namespace was
+regenerated or wiped. The first retirement command found the watcher belonged
+to admin's screen inventory rather than root's and stopped before any signal;
+the subsequent command used the verified owner.
+
+The replacement screen `w92-2p32-batched-v5` runs the same fixture
+`/mnt/w92-scale-big-20261010/scale-4294967296-bounded-24g-v4` with
+`--resume-build`. Time parent PID 554205 and actual harness PID 554207 are live;
+its separate log/time/pid and terminal markers use `scale-4294967296-batched-v5`.
+The linked executable SHA256 is
+`6f8e6f9d324e602c030dd8f78c0846e7e8d7cd5a84b60b2a4313ad0a6e7959d1`.
+It contains fd457076's batched merge and the latest complete oracle. The root
+screen `w92-2p32-batched-recovery-20261010` (watcher PID 554216) requires both
+the retained original population verdict and all new build/cold/mutation
+verdicts before dropping guest caches and verifying the same source fixture.
+It checks the stored time-parent PID while waiting. Do not treat the old 143
+marker as the current run's verdict or restart from an observation timeout.
+
+The original 4 MiB query/64 MiB owned source-pin budgets, 8 TiB per-generation,
+16 TiB aggregate, 100 GiB reserve, 524288 descriptor ceiling, nice 19 and idle
+IO priority remain. Whole-source borrowed memory remains separately measured.
+At the initial live check the new run had RSS 7583328 KiB, and source IO counters
+were advancing. Normal/private capacity daemons and the real writer were not
+stopped. The writer reached 424576 files / 103.65625 GiB; its own cold handoff
+still waits for the complete 400 GiB verdict. Both terminal gates remain open.
+
+[Reused-source pilot, original population proof and exact handoff scripts](../../results/measure/20261010-w92-closure/scale-reuse-handoff/).

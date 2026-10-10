@@ -1547,7 +1547,9 @@ fresh Linux NFSv4.0, retained payload recovery and loaded publication also pass.
 Bounded external-merge batching (`fd457076`) passes focused ordering, ENOSPC,
 cancellation, full native and complete 10m recovery gates. The queued 2^32
 kernel-cold oracle uses it; normal daemons remain on cdc13b88.
-The current large scale processes remain active.
+The completed 2^32 source population is reused by the new batched build
+(`w92-2p32-batched-v5`); the old build was intentionally superseded, preserving
+its evidence. The replacement and real capacity writer remain active.
 
 Remaining gates: the actual 2^32-entry index build/export/cold/mutation run,
 the 400 GiB real-payload write/cold/hash/export run. Named cdc13b88 Mac/Linux
@@ -1555,7 +1557,8 @@ NFS and native FUSE full oracles pass, as do 96 fresh Mac queries and all
 423 retained payload hashes after cold restart; the captured
 FORGET/handle-recovery ESTALE is fixed. These isolated scale fixtures are active; their cold-verification and service
 restoration checklist is in the closure ledger. Full named 2^32 kernel-cold
-recovery is queued behind the original run’s successful terminal verdict; the
+recovery is queued behind the replacement run’s successful terminal verdict
+and the retained original population proof; the
 400 GiB cold handoff is also queued behind its complete write verdict, using
 the current named-binary preflight and listener-readiness checks.
 The initial capacity writer stopped on CREATE PROTO after 124983 acknowledged
