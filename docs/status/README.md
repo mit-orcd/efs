@@ -52,10 +52,18 @@ records all-node profiles, exact-match lookup, bounded combined-record writes
 and one checked raw/index persistence barrier; controlled syscall and cold
 correctness evidence stays separate from live throughput observations.
 
+[W92 merged-source suites and three further rounds](query-cache-merged-three-rounds-20261009.md)
+records native, core/concurrent/extras and cold persistence gates, nine all-node
+CPU captures and three logical cache fixes. Frozen-namespace preads fall 78.0%,
+pwrites 23.6% and median process CPU 29.1%, preserving fsync counts; fixed memory
+increases within the tested budget. Live throughput and narrower NFS evidence
+are qualified separately. Runtime `a8a15a14` is restored with ordinary `.efs`
+mount opt-in disabled; eight retained trees pass cold query/payload checks.
+
 [Combined branch integration](find-stats-all-branches-20261009.md) records
 `devel`, W66 and persistence-pressure merges into `devel-find-stats`, preserving
 the cache fixes. Committed branch coverage and private Linux gates are tracked;
-the deployed runtime remains the prior profiling build.
+the newer suite/profile checkpoint above records merged-code deployment and live gates.
 
 ## Distributed metadata scaling discussion
 

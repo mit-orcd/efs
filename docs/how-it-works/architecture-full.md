@@ -1510,10 +1510,18 @@ records all-node profiles, exact-match lookup, bounded combined-record writes
 and one checked raw/index persistence barrier; controlled syscall and cold
 correctness evidence stays separate from live throughput observations.
 
+[W92 merged-source suites and three further rounds](../status/query-cache-merged-three-rounds-20261009.md)
+records native, core/concurrent/extras and cold persistence gates, nine all-node
+CPU captures and three logical cache fixes. Frozen-namespace preads fall 78.0%,
+pwrites 23.6% and median process CPU 29.1%, preserving fsync counts; fixed memory
+increases within the tested budget. Live throughput and narrower NFS evidence
+are qualified separately. Runtime `a8a15a14` is restored with ordinary `.efs`
+mount opt-in disabled; eight retained trees pass cold query/payload checks.
+
 [Combined branch integration](../status/find-stats-all-branches-20261009.md) records
 `devel`, W66 and persistence-pressure merges into `devel-find-stats`, preserving
 the cache fixes. Committed branch coverage and private Linux gates are tracked;
-the deployed runtime remains the prior profiling build.
+the newer suite/profile checkpoint above records merged-code deployment and live gates.
 
 ### Distributed metadata scaling discussion
 
@@ -5765,14 +5773,24 @@ Controlled traces reduce preads and pwrites; no namespace-growing live speedup
 is claimed. Persistence failures retain the old checkpoint.
 
 
-**Oct 9 user requirement — billions of files:** W92 remains open until the
-server query catalog uses a persistent, partitioned disk-backed index with
-bounded resident memory. Target namespace cardinality is **2^32 files**;
-this is a design/validation target, not a demonstrated EFS capacity. The current
-RAM implementation retains the complete query catalog in RAM. Partition reuse and
-bounded result paging reduce work/output but do not bound resident memory as
-the namespace grows. The latest NUC run reaches the unchanged 1024 MiB catalog
-cap near 1.25 million files and leaves stale snapshots. The earlier recovery
+**Oct 9 merged-source further rounds:** exact raw-key slot reuse, eight-row
+candidate writes and four fixed LRU windows reduce controlled preads 78.0% and
+pwrites 23.6%, preserving fsync counts. Three alternating trials show 29.1% lower
+median process CPU; live growing-namespace creation rate is not a speedup claim.
+Fixed candidate scratch is 2897032 bytes, below the tested 4 MiB budget.
+Merged-source native, POSIX core/concurrent/extras and cold persistence evidence
+is [indexed here](../status/query-cache-merged-three-rounds-20261009.md).
+Full derived passes and aggregate cache-space admission remain open.
+
+**Oct 9 user requirement — billions of files:** W92 remains open until the persistent,
+partitioned disk-backed index demonstrates bounded memory and correct operation
+at the required scale. Target namespace cardinality is **2^32 files**;
+this is a design/validation target, not a demonstrated EFS capacity. The RAM reference
+backend retains the complete query catalog in RAM; the default disk backend has
+bounded builder scratch but has not demonstrated that scale. In the RAM reference
+backend, partition reuse and bounded result paging reduce work/output without
+bounding resident memory as the namespace grows. The earlier NUC RAM-backend run
+reached its 1024 MiB catalog cap near 1.25 million files and left stale snapshots. The earlier recovery
 below applied to a smaller namespace and does not resolve this scale issue.
 Raising the cap is not acceptance of the requested architecture.
 

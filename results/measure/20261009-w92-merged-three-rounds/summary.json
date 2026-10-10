@@ -1,0 +1,56 @@
+{
+  "0": {
+    "fresh_seconds": {
+      "median": 2.781262,
+      "min": 2.687221,
+      "max": 2.829899
+    },
+    "refresh_seconds": {
+      "median": 0.900269,
+      "min": 0.887311,
+      "max": 1.003949
+    },
+    "process_cpu_seconds": {
+      "median": 2.240916,
+      "min": 2.195876,
+      "max": 2.241764
+    },
+    "process_wall_seconds": {
+      "median": 5.802288368984591,
+      "min": 5.68971565598622,
+      "max": 5.89882248500362
+    },
+    "peak_rss_kib": {
+      "median": 14364,
+      "min": 14364,
+      "max": 14448
+    }
+  },
+  "3": {
+    "fresh_seconds": {
+      "median": 2.703667,
+      "min": 2.660643,
+      "max": 2.794015
+    },
+    "refresh_seconds": {
+      "median": 0.741644,
+      "min": 0.715416,
+      "max": 1.146362
+    },
+    "process_cpu_seconds": {
+      "median": 1.5889959999999999,
+      "min": 1.572299,
+      "max": 1.651057
+    },
+    "process_wall_seconds": {
+      "median": 5.20055872402736,
+      "min": 5.170501212996896,
+      "max": 5.660156460013241
+    },
+    "peak_rss_kib": {
+      "median": 15996,
+      "min": 15876,
+      "max": 16036
+    }
+  }
+}

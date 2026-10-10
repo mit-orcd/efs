@@ -3647,14 +3647,24 @@ Controlled traces reduce preads and pwrites; no namespace-growing live speedup
 is claimed. Persistence failures retain the old checkpoint.
 
 
-**Oct 9 user requirement — billions of files:** W92 remains open until the
-server query catalog uses a persistent, partitioned disk-backed index with
-bounded resident memory. Target namespace cardinality is **2^32 files**;
-this is a design/validation target, not a demonstrated EFS capacity. The current
-RAM implementation retains the complete query catalog in RAM. Partition reuse and
-bounded result paging reduce work/output but do not bound resident memory as
-the namespace grows. The latest NUC run reaches the unchanged 1024 MiB catalog
-cap near 1.25 million files and leaves stale snapshots. The earlier recovery
+**Oct 9 merged-source further rounds:** exact raw-key slot reuse, eight-row
+candidate writes and four fixed LRU windows reduce controlled preads 78.0% and
+pwrites 23.6%, preserving fsync counts. Three alternating trials show 29.1% lower
+median process CPU; live growing-namespace creation rate is not a speedup claim.
+Fixed candidate scratch is 2897032 bytes, below the tested 4 MiB budget.
+Merged-source native, POSIX core/concurrent/extras and cold persistence evidence
+is [indexed here](../status/query-cache-merged-three-rounds-20261009.md).
+Full derived passes and aggregate cache-space admission remain open.
+
+**Oct 9 user requirement — billions of files:** W92 remains open until the persistent,
+partitioned disk-backed index demonstrates bounded memory and correct operation
+at the required scale. Target namespace cardinality is **2^32 files**;
+this is a design/validation target, not a demonstrated EFS capacity. The RAM reference
+backend retains the complete query catalog in RAM; the default disk backend has
+bounded builder scratch but has not demonstrated that scale. In the RAM reference
+backend, partition reuse and bounded result paging reduce work/output without
+bounding resident memory as the namespace grows. The earlier NUC RAM-backend run
+reached its 1024 MiB catalog cap near 1.25 million files and left stale snapshots. The earlier recovery
 below applied to a smaller namespace and does not resolve this scale issue.
 Raising the cap is not acceptance of the requested architecture.
 

@@ -1,0 +1,91 @@
+{
+  "platform": "darwin",
+  "directory": "/private/tmp/efsmac-x/w92-merged-nfs-20261010",
+  "bytes_per_file": 2922,
+  "copy_command": "cp -X",
+  "sha256": "2b8d2d650aa96830ab374612725bf43da1db62dcc83851b41ed0eb1517c2ea4a",
+  "boundary": "successful cp/close; no added fsync",
+  "files": [
+    {
+      "name": "copy-00",
+      "ino": 280989
+    },
+    {
+      "name": "copy-01",
+      "ino": 285085
+    },
+    {
+      "name": "copy-02",
+      "ino": 289181
+    },
+    {
+      "name": "copy-03",
+      "ino": 293277
+    },
+    {
+      "name": "copy-04",
+      "ino": 297373
+    },
+    {
+      "name": "copy-05",
+      "ino": 301469
+    },
+    {
+      "name": "copy-06",
+      "ino": 305565
+    },
+    {
+      "name": "copy-07",
+      "ino": 309661
+    },
+    {
+      "name": "copy-08",
+      "ino": 313757
+    },
+    {
+      "name": "copy-09",
+      "ino": 317853
+    },
+    {
+      "name": "copy-10",
+      "ino": 321949
+    },
+    {
+      "name": "copy-11",
+      "ino": 326045
+    },
+    {
+      "name": "copy-12",
+      "ino": 330141
+    },
+    {
+      "name": "copy-13",
+      "ino": 334237
+    },
+    {
+      "name": "copy-14",
+      "ino": 338333
+    },
+    {
+      "name": "copy-15",
+      "ino": 342429
+    },
+    {
+      "name": "copy-16",
+      "ino": 346525
+    },
+    {
+      "name": "copy-17",
+      "ino": 350621
+    },
+    {
+      "name": "copy-18",
+      "ino": 354717
+    },
+    {
+      "name": "copy-19",
+      "ino": 358813
+    }
+  ],
+  "warm_verified": 20
+}
