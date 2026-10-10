@@ -317,12 +317,12 @@ def transport_proof(processes):
         with (work/'rdma-runtime.jsonl').open('a') as out:
             out.write(json.dumps(proof)+'\n')
 
-def unmount():
+def unmount(timeout=15):
     global client
     if subprocess.run(['mountpoint','-q',str(mount)]).returncode==0:
         run([source/'scripts/client.sh','stop',mount])
     if client:
-        client.wait(timeout=15);client=None
+        client.wait(timeout=timeout);client=None
 
 def files(ino):
     seg=[]
@@ -1330,7 +1330,9 @@ os.close(fd)
             try:os.close(fd)
             except OSError as error:failures.append({'call':'close','errno':error.errno})
         start()
-        started=time.monotonic();unmount();elapsed=time.monotonic()-started
+        # Dirty-stop acceptance already permits 30 seconds. The generic 15-second
+        # child wait must not preempt that contract while retained bytes drain.
+        started=time.monotonic();unmount(timeout=30);elapsed=time.monotonic()-started
         assert elapsed<30,'recovered new partial body did not cleanly drain'
         stop();start();mount_client()
         assert target.read_bytes()==body,'clean stop lost the retained partial body'
