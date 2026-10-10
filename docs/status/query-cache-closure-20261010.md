@@ -11,7 +11,7 @@ profiling rounds do not satisfy them.
 | Aggregate retained-cache admission | implemented; native and live QUOTA/write/cold-recovery oracles pass |
 | Durable changed-key watermarks and bounded catch-up/recovery | durable partition revisions, restart catch-up and bounded discovery implemented; focused/full native and live cold/disable-re-enable/publisher-loss/interrupted-cache gates pass |
 | Explicit cardinality/offset/budget audit | revision saturation, complete source-allocation budgeting and representation audit complete; actual scale/live validation pending |
-| Increasing-cardinality RSS, cold-cache, concurrent export/mutation and freshness | pilots and live contention/freshness pass; full actual scale and final source-scratch deployment pending |
+| Increasing-cardinality RSS, cold-cache, concurrent export/mutation and freshness | pilots and live contention/freshness pass; latest source-scratch deployment, live command/pages and measured query/writer load pass; full actual scale pending |
 | Synthetic partitioned index of at least 2^32 entries | pending; sparse offset probes alone cannot satisfy this |
 | Staged real-filesystem and fault/platform gates | previous smaller gates pass; closure matrix pending |
 
@@ -440,3 +440,66 @@ are never changed. The fan-in fixture also waits for source quiescence before
 borrowing its segment. The corrected complete native suite passes, including the whole-source tail,
 KV, differential catalog, retained-view, IO/fault and architecture gates.
 Raw evidence: [complete gate](../../results/measure/20261010-w92-closure/source-tail-native-passed.log).
+
+## Latest bounded-source ten-million-entry repeat
+
+`d219e2bd` production source passes a fresh ten-million-entry oracle with bounded
+private scan/tail buffers and row-only stat reuse. Fresh build 233.101 s, full
+export verification 15.438 s; unchanged reuse 0.655 s, cold restore exact; retained
+mutation 4.925 s with one rebuilt partition and **one refolded inode**. The second
+full export also checks every path/identity/sequence. Accounted catalog scratch
+remains 3864480 bytes; source snapshot charges 112752/112859 bytes before/after
+mutation. Wall time varies on shared VMs, so the reduced fold count is the
+substantiated optimization, not a measured wall-time speedup. Time/allocation
+evidence is [retained here](../../results/measure/20261010-w92-closure/scale-10m-bounded-v3/).
+
+The source-scale VM has been gracefully drained for a temporary increase from
+3 GiB to 24 GiB RAM. Its inactive original XML is preserved on the host at
+`/data1/efs/bench/w92-xefs1-original-20261010.xml`; existing authoritative and
+private test disks are retained without formatting. Deployment/recovery and
+the fresh actual 2^32-entry run follow this capacity provisioning.
+
+## Deployed load and NFS platform findings
+
+The retained cluster is restored on `d219e2bd`, direct-I/O/TCP and normal budgets.
+Normal client mounts remain opted out; dedicated diagnostic mounts are opted in.
+The fresh actual 2^32-entry run is `w92-2p32-bounded-24g-v4`, on the retained
+private disk with 24 GiB RAM, finite 524288 NOFILE, no core dumps and low priority.
+Population logs distinguish completed files from the requested target. At the
+first recorded snapshot, 226492416 file/name pairs were populated; the index/full
+export gate remains incomplete. This is not yet 2^32 acceptance.
+
+Deployed command permission/collision/immutable-descriptor gates and full
+paged-export/retained-generation/fresh-authorization gates pass. Concurrent load
+acknowledges and independently hashes 1133 payloads; exact totals converge in
+5.120 s. Create p50/p95/p99: 63.969 / 246.046 / 534.140 ms. Two readers sample
+215/201 requests including BUSY; query p50/p95/p99: 9.317 / 296.393 / 414.472 ms
+and 10.109 / 330.106 / 544.373 ms. BUSY 168/157 is reported, not filtered away.
+These shared-VM measurements overlap the low-priority synthetic generator.
+
+The Mac's standard SSH NFS tunnel was absent; it has been restored. The retained
+Mac mount then returned ESTALE after gateway recreation. A local privileged
+remount is pending from the user because sudo requires their password.
+
+A fresh Linux NFS mount negotiated 4.2. Its intermittent directory-open EINVAL
+is traced on the wire to GET_DIR_DELEGATION returning NFS4ERR_INVAL; corresponding
+FUSE responses succeed. Explicit 4.0 matches the macOS helper and avoids that
+negotiation. Version 4.2 is not certified by this gate; protocol evidence is
+[retained here](../../results/measure/20261010-w92-closure/nfs42-delegation-status.tsv).
+
+The explicit 4.0 gate found a W92 freshness defect: repeated stats calls kept
+receiving generation 16 (99 files) for over 120 seconds, while a native fresh
+query served generation 17 with the complete 140-file/561155-byte oracle. A
+fixed `v1.stats` name allowed NFS to retain the old virtual result. Each simple
+command now uses a fresh 128-bit nonce component, validated by the synthetic
+path parser. Legacy fixed paths remain accepted; server query semantics and
+immutable acquired-result bytes remain unchanged. Native codec/command tests
+pass on Mac and Linux (28 tests). The identified gateway candidate passes explicit NFSv4.0 source, lookup-only,
+help, exact stats, JSON/NUL, fresh-command convergence after mutation, unchanged
+retained-result bytes, paged client-path export and all 141 payload hashes
+(561174 bytes). Eighty consecutive stats invocations also pass in 2.284 s,
+exceeding the 64-slot identity pool without exhaustion. Raw candidate, pre-fix
+reproduction and sequential logs are retained in the closure evidence directory.
+The export maps every NFS caller to UID/GID 0; these gates certify that actual
+policy and do not claim per-client UID authorization. Mac native execution,
+persistent remote export policy and the large scale gates remain open.

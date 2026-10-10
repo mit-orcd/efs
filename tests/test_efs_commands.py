@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/client/commands/command.py"
@@ -46,7 +47,9 @@ class Commands(unittest.TestCase):
         self.temp.cleanup()
 
     def result(self, op, paths=(), term=b"", match="contains"):
-        path = self.directory / ".query" / (commands.query_name(op, term, match) if op == "stats" else commands.page_name(op, term, match, None, 100))
+        with patch.object(commands.os, 'urandom', lambda n: bytes(n)):
+            name = commands.query_name(op, term, match) if op == "stats" else commands.page_name(op, term, match, None, 100)
+        path = self.directory / ".query" / name
         path.write_text(json.dumps(envelope(op, paths)))
         return path
 
@@ -90,6 +93,12 @@ class Commands(unittest.TestCase):
         lines = (SOURCE.parent / 'source.h').read_text().splitlines()[2:]
         literal = ''.join(json.loads(line.rstrip(';')) for line in lines)
         self.assertEqual(literal, SOURCE.read_text())
+
+    def test_simple_invocations_have_distinct_cache_identity(self):
+        for op in ('stats', 'ls'):
+            first, second = commands.query_name(op), commands.query_name(op)
+            self.assertNotEqual(first, second)
+            self.assertRegex(first, r'^v1\.' + op + r'\.[0-9a-f]{32}$')
 
     def test_command_directory_cannot_shadow_standard_library(self):
         self.result("stats")
@@ -393,7 +402,11 @@ int main(int argc,char **argv) {
                     self.assertEqual(p.returncode, 0)
                     self.assertEqual(p.stdout, ("2 %d %d %s" % (operation, 3 if op == "find" else 0,
                                                               term.hex())).encode())
-            for bad in ("", "v2.stats", "v1.stats.extra", "v1.find.", "v1.find.3", "v1.find.4.61",
+            for legacy in ('v1.stats', 'v1.ls'):
+                self.assertEqual(subprocess.run([str(binary), legacy], stdout=subprocess.PIPE).returncode, 0)
+            for bad in ("", "v2.stats", "v1.stats.extra", "v1.stats." + '0' * 31,
+                        "v1.stats." + '0' * 33, "v1.stats." + 'G' * 32,
+                        "v1.find.", "v1.find.3", "v1.find.4.61",
                         "v1.find.3.0", "v1.find.3.GG", "v1.find.3.FF", "v1.find.3.00", "v1.find.3.2f",
                         "v1.find.0.", "v1.find.2.", "v1.find.3." + "61" * 121):
                 self.assertNotEqual(subprocess.run([str(binary), bad], stdout=subprocess.PIPE).returncode, 0, bad)

@@ -17,8 +17,18 @@ static inline int efs_command_path_parse(const char *name, struct efs_msg_query_
     struct efs_msg_query_snapshot q={0};
     q.version=EFS_QUERY_COMMAND_VERSION;
     q.max_output=EFS_QUERY_MAX_OUTPUT;q.visit_budget=EFS_QUERY_MAX_VISITS;
-    if (!strcmp(name,"v1.stats")) q.operation=EFS_QUERY_STATS;
-    else if (!strcmp(name,"v1.ls")) q.operation=EFS_QUERY_LS;
+    size_t simple=0;
+    if (!strncmp(name,"v1.stats",8) && (!name[8] || name[8]=='.')) {q.operation=EFS_QUERY_STATS;simple=8;}
+    else if (!strncmp(name,"v1.ls",5) && (!name[5] || name[5]=='.')) {q.operation=EFS_QUERY_LS;simple=5;}
+    if(simple){
+        /* A per-invocation identity prevents NFS dentry/open-file caches from
+         * serving a prior result. It has no effect on server query semantics. */
+        if(name[simple]){
+            const char *nonce=name+simple+1;
+            if(strlen(nonce)!=32)return EFS_ERR_INVAL;
+            for(unsigned i=0;i<32;i++)if(efs_command_unhex(nonce[i])<0)return EFS_ERR_INVAL;
+        }
+    }
     else {
         if (strncmp(name,"v1.find.",8) || name[8]<'0' || name[8]>'3' || name[9]!='.') return EFS_ERR_INVAL;
         q.operation=EFS_QUERY_FIND;q.match=(uint32_t)(name[8]-'0');

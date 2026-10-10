@@ -104,7 +104,14 @@ A final audit bounded source scan scratch and unknown-tail exclusion; focused ga
 Row-only inode stat reuse also passes single-edit and append-cursor invalidation
 regressions; an overflow-probe test race exposed by the full suite is isolated,
 and the corrected complete native suite passes.
-Deployment and platform/full scale validation remain pending.
+The latest bounded-source ten-million repeat passes complete exports/cold restore,
+with one inode refolded for a single-row mutation. The cluster was gracefully
+drained to temporarily provision 24 GiB source VM RAM; latest deployment,
+The deployed command/pages/load gates pass; the actual-entry run continues.
+NFSv4.0 testing found stale fixed-name stats results; a nonce-path fix passes
+28 native command/codec tests, explicit NFSv4.0 exact/fresh/retained/export/payload
+gates and 80 sequential invocations. Mac remount,
+platform/full-scale and persistent remote export-policy gates remain pending.
 Large-export total lifetime is now
 configurable with bounded retention and unchanged idle/permission checks.
 

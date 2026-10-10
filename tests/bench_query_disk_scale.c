@@ -147,6 +147,7 @@ int main(int argc,char **argv)
     struct batch b={0};b.kv=efs_kv_lsm_open(kvpath,&cfg);if(!b.kv)return 1;
     double start=clock_s();uint64_t dirs=n<SHARDS?n:SHARDS;
     int rc=inode(&b,EFS_ROOT_INO,0,1,dirs);
+    uint64_t completed_files=0;
     for(unsigned s=0;s<dirs && !rc;s++){
         char label[32];snprintf(label,sizeof(label),"dir-%04x",s);
         rc=inode(&b,SHARDS+s,EFS_ROOT_INO,1,population(n,s));
@@ -163,10 +164,11 @@ int main(int argc,char **argv)
             rc=name(&b,SHARDS+s,label,file_ino(g),0);
         }
         if(!rc)rc=flush(&b);
-        if(!(s%256)){printf("{\"phase\":\"populate\",\"shard\":%u,\"files\":%llu,\"elapsed_s\":%.3f,\"rc\":%d}\n",s,(unsigned long long)n,clock_s()-start,rc);fflush(stdout);}
+        if(!rc)completed_files+=count;
+        printf("{\"phase\":\"populate\",\"shard\":%u,\"completed_files\":%llu,\"target_files\":%llu,\"elapsed_s\":%.3f,\"rc\":%d}\n",s,(unsigned long long)completed_files,(unsigned long long)n,clock_s()-start,rc);fflush(stdout);
     }
     if(!rc)rc=efs_kv_lsm_flush(b.kv);
-    printf("{\"phase\":\"populated\",\"files\":%llu,\"seconds\":%.6f,\"rc\":%d}\n",(unsigned long long)n,clock_s()-start,rc);fflush(stdout);
+    printf("{\"phase\":\"populated\",\"files\":%llu,\"target_files\":%llu,\"seconds\":%.6f,\"rc\":%d}\n",(unsigned long long)completed_files,(unsigned long long)n,clock_s()-start,rc);fflush(stdout);
     struct efs_kv_lsm_snapshot *source=NULL;struct efs_query_catalog *c=NULL,*next=NULL;
     if(!rc)rc=efs_kv_lsm_snapshot_pin(b.kv,64<<20,&source);
     uint64_t samples=0,watermark[4]={1,2,3,4};
