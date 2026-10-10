@@ -166,7 +166,7 @@
     "comparison.sh": "53b434db6f9c0756b324be9c32cc3451a81ad956f1af44fa812f9fdc8ffb215d",
     "resource-summary.py": "423c45420d443d1dbf0f2cdc6cb33395b3b967caf735b9ece4d74d16ce11e7d9",
     "candidate-gates.sh": "83af0a028afa6022ad73d33b8b6cd8d2316e304966ab4bee1bdaf3dd496cca36",
-    "final-state.py": "7fad48a69a5d6113188a05b4cc586d1a8760f55a5bd1f2ed786db72bd512bf4a",
+    "final-state.py": "e2618b7950722a4f9d211d77fe57c0ddab5180d22d165af070fd3359ca253b79",
     "cohort-matrix.sh": "b7a3ad16bb6e8f29e5aa11d73f1f3cd839d4b2fb9ef5e4f17aa259f80706d96e",
     "balanced-capture.py": "309b3592ed387ccd508c6cd3ef93dd2c5da9f4ba04b65c0530eafbcf9a246edd",
     "idle-matrix.sh": "acb43b9ed933de4fe7b574263dad931c475b66c0f795178c4ada8e0e0f02f22b",
@@ -531,5 +531,9 @@
     "tests/stress/scale_grow.sh": "3d346eeae3d0f3cb94b5bc632eea6bd9d5321849dd51a3d22ae0873f8d6ebdfe",
     "tests/stress/unlink_storm.sh": "32725bbee3a74cb603403db3a47d6a458d10726f8b83d9afa9241fd1b2d14bed",
     "tests/debug/resolve_stacks.sh": "2c14a869d8470185ae0778cc8964300ad0e34590b537eabb59d1e3f9501d36c9"
-  }
+  },
+  "harness_base_commit": "2d91777901add95fd48f05714e61a63aac4e82c1",
+  "unused_retained_diagnostic_helpers": [
+    "debug-gc.py"
+  ]
 }

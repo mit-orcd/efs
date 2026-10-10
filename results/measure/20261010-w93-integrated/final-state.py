@@ -22,8 +22,9 @@ assert {v["exe_sha256"] for v in servers}=={hashlib.sha256(Path("/data1/efs/src/
 for pid in subprocess.check_output(['pgrep','-x','efs-fuse'],text=True).split():
  env=dict(x.split('=',1) for x in Path(f'/proc/{pid}/environ').read_text().split('\0') if '=' in x)
  assert env.get('EFS_COMMANDS')=='0'
- clients.append(dict(pid=int(pid),commands=env.get('EFS_COMMANDS'),cmd=Path(f'/proc/{pid}/cmdline').read_bytes().replace(b'\0',b' ').decode()))
+ clients.append(dict(pid=int(pid),commands=env.get('EFS_COMMANDS'),exe_sha256=hashlib.sha256(Path(f'/proc/{pid}/exe').read_bytes()).hexdigest(),cmd=Path(f'/proc/{pid}/cmdline').read_bytes().replace(b'\0',b' ').decode()))
 assert len(clients)==2
+assert {c["exe_sha256"] for c in clients}=={hashlib.sha256(Path("/data1/efs/src/efs-fuse").read_bytes()).hexdigest()}
 mounts={p:os.path.ismount(p) for p in ('/data1/efs/mnt','/data1/efs/mnt2')};assert all(mounts.values())
 processes=subprocess.check_output(['ps','-eo','pid,args'],text=True)
 assert not any(re.search(r'(?:python3 .*balanced-load.py|(?:^|/)perf record|(?:^|/)strace -)',x) for x in processes.splitlines())
