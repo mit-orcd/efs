@@ -10,7 +10,8 @@ static int partial_write;
 static unsigned write_calls;
 static unsigned read_calls;
 static unsigned raw_syncs,index_syncs,sync_faults;
-static char fail_sync_kind;
+static char fail_sync_kind,fail_write_kind;
+static unsigned write_faults;
 static char descriptor_kind[4096];
 static int tracked_open(const char *path,int flags,...)
 {
@@ -40,6 +41,9 @@ static ssize_t counted_pread(int fd,void *buf,size_t size,off_t offset)
 static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
 {
     write_calls++;
+    if(fail_write_kind && fd>=0 && fd<(int)sizeof(descriptor_kind) && descriptor_kind[fd]==fail_write_kind){
+        fail_write_kind=0;write_faults++;partial_write=1;
+    }
     if(partial_write==2){partial_write=0;errno=ENOSPC;return -1;}
     if(partial_write==1){partial_write=2;return pwrite(fd,buf,size<3?size:3,offset);}
     return pwrite(fd,buf,size,offset);
@@ -153,12 +157,23 @@ int main(void)
         struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t file;
         CHECK(!efs_meta_apply_init(kv,100));
         CHECK(!efs_meta_apply_create_file(kv,&attrs,EFS_ROOT_INO,S_IFREG|0644,"file",&file));
+        for(unsigned i=0;i<30;i++){
+            char name[32];snprintf(name,sizeof(name),"batch-%u",i);efs_ino_t extra;
+            CHECK(!efs_meta_apply_create_file(kv,&attrs,EFS_ROOT_INO,S_IFREG|0644,name,&extra));
+        }
         CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));raw_syncs=index_syncs=0;
         CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,&old));
         if(old){
             unsigned populated=0;for(unsigned i=0;i<SHARDS;i++)populated+=old->part[i].count!=0;
             CHECK(raw_syncs==populated && index_syncs==populated);
             uint64_t wm[4]={1,2,3,4};CHECK(!efs_query_disk_checkpoint(old,wm));
+            /* A short derived-row batch followed by ENOSPC must never
+             * publish a partially materialized candidate or replace old. */
+            fail_write_kind='d';write_faults=0;
+            CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,&next)==EFS_ERR_IO && !next);
+            CHECK(write_faults==1 && !fail_write_kind);
+            CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
+            CHECK(!efs_query_disk_inode(next,file,NULL,NULL));efs_query_disk_free(next);next=NULL;
             const char kinds_to_fail[]={'r','i','n','d','m'};
             for(unsigned i=0;i<sizeof(kinds_to_fail);i++){
                 fail_sync_kind=kinds_to_fail[i];sync_faults=0;

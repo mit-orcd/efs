@@ -24,6 +24,7 @@
 #define FD_CACHE 32
 #define READ_WINDOW 8192
 #define SORT_ROWS 2048
+#define NODE_BATCH 8
 #define VALUE_MAX 16384
 #define RAW_RECORD_MAX (EFS_KV_KEY_MAX+VALUE_MAX)
 static const uint8_t kinds[KINDS]={EFS_KV_KIND_INODE,EFS_KV_KIND_DENTRY,
@@ -467,6 +468,7 @@ static int nodes_build(struct efs_query_disk *d,uint32_t shard)
     if(!d->part[shard].inodes)return EFS_OK;
     int fd=make_file(d,shard,'d');if(fd<0)return EFS_ERR_IO;
     int rc=EFS_OK;efs_ino_t previous=0;
+    struct disk_node batch[NODE_BATCH];unsigned used=0;
     for(uint64_t i=0;i<d->part[shard].inodes && !rc;i++) {
         if(cancelled(d)){rc=EFS_ERR_BUSY;break;}
         struct slot s;uint8_t key[EFS_KV_KEY_MAX],val[VALUE_MAX];struct disk_node n={0};
@@ -479,7 +481,15 @@ static int nodes_build(struct efs_query_disk *d,uint32_t shard)
         previous=encoded;
         if(!rc)rc=efs_meta_apply_getattr(&d->kv,n.row.ino,refuse_coord,NULL,&n.stat);
         if(!rc && d->refolded<UINT32_MAX)d->refolded++;
-        if(!rc)rc=io_at(fd,&n,sizeof(n),i*sizeof(n),1);
+        if(!rc){
+            batch[used++]=n;
+            /* Sequential candidate rows can share a write. Flush the tail
+             * before folds read this file; final publication still fsyncs it. */
+            if(used==NODE_BATCH || i+1==d->part[shard].inodes){
+                rc=io_at(fd,batch,used*sizeof(*batch),(i+1-used)*sizeof(*batch),1);
+                used=0;
+            }
+        }
     }
     if(rc)fprintf(stderr,"query-disk: nodes shard=%u previous=%llu rc=%d\n",shard,(unsigned long long)previous,rc);
     close(fd);return rc;
@@ -585,7 +595,7 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
     const struct efs_query_disk *old,uint64_t max_bytes,int (*stop)(void *),void *ctx,struct efs_query_disk **out)
 {
     if(out)*out=NULL;
-    uint64_t working=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX;
+    uint64_t working=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX+NODE_BATCH*sizeof(struct disk_node);
     if(!root || !source || !out)return EFS_ERR_INVAL;
     if(max_bytes<working)return EFS_ERR_NOMEM;
     if(mkdir(root,0700) && errno!=EEXIST)return EFS_ERR_IO;
@@ -834,7 +844,7 @@ int efs_query_disk_restore(const char *root,const uint64_t watermark[4],uint64_t
 {
     if(out)*out=NULL;
     if(!root || !watermark || !out)return EFS_ERR_INVAL;
-    uint64_t bytes=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX;
+    uint64_t bytes=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX+NODE_BATCH*sizeof(struct disk_node);
     if(max_bytes<bytes)return EFS_ERR_NOMEM;
     char current[EFS_MAX_PATH],base[256];int n=snprintf(current,sizeof(current),"%s/current",root);
     if(n<0 || (size_t)n>=sizeof(current))return EFS_ERR_NAMETOOLONG;
