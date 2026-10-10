@@ -67,18 +67,22 @@ increases within the tested budget. Live throughput and narrower NFS evidence
 are qualified separately. Runtime `a8a15a14` is restored with ordinary `.efs`
 mount opt-in disabled; eight retained trees pass cold query/payload checks.
 
-[W92 latest integration and three further profiles](query-cache-next-three-rounds-20261010.md)
+[W92 previous integration and three further profiles](query-cache-next-three-rounds-20261010.md)
 records the captured branch boundary, parent-rollup coalescing and constant-time
 cache descriptor hits, with bounded memory and persistence regressions. Controlled
 measurements show 39.1% fewer preads, 34.9% fewer pwrites and 15.0% lower median
-process CPU, preserving fsync counts. Final runtime `f5164bb3` passes native,
+process CPU, preserving fsync counts. At that checkpoint runtime `f5164bb3` passes native,
 POSIX core/concurrent/extras and cold persistence gates; eleven retained trees
 verify 78000 files and 724 payload samples, with normal `.efs` opt-out restored.
 
 [W92 incremental-cache implementation](query-cache-incremental-20261010.md)
 tracks bounded change/ancestor sets, immutable partition reuse, exact directory
-recomputation and full-build fallback. Focused incremental/failure gates pass;
-three live profiling rounds are in progress, including refresh coalescing.
+recomputation and full-build fallback. Three all-node profiles pass content
+oracles (124 / 165 / 159 files/s); coalescing reduces sampled cache cost.
+Final runtime `d83f3f06` passes full native, 212 core, 64 two-client,
+4 extras with one unsupported shared-mmap skip, and 26/26 cold persistence.
+Fourteen retained trees verify 96000 files / 922 payload samples.
+Median unchanged refresh falls from 720 to 42 ms on a fixed namespace.
 
 [Combined branch integration](find-stats-all-branches-20261009.md) records
 `devel`, W66 and persistence-pressure merges into `devel-find-stats`, preserving
