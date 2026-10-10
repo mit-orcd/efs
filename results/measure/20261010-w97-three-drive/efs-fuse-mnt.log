@@ -1,0 +1,56 @@
+2026-10-10T18:01:19.695Z efs-fuse: legacy export label 'fs' is ignored; mounting the single export 'default' (id=1)
+2026-10-10T18:01:19.695Z efs-fuse 6b8f05ac (branch devel-persistence-pressure, built 2026-10-10T11:47:05Z on nuc), build=6b8f05acb484-w97: starting export=default mount=/data1/efs/w97-three-drive-v2-20261010/mnt
+2026-10-10T18:01:19.696Z Discovered 3 cluster nodes from 127.0.0.1:25670
+2026-10-10T18:01:19.696Z   node id=1 127.0.0.1:25670
+2026-10-10T18:01:19.696Z   node id=2 127.0.0.1:25671
+2026-10-10T18:01:19.696Z   node id=3 127.0.0.1:25672
+2026-10-10T18:01:19.696Z fetching metadata...
+2026-10-10T18:01:19.696Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-10T18:01:19.696Z export id=1 name=default
+2026-10-10T18:01:19.696Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-10T18:01:19.696Z efs-fuse daemon pid=1412006
+2026-10-10T18:01:19.699Z efs-fuse: workers max=10 idle=10
+2026-10-10T18:01:19.704Z fuse serving
+2026-10-10T18:04:08.749Z inode-rpc: slow-ok type=67 attempts=3 saw_busy=1 status=0 us=1898369
+2026-10-10T18:04:08.753Z inode-rpc: slow-ok type=67 attempts=3 saw_busy=1 status=0 us=1882082
+2026-10-10T18:04:10.216Z inode-rpc: slow-ok type=67 attempts=5 saw_busy=1 status=0 us=3345332
+2026-10-10T18:23:34.760Z efs-fuse: legacy export label 'fs' is ignored; mounting the single export 'default' (id=1)
+2026-10-10T18:23:34.760Z efs-fuse 6b8f05ac (branch devel-persistence-pressure, built 2026-10-10T11:47:05Z on nuc), build=6b8f05acb484-w97: starting export=default mount=/data1/efs/w97-three-drive-v2-20261010/mnt
+2026-10-10T18:23:34.761Z Discovered 3 cluster nodes from 127.0.0.1:25670
+2026-10-10T18:23:34.761Z   node id=1 127.0.0.1:25670
+2026-10-10T18:23:34.761Z   node id=2 127.0.0.1:25671
+2026-10-10T18:23:34.761Z   node id=3 127.0.0.1:25672
+2026-10-10T18:23:34.761Z fetching metadata...
+2026-10-10T18:23:34.761Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-10T18:23:34.761Z export id=1 name=default
+2026-10-10T18:23:34.761Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-10T18:23:34.761Z efs-fuse daemon pid=1502352
+2026-10-10T18:23:34.764Z efs-fuse: workers max=10 idle=10
+2026-10-10T18:23:34.768Z fuse serving
+2026-10-10T18:24:42.909Z efs-fuse: legacy export label 'fs' is ignored; mounting the single export 'default' (id=1)
+2026-10-10T18:24:42.909Z efs-fuse 6b8f05ac (branch devel-persistence-pressure, built 2026-10-10T11:47:05Z on nuc), build=6b8f05acb484-w97: starting export=default mount=/data1/efs/w97-three-drive-v2-20261010/mnt
+2026-10-10T18:24:42.909Z Discovered 3 cluster nodes from 127.0.0.1:25670
+2026-10-10T18:24:42.909Z   node id=1 127.0.0.1:25670
+2026-10-10T18:24:42.909Z   node id=2 127.0.0.1:25671
+2026-10-10T18:24:42.909Z   node id=3 127.0.0.1:25672
+2026-10-10T18:24:42.909Z fetching metadata...
+2026-10-10T18:24:42.910Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-10T18:24:42.910Z export id=1 name=default
+2026-10-10T18:24:42.910Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-10T18:24:42.910Z efs-fuse daemon pid=1506887
+2026-10-10T18:24:42.913Z efs-fuse: workers max=10 idle=10
+2026-10-10T18:24:42.919Z fuse serving
+2026-10-10T18:39:32.048Z inode-rpc: slow-ok type=125 attempts=1 saw_busy=0 status=0 us=1046057
+2026-10-10T18:45:44.808Z efs-fuse: legacy export label 'fs' is ignored; mounting the single export 'default' (id=1)
+2026-10-10T18:45:44.808Z efs-fuse 6b8f05ac (branch devel-persistence-pressure, built 2026-10-10T11:47:05Z on nuc), build=6b8f05acb484-w97: starting export=default mount=/data1/efs/w97-three-drive-v2-20261010/mnt
+2026-10-10T18:45:44.809Z Discovered 3 cluster nodes from 127.0.0.1:25670
+2026-10-10T18:45:44.809Z   node id=1 127.0.0.1:25670
+2026-10-10T18:45:44.809Z   node id=2 127.0.0.1:25671
+2026-10-10T18:45:44.809Z   node id=3 127.0.0.1:25672
+2026-10-10T18:45:44.809Z fetching metadata...
+2026-10-10T18:45:44.809Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-10T18:45:44.809Z export id=1 name=default
+2026-10-10T18:45:44.809Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-10T18:45:44.810Z efs-fuse daemon pid=1588409
+2026-10-10T18:45:44.813Z efs-fuse: workers max=10 idle=10
+2026-10-10T18:45:44.817Z fuse serving

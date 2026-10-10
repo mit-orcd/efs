@@ -1,0 +1,62 @@
+[
+  {
+    "root": "/data1/efs/gc-direct-cdt8gvq3",
+    "retained": [
+      "manifest.json",
+      "n1.log.gz",
+      "n2.log.gz",
+      "n3.log.gz",
+      "n4.log.gz",
+      "fuse.log.gz",
+      "sync-peer.log.gz",
+      "synchronous-writes.json",
+      "append-replay-initial.log.gz",
+      "append-replay-cold-retry.log.gz",
+      "append-replay-leader-death.log.gz",
+      "append-leader-death.json",
+      "append-replay-acknowledged-next.log.gz",
+      "append-replay-retired.log.gz",
+      "append-replay-changed-payload.log.gz",
+      "append-replay-cold-next.log.gz",
+      "append-replay-cold-retired.log.gz",
+      "synchronous-write-fault.json",
+      "stop-dirty-recovery.json",
+      "shutdown-mutations.json",
+      "peer-fuse.log.gz",
+      "last-close-gc-effect.json",
+      "posix.tsv",
+      "posix2.tsv",
+      "posix-gc-effect.json",
+      "wal-tail-recovery.json",
+      "final-status.json"
+    ]
+  },
+  {
+    "root": "/data1/efs/gc-direct-vt7vrt5g",
+    "retained": [
+      "manifest.json",
+      "n1.log.gz",
+      "n2.log.gz",
+      "n3.log.gz",
+      "n4.log.gz",
+      "fuse.log.gz",
+      "sync-peer.log.gz",
+      "synchronous-writes.json",
+      "append-replay-initial.log.gz",
+      "append-replay-cold-retry.log.gz",
+      "append-replay-leader-death.log.gz",
+      "append-leader-death.json",
+      "append-replay-acknowledged-next.log.gz",
+      "append-replay-retired.log.gz",
+      "append-replay-changed-payload.log.gz",
+      "append-replay-cold-next.log.gz",
+      "append-replay-cold-retired.log.gz",
+      "synchronous-write-fault.json",
+      "stop-dirty-recovery.json",
+      "shutdown-mutations.json",
+      "peer-fuse.log.gz",
+      "last-close-gc-effect.json",
+      "posix.tsv"
+    ]
+  }
+]

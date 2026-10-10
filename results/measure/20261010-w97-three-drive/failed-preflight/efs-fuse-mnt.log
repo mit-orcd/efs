@@ -1,0 +1,13 @@
+2026-10-10T17:57:36.966Z efs-fuse: legacy export label 'fs' is ignored; mounting the single export 'default' (id=1)
+2026-10-10T17:57:36.966Z efs-fuse 6b8f05ac (branch devel-persistence-pressure, built 2026-10-10T11:47:05Z on nuc), build=6b8f05acb484-w97: starting export=default mount=/data1/efs/w97-three-drive-20261010/mnt
+2026-10-10T17:57:36.967Z Discovered 3 cluster nodes from 127.0.0.1:25670
+2026-10-10T17:57:36.967Z   node id=1 127.0.0.1:25670
+2026-10-10T17:57:36.967Z   node id=2 127.0.0.1:25671
+2026-10-10T17:57:36.967Z   node id=3 127.0.0.1:25672
+2026-10-10T17:57:36.967Z fetching metadata...
+2026-10-10T17:57:36.967Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-10T17:57:36.967Z export id=1 name=default
+2026-10-10T17:57:36.967Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-10T17:57:36.967Z efs-fuse daemon pid=1394048
+2026-10-10T17:57:36.970Z efs-fuse: workers max=10 idle=10
+2026-10-10T17:57:36.975Z fuse serving

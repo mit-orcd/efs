@@ -1,0 +1,31 @@
+{
+  "binaries": {
+    "efsd": {
+      "sha256": "1c4787c2067cd6b4c8cafecd6924570bfb379cf5203f97340c90316479e3f0ab",
+      "version": "efsd 6b8f05ac (branch devel-persistence-pressure, built 2026-10-10T11:47:05Z on nuc)\n"
+    },
+    "efs-fuse": {
+      "sha256": "7c4ca48709312a3c7a27c5f21142736dbabe917d8fa7202ce537c8059111bb1e",
+      "version": "efs-fuse 6b8f05ac (branch devel-persistence-pressure, built 2026-10-10T11:47:05Z on nuc)\n"
+    },
+    "efs-mgmt": {
+      "sha256": "fa9a1452c0e89eeac09029e8d9c32289cbf162406eec5f6bb204fdff3000067f",
+      "version": "efs-mgmt 6b8f05ac (branch devel-persistence-pressure, built 2026-10-10T11:47:05Z on nuc)\n"
+    }
+  },
+  "flags": {
+    "EFS_MD_RAFT_N": "3",
+    "EFS_RAFT_FLOW": "1",
+    "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+    "EFS_RAFT_BATCH_OVERLAP": "0",
+    "EFS_RAFT_BATCH_NOOP": "0",
+    "EFS_RAFT_GROUP_DRAIN": "0",
+    "EFS_RAFT_APPLIED_INTERVAL_MS": "10",
+    "EFS_COMMANDS_SERVER": "0",
+    "EFS_COMMANDS": "0",
+    "EFS_TRANSPORT": "tcp",
+    "EFS_BATCH_OBS": "1"
+  },
+  "seconds_per_cell": 1200,
+  "port": 25670
+}

@@ -1,0 +1,5 @@
+{
+  "/home/efs/w97-three-nvme-20261010/n1": "/dev/mapper/rl-home xfs",
+  "/home/efs/w97-three-nvme-20261010/n2": "/dev/mapper/rl-home xfs",
+  "/home/efs/w97-three-nvme-20261010/n3": "/dev/mapper/rl-home xfs"
+}

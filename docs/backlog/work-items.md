@@ -4152,6 +4152,36 @@ or present the Raft improvement as measured KV acceptance.
 
 ## W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
 
+**Oct 10 matched three-node drive test:** same frozen `6b8f05acb484` engine,
+20 minutes per drive, true three-voter groups, preserved regular cluster stopped.
+NVMe first/final rates 31.83/10.80 files/s and pooled server Raft sync
+2.465/6.993 ms; SATA 562.73/299.40 files/s and 0.150/0.319 ms. Both drives slow;
+SATA late rates fluctuate. NVMe root telemetry during slow phase has no reported
+thermal events/warnings (composite <=45.85°C, sensor2 <=61.85°C). SATA health is
+unavailable. Large inbox refusals are not necessary: NVMe records only 35,
+SATA 124, with zero loader errors, replica catch-up and 64 exact cold payload
+checks per drive. Normal four-node service/both mounts restore and verify.
+**W97 remains open:** isolate growing-file/XFS versus drive service latency;
+NAND cache cause and hardware ceiling remain unproved. This compares these two
+models/storage paths, one run each, not protocols in general.
+[Report](../status/w97-three-drive-20261010.md).
+
+**Oct 10 latest merged-code observation:** all 16 newly captured branch tips
+integrate at `6b8f05acb484` and deploy to preserved NUC stores. A continuous
+20-minute write / 10-minute drained pause / 20-minute same-worker resume creates
+138,881 files with zero loader errors. First-minute rates 152.47 and 159.35
+files/s fall to final-minute 52.85 and 48.05; corresponding NVMe flush means
+rise from 1.33/1.34 to 3.65/3.66 ms. Rest restores the burst without restart,
+but the decline repeats. n3 retains 75,109 sampled inbox refusals; all replicas
+catch up. No root SSD health data arrives; cache occupancy/thermal cause and
+hardware ceiling remain unproved. Native and unchanged-repeat full/fault gates
+pass (POSIX 212/212, peer 64/64), but retain the earlier concurrent-append
+30-second timeout. Defaults/diagnostics off are restored; 128 sampled exact
+cold payload checks and live executable hashes pass. **Keep W97 open.**
+Next isolate sustained durable-write latency with root NVMe health and matched
+EFS-stopped/loaded growing-WAL versus preallocated-overwrite probes.
+[Report](../status/w97-latest-nvme-20261010.md).
+
 **Oct 10 NUC:** return control reproduces fast-then-slow rates at 10 ms.
 NVMe host flush mean rises 2.38 to 3.70 ms while rates fall; an independent
 low-load XFS overwrite+fdatasync probe with EFS stopped measures NVMe 1.12 ms

@@ -1,0 +1,22 @@
+{
+  "efsd": {
+    "sha256": "1c4787c2067cd6b4c8cafecd6924570bfb379cf5203f97340c90316479e3f0ab",
+    "version": "efsd 6b8f05ac (branch devel-persistence-pressure, built 2026-10-10T11:47:05Z on nuc)\n"
+  },
+  "efs-fuse": {
+    "sha256": "7c4ca48709312a3c7a27c5f21142736dbabe917d8fa7202ce537c8059111bb1e",
+    "version": "efs-fuse 6b8f05ac (branch devel-persistence-pressure, built 2026-10-10T11:47:05Z on nuc)\n"
+  },
+  "efs-mgmt": {
+    "sha256": "fa9a1452c0e89eeac09029e8d9c32289cbf162406eec5f6bb204fdff3000067f",
+    "version": "efs-mgmt 6b8f05ac (branch devel-persistence-pressure, built 2026-10-10T11:47:05Z on nuc)\n"
+  },
+  "efs-query": {
+    "sha256": "22806dc15d0721daafbd2f5dcc8cd7f0268c4db2a64ebc3ed90bfbac98ffef9a",
+    "version": "efs-query 6b8f05ac (branch devel-persistence-pressure, built 2026-10-10T11:47:05Z on nuc)\n"
+  },
+  "efs-bench": {
+    "sha256": "03167261441becc10aea6626a9851c7549a43aae1639fe77578a7527029dafba",
+    "version": "efs-bench 6b8f05ac (branch devel-persistence-pressure, built 2026-10-10T11:47:05Z on nuc)\n"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "checked": [
+    {
+      "tag": "continuous",
+      "mount": "mnt",
+      "exact_files": 64,
+      "coverage": "first and last four completed files per worker"
+    },
+    {
+      "tag": "continuous",
+      "mount": "mnt2",
+      "exact_files": 64,
+      "coverage": "first and last four completed files per worker"
+    }
+  ]
+}

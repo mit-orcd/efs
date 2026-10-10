@@ -1,0 +1,1 @@
+get-feature:0x02 (Power Management), Current value:00000000
