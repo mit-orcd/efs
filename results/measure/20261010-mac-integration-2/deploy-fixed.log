@@ -1,0 +1,14 @@
+cluster: mac
+Restarted efs1
+Restarted efs2
+Restarted efs3
+Stop with: ./scripts/client.sh stop /mnt/efs
+Logging efs-fuse to /mnt/efs-fuse-efs.log
+Mounted /mnt/efs
+Stop with: ./scripts/client.sh stop /mnt/efs
+Logging efs-fuse to /mnt/efs-fuse-efs.log
+Mounted /mnt/efs
+Stop with: ./scripts/client.sh stop /mnt/efs-b
+Logging efs-fuse to /mnt/efs-fuse-efs-b.log
+Mounted /mnt/efs-b
+cold 300 MiB content verified after clean unmount 4.66

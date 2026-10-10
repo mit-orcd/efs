@@ -1,0 +1,8 @@
+python3 docs/check-architecture.py
+ok    regen-diff: architecture-full.md + architecture.html are current
+ok    links: every internal link resolves
+ok    invariant-refs: I-references name §4 invariants
+ok    op-matrix-sections: §6 names existing sections
+ok    single-home: normative tables / invariants / formulas defined once
+
+architecture doc gate: all 5 checks passed

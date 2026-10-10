@@ -1,0 +1,27 @@
+efs1
+USER         PID COMMAND
+efs      1366072 /tmp/efs/efsd --node-id 1 --addr 192.168.2.11 --port 17432 --storage /data1 --quota 15G --no-direct-io
+efsd 1a78d768d2a0 (branch devel, built 2026-10-10T05:04:09Z on efs1)
+863aa35c19b70c0fce654b2f924056f1cb9e048b86b9c6ada122e70698ac4827  /tmp/efs/efsd
+e54832a8c79d6821a9e4147ad04ff4c95d710230e5420048e018566a4ce249fe  /tmp/efs/efs-fuse
+efs2
+USER         PID COMMAND
+efs         3882 /tmp/efs/efsd --node-id 2 --addr 192.168.2.12 --port 17432 --storage /data1 --quota 15G --no-direct-io --join 192.168.2.11:17432
+efsd 1a78d768d2a0 (branch devel, built 2026-10-10T05:04:09Z on efs2)
+863aa35c19b70c0fce654b2f924056f1cb9e048b86b9c6ada122e70698ac4827  /tmp/efs/efsd
+e54832a8c79d6821a9e4147ad04ff4c95d710230e5420048e018566a4ce249fe  /tmp/efs/efs-fuse
+efs3
+USER         PID COMMAND
+efs         3123 /tmp/efs/efsd --node-id 3 --addr 192.168.2.13 --port 17432 --storage /data1 --quota 15G --no-direct-io --join 192.168.2.11:17432
+efsd 1a78d768d2a0 (branch devel, built 2026-10-10T05:04:09Z on efs3)
+863aa35c19b70c0fce654b2f924056f1cb9e048b86b9c6ada122e70698ac4827  /tmp/efs/efsd
+e54832a8c79d6821a9e4147ad04ff4c95d710230e5420048e018566a4ce249fe  /tmp/efs/efs-fuse
+efsgw
+USER         PID COMMAND
+efs         3629 ./efs-fuse 192.168.2.11:17432 fs /mnt/efs-b -o allow_other
+efs        64851 ./efs-fuse 192.168.2.11:17432 fs /mnt/efs -o allow_other
+efsd 1a78d768d2a0 (branch devel, built 2026-10-10T05:04:09Z on efsgw)
+efs-fuse 1a78d768d2a0 (branch devel, built 2026-10-10T05:04:09Z on efsgw)
+efs-fuse 1a78d768d2a0 (branch devel, built 2026-10-10T05:04:09Z on efsgw)
+863aa35c19b70c0fce654b2f924056f1cb9e048b86b9c6ada122e70698ac4827  /tmp/efs/efsd
+e54832a8c79d6821a9e4147ad04ff4c95d710230e5420048e018566a4ce249fe  /tmp/efs/efs-fuse

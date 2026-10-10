@@ -1,0 +1,2 @@
+{"phase": "check", "files": 500, "bytes": 2048000, "payloads_verified": 500}
+{"phase": "quota-check", "files": 500, "bytes": 2048000, "payloads_verified": 500}

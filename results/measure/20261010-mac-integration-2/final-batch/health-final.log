@@ -1,0 +1,15 @@
+Cluster nodes (3):
+  node 1: 192.168.2.11:17432  up  used=3.93 GiB  quota=15.00 GiB (26.2%)  storage(1):
+      /data1
+  node 2: 192.168.2.12:17432  up  used=3.94 GiB  quota=15.00 GiB (26.3%)  storage(1):
+      /data1
+  node 3: 192.168.2.13:17432  up  used=3.90 GiB  quota=15.00 GiB (26.0%)  storage(1):
+      /data1
+Usable (2+1 logical): used=7.88 GiB  free=22.12 GiB  capacity=30.00 GiB (26.3%)
+Cluster state: OK (3 up, 0 down)
+Versions: efsd 03db5552cc2d (branch devel, built 2026-10-10T06:38:18Z) — 3/3 identical
+Node 192.168.2.11:17432 state: active
+Heal:
+  node 1: idle
+  node 2: idle
+  node 3: idle

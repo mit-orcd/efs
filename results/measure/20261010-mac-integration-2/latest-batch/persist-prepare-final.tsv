@@ -1,0 +1,56 @@
+# posix-persist host=efsgw mnt=/mnt/efs phase=prepare 2026-10-10T08:23:28Z
+# select	small_file
+# select	closed_but_not_fsynced
+# select	fsynced_file
+# select	multichunk_file
+# select	chunk_boundary_write
+# select	overwrite_middle
+# select	appended_file
+# select	sparse_file
+# select	truncate_shrink
+# select	truncate_extend
+# select	empty_file
+# select	dd_written_file
+# select	many_files_in_one_dir
+# select	deep_tree
+# select	strange_names
+# select	renamed_file
+# select	renamed_across_dirs
+# select	unlinked_file
+# select	removed_dir
+# select	hardlinks
+# select	hardlink_after_unlink
+# select	symlinks
+# select	file_mode
+# select	dir_mode
+# select	size_and_mtime
+# select	large_file_size_only
+test	result	detail
+small_file	PASS	
+closed_but_not_fsynced	PASS	
+fsynced_file	PASS	
+multichunk_file	PASS	
+chunk_boundary_write	PASS	
+overwrite_middle	PASS	
+appended_file	PASS	
+sparse_file	PASS	
+truncate_shrink	PASS	
+truncate_extend	PASS	
+empty_file	PASS	
+dd_written_file	PASS	
+many_files_in_one_dir	PASS	
+deep_tree	FAIL	OSError: [Errno 16] Device or resource busy: '/mnt/efs/posix-persist-efsgw-integration2-latestbatch-20261010/deep_tree/lvl00/lvl01/lvl02/lvl03/lvl04/lvl05/lvl06/lvl07/lvl08/lvl09/lvl10/lvl11/lvl12/lvl13/lvl14/lvl15/lvl16/lvl17/lvl18/lvl19/lvl20/lvl21/lvl22/lvl23/lvl24/lvl25/lvl26/lvl27/lvl28/lvl29/lvl30/lvl31/lvl32'
+strange_names	PASS	
+renamed_file	PASS	
+renamed_across_dirs	PASS	
+unlinked_file	PASS	
+removed_dir	PASS	
+hardlinks	PASS	
+hardlink_after_unlink	PASS	
+symlinks	PASS	
+file_mode	PASS	
+dir_mode	PASS	
+size_and_mtime	PASS	
+large_file_size_only	PASS	
+# summary pass=25 fail=1 skip=0 total=26 dur=325.5
+# complete

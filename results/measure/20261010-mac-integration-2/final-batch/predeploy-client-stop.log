@@ -1,0 +1,5 @@
+exportfs: Could not find '*:/mnt/efs' to unexport.
+Unmounting /mnt/efs-b
+Not mounted: /mnt/efs-b (cleared any stale FUSE handle)
+Unmounting /mnt/efs
+Not mounted: /mnt/efs (cleared any stale FUSE handle)

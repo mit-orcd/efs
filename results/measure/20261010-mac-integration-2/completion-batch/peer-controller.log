@@ -1,0 +1,97 @@
+cluster: mac
+prepared /mnt/efs/posix2-integration2-completionbatch-20261010 (64 testdirs)
+Unmounting /mnt/efs
+Retiring drained efs-fuse PID 565088 for /mnt/efs
+Unmounted /mnt/efs
+Stop with: ./scripts/client.sh stop /mnt/efs
+Logging efs-fuse to /mnt/efs-fuse-efs.log
+Mounted /mnt/efs
+pass peer_mkdir_visible              
+pass peer_create_visible             
+pass peer_write_read                 
+pass peer_listdir_siblings           
+pass peer_shared_creat               
+pass peer_open_existing              
+pass peer_creat_excl_eexist          
+slow-step peer_stat_size a 0 2.68s
+pass peer_stat_size                  
+pass peer_rename_visible             
+pass peer_mkdir_then_create          
+slow-step peer_shared_pwrite ab 1 116.65s
+slow-step peer_shared_pwrite a 2 2.52s
+pass peer_shared_pwrite              
+pass peer_unlink_gone                
+pass peer_chmod_visible              
+pass peer_utimens_visible            
+pass peer_dir_mtime_bump_visible     
+pass peer_truncate_visible           
+pass peer_hardlink_visible           
+pass peer_symlink_visible            
+pass peer_negative_dentry            
+pass peer_fsync_then_read            
+pass peer_mkdir_rmdir_recreate       
+pass peer_oappend                    
+slow-step peer_rename_over a 0 2.05s
+pass peer_rename_over                
+slow-step peer_flock_exclusive a 0 2.49s
+slow-step peer_flock_exclusive a 2 2.20s
+pass peer_flock_exclusive            
+pass peer_unlink_while_b_has_fd      
+pass peer_rmdir_gone                 
+pass peer_nlink_after_link           
+slow-step peer_hardlink_write a 0 2.45s
+pass peer_hardlink_write             
+slow-step peer_rename_dir a 0 2.09s
+pass peer_rename_dir                 
+pass peer_o_trunc_visible            
+pass peer_unlink_recreate            
+pass peer_lstat_symlink_size         
+pass peer_listdir_after_unlink       
+pass peer_chmod_via_hardlink         
+pass peer_sparse_size                
+pass peer_overlap_pwrite_same_range  
+pass peer_overlap_pwrite_partial     
+pass peer_overlap_pwrite_chunk_straddle
+slow-step peer_concurrent_append ab 1 1216.93s
+pass peer_concurrent_append          
+slow-step peer_append_while_truncate ab 1 121.57s
+pass peer_append_while_truncate      
+pass peer_disjoint_extend            
+pass peer_disjoint_extend_reverse_completion
+pass peer_extend_and_truncate        
+pass peer_stat_during_extend         
+slow-step peer_trunc_then_pwrite_old_fd a 3 2.14s
+pass peer_trunc_then_pwrite_old_fd   
+pass peer_trunc_zero_then_high_pwrite
+pass peer_pwrite_then_peer_truncate  
+pass peer_rename_same_src_two_dst    
+pass peer_rename_vs_unlink_src       
+slow-step peer_rename_vs_unlink_dst ab 1 2.14s
+pass peer_rename_vs_unlink_dst       
+slow-step peer_rename_across_dirs_chase a 0 2.07s
+slow-step peer_rename_across_dirs_chase ab 1 2.79s
+pass peer_rename_across_dirs_chase   
+pass peer_creat_excl_race            
+slow-step peer_create_unlink_stat_churn ab 0 30.45s
+pass peer_create_unlink_stat_churn   
+pass peer_negative_after_unlink      
+pass peer_rename_negative            
+pass peer_unlink_recreate_stale_ino  
+slow-step peer_open_unlink_nlink a 1 2.28s
+pass peer_open_unlink_nlink          
+slow-step peer_open_rename_fd a 1 2.96s
+slow-step peer_open_rename_fd a 3 2.57s
+pass peer_open_rename_fd             
+slow-step peer_unlink_recreate_old_fd a 1 2.30s
+slow-step peer_unlink_recreate_old_fd a 3 2.03s
+pass peer_unlink_recreate_old_fd     
+pass peer_concurrent_hardlink        
+pass peer_concurrent_unlink_hardlinks
+slow-step peer_fcntl_range_conflict a 0 3.13s
+pass peer_fcntl_range_conflict       
+slow-step peer_fcntl_range_adjacent a 0 3.26s
+pass peer_fcntl_range_adjacent       
+pass peer_mtime_no_regress           
+============================================================
+POSIX 2-client: 64/64 pass, 0 fail  (1643.6s)
+wrote /private/tmp/efs-integration-20261009/results/measure/20261010-mac-integration-2/completion-batch/peer-final.tsv

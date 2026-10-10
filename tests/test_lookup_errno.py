@@ -21,7 +21,6 @@ static struct {uint64_t export_id;} g_client={1};
 #define EFS_FIND_NAME ".find"
 static int failure,adopted;
 static int virt_kind(fuse_ino_t n){(void)n;return 0;}
-static int feature_enabled(int n){(void)n;return 1;}
 static fuse_ino_t virt_parent(fuse_ino_t n){return n;}
 static fuse_ino_t vq_intern(fuse_ino_t n,const char*s,uint64_t version,size_t len){(void)s;(void)version;(void)len;return n;}
 static int virtual_access(fuse_ino_t n){(void)n;return 0;}

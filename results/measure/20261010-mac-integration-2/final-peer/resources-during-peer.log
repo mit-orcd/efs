@@ -1,0 +1,21 @@
+efs1
+ 02:07:40 up  8:38,  3 users,  load average: 2.12, 2.15, 2.08
+               total        used        free      shared  buff/cache   available
+Mem:            3893        1399         189         528        3015        2493
+Swap:           3892           0        3892
+USER         PID   RSS %CPU COMMAND
+efs      1366072 143360 3.3 efsd
+efs2
+ 02:07:40 up 33 min,  2 users,  load average: 2.33, 2.41, 1.95
+               total        used        free      shared  buff/cache   available
+Mem:            3889         662        1990          17        1437        3227
+Swap:           3888           0        3888
+USER         PID   RSS %CPU COMMAND
+efs         3882 135484 3.2 efsd
+efs3
+ 02:07:40 up 9 min,  2 users,  load average: 2.28, 1.88, 0.99
+               total        used        free      shared  buff/cache   available
+Mem:            3893         601        2993          18         499        3291
+Swap:           3892           0        3892
+USER         PID   RSS %CPU COMMAND
+efs         3123 102568 2.7 efsd

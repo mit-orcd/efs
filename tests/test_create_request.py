@@ -93,7 +93,7 @@ int main(void) {
  revoke_rc=0;revoke_proof=1;
  assert(efs_client_create_resume(&r,0)==EFS_ERR_STALE&&r.complete&&r.revoked&&r.slot==-1&&!r.attempted);
  assert(!efs_client_create_reset(&r));
- puts("retained CREATE: immutable body/identity, pure probe, admission ambiguity, cancellation barrier, exact proof and pinned routing PASS");
+ puts("retained CREATE: immutable body/identity, unrouted BUSY, pure probe, admission ambiguity, cancellation barrier, exact proof and pinned routing PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-create-request-') as directory:
