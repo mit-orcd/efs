@@ -2709,8 +2709,9 @@ clusters must scale metadata service while retaining the same protection target.
 See [binding decision](../status/node-count-protection-20261009.md).
 
 **Evidence/current state:** Oct 10 AMD engine and explicit private host four-voter
-membership, persistence-error fencing, snapshot ordering and GETCHUNKS endpoint
-failover gates pass. Full native/docs, POSIX 212/212 and peer 64/64 pass. Default
+membership, persistence-error fencing, snapshot ordering, GETCHUNKS endpoint
+failover and staged quorum-preserving leader distribution gates pass. Full
+native/docs, POSIX 212/212 and peer 64/64 pass. Default
 two fixed parity groups/dual-group routing remain; durable two-loss commit
 identity/recovery, versioned routing/migration and measured scale are open.
 Logical shard count is not independent leadership capacity.

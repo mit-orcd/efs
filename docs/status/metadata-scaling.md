@@ -202,3 +202,43 @@ availability unresolved. The recommendation is verified preservation followed
 by replacement nodes and quorum restoration before writes resume; the user has
 been asked to select that contract. Durable commit evidence, recovery fencing,
 versioned routing/migration and measured scaling still prevent W66 closure.
+
+### Quorum-preserving leader distribution — Oct 10
+
+The engine supports voluntary handoff to a recently responsive, durably
+caught-up voter. The source fences reads/new proposals before sending a
+TimeoutNow trigger; the target still needs the normal election quorum,
+durable term/vote and campaign/pressure admission. Lost/failed/stale triggers,
+joint configuration, lagging/offline peers and two-of-four partitions cannot
+confer authority. Fatal sanitizer and engine/wire gates pass.
+
+`EFS_METADATA_BALANCE=1` opts into deterministic preferences over each group's
+actual voter set. The shared pump waits two seconds after election/configuration
+and backs off thirty seconds after a submitted/failed handoff. Re-election
+retains the backoff. Default is off; this does not change group membership or
+the fixed odd/even map. Legacy preferences put group 0 on node 1 and group 2 on
+node 3; the explicitly configured four-voter fixture uses nodes 1 and 2.
+
+Separate private AMD direct/TCP legacy and four-voter gates pass 800 reads each
+and 36 exact-inode recovery probes each. Preferred placement is verified after
+initial election, leader rejoin and cold restart. These CLI measurements include
+startup and use two mutation writers; no throughput improvement or active-client
+capacity claim follows. See [leader-distribution evidence](../../results/measure/20261010-w66-leadership/README.md).
+
+This is a tested prerequisite, not W66 closure or D36 activation. The durable
+commit-evidence/recovery protocol, persisted versioned routing, migration,
+additional group capacity and controlled hotspot/scaling gates remain open.
+
+The full staged gate exposed an unresolved BUSY on peer OPEN during concurrent
+append (core POSIX 212/212, peer 63/64). No handoff occurred at that failure
+boundary. OPEN now retries the exact retained lease edge within the caller's
+earlier deadline or a 30-second ceiling; timeout keeps cleanup ownership.
+The one-shot negative control fails the new regression, while the fixed
+ownership/deadline and existing serialization tests pass. The failure is
+preserved in the [OPEN evidence](../../results/measure/20261010-w66-leadership/failed-peer/README.md).
+
+The corrected OPEN candidate then passed twenty repeated concurrent append
+races (16,000 exact records), full peer POSIX 64/64, cold exact bytes and drained
+GC queues; independent physical inventory is empty. Canonical native tests and
+all five documentation checks pass. Installed AMD direct/TCP service is restored.
+See [completed regression evidence](../../results/measure/20261010-w66-leadership/open-fixed/README.md).

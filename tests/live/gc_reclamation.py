@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import re
 import signal
+import shutil
 import threading
 import socket
 import subprocess
@@ -25,6 +26,7 @@ from raft_tail import commands as raft_commands
 import time
 
 p = argparse.ArgumentParser(description=__doc__)
+p.add_argument('--peer-open-contention-only',action='store_true',help='twenty concurrent append/OPEN races, full peer POSIX, exact cold bytes and physical cleanup only')
 p.add_argument('--append-truncate-only',action='store_true',help='run eight peer append/truncate races, a concurrent append handoff check, cold-remount repeats and physical cleanup only')
 p.add_argument('--mount-sync',action='store_true',help='run only mount-wide sync acceptance: ordinary writes, peer-before-close, cold bytes and deletion')
 p.add_argument('--mode', choices=('buffered', 'direct'), required=True)
@@ -429,6 +431,30 @@ try:
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.peer_open_contention_only:
+        peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
+        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+        wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'peer mounted',40)
+        transport_proof([peer])
+        for iteration in range(20):
+            run(['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,
+                 '--parent','open-contention','--filter','peer_concurrent_append','--keep',
+                 '--results',work/f'append-open-{iteration:02d}.tsv'],timeout=180)
+        path=mount/'open-contention/peer_concurrent_append/f'
+        with path.open('rb') as fd:os.fsync(fd.fileno())
+        expected=path.read_bytes();assert len(expected.splitlines())==800
+        run(['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,
+             '--parent','gc-posix-peer','--results',work/'posix2.tsv'],timeout=600)
+        run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
+        unmount();stop();start();mount_client()
+        assert path.read_bytes()==expected,'concurrent append cold bytes changed'
+        record={'iterations':20,'records_per_iteration':800,'cold_bytes':len(expected),
+                'sha256':hashlib.sha256(expected).hexdigest()}
+        (work/'peer-open-contention.json').write_text(json.dumps(record,indent=2))
+        shutil.rmtree(mount/'open-contention')
+        wait(drained,'peer OPEN contention physical reclamation',180)
+        print('twenty concurrent append/OPEN races, full peer POSIX and exact cold bytes PASS',flush=True)
+        raise SystemExit(0)
     if a.applied_checkpoint_replay_only:
         from applied_checkpoint_replay import exercise
         exercise(a,work,roots,mount,run,start,stop,mount_client,unmount,wait,drained)
