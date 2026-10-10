@@ -124,3 +124,9 @@ survives cold restart, and re-enables at version 23. All 120 payload hashes and
 [Final native guard](../../results/measure/20261010-w92-closure/w92-policy-final-guard-native-passed.log),
 [final live](../../results/measure/20261010-w92-closure/w92-policy-final-guard-live.log),
 [final cold](../../results/measure/20261010-w92-closure/w92-policy-final-guard-cold.log).
+
+The completed private 19432 fixture was retired at 12:01 UTC: its client was
+drained and all three policy services stopped. Data and prior evidence remain
+intact; normal services and the separate capacity test stay active.
+[Retirement log](../../results/measure/20261010-w92-closure/policy-retirement-20261010.log).
+This cleanup does not close W92's remaining large-scale gates.

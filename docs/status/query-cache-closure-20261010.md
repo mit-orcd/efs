@@ -669,7 +669,7 @@ A successful write or sampled read cannot replace that cold verification.
 
 The named Mac/Linux/native platform gates and normal opt-out restoration
 are complete (see the named platform verdicts below). Before closure, retire
-the two private service namespaces and any remaining diagnostic clients, and
+the remaining private capacity service namespace and any diagnostic clients, and
 restore xefs1's original 3 GiB memory configuration from its saved XML after
 all scale processes have exited. Preserve datasets and raw evidence. Verify
 normal port-17432 daemon arguments, all normal clients, NFS service and retained
@@ -813,3 +813,14 @@ FUSE export support enabled. Private capacity and policy services are preserved.
 The actual capacity resume is at 363648 files/88.78125 GiB and still live; the
 4b original process and queued kernel-cold recovery are also live. Neither
 large acceptance gate has a complete terminal verdict yet.
+
+### Completed policy fixture retired, 12:01 UTC
+
+The independent 19432 policy gate has complete native/live/cold/quorum/lost-reply
+and storage-fault evidence. Its diagnostic client was drained and unmounted,
+then only w92-policy-efsd.service was stopped on all three nodes. All private
+policy data directories are preserved. Normal efsd and private 18432 capacity
+services remain active on every node.
+[Retirement evidence](../../results/measure/20261010-w92-closure/policy-retirement-20261010.log).
+The capacity fixture and original actual-entry run were not stopped; their
+complete terminal/recovery verdicts remain required for closure.

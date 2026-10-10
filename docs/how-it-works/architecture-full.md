@@ -1559,7 +1559,8 @@ client rehashed every acknowledged prefix before continuing. W92 is not closed. 
 with this named deployment and remaining scope.
 Normal clients and gateway are restored to `.efs` opt-out after platform
 acceptance; diagnostic mounts are retired. Private scale services and temporary
-VM resources await the remaining gates and cleanup.
+VM resources await the remaining gates and cleanup. The completed private
+policy fixture is retired with its data and evidence preserved.
 [Earlier index text](../status/archive/w92-closure-index-history-20261010.md) is preserved.
 
 [W92 incremental-cache implementation](../status/query-cache-incremental-20261010.md)
