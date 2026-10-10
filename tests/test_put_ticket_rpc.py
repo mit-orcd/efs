@@ -3,7 +3,7 @@
 from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/client/inode_rpc.c').read_text()
-a=s.index('int efs_client_rpc_put_ticket(');b=s.index('int efs_client_rpc_publication(',a)
+a=s.index('static int rpc_put_ticket(');b=s.index('int efs_client_rpc_publication(',a)
 code=r'''
 #include "efs/protocol.h"
 #include "efs/put_ticket.h"
@@ -27,7 +27,7 @@ int efs_put_ticket_encode(const struct efs_put_ticket *t,uint8_t out[EFS_PUT_TIC
 }
 int efs_conn_send_msg(struct efs_conn *c,uint8_t type,const void *data,uint32_t bytes) {
  (void)c;assert(type==EFS_MSG_RAFT_MKFS && bytes==218);const uint8_t *p=data;
- assert(p[0]==efs_raft_shard_group(1) && p[1]==(query?EFS_MD_REQ_PUT_TICKET_STATUS:EFS_MD_CMD_PUT_TICKET_ADMIT));
+ assert(p[0]==efs_raft_shard_group(1) && p[1]==(query==2?EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED:query?EFS_MD_REQ_PUT_TICKET_STATUS:EFS_MD_CMD_PUT_TICKET_ADMIT));
  if(calls)assert(!memcmp(original,p,bytes));else memcpy(original,p,bytes);calls++;return 0;
 }
 int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **out,uint32_t *bytes) {
@@ -62,6 +62,10 @@ int main(void) {
  reset();busy=99;assert(RUN==EFS_ERR_BUSY && !state && calls==8);
  reset();invalid=1;assert(RUN==EFS_ERR_INVAL && !calls && !state);
  assert(efs_client_rpc_put_ticket(&t,2,&state)==EFS_ERR_INVAL && !state);
+ reset();query=2;salt=4;assert(!efs_client_rpc_put_ticket_retire(&t) && calls==1);
+ reset();query=2;salt=2;assert(efs_client_rpc_put_ticket_retire(&t)==EFS_ERR_PROTO);
+ reset();query=2;salt=4;redirect=1;assert(!efs_client_rpc_put_ticket_retire(&t) && calls==2);
+ reset();query=2;salt=4;fail_receive=1;assert(efs_client_rpc_put_ticket_retire(&t)==EFS_ERR_NET && drops==1);
  puts("PUT ticket RPC: immutable retries, pure probe, exact state, revoked/body-error refusal, redirects and deadlines PASS");
 }
 '''

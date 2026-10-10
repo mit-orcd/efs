@@ -380,3 +380,26 @@ int efs_put_ticket_retire(struct efs_kv *kv, const struct efs_put_ticket *t)
                                    {EFS_KV_PUT, fk, 23, val, sizeof(val)}};
     return efs_kv_batch(kv, items, 2);
 }
+
+int efs_put_ticket_retired(struct efs_kv *kv,const struct efs_put_ticket *t,int *out)
+{
+    if (!kv || !out) return EFS_ERR_INVAL;
+    *out=0;
+    uint8_t key[EFS_PUT_TICKET_KEY_LEN];uint64_t floor;
+    int rc=ticket_key(t,key);
+    if (rc==EFS_OK)rc=ticket_floor(kv,key,&floor);
+    if (rc==EFS_OK)*out=t->id.seq<=floor;
+    return rc;
+}
+
+int efs_put_ticket_retire_published(struct efs_kv *kv,const struct efs_put_ticket *t)
+{
+    int retired;
+    int rc=efs_put_ticket_retired(kv,t,&retired);
+    if (rc!=EFS_OK || retired) return rc;
+    uint32_t state;
+    rc=efs_put_ticket_get(kv,t,&state);
+    if (rc!=EFS_OK) return rc;
+    if (state!=EFS_PUT_TICKET_PUBLISHED) return EFS_ERR_BUSY;
+    return efs_put_ticket_retire(kv,t);
+}

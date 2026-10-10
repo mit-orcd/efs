@@ -16,6 +16,8 @@ static int allocation_fail,probe_rc=EFS_ERR_NOT_FOUND,send_rc,session_rc;
 static uint32_t observed=EFS_PUT_TICKET_ADMITTED;
 static unsigned allocations,frees,probes,sends,sessions;
 static struct efs_put_ticket expected;
+static int retirement_rc=EFS_ERR_NET;static unsigned retirements;
+int efs_client_rpc_put_ticket_retire(const struct efs_put_ticket *t){assert(!memcmp(t,&expected,sizeof(*t)));retirements++;return retirement_rc;}
 void *efs_buf_metadata_alloc(size_t n){allocations++;return allocation_fail?NULL:calloc(1,n);}
 void efs_buf_metadata_free(void *p,size_t n){(void)n;frees++;free(p);}
 int efs_client_publication_id(uint64_t seq,struct efs_opid *out){memset(out,0,sizeof(*out));out->client_uuid[0]=1;out->session_epoch=1;out->seq=seq;return EFS_OK;}
@@ -38,7 +40,7 @@ int main(void){
  assert(!efs_client_put_begin(&r,&p));
  session_rc=EFS_ERR_NET;assert(efs_client_put_resume(r,0,&state)==EFS_ERR_NET && !state && !sends);session_rc=0;
  send_rc=EFS_ERR_NET;assert(efs_client_put_resume(r,0,&state)==EFS_ERR_NET && !state && sends==1);
- assert(efs_client_put_free(r)==EFS_ERR_BUSY);
+ assert(efs_client_put_free(r)==EFS_ERR_BUSY);assert(efs_client_put_retire(r)==EFS_ERR_BUSY && !retirements);
  p.ch.checksums[0][0]^=1;struct efs_put_ticket copy;
  assert(!efs_client_put_manifest(r,&copy) && !memcmp(&copy,&expected,sizeof(copy)));copy.body_digest[0]^=1;
  probe_rc=0;assert(!efs_client_put_resume(r,0,&state) && state==1 && sends==1);
@@ -50,6 +52,11 @@ int main(void){
  assert(efs_client_put_resume(r,1,&state)==EFS_ERR_STALE && !state && probes==before);g_client.node_count=4;
  observed=3;assert(!efs_client_put_resume(r,1,&state) && state==3);assert(efs_client_put_free(r)==EFS_ERR_BUSY);
  observed=2;assert(efs_client_put_resume(r,0,&state)==EFS_ERR_STALE && state==2 && sends==1);
+ assert(efs_client_put_free(r)==EFS_ERR_BUSY);
+ assert(efs_client_put_retire(r)==EFS_ERR_NET && retirements==1);
+ assert(efs_client_put_free(r)==EFS_ERR_BUSY);
+ retirement_rc=0;assert(!efs_client_put_retire(r) && retirements==2);
+ assert(!efs_client_put_retire(r) && retirements==2);
  assert(!efs_client_put_free(r));r=NULL;
  p=intent();assert(!efs_client_put_begin(&r,&p));observed=0;
  assert(efs_client_put_resume(r,1,&state)==EFS_ERR_PROTO && !state);

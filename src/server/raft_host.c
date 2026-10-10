@@ -2988,13 +2988,14 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         if (!host_publication_command_valid(cmd,clen)) return EFS_ERR_PROTO;
         return apply_one_publish(h,cmd,index,term,group);
     }
-    if(cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT) {
+    if(cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT || cmd[0]==EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED) {
         struct efs_put_ticket ticket;
         int rc=efs_put_ticket_decode(cmd+1,clen-1,&ticket);
         if(rc!=EFS_OK)return rc;
         if(group!=efs_raft_shard_group(efs_kv_lane_shard(ticket.ino,ticket.ci%EFS_META_LANES)))
             return EFS_ERR_INVAL;
-        return efs_put_ticket_admit(h->kv,&ticket);
+        return cmd[0]==EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED?
+            efs_put_ticket_retire_published(h->kv,&ticket):efs_put_ticket_admit(h->kv,&ticket);
     }
     if (cmd[0] == EFS_MD_CMD_REPORT_PUBLISH)
         return apply_report_publish_cmd(h, cmd, clen, group);
@@ -9417,7 +9418,8 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         group!=efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd+1))))) {
         out->rc=EFS_ERR_INVAL;return;
     }
-    if(clen && (cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT || cmd[0]==EFS_MD_REQ_PUT_TICKET_STATUS)) {
+    if(clen && (cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT || cmd[0]==EFS_MD_REQ_PUT_TICKET_STATUS ||
+               cmd[0]==EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED)) {
         struct efs_put_ticket ticket;
         rc=efs_put_ticket_decode(cmd+1,clen-1,&ticket);
         uint32_t shard=rc==EFS_OK?efs_kv_lane_shard(ticket.ino,ticket.ci%EFS_META_LANES):0;
@@ -9434,14 +9436,18 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         wr32be(admission+18,ticket.id.session_epoch);wr32be(admission+22,shard);
         rc=host_session_establish_admit(h,admission,sizeof(admission),group,&hint);
         if(rc!=EFS_OK){out->rc=rc;out->leader_hint=hint;return;}
-        if(cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT)
+        if(cmd[0]!=EFS_MD_REQ_PUT_TICKET_STATUS)
             rc=host_propose_wait_idx(h,group,cmd,clen,&hint,&idx);
         /* Never grant admission from proposal/apply-ring success alone.
          * Fresh authority plus exact immutable body resolves a lost reply. */
         if(rc==EFS_OK || rc==EFS_ERR_BUSY || rc==EFS_ERR_STALE) {
             int proof=host_read_index(h,group,&hint);uint32_t state=0;
             if(proof==EFS_OK)proof=efs_session_accept(h->kv,shard,ticket.id.client_uuid,ticket.id.session_epoch);
-            if(proof==EFS_OK)proof=efs_put_ticket_get(h->kv,&ticket,&state);
+            if(proof==EFS_OK && cmd[0]==EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED) {
+                int retired=0;proof=efs_put_ticket_retired(h->kv,&ticket,&retired);
+                if(proof==EFS_OK && !retired)proof=EFS_ERR_BUSY;
+                if(proof==EFS_OK)state=EFS_PUT_TICKET_RETIRED;
+            } else if(proof==EFS_OK)proof=efs_put_ticket_get(h->kv,&ticket,&state);
             if(proof==EFS_OK){rc=EFS_OK;salt=state;}
             else if(rc==EFS_OK || proof!=EFS_ERR_NOT_FOUND)rc=proof;
         }

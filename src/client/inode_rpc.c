@@ -264,6 +264,16 @@ static int opid_begin(struct efs_opid_req *q)
         if(exhausted)return -1;
         usleep(1000);
     }
+    uint64_t oldest=0,next;unsigned live=0;
+    pthread_mutex_lock(&opid_mu);
+    next=g_client.opid_next;
+    for(unsigned i=0;i<EFS_OPID_INFLIGHT;i++) {
+        uint64_t seq=g_client.opid_inflight[i];
+        if(seq){live++;if(!oldest || seq<oldest)oldest=seq;}
+    }
+    pthread_mutex_unlock(&opid_mu);
+    fprintf(stderr,"opid-admission: BUSY oldest=%llu next=%llu live=%u window=%u\n",
+        (unsigned long long)oldest,(unsigned long long)next,live,EFS_OPID_REPLY_CACHE);
     return -1;
 }
 
@@ -911,6 +921,10 @@ static int create_request_rpc(struct efs_client_create_request *r,int probe)
         r->inode=reply.rpc.inode;r->generation=reply.generation;
         r->complete=1;r->result=rc;opid_end(r->slot);r->slot=-1;
     }
+    if(r->attempted && !reply.known && getenv("EFS_OPID_TRACE"))
+        fprintf(stderr,"opid-create: unresolved seq=%llu parent=%llu shard=%u routed=%u rc=%d probe=%d\n",
+            (unsigned long long)r->wire.q.id.seq,(unsigned long long)r->wire.create.parent,
+            r->wire.shard,r->wire.routed,rc,probe);
     return rc;
 }
 
@@ -1300,6 +1314,9 @@ int efs_client_lease_begin(struct efs_client_lease_request *r,efs_ino_t ino,
 static int lease_request_result(struct efs_client_lease_request *r,int rc,
                                  uint64_t known)
 {
+    if(!known && getenv("EFS_OPID_TRACE"))
+        fprintf(stderr,"opid-lease: unresolved seq=%llu ino=%llu flags=%u rc=%d\n",
+            (unsigned long long)r->q.id.seq,(unsigned long long)r->ino,r->flags,rc);
     if (known == 1) {
         r->complete=1;
         r->result=rc;
@@ -1352,17 +1369,17 @@ int efs_client_lease_reset(struct efs_client_lease_request *r)
     return EFS_OK;
 }
 
-int efs_client_rpc_put_ticket(const struct efs_put_ticket *ticket,int probe_only,
+static int rpc_put_ticket(const struct efs_put_ticket *ticket,int probe_only,
                                 uint32_t *state)
 {
     if(!state)return EFS_ERR_INVAL;
     *state=0;
-    if(probe_only<0 || probe_only>1)return EFS_ERR_INVAL;
+    if(probe_only<0 || probe_only>2)return EFS_ERR_INVAL;
     uint8_t body[2+EFS_PUT_TICKET_WIRE_LEN];
     int rc=efs_put_ticket_encode(ticket,body+2);if(rc!=EFS_OK)return rc;
     uint32_t shard=efs_kv_lane_shard(ticket->ino,ticket->ci%EFS_META_LANES);
     body[0]=efs_raft_shard_group(shard);
-    body[1]=probe_only?EFS_MD_REQ_PUT_TICKET_STATUS:EFS_MD_CMD_PUT_TICKET_ADMIT;
+    body[1]=probe_only==2?EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED:probe_only?EFS_MD_REQ_PUT_TICKET_STATUS:EFS_MD_CMD_PUT_TICKET_ADMIT;
     efs_node_id_t target=0;
     for(unsigned attempt=0;attempt<8;attempt++) {
         if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
@@ -1383,7 +1400,8 @@ int efs_client_rpc_put_ticket(const struct efs_put_ticket *ticket,int probe_only
         struct efs_msg_raft_mkfs_reply reply;memcpy(&reply,payload,bytes);free(payload);
         if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
         if(reply.rc==EFS_OK) {
-            if(reply.salt<EFS_PUT_TICKET_ADMITTED || reply.salt>EFS_PUT_TICKET_RECLAIMING)
+            if(probe_only==2 ? reply.salt!=EFS_PUT_TICKET_RETIRED :
+               (reply.salt<EFS_PUT_TICKET_ADMITTED || reply.salt>EFS_PUT_TICKET_RECLAIMING))
                 return EFS_ERR_PROTO;
             if(!probe_only && reply.salt!=EFS_PUT_TICKET_ADMITTED)return EFS_ERR_STALE;
             *state=(uint32_t)reply.salt;return EFS_OK;
@@ -1397,6 +1415,18 @@ int efs_client_rpc_put_ticket(const struct efs_put_ticket *ticket,int probe_only
         if(rpc_writer_retry_pause(attempt)!=EFS_OK)return EFS_ERR_BUSY;
     }
     return EFS_ERR_BUSY;
+}
+
+int efs_client_rpc_put_ticket(const struct efs_put_ticket *ticket,int probe_only,uint32_t *state)
+{
+    if (!state) return EFS_ERR_INVAL;
+    *state=0;
+    return probe_only<0 || probe_only>1 ? EFS_ERR_INVAL : rpc_put_ticket(ticket,probe_only,state);
+}
+int efs_client_rpc_put_ticket_retire(const struct efs_put_ticket *ticket)
+{
+    uint32_t state=0;
+    return rpc_put_ticket(ticket,2,&state);
 }
 
 int efs_client_rpc_publication(const struct efs_msg_publication *request, int query_only,

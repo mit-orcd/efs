@@ -3551,6 +3551,17 @@ first-send optimization still respects D7 and retries never falsely assert NEW.
 
 <a id="w87"></a>
 
+**Oct 10 UTC progress:** `22c8c1f9` retains budgeted immutable admission manifests
+and captured client membership across ambiguity/revocation. `70daa5a4` binds
+tickets through the actual durable publication/status/retirement endpoint and
+cache consumption; mapping/PUBLISHED ownership is atomic. PUT identities are
+mount-wide, separate from cache snapshot counters and namespace ACKs. AMD
+direct/TCP same/cross-group lost-reply, actual leader-death and cold replay gates
+pass, alongside core212/212 and peer64/64. These uploads still use legacy PUT
+transport after admission: default FUSE flush/PUT, durable storage rejection
+fences, stable server membership capture and abandoned all-member ACKs remain
+open. [Current checkpoint](../status/dependency-package-20261009.md#retained-put-ownership-and-ticketed-publications--oct-10-utc).
+
 ## W87 · Buffered concurrent append loses records under broader load
 
 **Oct 8 AMD follow-up:** Retrieved the original NUC failure TSV/manifest: missing W1S0002 and W0S0004 records, beyond first-record loss. AMD broad buffered POSIX 216/0/1 skip and peer 64/64 pass, plus mixed-close append during GC and 800 exact cold records. The separate identical-RPC reservation race is fixed, but is not established as this incident's sole cause.

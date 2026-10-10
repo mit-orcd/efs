@@ -328,12 +328,14 @@ int efs_client_put_manifest(const struct efs_client_put_request *,
                             struct efs_put_ticket *);
 int efs_client_put_resume(struct efs_client_put_request *,int probe_only,
                           uint32_t *state);
+int efs_client_put_retire(struct efs_client_put_request *);
 /* Ambiguous admission, revocation and RECLAIMING retain ownership. Only a
- * never-attempted request or an observed PUBLISHED ticket may be freed here. */
+ * never-attempted request or an observed PUBLISHED, retired ticket may be freed here. */
 int efs_client_put_free(struct efs_client_put_request *);
 /* Opt-in durable ownership only. Caller retains immutable identity/body on
  * ambiguity. STATUS does not establish a session; state is not a PUT permit. */
 int efs_client_rpc_put_ticket(const struct efs_put_ticket *,int probe_only,uint32_t *state);
+int efs_client_rpc_put_ticket_retire(const struct efs_put_ticket *);
 int efs_client_rpc_publication(const struct efs_msg_publication *, int query_only, /* 0 submit, 1 status, 2 exact retirement */
                                struct efs_msg_publication_reply *);
 int efs_client_rpc_lane_writer_view(efs_ino_t ino, uint64_t generation,

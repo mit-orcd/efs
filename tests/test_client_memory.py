@@ -73,7 +73,7 @@ void efs_export_present_add(struct efs_export *ex,efs_ino_t ino,int which,int de
 ticket_source=(root/'src/meta/put_ticket.c').read_text()
 for name in ['wr32','wr64','ticket_shard','ticket_key','efs_put_ticket_encode','efs_put_ticket_from_pub']:
     source+='\n'+function(ticket_source,name)
-for name in ['dcache_slot','dcache_mu','dcache_find','dcache_find_meta','dcache_metadata_idle','dcache_chain_reuse','dcache_keep_on_drop','efs_dcache_bind_writer','efs_dcache_write_lane','dcache_snapshot_lane','efs_dcache_snapshot_lane','efs_dcache_snapshot_publication','efs_dcache_begin_publication','efs_dcache_finish_publication','efs_dcache_publication_report','efs_dcache_complete_publication','efs_dcache_publication_request_ticketed','efs_dcache_publication_request','efs_dcache_consume_publication','efs_dcache_publication_result','dcache_take']:
+for name in ['dcache_slot','dcache_mu','dcache_find','dcache_find_meta','dcache_metadata_idle','dcache_chain_reuse','dcache_keep_on_drop','efs_dcache_bind_writer','dcache_typed_admission_idle','efs_dcache_write_lane','dcache_snapshot_lane','efs_dcache_snapshot_lane','efs_dcache_snapshot_publication','efs_dcache_begin_publication','efs_dcache_finish_publication','efs_dcache_publication_report','efs_dcache_complete_publication','efs_dcache_publication_request_ticketed','efs_dcache_publication_request','efs_dcache_consume_publication','efs_dcache_publication_result','dcache_take']:
     source += '\n'+function(w,name)
 source += '\n'+function(w,'efs_dcache_trim_metadata')
 source += '\n'+block(w, 'struct dcache_init {')
@@ -373,6 +373,18 @@ int main(void) {
     cached_view.view.history.entries[0].size=9;
     assert(efs_dcache_retire_clipped(555,7,0,&cached_view,read_base)==EFS_OK);
     assert(!fresh->data && !fresh->dirty && !fresh->pin_held && !efs_writer_state_owned(fresh->writer));
+    /* Idle typed body reuse preserves extra accounting for the same FileID;
+     * it never transfers that obligation to another generation. */
+    fresh->present_extra=1;cached_view.view.generation=8;
+    assert(efs_dcache_admit_lane_write(555,8,0,&cached_view,10,patch,4)==EFS_ERR_BUSY);
+    assert(!fresh->data && fresh->present_extra);
+    cached_view.view.generation=7;
+    assert(!efs_dcache_admit_lane_write(555,7,0,&cached_view,10,patch,4));
+    assert(fresh->data && fresh->present_extra && efs_writer_state_owned(fresh->writer));
+    cached_view.view.authority_epoch=2;cached_view.view.history.count=2;
+    cached_view.view.history.entries[1]=(struct efs_content_fence){2,0};read_base->authority_epoch=2;
+    assert(!efs_dcache_retire_clipped(555,7,0,&cached_view,read_base));
+    assert(!fresh->data && fresh->present_extra);
     free(read_base);
     dcache_drop_locked(555,0,0);assert(!g_metadata && !g_live);
     /* Snapshot outputs must never overwrite body/state through partial aliases. */

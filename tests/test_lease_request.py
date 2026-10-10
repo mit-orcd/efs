@@ -4,7 +4,7 @@ from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/client/inode_rpc.c').read_text()
 a=s.index('static int opid_begin(');b=s.index('/* A reservation identity',a)
-c=s.index('int efs_client_lease_begin(');d=s.index('int efs_client_rpc_put_ticket(',c)
+c=s.index('int efs_client_lease_begin(');d=s.index('static int rpc_put_ticket(',c)
 e=s.index('static void opid_refresh_ack(');f=s.index('static void opid_retry_ack(',e)
 h=s.index('static int session_shard_admit(uint32_t shard,const struct efs_opid_req *q)\n{');j=s.index('\n}',h)+2
 code=r'''
@@ -14,6 +14,7 @@ code=r'''
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 struct efs_client g_client;
 static pthread_mutex_t opid_mu=PTHREAD_MUTEX_INITIALIZER;

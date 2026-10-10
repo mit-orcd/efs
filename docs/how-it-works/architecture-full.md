@@ -1707,7 +1707,7 @@ positions do not assign an execution order or override the active handoff.
 | proto2 | **W83** · transaction decision records lack safe retirement | metadata lifecycle gap | resolve/drop remove participant records; no decision acknowledgement/GC path found | [evidence and gate](#w83) |
 | proto3 | **W84** · bounded namespace transactions | namespace completeness | Closed for accepted D32 144-participant envelope: distinct EOVERFLOW, prompt atomic refusal diagnostics, mixed boundaries, full64-lane removal/replacement, exact144 PREPARE/COMMIT cold recovery and AMD normal/fault POSIX/GC gates pass; larger-operation protocol deferred | [closure and limits](../status/w84-closure-20261009.md) |
 | storage1 | **W85** · path-hint eviction loses ambiguous PUT retry history | conditional accounting/storage correctness | Closed: ambiguous PUT placement retained in 389a8baf; direct/buffered real lost-ACK collision and two-root physical/quota/restart gates pass | [evidence and gate](#w85) |
-| gc-own | **W86** · durable PUT ticket integration | feature / safe reclamation | metadata state machine plus replicated admission/authoritative status transport implemented (`0aaf7d32`), AMD cold replay/body collision/revocation gates pass; production data-plane fences and all-member collection remain staged | [evidence and gate](#w86) · [D31](#d31--recorded-abandoned-upload-policy) |
+| gc-own | **W86** · durable PUT ticket integration | feature / safe reclamation | metadata ledger, budgeted retained admission and ticket-bound durable publication receipts implemented (`22c8c1f9`, `70daa5a4`); AMD same/cross-group lost replies, leader death, cold replay, collision and revocation pass; default PUT/flush, storage fences and all-member abandoned collection remain staged | [evidence and gate](#w86) · [D31](#d31--recorded-abandoned-upload-policy) |
 | append-load | **W87** · buffered concurrent append loses records under load | correctness investigation | failure recorded in private GC fixture; isolated repeats pass; full traced acceptance owed | [evidence and gate](#w87) |
 | replay-span | **W88** · folded span retry resurrects after bounded history eviction | publication/retry correctness | partial — actual cross-group typed cache/host replay preserves peer bytes and cold mappings on AMD direct/TCP; production flush/ticket integration and full replay gates remain open | [evidence and gate](#w88) · [Oct9 checkpoint](../status/dependency-package-20261009.md#retained-typed-publication-writeback--staged-amd-gated) |
 | measure-fields | **W89** · W23 TSV field packing shifts derived metrics | verification correctness | TSV schema/reduction repaired; NUC regressions pass; new pressure run and valid bound remain owed | [evidence and gate](#w89) |
@@ -5676,6 +5676,17 @@ first-send optimization still respects D7 and retries never falsely assert NEW.
 
 
 <a id="w87"></a>
+
+**Oct 10 UTC progress:** `22c8c1f9` retains budgeted immutable admission manifests
+and captured client membership across ambiguity/revocation. `70daa5a4` binds
+tickets through the actual durable publication/status/retirement endpoint and
+cache consumption; mapping/PUBLISHED ownership is atomic. PUT identities are
+mount-wide, separate from cache snapshot counters and namespace ACKs. AMD
+direct/TCP same/cross-group lost-reply, actual leader-death and cold replay gates
+pass, alongside core212/212 and peer64/64. These uploads still use legacy PUT
+transport after admission: default FUSE flush/PUT, durable storage rejection
+fences, stable server membership capture and abandoned all-member ACKs remain
+open. [Current checkpoint](../status/dependency-package-20261009.md#retained-put-ownership-and-ticketed-publications--oct-10-utc).
 
 ### W87 · Buffered concurrent append loses records under broader load
 

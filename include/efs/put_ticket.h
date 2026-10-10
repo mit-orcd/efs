@@ -11,6 +11,7 @@
 #define EFS_PUT_TICKET_ADMITTED 1u
 #define EFS_PUT_TICKET_PUBLISHED 2u
 #define EFS_PUT_TICKET_RECLAIMING 3u
+#define EFS_PUT_TICKET_RETIRED 4u /* transport floor proof only; never stored as a ticket */
 #define EFS_PUT_TICKET_KEY_LEN 51u
 #define EFS_PUT_TICKET_VAL_LEN 180u
 struct efs_put_ticket {
@@ -50,4 +51,9 @@ int efs_put_ticket_reclaim_begin(struct efs_kv *, const struct efs_put_ticket *)
 int efs_put_ticket_delete_ack(struct efs_kv *, const struct efs_put_ticket *,
                               uint32_t member_bit);
 int efs_put_ticket_retire(struct efs_kv *, const struct efs_put_ticket *);
+/* Floor proof cannot reconstruct the publication verdict or release bytes.
+ * The production retirement RPC accepts PUBLISHED only: abandoned uploads
+ * still require durable storage fences and every captured member's ACK. */
+int efs_put_ticket_retired(struct efs_kv *,const struct efs_put_ticket *,int *);
+int efs_put_ticket_retire_published(struct efs_kv *,const struct efs_put_ticket *);
 #endif
