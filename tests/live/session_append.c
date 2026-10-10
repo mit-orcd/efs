@@ -1,4 +1,4 @@
-/* Private staged bounded lease/lock cleanup RPC gate. No automatic activation. */
+/* Private staged bounded revoked-append cleanup RPC gate. No automatic activation. */
 #include "efs/network.h"
 #include "efs/protocol.h"
 #include "efs/meta_cmd.h"
@@ -52,13 +52,35 @@ int main(int argc,char **argv)
  for(unsigned i=0;i<16;i++){unsigned b;assert(sscanf(argv[3]+2*i,"%2x",&b)==1);uuid[i]=b;}
  shard=efs_kv_inode_shard(strtoull(argv[4],NULL,10));
  unsigned group=efs_raft_shard_group(shard),owner=efs_raft_shard_group(efs_kv_session_shard(uuid));
+ if(!strcmp(argv[1],"hold")) {
+  uint8_t held[39]={0};held[0]=group;held[1]=EFS_MD_CMD_SESSION;held[2]=EFS_MD_SESS_LEASE_OPEN;
+  memcpy(held+3,uuid,16);be(held+19,1,4);be(held+23,strtoull(argv[4],NULL,10),8);be(held+31,1,8);
+  rpc(held,sizeof(held),EFS_OK);
+  puts("retained session lease blocks unrelated CLOSE cleanup during exact append snapshot PASS");return 0;
+ }
  assert(!strcmp(argv[1],"fence-half"));
  next(EFS_ERR_BUSY);
  session(EFS_MD_SESS_BEGIN,owner,0,0,18,EFS_OK);
  session(EFS_MD_SESS_FENCE_LOC,group,2,shard,26,EFS_OK);
  next(EFS_ERR_BUSY);
  session(EFS_MD_SESS_ACK,owner,shard,0,22,EFS_OK);
- session(EFS_MD_SESS_FINISH,owner,0,0,18,EFS_OK);
+ /* The captured APPEND/EOF participants, not only the inode shard, belong
+  * to the exact frozen revocation set. Preserve incomplete completion. */
+ session(EFS_MD_SESS_FINISH,owner,2,0,22,EFS_ERR_BUSY);
+ for(unsigned word=0;word<EFS_SESSION_BITMAP/8u;word++) {
+  uint8_t query[23]={0};query[0]=owner;query[1]=EFS_MD_CMD_SESSION;
+  memcpy(query+3,uuid,16);be(query+19,EFS_SESSION_BITS+word,4);
+  uint64_t bits=rpc(query,sizeof(query),EFS_OK).salt;
+  for(unsigned bit=0;bit<64;bit++)if(bits&(1ull<<bit)) {
+   unsigned touched=word*64+bit;
+   printf("append frozen touched shard=%u\n",touched);
+   session(EFS_MD_SESS_FENCE_LOC,efs_raft_shard_group(touched),2,touched,26,EFS_OK);
+   session(EFS_MD_SESS_ACK,owner,touched,0,22,EFS_OK);
+  }
+ }
+ session(EFS_MD_SESS_STORAGE_FENCE,owner,2,0,22,EFS_OK);
+ session(EFS_MD_SESS_FINISH,owner,2,0,22,EFS_OK);
+ session(EFS_MD_SESS_FINISH,owner,2,0,22,EFS_OK);
  for(unsigned i=0;i<32;i++)assert(next(EFS_OK).salt==0);
  puts("completed global barrier and one-reservation transactions: 32 of 64 PASS");
  return 0;

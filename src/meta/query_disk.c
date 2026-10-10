@@ -61,7 +61,8 @@ struct efs_query_disk {
     uint8_t shared_d[SHARDS]; /* Immutable old generation link until first write. */
     uint8_t fd_index[SHARDS][4]; /* Slot plus one; zero means absent. */
     pthread_mutex_t mutex;
-    uint64_t tick,count,bytes,limit,disk_bytes,disk_limit;
+    uint64_t tick,count,bytes,limit,disk_bytes,disk_limit,root_bytes,root_limit;
+    int budget_fd;
     uint32_t rebuilt,refolded;
     uint64_t watermark[4];
     struct efs_kv kv;
@@ -72,6 +73,7 @@ static int kind_at(uint8_t kind) { for(int i=0;i<KINDS;i++)if(kinds[i]==kind)ret
 static pthread_once_t reserve_once=PTHREAD_ONCE_INIT;
 static uint64_t reserve_bytes=UINT64_C(64)<<20;
 static uint64_t generation_limit=UINT64_C(16384)<<20;
+static uint64_t aggregate_limit=UINT64_C(32768)<<20;
 static void configure_reserve(void)
 {
     const char *text=getenv("EFS_QUERY_DISK_RESERVE_MIB");
@@ -80,11 +82,15 @@ static void configure_reserve(void)
         fprintf(stderr,"query-config: invalid EFS_QUERY_DISK_RESERVE_MIB; using 64\n");
     else reserve_bytes=(uint64_t)mib<<20;
     text=getenv("EFS_QUERY_DISK_MAX_MIB");
-    if(!text)return;
-    errno=0;end=NULL;mib=strtoull(text,&end,10);
-    if(errno || !end || *end || mib<1 || mib>16777216)
+    errno=0;end=NULL;mib=text?strtoull(text,&end,10):16384;
+    if(text && (errno || !end || *end || mib<1 || mib>16777216))
         fprintf(stderr,"query-config: invalid EFS_QUERY_DISK_MAX_MIB; using 16384\n");
     else generation_limit=(uint64_t)mib<<20;
+    text=getenv("EFS_QUERY_DISK_TOTAL_MIB");
+    errno=0;end=NULL;mib=text?strtoull(text,&end,10):32768;
+    if(text && (errno || !end || *end || mib<1 || mib>16777216))
+        fprintf(stderr,"query-config: invalid EFS_QUERY_DISK_TOTAL_MIB; using 32768\n");
+    else aggregate_limit=(uint64_t)mib<<20;
 }
 /* A free-space guard, not a reservation against concurrent non-cache writers.
  * Check every 256 small writes; ENOSPC still propagates from every syscall. */
@@ -106,8 +112,12 @@ static int disk_reserve(int fd)
 static int charge_disk(struct efs_query_disk *d,uint64_t bytes)
 {
     if(bytes>d->disk_limit || d->disk_bytes>d->disk_limit-bytes)return EFS_ERR_QUOTA;
+    if(d->root_limit && (d->root_bytes>d->root_limit ||
+       d->disk_bytes>d->root_limit-d->root_bytes ||
+       bytes>d->root_limit-d->root_bytes-d->disk_bytes))return EFS_ERR_QUOTA;
     d->disk_bytes+=bytes;return EFS_OK;
 }
+#include "query_disk_budget.h"
 static uint64_t derived_charge(uint64_t inodes,uint64_t names)
 {
     return inodes*(sizeof(struct disk_node)+sizeof(efs_ino_t))+
@@ -287,6 +297,7 @@ void efs_query_disk_free(struct efs_query_disk *d)
         }
         closedir(dir);rmdir(d->path);
     }
+    if(d->budget_fd>=0)close(d->budget_fd);
     pthread_mutex_destroy(&d->mutex);free(d);
 }
 /* Acquire once per host worker, before opening any generation. The lease
@@ -706,12 +717,14 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
     if(mkdir(root,0700) && errno!=EEXIST)return EFS_ERR_IO;
     struct efs_query_disk *d=calloc(1,sizeof(*d));if(!d)return EFS_ERR_NOMEM;
     pthread_once(&reserve_once,configure_reserve);
-    d->disk_limit=generation_limit;
+    d->budget_fd=-1;d->disk_limit=generation_limit;
     d->disk_bytes=sizeof(d->part)+10*sizeof(uint64_t);
     if(d->disk_bytes>d->disk_limit){free(d);return EFS_ERR_QUOTA;}
     d->bytes=working;d->limit=max_bytes;d->stop=stop;d->stop_ctx=ctx;
     d->kv=(struct efs_kv){.ops=&raw_ops,.ctx=d};pthread_mutex_init(&d->mutex,NULL);
     for(int i=0;i<FD_CACHE;i++)d->fds[i].fd=-1;
+    int admitted=root_budget_acquire(d,root);
+    if(admitted){efs_query_disk_free(d);return admitted;}
     int n=snprintf(d->path,sizeof(d->path),"%s/view-XXXXXX",root);
     if(n<0 || (size_t)n>=sizeof(d->path) || !mkdtemp(d->path)){efs_query_disk_free(d);return EFS_ERR_IO;}
     uint64_t revisions[SHARDS];int rc=efs_kv_lsm_snapshot_revisions(source,revisions,SHARDS);
@@ -800,6 +813,7 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
         if(dir>=0)close(dir);
     }
     if(rc){efs_query_disk_free(d);return rc;}
+    close(d->budget_fd);d->budget_fd=-1;
     d->stop=NULL;d->stop_ctx=NULL;*out=d;return EFS_OK;
 }
 uint64_t efs_query_disk_bytes(const struct efs_query_disk *d){return d?d->bytes:0;}
@@ -968,6 +982,7 @@ int efs_query_disk_restore(const char *root,const uint64_t watermark[4],uint64_t
     if(length<0)return errno==ENOENT?EFS_ERR_NOT_FOUND:EFS_ERR_IO;
     base[length]=0;if(strncmp(base,"view-",5) || strchr(base,'/'))return EFS_ERR_PROTO;
     struct efs_query_disk *d=calloc(1,sizeof(*d));if(!d)return EFS_ERR_NOMEM;
+    d->budget_fd=-1;
     pthread_mutex_init(&d->mutex,NULL);for(int i=0;i<FD_CACHE;i++)d->fds[i].fd=-1;
     pthread_once(&reserve_once,configure_reserve);
     d->disk_limit=generation_limit;d->disk_bytes=sizeof(d->part)+10*sizeof(uint64_t);

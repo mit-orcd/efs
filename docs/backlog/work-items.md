@@ -3661,6 +3661,10 @@ the original record and withdrawn interpretation remain retained.
 
 ## W92 · .efs/find and .efs/stats server snapshots and large namespace acceptance
 
+Oct 10 closure work is active at the user's request. Aggregate retained-cache
+admission has focused passing gates; durable catch-up and the full scale/fault
+acceptance matrix remain open. [Closure ledger](../status/query-cache-closure-20261010.md).
+
 Oct 10 incremental checkpoint: fixed 1024-item change/ancestor sets reuse immutable
 derived partitions and recompute exact affected rollups, with full-build fallback.
 Three Xorinox profiles pass 6000-file oracles each (124 / 165 / 159 files/s); cache

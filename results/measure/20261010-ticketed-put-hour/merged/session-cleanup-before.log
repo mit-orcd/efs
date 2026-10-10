@@ -1,0 +1,28 @@
+Evidence directory: /data1/efs/lease-retention-fixtures/gc-direct-x0braao2
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=2 index=2 salt=5933693256007787626
+client serving PASS
+sub=3 rc=0 salt=0 index=17
+sub=4 rc=0 salt=0 index=115
+sub=14 rc=-13 salt=0 index=0
+sub=5 rc=0 salt=0 index=18
+
+session-cleanup: /data1/efs/merged-storage-src-20261010/tests/live/session_cleanup.c:36: rpc: Assertion `!"session cleanup RPC deadline"' failed.
+
+Traceback (most recent call last):
+  File "/data1/efs/merged-storage-src-20261010/tests/live/gc_reclamation.py", line 549, in <module>
+    cleanup('first')
+    ~~~~~~~^^^^^^^^^
+  File "/data1/efs/merged-storage-src-20261010/tests/live/gc_reclamation.py", line 543, in cleanup
+    result=run([helper,stage,str(a.port),uuid,*map(str,inos)],capture_output=True,text=True,timeout=180).stdout
+           ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data1/efs/merged-storage-src-20261010/tests/live/gc_reclamation.py", line 208, in run
+    return subprocess.run([str(x) for x in args], check=True, timeout=kwargs.pop("timeout",60), env=kwargs.pop("env",env), **kwargs)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/data1/efs/lease-retention-fixtures/gc-direct-x0braao2/session-cleanup', 'first', '31740', 'e434898896fee8c444dc8c169cc271d2', '7688', '11784', '15880', '19976', '24072', '28168', '32264', '36360', '40456', '44552', '48648', '52744', '56840']' died with <Signals.SIGABRT: 6>.

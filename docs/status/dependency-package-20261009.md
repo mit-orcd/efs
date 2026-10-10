@@ -1059,3 +1059,40 @@ Default FUSE typed flush, durable captured per-ticket server member identities,
 all-member abandoned-upload deletion acknowledgements, revoked unknown-intent
 reconciliation and active legacy W88 remain open. No activation follows from
 these primitives. [Raw evidence and final gates](../../results/measure/20261010-ticketed-put-hour/README.md).
+
+
+### Integrated follow-up gates — 06:30 UTC
+
+The corrected ticketed receiver and merged persistence/query code independently
+pass AMD core212/212, peer64/64 and full cold/physical GC gates. Complete Linux
+regressions and docs5/5 pass; selected local/AMD source hashes match. The new
+receiver/client sanitizer gates pass with their stated module-only scope.
+
+Additional direct/TCP gates prove old-leader namespace/publication/session
+refusal, incomplete revocation with an isolated storage member and same-epoch
+completion after healing; real KV WAL sync failure retains periodic/shutdown
+checkpoints and cold replay restores exact bytes/nlink. Append/fsync boundaries,
+32 duplicate APPEND requests, dirty-stop recovery and acknowledged mutations
+across leader shutdown also pass. These are software crash/fault gates.
+
+A previously unexercised bounded-cleanup helper exposed its obsolete one-shard
+completion assumption after FINISH began preserving BUSY. It now independently
+reads the exact frozen touched set, fences/ACKs every bit, proves the storage
+epoch and retries exact FINISH. The corrected gate passes first-batch replay,
+cold remaining leases/locks, bounded management resume and physical reclamation.
+Deferred CLOSE also passes 64 cross-group reservations, cold holes, zero retired
+obligations and exact reopen. Revoked-append also passes after the same
+exact-set correction and a real retained lease removes the setup's concurrent
+CLOSE race while preserving the exact 32+32 assertion. O_SYNC/O_DSYNC failure
+retains exact bytes through fsync and cold recovery. [Integrated evidence](../../results/measure/20261010-ticketed-put-hour/README.md).
+
+The package remains open: durable captured server member identities must precede
+abandoned-upload delete acknowledgements/collection. Default FUSE typed flush
+and revoked unknown-intent reconciliation still require integration gates.
+
+
+06:36 UTC integration: new atomic KV apply/cursor and WAL test commits arrived
+and were merged through `8109d954`/`12d2580b`. Complete Linux regressions pass;
+the final merged full AMD live gate is in progress. Earlier fixture proof is
+recorded separately and does not establish the new cursor's entire fault matrix.
+W93's exact committed build and sustained cohort acceptance remain open.
