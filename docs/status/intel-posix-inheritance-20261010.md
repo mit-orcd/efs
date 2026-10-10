@@ -124,3 +124,18 @@ callbacks with controlled error statuses. Failed source discovery must never
 allocate an OPEN description/lease, mutate a namespace or change the supplied
 file handle. Ordinary OPEN success and rejected lease cleanup also execute.
 The unchanged source fails the first unavailable-authority assertion.
+
+## Namespace removal refusal reporting
+
+The UNLINK/RMDIR error helper reported the accepted namespace transaction
+capacity refusal (EFS_ERR_OVERFLOW) as EIO. It similarly flattened server-side
+permission, memory and NOT_PRIMARY responses. Removal now returns EOVERFLOW,
+EACCES, ENOMEM and EBUSY respectively, retaining its existing bounded
+NOT_EMPTY retry and all other behavior. No transaction capacity, retry identity,
+namespace mutation or server authority rules change.
+
+The actual UNLINK/RMDIR callbacks execute in a controlled fixture. Capacity and
+other refusal statuses make one mutation attempt; a NOT_EMPTY rmdir retains
+exactly twenty bounded attempts, and failed source discovery/authorization make
+none. The unchanged callback fails the overflow assertion. This follows W84's
+explicit refusal contract but does not extend its accepted participant envelope.

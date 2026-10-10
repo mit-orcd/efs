@@ -4053,10 +4053,17 @@ static int fuse_unlink_errno(int urc)
         return -ENOENT;
     if (urc == EFS_ERR_NOT_EMPTY)
         return -ENOTEMPTY;
-    if (urc == EFS_ERR_BUSY || urc == EFS_ERR_AGAIN)
+    if (urc == EFS_ERR_BUSY || urc == EFS_ERR_AGAIN ||
+        urc == EFS_ERR_NOT_PRIMARY)
         return -EBUSY;
     if (urc == EFS_ERR_INVAL)
         return -EINVAL;
+    if (urc == EFS_ERR_OVERFLOW)
+        return -EOVERFLOW;
+    if (urc == EFS_ERR_ACCES)
+        return -EACCES;
+    if (urc == EFS_ERR_NOMEM)
+        return -ENOMEM;
     return -EIO;
 }
 
