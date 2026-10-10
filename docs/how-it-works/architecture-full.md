@@ -1510,6 +1510,11 @@ records all-node profiles, exact-match lookup, bounded combined-record writes
 and one checked raw/index persistence barrier; controlled syscall and cold
 correctness evidence stays separate from live throughput observations.
 
+[Combined branch integration](../status/find-stats-all-branches-20261009.md) records
+`devel`, W66 and persistence-pressure merges into `devel-find-stats`, preserving
+the cache fixes. Committed branch coverage and private Linux gates are tracked;
+the deployed runtime remains the prior profiling build.
+
 ### Distributed metadata scaling discussion
 
 [W98 — from fixed placement to distributed metadata capacity](../status/all-node-metadata-queries-20261009.md)
