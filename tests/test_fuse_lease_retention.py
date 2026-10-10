@@ -23,6 +23,8 @@ source=r'''
 #include "efs/session.h"
 struct efs_client g_client;
 static int open_rc,close_rc,adopt_rc,opens,closes,adopts,server_hold,revocation;
+static int busy_open_replies;
+static uint64_t stats_now_ms(void);
 int efs_client_rpc_getchunks_fileid(efs_export_id_t ex,efs_ino_t ino,uint64_t gen,uint32_t start,struct efs_chunk_rec *recs,uint32_t *count,uint64_t *out) {
  (void)ex;(void)gen;(void)start;(void)recs;(void)count;assert(ino==42);*out=99;return EFS_OK;
 }
@@ -36,7 +38,7 @@ int efs_client_lease_resume(struct efs_client_lease_request *r,int probe) {
  assert(!pthread_mutex_trylock(&g_open_mu));pthread_mutex_unlock(&g_open_mu);
  if(r->complete)return r->result;
  int rc;
- if(r->flags&EFS_LEASE_EDGE_OPEN){if(!r->attempted)opens++;server_hold=1;rc=open_rc;}
+ if(r->flags&EFS_LEASE_EDGE_OPEN){if(!r->attempted)opens++;server_hold=1;rc=busy_open_replies>0?(busy_open_replies--,EFS_ERR_BUSY):open_rc;}
  else if(r->flags==EFS_LEASE_EDGE_CLEAR_PENDING){adopts++;rc=adopt_rc;}
  else {closes++;rc=close_rc;if(!rc)server_hold=0;}
  r->attempted=1;
@@ -50,7 +52,7 @@ int efs_client_lease_reset(struct efs_client_lease_request *r) {
 # RPC mock references the production mutex, so place bookkeeping first.
 mock=source[source.index('int efs_client_rpc_getchunks_fileid'):]
 source=source[:source.index('int efs_client_rpc_getchunks_fileid')]+s[a:b]+mock
-for name in ('efs_open_note','efs_open_set_leased','efs_close_note','efs_open_release_pending','efs_open_drain_pending','efs_open_acquire_fileid','efs_open_acquire','efs_open_adopt'):
+for name in ('efs_open_note','efs_open_set_leased','efs_close_note','efs_open_release_pending','efs_open_drain_pending','efs_open_resume_wait','efs_open_acquire_fileid','efs_open_acquire','efs_open_adopt'):
  source+='\n'+function(name)
 w=s.index('/* A lost last-close reply must not pin')
 x=s.index('/* Client-cache design Part A, pin rule 2:',w)
@@ -58,11 +60,20 @@ source+=r'''
 static _Thread_local uint64_t mock_deadline;
 uint64_t efs_client_rpc_deadline_ms(void){return mock_deadline;}
 void efs_client_rpc_set_deadline_ms(uint64_t deadline){mock_deadline=deadline;}
+int efs_client_rpc_past_deadline(void){return mock_deadline && stats_now_ms()>=mock_deadline;}
 static int efs_pending_create_drain(void){return EFS_OK;}
 static uint64_t stats_now_ms(void){struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000+t.tv_nsec/1000000;}
 '''+s[w:x]
 source+=r'''
 int main(void) {
+ int leased_retry=0;
+ busy_open_replies=3;int before=opens;
+ assert(!efs_open_acquire(42)&&opens==before+1&&!busy_open_replies&&!mock_deadline);
+ assert(efs_close_note(42,&leased_retry));assert(!efs_open_release_pending(42));
+ open_rc=EFS_ERR_BUSY;mock_deadline=stats_now_ms()+5;uint64_t caller=mock_deadline;
+ before=opens;assert(efs_open_acquire(42)==EFS_ERR_BUSY&&opens==before+1&&mock_deadline==caller);
+ assert(g_open_refs&&!g_open_refs->n&&g_open_refs->edge.active&&!g_open_refs->edge.complete);
+ open_rc=0;mock_deadline=0;assert(!efs_open_release_pending(42)&&!g_open_refs&&!server_hold);opens=0;
  assert(!efs_open_acquire(42));assert(!efs_open_acquire(42));assert(opens==1);
  int leased=0;assert(!efs_close_note(42,&leased));assert(!leased);
  assert(efs_close_note(42,&leased)&&leased);

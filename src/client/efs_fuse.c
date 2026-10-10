@@ -2062,6 +2062,25 @@ static int efs_open_drain_pending(void)
     return rc == EFS_OK ? EFS_ERR_BUSY : rc;
 }
 
+/* OPEN can contend with an append/close transaction. An unknown BUSY is
+ * retryable with the same sequenced identity, never an application verdict.
+ * Preserve the caller deadline and leave unresolved ownership to cleanup. */
+static int efs_open_resume_wait(struct efs_client_lease_request *request)
+{
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    uint64_t deadline = stats_now_ms() + 30000;
+    if (previous && previous < deadline) deadline = previous;
+    efs_client_rpc_set_deadline_ms(deadline);
+    int rc = EFS_ERR_BUSY;
+    while (!efs_client_rpc_past_deadline()) {
+        rc = efs_client_lease_resume(request, 0);
+        if (rc != EFS_ERR_BUSY || request->complete) break;
+        usleep(1000);
+    }
+    efs_client_rpc_set_deadline_ms(previous);
+    return rc;
+}
+
 /* Every returned regular descriptor, including CREATE, owns a server lease.
  * The edge stripe prevents a second open returning before proven OPEN,
  * and prevents a delayed last-close release deleting a new lease. */
@@ -2097,7 +2116,7 @@ static int efs_open_acquire_fileid(efs_ino_t ino, uint64_t create_generation)
             if (rc == EFS_OK) {
                 owner->lease_generation = generation;
                 efs_open_set_leased(ino);
-                rc = efs_client_lease_resume(&owner->edge, 0);
+                rc = efs_open_resume_wait(&owner->edge);
                 if (rc == EFS_OK && !owner->edge.complete) rc = EFS_ERR_BUSY;
             }
         }

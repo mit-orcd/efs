@@ -1,0 +1,7 @@
+Assertion failed: (!efs_open_acquire(42)&&opens==before+1&&!busy_open_replies&&!mock_deadline), function main, file test.c, line 341.
+Traceback (most recent call last):
+  File "/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/w66-open-negative-56ewx091/tests/test_fuse_lease_retention.py", line 126, in <module>
+    subprocess.run([str(p.with_suffix(''))],check=True)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 528, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-lease-retention-22gmbbd_/test']' died with <Signals.SIGABRT: 6>.
