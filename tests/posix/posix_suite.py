@@ -1504,6 +1504,30 @@ def perm_suid_sgid_sticky_stored(d):
 
 
 @test
+def perm_setgid_directory_inheritance(d):
+    parent = os.path.join(d, "group-parent")
+    os.mkdir(parent)
+    os.chmod(parent, 0o2770)
+    parent_gid = os.stat(parent).st_gid
+    child = os.path.join(parent, "child")
+    os.mkdir(child, 0o750)
+    child_stat = os.stat(child)
+    eq(child_stat.st_gid, parent_gid, "child directory group")
+    assert child_stat.st_mode & statmod.S_ISGID, "child directory lost inherited setgid"
+    grandchild = os.path.join(child, "grandchild")
+    os.mkdir(grandchild, 0o750)
+    assert os.stat(grandchild).st_mode & statmod.S_ISGID, "setgid inheritance stopped at one level"
+    file = os.path.join(parent, "file")
+    wr(file, b"group inheritance")
+    file_stat = os.stat(file)
+    eq(file_stat.st_gid, parent_gid, "regular file group")
+    assert not file_stat.st_mode & statmod.S_ISGID, "regular file inherited directory-only setgid"
+    link = os.path.join(parent, "link")
+    os.symlink("file", link)
+    eq(os.lstat(link).st_gid, parent_gid, "symlink group")
+
+
+@test
 def perm_sticky_owner_can_unlink(d):
     sub = os.path.join(d, "sub")
     os.mkdir(sub)

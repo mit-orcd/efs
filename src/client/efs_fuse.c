@@ -744,6 +744,20 @@ static const struct fuse_ctx *ll_ctx(void)
     return t_req ? fuse_req_ctx(t_req) : NULL;
 }
 
+/* Linux/POSIX group inheritance belongs to the parent directory, not the
+ * creator's primary group. Only new directories inherit the setgid bit. */
+static void efs_create_credentials(const struct efs_inode *parent, mode_t *mode,
+                                   uid_t *uid, gid_t *gid)
+{
+    const struct fuse_ctx *ctx = ll_ctx();
+    *uid = ctx ? ctx->uid : 0;
+    *gid = ctx ? ctx->gid : 0;
+    if (parent->mode & S_ISGID) {
+        *gid = parent->gid;
+        if (S_ISDIR(*mode)) *mode |= S_ISGID;
+    }
+}
+
 static int query_credentials(struct efs_msg_query_snapshot *q)
 {
     const struct fuse_ctx *ctx=ll_ctx();
@@ -4039,14 +4053,15 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
     if (wx != 0)
         return wx;
 
-    const struct fuse_ctx *ctx = ll_ctx();
-    uid_t uid = ctx ? ctx->uid : 0;
-    gid_t gid = ctx ? ctx->gid : 0;
+    mode_t create_mode = S_IFREG | mode;
+    uid_t uid;
+    gid_t gid;
+    efs_create_credentials(&parent, &create_mode, &uid, &gid);
     efs_ino_t ino = 0;
     struct efs_pending_create *pending_create=efs_pending_create_alloc();
     if(!pending_create)return -ENOMEM;
     int create_rc=efs_fuse_create_begin_wait(&pending_create->request,parent.ino,
-        name,S_IFREG|mode,uid,gid);
+        name,create_mode,uid,gid);
     if(create_rc==EFS_OK)create_rc=efs_fuse_create_resume_wait(&pending_create->request);
     if(create_rc==EFS_OK && pending_create->request.complete) {
         ino=pending_create->request.inode.ino;
@@ -4148,11 +4163,12 @@ static int efs_fuse_mkdir_at(fuse_ino_t parent_ino, const char *name, mode_t mod
     int wx = check_dir_wx(&parent);
     if (wx != 0)
         return wx;
-    const struct fuse_ctx *ctx = ll_ctx();
-    uid_t uid = ctx ? ctx->uid : 0;
-    gid_t gid = ctx ? ctx->gid : 0;
+    mode_t create_mode = S_IFDIR | mode;
+    uid_t uid;
+    gid_t gid;
+    efs_create_credentials(&parent, &create_mode, &uid, &gid);
     efs_ino_t ino = 0;
-    int mk = efs_client_create_result(parent.ino, name, S_IFDIR | mode,
+    int mk = efs_client_create_result(parent.ino, name, create_mode,
                                       uid, gid, 0, &ino);
     if (mk != EFS_OK) {
         /* Kernel LOOKUP was negative, then MKDIR. The server can answer
@@ -4407,11 +4423,12 @@ static int efs_fuse_symlink_at(const char *link, fuse_ino_t parent_ino,
     int wx = check_dir_wx(&parent);
     if (wx != 0)
         return wx;
-    const struct fuse_ctx *ctx = ll_ctx();
-    uid_t uid = ctx ? ctx->uid : 0;
-    gid_t gid = ctx ? ctx->gid : 0;
+    mode_t create_mode = S_IFLNK | 0777;
+    uid_t uid;
+    gid_t gid;
+    efs_create_credentials(&parent, &create_mode, &uid, &gid);
     efs_ino_t ino = 0;
-    int create_rc = efs_client_create_result(parent.ino, name, S_IFLNK | 0777,
+    int create_rc = efs_client_create_result(parent.ino, name, create_mode,
                                               uid, gid, 0, &ino);
     if (create_rc != EFS_OK)
         return fuse_create_errno(create_rc, parent.ino, name);
