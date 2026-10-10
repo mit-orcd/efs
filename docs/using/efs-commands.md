@@ -137,6 +137,12 @@ this limit is refused with QUOTA. It includes hard-linked partition bytes and
 sort overlap, but does not cap the total of retained generations or physical
 filesystem allocation overhead.
 
+`EFS_QUERY_DISK_TOTAL_MIB` defaults to 32768 and caps aggregate logical bytes in
+the cache root, including retained generations and interrupted build files.
+Configure both disk limits for large namespaces; increasing the RAM budget
+does not increase disk admission. Refused cache refreshes retain the previous
+snapshot while ordinary file I/O continues.
+
 Check server `query-restore`, `query-refresh` and `query-publish` logs if commands
 fail. Stale/corrupt checkpoints are rebuilt after authority checks. A misplaced
 live directory entry can refuse the entire candidate; raising a memory budget
@@ -166,3 +172,20 @@ them. Fresh queries and export pages check server policy and current quorum;
 already acquired immutable bytes remain readable. Ordinary file I/O continues
 when command policy is disabled. Final scale/platform acceptance is
 tracked in the [W92 ledger](../status/query-cache-closure-20261010.md).
+
+## NFS gateways
+
+The gateway FUSE mount needs export support as well as command opt-in:
+
+```sh
+EFS_COMMANDS=1 EFS_FUSE_EXPORT=1 EFS_TRANSPORT=tcp \
+  ./scripts/client.sh SEED:17432 /mnt/efs -o allow_other
+```
+
+Use the cluster gateway helper for its NFS export setup. The tested protocol is
+NFSv4.0, including macOS clients. A FUSE or NFS restart can stale existing client
+handles; remount affected clients before testing. NFS restart grace can delay new
+opens (90 seconds on Xorinox). Keep the normal gateway mount opted out after
+testing by omitting `EFS_COMMANDS=1`, while retaining `EFS_FUSE_EXPORT=1`.
+NFS credential mapping remains the export administrator's responsibility; a
+client mapped to root does not prove per-user ACL isolation.

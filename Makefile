@@ -304,6 +304,7 @@ test: all
 	python3 tests/test_applied_interval.py
 	./tests/test_store_containers
 	python3 tests/test_lookup_errno.py
+	python3 tests/test_virtual_export_handles.py
 	python3 tests/test_fuse_open_reply.py
 	python3 tests/test_fuse_lease_retention.py
 	python3 tests/test_create_admission_wait.py
