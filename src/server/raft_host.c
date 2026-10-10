@@ -6229,9 +6229,11 @@ static void *host_pump(void *arg)
          * before commit, so the KV only has to be durable before
          * persist_applied advances the saved index: hold across the
          * applies, release (= the one fsync) before persist_applied.
-         * A crash between release and persist re-applies entries whose
-         * puts are already in the KV — the same window per-put fsync had,
-         * and apply is idempotent for it. A handler-thread KV write
+         * Each entry's effects and recovery cursor are one atomic KV
+         * WAL record. After a crash, the validated cursor suppresses
+         * replay of effects already recovered from that WAL; legacy
+         * hints alone cannot make transaction effects idempotent.
+         * A handler-thread KV write
          * during the hold (session/lock rows) is durable at this cycle's
          * release, at most one cycle later than before. */
         (void)efs_kv_lsm_sync_hold(h->kv);
