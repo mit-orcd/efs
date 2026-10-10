@@ -104,3 +104,16 @@ selects fragment I/O independently of transport; buffered is the daemon default.
 - `du` (`st_blocks`) counts chunks present per lane; a file this client did
   not write reports its server-side count, not size/512 — decision D17 in
   [decisions.md](../status/decisions.md).
+
+## Server query-cache capacity
+
+The disk query backend is a local, rebuildable cache. Configure the server process
+with `EFS_QUERY_DISK_MAX_MIB` (per generation, default 16384),
+`EFS_QUERY_DISK_TOTAL_MIB` (all retained generations and new-build scratch in the
+private cache root, default 32768), and `EFS_QUERY_DISK_RESERVE_MIB` (filesystem
+free-space guard, default 64). Settings are read at process startup. These are
+logical admission limits, not exclusive disk reservations. Shared links count
+conservatively per generation; pinned exports can cause refresh admission refusal.
+A refusal preserves the old checkpoint and reports a refresh error. Existing
+valid cache reads remain available after a total-limit reduction.
+See [aggregate admission and acceptance](../status/query-cache-closure-20261010.md).

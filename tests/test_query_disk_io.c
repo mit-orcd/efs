@@ -74,9 +74,51 @@ static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
 #endif
 static int failures;
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"FAIL %d: %s\n",__LINE__,#x);failures++;}}while(0)
+static int cancel_budget(void *ctx){(void)ctx;return 1;}
+static void budget_test(void)
+{
+    char root[]="/tmp/efs-query-budget-XXXXXX",a[EFS_MAX_PATH],b[EFS_MAX_PATH],c[EFS_MAX_PATH],path[EFS_MAX_PATH];
+    CHECK(mkdtemp(root));
+    snprintf(a,sizeof(a),"%s/view-a",root);snprintf(b,sizeof(b),"%s/view-b",root);snprintf(c,sizeof(c),"%s/view-orphan",root);
+    CHECK(!mkdir(a,0700));CHECK(!mkdir(b,0700));CHECK(!mkdir(c,0700));
+    char source[EFS_MAX_PATH];snprintf(source,sizeof(source),"%s/part",a);
+    int fd=open(source,O_CREAT|O_RDWR,0600);CHECK(fd>=0);if(fd>=0){CHECK(!ftruncate(fd,4096));close(fd);}
+    snprintf(path,sizeof(path),"%s/part",b);CHECK(!link(source,path));
+    snprintf(path,sizeof(path),"%s/partial.copy",c);fd=open(path,O_CREAT|O_RDWR,0600);CHECK(fd>=0);
+    if(fd>=0){CHECK(!ftruncate(fd,4096));close(fd);}
+    struct efs_query_disk *q=calloc(1,sizeof(*q)),*other=calloc(1,sizeof(*other));CHECK(q && other);
+    if(q && other){
+        uint64_t saved=aggregate_limit;aggregate_limit=3*4096+255;
+        q->budget_fd=other->budget_fd=-1;q->disk_limit=other->disk_limit=UINT64_MAX;q->disk_bytes=256;
+        CHECK(root_budget_acquire(q,root)==EFS_ERR_QUOTA && q->budget_fd==-1);
+        aggregate_limit++;
+        CHECK(!root_budget_acquire(q,root) && q->root_bytes==3*4096);
+        CHECK(root_budget_acquire(other,root)==EFS_ERR_BUSY);
+        CHECK(charge_disk(q,1)==EFS_ERR_QUOTA && q->disk_bytes==256);
+        close(q->budget_fd);q->budget_fd=-1;q->stop=cancel_budget;
+        CHECK(root_budget_acquire(q,root)==EFS_ERR_BUSY && q->budget_fd==-1);
+        CHECK(!root_budget_acquire(other,root));close(other->budget_fd);other->budget_fd=-1;
+        /* A lease release reduces the reconstructed total on the next build. */
+        CHECK(!unlink(path));CHECK(!rmdir(c));q->stop=NULL;
+        CHECK(!root_budget_acquire(q,root) && q->root_bytes==2*4096);
+        CHECK(!charge_disk(q,4096));CHECK(charge_disk(q,1)==EFS_ERR_QUOTA);
+        close(q->budget_fd);q->budget_fd=-1;
+        snprintf(path,sizeof(path),"%s/journal",root);fd=open(path,O_CREAT|O_RDWR,0600);CHECK(fd>=0);
+        if(fd>=0){CHECK(!ftruncate(fd,8192));close(fd);}
+        CHECK(root_budget_acquire(q,root)==EFS_ERR_QUOTA);CHECK(!unlink(path));
+        CHECK(!symlink(source,path));CHECK(root_budget_acquire(q,root)==EFS_ERR_PROTO);CHECK(!unlink(path));
+        CHECK(!root_budget_acquire(q,root));close(q->budget_fd);q->budget_fd=-1;
+        aggregate_limit=saved;
+    }
+    free(q);free(other);unlink(source);rmdir(a);
+    snprintf(path,sizeof(path),"%s/part",b);unlink(path);rmdir(b);
+    snprintf(path,sizeof(path),"%s/.budget.lock",root);unlink(path);rmdir(root);
+}
 int main(void)
 {
+    budget_test();
     struct efs_query_disk *d=calloc(1,sizeof(*d));if(!d)return 1;
+    d->budget_fd=-1;
     d->disk_limit=UINT64_MAX;
     strcpy(d->path,"/tmp/efs-query-window-XXXXXX");
     if(!mkdtemp(d->path)){free(d);return 1;}
@@ -256,6 +298,11 @@ int main(void)
             unsigned populated=0;for(unsigned i=0;i<SHARDS;i++)populated+=old->part[i].count!=0;
             CHECK(raw_syncs==populated && index_syncs==populated);
             uint64_t wm[4]={1,2,3,4};CHECK(!efs_query_disk_checkpoint(old,wm));
+            uint64_t saved_total=aggregate_limit;aggregate_limit=1;
+            CHECK(efs_query_disk_build(cache,source,old,4<<20,NULL,NULL,&next)==EFS_ERR_QUOTA && !next);
+            CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
+            CHECK(!efs_query_disk_inode(next,file,NULL,NULL));efs_query_disk_free(next);next=NULL;
+            aggregate_limit=saved_total;
             /* A short derived-row batch followed by ENOSPC must never
              * publish a partially materialized candidate or replace old. */
             fail_write_kind='d';write_faults=0;
