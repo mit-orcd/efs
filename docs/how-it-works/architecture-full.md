@@ -1501,11 +1501,12 @@ unimplemented; unavailable/refusal tests are not lifecycle acceptance.
 ### Tiny-file performance follow-up
 
 [W93 final NUC acceptance](../status/w93-atomic-apply-20261010.md) **closes W93 Oct 10**:
-atomic apply recovery and APPEND replay repairs pass full/fault/cold gates;
-repeated 15-minute ABBA runs improve candidate throughput by 28.9% across means,
-with lower operation/mixed-read tails and no regression in the larger matched
-idle-read check. Both NUC mounts are restored on the repaired build with default
-settings. Tested tuning remains opt-in; W53/W94/W97 remain separate.
+all 16 captured tips integrate at `37ad6a8790c8`; atomic apply recovery and
+APPEND replay/admission repairs pass full/fault/cold gates. Repeated 15-minute
+ABBA runs improve candidate throughput by 30.54% across means, with lower
+operation percentiles, reported mixed-read outliers and improved idle percentiles
+in the larger matched read check. Both NUC mounts are restored on the repaired
+build with default settings. Tested tuning remains opt-in; W53/W94/W97 remain separate.
 
 
 [Oct 10 W93 checkpoint cadence](../status/w93-checkpoint-cadence-20261010.md) records
@@ -6075,14 +6076,16 @@ find/stats checkpoint; never treat the private fixture as deployed acceptance.
 ### W93 · Broader durable Raft group commit for tiny-file metadata
 
 **Closed Oct 10 — frozen NUC acceptance:** All captured branch tips are integrated
-into `devel-persistence-pressure`. APPEND late-receipt replay and atomic KV-effects /
+into `devel-persistence-pressure` (final merged engine `37ad6a8790c8`). APPEND
+receipt-window admission, late-receipt replay and atomic KV-effects /
 applied-cursor recovery repairs pass actual-source negative/sanitizer controls,
 full native regression, three POSIX 212/212 + peer 64/64 release-build gates,
 sync/append/dirty-stop/shutdown/WAL and maximum-cadence KV/marker-EIO crash gates,
 plus partition/publication/session/voter-change acceptance. Four balanced
-900-second ABBA runs give 66.56 / 82.33 / 81.39 / 60.45 files/s: **+28.9%** across
-candidate/control means, with improved operation and mixed-read tails. A larger
-6,000-read-per-group default/cadence/bundle/default check shows no idle-tail
+900-second ABBA runs give 60.67 / 83.18 / 75.06 / 60.54 files/s: **+30.54%** across
+candidate/control means, with improved operation percentiles and reported mixed-read
+tails/outliers. A larger 6,000-read-per-group default/cadence/bundle/default
+check shows no idle-tail
 regression. Repeated actual-core SATA/NVMe one/two-group cases retain group-specific
 ACK ordering, 1,280 → 80 barriers per group for eligible 16-entry cohorts and exact
 cold records. Queue/apply bounds, RSS/lag/refusals and 512 cold service payloads
