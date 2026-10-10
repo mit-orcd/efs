@@ -1020,3 +1020,63 @@ current large run and its watcher are still PID 554207/554216, and the 400 GiB
 writer/handoff remain unchanged. W92 is still open.
 
 [Raw batching focused and complete pilot evidence](../../results/measure/20261010-w92-closure/raw-batching/).
+
+
+## Raw batching full gates and named rollout
+
+The complete native repeat exits 0. The large reused-source run was intentionally
+advanced to the tested raw-batched library; its completed original source remains
+untouched. The previous v5 build was deliberately terminated before any build or
+mutation verdict and its exit 143/log preserved. The current screen is
+`w92-2p32-raw-batched-v6`, time parent PID 570453, harness PID 570455. Its log/time
+stem is `scale-4294967296-raw-batched-v6`; source fixture remains v4. The executing
+binary and queued full cold oracle share SHA256
+`67b563c13be9718a6f6ac216b2e0661d966418c657f9ee73cedfdf57b3f35e4a`.
+
+The initially generated v6 runner retained v5's terminal marker names. Its first
+cold watcher saw the predecessor's preserved 143 marker and refused; the build
+itself remained healthy. Those old v5 terminal files were moved to `.superseded`,
+the refusal record preserved as `.skipped-marker-mismatch`, and the corrected
+root watcher now waits for the active wrapper alone to create its legacy v5
+terminal names. It copies those actual verdicts to canonical v6 names, waits for
+the finished marker, validates original population plus every new phase, then
+runs the same strong kernel-cold oracle against the retained source. The exact
+executing runner is `handoff/active-run.sh`; `handoff/run.sh` has corrected names
+for any future launch. Current watcher PID 574959, root screen
+`w92-2p32-raw-recovery-20261010`, is verified live. No restart was used to repair
+this marker problem. At 3:34 elapsed, 49 name-index partitions were complete;
+this is a progress observation, not a complete gate or controlled speedup.
+
+Named cf4e365a daemon/client/mgmt compilation succeeds. The first build wrapper's
+nested shell quoting made its exit marker unreliable; its compiler/link output
+is preserved and a separate structured script waits for that make and then
+requires a real make verdict, exit 0. Named source and binaries were staged and
+hashed on all six guests, with prior binaries retained. A normal-only cold
+rollout exits 0; all normal servers run files/direct-I/O/TCP on port 17432 with
+3-voter metadata, `/data1`, 100G quota. Source/code archive is 13 MiB and excludes
+result artifacts, retaining each guest's existing disk-backed result symlink.
+The private capacity servers on 18432 were not restarted or reformatted.
+
+All six binary identities match, and `/proc/PID/exe` verifies the actual normal
+server and client mappings, separately from private old-code mappings:
+
+- efsd: `caf15279c8aa176882678e656ae368a38957b8ca891c36967fde9f9145a12629`
+- efs-fuse: `9e40c2820808c4639116071d20896d982c47edac564759efa244d4b84169d4cc`
+- efs-mgmt: `ef51dae578e4871cd8d85056175d52ac49c9e4267064a51950fa05c09bf9b302`
+
+Native two-mount command/permission/identity gates exit 0. Fresh Mac and Linux
+NFS complete oracles each verify all 141 files / 561174 bytes, every payload
+hash, full paged paths, stats, raw names, retained results and new-command
+convergence, exit 0. As before, gateway credential squashing is not a native
+per-user permission proof. Acceptance NFS and node111 mounts are retired;
+normal gateway/client mounts are commands-disabled and NFS service active.
+The user's separate standard Mac mount was not remounted or claimed fresh.
+
+The capacity handoff was advanced to local screen
+`w92-capacity-cold-handoff-cf4e365a` (PID 44782), preflighting the exact new server
+hash before its eventual private all-three cold stop. The writer and its
+acknowledged source/checkpoints were not interrupted. Full 2^32 and real 400 GiB
+terminal/cold/export/hash gates and final private-fixture/RAM cleanup are still
+open; named pilots and full native/platform repeats do not replace them.
+
+[Named binary, mapped runtime, native and platform evidence](../../results/measure/20261010-w92-closure/raw-batching/).

@@ -1,0 +1,49 @@
+Unmounting /mnt/efs
+Retiring drained efs-fuse PID 476173 for /mnt/efs
+Unmounted /mnt/efs
+Unmounting /mnt/efs
+Retiring drained efs-fuse PID 453631 for /mnt/efs
+Unmounted /mnt/efs
+Unmounting /mnt/efs
+Retiring drained efs-fuse PID 432363 for /mnt/efs
+Unmounted /mnt/efs
+{ path=/tmp/efs/efsd ; argv[]=/tmp/efs/efsd --node-id 1 --addr 192.168.122.111 --port 17432 --storage /data1 --quota 100G --direct-io ; ignore_errors=no ; start_time=[Sat 2026-10-10 08:30:48 EDT] ; stop_time=[n/a] ; pid=496557 ; code=(null) ; status=0/0 }
+{ path=/tmp/efs/efsd ; argv[]=/tmp/efs/efsd --node-id 2 --addr 192.168.122.112 --port 17432 --storage /data1 --quota 100G --direct-io --join 192.168.122.111:17432 ; ignore_errors=no ; start_time=[Sat 2026-10-10 08:30:48 EDT] ; stop_time=[n/a] ; pid=589093 ; code=(null) ; status=0/0 }
+{ path=/tmp/efs/efsd ; argv[]=/tmp/efs/efsd --node-id 3 --addr 192.168.122.113 --port 17432 --storage /data1 --quota 100G --direct-io --join 192.168.122.111:17432 ; ignore_errors=no ; start_time=[Sat 2026-10-10 08:30:49 EDT] ; stop_time=[n/a] ; pid=574666 ; code=(null) ; status=0/0 }
+caf15279c8aa176882678e656ae368a38957b8ca891c36967fde9f9145a12629  /tmp/efs/efsd
+9e40c2820808c4639116071d20896d982c47edac564759efa244d4b84169d4cc  /tmp/efs/efs-fuse
+ef51dae578e4871cd8d85056175d52ac49c9e4267064a51950fa05c09bf9b302  /tmp/efs/efs-mgmt
+caf15279c8aa176882678e656ae368a38957b8ca891c36967fde9f9145a12629  /tmp/efs/efsd
+9e40c2820808c4639116071d20896d982c47edac564759efa244d4b84169d4cc  /tmp/efs/efs-fuse
+ef51dae578e4871cd8d85056175d52ac49c9e4267064a51950fa05c09bf9b302  /tmp/efs/efs-mgmt
+caf15279c8aa176882678e656ae368a38957b8ca891c36967fde9f9145a12629  /tmp/efs/efsd
+9e40c2820808c4639116071d20896d982c47edac564759efa244d4b84169d4cc  /tmp/efs/efs-fuse
+ef51dae578e4871cd8d85056175d52ac49c9e4267064a51950fa05c09bf9b302  /tmp/efs/efs-mgmt
+caf15279c8aa176882678e656ae368a38957b8ca891c36967fde9f9145a12629  /tmp/efs/efsd
+9e40c2820808c4639116071d20896d982c47edac564759efa244d4b84169d4cc  /tmp/efs/efs-fuse
+ef51dae578e4871cd8d85056175d52ac49c9e4267064a51950fa05c09bf9b302  /tmp/efs/efs-mgmt
+caf15279c8aa176882678e656ae368a38957b8ca891c36967fde9f9145a12629  /tmp/efs/efsd
+9e40c2820808c4639116071d20896d982c47edac564759efa244d4b84169d4cc  /tmp/efs/efs-fuse
+ef51dae578e4871cd8d85056175d52ac49c9e4267064a51950fa05c09bf9b302  /tmp/efs/efs-mgmt
+caf15279c8aa176882678e656ae368a38957b8ca891c36967fde9f9145a12629  /tmp/efs/efsd
+9e40c2820808c4639116071d20896d982c47edac564759efa244d4b84169d4cc  /tmp/efs/efs-fuse
+ef51dae578e4871cd8d85056175d52ac49c9e4267064a51950fa05c09bf9b302  /tmp/efs/efs-mgmt
+Running as unit: efsd.service; invocation ID: 4cb4c25384ab449caef7d01ff2a6da9f
+Running as unit: efsd.service; invocation ID: e6f6c4fa5d004c7d99f758b73a5d51ad
+Running as unit: efsd.service; invocation ID: 3831ec996da94216a84b4365c3a21fe4
+Stop with: ./scripts/client.sh stop /mnt/efs
+Logging efs-fuse to /mnt/efs-fuse-efs.log
+Mounted /mnt/efs
+Stop with: ./scripts/client.sh stop /mnt/efs
+Logging efs-fuse to /mnt/efs-fuse-efs.log
+Mounted /mnt/efs
+Stop with: ./scripts/client.sh stop /home/efs/w92-tiny-mnt
+Logging efs-fuse to /home/efs/efs-fuse-w92-tiny-mnt.log
+Mounted /home/efs/w92-tiny-mnt
+Stop with: ./scripts/client.sh stop /home/efs/w92-peer-mnt
+Logging efs-fuse to /home/efs/efs-fuse-w92-peer-mnt.log
+Mounted /home/efs/w92-peer-mnt
+Stop with: ./scripts/client.sh stop /mnt/efs
+Logging efs-fuse to /mnt/efs-fuse-efs.log
+Mounted /mnt/efs
+active

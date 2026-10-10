@@ -1534,7 +1534,7 @@ POSIX core/concurrent/extras and cold persistence gates; eleven retained trees
 verify 78000 files and 724 payload samples, with normal `.efs` opt-out restored.
 
 [W92 closure work](../status/query-cache-closure-20261010.md) remains active. Code
-`cdc13b88` is deployed on normal Xorinox files/direct-I/O/TCP services.
+`cf4e365a` is deployed on normal Xorinox files/direct-I/O/TCP services.
 Bounded disk indexes, durable incremental catch-up, row-only folding, aggregate
 retained-cache admission and the [replicated command policy](../status/efs-query-persistent-policy-20261010.md)
 pass full native and private live/cold/fault gates. Ten-million-entry pilots
@@ -1546,15 +1546,15 @@ fresh Linux NFSv4.0, retained payload recovery and loaded publication also pass.
 
 Bounded external-merge batching (`fd457076`) passes focused ordering, ENOSPC,
 cancellation, full native and complete 10m recovery gates. The queued 2^32
-kernel-cold oracle uses it; normal daemons remain on cdc13b88.
-Fixed-budget raw-record/slot batching passes focused fault and full 100k
-recovery pilots; its native repeat is pending before deployment.
-The completed 2^32 source population is reused by the new batched build
-(`w92-2p32-batched-v5`); the old build was intentionally superseded, preserving
-its evidence. The replacement and real capacity writer remain active.
+kernel-cold oracle uses it; subsequent raw batching is included in cf4e365a.
+Fixed-budget raw-record/slot batching passes focused fault, full 100k recovery,
+full native and named two-mount/Mac/Linux NFS gates. The completed 2^32 source
+population is reused by `w92-2p32-raw-batched-v6`; previous builds were
+intentionally superseded with evidence preserved. The replacement, corrected
+cold watcher and real capacity writer remain active.
 
 Remaining gates: the actual 2^32-entry index build/export/cold/mutation run,
-the 400 GiB real-payload write/cold/hash/export run. Named cdc13b88 Mac/Linux
+the 400 GiB real-payload write/cold/hash/export run. Named cf4e365a Mac/Linux
 NFS and native FUSE full oracles pass, as do 96 fresh Mac queries and all
 423 retained payload hashes after cold restart; the captured
 FORGET/handle-recovery ESTALE is fixed. These isolated scale fixtures are active; their cold-verification and service

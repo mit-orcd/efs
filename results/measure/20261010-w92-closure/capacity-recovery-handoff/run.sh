@@ -19,7 +19,7 @@ done
 run efs@192.168.122.115 "python3 -c 'import json; r=json.load(open(\"$writer/resume-complete.json\")); assert r[\"result\"]==\"PASS\" and r[\"phase\"]==\"resume\" and r[\"files\"]==1638400 and r[\"payload_bytes\"]==429496729600 and r[\"payloads_verified\"]+r[\"files_fsynced\"]==1638400 and r[\"snapshot\"][\"refresh_error\"]==0; print(r)'"
 # Preflight every named binary and unit before stopping any private service.
 for node in 111 112 113; do
-  run "admin@192.168.122.$node" "test \"\$(sha256sum /tmp/efs/efsd | cut -d' ' -f1)\" = 80dc28b6285a340cb7aea802b7f6cd689df2e6f537f969aa1676ff6665585fd7 && sudo -n systemctl show w92-capacity-efsd.service -p ExecStart --value | grep -F -- '--port 18432 --storage /mnt/w92-capacity-node-20261010 --quota 250G --direct-io'"
+  run "admin@192.168.122.$node" "test \"\$(sha256sum /tmp/efs/efsd | cut -d' ' -f1)\" = caf15279c8aa176882678e656ae368a38957b8ca891c36967fde9f9145a12629 && sudo -n systemctl show w92-capacity-efsd.service -p ExecStart --value | grep -F -- '--port 18432 --storage /mnt/w92-capacity-node-20261010 --quota 250G --direct-io'"
 done
 run efs@192.168.122.115 'cd /tmp/efs && ./scripts/client.sh stop /home/efs/w92-capacity-mnt'
 for node in 111 112 113; do
