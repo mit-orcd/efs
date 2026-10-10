@@ -1,0 +1,200 @@
+{
+  "live": [
+    {
+      "round": 1,
+      "seconds": 48.3,
+      "files_per_second": 124.0,
+      "nodes": [
+        {
+          "node": 111,
+          "cache_worker_inclusive_percent": 63.07,
+          "sampled_cycles_estimate": 215927828852
+        },
+        {
+          "node": 112,
+          "cache_worker_inclusive_percent": 77.46,
+          "sampled_cycles_estimate": 185655216935
+        },
+        {
+          "node": 113,
+          "cache_worker_inclusive_percent": 77.89,
+          "sampled_cycles_estimate": 185424872278
+        }
+      ],
+      "oracle": {
+        "phase": "capture",
+        "files": 6000,
+        "dirs": 195,
+        "bytes": 1537601,
+        "payload_samples": 66,
+        "result": "PASS"
+      }
+    },
+    {
+      "round": 2,
+      "seconds": 36.3,
+      "files_per_second": 165.0,
+      "nodes": [
+        {
+          "node": 111,
+          "cache_worker_inclusive_percent": 26.56,
+          "sampled_cycles_estimate": 103358801496
+        },
+        {
+          "node": 112,
+          "cache_worker_inclusive_percent": 41.33,
+          "sampled_cycles_estimate": 63647535339
+        },
+        {
+          "node": 113,
+          "cache_worker_inclusive_percent": 42.83,
+          "sampled_cycles_estimate": 64828366607
+        }
+      ],
+      "oracle": {
+        "phase": "capture",
+        "files": 6000,
+        "dirs": 190,
+        "bytes": 1545303,
+        "payload_samples": 66,
+        "result": "PASS"
+      }
+    },
+    {
+      "round": 3,
+      "seconds": 37.8,
+      "files_per_second": 159.0,
+      "nodes": [
+        {
+          "node": 111,
+          "cache_worker_inclusive_percent": 27.25,
+          "sampled_cycles_estimate": 107267197775
+        },
+        {
+          "node": 112,
+          "cache_worker_inclusive_percent": 41.44,
+          "sampled_cycles_estimate": 64053356196
+        },
+        {
+          "node": 113,
+          "cache_worker_inclusive_percent": 41.05,
+          "sampled_cycles_estimate": 63817986260
+        }
+      ],
+      "oracle": {
+        "phase": "capture",
+        "files": 6000,
+        "dirs": 197,
+        "bytes": 1549848,
+        "payload_samples": 66,
+        "result": "PASS"
+      }
+    }
+  ],
+  "frozen": [
+    {
+      "variant": 0,
+      "fresh_median_seconds": 2.561534,
+      "refresh_median_seconds": 0.719692,
+      "refresh_range_seconds": [
+        0.659946,
+        0.765947
+      ],
+      "process_cpu_median_seconds": 1.3187539999999998,
+      "process_peak_rss_range_kib": [
+        15808,
+        16108
+      ],
+      "builder_accounted_bytes": 2914016,
+      "refresh_refolded": [
+        26253,
+        26253,
+        26253,
+        26253,
+        26253,
+        26253,
+        26253,
+        26253,
+        26253
+      ]
+    },
+    {
+      "variant": 1,
+      "fresh_median_seconds": 2.817452,
+      "refresh_median_seconds": 0.043372,
+      "refresh_range_seconds": [
+        0.041268,
+        0.051837
+      ],
+      "process_cpu_median_seconds": 0.8542109999999999,
+      "process_peak_rss_range_kib": [
+        15260,
+        15492
+      ],
+      "builder_accounted_bytes": 3328360,
+      "refresh_refolded": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "variant": 2,
+      "fresh_median_seconds": 2.633158,
+      "refresh_median_seconds": 0.043521,
+      "refresh_range_seconds": [
+        0.042306,
+        0.049912
+      ],
+      "process_cpu_median_seconds": 0.8411569999999999,
+      "process_peak_rss_range_kib": [
+        15636,
+        15936
+      ],
+      "builder_accounted_bytes": 3639656,
+      "refresh_refolded": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "variant": 3,
+      "fresh_median_seconds": 2.69116,
+      "refresh_median_seconds": 0.041721,
+      "refresh_range_seconds": [
+        0.041077,
+        0.165484
+      ],
+      "process_cpu_median_seconds": 0.91031,
+      "process_peak_rss_range_kib": [
+        15612,
+        15784
+      ],
+      "builder_accounted_bytes": 3639656,
+      "refresh_refolded": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}
