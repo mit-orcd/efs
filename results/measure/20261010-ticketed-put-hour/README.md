@@ -106,7 +106,24 @@ integration commit points; a new `devel-intel` tip points to that included histo
 `32eaa009` contains the corrected retained-lease/exact frozen-shard live helpers.
 The final source hashes are separate under `final-integration/` and match the AMD
 private checkout. Complete native regressions pass after this code integration;
-the final full AMD live run is pending. Earlier fault/cleanup proofs above must
+the final full AMD live run `gc-direct-vs3gw66k` passes core212/212, peer64/64,
+typed same/cross cold replay, namespace completion, certificate fault/recovery
+and physical GC. [Raw integrated output](final-integration/live.log). Earlier fault/cleanup proofs above must
 not be attributed to the late atomic-cursor code. W93's broader exact committed
 build and sustained acceptance gates remain open; this private build reports
 unknown Git identity. No downgrade, activation or service-store migration occurs.
+
+
+### Last-tip boundary — 06:42 UTC
+
+The captured `devel`, `devel-intel`, `devel-find-stats` and persistence tips are
+all included, with final integration at `200d6aee`. Late arrivals add the isolated
+Raft verdict test boundary, retained CREATE BUSY routing and aggregate retained
+query-cache generation/candidate bounds. All captured branch tips and matching
+local/AMD sources are under `last-tips/`. Complete AMD Linux regressions and the
+warning-free build pass. Final direct/TCP fixture `gc-direct-7xbnrwx1` passes core212/212, peer64/64,
+server-side deletion counters, zero quota/physical inventory and cold GC/rejection
+floors. [Final raw gate](last-tips/live.log). Installed service and both policy
+mounts are restored; [restoration proof](last-tips/restored-service.txt). No owned
+fixture remains active. Earlier fault/cleanup results remain attached to their
+own candidate. No new implementation or test is started after 06:44:32 UTC.

@@ -1093,6 +1093,13 @@ and revoked unknown-intent reconciliation still require integration gates.
 
 06:36 UTC integration: new atomic KV apply/cursor and WAL test commits arrived
 and were merged through `8109d954`/`12d2580b`. Complete Linux regressions pass;
-the final merged full AMD live gate is in progress. Earlier fixture proof is
+the final merged full AMD live gate `gc-direct-vs3gw66k` passes core212/212,
+peer64/64, typed cold replay, namespace completion, certificate fault and physical
+GC. Last-tip CREATE/query-budget arrivals are additionally merged and native
+regressions pass; their independent POSIX/GC fixture `gc-direct-7xbnrwx1` passes core212/212,
+peer64/64 and cold physical reclamation. Installed AMD service and both allowed
+mounts are restored; all owned fixtures stopped. All captured branch tips are
+included in `devel-w66`. No push or activation. The complete package remains
+open for the dependencies recorded above. Earlier fixture proof is
 recorded separately and does not establish the new cursor's entire fault matrix.
 W93's exact committed build and sustained cohort acceptance remain open.
