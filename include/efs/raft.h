@@ -27,6 +27,20 @@ static inline int efs_raft_voters_valid(uint32_t voters)
     return voters != 0 && !(voters >> EFS_RAFT_MAX_PEERS);
 }
 
+/* Placement preference only; an election still requires a quorum. Ordinals
+ * rotate over the actual voter set, not an assumed contiguous node list. */
+static inline int efs_raft_preferred_voter(uint32_t voters, unsigned ordinal)
+{
+    unsigned count = 0, rank;
+    if (!efs_raft_voters_valid(voters)) return -1;
+    for (int i = 0; i < EFS_RAFT_MAX_PEERS; i++)
+        if (voters & (1u << i)) count++;
+    rank = ordinal % count;
+    for (int i = 0; i < EFS_RAFT_MAX_PEERS; i++)
+        if ((voters & (1u << i)) && rank-- == 0) return i;
+    return -1;
+}
+
 
 #define EFS_RAFT_MSG_VOTE_REQ 1
 #define EFS_RAFT_MSG_VOTE_REP 2
@@ -39,6 +53,8 @@ static inline int efs_raft_voters_valid(uint32_t voters)
  * the follower has installed the snapshot. */
 #define EFS_RAFT_MSG_SNAP_REQ 5
 #define EFS_RAFT_MSG_SNAP_REP 6
+/* Caught-up voter starts a normal election; never grants authority itself. */
+#define EFS_RAFT_MSG_TIMEOUT_NOW 7
 
 #define EFS_RAFT_GROUP_SHARD  0
 #define EFS_RAFT_GROUP_CTRL   1
@@ -279,7 +295,7 @@ int efs_raft_leader(const struct efs_raft *r); /* -1 if unknown */
 uint32_t efs_raft_voters(const struct efs_raft *r);
 /* 1 if a joint config is committed (C_new not yet COLD-committed). */
 int efs_raft_joint(const struct efs_raft *r);
-/* Leader-only. new_voters must be odd, 1..MAX bits. Ids not in C_old are
+/* Leader-only. new_voters must be a valid nonempty mask. Ids not in C_old are
  * added as learners; returns BUSY until each has match_index >= commit.
  * Always goes through joint consensus — there is no skip-joint path. */
 int efs_raft_change(struct efs_raft *r, uint32_t new_voters);
@@ -288,6 +304,12 @@ int efs_raft_change(struct efs_raft *r, uint32_t new_voters);
  * win again (same last_log as a complete peer). */
 int efs_raft_step_down(struct efs_raft *r);
 void efs_raft_allow_campaign(struct efs_raft *r, int on);
+/* Leader-only, stable configuration, recently responsive caught-up voter.
+ * Durable acknowledgment caps apply when configured. Voluntarily
+ * steps down before sending a bounded election trigger. OK means submitted,
+ * not that the target won; lost messages recover through normal election.
+ * Existing proposals keep their exact log identity; new proposals are fenced. */
+int efs_raft_transfer(struct efs_raft *r, int target);
 
 /* ReadIndex: leader records commitIndex, waits for a majority heartbeat
  * in the current term, then applied >= that index. No clock leases. */

@@ -33,6 +33,9 @@ struct net {
     int snap_restart_seen;
     int flow_zero_probe, flow_refuse_data; /* transport pressure fixture */
     int hold_ae_replies; /* deliver append bytes but delay their acknowledgements */
+    int hold_transfer;
+    int refuse_transfer;
+    struct efs_raft_msg *transfer;
     int cap_rep;          /* record AE_REP match_index */
     int cap_n;
     int cap_ok;
@@ -201,6 +204,13 @@ static int send_now(void *net, const struct efs_raft_msg *msg)
 {
     struct net *n = net;
 
+    if (msg->type == EFS_RAFT_MSG_TIMEOUT_NOW && n->refuse_transfer)
+        return EFS_ERR_IO;
+    if (msg->type == EFS_RAFT_MSG_TIMEOUT_NOW && n->hold_transfer) {
+        msg_free_deep(n->transfer);
+        n->transfer = msg_copy_deep(msg);
+        return EFS_OK;
+    }
     if (msg->to >= 0 && msg->to < EFS_RAFT_MAX_PEERS &&
         msg->type == EFS_RAFT_MSG_AE_REQ && msg->nentries > 0) {
         n->batches[msg->to]++;
@@ -712,6 +722,8 @@ static void boot_n(struct net *n, struct efs_raft_store **st, struct app *app,
 static void free_n(struct net *n, struct efs_raft_store **st, int npeers)
 {
     int i;
+    msg_free_deep(n->transfer);
+    n->transfer = NULL;
     for (i = 0; i < npeers; i++) {
         efs_raft_free(n->r[i]);
         n->r[i] = NULL;
@@ -823,6 +835,157 @@ static void test_grow_3_to_5(void)
     n.r[3] = efs_raft_new(&cfg);
     CHECK(n.r[3] && efs_raft_voters(n.r[3]) == 0x1f, "cfg survives snap");
     free_n(&n, st, 5);
+}
+
+static int pressure_admit(void *app, const struct efs_raft_entry *e, uint32_t n, int source);
+
+static void test_leadership_transfer(void)
+{
+    CHECK(efs_raft_preferred_voter(0,0)==-1, "empty preference refused");
+    CHECK(efs_raft_preferred_voter(0x7,0)==0 &&
+          efs_raft_preferred_voter(0xe,1)==2 &&
+          efs_raft_preferred_voter(0xf,1)==1 &&
+          efs_raft_preferred_voter(0x52,5)==6,
+          "preference rotates across actual sparse membership");
+    for (int count = 3; count <= 4; count++) {
+        struct net n;
+        struct efs_raft_store *st[4];
+        struct app app[4];
+        struct efs_raft_cfg cfg;
+        uint8_t cmd = 'T';
+        uint64_t idx = 0, term;
+        int lid, target;
+        boot_n(&n, st, app, &cfg, count, (1u << count)-1);
+        CHECK(elect(&n, 40) == 1, "transfer fixture elected");
+        lid = leader_id(&n);
+        if (lid < 0) { free_n(&n, st, count); return; }
+        target = (lid+1)%count;
+        CHECK(efs_raft_transfer(n.r[lid], lid) == EFS_ERR_INVAL, "self transfer refused");
+        CHECK(efs_raft_transfer(n.r[lid], EFS_RAFT_MAX_PEERS-1) == EFS_ERR_INVAL,
+              "nonvoter transfer refused");
+        CHECK(efs_raft_transfer(n.r[target], lid) == EFS_ERR_NOT_PRIMARY,
+              "follower cannot transfer leadership");
+        n.drop[target] = 1;
+        CHECK(efs_raft_propose(n.r[lid], &cmd, 1, &idx) == EFS_OK, "write while target behind");
+        elect(&n, 8);
+        CHECK(efs_raft_commit(n.r[lid]) >= idx, "quorum write without target");
+        CHECK(efs_raft_transfer(n.r[lid], target) == EFS_ERR_BUSY,
+              "behind target cannot receive transfer");
+        CHECK(efs_raft_role(n.r[lid]) == EFS_RAFT_LEADER, "refused transfer retains leader");
+        n.drop[target] = 0; elect(&n, 8);
+        CHECK(efs_raft_read_begin(n.r[lid]) == EFS_OK && efs_raft_read_ready(n.r[lid]),
+              "old leader has read authority before transfer");
+        term = efs_raft_term(n.r[lid]);
+        CHECK(efs_raft_transfer(n.r[lid], target) == EFS_OK, "caught-up transfer submitted");
+        CHECK(leader_id(&n) == target && efs_raft_term(n.r[target]) > term,
+              "target wins a new quorum election");
+        CHECK(efs_raft_role(n.r[lid]) == EFS_RAFT_FOLLOWER &&
+              !efs_raft_read_ready(n.r[lid]), "old leader read authority fenced");
+        CHECK(efs_raft_propose(n.r[lid], &cmd, 1, NULL) == EFS_ERR_NOT_PRIMARY,
+              "old leader refuses new writes");
+        CHECK(efs_raft_commit(n.r[target]) >= idx && app[target].last == cmd,
+              "new leader preserves committed bytes");
+        free_n(&n, st, count);
+    }
+    {
+        struct net n;
+        struct efs_raft_store *st[4];struct app app[4];struct efs_raft_cfg cfg;
+        uint8_t cmd='Q';uint64_t idx=0;int lid,target;
+        boot_n(&n,st,app,&cfg,4,0xf);elect(&n,40);lid=leader_id(&n);
+        if(lid<0){CHECK(0,"partition transfer leader");free_n(&n,st,4);return;}
+        target=(lid+1)%4;
+        CHECK(efs_raft_propose(n.r[lid],&cmd,1,&idx)==EFS_OK,"partition source write");elect(&n,8);
+        for(int i=0;i<4;i++)if(i!=lid&&i!=target)n.drop[i]=1;
+        CHECK(efs_raft_transfer(n.r[lid],target)==EFS_OK,"partition transfer submitted");
+        CHECK(elect(&n,40)==0,"two voters cannot win transfer election");
+        CHECK(!efs_raft_read_quorum(n.r[target]),"transfer cannot manufacture read quorum");
+        CHECK(efs_raft_commit(n.r[target])==idx,"partition transfer cannot advance commit");
+        for(int i=0;i<4;i++)n.drop[i]=0;
+        CHECK(elect(&n,60)==1,"quorum recovery after failed transfer");
+        lid=leader_id(&n);CHECK(lid>=0 && efs_raft_commit(n.r[lid])>=idx && app[lid].last==cmd,
+                                  "failed transfer preserved committed history");
+        free_n(&n,st,4);
+    }
+    {
+        struct net n;struct efs_raft_store *st[3];struct app app[3];struct efs_raft_cfg cfg;
+        uint8_t cmd='L';uint64_t idx=0,term;int lid,target;
+        boot_n(&n,st,app,&cfg,3,0x7);elect(&n,30);lid=leader_id(&n);
+        if(lid<0){CHECK(0,"delayed transfer leader");free_n(&n,st,3);return;}
+        target=(lid+1)%3;efs_raft_propose(n.r[lid],&cmd,1,&idx);elect(&n,8);
+        n.hold_transfer=1;
+        CHECK(efs_raft_transfer(n.r[lid],target)==EFS_OK && n.transfer,"lost trigger captured");
+        CHECK(efs_raft_role(n.r[lid])==EFS_RAFT_FOLLOWER,"lost trigger still fences source");
+        term=efs_raft_term(n.r[target]);
+        if(n.transfer) {
+            struct efs_raft_msg bad=*n.transfer;
+            bad.last_log_index++;
+            CHECK(efs_raft_recv(n.r[target],&bad)==EFS_OK && efs_raft_term(n.r[target])==term,
+                  "wrong tail trigger cannot campaign");
+            bad=*n.transfer;bad.prev_index=0xf;
+            CHECK(efs_raft_recv(n.r[target],&bad)==EFS_OK && efs_raft_term(n.r[target])==term,
+                  "wrong membership trigger cannot campaign");
+            bad=*n.transfer;bad.from=(target+1)%3;
+            if(bad.from==lid)bad.from=(bad.from+1)%3;
+            CHECK(efs_raft_recv(n.r[target],&bad)==EFS_OK && efs_raft_term(n.r[target])==term,
+                  "nonleader trigger cannot campaign");
+        }
+        CHECK(elect(&n,60)==1,"lost trigger recovers by normal election");
+        term=efs_raft_term(n.r[target]);
+        CHECK(n.transfer && efs_raft_recv(n.r[target],n.transfer)==EFS_OK &&
+              efs_raft_term(n.r[target])==term,"delayed stale trigger cannot bump term");
+        if(n.transfer){struct efs_raft_msg forged=*n.transfer;forged.term=term+100;
+            CHECK(efs_raft_recv(n.r[target],&forged)==EFS_OK && efs_raft_term(n.r[target])==term,
+                  "future-term nonleader trigger cannot start election");}
+        free_n(&n,st,3);
+    }
+    {
+        struct net n;struct efs_raft_store *st[3];struct app app[3];struct efs_raft_cfg cfg;
+        int lid,target;boot_n(&n,st,app,&cfg,3,0x7);elect(&n,30);lid=leader_id(&n);
+        if(lid<0){CHECK(0,"unavailable transfer leader");free_n(&n,st,3);return;}
+        target=(lid+1)%3;n.drop[target]=1;
+        elect(&n,8);
+        CHECK(efs_raft_transfer(n.r[lid],target)==EFS_ERR_BUSY &&
+              efs_raft_role(n.r[lid])==EFS_RAFT_LEADER,
+              "idle stale match cannot hand off to unavailable preferred peer");
+        n.drop[target]=0;elect(&n,8);
+        CHECK(efs_raft_transfer(n.r[lid],target)==EFS_OK && leader_id(&n)==target,
+              "rejoined caught-up peer becomes eligible after fresh response");
+        free_n(&n,st,3);
+    }
+    for (int fence = 0; fence < 3; fence++) {
+        struct net n;struct efs_raft_store *st[3];struct app app[3];struct efs_raft_cfg cfg;
+        int lid,target;uint64_t term;
+        boot_n(&n,st,app,&cfg,3,0x7);elect(&n,30);lid=leader_id(&n);
+        if(lid<0){CHECK(0,"fenced transfer leader");free_n(&n,st,3);return;}
+        target=(lid+1)%3;term=efs_raft_term(n.r[target]);
+        if(fence==0)efs_raft_allow_campaign(n.r[target],0);
+        if(fence==1){
+            /* Reopen the caught-up target with the production admission callback. */
+            efs_raft_free(n.r[target]);
+            cfg.id=target;cfg.store=st[target];cfg.app=&app[target];cfg.admit=pressure_admit;
+            n.r[target]=efs_raft_new(&cfg);app[target].owner=n.r[target];
+            elect(&n,2);app[target].pressure_mask=1u<<EFS_RAFT_ADMIT_LEAD;
+            term=efs_raft_term(n.r[target]);
+        }
+        if(fence==2)n.refuse_transfer=1;
+        CHECK(efs_raft_transfer(n.r[lid],target)==(fence==2?EFS_ERR_IO:EFS_OK),
+              "transfer observes transport refusal or submits fenced trigger");
+        CHECK(efs_raft_role(n.r[lid])==EFS_RAFT_FOLLOWER && !efs_raft_read_ready(n.r[lid]),
+              "ambiguous or fenced trigger cannot restore source authority");
+        CHECK(efs_raft_term(n.r[target])==term && efs_raft_role(n.r[target])==EFS_RAFT_FOLLOWER,
+              "transfer respects campaign and pressure fences");
+        CHECK(elect(&n,60)==1,"normal quorum election recovers fenced transfer");
+        free_n(&n,st,3);
+    }
+    {
+        struct net n;struct efs_raft_store *st[3];struct app app[3];struct efs_raft_cfg cfg;
+        int lid,target;boot_n(&n,st,app,&cfg,3,0x7);elect(&n,30);lid=leader_id(&n);
+        if(lid<0){CHECK(0,"joint transfer leader");free_n(&n,st,3);return;}
+        target=(lid+1)%3;n.hold_ae_replies=1;
+        CHECK(efs_raft_change(n.r[lid],(1u<<lid)|(1u<<target))==EFS_OK,"joint transition pending");
+        CHECK(efs_raft_transfer(n.r[lid],target)==EFS_ERR_BUSY,"joint transfer refused");
+        free_n(&n,st,3);
+    }
 }
 
 static int discard_send(void *net, const struct efs_raft_msg *msg)
@@ -2140,6 +2303,7 @@ int main(void)
     test_grow_3_to_5();
     test_four_voters();
     test_membership_persistence();
+    test_leadership_transfer();
     test_grow_3_to_4();
     test_solo_durable_cap_then_grow();
     test_i18_joint_quorum();

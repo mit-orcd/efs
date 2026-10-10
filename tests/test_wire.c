@@ -201,6 +201,16 @@ static void test_raft_codec(void)
               b.last_log_term == a.last_log_term && b.nentries == 0,
           "vote fields");
 
+    a.type = EFS_RAFT_MSG_TIMEOUT_NOW;
+    a.prev_index = 0xf;
+    a.leader_commit = 11;
+    CHECK(efs_wire_raft_encode(&a, buf, sizeof(buf), &len) == EFS_OK &&
+          efs_wire_raft_decode(buf, len, &b, cmd_out, sizeof(cmd_out)) == EFS_OK &&
+          b.type == EFS_RAFT_MSG_TIMEOUT_NOW && b.term == 7 &&
+          b.last_log_index == 11 && b.last_log_term == 6 &&
+          b.prev_index == 0xf && b.leader_commit == 11 && !b.nentries,
+          "transfer trigger round trip binds tail, term and membership");
+
     memset(&a, 0, sizeof(a));
     for (i = 0; i < 17; i++)
         cmd[i] = (uint8_t)(0xA0 + i);

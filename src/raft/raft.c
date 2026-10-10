@@ -60,6 +60,8 @@ struct efs_raft {
      * (Sep 30 IO-500: inbox_drop 3102 on fcstor005, 950 KB AEs). A full
      * batch waits for its reply or the heartbeat-interval resend. */
     uint8_t ae_inflight_full[EFS_RAFT_MAX_PEERS];
+    uint64_t peer_ack_tick[EFS_RAFT_MAX_PEERS]; /* transfer liveness only */
+    unsigned peer_ack_bits;
     uint64_t ticks; /* efs_raft_tick count, for ae_inflight aging */
     uint64_t peer_boot[EFS_RAFT_MAX_PEERS];
     unsigned vote_bits;
@@ -1078,6 +1080,7 @@ static int become_leader(struct efs_raft *r)
     r->read_in_flight = 0;
     r->read_index = 0;
     r->read_acks = 0;
+    r->peer_ack_bits = 0;
     reset_election(r);
     rc = last_log(r, &last_i, &last_t);
     if (rc != EFS_OK)
@@ -1399,6 +1402,8 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
     }
     if (in->success) {
         uint64_t prev_commit = r->commit_index;
+        r->peer_ack_bits |= 1u << in->from;
+        r->peer_ack_tick[in->from] = r->ticks;
         if (in->match_index > r->match_index[in->from])
             r->match_index[in->from] = in->match_index;
         r->next_index[in->from] = r->match_index[in->from] + 1;
@@ -1782,6 +1787,25 @@ int efs_raft_tick(struct efs_raft *r)
     return EFS_OK;
 }
 
+static int on_timeout_now(struct efs_raft *r, const struct efs_raft_msg *m)
+{
+    uint64_t tail = 0, term = 0;
+    /* A stale/nonleader trigger cannot even bump the term. Tail and config
+     * checks protect against delayed transfer across append/reconfiguration. */
+    if (m->group != r->group || m->term != r->current_term ||
+        r->role != EFS_RAFT_FOLLOWER || m->from != r->leader ||
+        !is_voter(r, m->from) || !is_voter(r, r->id) ||
+        r->log_new || r->app_new || r->log_old != r->app_old ||
+        m->prev_index != r->log_old || m->prev_term || m->nentries)
+        return EFS_OK;
+    int rc = last_log(r, &tail, &term);
+    if (rc != EFS_OK) return rc;
+    if (tail != m->last_log_index || term != m->last_log_term ||
+        m->leader_commit > tail)
+        return EFS_OK;
+    return start_election(r); /* Persists term/vote and still requires quorum. */
+}
+
 int efs_raft_recv(struct efs_raft *r, const struct efs_raft_msg *msg)
 {
     uint64_t boot;
@@ -1812,6 +1836,8 @@ int efs_raft_recv(struct efs_raft *r, const struct efs_raft_msg *msg)
         return on_snap_req(r, msg);
     case EFS_RAFT_MSG_SNAP_REP:
         return on_snap_rep(r, msg);
+    case EFS_RAFT_MSG_TIMEOUT_NOW:
+        return on_timeout_now(r, msg);
     default:
         return EFS_ERR_INVAL;
     }
@@ -2368,6 +2394,37 @@ int efs_raft_step_down(struct efs_raft *r)
     r->read_in_flight = 0;
     reset_election(r);
     return EFS_OK;
+}
+
+int efs_raft_transfer(struct efs_raft *r, int target)
+{
+    struct efs_raft_msg m = {0};
+    uint64_t tail = 0, term = 0, committed_term = 0;
+    int rc;
+    if (!r) return EFS_ERR_INVAL;
+    if (r->storage_failed) return EFS_ERR_IO;
+    if (r->role != EFS_RAFT_LEADER) return EFS_ERR_NOT_PRIMARY;
+    if (target == r->id || !is_voter(r, target)) return EFS_ERR_INVAL;
+    if (r->log_new || r->app_new || r->log_old != r->app_old)
+        return EFS_ERR_BUSY;
+    rc = last_log(r, &tail, &term);
+    if (rc != EFS_OK) return rc;
+    rc = log_term(r, r->commit_index, &committed_term);
+    if (rc != EFS_OK) return rc;
+    /* An old matched tail is not proof of current peer availability. This
+     * is a handoff liveness check, never a clock-based authority lease. */
+    if (!(r->peer_ack_bits & (1u << target)) ||
+        r->ticks - r->peer_ack_tick[target] > 2u*(uint64_t)r->heartbeat_ticks ||
+        committed_term != r->current_term || r->match_index[target] < tail ||
+        (r->ae_capped && r->durable_idx < tail))
+        return EFS_ERR_BUSY;
+    m.type = EFS_RAFT_MSG_TIMEOUT_NOW; m.to = target;
+    m.last_log_index = tail; m.last_log_term = term;
+    m.leader_commit = r->commit_index; m.prev_index = r->log_old;
+    /* Fence admission first: send may deliver immediately or lose its reply.
+     * Never resume leadership based on an ambiguous send failure. */
+    rc = efs_raft_step_down(r);
+    return rc != EFS_OK ? rc : send_msg(r, &m);
 }
 
 void efs_raft_allow_campaign(struct efs_raft *r, int on)
