@@ -1,0 +1,150 @@
+{
+  "cold_trees": [
+    {
+      "tree": "w92-tiny-baseline",
+      "phase": "check",
+      "files": 12000,
+      "dirs": 406,
+      "bytes": 3106159,
+      "payload_samples": 65,
+      "result": "PASS"
+    },
+    {
+      "tree": "w92-tiny-after",
+      "phase": "check",
+      "files": 12000,
+      "dirs": 402,
+      "bytes": 3082914,
+      "payload_samples": 65,
+      "result": "PASS"
+    },
+    {
+      "tree": "w92-round1",
+      "phase": "check",
+      "files": 6000,
+      "dirs": 204,
+      "bytes": 1543655,
+      "payload_samples": 66,
+      "result": "PASS"
+    },
+    {
+      "tree": "w92-round2",
+      "phase": "check",
+      "files": 6000,
+      "dirs": 178,
+      "bytes": 1543560,
+      "payload_samples": 66,
+      "result": "PASS"
+    },
+    {
+      "tree": "w92-round3",
+      "phase": "check",
+      "files": 6000,
+      "dirs": 216,
+      "bytes": 1531140,
+      "payload_samples": 66,
+      "result": "PASS"
+    },
+    {
+      "tree": "w92-merged-round1",
+      "phase": "check",
+      "files": 6000,
+      "dirs": 185,
+      "bytes": 1537520,
+      "payload_samples": 66,
+      "result": "PASS"
+    },
+    {
+      "tree": "w92-merged-round2",
+      "phase": "check",
+      "files": 6000,
+      "dirs": 191,
+      "bytes": 1529095,
+      "payload_samples": 66,
+      "result": "PASS"
+    },
+    {
+      "tree": "w92-merged-round3",
+      "phase": "check",
+      "files": 6000,
+      "dirs": 223,
+      "bytes": 1539127,
+      "payload_samples": 66,
+      "result": "PASS"
+    },
+    {
+      "tree": "w92-next-round1",
+      "phase": "check",
+      "files": 6000,
+      "dirs": 201,
+      "bytes": 1524599,
+      "payload_samples": 66,
+      "result": "PASS"
+    },
+    {
+      "tree": "w92-next-round2",
+      "phase": "check",
+      "files": 6000,
+      "dirs": 214,
+      "bytes": 1523795,
+      "payload_samples": 66,
+      "result": "PASS"
+    },
+    {
+      "tree": "w92-next-round3",
+      "phase": "check",
+      "files": 6000,
+      "dirs": 192,
+      "bytes": 1536110,
+      "payload_samples": 66,
+      "result": "PASS"
+    }
+  ],
+  "files": 78000,
+  "payload_samples": 724,
+  "root": {
+    "version": 1,
+    "operation": "stats",
+    "complete": true,
+    "expiry": "unavailable",
+    "snapshot": {
+      "boot_id": 16147341722626198,
+      "generation": 5,
+      "source_ns": 1791608322160384629,
+      "built_ns": 1791608324056317719,
+      "applied_g0": 497596,
+      "applied_g2": 502837,
+      "term_g0": 58,
+      "term_g2": 54,
+      "refresh_error": 0,
+      "refresh_n": 256,
+      "refresh_ms": 2000,
+      "pending_changes_at_least": 0,
+      "pending_age_ms_at_sample": 0,
+      "lag_sample_ns": 1791608324056317779,
+      "refresh_overdue": false
+    },
+    "stats": {
+      "imm_files": 0,
+      "imm_dirs": 17,
+      "imm_bytes": 0,
+      "imm_tmin": 1791581746511952180,
+      "imm_tmax": 1791607638842192899,
+      "tree_files": 80756,
+      "tree_dirs": 2927,
+      "tree_bytes": 344207151,
+      "tree_tmin": 1500000000000000000,
+      "tree_tmax": 1791607646013434034
+    }
+  },
+  "profile_captures": 9,
+  "profile_lost_samples": 0,
+  "native": "PASS",
+  "posix_core": "212/212 equivalent",
+  "posix_concurrent": "64/64",
+  "extras": "4 pass, 1 unsupported mmap skip",
+  "persistence": "26/26 prepare and verify",
+  "runtime": "f5164bb3 files/direct-I/O/TCP; all nodes active; source hashes match",
+  "efsd_sha256": "a515adfe558db14b2273c080f08679fb40f7a388eb2711bf61fb508e232291b5",
+  "restoration": "diagnostic unmounted, three ordinary mounts .efs disabled"
+}

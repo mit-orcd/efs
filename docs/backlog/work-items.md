@@ -3675,6 +3675,15 @@ Merged-source native, POSIX core/concurrent/extras and cold persistence evidence
 is [indexed here](../status/query-cache-merged-three-rounds-20261009.md).
 Full derived passes and aggregate cache-space admission remain open.
 
+**Oct 10 integration and three further profiles:** all captured branch tips are
+included; parent rollups coalesce in canonical dentry order and cached descriptor
+hits use a bounded 16 KiB index. Actual-source fault, differential and quota gates
+pass. [Indexed checkpoint](../status/query-cache-next-three-rounds-20261010.md)
+records controlled measurements, all-node profiles and restart validation.
+Frozen preads fall 39.1%, pwrites 34.9% and median process CPU 15.0%; fsync
+counts stay unchanged, with 2914016 accounted candidate bytes below 4 MiB.
+Full derived passes and aggregate cache capacity remain open.
+
 **Oct 9 user requirement — billions of files:** W92 remains open until the persistent,
 partitioned disk-backed index demonstrates bounded memory and correct operation
 at the required scale. Target namespace cardinality is **2^32 files**;

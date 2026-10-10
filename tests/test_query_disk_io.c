@@ -11,7 +11,7 @@ static unsigned write_calls;
 static unsigned read_calls;
 static unsigned raw_syncs,index_syncs,sync_faults;
 static char fail_sync_kind,fail_write_kind;
-static unsigned write_faults;
+static unsigned write_faults,fail_derived_after;
 static char descriptor_kind[4096];
 static int tracked_open(const char *path,int flags,...)
 {
@@ -41,6 +41,9 @@ static ssize_t counted_pread(int fd,void *buf,size_t size,off_t offset)
 static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
 {
     write_calls++;
+    if(fail_derived_after && fd>=0 && fd<(int)sizeof(descriptor_kind) && descriptor_kind[fd]=='d' && !--fail_derived_after){
+        write_faults++;partial_write=1;
+    }
     if(fail_write_kind && fd>=0 && fd<(int)sizeof(descriptor_kind) && descriptor_kind[fd]==fail_write_kind){
         fail_write_kind=0;write_faults++;partial_write=1;
     }
@@ -172,6 +175,15 @@ int main(void)
         CHECK(disk_io(d,shard,'r',got,17,READ_WINDOW,0)==EFS_ERR_IO);
     }
     CHECK(!disk_io(d,0,'r',got,17,100,0));CHECK(!memcmp(got,data+100,17));
+    /* A failed open must not leave the evicted key pointing to a reused FD. */
+    CHECK(disk_io(d,SHARDS-1,'r',got,1,0,0)==EFS_ERR_IO);
+    CHECK(!d->fd_index[SHARDS-1][fd_kind('r')]);
+    CHECK(!disk_io(d,FD_CACHE+2,'r',got,1,0,0));CHECK(got[0]==FD_CACHE+2);
+    CHECK(disk_io(d,SHARDS,'r',got,1,0,0)==EFS_ERR_INVAL);
+    CHECK(disk_io(d,0,'x',got,1,0,0)==EFS_ERR_INVAL);
+    close_cache(d);
+    for(unsigned i=0;i<SHARDS;i++)for(unsigned k=0;k<4;k++)CHECK(!d->fd_index[i][k]);
+    CHECK(!disk_io(d,0,'r',got,17,100,0));CHECK(!memcmp(got,data+100,17));
     efs_query_disk_free(d);
     /* A new raw/index inode has one checked writing-handle barrier. Inject
      * failures in every persisted file class; none may return a candidate or
@@ -188,10 +200,19 @@ int main(void)
         for(unsigned i=0;i<30;i++){
             char name[32];snprintf(name,sizeof(name),"batch-%u",i);efs_ino_t extra;
             CHECK(!efs_meta_apply_create_file(kv,&attrs,EFS_ROOT_INO,S_IFREG|0644,name,&extra));
+            struct efs_meta_row row;uint8_t k[EFS_KV_KEY_MAX],v[EFS_META_INO_BYTES];uint32_t kn;
+            CHECK(!efs_meta_apply_get_inode(kv,extra,&row));
+            row.base_size=i+1;row.base_mtime=200+i;
+            CHECK(!efs_kv_key_inode(efs_kv_inode_shard(extra),extra,k,&kn));
+            CHECK(!efs_meta_pack_inode(&row,v,sizeof(v)));CHECK(!efs_kv_put(kv,k,kn,v,sizeof(v)));
         }
         CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));raw_syncs=index_syncs=0;
         CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,&old));
         if(old){
+            struct efs_query_rollup totals;
+            CHECK(!efs_query_disk_stats(old,EFS_ROOT_INO,&totals));
+            CHECK(totals.imm_files==31 && totals.tree_files==31 && totals.imm_bytes==465 && totals.tree_bytes==465);
+            CHECK(totals.imm_tmin==100 && totals.imm_tmax==229);
             unsigned populated=0;for(unsigned i=0;i<SHARDS;i++)populated+=old->part[i].count!=0;
             CHECK(raw_syncs==populated && index_syncs==populated);
             uint64_t wm[4]={1,2,3,4};CHECK(!efs_query_disk_checkpoint(old,wm));
@@ -200,6 +221,15 @@ int main(void)
             fail_write_kind='d';write_faults=0;
             CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,&next)==EFS_ERR_IO && !next);
             CHECK(write_faults==1 && !fail_write_kind);
+            CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
+            CHECK(!efs_query_disk_inode(next,file,NULL,NULL));efs_query_disk_free(next);next=NULL;
+            /* Fail the first coalesced parent write after all inode batches.
+             * Candidate-only accumulated totals must not escape on failure. */
+            unsigned batches=0;
+            for(unsigned i=0;i<SHARDS;i++)batches+=(old->part[i].inodes+NODE_BATCH-1)/NODE_BATCH;
+            fail_derived_after=batches+1;write_faults=0;
+            CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,&next)==EFS_ERR_IO && !next);
+            CHECK(write_faults==1 && !fail_derived_after);
             CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
             CHECK(!efs_query_disk_inode(next,file,NULL,NULL));efs_query_disk_free(next);next=NULL;
             const char kinds_to_fail[]={'r','i','n','d','m'};
