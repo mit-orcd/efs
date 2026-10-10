@@ -1,0 +1,13 @@
+cluster: mac
+USER         PID     ELAPSED COMMAND
+efs        61618       45:53 ./efs-fuse 192.168.2.11:17432 fs /mnt/efs -o allow_other
+efs        97607       25:50 ./efs-fuse 192.168.2.11:17432 fs /mnt/efs-b -o allow_other
+efs       118093       14:46 ./efs-fuse 192.168.2.11:17432 fs /mnt/efs-d -o allow_other
+efs       122090       12:39 ./efs-fuse 192.168.2.11:17432 fs /mnt/efs-c -o allow_other
+efs       137491       04:04 ./efs-fuse 192.168.2.11:17432 fs /mnt/efs-e -o allow_other
+USER         PID     ELAPSED COMMAND
+efs       138917       03:24 python3 -u /var/tmp/efs-posix-diagnostic.py /mnt/efs-e --jobs 4 --timeout-s 30 --tag diagnostic-2c01 --results /var/tmp/efs-repair-2c01-diagnostic.tsv
+efs       140353       02:36 /usr/sbin/python3 /tmp/efs/tests/posix/posix_suite.py --worker dir_many_files /mnt/efs-e/posix-efsgw-diagnostic-2c01-vngu9_6c/dir_many_files /tmp/posix-result-vzqa8gxe
+efs       144164       00:25 /usr/sbin/python3 /tmp/efs/tests/posix/posix_suite.py --worker names_crazy_roundtrip /mnt/efs-e/posix-efsgw-diagnostic-2c01-vngu9_6c/names_crazy_roundtrip /tmp/posix-result-g7ycbcuh
+efs       144735       00:05 /usr/sbin/python3 /tmp/efs/tests/posix/posix_suite.py --worker names_path_too_long /mnt/efs-e/posix-efsgw-diagnostic-2c01-vngu9_6c/names_path_too_long /tmp/posix-result-omqauhsp
+efs       144806       00:03 /usr/sbin/python3 /tmp/efs/tests/posix/posix_suite.py --worker names_control_and_high_bytes /mnt/efs-e/posix-efsgw-diagnostic-2c01-vngu9_6c/names_control_and_high_bytes /tmp/posix-result-wpuwuny6

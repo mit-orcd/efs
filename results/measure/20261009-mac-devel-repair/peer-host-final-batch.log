@@ -1,0 +1,4 @@
+cluster: mac
+Stop with: ./scripts/client.sh stop /mnt/efs-i
+Logging efs-fuse to /mnt/efs-fuse-efs-i.log
+Mounted /mnt/efs-i

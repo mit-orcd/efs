@@ -1,0 +1,7 @@
+native_core	0
+posix	1
+persist_prepare	0
+clean_remount	0
+persist_verify	0
+append_600	0
+peer	0

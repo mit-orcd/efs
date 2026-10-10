@@ -1,0 +1,3 @@
+Unmounting /mnt/efs-e
+Retiring drained efs-fuse PID 137491 for /mnt/efs-e
+Unmounted /mnt/efs-e
