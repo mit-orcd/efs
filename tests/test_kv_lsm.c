@@ -603,6 +603,9 @@ static void test_kv_group_snap(void)
     uint32_t blen = 0;
 
     CHECK(src && dst, "mem kv");
+    const uint8_t local_key[]={255,255,'r','a','f','t',0};
+    CHECK(efs_kv_put(src,local_key,sizeof(local_key),(const uint8_t *)"source",6)==EFS_OK,"source local cursor");
+    CHECK(efs_kv_put(dst,local_key,sizeof(local_key),(const uint8_t *)"target",6)==EFS_OK,"target local cursor");
     CHECK(put_ino(src, 1, 1, "odd") == EFS_OK, "put g0");
     CHECK(put_ino(src, 2, 2, "even") == EFS_OK, "put g2");
     CHECK(efs_kv_group_export(src, EFS_RAFT_GROUP_SHARD, 4096, &blob, &blen) ==
@@ -612,6 +615,9 @@ static void test_kv_group_snap(void)
     CHECK(efs_kv_group_import(dst, EFS_RAFT_GROUP_SHARD, blob, blen) == EFS_OK,
           "import g0");
     CHECK(get_ino(dst, 1, 1, "odd") == EFS_OK, "g0 landed");
+    uint8_t local_value[16];uint32_t local_length=sizeof(local_value);
+    CHECK(efs_kv_get(dst,local_key,sizeof(local_key),local_value,&local_length)==EFS_OK &&
+          local_length==6 && !memcmp(local_value,"target",6),"group import neither imports nor erases node-local cursor");
     CHECK(get_ino(dst, 2, 2, NULL) == EFS_ERR_NOT_FOUND, "g2 not in g0 snap");
     CHECK(put_ino(dst, 1, 1, "ODD") == EFS_OK, "overwrite");
     CHECK(efs_kv_group_import(dst, EFS_RAFT_GROUP_SHARD, blob, blen) == EFS_OK,
@@ -1445,10 +1451,112 @@ static void test_pressure_observation(void)
           efs_kv_lsm_pressure(NULL, NULL) == EFS_ERR_INVAL, "invalid pressure inputs");
 }
 
+
+/* Recovery relies on a cursor sharing the exact atomic WAL record, not a
+ * later file sync. Test staged reads/scans, exclusion, abort and real exits. */
+struct apply_peer {struct efs_kv *kv;int saw_old,entered,done;};
+static void *apply_peer(void *p)
+{
+ struct apply_peer *a=p;
+ a->saw_old=get_is(a->kv,"a","old")==EFS_OK;
+ __atomic_store_n(&a->entered,1,__ATOMIC_RELEASE);
+ CHECK(put_s(a->kv,"peer","after")==EFS_OK,"writer proceeds after atomic scope");
+ __atomic_store_n(&a->done,1,__ATOMIC_RELEASE);
+ return NULL;
+}
+static void test_apply_scope(void)
+{
+ rmtree(g_dir);
+ struct efs_kv *kv=open_store(EFS_KV_LSM_SYNC,0);
+ CHECK(kv!=NULL,"open apply-scope store");if(!kv)return;
+ CHECK(put_s(kv,"a","old")==EFS_OK && put_s(kv,"b","deleted")==EFS_OK,"scope baseline");
+ CHECK(efs_kv_lsm_flush(kv)==EFS_OK,"scope reads cross disk and overlay");
+ struct efs_kv_item cursor={EFS_KV_PUT,(const uint8_t *)"cursor",6,(const uint8_t *)"1",1};
+ CHECK(efs_kv_lsm_apply_begin(kv)==EFS_OK,"begin bounded scope");
+ CHECK(efs_kv_lsm_apply_begin(kv)==EFS_ERR_BUSY,"nested scope refused");
+ CHECK(put_s(kv,"a","new")==EFS_OK && put_s(kv,"c","added")==EFS_OK,"stage overwrites/inserts");
+ CHECK(efs_kv_del(kv,(const uint8_t *)"b",1)==EFS_OK,"stage deletion");
+ CHECK(get_is(kv,"a","new")==EFS_OK && get_is(kv,"b","")==EFS_ERR_NOT_FOUND,"own staged view");
+ struct acc scan={0};CHECK(efs_kv_scan(kv,acc_cb,&scan)==EFS_OK,"overlay scan");
+ CHECK(!strcmp(scan.buf,"a,c,"),"scan deduplicates and hides tombstones");
+ memset(&scan,0,sizeof(scan));
+ CHECK(efs_kv_scan_from(kv,NULL,0,(const uint8_t *)"b",1,acc_cb,&scan)==EFS_OK && !strcmp(scan.buf,"c,"),"staged range scan seeks all sources");
+ struct apply_peer peer={.kv=kv};pthread_t t;
+ CHECK(!pthread_create(&t,NULL,apply_peer,&peer),"start excluded writer");
+ while(!__atomic_load_n(&peer.entered,__ATOMIC_ACQUIRE))usleep(1000);
+ CHECK(peer.saw_old && !__atomic_load_n(&peer.done,__ATOMIC_ACQUIRE),"other reader sees old state; writer excluded");
+ CHECK(efs_kv_lsm_apply_end(kv,&cursor)==EFS_OK,"effects/cursor atomically committed");
+ pthread_join(t,NULL);
+ CHECK(get_is(kv,"cursor","1")==EFS_OK && get_is(kv,"a","new")==EFS_OK,"committed view");
+ CHECK(efs_kv_lsm_apply_begin(kv)==EFS_OK && put_s(kv,"a","abort")==EFS_OK,"stage aborted change");
+ CHECK(efs_kv_lsm_apply_end(kv,NULL)==EFS_OK && get_is(kv,"a","new")==EFS_OK,"abort exposes no changes");
+ CHECK(efs_kv_lsm_apply_begin(kv)==EFS_OK && put_s(kv,"a","failed")==EFS_OK,"stage rejected commit");
+ ((struct kv_lsm *)kv->ctx)->fail_next_batch=1;
+ cursor.val=(const uint8_t *)"2";
+ CHECK(efs_kv_lsm_apply_end(kv,&cursor)==EFS_ERR_IO,"commit failure audible");
+ CHECK(get_is(kv,"cursor","1")==EFS_OK && get_is(kv,"a","new")==EFS_OK,"failed commit preserves cursor and effects");
+ CHECK(efs_kv_lsm_apply_begin(kv)==EFS_OK,"begin bounded key refusal");
+ for(unsigned i=0;i<32768;i++) {
+  char key[32];snprintf(key,sizeof(key),"bound-%08u",i);
+  CHECK(put_s(kv,key,"x")==EFS_OK,"key within stage bound");
+ }
+ CHECK(put_s(kv,"over-bound","x")==EFS_ERR_NOMEM,"key bound refuses excess");
+ CHECK(efs_kv_lsm_apply_end(kv,&cursor)==EFS_ERR_NOMEM,"overflow cannot commit a partial entry/cursor");
+ CHECK(get_is(kv,"bound-00000000","")==EFS_ERR_NOT_FOUND && get_is(kv,"cursor","1")==EFS_OK,"overflow leaves authoritative state unchanged");
+ CHECK(efs_kv_lsm_apply_begin(kv)==EFS_OK,"begin bounded byte refusal");
+ uint8_t *large=calloc(1,16u<<20);CHECK(large!=NULL,"allocate one shared limit probe");
+ if(large) {
+  for(unsigned i=0;i<4;i++) {
+   char key[16];snprintf(key,sizeof(key),"large-%u",i);
+   int rc=efs_kv_put(kv,(uint8_t *)key,strlen(key),large,16u<<20);
+   CHECK(rc==(i<3?EFS_OK:EFS_ERR_NOMEM),"payload bound includes metadata overhead");
+  }
+  free(large);
+  CHECK(efs_kv_lsm_apply_end(kv,&cursor)==EFS_ERR_NOMEM,"byte overflow aborts whole entry");
+ } else CHECK(efs_kv_lsm_apply_end(kv,NULL)==EFS_OK,"abort unavailable limit probe");
+ CHECK(get_is(kv,"large-0","")==EFS_ERR_NOT_FOUND,"oversized entry leaves no bytes");
+ efs_kv_lsm_close(kv);
+ for(int commit=0;commit<=1;commit++) {
+  pid_t child=fork();CHECK(child>=0,"fork actual scope crash");
+  if(!child) {
+   struct efs_kv *c=open_store(EFS_KV_LSM_SYNC,0);
+   if(!c || efs_kv_lsm_apply_begin(c)!=EFS_OK || put_s(c,"a","crash")!=EFS_OK)_exit(2);
+   if(commit && efs_kv_lsm_apply_end(c,&cursor)!=EFS_OK)_exit(3);
+   _exit(0); /* no close/flush/destructor can complete an uncommitted scope */
+  }
+  int status=0;waitpid(child,&status,0);CHECK(WIFEXITED(status)&&!WEXITSTATUS(status),"scope child succeeded");
+  kv=open_store(EFS_KV_LSM_SYNC,0);CHECK(kv!=NULL,"cold scope reopen");
+  CHECK(get_is(kv,"a",commit?"crash":"new")==EFS_OK,"cold effects exactly match commit");
+  CHECK(get_is(kv,"cursor",commit?"2":"1")==EFS_OK,"cold cursor exactly matches effects");
+  efs_kv_lsm_close(kv);
+ }
+ /* A torn final WAL record must expose neither its effects nor cursor. */
+ kv=open_store(EFS_KV_LSM_SYNC,0);
+ CHECK(put_s(kv,"a","base")==EFS_OK && put_s(kv,"cursor","3")==EFS_OK,"torn record baseline");
+ efs_kv_lsm_close(kv);
+ pid_t child=fork();CHECK(child>=0,"fork torn atomic record");
+ if(!child) {
+  struct efs_kv *c=open_store(EFS_KV_LSM_SYNC,0);
+  cursor.val=(const uint8_t *)"4";
+  if(!c || efs_kv_lsm_apply_begin(c)!=EFS_OK || put_s(c,"a","torn")!=EFS_OK ||
+     efs_kv_lsm_apply_end(c,&cursor)!=EFS_OK)_exit(4);
+  _exit(0);
+ }
+ int status=0;waitpid(child,&status,0);CHECK(WIFEXITED(status)&&!WEXITSTATUS(status),"torn record child committed");
+ char wal[1024];struct stat st;
+ snprintf(wal,sizeof(wal),"%s/wal",g_dir);
+ CHECK(!stat(wal,&st) && st.st_size>8 && !truncate(wal,st.st_size-1),"tear only final owned record");
+ kv=open_store(EFS_KV_LSM_SYNC,0);
+ CHECK(kv && get_is(kv,"a","base")==EFS_OK && get_is(kv,"cursor","3")==EFS_OK,"torn atomic record exposes neither effects nor frontier");
+ if(kv)efs_kv_lsm_close(kv);
+ rmtree(g_dir);
+}
+
 int main(void)
 {
     snprintf(g_dir, sizeof(g_dir), "/tmp/efs-kvlsm-%d", (int)getpid());
     rmtree(g_dir);
+    if (getenv("EFS_TEST_KV_APPLY_ONLY")) {test_apply_scope();goto report;}
     if (getenv("EFS_TEST_KV_SNAPSHOT_ONLY")) {
         test_full_snapshot();
         test_snapshot_batch_cut();
@@ -1456,6 +1564,7 @@ int main(void)
         goto report;
     }
 
+    test_apply_scope();
     test_pressure_observation();
     rmtree(g_dir);
     test_semantics();

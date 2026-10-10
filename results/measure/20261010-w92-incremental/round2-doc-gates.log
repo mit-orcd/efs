@@ -1,0 +1,9 @@
+FAIL  regen-diff: architecture-full.md + architecture.html are current
+      how-it-works/architecture-full.md is stale: first differs at line 1538 (10486 vs 10487 lines). Regenerate with: python3 gen-architecture-full.py
+      how-it-works/architecture.html is stale: first differs at line 87 (509 vs 509 lines). Regenerate with: python3 gen-architecture-full.py
+ok    links: every internal link resolves
+ok    invariant-refs: I-references name §4 invariants
+ok    op-matrix-sections: §6 names existing sections
+ok    single-home: normative tables / invariants / formulas defined once
+
+architecture doc gate: 1/5 checks failed

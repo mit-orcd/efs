@@ -1,0 +1,73 @@
+Unmounting /home/efs/w92-tiny-mnt
+Retiring drained efs-fuse PID 3877355 for /home/efs/w92-tiny-mnt
+Unmounted /home/efs/w92-tiny-mnt
+cluster: xorinox
+== drain/unmount client /mnt/efs on xefsgw
+Unmounting /mnt/efs
+Retiring drained efs-fuse PID 1310522 for /mnt/efs
+Unmounted /mnt/efs
+== drain/unmount client /mnt/efs on xefsct1
+Unmounting /mnt/efs
+Retiring drained efs-fuse PID 677150 for /mnt/efs
+Unmounted /mnt/efs
+== drain/unmount client /mnt/efs on xefsct2
+Unmounting /mnt/efs
+Retiring drained efs-fuse PID 649362 for /mnt/efs
+Unmounted /mnt/efs
+== stop efsd on xefs1
+== stop efsd on xefs2
+== stop efsd on xefs3
+cluster: xorinox
+cluster: xorinox
+== efsd on xefs1 (192.168.122.111) id=1 
+Running as unit: efsd.service; invocation ID: 9613f994f48a4a4fbc0170f038d7b505
+== efsd on xefs2 (192.168.122.112) id=2 joining --join 192.168.122.111:17432
+Running as unit: efsd.service; invocation ID: 2300fae309824be083ec61eeeaf0bdf3
+== efsd on xefs3 (192.168.122.113) id=3 joining --join 192.168.122.111:17432
+Running as unit: efsd.service; invocation ID: 5848bb6819504b0ea2ebfa793348251b
+== raft-mkfs (skipped if /data1/.mkfs-done exists on xefs1)
+   already formatted — use wipe first for a fresh table
+== client mounts: gateway + test clients (storage nodes never mount)
+cluster: xorinox
+xefsgw already running
+xefsgw up at 192.168.122.114
+shipping binaries from xefs1
+mounting efs on xefsgw (seed 192.168.122.111:17432)
+Stop with: ./scripts/client.sh stop /mnt/efs
+Logging efs-fuse to /mnt/efs-fuse-efs.log
+Mounted /mnt/efs
+/mnt/efs      	<world>
+gateway ready at 192.168.122.114 (from the Mac: ./mount-mac.sh)
+cluster: xorinox
+xefs1: hosts + ssh config updated
+xefs2: hosts + ssh config updated
+xefs3: hosts + ssh config updated
+xefsgw: hosts + ssh config updated
+xefsct1: hosts + ssh config updated
+xefsct2: hosts + ssh config updated
+mac: ~/.ssh/config updated (ssh xefs1 xefs2 xefs3 xefsgw xefsct1 xefsct2)
+cluster: xorinox
+xefsct1 already running
+== ship binaries + scripts + tests/posix -> xefsct1
+xefsct1: mounting efs (seed 192.168.122.111:17432)
+Stop with: ./scripts/client.sh stop /mnt/efs
+Logging efs-fuse to /mnt/efs-fuse-efs.log
+Mounted /mnt/efs
+xefsct2 already running
+== ship binaries + scripts + tests/posix -> xefsct2
+xefsct2: mounting efs (seed 192.168.122.111:17432)
+Stop with: ./scripts/client.sh stop /mnt/efs
+Logging efs-fuse to /mnt/efs-fuse-efs.log
+Mounted /mnt/efs
+cluster: xorinox
+xefs1: hosts + ssh config updated
+xefs2: hosts + ssh config updated
+xefs3: hosts + ssh config updated
+xefsgw: hosts + ssh config updated
+xefsct1: hosts + ssh config updated
+xefsct2: hosts + ssh config updated
+mac: ~/.ssh/config updated (ssh xefs1 xefs2 xefs3 xefsgw xefsct1 xefsct2)
+test clients ready: xefsct1 xefsct2 (posix.sh 2client runs across them)
+Stop with: ./scripts/client.sh stop /home/efs/w92-tiny-mnt
+Logging efs-fuse to /home/efs/efs-fuse-w92-tiny-mnt.log
+Mounted /home/efs/w92-tiny-mnt

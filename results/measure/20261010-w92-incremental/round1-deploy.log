@@ -1,0 +1,24 @@
+Unmounting /home/efs/w92-tiny-mnt
+Not mounted: /home/efs/w92-tiny-mnt (cleared any stale FUSE handle)
+cluster: xorinox
+== drain/unmount client /mnt/efs on xefsgw
+Unmounting /mnt/efs
+Retiring drained efs-fuse PID 1227519 for /mnt/efs
+Unmounted /mnt/efs
+== drain/unmount client /mnt/efs on xefsct1
+Unmounting /mnt/efs
+Retiring drained efs-fuse PID 602276 for /mnt/efs
+Unmounted /mnt/efs
+== drain/unmount client /mnt/efs on xefsct2
+Unmounting /mnt/efs
+Retiring drained efs-fuse PID 574591 for /mnt/efs
+Unmounted /mnt/efs
+== stop efsd on xefs1
+== stop efsd on xefs2
+== stop efsd on xefs3
+cluster: xorinox
+Permission denied, please try again.
+Permission denied, please try again.
+admin@192.168.122.111: Permission denied (publickey,gssapi-keyex,gssapi-with-mic,password).
+tar: This does not look like a tar archive
+tar: Exiting with failure status due to previous errors

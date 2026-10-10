@@ -1,0 +1,10 @@
+efsd d83f3f06 (branch devel-find-stats, built 2026-10-10T06:10:14Z on xefs3)
+active
+/tmp/efs/efsd --node-id 3 --addr 192.168.122.113 --port 17432 --storage /data1 --quota 100G --direct-io --join 192.168.122.111:17432 
+EFS_TRANSPORT=tcp
+7d4acd5fb94f8663186ca8be29747755d577a932a5fa8c35008b89aa5e0c94fd  /tmp/efs/efsd
+fad4b65d0f74d43e7fcd02ea676fac81d20cc43cc0465ae41ebeaa9f6be59869  /tmp/efs/src/meta/query_disk.c
+81c9b407cd937fb30fd81d37458a4d9a2ff2d66acdd15077b6488131c2a42ef1  /tmp/efs/src/meta/query_disk_incremental.h
+e7282f4c50b37277cc554a7a7b93a8442967195b9ec3ff8479270dcf6dd56126  /tmp/efs/src/server/raft_host.c
+a0710d003594d6fb55bf03942dd8cd25d5d1396d3bcc06c72a25071cf10872e9  /tmp/efs/src/server/query_refresh.h
+b2beb978051e39dfb8ee830c51480524e2dc1d34d41804d794c20f2e7f24a8d8  /tmp/efs/src/client/write.c

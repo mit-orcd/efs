@@ -216,6 +216,7 @@ struct kv_lsm {
     uint32_t l1_cap;
     uint64_t next_seq;
     pthread_mutex_t mu;
+    pthread_rwlock_t writers; /* ordinary batches share; staged apply excludes */
     pthread_cond_t cv;
     /* Compaction runs on compact_thr so a full-L1 rewrite never holds mu
      * (and therefore never holds the raft apply lock). compact_cv wakes
@@ -242,6 +243,7 @@ struct kv_lsm {
  * Precedence is the array position, newest first. */
 struct msrc {
     struct kv_seg_iter *it;
+    const struct kv_mtab *mt; /* NULL defaults to the committed memtable */
     uint32_t mi;
     const uint8_t *key;
     uint32_t klen;

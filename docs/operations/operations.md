@@ -203,7 +203,12 @@ Applied-marker experiment (W93): `EFS_RAFT_APPLIED_INTERVAL_MS=10` is the
 historical default. Explicit integers 10–1,000 select a best-effort checkpoint
 cadence; 1,024 additional applied entries or clean shutdown force persistence.
 These per-group restart hints remain behind a successful KV WAL barrier;
-Raft/publication ACK durability is unchanged. I/O failure can extend replay lag.
+Raft/publication ACK durability is unchanged. Each applied entry now commits its
+KV effects and node-local applied cursor in one atomic WAL record; restart uses
+that validated cursor even if a separate checkpoint is retained. Failed scopes
+do not advance application. Oversized entries refuse above 32,768 effect keys
+or 64 MiB. Before downgrading to a binary without atomic cursors, shut down
+cleanly to bring legacy hints current; crash downgrade is unsupported.
 Keep the default pending sustained and recovery acceptance.
 [Investigation and gates](../status/w93-checkpoint-cadence-20261010.md).
 
