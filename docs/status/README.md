@@ -75,6 +75,10 @@ process CPU, preserving fsync counts. Final runtime `f5164bb3` passes native,
 POSIX core/concurrent/extras and cold persistence gates; eleven retained trees
 verify 78000 files and 724 payload samples, with normal `.efs` opt-out restored.
 
+[W92 incremental-cache implementation](query-cache-incremental-20261010.md)
+tracks bounded change/ancestor sets, immutable partition reuse, exact directory
+recomputation and full-build fallback. Implementation and profiling are in progress.
+
 [Combined branch integration](find-stats-all-branches-20261009.md) records
 `devel`, W66 and persistence-pressure merges into `devel-find-stats`, preserving
 the cache fixes. Committed branch coverage and private Linux gates are tracked;
