@@ -14,6 +14,7 @@
 static void be(uint8_t *p,uint64_t v,unsigned n){while(n){p[--n]=(uint8_t)v;v>>=8;}}
 static uint64_t owner_rpc(unsigned port, const uint8_t *payload, unsigned length, int expected)
 {
+    fprintf(stderr,"owner BEGIN command=%u sub=%u length=%u expected=%d\n",payload[1],payload[2],length,expected);
     for (unsigned a = 0; a < 120; a++) {
         int fd = efs_connect_tcp("127.0.0.1", port + a % 4);
         if (fd < 0) {
@@ -58,8 +59,8 @@ static uint64_t owner_rpc(unsigned port, const uint8_t *payload, unsigned length
             usleep(10000);
             continue;
         }
-        fprintf(stderr,"owner command=%u rc=%d expected=%d\n", payload[1], reply.rc, expected);
-        printf("owner command=%u rc=%d expected=%d\n", payload[1], reply.rc, expected);
+        fprintf(stderr,"owner command=%u sub=%u arg=%u rc=%d expected=%d\n", payload[1], payload[2], length>=23?((unsigned)payload[19]<<24)|((unsigned)payload[20]<<16)|((unsigned)payload[21]<<8)|payload[22]:0, reply.rc, expected);
+        printf("owner command=%u sub=%u rc=%d expected=%d\n", payload[1], payload[2], reply.rc, expected);
         assert(reply.rc == expected);
         return reply.salt;
     }

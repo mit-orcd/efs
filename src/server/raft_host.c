@@ -2643,10 +2643,10 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP)
               ? EFS_OK
               : rc;
-    /* FENCE_LOC BUSY must let a later RESOLVE drain the owner intent. It is
+    /* FINISH/FENCE_LOC BUSY must let later ACK/RESOLVE drain ownership. It is
      * a rejected command, not a retryable storage failure at this log index. */
     if (cmd[0] == EFS_MD_CMD_SESSION && clen >= 2 &&
-        (cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
+        (cmd[1] == EFS_MD_SESS_FINISH || cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
          cmd[1] == EFS_MD_SESS_LEASE_EDGE_DEFERRED || cmd[1] == EFS_MD_SESS_LEASE_OPEN ||
          cmd[1] == EFS_MD_SESS_LEASE_CLOSE) &&
         rc != EFS_ERR_IO && rc != EFS_ERR_NOMEM)
