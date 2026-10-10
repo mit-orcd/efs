@@ -2065,7 +2065,21 @@ static int efs_open_drain_pending(void)
 /* Every returned regular descriptor, including CREATE, owns a server lease.
  * The edge stripe prevents a second open returning before proven OPEN,
  * and prevents a delayed last-close release deleting a new lease. */
-static int wb_lock_budget(pthread_mutex_t *mu);
+static int wb_lock_budget(pthread_mutex_t *mu)
+{
+    if (!efs_client_rpc_deadline_ms())
+        return pthread_mutex_lock(mu) == 0 ? EFS_OK : EFS_ERR_IO;
+    for (;;) {
+        if (efs_client_rpc_past_deadline())
+            return EFS_ERR_BUSY;
+        int rc = pthread_mutex_trylock(mu);
+        if (!rc)
+            return EFS_OK;
+        if (rc != EBUSY)
+            return EFS_ERR_IO;
+        usleep(1000);
+    }
+}
 
 /* BUSY without durable result proof owns the same OPEN edge. Wait within the
  * caller's single budget rather than return a transient contention as EBUSY
@@ -2714,21 +2728,7 @@ static int wb_wait_idle_budget(void)
     return efs_client_rpc_past_deadline() ? EFS_ERR_BUSY : EFS_OK;
 }
 
-static int wb_lock_budget(pthread_mutex_t *mu)
-{
-    if (!efs_client_rpc_deadline_ms())
-        return pthread_mutex_lock(mu) == 0 ? EFS_OK : EFS_ERR_IO;
-    for (;;) {
-        if (efs_client_rpc_past_deadline())
-            return EFS_ERR_BUSY;
-        int rc = pthread_mutex_trylock(mu);
-        if (!rc)
-            return EFS_OK;
-        if (rc != EBUSY)
-            return EFS_ERR_IO;
-        usleep(1000);
-    }
-}
+
 
 static void *efs_wb_thread(void *arg)
 {
