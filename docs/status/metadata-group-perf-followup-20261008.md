@@ -173,3 +173,28 @@ with common replica backing storage to separate topology from media/pump delay.
 Retain correctness and close durability throughout. Do not skip ReadIndex,
 reuse pre-admission rounds, move live metadata, or tune filesystem barriers as
 a shortcut. W66 remains open; no daemon fix is established by these captures.
+
+## Intel observation — Oct 10, 2026
+
+Integrated `d88899f3`, four direct-I/O/TCP daemons on two physical Intel hosts,
+was tested while preserving the million-file trees and running the creation
+workload. The private Intel2 POSIX run timed out after 30 seconds in
+`concurrent_appends_two_proc`. Three unchanged production probes returned
+PASS/FAIL/PASS at 11.2/33.6/22.0 seconds (failure includes cleanup); the timeout
+was not increased or reclassified as a skip.
+
+Two subsequent instrumented diagnostics used the same three persistent append
+writers and forty unique eight-byte records each. Both verified all 120 records
+with no duplicates or extras. An odd-shard/group-0 inode completed in 9.574 s:
+maximum OPEN 7 ms, median write 135 ms, maximum write 924 ms, maximum CLOSE
+317 ms. An even-shard/group-2 inode completed in 19.881 s: maximum OPEN 17 ms,
+median write 241 ms, maximum write 1961 ms, maximum CLOSE 1253 ms. The production
+client also logged REPORT_CHUNKS calls taking approximately 1.1–1.3 seconds.
+
+These are two observations with different inodes/time windows and concurrent
+background work, not a matched controlled group comparison or proof of a
+specific persistence cause. Both hosts have separate NVMe devices for `/data1`
+and the `/home`-backed second storage location. The bounded append publication
+path and durability barriers remain unchanged. Longer diagnostic success does
+not satisfy the original 30-second acceptance budget or close W66/W97. The
+original timeout and all subsequent outcomes remain retained in Intel evidence.

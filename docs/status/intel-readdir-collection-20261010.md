@@ -23,3 +23,10 @@ It passes locally both normally and under ASan/UBSan. The original source fails
 the comparison bound, establishing the specific improvement independently of
 wall-clock timing. Intel live and full-suite acceptance are recorded after
 running this source; no end-to-end throughput claim is inferred from the fixture.
+
+A larger macOS execution of the actual collector uses 65536 unique names plus
+their duplicate pages. The original makes 4,294,967,296 comparisons and the
+indexed version 129122. The fixture execution wall times were 10.075 s and
+0.313 s, excluding compilation but including Python process-wait overhead.
+This is a local collector fixture, not a measured Intel creation-rate gain.
+The source fixture also passes on both Intel Linux hosts.
