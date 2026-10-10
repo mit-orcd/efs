@@ -68,12 +68,13 @@ static void dcache_account_extra(efs_ino_t ino, uint32_t ci) { (void)ino;(void)c
 static void dcache_add_range(struct dcache_ent *e,uint32_t off,uint32_t len) { e->nrange=1;e->roff[0]=off;e->rlen[0]=len; }
 void efs_export_present_add(struct efs_export *ex,efs_ino_t ino,int which,int delta) { (void)ex;(void)ino;(void)which;(void)delta; }
 '''
-for name in ['dcache_slot','dcache_mu','dcache_find','dcache_find_meta','dcache_metadata_idle','dcache_chain_reuse','dcache_keep_on_drop','efs_dcache_bind_writer','efs_dcache_write_lane','dcache_snapshot_lane','efs_dcache_snapshot_lane','efs_dcache_snapshot_publication','efs_dcache_begin_publication','efs_dcache_finish_publication','efs_dcache_publication_report','efs_dcache_complete_publication','efs_dcache_publication_request','efs_dcache_publication_result','dcache_take']:
+for name in ['dcache_slot','dcache_mu','dcache_find','dcache_find_meta','dcache_metadata_idle','dcache_chain_reuse','dcache_keep_on_drop','efs_dcache_bind_writer','efs_dcache_write_lane','dcache_snapshot_lane','efs_dcache_snapshot_lane','efs_dcache_snapshot_publication','efs_dcache_begin_publication','efs_dcache_finish_publication','efs_dcache_publication_report','efs_dcache_complete_publication','efs_dcache_publication_request','efs_dcache_consume_publication','efs_dcache_publication_result','dcache_take']:
     source += '\n'+function(w,name)
 source += '\n'+function(w,'efs_dcache_trim_metadata')
 source += '\n'+block(w, 'struct dcache_init {')
 for name in ['dcache_apply_init','dcache_store_owned_locked','dcache_drop_locked','dcache_body_to_rdcache','dcache_install_image','dcache_flush_keep']:
     source += '\n'+function(w,name)
+source += '\n'+function(w,'efs_dcache_admit_lane_write')+'\n'+function(w,'dcache_range_covered')+'\n'+function(w,'efs_dcache_overlay_lane')+'\n'+function(w,'efs_dcache_retire_clipped')
 source += r'''
 static int dcache_store_owned(efs_ino_t ino, uint32_t ci, uint8_t *p, uint32_t len, const struct dcache_init *in) {
     pthread_mutex_t *mu=dcache_mu(dcache_slot(ino,ci));
@@ -307,6 +308,41 @@ int main(void) {
     free(cached_base);free(cached_copy);
 
     dcache_drop_locked(1,0,0);assert(!owned->writer && !g_metadata && !g_live);
+    /* Fresh typed admission reserves exact sparse ownership; gaps never become
+     * readable just because the body exists. Failure cannot adopt legacy bytes. */
+    cached_view=(struct efs_msg_lane_writer_view_reply){.view={.ino=555,.generation=7,.chunk_index=0}};
+    cached_view.chunk_size=EFS_MIN_CHUNK_SIZE;
+    assert(efs_dcache_admit_lane_write(555,7,0,&cached_view,10,patch,4)==EFS_OK);
+    struct dcache_ent *fresh=dcache_find_meta(dcache_slot(555,0),555,0);
+    assert(fresh && fresh->writer && fresh->dirty && fresh->pin_held && !fresh->have_base);
+    assert(dcache_range_covered(fresh,10,4) && !dcache_range_covered(fresh,9,5));
+    assert(efs_dcache_admit_lane_write(555,7,0,&cached_view,20,patch,4)==EFS_OK);
+    assert(!dcache_range_covered(fresh,10,14));
+    assert(efs_dcache_admit_lane_write(555,8,0,&cached_view,10,patch,4)!=EFS_OK);
+    struct efs_msg_inode_getchunks_reply *read_base=calloc(1,sizeof(*read_base));assert(read_base);
+    read_base->ino=555;read_base->generation=7;
+    uint8_t read_image[EFS_MIN_CHUNK_SIZE];memset(read_image,0x33,sizeof(read_image));
+    assert(efs_dcache_overlay_lane(555,7,0,&cached_view,read_base,read_image,sizeof(read_image))==EFS_OK);
+    assert(!memcmp(read_image+10,patch,4) && read_image[14]==0x33 && !memcmp(read_image+20,patch,4));
+    cached_view.view.authority_epoch=1;cached_view.view.history.count=1;
+    cached_view.view.history.entries[0]=(struct efs_content_fence){1,12};read_base->authority_epoch=1;
+    memset(read_image,0x33,sizeof(read_image));
+    assert(efs_dcache_overlay_lane(555,7,0,&cached_view,read_base,read_image,sizeof(read_image))==EFS_OK);
+    assert(!memcmp(read_image+10,patch,2) && read_image[12]==0x33 && read_image[20]==0x33);
+    cached_view.view.oldest_complete_epoch=1;
+    memset(read_image,0x33,sizeof(read_image));
+    assert(efs_dcache_overlay_lane(555,7,0,&cached_view,read_base,read_image,sizeof(read_image))==EFS_ERR_STALE);
+    for(unsigned i=0;i<sizeof(read_image);i++)assert(read_image[i]==0x33);
+    cached_view.view.oldest_complete_epoch=0;read_base->generation=8;
+    assert(efs_dcache_overlay_lane(555,7,0,&cached_view,read_base,read_image,sizeof(read_image))==EFS_ERR_STALE);
+    read_base->generation=7;
+    assert(efs_dcache_overlay_lane(555,7,0,&cached_view,read_base,fresh->data,fresh->len)==EFS_ERR_INVAL);
+    assert(efs_dcache_retire_clipped(555,7,0,&cached_view,read_base)==EFS_ERR_BUSY);
+    cached_view.view.history.entries[0].size=9;
+    assert(efs_dcache_retire_clipped(555,7,0,&cached_view,read_base)==EFS_OK);
+    assert(!fresh->data && !fresh->dirty && !fresh->pin_held && !efs_writer_state_owned(fresh->writer));
+    free(read_base);
+    dcache_drop_locked(555,0,0);assert(!g_metadata && !g_live);
     /* Snapshot outputs must never overwrite body/state through partial aliases. */
     uint32_t cs=EFS_MIN_CHUNK_SIZE;
     uint8_t *body=malloc(cs+1), *copy=malloc(cs); assert(body && copy);

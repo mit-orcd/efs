@@ -3893,8 +3893,19 @@ int efs_dcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len)
 static int dcache_range_covered(const struct dcache_ent *e, uint32_t off,
                                 uint32_t len)
 {
-    if (!e || !len)
+    if (!e || !len || off>UINT32_MAX-len)
         return 0;
+    if (e->writer) {
+        const struct efs_dirty_ranges *owned=&e->writer->ranges.bytes;
+        uint32_t need=off,end=off+len;
+        for (uint32_t i=0;i<owned->count && need<end;i++) {
+            const struct efs_fence_part *part=&owned->ranges[i];
+            if (part->off>need) return 0;
+            uint32_t stop=part->off+part->len;
+            if (stop>need) need=stop;
+        }
+        return need>=end;
+    }
     uint32_t need = off;
     uint32_t end = off + len;
     while (need < end) {
@@ -3944,7 +3955,7 @@ static int dcache_unpublished(const struct dcache_ent *e)
  * of the same bytes. */
 static int dcache_image_current(const struct dcache_ent *e, uint64_t tg)
 {
-    if (!e->have_base)
+    if (!e->have_base || efs_writer_state_owned(e->writer))
         return 0;
     if (e->object_gen && tg == e->object_gen)
         return 1;
@@ -3984,7 +3995,7 @@ int efs_dcache_copy(efs_ino_t ino, uint32_t ci, uint32_t off,
      * them sent the reader to GET/rdcache zeros (POSIX basic_rdwr_no_reopen).
      * A clean image the map no longer names is skipped: the caller fetches
      * the published chunk (a peer moved it). */
-    if (e && (uint64_t)off + len <= e->len &&
+    if (e && !e->writer && (uint64_t)off + len <= e->len &&
         ((dcache_image_current(e, tg) && !spans) ||
          (dcache_unpublished(e) && dcache_range_covered(e, off, len)))) {
         memcpy(dst, e->data + off, len);
@@ -4006,7 +4017,7 @@ int efs_dcache_copy_kept(efs_ino_t ino, uint32_t ci, uint32_t off,
     s = dcache_slot(ino, ci);
     pthread_mutex_lock(dcache_mu(s));
     e = dcache_find(s, ino, ci);
-    if (e && e->data && e->have_base && (uint64_t)off + len <= e->len) {
+    if (e && !e->writer && e->data && e->have_base && (uint64_t)off + len <= e->len) {
         memcpy(dst, e->data + off, len);
         pthread_mutex_unlock(dcache_mu(s));
         return 0;
@@ -4024,7 +4035,7 @@ int efs_dcache_copy_unpub(efs_ino_t ino, uint32_t ci, uint32_t off,
     pthread_mutex_t *mu = dcache_mu(s);
     pthread_mutex_lock(mu);
     struct dcache_ent *e = dcache_find(s, ino, ci);
-    if (e && e->data && !e->have_base &&
+    if (e && !e->writer && e->data && !e->have_base &&
         (uint64_t)off + len <= e->len &&
         dcache_range_covered(e, off, len)) {
         memcpy(dst, e->data + off, len);
@@ -4065,7 +4076,7 @@ void efs_dcache_overlay(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len)
     pthread_mutex_t *mu = dcache_mu(s);
     pthread_mutex_lock(mu);
     struct dcache_ent *e = dcache_find(s, ino, ci);
-    if (!e || !e->data) {
+    if (!e || e->writer || !e->data) {
         pthread_mutex_unlock(mu);
         return;
     }
@@ -4087,6 +4098,60 @@ void efs_dcache_overlay(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len)
         }
     }
     pthread_mutex_unlock(mu);
+}
+
+/* A typed overlay requires fresh FileID, lane authority and a matching decoded
+ * base. Never borrow the legacy cached image's generation as read authority.
+ * This also works while a publication is unresolved: reading changes no token. */
+int efs_dcache_overlay_lane(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    const struct efs_msg_lane_writer_view_reply *view,
+    const struct efs_msg_inode_getchunks_reply *base, uint8_t *dst, uint32_t len)
+{
+    if (!view || !base || !dst || !ino || !generation || len!=view->chunk_size)
+        return EFS_ERR_INVAL;
+    struct efs_msg_lane_writer_view request={ino,generation,ci,len};
+    int rc=efs_lane_writer_view_reply_valid(&request,view);
+    if (rc!=EFS_OK) return rc;
+    dcache_ensure();uint32_t slot=dcache_slot(ino,ci);
+    pthread_mutex_t *mu=dcache_mu(slot);pthread_mutex_lock(mu);
+    struct dcache_ent *e=dcache_find_meta(slot,ino,ci);
+    if (!e || !e->writer || !e->data) { rc=EFS_ERR_NOT_FOUND;goto done; }
+    if (efs_writer_buffers_overlap(dst,len,e,sizeof(*e)) ||
+        efs_writer_buffers_overlap(dst,len,e->writer,sizeof(*e->writer)) ||
+        efs_writer_buffers_overlap(dst,len,e->data,e->len)) {
+        rc=EFS_ERR_INVAL;goto done;
+    }
+    struct efs_writer_plan plan;
+    rc=efs_writer_ranges_plan_base(&e->writer->ranges,&view->view,base,&plan);
+    if (rc==EFS_OK && (e->len!=len || e->writer->ranges.bytes.chunk_size!=len))
+        rc=EFS_ERR_INVAL;
+    if (rc==EFS_OK) rc=efs_dirty_ranges_overlay(&plan.surviving,dst,len,e->data);
+done:
+    pthread_mutex_unlock(mu);return rc;
+}
+
+/* A complete fresh fence may prove all accepted bytes obsolete. An unresolved
+ * publication still owns its identity and must be reconciled before release. */
+int efs_dcache_retire_clipped(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    const struct efs_msg_lane_writer_view_reply *view,
+    const struct efs_msg_inode_getchunks_reply *base)
+{
+    if (!view || !base || !ino || !generation) return EFS_ERR_INVAL;
+    struct efs_msg_lane_writer_view request={ino,generation,ci,view->chunk_size};
+    int rc=efs_lane_writer_view_reply_valid(&request,view);
+    if (rc!=EFS_OK) return rc;
+    dcache_ensure();uint32_t slot=dcache_slot(ino,ci);
+    pthread_mutex_t *mu=dcache_mu(slot);pthread_mutex_lock(mu);
+    struct dcache_ent *e=dcache_find_meta(slot,ino,ci);
+    if (!e || !e->writer || e->writer->ranges.generation!=generation) rc=EFS_ERR_STALE;
+    else rc=efs_writer_state_retire_clipped(e->writer,view,base);
+    if (rc==EFS_OK) {
+        if (e->dirty) dcache_note_dirty_bytes(-(int64_t)e->len);
+        dcache_dirty_unlink(e,slot);e->dirty=0;dcache_pin_release(e);
+        if (e->data) efs_buf_free(e->data,e->len);
+        e->data=NULL;e->len=0;e->have_base=0;e->nrange=0;
+    }
+    pthread_mutex_unlock(mu);return rc;
 }
 
 /* "Clean" for drop_if_clean means nothing of ours is at risk: not dirty,
@@ -4362,9 +4427,11 @@ done:
 /* Only durable, matching terminal evidence releases the pending identity.
  * Rejection retains every accepted byte; caller must fetch a fresh view before
  * planning another publication. Unknown/transport failure changes nothing. */
-int efs_dcache_publication_result(efs_ino_t ino, uint64_t generation, uint32_t ci,
-    uint64_t object, uint64_t sequence, const struct efs_msg_publication_reply *reply)
+int efs_dcache_consume_publication(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    uint64_t object, uint64_t sequence, const struct efs_msg_publication_reply *reply, int *consumed)
 {
+    if (!consumed) return EFS_ERR_INVAL;
+    *consumed=0;
     if (!reply || reply->rpc.status!=EFS_INODE_RPC_OK ||
         (reply->state!=EFS_PUBLICATION_COMMITTED && reply->state!=EFS_PUBLICATION_REJECTED) ||
         (reply->state==EFS_PUBLICATION_COMMITTED && reply->verdict!=EFS_OK) ||
@@ -4380,13 +4447,35 @@ int efs_dcache_publication_result(efs_ino_t ino, uint64_t generation, uint32_t c
         !token->result_bound || memcmp(token->result_digest,reply->digest,EFS_HASH_SIZE))goto done;
     if (reply->state==EFS_PUBLICATION_REJECTED) {
         e->writer->has_publication=0;e->writer->publication_ready=0;
-        memset(token,0,sizeof(*token));e->object_gen=0;e->object_seq=0;
-        rc=reply->verdict;
-    } else rc=EFS_OK;
+        memset(token,0,sizeof(*token));
+        memset(&e->writer->after_publication,0,sizeof(e->writer->after_publication));
+        e->object_gen=0;e->object_seq=0;
+        rc=reply->verdict;*consumed=1;
+    } else {
+        /* Validate and consume under one slot lock. A concurrent newer write
+         * may remain owned, but cannot replace the terminal identity here. */
+        rc=efs_writer_state_report(e->writer,object,sequence,EFS_OK);
+        if (!e->writer->has_publication && (rc==EFS_OK || rc==EFS_ERR_STALE)) {
+            *consumed=1;e->committed_object=object;e->committed_seq=sequence;
+            if (!efs_writer_state_owned(e->writer)) {
+                if (e->dirty) dcache_note_dirty_bytes(-(int64_t)e->len);
+                dcache_dirty_unlink(e,slot);e->dirty=0;dcache_pin_release(e);
+                if (e->data) efs_buf_free(e->data,e->len);
+                e->data=NULL;e->len=0;e->have_base=0;e->nrange=0;
+            }
+        }
+    }
 done:
     pthread_mutex_unlock(mu);
-    return rc==EFS_OK ? efs_dcache_complete_publication(ino,generation,ci,object,sequence,EFS_OK) : rc;
+    return rc;
 }
+int efs_dcache_publication_result(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    uint64_t object, uint64_t sequence, const struct efs_msg_publication_reply *reply)
+{
+    int consumed;
+    return efs_dcache_consume_publication(ino,generation,ci,object,sequence,reply,&consumed);
+}
+
 
 
 static int dcache_pending_of(efs_ino_t ino, uint32_t ci)
@@ -5158,6 +5247,52 @@ static int dcache_store_owned_locked(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
         head->next = n;
     }
     return 0;
+}
+
+/* A private candidate is not accepted until body and sidecar install together.
+ * Existing legacy dirty bytes cannot be retroactively assigned new authority. */
+int efs_dcache_admit_lane_write(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    const struct efs_msg_lane_writer_view_reply *view, uint32_t off,
+    const uint8_t *src, uint32_t len)
+{
+    if (!view || !ino || !generation || !src || !len ||
+        off>=view->chunk_size || len>view->chunk_size-off) return EFS_ERR_INVAL;
+    struct efs_msg_lane_writer_view request={ino,generation,ci,view->chunk_size};
+    int rc=efs_lane_writer_view_reply_valid(&request,view);
+    if (rc!=EFS_OK) return rc;
+    rc=efs_dcache_write_lane(ino,generation,ci,view,off,src,len);
+    if (rc!=EFS_ERR_BUSY) return rc;
+    uint32_t slot=dcache_slot(ino,ci);pthread_mutex_t *mu=dcache_mu(slot);
+    pthread_mutex_lock(mu);
+    struct dcache_ent *e=dcache_find_meta(slot,ino,ci);
+    int available=!e || dcache_metadata_idle(e);
+    pthread_mutex_unlock(mu);
+    if (!available) return EFS_ERR_BUSY;
+    uint8_t *body=efs_buf_alloc(view->chunk_size);
+    if (!body) return EFS_ERR_NOMEM;
+    memset(body,0,view->chunk_size);
+    struct efs_writer_state *writer=NULL;
+    rc=efs_writer_state_write_lane(&writer,view,body,view->chunk_size,off,src,len);
+    if (rc==EFS_OK) {
+        pthread_mutex_lock(mu);
+        e=dcache_find_meta(slot,ino,ci);
+        if (e && !dcache_metadata_idle(e)) rc=EFS_ERR_BUSY;
+        else rc=dcache_store_owned_locked(ino,ci,body,view->chunk_size,NULL);
+        if (rc==EFS_OK) {
+            e=dcache_find_meta(slot,ino,ci);e->writer=writer;
+            e->have_base=0;e->nrange=0;
+            writer=NULL;body=NULL;
+        }
+        pthread_mutex_unlock(mu);
+    }
+    if (writer) {
+        /* Aborted private candidate: no application write was accepted. */
+        writer->ranges.bytes.count=0;
+        (void)efs_writer_state_free(writer);
+    }
+    if (body) efs_buf_free(body,view->chunk_size);
+    if (rc==EFS_OK) dcache_account_extra(ino,ci);
+    return rc;
 }
 
 /* Install a freshly loaded+patched chunk, or fold just [off,len) into a

@@ -192,6 +192,33 @@ static void writer_body_snapshot(void)
     assert(efs_writer_state_free(state)==EFS_OK && g_metadata==before);free(base);
 }
 
+/* A full snapshot merges all bytes into one main range, but the newer-write
+ * shadow still has a hard fragmentation bound. Refusal must precede memcpy. */
+static void writer_pending_fragment_bound(void)
+{
+    uint64_t before=g_metadata;
+    struct efs_writer_state *state=NULL;
+    uint8_t body[EFS_MIN_CHUNK_SIZE], saved[EFS_MIN_CHUNK_SIZE], value=0xa7;
+    memset(body,0x5a,sizeof(body));
+    struct efs_msg_inode_writer_view_reply view={.ino=100,.generation=1};
+    assert(efs_writer_state_write(&state,&view,body,sizeof(body),0,body,sizeof(body))==EFS_OK);
+    struct efs_writer_plan plan;
+    assert(efs_writer_ranges_plan(&state->ranges,&view,0,&plan)==EFS_OK);
+    assert(efs_writer_state_put(state,&plan,700,1)==EFS_OK);
+    for(unsigned i=0;i<EFS_DIRTY_RANGE_MAX;i++)
+        assert(efs_writer_state_write(&state,&view,body,sizeof(body),i*8,&value,1)==EFS_OK);
+    struct efs_writer_state intact=*state;memcpy(saved,body,sizeof(body));
+    assert(state->ranges.bytes.count==1 && state->after_publication.count==EFS_DIRTY_RANGE_MAX);
+    assert(efs_writer_state_write(&state,&view,body,sizeof(body),1024,&value,1)==EFS_ERR_BUSY);
+    assert(!memcmp(state,&intact,sizeof(intact)) && !memcmp(body,saved,sizeof(body)));
+    assert(efs_writer_state_report(state,700,1,EFS_OK)==EFS_ERR_STALE);
+    assert(!state->has_publication && state->ranges.bytes.count==EFS_DIRTY_RANGE_MAX);
+    assert(efs_writer_ranges_plan(&state->ranges,&view,0,&plan)==EFS_OK);
+    assert(efs_writer_state_put(state,&plan,701,2)==EFS_OK);
+    assert(efs_writer_state_report(state,701,2,EFS_OK)==EFS_OK);
+    assert(efs_writer_state_free(state)==EFS_OK && before==g_metadata);
+}
+
 int main(void)
 {
     setenv("EFS_DCACHE_HARD_BYTES", "33554432", 1);
@@ -320,6 +347,7 @@ int main(void)
     writer_state_lifetime();
     writer_admission_copy();
     writer_body_snapshot();
+    writer_pending_fragment_bound();
 #if EFS_FAULTS
     char fault_path[]="/tmp/efs-drain-budget-XXXXXX";
     int fault_fd=mkstemp(fault_path);assert(fault_fd>=0);close(fault_fd);
