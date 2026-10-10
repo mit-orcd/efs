@@ -1534,7 +1534,7 @@ POSIX core/concurrent/extras and cold persistence gates; eleven retained trees
 verify 78000 files and 724 payload samples, with normal `.efs` opt-out restored.
 
 [W92 closure work](../status/query-cache-closure-20261010.md) remains active. Code
-`1a25d20a193b` is deployed on normal Xorinox files/direct-I/O/TCP services.
+`1434aa83` is deployed on normal Xorinox files/direct-I/O/TCP services.
 Bounded disk indexes, durable incremental catch-up, row-only folding, aggregate
 retained-cache admission and the [replicated command policy](../status/efs-query-persistent-policy-20261010.md)
 pass full native and private live/cold/fault gates. Ten-million-entry pilots
@@ -1545,17 +1545,19 @@ all ten rollup fields and sampled inode attributes; full 10m recovery passes. Na
 fresh Linux NFSv4.0, retained payload recovery and loaded publication also pass.
 
 Remaining gates: the actual 2^32-entry index build/export/cold/mutation run,
-the 400 GiB real-payload write/cold/hash/export run, and named rollout/repeat
-of the virtual-handle recovery fix. Fresh Mac/Linux NFS candidate gates and
-96 Mac requests pass; the captured FORGET/handle-recovery ESTALE is fixed. These isolated scale fixtures are active; their cold-verification and service
+the 400 GiB real-payload write/cold/hash/export run. Named 1434aa83 Mac/Linux
+NFS and native FUSE full oracles pass, as do 96 fresh Mac queries and all
+423 retained payload hashes after cold restart; the captured
+FORGET/handle-recovery ESTALE is fixed. These isolated scale fixtures are active; their cold-verification and service
 restoration checklist is in the closure ledger. Full named 2^32 kernel-cold
 recovery is queued behind the original run’s successful terminal verdict; the
 400 GiB cold handoff is also queued behind its complete write verdict.
 The initial capacity writer stopped on CREATE PROTO after 124983 acknowledged
 files; the unrouted-BUSY retry fix passes regressions/full native, and the fixed
 client rehashed every acknowledged prefix before continuing. W92 is not closed.
-Normal clients remain `.efs` opt-out; test gateway/diagnostic mounts remain opted
-in until platform acceptance, and temporary VM resources await scale cleanup.
+Normal clients and gateway are restored to `.efs` opt-out after platform
+acceptance; diagnostic mounts are retired. Private scale services and temporary
+VM resources await the remaining gates and cleanup.
 [Earlier index text](../status/archive/w92-closure-index-history-20261010.md) is preserved.
 
 [W92 incremental-cache implementation](../status/query-cache-incremental-20261010.md)

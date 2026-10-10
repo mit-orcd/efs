@@ -19,7 +19,7 @@ done
 run efs@192.168.122.115 "python3 -c 'import json; r=json.load(open(\"$writer/resume-complete.json\")); assert r[\"result\"]==\"PASS\" and r[\"phase\"]==\"resume\" and r[\"files\"]==1638400 and r[\"payload_bytes\"]==429496729600 and r[\"payloads_verified\"]+r[\"files_fsynced\"]==1638400 and r[\"snapshot\"][\"refresh_error\"]==0; print(r)'"
 # Preflight every named binary and unit before stopping any private service.
 for node in 111 112 113; do
-  run "admin@192.168.122.$node" "test \"\$(sha256sum /tmp/efs/efsd | cut -d' ' -f1)\" = 8e20e3084c5cc5eeebf33f04be442999bd937aea1a59a39d43838d88cb4e89d2 && sudo -n systemctl show w92-capacity-efsd.service -p ExecStart --value | grep -F -- '--port 18432 --storage /mnt/w92-capacity-node-20261010 --quota 250G --direct-io'"
+  run "admin@192.168.122.$node" "test \"\$(sha256sum /tmp/efs/efsd | cut -d' ' -f1)\" = 985818fa30243d2a0291d525b7ade43ce541e1ee8cf6ea450f6129cbe9947662 && sudo -n systemctl show w92-capacity-efsd.service -p ExecStart --value | grep -F -- '--port 18432 --storage /mnt/w92-capacity-node-20261010 --quota 250G --direct-io'"
 done
 run efs@192.168.122.115 'cd /tmp/efs && ./scripts/client.sh stop /home/efs/w92-capacity-mnt'
 for node in 111 112 113; do
@@ -31,6 +31,10 @@ for id in 1 2 3; do
   join=''
   if [[ $id != 1 ]]; then join='--join 192.168.122.111:18432'; fi
   run "admin@192.168.122.$node" "sudo -n systemd-run --unit=w92-capacity-efsd --collect --uid=efs --gid=efs -p WorkingDirectory=/tmp/efs -p StandardOutput=append:/mnt/w92-capacity-node-20261010/efsd.log -p StandardError=inherit -E EFS_MD_RAFT_N=3 -E EFS_TRANSPORT=tcp -E EFS_QUERY_EXPORT_MAX_MS=86400000 /tmp/efs/efsd --node-id $id --addr 192.168.122.$node --port 18432 --storage /mnt/w92-capacity-node-20261010 --quota 250G --direct-io $join"
+done
+# Wait for recovered daemons to listen before client discovery.
+for node in 111 112 113; do
+  run "admin@192.168.122.$node" 'for attempt in $(seq 1 120); do if ss -lnt | grep -q ":18432 "; then exit 0; fi; sleep 2; done; echo "private daemon did not listen within 240 seconds" >&2; exit 1'
 done
 run efs@192.168.122.115 'cd /tmp/efs && EFS_COMMANDS=1 EFS_OPID_TRACE=1 ./scripts/client.sh 192.168.122.111:18432 /home/efs/w92-capacity-mnt'
 # The actual complete verifier owns a remote screen, independent of this SSH.

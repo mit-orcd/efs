@@ -14,7 +14,7 @@ profiling rounds do not satisfy them.
 | Increasing-cardinality RSS, cold-cache, concurrent export/mutation and freshness | 10m complete kernel-cold and concurrent old/new export oracles pass with fixed builder memory; named live contention/freshness passes; full actual scale pending |
 | Synthetic partitioned index of at least 2^32 entries | pending; sparse offset probes alone cannot satisfy this |
 | Replicated persistent feature policy | native, live, restart, quota, lost-reply and fail-closed gates pass |
-| Staged real-filesystem and fault/platform gates | named native and Linux NFSv4.0 pass; actual 400 GiB write/cold/hash/export pending; virtual-export fix passes native suite plus fresh Mac/Linux NFS; named fix rollout/repeat owed |
+| Staged real-filesystem and fault/platform gates | named native and Linux NFSv4.0 pass; actual 400 GiB write/cold/hash/export pending; virtual-export fix passes native suite plus fresh Mac/Linux NFS; named 1434aa83 Mac/Linux/native full repeats and 96 Mac queries pass |
 
 ## Aggregate cache admission
 
@@ -773,3 +773,42 @@ are preserved. Candidate human version is
 for this temporary gateway test; the committed named rollout and repeated
 platform gates remain owed. Storage daemons and both large fixtures kept running.
 These command-handle results do not close the original W55 NFS publication incident.
+
+### Named 1434aa83 rollout and full population, 11:53 UTC
+
+The exact committed source archive was built on Xorinox and its identical
+binaries installed atomically on all six guests. All normal storage daemons
+now run 1434aa83, files/direct-I/O/TCP, preserving /data1. The initial client
+mount preceded node 1's recovered listener and failed discovery; the daemon
+then became ready, and mounting succeeded without another daemon restart.
+Normal clients remain opted out. The acceptance gateway explicitly enables
+FUSE export handles. Native FUSE's full 141-file command/hash oracle passes
+on this named build; fresh Mac and Linux NFS repeats are running.
+
+The original synthetic process populated all 4294967296 entries in
+11236.399 seconds with rc=0; index construction and its full acceptance
+sequence remain outstanding. The original capacity resume process is still
+live. The previous local cold-handoff watcher was intentionally stopped for
+the named deployment and replaced by w92-capacity-cold-handoff-1434aa83;
+the writer itself was not interrupted. The handoff preflights the exact
+1434aa83 server SHA256 and polls recovered port readiness before mounting.
+No completion or cold-recovery claim is made for either large fixture yet.
+
+### Named platform gates passed, 11:55 UTC
+
+1434aa83 passes the complete 141-file/561174-byte oracle independently on
+Mac NFSv4.0, Linux NFSv4.0 and native FUSE. All report refresh_error=0 and
+boot 17023102757887622. The additional 96 fresh Mac nonce queries pass in
+3.314 seconds. Every byte of the three previously acknowledged candidate
+fixtures was independently rechecked after the named cold restart: 423 files,
+including the raw invalid-UTF8/newline/escape names, all match.
+
+[Named deployment and platform evidence](../../results/measure/20261010-w92-closure/named-1434aa83/)
+includes all six guest binary identities, normal and private unit arguments,
+the initial discovery failure and successful remaining rollout, and complete
+platform verdicts. Acceptance-only NFS mounts and native diagnostic mounts are
+retired; the normal gateway is restored with commands disabled and
+FUSE export support enabled. Private capacity and policy services are preserved.
+The actual capacity resume is at 363648 files/88.78125 GiB and still live; the
+4b original process and queued kernel-cold recovery are also live. Neither
+large acceptance gate has a complete terminal verdict yet.

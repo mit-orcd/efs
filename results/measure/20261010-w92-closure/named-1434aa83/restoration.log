@@ -1,0 +1,16 @@
+114
+419909 ./efs-fuse 192.168.122.111:17432 fs /mnt/efs -o allow_other
+Sat Oct 10 11:55:40 AM UTC 2026
+115
+269119 /home/efs/w92-unrouted-busy-bin/efs-fuse 192.168.122.111:18432 fs /home/efs/w92-capacity-mnt
+400341 ./efs-fuse 192.168.122.111:17432 fs /mnt/efs -o allow_other
+Sat Oct 10 11:55:41 AM UTC 2026
+116
+382811 ./efs-fuse 192.168.122.111:17432 fs /mnt/efs -o allow_other
+Sat Oct 10 11:55:41 AM UTC 2026
+active
+active
+active
+    PID     ELAPSED COMMAND
+   6246    03:11:32 /home/efs/w92-query-scale-sequential /mnt/w92-scale-big-20261010/scale-4294967296-bounded-24g-v4 4294967296
+ 301813       55:15 bash /home/admin/w92-scale-recovery-20261010.sh
