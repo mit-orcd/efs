@@ -10,10 +10,11 @@ profiling rounds do not satisfy them.
 | Immutable disk catalog, incremental exact aggregates, bounded builder scratch | implemented, differential/live/cold gates pass in previous checkpoint |
 | Aggregate retained-cache admission | implemented; native and live QUOTA/write/cold-recovery oracles pass |
 | Durable changed-key watermarks and bounded catch-up/recovery | durable partition revisions, restart catch-up and bounded discovery implemented; focused/full native and live cold/disable-re-enable/publisher-loss/interrupted-cache gates pass |
-| Explicit cardinality/offset/budget audit | revision saturation, complete source-allocation budgeting and representation audit complete; actual scale/live validation pending |
-| Increasing-cardinality RSS, cold-cache, concurrent export/mutation and freshness | pilots and live contention/freshness pass; latest source-scratch deployment, live command/pages and measured query/writer load pass; full actual scale pending |
+| Explicit cardinality/offset/budget audit | revision saturation, complete source-allocation budgeting and representation audit complete; named deployment/live validation passes; actual 2^32 validation remains open |
+| Increasing-cardinality RSS, cold-cache, concurrent export/mutation and freshness | 10m complete kernel-cold and concurrent old/new export oracles pass with fixed builder memory; named live contention/freshness passes; full actual scale pending |
 | Synthetic partitioned index of at least 2^32 entries | pending; sparse offset probes alone cannot satisfy this |
-| Staged real-filesystem and fault/platform gates | previous smaller gates pass; closure matrix pending |
+| Replicated persistent feature policy | native, live, restart, quota, lost-reply and fail-closed gates pass |
+| Staged real-filesystem and fault/platform gates | named native and Linux NFSv4.0 pass; actual 400 GiB write/cold/hash/export and Mac NFS execution pending |
 
 ## Aggregate cache admission
 
@@ -596,3 +597,38 @@ verified payloads (288256 bytes), changing publication generations and exact
 post-close stats in 10.573 s. Create p50/p95/p99 are 76.766/217.434/418.663 ms.
 The actual-entry generator and separate real-payload writer overlap this test;
 this shared-load measurement is not a controlled speedup comparison.
+
+## Explicit kernel-cold and concurrent ten-million-entry gates
+
+The named `1a25d20a` library passed a fresh-process recovery/export of all
+10,000,000 paths after root ran `sync` and cleared guest kernel caches. Guest
+Cached fell from 14,602,776 to 834,260 KiB. Recovery took 28.252 s and the complete
+independent export check 6.300 s; one partition rebuilt, builder allocation was
+3,864,480 bytes, and whole-process peak RSS was 29,084 KiB. Host/device caches
+were not controlled; this is guest kernel/process cold recovery, not power-loss
+or physical-device cold performance. The two larger fixtures continued running.
+
+`tests/bench_query_disk_concurrent.c` retains an old generation, starts a complete
+independent export, changes one source inode, and builds a replacement while
+that export continues. It checks every old and new path, every directory/root
+aggregate, restores the private source and checkpoints it for an independent
+fresh-process recovery check. It refuses missing/non-directory fixture roots.
+Compilation with `-Wall -Wextra -Werror` and a 1000-entry smoke test pass.
+
+The first 10m run reached the default 32 GiB aggregate retained-generation quota
+and correctly returned QUOTA; its old export still checked all 10m paths. That
+failed attempt is preserved. With only this private fixture's disk budget raised
+to 128 GiB, the repeated gate passes: 10m old and 10m new paths checked, 1,557,796
+old rows emitted during replacement construction, 3,864,480 builder bytes and
+225,718 bytes of retained source-owned allocations. Whole-process peak RSS was
+32,736 KiB; elapsed time was 57.93 s under overlapping cluster/scale load. RAM
+budgets and normal 32 GiB cache defaults are unchanged. This is a correctness and
+bounded-memory gate, not a controlled speed comparison.
+
+An additional fresh-process recovery verifies all 10m paths and exact aggregates
+after the concurrent test: 29.104 s recovery, 12.798 s complete export verification,
+zero rebuilt partitions, exit 0. Compact raw evidence, including the quota
+failure, is in
+[the cold/concurrent results](../../results/measure/20261010-w92-closure/cold-kernel-and-concurrent-10m/).
+The actual 2^32 run still owes its own complete build/export/mutation/recovery
+oracles; these pilots do not substitute for it.

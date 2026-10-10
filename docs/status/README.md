@@ -80,7 +80,8 @@ verify 78000 files and 724 payload samples, with normal `.efs` opt-out restored.
 Bounded disk indexes, durable incremental catch-up, row-only folding, aggregate
 retained-cache admission and the [replicated command policy](efs-query-persistent-policy-20261010.md)
 pass full native and private live/cold/fault gates. Ten-million-entry pilots
-pass complete streaming, cold and mutation oracles with a fixed 3.69 MiB builder;
+pass complete streaming, explicit guest kernel-cold recovery and concurrent
+old/new export oracles with a fixed 3.69 MiB builder;
 authoritative-source memory is tracked separately. Named native commands,
 fresh Linux NFSv4.0, retained payload recovery and loaded publication also pass.
 

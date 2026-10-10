@@ -1,0 +1,11 @@
+{"phase":"export-progress","count":1000000}
+{"phase":"export-progress","count":2000000}
+{"phase":"export-progress","count":3000000}
+{"phase":"export-progress","count":4000000}
+{"phase":"export-progress","count":5000000}
+{"phase":"export-progress","count":6000000}
+{"phase":"export-progress","count":7000000}
+{"phase":"export-progress","count":8000000}
+{"phase":"export-progress","count":9000000}
+{"phase":"export-progress","count":10000000}
+{"phase":"recovery","files":10000000,"hinted_files":41291,"seconds":29.104149,"verify_seconds":12.797559,"rebuilt":0,"builder_bytes":3864480,"rc":0}
