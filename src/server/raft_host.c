@@ -11984,7 +11984,7 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
     uint8_t v_dent[EFS_META_DENT_BYTES];
     uint8_t v_cino[EFS_META_INO_BYTES], v_alloc[EFS_META_ALLOC_BYTES];
     uint32_t kd = 0, kpi = 0, kci = 0, ka = 0, ks = 0;
-    uint32_t psh, csh, dsh, coord;
+    uint32_t psh, csh, dsh = 0, coord;
     uint64_t aver = 0, dver = 0, salt = 0;
     uint64_t now;
     efs_ino_t next = 0, ino = 0;
@@ -12238,9 +12238,10 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
         }
     }
 mkdir_done:
-    stage = 11;
-    if (rc == EFS_OK)
+    if (rc == EFS_OK) {
+        stage = 11;
         rc = efs_meta_apply_lookup_tx(h->kv, parent, name, host_txn_coord, h, &dent);
+    }
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, dent.ino, &crow);
     if (rc == EFS_OK)
