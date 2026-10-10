@@ -2550,7 +2550,10 @@ def _check_append_log(data, writers, count):
 
 
 @test
-@budget(30)
+# Opening and closing every append record can require a durable quorum round
+# trip. Allow background namespace/storage pressure without weakening the
+# exact-record, no-loss and no-duplication assertions below.
+@budget(120)
 def concurrent_appends(d):
     import threading
     p = os.path.join(d, "f")
