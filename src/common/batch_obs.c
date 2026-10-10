@@ -29,7 +29,7 @@ static const char *cn[BO_COUNTER_N] = {
     "overlap_config", "overlap_idle", "suffix_active", "suffix_read",
     "suffix_ready", "end_duplicate", "end_suffix", "end_conflict",
     "end_log", "end_config", "batch_overlap", "overlap_admit",
-    "overlap_bytes", "overlap_read_boundary"
+    "overlap_bytes", "overlap_read_boundary", "flow_retire_early"
 };
 static const char *hn[BH_HIST_N] = {
     "wal_entries", "wal_bytes", "sync_us", "sync_wait_us", "sync_waiters",
