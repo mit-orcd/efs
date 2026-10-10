@@ -65,3 +65,40 @@ iterators remain separate audit items. Tests cover exact admission, one byte bel
 it, impossible segment counts, finite retained views and counter exhaustion.
 KV durability, incremental differential and complete native gates pass.
 The deployment/live gates for this next logical fix are pending.
+
+## First native-format scale pilots
+
+The bounded generator in `tests/bench_query_disk_scale.c` writes actual production
+KV and disk-catalog records, distributed over 4096 partitions. It enumerates every
+exported file and checks its name, parent, inode, generation and per-partition
+sequence against an independent streaming oracle; it checks every directory's
+aggregate and samples folded inode attributes. Both complete exports, unchanged
+refreshes and close/reopen checkpoint restores pass.
+
+| Synthetic files | Fresh build s | Unchanged refresh s | Full export verification s | Builder MiB | Whole-process peak RSS MiB |
+|---:|---:|---:|---:|---:|---:|
+| 100,000 | 12.855 | 0.433 | 0.133 | 3.471 | 17.539 |
+| 1,000,000 | 27.169 | 0.618 | 7.119 | 3.471 | 25.262 |
+
+Single runs, warm kernel caches, production KV compaction concurrent with building.
+The source fixture uses NOSYNC; these are synthetic index correctness/memory pilots,
+not real EFS capacity, power-loss durability or performance conclusions. The fixture
+is an isolated 8 GiB loopback Btrfs volume with zstd compression on Xorinox; production
+remains XFS/direct-I/O/TCP. Logical fixture sizes are 136,784,153 and 1,311,154,559
+bytes. `du` allocated blocks are not a reliable compressed physical-space projection.
+The initial launcher lacked `/usr/bin/time`, failed before fixture creation, and was
+retried after installing that utility; its failure evidence is retained separately.
+No 2^32-entry acceptance claim is made. Compact raw logs are in
+[scale pilot evidence](../../results/measure/20261010-w92-closure/scale-pilot/).
+
+The cardinality audit also found unchecked 64-bit tree-count additions. Fresh and
+incremental disk folds now refuse aggregate overflow before changing counts or
+bytes. Boundary tests prove files, directories and bytes each refuse independently
+without changing the prior accumulator. Actual-source Linux IO-fault and differential
+catalog tests pass. The Mac native build encounters the pre-existing Linux-only
+`fopencookie` logger; Linux is the verified build platform for these gates.
+
+Matching authoritative checkpoint watermarks already permit restore followed by
+process-local hint rebasing; restore verifies on-disk digests, not the entire source
+namespace. Changed-watermark recovery currently falls back to rebuilding. Durable
+changed-key/catch-up watermarks and bounded discovery remain pending.

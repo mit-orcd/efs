@@ -78,7 +78,9 @@ verify 78000 files and 724 payload samples, with normal `.efs` opt-out restored.
 [W92 closure work](query-cache-closure-20261010.md) preserves the full acceptance
 matrix, including durable bounded catch-up and 2^32 synthetic index entries.
 Aggregate retained-cache admission passes focused and full native gates;
-closure-scale and deployment gates remain in progress.
+100,000- and 1,000,000-file native-format pilots pass complete streaming oracles
+with fixed 3.47 MiB builder memory. Durable catch-up, full scale and deployment
+gates remain in progress.
 
 [W92 incremental-cache implementation](query-cache-incremental-20261010.md)
 tracks bounded change/ancestor sets, immutable partition reuse, exact directory
