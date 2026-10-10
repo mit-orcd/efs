@@ -1318,11 +1318,11 @@ static void test_full_snapshot(void)
     struct kv_lsm *budget_store=kv->ctx;
     pthread_mutex_lock(&budget_store->mu);
     uint32_t saved_l0=budget_store->n_l0,saved_l1=budget_store->n_l1;
+    /* The recursive store lock keeps the real compactor from observing this
+     * deliberately impossible fixture while snapshot_pin checks its guard. */
     budget_store->n_l0=UINT32_MAX;budget_store->n_l1=1;
-    pthread_mutex_unlock(&budget_store->mu);
     CHECK(efs_kv_lsm_snapshot_pin(kv,UINT64_MAX,&failed)==EFS_ERR_BUSY && !failed,
           "overflowed segment count refuses before touching segment pointers");
-    pthread_mutex_lock(&budget_store->mu);
     budget_store->n_l0=saved_l0;budget_store->n_l1=saved_l1;
     pthread_mutex_unlock(&budget_store->mu);
     CHECK(efs_kv_lsm_snapshot_pin(kv,1<<20,&s)==EFS_OK,"pin unflushed state");
