@@ -8,6 +8,21 @@ static void put(uint8_t **p, uint64_t n, unsigned bytes)
         *(*p)++ = (uint8_t)(n >> (8 * (bytes - i - 1)));
 }
 
+/* Shared immutable object namespace, byte-identical to the metadata helper.
+ * Ticket transport validates it before any admission/proposal side effect. */
+uint64_t efs_meta_candidate_gen(const uint8_t uuid[16], uint32_t session_epoch,
+                                uint64_t seq, uint32_t chunk_index, uint32_t retry)
+{
+    if (!uuid) return 1;
+    uint8_t in[36],hash[EFS_HASH_SIZE],*p=in;
+    memcpy(p,uuid,16);p+=16;
+    put(&p,session_epoch,4);put(&p,seq,8);put(&p,chunk_index,4);put(&p,retry,4);
+    efs_hash(in,sizeof(in),hash);
+    uint64_t value=0;
+    for (unsigned i=0;i<8;i++) value=(value<<8)|hash[i];
+    return value ? value : 1;
+}
+
 int efs_publication_digest(const struct efs_meta_pub *r, uint8_t out[EFS_HASH_SIZE])
 {
     if (!r || !out || !r->ino || !r->inode_gen || !r->candidate_gen ||
@@ -80,4 +95,40 @@ int efs_publication_from_rec(const struct efs_chunk_rec *r, uint64_t size,
     memcpy(p->ch.checksums, r->checksums, sizeof(p->ch.checksums));
     return p->ino && p->inode_gen && p->candidate_gen &&
            p->expected_gen != EFS_CHUNK_BASE_UNCOND ? EFS_OK : EFS_ERR_INVAL;
+}
+
+int efs_publication_from_request(const struct efs_msg_publication *r,
+                                 struct efs_meta_pub *out)
+{
+    if (!r || !out || r->ticketed>1) return EFS_ERR_INVAL;
+    struct efs_meta_pub p;
+    int rc=efs_publication_from_rec(&r->rec,r->size,&p);
+    if (rc!=EFS_OK) return rc;
+    p.publication_id=r->id;
+    if (r->ticketed) {
+        if (!p.fresh_object || r->put_id.session_epoch!=r->id.session_epoch ||
+            memcmp(r->put_id.client_uuid,r->id.client_uuid,EFS_OPID_UUID_LEN) ||
+            !r->put_id.seq || !r->put_fragment_len ||
+            r->put_fragment_len>EFS_MAX_CHUNK_SIZE/2 ||
+            !r->put_member_mask || (r->put_member_mask & ~((1u<<EFS_MAX_NODES)-1u)) ||
+            __builtin_popcount(r->put_member_mask)<EFS_NUM_FRAGMENTS ||
+            (uint64_t)p.delta_off+p.delta_len>(uint64_t)r->put_fragment_len*2 ||
+            p.candidate_gen!=efs_meta_candidate_gen(r->put_id.client_uuid,
+                r->put_id.session_epoch,r->put_id.seq,p.chunk_index,0)) return EFS_ERR_INVAL;
+        for (unsigned i=0;i<EFS_NUM_FRAGMENTS;i++) {
+            if (!p.ch.nodes[i]) return EFS_ERR_INVAL;
+            for (unsigned j=0;j<i;j++) if (p.ch.nodes[i]==p.ch.nodes[j]) return EFS_ERR_INVAL;
+        }
+        p.ticketed=1;p.put_id=r->put_id;p.put_fragment_len=r->put_fragment_len;
+        p.put_member_mask=r->put_member_mask;
+    } else {
+        struct efs_opid zero={0};
+        if (r->put_fragment_len || r->put_member_mask ||
+            memcmp(r->put_id.client_uuid,zero.client_uuid,EFS_OPID_UUID_LEN) ||
+            r->put_id.session_epoch || r->put_id.seq) return EFS_ERR_INVAL;
+    }
+    uint8_t digest[EFS_HASH_SIZE];
+    rc=efs_publication_digest(&p,digest);
+    if (rc==EFS_OK) *out=p;
+    return rc;
 }

@@ -92,7 +92,7 @@ COMMON_SRCS = src/common/admission.c src/meta/append_plan.c $(COMMON_DIR)/public
               src/client/ops.c \
               src/client/read.c \
               src/client/write.c \
-              src/client/bufpool.c src/client/writer_state.c src/client/publication_ack_owner.c src/client/publication_writeback.c \
+              src/client/bufpool.c src/client/writer_state.c src/client/publication_ack_owner.c src/client/publication_writeback.c src/client/put_ticket_owner.c \
               src/client/inode_rpc.c \
               src/client/stage_evict.c \
               src/client/node_cache.c
@@ -309,6 +309,8 @@ test: all
 	python3 tests/test_lease_request.py
 	python3 tests/test_identity_revocation.py
 	python3 tests/test_put_ticket_rpc.py
+	python3 tests/test_put_ticket_owner.py
+	python3 tests/test_put_identity.py
 	python3 tests/test_create_request.py
 	python3 tests/test_pending_create_cleanup.py
 	python3 tests/test_mount_identity_rpc.py

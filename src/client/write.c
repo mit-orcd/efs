@@ -8,6 +8,7 @@
 #include "efs/wb_recovery.h"
 #include "efs/writer_state.h"
 #include "efs/publication.h"
+#include "efs/put_ticket.h"
 #include "efs/write_extent.h"
 #include <errno.h>
 #include <fcntl.h>
@@ -4350,6 +4351,7 @@ int efs_dcache_publication_report(efs_ino_t ino, uint64_t generation, uint32_t c
         rc=EFS_ERR_INVAL;goto done;
     }
     struct efs_chunk_rec put={0};put.ino=ino;put.chunk_index=ci;put.chunk_generation=object;
+    put.publish_flags=e->object_publish_flags & EFS_CHUNK_REC_F_FRESH_OBJECT;
     memcpy(put.nodes,e->object_nodes,sizeof(put.nodes));
     memcpy(put.checksums,e->object_cks,sizeof(put.checksums));
     rc=efs_writer_plan_report(&e->writer->publication.plan,&put,out);
@@ -4386,8 +4388,9 @@ done:
 
 /* Bind the wire size and digest once BEFORE any send. A retry must use this
  * request even if the inode grew or shrank while the reply was missing. */
-int efs_dcache_publication_request(efs_ino_t ino, uint64_t generation, uint32_t ci,
-    uint64_t object, uint64_t sequence, uint64_t size, struct efs_msg_publication *out)
+int efs_dcache_publication_request_ticketed(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    uint64_t object, uint64_t sequence, uint64_t size,
+    const struct efs_put_ticket *ticket, struct efs_msg_publication *out)
 {
     if (!out) return EFS_ERR_INVAL;
     struct efs_chunk_rec rec;
@@ -4412,17 +4415,34 @@ int efs_dcache_publication_request(efs_ino_t ino, uint64_t generation, uint32_t 
         rc=efs_client_publication_id(sequence,&identity);
         if (rc!=EFS_OK) goto done;
     }
-    rc=efs_publication_from_rec(&rec,size,&p);
-    p.publication_id=identity;
+    struct efs_msg_publication request={.rec=rec,.size=size,.id=identity};
+    if (ticket) {
+        request.ticketed=1;request.put_id=ticket->id;
+        request.put_fragment_len=ticket->fragment_len;request.put_member_mask=ticket->member_mask;
+    }
+    rc=efs_publication_from_request(&request,&p);
+    if (rc==EFS_OK && ticket) {
+        struct efs_put_ticket expected;
+        uint8_t got[EFS_PUT_TICKET_WIRE_LEN],want[EFS_PUT_TICKET_WIRE_LEN];
+        rc=efs_put_ticket_from_pub(&p,&expected);
+        if (rc==EFS_OK)rc=efs_put_ticket_encode(&expected,want);
+        if (rc==EFS_OK)rc=efs_put_ticket_encode(ticket,got);
+        if (rc==EFS_OK && memcmp(want,got,sizeof(got)))rc=EFS_ERR_STALE;
+    }
     if (rc==EFS_OK)rc=efs_publication_digest(&p,digest);
     if (rc!=EFS_OK)goto done;
     if (token->result_bound && memcmp(token->result_digest,digest,sizeof(digest))) {
         rc=EFS_ERR_STALE;goto done;
     }
     token->result_id=identity;token->result_size=size;memcpy(token->result_digest,digest,sizeof(digest));token->result_bound=1;
-    memset(out,0,sizeof(*out));out->rec=rec;out->size=size;out->id=identity;
+    *out=request;
 done:
     pthread_mutex_unlock(mu);return rc;
+}
+int efs_dcache_publication_request(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    uint64_t object, uint64_t sequence, uint64_t size, struct efs_msg_publication *out)
+{
+    return efs_dcache_publication_request_ticketed(ino,generation,ci,object,sequence,size,NULL,out);
 }
 /* Only durable, matching terminal evidence releases the pending identity.
  * Rejection retains every accepted byte; caller must fetch a fresh view before

@@ -48,8 +48,20 @@ int main(int argc,char **argv)
     for(unsigned i=0;i<3;i++){p.ch.nodes[i]=i+1;memset(p.ch.checksums[i],i+1,EFS_HASH_SIZE);}
     struct efs_put_ticket t;assert(!efs_put_ticket_from_pub(&p,&t));
     uint32_t shard=efs_kv_lane_shard(ino,p.chunk_index%EFS_META_LANES),state=99;
+    struct efs_client_put_request *owned=NULL;
+    uint64_t budget_before=0,budget_live=0,budget_reserved=0,budget_limit=0;
+    efs_buf_metadata_stats(&budget_before,&budget_reserved,&budget_limit);
+    assert(!efs_client_put_begin(&owned,&p));
+    efs_buf_metadata_stats(&budget_live,&budget_reserved,&budget_limit);assert(budget_live>budget_before);
+    struct efs_put_ticket captured;assert(!efs_client_put_manifest(owned,&captured));
+    assert(!memcmp(&captured,&t,sizeof(t)));
+    /* Reordering configured slots must not reinterpret an admitted mask. */
+    g_client.nodes[0].id=4;g_client.nodes[3].id=1;
+    assert(efs_client_put_resume(owned,0,&state)==EFS_ERR_STALE && !state);
+    g_client.nodes[0].id=1;g_client.nodes[3].id=4;
     /* Probe has no session or ticket admission side effects. */
     assert(efs_client_rpc_put_ticket(&t,1,&state)==EFS_ERR_NOT_FOUND && !state);
+    assert(efs_client_put_resume(owned,1,&state)==EFS_ERR_NOT_FOUND && !state);
     assert(!efs_client_rpc_publication_session(shard,&t.id));
     assert(efs_client_rpc_put_ticket(&t,1,&state)==EFS_ERR_NOT_FOUND && !state);
     if(discard) {
@@ -58,8 +70,11 @@ int main(int argc,char **argv)
         int fd=efs_connect_tcp("127.0.0.1",port);assert(fd>=0);
         assert(!efs_send_msg(fd,EFS_MSG_RAFT_MKFS,bytes,sizeof(bytes)));close(fd);
     }
-    assert(!efs_client_rpc_put_ticket(&t,0,&state) && state==EFS_PUT_TICKET_ADMITTED);
-    assert(!efs_client_rpc_put_ticket(&t,1,&state) && state==EFS_PUT_TICKET_ADMITTED);
+    assert(!efs_client_put_resume(owned,0,&state) && state==EFS_PUT_TICKET_ADMITTED);
+    assert(efs_client_put_free(owned)==EFS_ERR_BUSY);
+    p.ch.checksums[0][0]^=1;
+    assert(!efs_client_put_manifest(owned,&captured) && !memcmp(&captured,&t,sizeof(t)));
+    assert(!efs_client_put_resume(owned,1,&state) && state==EFS_PUT_TICKET_ADMITTED);
     struct efs_put_ticket changed=t;changed.body_digest[0]^=1;
     assert(efs_client_rpc_put_ticket(&changed,0,&state)==EFS_ERR_PROTO && !state);
     assert(efs_client_rpc_put_ticket(&changed,1,&state)==EFS_ERR_PROTO && !state);
@@ -71,7 +86,10 @@ int main(int argc,char **argv)
         puts("actual PUT ticket exact body saved for cold replay PASS");return 0;
     }
     fence(port,argv[3],&t.id);
+    assert(efs_client_put_resume(owned,0,&state)==EFS_ERR_STALE && !state);
+    assert(efs_client_put_free(owned)==EFS_ERR_BUSY);
+    efs_buf_metadata_stats(&budget_live,&budget_reserved,&budget_limit);assert(budget_live>budget_before);
     assert(efs_client_rpc_put_ticket(&t,0,&state)==EFS_ERR_STALE && !state);
     assert(efs_client_rpc_put_ticket(&t,1,&state)==EFS_ERR_STALE && !state);
-    printf("actual PUT ticket discard=%d cross-group shard=%u: pure probes, exact admission/replay, body collision and durable revocation PASS\n",discard,shard);
+    printf("actual retained PUT ticket discard=%d cross-group shard=%u: budgeted immutable body, membership reorder refusal, pure probes, exact admission/replay, body collision and revoked-owner retention PASS\n",discard,shard);
 }
