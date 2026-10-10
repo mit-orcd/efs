@@ -950,7 +950,10 @@ int efs_client_create_resume(struct efs_client_create_request *r,int probe_only)
     if(r->complete)return r->result;
     int rc=create_request_rpc(r,1);
     if(r->complete || probe_only || rc!=EFS_ERR_BUSY)return create_request_revocation(r,rc);
-    if(!r->wire.routed)return EFS_ERR_PROTO;
+    /* The parent read-index may be BUSY before the server can resolve the
+     * dentry shard. This is a valid unresolved probe, not malformed proof.
+     * Retain the identity and let the caller retry without submitting. */
+    if(!r->wire.routed)return EFS_ERR_BUSY;
     if(!r->admitted) {
         rc=session_shard_admit(r->wire.shard,&r->wire.q);
         if(rc!=EFS_OK)return create_request_revocation(r,rc);
