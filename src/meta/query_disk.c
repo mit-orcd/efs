@@ -39,6 +39,8 @@ struct disk_node {
     struct efs_name_entry link;
     uint64_t children;
 };
+/* One candidate-only accumulator; never retained across generations. */
+struct fold_parent { struct disk_node node;uint64_t at;int loaded; };
 struct read_window {
     uint64_t offset,tick;size_t size;
     uint8_t data[READ_WINDOW];
@@ -531,36 +533,58 @@ static int chosen_shard(struct efs_query_disk *d,const struct efs_meta_row *pare
     if(!rc || parent->layout==EFS_META_LAYOUT_HASHED){*chosen=hashed;return EFS_OK;}
     return rc==EFS_ERR_NOT_FOUND?EFS_OK:rc;
 }
-static int fold_edge(struct efs_query_disk *d,uint32_t shard,const struct efs_name_entry *e)
+static int fold_flush(struct efs_query_disk *d,struct fold_parent *p)
 {
-    struct disk_node parent,child;uint64_t pa,ca;uint32_t chosen;
-    int rc=locate(d,e->parent,&parent,&pa);if(rc)return rc;
-    if(!S_ISDIR(parent.row.mode))return EFS_ERR_IO;
-    rc=chosen_shard(d,&parent.row,e,&chosen);if(rc)return rc;
+    if(!p->loaded)return EFS_OK;
+    int rc=node_at(d,efs_kv_inode_shard(p->node.row.ino),p->at,&p->node,1);
+    if(!rc)p->loaded=0;
+    return rc;
+}
+static int fold_edge(struct efs_query_disk *d,uint32_t shard,const struct efs_name_entry *e,struct fold_parent *p)
+{
+    int rc=EFS_OK;
+    if(!p->loaded || p->node.row.ino!=e->parent){
+        rc=fold_flush(d,p);if(rc)return rc;
+        rc=locate(d,e->parent,&p->node,&p->at);if(rc)return rc;
+        if(!S_ISDIR(p->node.row.mode))return EFS_ERR_IO;
+        p->loaded=1;
+    }
+    struct disk_node *parent=&p->node,child;uint64_t ca;uint32_t chosen;
+    rc=chosen_shard(d,&parent->row,e,&chosen);if(rc)return rc;
     if(chosen!=shard || !e->dentry.ino || e->dentry.type==EFS_META_DENT_TOMBSTONE)return EFS_OK;
+    if(e->dentry.ino==e->parent)return EFS_ERR_PROTO;
     rc=locate(d,e->dentry.ino,&child,&ca);if(rc)return rc;
     if(child.row.generation!=e->dentry.generation)return EFS_ERR_IO;
-    struct efs_query_rollup *r=&parent.rollup;int has=r->imm_files+r->imm_dirs!=0;
+    struct efs_query_rollup *r=&parent->rollup;int has=r->imm_files+r->imm_dirs!=0;
     if(S_ISDIR(child.row.mode)) {
         if(child.link.parent || child.row.parent!=e->parent)return EFS_ERR_PROTO;
-        child.link=*e;r->imm_dirs++;parent.children++;
+        child.link=*e;r->imm_dirs++;parent->children++;
         rc=node_at(d,efs_kv_inode_shard(child.row.ino),ca,&child,1);if(rc)return rc;
     } else {
         if(UINT64_MAX-r->imm_bytes<child.stat.size)return EFS_ERR_QUOTA;
         r->imm_files++;r->imm_bytes+=child.stat.size;
     }
     expand(&r->imm_tmin,&r->imm_tmax,low_time(&child.stat),high_time(&child.stat),has);
-    return node_at(d,efs_kv_inode_shard(parent.row.ino),pa,&parent,1);
+    return EFS_OK;
 }
 static int folds_build(struct efs_query_disk *d)
 {
     int rc=EFS_OK;
-    for(uint32_t shard=0;shard<SHARDS && !rc;shard++)for(uint64_t i=0;i<d->part[shard].names && !rc;i++){
-        if(cancelled(d))return EFS_ERR_BUSY;
-        struct efs_name_entry e;rc=disk_io(d,shard,'n',&e,sizeof(e),i*sizeof(e),0);
-        if(!rc)rc=fold_edge(d,shard,&e);
-        if(rc)fprintf(stderr,"query-disk: edge shard=%u parent=%llu child=%llu rc=%d\n",shard,
-            (unsigned long long)e.parent,(unsigned long long)e.dentry.ino,rc);
+    /* Raw dentry keys order by parent then name. A single bounded parent
+     * accumulator amortizes lookup/writes without changing the name index. */
+    for(uint32_t shard=0;shard<SHARDS && !rc;shard++){
+        struct fold_parent parent={0};
+        for(uint64_t i=0;i<d->part[shard].names && !rc;i++){
+            if(cancelled(d))return EFS_ERR_BUSY;
+            struct efs_name_entry e={0};struct slot slot;
+            uint8_t key[EFS_KV_KEY_MAX],val[VALUE_MAX];
+            rc=read_record(d,shard,d->part[shard].begin[1]+i,&slot,key,val);
+            if(!rc)rc=entry_from(key,slot.key_len,val,slot.value_len,&e);
+            if(!rc)rc=fold_edge(d,shard,&e,&parent);
+            if(rc)fprintf(stderr,"query-disk: edge shard=%u parent=%llu child=%llu rc=%d\n",shard,
+                (unsigned long long)e.parent,(unsigned long long)e.dentry.ino,rc);
+        }
+        if(!rc)rc=fold_flush(d,&parent);
     }
     if(rc)return rc;
     char path[EFS_MAX_PATH];int len=snprintf(path,sizeof(path),"%s/queue",d->path);
@@ -611,7 +635,7 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
     const struct efs_query_disk *old,uint64_t max_bytes,int (*stop)(void *),void *ctx,struct efs_query_disk **out)
 {
     if(out)*out=NULL;
-    uint64_t working=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX+NODE_BATCH*sizeof(struct disk_node);
+    uint64_t working=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX+NODE_BATCH*sizeof(struct disk_node)+sizeof(struct fold_parent);
     if(!root || !source || !out)return EFS_ERR_INVAL;
     if(max_bytes<working)return EFS_ERR_NOMEM;
     if(mkdir(root,0700) && errno!=EEXIST)return EFS_ERR_IO;
@@ -860,7 +884,7 @@ int efs_query_disk_restore(const char *root,const uint64_t watermark[4],uint64_t
 {
     if(out)*out=NULL;
     if(!root || !watermark || !out)return EFS_ERR_INVAL;
-    uint64_t bytes=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX+NODE_BATCH*sizeof(struct disk_node);
+    uint64_t bytes=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX+NODE_BATCH*sizeof(struct disk_node)+sizeof(struct fold_parent);
     if(max_bytes<bytes)return EFS_ERR_NOMEM;
     char current[EFS_MAX_PATH],base[256];int n=snprintf(current,sizeof(current),"%s/current",root);
     if(n<0 || (size_t)n>=sizeof(current))return EFS_ERR_NAMETOOLONG;
