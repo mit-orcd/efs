@@ -1,0 +1,2 @@
+actual pre-PUT ticket admission, atomic PUBLISHED mapping, exact ticketed receipt/retirement and newer bytes PASS
+typed cache lost publication/retirement ACK, exact newer-range ownership and peer preservation PASS ci=2 group=0
