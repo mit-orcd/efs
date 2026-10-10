@@ -114,6 +114,50 @@ static void budget_test(void)
     snprintf(path,sizeof(path),"%s/part",b);unlink(path);rmdir(b);
     snprintf(path,sizeof(path),"%s/.budget.lock",root);unlink(path);rmdir(root);
 }
+static void merge_test(void)
+{
+    char root[]="/tmp/efs-query-merge-XXXXXX";CHECK(mkdtemp(root));
+    struct efs_query_disk *d=calloc(1,sizeof(*d));CHECK(d);if(!d)return;
+    for(unsigned kind=0;kind<2;kind++) {
+        size_t width=kind?sizeof(struct disk_alias):sizeof(struct efs_name_entry);
+        int (*compare)(const void *,const void *)=kind?alias_compare:name_compare;
+        const unsigned counts[2]={2001,4097},total=6098;
+        uint8_t *expected=calloc(total,width),*actual=calloc(total,width);
+        uint8_t *scratch=malloc(SORT_ROWS*width);CHECK(expected && actual && scratch);
+        int fds[3];char path[EFS_MAX_PATH];
+        for(unsigned j=0;j<3;j++) {
+            snprintf(path,sizeof(path),"%s/%u-%u",root,kind,j);
+            fds[j]=open(path,O_CREAT|O_RDWR,0600);CHECK(fds[j]>=0);unlink(path);
+        }
+        unsigned at=0;
+        for(unsigned j=0;j<2;j++)for(unsigned n=0;n<counts[j];n++,at++) {
+            if(kind) {
+                struct disk_alias e={2*n+j,17,at};memcpy(expected+at*width,&e,width);
+            } else {
+                struct efs_name_entry e={0};e.parent=17;
+                snprintf(e.name,sizeof(e.name),"item-%08u",2*n+j);
+                memcpy(expected+at*width,&e,width);
+            }
+            CHECK(pwrite(fds[j],expected+at*width,width,n*width)==(ssize_t)width);
+        }
+        qsort(expected,total,width,compare);read_calls=write_calls=0;
+        CHECK(!merge_names(d,fds[0],fds[1],fds[2],counts[0],counts[1],width,compare,scratch));
+        CHECK(read_calls<20 && write_calls<12);
+        printf("merge %s: rows=%u reads=%u writes=%u\n",kind?"aliases":"names",total,read_calls,write_calls);
+        CHECK(pread(fds[2],actual,total*width,0)==(ssize_t)(total*width));
+        CHECK(!memcmp(expected,actual,total*width));
+        /* A partial output followed by ENOSPC must propagate, never success. */
+        CHECK(!ftruncate(fds[2],0));partial_write=1;
+        CHECK(merge_names(d,fds[0],fds[1],fds[2],counts[0],counts[1],width,compare,scratch)==EFS_ERR_IO);
+        CHECK(!partial_write);
+        d->stop=cancel_budget;read_calls=write_calls=0;
+        CHECK(merge_names(d,fds[0],fds[1],fds[2],counts[0],counts[1],width,compare,scratch)==EFS_ERR_BUSY);
+        CHECK(!read_calls && !write_calls);d->stop=NULL;
+        for(unsigned j=0;j<3;j++)close(fds[j]);
+        free(scratch);free(actual);free(expected);
+    }
+    free(d);CHECK(!rmdir(root));
+}
 int main(void)
 {
     {
@@ -131,6 +175,7 @@ int main(void)
     }
 
     budget_test();
+    merge_test();
     struct efs_query_disk *d=calloc(1,sizeof(*d));if(!d)return 1;
     d->budget_fd=-1;
     d->disk_limit=UINT64_MAX;

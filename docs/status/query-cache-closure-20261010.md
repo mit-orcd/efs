@@ -902,3 +902,30 @@ restored to commands disabled; acceptance-only mounts are retired. Private
 18432 capacity daemons and both large-run watchers stay active. W92 remains
 open for complete actual-entry and 400-GiB terminal/cold/export verdicts and
 final resource cleanup; these new diagnostic gates do not replace them.
+
+
+## Bounded external-merge syscall reduction
+
+The actual 2^32 run remains live: its completed source population is preserved,
+but at 12:47 UTC only 49 of 4096 name/alias partitions were complete. IO counters
+continued advancing; this is not a stopped job. Inspection found the external
+merge issuing a separate pread/pwrite for every record on every merge pass.
+This produces billions of small syscalls at the required cardinality.
+
+`names_build` now reuses its existing 2048-row sort allocation as two input
+windows and one output window, each 682 records. It performs the same sorted
+merge with batched IO, without adding cardinality-dependent memory or changing
+the cache format, ordering, admission charge or durability barriers. Both
+name and alias merges have a focused 6098-record independent qsort oracle,
+unequal inputs and partial final batches, syscall bounds (under 20 reads and
+12 writes), partial output followed by ENOSPC, and cancellation before IO.
+The production `io_at` retry/error boundary remains in use.
+
+Mac compilation with warnings as errors and Linux disk differential/I/O tests
+pass. The full Linux native repeat is running in detached screen
+`w92-merge-native-20261010` on the host; it must finish before deploying this
+change or replacing the queued scale oracle. The original scale process and
+capacity writer were not interrupted. At 12:47 UTC the real writer had synced
+413184 files / 100.875 GiB; its complete cold-verification gate remains pending.
+
+[Focused merge evidence](../../results/measure/20261010-w92-closure/buffered-merge/).

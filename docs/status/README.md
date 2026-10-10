@@ -86,6 +86,10 @@ authoritative-source memory is tracked separately. The final oracle now checks
 all ten rollup fields and sampled inode attributes; full 10m recovery passes. Named native commands,
 fresh Linux NFSv4.0, retained payload recovery and loaded publication also pass.
 
+A bounded external-merge batching fix passes focused ordering, ENOSPC and
+cancellation tests; its full native repeat is running before deployment.
+The current large scale processes remain active.
+
 Remaining gates: the actual 2^32-entry index build/export/cold/mutation run,
 the 400 GiB real-payload write/cold/hash/export run. Named cdc13b88 Mac/Linux
 NFS and native FUSE full oracles pass, as do 96 fresh Mac queries and all

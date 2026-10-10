@@ -493,6 +493,38 @@ static int run_path(struct efs_query_disk *d,uint32_t shard,unsigned pass,uint64
     int n=snprintf(p,EFS_MAX_PATH,"%s/%04x.tmp%u-%llu",d->path,shard,pass,(unsigned long long)run);
     return n<0 || n>=EFS_MAX_PATH ? EFS_ERR_NAMETOOLONG : EFS_OK;
 }
+/* Reuse the run-sort allocation as two input windows and one output window.
+ * The merge remains bounded independently of cardinality and uses io_at so
+ * short writes, cancellation and reserve failures cannot publish a candidate. */
+static int merge_names(struct efs_query_disk *d,int fa,int fb,int fo,
+                       uint64_t na,uint64_t nb,size_t width,
+                       int (*compare)(const void *,const void *),uint8_t *rows)
+{
+    const unsigned cap=SORT_ROWS/3;
+    uint8_t *a=rows,*b=rows+cap*width,*out=rows+2*cap*width;
+    uint64_t ia=0,ib=0,at=0;unsigned pa=0,pb=0,ca=0,cb=0,used=0;
+    int rc=EFS_OK;
+    while(!rc && (ia<na || ib<nb)) {
+        if(cancelled(d)){rc=EFS_ERR_BUSY;break;}
+        if(ia<na && pa==ca) {
+            ca=(unsigned)(na-ia>cap?cap:na-ia);pa=0;
+            rc=io_at(fa,a,ca*width,ia*width,0);
+        }
+        if(!rc && ib<nb && pb==cb) {
+            cb=(unsigned)(nb-ib>cap?cap:nb-ib);pb=0;
+            rc=io_at(fb,b,cb*width,ib*width,0);
+        }
+        if(rc)break;
+        int takea=ia<na && (ib==nb || compare(a+pa*width,b+pb*width)<=0);
+        memcpy(out+used++*width,takea?a+pa*width:b+pb*width,width);
+        if(takea){ia++;pa++;}else{ib++;pb++;}
+        if(used==cap) {
+            rc=io_at(fo,out,used*width,at*width,1);at+=used;used=0;
+        }
+    }
+    if(!rc && used)rc=io_at(fo,out,used*width,at*width,1);
+    return rc;
+}
 static int names_build(struct efs_query_disk *d,uint32_t shard,char kind)
 {
     uint64_t count=d->part[shard].names;if(!count)return EFS_OK;
@@ -519,7 +551,7 @@ static int names_build(struct efs_query_disk *d,uint32_t shard,char kind)
         if(fd<0){rc=EFS_ERR_IO;break;}
         rc=io_at(fd,rows,n*width,0,1);close(fd);
     }
-    free(rows);unsigned pass=0;
+    unsigned pass=0;
     while(runs>1 && !rc) {
         for(uint64_t i=0;i<runs && !rc;i+=2) {
             char a[EFS_MAX_PATH],b[EFS_MAX_PATH],out[EFS_MAX_PATH];
@@ -529,19 +561,12 @@ static int names_build(struct efs_query_disk *d,uint32_t shard,char kind)
             if(i+1==runs){if(rename(a,out))rc=EFS_ERR_IO;continue;}
             rc=run_path(d,shard,pass,i+1,b);if(rc)break;
             int fa=open(a,O_RDONLY|O_CLOEXEC),fb=open(b,O_RDONLY|O_CLOEXEC),fo=open(out,O_CREAT|O_EXCL|O_RDWR|O_CLOEXEC,0600);
-            struct stat sa,sb;uint64_t ia=0,ib=0,at=0;
+            struct stat sa,sb;
             if(fa<0 || fb<0 || fo<0 || fstat(fa,&sa) || fstat(fb,&sb))rc=EFS_ERR_IO;
             uint64_t na=rc?0:(uint64_t)sa.st_size/width,nb=rc?0:(uint64_t)sb.st_size/width;
-            union { struct efs_name_entry name;struct disk_alias alias; } ea,eb;int ha=0,hb=0;
-            while(!rc && (ia<na || ib<nb)) {
-                if(cancelled(d)){rc=EFS_ERR_BUSY;break;}
-                if(ia<na && !ha){rc=io_at(fa,&ea,width,ia*width,0);ha=1;}
-                if(!rc && ib<nb && !hb){rc=io_at(fb,&eb,width,ib*width,0);hb=1;}
-                if(rc)break;
-                int takea=ia<na && (ib==nb || compare(&ea,&eb)<=0);
-                rc=io_at(fo,takea?&ea:&eb,width,at++*width,1);
-                if(takea){ia++;ha=0;}else{ib++;hb=0;}
-            }
+            if(!rc && (sa.st_size<0 || sb.st_size<0 ||
+                       (uint64_t)sa.st_size%width || (uint64_t)sb.st_size%width))rc=EFS_ERR_IO;
+            if(!rc)rc=merge_names(d,fa,fb,fo,na,nb,width,compare,rows);
             if(fa>=0)close(fa);
             if(fb>=0)close(fb);
             if(fo>=0)close(fo);
@@ -554,7 +579,7 @@ static int names_build(struct efs_query_disk *d,uint32_t shard,char kind)
         if(!rc)rc=filename(d,shard,kind,final,sizeof(final));
         if(!rc && rename(path,final))rc=EFS_ERR_IO;
     }
-    return rc;
+    free(rows);return rc;
 }
 static int node_at(struct efs_query_disk *d,uint32_t shard,uint64_t at,struct disk_node *n,int write)
 {
