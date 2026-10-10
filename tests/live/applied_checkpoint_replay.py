@@ -19,7 +19,7 @@ def exercise(args,work,roots,mount,run,start,stop,mount_client,unmount,wait,drai
         return {int(g):(int(c),int(a)) for g,c,a in re.findall(r'group (\d+).*?commit=(\d+) applied=(\d+)',text)}
     def checkpoints():
         return b''.join((roots[target]/'mdraft'/f'applied.{g}').read_bytes() for g in (0,2))
-    root=mount/'checkpoint-replay';root.mkdir();warm=root/'warm';warm.write_bytes(b'checkpoint baseline')
+    root=mount/'checkpoint-replay';root.mkdir();parent_ino=root.stat().st_ino;warm=root/'warm';warm.write_bytes(b'checkpoint baseline')
     wait(lambda:all(c==a for c,a in states(target).values()),'checkpoint follower initial apply',60)
     time.sleep(1.2)
     baseline=checkpoints();assert len(baseline)==32
@@ -58,10 +58,22 @@ def exercise(args,work,roots,mount,run,start,stop,mount_client,unmount,wait,drai
         a=final.stat();b=link.stat();assert a.st_ino==b.st_ino==manifest[i]['ino'] and a.st_nlink==2
         assert a.st_mode&0o777==0o640
     assert not removed.exists() and warm.read_bytes()==b'checkpoint baseline'
+    # A leader-served FUSE read alone cannot establish the follower's KV.
+    unmount();stop()
+    source=mgmt.parent;reader=work/'applied-checkpoint-read'
+    run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),
+         source/'tests/live/applied_checkpoint_read.c',source/'libefs.a',
+         '-pthread','-lm','-ldl','-libverbs','-o',reader])
+    cold=run([reader,roots[target]/'mdraft/kv',str(parent_ino)],capture_output=True,text=True).stdout
+    (work/'applied-checkpoint-cold-kv.txt').write_text(cold)
+    rows=[list(map(int,line.split())) for line in cold.splitlines()];assert len(rows)==8
+    for i,ino,linked,nlink,mode,size in rows:
+        assert ino==linked==manifest[i]['ino'] and nlink==2 and mode==0o640 and size==1024+i
+    start();mount_client()
     for p in root.iterdir():p.unlink()
     root.rmdir();wait(drained,'checkpoint replay deletion queues drained',180)
     (work/'applied-checkpoint-replay.json').write_text(json.dumps(dict(
         follower_node=3,marker_write_EIO=True,old_markers=old,before_crash=before,
         replayed=manifest,cold_exact_payloads=True,rename_link_mode_truncate_delete=True,
-        private_cluster_SIGKILL=True,physical_power_loss=False),indent=2))
+        follower_offline_cold_KV=True,private_cluster_SIGKILL=True,physical_power_loss=False),indent=2))
     print('retained applied-marker tail: cold rename/link/mode/truncate/delete and exact payload replay PASS',flush=True)
