@@ -5,11 +5,13 @@
 #include <string.h>
 #include <unistd.h>
 static int partial_write;
+static unsigned write_calls;
 static unsigned read_calls;
 static ssize_t counted_pread(int fd,void *buf,size_t size,off_t offset)
 { read_calls++;return pread(fd,buf,size,offset); }
 static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
 {
+    write_calls++;
     if(partial_write==2){partial_write=0;errno=ENOSPC;return -1;}
     if(partial_write==1){partial_write=2;return pwrite(fd,buf,size<3?size:3,offset);}
     return pwrite(fd,buf,size,offset);
@@ -61,6 +63,21 @@ int main(void)
     CHECK(locate(d,0,&found,NULL)==EFS_ERR_NOT_FOUND);
     CHECK(locate(d,3*4096,&found,NULL)==EFS_ERR_NOT_FOUND);
     CHECK(locate(d,32*8192,&found,NULL)==EFS_ERR_NOT_FOUND);
+    /* Raw record assembly must preserve bytes and never add an index entry
+     * after a short write followed by ENOSPC. It uses two writes, not three. */
+    uint8_t key[11]={0,99,EFS_KV_KIND_INODE},value[37],record[48];
+    memset(value,0x39,sizeof(value));d->disk_limit=UINT64_MAX;
+    struct writer writer={.d=d,.shard=99,.raw=-1,.index=-1};
+    write_calls=0;CHECK(!save(&writer,key,sizeof(key),value,sizeof(value)));
+    CHECK(write_calls==2 && writer.count==1 && writer.offset==sizeof(record));
+    CHECK(!io_at(writer.raw,record,sizeof(record),0,0));
+    CHECK(!memcmp(record,key,sizeof(key)) && !memcmp(record+sizeof(key),value,sizeof(value)));
+    partial_write=1;CHECK(save(&writer,key,sizeof(key),value,sizeof(value))==EFS_ERR_IO);
+    CHECK(writer.count==1 && writer.offset==sizeof(record));
+    struct stat index_stat;CHECK(!fstat(writer.index,&index_stat));
+    CHECK(index_stat.st_size==(off_t)sizeof(struct slot));
+    CHECK(!save(&writer,key,sizeof(key),NULL,0));CHECK(writer.count==2);
+    close(writer.raw);close(writer.index);
     /* Reusing every FD slot must not reuse bytes from its previous file. */
     for(uint32_t shard=1;shard<=FD_CACHE+2;shard++){
         uint8_t byte=(uint8_t)shard;fd=make_file(d,shard,'r');CHECK(fd>=0);
@@ -69,6 +86,6 @@ int main(void)
     }
     CHECK(!disk_io(d,0,'r',got,17,100,0));CHECK(!memcmp(got,data+100,17));
     efs_query_disk_free(d);
-    printf("query disk read windows: boundary, EOF, write coherence, partial ENOSPC and FD reuse %s\n",failures?"FAIL":"PASS");
+    printf("query disk I/O: windows, lookup, packed records, partial ENOSPC and FD reuse %s\n",failures?"FAIL":"PASS");
     return failures?1:0;
 }

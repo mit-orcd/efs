@@ -25,6 +25,7 @@
 #define READ_WINDOW 8192
 #define SORT_ROWS 2048
 #define VALUE_MAX 16384
+#define RAW_RECORD_MAX (EFS_KV_KEY_MAX+VALUE_MAX)
 static const uint8_t kinds[KINDS]={EFS_KV_KIND_INODE,EFS_KV_KIND_DENTRY,
     EFS_KV_KIND_LANE,EFS_KV_KIND_DSEQ,EFS_KV_KIND_APPEND_CUR,EFS_KV_KIND_PVER};
 struct slot { uint64_t offset;uint32_t key_len,value_len; };
@@ -323,8 +324,12 @@ static int save(void *ctx,const uint8_t *key,uint32_t kl,const uint8_t *val,uint
     if(w->index<0)w->index=make_file(w->d,w->shard,'i');
     if(w->raw<0 || w->index<0)return EFS_ERR_IO;
     struct slot s={w->offset,kl,vl};
-    int rc=io_at(w->raw,(void *)key,kl,w->offset,1);
-    if(!rc)rc=io_at(w->raw,(void *)val,vl,w->offset+kl,1);
+    /* Adjacent key/value bytes form one bounded record. Submit them together
+     * instead of making a disk syscall for each small field. The index is
+     * written only after the complete record succeeds. */
+    uint8_t record[RAW_RECORD_MAX];memcpy(record,key,kl);
+    if(vl)memcpy(record+kl,val,vl);
+    int rc=io_at(w->raw,record,(size_t)kl+vl,w->offset,1);
     if(!rc)rc=io_at(w->index,&s,sizeof(s),w->count*sizeof(s),1);
     if(!rc){w->offset+=kl+vl;w->count++;}return rc;
 }
@@ -578,7 +583,7 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
     const struct efs_query_disk *old,uint64_t max_bytes,int (*stop)(void *),void *ctx,struct efs_query_disk **out)
 {
     if(out)*out=NULL;
-    uint64_t working=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX;
+    uint64_t working=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX;
     if(!root || !source || !out)return EFS_ERR_INVAL;
     if(max_bytes<working)return EFS_ERR_NOMEM;
     if(mkdir(root,0700) && errno!=EEXIST)return EFS_ERR_IO;
@@ -823,7 +828,7 @@ int efs_query_disk_restore(const char *root,const uint64_t watermark[4],uint64_t
 {
     if(out)*out=NULL;
     if(!root || !watermark || !out)return EFS_ERR_INVAL;
-    uint64_t bytes=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX;
+    uint64_t bytes=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX;
     if(max_bytes<bytes)return EFS_ERR_NOMEM;
     char current[EFS_MAX_PATH],base[256];int n=snprintf(current,sizeof(current),"%s/current",root);
     if(n<0 || (size_t)n>=sizeof(current))return EFS_ERR_NAMETOOLONG;
