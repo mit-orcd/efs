@@ -632,3 +632,46 @@ failure, is in
 [the cold/concurrent results](../../results/measure/20261010-w92-closure/cold-kernel-and-concurrent-10m/).
 The actual 2^32 run still owes its own complete build/export/mutation/recovery
 oracles; these pilots do not substitute for it.
+
+## Remaining scale handoff and service restoration
+
+Do not restart either fixture on an observation timeout. Inspect the terminal
+marker first and then confirm its process: the actual-entry generator is PID
+6246 on xefs1, screen `w92-2p32-bounded-24g-v4`; the capacity writer is PID
+269152 on client 115, screen `w92-capacity-busy-fixed-20261010`. PIDs are a
+checkpoint, not permanent identities: verify command lines before signaling.
+The actual-entry run has an 8 TiB generation budget, 16 TiB aggregate budget and
+100 GiB free reserve; those are private logical limits, not preallocated storage.
+
+After the actual-entry run records exit 0, preserve its complete log/time/markers
+and check every build, cold and mutation verdict. Then run the named recovery
+harness against the same 4,294,967,296-entry root in a fresh process, following
+an explicit guest `sync`/kernel-cache clear, with the same large disk budgets.
+Its complete streaming oracle must pass; a count in a progress line is insufficient.
+The ten-million concurrent gate already passes; the completed large root can
+also be exercised by the concurrent harness, retaining its original source
+mutation and checking complete old/new exports. Do not open its source while
+the original generator or recovery process still owns it.
+
+After the capacity resume records exit 0 and `resume-complete.json` proves all
+1,638,400 files, drain/unmount its client using `/tmp/efs/scripts/client.sh stop`.
+Cold-stop all three **only** `w92-capacity-efsd.service` instances, then recreate
+their explicit transient units: port 18432, preserved
+`/mnt/w92-capacity-node-20261010`, quota 250G, files/direct-I/O/TCP,
+`EFS_MD_RAFT_N=3`, finite `EFS_QUERY_EXPORT_MAX_MS=86400000`, respective node IDs
+and addresses, and nodes 2/3 joining `192.168.122.111:18432`. Do not format,
+use the normal cluster-wide stop helper, or restart port 17432 for this gate.
+Start a fresh named `/tmp/efs/efs-fuse` opt-in client on 115 and run the capacity
+harness in `verify` mode against `w92-real-400g-20261010`, writing evidence to a
+new local directory outside EFS. This independently checks every payload hash
+and length, all directory names, exact rollups and every exported query path.
+A successful write or sampled read cannot replace that cold verification.
+
+Before closure, execute the fresh Mac NFS command suite after its privileged
+mount refresh. Restore the normal gateway and diagnostic mounts to `.efs`
+opt-out, retire the two private service namespaces and diagnostic clients, and
+restore xefs1's original 3 GiB memory configuration from its saved XML after
+all scale processes have exited. Preserve datasets and raw evidence. Verify
+normal port-17432 daemon arguments, all normal clients, NFS service and retained
+namespace after restoration. No pushes, production formatting, D25 activation,
+W55 incident closure or W66 consensus claim are part of this handoff.
