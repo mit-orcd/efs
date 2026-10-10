@@ -145,6 +145,50 @@ static void budget_test(void)
     snprintf(path,sizeof(path),"%s/part",b);unlink(path);rmdir(b);
     snprintf(path,sizeof(path),"%s/.budget.lock",root);unlink(path);rmdir(root);
 }
+static void merge_test(void)
+{
+    char root[]="/tmp/efs-query-merge-XXXXXX";CHECK(mkdtemp(root));
+    struct efs_query_disk *d=calloc(1,sizeof(*d));CHECK(d);if(!d)return;
+    for(unsigned kind=0;kind<2;kind++) {
+        size_t width=kind?sizeof(struct disk_alias):sizeof(struct efs_name_entry);
+        int (*compare)(const void *,const void *)=kind?alias_compare:name_compare;
+        const unsigned counts[2]={2001,4097},total=6098;
+        uint8_t *expected=calloc(total,width),*actual=calloc(total,width);
+        uint8_t *scratch=malloc(SORT_ROWS*width);CHECK(expected && actual && scratch);
+        int fds[3];char path[EFS_MAX_PATH];
+        for(unsigned j=0;j<3;j++) {
+            snprintf(path,sizeof(path),"%s/%u-%u",root,kind,j);
+            fds[j]=open(path,O_CREAT|O_RDWR,0600);CHECK(fds[j]>=0);unlink(path);
+        }
+        unsigned at=0;
+        for(unsigned j=0;j<2;j++)for(unsigned n=0;n<counts[j];n++,at++) {
+            if(kind) {
+                struct disk_alias e={2*n+j,17,at};memcpy(expected+at*width,&e,width);
+            } else {
+                struct efs_name_entry e={0};e.parent=17;
+                snprintf(e.name,sizeof(e.name),"item-%08u",2*n+j);
+                memcpy(expected+at*width,&e,width);
+            }
+            CHECK(pwrite(fds[j],expected+at*width,width,n*width)==(ssize_t)width);
+        }
+        qsort(expected,total,width,compare);read_calls=write_calls=0;
+        CHECK(!merge_names(d,fds[0],fds[1],fds[2],counts[0],counts[1],width,compare,scratch));
+        CHECK(read_calls<20 && write_calls<12);
+        printf("merge %s: rows=%u reads=%u writes=%u\n",kind?"aliases":"names",total,read_calls,write_calls);
+        CHECK(pread(fds[2],actual,total*width,0)==(ssize_t)(total*width));
+        CHECK(!memcmp(expected,actual,total*width));
+        /* A partial output followed by ENOSPC must propagate, never success. */
+        CHECK(!ftruncate(fds[2],0));partial_write=1;
+        CHECK(merge_names(d,fds[0],fds[1],fds[2],counts[0],counts[1],width,compare,scratch)==EFS_ERR_IO);
+        CHECK(!partial_write);
+        d->stop=cancel_budget;read_calls=write_calls=0;
+        CHECK(merge_names(d,fds[0],fds[1],fds[2],counts[0],counts[1],width,compare,scratch)==EFS_ERR_BUSY);
+        CHECK(!read_calls && !write_calls);d->stop=NULL;
+        for(unsigned j=0;j<3;j++)close(fds[j]);
+        free(scratch);free(actual);free(expected);
+    }
+    free(d);CHECK(!rmdir(root));
+}
 int main(void)
 {
     rebuild_cache_test();
@@ -163,6 +207,7 @@ int main(void)
     }
 
     budget_test();
+    merge_test();
     struct efs_query_disk *d=calloc(1,sizeof(*d));if(!d)return 1;
     d->budget_fd=-1;
     d->disk_limit=UINT64_MAX;
@@ -243,13 +288,14 @@ int main(void)
     /* Unique raw keys: exact search reuses its slot; absent and prefix
      * searches preserve lower-bound scan semantics and value capacity. */
     struct writer search={.d=d,.shard=98,.raw=-1,.index=-1};
+    search.buffer=malloc(2*RAW_WRITE_WINDOW);CHECK(search.buffer);
     d->disk_limit=UINT64_MAX;
     uint8_t search_key[11]={0,98,EFS_KV_KIND_INODE},search_value=0;
     for(unsigned i=0;i<31;i++){
         search_key[10]=(uint8_t)(2*i+2);search_value=(uint8_t)i;
         CHECK(!save(&search,search_key,sizeof(search_key),&search_value,1));
     }
-    close(search.raw);close(search.index);
+    CHECK(!writer_flush(&search));close(search.raw);close(search.index);free(search.buffer);
     d->part[98].count=31;d->part[98].end[0]=31;
     struct slot exact={0};uint64_t lower=UINT64_MAX;
     search_key[10]=32;read_calls=0;
@@ -263,21 +309,60 @@ int main(void)
     search_key[10]=0;CHECK(!seek(d,search_key,11,&lower,NULL) && lower==0);
     search_key[10]=63;CHECK(!seek(d,search_key,11,&lower,NULL) && lower==31);
     CHECK(!seek(d,search_key,3,&lower,NULL) && lower==0);
-    /* Raw record assembly must preserve bytes and never add an index entry
-     * after a short write followed by ENOSPC. It uses two writes, not three. */
+    /* Raw batches preserve bytes, offsets, empty values, and flush the raw
+     * data before any matching index slot. Failure must not publish a view. */
     uint8_t key[11]={0,99,EFS_KV_KIND_INODE},value[37],record[48];
     memset(value,0x39,sizeof(value));d->disk_limit=UINT64_MAX;
     struct writer writer={.d=d,.shard=99,.raw=-1,.index=-1};
+    writer.buffer=malloc(2*RAW_WRITE_WINDOW);CHECK(writer.buffer);
     write_calls=0;CHECK(!save(&writer,key,sizeof(key),value,sizeof(value)));
-    CHECK(write_calls==2 && writer.count==1 && writer.offset==sizeof(record));
+    CHECK(!write_calls && writer.count==1 && writer.offset==sizeof(record));
+    CHECK(!writer_flush(&writer));CHECK(write_calls==2);
     CHECK(!io_at(writer.raw,record,sizeof(record),0,0));
     CHECK(!memcmp(record,key,sizeof(key)) && !memcmp(record+sizeof(key),value,sizeof(value)));
-    partial_write=1;CHECK(save(&writer,key,sizeof(key),value,sizeof(value))==EFS_ERR_IO);
-    CHECK(writer.count==1 && writer.offset==sizeof(record));
-    struct stat index_stat;CHECK(!fstat(writer.index,&index_stat));
-    CHECK(index_stat.st_size==(off_t)sizeof(struct slot));
     CHECK(!save(&writer,key,sizeof(key),NULL,0));CHECK(writer.count==2);
-    close(writer.raw);close(writer.index);
+    CHECK(!writer_flush(&writer));
+    struct slot slot;CHECK(!io_at(writer.index,&slot,sizeof(slot),sizeof(slot),0));
+    CHECK(slot.offset==sizeof(record) && !slot.value_len && slot.key_len==sizeof(key));
+    CHECK(!save(&writer,key,sizeof(key),value,sizeof(value)));
+    partial_write=1;CHECK(writer_flush(&writer)==EFS_ERR_IO);
+    struct stat index_stat;CHECK(!fstat(writer.index,&index_stat));
+    CHECK(index_stat.st_size==(off_t)(2*sizeof(struct slot)));
+    close(writer.raw);close(writer.index);free(writer.buffer);
+    struct writer batch={.d=d,.shard=97,.raw=-1,.index=-1};
+    batch.buffer=malloc(2*RAW_WRITE_WINDOW);CHECK(batch.buffer);
+    key[1]=97;write_calls=0;
+    for(unsigned i=0;i<10000;i++) {
+        key[9]=(uint8_t)(i>>8);key[10]=(uint8_t)i;
+        CHECK(!save(&batch,key,sizeof(key),value,sizeof(value)));
+    }
+    CHECK(!writer_flush(&batch));CHECK(write_calls<20);
+    printf("raw batch: records=10000 writes=%u\n",write_calls);
+    for(unsigned i=0;i<10000;i++) {
+        CHECK(!io_at(batch.index,&slot,sizeof(slot),i*sizeof(slot),0));
+        CHECK(slot.offset==(uint64_t)i*sizeof(record) && slot.key_len==sizeof(key) && slot.value_len==sizeof(value));
+        CHECK(!io_at(batch.raw,record,sizeof(record),slot.offset,0));
+        CHECK(record[9]==(uint8_t)(i>>8) && record[10]==(uint8_t)i && !memcmp(record+sizeof(key),value,sizeof(value)));
+    }
+    close(batch.raw);close(batch.index);free(batch.buffer);
+    struct writer empty={.d=d,.shard=96,.raw=-1,.index=-1};
+    empty.buffer=malloc(2*RAW_WRITE_WINDOW);CHECK(empty.buffer);key[1]=96;write_calls=0;
+    for(unsigned i=0;i<10000;i++)CHECK(!save(&empty,key,sizeof(key),NULL,0));
+    CHECK(!writer_flush(&empty));CHECK(write_calls==6); /* Index window fills first. */
+    uint8_t *maximum=malloc(VALUE_MAX);CHECK(maximum);memset(maximum,0xa7,VALUE_MAX);
+    uint64_t before=empty.offset;
+    for(unsigned i=0;i<20;i++)CHECK(!save(&empty,key,sizeof(key),maximum,VALUE_MAX));
+    CHECK(!writer_flush(&empty));
+    for(unsigned i=0;i<20;i++) {
+        CHECK(!io_at(empty.index,&slot,sizeof(slot),(10000+i)*sizeof(slot),0));
+        CHECK(slot.offset==before+(uint64_t)i*(sizeof(key)+VALUE_MAX) && slot.value_len==VALUE_MAX);
+        uint8_t tail;CHECK(!io_at(empty.raw,&tail,1,slot.offset+sizeof(key)+VALUE_MAX-1,0));CHECK(tail==0xa7);
+    }
+    d->stop=cancel_budget;CHECK(save(&empty,key,sizeof(key),NULL,0)==EFS_ERR_BUSY);d->stop=NULL;
+    CHECK(!save(&empty,key,sizeof(key),NULL,0));fail_write_kind='i';write_faults=0;
+    CHECK(writer_flush(&empty)==EFS_ERR_IO && write_faults==1 && !fail_write_kind);
+    CHECK(!fstat(empty.index,&index_stat));CHECK(index_stat.st_size==(off_t)(10020*sizeof(slot)+3));
+    close(empty.raw);close(empty.index);free(empty.buffer);free(maximum);
     /* Reusing every FD slot must not reuse bytes from its previous file. */
     for(uint32_t shard=1;shard<=FD_CACHE+2;shard++){
         uint8_t byte=(uint8_t)shard;fd=make_file(d,shard,'r');CHECK(fd>=0);
@@ -345,7 +430,7 @@ int main(void)
             CHECK(!efs_meta_pack_inode(&row,v,sizeof(v)));CHECK(!efs_kv_put(kv,k,kn,v,sizeof(v)));
         }
         CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));raw_syncs=index_syncs=0;
-        CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,&old));
+        CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&old));
         if(old){
             struct efs_query_rollup totals;
             CHECK(!efs_query_disk_stats(old,EFS_ROOT_INO,&totals));
@@ -355,18 +440,18 @@ int main(void)
             CHECK(raw_syncs==populated && index_syncs==populated);
             uint64_t wm[4]={1,2,3,4};CHECK(!efs_query_disk_checkpoint(old,wm));
             read_calls=0;
-            CHECK(!efs_query_disk_build(cache,source,old,4<<20,NULL,NULL,&next));
+            CHECK(!efs_query_disk_build(cache,source,old,4<<20,NULL,NULL,NULL,&next));
             CHECK(read_calls==0); /* reuse performs no inode/dentry discovery */
             efs_query_disk_free(next);next=NULL;
             uint64_t saved_total=aggregate_limit;aggregate_limit=1;
-            CHECK(efs_query_disk_build(cache,source,old,4<<20,NULL,NULL,&next)==EFS_ERR_QUOTA && !next);
+            CHECK(efs_query_disk_build(cache,source,old,4<<20,NULL,NULL,NULL,&next)==EFS_ERR_QUOTA && !next);
             CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
             CHECK(!efs_query_disk_inode(next,file,NULL,NULL));efs_query_disk_free(next);next=NULL;
             aggregate_limit=saved_total;
             /* A short derived-row batch followed by ENOSPC must never
              * publish a partially materialized candidate or replace old. */
             fail_write_kind='d';write_faults=0;
-            CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,&next)==EFS_ERR_IO && !next);
+            CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&next)==EFS_ERR_IO && !next);
             CHECK(write_faults==1 && !fail_write_kind);
             CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
             CHECK(!efs_query_disk_inode(next,file,NULL,NULL));efs_query_disk_free(next);next=NULL;
@@ -375,14 +460,14 @@ int main(void)
             unsigned batches=0;
             for(unsigned i=0;i<SHARDS;i++)batches+=(old->part[i].inodes+NODE_BATCH-1)/NODE_BATCH;
             fail_derived_after=batches+1;write_faults=0;
-            CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,&next)==EFS_ERR_IO && !next);
+            CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&next)==EFS_ERR_IO && !next);
             CHECK(write_faults==1 && !fail_derived_after);
             CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
             CHECK(!efs_query_disk_inode(next,file,NULL,NULL));efs_query_disk_free(next);next=NULL;
             const char kinds_to_fail[]={'r','i','n','d','a','m'};
             for(unsigned i=0;i<sizeof(kinds_to_fail);i++){
                 fail_sync_kind=kinds_to_fail[i];sync_faults=0;
-                CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,&next)==EFS_ERR_IO && !next);
+                CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&next)==EFS_ERR_IO && !next);
                 CHECK(sync_faults==1);fail_sync_kind=0;
                 CHECK(!efs_query_disk_inode(old,file,NULL,NULL));
                 CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
@@ -395,7 +480,7 @@ int main(void)
             CHECK(!efs_kv_key_inode(efs_kv_inode_shard(file),file,k,&kn));CHECK(!efs_meta_pack_inode(&row,v,sizeof(v)));CHECK(!efs_kv_put(kv,k,kn,v,sizeof(v)));
             struct efs_kv_lsm_snapshot *changed=NULL;CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&changed));
             fail_write_kind='d';write_faults=0;
-            CHECK(efs_query_disk_build(cache,changed,old,4<<20,NULL,NULL,&next)==EFS_ERR_IO && !next);
+            CHECK(efs_query_disk_build(cache,changed,old,4<<20,NULL,NULL,NULL,&next)==EFS_ERR_IO && !next);
             CHECK(write_faults==1 && !fail_write_kind);
             struct efs_query_rollup totals;CHECK(!efs_query_disk_stats(old,EFS_ROOT_INO,&totals));CHECK(totals.tree_bytes==465);
             uint64_t wm[4]={1,2,3,4};CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));

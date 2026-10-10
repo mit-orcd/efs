@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+set -euo pipefail
+base=/mnt/w92-scale-big-20261010
+stem=scale-4294967296-raw-batched-v6
+fixture=$base/scale-4294967296-bounded-24g-v4
+# The already-running wrapper writes this legacy terminal name. Its old
+# marker was archived before this watcher starts; the current run alone can
+# create it. Preserve both observed and canonical terminal markers below.
+marker=$base/exit-4294967296-batched-v5
+out=$base/$stem-kernel-recovery
+# This private run owns its source until the terminal marker is written.
+while [[ ! -f "$marker" ]]; do
+  if ! ps -p "$(cat "$base/$stem.pid")" -o args= | grep -Fq '/home/efs/w92-query-scale-raw-batched'; then
+    printf '%s\n' 'resumed process missing without terminal marker; recovery not started' > "$out.skipped"
+    exit 1
+  fi
+  sleep 60
+done
+if [[ $(cat "$marker") != 0 ]]; then
+  printf '%s\n' 'resumed acceptance run failed; recovery not started' > "$out.skipped"
+  exit 1
+fi
+cp "$marker" "$base/exit-4294967296-raw-batched-v6"
+for attempt in $(seq 1 30); do
+  test -f "$base/finished-4294967296-batched-v5" && break
+  sleep 1
+done
+cp "$base/finished-4294967296-batched-v5" "$base/finished-4294967296-raw-batched-v6"
+python3 - "$base/$stem.log" "$fixture.log" <<'PY'
+import json,sys
+rows=[]
+for line in open(sys.argv[1]):
+    if not line.startswith('{'): continue
+    rows.append(json.loads(line))
+assert len([r for r in rows if r.get('phase')=='source_reused' and r['files']==4294967296])==1
+pop=[json.loads(s) for s in open(sys.argv[2]) if s.startswith('{')]
+pop=[r for r in pop if r.get('phase')=='populated']
+assert len(pop)==1 and pop[0]['files']==4294967296 and pop[0]['rc']==0
+for phase,number in [('build',2),('cold',1),('mutation',1)]:
+    found=[r for r in rows if r.get('phase')==phase]
+    assert len(found)==number and all(r['rc']==0 and r['files']==4294967296 for r in found), (phase,found)
+PY
+{
+  date -u
+  grep -E '^(MemAvailable|Cached|Buffers):' /proc/meminfo
+  sync
+  echo 3 > /proc/sys/vm/drop_caches
+  date -u
+  grep -E '^(MemAvailable|Cached|Buffers):' /proc/meminfo
+} > "$out.cache-state"
+ulimit -n 524288
+ulimit -c 0
+set +e
+runuser -u efs -- env EFS_QUERY_DISK_RESERVE_MIB=102400 \
+  EFS_QUERY_DISK_TOTAL_MIB=16777216 EFS_QUERY_DISK_MAX_MIB=8388608 \
+  bash -c 'ulimit -n 524288; ulimit -c 0; exec nice -n 19 ionice -c 3 /usr/bin/time -v -o "$1" /home/efs/w92-query-scale-full-oracle "$2" 4294967296 --recover' \
+  w92-recovery "$out.time" "$fixture" \
+  > "$out.log" 2>&1
+result=$?
+set -e
+printf '%s\n' "$result" > "$out.exit"
+date -u > "$out.finished"
+chown efs:efs "$out.cache-state" "$out.log" "$out.time" "$out.exit" "$out.finished"
+exit "$result"

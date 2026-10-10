@@ -688,7 +688,9 @@ static void vq_nlookup_sub(fuse_ino_t nodeid, uint64_t n)
         if (!g_vq[i].valid || g_vq[i].nodeid != nodeid)
             continue;
         if (n >= g_vq[i].nlookup) {
-            g_vq[i].valid = g_vq[i].nopen != 0;
+            /* NFS may decode the just-returned file handle after dentry
+             * invalidation delivered FORGET. Keep the bounded identity until
+             * an unreferenced slot is reused; open/looked-up slots stay pinned. */
             g_vq[i].nlookup = 0;
         } else {
             g_vq[i].nlookup -= (uint32_t)n;
@@ -708,7 +710,6 @@ static void vq_open_size(efs_ino_t ino, size_t len, int delta)
         if (delta > 0) { g_vq[i].nopen++; g_vq[i].open_size=len; }
         else if (g_vq[i].nopen) {
             g_vq[i].nopen--;
-            if (!g_vq[i].nopen && !g_vq[i].nlookup) g_vq[i].valid=0;
         }
         break;
     }
@@ -796,7 +797,7 @@ static void ll_inval_entry(fuse_ino_t parent, const char *name)
 
 /* Expired FUSE entries can retain lookup references until memory pressure.
  * Drop the query dentry on close so FORGET, rather than expiry alone, releases
- * the bounded identity slot. Open descriptions retain their own bytes. */
+ * the bounded identity slot for recycling. Open descriptions retain their own bytes. */
 static void vq_closed(efs_ino_t ino)
 {
     efs_ino_t dir;
@@ -5383,6 +5384,11 @@ static int efs_fuse_lookup_at(fuse_ino_t parent, const char *name,
     if (strlen(name) > 255)
         return -ENAMETOOLONG;
 
+    /* FUSE_EXPORT_SUPPORT reconstructs a disconnected file handle using
+     * LOOKUP(nodeid, "."), including regular virtual files. Attribute lookup
+     * keeps feature/authorization checks and the original immutable size. */
+    if (virt_kind(parent)==3 && !strcmp(name,"."))
+        return lookup_fill(parent,e,NULL);
     if (virt_kind(parent)==4) {
         if (!commands_enabled()) return -ENOENT;
         rc=virtual_access(virt_parent(parent));if (rc) return rc;

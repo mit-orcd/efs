@@ -1,5 +1,6 @@
 #include "efs/query_catalog.h"
 #include "query_disk.h"
+#include "query_build_time.h"
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -39,6 +40,7 @@ struct directory_value {
 struct node { struct inode_value *inode; struct directory_value *dir; };
 struct efs_query_catalog {
     struct efs_query_disk *disk;
+    struct efs_query_build_times times;
     struct partition *part[4096];
     struct edge_fold *fold[4096];
     struct node *nodes;
@@ -380,7 +382,7 @@ int efs_query_catalog_build(struct efs_kv_lsm_snapshot *source, const struct efs
                              uint64_t max_bytes, int (*stop)(void *), void *ctx,
                              struct efs_query_catalog **out)
 {
-    uint64_t revisions[4096];
+    uint64_t revisions[4096],phase_start=query_build_clock();
     if (out) *out=NULL;
     if (!source || !out) return EFS_ERR_INVAL;
     if (max_bytes<sizeof(struct efs_query_catalog)) return EFS_ERR_NOMEM;
@@ -401,6 +403,8 @@ int efs_query_catalog_build(struct efs_kv_lsm_snapshot *source, const struct efs
         if (c->part[shard]->bytes>max_bytes-c->bytes) { rc=EFS_ERR_NOMEM;break; }
         c->bytes+=c->part[shard]->bytes;
     }
+    c->times.index_ns=query_build_elapsed(phase_start);
+    phase_start=query_build_clock();
     /* Exact allocation avoids a transient doubled inode vector crossing the
      * catalog cap even when the final compact candidate fits. */
     uint64_t total=0;
@@ -518,6 +522,7 @@ int efs_query_catalog_build(struct efs_kv_lsm_snapshot *source, const struct efs
     if (!rc && head!=dirs) rc=EFS_ERR_PROTO; /* cyclic directory graph */
     free(queue);
     if (rc) { efs_query_catalog_free(c);return rc; }
+    c->times.stats_ns=query_build_elapsed(phase_start);
     c->stop=NULL;c->stop_ctx=NULL;
     *out=c;return EFS_OK;
 }
@@ -530,7 +535,7 @@ int efs_query_catalog_build_disk(const char *root,struct efs_kv_lsm_snapshot *so
     if(max_bytes<sizeof(struct efs_query_catalog))return EFS_ERR_NOMEM;
     struct efs_query_catalog *c=calloc(1,sizeof(*c));if(!c)return EFS_ERR_NOMEM;
     c->refs=1;
-    int rc=efs_query_disk_build(root,source,old?old->disk:NULL,max_bytes-sizeof(*c),stop,ctx,&c->disk);
+    int rc=efs_query_disk_build(root,source,old?old->disk:NULL,max_bytes-sizeof(*c),stop,ctx,&c->times,&c->disk);
     if(rc){free(c);return rc;}
     c->bytes=sizeof(*c)+efs_query_disk_bytes(c->disk);c->rebuilt=efs_query_disk_rebuilt(c->disk);
     *out=c;return EFS_OK;
@@ -546,9 +551,13 @@ int efs_query_catalog_restore_disk(const char *root,struct efs_kv_lsm_snapshot *
     if(!out || !source || !root || !watermark)return EFS_ERR_INVAL;
     if(max_bytes<sizeof(struct efs_query_catalog))return EFS_ERR_NOMEM;
     struct efs_query_catalog *c=calloc(1,sizeof(*c));if(!c)return EFS_ERR_NOMEM;
+    uint64_t phase_start=query_build_clock();
+    c->times.restored=1;
     c->refs=1;int rc=efs_query_disk_restore(root,watermark,max_bytes-sizeof(*c),&c->disk);
     if(!rc)rc=efs_query_disk_rebase(c->disk,source);
-    if(rc){efs_query_catalog_free(c);return rc;}c->bytes=sizeof(*c)+efs_query_disk_bytes(c->disk);*out=c;return EFS_OK;
+    if(rc){efs_query_catalog_free(c);return rc;}
+    c->times.restore_ns=query_build_elapsed(phase_start);
+    c->bytes=sizeof(*c)+efs_query_disk_bytes(c->disk);*out=c;return EFS_OK;
 }
 /* A stale completed checkpoint is an immutable build input, never a result.
  * The builder compares durable lineage/revisions and refreshes changed parts.
@@ -567,6 +576,8 @@ void efs_query_catalog_retain(struct efs_query_catalog *c)
 {
     if (c) __atomic_add_fetch(&c->refs,1,__ATOMIC_RELAXED);
 }
+struct efs_query_build_times efs_query_catalog_build_times(const struct efs_query_catalog *c)
+{ return c ? c->times : (struct efs_query_build_times){0}; }
 uint64_t efs_query_catalog_bytes(const struct efs_query_catalog *c) { return c ? c->bytes : 0; }
 uint32_t efs_query_catalog_refolded(const struct efs_query_catalog *c) { return c ? (c->disk?efs_query_disk_refolded(c->disk):c->refolded) : 0; }
 uint32_t efs_query_catalog_reused_edges(const struct efs_query_catalog *c) { return c ? c->reused_edges : 0; }

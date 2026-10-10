@@ -8,13 +8,14 @@ profiling rounds do not satisfy them.
 | Gate | Current state |
 |---|---|
 | Immutable disk catalog, incremental exact aggregates, bounded builder scratch | implemented, differential/live/cold gates pass in previous checkpoint |
+| Separate build-phase diagnostics | implemented in cdc13b88; full native, live two-mount and Mac/Linux NFS gates pass |
 | Aggregate retained-cache admission | implemented; native and live QUOTA/write/cold-recovery oracles pass |
 | Durable changed-key watermarks and bounded catch-up/recovery | durable partition revisions, restart catch-up and bounded discovery implemented; focused/full native and live cold/disable-re-enable/publisher-loss/interrupted-cache gates pass |
 | Explicit cardinality/offset/budget audit | revision saturation, complete source-allocation budgeting and representation audit complete; named deployment/live validation passes; actual 2^32 validation remains open |
 | Increasing-cardinality RSS, cold-cache, concurrent export/mutation and freshness | 10m complete kernel-cold and concurrent old/new export oracles pass with fixed builder memory; named live contention/freshness passes; full actual scale pending |
 | Synthetic partitioned index of at least 2^32 entries | pending; sparse offset probes alone cannot satisfy this |
 | Replicated persistent feature policy | native, live, restart, quota, lost-reply and fail-closed gates pass |
-| Staged real-filesystem and fault/platform gates | named native and Linux NFSv4.0 pass; actual 400 GiB write/cold/hash/export and Mac NFS execution pending |
+| Staged real-filesystem and fault/platform gates | named native and Linux NFSv4.0 pass; actual 400 GiB write/cold/hash/export pending; virtual-export fix passes native suite plus fresh Mac/Linux NFS; named 1434aa83 Mac/Linux/native full repeats and 96 Mac queries pass |
 
 ## Aggregate cache admission
 
@@ -667,9 +668,9 @@ new local directory outside EFS. This independently checks every payload hash
 and length, all directory names, exact rollups and every exported query path.
 A successful write or sampled read cannot replace that cold verification.
 
-Before closure, execute the fresh Mac NFS command suite after its privileged
-mount refresh. Restore the normal gateway and diagnostic mounts to `.efs`
-opt-out, retire the two private service namespaces and diagnostic clients, and
+The named Mac/Linux/native platform gates and normal opt-out restoration
+are complete (see the named platform verdicts below). Before closure, retire
+the remaining private capacity service namespace and any diagnostic clients, and
 restore xefs1's original 3 GiB memory configuration from its saved XML after
 all scale processes have exited. Preserve datasets and raw evidence. Verify
 normal port-17432 daemon arguments, all normal clients, NFS service and retained
@@ -688,7 +689,8 @@ this is queued work, not completed recovery. Results use the original fixture
 stem plus `-kernel-recovery.{cache-state,log,time,exit,finished}`.
 
 The 400 GiB cold handoff is queued in a local detached screen
-`w92-capacity-cold-handoff-20261010`, using this
+`w92-capacity-cold-handoff-cdc13b88` (replaces the intentionally retired
+previous watchers without interrupting the writer), using this
 [exact one-shot script](../../results/measure/20261010-w92-closure/capacity-recovery-handoff/run.sh).
 It retries SSH observation failures without restarting the writer. Only an exit-0
 marker plus the complete 1,638,400-file/400-GiB independent write verdict permits
@@ -732,3 +734,349 @@ statistics checks will be supplemented by this complete fresh-process gate,
 which still owes a passing terminal verdict.
 [Raw logs and harness/library hashes](../../results/measure/20261010-w92-closure/full-stat-oracle/)
 preserve the strengthened checks. W92 remains open.
+
+## Mac NFS handle-recovery fix
+
+A separate user-owned macOS mount succeeded without sudo, resolving the earlier
+stale-mount prerequisite for the platform gate. The complete oracle then failed
+with ESTALE reading a new directory's `.efs/find`. The manual gateway remount
+also omitted `EFS_FUSE_EXPORT=1`; restoring that required flag did not alone fix
+the failure. The standard cluster gateway helper already sets the flag.
+
+A 15-second gateway capture restricted to the `/dev/fuse` descriptor proves the
+sequence for all four command names: successful LOOKUP returns an ephemeral
+virtual node, entry invalidation sends FORGET, then NFS reconstructs the handle
+with `LOOKUP(nodeid, ".")`. The identity was discarded at FORGET, and that lookup
+returned ENOENT, becoming ESTALE at the Mac.
+
+The fix retains an unreferenced identity in the existing fixed 64-slot table
+until recycling, keeps open/lookup references protected, and supports this
+virtual-file self lookup through the existing attribute/feature/permission
+checks. It adds no unbounded cache or new disk format. Recycled node IDs still
+never alias old handles. Focused extracted-code regressions cover FORGET/CLOSE,
+immutable version/size, both pin types, exhaustion/recycling and denied/missing
+handle recovery; they pass on Mac and Linux and are included in `make test`.
+The entire native suite on the host passes with the candidate (exit 0).
+
+With the candidate gateway, the complete Mac NFSv4.0 oracle passes all 141
+payload hashes (561174 bytes), source/help, lookup-only behavior, stats, JSON,
+NUL, fresh-command convergence, retained-result immutability and full paged
+export paths. A further 96 sequential fresh stats requests pass in 9.021 seconds,
+beyond the identity-table capacity. A fresh Linux NFSv4.0 mount passes the same
+complete oracle. The gateway native FUSE path also passes the same 141-file
+full oracle. The new Mac mount is hard/TCP, port 2049 through the existing
+tunnel; the gateway maps all NFS credentials to root, so this is not a UID-501
+ACL-isolation result. NFS restart grace is 90 seconds and was observed before
+the first successful candidate open; it is separate from the captured ESTALE.
+
+[Failure traces, decoded requests and candidate gate results](../../results/measure/20261010-w92-closure/mac-nfs/)
+are preserved. Candidate human version is
+`1a25d20a193b-virtual-export-candidate`, retaining the compatible client build ID
+for this temporary gateway test; the committed named rollout and repeated
+platform gates remain owed. Storage daemons and both large fixtures kept running.
+These command-handle results do not close the original W55 NFS publication incident.
+
+### Named 1434aa83 rollout and full population, 11:53 UTC
+
+The exact committed source archive was built on Xorinox and its identical
+binaries installed atomically on all six guests. All normal storage daemons
+now run 1434aa83, files/direct-I/O/TCP, preserving /data1. The initial client
+mount preceded node 1's recovered listener and failed discovery; the daemon
+then became ready, and mounting succeeded without another daemon restart.
+Normal clients remain opted out. The acceptance gateway explicitly enables
+FUSE export handles. Native FUSE's full 141-file command/hash oracle passes
+on this named build; fresh Mac and Linux NFS repeats are running.
+
+The original synthetic process populated all 4294967296 entries in
+11236.399 seconds with rc=0; index construction and its full acceptance
+sequence remain outstanding. The original capacity resume process is still
+live. The previous local cold-handoff watcher was intentionally stopped for
+the named deployment and replaced by w92-capacity-cold-handoff-1434aa83;
+the writer itself was not interrupted. The handoff preflights the exact
+1434aa83 server SHA256 and polls recovered port readiness before mounting.
+No completion or cold-recovery claim is made for either large fixture yet.
+
+### Named platform gates passed, 11:55 UTC
+
+1434aa83 passes the complete 141-file/561174-byte oracle independently on
+Mac NFSv4.0, Linux NFSv4.0 and native FUSE. All report refresh_error=0 and
+boot 17023102757887622. The additional 96 fresh Mac nonce queries pass in
+3.314 seconds. Every byte of the three previously acknowledged candidate
+fixtures was independently rechecked after the named cold restart: 423 files,
+including the raw invalid-UTF8/newline/escape names, all match.
+
+[Named deployment and platform evidence](../../results/measure/20261010-w92-closure/named-1434aa83/)
+includes all six guest binary identities, normal and private unit arguments,
+the initial discovery failure and successful remaining rollout, and complete
+platform verdicts. Acceptance-only NFS mounts and native diagnostic mounts are
+retired; the normal gateway is restored with commands disabled and
+FUSE export support enabled. Private capacity and policy services are preserved.
+The actual capacity resume is at 363648 files/88.78125 GiB and still live; the
+4b original process and queued kernel-cold recovery are also live. Neither
+large acceptance gate has a complete terminal verdict yet.
+
+### Completed policy fixture retired, 12:01 UTC
+
+The independent 19432 policy gate has complete native/live/cold/quorum/lost-reply
+and storage-fault evidence. Its diagnostic client was drained and unmounted,
+then only w92-policy-efsd.service was stopped on all three nodes. All private
+policy data directories are preserved. Normal efsd and private 18432 capacity
+services remain active on every node.
+[Retirement evidence](../../results/measure/20261010-w92-closure/policy-retirement-20261010.log).
+The capacity fixture and original actual-entry run were not stopped; their
+complete terminal/recovery verdicts remain required for closure.
+
+### Acceptance audit: build-phase diagnostics, implementation pending rollout
+
+The original acceptance sequence requests distinct index and statistics build
+costs. Snapshot source/publication timestamps and a total refresh log do not
+supply those phase costs. The candidate now records exclusive monotonic wall
+phases for raw/name preparation, derived inode/aggregate work and final
+verification/fsync/manifest persistence, exposed in command JSON as `build`.
+Restores report the current restore interval and zero original build costs;
+timings are not stored in the cache format. The catalog wrapper adds 40 charged
+bytes, with no cardinality-dependent memory and no change to disk records,
+watermarks, query matching or publication barriers.
+
+Focused RAM/disk tests check phase presence, restored versus built state and
+retained-generation immutability. Live command checks require the diagnostic
+contract. Full Linux regression is in progress on an isolated host source copy.
+The first archive missed root README.md and failed the architecture gate; that
+failure is preserved. The second repeat reached that gate but lacked linked
+result artifacts; all 11454 tracked result files were then staged, and all five
+documentation checks pass. The third complete regression run is live.
+Server compilation succeeds, as do warning-as-error Mac compilations of both
+changed query implementation files. The Mac top-level make invocation encounters
+its existing Linux-only fopencookie logger; it is not a Mac native-suite pass.
+Named diagnostic deployment and live verification remain owed. The two large
+original fixtures continue untouched, with no disk-format conversion required.
+
+[Phase-diagnostic staging and compilation evidence](../../results/measure/20261010-w92-closure/build-phase-native/)
+preserves both archive failures and the successful preflight. They are staging
+failures, not failed cache oracles, and do not count as a complete native pass.
+
+The completed third Linux `make -j4 test` repeat exits 0, including the new
+RAM/disk phase-state checks, partial IO/fsync, quota, cancellation and retained
+catalog gates plus the complete native and documentation suites. Its
+[raw log and terminal markers](../../results/measure/20261010-w92-closure/build-phase-native/)
+are preserved. Runtime phase JSON still needs named deployment/live verification;
+this native pass does not close the two large-scale acceptance gates.
+
+### Named phase rollout and recovery pilot, 12:37 UTC
+
+All six guests have identical cdc13b88 binaries. The full committed archive
+includes root documentation and its linked evidence; result files live on
+/home/efs with a /tmp/efs/results symlink so the RAM-backed /tmp does not absorb
+hundreds of MiB. All normal daemons retain files/direct-I/O/TCP, port 17432,
+/data1 and quota 100G. Listener readiness is checked before remounting.
+
+The complete unprivileged two-mount command oracle passes the phase contract,
+raw filenames, source/help, immutable FD/seek, fresh permission denial,
+symlink scope, real .efs collision precedence, more-than-16 pinned identities,
+exhaustion and 128 sequential release/recovery requests. The first invocation
+passed its early phase/permission gates but omitted the test port environment;
+its KeyError is preserved. The corrected invocation explicitly supplies host
+and port and exits 0. Fresh Mac and Linux NFSv4.0 complete 141-file/561174-byte
+oracles also pass. An additional 96 Mac nonce requests check the phase object
+and exact counts, all pass in 3.634 seconds. Example published wall phases:
+index 388.524 ms, stats 101.704 ms, final persistence 54.072 ms, total refresh
+564 ms including pin/authority/checkpoint work. This is one observed refresh,
+not a throughput result or CPU-time claim.
+
+The cdc13b88-linked full ten-million-entry recovery oracle checks every exported
+path, all directory rollup fields and sampled inode attributes, exit 0:
+19.415 s catch-up plus 4.344 s full verification, zero rebuilt partitions,
+3864520 accounted builder bytes (40 more than the previous wrapper). The queued
+actual 2^32 kernel-cold verifier now resolves this same new-code full oracle,
+SHA256 77ba5036d876e338697727b2ef41b4cb50981faa445a165b23b25e5fc2b769f4;
+only its waiting executable was atomically replaced, and the original generator
+was not restarted. Its latest verified PID 6246 is live, with all entries
+populated but no complete build/export/mutation verdict yet. The capacity writer
+PID 269152 is live at 404480 files/98.75 GiB. Its new local handoff watcher
+preflights exact cdc13b88 server SHA256 before any private stop.
+
+[Named rollout, command and NFS evidence](../../results/measure/20261010-w92-closure/named-cdc13b88/)
+includes all six guest identities and normal/private unit arguments, pilot logs
+and preserved first-invocation failure. The normal gateway and clients are
+restored to commands disabled; acceptance-only mounts are retired. Private
+18432 capacity daemons and both large-run watchers stay active. W92 remains
+open for complete actual-entry and 400-GiB terminal/cold/export verdicts and
+final resource cleanup; these new diagnostic gates do not replace them.
+
+
+## Bounded external-merge syscall reduction
+
+The actual 2^32 run remains live: its completed source population is preserved,
+but at 12:47 UTC only 49 of 4096 name/alias partitions were complete. IO counters
+continued advancing; this is not a stopped job. Inspection found the external
+merge issuing a separate pread/pwrite for every record on every merge pass.
+This produces billions of small syscalls at the required cardinality.
+
+`names_build` now reuses its existing 2048-row sort allocation as two input
+windows and one output window, each 682 records. It performs the same sorted
+merge with batched IO, without adding cardinality-dependent memory or changing
+the cache format, ordering, admission charge or durability barriers. Both
+name and alias merges have a focused 6098-record independent qsort oracle,
+unequal inputs and partial final batches, syscall bounds (under 20 reads and
+12 writes), partial output followed by ENOSPC, and cancellation before IO.
+The production `io_at` retry/error boundary remains in use.
+
+Mac compilation with warnings as errors, Linux disk differential/I/O tests
+and the complete Linux native repeat pass (exit 0). The native log records
+10 reads and 9 writes for each 6098-row name/alias merge. A fresh process
+linked against the new library also passes the complete 10m recovery oracle:
+16.600 s catch-up plus 6.452 s full verification, zero rebuilt partitions and
+3864520 builder bytes. This is a recovery compatibility check, not a measured
+full-build speedup. The waiting actual 2^32 kernel-cold oracle was atomically
+updated to the same executable, SHA256
+`5f0b8dc19399c7efba74f5cddb06c159bf963f3d7f1e0fd08ed4abdeff9a1237`.
+Normal and private capacity daemons remain on cdc13b88. The original scale process and
+capacity writer were not interrupted. At 12:47 UTC the real writer had synced
+413184 files / 100.875 GiB; its complete cold-verification gate remains pending.
+
+[Focused merge evidence](../../results/measure/20261010-w92-closure/buffered-merge/).
+
+
+## Reuse completed 2^32 source with the batched implementation
+
+The harness now accepts explicit `--populate-only` and `--resume-build` modes.
+The latter requires an existing real source directory and skips source generation;
+it emits `source_reused`, never a fabricated `populated` verdict. All original
+build, complete export, unchanged refresh, close/reopen restore, retained-view
+mutation and complete postmutation export checks still run. The separate fresh
+kernel-cold oracle also remains mandatory. This harness is Linux-specific because
+its cache-dropping helper uses `posix_fadvise`; the existing Mac product gates
+are separate. Linux harness compilation with warnings as errors passes.
+
+A fresh 100000-file pilot completes population, reused-source build, unchanged
+refresh, cold restore, mutation and full recovery, all rc 0. The first build took
+106.082 s on the concurrently loaded VM; this is not a before/after performance
+comparison. It accounts for 3864520 fixed builder bytes. Full exports verify
+100000 entries before and after mutation; the stronger directory/inode oracle
+is used throughout. Raw logs and exit marker are retained.
+
+The old 2^32 process (PID 6246) was deliberately superseded after its complete
+4294967296-file population verdict was checked and the guest synced. Its old
+kernel-cold watcher was retired first. The source population, cache candidate,
+log, time and explicit superseded marker are preserved; old exit 143 is the
+intentional termination, not an acceptance failure. No source namespace was
+regenerated or wiped. The first retirement command found the watcher belonged
+to admin's screen inventory rather than root's and stopped before any signal;
+the subsequent command used the verified owner.
+
+The replacement screen `w92-2p32-batched-v5` runs the same fixture
+`/mnt/w92-scale-big-20261010/scale-4294967296-bounded-24g-v4` with
+`--resume-build`. Time parent PID 554205 and actual harness PID 554207 are live;
+its separate log/time/pid and terminal markers use `scale-4294967296-batched-v5`.
+The linked executable SHA256 is
+`6f8e6f9d324e602c030dd8f78c0846e7e8d7cd5a84b60b2a4313ad0a6e7959d1`.
+It contains fd457076's batched merge and the latest complete oracle. The root
+screen `w92-2p32-batched-recovery-20261010` (watcher PID 554216) requires both
+the retained original population verdict and all new build/cold/mutation
+verdicts before dropping guest caches and verifying the same source fixture.
+It checks the stored time-parent PID while waiting. Do not treat the old 143
+marker as the current run's verdict or restart from an observation timeout.
+
+The original 4 MiB query/64 MiB owned source-pin budgets, 8 TiB per-generation,
+16 TiB aggregate, 100 GiB reserve, 524288 descriptor ceiling, nice 19 and idle
+IO priority remain. Whole-source borrowed memory remains separately measured.
+At the initial live check the new run had RSS 7583328 KiB, and source IO counters
+were advancing. Normal/private capacity daemons and the real writer were not
+stopped. The writer reached 424576 files / 103.65625 GiB; its own cold handoff
+still waits for the complete 400 GiB verdict. Both terminal gates remain open.
+
+[Reused-source pilot, original population proof and exact handoff scripts](../../results/measure/20261010-w92-closure/scale-reuse-handoff/).
+
+
+## Bounded raw-record and slot batching
+
+The replacement's first live check showed 24816090 write syscalls after 99 s,
+while it was still building index partitions. The raw cache writer still issued
+one write per key/value record and one per index slot. It now uses two fixed
+64 KiB windows charged under the already-budgeted, mutually exclusive sort
+scratch. A compile-time assertion proves these windows fit that allowance;
+builder accounting stays 3864520 bytes. Raw bytes are flushed completely before
+matching index slots. Both tails flush before the existing checked raw/index
+fsync barriers. Any partial write or reserve failure aborts the candidate;
+authoritative metadata and the published old cache are unaffected.
+
+The focused oracle checks all 10000 raw records and matching offsets/lengths
+with 16 writes, empty values that fill the index window first, maximum-size
+values spanning raw window flushes, partial raw output followed by ENOSPC,
+partial index output followed by ENOSPC, and cancellation. Linux differential
+and IO tests pass, as does Mac compilation of both changed files with warnings
+as errors. A fresh 100000-file populated/reused-source build, unchanged round,
+cold restore, retained-view mutation/full export and fresh recovery pass;
+first build 107.644 s, fixed 3864520 builder bytes. The tiny partition pilot
+is dominated by many file/fsync operations; it is not evidence of a full-scale
+throughput improvement.
+
+The complete native repeat runs in host screen `w92-raw-native-20261010`, with
+`raw-native.log`, `.exit` and `.finished` under
+`/data1/efs/bench/w92-phase-native-20261010`. This raw batching change has not
+been put into the live scale process, waiting cold oracle or cluster daemons;
+wait for the complete native verdict before advancing those binaries. The
+current large run and its watcher are still PID 554207/554216, and the 400 GiB
+writer/handoff remain unchanged. W92 is still open.
+
+[Raw batching focused and complete pilot evidence](../../results/measure/20261010-w92-closure/raw-batching/).
+
+
+## Raw batching full gates and named rollout
+
+The complete native repeat exits 0. The large reused-source run was intentionally
+advanced to the tested raw-batched library; its completed original source remains
+untouched. The previous v5 build was deliberately terminated before any build or
+mutation verdict and its exit 143/log preserved. The current screen is
+`w92-2p32-raw-batched-v6`, time parent PID 570453, harness PID 570455. Its log/time
+stem is `scale-4294967296-raw-batched-v6`; source fixture remains v4. The executing
+binary and queued full cold oracle share SHA256
+`67b563c13be9718a6f6ac216b2e0661d966418c657f9ee73cedfdf57b3f35e4a`.
+
+The initially generated v6 runner retained v5's terminal marker names. Its first
+cold watcher saw the predecessor's preserved 143 marker and refused; the build
+itself remained healthy. Those old v5 terminal files were moved to `.superseded`,
+the refusal record preserved as `.skipped-marker-mismatch`, and the corrected
+root watcher now waits for the active wrapper alone to create its legacy v5
+terminal names. It copies those actual verdicts to canonical v6 names, waits for
+the finished marker, validates original population plus every new phase, then
+runs the same strong kernel-cold oracle against the retained source. The exact
+executing runner is `handoff/active-run.sh`; `handoff/run.sh` has corrected names
+for any future launch. Current watcher PID 574959, root screen
+`w92-2p32-raw-recovery-20261010`, is verified live. No restart was used to repair
+this marker problem. At 3:34 elapsed, 49 name-index partitions were complete;
+this is a progress observation, not a complete gate or controlled speedup.
+
+Named cf4e365a daemon/client/mgmt compilation succeeds. The first build wrapper's
+nested shell quoting made its exit marker unreliable; its compiler/link output
+is preserved and a separate structured script waits for that make and then
+requires a real make verdict, exit 0. Named source and binaries were staged and
+hashed on all six guests, with prior binaries retained. A normal-only cold
+rollout exits 0; all normal servers run files/direct-I/O/TCP on port 17432 with
+3-voter metadata, `/data1`, 100G quota. Source/code archive is 13 MiB and excludes
+result artifacts, retaining each guest's existing disk-backed result symlink.
+The private capacity servers on 18432 were not restarted or reformatted.
+
+All six binary identities match, and `/proc/PID/exe` verifies the actual normal
+server and client mappings, separately from private old-code mappings:
+
+- efsd: `caf15279c8aa176882678e656ae368a38957b8ca891c36967fde9f9145a12629`
+- efs-fuse: `9e40c2820808c4639116071d20896d982c47edac564759efa244d4b84169d4cc`
+- efs-mgmt: `ef51dae578e4871cd8d85056175d52ac49c9e4267064a51950fa05c09bf9b302`
+
+Native two-mount command/permission/identity gates exit 0. Fresh Mac and Linux
+NFS complete oracles each verify all 141 files / 561174 bytes, every payload
+hash, full paged paths, stats, raw names, retained results and new-command
+convergence, exit 0. As before, gateway credential squashing is not a native
+per-user permission proof. Acceptance NFS and node111 mounts are retired;
+normal gateway/client mounts are commands-disabled and NFS service active.
+The user's separate standard Mac mount was not remounted or claimed fresh.
+
+The capacity handoff was advanced to local screen
+`w92-capacity-cold-handoff-cf4e365a` (PID 44782), preflighting the exact new server
+hash before its eventual private all-three cold stop. The writer and its
+acknowledged source/checkpoints were not interrupted. Full 2^32 and real 400 GiB
+terminal/cold/export/hash gates and final private-fixture/RAM cleanup are still
+open; named pilots and full native/platform repeats do not replace them.
+
+[Named binary, mapped runtime, native and platform evidence](../../results/measure/20261010-w92-closure/raw-batching/).

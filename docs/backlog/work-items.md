@@ -3666,22 +3666,29 @@ the original record and withdrawn interpretation remain retained.
 
 ## W92 · .efs/find and .efs/stats server snapshots and large namespace acceptance
 
-Oct 10 closure work is active at the user's request. Aggregate retained-cache
+Oct 10 closure work remains active at the user's request. Aggregate retained-cache
 admission, durable partition checkpoints/catch-up and bounded incremental discovery
-pass focused/full native gates. Ten-million-entry pilots pass full exports,
-retained mutation and cold-hint catch-up with a fixed 3.69 MiB builder. The actual
-2^32-entry attempts are preserved; the current actual-entry run is active on
-the temporarily provisioned source VM (more than 2.2 billion entries populated). Complete native gates pass after bounding private scan
-scratch/tails and row-only stat reuse. Live disabled catch-up, aggregate QUOTA,
-publisher loss and interrupted-cache recovery pass; latest deployment and full
-scale/platform acceptance remain open. Durable single-export policy live/cold,
-quorum, lost-reply, startup-ceiling and storage-error gates pass on the private
-candidate (`49a73b22`); normal Xorinox direct-I/O/TCP rollout is identified
-as `1a25d20a193b`. The real 400 GiB writer
-stopped after 124983 acknowledged files on CREATE PROTO. A valid unrouted BUSY
-probe retry defect is fixed and passes focused plus full native gates; recovery
-rehashes acknowledged payloads before writing more. No full capacity pass is
-claimed. [Closure ledger](../status/query-cache-closure-20261010.md).
+pass focused/full native and private live/fault gates. Ten-million-entry pilots
+pass complete streaming, guest kernel-cold recovery and concurrent retained/new
+exports with all rollup fields and sampled inode attributes checked; builder
+scratch remains 3.69 MiB, separately from authoritative KV memory.
+The actual 2^32-entry process has populated all 4294967296 entries and is building
+its disk catalog; full export/mutation/recovery verdicts remain outstanding.
+Normal Xorinox files/direct-I/O/TCP runs `cf4e365a`, including fixed-budget
+external-merge and raw-record/slot batching. Its full native, Mac NFS, Linux
+NFSv4.0 and native FUSE command/payload oracles pass. The previous cdc13b88
+checkpoint also passed 96 fresh Mac queries and all 423 prior fixture payloads
+after cold restart. The active `w92-2p32-raw-batched-v6` run reuses the complete
+source population; previous build-only runs were intentionally superseded
+with evidence preserved. Its corrected kernel-cold watcher remains queued. Separate index/stats/final persistence phase diagnostics pass native/live/NFS
+gates; the newest ten-million-entry complete recovery passes with 3864520
+builder bytes. Normal mounts are restored with commands disabled; acceptance-only mounts are retired.
+The persistent policy passes live/cold/quorum/lost-reply/ceiling/fault gates.
+The real 400 GiB writer's initial CREATE PROTO failure and acknowledged 124983
+files are preserved. The unrouted BUSY retry fix passes focused/full native;
+the fixed client rehashed all acknowledged prefixes and continues, with its
+complete cold/hash/export verifier queued. Neither large gate is complete.
+[Closure ledger](../status/query-cache-closure-20261010.md).
 
 Oct 10 incremental checkpoint: fixed 1024-item change/ancestor sets reuse immutable
 derived partitions and recompute exact affected rollups, with full-build fallback.

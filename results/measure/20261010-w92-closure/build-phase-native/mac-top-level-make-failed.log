@@ -1,0 +1,35 @@
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"402213483610-dirty"' -DEFS_VERSION='"v0.2.1-pre-alpha-426-g40221348-dirty"' -DEFS_GIT_BRANCH='"devel-find-stats"' -DEFS_BUILD_TIME='"2026-10-10T12:06:54Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/admission.o src/common/admission.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"402213483610-dirty"' -DEFS_VERSION='"v0.2.1-pre-alpha-426-g40221348-dirty"' -DEFS_GIT_BRANCH='"devel-find-stats"' -DEFS_BUILD_TIME='"2026-10-10T12:06:54Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/append_plan.o src/meta/append_plan.c
+warning: warning: unknown warning option '-Wno-stringop-truncation'; did you mean '-Wno-format-truncation'? [-Wunknown-warning-option]
+unknown warning option '-Wno-stringop-truncation'; did you mean '-Wno-format-truncation'? [-Wunknown-warning-option]
+1 warning generated.
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"402213483610-dirty"' -DEFS_VERSION='"v0.2.1-pre-alpha-426-g40221348-dirty"' -DEFS_GIT_BRANCH='"devel-find-stats"' -DEFS_BUILD_TIME='"2026-10-10T12:06:54Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/publication.o src/common/publication.c
+warning: unknown warning option '-Wno-stringop-truncation'; did you mean '-Wno-format-truncation'? [-Wunknown-warning-option]
+1 warning generated.
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"402213483610-dirty"' -DEFS_VERSION='"v0.2.1-pre-alpha-426-g40221348-dirty"' -DEFS_GIT_BRANCH='"devel-find-stats"' -DEFS_BUILD_TIME='"2026-10-10T12:06:54Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/publication_ack.o src/common/publication_ack.c
+1 warning generated.
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"402213483610-dirty"' -DEFS_VERSION='"v0.2.1-pre-alpha-426-g40221348-dirty"' -DEFS_GIT_BRANCH='"devel-find-stats"' -DEFS_BUILD_TIME='"2026-10-10T12:06:54Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/common.o src/common/common.c
+warning: unknown warning option '-Wno-stringop-truncation'; did you mean '-Wno-format-truncation'? [-Wunknown-warning-option]
+warning: unknown warning option '-Wno-stringop-truncation'; did you mean '-Wno-format-truncation'? [-Wunknown-warning-option]
+1 warning generated.
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"402213483610-dirty"' -DEFS_VERSION='"v0.2.1-pre-alpha-426-g40221348-dirty"' -DEFS_GIT_BRANCH='"devel-find-stats"' -DEFS_BUILD_TIME='"2026-10-10T12:06:54Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/log_ts.o src/common/log_ts.c
+1 warning generated.
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"402213483610-dirty"' -DEFS_VERSION='"v0.2.1-pre-alpha-426-g40221348-dirty"' -DEFS_GIT_BRANCH='"devel-find-stats"' -DEFS_BUILD_TIME='"2026-10-10T12:06:54Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/batch_obs.o src/common/batch_obs.c
+warning: unknown warning option '-Wno-stringop-truncation'; did you mean '-Wno-format-truncation'? [-Wunknown-warning-option]
+warning: unknown warning option '-Wno-stringop-truncation'; did you mean '-Wno-format-truncation'? [-Wunknown-warning-option]
+src/common/log_ts.c:109:5: error: use of undeclared identifier 'cookie_io_functions_t'
+  109 |     cookie_io_functions_t fns = {.write = ts_write};
+      |     ^~~~~~~~~~~~~~~~~~~~~
+1 warning generated.
+src/common/log_ts.c:110:15: error: call to undeclared function 'fopencookie'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  110 |     FILE *f = fopencookie(c, "w", fns);
+      |               ^
+src/common/log_ts.cgcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"402213483610-dirty"' -DEFS_VERSION='"v0.2.1-pre-alpha-426-g40221348-dirty"' -DEFS_GIT_BRANCH='"devel-find-stats"' -DEFS_BUILD_TIME='"2026-10-10T12:06:54Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/version.o src/common/version.c
+:110:35: error: use of undeclared identifier 'fns'
+  110 |     FILE *f = fopencookie(c, "w", fns);
+      |                                   ^~~
+1 warning and 3 errors generated.
+make: *** [src/common/log_ts.o] Error 1
+make: *** Waiting for unfinished jobs....
+warning: unknown warning option '-Wno-stringop-truncation'; did you mean '-Wno-format-truncation'? [-Wunknown-warning-option]
+1 warning generated.

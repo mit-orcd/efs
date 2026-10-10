@@ -1,0 +1,13 @@
+caf15279c8aa176882678e656ae368a38957b8ca891c36967fde9f9145a12629  /tmp/efs/efsd
+9e40c2820808c4639116071d20896d982c47edac564759efa244d4b84169d4cc  /tmp/efs/efs-fuse
+ef51dae578e4871cd8d85056175d52ac49c9e4267064a51950fa05c09bf9b302  /tmp/efs/efs-mgmt
+Environment=
+ActiveState=inactive
+
+Environment=
+ActiveState=inactive
+normal-commands-disabled-PASS
+/home/efs/w92-unrouted-busy-bin/efs-fuse 192.168.122.111:18432 fs /home/efs/w92-capacity-mnt 
+57fd7577f42ad460b9bd1acfbf84a5fcf096c091992b682c346ca704f0a0bfe7  /proc/269119/exe
+./efs-fuse 192.168.122.111:17432 fs /mnt/efs -o allow_other 
+9e40c2820808c4639116071d20896d982c47edac564759efa244d4b84169d4cc  /proc/510048/exe

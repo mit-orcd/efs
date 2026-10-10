@@ -1,0 +1,2 @@
+query-disk: unlinked directory ino=36864004096 parent=1 nlink=2
+query disk: RAM oracle, external sort, bounded metadata, retained snapshot, rename and cancellation PASS

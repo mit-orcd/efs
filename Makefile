@@ -304,6 +304,7 @@ test: all
 	python3 tests/test_applied_interval.py
 	./tests/test_store_containers
 	python3 tests/test_lookup_errno.py
+	python3 tests/test_virtual_export_handles.py
 	python3 tests/test_fuse_open_reply.py
 	python3 tests/test_fuse_lease_retention.py
 	python3 tests/test_create_admission_wait.py
@@ -623,3 +624,5 @@ src/server/raft_host.o tests/test_query_refresh: src/server/query_refresh.h src/
 # Ticket wire changes must rebuild both endpoints and their actual handler.
 src/client/put_upload.o src/server/put_upload.o src/server/handler.o: include/efs/put_upload.h include/efs/put_ticket.h
 tests/test_kv_snapshot_tail: src/kv/kv_seg.c src/kv/kv_lsm_internal.h
+
+src/meta/query_catalog.o src/meta/query_disk.o tests/test_query_disk_io: src/meta/query_build_time.h

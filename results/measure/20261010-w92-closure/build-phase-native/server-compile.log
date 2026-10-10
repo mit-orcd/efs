@@ -1,0 +1,165 @@
+src/server/raft_host.c: In function ‘host_snap_export_pass’:
+src/server/raft_host.c:7776:42: warning: ‘%s’ directive output may be truncated writing up to 255 bytes into a region of size between 0 and 4095 [-Wformat-truncation=]
+ 7776 |         snprintf(path, sizeof(path), "%s/%s", h->mdraft, de->d_name);
+      |                                          ^~
+In function ‘host_snap_unlink_other’,
+    inlined from ‘host_snap_export_pass’ at src/server/raft_host.c:7868:17:
+src/server/raft_host.c:7776:9: note: ‘snprintf’ output between 2 and 4352 bytes into a destination of size 4096
+ 7776 |         snprintf(path, sizeof(path), "%s/%s", h->mdraft, de->d_name);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/server/raft_host.c: In function ‘host_snap_import_pass’:
+src/server/raft_host.c:7905:43: warning: ‘/snap-’ directive output may be truncated writing 6 bytes into a region of size between 1 and 4096 [-Wformat-truncation=]
+ 7905 |         snprintf(local, sizeof(local), "%s/snap-%u-import-local.kvx",
+      |                                           ^~~~~~
+src/server/raft_host.c:7905:40: note: directive argument in the range [0, 255]
+ 7905 |         snprintf(local, sizeof(local), "%s/snap-%u-import-local.kvx",
+      |                                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/server/raft_host.c:7905:9: note: ‘snprintf’ output between 25 and 4122 bytes into a destination of size 4096
+ 7905 |         snprintf(local, sizeof(local), "%s/snap-%u-import-local.kvx",
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 7906 |                  h->mdraft, group);
+      |                  ~~~~~~~~~~~~~~~~~
+src/server/raft_host.c: In function ‘load_desired’:
+src/server/raft_host.c:6430:25: warning: ‘/desired.’ directive output may be truncated writing 9 bytes into a region of size between 1 and 4096 [-Wformat-truncation=]
+ 6430 |     snprintf(out, n, "%s/desired.%u", h->mdraft, (unsigned)group);
+      |                         ^~~~~~~~~
+In function ‘desired_path’,
+    inlined from ‘load_desired’ at src/server/raft_host.c:6441:5:
+src/server/raft_host.c:6430:22: note: directive argument in the range [0, 255]
+ 6430 |     snprintf(out, n, "%s/desired.%u", h->mdraft, (unsigned)group);
+      |                      ^~~~~~~~~~~~~~~
+src/server/raft_host.c:6430:5: note: ‘snprintf’ output between 11 and 4108 bytes into a destination of size 4096
+ 6430 |     snprintf(out, n, "%s/desired.%u", h->mdraft, (unsigned)group);
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/server/raft_host.c: In function ‘load_applied’:
+src/server/raft_host.c:5799:28: warning: ‘/applied.’ directive output may be truncated writing 9 bytes into a region of size between 1 and 4096 [-Wformat-truncation=]
+ 5799 |     snprintf(path, cap, "%s/applied.%u", h->mdraft, group);
+      |                            ^~~~~~~~~
+In function ‘applied_path’,
+    inlined from ‘load_applied’ at src/server/raft_host.c:5917:5:
+src/server/raft_host.c:5799:25: note: directive argument in the range [0, 255]
+ 5799 |     snprintf(path, cap, "%s/applied.%u", h->mdraft, group);
+      |                         ^~~~~~~~~~~~~~~
+src/server/raft_host.c:5799:5: note: ‘snprintf’ output between 11 and 4108 bytes into a destination of size 4096
+ 5799 |     snprintf(path, cap, "%s/applied.%u", h->mdraft, group);
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/server/raft_host.c: In function ‘host_snap_chunk’:
+src/server/raft_host.c:2912:21: warning: ‘/snap-’ directive output may be truncated writing 6 bytes into a region of size between 1 and 4096 [-Wformat-truncation=]
+ 2912 |                  "%s/snap-%u-%llu.part", h->mdraft, g->group,
+      |                     ^~~~~~
+src/server/raft_host.c:2912:18: note: directive argument in the range [0, 255]
+ 2912 |                  "%s/snap-%u-%llu.part", h->mdraft, g->group,
+      |                  ^~~~~~~~~~~~~~~~~~~~~~
+src/server/raft_host.c:2911:9: note: ‘snprintf’ output between 15 and 4131 bytes into a destination of size 4096
+ 2911 |         snprintf(g->part_path, sizeof(g->part_path),
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 2912 |                  "%s/snap-%u-%llu.part", h->mdraft, g->group,
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 2913 |                  (unsigned long long)incl);
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~~~
+src/server/raft_host.c: In function ‘host_snap_open’:
+src/server/raft_host.c:2734:53: warning: ‘/snap-’ directive output may be truncated writing 6 bytes into a region of size between 1 and 4096 [-Wformat-truncation=]
+ 2734 |     snprintf(g->snap_path, sizeof(g->snap_path), "%s/snap-%u-%llu.kvx",
+      |                                                     ^~~~~~
+src/server/raft_host.c:2734:50: note: directive argument in the range [0, 255]
+ 2734 |     snprintf(g->snap_path, sizeof(g->snap_path), "%s/snap-%u-%llu.kvx",
+      |                                                  ^~~~~~~~~~~~~~~~~~~~~
+src/server/raft_host.c:2734:5: note: ‘snprintf’ output between 14 and 4130 bytes into a destination of size 4096
+ 2734 |     snprintf(g->snap_path, sizeof(g->snap_path), "%s/snap-%u-%llu.kvx",
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 2735 |              h->mdraft, g->group, (unsigned long long)incl);
+      |              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/server/raft_host.c: In function ‘persist_applied’:
+src/server/raft_host.c:5799:28: warning: ‘/applied.’ directive output may be truncated writing 9 bytes into a region of size between 1 and 4096 [-Wformat-truncation=]
+ 5799 |     snprintf(path, cap, "%s/applied.%u", h->mdraft, group);
+      |                            ^~~~~~~~~
+In function ‘applied_path’,
+    inlined from ‘persist_applied’ at src/server/raft_host.c:5864:9:
+src/server/raft_host.c:5799:25: note: directive argument in the range [0, 255]
+ 5799 |     snprintf(path, cap, "%s/applied.%u", h->mdraft, group);
+      |                         ^~~~~~~~~~~~~~~
+src/server/raft_host.c:5799:5: note: ‘snprintf’ output between 11 and 4108 bytes into a destination of size 4096
+ 5799 |     snprintf(path, cap, "%s/applied.%u", h->mdraft, group);
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/server/raft_host.c: In function ‘server_raft_host_start’:
+src/server/raft_host.c:8988:35: warning: ‘/mdraft’ directive output may be truncated writing 7 bytes into a region of size between 1 and 4096 [-Wformat-truncation=]
+ 8988 |     snprintf(dir, sizeof(dir), "%s/mdraft",
+      |                                   ^~~~~~~
+src/server/raft_host.c:8988:5: note: ‘snprintf’ output between 8 and 4103 bytes into a destination of size 4096
+ 8988 |     snprintf(dir, sizeof(dir), "%s/mdraft",
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 8989 |              s->meta_storage[0] ? s->meta_storage : s->storage_path);
+      |              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/server/raft_host.c:7802:42: warning: ‘%s’ directive output may be truncated writing up to 255 bytes into a region of size between 0 and 4095 [-Wformat-truncation=]
+ 7802 |         snprintf(path, sizeof(path), "%s/%s", h->mdraft, de->d_name);
+      |                                          ^~
+In function ‘host_snap_drop_parts’,
+    inlined from ‘server_raft_host_start’ at src/server/raft_host.c:8997:5:
+src/server/raft_host.c:7802:9: note: ‘snprintf’ output between 2 and 4352 bytes into a destination of size 4096
+ 7802 |         snprintf(path, sizeof(path), "%s/%s", h->mdraft, de->d_name);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/server/raft_host.c: In function ‘server_raft_host_start’:
+src/server/raft_host.c:6381:37: warning: ‘/boot.bin’ directive output may be truncated writing 9 bytes into a region of size between 1 and 4096 [-Wformat-truncation=]
+ 6381 |     snprintf(path, sizeof(path), "%s/boot.bin", dir);
+      |                                     ^~~~~~~~~
+In function ‘host_boot_bump’,
+    inlined from ‘server_raft_host_start’ at src/server/raft_host.c:8998:10:
+src/server/raft_host.c:6381:5: note: ‘snprintf’ output between 10 and 4105 bytes into a destination of size 4096
+ 6381 |     snprintf(path, sizeof(path), "%s/boot.bin", dir);
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/server/raft_host.c: In function ‘server_raft_host_start’:
+src/server/raft_host.c:9008:43: warning: ‘/kv’ directive output may be truncated writing 3 bytes into a region of size between 1 and 4096 [-Wformat-truncation=]
+ 9008 |         snprintf(kvdir, sizeof(kvdir), "%s/kv", dir);
+      |                                           ^~~
+src/server/raft_host.c:9008:9: note: ‘snprintf’ output between 4 and 4099 bytes into a destination of size 4096
+ 9008 |         snprintf(kvdir, sizeof(kvdir), "%s/kv", dir);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/server/raft_host.c:9009:45: warning: ‘/log’ directive output may be truncated writing 4 bytes into a region of size between 1 and 4096 [-Wformat-truncation=]
+ 9009 |         snprintf(logdir, sizeof(logdir), "%s/log", dir);
+      |                                             ^~~~
+src/server/raft_host.c:9009:9: note: ‘snprintf’ output between 5 and 4100 bytes into a destination of size 4096
+ 9009 |         snprintf(logdir, sizeof(logdir), "%s/log", dir);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/server/raft_host.c: In function ‘server_raft_host_submit’:
+src/server/raft_host.c:6430:25: warning: ‘/desired.’ directive output may be truncated writing 9 bytes into a region of size between 1 and 4096 [-Wformat-truncation=]
+ 6430 |     snprintf(out, n, "%s/desired.%u", h->mdraft, (unsigned)group);
+      |                         ^~~~~~~~~
+In function ‘desired_path’,
+    inlined from ‘save_desired’ at src/server/raft_host.c:6460:5,
+    inlined from ‘host_cfg’ at src/server/raft_host.c:6607:10,
+    inlined from ‘server_raft_host_submit’ at src/server/raft_host.c:9720:14:
+src/server/raft_host.c:6430:22: note: directive argument in the range [0, 2]
+ 6430 |     snprintf(out, n, "%s/desired.%u", h->mdraft, (unsigned)group);
+      |                      ^~~~~~~~~~~~~~~
+src/server/raft_host.c:6430:5: note: ‘snprintf’ output between 11 and 4106 bytes into a destination of size 4096
+ 6430 |     snprintf(out, n, "%s/desired.%u", h->mdraft, (unsigned)group);
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/server/raft_host.c: In function ‘server_raft_host_submit’:
+src/server/raft_host.c:6461:35: warning: ‘.tmp’ directive output may be truncated writing 4 bytes into a region of size between 1 and 4096 [-Wformat-truncation=]
+ 6461 |     snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+      |                                   ^~~~
+In function ‘save_desired’,
+    inlined from ‘host_cfg’ at src/server/raft_host.c:6607:10,
+    inlined from ‘server_raft_host_submit’ at src/server/raft_host.c:9720:14:
+src/server/raft_host.c:6461:5: note: ‘snprintf’ output between 5 and 4100 bytes into a destination of size 4096
+ 6461 |     snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/server/raft_host.c: In function ‘server_raft_host_publication’:
+src/server/raft_host.c:15653:31: warning: ‘locator.group’ may be used uninitialized [-Wmaybe-uninitialized]
+15653 |             out->receipt_group=locator.group;out->receipt_index=locator.index;
+      |             ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+src/server/raft_host.c:15650:40: note: ‘locator.group’ was declared here
+15650 |         struct efs_publication_locator locator;
+      |                                        ^~~~~~~
+src/server/raft_host.c:15653:64: warning: ‘locator.index’ may be used uninitialized [-Wmaybe-uninitialized]
+15653 |             out->receipt_group=locator.group;out->receipt_index=locator.index;
+      |                                              ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+src/server/raft_host.c:15650:40: note: ‘locator.index’ was declared here
+15650 |         struct efs_publication_locator locator;
+      |                                        ^~~~~~~
+src/server/raft_host.c:15654:30: warning: ‘locator.term’ may be used uninitialized [-Wmaybe-uninitialized]
+15654 |             out->receipt_term=locator.term;
+      |             ~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+src/server/raft_host.c:15650:40: note: ‘locator.term’ was declared here
+15650 |         struct efs_publication_locator locator;
+      |                                        ^~~~~~~

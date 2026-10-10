@@ -1,0 +1,11 @@
+{
+  "result": "PASS",
+  "phase": "named-cold-retained-payloads",
+  "fixtures": [
+    "w92-nfs-1791632381-88392",
+    "w92-nfs-1791632507-388126",
+    "w92-nfs-1791632567-404054"
+  ],
+  "files": 423,
+  "checks": "Every deterministic payload byte checked on native FUSE after all three normal daemon cold restart; raw names included."
+}

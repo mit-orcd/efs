@@ -3,6 +3,15 @@
 #include "efs/name_index.h"
 
 struct efs_query_catalog;
+/* Successful candidate's exclusive wall-clock phases, not CPU time. Index
+ * includes raw/name preparation; stats prepares inode values and folds aggregates;
+ * persist is final verification/fsync/manifest work. Restore does not replay old timings.
+ * These diagnostics are not stored in the cache format. */
+struct efs_query_build_times {
+    uint64_t index_ns,stats_ns,persist_ns,restore_ns;
+    uint32_t restored;
+};
+struct efs_query_build_times efs_query_catalog_build_times(const struct efs_query_catalog *);
 struct efs_query_rollup {
     uint64_t imm_files, imm_dirs, imm_bytes, imm_tmin, imm_tmax;
     uint64_t tree_files, tree_dirs, tree_bytes, tree_tmin, tree_tmax;

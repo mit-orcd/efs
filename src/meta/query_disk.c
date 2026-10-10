@@ -6,6 +6,7 @@
  * watermarks and verified content digests.
  */
 #include "query_disk.h"
+#include "query_build_time.h"
 #include "blake3.h"
 #include <dirent.h>
 #include <errno.h>
@@ -30,6 +31,9 @@
 #define READ_WAYS 4
 _Static_assert(FD_CACHE<=UINT8_MAX,"descriptor index must fit");
 #define SORT_ROWS 2048
+#define RAW_WRITE_WINDOW 65536
+_Static_assert(2*RAW_WRITE_WINDOW<=SORT_ROWS*sizeof(struct efs_name_entry),
+               "raw writer scratch must fit the existing sort admission charge");
 #define NODE_BATCH 8
 #define INODE_CACHE 64
 #define VALUE_MAX 16384
@@ -421,7 +425,20 @@ static int raw_prefix(void *ctx,const uint8_t *p,uint32_t pn,
 { return raw_scan(ctx,p,pn,NULL,0,cb,u); }
 static const struct efs_kv_ops raw_ops={.get=raw_get,.scan_prefix=raw_prefix,.scan_from=raw_scan};
 static int make_file(const struct efs_query_disk *,uint32_t,char);
-struct writer { struct efs_query_disk *d;uint32_t shard;int raw,index;uint64_t offset,count; };
+struct writer {
+    struct efs_query_disk *d;uint32_t shard;int raw,index;uint64_t offset,count;
+    uint8_t *buffer;size_t raw_used,index_used;
+};
+static int writer_flush(struct writer *w)
+{
+    int rc=EFS_OK;
+    if(w->raw_used)rc=io_at(w->raw,w->buffer,w->raw_used,w->offset-w->raw_used,1);
+    /* Never write index slots until their entire raw batch has succeeded. */
+    if(!rc && w->index_used)rc=io_at(w->index,w->buffer+RAW_WRITE_WINDOW,
+        w->index_used,w->count*sizeof(struct slot)-w->index_used,1);
+    if(!rc)w->raw_used=w->index_used=0;
+    return rc;
+}
 static int save(void *ctx,const uint8_t *key,uint32_t kl,const uint8_t *val,uint32_t vl)
 {
     struct writer *w=ctx;if(cancelled(w->d))return EFS_ERR_BUSY;
@@ -435,14 +452,16 @@ static int save(void *ctx,const uint8_t *key,uint32_t kl,const uint8_t *val,uint
     if(w->index<0)w->index=make_file(w->d,w->shard,'i');
     if(w->raw<0 || w->index<0)return EFS_ERR_IO;
     struct slot s={w->offset,kl,vl};
-    /* Adjacent key/value bytes form one bounded record. Submit them together
-     * instead of making a disk syscall for each small field. The index is
-     * written only after the complete record succeeds. */
-    uint8_t record[RAW_RECORD_MAX];memcpy(record,key,kl);
-    if(vl)memcpy(record+kl,val,vl);
-    int rc=io_at(w->raw,record,(size_t)kl+vl,w->offset,1);
-    if(!rc)rc=io_at(w->index,&s,sizeof(s),w->count*sizeof(s),1);
-    if(!rc){w->offset+=kl+vl;w->count++;}return rc;
+    size_t bytes=(size_t)kl+vl;
+    int rc=EFS_OK;
+    if(w->raw_used+bytes>RAW_WRITE_WINDOW || w->index_used+sizeof(s)>RAW_WRITE_WINDOW)
+        rc=writer_flush(w);
+    if(rc)return rc;
+    memcpy(w->buffer+w->raw_used,key,kl);
+    if(vl)memcpy(w->buffer+w->raw_used+kl,val,vl);
+    memcpy(w->buffer+RAW_WRITE_WINDOW+w->index_used,&s,sizeof(s));
+    w->raw_used+=bytes;w->index_used+=sizeof(s);
+    w->offset+=bytes;w->count++;return EFS_OK;
 }
 static int pending(void *u,const uint8_t *k,uint32_t kn,const uint8_t *v,uint32_t vn)
 { (void)u;(void)k;(void)kn;(void)v;(void)vn;return EFS_ERR_BUSY; }
@@ -459,6 +478,7 @@ static int raw_build(struct efs_query_disk *d,struct efs_kv_lsm_snapshot *source
         prefix[2]=refuse[i];int rc=efs_kv_lsm_snapshot_scan(source,prefix,3,NULL,0,pending,NULL);if(rc)return rc;
     }
     struct writer w={.d=d,.shard=shard,.raw=-1,.index=-1};
+    w.buffer=malloc(2*RAW_WRITE_WINDOW);if(!w.buffer)return EFS_ERR_NOMEM;
     int rc=EFS_OK;
     for(int i=0;i<KINDS && !rc;i++){
         prefix[2]=kinds[i];d->part[shard].begin[i]=w.count;
@@ -467,10 +487,11 @@ static int raw_build(struct efs_query_disk *d,struct efs_kv_lsm_snapshot *source
     }
     d->part[shard].count=w.count;d->part[shard].inodes=d->part[shard].end[0]-d->part[shard].begin[0];
     d->part[shard].names=d->part[shard].end[1]-d->part[shard].begin[1];
+    if(!rc)rc=writer_flush(&w);
     if(!rc && w.count && (fsync(w.raw) || fsync(w.index)))rc=EFS_ERR_IO;
     if(w.raw>=0)close(w.raw);
     if(w.index>=0)close(w.index);
-    return rc;
+    free(w.buffer);return rc;
 }
 static int entry_from(const uint8_t *key,uint32_t kl,const uint8_t *val,uint32_t vl,struct efs_name_entry *e)
 {
@@ -495,6 +516,38 @@ static int run_path(struct efs_query_disk *d,uint32_t shard,unsigned pass,uint64
 {
     int n=snprintf(p,EFS_MAX_PATH,"%s/%04x.tmp%u-%llu",d->path,shard,pass,(unsigned long long)run);
     return n<0 || n>=EFS_MAX_PATH ? EFS_ERR_NAMETOOLONG : EFS_OK;
+}
+/* Reuse the run-sort allocation as two input windows and one output window.
+ * The merge remains bounded independently of cardinality and uses io_at so
+ * short writes, cancellation and reserve failures cannot publish a candidate. */
+static int merge_names(struct efs_query_disk *d,int fa,int fb,int fo,
+                       uint64_t na,uint64_t nb,size_t width,
+                       int (*compare)(const void *,const void *),uint8_t *rows)
+{
+    const unsigned cap=SORT_ROWS/3;
+    uint8_t *a=rows,*b=rows+cap*width,*out=rows+2*cap*width;
+    uint64_t ia=0,ib=0,at=0;unsigned pa=0,pb=0,ca=0,cb=0,used=0;
+    int rc=EFS_OK;
+    while(!rc && (ia<na || ib<nb)) {
+        if(cancelled(d)){rc=EFS_ERR_BUSY;break;}
+        if(ia<na && pa==ca) {
+            ca=(unsigned)(na-ia>cap?cap:na-ia);pa=0;
+            rc=io_at(fa,a,ca*width,ia*width,0);
+        }
+        if(!rc && ib<nb && pb==cb) {
+            cb=(unsigned)(nb-ib>cap?cap:nb-ib);pb=0;
+            rc=io_at(fb,b,cb*width,ib*width,0);
+        }
+        if(rc)break;
+        int takea=ia<na && (ib==nb || compare(a+pa*width,b+pb*width)<=0);
+        memcpy(out+used++*width,takea?a+pa*width:b+pb*width,width);
+        if(takea){ia++;pa++;}else{ib++;pb++;}
+        if(used==cap) {
+            rc=io_at(fo,out,used*width,at*width,1);at+=used;used=0;
+        }
+    }
+    if(!rc && used)rc=io_at(fo,out,used*width,at*width,1);
+    return rc;
 }
 static int names_build(struct efs_query_disk *d,uint32_t shard,char kind)
 {
@@ -522,7 +575,7 @@ static int names_build(struct efs_query_disk *d,uint32_t shard,char kind)
         if(fd<0){rc=EFS_ERR_IO;break;}
         rc=io_at(fd,rows,n*width,0,1);close(fd);
     }
-    free(rows);unsigned pass=0;
+    unsigned pass=0;
     while(runs>1 && !rc) {
         for(uint64_t i=0;i<runs && !rc;i+=2) {
             char a[EFS_MAX_PATH],b[EFS_MAX_PATH],out[EFS_MAX_PATH];
@@ -532,19 +585,12 @@ static int names_build(struct efs_query_disk *d,uint32_t shard,char kind)
             if(i+1==runs){if(rename(a,out))rc=EFS_ERR_IO;continue;}
             rc=run_path(d,shard,pass,i+1,b);if(rc)break;
             int fa=open(a,O_RDONLY|O_CLOEXEC),fb=open(b,O_RDONLY|O_CLOEXEC),fo=open(out,O_CREAT|O_EXCL|O_RDWR|O_CLOEXEC,0600);
-            struct stat sa,sb;uint64_t ia=0,ib=0,at=0;
+            struct stat sa,sb;
             if(fa<0 || fb<0 || fo<0 || fstat(fa,&sa) || fstat(fb,&sb))rc=EFS_ERR_IO;
             uint64_t na=rc?0:(uint64_t)sa.st_size/width,nb=rc?0:(uint64_t)sb.st_size/width;
-            union { struct efs_name_entry name;struct disk_alias alias; } ea,eb;int ha=0,hb=0;
-            while(!rc && (ia<na || ib<nb)) {
-                if(cancelled(d)){rc=EFS_ERR_BUSY;break;}
-                if(ia<na && !ha){rc=io_at(fa,&ea,width,ia*width,0);ha=1;}
-                if(!rc && ib<nb && !hb){rc=io_at(fb,&eb,width,ib*width,0);hb=1;}
-                if(rc)break;
-                int takea=ia<na && (ib==nb || compare(&ea,&eb)<=0);
-                rc=io_at(fo,takea?&ea:&eb,width,at++*width,1);
-                if(takea){ia++;ha=0;}else{ib++;hb=0;}
-            }
+            if(!rc && (sa.st_size<0 || sb.st_size<0 ||
+                       (uint64_t)sa.st_size%width || (uint64_t)sb.st_size%width))rc=EFS_ERR_IO;
+            if(!rc)rc=merge_names(d,fa,fb,fo,na,nb,width,compare,rows);
             if(fa>=0)close(fa);
             if(fb>=0)close(fb);
             if(fo>=0)close(fo);
@@ -557,7 +603,7 @@ static int names_build(struct efs_query_disk *d,uint32_t shard,char kind)
         if(!rc)rc=filename(d,shard,kind,final,sizeof(final));
         if(!rc && rename(path,final))rc=EFS_ERR_IO;
     }
-    return rc;
+    free(rows);return rc;
 }
 static int node_at(struct efs_query_disk *d,uint32_t shard,uint64_t at,struct disk_node *n,int write)
 {
@@ -814,9 +860,11 @@ static int file_digest(int fd,uint8_t out[32])
 /* Private bounded incremental builder; no public/disk ABI change. */
 #include "query_disk_incremental.h"
 int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
-    const struct efs_query_disk *old,uint64_t max_bytes,int (*stop)(void *),void *ctx,struct efs_query_disk **out)
+    const struct efs_query_disk *old,uint64_t max_bytes,int (*stop)(void *),void *ctx,struct efs_query_build_times *times,struct efs_query_disk **out)
 {
     if(out)*out=NULL;
+    if(times)memset(times,0,sizeof(*times));
+    uint64_t phase_start=query_build_clock();
     uint64_t working=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX+NODE_BATCH*sizeof(struct disk_node)+sizeof(struct fold_parent)+sizeof(struct incremental)+64*sizeof(struct efs_meta_dir_ent)+65536+2*RAW_RECORD_MAX;
     if(!root || !source || !out)return EFS_ERR_INVAL;
     if(max_bytes<working)return EFS_ERR_NOMEM;
@@ -869,6 +917,8 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
         if(UINT64_MAX-d->count<d->part[shard].inodes)rc=EFS_ERR_OVERFLOW;
         else d->count+=d->part[shard].inodes;
     }
+    if(times)times->index_ns=query_build_elapsed(phase_start);
+    phase_start=query_build_clock();
     if(!rc && old)rc=incremental_build(d,(struct efs_query_disk *)old);
     else if(!rc)rc=INCREMENTAL_FULL;
     if(rc==INCREMENTAL_FULL){
@@ -882,6 +932,8 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
         for(uint32_t shard=0;shard<SHARDS && !rc;shard++)rc=nodes_build(d,shard);
         if(!rc)rc=folds_build(d);
     }
+    if(times)times->stats_ns=query_build_elapsed(phase_start);
+    phase_start=query_build_clock();
     close_cache(d);
     /* Derived node files are private to this candidate; fsync before the
      * completed manifest. A failed build never changes the published view. */
@@ -922,6 +974,7 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
     }
     if(rc){efs_query_disk_free(d);return rc;}
     close(d->budget_fd);d->budget_fd=-1;
+    if(times)times->persist_ns=query_build_elapsed(phase_start);
     d->stop=NULL;d->stop_ctx=NULL;*out=d;return EFS_OK;
 }
 uint64_t efs_query_disk_bytes(const struct efs_query_disk *d){return d?d->bytes:0;}

@@ -84,6 +84,22 @@ offset, and accept up to nine fractional digits. Pre-epoch values are refused.
 
 ## Snapshots, limits and expiry
 
+`.efs/stats --json` also exposes a `build` diagnostic object on current source.
+`index_ns` measures source/name preparation, `stats_ns` measures derived inode
+preparation and aggregate folding, and `persist_ns` measures final verification,
+fsync and manifest work. These exclusive phases use monotonic wall time, not CPU
+time; the initial raw-record fsync belongs to index preparation. `pin_ms` and
+`total_ms` describe the server's complete refresh, which includes other authority
+and checkpoint work. Counts and query matches still share one published source
+watermark and generation.
+
+For `kind: "restore"`, `restore_ns` measures the current process's validated
+restore; the three build-phase fields are zero. Original build timings are not
+persisted or reconstructed. Older daemon builds omit this additive object.
+The phase-diagnostic rollout is tracked in the
+[W92 closure ledger](../status/query-cache-closure-20261010.md).
+
+
 Dates, sizes and filters use the published **server metadata snapshot**. They
 may lag ordinary writes; the status on stderr and JSON snapshot fields report
 freshness. Filtering does not issue a stat RPC per result or download the tree.
@@ -137,6 +153,12 @@ this limit is refused with QUOTA. It includes hard-linked partition bytes and
 sort overlap, but does not cap the total of retained generations or physical
 filesystem allocation overhead.
 
+`EFS_QUERY_DISK_TOTAL_MIB` defaults to 32768 and caps aggregate logical bytes in
+the cache root, including retained generations and interrupted build files.
+Configure both disk limits for large namespaces; increasing the RAM budget
+does not increase disk admission. Refused cache refreshes retain the previous
+snapshot while ordinary file I/O continues.
+
 Check server `query-restore`, `query-refresh` and `query-publish` logs if commands
 fail. Stale/corrupt checkpoints are rebuilt after authority checks. A misplaced
 live directory entry can refuse the entire candidate; raising a memory budget
@@ -166,3 +188,20 @@ them. Fresh queries and export pages check server policy and current quorum;
 already acquired immutable bytes remain readable. Ordinary file I/O continues
 when command policy is disabled. Final scale/platform acceptance is
 tracked in the [W92 ledger](../status/query-cache-closure-20261010.md).
+
+## NFS gateways
+
+The gateway FUSE mount needs export support as well as command opt-in:
+
+```sh
+EFS_COMMANDS=1 EFS_FUSE_EXPORT=1 EFS_TRANSPORT=tcp \
+  ./scripts/client.sh SEED:17432 /mnt/efs -o allow_other
+```
+
+Use the cluster gateway helper for its NFS export setup. The tested protocol is
+NFSv4.0, including macOS clients. A FUSE or NFS restart can stale existing client
+handles; remount affected clients before testing. NFS restart grace can delay new
+opens (90 seconds on Xorinox). Keep the normal gateway mount opted out after
+testing by omitting `EFS_COMMANDS=1`, while retaining `EFS_FUSE_EXPORT=1`.
+NFS credential mapping remains the export administrator's responsibility; a
+client mapped to root does not prove per-user ACL isolation.

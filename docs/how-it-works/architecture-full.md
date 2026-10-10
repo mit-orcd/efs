@@ -1556,7 +1556,7 @@ POSIX core/concurrent/extras and cold persistence gates; eleven retained trees
 verify 78000 files and 724 payload samples, with normal `.efs` opt-out restored.
 
 [W92 closure work](../status/query-cache-closure-20261010.md) remains active. Code
-`1a25d20a193b` is deployed on normal Xorinox files/direct-I/O/TCP services.
+`cf4e365a` is deployed on normal Xorinox files/direct-I/O/TCP services.
 Bounded disk indexes, durable incremental catch-up, row-only folding, aggregate
 retained-cache admission and the [replicated command policy](../status/efs-query-persistent-policy-20261010.md)
 pass full native and private live/cold/fault gates. Ten-million-entry pilots
@@ -1566,17 +1566,38 @@ authoritative-source memory is tracked separately. The final oracle now checks
 all ten rollup fields and sampled inode attributes; full 10m recovery passes. Named native commands,
 fresh Linux NFSv4.0, retained payload recovery and loaded publication also pass.
 
+Bounded external-merge batching (`fd457076`) passes focused ordering, ENOSPC,
+cancellation, full native and complete 10m recovery gates. The queued 2^32
+kernel-cold oracle uses it; subsequent raw batching is included in cf4e365a.
+Fixed-budget raw-record/slot batching passes focused fault, full 100k recovery,
+full native and named two-mount/Mac/Linux NFS gates. The completed 2^32 source
+population is reused by `w92-2p32-raw-batched-v6`; previous builds were
+intentionally superseded with evidence preserved. The replacement, corrected
+cold watcher and real capacity writer remain active.
+
 Remaining gates: the actual 2^32-entry index build/export/cold/mutation run,
-the 400 GiB real-payload write/cold/hash/export run, and Mac NFS execution after
-a privileged stale-mount refresh. These isolated scale fixtures are active; their cold-verification and service
+the 400 GiB real-payload write/cold/hash/export run. Named cf4e365a Mac/Linux
+NFS and native FUSE full oracles pass, as do 96 fresh Mac queries and all
+423 retained payload hashes after cold restart; the captured
+FORGET/handle-recovery ESTALE is fixed. These isolated scale fixtures are active; their cold-verification and service
 restoration checklist is in the closure ledger. Full named 2^32 kernel-cold
-recovery is queued behind the original run’s successful terminal verdict; the
-400 GiB cold handoff is also queued behind its complete write verdict.
+recovery is queued behind the replacement run’s successful terminal verdict
+and the retained original population proof; the
+400 GiB cold handoff is also queued behind its complete write verdict, using
+the current named-binary preflight and listener-readiness checks.
+The current [W92 specification](../status/virtual-find-stats.md) and backlog reference
+the named raw-batched deployment and retain the older checkpoints as history.
 The initial capacity writer stopped on CREATE PROTO after 124983 acknowledged
 files; the unrouted-BUSY retry fix passes regressions/full native, and the fixed
-client rehashed every acknowledged prefix before continuing. W92 is not closed.
-Normal clients remain `.efs` opt-out; test gateway/diagnostic mounts remain opted
-in until platform acceptance, and temporary VM resources await scale cleanup.
+client rehashed every acknowledged prefix before continuing. W92 is not closed. The backlog and virtual-interface overview are reconciled
+with this named deployment and remaining scope. Acceptance audit found missing
+index/stats phase diagnostics; cdc13b88 implements them and passes complete Linux
+native, live two-mount and Mac/Linux NFS gates. Its full ten-million recovery
+passes with 3864520 builder bytes; the actual-entry cold verifier uses this code.
+Normal clients and gateway are restored to `.efs` opt-out after platform
+acceptance; diagnostic mounts are retired. Private scale services and temporary
+VM resources await the remaining gates and cleanup. The completed private
+policy fixture is retired with its data and evidence preserved.
 [Earlier index text](../status/archive/w92-closure-index-history-20261010.md) is preserved.
 
 [W92 incremental-cache implementation](../status/query-cache-incremental-20261010.md)
@@ -1730,7 +1751,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | 0t | **W64** · durable append reservation replay across leader changes | correctness / recovery | partial — durable replay, coordinated cross-group EOF/completion and bounded cleanup pass AMD direct/TCP replay, POSIX/peer, sync-write and cold-byte gates; production sessions and broader failover acceptance remain open ([ledger](../status/replay-readiness-20261008.md)) | [work item](#w64) |
 | 0u | **W65** · daemon exceeds graceful shutdown wait | liveness investigation | closed for supported TCP: six active-fsynced-write leader stops (three direct/three buffered) recover every acknowledged file cold; RDMA deferred | [work item](#w65) |
 | posix-link | **AMD `link_of_symlink` — Python request/test mismatch** | test correctness | root cause proven on native and EFS storage: default os.link requests follow; explicit no-follow works; test correction and full reruns owed | [evidence and fix](../status/amd-link-symlink.md) |
-| virtual-io | **W91/W92 · `.efs/` commands — server snapshots and safe reads** | correctness / performance / access control | in progress — disk index, bounded incremental catch-up, aggregate quota and replicated policy landed; named native/live/cold and Linux NFSv4.0 gates pass; actual 2^32/400 GiB and Mac NFS acceptance remain open | [closure](../status/query-cache-closure-20261010.md) · [persistent policy](../status/efs-query-persistent-policy-20261010.md) |
+| virtual-io | **W91/W92 · `.efs/` commands — server snapshots and safe reads** | correctness / performance / access control | in progress — disk index, bounded incremental catch-up, aggregate quota and replicated policy landed; named native/live/cold and Linux NFSv4.0 gates pass; actual 2^32/400 GiB gates and named virtual-export fix rollout remain open; Mac/Linux NFS candidate oracles pass | [closure](../status/query-cache-closure-20261010.md) · [persistent policy](../status/efs-query-persistent-policy-20261010.md) |
 | gc-obs | **W63** · GC backlog, reclaimed bytes and retry progress are missing | observability enhancement | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w63) |
 | 0e | **W38** · ior-hard fold tombstone without the span's bytes | correctness | code present; dated Oct 5 checkpoint — replay preserves live spans; folds require byte observations; deterministic regression + ASan/UBSan pass; traced real IOR-hard + independent cold hardscan pass (108000 records, bad=0, short=0); nine physical hosts remain; AMD software-RXE fold/GC gate passes, hardware RDMA remains | [full text](#w38--ior-hard-fold-tombstone-without-the-spans-bytes-queue-row-0e) |
 | 2a | **W42** · `df` / `efs-mgmt status` report the 3-node capacity model on any node count | correctness | capacity helper is used by both clients; NUC four-node status/df record 500 GiB for 4 × 187.5 GiB quotas; NUC limited-member write/cold-read/reclaim gate passes; protection debt/repair and named 19810 capacity acceptance remain open | [full text](#w42--df--efs-mgmt-status-report-the-3-node-capacity-model-on-any-node-count-queue-row-2a) |
@@ -5867,22 +5888,29 @@ the original record and withdrawn interpretation remain retained.
 
 ### W92 · .efs/find and .efs/stats server snapshots and large namespace acceptance
 
-Oct 10 closure work is active at the user's request. Aggregate retained-cache
+Oct 10 closure work remains active at the user's request. Aggregate retained-cache
 admission, durable partition checkpoints/catch-up and bounded incremental discovery
-pass focused/full native gates. Ten-million-entry pilots pass full exports,
-retained mutation and cold-hint catch-up with a fixed 3.69 MiB builder. The actual
-2^32-entry attempts are preserved; the current actual-entry run is active on
-the temporarily provisioned source VM (more than 2.2 billion entries populated). Complete native gates pass after bounding private scan
-scratch/tails and row-only stat reuse. Live disabled catch-up, aggregate QUOTA,
-publisher loss and interrupted-cache recovery pass; latest deployment and full
-scale/platform acceptance remain open. Durable single-export policy live/cold,
-quorum, lost-reply, startup-ceiling and storage-error gates pass on the private
-candidate (`49a73b22`); normal Xorinox direct-I/O/TCP rollout is identified
-as `1a25d20a193b`. The real 400 GiB writer
-stopped after 124983 acknowledged files on CREATE PROTO. A valid unrouted BUSY
-probe retry defect is fixed and passes focused plus full native gates; recovery
-rehashes acknowledged payloads before writing more. No full capacity pass is
-claimed. [Closure ledger](../status/query-cache-closure-20261010.md).
+pass focused/full native and private live/fault gates. Ten-million-entry pilots
+pass complete streaming, guest kernel-cold recovery and concurrent retained/new
+exports with all rollup fields and sampled inode attributes checked; builder
+scratch remains 3.69 MiB, separately from authoritative KV memory.
+The actual 2^32-entry process has populated all 4294967296 entries and is building
+its disk catalog; full export/mutation/recovery verdicts remain outstanding.
+Normal Xorinox files/direct-I/O/TCP runs `cf4e365a`, including fixed-budget
+external-merge and raw-record/slot batching. Its full native, Mac NFS, Linux
+NFSv4.0 and native FUSE command/payload oracles pass. The previous cdc13b88
+checkpoint also passed 96 fresh Mac queries and all 423 prior fixture payloads
+after cold restart. The active `w92-2p32-raw-batched-v6` run reuses the complete
+source population; previous build-only runs were intentionally superseded
+with evidence preserved. Its corrected kernel-cold watcher remains queued. Separate index/stats/final persistence phase diagnostics pass native/live/NFS
+gates; the newest ten-million-entry complete recovery passes with 3864520
+builder bytes. Normal mounts are restored with commands disabled; acceptance-only mounts are retired.
+The persistent policy passes live/cold/quorum/lost-reply/ceiling/fault gates.
+The real 400 GiB writer's initial CREATE PROTO failure and acknowledged 124983
+files are preserved. The unrouted BUSY retry fix passes focused/full native;
+the fixed client rehashed all acknowledged prefixes and continues, with its
+complete cold/hash/export verifier queued. Neither large gate is complete.
+[Closure ledger](../status/query-cache-closure-20261010.md).
 
 Oct 10 incremental checkpoint: fixed 1024-item change/ancestor sets reuse immutable
 derived partitions and recompute exact affected rollups, with full-build fallback.

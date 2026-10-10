@@ -1,6 +1,9 @@
 /* Offline synthetic metadata, not real filesystem/data capacity acceptance.
  * Real production KV/catalog formats; bounded generator and streaming oracle.
- * Never deletes a fixture. Each invocation needs a fresh private root. */
+ * Never deletes a fixture. Generation needs a fresh private root; explicit
+ * --populate-only stages it, --resume-build reuses a known complete unmutated
+ * source, and --recover verifies the postmutation source in a fresh process.
+ * The caller owns the source exclusively and retains its population verdict. */
 #include "efs/query_catalog.h"
 #include <errno.h>
 #include <dirent.h>
@@ -144,40 +147,58 @@ static int recover(const char *root,uint64_t n)
 }
 int main(int argc,char **argv)
 {
-    if(argc!=3 && (argc!=4 || strcmp(argv[3],"--recover")))return 2;
+    if(argc!=3 && argc!=4)return 2;
+    int reuse=argc==4 && !strcmp(argv[3],"--resume-build");
+    int populate_only=argc==4 && !strcmp(argv[3],"--populate-only");
+    int recovery=argc==4 && !strcmp(argv[3],"--recover");
+    if(argc==4 && !reuse && !populate_only && !recovery)return 2;
     char *end;errno=0;uint64_t n=strtoull(argv[2],&end,10);
     if(errno || *end || !n || n>(UINT64_C(1)<<32))return 2;
-    if(argc==4)return recover(argv[1],n);
-    if(mkdir(argv[1],0700)){perror("fresh fixture root");return 2;}
+    if(recovery)return recover(argv[1],n);
+    if(!reuse && mkdir(argv[1],0700)){perror("fresh fixture root");return 2;}
     char kvpath[EFS_MAX_PATH],cache[EFS_MAX_PATH];
     if(snprintf(kvpath,sizeof(kvpath),"%s/kv",argv[1])>=(int)sizeof(kvpath) ||
        snprintf(cache,sizeof(cache),"%s/cache",argv[1])>=(int)sizeof(cache))return 2;
+    if(reuse) {
+        struct stat st;
+        if(lstat(argv[1],&st) || !S_ISDIR(st.st_mode) ||
+           lstat(kvpath,&st) || !S_ISDIR(st.st_mode))return 2;
+    }
     struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,4<<20,4};
     struct batch b={0};b.kv=efs_kv_lsm_open(kvpath,&cfg);if(!b.kv)return 1;
     double start=clock_s();uint64_t dirs=n<SHARDS?n:SHARDS;
-    int rc=inode(&b,EFS_ROOT_INO,0,1,dirs);
-    uint64_t completed_files=0;
-    for(unsigned s=0;s<dirs && !rc;s++){
-        char label[32];snprintf(label,sizeof(label),"dir-%04x",s);
-        rc=inode(&b,SHARDS+s,EFS_ROOT_INO,1,population(n,s));
-        if(!rc)rc=name(&b,EFS_ROOT_INO,label,SHARDS+s,1);
-    }
-    if(!rc)rc=flush(&b);
-    for(unsigned s=0;s<dirs && !rc;s++){
-        uint64_t count=population(n,s);
-        for(uint64_t r=0;r<count && !rc;r++){
-            uint64_t g=r*SHARDS+s;rc=inode(&b,file_ino(g),SHARDS+s,0,g&511);
-        }
-        for(uint64_t r=0;r<count && !rc;r++){
-            uint64_t g=r*SHARDS+s;char label[32];snprintf(label,sizeof(label),"file-%016llx",(unsigned long long)g);
-            rc=name(&b,SHARDS+s,label,file_ino(g),0);
+    int rc=EFS_OK;
+    if(!reuse) {
+        rc=inode(&b,EFS_ROOT_INO,0,1,dirs);
+        uint64_t completed_files=0;
+        for(unsigned s=0;s<dirs && !rc;s++){
+            char label[32];snprintf(label,sizeof(label),"dir-%04x",s);
+            rc=inode(&b,SHARDS+s,EFS_ROOT_INO,1,population(n,s));
+            if(!rc)rc=name(&b,EFS_ROOT_INO,label,SHARDS+s,1);
         }
         if(!rc)rc=flush(&b);
-        if(!rc)completed_files+=count;
-        printf("{\"phase\":\"populate\",\"shard\":%u,\"completed_files\":%llu,\"target_files\":%llu,\"elapsed_s\":%.3f,\"rc\":%d}\n",s,(unsigned long long)completed_files,(unsigned long long)n,clock_s()-start,rc);fflush(stdout);
+        for(unsigned s=0;s<dirs && !rc;s++){
+            uint64_t count=population(n,s);
+            for(uint64_t r=0;r<count && !rc;r++){
+                uint64_t g=r*SHARDS+s;rc=inode(&b,file_ino(g),SHARDS+s,0,g&511);
+            }
+            for(uint64_t r=0;r<count && !rc;r++){
+                uint64_t g=r*SHARDS+s;char label[32];snprintf(label,sizeof(label),"file-%016llx",(unsigned long long)g);
+                rc=name(&b,SHARDS+s,label,file_ino(g),0);
+            }
+            if(!rc)rc=flush(&b);
+            if(!rc)completed_files+=count;
+            printf("{\"phase\":\"populate\",\"shard\":%u,\"completed_files\":%llu,\"target_files\":%llu,\"elapsed_s\":%.3f,\"rc\":%d}\n",s,(unsigned long long)completed_files,(unsigned long long)n,clock_s()-start,rc);fflush(stdout);
+        }
+        if(!rc)rc=efs_kv_lsm_flush(b.kv);
+        printf("{\"phase\":\"populated\",\"files\":%llu,\"target_files\":%llu,\"seconds\":%.6f,\"rc\":%d}\n",(unsigned long long)completed_files,(unsigned long long)n,clock_s()-start,rc);fflush(stdout);
+    } else {
+        /* Explicit reuse of a known complete, unmutated private source. No
+         * population success is inferred here: the full export/rollup oracle
+         * below still has to prove every entry before any mutation occurs. */
+        printf("{\"phase\":\"source_reused\",\"files\":%llu}\n",(unsigned long long)n);fflush(stdout);
     }
-    if(!rc)rc=efs_kv_lsm_flush(b.kv);
-    printf("{\"phase\":\"populated\",\"files\":%llu,\"target_files\":%llu,\"seconds\":%.6f,\"rc\":%d}\n",(unsigned long long)completed_files,(unsigned long long)n,clock_s()-start,rc);fflush(stdout);
+    if(populate_only){efs_kv_lsm_close(b.kv);return rc?1:0;}
     struct efs_kv_lsm_snapshot *source=NULL;struct efs_query_catalog *c=NULL,*next=NULL;
     if(!rc)rc=efs_kv_lsm_snapshot_pin(b.kv,64<<20,&source);
     uint64_t samples=0,watermark[4]={1,2,3,4};

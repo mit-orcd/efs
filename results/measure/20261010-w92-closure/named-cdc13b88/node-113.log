@@ -1,0 +1,14 @@
+80dc28b6285a340cb7aea802b7f6cd689df2e6f537f969aa1676ff6665585fd7  /tmp/efs/efsd
+b6b3e8d48f61de0a349d24f464b6c724e280e2a56966aaaa9bc30a35e34849d0  /tmp/efs/efs-fuse
+7fc005ac611c67f6661f2345dd1e923de73dfad86e369b140462cd4ac77081db  /tmp/efs/efs-mgmt
+/home/efs/w92-evidence-cdc13b88/results
+Filesystem      Size  Used Avail Use% Mounted on
+tmpfs           1.4G   40M  1.4G   3% /tmp
+ExecStart={ path=/tmp/efs/efsd ; argv[]=/tmp/efs/efsd --node-id 3 --addr 192.168.122.113 --port 17432 --storage /data1 --quota 100G --direct-io --join 192.168.122.111:17432 ; ignore_errors=no ; start_time=[Sat 2026-10-10 08:30:49 EDT] ; stop_time=[n/a] ; pid=574666 ; code=(null) ; status=0/0 }
+Environment=EFS_MD_RAFT_N=3 EFS_TRANSPORT=tcp
+ActiveState=active
+
+ExecStart={ path=/tmp/efs/efsd ; argv[]=/tmp/efs/efsd --node-id 3 --addr 192.168.122.113 --port 18432 --storage /mnt/w92-capacity-node-20261010 --quota 250G --direct-io --join 192.168.122.111:18432 ; ignore_errors=no ; start_time=[Sat 2026-10-10 05:13:09 EDT] ; stop_time=[n/a] ; pid=250177 ; code=(null) ; status=0/0 }
+Environment=EFS_MD_RAFT_N=3 EFS_TRANSPORT=tcp EFS_QUERY_EXPORT_MAX_MS=86400000
+ActiveState=active
+Sat Oct 10 12:37:32 PM UTC 2026
