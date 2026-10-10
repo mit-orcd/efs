@@ -2853,6 +2853,11 @@ def opt_xattr(d):
         if e.errno in (errno.EOPNOTSUPP, errno.ENOTSUP):
             raise Fail("xattr unsupported: %s" % e, soft=True)
         raise Fail("xattr: %s" % e)
+    if sys.platform.startswith("linux"):
+        expect_err(errno.EINVAL, os.setxattr, p, "user.", b"x")
+        expect_err(errno.EINVAL, os.getxattr, p, "user.")
+        expect_err(errno.EINVAL, os.removexattr, p, "user.")
+        eq(os.getxattr(p, "user.efs"), b"1", "valid xattr preserved")
 
 
 @test

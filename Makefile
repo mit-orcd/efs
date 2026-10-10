@@ -312,6 +312,7 @@ test: all
 	python3 tests/test_rename_flags.py
 	python3 tests/test_attribute_authority_errno.py
 	python3 tests/test_opendir_authority_errno.py
+	python3 tests/test_xattr_names.py
 	python3 tests/test_unlink_authority_errno.py
 	python3 tests/test_fallocate_errno.py
 	python3 tests/test_virtual_export_handles.py

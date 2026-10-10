@@ -6359,6 +6359,8 @@ static int xattr_user_name(const char *name)
      * create pay a Raft round trip for the LSM label. */
     if (strncmp(name, "user.", 5) != 0)
         return -EOPNOTSUPP;
+    if (n == 5)
+        return -EINVAL;
     return 0;
 }
 
