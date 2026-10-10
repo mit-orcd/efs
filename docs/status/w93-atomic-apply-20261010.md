@@ -78,3 +78,30 @@ Raw controls and evidence: `results/measure/20261010-w93-closure/` locally and
 `/data1/efs/w93-closure-20261010/` on NUC. Original failed private stores and
 copied follower metadata remain preserved. The service cluster has not yet
 been redeployed in this turn; experiments remain disabled there.
+
+## Intermittent peer append gate
+
+Frozen `ad69a9973384` full native passes. Its first full 100 ms live run passes
+POSIX 212/212 but peer is 63/64: concurrent append returns EBUSY on client B.
+The original fixture and raw logs remain preserved. A diagnostic-client full
+repeat and a normal-client repeat with only open/close tracing pass 212/212 and
+64/64, plus cold WAL recovery. Eight append/truncate races and an 800-record
+handoff fixture also pass. These repetitions do not prove the first failure's
+exact trigger or establish a hardware ceiling.
+
+Review identifies a definite OPEN policy gap: unlike retained CREATE, OPEN
+calls lease resume once and returns an unresolved BUSY to the application.
+Transient transaction/close-step guards can legitimately leave this exact edge
+unresolved. OPEN now waits on the retained edge within one 30-second budget,
+including inode serialization, FileID and compensating cleanup. It never
+extends an inherited deadline, replaces unknown identity, retries a completed
+rejection, or discards pending ownership. Mutex acquisition is deadline aware.
+IO/NET and terminal failures retain existing error/cleanup behavior.
+
+Actual-source tests cover two BUSY replies then success using one identity,
+terminal known BUSY, inherited deadline expiration, retained unknown edge,
+blocked mutex timeout and IO ownership. The old-source negative control fails
+its first transient-BUSY assertion; the repair passes. Existing shared-open,
+ambiguous OPEN/CLOSE, reopen barrier and stop-retry tests remain passing.
+Rebuild and repeat release-binary native and all live gates before deployment;
+the original intermittent trigger is not claimed reproduced by this unit test.

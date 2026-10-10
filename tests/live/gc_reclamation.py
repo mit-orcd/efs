@@ -231,7 +231,15 @@ def wait(predicate, label, seconds=120):
     raise AssertionError(label+' timed out')
 
 def start(prefer_single_host=False):
-    for i,root in enumerate(roots):
+    # Follower-persistence gates fault n3, which hosts both groups. Start its
+    # other voters first and allow them to elect before n3 joins; otherwise
+    # startup races can make the injected node a leader and invalidate the gate.
+    follower_fault = a.kv_wal_persistence_only or a.applied_checkpoint_replay_only
+    order = (0, 1, 3, 2) if follower_fault else range(len(roots))
+    for i in order:
+        if follower_fault and i == 2:
+            time.sleep(3)
+        root = roots[i]
         root.mkdir(exist_ok=True)
         log=open(work/f'n{i+1}.log','ab');handles.append(log)
         cmd=[a.server_binary or source/'efsd','--node-id',str(i+1),'--addr','127.0.0.1','--port',str(a.port+i),'--storage',root,'--quota',a.fixture_quota or ('16G' if (a.ior_binary or a.gc_bulk_gib) else ('4G' if a.compactor_pressure else '1G')),'--'+('direct-io' if a.mode=='direct' else 'no-direct-io')]

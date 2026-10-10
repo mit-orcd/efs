@@ -15,6 +15,14 @@ source = r"""
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <errno.h>
+#include <unistd.h>
+#include <time.h>
+static _Thread_local uint64_t mock_deadline;
+uint64_t efs_client_rpc_deadline_ms(void){return mock_deadline;}
+void efs_client_rpc_set_deadline_ms(uint64_t d){mock_deadline=d;}
+static uint64_t stats_now_ms(void){struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000+t.tv_nsec/1000000;}
+int efs_client_rpc_past_deadline(void){return mock_deadline && stats_now_ms()>=mock_deadline;}
 struct efs_client g_client;
 struct fuse_file_info { uint64_t fh, lock_owner; };
 typedef uint64_t fuse_ino_t;
@@ -53,7 +61,7 @@ static int flock_armed_take(efs_ino_t ino, uint64_t *owner) { (void)ino; (void)o
 int efs_client_rpc_flock(efs_export_id_t ex, efs_ino_t ino, uint32_t op, uint64_t owner) {
     (void)ex; (void)ino; (void)op; (void)owner; return EFS_OK;
 }
-""" + refs + '\n'.join(function(n) for n in ['efs_open_note', 'efs_open_set_leased', 'efs_close_note', 'efs_open_release_pending', 'efs_open_acquire_fileid','efs_open_acquire', 'efs_fuse_release_ino']) + r"""
+""" + refs + '\n'.join(function(n) for n in ['efs_open_note', 'efs_open_set_leased', 'efs_close_note', 'efs_open_release_pending', 'wb_lock_budget','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid','efs_open_acquire', 'efs_fuse_release_ino']) + r"""
 static void release(void) { struct fuse_file_info fi = {.fh = 42}; assert(!efs_fuse_release_ino(42, &fi)); }
 static void *opener(void *arg) { (void)arg; assert(efs_open_acquire(42) == EFS_OK); return NULL; }
 static void *closer(void *arg) { (void)arg; release(); return NULL; }
