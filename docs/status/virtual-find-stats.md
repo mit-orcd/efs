@@ -18,7 +18,10 @@ measurements; remaining software limits are recorded in that report.
 Earlier findings below are historical; do not mistake the former client tree
 walker or missing server catalog for the current source/deployment state.
 Loaded publication, publisher-loss and restart gates now pass; W92 remains open
-for real 400 GiB and actual 2^32-entry scale, platform execution. Normal Xorinox rollout is identified as `1a25d20a193b`. The [durable single-export policy](efs-query-persistent-policy-20261010.md)
+for real 400 GiB and actual 2^32-entry build/export/recovery acceptance. All
+4294967296 synthetic entries are populated, which alone does not pass the
+index gate. Normal Xorinox runs `1434aa83`; named Mac/Linux NFS and native
+FUSE full oracles, 96 fresh Mac queries and cold retained payload hashes pass. The [durable single-export policy](efs-query-persistent-policy-20261010.md)
 is implemented and passes private live/cold/quorum/lost-reply/ceiling/fault gates. Historical deployment statements below are superseded by these reports.
 
 ## Billions of files — disk-backed, bounded-memory catalog
@@ -54,9 +57,9 @@ namespace passes mutation query oracles; the earlier retained-data refusal is
 historical. Per-generation logical disk budgeting is implemented. The [Oct 10 closure work](query-cache-closure-20261010.md) implements incremental
 exact statistics, durable partition checkpoints/catch-up and aggregate cache
 admission. Native, live cold and disabled/re-enabled payload oracles pass;
-actual scale and the remaining fault/platform acceptance are still open.
-Raising the RAM cap alone cannot close W92. Full architecture implementation and
-these scale gates remain open.
+actual scale acceptance remains open. The current implementation replaces the
+former resident catalog and global refresh passes described above. Raising the
+RAM cap alone cannot close W92; the complete large-scale oracles are still required.
 
 ## Required direction
 

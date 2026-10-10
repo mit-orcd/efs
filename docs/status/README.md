@@ -96,7 +96,8 @@ recovery is queued behind the original run’s successful terminal verdict; the
 400 GiB cold handoff is also queued behind its complete write verdict.
 The initial capacity writer stopped on CREATE PROTO after 124983 acknowledged
 files; the unrouted-BUSY retry fix passes regressions/full native, and the fixed
-client rehashed every acknowledged prefix before continuing. W92 is not closed.
+client rehashed every acknowledged prefix before continuing. W92 is not closed. The backlog and virtual-interface overview are reconciled
+with this named deployment and remaining scope.
 Normal clients and gateway are restored to `.efs` opt-out after platform
 acceptance; diagnostic mounts are retired. Private scale services and temporary
 VM resources await the remaining gates and cleanup.
