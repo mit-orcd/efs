@@ -215,6 +215,8 @@ struct host_fin_item {
 #define HOST_APPLY_RC_MASK (HOST_APPLY_RC_RING - 1)
 
 struct host_group {
+    uint64_t balance_term, balance_since_us, balance_attempt_us;
+    uint32_t balance_voters;
     uint8_t group;
     uint8_t hosted;
     uint32_t voters;
@@ -337,6 +339,7 @@ struct host_waiter {
 struct efs_raft_host {
     struct efsd_server *s;
     int raft_id;
+    int balance_enabled; /* Opt-in until W66 distribution/failover gates pass. */
     int n;
     uint64_t boot_id;
     uint64_t salt;
@@ -6154,6 +6157,41 @@ static int host_checkpoint_retire(struct efs_raft_host *h, const uint64_t *idx,
     return rc;
 }
 
+/* Shared pump, bounded state per hosted group; no extra timer/thread/lease.
+ * Stable placement is a preference. Loss/lag/pressure never weakens quorum. */
+static void host_balance_leaders(struct efs_raft_host *h, uint64_t now)
+{
+    if (!h->balance_enabled) return;
+    for (int i = 0; i < HOST_NGROUPS; i++) {
+        struct host_group *g = &h->g[i];
+        uint64_t term;
+        uint32_t voters;
+        int target, rc;
+        if (!g->r || g->kv_incomplete || efs_raft_role(g->r) != EFS_RAFT_LEADER)
+            continue;
+        term = efs_raft_term(g->r); voters = efs_raft_voters(g->r);
+        if (g->balance_voters != voters) {
+            g->balance_voters = voters; g->balance_since_us = now;
+            g->balance_attempt_us = 0;
+        }
+        if (g->balance_term != term) {
+            g->balance_term = term; g->balance_since_us = now;
+        }
+        /* Let new leadership/configuration settle; avoid repeated handoff
+         * churn when a preferred peer cannot campaign or a trigger is lost. */
+        if (now - g->balance_since_us < 2000000u ||
+            (g->balance_attempt_us && now - g->balance_attempt_us < 30000000u))
+            continue;
+        target = efs_raft_preferred_voter(voters, (unsigned)i);
+        if (target < 0 || target == h->raft_id) continue;
+        rc = efs_raft_transfer(g->r, target);
+        if (rc == EFS_ERR_BUSY) continue; /* Target not durably caught up yet. */
+        g->balance_attempt_us = now;
+        fprintf(stderr, "raft-host: balance group=%u target=%d term=%llu rc=%d\n",
+                g->group, target+1, (unsigned long long)term, rc);
+    }
+}
+
 static void *host_pump(void *arg)
 {
     struct efs_raft_host *h = arg;
@@ -6252,6 +6290,7 @@ static void *host_pump(void *arg)
          * otherwise a new leader with one surviving follower cannot commit
          * its no-op, and fresh reads block the first client proposal forever. */
         host_durable_synced(h);
+        host_balance_leaders(h, now_us_());
         if (obs) {
             t_tick = now_us_() - c0;
             c0 = now_us_();
@@ -8865,6 +8904,11 @@ int server_raft_host_start(struct efsd_server *s)
         return EFS_ERR_INVAL;
     }
 
+    const char *balance = getenv("EFS_METADATA_BALANCE");
+    if (balance && strcmp(balance,"0") && strcmp(balance,"1")) {
+        fprintf(stderr,"raft-host: EFS_METADATA_BALANCE must be 0 or 1\n");
+        return EFS_ERR_INVAL;
+    }
     h = calloc(1, sizeof(*h));
     if (!h)
         return EFS_ERR_NOMEM;
@@ -8875,6 +8919,7 @@ int server_raft_host_start(struct efsd_server *s)
     h->flow_early_retire=early_retire && !strcmp(early_retire,"1"); /* candidate opt-in until acceptance */
     h->group_drain=group_drain && !strcmp(group_drain,"1");
     h->pressure_enabled=pressure && !strcmp(pressure,"1");
+    h->balance_enabled = balance && !strcmp(balance,"1");
     h->s = s;
     h->query_enabled=query_enabled;
     h->raft_id = (int)s->id - 1;

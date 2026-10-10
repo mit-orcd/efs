@@ -10,12 +10,15 @@ p.add_argument('--server',type=Path,required=True)
 p.add_argument('--work',type=Path,required=True)
 p.add_argument('--samples',type=int,default=100)
 p.add_argument('--port',type=int,default=27440)
+p.add_argument('--balance',action='store_true',help='enable and verify preferred metadata leader placement on the owned fixture')
 p.add_argument('--four-voters',action='store_true',help='explicitly grow both owned private groups to four voters; never changes installed topology')
 p.add_argument('--mode',choices=('direct','buffered'),default='direct',help='owned daemon storage mode; functional default is direct/TCP')
+p.add_argument('--outage-seconds',type=int,default=0,help='with recovery, verify stable successful reads and no leader-term churn while each preferred leader is absent')
 p.add_argument('--recovery',action='store_true',help='after timing, stop each group leader and cold restart all owned daemons')
 a=p.parse_args();assert 10<=a.samples<=1000
+assert 0<=a.outage_seconds<=120 and (not a.outage_seconds or a.recovery)
 a.work.mkdir(parents=True,exist_ok=False)
-env=dict(os.environ,EFS_MD_RAFT_N='4',EFS_TRANSPORT='tcp',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_READ_PROF='1',EFS_RAFT_OBS='1',EFS_DIRECT_IO='1' if a.mode=='direct' else '0')
+env=dict(os.environ,EFS_MD_RAFT_N='4',EFS_TRANSPORT='tcp',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_READ_PROF='1',EFS_RAFT_OBS='1',EFS_DIRECT_IO='1' if a.mode=='direct' else '0',EFS_METADATA_BALANCE='1' if a.balance else '0')
 procs=[];logs=[];mutation_attempts=[];stopped=set();commands=[];configuration=[]
 for port in range(a.port,a.port+4):
  with socket.socket() as s:
@@ -63,6 +66,16 @@ try:
     return status if all(re.search(rf'group {group} hosted=1 .*voters=0xf joint=0',row['text']) for row in status) else None
    wait(configured)
 
+ placement=[]
+ if a.balance:
+  def balanced():
+   status=snapshot()
+   expected={0:0,2:1 if a.four_voters else 2}
+   for group,rid in expected.items():
+    leaders=[node for node,row in enumerate(status) if re.search(rf'group {group} hosted=1 role=LEADER ',row['text'])]
+    if leaders!=[rid]:return None
+   return status
+  placement=wait(balanced,45)
  targets={};parents={};creation=[]
  for i in range(64):
   directory=ino(mutation('raft-create',1,f'd-{i}','040755'))
@@ -73,7 +86,7 @@ try:
   if group not in targets:targets[group]=file;parents[group]=directory
   if len(targets)==2:break
  assert len(targets)==2,('both placement classes required',creation)
- rows={'mode':a.mode,'transport':'tcp','commands':commands,'four_voters':a.four_voters,'configuration':configuration,'targets':targets,'parents':parents,'creation':creation,'before':snapshot(),'mutation_attempts':mutation_attempts,'cells':{}}
+ rows={'mode':a.mode,'transport':'tcp','commands':commands,'four_voters':a.four_voters,'balance':a.balance,'balanced_status':placement,'configuration':configuration,'targets':targets,'parents':parents,'creation':creation,'before':snapshot(),'mutation_attempts':mutation_attempts,'cells':{}}
  def reads(key,node,file):
   samples=[call(node,'raft-getattr',file) for _ in range(a.samples)]
   assert all(ok(r) for r in samples),(key,[r for r in samples if not ok(r)])
@@ -121,15 +134,42 @@ try:
    node=wait(leader)-1
    procs[node].terminate();procs[node].wait(timeout=30);stopped.add(node)
    verify(f'group-{group}-leader-{node+1}-stopped')
+   if a.outage_seconds:
+    def leaders_now():
+     state={}
+     for peer in range(4):
+      if peer in stopped:continue
+      row=call(peer,'raft-status')
+      assert row['exit']==0,row
+      for g in (0,2):
+       match=re.search(rf'group {g} hosted=1 role=LEADER leader=\d+ term=(\d+)',row['text'])
+       if match:
+        assert g not in state,('multiple leaders during outage',state,row)
+        state[g]=(peer+1,int(match.group(1)))
+     assert len(state)==2,('missing leader during outage',state)
+     return state
+    settled=leaders_now();outage=[];until=time.monotonic()+a.outage_seconds
+    while time.monotonic()<until:
+     state=leaders_now()
+     assert state==settled,('leadership churn with unavailable preferred peer',settled,state)
+     for peer in range(4):
+      if peer in stopped:continue
+      for g,file in targets.items():
+       row=call(peer,'raft-getattr',file)
+       assert ok(row) and ino(row)==file,('outage read failed',peer,g,row)
+       outage.append({'node':peer+1,'group':g,**row})
+     time.sleep(1)
+    rows['recovery'][-1]['outage']={'seconds':a.outage_seconds,'leaders':settled,'reads':outage}
    restart(node)
    verify(f'group-{group}-leader-rejoined')
+   if a.balance:rows['recovery'][-1]['balanced_status']=wait(balanced,45)
   for node,proc in enumerate(procs):
    proc.terminate()
   for node,proc in enumerate(procs):
    proc.wait(timeout=30);stopped.add(node)
   for node in range(4):restart(node)
   verify('all-daemons-cold-restarted')
-  rows['cold_status']=snapshot()
+  rows['cold_status']=wait(balanced,45) if a.balance else snapshot()
  (a.work/'results.json').write_text(json.dumps(rows,indent=2)+'\n')
  print(json.dumps({k:{m:v[m] for m in ('p50_ms','p95_ms','p99_ms','max_ms')} for k,v in rows['cells'].items()},indent=2),flush=True)
 finally:

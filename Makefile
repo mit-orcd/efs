@@ -365,6 +365,7 @@ test: all
 	./tests/test_data
 	./tests/test_kv
 	./tests/test_admission
+	python3 tests/test_metadata_balance.py
 	python3 tests/test_host_pressure.py
 	python3 tests/test_host_outbox.py
 	python3 tests/test_host_flow.py
