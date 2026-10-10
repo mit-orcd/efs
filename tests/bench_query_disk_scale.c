@@ -43,7 +43,7 @@ static int name(struct batch *b,efs_ino_t parent,const char *name,efs_ino_t ino,
 }
 static efs_ino_t file_ino(uint64_t g){return ((g/SHARDS+2)<<12)|(g%SHARDS);}
 static uint64_t population(uint64_t n,unsigned s){return n<=s?0:(n-1-s)/SHARDS+1;}
-struct oracle { const struct efs_query_catalog *catalog;uint64_t n,count,seen[SHARDS],samples; };
+struct oracle { const struct efs_query_catalog *catalog;uint64_t n,count,seen[SHARDS],samples;unsigned changed; };
 static int emit(void *ctx,const struct efs_name_entry *e,const char *path)
 {
     struct oracle *o=ctx;unsigned shard;unsigned long long index;int length=0;
@@ -52,29 +52,30 @@ static int emit(void *ctx,const struct efs_name_entry *e,const char *path)
     if(g>=o->n || g%SHARDS!=shard || g!=o->seen[shard]*SHARDS+shard ||
        e->parent!=SHARDS+shard || e->dentry.ino!=file_ino(g) || e->dentry.generation!=1)return EFS_ERR_PROTO;
     o->seen[shard]++;o->count++;
+    if(o->count%1000000==0){printf("{\"phase\":\"export-progress\",\"count\":%llu}\n",(unsigned long long)o->count);fflush(stdout);}
     if(g%8191==0 || g+1==o->n){
         struct efs_meta_row row;struct efs_meta_stat st;
         int rc=efs_query_catalog_inode(o->catalog,file_ino(g),&row,&st);
         if(rc)return rc;
-        if(row.parent!=SHARDS+shard || !S_ISREG(row.mode) || st.size!=(g&511))return EFS_ERR_PROTO;
+        if(row.parent!=SHARDS+shard || !S_ISREG(row.mode) || st.size!=((g&511)+(g==0?o->changed:0)))return EFS_ERR_PROTO;
         o->samples++;
     }
     return 0;
 }
-static int check(const struct efs_query_catalog *c,uint64_t n,int stream,uint64_t *samples)
+static int check(const struct efs_query_catalog *c,uint64_t n,int stream,uint64_t *samples,unsigned changed)
 {
     uint64_t dirs=n<SHARDS?n:SHARDS,tail=n%512;
     struct efs_query_rollup r;int rc=efs_query_catalog_stats(c,EFS_ROOT_INO,&r);
-    uint64_t bytes=(n/512)*UINT64_C(130816)+tail*(tail?tail-1:0)/2;
+    uint64_t bytes=(n/512)*UINT64_C(130816)+tail*(tail?tail-1:0)/2+changed;
     if(rc)return rc;
     if(r.tree_files!=n || r.tree_dirs!=dirs || r.tree_bytes!=bytes || r.imm_dirs!=dirs)return EFS_ERR_PROTO;
     for(unsigned s=0;s<dirs;s++){
         rc=efs_query_catalog_stats(c,SHARDS+s,&r);if(rc)return rc;
         uint64_t count=population(n,s);
-        if(r.imm_files!=count || r.tree_files!=count || r.tree_bytes!=count*(s&511))return EFS_ERR_PROTO;
+        if(r.imm_files!=count || r.tree_files!=count || r.tree_bytes!=count*(s&511)+(s==0?changed:0))return EFS_ERR_PROTO;
     }
     if(stream){
-        struct oracle o={.catalog=c,.n=n};uint64_t cursor=0;
+        struct oracle o={.catalog=c,.n=n,.changed=changed};uint64_t cursor=0;
         do{
             uint64_t before=cursor;
             rc=efs_query_catalog_page(c,EFS_ROOT_INO,EFS_NAME_PREFIX,"file-",0,&cursor,4096,NULL,NULL,emit,&o);
@@ -127,7 +128,7 @@ int main(int argc,char **argv)
         start=clock_s();rc=efs_query_catalog_build_disk(cache,source,c,4<<20,NULL,NULL,&next);
         double elapsed=clock_s()-start;
         double verify_start=clock_s();
-        if(!rc)rc=check(next,n,round==0,&samples);
+        if(!rc)rc=check(next,n,round==0,&samples,0);
         double verify_elapsed=clock_s()-verify_start;
         printf("{\"phase\":\"build\",\"round\":%u,\"files\":%llu,\"seconds\":%.6f,\"builder_bytes\":%llu,\"source_bytes\":%llu,\"verify_seconds\":%.6f,\"samples\":%llu,\"rc\":%d}\n",round,(unsigned long long)n,elapsed,(unsigned long long)efs_query_catalog_bytes(next),(unsigned long long)efs_kv_lsm_snapshot_bytes(source),verify_elapsed,(unsigned long long)samples,rc);fflush(stdout);
         efs_query_catalog_free(c);c=next;next=NULL;
@@ -137,8 +138,24 @@ int main(int argc,char **argv)
     b.kv=efs_kv_lsm_open(kvpath,&cfg);if(!b.kv)rc=EFS_ERR_IO;
     if(!rc)rc=efs_kv_lsm_snapshot_pin(b.kv,64<<20,&source);
     if(!rc)rc=efs_query_catalog_restore_disk(cache,source,watermark,4<<20,&c);
-    if(!rc)rc=check(c,n,0,&samples);
+    if(!rc)rc=check(c,n,0,&samples,0);
     printf("{\"phase\":\"cold\",\"files\":%llu,\"rc\":%d}\n",(unsigned long long)n,rc);fflush(stdout);
+    /* One inode-only change must update all aliases/ancestors while retaining
+     * the old snapshot. Verify every exported entry again after the refresh. */
+    if(!rc)rc=inode(&b,file_ino(0),SHARDS,0,1);
+    if(!rc)rc=flush(&b);
+    efs_kv_lsm_snapshot_release(source);source=NULL;
+    if(!rc)rc=efs_kv_lsm_snapshot_pin(b.kv,64<<20,&source);
+    start=clock_s();
+    if(!rc)rc=efs_query_catalog_build_disk(cache,source,c,4<<20,NULL,NULL,&next);
+    double mutation_elapsed=clock_s()-start,verify_start=clock_s();
+    if(!rc)rc=check(c,n,0,&samples,0);
+    if(!rc)rc=check(next,n,1,&samples,1);
+    printf("{\"phase\":\"mutation\",\"files\":%llu,\"seconds\":%.6f,\"verify_seconds\":%.6f,\"builder_bytes\":%llu,\"source_bytes\":%llu,\"rebuilt\":%u,\"refolded\":%u,\"rc\":%d}\n",
+        (unsigned long long)n,mutation_elapsed,clock_s()-verify_start,
+        (unsigned long long)efs_query_catalog_bytes(next),(unsigned long long)efs_kv_lsm_snapshot_bytes(source),
+        efs_query_catalog_rebuilt(next),efs_query_catalog_refolded(next),rc);fflush(stdout);
+    efs_query_catalog_free(next);next=NULL;
     efs_query_catalog_free(c);efs_kv_lsm_snapshot_release(source);if(b.kv)efs_kv_lsm_close(b.kv);
     return rc?1:0;
 }

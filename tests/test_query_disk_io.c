@@ -195,6 +195,12 @@ int main(void)
     if(fd>=0){CHECK(!io_at(fd,nodes,sizeof(nodes),0,1));close(fd);}
     read_calls=0;CHECK(!locate(d,16*8192,&found,&at));
     CHECK(found.row.ino==16*8192 && at==15 && read_calls==1);
+    read_calls=0;CHECK(!locate(d,16*8192,&found,&at) && !read_calls);
+    found.stat.size=123;CHECK(!node_at(d,0,15,&found,1));
+    CHECK(!locate(d,16*8192,&found,&at) && found.stat.size==123);
+    d->inode_epoch=UINT64_MAX;
+    found.stat.size=456;CHECK(!node_at(d,0,15,&found,1));
+    CHECK(!locate(d,16*8192,&found,&at) && found.stat.size==456 && d->inode_epoch==UINT64_MAX);
     CHECK(locate(d,0,&found,NULL)==EFS_ERR_NOT_FOUND);
     CHECK(locate(d,3*4096,&found,NULL)==EFS_ERR_NOT_FOUND);
     CHECK(locate(d,32*8192,&found,NULL)==EFS_ERR_NOT_FOUND);
@@ -312,6 +318,10 @@ int main(void)
             unsigned populated=0;for(unsigned i=0;i<SHARDS;i++)populated+=old->part[i].count!=0;
             CHECK(raw_syncs==populated && index_syncs==populated);
             uint64_t wm[4]={1,2,3,4};CHECK(!efs_query_disk_checkpoint(old,wm));
+            read_calls=0;
+            CHECK(!efs_query_disk_build(cache,source,old,4<<20,NULL,NULL,&next));
+            CHECK(read_calls==0); /* reuse performs no inode/dentry discovery */
+            efs_query_disk_free(next);next=NULL;
             uint64_t saved_total=aggregate_limit;aggregate_limit=1;
             CHECK(efs_query_disk_build(cache,source,old,4<<20,NULL,NULL,&next)==EFS_ERR_QUOTA && !next);
             CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
@@ -333,7 +343,7 @@ int main(void)
             CHECK(write_faults==1 && !fail_derived_after);
             CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
             CHECK(!efs_query_disk_inode(next,file,NULL,NULL));efs_query_disk_free(next);next=NULL;
-            const char kinds_to_fail[]={'r','i','n','d','m'};
+            const char kinds_to_fail[]={'r','i','n','d','a','m'};
             for(unsigned i=0;i<sizeof(kinds_to_fail);i++){
                 fail_sync_kind=kinds_to_fail[i];sync_faults=0;
                 CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,&next)==EFS_ERR_IO && !next);

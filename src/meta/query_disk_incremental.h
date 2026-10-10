@@ -22,8 +22,6 @@ static int changed_add(struct incremental *s,efs_ino_t ino)
     memmove(s->changed+at+1,s->changed+at,(s->changes-at)*sizeof(*s->changed));
     s->changed[at]=ino;s->changes++;return EFS_OK;
 }
-static int changed_has(const struct incremental *s,efs_ino_t ino)
-{ unsigned at=ino_lower(s->changed,s->changes,ino);return at<s->changes && s->changed[at]==ino; }
 static unsigned dir_lower(const struct incremental *s,efs_ino_t ino)
 {
     unsigned lo=0,hi=s->count;
@@ -121,6 +119,61 @@ static int changed_dentries(struct efs_query_disk *d,struct efs_query_disk *old,
     }
     return rc;
 }
+/* Each parent-shard index is sorted by child inode. At most 4096 bounded
+ * seeks discover aliases, with no scan of unrelated namespace names. */
+static int aliases_dirty(struct efs_query_disk *d,struct incremental *s,efs_ino_t ino)
+{
+    for(uint32_t shard=0;shard<SHARDS;shard++){
+        if(cancelled(d))return EFS_ERR_BUSY;
+        uint64_t lo=0,hi=d->part[shard].names;struct disk_alias alias;int rc=EFS_OK;
+        while(lo<hi){uint64_t mid=lo+(hi-lo)/2;
+            rc=disk_io(d,shard,'a',&alias,sizeof(alias),mid*sizeof(alias),0);if(rc)return rc;
+            if(alias.child<ino)lo=mid+1;else hi=mid;}
+        for(;lo<d->part[shard].names;lo++){
+            rc=disk_io(d,shard,'a',&alias,sizeof(alias),lo*sizeof(alias),0);if(rc)return rc;
+            if(alias.child!=ino)break;
+            if(alias.ordinal>=d->part[shard].names)return EFS_ERR_PROTO;
+            rc=dirty_add(d,s,alias.parent);if(rc)return rc;
+        }
+    }
+    return EFS_OK;
+}
+struct parent_fold { struct efs_query_disk *disk;struct incremental *state;uint32_t shard; };
+static int parent_fold_entry(void *user,const uint8_t *key,uint32_t kn,const uint8_t *value,uint32_t vn)
+{
+    struct parent_fold *ctx=user;struct efs_query_disk *d=ctx->disk;
+    if(cancelled(d))return EFS_ERR_BUSY;
+    struct efs_name_entry e;int rc=entry_from(key,kn,value,vn,&e);if(rc)return rc;
+    if(!e.dentry.ino || e.dentry.type==EFS_META_DENT_TOMBSTONE)return EFS_OK;
+    struct dirty_dir *parent=dirty_find(ctx->state,e.parent),*child_dir=dirty_find(ctx->state,e.dentry.ino);
+    if(!parent && !child_dir)return EFS_OK;
+    struct disk_node p,c;uint32_t chosen;
+    if(parent)p=parent->node;else rc=locate(d,e.parent,&p,NULL);
+    if(!rc)rc=chosen_shard(d,&p.row,&e,&chosen);
+    if(rc)return rc;
+    if(chosen!=ctx->shard)return EFS_OK;
+    if(child_dir)c=child_dir->node;else rc=locate(d,e.dentry.ino,&c,NULL);
+    if(rc)return rc;
+    if(!S_ISDIR(p.row.mode) || c.row.generation!=e.dentry.generation || c.row.ino==e.parent){rc=EFS_ERR_PROTO;return rc;}
+    if(S_ISDIR(c.row.mode) && child_dir){
+        if(child_dir->node.link.parent || c.row.parent!=e.parent){rc=EFS_ERR_PROTO;return rc;}
+        child_dir->node.link=e;
+    }
+    if(!parent)return EFS_OK;
+    struct efs_query_rollup *r=&parent->node.rollup;int has=r->imm_files+r->imm_dirs!=0;
+    if(S_ISDIR(c.row.mode))r->imm_dirs++;
+    else{if(UINT64_MAX-r->imm_bytes<c.stat.size){rc=EFS_ERR_QUOTA;return rc;}r->imm_files++;r->imm_bytes+=c.stat.size;}
+    expand(&r->imm_tmin,&r->imm_tmax,low_time(&c.stat),high_time(&c.stat),has);
+    if(S_ISDIR(c.row.mode)){
+        if(child_dir)parent->pending++;
+        else{
+            int treehas=r->tree_files || r->tree_dirs;
+            rc=rollup_tree_add(r,c.rollup.tree_files,c.rollup.tree_dirs,c.rollup.tree_bytes);if(rc)return rc;
+            if(c.rollup.tree_files || c.rollup.tree_dirs)expand(&r->tree_tmin,&r->tree_tmax,c.rollup.tree_tmin,c.rollup.tree_tmax,treehas);
+        }
+    }
+    return EFS_OK;
+}
 static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old)
 {
     struct incremental s={0};int rc=EFS_OK;
@@ -142,19 +195,8 @@ static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old
         if(lookup){rc=lookup;break;}
         if(S_ISDIR(n.row.mode))rc=dirty_add(d,&s,n.row.ino);
     }
-    /* Every live alias of a changed inode matters. Removed/renamed old edges
-     * already invalidated their parents in changed_dentries; scanning old
-     * aliases again adds no dependency. Keep discovery bounded in RAM. */
-    if(!rc && s.changes){
-        struct efs_query_disk *view=d;
-        for(uint32_t shard=0;shard<SHARDS && !rc;shard++)for(uint64_t i=0;i<view->part[shard].names && !rc;i++){
-            if(cancelled(d)){rc=EFS_ERR_BUSY;break;}
-            struct slot slot;uint8_t key[EFS_KV_KEY_MAX],val[VALUE_MAX];struct efs_name_entry e;
-            rc=read_record(view,shard,view->part[shard].begin[1]+i,&slot,key,val);
-            if(!rc)rc=entry_from(key,slot.key_len,val,slot.value_len,&e);
-            if(!rc && e.dentry.type!=EFS_META_DENT_TOMBSTONE && changed_has(&s,e.dentry.ino))rc=dirty_add(d,&s,e.parent);
-        }
-    }
+    /* Removed/renamed old edges already invalidated their parents above. */
+    for(unsigned i=0;i<s.changes && !rc;i++)rc=aliases_dirty(d,&s,s.changed[i]);
     /* Sorted insertion can move the current entry: process an explicit done
      * bit rather than an index walk that could skip newly inserted ancestors. */
     while(!rc){
@@ -173,39 +215,17 @@ static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old
         memset(&s.dirs[i].node.link,0,sizeof(s.dirs[i].node.link));
         s.dirs[i].node.children=0;s.dirs[i].done=0;
     }
-    for(uint32_t shard=0;shard<SHARDS && !rc && s.count;shard++)for(uint64_t i=0;i<d->part[shard].names && !rc;i++){
-        if(cancelled(d)){rc=EFS_ERR_BUSY;break;}
-        struct slot slot;uint8_t key[EFS_KV_KEY_MAX],val[VALUE_MAX];struct efs_name_entry e;
-        rc=read_record(d,shard,d->part[shard].begin[1]+i,&slot,key,val);
-        if(!rc)rc=entry_from(key,slot.key_len,val,slot.value_len,&e);
-        if(rc)break;
-        if(!e.dentry.ino || e.dentry.type==EFS_META_DENT_TOMBSTONE)continue;
-        struct dirty_dir *parent=dirty_find(&s,e.parent),*child_dir=dirty_find(&s,e.dentry.ino);
-        if(!parent && !child_dir)continue;
-        struct disk_node p,c;uint32_t chosen;
-        if(parent)p=parent->node;else rc=locate(d,e.parent,&p,NULL);
-        if(!rc)rc=chosen_shard(d,&p.row,&e,&chosen);
-        if(rc)break;
-        if(chosen!=shard)continue;
-        if(child_dir)c=child_dir->node;else rc=locate(d,e.dentry.ino,&c,NULL);
-        if(rc)break;
-        if(!S_ISDIR(p.row.mode) || c.row.generation!=e.dentry.generation || c.row.ino==e.parent){rc=EFS_ERR_PROTO;break;}
-        if(S_ISDIR(c.row.mode) && child_dir){
-            if(child_dir->node.link.parent || c.row.parent!=e.parent){rc=EFS_ERR_PROTO;break;}
-            child_dir->node.link=e;
-        }
-        if(!parent)continue;
-        struct efs_query_rollup *r=&parent->node.rollup;int has=r->imm_files+r->imm_dirs!=0;
-        if(S_ISDIR(c.row.mode))r->imm_dirs++;
-        else{if(UINT64_MAX-r->imm_bytes<c.stat.size){rc=EFS_ERR_QUOTA;break;}r->imm_files++;r->imm_bytes+=c.stat.size;}
-        expand(&r->imm_tmin,&r->imm_tmax,low_time(&c.stat),high_time(&c.stat),has);
-        if(S_ISDIR(c.row.mode)){
-            if(child_dir)parent->pending++;
-            else{
-                int treehas=r->tree_files || r->tree_dirs;
-                rc=rollup_tree_add(r,c.rollup.tree_files,c.rollup.tree_dirs,c.rollup.tree_bytes);if(rc)break;
-                if(c.rollup.tree_files || c.rollup.tree_dirs)expand(&r->tree_tmin,&r->tree_tmax,c.rollup.tree_tmin,c.rollup.tree_tmax,treehas);
-            }
+    /* Refold only affected parent prefixes. Inspect all possible layout
+     * lanes and use the same placement rule as a fresh fold; this also
+     * preserves validation when a source bitmap is incomplete. */
+    for(unsigned pi=0;pi<s.count && !rc;pi++){
+        struct efs_meta_row *row=&s.dirs[pi].node.row;
+        unsigned lanes=row->layout==EFS_META_LAYOUT_LOCAL?1:EFS_META_LANES;
+        for(unsigned lane=0;lane<lanes && !rc;lane++){
+            struct parent_fold ctx={d,&s,efs_kv_lane_shard(row->ino,(uint8_t)lane)};
+            uint8_t prefix[EFS_KV_KEY_MAX];uint32_t length;
+            rc=efs_kv_key_dentry_prefix(ctx.shard,row->ino,prefix,&length);
+            if(!rc)rc=raw_prefix(d,prefix,length,parent_fold_entry,&ctx);
         }
     }
     for(unsigned i=0;i<s.count && !rc;i++){

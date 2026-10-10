@@ -41,7 +41,7 @@ and preservation of the old checkpoint after aggregate refusal. Existing mutatio
 retained-view, partial IO and fsync tests and the complete native suite pass. Logs are retained in
 [closure evidence](../../results/measure/20261010-w92-closure/).
 
-The root scan is proportional to generation file count (at most four partition
+The root scan is proportional to generation file count (at most five partition
 files per populated shard per generation), not file cardinality; costs under
 long-lived exports still need measurement. Aggregate admission alone does not
 finish durable incremental recovery or the scale gates.
@@ -159,3 +159,73 @@ transaction folding) pass. A detached ten-million-file native-format scale case
 is running in the same isolated fixture. Alias discovery and affected-parent edge
 folding still need their global stream scans removed; this checkpoint is partial
 bounded-discovery progress, not W92 closure.
+
+## Indexed alias discovery and affected-parent folds
+
+Disk manifest version 5 adds a 24-byte reverse-alias record per physical dentry
+(child inode, parent inode, raw ordinal), sorted per parent-shard by child inode.
+Names and aliases share one bounded external merge-sort implementation. Unchanged
+partitions retain both indexes by immutable links; new alias files participate in
+fsync, content-digest, cold-restore and quota gates. Alias sorting reserves two
+24-byte copies per dentry conservatively, in addition to name-sort work.
+
+At most 4096 binary seeks per changed inode replace the global alias stream scan.
+All matching hardlink parents are invalidated. Affected directory aggregates read
+only their dentry prefixes: one lane for LOCAL, at most 64 for HASHED/SPLITTING,
+using the same authoritative-placement test as fresh folds. Changed raw partitions
+still stream and compare their own records; exceeding the 1024 change/ancestor
+bound triggers an explicit bounded-memory full background rebuild. No request
+access builds a catalog. Work is bounded in memory, not promised constant time.
+
+A fixed 64-entry decoded inode cache removes repeated binary probes for hot parent
+directories. Derived writes invalidate overlapping entries before the syscall,
+including failed/partial writes; an epoch prevents inserting a stale concurrent
+read. Epoch saturation disables new insertions. Immutable name pages use their
+canonical persisted records plus the placement check, avoiding an identical raw
+point lookup per result. This does not change permissions or snapshot lifetime.
+
+The rich RAM/full-rebuild oracle, 12,000-file external-sort/retained-view gate and
+IO/fsync/cancellation/overflow gates pass. Added tests prove unchanged reuse performs
+zero inode/dentry discovery reads, cache hits avoid reads, and derived writes and
+epoch exhaustion preserve fresh results. A 4,000-file smoke test checks every file
+before and after one inode-only mutation and verifies the old snapshot's totals;
+mutation rebuilds one raw partition and refolds two inodes. Accounted builder
+memory is 3,864,480 bytes, below 4 MiB. The complete native suite passes; live gates remain pending for
+this checkpoint.
+
+The preceding version-4 ten-million-file run completed successfully: fresh build
+259.494 s, unchanged refresh 0.475 s, full export oracle 166.327 s, builder
+3,672,472 bytes and whole-process maximum RSS 42,424 KiB. Every exported file
+passed the independent sequence/identity oracle; close/reopen restore also passed.
+Its source NOSYNC, warm/shared VM environment and isolated compressed fixture are
+unchanged limitations. See [raw ten-million evidence](../../results/measure/20261010-w92-closure/scale-10m-v4/).
+These are observed pilots, not extrapolated 2^32 acceptance. A version-5 repeat
+with an inode-only mutation and retained/full export oracles is next.
+
+## Cardinality and budget audit
+
+| Quantity / owner | Representation and bound | Consequence |
+|---|---|---|
+| Global disk-catalog inode count, rollup counts/bytes, raw offsets | uint64; tree additions and positional IO checked | 2^32 distributed files fit arithmetic; overflow refuses a candidate |
+| Raw records per partition | uint64 in manifest; builder/restore reject above UINT32_MAX | at most 4,294,967,295 records across the six raw families per partition, not that many files plus unlimited extra records |
+| Global name cursor | uint64: shard in upper bits, 32-bit row; terminal `4096 << 32` | 4096 partitions, bounded resume position; no 32-bit global file count |
+| Directory metadata nents/nlink | uint32 | individual directory limits still apply; distributed layout does not make these fields 64-bit |
+| Native disk node/name/alias records | versioned local ABI; file digests and expected lengths checked | v5 adds aliases; earlier derived formats rebuild, no authoritative-format upgrade |
+| Positional disk IO | checked against INT64_MAX before pread/pwrite | never wraps a signed filesystem offset |
+| RAM reference backend | uint32 node/edge ordinals and configured catalog budget | retained for differential tests; not the billions-of-files backend |
+| Work counters | uint32 refold count saturates; rebuilt partitions at most 4096 | diagnostic work counters do not define namespace size |
+| Incremental changes/ancestors | 1024 entries each, sorted fixed arrays | overflow triggers a full bounded-memory background rebuild, not silent omission |
+| Lane dependencies / decoded inode cache | 64-bit filter per partition; 64 decoded nodes | fixed resident allocations; filter collisions only add work |
+| Source snapshot admission | 64 MiB host limit, complete retained source allocation charged | segment objects/indexes borrowed from authoritative KV are outside the cache snapshot allocation and included in process RSS measurements |
+| Source revision checkpoints | 4096 uint64 counters, fixed sidecar and 128-bit lineage | saturation refuses comparison; invalid history forces derived rebuilding |
+| Query page | uint32 visit budget, at most 1,000,000 visits; requested results at most 10,000 | bounded per call; full export resumes uint64 cursor across pages |
+| Wire output / server reply allocation | output at most 16 MiB; aggregate reply admission 64 MiB | larger namespaces stream; no complete result buffered on server |
+| Authorization scratch / paged export lease | 8192 fixed authorization entries; one server page session, 60 s idle / 1 h total lease | concurrent exporters may receive BUSY; expired sessions refuse stale continuation |
+| Python display/export | display at most 10,000 entries; file export consumes pages of 1000 | ordering a bounded display is not sorting every file in RAM |
+| Cache logical disk quotas | default 16 GiB generation, 32 GiB root; each configurable up to 16 TiB | scale requires explicit provision/configuration; shared links charged conservatively |
+
+The native cache working estimate includes fixed record/sort buffers and candidate
+work, rather than allocating an array per namespace inode. Linux v5 smoke accounts
+3,864,480 bytes under the 4 MiB exercised builder budget. These arithmetic checks
+and pilots do not substitute for the required 2^32 actual-entry synthetic gate,
+concurrent load/freshness measurements or staged real-filesystem acceptance.

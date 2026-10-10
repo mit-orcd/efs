@@ -1541,7 +1541,9 @@ with fixed 3.47 MiB builder memory. Durable catch-up, full scale and deployment
 gates remain in progress. Durable partition checkpoints and restart catch-up now
 pass focused and full native private-build gates; live validation is pending.
 A fixed dependency filter also passes differential/fault gates; the ten-million
-synthetic-file case is running.
+synthetic-file case passes complete export and cold oracles. Compact alias seeks
+and affected-parent folds pass focused and full native gates; their live and
+scale repeat validation remains pending.
 
 [W92 incremental-cache implementation](../status/query-cache-incremental-20261010.md)
 tracks bounded change/ancestor sets, immutable partition reuse, exact directory
