@@ -89,7 +89,7 @@ static void rebuild_cache_test(void)
     CHECK(!efs_meta_apply_create_file(kv,&attrs,dir,S_IFREG|0644,"file",&file));
     struct efs_kv_lsm_snapshot *source=NULL;struct efs_query_disk *disk=NULL;
     CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));
-    CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,&disk));
+    CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&disk));
     if(disk){
         struct disk_node retained;CHECK(!locate(disk,dir,&retained,NULL));
         CHECK(retained.link.parent==EFS_ROOT_INO);
