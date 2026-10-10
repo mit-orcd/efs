@@ -18,6 +18,10 @@
 #include <sys/file.h>
 #include <sys/statvfs.h>
 #include <unistd.h>
+#ifdef __linux__
+#include <linux/fs.h>
+#include <sys/ioctl.h>
+#endif
 
 #define SHARDS 4096
 #define KINDS 6
@@ -54,6 +58,7 @@ struct efs_query_disk {
     char path[EFS_MAX_PATH];
     struct disk_part part[SHARDS];
     struct fd_slot fds[FD_CACHE];
+    uint8_t shared_d[SHARDS]; /* Immutable old generation link until first write. */
     uint8_t fd_index[SHARDS][4]; /* Slot plus one; zero means absent. */
     pthread_mutex_t mutex;
     uint64_t tick,count,bytes,limit,disk_bytes,disk_limit;
@@ -126,6 +131,52 @@ static int filename(const struct efs_query_disk *d,uint32_t shard,char kind,char
     int n=snprintf(p,cap,"%s/%04x.%c",d->path,shard,kind);
     return n<0 || (size_t)n>=cap ? EFS_ERR_NAMETOOLONG : EFS_OK;
 }
+/* Called under the candidate mutex before any derived write. Never modify a
+ * hard-linked old generation. Reflink is optional; the checked copy fallback
+ * works on non-reflink filesystems too. The publication barrier syncs the copy. */
+static int private_derived(struct efs_query_disk *d,uint32_t shard)
+{
+    if(!d->shared_d[shard])return EFS_OK;
+    char path[EFS_MAX_PATH],tmp[EFS_MAX_PATH];
+    int rc=filename(d,shard,'d',path,sizeof(path));if(rc)return rc;
+    int len=snprintf(tmp,sizeof(tmp),"%s.copy",path);
+    if(len<0 || (size_t)len>=sizeof(tmp))return EFS_ERR_NAMETOOLONG;
+    int src=open(path,O_RDONLY|O_CLOEXEC),dst=open(tmp,O_CREAT|O_EXCL|O_RDWR|O_CLOEXEC,0600);
+    if(src<0 || dst<0)rc=EFS_ERR_IO;
+    int cloned=0;uint64_t temporary=0;
+    if(!rc){
+        struct stat st;
+        if(fstat(src,&st) || st.st_size<0)rc=EFS_ERR_IO;
+        else{rc=charge_disk(d,(uint64_t)st.st_size);if(!rc)temporary=(uint64_t)st.st_size;}
+    }
+    if(!rc && disk_reserve(dst))rc=EFS_ERR_IO;
+#ifdef __linux__
+    if(!rc){
+        cloned=ioctl(dst,FICLONE,src)==0;
+        if(!cloned && errno!=EOPNOTSUPP && errno!=ENOTTY && errno!=EXDEV && errno!=EINVAL)rc=EFS_ERR_IO;
+    }
+#endif
+    if(!rc && !cloned){
+        uint8_t buf[65536];uint64_t off=0;
+        while(!rc){
+            if(cancelled(d)){rc=EFS_ERR_BUSY;break;}
+            ssize_t n=pread(src,buf,sizeof(buf),(off_t)off);
+            if(n<0 && errno==EINTR)continue;
+            if(n<0){rc=EFS_ERR_IO;break;}
+            if(!n)break;
+            rc=io_at(dst,buf,(size_t)n,off,1);off+=(uint64_t)n;
+        }
+    }
+    if(src>=0)close(src);
+    if(dst>=0)close(dst);
+    if(!rc && rename(tmp,path))rc=EFS_ERR_IO;
+    d->disk_bytes-=temporary;
+    if(rc){unlink(tmp);return rc;}
+    /* Any cached descriptor/windows refer to the old immutable inode. */
+    uint8_t slot=d->fd_index[shard][3];
+    if(slot){close(d->fds[slot-1].fd);d->fds[slot-1].fd=-1;d->fd_index[shard][3]=0;}
+    d->shared_d[shard]=0;return EFS_OK;
+}
 /* The descriptor cannot be evicted while pread/pwrite is using it. Reads use
  * independent offsets, and this lock never spans callbacks or recursive KV. */
 /* Four fixed LRU windows per descriptor amortize binary-search and adjacent-record syscalls.
@@ -173,6 +224,7 @@ static int disk_io(struct efs_query_disk *d,uint32_t shard,char kind,void *buf,s
     if(!n)return EFS_OK;
     int rc=EFS_OK;
     pthread_mutex_lock(&d->mutex);
+    if(write && kind=='d'){rc=private_derived(d,shard);if(rc){pthread_mutex_unlock(&d->mutex);return rc;}}
     uint8_t found=d->fd_index[shard][k];
     struct fd_slot *f=found?&d->fds[found-1]:NULL,*victim=&d->fds[0];
     if(!f)for(int i=0;i<FD_CACHE;i++) {
@@ -642,11 +694,13 @@ static int file_digest(int fd,uint8_t out[32])
     }
     blake3_hasher_finalize(&h,out,32);return EFS_OK;
 }
+/* Private bounded incremental builder; no public/disk ABI change. */
+#include "query_disk_incremental.h"
 int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
     const struct efs_query_disk *old,uint64_t max_bytes,int (*stop)(void *),void *ctx,struct efs_query_disk **out)
 {
     if(out)*out=NULL;
-    uint64_t working=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX+NODE_BATCH*sizeof(struct disk_node)+sizeof(struct fold_parent);
+    uint64_t working=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX+NODE_BATCH*sizeof(struct disk_node)+sizeof(struct fold_parent)+sizeof(struct incremental)+65536+2*RAW_RECORD_MAX;
     if(!root || !source || !out)return EFS_ERR_INVAL;
     if(max_bytes<working)return EFS_ERR_NOMEM;
     if(mkdir(root,0700) && errno!=EEXIST)return EFS_ERR_IO;
@@ -694,8 +748,19 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
         if(UINT64_MAX-d->count<d->part[shard].inodes)rc=EFS_ERR_OVERFLOW;
         else d->count+=d->part[shard].inodes;
     }
-    for(uint32_t shard=0;shard<SHARDS && !rc;shard++)rc=nodes_build(d,shard);
-    if(!rc)rc=folds_build(d);
+    if(!rc && old)rc=incremental_build(d,(struct efs_query_disk *)old);
+    else if(!rc)rc=INCREMENTAL_FULL;
+    if(rc==INCREMENTAL_FULL){
+        rc=EFS_OK;
+        close_cache(d);memset(d->shared_d,0,sizeof(d->shared_d));d->refolded=0;
+        for(uint32_t shard=0;old && shard<SHARDS;shard++){
+            char path[EFS_MAX_PATH];rc=filename(d,shard,'d',path,sizeof(path));
+            if(rc)break;
+            if(unlink(path) && errno!=ENOENT){rc=EFS_ERR_IO;break;}
+        }
+        for(uint32_t shard=0;shard<SHARDS && !rc;shard++)rc=nodes_build(d,shard);
+        if(!rc)rc=folds_build(d);
+    }
     close_cache(d);
     /* Derived node files are private to this candidate; fsync before the
      * completed manifest. A failed build never changes the published view. */
@@ -708,7 +773,7 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
              * old completed generation. Only their new directory links need
              * persistence (the candidate-directory fsync below). Derived rows
              * and every changed raw/index/name file still require both steps. */
-            if(i<3 && old && old->part[shard].revision==revisions[shard])continue;
+            if((i<3 && old && old->part[shard].revision==revisions[shard]) || (i==3 && d->shared_d[shard]))continue;
             char path[EFS_MAX_PATH];rc=filename(d,shard,files[i],path,sizeof(path));if(rc)break;
             int fd=open(path,O_RDONLY|O_CLOEXEC);if(fd<0){rc=EFS_ERR_IO;break;}
             /* raw_build already checked fsync on the writing descriptors for
@@ -895,7 +960,7 @@ int efs_query_disk_restore(const char *root,const uint64_t watermark[4],uint64_t
 {
     if(out)*out=NULL;
     if(!root || !watermark || !out)return EFS_ERR_INVAL;
-    uint64_t bytes=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX+NODE_BATCH*sizeof(struct disk_node)+sizeof(struct fold_parent);
+    uint64_t bytes=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX+NODE_BATCH*sizeof(struct disk_node)+sizeof(struct fold_parent)+sizeof(struct incremental)+65536+2*RAW_RECORD_MAX;
     if(max_bytes<bytes)return EFS_ERR_NOMEM;
     char current[EFS_MAX_PATH],base[256];int n=snprintf(current,sizeof(current),"%s/current",root);
     if(n<0 || (size_t)n>=sizeof(current))return EFS_ERR_NAMETOOLONG;

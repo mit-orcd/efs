@@ -55,6 +55,8 @@ static int compare_inode(void *ctx,const uint8_t *key,uint32_t kl,const uint8_t 
     }
     return 0;
 }
+static struct efs_query_catalog *disk_previous;
+static char disk_root[256];
 static int capture(struct efs_kv *kv,const struct efs_query_catalog *old,struct efs_query_catalog **out)
 {
     struct efs_kv_lsm_snapshot *s=NULL;
@@ -71,6 +73,25 @@ static int capture(struct efs_kv *kv,const struct efs_query_catalog *old,struct 
             }
             efs_query_catalog_free(full);
         }
+    }
+    if(!rc){
+        struct efs_query_catalog *full=NULL,*disk=NULL;
+        if(!disk_root[0])snprintf(disk_root,sizeof(disk_root),"/tmp/efs-query-incremental-%d",getpid());
+        CHECK(!efs_query_catalog_build(s,NULL,32<<20,NULL,NULL,&full),"fresh RAM oracle for disk incremental");
+        struct efs_query_rollup before,after;int retained=disk_previous && !efs_query_catalog_stats(disk_previous,EFS_ROOT_INO,&before);
+        int drc=efs_query_catalog_build_disk(disk_root,s,disk_previous,4<<20,NULL,NULL,&disk);
+        CHECK(!drc && disk,"bounded disk incremental build");
+        if(full && disk){
+            struct compare_catalogs pair={disk,full};
+            for(uint32_t shard=0;shard<4096;shard++){
+                uint8_t prefix[3]={(uint8_t)(shard>>8),(uint8_t)shard,EFS_KV_KIND_INODE};
+                CHECK(!efs_kv_lsm_snapshot_scan(s,prefix,3,NULL,0,compare_inode,&pair),"all disk rows/links/rollups equal full oracle");
+            }
+            if(!efs_query_catalog_rebuilt(disk))CHECK(!efs_query_catalog_refolded(disk),"unchanged disk inputs fold no attributes");
+            if(retained)CHECK(!efs_query_catalog_stats(disk_previous,EFS_ROOT_INO,&after) && !memcmp(&before,&after,sizeof(before)),"incremental writes preserve retained disk aggregates");
+        }
+        efs_query_catalog_free(full);
+        if(disk){efs_query_catalog_free(disk_previous);disk_previous=disk;}
     }
     efs_kv_lsm_snapshot_release(s);return rc;
 }
@@ -343,10 +364,39 @@ int main(void)
     CHECK(shared && !efs_query_catalog_stats(shared,EFS_ROOT_INO,&stat),
           "directory rollup survives source catalog retirement");
     efs_query_catalog_free(shared);
+    efs_ino_t extdir,extfile,maxfile;
+    CHECK(!efs_meta_apply_mkdir(kv,&attrs,EFS_ROOT_INO,S_IFDIR|0755,"extrema",&extdir),"extrema directory");
+    CHECK(!efs_meta_apply_create_file(kv,&attrs,extdir,S_IFREG|0644,"low",&extfile),"extrema low file");
+    CHECK(!efs_meta_apply_create_file(kv,&attrs,extdir,S_IFREG|0644,"high",&maxfile),"extrema high file");
+    CHECK(!efs_meta_apply_get_inode(kv,maxfile,&r),"extrema row");r.base_mtime=900000;r.base_size=9999;row_put(kv,&r);
+    CHECK(!capture(kv,NULL,&newer),"incremental extrema additions");efs_query_catalog_free(newer);newer=NULL;
+    CHECK(!efs_meta_apply_unlink(kv,extdir,"high",400),"delete maximum time/size child");
+    CHECK(!capture(kv,NULL,&newer),"incremental deletion recomputes extrema");efs_query_catalog_free(newer);newer=NULL;
+    CHECK(!efs_meta_apply_link(kv,extdir,"low",EFS_ROOT_INO,"extrema-alias",401),"cross-parent alias");
+    CHECK(!capture(kv,NULL,&newer),"incremental hardlink invalidation");efs_query_catalog_free(newer);newer=NULL;
+    CHECK(!efs_meta_apply_get_inode(kv,extfile,&r),"aliased inode row");r.base_size=777;r.base_mtime=800000;row_put(kv,&r);
+    CHECK(!capture(kv,NULL,&newer),"incremental updates every hardlink parent");efs_query_catalog_free(newer);newer=NULL;
+    CHECK(!efs_meta_apply_rename(kv,extdir,"low",EFS_ROOT_INO,"extrema-moved",402),"move file across parents");
+    CHECK(!capture(kv,NULL,&newer),"incremental both rename parents");efs_query_catalog_free(newer);newer=NULL;
+    CHECK(!efs_meta_apply_rmdir(kv,EFS_ROOT_INO,"extrema",403),"remove empty directory");
+    CHECK(!capture(kv,NULL,&newer),"incremental removed directory");efs_query_catalog_free(newer);newer=NULL;
+    CHECK(!efs_meta_apply_unlink(kv,EFS_ROOT_INO,"extrema-moved",404),"remove one alias");
+    CHECK(!efs_meta_apply_get_inode(kv,extfile,&r),"remaining aliased inode");r.base_size=888;row_put(kv,&r);
+    CHECK(!capture(kv,NULL,&newer),"removed old alias and changed surviving alias");efs_query_catalog_free(newer);newer=NULL;
+    CHECK(!efs_meta_apply_unlink(kv,EFS_ROOT_INO,"extrema-alias",405),"remove final alias");
+    CHECK(!capture(kv,NULL,&newer),"removed inode dependencies come from changed old edges");efs_query_catalog_free(newer);newer=NULL;
+    for(unsigned i=0;i<1100;i++){
+        char name[32];efs_ino_t added;snprintf(name,sizeof(name),"cap-fallback-%u",i);
+        CHECK(!efs_meta_apply_create_file(kv,&attrs,EFS_ROOT_INO,S_IFREG|0644,name,&added),"bounded-set overflow fixture");
+    }
+    CHECK(!capture(kv,NULL,&newer),"oversized incremental change set falls back exactly");
+    CHECK(disk_previous && efs_query_catalog_refolded(disk_previous)>=1100,"fallback really performs a full attribute build");
+    efs_query_catalog_free(newer);newer=NULL;
     CHECK(!efs_meta_apply_get_inode(kv,b,&r),"dir for corruption");
     r.parent=a;row_put(kv,&r);
     CHECK(capture(kv,c,&newer)==EFS_ERR_PROTO && !newer,"mismatched parent fails closed");
 done:
+    efs_query_catalog_free(disk_previous);if(disk_root[0])rmdir(disk_root);
     efs_query_catalog_free(newer);efs_query_catalog_free(c);efs_kv_lsm_close(kv);cleanup();
     if (failures) return 1;
     puts("test_query_catalog: OK");return 0;
