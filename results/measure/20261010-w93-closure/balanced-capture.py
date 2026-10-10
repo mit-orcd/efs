@@ -27,7 +27,18 @@ def require_headroom():
 require_headroom()
 def gc_status():
  return {n:subprocess.check_output(['/data1/efs/src/efs-mgmt','gc-status',f'127.0.0.1:{17431+n}'],text=True,timeout=10) for n in servers}
-(cell/'gc-before.json').write_text(json.dumps(gc_status(),indent=2))
+# Mount readiness may precede a follower's diagnostic RPC readiness. This
+# bounded preflight is outside every timed interval; timed failures still fail.
+gc_ready_deadline=time.monotonic()+90
+while True:
+ try:
+  gc_before=gc_status();break
+ except (subprocess.CalledProcessError,subprocess.TimeoutExpired) as error:
+  with (cell/'readiness-errors.jsonl').open('a') as out:
+   out.write(json.dumps(dict(error=str(error),utc=time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())))+'\n')
+  if time.monotonic()>=gc_ready_deadline:raise
+  time.sleep(2)
+(cell/'gc-before.json').write_text(json.dumps(gc_before,indent=2))
 clients=subprocess.check_output(['pgrep','-x','efs-fuse'],text=True).split();assert len(clients)==2
 logs={n:Path(f'/data1/efs/logs/efsd-n{n}.log') for n in servers};offsets={n:p.stat().st_size for n,p in logs.items()}
 root=f'/data1/efs/mnt/tiny-w93-closure-{tag}-20261010'
