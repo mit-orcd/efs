@@ -1543,9 +1543,23 @@ static void test_apply_scope(void)
   _exit(0);
  }
  int status=0;waitpid(child,&status,0);CHECK(WIFEXITED(status)&&!WEXITSTATUS(status),"torn record child committed");
- char wal[1024];struct stat st;
+ char wal[1024];
  snprintf(wal,sizeof(wal),"%s/wal",g_dir);
- CHECK(!stat(wal,&st) && st.st_size>8 && !truncate(wal,st.st_size-1),"tear only final owned record");
+ /* Linux reserves a zero-filled tail; tear the logical record, not allocation. */
+ FILE *f=fopen(wal,"rb");uint64_t end=0;uint8_t header[8];
+ CHECK(f!=NULL,"read owned WAL record lengths");
+ if(f) {
+  while(fread(header,1,sizeof(header),f)==sizeof(header)) {
+   uint32_t length=(uint32_t)header[4]|(uint32_t)header[5]<<8|
+                   (uint32_t)header[6]<<16|(uint32_t)header[7]<<24;
+   if(!length)break;
+   CHECK(length>=4 && length<=KV_LSM_REC_MAX,"bounded valid fixture record");
+   if(length<4 || length>KV_LSM_REC_MAX)break;
+   end+=8+length;if(fseeko(f,length,SEEK_CUR))break;
+  }
+  fclose(f);
+ }
+ CHECK(end>8 && !truncate(wal,(off_t)end-1),"tear final actual record before reserved tail");
  kv=open_store(EFS_KV_LSM_SYNC,0);
  CHECK(kv && get_is(kv,"a","base")==EFS_OK && get_is(kv,"cursor","3")==EFS_OK,"torn atomic record exposes neither effects nor frontier");
  if(kv)efs_kv_lsm_close(kv);
