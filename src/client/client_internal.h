@@ -29,6 +29,38 @@ void efs_buf_budget_stats(uint64_t *live, uint64_t *reserved,
 struct efs_publication_ack_queue;
 struct efs_publication_ack_queue *efs_client_publication_ack_alloc(void);
 int efs_client_publication_ack_free(struct efs_publication_ack_queue *);
+/* Staged typed writeback: caller owns/serializes a budgeted queue per stream.
+ * Admit every intent before send. No cache lock may be held across these RPCs.
+ * Progress never consumes bytes; writeback consumes exact terminal evidence.
+ * Retirement survives cache-entry destruction and lost retirement ACKs. */
+/* Reserve the recovery queue before accepting any application bytes. A full
+ * receipt window must drain first; caller owns this queue through retirement. */
+int efs_client_publication_admit_write(struct efs_publication_ack_queue **,
+    efs_ino_t, uint64_t generation, uint32_t ci,
+    const struct efs_msg_lane_writer_view_reply *, uint32_t off,
+    const uint8_t *src, uint32_t len);
+int efs_client_publication_progress(struct efs_publication_ack_queue *, uint64_t,
+    struct efs_msg_publication_reply *);
+int efs_client_publication_writeback(struct efs_publication_ack_queue *,
+    efs_ino_t, uint64_t generation, uint32_t ci, uint64_t object,
+    uint64_t sequence, uint64_t size);
+int efs_client_publication_retire(struct efs_publication_ack_queue *);
+/* First typed write reserves body and range ownership before accepting bytes;
+ * never adopts an existing legacy dirty body. No network I/O here. */
+int efs_dcache_admit_lane_write(efs_ino_t, uint64_t generation, uint32_t ci,
+    const struct efs_msg_lane_writer_view_reply *, uint32_t off,
+    const uint8_t *src, uint32_t len);
+/* dst is the decoded image at base's authoritative lane view. Resolve owned
+ * ranges against that same complete fence history before changing any byte. */
+int efs_dcache_retire_clipped(efs_ino_t, uint64_t generation, uint32_t ci,
+    const struct efs_msg_lane_writer_view_reply *,
+    const struct efs_msg_inode_getchunks_reply *);
+int efs_dcache_overlay_lane(efs_ino_t, uint64_t generation, uint32_t ci,
+    const struct efs_msg_lane_writer_view_reply *,
+    const struct efs_msg_inode_getchunks_reply *, uint8_t *dst, uint32_t len);
+int efs_dcache_consume_publication(efs_ino_t, uint64_t generation, uint32_t ci,
+    uint64_t object, uint64_t sequence, const struct efs_msg_publication_reply *,
+    int *consumed);
 void *efs_buf_metadata_alloc(size_t size);
 void efs_buf_metadata_free(void *p, size_t size);
 void efs_rdcache_trim(void);

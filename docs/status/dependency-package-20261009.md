@@ -799,3 +799,69 @@ The final partial-prefix gate queries the first mapping before retry, matching
 FileID/object generation/nodes/checksums to prove it already committed. The
 strengthened rerun exits0 with AMD service restored. Working tree checkpoint
 contains only this package's committed work; no owned fixture remains active.
+
+## Retained typed publication writeback — staged, AMD gated
+
+The writer now retains only ranges accepted after a bound publication snapshot.
+A raced pre-PUT snapshot must be recaptured; a committed older snapshot cannot
+replay already committed bytes over a peer winner. A bounded shadow range set
+refuses fragmentation before copying any new application bytes.
+
+A budgeted per-stream queue is reserved before accepting typed application
+bytes, refuses a full window before copying bytes, captures immutable request
+bodies before submission,
+queries authoritative results first, consumes matching terminal evidence under
+the cache slot lock, and retains retirement ownership independently of cache
+body lifetime. Lost publication or retirement replies do not release identity.
+First typed admission installs reserved body and ownership together; it never
+adopts legacy dirty bytes. Cold default-export lane bootstrap now works before
+the first PUT on a dual-host member without inventing unknown export geometry.
+
+AMD direct/TCP real-byte evidence proves lost replies, newer4KiB ownership, peer
+range preservation, cold exact bytes and physical deletion. Core212/212, peer64/64,800 cold append records, O_SYNC/O_DSYNC and GC/restart
+gates pass. Cold receipt replay remains RETIRED; old committed replay returns its
+original index/term without replacing a peer winner. Fresh read overlays require
+complete matching fence history and leave output unchanged on stale authority.
+A complete cut can retire fully clipped ownership only without an unresolved
+publication.
+
+The post-truncate gate exposed legacy fences advancing the lane stamp without
+the bootstrapped authority/history, leaving admission permanently BUSY. The
+cross-group fix writes all three in one batch and passes actual cold truncate;
+the same-group extension also passes actual cold truncate, core212/212,
+peer64/64,800 cold append records, sync writes and GC/restart. Failed batch and bounded
+history overflow leave the authoritative view unchanged. Natural FUSE exit can
+clear cmdline before zombie state; confirmed PF_EXITING is now recognized while
+ambiguous live processes still refuse cleanup.
+[Evidence](../../results/measure/20261009-retained-publication/README.md).
+
+This is staged driver integration, not default FUSE flush activation. The helper
+uses raw unticketed PUTs. Production PUT admission/storage fencing, captured
+membership retirement, other ambiguous namespace identities and final activation
+gates remain open. D25 remains staged; W72/D27/W88 are not globally closed.
+
+This hour's focused code commits:47394c4c (exact post-snapshot ownership),2afaa8fb
+(cold default lane bootstrap),9a6ca38e (confirmed natural FUSE exit discovery),
+643d4404 (atomic legacy truncate/typed authority interop),2002a028 (budgeted
+retained driver, pre-write queue reservation, atomic consumption and fresh read
+overlays),e9f6f2cd (unconsumed retired-floor/pending recovery fault tests).
+
+AMD direct/TCP proves same- and cross-group cold replay and truncate clipping.
+Actual lane leader death also returns the exact RETIRED floor without restoring
+old mappings, with bounded transient election retry. Full default core212/212,
+peer64/64,800 cold append records, O_SYNC/O_DSYNC and GC/restart gates pass. Linux
+code regressions/build and docs5/5 pass; tested source hashes match committed
+production sources. The final owned fixture exited0 and restored all four installed daemons and
+both mounts; reservation released. No efs-bench source/harness was changed; no merge/push/tag/activation.
+
+Final actual lane leader-death gate: b5130037, gc-direct-b9kgkazc, both same/cross
+streams return RETIRED without mapping resurrection, cold bytes/truncate clipping
+and complete physical GC/restart pass. Installed AMD978caaf7 service verified
+healthy4/4, both mounts serving; no owned fixture remains active.
+
+The full package remains open. Next dependency is production PUT tickets and
+durable receive/store fencing with captured membership/all-member ACKs, then
+default FUSE typed flush integration and revoked unknown-intent reconciliation.
+Other ambiguous UNLINK/RMDIR/RENAME/LINK identities also require retained exact
+routed bodies and authoritative results. W88's active legacy eviction/re-PUT
+case remains open; these staged proofs do not activate D25 or close W72/D27/W88.

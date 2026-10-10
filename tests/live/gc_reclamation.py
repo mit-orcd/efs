@@ -42,6 +42,7 @@ p.add_argument('--fixture-quota',choices=('1G','4G','16G'),help='explicit per-da
 p.add_argument('--session-append',action='store_true',help='bounded revoked-session append holes, cold half-completion and exact epoch resume')
 p.add_argument('--session-cleanup',action='store_true',help='staged bounded lease/lock cleanup, global barrier, exact replay and cold physical reclaim')
 p.add_argument('--deferred-close',action='store_true',help='staged identified close, 64 cross-group OPEN appends, crash/resume, exact holes and bounded retirement')
+p.add_argument('--typed-writeback',action='store_true',help='actual typed cache bytes, publication/retirement lost ACK and post-snapshot peer preservation')
 p.add_argument('--guarded-leases',action='store_true',help='sequenced lease wire reorder, lost reply probe, cold replay and last-close reclaim')
 p.add_argument('--put-barrier-fault',action='store_true',help='test-only server fragment fsync refusal, unpublished state, retained-body recovery and cold bytes')
 p.add_argument('--create-live-retry',action='store_true',help='actual FUSE CREATE retries consumed committed reply then BUSY using one identity')
@@ -197,7 +198,7 @@ posix_failure=None
 
 def run(args, **kwargs):
     try:
-        return subprocess.run([str(x) for x in args], check=True, timeout=kwargs.pop("timeout",60), env=env, **kwargs)
+        return subprocess.run([str(x) for x in args], check=True, timeout=kwargs.pop("timeout",60), env=kwargs.pop("env",env), **kwargs)
     except subprocess.CalledProcessError as error:
         # Captured helper assertions must remain visible in saved gate evidence.
         if error.stdout: print(error.stdout,flush=True)
@@ -547,6 +548,36 @@ try:
         start();mount_client()
         (work/'session-cleanup.json').write_text(json.dumps({'inos':inos,'records':records},indent=2))
         print('bounded session lease/lock global barrier, exact replay, cold remaining owners and physical reclaim PASS',flush=True)
+    if a.typed_writeback:
+        typed=work/'client-publication-writeback'
+        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_publication_writeback.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',typed])
+        for group in ('cross','same'):
+            typed_env={**env}
+            if group=='same':typed_env['EFS_TYPED_SAME_GROUP']='1'
+            typed_path=mount/('typed-writeback-'+group);typed_path.touch()
+            typed_ino=typed_path.stat().st_ino
+            typed_state=work/('typed-writeback-'+group+'-state.bin')
+            typed_result=run([typed,str(a.port),str(typed_ino),typed_state],capture_output=True,text=True,timeout=180,env=typed_env).stdout
+            (work/('typed-writeback-'+group+'-wire.txt')).write_text(typed_result)
+            typed_ci=int(re.search(r'ci=(\d+)',typed_result).group(1))
+            typed_group=int(re.search(r'group=(\d+)',typed_result).group(1))
+            leaders=[]
+            for node in range(4):
+                raft=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+node}'],capture_output=True,text=True).stdout
+                if re.search(r'group '+str(typed_group)+r' .*role=LEADER',raft):leaders.append(node)
+            assert len(leaders)==1,leaders
+            dead=leaders[0];servers[dead].kill();servers[dead].wait(timeout=10)
+            leader_replay=run([typed,str(a.port),str(typed_ino),typed_state,'receipt-only'],capture_output=True,text=True,timeout=180,env=typed_env).stdout
+            (work/('typed-writeback-'+group+'-leader-replay.txt')).write_text(leader_replay)
+            print('typed retired publication replay after actual lane leader death PASS',flush=True)
+            unmount();stop(crash=True);start();mount_client()
+            expected=bytearray([0x5a])*(128<<10);expected[4096:8192]=bytes([0xa7])*4096;expected[8192:12288]=bytes([0x33])*4096
+            assert typed_path.stat().st_ino==typed_ino and typed_path.read_bytes()==bytes(typed_ci*(128<<10))+expected
+            cold_replay=run([typed,str(a.port),str(typed_ino),typed_state,'verify'],capture_output=True,text=True,timeout=180,env=typed_env).stdout
+            (work/('typed-writeback-'+group+'-cold-replay.txt')).write_text(cold_replay)
+            typed_path.unlink();wait(lambda:not files(typed_ino),'typed writeback physical deletion',180)
+            print('actual typed cache, lost ACKs, newer-range ownership, peer preservation and exact cold bytes PASS',flush=True)
+
     if a.guarded_leases:
         pending_helper=work/'client-pending-create'
         run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_pending_create.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',pending_helper])

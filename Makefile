@@ -92,7 +92,7 @@ COMMON_SRCS = src/common/admission.c src/meta/append_plan.c $(COMMON_DIR)/public
               src/client/ops.c \
               src/client/read.c \
               src/client/write.c \
-              src/client/bufpool.c src/client/writer_state.c src/client/publication_ack_owner.c \
+              src/client/bufpool.c src/client/writer_state.c src/client/publication_ack_owner.c src/client/publication_writeback.c \
               src/client/inode_rpc.c \
               src/client/stage_evict.c \
               src/client/node_cache.c
@@ -342,6 +342,8 @@ test: all
 	python3 tests/test_read_failure_admission.py
 	python3 tests/test_read_refs_window.py
 	python3 tests/test_client_memory.py
+	python3 tests/test_publication_writeback.py
+	python3 tests/test_lane_bootstrap_export.py
 	./tests/test_wire
 	./tests/test_data
 	./tests/test_kv
@@ -447,6 +449,8 @@ test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	python3 tests/test_read_failure_admission.py
 	python3 tests/test_read_refs_window.py
 	python3 tests/test_client_memory.py
+	python3 tests/test_publication_writeback.py
+	python3 tests/test_lane_bootstrap_export.py
 
 $(filter src/client/%.o,$(COMMON_OBJS)) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ): src/client/client_internal.h include/efs/wb_recovery.h
 src/client/efs_fuse.o: src/client/reply_buffers.h src/client/stop_control.h

@@ -2884,7 +2884,9 @@ accepted durability contract or fixing only FUSE flag handling.
 
 **Class:** fencing integration. **Status:** partial; full mount identity, retained
 FUSE CREATE/adoption/OPEN/CLOSE and namespace shard admission are implemented and
-AMD gated. REPORT-wide fencing and production ticketed PUTs remain open.
+AMD gated. REPORT mapping/activation/completion session guards are AMD gated;
+staged typed publication recovery is byte-tested. Default production flush and
+ticketed PUT/storage fencing integration remain open.
 
 **Original evidence (before the Oct 9 integration):** `inode_rpc.c:opid_seed_locked` creates a local random UUID at
 fixed epoch 1. HOLD sends only its base request; FLOCK sends its range but
@@ -3564,6 +3566,19 @@ See [the package evidence](../status/amd-functional-gates-20261008.md).
 <a id="w88"></a>
 
 ## W88 · Legacy span replay loses idempotency after folded-history eviction
+
+**Oct 9 staged recovery update:** immutable budgeted client requests now resolve
+authoritative per-publication results before releasing cache ownership, preserve
+only writes newer than a committed snapshot, and retain retirement identities
+through lost ACKs independently of cache bodies. AMD actual cache/host gates
+preserve peer bytes, return the original committed locator after supersession,
+and reject retired replay after cold restart. Fresh typed overlays require
+complete matching fences; legacy truncate interop updates authority/history
+with the stamp atomically.
+[Checkpoint and evidence](../status/dependency-package-20261009.md#retained-typed-publication-writeback--staged-amd-gated).
+This driver is staged. Default FUSE REPORT/PUT still uses the legacy flow, so the
+original W88 span-history-eviction bug remains open until production integration
+and its full eviction/re-PUT/session/leader-change gates pass.
 
 **Class/state:** publication/retry correctness; isolated metadata reproduction Oct 7, round 6. D1 requires a folded span retry to be a no-op; I16 requires byte-identical retries not to repeat effects. This finding concerns the active legacy path, not the staged durable-result receipt/floor design.
 

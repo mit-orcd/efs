@@ -37,6 +37,9 @@ static void ownership(void)
     assert(!memcmp(&q,&saved,sizeof(q)));
     assert(efs_publication_ack_admit(&q,&a)==EFS_OK);
     assert(efs_publication_ack_admit(&q,&b)==EFS_OK);
+    assert(efs_publication_ack_request(&q,11,&out)==EFS_OK && !memcmp(&out,&b,sizeof(out)));
+    memset(&out,0xa5,sizeof(out));struct efs_msg_publication miss=out;
+    assert(efs_publication_ack_request(&q,99,&out)==EFS_ERR_NOT_FOUND && !memcmp(&out,&miss,sizeof(out)));
     saved=q;
     assert(efs_publication_ack_admit(&q,&a)==EFS_OK && !memcmp(&q,&saved,sizeof(q)));
     struct efs_msg_publication changed=a;changed.size++;

@@ -1,0 +1,2 @@
+cold retired exact replay cannot resurrect superseded mapping PASS
+actual truncate fence prevents typed dirty read resurrection and retires fully clipped ownership PASS

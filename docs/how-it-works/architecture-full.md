@@ -1673,7 +1673,7 @@ positions do not assign an execution order or override the active handoff.
 | review ID | finding | classification | review state | evidence / gate |
 | --- | --- | --- | --- | --- |
 | spec1 | **W71** · fragment PUT lacks a production persistence barrier | durability correctness | implemented barrier — file and pathname fsync before production PUT ACK; fault/live gates pass, hardware power-loss gate owed | [evidence and gate](#w71) |
-| spec2 | **W72** · production mount session lifecycle / I23 integration | fencing integration | partial — full mount UUID/epoch shared by append/HOLD/FLOCK; retained FUSE CREATE/adoption and sequenced OPEN/CLOSE plus proven-revocation recovery pass AMD direct/TCP; namespace shard admission and fenced replay/effect checks are AMD gated; REPORT mapping/activation/completion session fences pass AMD direct/TCP; per-publication result reconciliation and production data-plane PUT integration remain open | [evidence and gate](#w72) · [Oct9 mounted-client gates](../status/dependency-package-20261009.md#terminal-retained-identity-recovery--implementedgated) |
+| spec2 | **W72** · production mount session lifecycle / I23 integration | fencing integration | partial — full mount UUID/epoch shared by append/HOLD/FLOCK; retained FUSE CREATE/adoption and sequenced OPEN/CLOSE plus proven-revocation recovery pass AMD direct/TCP; namespace shard admission and fenced replay/effect checks are AMD gated; REPORT mapping/activation/completion session fences pass AMD direct/TCP; staged typed per-publication recovery/newer-range ownership passes AMD; production flush/PUT-ticket integration remain open | [evidence and gate](#w72) · [Oct9 mounted-client gates](../status/dependency-package-20261009.md#terminal-retained-identity-recovery--implementedgated) |
 | spec3 | **W73** · synchronous application-write publication | integration | implemented — explicit O_SYNC/O_DSYNC publication passes AMD direct/TCP small/queued/append, peer-before-close and cold crash gates; mount-wide sync also passes AMD direct/TCP peer-before-close and cold bytes on the current REPORT candidate; final mode matrix owed ([Oct9 evidence](../../results/measure/20261009-report-log-coverage/README.md)) | [evidence and gate](#w73) |
 | spec4 | **W74** · protection profiles, debt and automatic repair | recovery feature gap | fixed 2+1; no automatic repair/profile cutover; accepted design exceeds current capability | [evidence and gate](#w74) |
 | spec5 | **W75** · fragment integrity trust / missing checksum fallback | integrity correctness | missing/corrupt evidence fails closed; captured metadata digest and PUT validation gates pass on NUC; identity-bound format remains open | [evidence and gate](#w75) |
@@ -1689,7 +1689,7 @@ positions do not assign an execution order or override the active handoff.
 | storage1 | **W85** · path-hint eviction loses ambiguous PUT retry history | conditional accounting/storage correctness | Closed: ambiguous PUT placement retained in 389a8baf; direct/buffered real lost-ACK collision and two-root physical/quota/restart gates pass | [evidence and gate](#w85) |
 | gc-own | **W86** · durable PUT ticket integration | feature / safe reclamation | metadata state machine plus replicated admission/authoritative status transport implemented (`0aaf7d32`), AMD cold replay/body collision/revocation gates pass; production data-plane fences and all-member collection remain staged | [evidence and gate](#w86) · [D31](#d31--recorded-abandoned-upload-policy) |
 | append-load | **W87** · buffered concurrent append loses records under load | correctness investigation | failure recorded in private GC fixture; isolated repeats pass; full traced acceptance owed | [evidence and gate](#w87) |
-| replay-span | **W88** · folded span retry resurrects after bounded history eviction | publication/retry correctness | isolated metadata reproduction; actual host/FUSE byte gate owed | [evidence and gate](#w88) |
+| replay-span | **W88** · folded span retry resurrects after bounded history eviction | publication/retry correctness | partial — actual cross-group typed cache/host replay preserves peer bytes and cold mappings on AMD direct/TCP; production flush/ticket integration and full replay gates remain open | [evidence and gate](#w88) · [Oct9 checkpoint](../status/dependency-package-20261009.md#retained-typed-publication-writeback--staged-amd-gated) |
 | measure-fields | **W89** · W23 TSV field packing shifts derived metrics | verification correctness | TSV schema/reduction repaired; NUC regressions pass; new pressure run and valid bound remain owed | [evidence and gate](#w89) |
 
 The [specification/public-path review](../status/spec-implementation.md) separates accepted
@@ -4990,7 +4990,9 @@ accepted durability contract or fixing only FUSE flag handling.
 
 **Class:** fencing integration. **Status:** partial; full mount identity, retained
 FUSE CREATE/adoption/OPEN/CLOSE and namespace shard admission are implemented and
-AMD gated. REPORT-wide fencing and production ticketed PUTs remain open.
+AMD gated. REPORT mapping/activation/completion session guards are AMD gated;
+staged typed publication recovery is byte-tested. Default production flush and
+ticketed PUT/storage fencing integration remain open.
 
 **Original evidence (before the Oct 9 integration):** `inode_rpc.c:opid_seed_locked` creates a local random UUID at
 fixed epoch 1. HOLD sends only its base request; FLOCK sends its range but
@@ -5670,6 +5672,19 @@ See [the package evidence](../status/amd-functional-gates-20261008.md).
 <a id="w88"></a>
 
 ### W88 · Legacy span replay loses idempotency after folded-history eviction
+
+**Oct 9 staged recovery update:** immutable budgeted client requests now resolve
+authoritative per-publication results before releasing cache ownership, preserve
+only writes newer than a committed snapshot, and retain retirement identities
+through lost ACKs independently of cache bodies. AMD actual cache/host gates
+preserve peer bytes, return the original committed locator after supersession,
+and reject retired replay after cold restart. Fresh typed overlays require
+complete matching fences; legacy truncate interop updates authority/history
+with the stamp atomically.
+[Checkpoint and evidence](../status/dependency-package-20261009.md#retained-typed-publication-writeback--staged-amd-gated).
+This driver is staged. Default FUSE REPORT/PUT still uses the legacy flow, so the
+original W88 span-history-eviction bug remains open until production integration
+and its full eviction/re-PUT/session/leader-change gates pass.
 
 **Class/state:** publication/retry correctness; isolated metadata reproduction Oct 7, round 6. D1 requires a folded span retry to be a no-op; I16 requires byte-identical retries not to repeat effects. This finding concerns the active legacy path, not the staged durable-result receipt/floor design.
 

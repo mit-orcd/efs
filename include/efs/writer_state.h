@@ -7,6 +7,9 @@
 struct efs_writer_state {
     struct efs_writer_ranges ranges;
     struct efs_writer_publication publication;
+    /* Exact writes admitted while the immutable publication is outstanding.
+     * A committed old snapshot must not replay its already-published bytes. */
+    struct efs_dirty_ranges after_publication;
     int has_publication;
     int publication_ready; /* fragments completed; REPORT may acknowledge */
 };
