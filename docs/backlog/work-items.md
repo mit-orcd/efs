@@ -4145,6 +4145,22 @@ or present the Raft improvement as measured KV acceptance.
 
 ## W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
 
+**Oct 10 latest merged-code observation:** all 16 newly captured branch tips
+integrate at `6b8f05acb484` and deploy to preserved NUC stores. A continuous
+20-minute write / 10-minute drained pause / 20-minute same-worker resume creates
+138,881 files with zero loader errors. First-minute rates 152.47 and 159.35
+files/s fall to final-minute 52.85 and 48.05; corresponding NVMe flush means
+rise from 1.33/1.34 to 3.65/3.66 ms. Rest restores the burst without restart,
+but the decline repeats. n3 retains 75,109 sampled inbox refusals; all replicas
+catch up. No root SSD health data arrives; cache occupancy/thermal cause and
+hardware ceiling remain unproved. Native and unchanged-repeat full/fault gates
+pass (POSIX 212/212, peer 64/64), but retain the earlier concurrent-append
+30-second timeout. Defaults/diagnostics off are restored; 128 sampled exact
+cold payload checks and live executable hashes pass. **Keep W97 open.**
+Next isolate sustained durable-write latency with root NVMe health and matched
+EFS-stopped/loaded growing-WAL versus preallocated-overwrite probes.
+[Report](../status/w97-latest-nvme-20261010.md).
+
 **Oct 10 NUC:** return control reproduces fast-then-slow rates at 10 ms.
 NVMe host flush mean rises 2.38 to 3.70 ms while rates fall; an independent
 low-load XFS overwrite+fdatasync probe with EFS stopped measures NVMe 1.12 ms
