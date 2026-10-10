@@ -3,7 +3,7 @@
 from pathlib import Path
 import os,re,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/client/efs_fuse.c').read_text()
+s=Path(os.environ.get('EFS_FUSE_SOURCE',root/'src/client/efs_fuse.c')).read_text()
 def function(name):
  m=re.search(r'^static (?:int|void) '+name+r'\([^;]+?\)\n\{',s,re.M)
  assert m,name
@@ -24,14 +24,15 @@ static uint64_t stats_now_ms(void);
 #include "client_internal.h"
 #include "efs/session.h"
 struct efs_client g_client;
-static int open_rc,close_rc,adopt_rc,opens,closes,adopts,server_hold,revocation;
+static int open_rc,close_rc,adopt_rc,opens,closes,adopts,server_hold,revocation,adopt_begin_busy,adopt_resume_busy,adopt_known_busy,pressure_sleep,adopt_begins;
 int efs_client_rpc_getchunks_fileid(efs_export_id_t ex,efs_ino_t ino,uint64_t gen,uint32_t start,struct efs_chunk_rec *recs,uint32_t *count,uint64_t *out) {
  (void)ex;(void)gen;(void)start;(void)recs;(void)count;assert(ino==42);*out=99;return EFS_OK;
 }
 int efs_client_lease_begin(struct efs_client_lease_request *r,efs_ino_t ino,uint64_t gen,unsigned flags,uint64_t token) {
  assert(!r->active&&ino==42&&gen==99);
  assert((flags==EFS_LEASE_EDGE_CLEAR_PENDING&&token==3)||(!token&&flags!=EFS_LEASE_EDGE_CLEAR_PENDING));
- *r=(struct efs_client_lease_request){.ino=ino,.generation=gen,.flags=flags,.active=1};return EFS_OK;
+ if(flags==EFS_LEASE_EDGE_CLEAR_PENDING){adopt_begins++;if(adopt_begin_busy){adopt_begin_busy--;pressure_sleep=1;return EFS_ERR_BUSY;}}
+ *r=(struct efs_client_lease_request){.ino=ino,.generation=gen,.pending_token=token,.flags=flags,.active=1};r->q.id.seq=55;return EFS_OK;
 }
 int efs_client_lease_resume(struct efs_client_lease_request *r,int probe) {
  assert(!probe&&r->active);
@@ -39,7 +40,9 @@ int efs_client_lease_resume(struct efs_client_lease_request *r,int probe) {
  if(r->complete)return r->result;
  int rc;
  if(r->flags&EFS_LEASE_EDGE_OPEN){if(!r->attempted)opens++;server_hold=1;rc=open_rc;}
- else if(r->flags==EFS_LEASE_EDGE_CLEAR_PENDING){adopts++;rc=adopt_rc;}
+ else if(r->flags==EFS_LEASE_EDGE_CLEAR_PENDING){adopts++;assert(r->q.id.seq==55 && r->pending_token==3);rc=adopt_rc;
+  if(adopt_resume_busy){adopt_resume_busy--;pressure_sleep=1;rc=EFS_ERR_BUSY;}
+  if(adopt_known_busy){r->complete=1;r->result=EFS_ERR_BUSY;return EFS_ERR_BUSY;}}
  else {closes++;rc=close_rc;if(!rc)server_hold=0;}
  r->attempted=1;
  if(revocation && rc==EFS_ERR_STALE){r->revoked=1;r->complete=1;r->result=rc;server_hold=0;}
@@ -51,7 +54,13 @@ int efs_client_lease_reset(struct efs_client_lease_request *r) {
 '''
 # RPC mock references the production mutex, so place bookkeeping first.
 mock=source[source.index('int efs_client_rpc_getchunks_fileid'):]
-source=source[:source.index('int efs_client_rpc_getchunks_fileid')]+s[a:b]+mock
+source=source[:source.index('int efs_client_rpc_getchunks_fileid')]+s[a:b]+mock+r'''
+static int fixture_sleep(unsigned us){
+ if(pressure_sleep){assert(!pthread_mutex_trylock(open_edge_mu(42)));pthread_mutex_unlock(open_edge_mu(42));pressure_sleep=0;}
+ return usleep(us);
+}
+#define usleep fixture_sleep
+'''
 for name in ('efs_open_note','efs_open_set_leased','efs_close_note','efs_open_release_pending','efs_open_drain_pending','wb_lock_budget','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid','efs_open_acquire','efs_open_adopt'):
  source+='\n'+function(name)
 w=s.index('/* A lost last-close reply must not pin')
@@ -109,6 +118,17 @@ int main(void) {
  adopt_rc=EFS_ERR_NET;assert(efs_open_adopt(42,99,3,&handed_off)==EFS_ERR_NET);
  assert(efs_close_note(42,&leased));adopt_rc=EFS_ERR_STALE;close_rc=EFS_ERR_STALE;revocation=1;
  assert(!efs_open_release_pending(42) && !g_open_refs && !server_hold);
+ revocation=0;close_rc=0;adopt_rc=0;assert(!efs_open_acquire(42));
+ adopt_begin_busy=3;adopt_resume_busy=2;int before_adopts=adopt_begins;
+ assert(!efs_open_adopt(42,99,3,&handed_off) && handed_off && !g_open_refs->adoption.active);
+ assert(adopt_begins==before_adopts+4 && !pressure_sleep && !adopt_begin_busy && !adopt_resume_busy);
+ assert(efs_close_note(42,&leased));assert(!efs_open_release_pending(42));
+ assert(!efs_open_acquire(42));adopt_known_busy=1;before_adopts=adopt_begins;
+ assert(efs_open_adopt(42,99,3,&handed_off)==EFS_ERR_BUSY && handed_off && g_open_refs->adoption.complete);
+ assert(adopt_begins==before_adopts+1);adopt_known_busy=0;
+ assert(efs_close_note(42,&leased));
+ assert(efs_open_release_pending(42)==EFS_ERR_BUSY && g_open_refs);
+ g_open_refs->adoption.result=EFS_OK;assert(!efs_open_release_pending(42) && !g_open_refs);
  puts("FUSE ambiguous OPEN/CLOSE: retained ownership, reopen barrier and clean-stop retry PASS");
 }
 '''

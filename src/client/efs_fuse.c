@@ -2095,8 +2095,10 @@ static int efs_open_lease_resume_wait(struct efs_client_lease_request *request)
     return rc;
 }
 
-static int efs_open_acquire_fileid_run(efs_ino_t ino, uint64_t create_generation)
+static int efs_open_acquire_fileid_run(efs_ino_t ino, uint64_t create_generation,
+                                        int *admission_busy)
 {
+    *admission_busy=0;
     pthread_mutex_t *edge = open_edge_mu(ino);
     int lock_rc=wb_lock_budget(edge);
     if(lock_rc!=EFS_OK)return lock_rc;
@@ -2125,6 +2127,7 @@ static int efs_open_acquire_fileid_run(efs_ino_t ino, uint64_t create_generation
         if (rc == EFS_OK) {
             rc = efs_client_lease_begin(&owner->edge, ino, generation,
                                          EFS_LEASE_EDGE_OPEN, 0);
+            if(rc==EFS_ERR_BUSY && !owner->edge.active)*admission_busy=1;
             if (rc == EFS_OK) {
                 owner->lease_generation = generation;
                 efs_open_set_leased(ino);
@@ -2149,7 +2152,15 @@ static int efs_open_acquire_fileid(efs_ino_t ino, uint64_t create_generation)
     uint64_t deadline=stats_now_ms()+30000;
     if(previous && previous<deadline)deadline=previous;
     efs_client_rpc_set_deadline_ms(deadline);
-    int rc=efs_open_acquire_fileid_run(ino,create_generation);
+    int rc=EFS_ERR_BUSY;
+    while(!efs_client_rpc_past_deadline()) {
+        int admission_busy=0;
+        rc=efs_open_acquire_fileid_run(ino,create_generation,&admission_busy);
+        /* No identity was allocated. Drop the stripe before waiting so an
+         * older append on a colliding inode can finish and release capacity. */
+        if(rc!=EFS_ERR_BUSY || !admission_busy)break;
+        usleep(1000);
+    }
     efs_client_rpc_set_deadline_ms(previous);
     return rc;
 }
@@ -2166,25 +2177,43 @@ static int efs_open_adopt(efs_ino_t ino,uint64_t generation,uint64_t token,
                           int *handed_off)
 {
     *handed_off=0;
-    pthread_mutex_t *stripe=open_edge_mu(ino);pthread_mutex_lock(stripe);
-    struct efs_open_ref *owner=NULL;
-    pthread_mutex_lock(&g_open_mu);
-    for(struct efs_open_ref *r=g_open_refs;r;r=r->next)
-        if(r->ino==ino){owner=r;break;}
-    pthread_mutex_unlock(&g_open_mu);
-    int rc=EFS_ERR_STALE;
-    if(owner && owner->n && owner->leased && owner->lease_generation==generation) {
-        rc=efs_client_lease_begin(&owner->adoption,ino,generation,
-                                   EFS_LEASE_EDGE_CLEAR_PENDING,token);
-        if(rc==EFS_OK) {
-            *handed_off=1;
-            rc=efs_client_lease_resume(&owner->adoption,0);
-            if(rc==EFS_OK && owner->adoption.complete)
-                (void)efs_client_lease_reset(&owner->adoption);
-            else if(rc==EFS_OK)rc=EFS_ERR_BUSY;
+    pthread_mutex_t *stripe=open_edge_mu(ino);
+    int rc=EFS_ERR_BUSY;
+    while(!efs_client_rpc_past_deadline()) {
+        int lock_rc=wb_lock_budget(stripe);
+        if(lock_rc!=EFS_OK)return lock_rc;
+        struct efs_open_ref *owner=NULL;
+        pthread_mutex_lock(&g_open_mu);
+        for(struct efs_open_ref *r=g_open_refs;r;r=r->next)
+            if(r->ino==ino){owner=r;break;}
+        pthread_mutex_unlock(&g_open_mu);
+        rc=EFS_ERR_STALE;
+        int terminal=0;
+        if(owner && owner->n && owner->leased && owner->lease_generation==generation) {
+            struct efs_client_lease_request *adoption=&owner->adoption;
+            if(!adoption->active)
+                rc=efs_client_lease_begin(adoption,ino,generation,
+                                          EFS_LEASE_EDGE_CLEAR_PENDING,token);
+            else if(adoption->ino==ino && adoption->generation==generation &&
+                    adoption->pending_token==token &&
+                    adoption->flags==EFS_LEASE_EDGE_CLEAR_PENDING)
+                rc=EFS_OK;
+            if(rc==EFS_OK) {
+                *handed_off=1;
+                rc=efs_client_lease_resume(adoption,0);
+                terminal=adoption->complete;
+                if(rc==EFS_OK && terminal)
+                    (void)efs_client_lease_reset(adoption);
+                else if(rc==EFS_OK)rc=EFS_ERR_BUSY;
+            }
         }
+        pthread_mutex_unlock(stripe);
+        /* Retry only unallocated admission or this exact unknown adoption.
+         * A known rejection is final. Waiting never holds the inode stripe. */
+        if(rc!=EFS_ERR_BUSY || terminal)break;
+        usleep(1000);
     }
-    pthread_mutex_unlock(stripe);return rc;
+    return rc;
 }
 
 #define EFS_PENDING_CREATES_MAX 128u

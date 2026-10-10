@@ -20,18 +20,20 @@ code=r'''
 #include <unistd.h>
 struct efs_client g_client;
 static _Thread_local uint64_t deadline;
-static uint64_t clock_ms;static int begins,resumes,busy,expire,known,io;
+static uint64_t clock_ms;static int begins,resumes,busy,expire,known,io,begin_busy,admission_sleep;
+static pthread_mutex_t *open_edge_mu(efs_ino_t ino);
 uint64_t efs_client_rpc_deadline_ms(void){return deadline;}
 void efs_client_rpc_set_deadline_ms(uint64_t v){deadline=v;}
 static __attribute__((unused)) uint64_t stats_now_ms(void){return clock_ms;}
 int efs_client_rpc_past_deadline(void){return deadline && clock_ms>=deadline;}
-static __attribute__((unused)) int fixture_sleep(unsigned us){clock_ms+=(us+999)/1000;return 0;}
+static __attribute__((unused)) int fixture_sleep(unsigned us){if(admission_sleep){pthread_mutex_t *mu=open_edge_mu(42);assert(!pthread_mutex_trylock(mu));pthread_mutex_unlock(mu);admission_sleep=0;}clock_ms+=(us+999)/1000;return 0;}
 #define usleep fixture_sleep
 int efs_client_rpc_getchunks_fileid(efs_export_id_t ex,efs_ino_t ino,uint64_t gen,uint32_t start,struct efs_chunk_rec *r,uint32_t *n,uint64_t *out){
  (void)ex;(void)ino;(void)gen;(void)start;(void)r;(void)n;*out=99;return EFS_OK;
 }
 int efs_client_lease_begin(struct efs_client_lease_request *r,efs_ino_t ino,uint64_t gen,unsigned flags,uint64_t token){
  assert(!r->active && ino==42 && gen==99 && !token);begins++;
+ if(begin_busy){begin_busy--;admission_sleep=1;return EFS_ERR_BUSY;}
  *r=(struct efs_client_lease_request){.ino=ino,.generation=gen,.flags=flags,.active=1};r->q.id.seq=55;return EFS_OK;
 }
 int efs_client_lease_resume(struct efs_client_lease_request *r,int probe){
@@ -52,6 +54,7 @@ for name in ('efs_open_note','efs_open_set_leased','efs_close_note','efs_open_re
 code+=r'''
 static void close_owned(void){int leased;assert(efs_close_note(42,&leased) && leased);assert(!efs_open_release_pending(42) && !g_open_refs);}
 int main(void){
+ begin_busy=3;assert(!efs_open_acquire(42));assert(begins==4 && !begin_busy && !admission_sleep && g_open_refs->edge.complete);close_owned();begins=resumes=0;
  busy=2;assert(!efs_open_acquire(42));assert(begins==1 && resumes==3 && g_open_refs->n==1 && g_open_refs->edge.complete && !deadline);close_owned();
  /* A known rejection is final, not an excuse to allocate a different edge. */
  busy=1;known=1;int before=begins;assert(efs_open_acquire(42)==EFS_ERR_BUSY);assert(begins==before+1 && !g_open_refs && !deadline);known=0;
