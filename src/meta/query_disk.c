@@ -287,6 +287,10 @@ static void close_cache(struct efs_query_disk *d)
 {
     for(int i=0;i<FD_CACHE;i++)if(d->fds[i].fd>=0){close(d->fds[i].fd);d->fds[i].fd=-1;}
     memset(d->fd_index,0,sizeof(d->fd_index));
+    /* A full rebuild replaces derived files outside disk_io. Discard rows
+     * retained by a partial incremental attempt before reading those files. */
+    memset(d->inode_cache,0,sizeof(d->inode_cache));
+    if(d->inode_epoch!=UINT64_MAX)d->inode_epoch++;
 }
 void efs_query_disk_free(struct efs_query_disk *d)
 {

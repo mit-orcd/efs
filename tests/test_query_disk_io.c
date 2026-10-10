@@ -74,6 +74,37 @@ static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
 #endif
 static int failures;
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"FAIL %d: %s\n",__LINE__,#x);failures++;}}while(0)
+/* Exercise the full-rebuild boundary after a partial attempt has retained
+ * directory rows with already-folded links. Replacing .d files must make
+ * subsequent lookups read the new zeroed rows, not those retained links. */
+static void rebuild_cache_test(void)
+{
+    char store[]="/tmp/efs-query-rebuild-kv-XXXXXX",cache[]="/tmp/efs-query-rebuild-cache-XXXXXX";
+    CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};
+    struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);CHECK(kv);if(!kv)return;
+    struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t dir,file;
+    CHECK(!efs_meta_apply_init(kv,100));
+    CHECK(!efs_meta_apply_mkdir(kv,&attrs,EFS_ROOT_INO,S_IFDIR|0755,"dir",&dir));
+    CHECK(!efs_meta_apply_create_file(kv,&attrs,dir,S_IFREG|0644,"file",&file));
+    struct efs_kv_lsm_snapshot *source=NULL;struct efs_query_disk *disk=NULL;
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));
+    CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,&disk));
+    if(disk){
+        struct disk_node retained;CHECK(!locate(disk,dir,&retained,NULL));
+        CHECK(retained.link.parent==EFS_ROOT_INO);
+        close_cache(disk);
+        for(unsigned shard=0;shard<SHARDS;shard++){
+            char path[EFS_MAX_PATH];CHECK(!filename(disk,shard,'d',path,sizeof(path)));
+            CHECK(!unlink(path) || errno==ENOENT);
+            CHECK(!nodes_build(disk,shard));
+        }
+        CHECK(!folds_build(disk));
+        struct efs_query_rollup totals;CHECK(!efs_query_disk_stats(disk,EFS_ROOT_INO,&totals));
+        CHECK(totals.tree_files==1 && totals.tree_dirs==1);
+    }
+    efs_query_disk_free(disk);efs_kv_lsm_snapshot_release(source);efs_kv_lsm_close(kv);
+}
 static int cancel_budget(void *ctx){(void)ctx;return 1;}
 static void budget_test(void)
 {
@@ -116,6 +147,7 @@ static void budget_test(void)
 }
 int main(void)
 {
+    rebuild_cache_test();
     {
         struct efs_query_rollup r={.tree_files=UINT64_MAX-1,.tree_dirs=7,.tree_bytes=9};
         CHECK(!rollup_tree_add(&r,1,2,3));
