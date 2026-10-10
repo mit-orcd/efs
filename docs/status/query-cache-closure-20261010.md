@@ -220,7 +220,7 @@ with an inode-only mutation and retained/full export oracles is next.
 | Source revision checkpoints | 4096 uint64 counters, fixed sidecar and 128-bit lineage | saturation refuses comparison; invalid history forces derived rebuilding |
 | Query page | uint32 visit budget, at most 1,000,000 visits; requested results at most 10,000 | bounded per call; full export resumes uint64 cursor across pages |
 | Wire output / server reply allocation | output at most 16 MiB; aggregate reply admission 64 MiB | larger namespaces stream; no complete result buffered on server |
-| Authorization scratch / paged export lease | 8192 fixed authorization entries; one server page session, 60 s idle / 1 h total lease | concurrent exporters may receive BUSY; expired sessions refuse stale continuation |
+| Authorization scratch / paged export lease | 8192 fixed authorization entries; one server page session, 60 s idle / configurable finite total lease | concurrent exporters may receive BUSY; expired sessions refuse stale continuation |
 | Python display/export | display at most 10,000 entries; file export consumes pages of 1000 | ordering a bounded display is not sorting every file in RAM |
 | Cache logical disk quotas | default 16 GiB generation, 32 GiB root; each configurable up to 16 TiB | scale requires explicit provision/configuration; shared links charged conservatively |
 
@@ -229,3 +229,17 @@ work, rather than allocating an array per namespace inode. Linux v5 smoke accoun
 3,864,480 bytes under the 4 MiB exercised builder budget. These arithmetic checks
 and pilots do not substitute for the required 2^32 actual-entry synthetic gate,
 concurrent load/freshness measurements or staged real-filesystem acceptance.
+
+## Large-export lease duration
+
+The cardinality audit found the fixed one-hour active export lease could prevent
+completion of a billions-of-files stream. `EFS_QUERY_EXPORT_MAX_MS` now configures
+its finite total lifetime, allowed 60000–604800000 ms (one minute to seven days),
+default still 3600000 ms. Invalid/overflowing values report a configuration warning
+and retain the default. Idle expiry remains sixty seconds, publication shutdown
+still clears the lease, only one paged snapshot is retained per host, and every
+page repeats authorization. Longer retention is charged by the aggregate cache
+budget; no namespace-sized memory allocation or protocol-format change is added.
+Boundary/default/invalid-value tests verify an active 24-hour lease survives the
+old one-hour point while idle and hard expiry still refuse continuation. Integrated
+Linux compilation and focused lease tests pass; live expiry/resource gates remain pending.

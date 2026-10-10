@@ -8101,6 +8101,7 @@ static void *host_gc_thread(void *arg)
 #define HOST_QUERY_BYTES (256ULL << 20)
 #define HOST_QUERY_MEMTABLE (64ULL << 20)
 #include "query_refresh.h"
+#include "query_export_lease.h"
 #define HOST_QUERY_N 256
 #define HOST_QUERY_T_MS 2000
 #define HOST_QUERY_BUILD_MS 10000
@@ -8112,6 +8113,18 @@ static uint64_t query_mono_ms(void)
 }
 /* One retained export generation per host, bounded by the catalog cap.
  * Fresh per-page permissions still apply. Idle expiry also runs without RPCs. */
+static pthread_once_t query_export_once=PTHREAD_ONCE_INIT;
+static uint64_t query_export_max_ms=3600000;
+static void query_export_configure(void)
+{
+    int valid;query_export_max_ms=efs_query_export_lifetime(getenv("EFS_QUERY_EXPORT_MAX_MS"),&valid);
+    if(!valid)fprintf(stderr,"query-config: invalid EFS_QUERY_EXPORT_MAX_MS; using 3600000 (allowed 60000..604800000)\n");
+}
+static int query_export_expired(uint64_t now,uint64_t touched,uint64_t born)
+{
+    pthread_once(&query_export_once,query_export_configure);
+    return efs_query_export_expired(now,touched,born,query_export_max_ms);
+}
 static pthread_mutex_t query_page_mu=PTHREAD_MUTEX_INITIALIZER;
 static struct {
     uint64_t token,touched,born;
@@ -8130,7 +8143,7 @@ static void query_page_sweep(int force)
     else if (pthread_mutex_trylock(&query_page_mu)) return;
     uint64_t now=query_mono_ms();
     if (force || (query_page_session.token &&
-        (now-query_page_session.touched>60000 || now-query_page_session.born>3600000))) query_page_clear();
+        query_export_expired(now,query_page_session.touched,query_page_session.born))) query_page_clear();
     pthread_mutex_unlock(&query_page_mu);
 }
 static int host_query_cancel(void *ctx)
@@ -8747,8 +8760,7 @@ int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void
     if (pthread_mutex_trylock(&query_page_mu)) return EFS_ERR_BUSY;
     int rc=EFS_OK,created=0;
     uint64_t now=query_mono_ms();
-    if (query_page_session.token && (now-query_page_session.touched>60000 ||
-        now-query_page_session.born>3600000)) query_page_clear();
+    if (query_page_session.token && query_export_expired(now,query_page_session.touched,query_page_session.born)) query_page_clear();
     struct efs_msg_query_snapshot_v4 identity=*req;
     identity.token=identity.cursor=0;identity.limit=0;
     if (req->token) {

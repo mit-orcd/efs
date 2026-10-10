@@ -603,4 +603,4 @@ tests/test_put_storage_fence: tests/test_put_storage_fence.c src/server/put_fenc
 	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ $< $(LIB) $(LDFLAGS)
 
 # Publication coalescing is shared by the real worker and its policy gate.
-src/server/raft_host.o tests/test_query_refresh: src/server/query_refresh.h
+src/server/raft_host.o tests/test_query_refresh: src/server/query_refresh.h src/server/query_export_lease.h
