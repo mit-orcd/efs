@@ -1,0 +1,5 @@
+{
+  "/data1/efs/w97-three-sata-v2-20261010/n1": "/dev/sda xfs",
+  "/data1/efs/w97-three-sata-v2-20261010/n2": "/dev/sda xfs",
+  "/data1/efs/w97-three-sata-v2-20261010/n3": "/dev/sda xfs"
+}

@@ -1,0 +1,8 @@
+{
+  "/sys/block/sda/device/model": "MK0800GEYKE",
+  "/sys/block/sda/device/rev": "HPG1",
+  "/sys/block/sda/queue/write_cache": "write through",
+  "/sys/block/nvme0n1/queue/write_cache": "write back",
+  "lsblk": "NAME    MODEL                   TRAN   ROTA   SIZE\nsda     MK0800GEYKE             sata      0 745.2G\nnvme0n1 Samsung SSD 970 EVO 1TB nvme      0 931.5G\n",
+  "final_space": "Filesystem           Size  Used Avail Use% Mounted on\n/dev/sda             745G  436G  310G  59% /data1\n/dev/mapper/rl-home  843G  333G  511G  40% /home\n"
+}

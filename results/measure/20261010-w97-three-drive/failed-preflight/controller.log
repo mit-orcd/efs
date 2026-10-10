@@ -1,0 +1,22 @@
+Traceback (most recent call last):
+  File "/data1/efs/w97-three-drive-20261010/drive-test.py", line 120, in <module>
+    cell_test('nvme',Path('/home/efs/w97-three-nvme-20261010'))
+  File "/data1/efs/w97-three-drive-20261010/drive-test.py", line 71, in cell_test
+    start_private(roots,cell,'');run([src/'efs-mgmt','raft-mkfs',f'127.0.0.1:{port}'],stdout=(cell/'mkfs.log').open('w'));mount_private(cell,'');status()
+                                                                                                                                                 ^^^^^^^^
+  File "/data1/efs/w97-three-drive-20261010/drive-test.py", line 60, in status
+    assert len(rows)==6 and all(r['hosted']==1 and r['voters']==7 for r in rows),rows
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [{'node': 1, 'group': 0, 'hosted': 1, 'role': 'LEADER', 'leader': 0, 'term': 1, 'commit': 2, 'applied': 2, 'voters': 7}, {'node': 2, 'group': 0, 'hosted': 1, 'role': 'FOLLOWER', 'leader': 0, 'term': 1, 'commit': 2, 'applied': 2, 'voters': 7}, {'node': 2, 'group': 2, 'hosted': 1, 'role': 'LEADER', 'leader': 1, 'term': 1, 'commit': 2, 'applied': 2, 'voters': 14}, {'node': 3, 'group': 0, 'hosted': 1, 'role': 'FOLLOWER', 'leader': 0, 'term': 1, 'commit': 2, 'applied': 2, 'voters': 7}, {'node': 3, 'group': 2, 'hosted': 1, 'role': 'FOLLOWER', 'leader': 1, 'term': 1, 'commit': 2, 'applied': 2, 'voters': 14}]
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/data1/efs/w97-three-drive-20261010/drive-test.py", line 130, in <module>
+    run(['python3','/data1/efs/w97-latest-20261010/final-state.py'],stdout=(base/'final-service-state.log').open('w'),stderr=subprocess.STDOUT)
+  File "/data1/efs/w97-three-drive-20261010/drive-test.py", line 12, in run
+    def run(args,**kw):return subprocess.run(list(map(str,args)),check=True,**kw)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['python3', '/data1/efs/w97-latest-20261010/final-state.py']' returned non-zero exit status 1.

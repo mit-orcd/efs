@@ -14,7 +14,14 @@ for tag,device in [('nvme','nvme0n1'),('sata','sda')]:
     count=y['hist'][k]['n']-v['n'];total=y['hist'][k]['sum']-v['sum'];hist[k]=dict(n=count,sum=total,mean=total/count if count else None,bins=[b-a for a,b in zip(v['bins'],y['hist'][k]['bins'])])
    nodes.append(dict(node=n,start_s=(x['mono_us']-origin)/1e6,end_s=(y['mono_us']-origin)/1e6,hist=hist,counters={k:y['counters'][k]-v for k,v in x['counters'].items()}))
   counts=[y-x for x,y in zip(a['progress']['counts'],b['progress']['counts'])]
-  return dict(start=a['seconds'],end=b['seconds'],files_s=sum(counts)/dt,group0_files_s=sum(counts[:4])/dt,group2_files_s=sum(counts[4:])/dt,device=dict(host_write_GiB=d[6]*512/2**30,write_MiB_s=d[6]*512/dt/2**20,mean_request_ms=(d[3]+d[7])/ios if ios else None,mean_flush_ms=d[16]/d[15] if len(d)>16 and d[15] else None,flush_s=d[15]/dt if len(d)>16 else None,busy_percent=d[9]/dt/10),nodes=nodes)
+  return dict(start=a['seconds'],end=b['seconds'],files_s=sum(counts)/dt,group0_files_s=sum(counts[:4])/dt,group2_files_s=sum(counts[4:])/dt,device=dict(read_MiB_s=d[2]*512/dt/2**20,host_write_GiB=d[6]*512/2**30,write_MiB_s=d[6]*512/dt/2**20,mean_request_ms=(d[3]+d[7])/ios if ios else None,mean_flush_ms=d[16]/d[15] if len(d)>16 and d[15] else None,flush_s=d[15]/dt if len(d)>16 else None,busy_percent=d[9]/dt/10),nodes=nodes)
  assert final['errors']==[] and max(final['counts'])<512000
  result[tag]=dict(minutes=[window(i,i+60) for i in range(0,1200,60)],five_minutes=[window(i,i+300) for i in range(0,1200,300)],whole=window(0,1200),latency=final['latency'],files=sum(final['counts']),cold=json.loads((cell/'cold-verification.json').read_text()),catch_up=json.loads((cell/'catch-up.json').read_text()))
 (base/'analysis.json').write_text(json.dumps(result,indent=2));print(json.dumps({k:dict(files=v['files'],rate=v['whole']['files_s'],minutes=[round(w['files_s'],2) for w in v['minutes']],five_minute_rates=[round(w['files_s'],2) for w in v['five_minutes']],first_sync_ms=[w['hist']['sync_us']['mean']/1000 for w in v['minutes'][0]['nodes']],last_sync_ms=[w['hist']['sync_us']['mean']/1000 for w in v['minutes'][-1]['nodes']],latency=v['latency']) for k,v in result.items()},indent=2))
+
+summary={}
+for tag,c in result.items():
+ def sync(w):
+  h=[n['hist']['sync_us'] for n in w['nodes']];return sum(v['sum'] for v in h)/sum(v['n'] for v in h)/1000
+ summary[tag]=dict(files=c['files'],mean_files_s=c['whole']['files_s'],first_files_s=c['minutes'][0]['files_s'],last_files_s=c['minutes'][-1]['files_s'],first_raft_sync_ms=sync(c['minutes'][0]),last_raft_sync_ms=sync(c['minutes'][-1]),first_device=c['minutes'][0]['device'],last_device=c['minutes'][-1]['device'],cold_files=c['cold']['exact_files'],inbox_refusals={str(n+1):sum(w['nodes'][n]['counters']['inbox_drop'] for w in c['five_minutes']) for n in range(3)},sync_errors=sum(w['nodes'][n]['counters']['sync_error'] for w in c['five_minutes'] for n in range(3)))
+(base/'comparison-summary.json').write_text(json.dumps(summary,indent=2)+'\n')

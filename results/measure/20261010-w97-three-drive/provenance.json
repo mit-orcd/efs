@@ -14,5 +14,12 @@
   "seconds_each": 1200,
   "source": "installed verified 6b8f05acb484-w97",
   "three_voter_env": "EFS_MD_RAFT_N=3",
-  "regular_service_restore_env": "EFS_MD_RAFT_N=4"
+  "regular_service_restore_env": "EFS_MD_RAFT_N=4",
+  "offline_helpers_sha256": {
+    "analyze.py": "7875d8c983109c6d5f60357d8ec9aa87395756e5dc8970c5e962e38868e31a5a",
+    "health-summary.py": "99944b1ac48867a831970cccb0594c0c0721c39cbb92009a288ca8df30d6ae3e",
+    "capture-nvme-health.sh": "9233631bc11eb62a4363c6c4dc266b653c494ff49becf0b57eae5df1105947ce",
+    "capture-sata-health.sh": "4588a03042de834d223941fe2c6cef537dae3e8a608f00eb9636df7f2ef3ee3e"
+  },
+  "offline_helper_note": "analyze.py adds read bandwidth after timed runs; workload/controller/perf hashes remain frozen. Health scripts are read-only optional collectors, NVMe starts after slowdown."
 }

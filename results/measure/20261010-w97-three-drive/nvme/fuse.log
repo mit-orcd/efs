@@ -1,0 +1,3 @@
+Stop with: /data1/efs/src/scripts/client.sh stop /data1/efs/w97-three-drive-v2-20261010/mnt
+Logging efs-fuse to /data1/efs/w97-three-drive-v2-20261010/efs-fuse-mnt.log
+Mounted /data1/efs/w97-three-drive-v2-20261010/mnt

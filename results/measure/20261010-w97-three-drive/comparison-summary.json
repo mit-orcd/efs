@@ -1,0 +1,68 @@
+{
+  "nvme": {
+    "files": 15506,
+    "mean_files_s": 12.91175515012412,
+    "first_files_s": 31.82762555380195,
+    "last_files_s": 10.80002162992426,
+    "first_raft_sync_ms": 2.464898001045731,
+    "last_raft_sync_ms": 6.992708678717666,
+    "first_device": {
+      "read_MiB_s": 0.006863459276315238,
+      "host_write_GiB": 0.8803935050964355,
+      "write_MiB_s": 15.08587531855604,
+      "mean_request_ms": 1.1856297064768275,
+      "mean_flush_ms": 1.3752818306683599,
+      "flush_s": 1291.4117636640967,
+      "busy_percent": 91.39147053737611
+    },
+    "last_device": {
+      "read_MiB_s": 0.00234375469399398,
+      "host_write_GiB": 0.27636146545410156,
+      "write_MiB_s": 4.71657845662319,
+      "mean_request_ms": 3.402572133637054,
+      "mean_flush_ms": 3.869680760451092,
+      "flush_s": 489.1843130554119,
+      "busy_percent": 93.57185406926507
+    },
+    "cold_files": 64,
+    "inbox_refusals": {
+      "1": 0,
+      "2": 0,
+      "3": 35
+    },
+    "sync_errors": 0
+  },
+  "sata": {
+    "files": 361060,
+    "mean_files_s": 300.7590462140542,
+    "first_files_s": 562.7326989829405,
+    "last_files_s": 299.3999870958291,
+    "first_raft_sync_ms": 0.15005428195425338,
+    "last_raft_sync_ms": 0.3192884489277127,
+    "first_device": {
+      "read_MiB_s": 0.03457009740041374,
+      "host_write_GiB": 13.985275268554688,
+      "write_MiB_s": 239.58293006637285,
+      "mean_request_ms": 0.17869105289003848,
+      "mean_flush_ms": null,
+      "flush_s": 0.0,
+      "busy_percent": 92.1699180003155
+    },
+    "last_device": {
+      "read_MiB_s": 0.0020182290796807814,
+      "host_write_GiB": 7.865325927734375,
+      "write_MiB_s": 134.23489004779546,
+      "mean_request_ms": 0.4093226009453362,
+      "mean_flush_ms": null,
+      "flush_s": 0.0,
+      "busy_percent": 95.48166255139698
+    },
+    "cold_files": 64,
+    "inbox_refusals": {
+      "1": 0,
+      "2": 15,
+      "3": 109
+    },
+    "sync_errors": 0
+  }
+}
