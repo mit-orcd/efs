@@ -115,6 +115,11 @@ SERVER_OBJS = $(SERVER_SRCS:.c=.o)
 CLIENT_SRCS = src/client/efs_fuse.c
 CLIENT_OBJS = $(CLIENT_SRCS:.c=.o)
 
+# Simulator objects embed public Raft/KV layouts too. Keep them on the same
+# header/build boundary as the library, including newly added sim modules.
+SIM_OBJS = $(patsubst %.c,%.o,$(wildcard src/sim/sim*.c))
+$(SIM_OBJS): $(wildcard include/efs/*.h) src/sim/sim_internal.h .build_id.stamp
+
 BENCH_CLIENT_SRC = src/client/efs_bench.c src/bench/bench_local.c src/bench/blake3_bench.c src/bench/io_bench.c src/bench/storage_principles.c src/bench/principles_index.c src/bench/storage_churn.c src/bench/storage_ranges.c
 # Reuse production storage/writer code without linking daemon/network startup.
 # Separate sectioned objects let the linker discard unrelated server functions.
