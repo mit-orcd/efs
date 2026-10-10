@@ -5,6 +5,9 @@
 #include <string.h>
 #include <unistd.h>
 static int partial_write;
+static unsigned read_calls;
+static ssize_t counted_pread(int fd,void *buf,size_t size,off_t offset)
+{ read_calls++;return pread(fd,buf,size,offset); }
 static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
 {
     if(partial_write==2){partial_write=0;errno=ENOSPC;return -1;}
@@ -12,8 +15,10 @@ static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
     return pwrite(fd,buf,size,offset);
 }
 #define pwrite fault_pwrite
+#define pread counted_pread
 #include "../src/meta/query_disk.c"
 #undef pwrite
+#undef pread
 static int failures;
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"FAIL %d: %s\n",__LINE__,#x);failures++;}}while(0)
 int main(void)
@@ -45,6 +50,17 @@ int main(void)
     CHECK(!disk_io(d,0,'r',got,17,100,0));partial_write=1;
     CHECK(disk_io(d,0,'r',change,10,100,1)==EFS_ERR_IO);memcpy(data+100,change,3);
     CHECK(!disk_io(d,0,'r',got,17,100,0));CHECK(!memcmp(got,data+100,17));
+    /* Exact median lookup needs one cold window; gaps and end misses must
+     * still report NOT_FOUND rather than returning a neighboring inode. */
+    struct disk_node nodes[31]={0},found;uint64_t at=UINT64_MAX;
+    for(unsigned i=0;i<31;i++)nodes[i].row.ino=(uint64_t)(i+1)*8192;
+    d->part[0].inodes=31;fd=make_file(d,0,'d');CHECK(fd>=0);
+    if(fd>=0){CHECK(!io_at(fd,nodes,sizeof(nodes),0,1));close(fd);}
+    read_calls=0;CHECK(!locate(d,16*8192,&found,&at));
+    CHECK(found.row.ino==16*8192 && at==15 && read_calls==1);
+    CHECK(locate(d,0,&found,NULL)==EFS_ERR_NOT_FOUND);
+    CHECK(locate(d,3*4096,&found,NULL)==EFS_ERR_NOT_FOUND);
+    CHECK(locate(d,32*8192,&found,NULL)==EFS_ERR_NOT_FOUND);
     /* Reusing every FD slot must not reuse bytes from its previous file. */
     for(uint32_t shard=1;shard<=FD_CACHE+2;shard++){
         uint8_t byte=(uint8_t)shard;fd=make_file(d,shard,'r');CHECK(fd>=0);

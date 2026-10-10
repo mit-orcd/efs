@@ -441,6 +441,10 @@ static int locate(struct efs_query_disk *d,efs_ino_t ino,struct disk_node *n,uin
     uint32_t shard=efs_kv_inode_shard(ino);uint64_t lo=0,hi=d->part[shard].inodes;
     while(lo<hi) {
         uint64_t mid=lo+(hi-lo)/2;int rc=node_at(d,shard,mid,n,0);if(rc)return rc;
+        /* Build validation requires strictly increasing inode IDs. An exact
+         * match is already the sole answer; do not finish a lower-bound search
+         * and read the same row again. */
+        if(n->row.ino==ino){if(at)*at=mid;return EFS_OK;}
         if(n->row.ino<ino)lo=mid+1;else hi=mid;
     }
     if(lo==d->part[shard].inodes)return EFS_ERR_NOT_FOUND;
