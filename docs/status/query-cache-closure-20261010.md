@@ -702,3 +702,33 @@ part of this script. The local screen must remain running (a sleeping/disconnect
 Mac delays the handoff). Its launch is verified; no cold-capacity pass is claimed.
 Local handoff logs/markers and the remote verification markers must be inspected
 before treating either stage as complete.
+
+## Complete statistics oracle audit
+
+A final oracle audit found that the synthetic gate checked total bytes/files and
+selected counts but omitted some immediate byte totals, empty directory counts
+and timestamp extrema. The production implementation is unchanged. The harness
+now independently verifies all ten rollup fields for the root and every directory:
+counts, bytes, immediate/tree minimum and maximum times. Sampled file attributes
+also check inode/generation, exact mode, link count, UID/GID, all three timestamps,
+allocation and lane counts as well as length. Every exported path remains checked.
+
+Both scale and concurrent harnesses compile with `-Wall -Wextra -Werror` against
+the named deployed library. A fresh 1000-entry construction, full export, mutation,
+concurrent old/new export and fresh-process recovery all pass the stronger oracle.
+The existing ten-million-entry fixture also passes complete recovery/export with
+all fields checked: 21.095 s recovery, 5.688 s verification, zero rebuilt
+partitions and the unchanged 3,864,480-byte builder. These timings overlap other
+work and are not a speed comparison.
+
+The stronger concurrent 10m gate also passes both complete old/new exports and
+all rollups: 4,187,842 old rows emitted during replacement construction,
+3,864,480 builder bytes, 225,718 retained source-owned bytes, 19.541 s and exit 0.
+
+The waiting billion-entry recovery wrapper now uses
+`/home/efs/w92-query-scale-full-oracle`; its previous waiting screen alone was
+replaced, leaving the original generator running. The original gate's narrower
+statistics checks will be supplemented by this complete fresh-process gate,
+which still owes a passing terminal verdict.
+[Raw logs and harness/library hashes](../../results/measure/20261010-w92-closure/full-stat-oracle/)
+preserve the strengthened checks. W92 remains open.

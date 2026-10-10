@@ -1540,7 +1540,8 @@ retained-cache admission and the [replicated command policy](../status/efs-query
 pass full native and private live/cold/fault gates. Ten-million-entry pilots
 pass complete streaming, explicit guest kernel-cold recovery and concurrent
 old/new export oracles with a fixed 3.69 MiB builder;
-authoritative-source memory is tracked separately. Named native commands,
+authoritative-source memory is tracked separately. The final oracle now checks
+all ten rollup fields and sampled inode attributes; full 10m recovery passes. Named native commands,
 fresh Linux NFSv4.0, retained payload recovery and loaded publication also pass.
 
 Remaining gates: the actual 2^32-entry index build/export/cold/mutation run,

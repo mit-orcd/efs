@@ -60,7 +60,11 @@ static int emit(void *ctx,const struct efs_name_entry *e,const char *path)
         struct efs_meta_row row;struct efs_meta_stat st;
         int rc=efs_query_catalog_inode(o->catalog,file_ino(g),&row,&st);
         if(rc)return rc;
-        if(row.parent!=SHARDS+shard || !S_ISREG(row.mode) || st.size!=((g&511)+(g==0?o->changed:0)))return EFS_ERR_PROTO;
+        if(row.parent!=SHARDS+shard || row.generation!=1 ||
+           row.mode!=(S_IFREG|0644) || st.ino!=file_ino(g) || st.generation!=1 ||
+           st.mode!=(S_IFREG|0644) || st.nlink!=1 || st.uid!=1000 || st.gid!=1000 ||
+           st.mtime!=100 || st.ctime!=100 || st.atime!=100 || st.alloc || st.lanes ||
+           st.size!=((g&511)+(g==0?o->changed:0)))return EFS_ERR_PROTO;
         o->samples++;
     }
     return 0;
@@ -71,11 +75,16 @@ static int check(const struct efs_query_catalog *c,uint64_t n,int stream,uint64_
     struct efs_query_rollup r;int rc=efs_query_catalog_stats(c,EFS_ROOT_INO,&r);
     uint64_t bytes=(n/512)*UINT64_C(130816)+tail*(tail?tail-1:0)/2+changed;
     if(rc)return rc;
-    if(r.tree_files!=n || r.tree_dirs!=dirs || r.tree_bytes!=bytes || r.imm_dirs!=dirs)return EFS_ERR_PROTO;
+    if(r.tree_files!=n || r.tree_dirs!=dirs || r.tree_bytes!=bytes ||
+       r.imm_dirs!=dirs || r.imm_files || r.imm_bytes ||
+       r.imm_tmin!=100 || r.imm_tmax!=100 || r.tree_tmin!=100 || r.tree_tmax!=100)return EFS_ERR_PROTO;
     for(unsigned s=0;s<dirs;s++){
         rc=efs_query_catalog_stats(c,SHARDS+s,&r);if(rc)return rc;
         uint64_t count=population(n,s);
-        if(r.imm_files!=count || r.tree_files!=count || r.tree_bytes!=count*(s&511)+(s==0?changed:0))return EFS_ERR_PROTO;
+        uint64_t expected_bytes=count*(s&511)+(s==0?changed:0);
+        if(r.imm_files!=count || r.tree_files!=count || r.imm_dirs || r.tree_dirs ||
+           r.imm_bytes!=expected_bytes || r.tree_bytes!=expected_bytes ||
+           r.imm_tmin!=100 || r.imm_tmax!=100 || r.tree_tmin!=100 || r.tree_tmax!=100)return EFS_ERR_PROTO;
     }
     if(stream){
         struct oracle o={.catalog=c,.n=n,.changed=changed};uint64_t cursor=0;

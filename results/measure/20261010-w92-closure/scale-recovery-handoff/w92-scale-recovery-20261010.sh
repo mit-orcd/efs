@@ -39,7 +39,7 @@ ulimit -c 0
 set +e
 runuser -u efs -- env EFS_QUERY_DISK_RESERVE_MIB=102400 \
   EFS_QUERY_DISK_TOTAL_MIB=16777216 EFS_QUERY_DISK_MAX_MIB=8388608 \
-  bash -c 'ulimit -n 524288; ulimit -c 0; exec nice -n 19 ionice -c 3 /usr/bin/time -v -o "$1" /home/efs/w92-query-scale-1a25d20a "$2" 4294967296 --recover' \
+  bash -c 'ulimit -n 524288; ulimit -c 0; exec nice -n 19 ionice -c 3 /usr/bin/time -v -o "$1" /home/efs/w92-query-scale-full-oracle "$2" 4294967296 --recover' \
   w92-recovery "$out.time" "$base/$stem" \
   > "$out.log" 2>&1
 result=$?
