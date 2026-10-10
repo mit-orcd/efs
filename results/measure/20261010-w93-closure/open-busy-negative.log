@@ -1,0 +1,7 @@
+Assertion failed: (!efs_open_acquire(42)), function main, file test.c, line 244.
+Traceback (most recent call last):
+  File "/Users/mike/Documents/Codex/2026-10-07/i-l/work/efs-find-stats/tests/test_open_busy.py", line 73, in <module>
+    subprocess.run([str(p/'test')],check=True)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 528, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-open-busy-t0mbf4jy/test']' died with <Signals.SIGABRT: 6>.
