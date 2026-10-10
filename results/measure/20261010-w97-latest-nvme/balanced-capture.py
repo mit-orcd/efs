@@ -1,7 +1,6 @@
-"""Frozen-binary A/B: default cohorts/10ms versus overlap+noop cohorts/100ms.
+"""One frozen merged binary: continuous write, drained pause, same-directory resume.
 
-The treatment is a bundle; it does not isolate individual switches. Fixed
-read probes, equal group workers and ABBA order address earlier confounders.
+All callbacks and durable acknowledgements retain production semantics.
 """
 import atexit,gzip,hashlib,json,os,re,signal,subprocess,sys,time,shutil
 from pathlib import Path
@@ -18,7 +17,7 @@ for pid in subprocess.check_output(['pgrep','-f','^/data1/efs/src/efsd .*--port 
  servers[n]=dict(pid=int(pid),cmd=cmd,flags=flags,exe_sha256=hashlib.sha256(Path(f'/proc/{pid}/exe').read_bytes()).hexdigest())
 assert len(servers)==4
 assert len({v["exe_sha256"] for v in servers.values()})==1
-version=subprocess.check_output(['/data1/efs/src/efsd','--version'],text=True);assert version.startswith('efsd 37ad6a87 ')
+version=subprocess.check_output(['/data1/efs/src/efsd','--version'],text=True);assert version.startswith('efsd 6b8f05ac ')
 (cell/'identity.json').write_text(json.dumps(dict(servers=servers,version=version,sha256=hashlib.sha256(Path('/data1/efs/src/efsd').read_bytes()).hexdigest(),test_harness_commit='recorded-in-source-provenance.json'),indent=2))
 def require_headroom():
  assert min(shutil.disk_usage(p).free for p in ('/data1/efs/n1','/data2/efs/n3'))>80*2**30,'below 80 GiB free: drain own loader'
