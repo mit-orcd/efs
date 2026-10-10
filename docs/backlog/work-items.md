@@ -3667,9 +3667,11 @@ the original record and withdrawn interpretation remain retained.
 ## W92 · .efs/find and .efs/stats server snapshots and large namespace acceptance
 
 Oct 10 closure work is active at the user's request. Aggregate retained-cache
-admission has focused and full native passing gates; 100,000/1,000,000 synthetic
-file pilots pass streaming oracles with bounded builder memory. Durable catch-up and the full scale/fault
-acceptance matrix remain open. [Closure ledger](../status/query-cache-closure-20261010.md).
+admission, durable partition checkpoints/catch-up and bounded incremental discovery
+pass focused/full native gates. Ten-million-entry pilots pass full exports,
+retained mutation and cold-hint catch-up with a fixed 3.69 MiB builder. The actual
+2^32-entry generator is running on an isolated capped disk. Deployment/live
+recovery and full scale/fault acceptance remain open. [Closure ledger](../status/query-cache-closure-20261010.md).
 
 Oct 10 incremental checkpoint: fixed 1024-item change/ancestor sets reuse immutable
 derived partitions and recompute exact affected rollups, with full-build fallback.

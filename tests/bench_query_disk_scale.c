@@ -3,6 +3,9 @@
  * Never deletes a fixture. Each invocation needs a fresh private root. */
 #include "efs/query_catalog.h"
 #include <errno.h>
+#include <dirent.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -88,11 +91,54 @@ static int check(const struct efs_query_catalog *c,uint64_t n,int stream,uint64_
     }
     return 0;
 }
+/* Advisory eviction is restricted to this private fixture. It never drops
+ * host/global caches. Filesystems may retain pages: report it as a cold hint,
+ * separately from the mandatory close/reopen correctness oracle. */
+static int cold_hint(const char *path,unsigned depth,uint64_t *files)
+{
+    if(depth>4)return EFS_ERR_INVAL;
+    DIR *dir=opendir(path);if(!dir)return EFS_ERR_IO;
+    struct dirent *entry;int rc=0;
+    while(!rc && (entry=readdir(dir))){
+        if(!strcmp(entry->d_name,".") || !strcmp(entry->d_name,".."))continue;
+        char name[EFS_MAX_PATH];struct stat st;
+        if(snprintf(name,sizeof(name),"%s/%s",path,entry->d_name)>=(int)sizeof(name)){rc=EFS_ERR_INVAL;break;}
+        if(lstat(name,&st)){rc=EFS_ERR_IO;break;}
+        if(S_ISDIR(st.st_mode))rc=cold_hint(name,depth+1,files);
+        else if(S_ISREG(st.st_mode)){
+            int fd=open(name,O_RDONLY|O_NOFOLLOW);if(fd<0){rc=EFS_ERR_IO;break;}
+            if(posix_fadvise(fd,0,0,POSIX_FADV_DONTNEED))rc=EFS_ERR_IO;
+            close(fd);(*files)++;
+        }else if(!S_ISLNK(st.st_mode))rc=EFS_ERR_INVAL;
+    }
+    closedir(dir);return rc;
+}
+static int recover(const char *root,uint64_t n)
+{
+    char kvpath[EFS_MAX_PATH],cache[EFS_MAX_PATH];uint64_t hinted=0,samples=0;
+    if(snprintf(kvpath,sizeof(kvpath),"%s/kv",root)>=(int)sizeof(kvpath) ||
+       snprintf(cache,sizeof(cache),"%s/cache",root)>=(int)sizeof(cache))return 2;
+    int rc=cold_hint(root,0,&hinted);double start=clock_s();
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,4<<20,4};
+    struct efs_kv *kv=rc?NULL:efs_kv_lsm_open(kvpath,&cfg);
+    struct efs_kv_lsm_snapshot *source=NULL;struct efs_query_catalog *catalog=NULL;
+    if(!rc && !kv)rc=EFS_ERR_IO;
+    if(!rc)rc=efs_kv_lsm_snapshot_pin(kv,64<<20,&source);
+    if(!rc)rc=efs_query_catalog_catchup_disk(cache,source,4<<20,NULL,NULL,&catalog);
+    double restored=clock_s()-start;start=clock_s();
+    if(!rc)rc=check(catalog,n,1,&samples,1);
+    printf("{\"phase\":\"recovery\",\"files\":%llu,\"hinted_files\":%llu,\"seconds\":%.6f,\"verify_seconds\":%.6f,\"rebuilt\":%u,\"builder_bytes\":%llu,\"rc\":%d}\n",
+        (unsigned long long)n,(unsigned long long)hinted,restored,clock_s()-start,
+        efs_query_catalog_rebuilt(catalog),(unsigned long long)efs_query_catalog_bytes(catalog),rc);
+    efs_query_catalog_free(catalog);efs_kv_lsm_snapshot_release(source);if(kv)efs_kv_lsm_close(kv);
+    return rc?1:0;
+}
 int main(int argc,char **argv)
 {
-    if(argc!=3)return 2;
+    if(argc!=3 && (argc!=4 || strcmp(argv[3],"--recover")))return 2;
     char *end;errno=0;uint64_t n=strtoull(argv[2],&end,10);
     if(errno || *end || !n || n>(UINT64_C(1)<<32))return 2;
+    if(argc==4)return recover(argv[1],n);
     if(mkdir(argv[1],0700)){perror("fresh fixture root");return 2;}
     char kvpath[EFS_MAX_PATH],cache[EFS_MAX_PATH];
     if(snprintf(kvpath,sizeof(kvpath),"%s/kv",argv[1])>=(int)sizeof(kvpath) ||
