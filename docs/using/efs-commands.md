@@ -84,6 +84,22 @@ offset, and accept up to nine fractional digits. Pre-epoch values are refused.
 
 ## Snapshots, limits and expiry
 
+`.efs/stats --json` also exposes a `build` diagnostic object on current source.
+`index_ns` measures source/name preparation, `stats_ns` measures derived inode
+preparation and aggregate folding, and `persist_ns` measures final verification,
+fsync and manifest work. These exclusive phases use monotonic wall time, not CPU
+time; the initial raw-record fsync belongs to index preparation. `pin_ms` and
+`total_ms` describe the server's complete refresh, which includes other authority
+and checkpoint work. Counts and query matches still share one published source
+watermark and generation.
+
+For `kind: "restore"`, `restore_ns` measures the current process's validated
+restore; the three build-phase fields are zero. Original build timings are not
+persisted or reconstructed. Older daemon builds omit this additive object.
+The phase-diagnostic rollout is tracked in the
+[W92 closure ledger](../status/query-cache-closure-20261010.md).
+
+
 Dates, sizes and filters use the published **server metadata snapshot**. They
 may lag ordinary writes; the status on stderr and JSON snapshot fields report
 freshness. Filtering does not issue a stat RPC per result or download the tree.

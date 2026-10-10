@@ -1556,7 +1556,10 @@ the current named-binary preflight and listener-readiness checks.
 The initial capacity writer stopped on CREATE PROTO after 124983 acknowledged
 files; the unrouted-BUSY retry fix passes regressions/full native, and the fixed
 client rehashed every acknowledged prefix before continuing. W92 is not closed. The backlog and virtual-interface overview are reconciled
-with this named deployment and remaining scope.
+with this named deployment and remaining scope. Acceptance audit found missing
+index/stats phase diagnostics; their additive implementation passes
+complete Linux native validation and Mac warning-as-error compilation, but still
+owes named rollout/live checks.
 Normal clients and gateway are restored to `.efs` opt-out after platform
 acceptance; diagnostic mounts are retired. Private scale services and temporary
 VM resources await the remaining gates and cleanup. The completed private

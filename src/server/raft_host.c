@@ -8551,6 +8551,19 @@ static int query_command_begin(struct query_request *q)
         v->pending_changes && pending_age>=HOST_QUERY_T_MS ? "true" : "false");
     if (n<0 || (size_t)n>=sizeof(header)) return EFS_ERR_OVERFLOW;
     int rc=query_append(q,header,(size_t)n);
+    if (!rc) {
+        struct efs_query_build_times times=efs_query_catalog_build_times(v->catalog);
+        /* Restoration measures this process's restore, not the original build.
+         * Exclusive phases are wall time and share one committed generation. */
+        n=snprintf(header,sizeof(header),
+            "\"build\":{\"kind\":\"%s\",\"pin_ms\":%llu,\"total_ms\":%llu,"
+            "\"index_ns\":%llu,\"stats_ns\":%llu,\"persist_ns\":%llu,\"restore_ns\":%llu},",
+            times.restored ? "restore" : "build",(unsigned long long)v->pin_ms,
+            (unsigned long long)v->build_ms,(unsigned long long)times.index_ns,
+            (unsigned long long)times.stats_ns,(unsigned long long)times.persist_ns,
+            (unsigned long long)times.restore_ns);
+        rc=n<0 || (size_t)n>=sizeof(header) ? EFS_ERR_OVERFLOW : query_append(q,header,(size_t)n);
+    }
     if (!rc && q->filters) {
         const struct efs_query_filters *f=q->filters;
         char values[4][32];uint64_t raw[4]={f->min_size,f->max_size,f->after_ns,f->before_ns};

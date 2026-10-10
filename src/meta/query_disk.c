@@ -6,6 +6,7 @@
  * watermarks and verified content digests.
  */
 #include "query_disk.h"
+#include "query_build_time.h"
 #include "blake3.h"
 #include <dirent.h>
 #include <errno.h>
@@ -810,9 +811,11 @@ static int file_digest(int fd,uint8_t out[32])
 /* Private bounded incremental builder; no public/disk ABI change. */
 #include "query_disk_incremental.h"
 int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
-    const struct efs_query_disk *old,uint64_t max_bytes,int (*stop)(void *),void *ctx,struct efs_query_disk **out)
+    const struct efs_query_disk *old,uint64_t max_bytes,int (*stop)(void *),void *ctx,struct efs_query_build_times *times,struct efs_query_disk **out)
 {
     if(out)*out=NULL;
+    if(times)memset(times,0,sizeof(*times));
+    uint64_t phase_start=query_build_clock();
     uint64_t working=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX+NODE_BATCH*sizeof(struct disk_node)+sizeof(struct fold_parent)+sizeof(struct incremental)+64*sizeof(struct efs_meta_dir_ent)+65536+2*RAW_RECORD_MAX;
     if(!root || !source || !out)return EFS_ERR_INVAL;
     if(max_bytes<working)return EFS_ERR_NOMEM;
@@ -865,6 +868,8 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
         if(UINT64_MAX-d->count<d->part[shard].inodes)rc=EFS_ERR_OVERFLOW;
         else d->count+=d->part[shard].inodes;
     }
+    if(times)times->index_ns=query_build_elapsed(phase_start);
+    phase_start=query_build_clock();
     if(!rc && old)rc=incremental_build(d,(struct efs_query_disk *)old);
     else if(!rc)rc=INCREMENTAL_FULL;
     if(rc==INCREMENTAL_FULL){
@@ -878,6 +883,8 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
         for(uint32_t shard=0;shard<SHARDS && !rc;shard++)rc=nodes_build(d,shard);
         if(!rc)rc=folds_build(d);
     }
+    if(times)times->stats_ns=query_build_elapsed(phase_start);
+    phase_start=query_build_clock();
     close_cache(d);
     /* Derived node files are private to this candidate; fsync before the
      * completed manifest. A failed build never changes the published view. */
@@ -918,6 +925,7 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
     }
     if(rc){efs_query_disk_free(d);return rc;}
     close(d->budget_fd);d->budget_fd=-1;
+    if(times)times->persist_ns=query_build_elapsed(phase_start);
     d->stop=NULL;d->stop_ctx=NULL;*out=d;return EFS_OK;
 }
 uint64_t efs_query_disk_bytes(const struct efs_query_disk *d){return d?d->bytes:0;}

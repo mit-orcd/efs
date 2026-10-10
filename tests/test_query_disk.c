@@ -114,6 +114,10 @@ int main(void)
     CHECK(!rc && disk);if(!disk){fprintf(stderr,"disk build rc=%d\n",rc);return 1;}
     compare(source,memory,disk,EFS_ROOT_INO);compare(source,memory,disk,dir);compare(source,memory,disk,sub);
     uint64_t bytes=efs_query_catalog_bytes(disk);CHECK(bytes<(4<<20));
+    struct efs_query_build_times times=efs_query_catalog_build_times(disk);
+    CHECK(!times.restored && times.index_ns && times.stats_ns && times.persist_ns && !times.restore_ns);
+    struct efs_query_build_times memory_times=efs_query_catalog_build_times(memory);
+    CHECK(!memory_times.restored && memory_times.index_ns && memory_times.stats_ns && !memory_times.persist_ns);
     CHECK(efs_query_catalog_build_disk(root,source,disk,1,NULL,NULL,&next)==EFS_ERR_NOMEM && !next);
     CHECK(efs_query_catalog_build_disk(root,source,disk,4<<20,cancel,NULL,&next)==EFS_ERR_BUSY && !next);
     CHECK(!efs_query_catalog_build_disk(root,source,disk,4<<20,NULL,NULL,&next));CHECK(!efs_query_catalog_rebuilt(next));CHECK(!efs_query_catalog_refolded(next));
@@ -164,6 +168,11 @@ int main(void)
     CHECK(!efs_query_catalog_checkpoint(next,wm));
     efs_query_catalog_free(next);next=NULL;
     CHECK(!efs_query_catalog_restore_disk(root,source,wm,4<<20,&restored));
+    times=efs_query_catalog_build_times(restored);
+    CHECK(times.restored && times.restore_ns && !times.index_ns && !times.stats_ns && !times.persist_ns);
+    times=efs_query_catalog_build_times(disk);
+    CHECK(!times.restored && times.index_ns && times.stats_ns && times.persist_ns);
+
     if(restored)compare(source,memory,restored,EFS_ROOT_INO);
     uint64_t stale[4]={11,13,21,22};
     CHECK(efs_query_catalog_restore_disk(root,source,stale,4<<20,&next)==EFS_ERR_STALE && !next);

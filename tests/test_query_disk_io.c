@@ -313,7 +313,7 @@ int main(void)
             CHECK(!efs_meta_pack_inode(&row,v,sizeof(v)));CHECK(!efs_kv_put(kv,k,kn,v,sizeof(v)));
         }
         CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));raw_syncs=index_syncs=0;
-        CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,&old));
+        CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&old));
         if(old){
             struct efs_query_rollup totals;
             CHECK(!efs_query_disk_stats(old,EFS_ROOT_INO,&totals));
@@ -323,18 +323,18 @@ int main(void)
             CHECK(raw_syncs==populated && index_syncs==populated);
             uint64_t wm[4]={1,2,3,4};CHECK(!efs_query_disk_checkpoint(old,wm));
             read_calls=0;
-            CHECK(!efs_query_disk_build(cache,source,old,4<<20,NULL,NULL,&next));
+            CHECK(!efs_query_disk_build(cache,source,old,4<<20,NULL,NULL,NULL,&next));
             CHECK(read_calls==0); /* reuse performs no inode/dentry discovery */
             efs_query_disk_free(next);next=NULL;
             uint64_t saved_total=aggregate_limit;aggregate_limit=1;
-            CHECK(efs_query_disk_build(cache,source,old,4<<20,NULL,NULL,&next)==EFS_ERR_QUOTA && !next);
+            CHECK(efs_query_disk_build(cache,source,old,4<<20,NULL,NULL,NULL,&next)==EFS_ERR_QUOTA && !next);
             CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
             CHECK(!efs_query_disk_inode(next,file,NULL,NULL));efs_query_disk_free(next);next=NULL;
             aggregate_limit=saved_total;
             /* A short derived-row batch followed by ENOSPC must never
              * publish a partially materialized candidate or replace old. */
             fail_write_kind='d';write_faults=0;
-            CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,&next)==EFS_ERR_IO && !next);
+            CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&next)==EFS_ERR_IO && !next);
             CHECK(write_faults==1 && !fail_write_kind);
             CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
             CHECK(!efs_query_disk_inode(next,file,NULL,NULL));efs_query_disk_free(next);next=NULL;
@@ -343,14 +343,14 @@ int main(void)
             unsigned batches=0;
             for(unsigned i=0;i<SHARDS;i++)batches+=(old->part[i].inodes+NODE_BATCH-1)/NODE_BATCH;
             fail_derived_after=batches+1;write_faults=0;
-            CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,&next)==EFS_ERR_IO && !next);
+            CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&next)==EFS_ERR_IO && !next);
             CHECK(write_faults==1 && !fail_derived_after);
             CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
             CHECK(!efs_query_disk_inode(next,file,NULL,NULL));efs_query_disk_free(next);next=NULL;
             const char kinds_to_fail[]={'r','i','n','d','a','m'};
             for(unsigned i=0;i<sizeof(kinds_to_fail);i++){
                 fail_sync_kind=kinds_to_fail[i];sync_faults=0;
-                CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,&next)==EFS_ERR_IO && !next);
+                CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&next)==EFS_ERR_IO && !next);
                 CHECK(sync_faults==1);fail_sync_kind=0;
                 CHECK(!efs_query_disk_inode(old,file,NULL,NULL));
                 CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
@@ -363,7 +363,7 @@ int main(void)
             CHECK(!efs_kv_key_inode(efs_kv_inode_shard(file),file,k,&kn));CHECK(!efs_meta_pack_inode(&row,v,sizeof(v)));CHECK(!efs_kv_put(kv,k,kn,v,sizeof(v)));
             struct efs_kv_lsm_snapshot *changed=NULL;CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&changed));
             fail_write_kind='d';write_faults=0;
-            CHECK(efs_query_disk_build(cache,changed,old,4<<20,NULL,NULL,&next)==EFS_ERR_IO && !next);
+            CHECK(efs_query_disk_build(cache,changed,old,4<<20,NULL,NULL,NULL,&next)==EFS_ERR_IO && !next);
             CHECK(write_faults==1 && !fail_write_kind);
             struct efs_query_rollup totals;CHECK(!efs_query_disk_stats(old,EFS_ROOT_INO,&totals));CHECK(totals.tree_bytes==465);
             uint64_t wm[4]={1,2,3,4};CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));

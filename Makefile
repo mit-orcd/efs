@@ -611,3 +611,5 @@ tests/test_put_storage_fence: tests/test_put_storage_fence.c src/server/put_fenc
 src/server/raft_host.o tests/test_query_refresh: src/server/query_refresh.h src/server/query_export_lease.h
 
 tests/test_kv_snapshot_tail: src/kv/kv_seg.c src/kv/kv_lsm_internal.h
+
+src/meta/query_catalog.o src/meta/query_disk.o tests/test_query_disk_io: src/meta/query_build_time.h

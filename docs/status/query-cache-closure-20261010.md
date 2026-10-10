@@ -824,3 +824,39 @@ services remain active on every node.
 [Retirement evidence](../../results/measure/20261010-w92-closure/policy-retirement-20261010.log).
 The capacity fixture and original actual-entry run were not stopped; their
 complete terminal/recovery verdicts remain required for closure.
+
+### Acceptance audit: build-phase diagnostics, implementation pending rollout
+
+The original acceptance sequence requests distinct index and statistics build
+costs. Snapshot source/publication timestamps and a total refresh log do not
+supply those phase costs. The candidate now records exclusive monotonic wall
+phases for raw/name preparation, derived inode/aggregate work and final
+verification/fsync/manifest persistence, exposed in command JSON as `build`.
+Restores report the current restore interval and zero original build costs;
+timings are not stored in the cache format. The catalog wrapper adds 40 charged
+bytes, with no cardinality-dependent memory and no change to disk records,
+watermarks, query matching or publication barriers.
+
+Focused RAM/disk tests check phase presence, restored versus built state and
+retained-generation immutability. Live command checks require the diagnostic
+contract. Full Linux regression is in progress on an isolated host source copy.
+The first archive missed root README.md and failed the architecture gate; that
+failure is preserved. The second repeat reached that gate but lacked linked
+result artifacts; all 11454 tracked result files were then staged, and all five
+documentation checks pass. The third complete regression run is live.
+Server compilation succeeds, as do warning-as-error Mac compilations of both
+changed query implementation files. The Mac top-level make invocation encounters
+its existing Linux-only fopencookie logger; it is not a Mac native-suite pass.
+Named diagnostic deployment and live verification remain owed. The two large
+original fixtures continue untouched, with no disk-format conversion required.
+
+[Phase-diagnostic staging and compilation evidence](../../results/measure/20261010-w92-closure/build-phase-native/)
+preserves both archive failures and the successful preflight. They are staging
+failures, not failed cache oracles, and do not count as a complete native pass.
+
+The completed third Linux `make -j4 test` repeat exits 0, including the new
+RAM/disk phase-state checks, partial IO/fsync, quota, cancellation and retained
+catalog gates plus the complete native and documentation suites. Its
+[raw log and terminal markers](../../results/measure/20261010-w92-closure/build-phase-native/)
+are preserved. Runtime phase JSON still needs named deployment/live verification;
+this native pass does not close the two large-scale acceptance gates.

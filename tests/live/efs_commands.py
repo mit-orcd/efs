@@ -56,6 +56,15 @@ def find_gate():
     assert result['complete'] is True and result['expiry'] == 'unavailable', result
     assert {bytes.fromhex(e['path_hex']) for e in result['entries']} == expected, result
     assert result['snapshot']['refresh_n'] == 256, result
+    build = result['build']
+    assert build['kind'] in ('build', 'restore'), build
+    assert all(isinstance(build[k], int) and build[k] >= 0 for k in
+               ('pin_ms', 'total_ms', 'index_ns', 'stats_ns', 'persist_ns', 'restore_ns')), build
+    if build['kind'] == 'restore':
+        assert build['restore_ns'] > 0 and not any(build[k] for k in
+               ('index_ns', 'stats_ns', 'persist_ns')), build
+    else:
+        assert build['index_ns'] > 0 and build['stats_ns'] > 0 and build['restore_ns'] == 0, build
     assert result['snapshot']['refresh_ms'] == 2000, result
 eventually(find_gate)
 result = command(other, 'find', '.txt', '--match', 'suffix', '-0')
