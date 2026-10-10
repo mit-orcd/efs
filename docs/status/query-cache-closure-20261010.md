@@ -8,6 +8,7 @@ profiling rounds do not satisfy them.
 | Gate | Current state |
 |---|---|
 | Immutable disk catalog, incremental exact aggregates, bounded builder scratch | implemented, differential/live/cold gates pass in previous checkpoint |
+| Separate build-phase diagnostics | implemented in cdc13b88; full native, live two-mount and Mac/Linux NFS gates pass |
 | Aggregate retained-cache admission | implemented; native and live QUOTA/write/cold-recovery oracles pass |
 | Durable changed-key watermarks and bounded catch-up/recovery | durable partition revisions, restart catch-up and bounded discovery implemented; focused/full native and live cold/disable-re-enable/publisher-loss/interrupted-cache gates pass |
 | Explicit cardinality/offset/budget audit | revision saturation, complete source-allocation budgeting and representation audit complete; named deployment/live validation passes; actual 2^32 validation remains open |
@@ -688,8 +689,8 @@ this is queued work, not completed recovery. Results use the original fixture
 stem plus `-kernel-recovery.{cache-state,log,time,exit,finished}`.
 
 The 400 GiB cold handoff is queued in a local detached screen
-`w92-capacity-cold-handoff-1434aa83` (replaces the intentionally retired
-20261010 watcher without interrupting the writer), using this
+`w92-capacity-cold-handoff-cdc13b88` (replaces the intentionally retired
+previous watchers without interrupting the writer), using this
 [exact one-shot script](../../results/measure/20261010-w92-closure/capacity-recovery-handoff/run.sh).
 It retries SSH observation failures without restarting the writer. Only an exit-0
 marker plus the complete 1,638,400-file/400-GiB independent write verdict permits
@@ -860,3 +861,44 @@ catalog gates plus the complete native and documentation suites. Its
 [raw log and terminal markers](../../results/measure/20261010-w92-closure/build-phase-native/)
 are preserved. Runtime phase JSON still needs named deployment/live verification;
 this native pass does not close the two large-scale acceptance gates.
+
+### Named phase rollout and recovery pilot, 12:37 UTC
+
+All six guests have identical cdc13b88 binaries. The full committed archive
+includes root documentation and its linked evidence; result files live on
+/home/efs with a /tmp/efs/results symlink so the RAM-backed /tmp does not absorb
+hundreds of MiB. All normal daemons retain files/direct-I/O/TCP, port 17432,
+/data1 and quota 100G. Listener readiness is checked before remounting.
+
+The complete unprivileged two-mount command oracle passes the phase contract,
+raw filenames, source/help, immutable FD/seek, fresh permission denial,
+symlink scope, real .efs collision precedence, more-than-16 pinned identities,
+exhaustion and 128 sequential release/recovery requests. The first invocation
+passed its early phase/permission gates but omitted the test port environment;
+its KeyError is preserved. The corrected invocation explicitly supplies host
+and port and exits 0. Fresh Mac and Linux NFSv4.0 complete 141-file/561174-byte
+oracles also pass. An additional 96 Mac nonce requests check the phase object
+and exact counts, all pass in 3.634 seconds. Example published wall phases:
+index 388.524 ms, stats 101.704 ms, final persistence 54.072 ms, total refresh
+564 ms including pin/authority/checkpoint work. This is one observed refresh,
+not a throughput result or CPU-time claim.
+
+The cdc13b88-linked full ten-million-entry recovery oracle checks every exported
+path, all directory rollup fields and sampled inode attributes, exit 0:
+19.415 s catch-up plus 4.344 s full verification, zero rebuilt partitions,
+3864520 accounted builder bytes (40 more than the previous wrapper). The queued
+actual 2^32 kernel-cold verifier now resolves this same new-code full oracle,
+SHA256 77ba5036d876e338697727b2ef41b4cb50981faa445a165b23b25e5fc2b769f4;
+only its waiting executable was atomically replaced, and the original generator
+was not restarted. Its latest verified PID 6246 is live, with all entries
+populated but no complete build/export/mutation verdict yet. The capacity writer
+PID 269152 is live at 404480 files/98.75 GiB. Its new local handoff watcher
+preflights exact cdc13b88 server SHA256 before any private stop.
+
+[Named rollout, command and NFS evidence](../../results/measure/20261010-w92-closure/named-cdc13b88/)
+includes all six guest identities and normal/private unit arguments, pilot logs
+and preserved first-invocation failure. The normal gateway and clients are
+restored to commands disabled; acceptance-only mounts are retired. Private
+18432 capacity daemons and both large-run watchers stay active. W92 remains
+open for complete actual-entry and 400-GiB terminal/cold/export verdicts and
+final resource cleanup; these new diagnostic gates do not replace them.

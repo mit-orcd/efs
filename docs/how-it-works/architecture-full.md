@@ -1534,7 +1534,7 @@ POSIX core/concurrent/extras and cold persistence gates; eleven retained trees
 verify 78000 files and 724 payload samples, with normal `.efs` opt-out restored.
 
 [W92 closure work](../status/query-cache-closure-20261010.md) remains active. Code
-`1434aa83` is deployed on normal Xorinox files/direct-I/O/TCP services.
+`cdc13b88` is deployed on normal Xorinox files/direct-I/O/TCP services.
 Bounded disk indexes, durable incremental catch-up, row-only folding, aggregate
 retained-cache admission and the [replicated command policy](../status/efs-query-persistent-policy-20261010.md)
 pass full native and private live/cold/fault gates. Ten-million-entry pilots
@@ -1545,7 +1545,7 @@ all ten rollup fields and sampled inode attributes; full 10m recovery passes. Na
 fresh Linux NFSv4.0, retained payload recovery and loaded publication also pass.
 
 Remaining gates: the actual 2^32-entry index build/export/cold/mutation run,
-the 400 GiB real-payload write/cold/hash/export run. Named 1434aa83 Mac/Linux
+the 400 GiB real-payload write/cold/hash/export run. Named cdc13b88 Mac/Linux
 NFS and native FUSE full oracles pass, as do 96 fresh Mac queries and all
 423 retained payload hashes after cold restart; the captured
 FORGET/handle-recovery ESTALE is fixed. These isolated scale fixtures are active; their cold-verification and service
@@ -1557,9 +1557,9 @@ The initial capacity writer stopped on CREATE PROTO after 124983 acknowledged
 files; the unrouted-BUSY retry fix passes regressions/full native, and the fixed
 client rehashed every acknowledged prefix before continuing. W92 is not closed. The backlog and virtual-interface overview are reconciled
 with this named deployment and remaining scope. Acceptance audit found missing
-index/stats phase diagnostics; their additive implementation passes
-complete Linux native validation and Mac warning-as-error compilation, but still
-owes named rollout/live checks.
+index/stats phase diagnostics; cdc13b88 implements them and passes complete Linux
+native, live two-mount and Mac/Linux NFS gates. Its full ten-million recovery
+passes with 3864520 builder bytes; the actual-entry cold verifier uses this code.
 Normal clients and gateway are restored to `.efs` opt-out after platform
 acceptance; diagnostic mounts are retired. Private scale services and temporary
 VM resources await the remaining gates and cleanup. The completed private
@@ -5848,10 +5848,11 @@ exports with all rollup fields and sampled inode attributes checked; builder
 scratch remains 3.69 MiB, separately from authoritative KV memory.
 The actual 2^32-entry process has populated all 4294967296 entries and is building
 its disk catalog; full export/mutation/recovery verdicts remain outstanding.
-Normal Xorinox files/direct-I/O/TCP runs `1434aa83`. Its complete Mac NFSv4.0,
+Normal Xorinox files/direct-I/O/TCP runs `cdc13b88`. Its complete Mac NFSv4.0,
 Linux NFSv4.0 and native FUSE command/payload oracles pass, as do 96 fresh Mac
-queries and all 423 prior fixture payloads after cold restart. Normal mounts are
-restored with commands disabled; acceptance-only mounts are retired.
+queries and all 423 prior fixture payloads after cold restart. Separate index/stats/final persistence phase diagnostics pass native/live/NFS
+gates; the newest ten-million-entry complete recovery passes with 3864520
+builder bytes. Normal mounts are restored with commands disabled; acceptance-only mounts are retired.
 The persistent policy passes live/cold/quorum/lost-reply/ceiling/fault gates.
 The real 400 GiB writer's initial CREATE PROTO failure and acknowledged 124983
 files are preserved. The unrouted BUSY retry fix passes focused/full native;

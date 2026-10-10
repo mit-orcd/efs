@@ -3661,10 +3661,11 @@ exports with all rollup fields and sampled inode attributes checked; builder
 scratch remains 3.69 MiB, separately from authoritative KV memory.
 The actual 2^32-entry process has populated all 4294967296 entries and is building
 its disk catalog; full export/mutation/recovery verdicts remain outstanding.
-Normal Xorinox files/direct-I/O/TCP runs `1434aa83`. Its complete Mac NFSv4.0,
+Normal Xorinox files/direct-I/O/TCP runs `cdc13b88`. Its complete Mac NFSv4.0,
 Linux NFSv4.0 and native FUSE command/payload oracles pass, as do 96 fresh Mac
-queries and all 423 prior fixture payloads after cold restart. Normal mounts are
-restored with commands disabled; acceptance-only mounts are retired.
+queries and all 423 prior fixture payloads after cold restart. Separate index/stats/final persistence phase diagnostics pass native/live/NFS
+gates; the newest ten-million-entry complete recovery passes with 3864520
+builder bytes. Normal mounts are restored with commands disabled; acceptance-only mounts are retired.
 The persistent policy passes live/cold/quorum/lost-reply/ceiling/fault gates.
 The real 400 GiB writer's initial CREATE PROTO failure and acknowledged 124983
 files are preserved. The unrouted BUSY retry fix passes focused/full native;
