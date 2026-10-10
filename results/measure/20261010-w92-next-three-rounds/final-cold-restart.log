@@ -1,0 +1,20 @@
+Unmounting /home/efs/w92-tiny-mnt
+Retiring drained efs-fuse PID 3730669 for /home/efs/w92-tiny-mnt
+Unmounted /home/efs/w92-tiny-mnt
+cluster: xorinox
+== drain/unmount client /mnt/efs on xefsgw
+Unmounting /mnt/efs
+Retiring drained efs-fuse PID 1216528 for /mnt/efs
+Unmounted /mnt/efs
+== drain/unmount client /mnt/efs on xefsct1
+Unmounting /mnt/efs
+Retiring drained efs-fuse PID 587212 for /mnt/efs
+Unmounted /mnt/efs
+== drain/unmount client /mnt/efs on xefsct2
+Unmounting /mnt/efs
+Retiring drained efs-fuse PID 568131 for /mnt/efs
+Unmounted /mnt/efs
+== stop efsd on xefs1
+== stop efsd on xefs2
+== stop efsd on xefs3
+cluster: xorinox

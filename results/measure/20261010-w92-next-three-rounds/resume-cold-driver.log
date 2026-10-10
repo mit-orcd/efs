@@ -1,0 +1,3 @@
+Stop with: ./scripts/client.sh stop /home/efs/w92-tiny-mnt
+Logging efs-fuse to /home/efs/efs-fuse-w92-tiny-mnt.log
+Mounted /home/efs/w92-tiny-mnt

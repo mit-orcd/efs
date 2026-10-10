@@ -60,6 +60,14 @@ increases within the tested budget. Live throughput and narrower NFS evidence
 are qualified separately. Runtime `a8a15a14` is restored with ordinary `.efs`
 mount opt-in disabled; eight retained trees pass cold query/payload checks.
 
+[W92 latest integration and three further profiles](query-cache-next-three-rounds-20261010.md)
+records the captured branch boundary, parent-rollup coalescing and constant-time
+cache descriptor hits, with bounded memory and persistence regressions. Controlled
+measurements show 39.1% fewer preads, 34.9% fewer pwrites and 15.0% lower median
+process CPU, preserving fsync counts. Final runtime `f5164bb3` passes native,
+POSIX core/concurrent/extras and cold persistence gates; eleven retained trees
+verify 78000 files and 724 payload samples, with normal `.efs` opt-out restored.
+
 [Combined branch integration](find-stats-all-branches-20261009.md) records
 `devel`, W66 and persistence-pressure merges into `devel-find-stats`, preserving
 the cache fixes. Committed branch coverage and private Linux gates are tracked;
@@ -74,6 +82,10 @@ cluster-wide coordination for routine updates. W66 owns authoritative placement,
 routing and migration; W92 remains the local disk backend. W98 owns the scaling
 discussion and distributed query design. This item is outside the dated grouped
 count below.
+
+[W93/W97 NUC read-pressure follow-up](w93-read-pressure-20261009.md)
+records latency controls, the rejected credit-order experiment and independent
+functional recovery fixes. The experiment is not promoted; W93/W97 remain open.
 
 ## Storage pressure policy
 
