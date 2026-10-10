@@ -6,6 +6,8 @@ samples=[json.loads(x) for x in (cell/'samples.jsonl').read_text().splitlines()]
 phases=json.loads((cell/'phases.json').read_text());final=json.loads((cell/'load-final.json').read_text())
 assert final['errors']==[] and max(final['counts'])<128000
 assert phases['pause_drained_us'] is not None
+origin=json.loads((cell/"timebase.json").read_text())["start_mono_us"]
+observations={n:[json.loads(x) for x in (cell/f"n{n}-observations.jsonl").read_text().splitlines()] for n in range(1,5)}
 windows=[]
 for lo,hi in [(i,i+300) for i in range(0,1200,300)]+[(1200,1800)]+[(i,i+300) for i in range(1800,3000,300)]:
  a=min(samples,key=lambda s:abs(s['seconds']-lo));b=min(samples,key=lambda s:abs(s['seconds']-hi));dt=b['seconds']-a['seconds'];counts=[y-x for x,y in zip(a['progress']['counts'],b['progress']['counts'])]
@@ -14,7 +16,14 @@ for lo,hi in [(i,i+300) for i in range(0,1200,300)]+[(1200,1800)]+[(i,i+300) for
  for name in ('sda','nvme0n1'):
   d=[y-x for x,y in zip(old[name],new[name])];ios=d[0]+d[4]
   disks[name]=dict(host_write_GiB=d[6]*512/2**30,read_MiB_s=d[2]*512/dt/2**20,write_MiB_s=d[6]*512/dt/2**20,mean_request_ms=(d[3]+d[7])/ios if ios else None,io_busy_percent=d[9]/dt/10,flush_requests_s=d[15]/dt if len(d)>16 else None,mean_flush_ms=d[16]/d[15] if len(d)>16 and d[15] else None)
- windows.append(dict(start=a['seconds'],end=b['seconds'],files_s=sum(counts)/dt,group0_files_s=sum(counts[:4])/dt,group2_files_s=sum(counts[4:])/dt,disks=disks))
+ nodes=[]
+ for n,rows in observations.items():
+  x=max((r for r in rows if r['mono_us']<=origin+a['seconds']*1e6),key=lambda r:r['mono_us']);y=max((r for r in rows if r['mono_us']<=origin+b['seconds']*1e6),key=lambda r:r['mono_us'])
+  counters={k:y['counters'][k]-v for k,v in x['counters'].items()};hist={}
+  for k,v in x['hist'].items():
+   count=y['hist'][k]['n']-v['n'];total=y['hist'][k]['sum']-v['sum'];hist[k]=dict(n=count,sum=total,mean=total/count if count else None,bins=[b-a for a,b in zip(v['bins'],y['hist'][k]['bins'])])
+  nodes.append(dict(node=n,start_s=(x['mono_us']-origin)/1e6,end_s=(y['mono_us']-origin)/1e6,counters=counters,hist=hist,commands={k:y['commands'][k]-v for k,v in x['commands'].items()}))
+ windows.append(dict(nodes=nodes,start=a['seconds'],end=b['seconds'],files_s=sum(counts)/dt,group0_files_s=sum(counts[:4])/dt,group2_files_s=sum(counts[4:])/dt,disks=disks))
 rss={};lag={0:0,2:0}
 for s in samples:
  for pid,v in s['processes'].items():
