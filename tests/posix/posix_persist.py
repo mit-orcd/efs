@@ -454,6 +454,37 @@ def symlinks(d, phase):
 # --------------------------------------------------------------------------
 
 @persist
+def setgid_directory_inheritance(d, phase):
+    """Inherited directory bit and entry ownership survive a client remount."""
+    parent = os.path.join(d, "parent")
+    child = os.path.join(parent, "child")
+    grandchild = os.path.join(child, "grandchild")
+    file = os.path.join(parent, "file")
+    link = os.path.join(parent, "link")
+    if phase == "prepare":
+        os.mkdir(parent)
+        os.chmod(parent, 0o2770)
+        os.mkdir(child, 0o750)
+        os.mkdir(grandchild, 0o750)
+        wr(file, b"persistent group inheritance")
+        os.symlink("file", link)
+    parent_gid = os.stat(parent).st_gid
+    eq(parent_gid, os.getgid(), "parent group")
+    for directory in (parent, child, grandchild):
+        metadata = os.stat(directory)
+        if not metadata.st_mode & statmod.S_ISGID:
+            raise Fail("directory lost inherited setgid: %s" % directory)
+        eq(metadata.st_gid, parent_gid, "directory group")
+    for path in (file, link):
+        metadata = os.lstat(path)
+        eq(metadata.st_gid, parent_gid, "file/symlink group")
+        if metadata.st_mode & statmod.S_ISGID:
+            raise Fail("file/symlink inherited directory-only setgid")
+    eq_bytes(rd(file), b"persistent group inheritance")
+    eq(os.readlink(link), "file", "symlink target")
+
+
+@persist
 def file_mode(d, phase):
     """Permission bits survive."""
     modes = [0o600, 0o644, 0o755, 0o400, 0o777, 0o000]
