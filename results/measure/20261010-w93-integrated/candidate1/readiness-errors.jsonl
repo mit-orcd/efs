@@ -1,0 +1,2 @@
+{"error": "Command '['/data1/efs/src/efs-mgmt', 'gc-status', '127.0.0.1:17435']' returned non-zero exit status 1.", "utc": "2026-10-10T10:20:21Z"}
+{"error": "Command '['/data1/efs/src/efs-mgmt', 'gc-status', '127.0.0.1:17435']' returned non-zero exit status 1.", "utc": "2026-10-10T10:20:23Z"}

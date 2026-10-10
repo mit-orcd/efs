@@ -1,0 +1,60 @@
+[
+  {
+    "node": 1,
+    "command": "enable",
+    "ack": "ack\n\u0000",
+    "mono_us": 70380753584
+  },
+  {
+    "node": 2,
+    "command": "enable",
+    "ack": "ack\n\u0000",
+    "mono_us": 70380753671
+  },
+  {
+    "node": 3,
+    "command": "enable",
+    "ack": "ack\n\u0000",
+    "mono_us": 70380753726
+  },
+  {
+    "node": 4,
+    "command": "enable",
+    "ack": "ack\n\u0000",
+    "mono_us": 70380753778
+  },
+  {
+    "command": "enable",
+    "begin_mono_us": 70380685352,
+    "end_mono_us": 70380753780
+  },
+  {
+    "node": 1,
+    "command": "disable",
+    "ack": "ack\n\u0000",
+    "mono_us": 71281163421
+  },
+  {
+    "node": 2,
+    "command": "disable",
+    "ack": "ack\n\u0000",
+    "mono_us": 71281163698
+  },
+  {
+    "node": 3,
+    "command": "disable",
+    "ack": "ack\n\u0000",
+    "mono_us": 71281163933
+  },
+  {
+    "node": 4,
+    "command": "disable",
+    "ack": "ack\n\u0000",
+    "mono_us": 71281164200
+  },
+  {
+    "command": "disable",
+    "begin_mono_us": 71281162819,
+    "end_mono_us": 71281164205
+  }
+]

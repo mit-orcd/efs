@@ -1,0 +1,120 @@
+{
+  "tag": "idle-cohort",
+  "applied_interval_ms": 100,
+  "cohort": 1,
+  "seconds": 84.62218678399222,
+  "identity": [
+    {
+      "pid": 3144641,
+      "env": {
+        "EFS_TRANSPORT": "tcp",
+        "EFS_MD_RAFT_N": "4",
+        "EFS_RAFT_GROUP_DRAIN": "0",
+        "EFS_BATCH_OBS": "0",
+        "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+        "EFS_RAFT_FLOW": "1",
+        "EFS_RDMA_GID_INDEX": "",
+        "EFS_RAFT_APPLIED_INTERVAL_MS": "100",
+        "EFS_QUERY_CATALOG_MIB": "1024",
+        "EFS_RAFT_BATCH_NOOP": "1",
+        "EFS_COMMANDS": "0",
+        "EFS_RAFT_BATCH_OVERLAP": "1",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_CLUSTER": "nuc",
+        "EFS_DIRECT_IO": "1",
+        "EFS_RDMA_DEV": ""
+      },
+      "sha256": "a99768a591d88b92789e259d9e969987ca36be16dcaea7b352e1de3ef44928fb"
+    },
+    {
+      "pid": 3147466,
+      "env": {
+        "EFS_TRANSPORT": "tcp",
+        "EFS_MD_RAFT_N": "4",
+        "EFS_RAFT_GROUP_DRAIN": "0",
+        "EFS_BATCH_OBS": "0",
+        "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+        "EFS_RAFT_FLOW": "1",
+        "EFS_RDMA_GID_INDEX": "",
+        "EFS_RAFT_APPLIED_INTERVAL_MS": "100",
+        "EFS_QUERY_CATALOG_MIB": "1024",
+        "EFS_RAFT_BATCH_NOOP": "1",
+        "EFS_COMMANDS": "0",
+        "EFS_RAFT_BATCH_OVERLAP": "1",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_CLUSTER": "nuc",
+        "EFS_DIRECT_IO": "1",
+        "EFS_RDMA_DEV": ""
+      },
+      "sha256": "a99768a591d88b92789e259d9e969987ca36be16dcaea7b352e1de3ef44928fb"
+    },
+    {
+      "pid": 3149897,
+      "env": {
+        "EFS_TRANSPORT": "tcp",
+        "EFS_MD_RAFT_N": "4",
+        "EFS_RAFT_GROUP_DRAIN": "0",
+        "EFS_BATCH_OBS": "0",
+        "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+        "EFS_RAFT_FLOW": "1",
+        "EFS_RDMA_GID_INDEX": "",
+        "EFS_RAFT_APPLIED_INTERVAL_MS": "100",
+        "EFS_QUERY_CATALOG_MIB": "1024",
+        "EFS_RAFT_BATCH_NOOP": "1",
+        "EFS_COMMANDS": "0",
+        "EFS_RAFT_BATCH_OVERLAP": "1",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_CLUSTER": "nuc",
+        "EFS_DIRECT_IO": "1",
+        "EFS_RDMA_DEV": ""
+      },
+      "sha256": "a99768a591d88b92789e259d9e969987ca36be16dcaea7b352e1de3ef44928fb"
+    },
+    {
+      "pid": 3152023,
+      "env": {
+        "EFS_TRANSPORT": "tcp",
+        "EFS_MD_RAFT_N": "4",
+        "EFS_RAFT_GROUP_DRAIN": "0",
+        "EFS_BATCH_OBS": "0",
+        "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+        "EFS_RAFT_FLOW": "1",
+        "EFS_RDMA_GID_INDEX": "",
+        "EFS_RAFT_APPLIED_INTERVAL_MS": "100",
+        "EFS_QUERY_CATALOG_MIB": "1024",
+        "EFS_RAFT_BATCH_NOOP": "1",
+        "EFS_COMMANDS": "0",
+        "EFS_RAFT_BATCH_OVERLAP": "1",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_CLUSTER": "nuc",
+        "EFS_DIRECT_IO": "1",
+        "EFS_RDMA_DEV": ""
+      },
+      "sha256": "a99768a591d88b92789e259d9e969987ca36be16dcaea7b352e1de3ef44928fb"
+    }
+  ],
+  "reads": {
+    "0": {
+      "n": 6000,
+      "mean_us": 6589.036666666667,
+      "p50_us": 6122,
+      "p95_us": 10557,
+      "p99_us": 15240,
+      "max_us": 53828
+    },
+    "2": {
+      "n": 6000,
+      "mean_us": 7477.986,
+      "p50_us": 6528,
+      "p95_us": 10238,
+      "p99_us": 35034,
+      "max_us": 86300
+    }
+  },
+  "raft_status": {
+    "1": "node 1 root=1 salt=1898367047478964614 groups=2\n  group 0 hosted=1 role=LEADER leader=0 term=3451 commit=9602634 applied=9602634 voters=0x7 joint=0\n  group 2 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0xe joint=0\n",
+    "2": "node 2 root=1 salt=1898367047478964614 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=0 term=3451 commit=9602634 applied=9602634 voters=0x7 joint=0\n  group 2 hosted=1 role=LEADER leader=1 term=3318 commit=6080556 applied=6080556 voters=0xe joint=0\n",
+    "3": "node 3 root=1 salt=1898367047478964614 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=0 term=3451 commit=9602634 applied=9602634 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=1 term=3318 commit=6080556 applied=6080556 voters=0xe joint=0\n",
+    "4": "node 4 root=0 salt=1898367047478964614 groups=2\n  group 0 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=1 term=3318 commit=6080556 applied=6080556 voters=0xe joint=0\n"
+  }
+}

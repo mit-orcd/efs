@@ -30,11 +30,12 @@ unimplemented; unavailable/refusal tests are not lifecycle acceptance.
 ## Tiny-file performance follow-up
 
 [W93 final NUC acceptance](w93-atomic-apply-20261010.md) **closes W93 Oct 10**:
-atomic apply recovery and APPEND replay repairs pass full/fault/cold gates;
-repeated 15-minute ABBA runs improve candidate throughput by 28.9% across means,
-with lower operation/mixed-read tails and no regression in the larger matched
-idle-read check. Both NUC mounts are restored on the repaired build with default
-settings. Tested tuning remains opt-in; W53/W94/W97 remain separate.
+all 16 captured tips integrate at `37ad6a8790c8`; atomic apply recovery and
+APPEND replay/admission repairs pass full/fault/cold gates. Repeated 15-minute
+ABBA runs improve candidate throughput by 30.54% across means, with lower
+operation percentiles, reported mixed-read outliers and improved idle percentiles
+in the larger matched read check. Both NUC mounts are restored on the repaired
+build with default settings. Tested tuning remains opt-in; W53/W94/W97 remain separate.
 
 
 [Oct 10 W93 checkpoint cadence](w93-checkpoint-cadence-20261010.md) records

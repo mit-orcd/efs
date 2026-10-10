@@ -1,0 +1,113 @@
+{
+  "gate_results": {
+    "default-full10-exit.txt": "0",
+    "cohort-exit.txt": "0",
+    "native-exit.txt": "0",
+    "full100-exit.txt": "0",
+    "candidate-full100-exit.txt": "0",
+    "kv1000-exit.txt": "0",
+    "marker1000-exit.txt": "0",
+    "partition-exit.txt": "0",
+    "comparison-exit.txt": "0",
+    "candidate-kv1000-exit.txt": "0",
+    "candidate-marker1000-exit.txt": "0"
+  },
+  "restoration_only": false,
+  "utc": "2026-10-10T11:30:26Z",
+  "version": "efsd 37ad6a87 (branch devel-persistence-pressure, built 2026-10-10T09:33:43Z on nuc)\n",
+  "servers": [
+    {
+      "pid": 3165709,
+      "cmd": "/data1/efs/src/efsd --node-id 1 --addr 127.0.0.1 --port 17432 --storage /data1/efs/n1 --quota 187.5G --direct-io ",
+      "flags": {
+        "EFS_RAFT_FLOW": "1",
+        "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+        "EFS_RAFT_BATCH_OVERLAP": "0",
+        "EFS_RAFT_BATCH_NOOP": "0",
+        "EFS_RAFT_GROUP_DRAIN": "0",
+        "EFS_BATCH_OBS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_RAFT_APPLIED_INTERVAL_MS": "10"
+      },
+      "transport": "tcp",
+      "exe_sha256": "a99768a591d88b92789e259d9e969987ca36be16dcaea7b352e1de3ef44928fb"
+    },
+    {
+      "pid": 3168670,
+      "cmd": "/data1/efs/src/efsd --node-id 2 --addr 127.0.0.1 --port 17433 --storage /data1/efs/n2 --quota 187.5G --direct-io --join 127.0.0.1:17432 ",
+      "flags": {
+        "EFS_RAFT_FLOW": "1",
+        "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+        "EFS_RAFT_BATCH_OVERLAP": "0",
+        "EFS_RAFT_BATCH_NOOP": "0",
+        "EFS_RAFT_GROUP_DRAIN": "0",
+        "EFS_BATCH_OBS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_RAFT_APPLIED_INTERVAL_MS": "10"
+      },
+      "transport": "tcp",
+      "exe_sha256": "a99768a591d88b92789e259d9e969987ca36be16dcaea7b352e1de3ef44928fb"
+    },
+    {
+      "pid": 3171139,
+      "cmd": "/data1/efs/src/efsd --node-id 3 --addr 127.0.0.1 --port 17434 --storage /data2/efs/n3 --quota 187.5G --direct-io --join 127.0.0.1:17432 ",
+      "flags": {
+        "EFS_RAFT_FLOW": "1",
+        "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+        "EFS_RAFT_BATCH_OVERLAP": "0",
+        "EFS_RAFT_BATCH_NOOP": "0",
+        "EFS_RAFT_GROUP_DRAIN": "0",
+        "EFS_BATCH_OBS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_RAFT_APPLIED_INTERVAL_MS": "10"
+      },
+      "transport": "tcp",
+      "exe_sha256": "a99768a591d88b92789e259d9e969987ca36be16dcaea7b352e1de3ef44928fb"
+    },
+    {
+      "pid": 3173262,
+      "cmd": "/data1/efs/src/efsd --node-id 4 --addr 127.0.0.1 --port 17435 --storage /data2/efs/n4 --quota 187.5G --direct-io --join 127.0.0.1:17432 ",
+      "flags": {
+        "EFS_RAFT_FLOW": "1",
+        "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+        "EFS_RAFT_BATCH_OVERLAP": "0",
+        "EFS_RAFT_BATCH_NOOP": "0",
+        "EFS_RAFT_GROUP_DRAIN": "0",
+        "EFS_BATCH_OBS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_RAFT_APPLIED_INTERVAL_MS": "10"
+      },
+      "transport": "tcp",
+      "exe_sha256": "a99768a591d88b92789e259d9e969987ca36be16dcaea7b352e1de3ef44928fb"
+    }
+  ],
+  "clients": [
+    {
+      "pid": 3175738,
+      "commands": "0",
+      "exe_sha256": "cd3d4b03dfd1d8b63ad79cab5e480a25fa459a8752d03d2362caf2fc87e77241",
+      "cmd": "./efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt "
+    },
+    {
+      "pid": 3175776,
+      "commands": "0",
+      "exe_sha256": "cd3d4b03dfd1d8b63ad79cab5e480a25fa459a8752d03d2362caf2fc87e77241",
+      "cmd": "./efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt2 "
+    }
+  ],
+  "raft_status": {
+    "17432": "node 1 root=1 salt=1898367047478964614 groups=2\n  group 0 hosted=1 role=LEADER leader=0 term=3509 commit=9618401 applied=9618401 voters=0x7 joint=0\n  group 2 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0xe joint=0\n",
+    "17433": "node 2 root=1 salt=1898367047478964614 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=0 term=3509 commit=9618401 applied=9618401 voters=0x7 joint=0\n  group 2 hosted=1 role=LEADER leader=1 term=3363 commit=6096413 applied=6096413 voters=0xe joint=0\n",
+    "17434": "node 3 root=1 salt=1898367047478964614 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=0 term=3509 commit=9618401 applied=9618401 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=1 term=3363 commit=6096413 applied=6096413 voters=0xe joint=0\n",
+    "17435": "node 4 root=0 salt=1898367047478964614 groups=2\n  group 0 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=1 term=3363 commit=6096413 applied=6096413 voters=0xe joint=0\n"
+  },
+  "mounts": {
+    "/data1/efs/mnt": true,
+    "/data1/efs/mnt2": true
+  },
+  "binary_sha256": {
+    "efsd": "a99768a591d88b92789e259d9e969987ca36be16dcaea7b352e1de3ef44928fb",
+    "efs-fuse": "cd3d4b03dfd1d8b63ad79cab5e480a25fa459a8752d03d2362caf2fc87e77241"
+  },
+  "space": "Filesystem           Size  Used Avail Use% Mounted on\n/dev/sda             745G  348G  398G  47% /data1\n/dev/mapper/rl-home  843G  315G  529G  38% /home\n"
+}

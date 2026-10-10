@@ -1,0 +1,1 @@
+{"fdatasync_calls":160,"batch":1,"groups":1,"width":16,"records":2560,"ops_s":57112.4,"ready_to_ack_p50_us":272.0,"p95_us":318.7,"p99_us":386.5,"maxrss_kib":5628,"by_group":[{"group":0,"records":2560,"fdatasync_calls":160,"ready_to_ack_p50_us":272.0,"p95_us":318.7,"p99_us":386.5}]}

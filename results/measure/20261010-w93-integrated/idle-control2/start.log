@@ -1,0 +1,106 @@
+ERROR: n1 did not start; log:
+2026-10-10T11:25:44.718Z raft-host: gc-pass ms=23 orphan=23 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=185 keys=4147 emit=4106 tomb=41 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-10T11:25:44.925Z kv-obs: mt_bytes=2687452 l0_bytes=57542963 l0=118 l1=149
+2026-10-10T11:25:45.784Z raft-host: read-sleep us=27783 group=0 want=9601473 read_idx=9601473 applied=9601473 pending=1
+2026-10-10T11:25:45.794Z raft-host: gc-pass ms=72 orphan=72 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=183 keys=4109 emit=4106 tomb=3 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-10T11:25:46.296Z iostats: get ops=6028 bytes=395051008 errors=0 avg_us=1475 p50_us=659 max_us=8429 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T11:25:46.848Z raft-host: gc-pass ms=50 orphan=50 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=181 keys=4182 emit=4106 tomb=76 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-10T11:25:47.872Z raft-host: gc-pass ms=20 orphan=20 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=179 keys=4114 emit=4106 tomb=8 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-10T11:25:48.895Z raft-host: gc-pass ms=20 orphan=20 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=177 keys=4107 emit=4106 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-10T11:25:49.917Z raft-host: gc-pass ms=18 orphan=18 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=177 keys=4107 emit=4106 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-10T11:25:49.928Z kv-obs: mt_bytes=2689812 l0_bytes=57542963 l0=118 l1=149
+2026-10-10T11:25:50.943Z raft-host: gc-pass ms=22 orphan=22 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=177 keys=4298 emit=4106 tomb=192 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-10T11:25:51.299Z iostats: get ops=6378 bytes=417988608 errors=0 avg_us=1478 p50_us=642 max_us=9050 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T11:25:51.963Z raft-host: gc-pass ms=16 orphan=16 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=176 keys=4107 emit=4106 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-10T11:25:52.991Z raft-host: gc-pass ms=24 orphan=24 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=176 keys=4109 emit=4106 tomb=3 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-10T11:25:55.781Z storage-engine=files direct_io=on
+2026-10-10T11:25:55.781Z Loaded 4 persisted cluster node(s) from /data1/efs/n1/meta/cluster_nodes.bin
+2026-10-10T11:25:55.781Z   persisted node 1: 127.0.0.1:17432
+2026-10-10T11:25:55.781Z   persisted node 2: 127.0.0.1:17433
+2026-10-10T11:25:55.781Z   persisted node 3: 127.0.0.1:17434
+2026-10-10T11:25:55.781Z   persisted node 4: 127.0.0.1:17435
+start readiness attempt 1 failed; retaining processes for bounded retry
+n1 already running (pid 3165709)
+ERROR: n2 did not start; log:
+2026-10-10T11:25:45.784Z raft-host: gc-pass ms=94 orphan=93 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=21 segs=508 keys=4338 emit=4106 tomb=232 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-10T11:25:45.784Z raft-host: apply-sleep us=27644 group=0 idx=9601473 applied=9601472
+2026-10-10T11:25:46.298Z iostats: get ops=6029 bytes=395116544 errors=0 avg_us=1052 p50_us=593 max_us=7002 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T11:25:46.878Z raft-host: apply-sleep us=25291 group=0 idx=9601644 applied=9601643
+2026-10-10T11:25:46.878Z raft-host: gc-pass ms=91 orphan=91 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=21 segs=503 keys=4136 emit=4106 tomb=30 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-10T11:25:47.988Z raft-host: gc-pass ms=106 orphan=106 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=21 segs=495 keys=4139 emit=4106 tomb=33 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-10T11:25:49.119Z raft-host: gc-pass ms=128 orphan=128 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=21 segs=495 keys=4226 emit=4106 tomb=120 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-10T11:25:50.130Z kv-obs: mt_bytes=684556 l0_bytes=113054931 l0=221 l1=287
+2026-10-10T11:25:50.216Z raft-host: gc-pass ms=93 orphan=93 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=21 segs=490 keys=4123 emit=4106 tomb=17 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-10T11:25:50.216Z raft-host: apply-sleep us=21992 group=0 idx=9602164 applied=9602163
+2026-10-10T11:25:51.301Z iostats: get ops=6378 bytes=417988608 errors=0 avg_us=1054 p50_us=601 max_us=7002 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T11:25:51.303Z raft-host: gc-pass ms=83 orphan=83 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=21 segs=490 keys=4127 emit=4106 tomb=21 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-10T11:25:52.391Z raft-host: gc-pass ms=84 orphan=84 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=21 segs=489 keys=4125 emit=4106 tomb=19 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-10T11:25:53.477Z raft-host: gc-pass ms=82 orphan=82 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=21 segs=485 keys=4127 emit=4106 tomb=21 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-10T11:26:31.153Z storage-engine=files direct_io=on
+2026-10-10T11:26:31.153Z Loaded 4 persisted cluster node(s) from /data1/efs/n2/meta/cluster_nodes.bin
+2026-10-10T11:26:31.153Z   persisted node 1: 127.0.0.1:17432
+2026-10-10T11:26:31.153Z   persisted node 2: 127.0.0.1:17433
+2026-10-10T11:26:31.153Z   persisted node 3: 127.0.0.1:17434
+2026-10-10T11:26:31.153Z   persisted node 4: 127.0.0.1:17435
+start readiness attempt 2 failed; retaining processes for bounded retry
+n1 already running (pid 3165709)
+n2 already running (pid 3168670)
+ERROR: n3 did not start; log:
+2026-10-10T11:25:26.327Z iostats: get ops=4609 bytes=302055424 errors=0 avg_us=1248 p50_us=1010 max_us=7758 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T11:25:27.605Z kv-obs: mt_bytes=665128 l0_bytes=109033804 l0=221 l1=287
+2026-10-10T11:25:31.328Z iostats: get ops=4966 bytes=325451776 errors=0 avg_us=1248 p50_us=1013 max_us=7758 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T11:25:32.608Z kv-obs: mt_bytes=669183 l0_bytes=109033804 l0=221 l1=287
+2026-10-10T11:25:36.331Z iostats: get ops=5317 bytes=348454912 errors=0 avg_us=1244 p50_us=1524 max_us=7758 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T11:25:37.608Z kv-obs: mt_bytes=673431 l0_bytes=109033804 l0=221 l1=287
+2026-10-10T11:25:41.182Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=175 passes=114 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T11:25:41.332Z iostats: get ops=5679 bytes=372178944 errors=0 avg_us=1242 p50_us=1097 max_us=7758 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T11:25:42.608Z kv-obs: mt_bytes=677679 l0_bytes=109033804 l0=221 l1=287
+2026-10-10T11:25:46.333Z iostats: get ops=6031 bytes=395247616 errors=0 avg_us=1244 p50_us=996 max_us=7758 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T11:25:47.608Z kv-obs: mt_bytes=681927 l0_bytes=109033804 l0=221 l1=287
+2026-10-10T11:25:49.045Z raft-host: gc-pass ms=5 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-10T11:25:51.333Z iostats: get ops=6379 bytes=418054144 errors=0 avg_us=1243 p50_us=954 max_us=7758 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T11:25:52.608Z kv-obs: mt_bytes=686647 l0_bytes=109033804 l0=221 l1=287
+2026-10-10T11:27:06.761Z storage-engine=files direct_io=on
+2026-10-10T11:27:06.761Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/n3/meta/cluster_nodes.bin
+2026-10-10T11:27:06.761Z   persisted node 1: 127.0.0.1:17432
+2026-10-10T11:27:06.761Z   persisted node 2: 127.0.0.1:17433
+2026-10-10T11:27:06.761Z   persisted node 3: 127.0.0.1:17434
+2026-10-10T11:27:06.761Z   persisted node 4: 127.0.0.1:17435
+start readiness attempt 3 failed; retaining processes for bounded retry
+n1 already running (pid 3165709)
+n2 already running (pid 3168670)
+n3 already running (pid 3171139)
+ERROR: n4 did not start; log:
+2026-10-10T11:25:25.189Z kv-obs: mt_bytes=2982157 l0_bytes=39073287 l0=118 l1=144
+2026-10-10T11:25:25.237Z iostats: get ops=4529 bytes=296812544 errors=0 avg_us=524 p50_us=330 max_us=7814 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T11:25:30.189Z kv-obs: mt_bytes=2982620 l0_bytes=39073287 l0=118 l1=144
+2026-10-10T11:25:30.241Z iostats: get ops=4888 bytes=320339968 errors=0 avg_us=527 p50_us=324 max_us=7814 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T11:25:31.134Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=687 passes=76 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T11:25:35.189Z kv-obs: mt_bytes=2983270 l0_bytes=39073287 l0=118 l1=144
+2026-10-10T11:25:35.243Z iostats: get ops=5242 bytes=343539712 errors=0 avg_us=529 p50_us=325 max_us=7876 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T11:25:40.189Z kv-obs: mt_bytes=2983828 l0_bytes=39073287 l0=118 l1=144
+2026-10-10T11:25:40.244Z iostats: get ops=5602 bytes=367132672 errors=0 avg_us=529 p50_us=333 max_us=7876 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T11:25:45.190Z kv-obs: mt_bytes=2984668 l0_bytes=39073287 l0=118 l1=144
+2026-10-10T11:25:45.248Z iostats: get ops=5953 bytes=390135808 errors=0 avg_us=528 p50_us=330 max_us=7876 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T11:25:47.136Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=632 passes=92 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T11:25:50.191Z kv-obs: mt_bytes=2985544 l0_bytes=39073287 l0=118 l1=144
+2026-10-10T11:25:50.251Z iostats: get ops=6303 bytes=413073408 errors=0 avg_us=528 p50_us=311 max_us=7876 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T11:27:42.372Z storage-engine=files direct_io=on
+2026-10-10T11:27:42.372Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/n4/meta/cluster_nodes.bin
+2026-10-10T11:27:42.372Z   persisted node 1: 127.0.0.1:17432
+2026-10-10T11:27:42.372Z   persisted node 2: 127.0.0.1:17433
+2026-10-10T11:27:42.372Z   persisted node 3: 127.0.0.1:17434
+2026-10-10T11:27:42.372Z   persisted node 4: 127.0.0.1:17435
+start readiness attempt 4 failed; retaining processes for bounded retry
+n1 already running (pid 3165709)
+n2 already running (pid 3168670)
+n3 already running (pid 3171139)
+n4 already running (pid 3173262)
+already formatted (rm /data1/efs/.mkfs-done + wipe n* to redo)
+Stop with: /data1/efs/src/scripts/client.sh stop /data1/efs/mnt
+Logging efs-fuse to /data1/efs/efs-fuse-mnt.log
+Mounted /data1/efs/mnt
+Stop with: /data1/efs/src/scripts/client.sh stop /data1/efs/mnt2
+Logging efs-fuse to /data1/efs/efs-fuse-mnt2.log
+Mounted /data1/efs/mnt2
+nuc-efs up: n1..n4 on 127.0.0.1:17432/17433/17434/17435, mounted at /data1/efs/mnt + /data1/efs/mnt2

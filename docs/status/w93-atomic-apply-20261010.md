@@ -2,7 +2,14 @@
 
 Status: **W93 closed Oct 10** for bounded durable batching and the stated AMD/NUC acceptance. Runtime defaults remain unchanged; the tested NUC bundle remains opt-in.
 
-All 15 branch tips captured in the retained merge manifest were integrated into
+Latest integrated acceptance is engine `37ad6a8790c8-integration`, including all
+16 final captured branch tips and the receipt-window admission repair. The new
+four-run comparison improves candidate mean by **30.54%**, passes the larger
+idle-read matrix and restores both NUC mounts with exact binary identities.
+See the integrated acceptance sections below; the earlier build retains its
+separate evidence and results.
+
+All 15 initial branch tips captured in the retained merge manifest were integrated into
 `devel-persistence-pressure`; other checkouts and branch pointers are preserved.
 The first repair (`8c214f7e`) fixes a receipt race: a peer can complete an APPEND
 between the initial receipt miss and the later authoritative receipt read.
@@ -62,7 +69,7 @@ also had an invalid null decision callback; it now supplies the real local KV
 transaction decision reader. Temporary smoke binaries identify as `unknown`;
 final acceptance must use a frozen committed build and repeat the full gates.
 
-## Final acceptance procedure (completed)
+## First frozen acceptance procedure (completed)
 
 The final sequence rebuilds all five binaries with an exact committed ID and repeats full native,
 full POSIX/peer/sync/append/dirty-stop/WAL gates, candidate switches, KV EIO,
@@ -107,7 +114,7 @@ The final release-binary native and all live gates pass before deployment;
 the original intermittent trigger is not claimed reproduced by this unit test.
 
 
-## Frozen final safety and sustained NUC results
+## First frozen safety and sustained NUC results — 5b2df4bd
 
 Engine `5b2df4bd32be-closure` passes full native regression and partition /
 publication / session / voter-change gates. Three complete private release-build
@@ -165,7 +172,7 @@ lower candidate medians. The separately matched 6,000-read-per-group default / c
 full-candidate / default check below completes this acceptance step.
 
 
-## Larger idle check and final disposition
+## First acceptance: larger idle check and disposition
 
 All four larger read-only cases use the same frozen binaries and immutable
 payloads, exclude startup/warm-up, retain every raw read, verify identities and
@@ -202,8 +209,8 @@ drain tail. Observation log windows and perf enable/disable acknowledgements
 retain their exact timing offsets. Maximum sampled process RSS across ABBA is
 2,125.9 MiB. Largest sequential-probe replica commit spreads are 181/group 0 and
 39/group 2 entries; these are observed values, not continuous lag ceilings.
-The final larger idle repeat and another 512 cold checks pass. Final live binary
-hashes match installed binaries, four direct/TCP daemons and both mounts are up,
+The final larger idle repeat and another 512 cold checks pass. Final live server
+hashes match the installed server, four direct/TCP daemons and both mounts are up,
 and no loader/profiler remains. All final acceptance exit records are zero;
 original failures and expected negative-control exits remain retained.
 
@@ -215,3 +222,164 @@ The accepted bundle is opt-in (`EFS_RAFT_APPLIED_INTERVAL_MS=100`,
 `EFS_RAFT_BATCH_OVERLAP=1`, `EFS_RAFT_BATCH_NOOP=1`); it is not a global-default
 change for untested deployments. Clean shutdown is required before downgrading
 to binaries that ignore the atomic recovery cursor.
+
+
+## Concurrent final branch integration
+
+After the completed acceptance above, the last ancestry audit found concurrent
+`devel`/`devel-intel`, query-cache and W66 commits. These are merged at frozen
+engine `cdc5c26539e9`, preserving the W93 repairs and both test dependencies.
+`merge-closure-tips.json` records this final boundary. Four-voter handling,
+namespace/GETCHUNKS retries and query revision persistence are independently
+changed; current production topology remains the existing two three-voter groups.
+The earlier acceptance remains attributed to `5b2df4bd32be`. Final integrated
+native/live gates and repeated sustained NUC revalidation are retained under
+`results/measure/20261010-w93-integrated/`; do not represent the old evidence as
+execution of this new build. NUC stayed on the accepted old build until the
+new isolated safety gates passed; it now runs the frozen repair below for
+sustained revalidation. No moving concurrent branch is silently chased
+past this final captured integration boundary.
+
+### Integrated receipt-window admission repair
+
+The first integrated `cdc5c26539e9` full live run passes the sync/APPEND/dirty-stop
+and shutdown gates but fails `concurrent_appends`: POSIX 211/212, EAGAIN. Keep
+`initial-cdc5c265/full100.log` and private fixture `gc-direct-hg1fadwi`.
+The concurrent file has 57 accepted eight-byte reservations rather than 200;
+its adjacent two-process case accepts all 120 records. Twelve client admission
+messages retain the oldest unresolved identities (3828 then 3846) and a full
+16-position receipt window, sometimes with only one live owner. Later completed
+positions cannot be acknowledged until that oldest owner finishes. Increasing
+the receipt limit or advancing ACK past an unresolved identity is not a fix.
+
+`37ad6a87` waits for identity admission before any reservation RPC, outside the
+append stripe, retrying within the inherited write deadline. Success reacquires
+the stripe within that same deadline; a failed reacquisition retires only the
+new, never-submitted identity. Generic identity admission now respects an expired
+caller deadline even inside its one-second attempt. No partial write is accepted,
+unknown operation is replaced, or callback budget extended. Saturation can still
+fail honestly when the full deadline expires. This prevents immediate one-second
+EAGAIN and avoids making an older operation wait behind the admission lock.
+
+Actual-source tests exercise a window remaining blocked beyond one second then
+recovering, unlocked admission, deadline/exhaustion refusal, identity and stripe
+cleanup, and a 20 ms inherited deadline inside saturated generic admission.
+The unchanged-source negative controls fail the lock and elapsed-time assertions.
+Existing retained CREATE/lease/ACK and 800,000 concurrent identity checks pass.
+Integrated live and performance acceptance completes below; the older-engine
+acceptance remains separate.
+
+### Integrated safety and deployment
+
+Frozen engine `37ad6a8790c8-integration` passes the rebuilt full native suite
+and all five documentation checks. Source hashes and all five binary versions /
+hashes are retained; server/FUSE HELLO build identifiers are checked separately
+from human `--version` text. Every one of the final 16 captured tips is an
+ancestor. No additional moving tip is chased after this boundary.
+
+All three complete private configurations pass POSIX 212/212 and peer 64/64:
+100 ms baseline cohorts (70.7 / 190.0 seconds for POSIX / peer), 100 ms overlap /
+no-op (60.1 / 34.5), and unchanged 10 ms defaults (65.5 / 44.9). These functional
+run durations are retained, not used as a controlled speed comparison.
+Each also passes sync/APPEND, dirty-stop, shutdown-mutation, physical GC and
+corrupt-WAL/second-cold-crash checks. Partition/publication/session/voter-change
+acceptance passes. At the maximum 1,000 ms cadence, KV-WAL and retained-marker
+EIO/crash/offline-metadata tests pass both with baseline cohorts and with the
+accepted overlap/no-op switches together. The repeated per-group SATA/NVMe
+core matrix also passes: all 32 cases, exact cold records and own-group ACK
+watermarks. Every final isolated safety exit is zero; the original cdc failure
+and expected old-source negative exits remain separate.
+
+Both service mounts and all old daemons drained before installation. Preserved
+stores required four failed readiness attempts before the fifth completed;
+already-started processes were retained. Four repaired-build daemons and both mounts are ready, direct IO / TCP,
+commands off. No timed loader existed during failed startup readiness attempts.
+Sustained ABBA revalidation completes on this exact source, with fresh workload
+directories and the same monitoring / headroom guards as the earlier acceptance.
+The larger matched idle matrix follows those four 900-second cells. Default
+restoration and exact cold checks pass; results follow.
+
+### Integrated sustained comparison — 37ad6a87
+
+All four fresh-directory 900-second cells complete, drain, and catch every
+replica up to its group's final leader cut. No worker error, cap hit or Raft
+sync error occurs. The workload, monitoring, headroom guards and ABBA order
+are unchanged from the first acceptance; executable source is now the final
+merged engine. Preparation, restart and idle probes remain outside timed work.
+
+| Cell | Files/s | 0–5 / 5–10 / 10–15 min files/s | Operation p50 / p95 / p99, ms | Mixed-read p99 group 0 / 2, ms |
+|---|---:|---|---|---|
+| Control 1, 10 ms | 60.67 | 76.73 / 52.43 / 52.85 | 94.54 / 352.08 / 468.99 | 212.73 / 469.99 |
+| Candidate 1, 100 ms + overlap/no-op | 83.18 | 96.04 / 72.99 / 80.50 | 65.60 / 284.73 / 394.76 | 186.11 / 406.15 |
+| Candidate 2, same | 75.06 | 91.77 / 66.83 / 66.57 | 77.32 / 274.21 / 351.86 | 210.00 / 351.65 |
+| Control 2, 10 ms | 60.54 | 76.20 / 53.06 / 52.37 | 94.29 / 352.06 / 462.26 | 207.02 / 430.65 |
+
+Candidate mean is **79.12 vs 60.61 files/s, +30.54%**. Both candidates beat
+both controls, including settled rate windows. Operation p50/p95/p99 improve;
+short mixed-read p99 is generally lower, but candidate 2 group 0 is 210.00 ms
+versus final control 207.02 ms. Candidate 1 retains an operation maximum of
+1.077 seconds and group 2 mixed-read maximum of 1.010 seconds, versus controls'
+0.801 / 0.819 second operation maxima and 0.500 / 0.481 second group 2 read
+maxima. Do not hide these outliers or overinterpret 181 mixed reads/group/cell.
+This remains a bundled, local workload comparison, not separate attribution of
+switches or a universal gain.
+
+n3 entries/sync in ABBA order are **4.51 / 6.72 / 5.87 / 4.50**; n4 is
+1.074 / 1.148 / 1.149 / 1.076. n3 applied-marker phase time is
+146.9 / 76.9 / 75.1 / 145.6 seconds, and n4 is
+213.9 / 45.5 / 42.4 / 214.3. Actual sync syscall windows, all per-group and
+worker latencies, background GC and host block deltas remain in the raw bundle.
+The fewer marker barriers and broader eligible cohorts retain ACK coverage;
+these timings are evidence of reduced persistence work, not drive physics.
+
+Maximum sampled process RSS across these cells is **2,359.7 MiB**. Observed
+local commit-minus-applied is zero; largest sequential replica commit spreads
+are 143/group 0 and 58/group 2 entries, not continuous ceilings. Inbox bounds
+remain 256 frames/32 MiB; atomic apply bounds remain 32,768 keys/64 MiB.
+n3 refuses 27,936 / 30,414 / 29,795 / 28,002 inbox admissions. Retried pressure
+is still material; W97 remains separate. n4 refusals are 11 / 17 / 0 / 5.
+Memory/resource and background work evidence is retained, not an assertion of
+constant total RSS with an arbitrarily growing namespace.
+
+### Integrated final acceptance
+
+The matched larger idle matrix completes on the same binaries, with startup /
+warm-up excluded and 6,000 exact immutable-payload reads per group per case.
+
+| Settings | Group 0 p50 / p95 / p99, ms | Group 2 p50 / p95 / p99, ms |
+|---|---|---|
+| Default 10 ms, control 1 | 6.57 / 11.53 / 17.47 | 8.12 / 12.57 / 41.80 |
+| 100 ms cadence only | 6.08 / 10.48 / 16.03 | 6.49 / 10.12 / 35.14 |
+| 100 ms + overlap/no-op | 6.12 / 10.56 / 15.24 | 6.53 / 10.24 / 35.03 |
+| Default 10 ms, control 2 | 6.43 / 10.78 / 16.83 | 8.21 / 13.39 / 38.92 |
+
+Both groups' full-bundle p50/p95/p99 improve against both controls. Group 0
+maxima in table order are 57.4 / 50.5 / 53.8 / 66.1 ms; group 2 maxima are
+115.2 / 66.0 / 86.3 / 68.3 ms. The bundle's group 2 maximum exceeds the final
+control despite lower percentiles; retain it. This comparison does not show
+an idle percentile regression hidden by throughput averages. Reads include
+FUSE OPEN/read/CLOSE metadata, not raw device IO.
+
+All final native, functional, partition, maximum-cadence fault, core matrix,
+sustained, idle and deployment exit records are zero. The first cold restoration
+and the post-idle check each verify all **512 sampled first/last payloads**
+through both mounts. Final verification at **2026-10-10 11:30:26 UTC** proves
+four daemons and two FUSE clients match the installed merged executable hashes;
+TCP/direct IO, both mounts up, FLOW=1, 10 ms applied cadence, commands / batch
+diagnostics / overlap / no-op / group drain / early retirement off. No owned
+loader or profiler remains. Original failures and expected old-source negative
+exits remain retained and are not counted as passes.
+
+Raw integrated controls, versions, source/controller hashes, all 32 per-group
+core cases, four ABBA cells, four larger idle cases, fixture logs / metadata and
+final state are retained in `results/measure/20261010-w93-integrated/`, with an
+artifact hash manifest. Executable source is the frozen `37ad6a8790c8` commit;
+`4a962397` adds active-FUSE restoration hash checks outside timed workloads.
+All 16 final captured tips are ancestors. Other checkouts and branch pointers
+are preserved; concurrent tips after this captured boundary are not silently
+represented as tested.
+
+**W93 is closed on the final integrated build.** The opt-in tuning bundle,
+clean-downgrade rule, sample/outlier caveats and separate W53/W94/W97 obligations
+remain as stated above. This acceptance establishes neither a hardware ceiling
+nor physical power-loss or distributed-RDMA guarantees.
