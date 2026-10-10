@@ -309,6 +309,22 @@ int efs_client_lease_resume(struct efs_client_lease_request *,int probe_only);
 int efs_client_lease_reset(struct efs_client_lease_request *);
 
 struct efs_put_ticket;
+struct efs_meta_pub;
+struct efs_client_put_request;
+/* Staged pre-PUT ownership. Reserve an immutable, budgeted manifest before
+ * any admission RPC. Caller serializes the handle and keeps fragment bytes
+ * separately. Membership slots are captured with node IDs, never reinterpreted
+ * after a configuration change. ADMITTED is metadata proof, not a storage
+ * write permit: the data-plane durable fence is still required. */
+int efs_client_put_begin(struct efs_client_put_request **,
+                         const struct efs_meta_pub *);
+int efs_client_put_manifest(const struct efs_client_put_request *,
+                            struct efs_put_ticket *);
+int efs_client_put_resume(struct efs_client_put_request *,int probe_only,
+                          uint32_t *state);
+/* Ambiguous admission, revocation and RECLAIMING retain ownership. Only a
+ * never-attempted request or an observed PUBLISHED ticket may be freed here. */
+int efs_client_put_free(struct efs_client_put_request *);
 /* Opt-in durable ownership only. Caller retains immutable identity/body on
  * ambiguity. STATUS does not establish a session; state is not a PUT permit. */
 int efs_client_rpc_put_ticket(const struct efs_put_ticket *,int probe_only,uint32_t *state);
