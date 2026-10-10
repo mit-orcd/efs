@@ -33,7 +33,7 @@ def exercise(args,work,roots,mount,run,start,stop,mount_client,unmount,wait,drai
     time.sleep(1)
     assert checkpoints()==baseline,'periodic checkpoint advanced past failed WAL sync'
     assert 'test-kv-wal: refusing WAL fdatasync' in (work/'n3.log').read_text()
-    assert 'KV/applied durability failed; checkpoint retained' in (work/'n3.log').read_text()
+    assert 'applied checkpoint not advanced after persistence failure' in (work/'n3.log').read_text()
     unmount();stop() # forced final checkpoint path must also refuse
     assert checkpoints()==baseline,'shutdown checkpoint advanced past failed WAL sync'
     assert 'shutdown durability failed; checkpoint retained' in (work/'n3.log').read_text()
