@@ -3843,14 +3843,22 @@ find/stats checkpoint; never treat the private fixture as deployed acceptance.
 
 ## W93 · Broader durable Raft group commit for tiny-file metadata
 
-**Oct 10 atomic apply repair in progress:** The final retained-checkpoint fault
-exposed duplicate hardlink application (cold n3 nlink 3 instead of 2). Applied
-KV effects and a node-local group cursor now share one bounded atomic WAL
-record; restart validates that proof before using legacy hints. The initial
-maximum-cadence crash/cold smoke passes. APPEND late-receipt replay is separately
-fixed with negative controls. Full frozen-binary gates and repeated sustained
-NUC acceptance remain required; default settings are unchanged. See
-[repair and current acceptance](../status/w93-atomic-apply-20261010.md).
+**Closed Oct 10 — frozen NUC acceptance:** All captured branch tips are integrated
+into `devel-persistence-pressure`. APPEND late-receipt replay and atomic KV-effects /
+applied-cursor recovery repairs pass actual-source negative/sanitizer controls,
+full native regression, three POSIX 212/212 + peer 64/64 release-build gates,
+sync/append/dirty-stop/shutdown/WAL and maximum-cadence KV/marker-EIO crash gates,
+plus partition/publication/session/voter-change acceptance. Four balanced
+900-second ABBA runs give 66.56 / 82.33 / 81.39 / 60.45 files/s: **+28.9%** across
+candidate/control means, with improved operation and mixed-read tails. A larger
+6,000-read-per-group default/cadence/bundle/default check shows no idle-tail
+regression. Repeated actual-core SATA/NVMe one/two-group cases retain group-specific
+ACK ordering, 1,280 → 80 barriers per group for eligible 16-entry cohorts and exact
+cold records. Queue/apply bounds, RSS/lag/refusals and 512 cold service payloads
+are retained. NUC is restored on the repaired build, both mounts up, default
+10 ms, `.efs`/diagnostics and optional experiments off. The tested bundle remains
+opt-in; W53/W94/W97 and hardware power-loss/distributed-RDMA obligations are separate.
+[Final evidence, limits and repairs](../status/w93-atomic-apply-20261010.md).
 
 **Oct 10 checkpoint investigation:** All 16 frozen local branch tips are merged
 into `devel-persistence-pressure`. `4bb7b169` fixes failed applied-marker writes
@@ -3972,7 +3980,7 @@ new end-to-end batching acceptance. See
 **Implementation update (Oct 8):** Bounded follower durability batching, durable ACK ordering, storage-failure fencing and committed-prefix protection are implemented. Fault/full Linux/live AMD direct/TCP gates pass. Six balanced 4,096-file same-code mixed-load fixtures pass cold verification and physical reclamation, with overlapping close tails; separate pump/barrier diagnostics are retained.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
-**Class/status:** Performance; base batching implemented and covered AMD gates passed. Bounded follower batching, durable ACK ordering, persistence fencing and committed-prefix protection pass fault/cold/POSIX/peer gates. Earlier controlled AMD batching gains repeat; six balanced long same-code mixed-load fixtures show no consistent tail regression. Broader sustained NUC acceptance and optional Oct 9 scheduling/cohort extensions remain open.
+**Class/status:** Performance; **closed Oct 10** for bounded follower batching and the recorded AMD/NUC acceptance. Durable ACK ordering, persistence fencing, committed-prefix protection and atomic apply recovery pass fault/cold/POSIX/peer gates. Repeated NUC gains and the larger matched idle-read matrix complete the remaining acceptance. Optional experiments remain off by default; rejected group scheduling/early retirement are not adopted.
 
 **Evidence:** NUC round 7, `c22754236b38-tiny-r7`, buffered/TCP. In an eight-second
 instrumented window, n3 pump thread 1746498 completed 1,024 Raft `fdatasync`
@@ -3982,7 +3990,7 @@ The trace includes replication/catch-up/background work. See the
 [raw trace](../../results/measure/20261008-nuc-tiny-create/round-7/after/follower-sync.txt)
 and [separate profiles](../../results/measure/20261008-nuc-tiny-create/round-7/after/).
 
-**Remaining action:** Establish repeatable sustained NUC gains from eligible cohort changes with per-group barrier/entry ratios, idle/mixed p50/p95/p99, bounded memory/queues/lag and the same-code cold/fault gates. A sequential A/B pair is exploratory evidence, not repeatability. Retain base batching regressions. W53 end-to-end close tails remain a separate investigation; W94 client CREATE/lease adoption has independent ownership/fencing prerequisites. Process-crash acceptance is not hardware power-loss or distributed-RDMA proof.
+**Disposition:** The remaining sustained NUC/per-group/read-tail/cold/fault gates are completed in the linked final report. Retain batching, cursor and ACK regressions. W53 end-to-end close tails, W94 CREATE/lease adoption and W97 pressure handling remain separate; process-crash acceptance does not establish hardware power-loss or distributed-RDMA guarantees.
 
 **Governing contracts/related work:** preserve Raft durability, W82 read
 authority, W23/W89 and D30 pressure bounds. W19's older CPU-copy measurement
