@@ -1,5 +1,7 @@
 /* Exercise the production cache boundary and partial-write error behavior. */
 #include <errno.h>
+#include <fcntl.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,6 +9,32 @@
 static int partial_write;
 static unsigned write_calls;
 static unsigned read_calls;
+static unsigned raw_syncs,index_syncs,sync_faults;
+static char fail_sync_kind;
+static char descriptor_kind[4096];
+static int tracked_open(const char *path,int flags,...)
+{
+    mode_t mode=0;
+    if(flags&O_CREAT){va_list args;va_start(args,flags);mode=va_arg(args,int);va_end(args);}
+    int fd=open(path,flags,mode);
+    if(fd>=0 && fd<(int)sizeof(descriptor_kind)){
+        size_t n=strlen(path);char kind=0;
+        if(!(flags&O_DIRECTORY)){
+            if(n>=2 && path[n-2]=='.')kind=path[n-1];
+            const char *name=strrchr(path,'/');if(name && !strcmp(name+1,"manifest"))kind='m';
+        }
+        descriptor_kind[fd]=kind;
+    }
+    return fd;
+}
+static int fault_fsync(int fd)
+{
+    char kind=fd>=0 && fd<(int)sizeof(descriptor_kind)?descriptor_kind[fd]:0;
+    if(kind=='r')raw_syncs++;
+    if(kind=='i')index_syncs++;
+    if(kind && kind==fail_sync_kind){sync_faults++;errno=EIO;return -1;}
+    return fsync(fd);
+}
 static ssize_t counted_pread(int fd,void *buf,size_t size,off_t offset)
 { read_calls++;return pread(fd,buf,size,offset); }
 static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
@@ -18,9 +46,13 @@ static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
 }
 #define pwrite fault_pwrite
 #define pread counted_pread
+#define fsync fault_fsync
+#define open tracked_open
 #include "../src/meta/query_disk.c"
 #undef pwrite
 #undef pread
+#undef fsync
+#undef open
 static int failures;
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"FAIL %d: %s\n",__LINE__,#x);failures++;}}while(0)
 int main(void)
@@ -86,6 +118,36 @@ int main(void)
     }
     CHECK(!disk_io(d,0,'r',got,17,100,0));CHECK(!memcmp(got,data+100,17));
     efs_query_disk_free(d);
-    printf("query disk I/O: windows, lookup, packed records, partial ENOSPC and FD reuse %s\n",failures?"FAIL":"PASS");
+    /* A new raw/index inode has one checked writing-handle barrier. Inject
+     * failures in every persisted file class; none may return a candidate or
+     * replace the checkpoint of a previously completed generation. */
+    char kvroot[]="/tmp/efs-query-sync-kv-XXXXXX",cache[]="/tmp/efs-query-sync-cache-XXXXXX";
+    CHECK(mkdtemp(kvroot));CHECK(mkdtemp(cache));
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};
+    struct efs_kv *kv=efs_kv_lsm_open(kvroot,&cfg);CHECK(kv);
+    struct efs_kv_lsm_snapshot *source=NULL;struct efs_query_disk *old=NULL,*next=NULL;
+    if(kv){
+        struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t file;
+        CHECK(!efs_meta_apply_init(kv,100));
+        CHECK(!efs_meta_apply_create_file(kv,&attrs,EFS_ROOT_INO,S_IFREG|0644,"file",&file));
+        CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));raw_syncs=index_syncs=0;
+        CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,&old));
+        if(old){
+            unsigned populated=0;for(unsigned i=0;i<SHARDS;i++)populated+=old->part[i].count!=0;
+            CHECK(raw_syncs==populated && index_syncs==populated);
+            uint64_t wm[4]={1,2,3,4};CHECK(!efs_query_disk_checkpoint(old,wm));
+            const char kinds_to_fail[]={'r','i','n','d','m'};
+            for(unsigned i=0;i<sizeof(kinds_to_fail);i++){
+                fail_sync_kind=kinds_to_fail[i];sync_faults=0;
+                CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,&next)==EFS_ERR_IO && !next);
+                CHECK(sync_faults==1);fail_sync_kind=0;
+                CHECK(!efs_query_disk_inode(old,file,NULL,NULL));
+                CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
+                CHECK(!efs_query_disk_inode(next,file,NULL,NULL));efs_query_disk_free(next);next=NULL;
+            }
+        }
+        efs_query_disk_free(old);efs_kv_lsm_snapshot_release(source);efs_kv_lsm_close(kv);
+    }
+    printf("query disk I/O: windows, lookup, packed records, partial ENOSPC, FD reuse and fsync refusal %s\n",failures?"FAIL":"PASS");
     return failures?1:0;
 }
