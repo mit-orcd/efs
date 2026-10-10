@@ -11135,6 +11135,43 @@ static int host_prep_value(struct efs_raft_host *h, uint32_t shard,
                           pay, pn, NULL, hint);
 }
 
+/* Capture the allocator before selecting an inode. Sidecar counters can
+ * differ between replicas; the canonical eight-byte watermark is the
+ * allocation predicate. Capturing after peek
+ * could authorize a rewind if another create advanced it in between. */
+static int host_alloc_capture(struct efs_raft_host *h, uint32_t shard,
+                              uint8_t *key, uint32_t *length,
+                              uint8_t value[EFS_META_ALLOC_BYTES], uint32_t *bytes)
+{
+    int rc = efs_kv_key_alloc(shard, key, length);
+    if (rc != EFS_OK) return rc;
+    *bytes = EFS_META_ALLOC_BYTES;
+    rc = efs_kv_get(h->kv, key, *length, value, bytes);
+    if (rc == EFS_ERR_NOT_FOUND) {
+        *bytes = EFS_TXN_ABSENT;
+        return EFS_OK;
+    }
+    if (rc == EFS_OK && *bytes != EFS_META_ALLOC_BYTES) return EFS_ERR_PROTO;
+    return rc;
+}
+
+static int host_prep_alloc_value(struct efs_raft_host *h, uint32_t shard,
+                                 const struct efs_txid *t, const struct efs_txn_parts *parts,
+                                 const uint8_t *key, uint32_t length,
+                                 const uint8_t *expected, uint32_t expected_bytes,
+                                 const uint8_t value[EFS_META_ALLOC_BYTES],
+                                 struct host_idx_ref *ref, int *hint)
+{
+    uint8_t payload[9 + 2 * EFS_META_ALLOC_BYTES];
+    uint32_t bytes = 0;
+    int rc = efs_txn_encode_excl_value(payload, sizeof(payload), &bytes,
+        expected_bytes == EFS_TXN_ABSENT ? NULL : expected, expected_bytes,
+        EFS_TXN_PUT, value, EFS_META_ALLOC_BYTES);
+    if (rc != EFS_OK) return rc;
+    return host_prep_raw(h, shard, EFS_TXN_EXCL_VALUE, t, parts, key, length,
+                         payload, bytes, ref, hint);
+}
+
 /* Parent (or moved-dir) inode row: nlink/nents delta, times MAX,
  * used_shards OR, parent SET. Replaces the EXCL full-image PUT that lost
  * concurrent log-path updates and serialized every op in one directory. */
@@ -11826,7 +11863,9 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
     uint8_t v_cino[EFS_META_INO_BYTES], v_alloc[EFS_META_ALLOC_BYTES];
     uint32_t kd = 0, kpi = 0, kci = 0, ka = 0, ks = 0;
     uint32_t psh, coord;
-    uint64_t aver = 0, dver = 0;
+    uint64_t dver = 0;
+    uint8_t alloc_before[EFS_META_ALLOC_BYTES];
+    uint32_t alloc_before_bytes = 0;
     uint64_t bit;
     uint8_t lane;
     efs_ino_t next = 0, ino = 0;
@@ -11842,7 +11881,9 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
      * OR (times ride the dir-lane). */
     memset(&pd, 0, sizeof(pd));
     pd.or_used_shards = bit;
-    rc = efs_meta_apply_peek_alloc(h->kv, dsh, &next);
+    rc = host_alloc_capture(h, dsh, k_alloc, &ka, alloc_before, &alloc_before_bytes);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_peek_alloc(h->kv, dsh, &next);
     if (rc == EFS_OK) {
         ino = next;
         if (efs_kv_inode_shard(ino) != dsh)
@@ -11877,11 +11918,7 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
     if (rc == EFS_OK)
         rc = efs_kv_key_inode(dsh, ino, k_cino, &kci);
     if (rc == EFS_OK)
-        rc = efs_kv_key_alloc(dsh, k_alloc, &ka);
-    if (rc == EFS_OK)
         rc = efs_kv_key_dseq(dsh, parent, lane, k_dseq, &ks);
-    if (rc == EFS_OK)
-        rc = efs_txn_ver_get(h->kv, k_alloc, ka, &aver);
     if (rc == EFS_OK)
         rc = efs_txn_ver_get(h->kv, k_dent, kd, &dver);
     if (rc == EFS_OK && hold) {
@@ -11932,9 +11969,9 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
                                    kci, 0, EFS_TXN_PUT, v_cino, sizeof(v_cino),
                                    hint);
                 if (rc == EFS_OK)
-                    rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_alloc,
-                                   ka, aver, EFS_TXN_PUT, v_alloc,
-                                   sizeof(v_alloc), hint);
+                    rc = host_prep_alloc_value(h, dsh, &t, &parts, k_alloc,
+                                   ka, alloc_before, alloc_before_bytes, v_alloc,
+                                   NULL, hint);
                 if (rc == EFS_OK)
                     rc = host_prep_dseq_bump(h, dsh, &t, &parts, k_dseq, ks,
                                              NULL, hint);
@@ -11985,7 +12022,9 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
     uint8_t v_cino[EFS_META_INO_BYTES], v_alloc[EFS_META_ALLOC_BYTES];
     uint32_t kd = 0, kpi = 0, kci = 0, ka = 0, ks = 0;
     uint32_t psh, csh, dsh = 0, coord;
-    uint64_t aver = 0, dver = 0, salt = 0;
+    uint64_t dver = 0, salt = 0;
+    uint8_t alloc_before[EFS_META_ALLOC_BYTES];
+    uint32_t alloc_before_bytes = 0;
     uint64_t now;
     efs_ino_t next = 0, ino = 0;
     uint8_t mkcmd[HOST_CMD_MAX], p_lane = 0;
@@ -12109,7 +12148,9 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
     }
     if (rc == EFS_OK) {
         stage = 6;
-        rc = efs_meta_apply_peek_alloc(h->kv, csh, &next);
+        rc = host_alloc_capture(h, csh, k_alloc, &ka, alloc_before, &alloc_before_bytes);
+        if (rc == EFS_OK)
+            rc = efs_meta_apply_peek_alloc(h->kv, csh, &next);
     }
     if (rc == EFS_OK) {
         ino = next;
@@ -12161,11 +12202,7 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
     if (rc == EFS_OK)
         rc = efs_kv_key_inode(csh, ino, k_cino, &kci);
     if (rc == EFS_OK)
-        rc = efs_kv_key_alloc(csh, k_alloc, &ka);
-    if (rc == EFS_OK)
         rc = efs_kv_key_dseq(dsh, parent, p_lane, k_dseq, &ks);
-    if (rc == EFS_OK)
-        rc = efs_txn_ver_get(h->kv, k_alloc, ka, &aver);
     if (rc == EFS_OK) {
         stage = 8;
         rc = efs_txn_ver_get(h->kv, k_dent, kd, &dver);
@@ -12219,10 +12256,9 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
                 if (rc == EFS_OK)
                     np++;
                 if (rc == EFS_OK)
-                    rc = host_prep_async(h, csh, EFS_TXN_EXCL, &t, &parts,
-                                         k_alloc, ka, aver, EFS_TXN_PUT,
-                                         v_alloc, sizeof(v_alloc), &prefs[np],
-                                         &hint);
+                    rc = host_prep_alloc_value(h, csh, &t, &parts,
+                                         k_alloc, ka, alloc_before, alloc_before_bytes,
+                                         v_alloc, &prefs[np], &hint);
                 if (rc == EFS_OK)
                     np++;
             }
