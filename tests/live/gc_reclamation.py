@@ -34,6 +34,7 @@ p.add_argument('--root', action='append', default=[])
 p.add_argument('--mount', type=Path, help='existing empty, unmounted path allowed by host FUSE policy')
 p.add_argument('--peer-mount', type=Path, help='existing empty, unmounted second policy-allowed mount')
 p.add_argument('--posix', action='store_true')
+p.add_argument('--posix-jobs', type=int, default=4, help='parallel POSIX cases (default: 4); each case retains its own concurrent writers')
 p.add_argument('--storage-session-fence-fault',action='store_true',help='private certificate fsync EIO: revocation must remain incomplete, then recover and survive cold restart; requires --guarded-leases')
 p.add_argument('--continue-posix-failure','--continue-regression-failure',dest='continue_posix_failure',action='store_true',help='retain POSIX/peer failure, run independent later gates, then exit unsuccessfully')
 p.add_argument('--tiny-mixed',action='store_true',help='bounded large-writer overlap with 512 tiny CREATE/close operations, cold exact bytes and physical deletion')
@@ -108,6 +109,8 @@ p.add_argument('--idle-seconds',type=int,default=0,help='measure live-table idle
 p.add_argument('--full-node',action='store_true',help='one node quota exhausted while three fragment targets remain writable')
 p.add_argument('--port', type=int, default=20190)
 a = p.parse_args()
+if a.posix_jobs < 1:
+    p.error("--posix-jobs must be positive")
 if a.mount_sync:a.sync_writes=True
 if not 8 <= a.tiny_mixed_files <= 8192 or a.tiny_mixed_files % 8:
     p.error("--tiny-mixed-files must be 8..8192 and divisible by eight")
@@ -2323,7 +2326,7 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
     if a.posix:
         posix_checkpoint = totals(status())
         try:
-            run(['python3',source/'tests/posix/posix_suite.py',mount,'--jobs','4','--timeout-s','30','--results',work/'posix.tsv'],timeout=600)
+            run(['python3',source/'tests/posix/posix_suite.py',mount,'--jobs',str(a.posix_jobs),'--timeout-s','30','--results',work/'posix.tsv'],timeout=600)
         except subprocess.CalledProcessError as error:
             if not a.continue_posix_failure:raise
             posix_failure=error
