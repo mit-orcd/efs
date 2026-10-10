@@ -5536,17 +5536,10 @@ static int efs_fuse_lookup_at(fuse_ino_t parent, const char *name,
     rc = check_dir_x(&prow);
     if (rc != 0)
         return rc;
-    /* A directory this client just created is in the local table.
-     * Answering it here keeps a deep mkdir from re-reading every
-     * ancestor over RPC (dir_deep_nesting*_64 is O(n^2) LOOKUPs with
-     * entry_timeout=0). Files stay on the RPC: a peer unlink must
-     * still be visible (peer_negative_after_unlink). A name we have
-     * never seen is a miss and falls through. */
-    if (strcmp(name,".efs") && efs_client_lookup_local((efs_ino_t)parent, name, &row) == EFS_OK &&
-        efs_mode_is_dir(row.mode)) {
-        fill_entry_row((fuse_ino_t)row.ino, e, &row);
-        return 0;
-    }
+    /* Local namespace rows are not peer coherence evidence. A peer may
+     * rename a directory while its inode still exists: GETATTR cannot
+     * validate the cached parent/name binding. Resolve every ordinary name
+     * through authoritative LOOKUP before adopting its row. */
     rc = efs_client_rpc_lookup(g_client.export_id, (efs_ino_t)parent, name, &row);
     if (!strcmp(name,".efs") && commands_enabled()) {
         if (rc==EFS_ERR_NOT_FOUND) return lookup_fill(virt_commands_ino(parent),e,NULL);

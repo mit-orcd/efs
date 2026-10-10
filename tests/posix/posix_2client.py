@@ -780,6 +780,32 @@ def peer_hardlink_write():
 
 
 @test
+def peer_cached_directory_rename():
+    """A caches a created directory; B rename invalidates A's old name."""
+    def a(d):
+        os.mkdir(os.path.join(d, "old"))
+        wr(os.path.join(d, "old", "f"), b"preserved-child")
+        eq(rd(os.path.join(d, "old", "f")), b"preserved-child", "prime creator cache")
+
+    def b(d):
+        eq(rd(os.path.join(d, "old", "f")), b"preserved-child", "prime peer cache")
+        os.rename(os.path.join(d, "old"), os.path.join(d, "new"))
+
+    def a2(d):
+        try:
+            os.stat(os.path.join(d, "old"))
+        except OSError as e:
+            if e.errno != errno.ENOENT:
+                raise Fail("old directory stat: %s" % e)
+        else:
+            raise Fail("creator still sees cached old directory after peer rename")
+        eq(rd(os.path.join(d, "new", "f")), b"preserved-child", "renamed child payload")
+        eq(sorted(os.listdir(d)), ["new"], "only authoritative directory name")
+
+    return [("a", a), ("b", b), ("a", a2)]
+
+
+@test
 def peer_rename_dir():
     """A rename a directory with a child; B sees the new path."""
     def a(d):

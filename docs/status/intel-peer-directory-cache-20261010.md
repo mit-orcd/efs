@@ -1,0 +1,7 @@
+# Intel peer directory rename visibility — 2026-10-10
+
+On build 15af1f8a, Intel1 created and accessed `old/`; Intel2 renamed it to `new/`. Intel1 then reported BOTH names as existing although readdir listed only `new`. The original creator's local inode/name cache supplied an old binding without authoritative LOOKUP. GETATTR cannot reject that stale binding because the renamed inode still exists.
+
+Ordinary FUSE LOOKUP now resolves the name through authoritative RPC before adopting its row, including directories. Virtual command handling is unchanged. This removes a directory-cache shortcut: correctness takes priority, and large/deep path lookup performance must be measured rather than promised unchanged. Directory-FD-relative tiny-file resume avoids many repeated ancestor walks independently.
+
+The production lookup fixture primes a stale cached directory and asserts authoritative absence, transport refusal and replacement inode are not masked. It fails on the old shortcut and passes after removal. A new two-physical-client case primes both sides, renames on the peer, rejects the old name on its creator, verifies the new name and exact child bytes, and checks the directory listing. It passes on native Linux and fails on the old deployed Intel client. The peer runner self-test passes. This is concrete directory binding evidence relevant to W69/W56; it does not close all cache/partition or original incident gates.

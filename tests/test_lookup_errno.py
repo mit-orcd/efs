@@ -19,7 +19,8 @@ static struct {uint64_t export_id;} g_client={1};
 #define FUSE_ROOT_ID 1
 #define EFS_STATS_NAME ".stats"
 #define EFS_FIND_NAME ".find"
-static int failure,adopted;
+static int failure,adopted,stale_local,rpc_calls;
+static uint64_t authoritative_ino=42;
 static int virt_kind(fuse_ino_t n){return n==((1ULL<<60)|42)?3:0;}
 static fuse_ino_t virt_parent(fuse_ino_t n){return n;}
 static fuse_ino_t vq_intern(fuse_ino_t n,const char*s,uint64_t version,size_t len){(void)s;(void)version;(void)len;return n;}
@@ -40,8 +41,8 @@ static int lookup_fill(fuse_ino_t n,struct fuse_entry_param*e,void*p){(void)p;e-
 static int efs_client_stat_local(efs_ino_t n,struct efs_inode*out){out->ino=n;out->mode=S_IFDIR|0755;return 0;}
 static int efs_client_stat_ino(efs_ino_t n,struct efs_inode*out){return efs_client_stat_local(n,out);}
 static int check_dir_x(struct efs_inode*n){(void)n;return 0;}
-static int efs_client_lookup_local(efs_ino_t p,const char*n,struct efs_inode*out){(void)p;(void)n;(void)out;return EFS_ERR_NOT_FOUND;}
-static int efs_client_rpc_lookup(uint64_t x,efs_ino_t p,const char*n,struct efs_inode*out){(void)x;(void)p;(void)n;out->ino=42;out->mode=S_IFREG|0644;return failure;}
+static int __attribute__((unused)) efs_client_lookup_local(efs_ino_t p,const char*n,struct efs_inode*out){(void)p;(void)n;out->ino=42;out->mode=S_IFDIR|0755;return stale_local?EFS_OK:EFS_ERR_NOT_FOUND;}
+static int efs_client_rpc_lookup(uint64_t x,efs_ino_t p,const char*n,struct efs_inode*out){(void)x;(void)p;(void)n;rpc_calls++;out->ino=authoritative_ino;out->mode=S_IFREG|0644;return failure;}
 static void efs_client_adopt_lookup(struct efs_inode*a,struct efs_inode*b){(void)a;(void)b;adopted++;}
 static void fill_entry_row(fuse_ino_t n,struct fuse_entry_param*e,struct efs_inode*r){(void)r;e->ino=n;}
 '''+fn('fuse_stat_errno')+fn('efs_fuse_lookup_at')+r'''
@@ -50,6 +51,10 @@ int main(void){
  int cases[][2]={{EFS_ERR_IO,-EIO},{EFS_ERR_NET,-EIO},{EFS_ERR_NO_QUORUM,-EIO},{EFS_ERR_BUSY,-EBUSY},{EFS_ERR_NOT_PRIMARY,-EBUSY},{EFS_ERR_NOMEM,-ENOMEM},{EFS_ERR_ACCES,-EACCES},{EFS_ERR_NOT_FOUND,-ENOENT}};
  for(unsigned i=0;i<sizeof(cases)/sizeof(cases[0]);i++){failure=cases[i][0];assert(efs_fuse_lookup_at(1,"name",&e)==cases[i][1]);assert(!adopted);}
  failure=0;assert(!efs_fuse_lookup_at(1,"name",&e)&&adopted==1&&e.ino==42);
+ stale_local=1;adopted=0;failure=EFS_ERR_NOT_FOUND;
+ int before=rpc_calls;assert(efs_fuse_lookup_at(1,"old-directory",&e)==-ENOENT);assert(rpc_calls==before+1&&!adopted);
+ failure=EFS_ERR_NET;assert(efs_fuse_lookup_at(1,"old-directory",&e)==-EIO&&!adopted);
+ failure=0;authoritative_ino=84;assert(!efs_fuse_lookup_at(1,"old-directory",&e)&&e.ino==84&&adopted==1);
  fuse_ino_t virtual_file=(1ULL<<60)|42;
  assert(!efs_fuse_lookup_at(virtual_file,".",&e)&&e.ino==virtual_file);
  assert(efs_fuse_lookup_at(virtual_file,"child",&e)==-ENOENT);
