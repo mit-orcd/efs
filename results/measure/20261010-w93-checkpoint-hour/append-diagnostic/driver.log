@@ -1,0 +1,6 @@
+parallel 2 tests jobs=1 (serial 0 after)
+pass concurrent_appends              
+pass concurrent_appends_two_proc     
+============================================================
+POSIX suite: 2/2 pass, 0 fail, 0 skip, 0 notrun  (4.7s)
+wrote /data1/efs/w93-checkpoint-hour-20261010/append-diagnostic/results.tsv

@@ -1,0 +1,12 @@
+2026-10-10T05:22:49.249Z efs-fuse d4f2ddb3 (branch devel-persistence-pressure, built 2026-10-10T04:32:02Z on nuc), build=d4f2ddb3-checkpoint: starting export=default mount=/data1/efs/w93-checkpoint-replay-mnt2
+2026-10-10T05:22:49.249Z Discovered 4 cluster nodes from 127.0.0.1:22490
+2026-10-10T05:22:49.249Z   node id=1 127.0.0.1:22490
+2026-10-10T05:22:49.249Z   node id=2 127.0.0.1:22491
+2026-10-10T05:22:49.249Z   node id=3 127.0.0.1:22492
+2026-10-10T05:22:49.249Z   node id=4 127.0.0.1:22493
+2026-10-10T05:22:49.249Z fetching metadata...
+2026-10-10T05:22:49.249Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-10T05:22:49.249Z export id=1 name=default
+2026-10-10T05:22:49.249Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-10T05:22:49.250Z efs-fuse: workers max=10 idle=10
+2026-10-10T05:22:49.253Z fuse serving

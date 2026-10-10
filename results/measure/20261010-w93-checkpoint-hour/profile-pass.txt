@@ -1,0 +1,1 @@
+profiled workload is diagnostic only
