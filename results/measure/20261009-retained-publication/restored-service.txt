@@ -1,0 +1,21 @@
+Cluster nodes (4):
+  node 1: 127.0.0.1:17432  up  used=7.50 GiB  quota=37.50 GiB (20.0%)  storage(1):
+      /data1/efs/n1
+  node 2: 127.0.0.1:17433  up  used=7.50 GiB  quota=37.50 GiB (20.0%)  storage(1):
+      /data1/efs/n2
+  node 3: 127.0.0.1:17434  up  used=7.50 GiB  quota=37.50 GiB (20.0%)  storage(1):
+      /data1/efs/n3
+  node 4: 127.0.0.1:17435  up  used=7.50 GiB  quota=37.50 GiB (20.0%)  storage(1):
+      /data1/efs/n4
+Usable (2+1 logical): used=20.00 GiB  free=80.00 GiB  capacity=100.00 GiB (20.0%)
+Cluster state: OK (4 up, 0 down)
+Versions: efsd 978caaf7 (branch devel-w66, built 2026-10-09T03:17:20Z) — 4/4 identical
+Node 127.0.0.1:17432 state: active
+Heal:
+  node 1: idle
+  node 2: idle
+  node 3: idle
+  node 4: idle
+/data1/efs/mnt
+/data1/efs/mnt2
+released: installed direct/TCP service restored after lease-retention fixture
