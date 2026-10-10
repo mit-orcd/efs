@@ -1551,7 +1551,8 @@ NFS and native FUSE full oracles pass, as do 96 fresh Mac queries and all
 FORGET/handle-recovery ESTALE is fixed. These isolated scale fixtures are active; their cold-verification and service
 restoration checklist is in the closure ledger. Full named 2^32 kernel-cold
 recovery is queued behind the original run’s successful terminal verdict; the
-400 GiB cold handoff is also queued behind its complete write verdict.
+400 GiB cold handoff is also queued behind its complete write verdict, using
+the current named-binary preflight and listener-readiness checks.
 The initial capacity writer stopped on CREATE PROTO after 124983 acknowledged
 files; the unrouted-BUSY retry fix passes regressions/full native, and the fixed
 client rehashed every acknowledged prefix before continuing. W92 is not closed. The backlog and virtual-interface overview are reconciled

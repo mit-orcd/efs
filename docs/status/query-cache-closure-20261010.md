@@ -667,9 +667,9 @@ new local directory outside EFS. This independently checks every payload hash
 and length, all directory names, exact rollups and every exported query path.
 A successful write or sampled read cannot replace that cold verification.
 
-Before closure, execute the fresh Mac NFS command suite after its privileged
-mount refresh. Restore the normal gateway and diagnostic mounts to `.efs`
-opt-out, retire the two private service namespaces and diagnostic clients, and
+The named Mac/Linux/native platform gates and normal opt-out restoration
+are complete (see the named platform verdicts below). Before closure, retire
+the two private service namespaces and any remaining diagnostic clients, and
 restore xefs1's original 3 GiB memory configuration from its saved XML after
 all scale processes have exited. Preserve datasets and raw evidence. Verify
 normal port-17432 daemon arguments, all normal clients, NFS service and retained
@@ -688,7 +688,8 @@ this is queued work, not completed recovery. Results use the original fixture
 stem plus `-kernel-recovery.{cache-state,log,time,exit,finished}`.
 
 The 400 GiB cold handoff is queued in a local detached screen
-`w92-capacity-cold-handoff-20261010`, using this
+`w92-capacity-cold-handoff-1434aa83` (replaces the intentionally retired
+20261010 watcher without interrupting the writer), using this
 [exact one-shot script](../../results/measure/20261010-w92-closure/capacity-recovery-handoff/run.sh).
 It retries SSH observation failures without restarting the writer. Only an exit-0
 marker plus the complete 1,638,400-file/400-GiB independent write verdict permits
