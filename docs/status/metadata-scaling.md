@@ -185,3 +185,20 @@ peer 64/64, lane leader-death replay, cold bytes and GC pass. The earlier live
 readback assertion lacked an error code, so it is not causally attributed to
 this fix; the gate now prints that code on failure. See
 [routing evidence](../../results/measure/20261010-w66-foundation/routing-fix/README.md).
+
+### Explicit private four-voter integration — Oct 10
+
+A separate AMD direct/TCP fixture reconfigured both groups through production
+`raft-change` to 0xf, verified all four hosts report converged membership,
+passed 800/800 reads and both leader-loss/rejoin cases, and preserved membership
+and exact target inode identity through cold restart. See
+[raw results](../../results/measure/20261010-w66-foundation/four-voter-live/README.md).
+Both leaders initially occupied one node: replica count is not leadership
+balancing or additional useful capacity. Installed topology was untouched.
+
+The [protection/routing implementation proposal](w66-protection-routing-design-20261010.md)
+makes the remaining protocol and gates explicit. D36 leaves post-two-loss
+availability unresolved. The recommendation is verified preservation followed
+by replacement nodes and quorum restoration before writes resume; the user has
+been asked to select that contract. Durable commit evidence, recovery fencing,
+versioned routing/migration and measured scaling still prevent W66 closure.
