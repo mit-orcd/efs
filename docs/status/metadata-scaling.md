@@ -174,3 +174,14 @@ AMD direct/TCP private POSIX 212/212 and peer 64/64, staged leader-loss replay,
 cold bytes and physical GC pass; installed service restored. See
 [separate evidence](../../results/measure/20261010-w66-foundation/membership-fix/README.md).
 W66 protection, generalized topology and measured scaling remain open.
+
+### GETCHUNKS endpoint/leader-hint retry correction — Oct 10
+
+GETCHUNKS now retries endpoint loss and missing/self NOT_PRIMARY hints through
+another voter while retaining exact FileID/range, caller deadline and outputs.
+Sixteen attempts remain bounded. Controlled tests fail on the previous function
+and pass on the fix. Full native/docs and separate AMD direct/TCP POSIX 212/212,
+peer 64/64, lane leader-death replay, cold bytes and GC pass. The earlier live
+readback assertion lacked an error code, so it is not causally attributed to
+this fix; the gate now prints that code on failure. See
+[routing evidence](../../results/measure/20261010-w66-foundation/routing-fix/README.md).
