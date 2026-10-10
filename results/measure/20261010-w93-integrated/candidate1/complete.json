@@ -1,0 +1,7 @@
+{
+  "duration_seconds": 900,
+  "tag": "candidate1",
+  "applied_interval_ms": 100,
+  "root": "/data1/efs/mnt/tiny-w93-integrated-candidate1-20261010",
+  "drained": true
+}

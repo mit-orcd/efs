@@ -1,0 +1,7 @@
+{
+  "duration_seconds": 900,
+  "tag": "control2",
+  "applied_interval_ms": 10,
+  "root": "/data1/efs/mnt/tiny-w93-integrated-control2-20261010",
+  "drained": true
+}
