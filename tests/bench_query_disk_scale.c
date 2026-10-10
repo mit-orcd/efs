@@ -1,6 +1,9 @@
 /* Offline synthetic metadata, not real filesystem/data capacity acceptance.
  * Real production KV/catalog formats; bounded generator and streaming oracle.
- * Never deletes a fixture. Each invocation needs a fresh private root. */
+ * Never deletes a fixture. Generation needs a fresh private root; explicit
+ * --populate-only stages it, --resume-build reuses a known complete unmutated
+ * source, and --recover verifies the postmutation source in a fresh process.
+ * The caller owns the source exclusively and retains its population verdict. */
 #include "efs/query_catalog.h"
 #include <errno.h>
 #include <dirent.h>

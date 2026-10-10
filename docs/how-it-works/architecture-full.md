@@ -1563,6 +1563,8 @@ recovery is queued behind the replacement run’s successful terminal verdict
 and the retained original population proof; the
 400 GiB cold handoff is also queued behind its complete write verdict, using
 the current named-binary preflight and listener-readiness checks.
+The current [W92 specification](../status/virtual-find-stats.md) and backlog reference
+the named raw-batched deployment and retain the older checkpoints as history.
 The initial capacity writer stopped on CREATE PROTO after 124983 acknowledged
 files; the unrouted-BUSY retry fix passes regressions/full native, and the fixed
 client rehashed every acknowledged prefix before continuing. W92 is not closed. The backlog and virtual-interface overview are reconciled
@@ -5858,9 +5860,13 @@ exports with all rollup fields and sampled inode attributes checked; builder
 scratch remains 3.69 MiB, separately from authoritative KV memory.
 The actual 2^32-entry process has populated all 4294967296 entries and is building
 its disk catalog; full export/mutation/recovery verdicts remain outstanding.
-Normal Xorinox files/direct-I/O/TCP runs `cdc13b88`. Its complete Mac NFSv4.0,
-Linux NFSv4.0 and native FUSE command/payload oracles pass, as do 96 fresh Mac
-queries and all 423 prior fixture payloads after cold restart. Separate index/stats/final persistence phase diagnostics pass native/live/NFS
+Normal Xorinox files/direct-I/O/TCP runs `cf4e365a`, including fixed-budget
+external-merge and raw-record/slot batching. Its full native, Mac NFS, Linux
+NFSv4.0 and native FUSE command/payload oracles pass. The previous cdc13b88
+checkpoint also passed 96 fresh Mac queries and all 423 prior fixture payloads
+after cold restart. The active `w92-2p32-raw-batched-v6` run reuses the complete
+source population; previous build-only runs were intentionally superseded
+with evidence preserved. Its corrected kernel-cold watcher remains queued. Separate index/stats/final persistence phase diagnostics pass native/live/NFS
 gates; the newest ten-million-entry complete recovery passes with 3864520
 builder bytes. Normal mounts are restored with commands disabled; acceptance-only mounts are retired.
 The persistent policy passes live/cold/quorum/lost-reply/ceiling/fault gates.

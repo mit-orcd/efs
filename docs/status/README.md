@@ -105,6 +105,8 @@ recovery is queued behind the replacement run’s successful terminal verdict
 and the retained original population proof; the
 400 GiB cold handoff is also queued behind its complete write verdict, using
 the current named-binary preflight and listener-readiness checks.
+The current [W92 specification](virtual-find-stats.md) and backlog reference
+the named raw-batched deployment and retain the older checkpoints as history.
 The initial capacity writer stopped on CREATE PROTO after 124983 acknowledged
 files; the unrouted-BUSY retry fix passes regressions/full native, and the fixed
 client rehashed every acknowledged prefix before continuing. W92 is not closed. The backlog and virtual-interface overview are reconciled

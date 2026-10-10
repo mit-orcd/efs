@@ -3661,9 +3661,13 @@ exports with all rollup fields and sampled inode attributes checked; builder
 scratch remains 3.69 MiB, separately from authoritative KV memory.
 The actual 2^32-entry process has populated all 4294967296 entries and is building
 its disk catalog; full export/mutation/recovery verdicts remain outstanding.
-Normal Xorinox files/direct-I/O/TCP runs `cdc13b88`. Its complete Mac NFSv4.0,
-Linux NFSv4.0 and native FUSE command/payload oracles pass, as do 96 fresh Mac
-queries and all 423 prior fixture payloads after cold restart. Separate index/stats/final persistence phase diagnostics pass native/live/NFS
+Normal Xorinox files/direct-I/O/TCP runs `cf4e365a`, including fixed-budget
+external-merge and raw-record/slot batching. Its full native, Mac NFS, Linux
+NFSv4.0 and native FUSE command/payload oracles pass. The previous cdc13b88
+checkpoint also passed 96 fresh Mac queries and all 423 prior fixture payloads
+after cold restart. The active `w92-2p32-raw-batched-v6` run reuses the complete
+source population; previous build-only runs were intentionally superseded
+with evidence preserved. Its corrected kernel-cold watcher remains queued. Separate index/stats/final persistence phase diagnostics pass native/live/NFS
 gates; the newest ten-million-entry complete recovery passes with 3864520
 builder bytes. Normal mounts are restored with commands disabled; acceptance-only mounts are retired.
 The persistent policy passes live/cold/quorum/lost-reply/ceiling/fault gates.
