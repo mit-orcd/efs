@@ -157,6 +157,17 @@ def data_fragment_set(before, after, minimum=3):
     return full[0]
 
 
+
+def checksum_tail_offset(size):
+    # Buffered objects append the 32-byte digest; direct-I/O objects pad
+    # that same digest to a 4 KiB trailer. Data fragment lengths are aligned.
+    for trailer in (32, 4096):
+        payload = size - trailer
+        if payload >= 65536 and payload % 4096 == 0:
+            return payload
+    raise ValueError("unrecognized data-fragment trailer size %s" % size)
+
+
 def flip_first_byte(path):
     with open(path, "r+b") as f:
         b = f.read(1)
@@ -690,12 +701,13 @@ def case_missing_checksum(cluster, seed):
                     detail="fragment 0 was not created")]
     frag = groups[0]
     sz = os.path.getsize(frag)
-    if sz < 4096:
-        return [row("missing_checksum", "FAIL",
-                    detail="fragment %s has no checksum tail" % frag)]
-    # Zero the digest in the 4 KiB tail (offset = size - 4096).
+    try:
+        tail_offset = checksum_tail_offset(sz)
+    except ValueError as error:
+        return [row("missing_checksum", "FAIL", detail=str(error))]
+    # Remove the actual digest, rather than corrupting the payload's end.
     with open(frag, "r+b") as f:
-        f.seek(sz - 4096)
+        f.seek(tail_offset)
         f.write(b"\x00" * 32)
     flip_first_byte(frag)
     got, err = timed_read(mount_b, name, cluster.journal, cluster.work)
@@ -710,7 +722,7 @@ def case_missing_checksum(cluster, seed):
         detail = "read returned different bytes after the sidecar was removed and the payload flipped"
     return [row(
         "missing_checksum", status, readable=(status == "PASS" and err is None),
-        detail=detail, fragment=frag, checksum_tail_offset=sz - 4096,
+        detail=detail, fragment=frag, checksum_tail_offset=tail_offset,
         expected_sha256=sha256(data), actual_sha256=sha256(got))]
 
 
@@ -922,6 +934,14 @@ def self_test():
     ])
     if set(groups.get(("1/0000", 0, "101"), {})) != {0, 1, 2} or set(groups.get(("1/0000", 0, "102"), {})) != {2}:
         fails.append("cross-server candidate grouping %s" % groups)
+
+    if checksum_tail_offset(65536 + 32) != 65536 or checksum_tail_offset(65536 + 4096) != 65536:
+        fails.append("buffered/direct checksum tail offsets")
+    try:
+        checksum_tail_offset(123)
+        fails.append("invalid checksum trailer accepted")
+    except ValueError:
+        pass
 
     try:
         assert_safe_port(19810)
