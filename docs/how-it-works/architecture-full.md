@@ -1547,7 +1547,8 @@ Remaining gates: the actual 2^32-entry index build/export/cold/mutation run,
 the 400 GiB real-payload write/cold/hash/export run, and Mac NFS execution after
 a privileged stale-mount refresh. These isolated scale fixtures are active; their cold-verification and service
 restoration checklist is in the closure ledger. Full named 2^32 kernel-cold
-recovery is queued behind the original run’s successful terminal verdict.
+recovery is queued behind the original run’s successful terminal verdict; the
+400 GiB cold handoff is also queued behind its complete write verdict.
 The initial capacity writer stopped on CREATE PROTO after 124983 acknowledged
 files; the unrouted-BUSY retry fix passes regressions/full native, and the fixed
 client rehashed every acknowledged prefix before continuing. W92 is not closed.

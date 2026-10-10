@@ -686,3 +686,19 @@ sets NOFILE **inside** the `runuser` shell: the guest's `runuser` otherwise rese
 the soft limit to 1024 (hard limit remains 524288). The waiting wrapper is live;
 this is queued work, not completed recovery. Results use the original fixture
 stem plus `-kernel-recovery.{cache-state,log,time,exit,finished}`.
+
+The 400 GiB cold handoff is queued in a local detached screen
+`w92-capacity-cold-handoff-20261010`, using this
+[exact one-shot script](../../results/measure/20261010-w92-closure/capacity-recovery-handoff/run.sh).
+It retries SSH observation failures without restarting the writer. Only an exit-0
+marker plus the complete 1,638,400-file/400-GiB independent write verdict permits
+the handoff. It preflights the named daemon hashes and all three private unit
+arguments, drains the test client, stops all three private daemons, recreates
+only those units with preserved storage and mounts a fresh named opt-in client.
+It then queues the full verifier in remote screen
+`w92-capacity-cold-verify-20261010` on 115; results are outside EFS in
+`/home/efs/w92-capacity-cold-verify-20261010`. Normal port-17432 services are not
+part of this script. The local screen must remain running (a sleeping/disconnected
+Mac delays the handoff). Its launch is verified; no cold-capacity pass is claimed.
+Local handoff logs/markers and the remote verification markers must be inspected
+before treating either stage as complete.
