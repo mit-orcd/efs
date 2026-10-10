@@ -8,11 +8,18 @@ cluster = Path(os.environ.get('EFS_CLUSTER_SCRIPTS', str(Path.home()/'git/cluste
 with tempfile.TemporaryDirectory(prefix='efs-cluster-stop-') as directory:
     task=Path(directory);(task/'bin').mkdir()
     (task/'source/scripts').mkdir(parents=True)
+    for name in ('efs-bench.sh','Makefile','scripts/bench_profile.py'):
+        (task/'source'/name).touch()
+    for name in ('src','include','deps/blake3'):
+        (task/'source'/name).mkdir(parents=True)
     source=Path(__file__).resolve().parents[1]/'scripts'
     for name in ('client.sh','client_processes.py'):
         (task/'source/scripts'/name).write_text((source/name).read_text())
     for name in ('cluster.sh','ct-up.sh','gw-up.sh'):
         (task/name).write_text((cluster/name).read_text())
+    (task/'lib').mkdir()
+    for name in ('client-stop.sh','client-user.sh','transfer.sh'):
+        (task/'lib'/name).write_text((cluster/'lib'/name).read_text())
     (task/'hosts.sh').write_text('#!/bin/bash\nexit 0\n');(task/'hosts.sh').chmod(0o755)
     (task/'bin/sshpass').write_text('''#!/bin/bash
 case "$*" in
@@ -38,10 +45,12 @@ vm_is_running() { return 0; }
 wait_ssh() { return 0; }
 ensure_guest_tz() { return 0; }
 rsync_to() { return 0; }
+ssh_node_once() { ssh_node "$@"; }
 ssh_node() {
   local host=$1; shift
   echo "$host:$*" >> "$LOG"
   case "$*" in
+    *"client_processes.py has"*) return "${PROCESS_RC:-0}";;
     *"client_processes.py list"*)
       [ "$host" = "${DISCOVERY_FAIL:-none}" ] && return 2
       [ "$host" = gw ] && echo /mnt/efs
@@ -49,7 +58,7 @@ ssh_node() {
     *"client.sh stop"*)
       [ "$host" = "${REFUSE:-none}" ] && return 1
       echo 0 > "$STATE"; return 0;;
-    *"mountpoint -q"*) [ "$(cat "$STATE")" = 1 ]; return $?;;
+    "mountpoint -q "*) [ "$(cat "$STATE")" = 1 ]; return $?;;
     *"client.sh "*) echo 1 > "$STATE"; return 0;;
   esac
   return 0
@@ -61,8 +70,8 @@ ssh_node() {
         result=subprocess.run(['bash',str(task/script),*args],env=env,capture_output=True,text=True)
         return result,log.read_text()
     r,log=run('cluster.sh','stop')
-    assert r.returncode==0 and 'gw:cd /tmp/efs && sudo ./scripts/client.sh stop /mnt/efs' in log
-    assert log.index('gw:cd /tmp/efs && sudo ./scripts/client.sh stop') < log.index('systemctl stop')
+    assert r.returncode==0 and 'cd /tmp/efs && sudo -n -H -u efs ./scripts/client.sh stop /mnt/efs' in log, (r.stderr,log)
+    assert log.index('cd /tmp/efs && sudo -n -H -u efs ./scripts/client.sh stop') < log.index('systemctl stop')
     assert 'fusermount' not in log
     assert log.index('BOOTSTRAP:') < log.index('client_processes.py list')
     assert 'client_processes.py admin@n1:/tmp/efs/scripts/' in log
@@ -76,10 +85,10 @@ ssh_node() {
     helper.write_text(saved)
     for script in ('ct-up.sh','gw-up.sh'):
         r,log=run(script)
-        assert r.returncode!=0 and 'detached client' in r.stderr
+        assert r.returncode!=0 and 'detached client' in r.stderr, (script,r.stdout,r.stderr,log)
         assert 'client.sh stop' not in log
         r,log=run(script,'--remount')
-        assert r.returncode==0 and 'client.sh stop /mnt/efs' in log
+        assert r.returncode==0 and 'client.sh stop /mnt/efs' in log, (script,r.stdout,r.stderr,log)
         r,log=run(script,'--remount',REFUSE='c1' if script=='ct-up.sh' else 'gw')
         assert r.returncode!=0
     print('cluster scripts: detached discovery, drain refusal retains servers, remount preflight PASS')
