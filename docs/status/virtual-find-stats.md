@@ -1,6 +1,8 @@
 # W92 — .efs/find and .efs/stats replacement commands
 
-Status: open. The accepted Oct 8 user revision replaces synthetic `.find` and
+Status: open. [Active closure ledger](query-cache-closure-20261010.md) records
+the current incremental implementation, aggregate admission and remaining gates.
+ The accepted Oct 8 user revision replaces synthetic `.find` and
 `.stats` with executable `.efs/find` and `.efs/stats`. W91 supplies readable
 Python command source and the separate versioned query path. Real user entries
 named `.find`, `.stats` or `.efs` must remain available. Compatibility with the

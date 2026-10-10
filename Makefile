@@ -595,7 +595,7 @@ tests/test_txn_resolve_faults: tests/test_txn_resolve_faults.o $(LIB)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 # Internal I/O fault regression compiles the actual disk-cache implementation.
-src/meta/query_disk.o tests/test_query_disk_io: src/meta/query_disk_incremental.h
+src/meta/query_disk.o tests/test_query_disk_io: src/meta/query_disk_incremental.h src/meta/query_disk_budget.h
 tests/test_query_disk_io: src/meta/query_disk.c src/meta/query_disk.h
 
 # Independent production storage-session barrier, including syscall failures.

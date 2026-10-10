@@ -1533,6 +1533,11 @@ process CPU, preserving fsync counts. At that checkpoint runtime `f5164bb3` pass
 POSIX core/concurrent/extras and cold persistence gates; eleven retained trees
 verify 78000 files and 724 payload samples, with normal `.efs` opt-out restored.
 
+[W92 closure work](../status/query-cache-closure-20261010.md) preserves the full acceptance
+matrix, including durable bounded catch-up and 2^32 synthetic index entries.
+Aggregate retained-cache admission passes focused and full native gates;
+closure-scale and deployment gates remain in progress.
+
 [W92 incremental-cache implementation](../status/query-cache-incremental-20261010.md)
 tracks bounded change/ancestor sets, immutable partition reuse, exact directory
 recomputation and full-build fallback. Three all-node profiles pass content
@@ -5806,6 +5811,10 @@ the original record and withdrawn interpretation remain retained.
 <a id="w92"></a>
 
 ### W92 · .efs/find and .efs/stats server snapshots and large namespace acceptance
+
+Oct 10 closure work is active at the user's request. Aggregate retained-cache
+admission has focused passing gates; durable catch-up and the full scale/fault
+acceptance matrix remain open. [Closure ledger](../status/query-cache-closure-20261010.md).
 
 Oct 10 incremental checkpoint: fixed 1024-item change/ancestor sets reuse immutable
 derived partitions and recompute exact affected rollups, with full-build fallback.
