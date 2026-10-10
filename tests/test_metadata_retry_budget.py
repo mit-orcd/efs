@@ -15,8 +15,11 @@ code=r'''
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/stat.h>
 static uint64_t now=1000,deadline;static unsigned calls,sleeps,freed,drops,releases;
 static int reply_status,fail_recv,fail_send,bad_type,expire_recv;
+static unsigned mkdir_ready, mkdir_packet_len;
+static unsigned char mkdir_packet[1024];
 static unsigned failover,routing_sends,stale_hint;
 struct efs_conn {unsigned node;};static struct efs_conn connection;
 static unsigned g_group_leader[2];
@@ -44,11 +47,11 @@ static void efs_client_node_note_ok(efs_node_id_t n){(void)n;}
 static unsigned efs_raft_shard_group(uint32_t s){(void)s;return 0;}
 static unsigned rpc_leader_of(unsigned g){(void)g;return 1;}
 static void efs_conn_set_recv_timeout(struct efs_conn*c,int n){(void)c;(void)n;}
-int efs_conn_send_msg(struct efs_conn*c,uint8_t t,const void*p,uint32_t n){(void)t;(void)p;(void)n;if(stale_hint && calls)assert(c->node==3);if(failover){routing_sends++;if(routing_sends==2){assert(c->node==2);if(failover==2)return 1;}if(routing_sends==3)assert(c->node==3);}return fail_send;}
-int efs_conn_recv_msg(struct efs_conn*c,uint8_t*t,void**p,uint32_t*n){(void)c;calls++;struct efs_msg_inode_reply*r=calloc(1,sizeof(*r));assert(r);r->status=reply_status;*p=r;*n=sizeof(*r);*t=bad_type?0:EFS_MSG_INODE_GETATTR_REPLY;if(expire_recv)now=deadline;if(stale_hint && calls==1){r->status=EFS_INODE_RPC_STALE;r->primary_id=3;}if(failover){if(calls==1){r->status=EFS_INODE_RPC_NOT_PRIMARY;r->primary_id=2;}else if(failover==1&&calls==2)return 1;else assert(c->node==3);}return fail_recv;}
+int efs_conn_send_msg(struct efs_conn*c,uint8_t t,const void*p,uint32_t n){(void)t;if(stale_hint && calls)assert(c->node==3);if(mkdir_ready){assert(n<=sizeof(mkdir_packet));if(!mkdir_packet_len){memcpy(mkdir_packet,p,n);mkdir_packet_len=n;}else assert(n==mkdir_packet_len&&!memcmp(mkdir_packet,p,n));}if(failover){routing_sends++;if(routing_sends==2){assert(c->node==2);if(failover==2)return 1;}if(routing_sends==3)assert(c->node==3);}return fail_send;}
+int efs_conn_recv_msg(struct efs_conn*c,uint8_t*t,void**p,uint32_t*n){(void)c;calls++;struct efs_msg_inode_reply*r=calloc(1,sizeof(*r));assert(r);r->status=mkdir_ready && calls>=mkdir_ready ? EFS_INODE_RPC_OK : reply_status;*p=r;*n=sizeof(*r);*t=bad_type?0:EFS_MSG_INODE_GETATTR_REPLY;if(expire_recv)now=deadline;if(stale_hint && calls==1){r->status=EFS_INODE_RPC_STALE;r->primary_id=3;}if(failover){if(calls==1){r->status=EFS_INODE_RPC_NOT_PRIMARY;r->primary_id=2;}else if(failover==1&&calls==2)return 1;else assert(c->node==3);}return fail_recv;}
 static void opid_retry_ack(void *packet,uint32_t length){(void)packet;(void)length;}
 '''+fn('static int rpc_writer_retry_pause(' ,True)+fn('static void rpc_retry_peer(')+fn('static int rpc_send_recv_shard(')+fn('static int rpc_send_recv_dual(',True)+r'''
-static void reset(void){calls=sleeps=freed=drops=releases=0;reply_status=EFS_INODE_RPC_OK;fail_recv=fail_send=bad_type=expire_recv=0;now=1000;deadline=0;failover=routing_sends=stale_hint=0;g_group_leader[0]=0;}
+static void reset(void){calls=sleeps=freed=drops=releases=0;reply_status=EFS_INODE_RPC_OK;fail_recv=fail_send=bad_type=expire_recv=0;now=1000;deadline=0;failover=routing_sends=mkdir_ready=mkdir_packet_len=stale_hint=0;g_group_leader[0]=0;}
 static int run(int dual,struct efs_msg_inode_reply*r){return dual?rpc_send_recv_dual(EFS_MSG_INODE_GETATTR,NULL,0,EFS_MSG_INODE_GETATTR_REPLY,r,sizeof(*r),100):rpc_send_recv_shard(0,EFS_MSG_INODE_GETATTR,NULL,0,EFS_MSG_INODE_GETATTR_REPLY,r,sizeof(*r),0,NULL);}
 int main(void){for(int d=0;d<2;d++){
  struct efs_msg_inode_reply r;
@@ -63,6 +66,16 @@ int main(void){for(int d=0;d<2;d++){
  reset();stale_hint=1;assert(!run(d,&r)&&calls==2&&freed==2);
  reset();reply_status=EFS_INODE_RPC_BUSY;assert(run(d,&r)==EFS_ERR_BUSY&&calls==16&&freed==16&&sleeps==15);
  }
+ /* A directory prepare can outlive the legacy 16-attempt window. */
+ unsigned char packet[sizeof(struct efs_msg_inode_create)+EFS_OPID_WIRE_LEN]={0};
+ ((struct efs_msg_inode_create *)packet)->mode=S_IFDIR|0755;
+ struct efs_msg_inode_reply mkdir_reply;
+ reset();deadline=31000;reply_status=EFS_INODE_RPC_BUSY;mkdir_ready=21;
+ assert(rpc_send_recv_dual(EFS_MSG_INODE_CREATE,packet,sizeof(packet),EFS_MSG_INODE_GETATTR_REPLY,&mkdir_reply,sizeof(mkdir_reply),100)==EFS_OK);
+ assert(calls==21 && now<deadline && freed==21);
+ reset();deadline=1010;reply_status=EFS_INODE_RPC_BUSY;mkdir_ready=21;
+ assert(rpc_send_recv_dual(EFS_MSG_INODE_CREATE,packet,sizeof(packet),EFS_MSG_INODE_GETATTR_REPLY,&mkdir_reply,sizeof(mkdir_reply),100)==EFS_ERR_BUSY);
+ assert(calls==1 && now==deadline && freed==1);
  for(unsigned mode=1;mode<=2;mode++){
   struct efs_msg_inode_reply r;reset();failover=mode;g_group_leader[0]=2;
   assert(!run(0,&r)&&routing_sends==3&&calls==(mode==1?3u:2u)&&g_group_leader[0]==0);
@@ -76,4 +89,4 @@ with tempfile.TemporaryDirectory(prefix='efs-metadata-budget-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
-print('metadata retries: shard/dual budgets, STALE/BUSY/hints, failed payload cleanup and late-output retention, lost hinted peer rerouting and concurrent leader retention PASS')
+print('metadata retries: shard/dual budgets, STALE/BUSY/hints, failed payload cleanup and late-output retention, lost hinted peer rerouting, concurrent leader retention and same-identity MKDIR beyond 16 attempts with shorter deadline enforcement PASS')

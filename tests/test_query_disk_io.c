@@ -228,6 +228,10 @@ int main(void)
     read_calls=0;CHECK(!locate(d,16*8192,&found,&at));
     CHECK(found.row.ino==16*8192 && at==15 && read_calls==1);
     read_calls=0;CHECK(!locate(d,16*8192,&found,&at) && !read_calls);
+    CHECK(!locate(d,17*8192,&found,&at) && at==16);
+    CHECK(locate(d,17*8192+4096,&found,NULL)==EFS_ERR_NOT_FOUND);
+    CHECK(!locate(d,2*8192,&found,&at) && at==1);
+    CHECK(!locate(d,16*8192,&found,&at) && at==15);
     found.stat.size=123;CHECK(!node_at(d,0,15,&found,1));
     CHECK(!locate(d,16*8192,&found,&at) && found.stat.size==123);
     d->inode_epoch=UINT64_MAX;

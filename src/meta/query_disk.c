@@ -585,13 +585,26 @@ static int locate_uncached(struct efs_query_disk *d,efs_ino_t ino,struct disk_no
 static int locate(struct efs_query_disk *d,efs_ino_t ino,struct disk_node *node,uint64_t *at)
 {
     pthread_mutex_lock(&d->mutex);uint64_t epoch=d->inode_epoch;
+    uint64_t hint=UINT64_MAX;efs_ino_t predecessor=0;uint32_t shard=efs_kv_inode_shard(ino);
     for(unsigned i=0;i<INODE_CACHE;i++){
         struct inode_cache *c=&d->inode_cache[i];
+        if(c->valid && c->shard==shard && c->node.row.ino<ino && c->node.row.ino>predecessor){
+            predecessor=c->node.row.ino;hint=c->at+1;
+        }
         if(c->valid && c->node.row.ino==ino){*node=c->node;if(at)*at=c->at;c->tick=++d->tick;
             pthread_mutex_unlock(&d->mutex);return EFS_OK;}
     }
     pthread_mutex_unlock(&d->mutex);
-    uint64_t ordinal;int rc=locate_uncached(d,ino,node,&ordinal);if(rc)return rc;
+    uint64_t ordinal=hint;int rc=EFS_OK;
+    /* Sorted immutable rows commonly arrive in inode order. A predecessor
+     * supplies only a hint: exact identity is mandatory, otherwise retain
+     * the binary search and its error semantics. */
+    if(hint<d->part[shard].inodes){
+        rc=node_at(d,shard,hint,node,0);if(rc)return rc;
+    }
+    if(hint>=d->part[shard].inodes || node->row.ino!=ino)
+        rc=locate_uncached(d,ino,node,&ordinal);
+    if(rc)return rc;
     if(at)*at=ordinal;
     pthread_mutex_lock(&d->mutex);
     if(epoch!=UINT64_MAX && epoch==d->inode_epoch){
@@ -603,6 +616,27 @@ static int locate(struct efs_query_disk *d,efs_ino_t ino,struct disk_node *node,
 }
 static int refuse_coord(void *ctx,const struct efs_txid *tx,uint32_t shard,int *decision)
 { (void)ctx;(void)tx;(void)shard;(void)decision;return EFS_ERR_BUSY; }
+/* A raw inode already validated by the builder is an immutable point-read
+ * overlay. Getattr still performs its normal lane/transaction reductions;
+ * all other keys and scans use the snapshot-backed disk KV. */
+struct inode_overlay { struct efs_query_disk *d;const uint8_t *key,*value;uint32_t size; };
+static int overlay_get(void *ctx,const uint8_t *key,uint32_t kl,uint8_t *value,uint32_t *vl)
+{
+    struct inode_overlay *o=ctx;
+    if(kl==11 && !memcmp(key,o->key,11)){
+        uint32_t capacity=*vl;*vl=o->size;
+        if(capacity<o->size)return EFS_ERR_INVAL;
+        memcpy(value,o->value,o->size);return EFS_OK;
+    }
+    return raw_get(o->d,key,kl,value,vl);
+}
+static int overlay_prefix(void *ctx,const uint8_t *p,uint32_t pn,
+    int (*cb)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *u)
+{ return raw_prefix(((struct inode_overlay *)ctx)->d,p,pn,cb,u); }
+static int overlay_from(void *ctx,const uint8_t *p,uint32_t pn,const uint8_t *k,uint32_t kn,
+    int (*cb)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *u)
+{ return raw_scan(((struct inode_overlay *)ctx)->d,p,pn,k,kn,cb,u); }
+static const struct efs_kv_ops overlay_ops={.get=overlay_get,.scan_prefix=overlay_prefix,.scan_from=overlay_from};
 /* Conservative fixed-size dependency filter. Hash collisions only cause
  * extra scans; no lane-dependent inode can be skipped after a source change. */
 static uint64_t dependency_bits(const struct efs_meta_row *row)
@@ -629,7 +663,11 @@ static int nodes_build(struct efs_query_disk *d,uint32_t shard)
         if(!rc && (encoded!=n.row.ino || efs_kv_inode_shard(encoded)!=shard || (i && encoded<=previous)))rc=EFS_ERR_PROTO;
         previous=encoded;
         if(!rc)d->part[shard].dependencies|=dependency_bits(&n.row);
-        if(!rc)rc=efs_meta_apply_getattr(&d->kv,n.row.ino,refuse_coord,NULL,&n.stat);
+        if(!rc){
+            struct inode_overlay overlay={d,key,val,s.value_len};
+            struct efs_kv kv={&overlay_ops,&overlay};
+            rc=efs_meta_apply_getattr(&kv,n.row.ino,refuse_coord,NULL,&n.stat);
+        }
         if(!rc && d->refolded<UINT32_MAX)d->refolded++;
         if(!rc){
             batch[used++]=n;

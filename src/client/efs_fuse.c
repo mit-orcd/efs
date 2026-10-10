@@ -5602,10 +5602,15 @@ static void ll_mkdir_run(fuse_req_t req, fuse_ino_t parent, const char *name,
     int rc;
     lookup_memo_mutation_begin();
     t_req = req;
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    uint64_t deadline = stats_now_ms() + 30000;
+    if (previous && previous < deadline) deadline = previous;
+    efs_client_rpc_set_deadline_ms(deadline);
     rc = efs_fuse_mkdir_at(parent, name, mode, &new_ino);
     if (rc == 0)
         rc = lookup_fill_committed((fuse_ino_t)new_ino, &e, "mkdir",
                                    parent, name);
+    efs_client_rpc_set_deadline_ms(previous);
     lookup_memo_mutation_end();
     t_req = NULL;
     if (rc)

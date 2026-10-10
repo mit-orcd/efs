@@ -9,8 +9,8 @@ profiling rounds do not satisfy them.
 |---|---|
 | Immutable disk catalog, incremental exact aggregates, bounded builder scratch | implemented, differential/live/cold gates pass in previous checkpoint |
 | Aggregate retained-cache admission | implemented; focused and complete native suites pass; live deployment gate pending |
-| Durable changed-key watermarks and bounded catch-up/recovery | durable partition revisions and restart catch-up implemented in private build; focused gates pass; bounded discovery, live and bounded-discovery gates pending |
-| Explicit cardinality/offset/budget audit | revision saturation and complete source-allocation budgeting implemented; broader audit in progress |
+| Durable changed-key watermarks and bounded catch-up/recovery | durable partition revisions, restart catch-up and bounded discovery implemented; focused and full native gates pass; live validation pending |
+| Explicit cardinality/offset/budget audit | revision saturation, complete source-allocation budgeting and representation audit complete; actual scale/live validation pending |
 | Increasing-cardinality RSS, cold-cache, concurrent export/mutation and freshness | pending |
 | Synthetic partitioned index of at least 2^32 entries | pending; sparse offset probes alone cannot satisfy this |
 | Staged real-filesystem and fault/platform gates | previous smaller gates pass; closure matrix pending |
@@ -199,8 +199,14 @@ The preceding version-4 ten-million-file run completed successfully: fresh build
 passed the independent sequence/identity oracle; close/reopen restore also passed.
 Its source NOSYNC, warm/shared VM environment and isolated compressed fixture are
 unchanged limitations. See [raw ten-million evidence](../../results/measure/20261010-w92-closure/scale-10m-v4/).
-These are observed pilots, not extrapolated 2^32 acceptance. A version-5 repeat
-with an inode-only mutation and retained/full export oracles is next.
+These are observed pilots, not extrapolated 2^32 acceptance. The version-5 repeat also completed with every file checked before and after
+an inode-only mutation. Fresh build 291.206 s; unchanged refresh 0.617 s;
+full export verification 7.196 s; mutation refresh 2.932 s (one partition,
+2443 inode refolds), followed by a second full export verification in 7.446 s.
+The old snapshot retained its original exact totals. Accounted builder memory
+3,864,480 bytes; whole-process peak RSS 41,000 KiB. These are single shared-VM,
+warm-kernel measurements, not a controlled throughput comparison or the 2^32 gate.
+See [version-5 evidence](../../results/measure/20261010-w92-closure/scale-10m-v5/).
 
 ## Cardinality and budget audit
 
@@ -218,7 +224,7 @@ with an inode-only mutation and retained/full export oracles is next.
 | Lane dependencies / decoded inode cache | 64-bit filter per partition; 64 decoded nodes | fixed resident allocations; filter collisions only add work |
 | Source snapshot admission | 64 MiB host limit, complete retained source allocation charged | segment objects/indexes borrowed from authoritative KV are outside the cache snapshot allocation and included in process RSS measurements |
 | Source revision checkpoints | 4096 uint64 counters, fixed sidecar and 128-bit lineage | saturation refuses comparison; invalid history forces derived rebuilding |
-| Query page | uint32 visit budget, at most 1,000,000 visits; requested results at most 10,000 | bounded per call; full export resumes uint64 cursor across pages |
+| Query page | uint32 visit budget: v1 at most 1,000,000, v4 paged at most 100,000; requested results at most 10,000 | bounded per call; full export resumes uint64 cursor across pages |
 | Wire output / server reply allocation | output at most 16 MiB; aggregate reply admission 64 MiB | larger namespaces stream; no complete result buffered on server |
 | Authorization scratch / paged export lease | 8192 fixed authorization entries; one server page session, 60 s idle / configurable finite total lease | concurrent exporters may receive BUSY; expired sessions refuse stale continuation |
 | Python display/export | display at most 10,000 entries; file export consumes pages of 1000 | ordering a bounded display is not sorting every file in RAM |
@@ -243,3 +249,24 @@ budget; no namespace-sized memory allocation or protocol-format change is added.
 Boundary/default/invalid-value tests verify an active 24-hour lease survives the
 old one-hour point while idle and hard expiry still refuse continuation. Integrated
 Linux compilation and focused lease tests pass; live expiry/resource gates remain pending.
+
+## Sequential lookup and actual scale provisioning
+
+Full inode folds reuse the already validated immutable raw inode record through
+a point-read KV overlay. Other keys and scans still use the normal snapshot disk
+backend; getattr retains its lane, transaction and stability checks. The fixed
+64-entry decoded cache also supplies a same-partition predecessor hint. The
+adjacent row must match the requested inode exactly; gaps and reverse order use
+the original binary lookup. IO errors remain failures. Differential, retained
+view and fault tests pass, including gaps, reverse order and write invalidation.
+A ten-million-entry repeat is running before the actual billions-entry gate.
+
+For the actual scale gate, a fresh 2 TiB sparse raw disk was attached live-only to
+xefs1 as vdc, serial W92SCALE20261010. Its uniquely identified blank device was
+formatted Btrfs and mounted at `/data1/efs/bench/w92-scale-2p32-20261010`, with
+forced zstd compression and noatime. Existing vda/vdb disks and persistent VM
+configuration were unchanged. Host backing is capped at 2 TiB with approximately
+3.2 TiB initially free; the fixture reserves 100 GiB physical free space and
+explicitly configures larger logical cache limits. This is synthetic production
+record validation, not a claim of real EFS/Raft payload capacity. No billion-entry
+result is claimed until actual population and independent streaming oracles pass.
