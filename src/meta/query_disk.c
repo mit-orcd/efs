@@ -24,6 +24,7 @@
 #define FD_CACHE 32
 #define READ_WINDOW 8192
 #define READ_WAYS 4
+_Static_assert(FD_CACHE<=UINT8_MAX,"descriptor index must fit");
 #define SORT_ROWS 2048
 #define NODE_BATCH 8
 #define VALUE_MAX 16384
@@ -53,6 +54,7 @@ struct efs_query_disk {
     char path[EFS_MAX_PATH];
     struct disk_part part[SHARDS];
     struct fd_slot fds[FD_CACHE];
+    uint8_t fd_index[SHARDS][4]; /* Slot plus one; zero means absent. */
     pthread_mutex_t mutex;
     uint64_t tick,count,bytes,limit,disk_bytes,disk_limit;
     uint32_t rebuilt,refolded;
@@ -160,25 +162,33 @@ static int window_read(struct fd_slot *f,void *buf,size_t n,uint64_t off)
     if(at>w->size || n>w->size-at)return EFS_ERR_IO;
     memcpy(buf,w->data+at,n);return EFS_OK;
 }
+static int fd_kind(char kind)
+{
+    switch(kind){case 'r':return 0;case 'i':return 1;case 'n':return 2;case 'd':return 3;default:return -1;}
+}
 static int disk_io(struct efs_query_disk *d,uint32_t shard,char kind,void *buf,size_t n,uint64_t off,int write)
 {
+    int k=fd_kind(kind);if(shard>=SHARDS || k<0)return EFS_ERR_INVAL;
     if(off>INT64_MAX || n>INT64_MAX-off)return EFS_ERR_OVERFLOW;
     if(!n)return EFS_OK;
     int rc=EFS_OK;
     pthread_mutex_lock(&d->mutex);
-    struct fd_slot *f=NULL,*victim=&d->fds[0];
-    for(int i=0;i<FD_CACHE;i++) {
-        if(d->fds[i].fd>=0 && d->fds[i].shard==shard && d->fds[i].kind==kind) { f=&d->fds[i];break; }
-        if(d->fds[i].fd<0 || d->fds[i].tick<victim->tick)victim=&d->fds[i];
+    uint8_t found=d->fd_index[shard][k];
+    struct fd_slot *f=found?&d->fds[found-1]:NULL,*victim=&d->fds[0];
+    if(!f)for(int i=0;i<FD_CACHE;i++) {
+        if(d->fds[i].fd<0){victim=&d->fds[i];break;}
+        if(d->fds[i].tick<victim->tick)victim=&d->fds[i];
     }
     if(!f) {
         char path[EFS_MAX_PATH];rc=filename(d,shard,kind,path,sizeof(path));
         if(!rc) {
-            f=victim;if(f->fd>=0)close(f->fd);
+            f=victim;
+            if(f->fd>=0){d->fd_index[f->shard][fd_kind(f->kind)]=0;close(f->fd);}
             f->window_tick=0;
             for(unsigned i=0;i<READ_WAYS;i++)f->windows[i].size=0;
             f->fd=open(path,O_RDWR|O_CLOEXEC);f->shard=shard;f->kind=kind;
             if(f->fd<0)rc=EFS_ERR_IO;
+            else d->fd_index[shard][k]=(uint8_t)(f-d->fds+1);
         }
     }
     if(!rc) {
@@ -202,6 +212,7 @@ static int disk_io(struct efs_query_disk *d,uint32_t shard,char kind,void *buf,s
 static void close_cache(struct efs_query_disk *d)
 {
     for(int i=0;i<FD_CACHE;i++)if(d->fds[i].fd>=0){close(d->fds[i].fd);d->fds[i].fd=-1;}
+    memset(d->fd_index,0,sizeof(d->fd_index));
 }
 void efs_query_disk_free(struct efs_query_disk *d)
 {

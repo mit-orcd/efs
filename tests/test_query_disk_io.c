@@ -175,6 +175,15 @@ int main(void)
         CHECK(disk_io(d,shard,'r',got,17,READ_WINDOW,0)==EFS_ERR_IO);
     }
     CHECK(!disk_io(d,0,'r',got,17,100,0));CHECK(!memcmp(got,data+100,17));
+    /* A failed open must not leave the evicted key pointing to a reused FD. */
+    CHECK(disk_io(d,SHARDS-1,'r',got,1,0,0)==EFS_ERR_IO);
+    CHECK(!d->fd_index[SHARDS-1][fd_kind('r')]);
+    CHECK(!disk_io(d,FD_CACHE+2,'r',got,1,0,0));CHECK(got[0]==FD_CACHE+2);
+    CHECK(disk_io(d,SHARDS,'r',got,1,0,0)==EFS_ERR_INVAL);
+    CHECK(disk_io(d,0,'x',got,1,0,0)==EFS_ERR_INVAL);
+    close_cache(d);
+    for(unsigned i=0;i<SHARDS;i++)for(unsigned k=0;k<4;k++)CHECK(!d->fd_index[i][k]);
+    CHECK(!disk_io(d,0,'r',got,17,100,0));CHECK(!memcmp(got,data+100,17));
     efs_query_disk_free(d);
     /* A new raw/index inode has one checked writing-handle barrier. Inject
      * failures in every persisted file class; none may return a candidate or
