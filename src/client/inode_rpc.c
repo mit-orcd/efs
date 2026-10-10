@@ -915,6 +915,10 @@ static int create_request_rpc(struct efs_client_create_request *r,int probe)
        (r->wire.routed && reply.routed && r->wire.shard!=reply.shard))return EFS_ERR_PROTO;
     if(reply.routed){r->wire.routed=1;r->wire.shard=reply.shard;}
     rc=rpc_status_to_efs(reply.rpc.status);
+    /* A successful submission without a replay receipt is still ambiguous.
+     * Keep the same identity/slot and retry until durable terminal proof;
+     * returning OK here makes FUSE stop its retry loop before completion. */
+    if(!reply.known && rc==EFS_OK)rc=EFS_ERR_BUSY;
     if(reply.known) {
         if(rc==EFS_ERR_BUSY || rc==EFS_ERR_NOT_PRIMARY ||
            (rc==EFS_OK && (!reply.rpc.inode.ino || !reply.generation)))return EFS_ERR_PROTO;
