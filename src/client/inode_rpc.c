@@ -567,6 +567,25 @@ static int rpc_fault_create_reply(uint8_t type, const void *req, uint32_t len,
 }
 #endif
 
+/* A transport failure invalidates this attempt's hint. Preserve the
+ * request identity while retrying another voter, and never erase a newer
+ * leader learned concurrently by another worker. Pool admission failure
+ * is not evidence that a peer is down. */
+static void rpc_retry_peer(uint32_t shard, efs_node_id_t nid,
+                            efs_node_id_t *target, efs_node_id_t *skip, int failed)
+{
+    unsigned group = efs_raft_shard_group(shard) >> 1;
+    *target = 0;
+    *skip = nid;
+    if (!nid) return;
+    if (failed) efs_client_node_note_fail(nid);
+    if (group < 2) {
+        efs_node_id_t expected = nid;
+        __atomic_compare_exchange_n(&g_group_leader[group], &expected, 0,
+                                    0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+    }
+}
+
 static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
                                uint32_t req_len, uint8_t expect, void *reply,
                                uint32_t reply_len, uint32_t copy_cap,
@@ -602,6 +621,7 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
         if (!conn || efs_conn_send_msg(conn, type, req, req_len) != 0) {
             if (conn)
                 efs_client_conn_drop(nid, conn);
+            rpc_retry_peer(shard, nid, &target, &skip, conn != NULL);
             /* One dropped conn is not a failed create. Same 16-attempt
              * budget as BUSY; a hard NET only after it is used up
              * (dir_many_files EIO on a single recv failure). */
@@ -626,6 +646,7 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
         if (rc != 0) {
             free(payload);
             efs_client_conn_drop(nid, conn);
+            rpc_retry_peer(shard, nid, &target, &skip, 1);
             if (attempt + 1 < 16) {
                 fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=recv rc=%d\n",
                         type, attempt, rc);
@@ -636,6 +657,7 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
             return EFS_ERR_NET;
         }
         efs_client_conn_release(nid, conn);
+        efs_client_node_note_ok(nid);
         if (efs_client_rpc_past_deadline()) {
             free(payload);
             return EFS_ERR_BUSY;
@@ -682,6 +704,12 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
             continue;
         }
         if (r->status == EFS_INODE_RPC_STALE && stale_retryable(type)) {
+            /* PREPARE can report the participant leader whose canonical
+             * version disagreed with this replica. Re-reading repeatedly on
+             * the same coordinator cannot resolve that replica-local drift. */
+            target = r->primary_id && r->primary_id <= EFS_MAX_NODES &&
+                     r->primary_id != nid ? r->primary_id : 0;
+            skip = target ? 0 : nid;
             /* A directory-op txn lands STALE when a same-name dentry, the
              * child row, or an emptiness witness moved between its read
              * and its PREPARE (the parent row itself is a commutative
@@ -950,7 +978,10 @@ int efs_client_create_resume(struct efs_client_create_request *r,int probe_only)
     if(r->complete)return r->result;
     int rc=create_request_rpc(r,1);
     if(r->complete || probe_only || rc!=EFS_ERR_BUSY)return create_request_revocation(r,rc);
-    if(!r->wire.routed)return EFS_ERR_PROTO;
+    /* The parent read-index may be BUSY before the server can resolve the
+     * dentry shard. This is a valid unresolved probe, not malformed proof.
+     * Retain the identity and let the caller retry without submitting. */
+    if(!r->wire.routed)return EFS_ERR_BUSY;
     if(!r->admitted) {
         rc=session_shard_admit(r->wire.shard,&r->wire.q);
         if(rc!=EFS_OK)return create_request_revocation(r,rc);
@@ -1654,7 +1685,7 @@ int efs_client_rpc_getchunks_fileid(efs_export_id_t export_id, efs_ino_t ino,
     uint32_t shard = efs_export_shard_of(ino, EFS_KV_SHARD_BITS);
     struct efs_msg_inode_getchunks_reply *r = NULL;
     void *payload = NULL;
-    efs_node_id_t target = 0;
+    efs_node_id_t target = 0, skip = 0;
     for (int attempt = 0; attempt < 16; attempt++) {
         if (efs_client_rpc_past_deadline())
             return EFS_ERR_BUSY;
@@ -1662,16 +1693,21 @@ int efs_client_rpc_getchunks_fileid(efs_export_id_t export_id, efs_ino_t ino,
         int prof = rpc_prof_enabled();
         unsigned long long t0 = prof ? rpc_prof_now_us() : 0;
         struct efs_conn *conn = target ? efs_client_conn_get(target)
-                                      : rpc_owner_conn_shard(shard, &nid);
+                                      : raft_voter_conn_skip(shard, &nid, skip);
         if (target)
             nid = target;
         unsigned long long t1 = prof ? rpc_prof_now_us() : 0;
-        if (!conn)
-            return EFS_ERR_NET;
-        if (efs_conn_send_msg(conn, EFS_MSG_INODE_GETCHUNKS, &req,
-                              sizeof(req)) != 0) {
-            efs_client_conn_drop(nid, conn);
-            return EFS_ERR_NET;
+        if (!conn || efs_conn_send_msg(conn, EFS_MSG_INODE_GETCHUNKS, &req,
+                                      sizeof(req)) != 0) {
+            if (conn) efs_client_conn_drop(nid, conn);
+            /* This immutable read is safe to repeat after endpoint loss.
+             * Drop a dead leader hint and choose a different live voter;
+             * preserve FileID, range, outputs and the original deadline. */
+            skip = nid; target = 0;
+            if (attempt == 15) return EFS_ERR_NET;
+            if (rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+                return EFS_ERR_BUSY;
+            continue;
         }
         unsigned long long t2 = prof ? rpc_prof_now_us() : 0;
         uint8_t rtype = 0;
@@ -1682,7 +1718,12 @@ int efs_client_rpc_getchunks_fileid(efs_export_id_t export_id, efs_ino_t ino,
         if (rc != 0) {
             free(payload);
             efs_client_conn_drop(nid, conn);
-            return EFS_ERR_NET;
+            payload = NULL;
+            skip = nid; target = 0;
+            if (attempt == 15) return EFS_ERR_NET;
+            if (rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+                return EFS_ERR_BUSY;
+            continue;
         }
         efs_client_conn_release(nid, conn);
         if (efs_client_rpc_past_deadline()) {
@@ -1696,12 +1737,16 @@ int efs_client_rpc_getchunks_fileid(efs_export_id_t export_id, efs_ino_t ino,
             return EFS_ERR_PROTO;
         }
         r = payload;
-        if (r->status == EFS_INODE_RPC_NOT_PRIMARY && r->primary_id &&
-            r->primary_id != nid) {
-            target = r->primary_id;
+        if (r->status == EFS_INODE_RPC_NOT_PRIMARY) {
+            efs_node_id_t hint = r->primary_id;
+            target = hint && hint != nid ? hint : 0;
+            skip = nid;
             free(payload);
             payload = NULL;
             r = NULL;
+            if (!target && (attempt == 15 ||
+                            rpc_writer_retry_pause((unsigned)attempt) != EFS_OK))
+                return EFS_ERR_BUSY;
             continue;
         }
         if (r->status != EFS_INODE_RPC_BUSY)
@@ -2047,7 +2092,13 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         (type==EFS_MSG_INODE_LINK && req_len==sizeof(mutation.link)+EFS_OPID_WIRE_LEN) ||
         (type==EFS_MSG_INODE_RENAME_AT && req_len==sizeof(mutation.rename)+EFS_OPID_WIRE_LEN);
     if (identified_create) { memcpy(create_retry,req,req_len);req=create_retry; }
-    for (int attempt = 0; attempt < 16; attempt++) {
+    /* MKDIR owns a bounded callback deadline. Keep its original identity
+     * while a cross-shard prepare drains instead of stopping after 16 tries.
+     * Other users retain the legacy attempt cap. */
+    int attempts = identified_create && type == EFS_MSG_INODE_CREATE &&
+        S_ISDIR(((const struct efs_msg_inode_create *)req)->mode) &&
+        efs_client_rpc_deadline_ms() ? 64 : 16;
+    for (int attempt = 0; attempt < attempts; attempt++) {
         if (identified_create) opid_retry_ack(create_retry,req_len);
         efs_node_id_t nid = 0;
         struct efs_conn *conn;
@@ -2065,7 +2116,7 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         if (!conn || efs_conn_send_msg(conn, type, req, req_len) != 0) {
             if (conn)
                 efs_client_conn_drop(nid, conn);
-            if (attempt + 1 < 16) {
+            if (attempt + 1 < attempts) {
                 if (rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
                     return EFS_ERR_BUSY;
                 continue;
@@ -2083,7 +2134,7 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         if (rc != 0) {
             free(payload);
             efs_client_conn_drop(nid, conn);
-            if (attempt + 1 < 16) {
+            if (attempt + 1 < attempts) {
                 fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=recv rc=%d "
                         "req_len=%u recv_ms=%d\n",
                         type, attempt, rc, req_len,
@@ -2116,19 +2167,25 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
             skip = nid;
             target = 0;
             unsigned long long sleep_start = rpc_prof_now_us();
-            if (attempt == 15 || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+            if (attempt + 1 == attempts || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
                 return EFS_ERR_BUSY;
             unsigned long long sleep_us = rpc_prof_now_us() - sleep_start;
             rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, sleep_us);
             continue;
         }
         if (r->status == EFS_INODE_RPC_STALE && stale_retryable(type)) {
+            /* PREPARE can report the participant leader whose canonical
+             * version disagreed with this replica. Re-reading repeatedly on
+             * the same coordinator cannot resolve that replica-local drift. */
+            target = r->primary_id && r->primary_id <= EFS_MAX_NODES &&
+                     r->primary_id != nid ? r->primary_id : 0;
+            skip = target ? 0 : nid;
             /* See rpc_send_recv_shard: a directory-op txn that lost a
              * dentry / witness race committed nothing; re-run it.
              * REPORT_CHUNKS owns its STALE (W1). */
             saw_busy = 1;
             unsigned long long sleep_start = rpc_prof_now_us();
-            if (attempt == 15 || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+            if (attempt + 1 == attempts || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
                 return EFS_ERR_BUSY;
             unsigned long long sleep_us = rpc_prof_now_us() - sleep_start;
             rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, sleep_us);
@@ -2145,7 +2202,7 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
             unsigned long long sleep_start = rpc_prof_now_us();
             saw_busy = 1;
             target = 0;
-            if (attempt == 15 || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+            if (attempt + 1 == attempts || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
                 return EFS_ERR_BUSY;
             unsigned long long sleep_us = rpc_prof_now_us() - sleep_start;
             rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, sleep_us);
@@ -2155,8 +2212,8 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         target = r->primary_id;
     }
     if (saw_busy)
-        fprintf(stderr, "inode-rpc: dual type=%u exhausted 16 BUSY/STALE "
-                "retries (%.1f s) -> EBUSY\n", type, 10.35);
+        fprintf(stderr, "inode-rpc: dual type=%u exhausted %d BUSY/STALE "
+                "retries (%.1f s) -> EBUSY\n", type, attempts, (rpc_prof_now_us() - t_start) / 1000000.0);
     return saw_busy ? EFS_ERR_BUSY : EFS_ERR_NOT_PRIMARY;
 }
 

@@ -40,6 +40,8 @@ static void rpc_prof_add(unsigned t,unsigned long long a,unsigned long long b,un
 static void rpc_note_slow_ok(unsigned t,int a,int b,unsigned st,unsigned long long start){(void)t;(void)a;(void)b;(void)st;(void)start;}
 static int efs_client_rpc_past_deadline(void){return 0;}
 static int rpc_writer_retry_pause(unsigned n){(void)n;pauses++;return EFS_OK;}
+static void efs_client_node_note_fail(efs_node_id_t n){(void)n;}
+static void efs_client_node_note_ok(efs_node_id_t n){(void)n;}
 static unsigned rpc_leader_of(unsigned g){return g_group_leader[g>>1];}
 static struct efs_conn *efs_client_conn_get(efs_node_id_t n){assert(n==2);return &connection;}
 static struct efs_conn *raft_voter_conn_skip(uint32_t sh,efs_node_id_t *n,efs_node_id_t skip){(void)sh;(void)skip;*n=1;return &connection;}
@@ -65,7 +67,7 @@ int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **payload,uint32_t *
  return 0;
 }
 '''
-code += '\n'.join(function(n) for n in ['rpc_status_to_efs','stale_retryable','opid_suffix','rpc_send_recv_shard','rpc_send_recv_owner'])
+code += '\n'.join(function(n) for n in ['rpc_status_to_efs','stale_retryable','opid_suffix','rpc_retry_peer','rpc_send_recv_shard','rpc_send_recv_owner'])
 code += r'''
 static int rpc_send_recv_dual(uint8_t type,const void *req,uint32_t len,uint8_t expect,void *reply,uint32_t size,int unused){(void)unused;return rpc_send_recv_shard(1,type,req,len,expect,reply,size,0,NULL);}
 '''+function('efs_client_rpc_create')+r'''

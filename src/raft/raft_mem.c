@@ -188,7 +188,9 @@ static int mem_save_snap(void *ctx, uint64_t last_index, uint64_t last_term)
             drop = m->n;
         for (i = 0; i < drop; i++)
             free(m->log[i].cmd);
-        memmove(m->log, m->log + drop, (size_t)(m->n - drop) * sizeof(*m->log));
+        if (m->n > drop)
+            memmove(m->log, m->log + drop,
+                    (size_t)(m->n - drop) * sizeof(*m->log));
         m->n -= drop;
     }
     m->snap_idx = last_index;

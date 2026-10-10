@@ -601,7 +601,7 @@ tests/test_txn_resolve_faults: tests/test_txn_resolve_faults.o $(LIB)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 # Internal I/O fault regression compiles the actual disk-cache implementation.
-src/meta/query_disk.o tests/test_query_disk_io: src/meta/query_disk_incremental.h
+src/meta/query_disk.o tests/test_query_disk_io: src/meta/query_disk_incremental.h src/meta/query_disk_budget.h
 tests/test_query_disk_io: src/meta/query_disk.c src/meta/query_disk.h
 
 # Independent production storage-session barrier, including syscall failures.
@@ -614,7 +614,7 @@ tests/test_put_upload_server: tests/test_put_upload_server.c src/server/put_uplo
 tests/test_put_upload_client: tests/test_put_upload_client.c src/client/put_upload.c include/efs/put_upload.h include/efs/put_ticket.h src/client/client_internal.h $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ $< $(LIB) $(LDFLAGS)
 # Publication coalescing is shared by the real worker and its policy gate.
-src/server/raft_host.o tests/test_query_refresh: src/server/query_refresh.h
+src/server/raft_host.o tests/test_query_refresh: src/server/query_refresh.h src/server/query_export_lease.h
 
 # Ticket wire changes must rebuild both endpoints and their actual handler.
 src/client/put_upload.o src/server/put_upload.o src/server/handler.o: include/efs/put_upload.h include/efs/put_ticket.h

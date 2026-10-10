@@ -1,0 +1,3 @@
+cold retired exact replay cannot resurrect superseded mapping PASS
+cold ticket floors: exact retirement ACK replay, status and late admission refusal PASS
+actual truncate fence prevents typed dirty read resurrection and retires fully clipped ownership PASS

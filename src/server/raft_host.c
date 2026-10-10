@@ -659,19 +659,6 @@ static uint32_t group_voters(uint8_t group, int n)
     return 0xeu;     /* nodes 2,3,4 = raft ids 1,2,3 */
 }
 
-/* Same rule as raft.c valid_voters: RF = 2f+1, so the popcount is odd. */
-static int cfg_voters_ok(uint32_t v)
-{
-    int n = 0, i;
-
-    if (v == 0 || (v >> EFS_RAFT_MAX_PEERS))
-        return 0;
-    for (i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
-        if (v & (1u << i))
-            n++;
-    }
-    return n >= 1 && (n % 2) == 1;
-}
 
 static int hosts_group(int raft_id, uint32_t voters)
 {
@@ -6465,7 +6452,7 @@ static uint32_t load_desired(struct efs_raft_host *h, uint8_t group,
     }
     close(fd);
     v = rd32be(buf);
-    return cfg_voters_ok(v) ? v : fallback;
+    return efs_raft_voters_valid(v) ? v : fallback;
 }
 
 static int save_desired(struct efs_raft_host *h, uint8_t group, uint32_t voters)
@@ -6621,7 +6608,7 @@ static int host_cfg(struct efs_raft_host *h, uint8_t group,
         return EFS_ERR_INVAL;
     sub = cmd[1];
     voters = rd32be(cmd + 2);
-    if (!cfg_voters_ok(voters))
+    if (!efs_raft_voters_valid(voters))
         return EFS_ERR_INVAL;
     if (sub != EFS_MD_CFG_NOTE && sub != EFS_MD_CFG_CHANGE)
         return EFS_ERR_INVAL;
@@ -8136,6 +8123,7 @@ static void *host_gc_thread(void *arg)
 #define HOST_QUERY_BYTES (256ULL << 20)
 #define HOST_QUERY_MEMTABLE (64ULL << 20)
 #include "query_refresh.h"
+#include "query_export_lease.h"
 #define HOST_QUERY_N 256
 #define HOST_QUERY_T_MS 2000
 #define HOST_QUERY_BUILD_MS 10000
@@ -8147,6 +8135,18 @@ static uint64_t query_mono_ms(void)
 }
 /* One retained export generation per host, bounded by the catalog cap.
  * Fresh per-page permissions still apply. Idle expiry also runs without RPCs. */
+static pthread_once_t query_export_once=PTHREAD_ONCE_INIT;
+static uint64_t query_export_max_ms=3600000;
+static void query_export_configure(void)
+{
+    int valid;query_export_max_ms=efs_query_export_lifetime(getenv("EFS_QUERY_EXPORT_MAX_MS"),&valid);
+    if(!valid)fprintf(stderr,"query-config: invalid EFS_QUERY_EXPORT_MAX_MS; using 3600000 (allowed 60000..604800000)\n");
+}
+static int query_export_expired(uint64_t now,uint64_t touched,uint64_t born)
+{
+    pthread_once(&query_export_once,query_export_configure);
+    return efs_query_export_expired(now,touched,born,query_export_max_ms);
+}
 static pthread_mutex_t query_page_mu=PTHREAD_MUTEX_INITIALIZER;
 static struct {
     uint64_t token,touched,born;
@@ -8165,7 +8165,7 @@ static void query_page_sweep(int force)
     else if (pthread_mutex_trylock(&query_page_mu)) return;
     uint64_t now=query_mono_ms();
     if (force || (query_page_session.token &&
-        (now-query_page_session.touched>60000 || now-query_page_session.born>3600000))) query_page_clear();
+        query_export_expired(now,query_page_session.touched,query_page_session.born))) query_page_clear();
     pthread_mutex_unlock(&query_page_mu);
 }
 static int host_query_cancel(void *ctx)
@@ -8279,7 +8279,16 @@ static void *host_query_thread(void *ctx)
         uint64_t now=query_mono_ms(),dirty=0;
         if (now-last_attempt<200) continue;
         int rc=efs_kv_lsm_metadata_revisions(h->kv,current,4096);
-        if (rc) continue;
+        if (rc) {
+            pthread_rwlock_wrlock(&h->query_lock);
+            h->query_error=rc;
+            pthread_rwlock_unlock(&h->query_lock);
+            if(rc!=last_error || now-last_error_log>=30000){
+                fprintf(stderr,"query-revisions: rc=%d\n",rc);last_error_log=now;
+            }
+            last_error=rc;
+            continue;
+        }
         for (uint32_t i=0;i<4096;i++) {
             uint64_t diff=current[i]>=published[i] ? current[i]-published[i] : HOST_QUERY_N;
             if (diff>=HOST_QUERY_N-dirty) { dirty=HOST_QUERY_N;break; }
@@ -8314,6 +8323,10 @@ static void *host_query_thread(void *ctx)
             if(disk_backend) {
                 int restored=EFS_ERR_NOT_FOUND;
                 if(initial)restored=efs_query_catalog_restore_disk(query_root,source,watermark,catalog_bytes,&candidate);
+                if(initial && restored==EFS_ERR_STALE){
+                    restored=efs_query_catalog_catchup_disk(query_root,source,catalog_bytes,host_query_disk_cancel,h,&candidate);
+                    fprintf(stderr,"query-catchup: rc=%d backend=disk\n",restored);
+                }
                 if(initial)fprintf(stderr,"query-restore: rc=%d backend=disk\n",restored);
                 if(restored)rc=efs_query_catalog_build_disk(query_root,source,h->query_view.catalog,
                     catalog_bytes,host_query_disk_cancel,h,&candidate);
@@ -8769,8 +8782,7 @@ int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void
     if (pthread_mutex_trylock(&query_page_mu)) return EFS_ERR_BUSY;
     int rc=EFS_OK,created=0;
     uint64_t now=query_mono_ms();
-    if (query_page_session.token && (now-query_page_session.touched>60000 ||
-        now-query_page_session.born>3600000)) query_page_clear();
+    if (query_page_session.token && query_export_expired(now,query_page_session.touched,query_page_session.born)) query_page_clear();
     struct efs_msg_query_snapshot_v4 identity=*req;
     identity.token=identity.cursor=0;identity.limit=0;
     if (req->token) {
@@ -11137,6 +11149,43 @@ static int host_prep_value(struct efs_raft_host *h, uint32_t shard,
                           pay, pn, NULL, hint);
 }
 
+/* Capture the allocator before selecting an inode. Sidecar counters can
+ * differ between replicas; the canonical eight-byte watermark is the
+ * allocation predicate. Capturing after peek
+ * could authorize a rewind if another create advanced it in between. */
+static int host_alloc_capture(struct efs_raft_host *h, uint32_t shard,
+                              uint8_t *key, uint32_t *length,
+                              uint8_t value[EFS_META_ALLOC_BYTES], uint32_t *bytes)
+{
+    int rc = efs_kv_key_alloc(shard, key, length);
+    if (rc != EFS_OK) return rc;
+    *bytes = EFS_META_ALLOC_BYTES;
+    rc = efs_kv_get(h->kv, key, *length, value, bytes);
+    if (rc == EFS_ERR_NOT_FOUND) {
+        *bytes = EFS_TXN_ABSENT;
+        return EFS_OK;
+    }
+    if (rc == EFS_OK && *bytes != EFS_META_ALLOC_BYTES) return EFS_ERR_PROTO;
+    return rc;
+}
+
+static int host_prep_alloc_value(struct efs_raft_host *h, uint32_t shard,
+                                 const struct efs_txid *t, const struct efs_txn_parts *parts,
+                                 const uint8_t *key, uint32_t length,
+                                 const uint8_t *expected, uint32_t expected_bytes,
+                                 const uint8_t value[EFS_META_ALLOC_BYTES],
+                                 struct host_idx_ref *ref, int *hint)
+{
+    uint8_t payload[9 + 2 * EFS_META_ALLOC_BYTES];
+    uint32_t bytes = 0;
+    int rc = efs_txn_encode_excl_value(payload, sizeof(payload), &bytes,
+        expected_bytes == EFS_TXN_ABSENT ? NULL : expected, expected_bytes,
+        EFS_TXN_PUT, value, EFS_META_ALLOC_BYTES);
+    if (rc != EFS_OK) return rc;
+    return host_prep_raw(h, shard, EFS_TXN_EXCL_VALUE, t, parts, key, length,
+                         payload, bytes, ref, hint);
+}
+
 /* Parent (or moved-dir) inode row: nlink/nents delta, times MAX,
  * used_shards OR, parent SET. Replaces the EXCL full-image PUT that lost
  * concurrent log-path updates and serialized every op in one directory. */
@@ -11828,7 +11877,9 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
     uint8_t v_cino[EFS_META_INO_BYTES], v_alloc[EFS_META_ALLOC_BYTES];
     uint32_t kd = 0, kpi = 0, kci = 0, ka = 0, ks = 0;
     uint32_t psh, coord;
-    uint64_t aver = 0, dver = 0;
+    uint64_t dver = 0;
+    uint8_t alloc_before[EFS_META_ALLOC_BYTES];
+    uint32_t alloc_before_bytes = 0;
     uint64_t bit;
     uint8_t lane;
     efs_ino_t next = 0, ino = 0;
@@ -11844,7 +11895,9 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
      * OR (times ride the dir-lane). */
     memset(&pd, 0, sizeof(pd));
     pd.or_used_shards = bit;
-    rc = efs_meta_apply_peek_alloc(h->kv, dsh, &next);
+    rc = host_alloc_capture(h, dsh, k_alloc, &ka, alloc_before, &alloc_before_bytes);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_peek_alloc(h->kv, dsh, &next);
     if (rc == EFS_OK) {
         ino = next;
         if (efs_kv_inode_shard(ino) != dsh)
@@ -11879,11 +11932,7 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
     if (rc == EFS_OK)
         rc = efs_kv_key_inode(dsh, ino, k_cino, &kci);
     if (rc == EFS_OK)
-        rc = efs_kv_key_alloc(dsh, k_alloc, &ka);
-    if (rc == EFS_OK)
         rc = efs_kv_key_dseq(dsh, parent, lane, k_dseq, &ks);
-    if (rc == EFS_OK)
-        rc = efs_txn_ver_get(h->kv, k_alloc, ka, &aver);
     if (rc == EFS_OK)
         rc = efs_txn_ver_get(h->kv, k_dent, kd, &dver);
     if (rc == EFS_OK && hold) {
@@ -11934,9 +11983,9 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
                                    kci, 0, EFS_TXN_PUT, v_cino, sizeof(v_cino),
                                    hint);
                 if (rc == EFS_OK)
-                    rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_alloc,
-                                   ka, aver, EFS_TXN_PUT, v_alloc,
-                                   sizeof(v_alloc), hint);
+                    rc = host_prep_alloc_value(h, dsh, &t, &parts, k_alloc,
+                                   ka, alloc_before, alloc_before_bytes, v_alloc,
+                                   NULL, hint);
                 if (rc == EFS_OK)
                     rc = host_prep_dseq_bump(h, dsh, &t, &parts, k_dseq, ks,
                                              NULL, hint);
@@ -11986,8 +12035,10 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
     uint8_t v_dent[EFS_META_DENT_BYTES];
     uint8_t v_cino[EFS_META_INO_BYTES], v_alloc[EFS_META_ALLOC_BYTES];
     uint32_t kd = 0, kpi = 0, kci = 0, ka = 0, ks = 0;
-    uint32_t psh, csh, dsh, coord;
-    uint64_t aver = 0, dver = 0, salt = 0;
+    uint32_t psh, csh, dsh = 0, coord;
+    uint64_t dver = 0, salt = 0;
+    uint8_t alloc_before[EFS_META_ALLOC_BYTES];
+    uint32_t alloc_before_bytes = 0;
     uint64_t now;
     efs_ino_t next = 0, ino = 0;
     uint8_t mkcmd[HOST_CMD_MAX], p_lane = 0;
@@ -12111,7 +12162,9 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
     }
     if (rc == EFS_OK) {
         stage = 6;
-        rc = efs_meta_apply_peek_alloc(h->kv, csh, &next);
+        rc = host_alloc_capture(h, csh, k_alloc, &ka, alloc_before, &alloc_before_bytes);
+        if (rc == EFS_OK)
+            rc = efs_meta_apply_peek_alloc(h->kv, csh, &next);
     }
     if (rc == EFS_OK) {
         ino = next;
@@ -12163,11 +12216,7 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
     if (rc == EFS_OK)
         rc = efs_kv_key_inode(csh, ino, k_cino, &kci);
     if (rc == EFS_OK)
-        rc = efs_kv_key_alloc(csh, k_alloc, &ka);
-    if (rc == EFS_OK)
         rc = efs_kv_key_dseq(dsh, parent, p_lane, k_dseq, &ks);
-    if (rc == EFS_OK)
-        rc = efs_txn_ver_get(h->kv, k_alloc, ka, &aver);
     if (rc == EFS_OK) {
         stage = 8;
         rc = efs_txn_ver_get(h->kv, k_dent, kd, &dver);
@@ -12221,10 +12270,9 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
                 if (rc == EFS_OK)
                     np++;
                 if (rc == EFS_OK)
-                    rc = host_prep_async(h, csh, EFS_TXN_EXCL, &t, &parts,
-                                         k_alloc, ka, aver, EFS_TXN_PUT,
-                                         v_alloc, sizeof(v_alloc), &prefs[np],
-                                         &hint);
+                    rc = host_prep_alloc_value(h, csh, &t, &parts,
+                                         k_alloc, ka, alloc_before, alloc_before_bytes,
+                                         v_alloc, &prefs[np], &hint);
                 if (rc == EFS_OK)
                     np++;
             }
@@ -12240,9 +12288,10 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
         }
     }
 mkdir_done:
-    stage = 11;
-    if (rc == EFS_OK)
+    if (rc == EFS_OK) {
+        stage = 11;
         rc = efs_meta_apply_lookup_tx(h->kv, parent, name, host_txn_coord, h, &dent);
+    }
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, dent.ino, &crow);
     if (rc == EFS_OK)

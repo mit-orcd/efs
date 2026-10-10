@@ -238,6 +238,32 @@ static void test_alloc_skips_live(void)
     efs_kv_mem_free(kv);
 }
 
+/* An absent row with durable transaction history is not a fresh FileID.
+ * Both the watermark and a proposer hint must skip it. */
+static void test_alloc_skips_retired_version(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    efs_ino_t parent = 0, retired = 0, peek = 0, created = 0;
+    uint8_t key[EFS_KV_KEY_MAX], version_key[EFS_KV_KEY_MAX], value[8];
+    uint32_t length = 0, version_length = 0, shard;
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_mkdir(kv, &g_at, EFS_ROOT_INO, S_IFDIR | 0755,
+                              "retired-parent", &parent) == EFS_OK, "parent");
+    shard = efs_kv_inode_shard(parent);
+    CHECK(efs_meta_apply_peek_alloc(kv, shard, &retired) == EFS_OK, "initial peek");
+    CHECK(efs_kv_key_inode(shard, retired, key, &length) == EFS_OK, "inode key");
+    CHECK(efs_kv_key_ver(key, length, version_key, &version_length) == EFS_OK, "version key");
+    wr64_test(value, 2);
+    CHECK(efs_kv_put(kv, version_key, version_length, value, sizeof(value)) == EFS_OK, "retired version");
+    CHECK(efs_meta_apply_peek_alloc(kv, shard, &peek) == EFS_OK && peek != retired,
+          "watermark skips retired version");
+    CHECK(efs_meta_apply_create_file_log_at(kv, &g_at, parent, S_IFREG | 0644,
+              "new-file", retired, EFS_META_LAYOUT_LOCAL, &created) == EFS_OK && created == peek,
+          "log hint skips retired version");
+    efs_kv_mem_free(kv);
+}
+
 /* Two proposers peek the same alloc watermark before either applies and
  * both carry ino=want. The apply must not let the second overwrite the
  * first's row (IO-500 ior-easy: 36 files, 10 distinct inos). Same log on
@@ -5889,6 +5915,7 @@ int main(void)
     test_create_remote_parent();
     test_create_log_at_matches();
     test_alloc_skips_live();
+    test_alloc_skips_retired_version();
     test_mkdir_log_at_matches();
     test_create_log_at_dup_hint();
     test_alloc_vs_txn_intent();

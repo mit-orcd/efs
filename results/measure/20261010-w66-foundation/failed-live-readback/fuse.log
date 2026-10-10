@@ -1,0 +1,16 @@
+2026-10-10T07:00:46.204Z efs-fuse (no git metadata, branch unknown, built 2026-10-10T06:55:40Z on amd-395), build=unknown: starting export=default mount=/data1/efs/mnt
+2026-10-10T07:00:46.204Z Discovered 4 cluster nodes from 127.0.0.1:31740
+2026-10-10T07:00:46.204Z   node id=1 127.0.0.1:31740
+2026-10-10T07:00:46.204Z   node id=2 127.0.0.1:31741
+2026-10-10T07:00:46.204Z   node id=3 127.0.0.1:31742
+2026-10-10T07:00:46.204Z   node id=4 127.0.0.1:31743
+2026-10-10T07:00:46.204Z fetching metadata...
+2026-10-10T07:00:46.204Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-10T07:00:46.204Z export id=1 name=default
+2026-10-10T07:00:46.204Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-10T07:00:46.207Z efs-fuse: workers max=10 idle=10
+2026-10-10T07:00:46.208Z fuse serving
+2026-10-10T07:00:46.581Z report-irec ino=4097 size=0 only=4097 sync=1 rc=0
+2026-10-10T07:00:46.581Z release ino=4097 begin
+2026-10-10T07:00:46.582Z release ino=4097 rc=0
+2026-10-10T07:00:49.018Z report-irec ino=1 size=0 only=0 sync=1 rc=0

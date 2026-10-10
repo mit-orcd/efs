@@ -104,3 +104,30 @@ selects fragment I/O independently of transport; buffered is the daemon default.
 - `du` (`st_blocks`) counts chunks present per lane; a file this client did
   not write reports its server-side count, not size/512 — decision D17 in
   [decisions.md](../status/decisions.md).
+
+## Server query-cache capacity
+
+The disk query backend is a local, rebuildable cache. Configure the server process
+with `EFS_QUERY_DISK_MAX_MIB` (per generation, default 16384),
+`EFS_QUERY_DISK_TOTAL_MIB` (all retained generations and new-build scratch in the
+private cache root, default 32768), and `EFS_QUERY_DISK_RESERVE_MIB` (filesystem
+free-space guard, default 64). Settings are read at process startup. These are
+logical admission limits, not exclusive disk reservations. Shared links count
+conservatively per generation; pinned exports can cause refresh admission refusal.
+A refusal preserves the old checkpoint and reports a refresh error. Existing
+valid cache reads remain available after a total-limit reduction.
+See [aggregate admission and acceptance](../status/query-cache-closure-20261010.md).
+
+The metadata directory also keeps an optional fixed-size `QUERY-REVISIONS` sidecar
+for restart catch-up. It is derived state paired with the KV manifest; missing or
+invalid hints force rebuilding rather than preventing metadata recovery. Partition
+change counters continue while command serving is disabled, with no accumulated
+per-operation queue. Disk catalog version 5 rebuilds older local cache generations.
+
+For large streaming exports, set server `EFS_QUERY_EXPORT_MAX_MS` to the required
+finite total lifetime (milliseconds, allowed 60000–604800000; default 3600000).
+For example, `86400000` allows a 24-hour active export. The idle timeout stays
+60 seconds; each host retains at most one paged export snapshot, and permission
+checks still run on every page. Longer total lifetimes can retain old cache files
+longer, so provision the aggregate query-cache budget accordingly. Apply the
+setting consistently to potential publishers before starting the export.

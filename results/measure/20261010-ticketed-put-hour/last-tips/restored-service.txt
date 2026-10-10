@@ -1,0 +1,3 @@
+/data1/efs/mnt efs-fuse fuse.efs-fuse rw,nosuid,nodev,relatime,user_id=1001,group_id=1001
+/data1/efs/mnt2 efs-fuse fuse.efs-fuse rw,nosuid,nodev,relatime,user_id=1001,group_id=1001
+released: installed direct/TCP service restored after lease-retention fixture

@@ -83,6 +83,27 @@ process CPU, preserving fsync counts. At that checkpoint runtime `f5164bb3` pass
 POSIX core/concurrent/extras and cold persistence gates; eleven retained trees
 verify 78000 files and 724 payload samples, with normal `.efs` opt-out restored.
 
+[W92 closure work](query-cache-closure-20261010.md) preserves the full acceptance
+matrix, including durable bounded catch-up and 2^32 synthetic index entries.
+Aggregate retained-cache admission passes focused and full native gates;
+100,000- and 1,000,000-file native-format pilots pass complete streaming oracles
+with fixed 3.47 MiB builder memory. Durable catch-up, full scale and deployment
+gates remain in progress. Durable partition checkpoints and restart catch-up now
+pass focused and full native private-build gates; live validation is pending.
+A fixed dependency filter also passes differential/fault gates; the ten-million
+synthetic-file case passes complete export and cold oracles. Compact alias seeks
+and affected-parent folds pass focused and full native gates; their live and
+live validation remains pending. The version-5 ten-million repeat passes full
+exports before/after mutation, retained totals and cold restore (3.69 MiB builder,
+40.04 MiB peak process RSS). Sequential lookup regressions pass; a repeat is
+complete (231.9 s fresh, 2.43 s mutation), and full native gates pass.
+The actual 2^32-entry generator is running on the isolated capped disk. A separate
+ten-million cold-hint catch-up/full-stream oracle passes. Deployed command/pages
+and concurrent publication gates pass, including all 2131 payload hashes and
+measured convergence under contention; recovery/platform/full scale remain open.
+Large-export total lifetime is now
+configurable with bounded retention and unchanged idle/permission checks.
+
 [W92 incremental-cache implementation](query-cache-incremental-20261010.md)
 tracks bounded change/ancestor sets, immutable partition reuse, exact directory
 recomputation and full-build fallback. Three all-node profiles pass content
@@ -256,7 +277,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | container-engine | **P4.1** · experimental daemon files/containers selector and VM A/B | storage feature | implemented experimentally on `devel-storage-engine`; 16 VM A/B cases and full Linux suite pass; files remains default; read-index waits limit read-speed attribution | [checkpoint](container-engine-20261008.md) |
 | bench-churn | **W90** · independent steady-state storage churn benchmark | benchmark enhancement | implemented on `devel-bench`; functional gates pass; initial matched 50/80/95-percent evidence; 64 KiB scaling, shared ranges and five profiling rounds recorded; bounded punch batching retained; merged into isolated `devel-storage-engine`; matched simulator comparison validated; 8 longer cases favor punch at 95%/QD4 (same-device roots); no production changes | [work item](../backlog/work-items.md#w90) · [ranges](bench-scaling-ranges-20261008.md) · [profiles](bench-perf-five-rounds-20261008.md) · [comparison](bench-layout-comparison-20261008.md) |
 | P4.1–P4.4 | fragment on-disk layout (**wipe**), W40 FUSE write copy, RDMA zero-copy receive, 9-client scaling | performance | deferred until P3's numbers | [full text](../backlog/work-items.md#p4--deferred-until-p3s-numbers-long-one-is-a-wipe) |
-| meta-scale | **W66** · metadata leadership distribution and topology-independent routing | scalability | open — Oct 5 implementation gap recorded; correctness work first, then baseline measurement and staged multi-Raft implementation | [evidence, phases and gates](metadata-scaling.md) |
+| meta-scale | **W66** · metadata leadership distribution and topology-independent routing | scalability | open — Oct 10 AMD private four-voter host/engine and persistence/failover fixes pass; POSIX 212/212 + peer 64/64; default two-group topology unchanged; D36 commit authority/recovery choice, routing/migration and scale remain | [evidence, phases and gates](metadata-scaling.md) |
 | tiny-raft | **W93** · broader durable Raft group commit | performance | closed Oct 10 — AMD + repeated NUC batching, read-tail, atomic recovery, fault and cold gates pass; tuning opt-in | [acceptance](w93-atomic-apply-20261010.md) |
 | tiny-create | **W94** · atomic CREATE plus open lease | performance / lifecycle | partial — retained FUSE CREATE/adoption, sequenced lease edges and cleanup AMD gated; REPORT session fences AMD gated; data-plane/per-publication integration and measured consensus/throughput gate remain open | [work item](../backlog/work-items.md#w94) |
 | tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | partial — tiny/durable/cold/crash/churn gates pass; indexed packing and P4.1 decision remain | [work item](../backlog/work-items.md#w95) |

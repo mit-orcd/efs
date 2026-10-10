@@ -131,6 +131,8 @@ static int schedule(struct efs_sim *sim, struct sim_ev *in)
             free(in->payload);
             in->payload = NULL;
             sim->last_rc = EFS_ERR_AGAIN;
+            if (in->kind == EV_PUT_FRAG && sim->last_put_rc == EFS_OK)
+                sim->last_put_rc = EFS_ERR_AGAIN;
             return EFS_OK;
         }
     }
@@ -370,6 +372,8 @@ static int apply_one(struct efs_sim *sim, struct sim_ev *e)
     free(e->payload);
     e->payload = NULL;
     sim->last_rc = rc;
+    if (e->kind == EV_PUT_FRAG && rc != EFS_OK && sim->last_put_rc == EFS_OK)
+        sim->last_put_rc = rc;
     if (rc == EFS_OK && e->kind != EV_RAFT)
         sim->last_ino = e->ino;
     return rc;
@@ -806,6 +810,7 @@ int efs_sim_put_stripe_as(struct efs_sim *sim, int client, efs_ino_t ino,
         return rc;
     }
     sim->last_rc = EFS_OK;
+    sim->last_put_rc = EFS_OK;
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         struct sim_ev e;
         if (skip_frag >= 0 && i == skip_frag)
@@ -837,7 +842,7 @@ int efs_sim_put_stripe_as(struct efs_sim *sim, int client, efs_ino_t ino,
     rc = maybe_drain(sim);
     if (rc != EFS_OK)
         return rc;
-    return sim->last_rc;
+    return sim->last_put_rc;
 }
 
 int efs_sim_put_stripe(struct efs_sim *sim, int client, efs_ino_t ino,

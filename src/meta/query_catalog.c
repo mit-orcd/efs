@@ -550,6 +550,19 @@ int efs_query_catalog_restore_disk(const char *root,struct efs_kv_lsm_snapshot *
     if(!rc)rc=efs_query_disk_rebase(c->disk,source);
     if(rc){efs_query_catalog_free(c);return rc;}c->bytes=sizeof(*c)+efs_query_disk_bytes(c->disk);*out=c;return EFS_OK;
 }
+/* A stale completed checkpoint is an immutable build input, never a result.
+ * The builder compares durable lineage/revisions and refreshes changed parts.
+ * Its caller must still validate the authority/import seal before publication. */
+int efs_query_catalog_catchup_disk(const char *root,struct efs_kv_lsm_snapshot *source,
+    uint64_t max_bytes,int (*stop)(void *),void *ctx,struct efs_query_catalog **out)
+{
+    if(out)*out=NULL;
+    if(!out || !source || !root || max_bytes<sizeof(struct efs_query_catalog))return EFS_ERR_INVAL;
+    struct efs_query_catalog *old=calloc(1,sizeof(*old));if(!old)return EFS_ERR_NOMEM;
+    old->refs=1;int rc=efs_query_disk_restore(root,NULL,max_bytes-sizeof(*old),&old->disk);
+    if(!rc)rc=efs_query_catalog_build_disk(root,source,old,max_bytes,stop,ctx,out);
+    efs_query_catalog_free(old);return rc;
+}
 void efs_query_catalog_retain(struct efs_query_catalog *c)
 {
     if (c) __atomic_add_fetch(&c->refs,1,__ATOMIC_RELAXED);

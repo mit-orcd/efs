@@ -1,8 +1,10 @@
 # W66 — Metadata scaling implementation gap
 
 Recorded Oct 5 2026 following the user's question about 100–1,000 clients
-connecting to a metadata leader. Status: **open enhancement; documentation only**. W66 is indexed in the status queue. No
-running-cluster capacity measurement or topology change was made for this item.
+connecting to a metadata leader. Status: **open enhancement and protection
+protocol; staged engine foundation tested on AMD**. W66 is indexed in the
+status queue. Default production topology remains unchanged; active-client
+capacity and the D36 recovery contract are not yet proved.
 
 [Status queue](README.md#1a-the-work-queue) ·
 [Architecture §7.1](../how-it-works/architecture.md#71-sharded-raft-and-linearizable-reads)
@@ -137,3 +139,66 @@ cache refreshes, but live file creation fell 225 → 85 files/s after advancing
 other devel code and retaining a larger namespace. This does not identify a
 W66 defect. Repeat with controlled revision, namespace/placement and foreground
 profiles before assigning cause; preserve read authority and persistence.
+
+## Four-voter foundation and fresh AMD baseline — Oct 10
+
+Host and Raft engine now share membership validation, allowing four voters
+with quorum three. Joint 3→4→3 changes and cold snapshot membership restart
+pass. Tests cover every one-node omission and all six two-loss pairs; real
+SYNC stores retain an exact command copy after abrupt process exit and removal
+of any pair of store directories. Two cold survivors cannot elect, authorize
+reads or commit new writes. A negative control fails on the parent engine.
+Fatal ASan/UBSan exposed and fixed a null zero-length move in empty snapshot
+installation. See [raw evidence](../../results/measure/20261010-w66-foundation/README.md).
+
+This does **not** satisfy D36: copy survival lacks independently recoverable
+commit authority. Durable commit proof and verified quorum restoration remain,
+as do versioned routing, group distribution, migration and measured scaling.
+The existing default 0x7/0xe placement has not been activated as four voters.
+
+Fresh private AMD direct-I/O/TCP baseline: 800 successful GETATTRs, idle cell
+p50 0.96–0.97 ms and write-loaded p50 1.43–1.51 ms, including CLI startup.
+Both group leader-loss/rejoin gates and cold four-daemon restart pass. Leaders
+were distributed across nodes 2/3; this is one host and two groups, not proof
+of metadata scale or independent failure domains.
+
+### Membership persistence correction — Oct 10
+
+Recovery audit found ignored membership-save errors and snapshot/config ordering
+that could discard the membership log before saving its replacement. Failed
+saves now fence the replica and prevent apply advancement; local/imported
+snapshots save membership before dropping history. Invalid cold/incoming
+snapshot membership and load IO are refused. Ten assertions fail against the
+prior engine; Raft/disk/simulator and fatal sanitizer runs pass with the fix.
+AMD direct/TCP private POSIX 212/212 and peer 64/64, staged leader-loss replay,
+cold bytes and physical GC pass; installed service restored. See
+[separate evidence](../../results/measure/20261010-w66-foundation/membership-fix/README.md).
+W66 protection, generalized topology and measured scaling remain open.
+
+### GETCHUNKS endpoint/leader-hint retry correction — Oct 10
+
+GETCHUNKS now retries endpoint loss and missing/self NOT_PRIMARY hints through
+another voter while retaining exact FileID/range, caller deadline and outputs.
+Sixteen attempts remain bounded. Controlled tests fail on the previous function
+and pass on the fix. Full native/docs and separate AMD direct/TCP POSIX 212/212,
+peer 64/64, lane leader-death replay, cold bytes and GC pass. The earlier live
+readback assertion lacked an error code, so it is not causally attributed to
+this fix; the gate now prints that code on failure. See
+[routing evidence](../../results/measure/20261010-w66-foundation/routing-fix/README.md).
+
+### Explicit private four-voter integration — Oct 10
+
+A separate AMD direct/TCP fixture reconfigured both groups through production
+`raft-change` to 0xf, verified all four hosts report converged membership,
+passed 800/800 reads and both leader-loss/rejoin cases, and preserved membership
+and exact target inode identity through cold restart. See
+[raw results](../../results/measure/20261010-w66-foundation/four-voter-live/README.md).
+Both leaders initially occupied one node: replica count is not leadership
+balancing or additional useful capacity. Installed topology was untouched.
+
+The [protection/routing implementation proposal](w66-protection-routing-design-20261010.md)
+makes the remaining protocol and gates explicit. D36 leaves post-two-loss
+availability unresolved. The recommendation is verified preservation followed
+by replacement nodes and quorum restoration before writes resume; the user has
+been asked to select that contract. Durable commit evidence, recovery fencing,
+versioned routing/migration and measured scaling still prevent W66 closure.

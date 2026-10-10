@@ -6,7 +6,8 @@ root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text()
 defines='\n'.join(line for line in s.splitlines() if line.startswith(('#define HOST_APPEND_RSV_LEN ', '#define HOST_LOCK_LEN ')))
 a=s.index('    ret = (cmd[0] == EFS_MD_CMD_PREPARE')
-b=s.index('    /* Finish the atomic apply scope',a)
+# Test only verdict classification; the atomic commit scope has its own tests.
+b=s.index('    /* Finish the atomic apply scope before publishing its verdict. */',a)
 code=defines+'\n'+'''
 #include "efs/common.h"
 #include "efs/meta_cmd.h"

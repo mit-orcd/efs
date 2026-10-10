@@ -104,7 +104,8 @@ int efs_kv_lsm_view_export(struct efs_kv_lsm_view *v, uint8_t group,
 /* Full applied-state snapshot for background metadata/index work. Unlike a
  * segment view, this includes a private copy of the live memtable (including
  * tombstones), captured atomically with the pinned segment set. No flush or
- * WAL write is required. mt_limit bounds memtable copying under the KV lock;
+ * WAL write is required. mt_limit bounds the snapshot object, copied memtable
+ * and retained segment/pin arrays under the KV lock;
  * BUSY means that budget was exceeded, IO means the engine is poisoned.
  * This is a local KV cut, not a cross-group Raft/transaction watermark.
  * Call from a background worker. Release snapshots promptly: compaction's old
@@ -123,6 +124,9 @@ int efs_kv_lsm_snapshot_get(struct efs_kv_lsm_snapshot *s,
                             const uint8_t *key, uint32_t klen,
                             uint8_t *val, uint32_t *vlen);
 void efs_kv_lsm_snapshot_release(struct efs_kv_lsm_snapshot *s);
+/* Retained snapshot allocations; excludes borrowed engine segments and
+ * temporary per-reader scan iterators, whose limits are reported separately. */
+uint64_t efs_kv_lsm_snapshot_bytes(const struct efs_kv_lsm_snapshot *s);
 /* Dirty hints for incremental index refresh. Arrays have 4096 entries. They
  * count applied writes to inode/dentry/lane and transaction metadata families,
  * not user operations. Reset on engine open/recovery; zero is not proof of an
@@ -136,6 +140,13 @@ int efs_kv_lsm_metadata_revisions(struct efs_kv *kv, uint64_t *out, uint32_t n);
  * the same KV lock as the metadata image. Saturation refuses comparisons. */
 int efs_kv_lsm_transaction_revision(struct efs_kv *kv,uint64_t *out);
 int efs_kv_lsm_snapshot_transaction_revision(struct efs_kv_lsm_snapshot *s,uint64_t *out);
+/* Durable partition change checkpoints, paired with the exact KV manifest.
+ * WAL replay may conservatively advance counters twice after an interrupted
+ * reset. Compare only inside the same lineage; missing/corrupt sidecars create
+ * a new lineage and force a derived rebuild. Tracking remains active while
+ * command serving is disabled. These are not cross-group authority seals. */
+int efs_kv_lsm_snapshot_query_revisions(struct efs_kv_lsm_snapshot *s,
+                                       uint64_t lineage[2],uint64_t revisions[4096]);
 int efs_kv_lsm_snapshot_revisions(struct efs_kv_lsm_snapshot *s,
                                   uint64_t *out, uint32_t n);
 

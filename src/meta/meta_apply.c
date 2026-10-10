@@ -890,6 +890,23 @@ static int load_alloc(struct efs_kv *kv, uint32_t shard, efs_ino_t *next)
     return EFS_OK;
 }
 
+/* A deleted inode can retain a transaction version even when its row is
+ * absent. Reusing it as a generation-1 allocation both revives an old FileID
+ * and makes cross-group MKDIR's CAS(0) fail forever. Treat that durable
+ * history as occupied when a stale allocator watermark or hint reaches it. */
+static int alloc_inode_unused(struct efs_kv *kv, efs_ino_t ino, int *unused)
+{
+    uint8_t key[EFS_KV_KEY_MAX];
+    uint32_t length = 0;
+    uint64_t version = 0;
+    int rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, key, &length);
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(kv, key, length, &version);
+    if (rc == EFS_OK)
+        *unused = version == 0;
+    return rc;
+}
+
 /* Watermark can sit on a live row (SNAP lag, hollow replica, or a
  * rewind after unlink of a later sibling). Reusing that ino overwrites
  * the row and inherits leftover children — POSIX mkdir then EEXIST on
@@ -915,9 +932,15 @@ static int alloc_next_free(struct efs_kv *kv, uint32_t shard, efs_ino_t *ino,
         }
         rc = efs_meta_apply_get_inode(kv, next, &row);
         if (rc == EFS_ERR_NOT_FOUND) {
-            *ino = next;
-            *next_out = next + (efs_ino_t)(1u << EFS_KV_SHARD_BITS);
-            return EFS_OK;
+            int unused = 0;
+            rc = alloc_inode_unused(kv, next, &unused);
+            if (rc != EFS_OK)
+                return rc;
+            if (unused) {
+                *ino = next;
+                *next_out = next + (efs_ino_t)(1u << EFS_KV_SHARD_BITS);
+                return EFS_OK;
+            }
         }
         if (rc != EFS_OK)
             return rc;
@@ -956,9 +979,15 @@ static int alloc_hint_or_next(struct efs_kv *kv, uint32_t shard,
     if (want >= next) {
         rc = efs_meta_apply_get_inode(kv, want, &row);
         if (rc == EFS_ERR_NOT_FOUND) {
-            *ino = want;
-            *next_out = want + (efs_ino_t)(1u << EFS_KV_SHARD_BITS);
-            return EFS_OK;
+            int unused = 0;
+            rc = alloc_inode_unused(kv, want, &unused);
+            if (rc != EFS_OK)
+                return rc;
+            if (unused) {
+                *ino = want;
+                *next_out = want + (efs_ino_t)(1u << EFS_KV_SHARD_BITS);
+                return EFS_OK;
+            }
         }
         if (rc != EFS_OK)
             return rc;

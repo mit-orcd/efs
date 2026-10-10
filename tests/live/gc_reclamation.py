@@ -34,6 +34,7 @@ p.add_argument('--root', action='append', default=[])
 p.add_argument('--mount', type=Path, help='existing empty, unmounted path allowed by host FUSE policy')
 p.add_argument('--peer-mount', type=Path, help='existing empty, unmounted second policy-allowed mount')
 p.add_argument('--posix', action='store_true')
+p.add_argument('--posix-jobs', type=int, default=4, help='parallel POSIX cases (default: 4); each case retains its own concurrent writers')
 p.add_argument('--storage-session-fence-fault',action='store_true',help='private certificate fsync EIO: revocation must remain incomplete, then recover and survive cold restart; requires --guarded-leases')
 p.add_argument('--continue-posix-failure','--continue-regression-failure',dest='continue_posix_failure',action='store_true',help='retain POSIX/peer failure, run independent later gates, then exit unsuccessfully')
 p.add_argument('--tiny-mixed',action='store_true',help='bounded large-writer overlap with 512 tiny CREATE/close operations, cold exact bytes and physical deletion')
@@ -108,6 +109,8 @@ p.add_argument('--idle-seconds',type=int,default=0,help='measure live-table idle
 p.add_argument('--full-node',action='store_true',help='one node quota exhausted while three fragment targets remain writable')
 p.add_argument('--port', type=int, default=20190)
 a = p.parse_args()
+if a.posix_jobs < 1:
+    p.error("--posix-jobs must be positive")
 if a.mount_sync:a.sync_writes=True
 if not 8 <= a.tiny_mixed_files <= 8192 or a.tiny_mixed_files % 8:
     p.error("--tiny-mixed-files must be 8..8192 and divisible by eight")
@@ -828,6 +831,9 @@ try:
         records=[]
         for operation,extra in [('create',['1']),('register',[str(shard),'1']),('establish',[str(shard),'1'])]:
             records.append(run([source/'efs-mgmt','raft-session',f'127.0.0.1:{a.port}',operation,uuid,*extra],capture_output=True,text=True).stdout)
+        # Retain a real owner lease: a previous FUSE CLOSE obligation must not
+        # race this gate's exact 32-reservation cold ownership snapshot.
+        records.append(run([helper,'hold',str(a.port),uuid,str(ino)],capture_output=True,text=True).stdout)
         reserved=run([inspector,'reserve',str(a.port),str(ino),uuid,'64','131072'],capture_output=True,text=True,timeout=180).stdout
         records.append(run([helper,'fence-half',str(a.port),uuid,str(ino)],capture_output=True,text=True,timeout=180).stdout)
         records.append(run([inspector,'late',str(a.port),str(ino),uuid,'131072'],capture_output=True,text=True,timeout=45).stdout)
@@ -849,6 +855,9 @@ try:
         assert all('open=0 ' in text and 'reservations=0 ' in text and 'receipts=0' in text for text in after),after
         start();mount_client()
         assert path.stat().st_size==expected and path.read_bytes()==body+bytes(expected-len(body))
+        released=run([source/'efs-mgmt','raft-session',f'127.0.0.1:{a.port}','cleanup-leases',uuid,'1',str(shard)],capture_output=True,text=True,timeout=180)
+        assert 'rc=0' in released.stdout,released.stdout
+        records.append(released.stdout)
         path.unlink();wait(lambda:not files(ino),'revoked append physical reclaim',180)
         (work/'session-append.json').write_text(json.dumps({'ino':ino,'reserved':reserved,'records':records,'before':before,'after':after,'routing':routing,'expected_bytes':expected},indent=2))
         print('bounded revoked-session append: 32+32 cold transactions, exact retry, original bytes/holes, physical reclaim PASS',flush=True)
@@ -2325,7 +2334,7 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
     if a.posix:
         posix_checkpoint = totals(status())
         try:
-            run(['python3',source/'tests/posix/posix_suite.py',mount,'--jobs','4','--timeout-s','30','--results',work/'posix.tsv'],timeout=600)
+            run(['python3',source/'tests/posix/posix_suite.py',mount,'--jobs',str(a.posix_jobs),'--timeout-s','30','--results',work/'posix.tsv'],timeout=600)
         except subprocess.CalledProcessError as error:
             if not a.continue_posix_failure:raise
             posix_failure=error

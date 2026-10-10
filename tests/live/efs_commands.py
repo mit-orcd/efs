@@ -133,7 +133,7 @@ collision.mkdir()
 mgmt = Path(__file__).resolve().parents[2] / 'efs-mgmt'
 port = int(os.environ['EFS_QUERY_TEST_PORT'])
 for candidate in range(port-1, port+3):
-    created = subprocess.run([str(mgmt), 'raft-create', '127.0.0.1:%d' % candidate,
+    created = subprocess.run([str(mgmt), 'raft-create', '%s:%d' % (os.environ.get('EFS_QUERY_TEST_HOST','127.0.0.1'),candidate),
                               str(collision.stat().st_ino), '.efs'], stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE, timeout=15)
     if created.returncode == 0:

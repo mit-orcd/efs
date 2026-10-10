@@ -74,9 +74,97 @@ static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
 #endif
 static int failures;
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"FAIL %d: %s\n",__LINE__,#x);failures++;}}while(0)
+/* Exercise the full-rebuild boundary after a partial attempt has retained
+ * directory rows with already-folded links. Replacing .d files must make
+ * subsequent lookups read the new zeroed rows, not those retained links. */
+static void rebuild_cache_test(void)
+{
+    char store[]="/tmp/efs-query-rebuild-kv-XXXXXX",cache[]="/tmp/efs-query-rebuild-cache-XXXXXX";
+    CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};
+    struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);CHECK(kv);if(!kv)return;
+    struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t dir,file;
+    CHECK(!efs_meta_apply_init(kv,100));
+    CHECK(!efs_meta_apply_mkdir(kv,&attrs,EFS_ROOT_INO,S_IFDIR|0755,"dir",&dir));
+    CHECK(!efs_meta_apply_create_file(kv,&attrs,dir,S_IFREG|0644,"file",&file));
+    struct efs_kv_lsm_snapshot *source=NULL;struct efs_query_disk *disk=NULL;
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));
+    CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,&disk));
+    if(disk){
+        struct disk_node retained;CHECK(!locate(disk,dir,&retained,NULL));
+        CHECK(retained.link.parent==EFS_ROOT_INO);
+        close_cache(disk);
+        for(unsigned shard=0;shard<SHARDS;shard++){
+            char path[EFS_MAX_PATH];CHECK(!filename(disk,shard,'d',path,sizeof(path)));
+            CHECK(!unlink(path) || errno==ENOENT);
+            CHECK(!nodes_build(disk,shard));
+        }
+        CHECK(!folds_build(disk));
+        struct efs_query_rollup totals;CHECK(!efs_query_disk_stats(disk,EFS_ROOT_INO,&totals));
+        CHECK(totals.tree_files==1 && totals.tree_dirs==1);
+    }
+    efs_query_disk_free(disk);efs_kv_lsm_snapshot_release(source);efs_kv_lsm_close(kv);
+}
+static int cancel_budget(void *ctx){(void)ctx;return 1;}
+static void budget_test(void)
+{
+    char root[]="/tmp/efs-query-budget-XXXXXX",a[EFS_MAX_PATH],b[EFS_MAX_PATH],c[EFS_MAX_PATH],path[EFS_MAX_PATH];
+    CHECK(mkdtemp(root));
+    snprintf(a,sizeof(a),"%s/view-a",root);snprintf(b,sizeof(b),"%s/view-b",root);snprintf(c,sizeof(c),"%s/view-orphan",root);
+    CHECK(!mkdir(a,0700));CHECK(!mkdir(b,0700));CHECK(!mkdir(c,0700));
+    char source[EFS_MAX_PATH];snprintf(source,sizeof(source),"%s/part",a);
+    int fd=open(source,O_CREAT|O_RDWR,0600);CHECK(fd>=0);if(fd>=0){CHECK(!ftruncate(fd,4096));close(fd);}
+    snprintf(path,sizeof(path),"%s/part",b);CHECK(!link(source,path));
+    snprintf(path,sizeof(path),"%s/partial.copy",c);fd=open(path,O_CREAT|O_RDWR,0600);CHECK(fd>=0);
+    if(fd>=0){CHECK(!ftruncate(fd,4096));close(fd);}
+    struct efs_query_disk *q=calloc(1,sizeof(*q)),*other=calloc(1,sizeof(*other));CHECK(q && other);
+    if(q && other){
+        uint64_t saved=aggregate_limit;aggregate_limit=3*4096+255;
+        q->budget_fd=other->budget_fd=-1;q->disk_limit=other->disk_limit=UINT64_MAX;q->disk_bytes=256;
+        CHECK(root_budget_acquire(q,root)==EFS_ERR_QUOTA && q->budget_fd==-1);
+        aggregate_limit++;
+        CHECK(!root_budget_acquire(q,root) && q->root_bytes==3*4096);
+        CHECK(root_budget_acquire(other,root)==EFS_ERR_BUSY);
+        CHECK(charge_disk(q,1)==EFS_ERR_QUOTA && q->disk_bytes==256);
+        close(q->budget_fd);q->budget_fd=-1;q->stop=cancel_budget;
+        CHECK(root_budget_acquire(q,root)==EFS_ERR_BUSY && q->budget_fd==-1);
+        CHECK(!root_budget_acquire(other,root));close(other->budget_fd);other->budget_fd=-1;
+        /* A lease release reduces the reconstructed total on the next build. */
+        CHECK(!unlink(path));CHECK(!rmdir(c));q->stop=NULL;
+        CHECK(!root_budget_acquire(q,root) && q->root_bytes==2*4096);
+        CHECK(!charge_disk(q,4096));CHECK(charge_disk(q,1)==EFS_ERR_QUOTA);
+        close(q->budget_fd);q->budget_fd=-1;
+        snprintf(path,sizeof(path),"%s/journal",root);fd=open(path,O_CREAT|O_RDWR,0600);CHECK(fd>=0);
+        if(fd>=0){CHECK(!ftruncate(fd,8192));close(fd);}
+        CHECK(root_budget_acquire(q,root)==EFS_ERR_QUOTA);CHECK(!unlink(path));
+        CHECK(!symlink(source,path));CHECK(root_budget_acquire(q,root)==EFS_ERR_PROTO);CHECK(!unlink(path));
+        CHECK(!root_budget_acquire(q,root));close(q->budget_fd);q->budget_fd=-1;
+        aggregate_limit=saved;
+    }
+    free(q);free(other);unlink(source);rmdir(a);
+    snprintf(path,sizeof(path),"%s/part",b);unlink(path);rmdir(b);
+    snprintf(path,sizeof(path),"%s/.budget.lock",root);unlink(path);rmdir(root);
+}
 int main(void)
 {
+    rebuild_cache_test();
+    {
+        struct efs_query_rollup r={.tree_files=UINT64_MAX-1,.tree_dirs=7,.tree_bytes=9};
+        CHECK(!rollup_tree_add(&r,1,2,3));
+        struct efs_query_rollup before=r;
+        CHECK(rollup_tree_add(&r,1,0,0)==EFS_ERR_OVERFLOW);
+        CHECK(!memcmp(&r,&before,sizeof(r)));
+        r.tree_dirs=UINT64_MAX;before=r;
+        CHECK(rollup_tree_add(&r,0,1,0)==EFS_ERR_OVERFLOW);
+        CHECK(!memcmp(&r,&before,sizeof(r)));
+        r.tree_bytes=UINT64_MAX;before=r;
+        CHECK(rollup_tree_add(&r,0,0,1)==EFS_ERR_OVERFLOW);
+        CHECK(!memcmp(&r,&before,sizeof(r)));
+    }
+
+    budget_test();
     struct efs_query_disk *d=calloc(1,sizeof(*d));if(!d)return 1;
+    d->budget_fd=-1;
     d->disk_limit=UINT64_MAX;
     strcpy(d->path,"/tmp/efs-query-window-XXXXXX");
     if(!mkdtemp(d->path)){free(d);return 1;}
@@ -139,6 +227,16 @@ int main(void)
     if(fd>=0){CHECK(!io_at(fd,nodes,sizeof(nodes),0,1));close(fd);}
     read_calls=0;CHECK(!locate(d,16*8192,&found,&at));
     CHECK(found.row.ino==16*8192 && at==15 && read_calls==1);
+    read_calls=0;CHECK(!locate(d,16*8192,&found,&at) && !read_calls);
+    CHECK(!locate(d,17*8192,&found,&at) && at==16);
+    CHECK(locate(d,17*8192+4096,&found,NULL)==EFS_ERR_NOT_FOUND);
+    CHECK(!locate(d,2*8192,&found,&at) && at==1);
+    CHECK(!locate(d,16*8192,&found,&at) && at==15);
+    found.stat.size=123;CHECK(!node_at(d,0,15,&found,1));
+    CHECK(!locate(d,16*8192,&found,&at) && found.stat.size==123);
+    d->inode_epoch=UINT64_MAX;
+    found.stat.size=456;CHECK(!node_at(d,0,15,&found,1));
+    CHECK(!locate(d,16*8192,&found,&at) && found.stat.size==456 && d->inode_epoch==UINT64_MAX);
     CHECK(locate(d,0,&found,NULL)==EFS_ERR_NOT_FOUND);
     CHECK(locate(d,3*4096,&found,NULL)==EFS_ERR_NOT_FOUND);
     CHECK(locate(d,32*8192,&found,NULL)==EFS_ERR_NOT_FOUND);
@@ -256,6 +354,15 @@ int main(void)
             unsigned populated=0;for(unsigned i=0;i<SHARDS;i++)populated+=old->part[i].count!=0;
             CHECK(raw_syncs==populated && index_syncs==populated);
             uint64_t wm[4]={1,2,3,4};CHECK(!efs_query_disk_checkpoint(old,wm));
+            read_calls=0;
+            CHECK(!efs_query_disk_build(cache,source,old,4<<20,NULL,NULL,&next));
+            CHECK(read_calls==0); /* reuse performs no inode/dentry discovery */
+            efs_query_disk_free(next);next=NULL;
+            uint64_t saved_total=aggregate_limit;aggregate_limit=1;
+            CHECK(efs_query_disk_build(cache,source,old,4<<20,NULL,NULL,&next)==EFS_ERR_QUOTA && !next);
+            CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
+            CHECK(!efs_query_disk_inode(next,file,NULL,NULL));efs_query_disk_free(next);next=NULL;
+            aggregate_limit=saved_total;
             /* A short derived-row batch followed by ENOSPC must never
              * publish a partially materialized candidate or replace old. */
             fail_write_kind='d';write_faults=0;
@@ -272,7 +379,7 @@ int main(void)
             CHECK(write_faults==1 && !fail_derived_after);
             CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
             CHECK(!efs_query_disk_inode(next,file,NULL,NULL));efs_query_disk_free(next);next=NULL;
-            const char kinds_to_fail[]={'r','i','n','d','m'};
+            const char kinds_to_fail[]={'r','i','n','d','a','m'};
             for(unsigned i=0;i<sizeof(kinds_to_fail);i++){
                 fail_sync_kind=kinds_to_fail[i];sync_faults=0;
                 CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,&next)==EFS_ERR_IO && !next);

@@ -50,3 +50,80 @@ identities, all-member abandoned-upload deletion acknowledgements/collection,
 revoked unknown-intent reconciliation and active legacy W88 readiness remain
 open. Current roster validation is not durable dynamic-membership proof. These
 gates do not establish hardware power-loss durability or distributed hardware RDMA.
+
+## Integrated follow-up gates
+
+`2fed12ef` merges the persistence branch's append receipt/EOF race and recovery
+fixture fixes. `2526d4c1` merges bounded query cache code; `67fc6a2f` adds its final
+documentation/evidence. `e8c6178d` makes partition fixture mode explicit and
+records it; its direct/TCP rerun passes. All inspected local tips are included.
+
+Final receiver fixture `gc-direct-mehuigdc` passes core212/212, peer64/64 and cold
+physical GC. Integrated fixture `gc-direct-k7dik9wu` independently repeats those
+counts, exact ticketed cold bytes, publication/retirement rejection, certificate
+fault/recovery, namespace completion and physical deletion. See [merged live
+output](merged/live.log), [regressions](merged/final-make-test.log) and [direct
+partition output](merged/partition-direct.log). Both restored installed service.
+Selected local/AMD source hashes match; the private build still reports unknown
+Git identity. New-module ASan/UBSan reruns pass after the geometry/deadline tests.
+
+WAL fault fixture `gc-direct-s24q2nrm` proves periodic and shutdown checkpoints
+remain unchanged after a real latched follower KV fdatasync failure, then cold
+Raft replay recovers exact original/link/follow-up bytes and nlink=2 before
+physical deletion. [Raw log](merged/wal-fault.log).
+
+Fixture `gc-direct-rgtf3fdp` passes cross-group append/fsync peer-before-close/cold
+bytes, 32 identical APPEND requests with one allocation, ACK retirement, retained
+partial-body recovery after failed stop and acknowledged fsynced bytes across
+leader shutdown. [Raw log](merged/append-drain.log).
+
+The additional session-cleanup gate initially failed in `gc-direct-x0braao2`:
+its helper assumed one manually registered inode shard represented the complete
+frozen touched set. Lease admission registers additional guarded participants.
+The committed FINISH BUSY now exposed that incomplete barrier instead of hiding
+it. [Retained failure](merged/session-cleanup-before.log). The updated helper
+requires incomplete BUSY, reads and ACKs every frozen bit, verifies the storage
+epoch and retries exact FINISH; it never relaxes the production barrier. Corrected
+fixture `gc-direct-d_48g00a` passes exact first-eight replay, remaining owners
+across cold restart, management resume, zero locks/markers, physical reclamation,
+and deferred CLOSE with 64 cross-group reservations, cold holes, retired
+obligations and exact reopened bytes. [Raw output](merged/session-close-fixed.log).
+The revoked-append helper had the same single-shard assumption and now uses the
+exact frozen set and storage epoch too; its corrected `gc-direct-0gb77sxi` run passes exact 32+32 transactions, cold
+original bytes/holes, rejected late appends, zero remaining reservations/receipts,
+bounded lease release and physical reclaim. The helper holds a real session lease
+so unrelated CLOSE cleanup cannot race the exact half-complete snapshot; the
+prior open=31 setup failure is retained in [its log](merged/revoked-append-before.log).
+This does not weaken the open=32 assertion. Actual O_SYNC/O_DSYNC callback failure
+also retains exact bytes through fsync and cold recovery.
+[Successful run](merged/revoked-append-fixed.log).
+
+## Final late-arriving integration
+
+`8109d954` integrates the atomic KV apply/cursor changes and logical WAL tear
+recovery test from the persistence branch. `12d2580b` includes the latest devel
+integration commit points; a new `devel-intel` tip points to that included history.
+`32eaa009` contains the corrected retained-lease/exact frozen-shard live helpers.
+The final source hashes are separate under `final-integration/` and match the AMD
+private checkout. Complete native regressions pass after this code integration;
+the final full AMD live run `gc-direct-vs3gw66k` passes core212/212, peer64/64,
+typed same/cross cold replay, namespace completion, certificate fault/recovery
+and physical GC. [Raw integrated output](final-integration/live.log). Earlier fault/cleanup proofs above must
+not be attributed to the late atomic-cursor code. W93's broader exact committed
+build and sustained acceptance gates remain open; this private build reports
+unknown Git identity. No downgrade, activation or service-store migration occurs.
+
+
+### Last-tip boundary — 06:42 UTC
+
+The captured `devel`, `devel-intel`, `devel-find-stats` and persistence tips are
+all included, with final integration at `200d6aee`. Late arrivals add the isolated
+Raft verdict test boundary, retained CREATE BUSY routing and aggregate retained
+query-cache generation/candidate bounds. All captured branch tips and matching
+local/AMD sources are under `last-tips/`. Complete AMD Linux regressions and the
+warning-free build pass. Final direct/TCP fixture `gc-direct-7xbnrwx1` passes core212/212, peer64/64,
+server-side deletion counters, zero quota/physical inventory and cold GC/rejection
+floors. [Final raw gate](last-tips/live.log). Installed service and both policy
+mounts are restored; [restoration proof](last-tips/restored-service.txt). No owned
+fixture remains active. Earlier fault/cleanup results remain attached to their
+own candidate. No new implementation or test is started after 06:44:32 UTC.

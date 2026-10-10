@@ -5,6 +5,8 @@
 #include "efs/meta_apply.h"
 #include "efs/session.h"
 #include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 /* Full histories plus a 144-participant EXCL envelope, with fixed bounds.
  * Data values and durable intent envelopes have separate limits. */
@@ -370,8 +372,18 @@ int efs_txn_prepare_excl(struct efs_kv *kv, const struct efs_txid *t,
     rc = efs_txn_ver_get(kv, key, klen, &ver);
     if (rc != EFS_OK)
         return rc;
-    if (ver != expected_ver)
+    if (ver != expected_ver) {
+        const char *trace = getenv("EFS_TXN_TRACE_STALE");
+        if (trace && !strcmp(trace, "1")) {
+            fprintf(stderr, "txn-stale-version shard=%u kind=%u expected=%llu actual=%llu key=",
+                    key_shard(key), key[2], (unsigned long long)expected_ver,
+                    (unsigned long long)ver);
+            for (uint32_t i = 0; i < klen; i++)
+                fprintf(stderr, "%02x", key[i]);
+            fputc('\n', stderr);
+        }
         return EFS_ERR_STALE;
+    }
     /* ver 0 is "no txn has resolved this key". A live row at ver 0 is an
      * unversioned apply write (root inode, file CREATE) — CAS(0) updates it.
      * Insert uniqueness is intent conflict, then STALE once resolve bumps ver. */
