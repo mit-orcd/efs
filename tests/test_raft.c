@@ -825,6 +825,94 @@ static void test_grow_3_to_5(void)
     free_n(&n, st, 5);
 }
 
+static int discard_send(void *net, const struct efs_raft_msg *msg)
+{
+    (void)net; (void)msg;
+    return EFS_OK;
+}
+static int fail_cfg_save(void *ctx, uint32_t old, uint32_t next)
+{
+    (void)ctx; (void)old; (void)next;
+    return EFS_ERR_IO;
+}
+static int fail_cfg_load(void *ctx, uint32_t *old, uint32_t *next)
+{
+    (void)ctx; (void)old; (void)next;
+    return EFS_ERR_IO;
+}
+static void test_membership_persistence(void)
+{
+    struct efs_raft_store *st = efs_raft_mem_create();
+    struct efs_raft_cfg cfg = {0};
+    struct efs_raft *r;
+    struct app app = {0};
+    uint64_t idx = 0, snap = 0, term = 0;
+    uint8_t cmd = 'M';
+    int i;
+    cfg.id = 0; cfg.n = 1; cfg.voters = 1; cfg.store = st;
+    cfg.store_ctx = st; cfg.send = discard_send; cfg.apply = apply_cmd;
+    cfg.app = &app; cfg.election_ticks = 2; cfg.heartbeat_ticks = 1;
+    r = efs_raft_new(&cfg);
+    CHECK(r != NULL, "membership persistence fixture");
+    if (!r) { efs_raft_mem_free(st); return; }
+    for (i = 0; i < 8; i++) efs_raft_tick(r);
+    CHECK(efs_raft_propose(r, &cmd, 1, &idx) == EFS_OK, "solo command committed");
+    st->save_cfg = fail_cfg_save;
+    CHECK(efs_raft_snapshot(r) == EFS_ERR_IO, "snapshot reports membership save failure");
+    CHECK(st->load_snap(st, &snap, &term) == EFS_OK && snap == 0,
+          "failed membership save cannot discard log prefix");
+    CHECK(efs_raft_tick(r) == EFS_ERR_IO, "failed membership save fences replica");
+    CHECK(efs_raft_role(r) == EFS_RAFT_FOLLOWER, "fenced replica loses leadership");
+    efs_raft_free(r); efs_raft_mem_free(st);
+
+    st = efs_raft_mem_create(); cfg.store = st; cfg.store_ctx = st;
+    CHECK(st->save_cfg(st, 0, 0) == EFS_OK, "seed invalid empty membership");
+    r = efs_raft_new(&cfg);
+    CHECK(r == NULL, "cold bootstrap rejects invalid stored membership");
+    efs_raft_free(r);
+    CHECK(st->save_cfg(st, 1, 1u << EFS_RAFT_MAX_PEERS) == EFS_OK,
+          "seed invalid joint membership");
+    r = efs_raft_new(&cfg);
+    CHECK(r == NULL, "cold bootstrap rejects invalid stored joint membership");
+    efs_raft_free(r);
+    st->load_cfg = fail_cfg_load;
+    r = efs_raft_new(&cfg);
+    CHECK(r == NULL, "membership load IO cannot silently use bootstrap config");
+    efs_raft_free(r); efs_raft_mem_free(st);
+
+    st = efs_raft_mem_create(); cfg.store = st; cfg.store_ctx = st;
+    cfg.id = 1; cfg.n = 4; cfg.voters = 0x7; cfg.snap_chunk = snap_chunk;
+    r = efs_raft_new(&cfg);
+    CHECK(r != NULL, "follower membership fixture");
+    if (r) {
+        struct efs_raft_msg m = {0};
+        struct efs_raft_entry *entry = &m.entries[0];
+        uint8_t payload[13] = {0};
+        m.type = EFS_RAFT_MSG_SNAP_REQ; m.from = 0; m.to = 1;
+        m.term = 1; m.boot_id = 1; m.last_log_index = 10;
+        m.last_log_term = 1; m.leader_commit = 10; m.success = 1;
+        m.nentries = 1;
+        entry->cmd = payload; entry->clen = sizeof(payload); entry->term = 1;
+        wr32_t(payload, 0); wr32_t(payload+4, 0);
+        CHECK(efs_raft_recv(r, &m) == EFS_OK, "malformed snapshot gets rejection response");
+        CHECK(app.part_resets == 0 && !app.part_applied,
+              "invalid snapshot membership rejected before importing user state");
+        CHECK(efs_raft_voters(r) == 0x7, "invalid snapshot preserves original membership");
+        /* An ordinary committed membership entry must persist before apply
+         * advancement or a successful replication response. */
+        m.type = EFS_RAFT_MSG_AE_REQ; m.last_log_index = 0;
+        m.last_log_term = 0; m.leader_commit = 1; m.success = 0;
+        payload[0] = EFS_RAFT_CMD_JOINT;
+        wr32_t(payload+1, 0x7); wr32_t(payload+5, 0xf); entry->clen = 9;
+        st->save_cfg = fail_cfg_save;
+        CHECK(efs_raft_recv(r, &m) == EFS_ERR_IO, "applied membership IO is propagated");
+        CHECK(efs_raft_applied(r) == 0, "failed membership does not advance apply");
+        CHECK(efs_raft_tick(r) == EFS_ERR_IO, "membership apply IO fences follower");
+        efs_raft_free(r);
+    }
+    efs_raft_mem_free(st);
+}
+
 /* Four-voter engine support is staged. These memory-store checks establish
  * replication and quorum behavior, not recoverable commit certificates or
  * production D36 protection. In particular two survivors cannot elect. */
@@ -2051,6 +2139,7 @@ int main(void)
     test_snapshot();
     test_grow_3_to_5();
     test_four_voters();
+    test_membership_persistence();
     test_grow_3_to_4();
     test_solo_durable_cap_then_grow();
     test_i18_joint_quorum();

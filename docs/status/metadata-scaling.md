@@ -161,3 +161,16 @@ p50 0.96–0.97 ms and write-loaded p50 1.43–1.51 ms, including CLI startup.
 Both group leader-loss/rejoin gates and cold four-daemon restart pass. Leaders
 were distributed across nodes 2/3; this is one host and two groups, not proof
 of metadata scale or independent failure domains.
+
+### Membership persistence correction — Oct 10
+
+Recovery audit found ignored membership-save errors and snapshot/config ordering
+that could discard the membership log before saving its replacement. Failed
+saves now fence the replica and prevent apply advancement; local/imported
+snapshots save membership before dropping history. Invalid cold/incoming
+snapshot membership and load IO are refused. Ten assertions fail against the
+prior engine; Raft/disk/simulator and fatal sanitizer runs pass with the fix.
+AMD direct/TCP private POSIX 212/212 and peer 64/64, staged leader-loss replay,
+cold bytes and physical GC pass; installed service restored. See
+[separate evidence](../../results/measure/20261010-w66-foundation/membership-fix/README.md).
+W66 protection, generalized topology and measured scaling remain open.
