@@ -1,0 +1,16 @@
+early PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 214481 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 214515 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+cluster ready: flow=1 observations=1
+late2 PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 254508 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 254542 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+cluster ready: flow=1 observations=0

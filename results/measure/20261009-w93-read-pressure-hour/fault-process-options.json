@@ -1,0 +1,50 @@
+[
+  {
+    "pid": 304358,
+    "flags": {
+      "EFS_RAFT_FLOW": "1",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "1",
+      "EFS_RAFT_BATCH_NOOP": "1",
+      "EFS_RAFT_BATCH_OVERLAP": "1",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_COMMANDS_SERVER": "0"
+    },
+    "cmd": "/data1/efs/w93-read-build/efsd --node-id 1 --addr 127.0.0.1 --port 22190 --storage /data1/efs/gc-direct-83o_oo9z/n1 --quota 1G --direct-io "
+  },
+  {
+    "pid": 304434,
+    "flags": {
+      "EFS_RAFT_FLOW": "1",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "1",
+      "EFS_RAFT_BATCH_NOOP": "1",
+      "EFS_RAFT_BATCH_OVERLAP": "1",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_COMMANDS_SERVER": "0"
+    },
+    "cmd": "/data1/efs/w93-read-build/efsd --node-id 2 --addr 127.0.0.1 --port 22191 --storage /data1/efs/gc-direct-83o_oo9z/n2 --quota 1G --direct-io --join 127.0.0.1:22190 "
+  },
+  {
+    "pid": 304446,
+    "flags": {
+      "EFS_RAFT_FLOW": "1",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "1",
+      "EFS_RAFT_BATCH_NOOP": "1",
+      "EFS_RAFT_BATCH_OVERLAP": "1",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_COMMANDS_SERVER": "0"
+    },
+    "cmd": "/data1/efs/w93-read-build/efsd --node-id 3 --addr 127.0.0.1 --port 22192 --storage /data2/efs/gc-direct-7hn0ct4r/n3 --quota 1G --direct-io --join 127.0.0.1:22190 "
+  },
+  {
+    "pid": 304459,
+    "flags": {
+      "EFS_RAFT_FLOW": "1",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "1",
+      "EFS_RAFT_BATCH_NOOP": "1",
+      "EFS_RAFT_BATCH_OVERLAP": "1",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_COMMANDS_SERVER": "0"
+    },
+    "cmd": "/data1/efs/w93-read-build/efsd --node-id 4 --addr 127.0.0.1 --port 22193 --storage /data2/efs/gc-direct-7hn0ct4r/n4 --quota 1G --direct-io --join 127.0.0.1:22190 "
+  }
+]

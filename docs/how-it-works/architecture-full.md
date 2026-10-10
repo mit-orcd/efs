@@ -5915,6 +5915,22 @@ find/stats checkpoint; never treat the private fixture as deployed acceptance.
 
 ### W93 · Broader durable Raft group commit for tiny-file metadata
 
+**Oct 9 late-hour read/credit investigation:** Fixed-file warmed native
+idle off/on/off probes do not reproduce the earlier large group 0 gap:
+p50 6.43/6.62/6.64 ms, p99 approximately 13 ms, over 6,000 samples per group
+per case. Mixed-load tails remain substantial. Default-off early credit return
+`ea23775b` moves completed transport admission before the marker tail, after
+KV release, without changing ACKs. Matched common 180-second late/early/late
+rates are 163.65/157.22/168.15 files/s; no adoption gain or read-tail benefit.
+Keep the experiment off. Functional testing exposes a stale chunk-map recovery
+EIO on peer append/truncate; `437b7890` honors confirmed server absence while
+propagating RPC/published-data errors. Corrected POSIX 212/212, peer 64/64,
+twenty repeated append/truncate and actual-source/sanitizer/negative controls
+pass. All 384 sampled exact cold-payload checks and private sync/append/dirty-stop/
+shutdown/WAL-tail/GC fault gates pass. W93 remains open; prioritize the
+serial KV/marker tail with an explicit recovery contract, not earlier ACKs.
+[Detailed evidence](../status/w93-read-pressure-20261009.md).
+
 **Oct 9 verified-overlap experiment:** `devel-persistence-pressure` adds guarded,
 default-off `EFS_RAFT_BATCH_OVERLAP=1`. Stable follower requests with a verified
 matching prefix and new suffix can start/extend bounded durable cohorts;
@@ -6141,6 +6157,18 @@ or present the Raft improvement as measured KV acceptance.
 <a id="w97"></a>
 
 ### W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
+
+**Oct 9 completed-credit admission candidate:** `ea23775b` adds default-off
+retirement after KV release and before the marker tail, preserving queue caps,
+hysteresis and newly arriving credits. Actual-source arrival/EIO regressions
+pass. Common 180-second late/early/late rates are 163.65/157.22/168.15 files/s;
+no sustained acceptance or read-tail benefit, so keep it disabled. Initial peer
+testing exposes stale-map append/truncate EIO; `437b7890` fixes confirmed-absence
+recovery, passing corrected full and twenty repeated peer gates. All 384 sampled exact cold payloads and private
+sync/append/shutdown/WAL-tail/GC fault gates pass. Retained-store n3 startup takes 33.5 seconds against the
+devops 30-second readiness window; bounded idempotent measurement retries retain
+processes/data. A configurable readiness budget remains a devops follow-up.
+[Evidence and limits](../status/w93-read-pressure-20261009.md).
 
 **Implemented experimental candidate (Oct 9):** Commits 9728d07b,
 eb110217 and ec5b53b3 on `devel-persistence-pressure` implement opt-in
