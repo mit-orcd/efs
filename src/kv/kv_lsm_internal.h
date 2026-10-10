@@ -33,6 +33,11 @@
 #define KV_LSM_MEM_DEFAULT  (4u * 1024u * 1024u)
 #define KV_LSM_L0_DEFAULT   4u
 #define KV_LSM_MAX_SEGS     64u
+/* Query-source scan scratch, distinct from borrowed authoritative indexes.
+ * At most 256 private block buffers of 128 KiB plus fixed iterator/merge
+ * objects; broad or oversized input refuses without poisoning the store. */
+#define KV_LSM_SNAPSHOT_SCAN_SEGS 256u
+#define KV_LSM_SNAPSHOT_BLOCK_MAX (128u * 1024u)
 /* L0 admission. The file count is not the constraint (a read probes
  * every L0); 1 GiB of L0 is. The slot array grows to hold it. */
 #define KV_LSM_L0_BYTES     (1ull << 30)
@@ -331,6 +336,10 @@ int kv_seg_range_excludes(const struct kv_seg *s, int rlo, int rhi);
 int kv_seg_excludes(struct kv_seg *s, const uint8_t *seek, uint32_t slen,
                     const uint8_t *prefix, uint32_t plen);
 
+/* Immutable query filtering must not allocate an unbounded tail block or
+ * populate source-wide mutable tail caches. Errors are distinct from exclusion. */
+int kv_seg_snapshot_excludes(struct kv_seg *s,const uint8_t *seek,uint32_t slen,
+                            const uint8_t *prefix,uint32_t plen,int *excluded);
 int kv_seg_iter_open(struct kv_seg *s, struct kv_seg_iter **out);
 /* 1 MiB readahead for a reader that walks the whole segment (compaction,
  * snapshot export). Off by default: a prefix scan reads one block. */

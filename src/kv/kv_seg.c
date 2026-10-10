@@ -850,6 +850,38 @@ int kv_seg_excludes(struct kv_seg *s, const uint8_t *seek, uint32_t slen,
     return 0;
 }
 
+int kv_seg_snapshot_excludes(struct kv_seg *s,const uint8_t *seek,uint32_t slen,
+                            const uint8_t *prefix,uint32_t plen,int *excluded)
+{
+    *excluded=0;
+    if(!s || !s->nblocks){*excluded=1;return EFS_OK;}
+    if(plen && prefix){
+        int lo,hi;kv_prefix_ranges(prefix,plen,&lo,&hi);
+        if(kv_seg_range_excludes(s,lo,hi)){*excluded=1;return EFS_OK;}
+        const uint8_t *first;uint32_t length;
+        if(!kv_seg_first_key(s,&first,&length) && !kv_has_prefix(first,length,prefix,plen) &&
+           kv_key_cmp(first,length,prefix,plen)>0){*excluded=1;return EFS_OK;}
+    }
+    if(!slen || !seek)return EFS_OK;
+    uint8_t *known=__atomic_load_n(&s->last_key,__ATOMIC_ACQUIRE);
+    if(known){*excluded=kv_key_cmp(known,__atomic_load_n(&s->last_klen,__ATOMIC_RELAXED),seek,slen)<0;return EFS_OK;}
+    struct blk_ref *r=&s->idx[s->nblocks-1];
+    /* The last block's first key is a safe lower bound for its last key. */
+    if(kv_key_cmp(r->key,r->klen,seek,slen)>=0)return EFS_OK;
+    if(r->len>KV_LSM_SNAPSHOT_BLOCK_MAX)return EFS_ERR_BUSY;
+    uint8_t block[KV_LSM_SNAPSHOT_BLOCK_MAX];
+    int rc=pread_all(s->fd,block,r->len,r->off);if(rc)return rc;
+    uint32_t offset=0,length=0;const uint8_t *last=NULL;
+    while(offset<r->len){
+        if(r->len-offset<9)return EFS_ERR_PROTO;
+        uint32_t kl=get_u32(block+offset+1),vl=get_u32(block+offset+5);
+        if(!kl || kl>r->len-offset-9 || vl>r->len-offset-9-kl)return EFS_ERR_PROTO;
+        last=block+offset+9;length=kl;offset+=9+kl+vl;
+    }
+    if(!last)return EFS_ERR_PROTO;
+    *excluded=kv_key_cmp(last,length,seek,slen)<0;return EFS_OK;
+}
+
 /* --- iterator -------------------------------------------------------- */
 
 struct kv_seg_iter {
@@ -913,6 +945,7 @@ static int iter_load(struct kv_seg_iter *it)
     if (it->bi >= it->s->nblocks)
         return EFS_ERR_NOT_FOUND;
     r = &it->s->idx[it->bi];
+    if(it->private_read && r->len>KV_LSM_SNAPSHOT_BLOCK_MAX)return EFS_ERR_BUSY;
     p = realloc(it->blk, r->len);
     if (!p)
         return EFS_ERR_NOMEM;
@@ -934,7 +967,7 @@ static int iter_load(struct kv_seg_iter *it)
     if (it->ra && r->off >= it->ra_off &&
         r->off + r->len <= it->ra_off + it->ra_len) {
         memcpy(it->blk, it->ra + (uint32_t)(r->off - it->ra_off), r->len);
-    } else if (!it->seq || r->len > (1u << 20)) {
+    } else if (!it->seq || it->private_read || r->len > (1u << 20)) {
         /* One block. Entries never split, so one value up to
          * KV_LSM_VLEN_MAX is one block; a scan reads exactly what it
          * needs. The 1 MiB window is for the sequential readers only. */

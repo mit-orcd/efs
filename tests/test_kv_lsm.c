@@ -1294,6 +1294,49 @@ static void test_snapshot_batch_cut(void)
     efs_kv_lsm_close(kv);
 }
 
+static void test_snapshot_scan_bounds(void)
+{
+    rmtree(g_dir);struct efs_kv *kv=open_store(EFS_KV_LSM_NOSYNC,0);
+    CHECK(kv!=NULL,"open bounded scan source");if(!kv)return;
+    CHECK(!put_s(kv,"p/a","value") && !efs_kv_lsm_flush(kv) && !efs_kv_lsm_compact(kv) && !efs_kv_lsm_quiesce(kv),"persist bounded source");
+    struct kv_lsm *live=kv->ctx,mock=*live;
+    struct kv_seg *seg=live->n_l0?live->l0[0].seg:live->l1[0].seg;
+    memset(&mock.mu,0,sizeof(mock.mu));pthread_mutex_init(&mock.mu,NULL);
+    mock.l0=calloc(KV_LSM_SNAPSHOT_SCAN_SEGS+1,sizeof(*mock.l0));mock.n_l1=0;mock.l1=NULL;
+    CHECK(mock.l0!=NULL,"allocate white-box fan-in boundary");
+    if(mock.l0){
+        for(unsigned i=0;i<KV_LSM_SNAPSHOT_SCAN_SEGS+1;i++)mock.l0[i].seg=seg;
+        struct efs_kv input={kv->ops,&mock};struct efs_kv_lsm_snapshot *source=NULL;struct acc a={0};
+        mock.n_l0=KV_LSM_SNAPSHOT_SCAN_SEGS;
+        CHECK(!efs_kv_lsm_snapshot_pin(&input,1<<20,&source),"pin exact fan-in boundary");
+        if(source){CHECK(!efs_kv_lsm_snapshot_scan(source,(const uint8_t *)"p/",2,NULL,0,acc_cb,&a),"exact fan-in admits source");efs_kv_lsm_snapshot_release(source);source=NULL;}
+        mock.n_l0=KV_LSM_SNAPSHOT_SCAN_SEGS+1;
+        CHECK(!efs_kv_lsm_snapshot_pin(&input,1<<20,&source),"pin above scan fan-in");
+        if(source){
+            memset(&a,0,sizeof(a));
+            CHECK(efs_kv_lsm_snapshot_scan(source,(const uint8_t *)"p/",2,NULL,0,acc_cb,&a)==EFS_ERR_BUSY && !a.n,"over fan-in refuses before output");
+            CHECK(!efs_kv_lsm_snapshot_scan(source,(const uint8_t *)"z/",2,NULL,0,acc_cb,&a) && !a.n,"irrelevant sources do not consume scan fan-in");
+            efs_kv_lsm_snapshot_release(source);
+        }
+        free(mock.l0);
+    }
+    pthread_mutex_destroy(&mock.mu);
+    uint32_t size=KV_LSM_SNAPSHOT_BLOCK_MAX+1;uint8_t *large=malloc(size),*got=malloc(size);
+    CHECK(large && got,"allocate oversized-block test input");
+    if(large && got){
+        memset(large,0x5a,size);
+        CHECK(!efs_kv_put(kv,(const uint8_t *)"large",5,large,size) && !efs_kv_lsm_flush(kv),"persist large authoritative value");
+        struct efs_kv_lsm_snapshot *source=NULL;struct acc a={0};
+        CHECK(!efs_kv_lsm_snapshot_pin(kv,1<<20,&source),"pin large-block source");
+        if(source){CHECK(efs_kv_lsm_snapshot_scan(source,(const uint8_t *)"large",5,NULL,0,acc_cb,&a)==EFS_ERR_BUSY && !a.n,"oversized private block refuses before output");
+            CHECK(!efs_kv_lsm_snapshot_scan(source,(const uint8_t *)"largf",5,NULL,0,acc_cb,&a) && !a.n,"cached tail excludes irrelevant oversized block without reading it");
+            efs_kv_lsm_snapshot_release(source);}
+        uint32_t capacity=size;
+        CHECK(!efs_kv_get(kv,(const uint8_t *)"large",5,got,&capacity) && capacity==size && !memcmp(got,large,size),"private scan refusal leaves authoritative reads valid");
+    }
+    free(large);free(got);efs_kv_lsm_close(kv);
+}
+
 static void test_full_snapshot(void)
 {
     struct efs_kv_lsm_snapshot *s=NULL,*failed=NULL;
@@ -1317,14 +1360,15 @@ static void test_full_snapshot(void)
           "snapshot budget is explicit");
     struct kv_lsm *budget_store=kv->ctx;
     pthread_mutex_lock(&budget_store->mu);
-    uint32_t saved_l0=budget_store->n_l0,saved_l1=budget_store->n_l1;
-    /* The recursive store lock keeps the real compactor from observing this
-     * deliberately impossible fixture while snapshot_pin checks its guard. */
-    budget_store->n_l0=UINT32_MAX;budget_store->n_l1=1;
-    CHECK(efs_kv_lsm_snapshot_pin(kv,UINT64_MAX,&failed)==EFS_ERR_BUSY && !failed,
-          "overflowed segment count refuses before touching segment pointers");
-    budget_store->n_l0=saved_l0;budget_store->n_l1=saved_l1;
+    struct kv_lsm overflow_store=*budget_store;
     pthread_mutex_unlock(&budget_store->mu);
+    /* Never expose deliberately invalid counts to the live compactor. */
+    memset(&overflow_store.mu,0,sizeof(overflow_store.mu));pthread_mutex_init(&overflow_store.mu,NULL);
+    overflow_store.n_l0=UINT32_MAX;overflow_store.n_l1=1;
+    struct efs_kv overflow_kv={kv->ops,&overflow_store};
+    CHECK(efs_kv_lsm_snapshot_pin(&overflow_kv,UINT64_MAX,&failed)==EFS_ERR_BUSY && !failed,
+          "overflowed segment count refuses before touching segment pointers");
+    pthread_mutex_destroy(&overflow_store.mu);
     CHECK(efs_kv_lsm_snapshot_pin(kv,1<<20,&s)==EFS_OK,"pin unflushed state");
     if (!s) { efs_kv_lsm_close(kv);return; }
     uint64_t snapshot_bytes=efs_kv_lsm_snapshot_bytes(s);
@@ -1643,10 +1687,11 @@ int main(void)
     rmtree(g_dir);
     if (getenv("EFS_TEST_KV_APPLY_ONLY")) {test_apply_scope();goto report;}
     if (getenv("EFS_TEST_KV_SNAPSHOT_ONLY")) {
+        test_snapshot_scan_bounds();
         test_full_snapshot();
         test_snapshot_batch_cut();
         test_metadata_dirty_hints();
-    test_durable_query_hints();
+        test_durable_query_hints();
         goto report;
     }
 
@@ -1666,6 +1711,7 @@ int main(void)
     test_l1_grows();
     test_flush_nowait();
     test_pinned_view();
+    test_snapshot_scan_bounds();
     test_full_snapshot();
     test_snapshot_batch_cut();
     test_metadata_dirty_hints();

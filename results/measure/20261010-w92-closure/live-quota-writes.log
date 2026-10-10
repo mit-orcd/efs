@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/home/efs/w92-closure-tests/tests/live/efs_query_disabled.py", line 26, in <module>
+    assert time.monotonic()<deadline,('quota refusal did not become truthful',reply.status,reply.refresh_error)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ('quota refusal did not become truthful', -11, 0)

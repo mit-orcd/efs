@@ -720,6 +720,19 @@ static int merge_scan(struct kv_lsm *l, int private_read,
     int rc = EFS_OK;
 
     t_scan_stats.scans++;
+    if (private_read) {
+        /* Size only relevant sources. The old allocation used every source
+         * segment even for a point/prefix lookup and grew with the namespace. */
+        need=1;
+        for(i=0;i<l->n_l0+l->n_l1;i++){
+            struct seg_slot *sl=i<l->n_l0?&l->l0[i]:&l->l1[i-l->n_l0];
+            int excluded=0;
+            if(seek_len){rc=kv_seg_snapshot_excludes(sl->seg,seek,seek_len,prefix,plen,&excluded);if(rc)return rc;}
+            if(excluded)continue;
+            if(need==KV_LSM_SNAPSHOT_SCAN_SEGS+1)return EFS_ERR_BUSY;
+            need++;
+        }
+    }
     if (need > cap) {
         src = calloc(need, sizeof(*src));
         if (!src)
@@ -750,8 +763,12 @@ static int merge_scan(struct kv_lsm *l, int private_read,
         /* L1 is range-partitioned: a 3-byte txn-record prefix lives in
          * one or two of its segments. Opening the rest cost one pread
          * each under l->mu on every PREPARE/RESOLVE apply. */
-        if (seek_len && kv_seg_excludes(sl->seg, seek, seek_len, prefix, plen))
-            continue;
+        if(seek_len){
+            int excluded=0;
+            if(private_read){rc=kv_seg_snapshot_excludes(sl->seg,seek,seek_len,prefix,plen,&excluded);if(rc)goto out;}
+            else excluded=kv_seg_excludes(sl->seg,seek,seek_len,prefix,plen);
+            if(excluded)continue;
+        }
         if (nsrc >= cap) {
             rc = EFS_ERR_NOMEM;
             goto out;

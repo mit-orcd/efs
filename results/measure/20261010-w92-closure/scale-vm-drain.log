@@ -1,0 +1,27 @@
+Unmounting /home/efs/w92-tiny-mnt
+Retiring drained efs-fuse PID 163045 for /home/efs/w92-tiny-mnt
+Unmounted /home/efs/w92-tiny-mnt
+Unmounting /home/efs/w92-peer-mnt
+Retiring drained efs-fuse PID 163111 for /home/efs/w92-peer-mnt
+Unmounted /home/efs/w92-peer-mnt
+Unmounting /home/efs/w92-survivor-mnt
+Retiring drained efs-fuse PID 130313 for /home/efs/w92-survivor-mnt
+Unmounted /home/efs/w92-survivor-mnt
+cluster: xorinox
+== drain/unmount client /mnt/efs on xefsgw
+Unmounting /mnt/efs
+Retiring drained efs-fuse PID 121630 for /mnt/efs
+Unmounted /mnt/efs
+== drain/unmount client /mnt/efs on xefsct1
+Unmounting /mnt/efs
+Retiring drained efs-fuse PID 116622 for /mnt/efs
+Unmounted /mnt/efs
+== drain/unmount client /mnt/efs on xefsct2
+Unmounting /mnt/efs
+Retiring drained efs-fuse PID 113666 for /mnt/efs
+Unmounted /mnt/efs
+== stop efsd on xefs1
+== stop efsd on xefs2
+== stop efsd on xefs3
+Domain 'xefs1' is being shutdown
+

@@ -36,7 +36,9 @@ def query_name(command, term=b"", match="contains", filters=None):
     if command != "find":
         if term:
             raise ValueError("this command does not accept a pattern")
-        return "v1." + command
+        # NFS may retain an opened virtual inode beyond one Python process.
+        # Fresh invocations need a new name; retained descriptors stay immutable.
+        return "v1." + command + "." + os.urandom(16).hex()
     if match not in MATCHES:
         raise ValueError("unknown match")
     if len(term) > MAX_TERM_BYTES:

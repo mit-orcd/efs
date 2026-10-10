@@ -1,0 +1,3 @@
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"' -DEFS_VERSION='"unknown"' -DEFS_GIT_BRANCH='"unknown"' -DEFS_BUILD_TIME='"2026-10-10T08:31:55Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_query_disk tests/test_query_disk.c libefs.a -lpthread -lm -ldl -libverbs
+query-disk: unlinked directory ino=36864004096 parent=1 nlink=2
+query disk: RAM oracle, external sort, bounded metadata, retained snapshot, rename and cancellation PASS

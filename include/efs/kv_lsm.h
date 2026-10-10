@@ -115,6 +115,9 @@ int efs_kv_lsm_view_export(struct efs_kv_lsm_view *v, uint8_t group,
 struct efs_kv_lsm_snapshot;
 int efs_kv_lsm_snapshot_pin(struct efs_kv *kv, uint64_t mt_limit,
                             struct efs_kv_lsm_snapshot **out);
+/* Private source scans admit at most 256 relevant segments and 128 KiB per
+ * block (under 33 MiB iterator/merge scratch). Wider/oversized inputs return
+ * BUSY; authoritative live reads/writes retain their existing limits. */
 int efs_kv_lsm_snapshot_scan(struct efs_kv_lsm_snapshot *s,
                              const uint8_t *prefix, uint32_t plen,
                              const uint8_t *start, uint32_t slen,

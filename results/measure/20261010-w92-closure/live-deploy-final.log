@@ -1,0 +1,9 @@
+Unmounting /home/efs/w92-tiny-mnt
+Not mounted: /home/efs/w92-tiny-mnt (cleared any stale FUSE handle)
+cluster: xorinox
+== stop efsd on xefs1
+== stop efsd on xefs2
+== stop efsd on xefs3
+cluster: xorinox
+cluster: xorinox
+ERROR: expected a dedicated storage filesystem
