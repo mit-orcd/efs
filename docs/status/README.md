@@ -29,6 +29,13 @@ unimplemented; unavailable/refusal tests are not lifecycle acceptance.
 
 ## Tiny-file performance follow-up
 
+[Oct 10 W93 checkpoint cadence](w93-checkpoint-cadence-20261010.md) records
+all-branch integration, failed-marker immediate retry, bounded checkpoint
+coalescing, original/repeated NUC functional gates and private retained-marker
+crash replay. The 10 ms default remains; performance and remaining recovery
+acceptance are recorded separately from implementation.
+
+
 [W93–W96: NUC profiling evidence and next experiments](tiny-file-performance-plan-20261008.md)
 register broader Raft group commit, atomic CREATE/open lease, tiny-file data
 persistence/packing, and KV WAL preallocation. All four are open; W93/W94 are
