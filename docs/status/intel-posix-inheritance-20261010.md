@@ -107,3 +107,20 @@ nondirectory assertion; repaired ordinary and sanitizer fixtures pass locally.
 The existing live access case now also tests execute checks when run as root;
 ordinary Intel mounts run as the efs service account and do not prove root
 mount acceptance.
+
+## Unavailable authority must not become absence
+
+The actual OPEN, CHOWN and hard-link callbacks collapsed every failed source
+inode stat into ENOENT. Hard-link mutation errors also collapsed permission,
+memory and temporary refusal into EIO. The callbacks now use the existing
+FUSE status mapping: only authoritative NOT_FOUND becomes ENOENT; transport,
+quorum and IO failures remain EIO, and BUSY/NOT_PRIMARY, memory and permission
+errors retain their distinct errno. Successful operations and authorization
+checks are unchanged. This is not a diagnosis or claimed cure of the earlier
+Intel2 tiny-file EIO.
+
+`tests/test_attribute_authority_errno.py` executes all three production
+callbacks with controlled error statuses. Failed source discovery must never
+allocate an OPEN description/lease, mutate a namespace or change the supplied
+file handle. Ordinary OPEN success and rejected lease cleanup also execute.
+The unchanged source fails the first unavailable-authority assertion.

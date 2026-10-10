@@ -310,6 +310,7 @@ test: all
 	python3 tests/test_readdir_collection.py
 	python3 tests/test_access_permissions.py
 	python3 tests/test_rename_flags.py
+	python3 tests/test_attribute_authority_errno.py
 	python3 tests/test_virtual_export_handles.py
 	python3 tests/test_fuse_open_reply.py
 	python3 tests/test_fuse_lease_retention.py

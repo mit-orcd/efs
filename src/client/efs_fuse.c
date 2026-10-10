@@ -2516,7 +2516,7 @@ static int efs_fuse_open_ino(fuse_ino_t ino, struct fuse_file_info *fi)
     struct efs_inode row;
     int lrc = efs_client_stat_ino((efs_ino_t)ino, &row);
     if (lrc != EFS_OK)
-        return -ENOENT;
+        return fuse_stat_errno(lrc);
     {
         const struct fuse_ctx *ctx = ll_ctx();
         int accmode = fi ? (fi->flags & O_ACCMODE) : O_RDONLY;
@@ -4456,8 +4456,9 @@ static int efs_fuse_chown_ino(fuse_ino_t ino, uid_t uid, gid_t gid)
     int rc;
     if (virt_kind(ino))
         return -EACCES;
-    if (efs_client_stat_ino((efs_ino_t)ino, &row) != EFS_OK)
-        return -ENOENT;
+    rc = efs_client_stat_ino((efs_ino_t)ino, &row);
+    if (rc != EFS_OK)
+        return fuse_stat_errno(rc);
     rc = check_chown_perm(&row, uid, gid);
     if (rc != 0)
         return rc;
@@ -4532,8 +4533,9 @@ static int efs_fuse_link_at(fuse_ino_t src_ino, fuse_ino_t newparent,
         return -EACCES;
     if (name_is_reserved(newname))
         return -EACCES;
-    if (efs_client_stat_ino((efs_ino_t)src_ino, &src) != EFS_OK)
-        return -ENOENT;
+    rc = efs_client_stat_ino((efs_ino_t)src_ino, &src);
+    if (rc != EFS_OK)
+        return fuse_stat_errno(rc);
     if (efs_mode_is_dir(src.mode))
         return -EPERM;
     rc = efs_client_stat_ino((efs_ino_t)newparent, &parent);
@@ -4543,11 +4545,7 @@ static int efs_fuse_link_at(fuse_ino_t src_ino, fuse_ino_t newparent,
     if (wx != 0)
         return wx;
     rc = efs_client_link(src.ino, parent.ino, newname);
-    if (rc == EFS_ERR_EXIST)
-        return -EEXIST;
-    if (rc != 0)
-        return -EIO;
-    return 0;
+    return fuse_stat_errno(rc);
 }
 
 static int efs_fuse_utimens_ino(fuse_ino_t ino, const struct timespec tv[2])
