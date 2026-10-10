@@ -567,6 +567,25 @@ static int rpc_fault_create_reply(uint8_t type, const void *req, uint32_t len,
 }
 #endif
 
+/* A transport failure invalidates this attempt's hint. Preserve the
+ * request identity while retrying another voter, and never erase a newer
+ * leader learned concurrently by another worker. Pool admission failure
+ * is not evidence that a peer is down. */
+static void rpc_retry_peer(uint32_t shard, efs_node_id_t nid,
+                            efs_node_id_t *target, efs_node_id_t *skip, int failed)
+{
+    unsigned group = efs_raft_shard_group(shard) >> 1;
+    *target = 0;
+    *skip = nid;
+    if (!nid) return;
+    if (failed) efs_client_node_note_fail(nid);
+    if (group < 2) {
+        efs_node_id_t expected = nid;
+        __atomic_compare_exchange_n(&g_group_leader[group], &expected, 0,
+                                    0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+    }
+}
+
 static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
                                uint32_t req_len, uint8_t expect, void *reply,
                                uint32_t reply_len, uint32_t copy_cap,
@@ -602,6 +621,7 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
         if (!conn || efs_conn_send_msg(conn, type, req, req_len) != 0) {
             if (conn)
                 efs_client_conn_drop(nid, conn);
+            rpc_retry_peer(shard, nid, &target, &skip, conn != NULL);
             /* One dropped conn is not a failed create. Same 16-attempt
              * budget as BUSY; a hard NET only after it is used up
              * (dir_many_files EIO on a single recv failure). */
@@ -626,6 +646,7 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
         if (rc != 0) {
             free(payload);
             efs_client_conn_drop(nid, conn);
+            rpc_retry_peer(shard, nid, &target, &skip, 1);
             if (attempt + 1 < 16) {
                 fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=recv rc=%d\n",
                         type, attempt, rc);
@@ -636,6 +657,7 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
             return EFS_ERR_NET;
         }
         efs_client_conn_release(nid, conn);
+        efs_client_node_note_ok(nid);
         if (efs_client_rpc_past_deadline()) {
             free(payload);
             return EFS_ERR_BUSY;

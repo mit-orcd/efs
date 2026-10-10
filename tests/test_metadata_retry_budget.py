@@ -17,7 +17,8 @@ code=r'''
 #include <unistd.h>
 static uint64_t now=1000,deadline;static unsigned calls,sleeps,freed,drops,releases;
 static int reply_status,fail_recv,fail_send,bad_type,expire_recv;
-struct efs_conn {int unused;};static struct efs_conn connection;
+static unsigned failover,routing_sends;
+struct efs_conn {unsigned node;};static struct efs_conn connection;
 static unsigned g_group_leader[2];
 uint64_t efs_client_rpc_deadline_ms(void){return deadline;}
 int efs_client_rpc_past_deadline(void){return deadline&&now>=deadline;}
@@ -28,8 +29,8 @@ static void test_free(void*p){if(p)freed++;free(p);}
 #define free test_free
 #define clock_gettime fake_clock
 #define usleep fake_sleep
-static struct efs_conn *efs_client_conn_get(efs_node_id_t n){(void)n;return &connection;}
-static struct efs_conn *raft_voter_conn_skip(uint32_t s,efs_node_id_t*n,efs_node_id_t skip){(void)s;(void)skip;*n=1;return &connection;}
+static struct efs_conn *efs_client_conn_get(efs_node_id_t n){connection.node=n;return &connection;}
+static struct efs_conn *raft_voter_conn_skip(uint32_t s,efs_node_id_t*n,efs_node_id_t skip){(void)s;*n=(failover&&skip==2)?3:1;connection.node=*n;return &connection;}
 static struct efs_conn *raft_dual_voter_conn(efs_node_id_t*n,efs_node_id_t skip){return raft_voter_conn_skip(0,n,skip);}
 static void efs_client_conn_drop(efs_node_id_t n,struct efs_conn*c){(void)n;(void)c;drops++;}
 static void efs_client_conn_release(efs_node_id_t n,struct efs_conn*c){(void)n;(void)c;releases++;}
@@ -38,14 +39,16 @@ static unsigned long long rpc_prof_now_us(void){return now*1000;}
 static void rpc_prof_add(int type,unsigned long long a,unsigned long long b,unsigned long long c,unsigned long long d){(void)type;(void)a;(void)b;(void)c;(void)d;}
 static void rpc_note_slow_ok(uint8_t t,int a,int b,uint8_t st,unsigned long long n){(void)t;(void)a;(void)b;(void)st;(void)n;}
 static int stale_retryable(uint8_t type){(void)type;return 1;}
+static void efs_client_node_note_fail(efs_node_id_t n){(void)n;}
+static void efs_client_node_note_ok(efs_node_id_t n){(void)n;}
 static unsigned efs_raft_shard_group(uint32_t s){(void)s;return 0;}
 static unsigned rpc_leader_of(unsigned g){(void)g;return 1;}
 static void efs_conn_set_recv_timeout(struct efs_conn*c,int n){(void)c;(void)n;}
-int efs_conn_send_msg(struct efs_conn*c,uint8_t t,const void*p,uint32_t n){(void)c;(void)t;(void)p;(void)n;return fail_send;}
-int efs_conn_recv_msg(struct efs_conn*c,uint8_t*t,void**p,uint32_t*n){(void)c;calls++;struct efs_msg_inode_reply*r=calloc(1,sizeof(*r));assert(r);r->status=reply_status;*p=r;*n=sizeof(*r);*t=bad_type?0:EFS_MSG_INODE_GETATTR_REPLY;if(expire_recv)now=deadline;return fail_recv;}
+int efs_conn_send_msg(struct efs_conn*c,uint8_t t,const void*p,uint32_t n){(void)t;(void)p;(void)n;if(failover){routing_sends++;if(routing_sends==2){assert(c->node==2);if(failover==2)return 1;}if(routing_sends==3)assert(c->node==3);}return fail_send;}
+int efs_conn_recv_msg(struct efs_conn*c,uint8_t*t,void**p,uint32_t*n){(void)c;calls++;struct efs_msg_inode_reply*r=calloc(1,sizeof(*r));assert(r);r->status=reply_status;*p=r;*n=sizeof(*r);*t=bad_type?0:EFS_MSG_INODE_GETATTR_REPLY;if(expire_recv)now=deadline;if(failover){if(calls==1){r->status=EFS_INODE_RPC_NOT_PRIMARY;r->primary_id=2;}else if(failover==1&&calls==2)return 1;else assert(c->node==3);}return fail_recv;}
 static void opid_retry_ack(void *packet,uint32_t length){(void)packet;(void)length;}
-'''+fn('static int rpc_writer_retry_pause(' ,True)+fn('static int rpc_send_recv_shard(')+fn('static int rpc_send_recv_dual(',True)+r'''
-static void reset(void){calls=sleeps=freed=drops=releases=0;reply_status=EFS_INODE_RPC_OK;fail_recv=fail_send=bad_type=expire_recv=0;now=1000;deadline=0;}
+'''+fn('static int rpc_writer_retry_pause(' ,True)+fn('static void rpc_retry_peer(')+fn('static int rpc_send_recv_shard(')+fn('static int rpc_send_recv_dual(',True)+r'''
+static void reset(void){calls=sleeps=freed=drops=releases=0;reply_status=EFS_INODE_RPC_OK;fail_recv=fail_send=bad_type=expire_recv=0;now=1000;deadline=0;failover=routing_sends=0;g_group_leader[0]=0;}
 static int run(int dual,struct efs_msg_inode_reply*r){return dual?rpc_send_recv_dual(EFS_MSG_INODE_GETATTR,NULL,0,EFS_MSG_INODE_GETATTR_REPLY,r,sizeof(*r),100):rpc_send_recv_shard(0,EFS_MSG_INODE_GETATTR,NULL,0,EFS_MSG_INODE_GETATTR_REPLY,r,sizeof(*r),0,NULL);}
 int main(void){for(int d=0;d<2;d++){
  struct efs_msg_inode_reply r;
@@ -58,10 +61,18 @@ int main(void){for(int d=0;d<2;d++){
  reset();fail_send=1;deadline=1010;assert(run(d,&r)==EFS_ERR_BUSY&&!calls&&drops==1&&sleeps==1);
  reset();deadline=1010;expire_recv=1;memset(&r,0x5a,sizeof(r));struct efs_msg_inode_reply before=r;assert(run(d,&r)==EFS_ERR_BUSY&&freed==1&&!memcmp(&r,&before,sizeof(r)));
  reset();reply_status=EFS_INODE_RPC_BUSY;assert(run(d,&r)==EFS_ERR_BUSY&&calls==16&&freed==16&&sleeps==15);
- }return 0;}
+ }
+ for(unsigned mode=1;mode<=2;mode++){
+  struct efs_msg_inode_reply r;reset();failover=mode;g_group_leader[0]=2;
+  assert(!run(0,&r)&&routing_sends==3&&calls==(mode==1?3u:2u)&&g_group_leader[0]==0);
+ }
+ efs_node_id_t target=2,skip=0;g_group_leader[0]=3;
+ rpc_retry_peer(0,2,&target,&skip,1);
+ assert(!target&&skip==2&&g_group_leader[0]==3);
+ return 0;}
 '''
 with tempfile.TemporaryDirectory(prefix='efs-metadata-budget-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
-print('metadata retries: shard/dual budgets, STALE/BUSY/hints, failed payload cleanup and late-output retention PASS')
+print('metadata retries: shard/dual budgets, STALE/BUSY/hints, failed payload cleanup and late-output retention, lost hinted peer rerouting and concurrent leader retention PASS')
