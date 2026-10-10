@@ -31,6 +31,9 @@
 #define READ_WAYS 4
 _Static_assert(FD_CACHE<=UINT8_MAX,"descriptor index must fit");
 #define SORT_ROWS 2048
+#define RAW_WRITE_WINDOW 65536
+_Static_assert(2*RAW_WRITE_WINDOW<=SORT_ROWS*sizeof(struct efs_name_entry),
+               "raw writer scratch must fit the existing sort admission charge");
 #define NODE_BATCH 8
 #define INODE_CACHE 64
 #define VALUE_MAX 16384
@@ -418,7 +421,20 @@ static int raw_prefix(void *ctx,const uint8_t *p,uint32_t pn,
 { return raw_scan(ctx,p,pn,NULL,0,cb,u); }
 static const struct efs_kv_ops raw_ops={.get=raw_get,.scan_prefix=raw_prefix,.scan_from=raw_scan};
 static int make_file(const struct efs_query_disk *,uint32_t,char);
-struct writer { struct efs_query_disk *d;uint32_t shard;int raw,index;uint64_t offset,count; };
+struct writer {
+    struct efs_query_disk *d;uint32_t shard;int raw,index;uint64_t offset,count;
+    uint8_t *buffer;size_t raw_used,index_used;
+};
+static int writer_flush(struct writer *w)
+{
+    int rc=EFS_OK;
+    if(w->raw_used)rc=io_at(w->raw,w->buffer,w->raw_used,w->offset-w->raw_used,1);
+    /* Never write index slots until their entire raw batch has succeeded. */
+    if(!rc && w->index_used)rc=io_at(w->index,w->buffer+RAW_WRITE_WINDOW,
+        w->index_used,w->count*sizeof(struct slot)-w->index_used,1);
+    if(!rc)w->raw_used=w->index_used=0;
+    return rc;
+}
 static int save(void *ctx,const uint8_t *key,uint32_t kl,const uint8_t *val,uint32_t vl)
 {
     struct writer *w=ctx;if(cancelled(w->d))return EFS_ERR_BUSY;
@@ -432,14 +448,16 @@ static int save(void *ctx,const uint8_t *key,uint32_t kl,const uint8_t *val,uint
     if(w->index<0)w->index=make_file(w->d,w->shard,'i');
     if(w->raw<0 || w->index<0)return EFS_ERR_IO;
     struct slot s={w->offset,kl,vl};
-    /* Adjacent key/value bytes form one bounded record. Submit them together
-     * instead of making a disk syscall for each small field. The index is
-     * written only after the complete record succeeds. */
-    uint8_t record[RAW_RECORD_MAX];memcpy(record,key,kl);
-    if(vl)memcpy(record+kl,val,vl);
-    int rc=io_at(w->raw,record,(size_t)kl+vl,w->offset,1);
-    if(!rc)rc=io_at(w->index,&s,sizeof(s),w->count*sizeof(s),1);
-    if(!rc){w->offset+=kl+vl;w->count++;}return rc;
+    size_t bytes=(size_t)kl+vl;
+    int rc=EFS_OK;
+    if(w->raw_used+bytes>RAW_WRITE_WINDOW || w->index_used+sizeof(s)>RAW_WRITE_WINDOW)
+        rc=writer_flush(w);
+    if(rc)return rc;
+    memcpy(w->buffer+w->raw_used,key,kl);
+    if(vl)memcpy(w->buffer+w->raw_used+kl,val,vl);
+    memcpy(w->buffer+RAW_WRITE_WINDOW+w->index_used,&s,sizeof(s));
+    w->raw_used+=bytes;w->index_used+=sizeof(s);
+    w->offset+=bytes;w->count++;return EFS_OK;
 }
 static int pending(void *u,const uint8_t *k,uint32_t kn,const uint8_t *v,uint32_t vn)
 { (void)u;(void)k;(void)kn;(void)v;(void)vn;return EFS_ERR_BUSY; }
@@ -456,6 +474,7 @@ static int raw_build(struct efs_query_disk *d,struct efs_kv_lsm_snapshot *source
         prefix[2]=refuse[i];int rc=efs_kv_lsm_snapshot_scan(source,prefix,3,NULL,0,pending,NULL);if(rc)return rc;
     }
     struct writer w={.d=d,.shard=shard,.raw=-1,.index=-1};
+    w.buffer=malloc(2*RAW_WRITE_WINDOW);if(!w.buffer)return EFS_ERR_NOMEM;
     int rc=EFS_OK;
     for(int i=0;i<KINDS && !rc;i++){
         prefix[2]=kinds[i];d->part[shard].begin[i]=w.count;
@@ -464,10 +483,11 @@ static int raw_build(struct efs_query_disk *d,struct efs_kv_lsm_snapshot *source
     }
     d->part[shard].count=w.count;d->part[shard].inodes=d->part[shard].end[0]-d->part[shard].begin[0];
     d->part[shard].names=d->part[shard].end[1]-d->part[shard].begin[1];
+    if(!rc)rc=writer_flush(&w);
     if(!rc && w.count && (fsync(w.raw) || fsync(w.index)))rc=EFS_ERR_IO;
     if(w.raw>=0)close(w.raw);
     if(w.index>=0)close(w.index);
-    return rc;
+    free(w.buffer);return rc;
 }
 static int entry_from(const uint8_t *key,uint32_t kl,const uint8_t *val,uint32_t vl,struct efs_name_entry *e)
 {

@@ -256,13 +256,14 @@ int main(void)
     /* Unique raw keys: exact search reuses its slot; absent and prefix
      * searches preserve lower-bound scan semantics and value capacity. */
     struct writer search={.d=d,.shard=98,.raw=-1,.index=-1};
+    search.buffer=malloc(2*RAW_WRITE_WINDOW);CHECK(search.buffer);
     d->disk_limit=UINT64_MAX;
     uint8_t search_key[11]={0,98,EFS_KV_KIND_INODE},search_value=0;
     for(unsigned i=0;i<31;i++){
         search_key[10]=(uint8_t)(2*i+2);search_value=(uint8_t)i;
         CHECK(!save(&search,search_key,sizeof(search_key),&search_value,1));
     }
-    close(search.raw);close(search.index);
+    CHECK(!writer_flush(&search));close(search.raw);close(search.index);free(search.buffer);
     d->part[98].count=31;d->part[98].end[0]=31;
     struct slot exact={0};uint64_t lower=UINT64_MAX;
     search_key[10]=32;read_calls=0;
@@ -276,21 +277,60 @@ int main(void)
     search_key[10]=0;CHECK(!seek(d,search_key,11,&lower,NULL) && lower==0);
     search_key[10]=63;CHECK(!seek(d,search_key,11,&lower,NULL) && lower==31);
     CHECK(!seek(d,search_key,3,&lower,NULL) && lower==0);
-    /* Raw record assembly must preserve bytes and never add an index entry
-     * after a short write followed by ENOSPC. It uses two writes, not three. */
+    /* Raw batches preserve bytes, offsets, empty values, and flush the raw
+     * data before any matching index slot. Failure must not publish a view. */
     uint8_t key[11]={0,99,EFS_KV_KIND_INODE},value[37],record[48];
     memset(value,0x39,sizeof(value));d->disk_limit=UINT64_MAX;
     struct writer writer={.d=d,.shard=99,.raw=-1,.index=-1};
+    writer.buffer=malloc(2*RAW_WRITE_WINDOW);CHECK(writer.buffer);
     write_calls=0;CHECK(!save(&writer,key,sizeof(key),value,sizeof(value)));
-    CHECK(write_calls==2 && writer.count==1 && writer.offset==sizeof(record));
+    CHECK(!write_calls && writer.count==1 && writer.offset==sizeof(record));
+    CHECK(!writer_flush(&writer));CHECK(write_calls==2);
     CHECK(!io_at(writer.raw,record,sizeof(record),0,0));
     CHECK(!memcmp(record,key,sizeof(key)) && !memcmp(record+sizeof(key),value,sizeof(value)));
-    partial_write=1;CHECK(save(&writer,key,sizeof(key),value,sizeof(value))==EFS_ERR_IO);
-    CHECK(writer.count==1 && writer.offset==sizeof(record));
-    struct stat index_stat;CHECK(!fstat(writer.index,&index_stat));
-    CHECK(index_stat.st_size==(off_t)sizeof(struct slot));
     CHECK(!save(&writer,key,sizeof(key),NULL,0));CHECK(writer.count==2);
-    close(writer.raw);close(writer.index);
+    CHECK(!writer_flush(&writer));
+    struct slot slot;CHECK(!io_at(writer.index,&slot,sizeof(slot),sizeof(slot),0));
+    CHECK(slot.offset==sizeof(record) && !slot.value_len && slot.key_len==sizeof(key));
+    CHECK(!save(&writer,key,sizeof(key),value,sizeof(value)));
+    partial_write=1;CHECK(writer_flush(&writer)==EFS_ERR_IO);
+    struct stat index_stat;CHECK(!fstat(writer.index,&index_stat));
+    CHECK(index_stat.st_size==(off_t)(2*sizeof(struct slot)));
+    close(writer.raw);close(writer.index);free(writer.buffer);
+    struct writer batch={.d=d,.shard=97,.raw=-1,.index=-1};
+    batch.buffer=malloc(2*RAW_WRITE_WINDOW);CHECK(batch.buffer);
+    key[1]=97;write_calls=0;
+    for(unsigned i=0;i<10000;i++) {
+        key[9]=(uint8_t)(i>>8);key[10]=(uint8_t)i;
+        CHECK(!save(&batch,key,sizeof(key),value,sizeof(value)));
+    }
+    CHECK(!writer_flush(&batch));CHECK(write_calls<20);
+    printf("raw batch: records=10000 writes=%u\n",write_calls);
+    for(unsigned i=0;i<10000;i++) {
+        CHECK(!io_at(batch.index,&slot,sizeof(slot),i*sizeof(slot),0));
+        CHECK(slot.offset==(uint64_t)i*sizeof(record) && slot.key_len==sizeof(key) && slot.value_len==sizeof(value));
+        CHECK(!io_at(batch.raw,record,sizeof(record),slot.offset,0));
+        CHECK(record[9]==(uint8_t)(i>>8) && record[10]==(uint8_t)i && !memcmp(record+sizeof(key),value,sizeof(value)));
+    }
+    close(batch.raw);close(batch.index);free(batch.buffer);
+    struct writer empty={.d=d,.shard=96,.raw=-1,.index=-1};
+    empty.buffer=malloc(2*RAW_WRITE_WINDOW);CHECK(empty.buffer);key[1]=96;write_calls=0;
+    for(unsigned i=0;i<10000;i++)CHECK(!save(&empty,key,sizeof(key),NULL,0));
+    CHECK(!writer_flush(&empty));CHECK(write_calls==6); /* Index window fills first. */
+    uint8_t *maximum=malloc(VALUE_MAX);CHECK(maximum);memset(maximum,0xa7,VALUE_MAX);
+    uint64_t before=empty.offset;
+    for(unsigned i=0;i<20;i++)CHECK(!save(&empty,key,sizeof(key),maximum,VALUE_MAX));
+    CHECK(!writer_flush(&empty));
+    for(unsigned i=0;i<20;i++) {
+        CHECK(!io_at(empty.index,&slot,sizeof(slot),(10000+i)*sizeof(slot),0));
+        CHECK(slot.offset==before+(uint64_t)i*(sizeof(key)+VALUE_MAX) && slot.value_len==VALUE_MAX);
+        uint8_t tail;CHECK(!io_at(empty.raw,&tail,1,slot.offset+sizeof(key)+VALUE_MAX-1,0));CHECK(tail==0xa7);
+    }
+    d->stop=cancel_budget;CHECK(save(&empty,key,sizeof(key),NULL,0)==EFS_ERR_BUSY);d->stop=NULL;
+    CHECK(!save(&empty,key,sizeof(key),NULL,0));fail_write_kind='i';write_faults=0;
+    CHECK(writer_flush(&empty)==EFS_ERR_IO && write_faults==1 && !fail_write_kind);
+    CHECK(!fstat(empty.index,&index_stat));CHECK(index_stat.st_size==(off_t)(10020*sizeof(slot)+3));
+    close(empty.raw);close(empty.index);free(empty.buffer);free(maximum);
     /* Reusing every FD slot must not reuse bytes from its previous file. */
     for(uint32_t shard=1;shard<=FD_CACHE+2;shard++){
         uint8_t byte=(uint8_t)shard;fd=make_file(d,shard,'r');CHECK(fd>=0);

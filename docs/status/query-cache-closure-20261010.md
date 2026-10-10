@@ -986,3 +986,37 @@ stopped. The writer reached 424576 files / 103.65625 GiB; its own cold handoff
 still waits for the complete 400 GiB verdict. Both terminal gates remain open.
 
 [Reused-source pilot, original population proof and exact handoff scripts](../../results/measure/20261010-w92-closure/scale-reuse-handoff/).
+
+
+## Bounded raw-record and slot batching
+
+The replacement's first live check showed 24816090 write syscalls after 99 s,
+while it was still building index partitions. The raw cache writer still issued
+one write per key/value record and one per index slot. It now uses two fixed
+64 KiB windows charged under the already-budgeted, mutually exclusive sort
+scratch. A compile-time assertion proves these windows fit that allowance;
+builder accounting stays 3864520 bytes. Raw bytes are flushed completely before
+matching index slots. Both tails flush before the existing checked raw/index
+fsync barriers. Any partial write or reserve failure aborts the candidate;
+authoritative metadata and the published old cache are unaffected.
+
+The focused oracle checks all 10000 raw records and matching offsets/lengths
+with 16 writes, empty values that fill the index window first, maximum-size
+values spanning raw window flushes, partial raw output followed by ENOSPC,
+partial index output followed by ENOSPC, and cancellation. Linux differential
+and IO tests pass, as does Mac compilation of both changed files with warnings
+as errors. A fresh 100000-file populated/reused-source build, unchanged round,
+cold restore, retained-view mutation/full export and fresh recovery pass;
+first build 107.644 s, fixed 3864520 builder bytes. The tiny partition pilot
+is dominated by many file/fsync operations; it is not evidence of a full-scale
+throughput improvement.
+
+The complete native repeat runs in host screen `w92-raw-native-20261010`, with
+`raw-native.log`, `.exit` and `.finished` under
+`/data1/efs/bench/w92-phase-native-20261010`. This raw batching change has not
+been put into the live scale process, waiting cold oracle or cluster daemons;
+wait for the complete native verdict before advancing those binaries. The
+current large run and its watcher are still PID 554207/554216, and the 400 GiB
+writer/handoff remain unchanged. W92 is still open.
+
+[Raw batching focused and complete pilot evidence](../../results/measure/20261010-w92-closure/raw-batching/).

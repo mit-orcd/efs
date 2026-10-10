@@ -1547,6 +1547,8 @@ fresh Linux NFSv4.0, retained payload recovery and loaded publication also pass.
 Bounded external-merge batching (`fd457076`) passes focused ordering, ENOSPC,
 cancellation, full native and complete 10m recovery gates. The queued 2^32
 kernel-cold oracle uses it; normal daemons remain on cdc13b88.
+Fixed-budget raw-record/slot batching passes focused fault and full 100k
+recovery pilots; its native repeat is pending before deployment.
 The completed 2^32 source population is reused by the new batched build
 (`w92-2p32-batched-v5`); the old build was intentionally superseded, preserving
 its evidence. The replacement and real capacity writer remain active.
