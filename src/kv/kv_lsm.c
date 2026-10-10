@@ -740,7 +740,7 @@ static void metadata_dirty(struct kv_lsm *l, const uint8_t *key, uint32_t len)
     case EFS_KV_KIND_INTENT: case EFS_KV_KIND_GUARD: case EFS_KV_KIND_REDUCE:
     case EFS_KV_KIND_DECISION: case EFS_KV_KIND_PVER: case EFS_KV_KIND_DSEQ:
     case EFS_KV_KIND_EXPORT: case EFS_KV_KIND_APPEND_CUR:
-        l->metadata_revision[shard]++;
+        if(l->metadata_revision[shard]!=UINT64_MAX)l->metadata_revision[shard]++;
         break;
     default: break;
     }
@@ -1330,6 +1330,12 @@ struct efs_kv_lsm_snapshot {
     struct kv_seg **pinned;
     uint32_t npinned;
 };
+uint64_t efs_kv_lsm_snapshot_bytes(const struct efs_kv_lsm_snapshot *s)
+{
+    if(!s)return 0;
+    uint64_t n=s->npinned?s->npinned:1;
+    return sizeof(*s)+n*(sizeof(*s->pinned)+sizeof(*s->input.l0))+s->input.mt.bytes;
+}
 
 void efs_kv_lsm_snapshot_release(struct efs_kv_lsm_snapshot *s)
 {
@@ -1353,11 +1359,18 @@ int efs_kv_lsm_snapshot_pin(struct efs_kv *kv, uint64_t mt_limit,
     if (!out || !kv || kv->ops!=&lsm_ops || !kv->ctx)
         return EFS_ERR_INVAL;
     l=kv->ctx;
+    if(mt_limit<sizeof(*s))return EFS_ERR_BUSY;
     s=calloc(1,sizeof(*s));
     if (!s) return EFS_ERR_NOMEM;
     pthread_mutex_lock(&l->mu);
     if (l->io_failed) { rc=EFS_ERR_IO; goto unlock; }
-    if (l->mt.bytes>mt_limit) { rc=EFS_ERR_BUSY; goto unlock; }
+    /* The copied source includes segment metadata, not just live values.
+     * Refuse before allocating/pinning if its complete retained footprint
+     * cannot fit the caller's budget. Checked subtraction avoids overflow. */
+    uint64_t slots=(uint64_t)l->n_l0+l->n_l1;
+    uint64_t arrays=(slots?slots:1)*(sizeof(*s->pinned)+sizeof(*s->input.l0));
+    if(slots>UINT32_MAX || sizeof(*s)>mt_limit || arrays>mt_limit-sizeof(*s) ||
+       l->mt.bytes>mt_limit-sizeof(*s)-arrays){rc=EFS_ERR_BUSY;goto unlock;}
     count=l->n_l0+l->n_l1;
     s->pinned=calloc(count ? count : 1,sizeof(*s->pinned));
     s->input.l0=calloc(count ? count : 1,sizeof(*s->input.l0));
@@ -1409,6 +1422,7 @@ int efs_kv_lsm_metadata_revisions(struct efs_kv *kv, uint64_t *out, uint32_t n)
     struct kv_lsm *l=kv->ctx;
     pthread_mutex_lock(&l->mu);
     int rc=l->io_failed ? EFS_ERR_IO : EFS_OK;
+    for(unsigned i=0;i<4096 && !rc;i++)if(l->metadata_revision[i]==UINT64_MAX)rc=EFS_ERR_OVERFLOW;
     if (rc==EFS_OK) memcpy(out,l->metadata_revision,sizeof(l->metadata_revision));
     pthread_mutex_unlock(&l->mu);
     return rc;
@@ -1417,6 +1431,7 @@ int efs_kv_lsm_snapshot_revisions(struct efs_kv_lsm_snapshot *s,
                                   uint64_t *out, uint32_t n)
 {
     if (!s || !out || n<4096) return EFS_ERR_INVAL;
+    for(unsigned i=0;i<4096;i++)if(s->input.metadata_revision[i]==UINT64_MAX)return EFS_ERR_OVERFLOW;
     memcpy(out,s->input.metadata_revision,sizeof(s->input.metadata_revision));
     return EFS_OK;
 }

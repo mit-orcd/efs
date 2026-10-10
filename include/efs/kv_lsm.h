@@ -95,7 +95,8 @@ int efs_kv_lsm_view_export(struct efs_kv_lsm_view *v, uint8_t group,
 /* Full applied-state snapshot for background metadata/index work. Unlike a
  * segment view, this includes a private copy of the live memtable (including
  * tombstones), captured atomically with the pinned segment set. No flush or
- * WAL write is required. mt_limit bounds memtable copying under the KV lock;
+ * WAL write is required. mt_limit bounds the snapshot object, copied memtable
+ * and retained segment/pin arrays under the KV lock;
  * BUSY means that budget was exceeded, IO means the engine is poisoned.
  * This is a local KV cut, not a cross-group Raft/transaction watermark.
  * Call from a background worker. Release snapshots promptly: compaction's old
@@ -114,6 +115,9 @@ int efs_kv_lsm_snapshot_get(struct efs_kv_lsm_snapshot *s,
                             const uint8_t *key, uint32_t klen,
                             uint8_t *val, uint32_t *vlen);
 void efs_kv_lsm_snapshot_release(struct efs_kv_lsm_snapshot *s);
+/* Retained snapshot allocations; excludes borrowed engine segments and
+ * temporary per-reader scan iterators, whose limits are reported separately. */
+uint64_t efs_kv_lsm_snapshot_bytes(const struct efs_kv_lsm_snapshot *s);
 /* Dirty hints for incremental index refresh. Arrays have 4096 entries. They
  * count applied writes to inode/dentry/lane and transaction metadata families,
  * not user operations. Reset on engine open/recovery; zero is not proof of an

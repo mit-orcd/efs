@@ -1308,8 +1308,25 @@ static void test_full_snapshot(void)
     CHECK(put_s(kv,"p/c","")==EFS_OK,"unflushed empty value");
     CHECK(efs_kv_lsm_snapshot_pin(kv,1,&failed)==EFS_ERR_BUSY && !failed,
           "snapshot budget is explicit");
+    struct kv_lsm *budget_store=kv->ctx;
+    pthread_mutex_lock(&budget_store->mu);
+    uint32_t saved_l0=budget_store->n_l0,saved_l1=budget_store->n_l1;
+    budget_store->n_l0=UINT32_MAX;budget_store->n_l1=1;
+    pthread_mutex_unlock(&budget_store->mu);
+    CHECK(efs_kv_lsm_snapshot_pin(kv,UINT64_MAX,&failed)==EFS_ERR_BUSY && !failed,
+          "overflowed segment count refuses before touching segment pointers");
+    pthread_mutex_lock(&budget_store->mu);
+    budget_store->n_l0=saved_l0;budget_store->n_l1=saved_l1;
+    pthread_mutex_unlock(&budget_store->mu);
     CHECK(efs_kv_lsm_snapshot_pin(kv,1<<20,&s)==EFS_OK,"pin unflushed state");
     if (!s) { efs_kv_lsm_close(kv);return; }
+    uint64_t snapshot_bytes=efs_kv_lsm_snapshot_bytes(s);
+    CHECK(snapshot_bytes<=1<<20 && snapshot_bytes>budget_store->mt.bytes,
+          "reported source bytes include copied values, object and segment lists");
+    CHECK(efs_kv_lsm_snapshot_pin(kv,snapshot_bytes-1,&failed)==EFS_ERR_BUSY && !failed,
+          "one byte below retained source requirement refuses");
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,snapshot_bytes,&failed),"exact source budget succeeds");
+    if(failed){CHECK(efs_kv_lsm_snapshot_bytes(failed)==snapshot_bytes,"exact charged snapshot size");efs_kv_lsm_snapshot_release(failed);failed=NULL;}
     CHECK(snapshot_is(s,"p/a","new")==EFS_OK,"snapshot includes memtable override");
     CHECK(snapshot_is(s,"p/b","")==EFS_ERR_NOT_FOUND,"snapshot applies tombstone");
     CHECK(snapshot_is(s,"p/c","")==EFS_OK,"snapshot preserves empty value");
@@ -1385,6 +1402,18 @@ static void test_metadata_dirty_hints(void)
     CHECK(efs_kv_batch(kv,items,4)==EFS_ERR_IO,"failed batch");
     CHECK(!efs_kv_lsm_metadata_revisions(kv,before,4096) && !memcmp(before,after,sizeof(before)),
           "rejected batch cannot advance dirty hints");
+    pthread_mutex_lock(&l->mu);l->metadata_revision[3]=UINT64_MAX-1;pthread_mutex_unlock(&l->mu);
+    CHECK(!efs_kv_put(kv,inode,sizeof(inode),(const uint8_t *)"i",1),"write exhausting revision");
+    CHECK(efs_kv_lsm_metadata_revisions(kv,before,4096)==EFS_ERR_OVERFLOW,"live saturated hints refuse comparisons");
+    CHECK(!efs_kv_put(kv,inode,sizeof(inode),(const uint8_t *)"i",1),"write after hint saturation");
+    CHECK(efs_kv_lsm_metadata_revisions(kv,before,4096)==EFS_ERR_OVERFLOW,"dirty hints never wrap to zero");
+    struct efs_kv_lsm_snapshot *saturated=NULL;
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,1<<20,&saturated),"saturated hint does not poison authoritative reads");
+    if(saturated){
+        CHECK(efs_kv_lsm_snapshot_revisions(saturated,before,4096)==EFS_ERR_OVERFLOW,"snapshot saturated hints refuse comparisons");
+        efs_kv_lsm_snapshot_release(saturated);
+    }
+    CHECK(!efs_kv_lsm_snapshot_revisions(s,before,4096) && !memcmp(before,pinned,sizeof(before)),"retained finite snapshot remains valid after live saturation");
     efs_kv_lsm_snapshot_release(s);
     efs_kv_lsm_close(kv);
     kv=open_store(EFS_KV_LSM_NOSYNC,0);

@@ -8244,7 +8244,16 @@ static void *host_query_thread(void *ctx)
         uint64_t now=query_mono_ms(),dirty=0;
         if (now-last_attempt<200) continue;
         int rc=efs_kv_lsm_metadata_revisions(h->kv,current,4096);
-        if (rc) continue;
+        if (rc) {
+            pthread_rwlock_wrlock(&h->query_lock);
+            h->query_error=rc;
+            pthread_rwlock_unlock(&h->query_lock);
+            if(rc!=last_error || now-last_error_log>=30000){
+                fprintf(stderr,"query-revisions: rc=%d\n",rc);last_error_log=now;
+            }
+            last_error=rc;
+            continue;
+        }
         for (uint32_t i=0;i<4096;i++) {
             uint64_t diff=current[i]>=published[i] ? current[i]-published[i] : HOST_QUERY_N;
             if (diff>=HOST_QUERY_N-dirty) { dirty=HOST_QUERY_N;break; }

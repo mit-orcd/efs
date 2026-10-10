@@ -10,7 +10,7 @@ profiling rounds do not satisfy them.
 | Immutable disk catalog, incremental exact aggregates, bounded builder scratch | implemented, differential/live/cold gates pass in previous checkpoint |
 | Aggregate retained-cache admission | implemented; focused and complete native suites pass; live deployment gate pending |
 | Durable changed-key watermarks and bounded catch-up/recovery | pending; current revisions are process-local hints and cold rebasing scans authority |
-| Explicit cardinality/offset/budget audit | in progress |
+| Explicit cardinality/offset/budget audit | revision saturation and complete source-allocation budgeting implemented; broader audit in progress |
 | Increasing-cardinality RSS, cold-cache, concurrent export/mutation and freshness | pending |
 | Synthetic partitioned index of at least 2^32 entries | pending; sparse offset probes alone cannot satisfy this |
 | Staged real-filesystem and fault/platform gates | previous smaller gates pass; closure matrix pending |
@@ -47,3 +47,21 @@ long-lived exports still need measurement. Aggregate admission alone does not
 finish durable incremental recovery or the scale gates.
 
 [W92](../backlog/work-items.md#w92) · [status index](README.md).
+
+## Source allocation and revision audit
+
+Dirty metadata revision counters now saturate and both live and pinned revision
+APIs return `EFS_ERR_OVERFLOW` at exhaustion. An older finite snapshot remains
+valid; authoritative KV writes/reads are not poisoned by a derived hint limit.
+The query worker records hint-read failures rather than silently retaining a
+zero refresh error. Exhaustion is a refusal, not a comparison that can wrap and
+misclassify changed metadata as unchanged.
+
+Source snapshot admission now charges its fixed object, copied memtable entries
+and both segment/pin arrays, with checked segment-count addition. The existing
+64 MiB host source budget remains. `efs_kv_lsm_snapshot_bytes` exposes this retained
+footprint; borrowed storage-engine segment objects and temporary per-reader scan
+iterators remain separate audit items. Tests cover exact admission, one byte below
+it, impossible segment counts, finite retained views and counter exhaustion.
+KV durability, incremental differential and complete native gates pass.
+The deployment/live gates for this next logical fix are pending.
