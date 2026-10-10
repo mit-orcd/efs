@@ -155,3 +155,10 @@ cleared before every reply. Existing successful/in-range/unsupported/invalid
 extent behavior and truncate errno are preserved. The original source fails
 the positive-errno assertion. The memo regression now compiles the actual
 status helper used by this callback.
+
+OPENDIR had the same unavailable-authority-as-absence defect: its callback
+returned ENOENT for every metadata lookup failure. It now preserves the common
+stat errno mapping. A production-callback fixture checks IO/network/quorum,
+BUSY/not-primary, allocation/access failures and actual absence, confirms no
+handle allocation or replacement on refusal, and balances successful handles.
+The old callback fails the errno assertions; the corrected callback passes.

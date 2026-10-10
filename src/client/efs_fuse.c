@@ -6102,7 +6102,7 @@ static void ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
         int rc = efs_client_stat_ino((efs_ino_t)ino, &row);
         t_req = NULL;
         if (rc != EFS_OK) {
-            fuse_reply_err(req, ENOENT);
+            fuse_reply_err(req, -fuse_stat_errno(rc));
             return;
         }
         if (!efs_mode_is_dir(row.mode)) {
