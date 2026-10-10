@@ -4,6 +4,7 @@
 #include "efs/publication_ack.h"
 #include "efs/writer_state.h"
 #include "efs/put_ticket.h"
+#include "efs/put_upload.h"
 #include "efs/meta_cmd.h"
 #include "efs/erasure.h"
 #include "efs/checksum.h"
@@ -19,16 +20,30 @@ static int ticketed_mode;
 static uint64_t ticket_generation,ticket_epoch;
 static struct efs_client_put_request *ticket_owner;
 static struct efs_put_ticket admitted_ticket;
+static uint8_t ticket_probe_fragment[EFS_MIN_CHUNK_SIZE/2];
 static struct efs_opid next_put_id;
 static uint64_t object_for(uint64_t sequence,uint32_t ci) {
  (void)sequence;assert(!efs_client_put_id(&next_put_id));
  return efs_meta_candidate_gen(next_put_id.client_uuid,next_put_id.session_epoch,next_put_id.seq,ci,0);
 }
 static int connect_node(unsigned node);
+static int ticket_upload_rpc(unsigned fragment,const uint8_t *data,uint32_t len)
+{
+ uint8_t header[EFS_PUT_UPLOAD_HEADER_LEN];
+ assert(!efs_put_upload_header(&admitted_ticket,1,fragment,header));
+ int fd=connect_node(fragment);
+ assert(!efs_send_msg_parts(fd,EFS_MSG_PUT_TICKETED,header,sizeof(header),data,len));
+ uint8_t type;void *reply=NULL;uint32_t bytes;
+ assert(!efs_recv_msg(fd,&type,&reply,&bytes));close(fd);
+ assert(type==EFS_MSG_PUT_TICKETED_REPLY&&bytes==EFS_PUT_UPLOAD_REPLY_LEN);
+ int rc=(int32_t)efs_put_upload_rd32(reply);free(reply);return rc;
+}
+
 static void published_ticket(void) {
  if(!ticketed_mode)return;
  uint32_t state=0;assert(!efs_client_put_resume(ticket_owner,1,&state) && state==EFS_PUT_TICKET_PUBLISHED);
  assert(efs_client_put_free(ticket_owner)==EFS_ERR_BUSY);
+ assert(ticket_upload_rpc(0,ticket_probe_fragment,sizeof(ticket_probe_fragment))==EFS_ERR_STALE);
  /* The retirement RPC may commit even when every response is discarded. */
  uint8_t wire[2+EFS_PUT_TICKET_WIRE_LEN];
  wire[0]=efs_raft_shard_group(efs_kv_lane_shard(admitted_ticket.ino,admitted_ticket.ci%EFS_META_LANES));
@@ -41,6 +56,7 @@ static void published_ticket(void) {
   assert(rc==EFS_ERR_BUSY || rc==EFS_ERR_NET || rc==EFS_ERR_NOT_PRIMARY || rc==EFS_ERR_NO_QUORUM);usleep(100000);
  }
  assert(!rc && !efs_client_put_retire(ticket_owner));
+ assert(ticket_upload_rpc(0,ticket_probe_fragment,sizeof(ticket_probe_fragment))==EFS_ERR_STALE);
  assert(!efs_client_put_free(ticket_owner));ticket_owner=NULL;
 }
 
@@ -95,7 +111,31 @@ static struct efs_chunk_rec upload(efs_ino_t ino,uint32_t ci,uint64_t object,con
         }
         assert(!rc && state==EFS_PUT_TICKET_ADMITTED);
     }
+    if(ticketed_mode && sequence) {
+        memcpy(ticket_probe_fragment,parts[0],sizeof(ticket_probe_fragment));
+        parts[0][0]^=1;
+        assert(ticket_upload_rpc(0,parts[0],EFS_MIN_CHUNK_SIZE/2)==EFS_ERR_PROTO);
+        parts[0][0]^=1;
+        /* Discard an actual successful response before retained client upload.
+         * The same immutable ticket must resolve ambiguity without NEW hints. */
+        int rc=EFS_ERR_BUSY;
+        for(unsigned attempt=0;attempt<40;attempt++) {
+            rc=ticket_upload_rpc(0,parts[0],EFS_MIN_CHUNK_SIZE/2);
+            if(rc==EFS_OK)break;
+            assert(rc==EFS_ERR_BUSY || rc==EFS_ERR_NOT_PRIMARY || rc==EFS_ERR_NO_QUORUM);usleep(100000);
+        }
+        assert(!rc);
+    }
     for(unsigned i=0;i<3;i++) {
+        if(ticketed_mode && sequence) {
+            int rc=EFS_ERR_BUSY;uint8_t path=255;
+            for(unsigned attempt=0;attempt<40;attempt++) {
+                rc=efs_client_put_fragment(ticket_owner,i,parts[i],EFS_MIN_CHUNK_SIZE/2,&path);
+                if(rc==EFS_OK)break;
+                assert(rc==EFS_ERR_BUSY || rc==EFS_ERR_NET || rc==EFS_ERR_NOT_PRIMARY || rc==EFS_ERR_NO_QUORUM);usleep(100000);
+            }
+            assert(!rc);free(parts[i]);continue;
+        }
         size_t bytes=sizeof(struct efs_msg_put_chunk)+EFS_MIN_CHUNK_SIZE/2;
         struct efs_msg_put_chunk *put=calloc(1,bytes);assert(put);
         put->export_id=1;put->ino=ino;put->chunk_index=ci;put->fragment_index=i;

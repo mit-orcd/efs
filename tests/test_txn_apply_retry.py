@@ -27,6 +27,10 @@ int main(void) {
   assert(policy(txn[i],0,EFS_ERR_NOMEM)==EFS_ERR_NOMEM);
   for(unsigned j=0;j<sizeof(business)/sizeof(business[0]);j++)assert(policy(txn[i],0,business[j])==EFS_OK);
  }
+ for(unsigned j=0;j<sizeof(business)/sizeof(business[0]);j++)
+  assert(policy(EFS_MD_CMD_SESSION,EFS_MD_SESS_FINISH,business[j])==EFS_OK);
+ assert(policy(EFS_MD_CMD_SESSION,EFS_MD_SESS_FINISH,EFS_ERR_IO)==EFS_ERR_IO);
+ assert(policy(EFS_MD_CMD_SESSION,EFS_MD_SESS_FINISH,EFS_ERR_NOMEM)==EFS_ERR_NOMEM);
  assert(policy(EFS_MD_CMD_SESSION,EFS_MD_SESS_FENCE_LOC,EFS_ERR_BUSY)==EFS_OK);
  assert(policy(EFS_MD_CMD_SESSION,EFS_MD_SESS_FENCE_LOC,EFS_ERR_IO)==EFS_ERR_IO);
  assert(policy(EFS_MD_CMD_PUT_TICKET_ADMIT,0,EFS_ERR_IO)==EFS_ERR_IO);

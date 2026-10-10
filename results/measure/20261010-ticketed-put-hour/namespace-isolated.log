@@ -1,0 +1,4 @@
+fixture /data1/efs/lease-retention-fixtures/namespace-barrier-cgbd_4pq
+raft-mkfs rc=0 leader_hint=1 index=2 salt=10234921035496153521
+namespace isolated PASS
+owned private daemons stopped

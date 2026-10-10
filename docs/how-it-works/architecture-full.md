@@ -1538,13 +1538,22 @@ increases within the tested budget. Live throughput and narrower NFS evidence
 are qualified separately. Runtime `a8a15a14` is restored with ordinary `.efs`
 mount opt-in disabled; eight retained trees pass cold query/payload checks.
 
-[W92 latest integration and three further profiles](../status/query-cache-next-three-rounds-20261010.md)
+[W92 previous integration and three further profiles](../status/query-cache-next-three-rounds-20261010.md)
 records the captured branch boundary, parent-rollup coalescing and constant-time
 cache descriptor hits, with bounded memory and persistence regressions. Controlled
 measurements show 39.1% fewer preads, 34.9% fewer pwrites and 15.0% lower median
-process CPU, preserving fsync counts. Final runtime `f5164bb3` passes native,
+process CPU, preserving fsync counts. At that checkpoint runtime `f5164bb3` passes native,
 POSIX core/concurrent/extras and cold persistence gates; eleven retained trees
 verify 78000 files and 724 payload samples, with normal `.efs` opt-out restored.
+
+[W92 incremental-cache implementation](../status/query-cache-incremental-20261010.md)
+tracks bounded change/ancestor sets, immutable partition reuse, exact directory
+recomputation and full-build fallback. Three all-node profiles pass content
+oracles (124 / 165 / 159 files/s); coalescing reduces sampled cache cost.
+Final runtime `d83f3f06` passes full native, 212 core, 64 two-client,
+4 extras with one unsupported shared-mmap skip, and 26/26 cold persistence.
+Fourteen retained trees verify 96000 files / 922 payload samples.
+Median unchanged refresh falls from 720 to 42 ms on a fixed namespace.
 
 [Combined branch integration](../status/find-stats-all-branches-20261009.md) records
 `devel`, W66 and persistence-pressure merges into `devel-find-stats`, preserving
@@ -5737,6 +5746,14 @@ gates cover these primitives. This does not close production PUT validation,
 default flush, durable per-ticket membership or abandoned-member deletion ACKs.
 See the [merged checkpoint](../status/dependency-package-20261009.md#merged-baseline-and-durable-storage-session-barrier--oct-10-utc).
 
+**Oct 10 ticketed receiver progress:** actual typed publication helpers now
+upload via a fixed-endian ticketed receiver. It checks fresh ADMITTED/FileID
+views, exact fragment digest/destination/configured geometry and guards storage
+with the durable session floor. Three real unpublished fragments survive cold
+restart; completed revocation rejects actual late uploads on every destination.
+Default FUSE flush, durable per-ticket membership capture and all-member abandoned
+collection remain open. [Checkpoint](../status/dependency-package-20261009.md#exact-finish-apply-and-ticketed-put-receiver--oct-10-0600-utc).
+
 ### W87 · Buffered concurrent append loses records under broader load
 
 **Oct 8 AMD follow-up:** Retrieved the original NUC failure TSV/manifest: missing W1S0002 and W0S0004 records, beyond first-record loss. AMD broad buffered POSIX 216/0/1 skip and peer 64/64 pass, plus mixed-close append during GC and 800 exact cold records. The separate identical-RPC reservation race is fixed, but is not established as this incident's sole cause.
@@ -5811,20 +5828,29 @@ the original record and withdrawn interpretation remain retained.
 
 ### W92 · .efs/find and .efs/stats server snapshots and large namespace acceptance
 
+Oct 10 incremental checkpoint: fixed 1024-item change/ancestor sets reuse immutable
+derived partitions and recompute exact affected rollups, with full-build fallback.
+Three Xorinox profiles pass 6000-file oracles each (124 / 165 / 159 files/s); cache
+refresh coalescing reduces sampled cost. Full sequential discovery, aggregate
+cache capacity and scale/fault acceptance remain open.
+[Implementation, profiles and gates](../status/query-cache-incremental-20261010.md).
+
 **Oct 9 disk backend progress:** [implementation checkpoint](../status/query-disk-backend-20261009.md)
 records the persistent partition backend, bounded scratch, immutable generation
 leases and validated cold restore. Functional differential and private live
 gates pass, including clean Xorinox mutation queries after an explicitly authorized
 wipe. Per-generation logical disk budgeting is implemented in `47e7b886`.
-Derived-stat refresh still performs a full disk pass; aggregate cache-space
-budgets, incremental derived maintenance and the scale gates below remain open.
+At that checkpoint derived-stat refresh still performed a full disk pass. The
+Oct 10 incremental checkpoint above supersedes this limitation; aggregate
+cache-space budgets and the scale gates below remain open.
 
 **Oct 9 tiny-file profiling:** fixed read windows and immutable-file persistence
 reuse deployed as `6e841662`; identical 25425-file metadata copies show median
 unchanged refresh 1.977 → 0.955 seconds. Unit preads fall 50.2%. Live creation
 225 → 85 files/s remains a confounded follow-up, not a cache-only verdict.
 See [indexed checkpoint](../status/query-cache-tiny-profile-20261009.md).
-Full incremental stats and aggregate disk control remain open.
+Incremental stats were still open at this checkpoint and are now implemented
+by the Oct 10 work above; aggregate disk control remains open.
 
 **Oct 9 additional three rounds:** exact inode matches stop early, raw key/value
 bytes use one bounded write and new raw/index files retain one checked writing-
@@ -5983,6 +6009,15 @@ find/stats checkpoint; never treat the private fixture as deployed acceptance.
 <a id="w93"></a>
 
 ### W93 · Broader durable Raft group commit for tiny-file metadata
+
+**Oct 10 atomic apply repair in progress:** The final retained-checkpoint fault
+exposed duplicate hardlink application (cold n3 nlink 3 instead of 2). Applied
+KV effects and a node-local group cursor now share one bounded atomic WAL
+record; restart validates that proof before using legacy hints. The initial
+maximum-cadence crash/cold smoke passes. APPEND late-receipt replay is separately
+fixed with negative controls. Full frozen-binary gates and repeated sustained
+NUC acceptance remain required; default settings are unchanged. See
+[repair and current acceptance](../status/w93-atomic-apply-20261010.md).
 
 **Oct 10 checkpoint investigation:** All 16 frozen local branch tips are merged
 into `devel-persistence-pressure`. `4bb7b169` fixes failed applied-marker writes

@@ -2641,10 +2641,10 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP)
               ? EFS_OK
               : rc;
-    /* FENCE_LOC BUSY must let a later RESOLVE drain the owner intent. It is
+    /* FINISH/FENCE_LOC BUSY must let later ACK/RESOLVE drain ownership. It is
      * a rejected command, not a retryable storage failure at this log index. */
     if (cmd[0] == EFS_MD_CMD_SESSION && clen >= 2 &&
-        (cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
+        (cmd[1] == EFS_MD_SESS_FINISH || cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
          cmd[1] == EFS_MD_SESS_LEASE_EDGE_DEFERRED || cmd[1] == EFS_MD_SESS_LEASE_OPEN ||
          cmd[1] == EFS_MD_SESS_LEASE_CLOSE) &&
         rc != EFS_ERR_IO && rc != EFS_ERR_NOMEM)
@@ -8133,6 +8133,7 @@ static void *host_gc_thread(void *arg)
  * a query path. Dirty revisions are refresh hints, never Raft watermarks. */
 #define HOST_QUERY_BYTES (256ULL << 20)
 #define HOST_QUERY_MEMTABLE (64ULL << 20)
+#include "query_refresh.h"
 #define HOST_QUERY_N 256
 #define HOST_QUERY_T_MS 2000
 #define HOST_QUERY_BUILD_MS 10000
@@ -8296,9 +8297,8 @@ static void *host_query_thread(void *ctx)
             lag->lag_sample_ms=now;lag->lag_sample_ns=now_ns();
         }
         pthread_rwlock_unlock(&h->query_lock);
-        if (!dirty && !initial) continue;
-        if (!initial && dirty<HOST_QUERY_N && now-first_dirty<HOST_QUERY_T_MS) continue;
-        if (failed && last_attempt && now-last_attempt<HOST_QUERY_T_MS) continue;
+        if (!efs_query_refresh_due(now,first_dirty,last_attempt,dirty,initial,failed,
+                                   HOST_QUERY_N,HOST_QUERY_T_MS)) continue;
         last_attempt=now;
         struct efs_kv_lsm_snapshot *source=NULL;
         struct efs_server_query_view view={0};
@@ -8514,12 +8514,12 @@ static int query_command_begin(struct query_request *q)
         "{\"version\":1,\"operation\":\"%s\",\"complete\":true,\"expiry\":\"unavailable\","
         "\"snapshot\":{\"boot_id\":%llu,\"generation\":%llu,\"source_ns\":%llu,\"built_ns\":%llu,"
         "\"applied_g0\":%llu,\"applied_g2\":%llu,\"term_g0\":%llu,\"term_g2\":%llu,"
-        "\"refresh_error\":%d,\"refresh_n\":%d,\"refresh_ms\":%d,\"pending_changes_at_least\":%llu,\"pending_age_ms_at_sample\":%llu,\"lag_sample_ns\":%llu,\"refresh_overdue\":%s},",
+        "\"refresh_error\":%d,\"refresh_n\":%d,\"refresh_ms\":%d,\"refresh_min_ms\":%d,\"pending_changes_at_least\":%llu,\"pending_age_ms_at_sample\":%llu,\"lag_sample_ns\":%llu,\"refresh_overdue\":%s},",
         op,(unsigned long long)v->boot_id,(unsigned long long)v->generation,
         (unsigned long long)v->source_ns,(unsigned long long)v->built_ns,
         (unsigned long long)v->applied[0],(unsigned long long)v->applied[1],
         (unsigned long long)v->terms[0],(unsigned long long)v->terms[1],q->reply->refresh_error,
-        HOST_QUERY_N,HOST_QUERY_T_MS,(unsigned long long)v->pending_changes,
+        HOST_QUERY_N,HOST_QUERY_T_MS,HOST_QUERY_T_MS,(unsigned long long)v->pending_changes,
         (unsigned long long)pending_age,(unsigned long long)v->lag_sample_ns,
         v->pending_changes && pending_age>=HOST_QUERY_T_MS ? "true" : "false");
     if (n<0 || (size_t)n>=sizeof(header)) return EFS_ERR_OVERFLOW;

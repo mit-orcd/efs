@@ -7,6 +7,7 @@ reachable to clients while all of its peer connections are cut in both direction
 """
 import concurrent.futures
 import argparse
+import json
 import os
 from pathlib import Path
 import re
@@ -22,6 +23,7 @@ parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--transactions',action='store_true',help='test cross-parent namespace decisions across an old-leader partition')
 parser.add_argument('--publication',action='store_true',help='test stored publication receipts through an isolated old leader')
 parser.add_argument('--configuration',action='store_true',help='change group voters while the old leader is isolated')
+parser.add_argument('--mode',choices=('direct','buffered'),default='direct',help='private daemon storage mode (default: direct)')
 args=parser.parse_args()
 base, proxy_base, count = 21340, 21400, 3
 isolated = None
@@ -110,7 +112,8 @@ def leader(exclude=None):
     return None
 
 work = Path(tempfile.mkdtemp(prefix='efs-read-freshness-'))
-print('Evidence:', work, flush=True)
+print('Evidence:', work, 'mode:', args.mode, 'transport: tcp', flush=True)
+(work/'manifest.json').write_text(json.dumps({'mode':args.mode,'transport':'tcp','nodes':count,'transactions':args.transactions,'publication':args.publication,'configuration':args.configuration},indent=2))
 servers, logs, listeners = [], [], []
 try:
     (work/'connect.c').write_text(shim)
@@ -131,7 +134,8 @@ try:
                    LD_PRELOAD=str(work/'connect.so'),TEST_BASE=str(base),
                    TEST_PROXY=str(proxy_base),TEST_NODE=str(node))
         cmd = [str(source/'efsd'),'--node-id',str(node+1),'--addr','127.0.0.1',
-               '--port',str(base+node),'--storage',str(storage),'--no-direct-io']
+               '--port',str(base+node),'--storage',str(storage),
+               '--direct-io' if args.mode=='direct' else '--no-direct-io']
         if node:
             cmd += ['--join',f'127.0.0.1:{base}']
         servers.append(subprocess.Popen(cmd,env=env,stdout=log,stderr=log))

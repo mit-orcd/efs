@@ -328,6 +328,8 @@ int efs_client_put_manifest(const struct efs_client_put_request *,
                             struct efs_put_ticket *);
 int efs_client_put_resume(struct efs_client_put_request *,int probe_only,
                           uint32_t *state);
+int efs_client_put_fragment(struct efs_client_put_request *,uint32_t,
+                             const uint8_t *,uint32_t,uint8_t *);
 int efs_client_put_retire(struct efs_client_put_request *);
 /* Ambiguous admission, revocation and RECLAIMING retain ownership. Only a
  * never-attempted request or an observed PUBLISHED, retired ticket may be freed here. */

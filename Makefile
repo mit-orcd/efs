@@ -92,7 +92,7 @@ COMMON_SRCS = src/common/admission.c src/meta/append_plan.c $(COMMON_DIR)/public
               src/client/ops.c \
               src/client/read.c \
               src/client/write.c \
-              src/client/bufpool.c src/client/writer_state.c src/client/publication_ack_owner.c src/client/publication_writeback.c src/client/put_ticket_owner.c \
+              src/client/bufpool.c src/client/writer_state.c src/client/publication_ack_owner.c src/client/publication_writeback.c src/client/put_ticket_owner.c src/client/put_upload.c \
               src/client/inode_rpc.c \
               src/client/stage_evict.c \
               src/client/node_cache.c
@@ -100,11 +100,11 @@ COMMON_SRCS = src/common/admission.c src/meta/append_plan.c $(COMMON_DIR)/public
 COMMON_OBJS = $(COMMON_SRCS:.c=.o)
 LIB = libefs.a
 
-TEST_SRCS = tests/test_txn_resolve_faults.c tests/test_namespace_session.c tests/test_admission.c tests/test_store_containers.c tests/test_principles_index_fault.c tests/test_principles_index.c tests/test_query_catalog.c tests/test_name_index.c tests/test_append_transaction.c tests/test_store_durability.c tests/test_append_receipt.c tests/test_put_ticket.c tests/test_store_gc.c tests/test_bench_latency.c tests/test_store_overwrite.c tests/test_writer_routing.c tests/test_kv_seg_index.c tests/test_mtime_barrier.c tests/test_publication_session.c tests/test_publication_ack.c tests/test_publication_recovery.c tests/test_lane_bootstrap_recovery.c tests/test_fence_view.c tests/test_reply_buffers.c tests/test_bufpool.c tests/test_erasure.c tests/test_placement.c tests/test_rdma_xprt.c tests/test_wire.c tests/test_data.c tests/test_kv.c tests/test_kv_lsm.c tests/test_raft_store.c tests/test_meta_apply.c tests/test_raft.c tests/test_sim.c tests/test_txn.c tests/test_session.c tests/test_lock.c tests/test_stage_evict.c tests/test_conn_fd.c tests/test_query_disk.c tests/test_query_disk_io.c
-TEST_BINS = tests/test_txn_resolve_faults tests/test_namespace_session tests/test_admission tests/test_store_containers tests/test_principles_index_fault tests/test_principles_index tests/test_query_catalog tests/test_name_index tests/test_append_transaction tests/test_store_durability tests/test_append_receipt tests/test_put_ticket tests/test_store_gc tests/test_bench_latency tests/test_store_overwrite tests/test_writer_routing tests/test_kv_seg_index tests/test_mtime_barrier tests/test_publication_session tests/test_publication_ack tests/test_publication_recovery tests/test_lane_bootstrap_recovery tests/test_fence_view tests/test_reply_buffers tests/test_bufpool tests/test_erasure tests/test_placement tests/test_rdma_xprt tests/test_wire tests/test_data tests/test_kv tests/test_kv_lsm tests/test_raft_store tests/test_meta_apply tests/test_raft tests/test_sim tests/test_txn tests/test_session tests/test_lock tests/test_stage_evict tests/test_conn_fd tests/test_query_disk tests/test_query_disk_io
+TEST_SRCS = tests/test_query_refresh.c tests/test_txn_resolve_faults.c tests/test_namespace_session.c tests/test_admission.c tests/test_store_containers.c tests/test_principles_index_fault.c tests/test_principles_index.c tests/test_query_catalog.c tests/test_name_index.c tests/test_append_transaction.c tests/test_store_durability.c tests/test_append_receipt.c tests/test_put_ticket.c tests/test_store_gc.c tests/test_bench_latency.c tests/test_store_overwrite.c tests/test_writer_routing.c tests/test_kv_seg_index.c tests/test_mtime_barrier.c tests/test_publication_session.c tests/test_publication_ack.c tests/test_publication_recovery.c tests/test_lane_bootstrap_recovery.c tests/test_fence_view.c tests/test_reply_buffers.c tests/test_bufpool.c tests/test_erasure.c tests/test_placement.c tests/test_rdma_xprt.c tests/test_wire.c tests/test_data.c tests/test_kv.c tests/test_kv_lsm.c tests/test_raft_store.c tests/test_meta_apply.c tests/test_raft.c tests/test_sim.c tests/test_txn.c tests/test_session.c tests/test_lock.c tests/test_stage_evict.c tests/test_conn_fd.c tests/test_query_disk.c tests/test_query_disk_io.c
+TEST_BINS = tests/test_query_refresh tests/test_txn_resolve_faults tests/test_namespace_session tests/test_admission tests/test_store_containers tests/test_principles_index_fault tests/test_principles_index tests/test_query_catalog tests/test_name_index tests/test_append_transaction tests/test_store_durability tests/test_append_receipt tests/test_put_ticket tests/test_store_gc tests/test_bench_latency tests/test_store_overwrite tests/test_writer_routing tests/test_kv_seg_index tests/test_mtime_barrier tests/test_publication_session tests/test_publication_ack tests/test_publication_recovery tests/test_lane_bootstrap_recovery tests/test_fence_view tests/test_reply_buffers tests/test_bufpool tests/test_erasure tests/test_placement tests/test_rdma_xprt tests/test_wire tests/test_data tests/test_kv tests/test_kv_lsm tests/test_raft_store tests/test_meta_apply tests/test_raft tests/test_sim tests/test_txn tests/test_session tests/test_lock tests/test_stage_evict tests/test_conn_fd tests/test_query_disk tests/test_query_disk_io
 
 
-SERVER_SRCS = src/server/put_fence.c src/server/efsd.c src/server/store.c src/server/store_nvme.c src/server/store_containers.c \
+SERVER_SRCS = src/server/put_fence.c src/server/put_upload.c src/server/efsd.c src/server/store.c src/server/store_nvme.c src/server/store_containers.c \
               src/server/handler.c \
               src/server/cluster.c \
               src/server/peer_pool.c src/server/writer.c \
@@ -296,6 +296,10 @@ test: all
 	./tests/test_put_storage_fence
 	python3 tests/test_storage_fence_members.py
 	python3 tests/test_storage_fence_retry.py
+	$(MAKE) tests/test_put_upload_server
+	./tests/test_put_upload_server
+	$(MAKE) tests/test_put_upload_client
+	./tests/test_put_upload_client
 	python3 tests/test_applied_interval.py
 	./tests/test_store_containers
 	python3 tests/test_lookup_errno.py
@@ -372,6 +376,7 @@ test: all
 	./tests/test_query_catalog
 	./tests/test_query_disk
 	./tests/test_query_disk_io
+	./tests/test_query_refresh
 	./tests/test_name_index
 	./tests/test_bench_latency
 	./tests/test_store_overwrite
@@ -532,7 +537,7 @@ clean:
 	rm -f src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o src/sim/opid.o
 	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt efs-query blake3-bench
 	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim
-	rm -f $(TEST_BINS) tests/test_put_storage_fence tests/principles_index_fault.o
+	rm -f $(TEST_BINS) tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_upload_client tests/principles_index_fault.o
 	rm -f .build_id.stamp
 
 $(BLAKE3_DIR)/blake3_sse2.o: $(BLAKE3_DIR)/blake3_sse2.c
@@ -595,8 +600,20 @@ tests/test_txn_resolve_faults: tests/test_txn_resolve_faults.o $(LIB)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 # Internal I/O fault regression compiles the actual disk-cache implementation.
+src/meta/query_disk.o tests/test_query_disk_io: src/meta/query_disk_incremental.h
 tests/test_query_disk_io: src/meta/query_disk.c src/meta/query_disk.h
 
 # Independent production storage-session barrier, including syscall failures.
 tests/test_put_storage_fence: tests/test_put_storage_fence.c src/server/put_fence.c src/server/server_internal.h $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ $< $(LIB) $(LDFLAGS)
+
+tests/test_put_upload_server: tests/test_put_upload_server.c src/server/put_upload.c src/server/put_fence.c include/efs/put_upload.h include/efs/put_ticket.h src/server/server_internal.h $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ $< $(LIB) $(LDFLAGS)
+
+tests/test_put_upload_client: tests/test_put_upload_client.c src/client/put_upload.c include/efs/put_upload.h include/efs/put_ticket.h src/client/client_internal.h $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ $< $(LIB) $(LDFLAGS)
+# Publication coalescing is shared by the real worker and its policy gate.
+src/server/raft_host.o tests/test_query_refresh: src/server/query_refresh.h
+
+# Ticket wire changes must rebuild both endpoints and their actual handler.
+src/client/put_upload.o src/server/put_upload.o src/server/handler.o: include/efs/put_upload.h include/efs/put_ticket.h
