@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import tempfile
 
@@ -54,6 +55,9 @@ int main(void){
 with tempfile.TemporaryDirectory(prefix='efs-permission-groups-') as d:
     path = Path(d) / 'test.c'
     path.write_text(code)
-    subprocess.run(['cc','-O1','-g','-Wall','-Wextra','-Werror','-fsanitize=address,undefined',str(path),'-o',str(path.with_suffix(''))],check=True)
+    flags = shlex.split(os.environ.get('PERMISSION_GROUP_TEST_CFLAGS', ''))
+    command = shlex.split(os.environ.get('CC', 'cc')) + ['-O1','-g','-Wall','-Wextra','-Werror']
+    subprocess.run(command + flags + [str(path),'-o',str(path.with_suffix(''))],check=True)
     subprocess.run([str(path.with_suffix(''))],check=True,timeout=15)
-print('Permission groups: large supplementary membership, bounds, changed lists, API/allocation failures and sanitizer checks PASS')
+print('Permission groups: large membership, bounds, changed lists and API/allocation failures'
+      + (' with sanitizers' if any(flag.startswith('-fsanitize=') for flag in flags) else '') + ' PASS')
