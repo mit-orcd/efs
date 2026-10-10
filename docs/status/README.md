@@ -29,6 +29,13 @@ unimplemented; unavailable/refusal tests are not lifecycle acceptance.
 
 ## Tiny-file performance follow-up
 
+[W97 matched three-node SSD tests](w97-three-drive-20261010.md): NVMe
+31.83→10.80 files/s with Raft sync 2.465→6.993 ms; SATA 562.73→299.40 with
+0.150→0.319 ms. Both slow, at very different absolute latency; no reported NVMe
+thermal event during recorded slow phase. Cache/ceiling remains unproved.
+128 private cold payload checks pass and normal four-node service restores.
+
+
 [W97 latest merged NUC observation](w97-latest-nvme-20261010.md) deploys
 `6b8f05acb484`: first-minute 152/159 files/s falls to 53/48 before/after a
 10-minute creation pause, with higher NVMe flush latency. Rest restores only

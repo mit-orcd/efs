@@ -1500,6 +1500,13 @@ unimplemented; unavailable/refusal tests are not lifecycle acceptance.
 
 ### Tiny-file performance follow-up
 
+[W97 matched three-node SSD tests](../status/w97-three-drive-20261010.md): NVMe
+31.83→10.80 files/s with Raft sync 2.465→6.993 ms; SATA 562.73→299.40 with
+0.150→0.319 ms. Both slow, at very different absolute latency; no reported NVMe
+thermal event during recorded slow phase. Cache/ceiling remains unproved.
+128 private cold payload checks pass and normal four-node service restores.
+
+
 [W97 latest merged NUC observation](../status/w97-latest-nvme-20261010.md) deploys
 `6b8f05acb484`: first-minute 152/159 files/s falls to 53/48 before/after a
 10-minute creation pause, with higher NVMe flush latency. Rest restores only
@@ -6354,6 +6361,20 @@ or present the Raft improvement as measured KV acceptance.
 <a id="w97"></a>
 
 ### W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
+
+**Oct 10 matched three-node drive test:** same frozen `6b8f05acb484` engine,
+20 minutes per drive, true three-voter groups, preserved regular cluster stopped.
+NVMe first/final rates 31.83/10.80 files/s and pooled server Raft sync
+2.465/6.993 ms; SATA 562.73/299.40 files/s and 0.150/0.319 ms. Both drives slow;
+SATA late rates fluctuate. NVMe root telemetry during slow phase has no reported
+thermal events/warnings (composite <=45.85°C, sensor2 <=61.85°C). SATA health is
+unavailable. Large inbox refusals are not necessary: NVMe records only 35,
+SATA 124, with zero loader errors, replica catch-up and 64 exact cold payload
+checks per drive. Normal four-node service/both mounts restore and verify.
+**W97 remains open:** isolate growing-file/XFS versus drive service latency;
+NAND cache cause and hardware ceiling remain unproved. This compares these two
+models/storage paths, one run each, not protocols in general.
+[Report](../status/w97-three-drive-20261010.md).
 
 **Oct 10 latest merged-code observation:** all 16 newly captured branch tips
 integrate at `6b8f05acb484` and deploy to preserved NUC stores. A continuous
