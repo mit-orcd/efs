@@ -95,6 +95,29 @@ int main(void)
     CHECK(locate(d,0,&found,NULL)==EFS_ERR_NOT_FOUND);
     CHECK(locate(d,3*4096,&found,NULL)==EFS_ERR_NOT_FOUND);
     CHECK(locate(d,32*8192,&found,NULL)==EFS_ERR_NOT_FOUND);
+    /* Unique raw keys: exact search reuses its slot; absent and prefix
+     * searches preserve lower-bound scan semantics and value capacity. */
+    struct writer search={.d=d,.shard=98,.raw=-1,.index=-1};
+    d->disk_limit=UINT64_MAX;
+    uint8_t search_key[11]={0,98,EFS_KV_KIND_INODE},search_value=0;
+    for(unsigned i=0;i<31;i++){
+        search_key[10]=(uint8_t)(2*i+2);search_value=(uint8_t)i;
+        CHECK(!save(&search,search_key,sizeof(search_key),&search_value,1));
+    }
+    close(search.raw);close(search.index);
+    d->part[98].count=31;d->part[98].end[0]=31;
+    struct slot exact={0};uint64_t lower=UINT64_MAX;
+    search_key[10]=32;read_calls=0;
+    CHECK(!seek(d,search_key,sizeof(search_key),&lower,&exact));
+    CHECK(lower==15 && exact.key_len==11 && read_calls==4);
+    uint32_t capacity=0;CHECK(raw_get(d,search_key,11,got,&capacity)==EFS_ERR_INVAL && capacity==1);
+    capacity=1;CHECK(!raw_get(d,search_key,11,got,&capacity) && got[0]==15);
+    search_key[10]=31;capacity=sizeof(got);
+    CHECK(raw_get(d,search_key,11,got,&capacity)==EFS_ERR_NOT_FOUND);
+    CHECK(!seek(d,search_key,11,&lower,NULL) && lower==15);
+    search_key[10]=0;CHECK(!seek(d,search_key,11,&lower,NULL) && lower==0);
+    search_key[10]=63;CHECK(!seek(d,search_key,11,&lower,NULL) && lower==31);
+    CHECK(!seek(d,search_key,3,&lower,NULL) && lower==0);
     /* Raw record assembly must preserve bytes and never add an index entry
      * after a short write followed by ENOSPC. It uses two writes, not three. */
     uint8_t key[11]={0,99,EFS_KV_KIND_INODE},value[37],record[48];

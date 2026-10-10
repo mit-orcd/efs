@@ -264,8 +264,9 @@ static int read_record(struct efs_query_disk *d,uint32_t shard,uint64_t at,struc
     if(!rc && value)rc=disk_io(d,shard,'r',value,s->value_len,s->offset+s->key_len,0);
     return rc;
 }
-static int seek(struct efs_query_disk *d,const uint8_t *key,uint32_t kl,uint64_t *at)
+static int seek(struct efs_query_disk *d,const uint8_t *key,uint32_t kl,uint64_t *at,struct slot *exact)
 {
+    if(exact)memset(exact,0,sizeof(*exact));
     if(kl<3 || kl>EFS_KV_KEY_MAX)return EFS_ERR_INVAL;
     uint32_t shard=((uint32_t)key[0]<<8)|key[1];int kind=kind_at(key[2]);
     if(shard>=SHARDS || kind<0)return EFS_ERR_NOT_FOUND;
@@ -273,19 +274,20 @@ static int seek(struct efs_query_disk *d,const uint8_t *key,uint32_t kl,uint64_t
     while(lo<hi) {
         uint64_t mid=lo+(hi-lo)/2;struct slot s;uint8_t k[EFS_KV_KEY_MAX];
         int rc=read_record(d,shard,mid,&s,k,NULL);if(rc)return rc;
-        if(cmpkey(k,s.key_len,key,kl)<0)lo=mid+1;else hi=mid;
+        int order=cmpkey(k,s.key_len,key,kl);
+        /* Snapshot keys are unique. Equality is also the lower bound, so
+         * return the already validated slot instead of reading it again. */
+        if(!order){*at=mid;if(exact)*exact=s;return EFS_OK;}
+        if(order<0)lo=mid+1;else hi=mid;
     }
     *at=lo;return EFS_OK;
 }
 static int raw_get(void *ctx,const uint8_t *key,uint32_t kl,uint8_t *value,uint32_t *vl)
 {
-    struct efs_query_disk *d=ctx;uint64_t at;int rc=seek(d,key,kl,&at);
-    if(rc)return rc;
-    uint32_t shard=((uint32_t)key[0]<<8)|key[1];int kind=kind_at(key[2]);
-    if(at==d->part[shard].end[kind])return EFS_ERR_NOT_FOUND;
-    struct slot s;uint8_t k[EFS_KV_KEY_MAX];rc=read_record(d,shard,at,&s,k,NULL);
-    if(rc)return rc;
-    if(cmpkey(k,s.key_len,key,kl))return EFS_ERR_NOT_FOUND;
+    struct efs_query_disk *d=ctx;uint64_t at;struct slot s;
+    int rc=seek(d,key,kl,&at,&s);if(rc)return rc;
+    if(!s.key_len)return EFS_ERR_NOT_FOUND;
+    uint32_t shard=((uint32_t)key[0]<<8)|key[1];
     if(*vl<s.value_len || (s.value_len && !value)){*vl=s.value_len;return EFS_ERR_INVAL;}
     rc=disk_io(d,shard,'r',value,s.value_len,s.offset+s.key_len,0);*vl=s.value_len;return rc;
 }
@@ -295,7 +297,7 @@ static int raw_scan(void *ctx,const uint8_t *prefix,uint32_t pn,const uint8_t *s
     struct efs_query_disk *d=ctx;uint64_t at;
     if(pn<3)return EFS_ERR_INVAL;
     int kind=kind_at(prefix[2]);if(kind<0)return EFS_OK;
-    int rc=seek(d,sn?start:prefix,sn?sn:pn,&at);if(rc==EFS_ERR_NOT_FOUND)return EFS_OK;if(rc)return rc;
+    int rc=seek(d,sn?start:prefix,sn?sn:pn,&at,NULL);if(rc==EFS_ERR_NOT_FOUND)return EFS_OK;if(rc)return rc;
     uint32_t shard=((uint32_t)prefix[0]<<8)|prefix[1];
     for(;at<d->part[shard].end[kind];at++) {
         struct slot s;uint8_t key[EFS_KV_KEY_MAX],value[VALUE_MAX];
