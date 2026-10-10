@@ -1,0 +1,6 @@
+Unmounting /mnt/efs-b
+Retiring drained efs-fuse PID 568997 for /mnt/efs-b
+Unmounted /mnt/efs-b
+Unmounting /mnt/efs
+Retiring drained efs-fuse PID 677398 for /mnt/efs
+Unmounted /mnt/efs

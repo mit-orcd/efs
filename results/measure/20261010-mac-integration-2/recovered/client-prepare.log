@@ -1,0 +1,300 @@
+2026-10-10T05:00:56.879Z fsync-split ino=19486 flush_ms=171 report_ms=0 rc=0
+2026-10-10T05:00:57.123Z fsync-split ino=19486 flush_ms=244 report_ms=0 rc=0
+2026-10-10T05:00:57.414Z fsync-split ino=19486 flush_ms=291 report_ms=0 rc=0
+2026-10-10T05:00:57.735Z fsync-split ino=19486 flush_ms=320 report_ms=0 rc=0
+2026-10-10T05:00:57.948Z fsync-split ino=19486 flush_ms=212 report_ms=0 rc=0
+2026-10-10T05:00:58.261Z fsync-split ino=19486 flush_ms=312 report_ms=0 rc=0
+2026-10-10T05:00:58.588Z fsync-split ino=19486 flush_ms=326 report_ms=0 rc=0
+2026-10-10T05:00:58.803Z fsync-split ino=19486 flush_ms=216 report_ms=0 rc=0
+2026-10-10T05:00:59.032Z fsync-split ino=19486 flush_ms=228 report_ms=0 rc=0
+2026-10-10T05:00:59.870Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=167 replay_ms=104
+2026-10-10T05:01:00.145Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=148 replay_ms=33
+2026-10-10T05:01:00.433Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=61 replay_ms=81
+2026-10-10T05:01:00.536Z fsync-split ino=19486 flush_ms=1504 report_ms=0 rc=0
+2026-10-10T05:01:00.855Z fsync-split ino=19486 flush_ms=319 report_ms=0 rc=0
+2026-10-10T05:01:01.108Z fsync-split ino=19486 flush_ms=253 report_ms=0 rc=0
+2026-10-10T05:01:01.408Z fsync-split ino=19486 flush_ms=300 report_ms=0 rc=0
+2026-10-10T05:01:01.746Z fsync-split ino=19486 flush_ms=338 report_ms=0 rc=0
+2026-10-10T05:01:02.064Z fsync-split ino=19486 flush_ms=317 report_ms=0 rc=0
+2026-10-10T05:01:02.383Z fsync-split ino=19486 flush_ms=319 report_ms=0 rc=0
+2026-10-10T05:01:02.639Z fsync-split ino=19486 flush_ms=256 report_ms=0 rc=0
+2026-10-10T05:01:02.990Z fsync-split ino=19486 flush_ms=351 report_ms=0 rc=0
+2026-10-10T05:01:03.424Z fsync-split ino=19486 flush_ms=434 report_ms=0 rc=0
+2026-10-10T05:01:03.705Z fsync-split ino=19486 flush_ms=281 report_ms=0 rc=0
+2026-10-10T05:01:03.983Z fsync-split ino=19486 flush_ms=277 report_ms=0 rc=0
+2026-10-10T05:01:04.370Z fsync-split ino=19486 flush_ms=387 report_ms=0 rc=0
+2026-10-10T05:01:04.654Z fsync-split ino=19486 flush_ms=283 report_ms=0 rc=0
+2026-10-10T05:01:04.952Z fsync-split ino=19486 flush_ms=299 report_ms=0 rc=0
+2026-10-10T05:01:05.172Z fsync-split ino=19486 flush_ms=219 report_ms=0 rc=0
+2026-10-10T05:01:05.719Z fsync-split ino=19486 flush_ms=547 report_ms=0 rc=0
+2026-10-10T05:01:05.849Z fsync-split ino=19486 flush_ms=129 report_ms=0 rc=0
+2026-10-10T05:01:06.170Z fsync-split ino=19486 flush_ms=321 report_ms=0 rc=0
+2026-10-10T05:01:06.361Z fsync-split ino=19486 flush_ms=191 report_ms=0 rc=0
+2026-10-10T05:01:06.666Z fsync-split ino=19486 flush_ms=304 report_ms=0 rc=0
+2026-10-10T05:01:06.967Z fsync-split ino=19486 flush_ms=301 report_ms=0 rc=0
+2026-10-10T05:01:07.265Z fsync-split ino=19486 flush_ms=297 report_ms=0 rc=0
+2026-10-10T05:01:07.470Z fsync-split ino=19486 flush_ms=206 report_ms=0 rc=0
+2026-10-10T05:01:07.723Z fsync-split ino=19486 flush_ms=252 report_ms=0 rc=0
+2026-10-10T05:01:08.087Z fsync-split ino=19486 flush_ms=364 report_ms=0 rc=0
+2026-10-10T05:01:08.276Z fsync-split ino=19486 flush_ms=189 report_ms=0 rc=0
+2026-10-10T05:01:08.524Z fsync-split ino=19486 flush_ms=247 report_ms=0 rc=0
+2026-10-10T05:01:08.746Z fsync-split ino=19486 flush_ms=223 report_ms=0 rc=0
+2026-10-10T05:01:08.868Z fsync-split ino=19486 flush_ms=122 report_ms=0 rc=0
+2026-10-10T05:01:09.097Z fsync-split ino=19486 flush_ms=229 report_ms=0 rc=0
+2026-10-10T05:01:09.253Z fsync-split ino=19486 flush_ms=156 report_ms=0 rc=0
+2026-10-10T05:01:10.118Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=51 replay_ms=137
+2026-10-10T05:01:10.273Z fsync-split ino=19486 flush_ms=1020 report_ms=0 rc=0
+2026-10-10T05:01:10.496Z fsync-split ino=19486 flush_ms=222 report_ms=0 rc=0
+2026-10-10T05:01:10.749Z fsync-split ino=19486 flush_ms=254 report_ms=0 rc=0
+2026-10-10T05:01:11.060Z fsync-split ino=19486 flush_ms=310 report_ms=0 rc=0
+2026-10-10T05:01:11.382Z fsync-split ino=19486 flush_ms=322 report_ms=0 rc=0
+2026-10-10T05:01:11.738Z fsync-split ino=19486 flush_ms=357 report_ms=0 rc=0
+2026-10-10T05:01:12.061Z fsync-split ino=19486 flush_ms=323 report_ms=0 rc=0
+2026-10-10T05:01:12.396Z fsync-split ino=19486 flush_ms=335 report_ms=0 rc=0
+2026-10-10T05:01:12.740Z fsync-split ino=19486 flush_ms=344 report_ms=0 rc=0
+2026-10-10T05:01:13.176Z fsync-split ino=19486 flush_ms=436 report_ms=0 rc=0
+2026-10-10T05:01:13.447Z fsync-split ino=19486 flush_ms=270 report_ms=0 rc=0
+2026-10-10T05:01:13.726Z fsync-split ino=19486 flush_ms=279 report_ms=0 rc=0
+2026-10-10T05:01:13.993Z fsync-split ino=19486 flush_ms=265 report_ms=0 rc=0
+2026-10-10T05:01:14.363Z fsync-split ino=19486 flush_ms=369 report_ms=0 rc=0
+2026-10-10T05:01:14.802Z fsync-split ino=19486 flush_ms=439 report_ms=0 rc=0
+2026-10-10T05:01:15.105Z fsync-split ino=19486 flush_ms=302 report_ms=0 rc=0
+2026-10-10T05:01:15.679Z fsync-split ino=19486 flush_ms=574 report_ms=0 rc=0
+2026-10-10T05:01:15.939Z fsync-split ino=19486 flush_ms=260 report_ms=0 rc=0
+2026-10-10T05:01:16.201Z fsync-split ino=19486 flush_ms=262 report_ms=0 rc=0
+2026-10-10T05:01:16.512Z fsync-split ino=19486 flush_ms=310 report_ms=0 rc=0
+2026-10-10T05:01:16.893Z fsync-split ino=19486 flush_ms=381 report_ms=0 rc=0
+2026-10-10T05:01:17.084Z fsync-split ino=19486 flush_ms=191 report_ms=0 rc=0
+2026-10-10T05:01:17.249Z fsync-split ino=19486 flush_ms=165 report_ms=0 rc=0
+2026-10-10T05:01:17.432Z fsync-split ino=19486 flush_ms=182 report_ms=0 rc=0
+2026-10-10T05:01:17.601Z fsync-split ino=19486 flush_ms=170 report_ms=0 rc=0
+2026-10-10T05:01:17.880Z fsync-split ino=19486 flush_ms=279 report_ms=0 rc=0
+2026-10-10T05:01:18.241Z fsync-split ino=19486 flush_ms=361 report_ms=0 rc=0
+2026-10-10T05:01:18.543Z fsync-split ino=19486 flush_ms=302 report_ms=0 rc=0
+2026-10-10T05:01:18.808Z fsync-split ino=19486 flush_ms=265 report_ms=0 rc=0
+2026-10-10T05:01:19.144Z fsync-split ino=19486 flush_ms=336 report_ms=0 rc=0
+2026-10-10T05:01:19.469Z fsync-split ino=19486 flush_ms=324 report_ms=0 rc=0
+2026-10-10T05:01:19.598Z fsync-split ino=19486 flush_ms=130 report_ms=0 rc=0
+2026-10-10T05:01:20.221Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=152 replay_ms=61
+2026-10-10T05:01:20.283Z fsync-split ino=19486 flush_ms=684 report_ms=0 rc=0
+2026-10-10T05:01:20.655Z fsync-split ino=19486 flush_ms=371 report_ms=0 rc=0
+2026-10-10T05:01:20.876Z fsync-split ino=19486 flush_ms=222 report_ms=0 rc=0
+2026-10-10T05:01:21.104Z fsync-split ino=19486 flush_ms=227 report_ms=0 rc=0
+2026-10-10T05:01:21.374Z fsync-split ino=19486 flush_ms=270 report_ms=0 rc=0
+2026-10-10T05:01:21.585Z fsync-split ino=19486 flush_ms=210 report_ms=0 rc=0
+2026-10-10T05:01:21.840Z fsync-split ino=19486 flush_ms=254 report_ms=0 rc=0
+2026-10-10T05:01:22.421Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=68 replay_ms=58
+2026-10-10T05:01:22.504Z fsync-split ino=19486 flush_ms=665 report_ms=0 rc=0
+2026-10-10T05:01:23.043Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=125 replay_ms=56
+2026-10-10T05:01:23.131Z fsync-split ino=19486 flush_ms=626 report_ms=0 rc=0
+2026-10-10T05:01:23.406Z fsync-split ino=19486 flush_ms=274 report_ms=0 rc=0
+2026-10-10T05:01:23.718Z fsync-split ino=19486 flush_ms=311 report_ms=0 rc=0
+2026-10-10T05:01:23.999Z fsync-split ino=19486 flush_ms=280 report_ms=0 rc=0
+2026-10-10T05:01:24.305Z fsync-split ino=19486 flush_ms=305 report_ms=0 rc=0
+2026-10-10T05:01:24.625Z fsync-split ino=19486 flush_ms=319 report_ms=0 rc=0
+2026-10-10T05:01:24.865Z fsync-split ino=19486 flush_ms=241 report_ms=0 rc=0
+2026-10-10T05:01:25.181Z fsync-split ino=19486 flush_ms=315 report_ms=0 rc=0
+2026-10-10T05:01:25.894Z fsync-split ino=19486 flush_ms=712 report_ms=0 rc=0
+2026-10-10T05:01:26.271Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=26 replay_ms=132
+2026-10-10T05:01:26.535Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=109 replay_ms=75
+2026-10-10T05:01:26.809Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=79 replay_ms=97
+2026-10-10T05:01:27.035Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=35 replay_ms=126
+2026-10-10T05:01:27.272Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=21 replay_ms=74
+2026-10-10T05:01:27.466Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=64 replay_ms=98
+2026-10-10T05:01:27.710Z fsync-split ino=19486 flush_ms=1816 report_ms=0 rc=0
+2026-10-10T05:01:28.042Z fsync-split ino=19486 flush_ms=331 report_ms=0 rc=0
+2026-10-10T05:01:28.507Z fsync-split ino=19486 flush_ms=464 report_ms=0 rc=0
+2026-10-10T05:01:28.872Z fsync-split ino=19486 flush_ms=364 report_ms=0 rc=0
+2026-10-10T05:01:29.098Z fsync-split ino=19486 flush_ms=225 report_ms=0 rc=0
+2026-10-10T05:01:29.266Z fsync-split ino=19486 flush_ms=168 report_ms=0 rc=0
+2026-10-10T05:01:29.564Z fsync-split ino=19486 flush_ms=298 report_ms=0 rc=0
+2026-10-10T05:01:29.812Z fsync-split ino=19486 flush_ms=249 report_ms=0 rc=0
+2026-10-10T05:01:30.010Z fsync-split ino=19486 flush_ms=198 report_ms=0 rc=0
+2026-10-10T05:01:30.188Z fsync-split ino=19486 flush_ms=178 report_ms=0 rc=0
+2026-10-10T05:01:30.491Z fsync-split ino=19486 flush_ms=303 report_ms=0 rc=0
+2026-10-10T05:01:30.738Z fsync-split ino=19486 flush_ms=246 report_ms=0 rc=0
+2026-10-10T05:01:31.273Z fsync-split ino=19486 flush_ms=535 report_ms=0 rc=0
+2026-10-10T05:01:31.696Z fsync-split ino=19486 flush_ms=422 report_ms=0 rc=0
+2026-10-10T05:01:31.937Z fsync-split ino=19486 flush_ms=240 report_ms=0 rc=0
+2026-10-10T05:01:32.640Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=111 replay_ms=117
+2026-10-10T05:01:32.820Z fsync-split ino=19486 flush_ms=883 report_ms=0 rc=0
+2026-10-10T05:01:33.088Z fsync-split ino=19486 flush_ms=267 report_ms=0 rc=0
+2026-10-10T05:01:33.742Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=54 replay_ms=133
+2026-10-10T05:01:34.071Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=95 replay_ms=132
+2026-10-10T05:01:34.154Z fsync-split ino=19486 flush_ms=1065 report_ms=0 rc=0
+2026-10-10T05:01:34.549Z fsync-split ino=19486 flush_ms=394 report_ms=0 rc=0
+2026-10-10T05:01:34.917Z fsync-split ino=19486 flush_ms=369 report_ms=0 rc=0
+2026-10-10T05:01:35.276Z fsync-split ino=19486 flush_ms=358 report_ms=0 rc=0
+2026-10-10T05:01:35.644Z fsync-split ino=19486 flush_ms=367 report_ms=0 rc=0
+2026-10-10T05:01:35.957Z fsync-split ino=19486 flush_ms=312 report_ms=0 rc=0
+2026-10-10T05:01:36.347Z fsync-split ino=19486 flush_ms=389 report_ms=0 rc=0
+2026-10-10T05:01:36.671Z fsync-split ino=19486 flush_ms=325 report_ms=0 rc=0
+2026-10-10T05:01:37.088Z fsync-split ino=19486 flush_ms=416 report_ms=0 rc=0
+2026-10-10T05:01:37.437Z fsync-split ino=19486 flush_ms=349 report_ms=0 rc=0
+2026-10-10T05:01:37.866Z fsync-split ino=19486 flush_ms=429 report_ms=0 rc=0
+2026-10-10T05:01:38.269Z fsync-split ino=19486 flush_ms=403 report_ms=0 rc=0
+2026-10-10T05:01:38.800Z fsync-split ino=19486 flush_ms=530 report_ms=0 rc=0
+2026-10-10T05:01:39.182Z fsync-split ino=19486 flush_ms=382 report_ms=0 rc=0
+2026-10-10T05:01:39.835Z fsync-split ino=19486 flush_ms=652 report_ms=0 rc=0
+2026-10-10T05:01:40.040Z fsync-split ino=19486 flush_ms=205 report_ms=0 rc=0
+2026-10-10T05:01:40.194Z fsync-split ino=19486 flush_ms=154 report_ms=0 rc=0
+2026-10-10T05:01:40.329Z fsync-split ino=19486 flush_ms=134 report_ms=0 rc=0
+2026-10-10T05:01:40.746Z fsync-split ino=19486 flush_ms=417 report_ms=0 rc=0
+2026-10-10T05:01:41.041Z fsync-split ino=19486 flush_ms=295 report_ms=0 rc=0
+2026-10-10T05:01:41.241Z fsync-split ino=19486 flush_ms=199 report_ms=0 rc=0
+2026-10-10T05:01:41.410Z fsync-split ino=19486 flush_ms=169 report_ms=0 rc=0
+2026-10-10T05:01:41.753Z fsync-split ino=19486 flush_ms=343 report_ms=0 rc=0
+2026-10-10T05:01:41.987Z fsync-split ino=19486 flush_ms=233 report_ms=0 rc=0
+2026-10-10T05:01:42.231Z fsync-split ino=19486 flush_ms=244 report_ms=0 rc=0
+2026-10-10T05:01:42.439Z fsync-split ino=19486 flush_ms=208 report_ms=0 rc=0
+2026-10-10T05:01:42.719Z fsync-split ino=19486 flush_ms=280 report_ms=0 rc=0
+2026-10-10T05:01:42.922Z fsync-split ino=19486 flush_ms=202 report_ms=0 rc=0
+2026-10-10T05:01:43.223Z fsync-split ino=19486 flush_ms=301 report_ms=0 rc=0
+2026-10-10T05:01:43.366Z fsync-split ino=19486 flush_ms=142 report_ms=0 rc=0
+2026-10-10T05:01:44.044Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=66 replay_ms=56
+2026-10-10T05:01:44.122Z fsync-split ino=19486 flush_ms=756 report_ms=0 rc=0
+2026-10-10T05:01:44.267Z fsync-split ino=19486 flush_ms=144 report_ms=0 rc=0
+2026-10-10T05:01:44.508Z fsync-split ino=19486 flush_ms=241 report_ms=0 rc=0
+2026-10-10T05:01:44.830Z fsync-split ino=19486 flush_ms=321 report_ms=0 rc=0
+2026-10-10T05:01:45.138Z fsync-split ino=19486 flush_ms=308 report_ms=0 rc=0
+2026-10-10T05:01:45.767Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=147 replay_ms=50
+2026-10-10T05:01:46.084Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=78 replay_ms=79
+2026-10-10T05:01:46.376Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=8 replay_ms=114
+2026-10-10T05:01:46.452Z fsync-split ino=19486 flush_ms=1314 report_ms=0 rc=0
+2026-10-10T05:01:46.715Z fsync-split ino=19486 flush_ms=263 report_ms=0 rc=0
+2026-10-10T05:01:47.042Z fsync-split ino=19486 flush_ms=327 report_ms=0 rc=0
+2026-10-10T05:01:47.419Z fsync-split ino=19486 flush_ms=376 report_ms=0 rc=0
+2026-10-10T05:01:47.907Z fsync-split ino=19486 flush_ms=487 report_ms=0 rc=0
+2026-10-10T05:01:48.239Z fsync-split ino=19486 flush_ms=331 report_ms=0 rc=0
+2026-10-10T05:01:48.478Z fsync-split ino=19486 flush_ms=238 report_ms=0 rc=0
+2026-10-10T05:01:48.772Z fsync-split ino=19486 flush_ms=294 report_ms=0 rc=0
+2026-10-10T05:01:49.038Z fsync-split ino=19486 flush_ms=265 report_ms=0 rc=0
+2026-10-10T05:01:49.339Z fsync-split ino=19486 flush_ms=300 report_ms=0 rc=0
+2026-10-10T05:01:49.682Z fsync-split ino=19486 flush_ms=343 report_ms=0 rc=0
+2026-10-10T05:01:50.335Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=41 replay_ms=47
+2026-10-10T05:01:50.462Z fsync-split ino=19486 flush_ms=780 report_ms=0 rc=0
+2026-10-10T05:01:50.896Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=90 replay_ms=111
+2026-10-10T05:01:51.043Z fsync-split ino=19486 flush_ms=581 report_ms=0 rc=0
+2026-10-10T05:01:51.231Z fsync-split ino=19486 flush_ms=187 report_ms=0 rc=0
+2026-10-10T05:01:51.549Z fsync-split ino=19486 flush_ms=318 report_ms=0 rc=0
+2026-10-10T05:01:51.891Z fsync-split ino=19486 flush_ms=341 report_ms=0 rc=0
+2026-10-10T05:01:52.137Z fsync-split ino=19486 flush_ms=246 report_ms=0 rc=0
+2026-10-10T05:01:52.290Z fsync-split ino=19486 flush_ms=153 report_ms=0 rc=0
+2026-10-10T05:01:52.533Z fsync-split ino=19486 flush_ms=243 report_ms=0 rc=0
+2026-10-10T05:01:52.804Z fsync-split ino=19486 flush_ms=270 report_ms=0 rc=0
+2026-10-10T05:01:53.018Z fsync-split ino=19486 flush_ms=215 report_ms=0 rc=0
+2026-10-10T05:01:53.366Z fsync-split ino=19486 flush_ms=347 report_ms=0 rc=0
+2026-10-10T05:01:53.582Z fsync-split ino=19486 flush_ms=216 report_ms=0 rc=0
+2026-10-10T05:01:53.808Z fsync-split ino=19486 flush_ms=225 report_ms=0 rc=0
+2026-10-10T05:01:53.916Z fsync-split ino=19486 flush_ms=108 report_ms=0 rc=0
+2026-10-10T05:01:54.142Z fsync-split ino=19486 flush_ms=225 report_ms=0 rc=0
+2026-10-10T05:01:54.373Z fsync-split ino=19486 flush_ms=231 report_ms=0 rc=0
+2026-10-10T05:01:54.712Z fsync-split ino=19486 flush_ms=338 report_ms=0 rc=0
+2026-10-10T05:01:54.892Z fsync-split ino=19486 flush_ms=179 report_ms=0 rc=0
+2026-10-10T05:01:55.023Z fsync-split ino=19486 flush_ms=132 report_ms=0 rc=0
+2026-10-10T05:01:55.266Z fsync-split ino=19486 flush_ms=243 report_ms=0 rc=0
+2026-10-10T05:02:34.413Z fsync-split ino=4429 flush_ms=283 report_ms=0 rc=0
+2026-10-10T05:02:48.667Z fsync-split ino=80997 flush_ms=139 report_ms=0 rc=0
+2026-10-10T05:02:50.949Z fsync-split ino=85093 flush_ms=290 report_ms=0 rc=0
+2026-10-10T05:02:53.311Z fsync-split ino=89189 flush_ms=213 report_ms=0 rc=0
+2026-10-10T05:03:05.331Z inode-rpc: slow-ok type=45 attempts=1 saw_busy=0 status=0 us=1106171
+2026-10-10T05:03:17.925Z fsync-split ino=13590 flush_ms=262 report_ms=0 rc=0
+2026-10-10T05:03:30.993Z fsync-split ino=422479 flush_ms=608 report_ms=0 rc=0
+2026-10-10T05:03:32.498Z fsync-split ino=4775 flush_ms=139 report_ms=0 rc=0
+2026-10-10T05:03:33.045Z fsync-split ino=4775 flush_ms=212 report_ms=0 rc=0
+2026-10-10T05:03:34.936Z fsync-split ino=14614 flush_ms=364 report_ms=0 rc=0
+2026-10-10T05:06:05.757Z efs-fuse: legacy export label 'fs' is ignored; mounting the single export 'default' (id=1)
+2026-10-10T05:06:05.757Z efs-fuse 1a78d768d2a0 (branch devel, built 2026-10-10T05:04:09Z on efsgw), build=1a78d768d2a0: starting export=default mount=/mnt/efs
+2026-10-10T05:06:05.759Z Discovered 3 cluster nodes from 192.168.2.11:17432
+2026-10-10T05:06:05.759Z   node id=1 192.168.2.11:17432
+2026-10-10T05:06:05.759Z   node id=2 192.168.2.12:17432
+2026-10-10T05:06:05.759Z   node id=3 192.168.2.13:17432
+2026-10-10T05:06:05.759Z fetching metadata...
+2026-10-10T05:06:05.759Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-10T05:06:05.759Z export id=1 name=default
+2026-10-10T05:06:05.759Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-10T05:06:05.759Z efs-fuse daemon pid=830784
+2026-10-10T05:06:05.760Z efs-fuse: workers max=10 idle=10
+2026-10-10T05:06:05.765Z fuse serving
+2026-10-10T05:06:27.210Z dcache-pressure live=134086656 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:06:45.670Z efs: read hole ino=5542 ci=1 holes=1
+2026-10-10T05:06:46.821Z fsync-split ino=6831 flush_ms=121 report_ms=0 rc=0
+2026-10-10T05:06:54.591Z efs: read hole ino=23129 ci=0 holes=2
+2026-10-10T05:07:34.319Z efs: rename_at 12703/a -> 12703/b rc=-12 after 1 tries
+2026-10-10T05:11:59.922Z inode-rpc: slow-ok type=87 attempts=1 saw_busy=0 status=0 us=1045831
+2026-10-10T05:12:22.211Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=18 replay_ms=49
+2026-10-10T05:12:22.329Z efs: report rec ino=4559 ci=0 rejected unowned staging observation nodes=1,2,3 (putid miss, n=1)
+2026-10-10T05:15:19.478Z inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=2297160
+2026-10-10T05:15:35.239Z fsync-split ino=9136 flush_ms=107 report_ms=0 rc=0
+2026-10-10T05:15:36.488Z fsync-split ino=10744 flush_ms=100 report_ms=0 rc=0
+2026-10-10T05:16:59.612Z inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=1090459
+2026-10-10T05:20:59.867Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1100146
+2026-10-10T05:21:32.474Z inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=1408890
+2026-10-10T05:25:12.689Z efs: read hole ino=19570 ci=0 holes=3
+2026-10-10T05:25:23.047Z fsync-split ino=20818 flush_ms=413 report_ms=0 rc=0
+2026-10-10T05:25:24.206Z efs: read hole ino=4329 ci=1 holes=12
+2026-10-10T05:25:29.118Z fsync-split ino=18246 flush_ms=144 report_ms=0 rc=0
+2026-10-10T05:25:30.596Z fsync-split ino=30232 flush_ms=101 report_ms=0 rc=0
+2026-10-10T05:25:54.124Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=36 replay_ms=56
+2026-10-10T05:25:54.245Z efs: report rec ino=16961 ci=0 rejected unowned staging observation nodes=1,2,3 (putid miss, n=2)
+2026-10-10T05:26:10.897Z efs: read hole ino=8972 ci=0 holes=13
+2026-10-10T05:28:30.708Z efs: read hole ino=4101 ci=0 holes=14
+2026-10-10T05:28:32.333Z dcache-pressure live=34340864 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=73040 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:28:32.366Z dcache-pressure live=34471936 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:28:49.360Z inode-rpc: retry type=67 attempt=0 why=recv rc=-6 req_len=67676 recv_ms=30096
+2026-10-10T05:28:49.360Z report-loop ino=19611 rounds=1 stale=0 busy=1 ms=8005 rpc_ms=8005 replay_ms=0 sleep_ms=0 recs=192 rc=-13
+2026-10-10T05:28:49.378Z dcache-pressure live=34996224 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:28:51.399Z report-stale: chunks=224 runs=1 committed=223 replayed=1 pull_ms=105 replay_ms=57
+2026-10-10T05:28:51.462Z dcache-pressure live=33947648 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:28:58.863Z efs: report rec ino=19611 ci=191 rejected unowned staging observation nodes=3,1,2 (putid miss, n=3)
+2026-10-10T05:28:58.984Z dcache-pressure live=33816576 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:29:05.720Z dcache-pressure live=34078720 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=1992 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:29:13.579Z dcache-pressure live=34340864 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:29:22.823Z dcache-pressure live=34078720 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:29:29.859Z dcache-pressure live=33554432 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:29:38.116Z dcache-pressure live=34209792 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:29:45.971Z dcache-pressure live=34340864 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:29:54.851Z dcache-pressure live=34471936 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:30:03.662Z dcache-pressure live=34340864 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=1328 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:30:12.917Z dcache-pressure live=34471936 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:30:22.449Z dcache-pressure live=33816576 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:30:33.870Z fsync-split ino=19611 flush_ms=3125 report_ms=0 rc=0
+2026-10-10T05:30:38.654Z dcache-pressure live=134086656 reserved=0 backing=134217728 limit=335544320 request=5242880 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=high-water
+2026-10-10T05:30:38.676Z dcache-pressure live=33816576 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=5312 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:30:54.734Z inode-rpc: retry type=67 attempt=0 why=recv rc=-6 req_len=62044 recv_ms=30088
+2026-10-10T05:30:54.734Z report-loop ino=12019 rounds=1 stale=0 busy=1 ms=8012 rpc_ms=8012 replay_ms=0 sleep_ms=0 recs=176 rc=-13
+2026-10-10T05:30:54.746Z dcache-pressure live=34865152 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=5976 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:30:57.281Z report-stale: chunks=216 runs=1 committed=215 replayed=1 pull_ms=98 replay_ms=68
+2026-10-10T05:30:57.381Z dcache-pressure live=34471936 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=8632 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:31:06.093Z efs: report rec ino=12019 ci=175 rejected unowned staging observation nodes=3,1,2 (putid miss, n=4)
+2026-10-10T05:31:06.258Z dcache-pressure live=34340864 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=4648 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:31:15.298Z dcache-pressure live=34340864 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=7304 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:31:26.137Z dcache-pressure live=34471936 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=3320 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:31:37.027Z dcache-pressure live=33554432 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=3984 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:31:46.447Z dcache-pressure live=34471936 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=4648 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:31:56.456Z dcache-pressure live=33947648 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=3320 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:32:03.484Z dcache-pressure live=34471936 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=3984 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:32:11.986Z dcache-pressure live=34209792 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=4648 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:32:20.724Z dcache-pressure live=34078720 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=4648 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:32:28.752Z dcache-pressure live=34340864 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=5976 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:32:37.508Z dcache-pressure live=34471936 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=5976 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:32:49.038Z fsync-split ino=12019 flush_ms=1621 report_ms=0 rc=0
+2026-10-10T05:32:57.783Z dcache-pressure live=134086656 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=1328 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-10T05:33:13.433Z inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=2655295
+2026-10-10T05:33:23.259Z fsync-split ino=52716 flush_ms=298 report_ms=0 rc=0
+2026-10-10T05:39:07.724Z efs-fuse: legacy export label 'fs' is ignored; mounting the single export 'default' (id=1)
+2026-10-10T05:39:07.724Z efs-fuse 1a78d768d2a0 (branch devel, built 2026-10-10T05:04:09Z on efsgw), build=1a78d768d2a0: starting export=default mount=/mnt/efs
+2026-10-10T05:39:07.725Z Discovered 3 cluster nodes from 192.168.2.11:17432
+2026-10-10T05:39:07.725Z   node id=1 192.168.2.11:17432
+2026-10-10T05:39:07.725Z   node id=2 192.168.2.12:17432
+2026-10-10T05:39:07.725Z   node id=3 192.168.2.13:17432
+2026-10-10T05:39:07.725Z fetching metadata...
+2026-10-10T05:39:07.726Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-10T05:39:07.726Z export id=1 name=default
+2026-10-10T05:39:07.726Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-10T05:39:07.726Z efs-fuse daemon pid=3595
+2026-10-10T05:39:07.728Z efs-fuse: workers max=10 idle=10
+2026-10-10T05:39:07.735Z fuse serving
+2026-10-10T05:39:43.043Z fsync-split ino=36718 flush_ms=2074 report_ms=0 rc=0
+2026-10-10T05:39:51.919Z inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=2188129
+2026-10-10T05:40:20.924Z fsync-split ino=19954 flush_ms=2201 report_ms=0 rc=0

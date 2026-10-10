@@ -1,0 +1,17 @@
+cluster: mac
+Running as unit: efsd.service; invocation ID: f38341d1098b4675b0496f2379835455
+Running as unit: efsd.service; invocation ID: b1d8a2be6a35495b9d2eca367fbc210e
+Running as unit: efsd.service; invocation ID: c963deb8acae4c47a6483d06c8637067
+Restarted efs1
+Restarted efs2
+Restarted efs3
+Stop with: ./scripts/client.sh stop /mnt/efs
+Logging efs-fuse to /mnt/efs-fuse-efs.log
+Mounted /mnt/efs
+Stop with: ./scripts/client.sh stop /mnt/efs
+Logging efs-fuse to /mnt/efs-fuse-efs.log
+Mounted /mnt/efs
+Stop with: ./scripts/client.sh stop /mnt/efs-b
+Logging efs-fuse to /mnt/efs-fuse-efs-b.log
+Mounted /mnt/efs-b
+cold 300 MiB content verified after clean unmount 3.503

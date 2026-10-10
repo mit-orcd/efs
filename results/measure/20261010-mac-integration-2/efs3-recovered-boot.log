@@ -1,0 +1,4 @@
+ 01:58:57 up 0 min,  2 users,  load average: 0.04, 0.01, 0.00
+6.14.0-63.fc42.aarch64
+TARGET SOURCE   FSTYPE OPTIONS
+/data1 /dev/vdb xfs    rw,relatime,seclabel,attr2,inode64,logbufs=8,logbsize=32k,noquota

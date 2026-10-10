@@ -1,0 +1,3 @@
+cluster: mac
+/bin/bash: Input/output error
+rsync(93992): error: unexpected end of file
