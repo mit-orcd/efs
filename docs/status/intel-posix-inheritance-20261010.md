@@ -27,3 +27,24 @@ A new single-client POSIX case checks setgid propagation through two directory
 levels, regular-file bit behavior and symlink group ownership. The Intel efs
 account has no alternate group for a live cross-group ownership check; that
 condition is covered by the production-function regression with distinct GIDs.
+
+## Confirmed competing-MKDIR false success
+
+A synchronized, two-physical-host probe on the deployed `d579c3bf` clients
+reported two successful `mkdir` calls for one new name in 16 of 20 trials.
+Four trials correctly had one success and one EEXIST. Each trial used a new,
+disposable name; its directory was removed only after both calls completed.
+
+The FUSE callback performed a lookup after a refused MKDIR and treated an
+existing directory as proof that this request had succeeded. A competing
+request's directory is not such proof. The repaired callback preserves the
+original failure, including known EEXIST and unknown BUSY, without substituting
+another creator's inode. Existing create errno mapping still distinguishes
+quota, access and authority failures. This does not extend legacy directory
+CREATE into the retained regular-file CREATE protocol.
+
+The production-function test now asserts EEXIST/BUSY/quota refusals leave the
+output inode untouched. Source `0f540108` fails that deterministic assertion.
+A new peer case synchronizes both clients across eight fresh names and requires
+exactly one successful mkdir and one EEXIST for each. The native macOS two-client
+fixture passes; deployment acceptance follows.

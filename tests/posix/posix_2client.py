@@ -193,6 +193,43 @@ def peer_mkdir_visible():
 
 
 @test
+def peer_mkdir_exclusive_race():
+    """Two competing mkdirs have exactly one success and one EEXIST."""
+    def race(d, side, other):
+        for trial in range(8):
+            ready = os.path.join(d, "ready-%s-%d" % (side, trial))
+            peer_ready = os.path.join(d, "ready-%s-%d" % (other, trial))
+            wr(ready, b"ready")
+            deadline = time.monotonic() + 30
+            while not os.path.exists(peer_ready):
+                if time.monotonic() >= deadline:
+                    raise Fail("mkdir peer did not reach the barrier")
+                time.sleep(0.005)
+            try:
+                os.mkdir(os.path.join(d, "raced-%d" % trial))
+                rc = 0
+            except OSError as e:
+                if e.errno != errno.EEXIST:
+                    raise Fail("raced mkdir returned errno %s" % e.errno)
+                rc = e.errno
+            _race_rc(d, "%s-%d" % (side, trial), rc)
+
+    def a(d):
+        race(d, "a", "b")
+
+    def b(d):
+        race(d, "b", "a")
+
+    def verify(d):
+        for trial in range(8):
+            eq(sorted((_read_rc(d, "a-%d" % trial), _read_rc(d, "b-%d" % trial))),
+               [0, errno.EEXIST], "mkdir must have exactly one winner")
+            assert os.path.isdir(os.path.join(d, "raced-%d" % trial))
+
+    return [("ab", (a, b)), ("a", verify)]
+
+
+@test
 def peer_create_visible():
     """A creates an empty file; B must see it."""
     def a(d):

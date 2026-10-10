@@ -4170,38 +4170,10 @@ static int efs_fuse_mkdir_at(fuse_ino_t parent_ino, const char *name, mode_t mod
     efs_ino_t ino = 0;
     int mk = efs_client_create_result(parent.ino, name, create_mode,
                                       uid, gid, 0, &ino);
-    if (mk != EFS_OK) {
-        /* Kernel LOOKUP was negative, then MKDIR. The server can answer
-         * EEXIST for a dentry this client's lookup has not seen yet
-         * (posix makedirs FileExistsError on a unique testdir name:
-         * names_near_path_max, content_random_overwrite_append). A real
-         * existing dir is caught by the kernel lookup before MKDIR, so
-         * finding it here means the create landed — reply success.
-         * A few short lookups, not the 16-attempt RPC budget. */
-        struct efs_inode row;
-        int tries;
-
-        /* BUSY after the RPC budget may be a committed mkdir. Keep the
-         * original request error throughout the visibility check. */
-        if (mk == EFS_ERR_EXIST || mk == EFS_ERR_BUSY) {
-            for (tries = 0; tries < 8; tries++) {
-                int lrc = efs_client_rpc_lookup(g_client.export_id,
-                                                parent.ino, name, &row);
-                if (lrc == EFS_OK) {
-                    if (!efs_mode_is_dir(row.mode))
-                        return -EEXIST;
-                    if (out_ino)
-                        *out_ino = row.ino;
-                    return 0;
-                }
-                if (lrc != EFS_ERR_NOT_FOUND)
-                    return fuse_stat_errno(lrc);
-                if (tries + 1 < 8)
-                    usleep(20000u * (unsigned)(tries + 1));
-            }
-        }
+    /* A directory seen after refusal may belong to a competing creator.
+     * Only the original RPC's proven success can satisfy this mkdir call. */
+    if (mk != EFS_OK)
         return fuse_create_errno(mk, parent.ino, name);
-    }
     if (out_ino)
         *out_ino = ino;
     return 0;
