@@ -1,6 +1,8 @@
 # W92 — tiny-file disk-catalog hot paths
 
-Oct 9, 2026; `devel-find-stats`, final deployed `6e841662`. Three Xorinox VMs,
+Oct 9, 2026; `devel-find-stats`, deployed at this checkpoint: `6e841662`.
+The [three additional rounds](query-cache-three-rounds-20261009.md) supersede
+this deployment and retain these measurements as historical evidence. Three Xorinox VMs,
 files/direct-I/O/TCP; ordinary mounts opt out of commands.
 
 The user's tiny_files.py ran on xefs1 against EFS: two 12000-file trees, four

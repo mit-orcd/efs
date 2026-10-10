@@ -1,0 +1,9 @@
+query-disk: raw shard=1 rc=-1 errno=5
+query-disk: raw shard=1 rc=-1 errno=5
+query disk I/O: windows, lookup, packed records, partial ENOSPC, FD reuse and fsync refusal PASS
+query-disk: unlinked directory ino=36864004096 parent=1 nlink=2
+query disk: RAM oracle, external sort, bounded metadata, retained snapshot, rename and cancellation PASS
+query disk: generation quota PASS
+test_query_catalog: OK
+test_name_index: OK
+test_meta_apply: OK

@@ -3625,6 +3625,13 @@ unchanged refresh 1.977 → 0.955 seconds. Unit preads fall 50.2%. Live creation
 See [indexed checkpoint](../status/query-cache-tiny-profile-20261009.md).
 Full incremental stats and aggregate disk control remain open.
 
+**Oct 9 additional three rounds:** exact inode matches stop early, raw key/value
+bytes use one bounded write and new raw/index files retain one checked writing-
+handle fsync rather than a duplicate final barrier. See [indexed evidence](../status/query-cache-three-rounds-20261009.md).
+Controlled traces reduce preads and pwrites; no namespace-growing live speedup
+is claimed. Persistence failures retain the old checkpoint.
+
+
 **Oct 9 user requirement — billions of files:** W92 remains open until the
 server query catalog uses a persistent, partitioned disk-backed index with
 bounded resident memory. Target namespace cardinality is **2^32 files**;

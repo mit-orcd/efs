@@ -47,6 +47,10 @@ quotas and large-scale acceptance remain open.
 [W92 tiny-file profiling](query-cache-tiny-profile-20261009.md) records deployed
 bounded read windows and immutable-file persistence reuse: controlled unchanged
 refresh is 2.07× faster; the mixed live creation-rate drop remains unisolated.
+[W92 three additional tiny-file rounds](query-cache-three-rounds-20261009.md)
+records all-node profiles, exact-match lookup, bounded combined-record writes
+and one checked raw/index persistence barrier; controlled syscall and cold
+correctness evidence stays separate from live throughput observations.
 
 ## Distributed metadata scaling discussion
 

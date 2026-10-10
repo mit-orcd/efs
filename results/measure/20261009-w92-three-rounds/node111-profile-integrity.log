@@ -1,0 +1,10 @@
+e19f8b8e559165fd7bf05cb3b139fc7457464611a294b614b19c3143b10914ed  /home/admin/w92-three-rounds/round1.data
+81f89c3bd9db5f902e8175658223eafd66b86d8dba64e49f8adca1a368599bf9  /home/admin/w92-three-rounds/round2.data
+bef263ef95735de46b5c0f889c29e458f4cf9afb8c334e3423c6dbebae671ede  /home/admin/w92-three-rounds/round3.data
+[ perf record: Woken up 6 times to write data ]
+[ perf record: Captured and wrote 1.514 MB /home/admin/w92-three-rounds/round1.data (7087 samples) ]
+[ perf record: Woken up 7 times to write data ]
+[ perf record: Captured and wrote 1.568 MB /home/admin/w92-three-rounds/round2.data (7324 samples) ]
+[ perf record: Woken up 7 times to write data ]
+[ perf record: Captured and wrote 1.586 MB /home/admin/w92-three-rounds/round3.data (7444 samples) ]
+2026-10-09 22:52:36.834944324 -0400 /home/admin/w92-three-rounds/round2-perf.log

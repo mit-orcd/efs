@@ -1505,6 +1505,10 @@ quotas and large-scale acceptance remain open.
 [W92 tiny-file profiling](../status/query-cache-tiny-profile-20261009.md) records deployed
 bounded read windows and immutable-file persistence reuse: controlled unchanged
 refresh is 2.07× faster; the mixed live creation-rate drop remains unisolated.
+[W92 three additional tiny-file rounds](../status/query-cache-three-rounds-20261009.md)
+records all-node profiles, exact-match lookup, bounded combined-record writes
+and one checked raw/index persistence barrier; controlled syscall and cold
+correctness evidence stays separate from live throughput observations.
 
 ### Distributed metadata scaling discussion
 
@@ -5733,6 +5737,13 @@ unchanged refresh 1.977 → 0.955 seconds. Unit preads fall 50.2%. Live creation
 225 → 85 files/s remains a confounded follow-up, not a cache-only verdict.
 See [indexed checkpoint](../status/query-cache-tiny-profile-20261009.md).
 Full incremental stats and aggregate disk control remain open.
+
+**Oct 9 additional three rounds:** exact inode matches stop early, raw key/value
+bytes use one bounded write and new raw/index files retain one checked writing-
+handle fsync rather than a duplicate final barrier. See [indexed evidence](../status/query-cache-three-rounds-20261009.md).
+Controlled traces reduce preads and pwrites; no namespace-growing live speedup
+is claimed. Persistence failures retain the old checkpoint.
+
 
 **Oct 9 user requirement — billions of files:** W92 remains open until the
 server query catalog uses a persistent, partitioned disk-backed index with

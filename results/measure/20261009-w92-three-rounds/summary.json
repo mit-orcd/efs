@@ -1,0 +1,12 @@
+{
+  "0": {
+    "fresh_median": 2.978866,
+    "refresh_median": 0.945705,
+    "four_build_cpu_median": 2.288782
+  },
+  "3": {
+    "fresh_median": 2.986234,
+    "refresh_median": 0.983684,
+    "four_build_cpu_median": 2.224191
+  }
+}

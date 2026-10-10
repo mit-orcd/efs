@@ -111,6 +111,14 @@ so this run verifies recovery by rebuilding, not checkpoint reuse. Results are r
 [clean-cluster ledger](../../results/measure/20261009-w92-clean-cluster/README.md).
 Ordinary mounts remain opted out; the acceptance mount explicitly enables commands.
 
+## Additional measured cache improvements
+
+The [three additional tiny-file rounds](query-cache-three-rounds-20261009.md)
+advance the runtime to `b4212453`: exact inode matches stop early, raw key/value
+fields share a bounded write, and new raw/index files use one checked barrier
+on their writing descriptors. Digests and publication barriers remain intact.
+Fixed record scratch adds 16704 bytes to build/restore admission.
+
 ## Remaining W92 obligations
 
 Incremental derived-stat maintenance, total cache-space quotas/retention,
