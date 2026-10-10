@@ -53,8 +53,10 @@ python3 tests/posix/posix_persist.py /mount/one --phase verify --results /tmp/pe
 
 `--timeout-s` is a minimum wall-clock budget per POSIX case; longer explicit
 case budgets remain in effect. For Mac virtual disks with slow durable flushes,
-use `--timeout-s 300` to validate the same operations and assertions. Use
-`--timeout-s 300` for each persistence phase as well. Record this choice with the
+use `--timeout-s 600` with `--jobs 1` to validate the same operations and
+assertions. Use `--timeout-s 600` for each persistence phase as well. The
+two-client Mac correctness profile uses `POSIX2_STEP_SEC=1200` for its
+500-fsync and 800-record workloads; keep their operation counts unchanged. Record this choice with the
 results, and retain failures at the original deadlines separately: a pass with
 more time proves correctness within that budget, not the original latency target.
 The filesystem's admission and RPC deadlines are not increased by this option.
