@@ -463,6 +463,7 @@ def setgid_directory_inheritance(d, phase):
     link = os.path.join(parent, "link")
     if phase == "prepare":
         os.mkdir(parent)
+        os.chown(parent, -1, os.getgid())
         os.chmod(parent, 0o2770)
         os.mkdir(child, 0o750)
         os.mkdir(grandchild, 0o750)
