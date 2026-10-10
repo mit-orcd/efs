@@ -84,6 +84,17 @@ int main(void) {
  assert(efs_client_publication_writeback(&q,1,7,0,10,9,999)==EFS_ERR_BUSY);
  assert(submits==1 && !consumes && q.count==1);
  assert(efs_client_publication_retire(&q)==EFS_ERR_BUSY && !retires);
+ /* A retired floor cannot reconstruct an unconsumed outcome or authorize
+  * releasing accepted bytes. Keep the local identity through reconciliation. */
+ state=EFS_PUBLICATION_RETIRED;verdict=EFS_META_PUBLICATION_RETIRED;
+ assert(efs_client_publication_writeback(&q,1,7,0,10,9,999)==EFS_ERR_STALE);
+ assert(q.count==1 && !q.entries[0].consumed_state && !consumes && submits==1);
+ status_rc=EFS_ERR_NOT_FOUND;submit_rc=0;state=EFS_PUBLICATION_PENDING;verdict=EFS_META_PUBLICATION_PENDING;
+ assert(efs_client_publication_writeback(&q,1,7,0,10,9,999)==EFS_ERR_BUSY);
+ assert(sessions==2 && submits==2 && !consumes && q.count==1);
+ status_rc=0;
+ assert(efs_client_publication_writeback(&q,1,7,0,10,9,999)==EFS_ERR_BUSY);
+ assert(sessions==2 && submits==3 && !consumes && q.count==1);
  state=EFS_PUBLICATION_COMMITTED;verdict=0;consume_exact=0;consume_rc=EFS_ERR_STALE;
  assert(efs_client_publication_writeback(&q,1,7,0,10,9,999)==EFS_ERR_STALE);
  assert(!q.entries[0].consumed_state);
