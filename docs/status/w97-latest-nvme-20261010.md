@@ -30,7 +30,12 @@ is not relabeled. Deployment then safely drains both service mounts / all four
 daemons and installs the merged build. A copied measurement preflight still
 expects the old build ID and refuses before any loader starts. Its empty cell
 and failure are retained; the corrected preflight expects the verified new ID.
-The measurement then starts without repeating deployment or replacing stores.
+A second measurement startup assumes PSI files that this kernel does not
+expose; it safely drains after 11 files. Retain that cell and its tree. PSI
+becomes explicitly unavailable rather than zero, and the final run uses fresh
+`tiny-w97-latest-continuous-v2-20261010`. The measurement then starts without
+repeating deployment or replacing stores. Controllers are frozen through
+`742a6acb`; executable source remains `6b8f05acb484` throughout.
 
 ## Continuous experiment
 
@@ -74,5 +79,5 @@ write totals include other users and are not NAND write amplification.
 Controls/provenance: `results/measure/20261010-w97-latest-nvme/` locally,
 `/data1/efs/w97-latest-20261010` on NUC; candidate build is isolated at
 `/data1/efs/w97-latest-build`. Native/live gates and service deployment are complete. Continuous observation
-is starting on this exact merged build; final observation and restoration remain
+is active on this exact merged build; final observation and restoration remain
 pending.
