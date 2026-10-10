@@ -296,6 +296,7 @@ test: all
 	./tests/test_put_storage_fence
 	python3 tests/test_storage_fence_members.py
 	python3 tests/test_storage_fence_retry.py
+	python3 tests/test_applied_interval.py
 	./tests/test_store_containers
 	python3 tests/test_lookup_errno.py
 	python3 tests/test_fuse_open_reply.py

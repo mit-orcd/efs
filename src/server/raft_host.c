@@ -403,6 +403,7 @@ struct efs_raft_host {
     uint64_t inbox_bytes, inbox_bytes_hi;
     int pressure_enabled;
     int flow_enabled, inbox_pressure, group_drain, flow_early_retire;
+    uint64_t applied_persist_us; /* pump-only bounded checkpoint cadence */
     unsigned inbox_work_n;
     uint64_t inbox_work_bytes;
     uint64_t inbox_probe_sent[HOST_NGROUPS][EFS_RAFT_MAX_PEERS];
@@ -5801,6 +5802,24 @@ static void applied_path(struct efs_raft_host *h, uint8_t group,
  * complement of the first is torn and reads as 0 (replay from the log
  * floor, which apply tolerates). */
 #define HOST_APPLIED_PERSIST_US 10000ull
+#define HOST_APPLIED_MAX_TAIL 1024ull
+
+/* Checkpoints are replay hints, never ACK watermarks. Keep the historical
+ * cadence unless explicitly experimenting; reject malformed/unbounded input. */
+static int host_applied_interval(const char *value, uint64_t *us)
+{
+    unsigned ms=0;
+    *us=HOST_APPLIED_PERSIST_US;
+    if (!value) return EFS_OK;
+    if (!*value) return EFS_ERR_INVAL;
+    for (const char *p=value; *p; p++) {
+        if (*p<'0' || *p>'9' || ms>1000) return EFS_ERR_INVAL;
+        ms=ms*10+(unsigned)(*p-'0');
+    }
+    if (ms<10 || ms>1000) return EFS_ERR_INVAL;
+    *us=(uint64_t)ms*1000;
+    return EFS_OK;
+}
 
 static int persist_applied(struct efs_raft_host *h, int gi, uint64_t idx,
                            uint64_t now, int force)
@@ -5812,16 +5831,28 @@ static int persist_applied(struct efs_raft_host *h, int gi, uint64_t idx,
         return EFS_OK;
     if (idx == 0 || idx == h->g[gi].applied_saved)
         return EFS_OK;
-    if (!force && now - h->g[gi].applied_saved_us < HOST_APPLIED_PERSIST_US)
+    uint64_t interval=h->applied_persist_us ? h->applied_persist_us : HOST_APPLIED_PERSIST_US;
+    /* The entry cap bounds the deliberately deferred replay tail. Timer
+     * cadence is best effort while I/O is blocked; no extra queue is kept. */
+    if (!force && idx>=h->g[gi].applied_saved &&
+        idx-h->g[gi].applied_saved<HOST_APPLIED_MAX_TAIL &&
+        now>=h->g[gi].applied_saved_us &&
+        now-h->g[gi].applied_saved_us<interval) {
+        BO_COUNT(BO_APPLIED_THROTTLE);
         return EFS_OK;
-    h->g[gi].applied_saved_us = now;
+    }
+    if (!force && idx>=h->g[gi].applied_saved &&
+        idx-h->g[gi].applied_saved>=HOST_APPLIED_MAX_TAIL)
+        BO_COUNT(BO_APPLIED_ENTRY_CAP);
     if (h->g[gi].applied_fd < 0) {
         char path[EFS_MAX_PATH];
 
         applied_path(h, h->g[gi].group, path, sizeof(path));
         h->g[gi].applied_fd = open(path, O_RDWR | O_CREAT, 0644);
-        if (h->g[gi].applied_fd < 0)
+        if (h->g[gi].applied_fd < 0) {
+            BO_COUNT(BO_APPLIED_ERROR);
             return EFS_ERR_IO;
+        }
     }
     wr64be(buf, idx);
     wr64be(buf + 8, ~idx);
@@ -5829,9 +5860,12 @@ static int persist_applied(struct efs_raft_host *h, int gi, uint64_t idx,
     if (n != (int)sizeof(buf) || fdatasync(h->g[gi].applied_fd) != 0) {
         close(h->g[gi].applied_fd);
         h->g[gi].applied_fd = -1;
+        BO_COUNT(BO_APPLIED_ERROR);
         return EFS_ERR_IO;
     }
+    BO_COUNT(BO_APPLIED_SYNC);
     h->g[gi].applied_saved = idx;
+    h->g[gi].applied_saved_us = now; /* failed writes must remain retryable */
     return EFS_OK;
 }
 
@@ -8784,6 +8818,11 @@ int server_raft_host_start(struct efsd_server *s)
     int query_enabled=!commands || !strcmp(commands,"1");
     const char *flow=getenv("EFS_RAFT_FLOW");
     if (flow && strcmp(flow,"0") && strcmp(flow,"1")) return EFS_ERR_INVAL;
+    uint64_t applied_interval;
+    if (host_applied_interval(getenv("EFS_RAFT_APPLIED_INTERVAL_MS"),&applied_interval)!=EFS_OK) {
+        fprintf(stderr,"raft-host: EFS_RAFT_APPLIED_INTERVAL_MS must be 10..1000\n");
+        return EFS_ERR_INVAL;
+    }
     const char *early_retire=getenv("EFS_RAFT_FLOW_EARLY_RETIRE");
     if (early_retire && strcmp(early_retire,"0") && strcmp(early_retire,"1"))
         return EFS_ERR_INVAL;
@@ -8811,6 +8850,7 @@ int server_raft_host_start(struct efsd_server *s)
         return EFS_ERR_NOMEM;
     struct efs_admission_limits limits={8ull<<20,1ull<<20,64,8};
     if (efs_admission_init(&h->proposal_queue,&limits) != EFS_OK) { free(h); return EFS_ERR_IO; }
+    h->applied_persist_us=applied_interval;
     h->flow_enabled=flow && !strcmp(flow,"1");
     h->flow_early_retire=early_retire && !strcmp(early_retire,"1"); /* candidate opt-in until acceptance */
     h->group_drain=group_drain && !strcmp(group_drain,"1");

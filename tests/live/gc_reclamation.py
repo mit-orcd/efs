@@ -88,6 +88,7 @@ p.add_argument('--rename-cache', action='store_true', help='root rename evicts t
 p.add_argument('--mixed-reads', action='store_true', help='tiny demand reads while sequential prefetch uses a bounded cache')
 p.add_argument('--ecrawl-binary',type=Path,help='run the actual ecrawl dense/sparse classification gate; requires --allocation')
 p.add_argument('--allocation', action='store_true', help='cold non-writing client allocation reports for dense and sparse files')
+p.add_argument('--applied-checkpoint-replay-only',action='store_true',help='retain follower applied markers, crash private fixture and verify durable metadata replay')
 p.add_argument('--kv-wal-persistence-only',action='store_true',help='refuse follower KV WAL fsync; preserve periodic/shutdown checkpoints and cold replay')
 p.add_argument('--transaction-fault-seed',action='store_true',help='prefer the client seed as fault follower for authority redirect validation')
 p.add_argument('--transaction-apply-retry',action='store_true',help='fault follower transaction persistence, retain commit/apply lag, retry and cold namespace bytes')
@@ -246,6 +247,9 @@ def start(prefer_single_host=False):
             node_env.update(LD_PRELOAD=str(work/'store-barrier-fault.so'),
                             EFS_TEST_STORE_BARRIER_FILE=str(work/'put-barrier-fault'),
                             EFS_TEST_STORE_NODE=str(i+1))
+        if a.applied_checkpoint_replay_only and i==2:
+            node_env.update(LD_PRELOAD=str(work/'applied-checkpoint-fault.so'),
+                            EFS_TEST_APPLIED_FAULT=str(work/'applied-marker-fault'))
         if a.kv_wal_persistence_only and i==2:
             node_env.update(LD_PRELOAD=str(work/'kv-wal-fault.so'),
                             EFS_TEST_KV_WAL_FAULT=str(work/'kv-wal-fault'),
@@ -403,11 +407,17 @@ try:
     print('Evidence directory: '+str(work),flush=True)
     if a.put_barrier_fault:
         run(['cc','-Wall','-Wextra','-Werror','-shared','-fPIC',source/'tests/live/store_barrier_fault.c','-ldl','-o',work/'store-barrier-fault.so'])
+    if a.applied_checkpoint_replay_only:
+        run(['cc','-shared','-fPIC','-Wall','-Wextra','-Werror',source/'tests/live/applied_checkpoint_fault.c','-ldl','-o',work/'applied-checkpoint-fault.so'])
     if a.kv_wal_persistence_only:
         run(['cc','-shared','-fPIC','-Wall','-Wextra','-Werror',source/'tests/live/kv_wal_fault.c','-ldl','-o',work/'kv-wal-fault.so'])
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.applied_checkpoint_replay_only:
+        from applied_checkpoint_replay import exercise
+        exercise(a,work,roots,mount,run,start,stop,mount_client,unmount,wait,drained)
+        raise SystemExit(0)
     if a.kv_wal_persistence_only:
         from kv_wal_persistence import exercise
         exercise(a,work,roots,mount,run,start,stop,mount_client,unmount,wait,drained)
