@@ -921,10 +921,16 @@ unequal inputs and partial final batches, syscall bounds (under 20 reads and
 12 writes), partial output followed by ENOSPC, and cancellation before IO.
 The production `io_at` retry/error boundary remains in use.
 
-Mac compilation with warnings as errors and Linux disk differential/I/O tests
-pass. The full Linux native repeat is running in detached screen
-`w92-merge-native-20261010` on the host; it must finish before deploying this
-change or replacing the queued scale oracle. The original scale process and
+Mac compilation with warnings as errors, Linux disk differential/I/O tests
+and the complete Linux native repeat pass (exit 0). The native log records
+10 reads and 9 writes for each 6098-row name/alias merge. A fresh process
+linked against the new library also passes the complete 10m recovery oracle:
+16.600 s catch-up plus 6.452 s full verification, zero rebuilt partitions and
+3864520 builder bytes. This is a recovery compatibility check, not a measured
+full-build speedup. The waiting actual 2^32 kernel-cold oracle was atomically
+updated to the same executable, SHA256
+`5f0b8dc19399c7efba74f5cddb06c159bf963f3d7f1e0fd08ed4abdeff9a1237`.
+Normal and private capacity daemons remain on cdc13b88. The original scale process and
 capacity writer were not interrupted. At 12:47 UTC the real writer had synced
 413184 files / 100.875 GiB; its complete cold-verification gate remains pending.
 

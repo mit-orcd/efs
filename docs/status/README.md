@@ -86,8 +86,9 @@ authoritative-source memory is tracked separately. The final oracle now checks
 all ten rollup fields and sampled inode attributes; full 10m recovery passes. Named native commands,
 fresh Linux NFSv4.0, retained payload recovery and loaded publication also pass.
 
-A bounded external-merge batching fix passes focused ordering, ENOSPC and
-cancellation tests; its full native repeat is running before deployment.
+Bounded external-merge batching (`fd457076`) passes focused ordering, ENOSPC,
+cancellation, full native and complete 10m recovery gates. The queued 2^32
+kernel-cold oracle uses it; normal daemons remain on cdc13b88.
 The current large scale processes remain active.
 
 Remaining gates: the actual 2^32-entry index build/export/cold/mutation run,
