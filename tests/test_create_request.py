@@ -17,7 +17,7 @@ code=r'''
 struct efs_client g_client;
 static pthread_mutex_t opid_mu=PTHREAD_MUTEX_INITIALIZER;
 static void opid_seed_locked(void) {if(!g_client.opid_next){g_client.opid_uuid[0]=29;g_client.opid_epoch=7;g_client.opid_next=1;}}
-static int admits,submits,probes,admit_rc,transport_rc,stored,negative,bad_route;
+static int admits,submits,probes,admit_rc,transport_rc,stored,negative,bad_route,unknown_ok;
 static struct efs_opid identity;
 static int rpc_status_to_efs(uint8_t status) {
  if(status==EFS_INODE_RPC_OK)return EFS_OK;
@@ -41,7 +41,7 @@ static int rpc_send_recv_owner(efs_ino_t parent,uint8_t type,const void *body,ui
  if(transport_rc)return transport_rc;
  struct efs_msg_create_retained_reply *reply=out;
  reply->routed=1;reply->shard=bad_route?122:121;
- reply->known=stored;reply->rpc.status=stored?(negative?EFS_INODE_RPC_EXIST:EFS_INODE_RPC_OK):EFS_INODE_RPC_BUSY;
+ reply->known=stored;reply->rpc.status=stored?(negative?EFS_INODE_RPC_EXIST:EFS_INODE_RPC_OK):(unknown_ok&&!r->probe?EFS_INODE_RPC_OK:EFS_INODE_RPC_BUSY);
  if(stored&&!negative){reply->rpc.inode.ino=4217;reply->generation=1;}
  return EFS_OK;
 }
@@ -58,6 +58,13 @@ int main(void) {
  assert(!efs_client_create_begin(&r,4097,"new",S_IFREG|0600,11,12));identity=r.wire.q.id;
  admit_rc=0;assert(efs_client_create_resume(&r,0)==EFS_ERR_BUSY&&r.attempted&&submits==1);
  assert(efs_client_create_cancel(&r)==EFS_ERR_BUSY&&g_client.opid_inflight[r.slot]);
+ /* Submission OK is not a terminal receipt. Retain the original identity,
+  * retry ownership and cancellation barrier until a known probe completes. */
+ unknown_ok=1;
+ assert(efs_client_create_resume(&r,0)==EFS_ERR_BUSY&&!r.complete&&r.slot>=0);
+ assert(g_client.opid_inflight[r.slot]==identity.seq);
+ assert(efs_client_create_cancel(&r)==EFS_ERR_BUSY);
+ unknown_ok=0;
  int count=submits;stored=1;
  assert(!efs_client_create_resume(&r,0)&&r.complete&&r.slot==-1&&r.inode.ino==4217&&r.generation==1&&submits==count);
  assert(!efs_client_create_resume(&r,0)&&submits==count);assert(!efs_client_create_reset(&r));
