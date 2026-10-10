@@ -116,6 +116,20 @@ static void budget_test(void)
 }
 int main(void)
 {
+    {
+        struct efs_query_rollup r={.tree_files=UINT64_MAX-1,.tree_dirs=7,.tree_bytes=9};
+        CHECK(!rollup_tree_add(&r,1,2,3));
+        struct efs_query_rollup before=r;
+        CHECK(rollup_tree_add(&r,1,0,0)==EFS_ERR_OVERFLOW);
+        CHECK(!memcmp(&r,&before,sizeof(r)));
+        r.tree_dirs=UINT64_MAX;before=r;
+        CHECK(rollup_tree_add(&r,0,1,0)==EFS_ERR_OVERFLOW);
+        CHECK(!memcmp(&r,&before,sizeof(r)));
+        r.tree_bytes=UINT64_MAX;before=r;
+        CHECK(rollup_tree_add(&r,0,0,1)==EFS_ERR_OVERFLOW);
+        CHECK(!memcmp(&r,&before,sizeof(r)));
+    }
+
     budget_test();
     struct efs_query_disk *d=calloc(1,sizeof(*d));if(!d)return 1;
     d->budget_fd=-1;

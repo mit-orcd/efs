@@ -586,6 +586,16 @@ static int nodes_build(struct efs_query_disk *d,uint32_t shard)
     if(rc)fprintf(stderr,"query-disk: nodes shard=%u previous=%llu rc=%d\n",shard,(unsigned long long)previous,rc);
     close(fd);return rc;
 }
+/* Count and byte additions are independent 64-bit fields. Refuse a bad
+ * candidate before changing any aggregate; retained generations stay valid. */
+static int rollup_tree_add(struct efs_query_rollup *to,uint64_t files,
+                           uint64_t dirs,uint64_t bytes)
+{
+    if(UINT64_MAX-to->tree_files<files || UINT64_MAX-to->tree_dirs<dirs ||
+       UINT64_MAX-to->tree_bytes<bytes)return EFS_ERR_OVERFLOW;
+    to->tree_files+=files;to->tree_dirs+=dirs;to->tree_bytes+=bytes;
+    return EFS_OK;
+}
 static void expand(uint64_t *lo,uint64_t *hi,uint64_t l,uint64_t h,int has)
 { if(!has || l<*lo)*lo=l;if(!has || h>*hi)*hi=h; }
 static uint64_t low_time(const struct efs_meta_stat *s)
@@ -685,10 +695,10 @@ static int folds_build(struct efs_query_disk *d)
         if(!child.link.parent)continue;
         rc=locate(d,child.link.parent,&parent,&at);if(rc)break;
         struct efs_query_rollup *a=&parent.rollup,*b=&child.rollup;
-        int has=a->tree_files+a->tree_dirs!=0;
+        int has=a->tree_files || a->tree_dirs;
         if(UINT64_MAX-a->tree_bytes<b->tree_bytes || !parent.children){rc=EFS_ERR_QUOTA;break;}
-        a->tree_files+=b->tree_files;a->tree_dirs+=b->tree_dirs;a->tree_bytes+=b->tree_bytes;
-        if(b->tree_files+b->tree_dirs)expand(&a->tree_tmin,&a->tree_tmax,b->tree_tmin,b->tree_tmax,has);
+        rc=rollup_tree_add(a,b->tree_files,b->tree_dirs,b->tree_bytes);if(rc)break;
+        if(b->tree_files || b->tree_dirs)expand(&a->tree_tmin,&a->tree_tmax,b->tree_tmin,b->tree_tmax,has);
         parent.children--;rc=node_at(d,efs_kv_inode_shard(parent.row.ino),at,&parent,1);
         if(!rc && !parent.children)rc=io_at(fd,&parent.row.ino,sizeof(parent.row.ino),tail++*sizeof(parent.row.ino),1);
     }

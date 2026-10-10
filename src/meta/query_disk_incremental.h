@@ -197,20 +197,17 @@ static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old
         if(S_ISDIR(c.row.mode)){
             if(child_dir)parent->pending++;
             else{
-                r->tree_files+=c.rollup.tree_files;r->tree_dirs+=c.rollup.tree_dirs;
-                if(UINT64_MAX-r->tree_bytes<c.rollup.tree_bytes){rc=EFS_ERR_QUOTA;break;}
-                int treehas=r->tree_files+r->tree_dirs-c.rollup.tree_files-c.rollup.tree_dirs!=0;
-                r->tree_bytes+=c.rollup.tree_bytes;
-                if(c.rollup.tree_files+c.rollup.tree_dirs)expand(&r->tree_tmin,&r->tree_tmax,c.rollup.tree_tmin,c.rollup.tree_tmax,treehas);
+                int treehas=r->tree_files || r->tree_dirs;
+                rc=rollup_tree_add(r,c.rollup.tree_files,c.rollup.tree_dirs,c.rollup.tree_bytes);if(rc)break;
+                if(c.rollup.tree_files || c.rollup.tree_dirs)expand(&r->tree_tmin,&r->tree_tmax,c.rollup.tree_tmin,c.rollup.tree_tmax,treehas);
             }
         }
     }
     for(unsigned i=0;i<s.count && !rc;i++){
         struct dirty_dir *dir=&s.dirs[i];struct efs_query_rollup *r=&dir->node.rollup;
         if(dir->node.row.nlink && dir->node.row.ino!=EFS_ROOT_INO && !dir->node.link.parent){rc=EFS_ERR_IO;break;}
-        int has=r->tree_files+r->tree_dirs!=0;
-        r->tree_files+=r->imm_files;r->tree_dirs+=r->imm_dirs;
-        if(UINT64_MAX-r->tree_bytes<r->imm_bytes){rc=EFS_ERR_QUOTA;break;}r->tree_bytes+=r->imm_bytes;
+        int has=r->tree_files || r->tree_dirs;
+        rc=rollup_tree_add(r,r->imm_files,r->imm_dirs,r->imm_bytes);if(rc)break;
         if(r->imm_files+r->imm_dirs)expand(&r->tree_tmin,&r->tree_tmax,r->imm_tmin,r->imm_tmax,has);
     }
     unsigned done=0;
@@ -223,9 +220,9 @@ static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old
             if(parent){
                 struct efs_query_rollup *a=&parent->node.rollup,*b=&dir->node.rollup;
                 if(!parent->pending || UINT64_MAX-a->tree_bytes<b->tree_bytes){rc=EFS_ERR_PROTO;break;}
-                int has=a->tree_files+a->tree_dirs!=0;
-                a->tree_files+=b->tree_files;a->tree_dirs+=b->tree_dirs;a->tree_bytes+=b->tree_bytes;
-                if(b->tree_files+b->tree_dirs)expand(&a->tree_tmin,&a->tree_tmax,b->tree_tmin,b->tree_tmax,has);
+                int has=a->tree_files || a->tree_dirs;
+                rc=rollup_tree_add(a,b->tree_files,b->tree_dirs,b->tree_bytes);if(rc)break;
+                if(b->tree_files || b->tree_dirs)expand(&a->tree_tmin,&a->tree_tmax,b->tree_tmin,b->tree_tmax,has);
                 parent->pending--;
             }
             rc=node_at(d,efs_kv_inode_shard(dir->node.row.ino),dir->at,&dir->node,1);
