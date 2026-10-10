@@ -69,3 +69,4 @@ __pycache__/
 /tests/test_put_upload_server
 
 /tests/test_put_upload_client
+/tests/test_query_policy

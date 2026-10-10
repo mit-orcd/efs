@@ -1,3 +1,4 @@
+#include <errno.h>
 #include "efs/cli_help.h"
 #include "efs/common.h"
 #include "efs/lock.h"
@@ -1170,6 +1171,32 @@ static int sess_rpc(const char *host, uint16_t port, const uint8_t *payload,
         if(rc!=EFS_OK){out->rc=rc;return rc;}
     }
     return out->rc;
+}
+
+static int cmd_commands_policy(int argc,char **argv)
+{
+    if((argc!=2 && argc!=4) ||
+       (strcmp(argv[1],"get") && strcmp(argv[1],"set")) ||
+       (!strcmp(argv[1],"get") && argc!=2) ||
+       (!strcmp(argv[1],"set") && argc!=4)) {
+        fprintf(stderr,"Usage: efs-mgmt commands-policy node:port get | set MASK EXPECTED_VERSION\n");return 1;
+    }
+    char host[64];uint16_t port;
+    if(parse_host_port(argv[0],host,sizeof(host),&port))return 1;
+    uint8_t payload[14]={efs_raft_shard_group(1),EFS_MD_REQ_QUERY_POLICY};
+    uint32_t length=2;
+    if(argc==4) {
+        char *end=NULL;errno=0;unsigned long mask=strtoul(argv[2],&end,10);
+        if(errno || !argv[2][0] || argv[2][0]=='-' || *end || mask>3)return 1;
+        errno=0;unsigned long long version=strtoull(argv[3],&end,10);
+        if(errno || !argv[3][0] || argv[3][0]=='-' || *end)return 1;
+        payload[1]=EFS_MD_CMD_QUERY_POLICY;wr64be_mgmt(payload+2,version);
+        wr32be_mgmt(payload+10,(uint32_t)mask);length=14;
+    }
+    struct efs_msg_raft_mkfs_reply reply;int rc=sess_rpc(host,port,payload,length,&reply);
+    printf("commands-policy rc=%d version=%llu mask=%llu leader_hint=%d\n",rc,
+           (unsigned long long)reply.index,(unsigned long long)reply.salt,reply.leader_hint);
+    return rc?1:0;
 }
 
 /* Repeating this exact monotonic certificate barrier cannot reopen a session.
@@ -2485,6 +2512,8 @@ int main(int argc, char **argv)
         return cmd_gc_status(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-status") == 0)
         return cmd_raft_status(argc - 2, argv + 2);
+    if (strcmp(cmd, "commands-policy") == 0)
+        return cmd_commands_policy(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-mkfs") == 0)
         return cmd_raft_mkfs(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-change") == 0)

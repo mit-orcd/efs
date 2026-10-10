@@ -17,6 +17,8 @@
  * is serialized apply. Reply salt is ticket state, never permission to PUT. */
 /* REPORT envelope: [tag][uuid:16][epoch:4][legacy PUBLISH:202]*N.
  * Fences every mapping at serialized apply without reusing delta fields. */
+#define EFS_MD_CMD_QUERY_POLICY 43 /* expected version:8, mask:4 */
+#define EFS_MD_REQ_QUERY_POLICY 44 /* ReadIndex only, reply index=version/salt=mask */
 #define EFS_MD_CMD_REPORT_PUBLISH 41
 #define EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED 42
 #define EFS_MD_CMD_PUT_TICKET_ADMIT 39

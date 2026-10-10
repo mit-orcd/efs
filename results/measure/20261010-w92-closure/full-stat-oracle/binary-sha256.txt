@@ -1,0 +1,3 @@
+a06c56f6c108a329206f91aea131683cc74e2be60c620d7cf276298b63986e1c  /home/efs/w92-query-scale-full-oracle
+ebdf4b6d5a608306294a6e6ab9140a394a90d4f15cf40be4c351b76a2c7099a0  /home/efs/w92-query-concurrent-full-oracle
+64e75df94050c798405ea597a59a2cbe08e62a0a6e5e1e28c7ea0a0d5df45656  /home/efs/w92-incremental-build/libefs.a

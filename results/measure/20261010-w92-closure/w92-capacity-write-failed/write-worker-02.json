@@ -1,0 +1,1 @@
+{"worker": 2, "completed": 15567, "phase": "write", "expected_files": 1638400, "bytes_per_file": 262144, "elapsed_seconds": 1186.2786177969992}

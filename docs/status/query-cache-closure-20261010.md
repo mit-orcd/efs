@@ -10,10 +10,11 @@ profiling rounds do not satisfy them.
 | Immutable disk catalog, incremental exact aggregates, bounded builder scratch | implemented, differential/live/cold gates pass in previous checkpoint |
 | Aggregate retained-cache admission | implemented; native and live QUOTA/write/cold-recovery oracles pass |
 | Durable changed-key watermarks and bounded catch-up/recovery | durable partition revisions, restart catch-up and bounded discovery implemented; focused/full native and live cold/disable-re-enable/publisher-loss/interrupted-cache gates pass |
-| Explicit cardinality/offset/budget audit | revision saturation, complete source-allocation budgeting and representation audit complete; actual scale/live validation pending |
-| Increasing-cardinality RSS, cold-cache, concurrent export/mutation and freshness | pilots and live contention/freshness pass; latest source-scratch deployment, live command/pages and measured query/writer load pass; full actual scale pending |
+| Explicit cardinality/offset/budget audit | revision saturation, complete source-allocation budgeting and representation audit complete; named deployment/live validation passes; actual 2^32 validation remains open |
+| Increasing-cardinality RSS, cold-cache, concurrent export/mutation and freshness | 10m complete kernel-cold and concurrent old/new export oracles pass with fixed builder memory; named live contention/freshness passes; full actual scale pending |
 | Synthetic partitioned index of at least 2^32 entries | pending; sparse offset probes alone cannot satisfy this |
-| Staged real-filesystem and fault/platform gates | previous smaller gates pass; closure matrix pending |
+| Replicated persistent feature policy | native, live, restart, quota, lost-reply and fail-closed gates pass |
+| Staged real-filesystem and fault/platform gates | named native and Linux NFSv4.0 pass; actual 400 GiB write/cold/hash/export and Mac NFS execution pending |
 
 ## Aggregate cache admission
 
@@ -503,3 +504,231 @@ reproduction and sequential logs are retained in the closure evidence directory.
 The export maps every NFS caller to UID/GID 0; these gates certify that actual
 policy and do not claim per-client UID authorization. Mac native execution,
 persistent remote export policy and the large scale gates remain open.
+
+## Remaining real-payload capacity fixture plan
+
+The historical 400 GiB actual-payload requirement is still open; synthetic files
+are not a substitute. Production quotas total 300 GiB raw and cannot hold that
+2+1 payload safely. Provision three fresh capped 270 GiB XFS test volumes on
+the same Xorinox VMs and run a separate direct-I/O/TCP/files namespace on port
+18432, with 250 GiB quota per node and a distinct client mount. Existing port
+17432 services and /data1 are retained. About 600 GiB raw fragments plus metadata
+fit those private quotas; host physical capacity must be rechecked before launch.
+The generator will stream bounded deterministic nonzero payloads, fsync every
+acknowledged file, and independently verify all data and exact query totals
+through a fresh client after a cold restart. Record namespace cardinality and
+measured physical/logical allocation separately from the actual synthetic gate.
+Do not format any existing filesystem or expand production quotas. The private
+units/disks must be addressed explicitly; shared helpers that discover all efsd
+processes cannot distinguish both namespaces. This is a proposed fixture, not
+a completed gate or an end-to-end billions-of-file capacity claim.
+
+The three private 270 GiB raw disks have now been serial-verified, formatted
+without force, and mounted separately. The port-18432 namespace uses 250 GiB
+per-node quotas and explicit units `w92-capacity-efsd`. Client 115 runs
+`w92-capacity-400g-20261010` detached. The 80-file/20 MiB smoke write and
+independent full hash/stat verification pass; this is a harness check only.
+At the first compact progress check, 23936 of 1638400 real files were acknowledged.
+Full write, cold recovery, every-payload and complete-export gates remain pending.
+
+The first capacity writer stopped at 09:33:38 UTC with exit 1 after 124983
+acknowledged files (32763543552 payload bytes), before the 400 GiB gate. The
+client reported CREATE PROTO (-7), not ENOSPC; all three private daemons remained
+active with about 248 GiB free each and no PUT/disk-write errors. The original
+[failed-run checkpoints](../../results/measure/20261010-w92-closure/w92-capacity-write-failed/write.log)
+are retained. A later diagnostic exclusive CREATE for the absent failing name
+succeeded and left an unacknowledged zero-byte tail. The explicit resume harness
+rehashes every acknowledged payload before proceeding and only rewrites the
+unacknowledged tail, recording each repair. Its full-acknowledgement 80-file
+smoke passes. This recovery does not convert the failed run into a passed gate.
+
+Review found a concrete retained-CREATE retry defect: an initial probe can return
+BUSY before parent ReadIndex determines the route; the client incorrectly
+converted that response to PROTO. The proposed fix preserves BUSY and the exact
+operation identity, and admits/submits nothing until a route is received. The
+actual extracted CREATE regression now exercises three such probes and passes
+on Mac; candidate Linux/live and native repetition follow. The original log
+without per-probe tracing does not prove which validation branch fired.
+
+The unrouted-BUSY fix passes the actual extracted retained-CREATE and FUSE
+admission deadline regressions on Mac, the retained-CREATE regression on Linux,
+and the [unchanged complete native suite](../../results/measure/20261010-w92-closure/w92-unrouted-busy-native-passed.log).
+The initial resume was intentionally stopped with SIGTERM/143 during its read-only
+acknowledgement rehash to install the fixed private client. The new detached
+`w92-capacity-busy-fixed-20261010` resumes from the preserved original write
+checkpoints with client diagnostics captured to a persistent file. Actual full
+payload/cold/export acceptance remains pending.
+
+## Named rollout — 1a25d20a193b
+
+The committed policy and unrouted-CREATE fixes pass the full native suite;
+named `1a25d20a193b` binaries/source are deployed on all six Xorinox guests.
+All three binary SHA-256 digests agree across the six guests. Only normal port
+17432 services/mounts were drained and cold restarted; no data was formatted.
+Separate capacity/policy services and the actual-entry generator stayed running.
+The normal clients on 115/116 remain `.efs` opt-out; gateway and the named
+diagnostic mount remain opted in for platform acceptance. All node policy GETs
+return default version 0/mask 3.
+
+Native commands and one freshly mounted, explicitly NFSv4.0 Linux client pass
+all 141 payload hashes/561174 bytes, exact stats, fresh command convergence,
+retained immutable bytes and complete paged client-path export. Two earlier
+NFS invocations passed but found stacked mounts; they are not the final mount
+gate. The admin user cannot traverse `/home/efs`, so mountpoint checks for cleanup
+now run under sudo before a single fresh mount. Earlier acknowledged disabled
+and quota fixtures also recover all 1000 payloads/4096000 bytes after rollout.
+Mac execution remains pending its user-privileged stale-mount refresh.
+
+[Deployment/digests](../../results/measure/20261010-w92-closure/w92-1a25d20a-deployment.json),
+[native commands](../../results/measure/20261010-w92-closure/w92-1a25d20a-native-commands.log),
+[fresh NFSv4.0](../../results/measure/20261010-w92-closure/w92-1a25d20a-nfs40-fresh-single.log),
+[retained payloads](../../results/measure/20261010-w92-closure/w92-1a25d20a-retained-payloads.log).
+
+The fixed capacity client has rehashed the original acknowledged prefix and
+resumed new writes. Its recorded zero-byte unacknowledged diagnostic tail is
+rewritten, with original failed-run evidence retained. No 400 GiB or actual
+2^32-entry completion gate is claimed. The latest actual-entry population
+checkpoint is 2345664512 entries; whole generator/source-process RSS is
+4305072 KiB, distinct from the fixed query-builder/scratch budgets.
+
+The named [loaded writer/query repeat](../../results/measure/20261010-w92-closure/w92-1a25d20a-loaded.log)
+also passes with eight writers/two concurrent readers: 1126 independently
+verified payloads (288256 bytes), changing publication generations and exact
+post-close stats in 10.573 s. Create p50/p95/p99 are 76.766/217.434/418.663 ms.
+The actual-entry generator and separate real-payload writer overlap this test;
+this shared-load measurement is not a controlled speedup comparison.
+
+## Explicit kernel-cold and concurrent ten-million-entry gates
+
+The named `1a25d20a` library passed a fresh-process recovery/export of all
+10,000,000 paths after root ran `sync` and cleared guest kernel caches. Guest
+Cached fell from 14,602,776 to 834,260 KiB. Recovery took 28.252 s and the complete
+independent export check 6.300 s; one partition rebuilt, builder allocation was
+3,864,480 bytes, and whole-process peak RSS was 29,084 KiB. Host/device caches
+were not controlled; this is guest kernel/process cold recovery, not power-loss
+or physical-device cold performance. The two larger fixtures continued running.
+
+`tests/bench_query_disk_concurrent.c` retains an old generation, starts a complete
+independent export, changes one source inode, and builds a replacement while
+that export continues. It checks every old and new path, every directory/root
+aggregate, restores the private source and checkpoints it for an independent
+fresh-process recovery check. It refuses missing/non-directory fixture roots.
+Compilation with `-Wall -Wextra -Werror` and a 1000-entry smoke test pass.
+
+The first 10m run reached the default 32 GiB aggregate retained-generation quota
+and correctly returned QUOTA; its old export still checked all 10m paths. That
+failed attempt is preserved. With only this private fixture's disk budget raised
+to 128 GiB, the repeated gate passes: 10m old and 10m new paths checked, 1,557,796
+old rows emitted during replacement construction, 3,864,480 builder bytes and
+225,718 bytes of retained source-owned allocations. Whole-process peak RSS was
+32,736 KiB; elapsed time was 57.93 s under overlapping cluster/scale load. RAM
+budgets and normal 32 GiB cache defaults are unchanged. This is a correctness and
+bounded-memory gate, not a controlled speed comparison.
+
+An additional fresh-process recovery verifies all 10m paths and exact aggregates
+after the concurrent test: 29.104 s recovery, 12.798 s complete export verification,
+zero rebuilt partitions, exit 0. Compact raw evidence, including the quota
+failure, is in
+[the cold/concurrent results](../../results/measure/20261010-w92-closure/cold-kernel-and-concurrent-10m/).
+The actual 2^32 run still owes its own complete build/export/mutation/recovery
+oracles; these pilots do not substitute for it.
+
+## Remaining scale handoff and service restoration
+
+Do not restart either fixture on an observation timeout. Inspect the terminal
+marker first and then confirm its process: the actual-entry generator is PID
+6246 on xefs1, screen `w92-2p32-bounded-24g-v4`; the capacity writer is PID
+269152 on client 115, screen `w92-capacity-busy-fixed-20261010`. PIDs are a
+checkpoint, not permanent identities: verify command lines before signaling.
+The actual-entry run has an 8 TiB generation budget, 16 TiB aggregate budget and
+100 GiB free reserve; those are private logical limits, not preallocated storage.
+
+After the actual-entry run records exit 0, preserve its complete log/time/markers
+and check every build, cold and mutation verdict. Then run the named recovery
+harness against the same 4,294,967,296-entry root in a fresh process, following
+an explicit guest `sync`/kernel-cache clear, with the same large disk budgets.
+Its complete streaming oracle must pass; a count in a progress line is insufficient.
+The ten-million concurrent gate already passes; the completed large root can
+also be exercised by the concurrent harness, retaining its original source
+mutation and checking complete old/new exports. Do not open its source while
+the original generator or recovery process still owns it.
+
+After the capacity resume records exit 0 and `resume-complete.json` proves all
+1,638,400 files, drain/unmount its client using `/tmp/efs/scripts/client.sh stop`.
+Cold-stop all three **only** `w92-capacity-efsd.service` instances, then recreate
+their explicit transient units: port 18432, preserved
+`/mnt/w92-capacity-node-20261010`, quota 250G, files/direct-I/O/TCP,
+`EFS_MD_RAFT_N=3`, finite `EFS_QUERY_EXPORT_MAX_MS=86400000`, respective node IDs
+and addresses, and nodes 2/3 joining `192.168.122.111:18432`. Do not format,
+use the normal cluster-wide stop helper, or restart port 17432 for this gate.
+Start a fresh named `/tmp/efs/efs-fuse` opt-in client on 115 and run the capacity
+harness in `verify` mode against `w92-real-400g-20261010`, writing evidence to a
+new local directory outside EFS. This independently checks every payload hash
+and length, all directory names, exact rollups and every exported query path.
+A successful write or sampled read cannot replace that cold verification.
+
+Before closure, execute the fresh Mac NFS command suite after its privileged
+mount refresh. Restore the normal gateway and diagnostic mounts to `.efs`
+opt-out, retire the two private service namespaces and diagnostic clients, and
+restore xefs1's original 3 GiB memory configuration from its saved XML after
+all scale processes have exited. Preserve datasets and raw evidence. Verify
+normal port-17432 daemon arguments, all normal clients, NFS service and retained
+namespace after restoration. No pushes, production formatting, D25 activation,
+W55 incident closure or W66 consensus claim are part of this handoff.
+
+The named 2^32 guest-kernel-cold recovery is queued in detached admin screen
+`w92-2p32-kernel-recovery-20261010`. Its
+[exact wrapper](../../results/measure/20261010-w92-closure/scale-recovery-handoff/w92-scale-recovery-20261010.sh)
+waits for the original marker, refuses a failed/missing original process, checks
+all population/build/cold/mutation verdicts, then clears guest caches and runs
+the named full recovery oracle. It preserves the large private disk budgets and
+sets NOFILE **inside** the `runuser` shell: the guest's `runuser` otherwise resets
+the soft limit to 1024 (hard limit remains 524288). The waiting wrapper is live;
+this is queued work, not completed recovery. Results use the original fixture
+stem plus `-kernel-recovery.{cache-state,log,time,exit,finished}`.
+
+The 400 GiB cold handoff is queued in a local detached screen
+`w92-capacity-cold-handoff-20261010`, using this
+[exact one-shot script](../../results/measure/20261010-w92-closure/capacity-recovery-handoff/run.sh).
+It retries SSH observation failures without restarting the writer. Only an exit-0
+marker plus the complete 1,638,400-file/400-GiB independent write verdict permits
+the handoff. It preflights the named daemon hashes and all three private unit
+arguments, drains the test client, stops all three private daemons, recreates
+only those units with preserved storage and mounts a fresh named opt-in client.
+It then queues the full verifier in remote screen
+`w92-capacity-cold-verify-20261010` on 115; results are outside EFS in
+`/home/efs/w92-capacity-cold-verify-20261010`. Normal port-17432 services are not
+part of this script. The local screen must remain running (a sleeping/disconnected
+Mac delays the handoff). Its launch is verified; no cold-capacity pass is claimed.
+Local handoff logs/markers and the remote verification markers must be inspected
+before treating either stage as complete.
+
+## Complete statistics oracle audit
+
+A final oracle audit found that the synthetic gate checked total bytes/files and
+selected counts but omitted some immediate byte totals, empty directory counts
+and timestamp extrema. The production implementation is unchanged. The harness
+now independently verifies all ten rollup fields for the root and every directory:
+counts, bytes, immediate/tree minimum and maximum times. Sampled file attributes
+also check inode/generation, exact mode, link count, UID/GID, all three timestamps,
+allocation and lane counts as well as length. Every exported path remains checked.
+
+Both scale and concurrent harnesses compile with `-Wall -Wextra -Werror` against
+the named deployed library. A fresh 1000-entry construction, full export, mutation,
+concurrent old/new export and fresh-process recovery all pass the stronger oracle.
+The existing ten-million-entry fixture also passes complete recovery/export with
+all fields checked: 21.095 s recovery, 5.688 s verification, zero rebuilt
+partitions and the unchanged 3,864,480-byte builder. These timings overlap other
+work and are not a speed comparison.
+
+The stronger concurrent 10m gate also passes both complete old/new exports and
+all rollups: 4,187,842 old rows emitted during replacement construction,
+3,864,480 builder bytes, 225,718 retained source-owned bytes, 19.541 s and exit 0.
+
+The waiting billion-entry recovery wrapper now uses
+`/home/efs/w92-query-scale-full-oracle`; its previous waiting screen alone was
+replaced, leaving the original generator running. The original gate's narrower
+statistics checks will be supplemented by this complete fresh-process gate,
+which still owes a passing terminal verdict.
+[Raw logs and harness/library hashes](../../results/measure/20261010-w92-closure/full-stat-oracle/)
+preserve the strengthened checks. W92 remains open.
