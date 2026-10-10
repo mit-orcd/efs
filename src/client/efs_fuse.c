@@ -2065,10 +2065,28 @@ static int efs_open_drain_pending(void)
 /* Every returned regular descriptor, including CREATE, owns a server lease.
  * The edge stripe prevents a second open returning before proven OPEN,
  * and prevents a delayed last-close release deleting a new lease. */
-static int efs_open_acquire_fileid(efs_ino_t ino, uint64_t create_generation)
+static int wb_lock_budget(pthread_mutex_t *mu);
+
+/* BUSY without durable result proof owns the same OPEN edge. Wait within the
+ * caller's single budget rather than return a transient contention as EBUSY
+ * or replace an ambiguous identity. A completed rejection remains audible. */
+static int efs_open_lease_resume_wait(struct efs_client_lease_request *request)
+{
+    int rc=EFS_ERR_BUSY;
+    while(!efs_client_rpc_past_deadline()) {
+        rc=efs_client_lease_resume(request,0);
+        if(request->complete || rc!=EFS_ERR_BUSY)break;
+        usleep(1000);
+    }
+    if(!request->complete && efs_client_rpc_past_deadline())rc=EFS_ERR_BUSY;
+    return rc;
+}
+
+static int efs_open_acquire_fileid_run(efs_ino_t ino, uint64_t create_generation)
 {
     pthread_mutex_t *edge = open_edge_mu(ino);
-    pthread_mutex_lock(edge);
+    int lock_rc=wb_lock_budget(edge);
+    if(lock_rc!=EFS_OK)return lock_rc;
     int rc = efs_open_release_pending(ino);
     if (rc != EFS_OK) {
         pthread_mutex_unlock(edge);
@@ -2097,7 +2115,7 @@ static int efs_open_acquire_fileid(efs_ino_t ino, uint64_t create_generation)
             if (rc == EFS_OK) {
                 owner->lease_generation = generation;
                 efs_open_set_leased(ino);
-                rc = efs_client_lease_resume(&owner->edge, 0);
+                rc = efs_open_lease_resume_wait(&owner->edge);
                 if (rc == EFS_OK && !owner->edge.complete) rc = EFS_ERR_BUSY;
             }
         }
@@ -2107,6 +2125,19 @@ static int efs_open_acquire_fileid(efs_ino_t ino, uint64_t create_generation)
         }
     }
     pthread_mutex_unlock(edge);
+    return rc;
+}
+
+/* Budget includes serialization, FileID lookup, the retained OPEN and any
+ * compensating cleanup. Never extend an inherited deadline. */
+static int efs_open_acquire_fileid(efs_ino_t ino, uint64_t create_generation)
+{
+    uint64_t previous=efs_client_rpc_deadline_ms();
+    uint64_t deadline=stats_now_ms()+30000;
+    if(previous && previous<deadline)deadline=previous;
+    efs_client_rpc_set_deadline_ms(deadline);
+    int rc=efs_open_acquire_fileid_run(ino,create_generation);
+    efs_client_rpc_set_deadline_ms(previous);
     return rc;
 }
 

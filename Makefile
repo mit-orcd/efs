@@ -194,6 +194,7 @@ test-create-errors: $(LIB)
 	python3 tests/test_create_retry_identity.py
 	python3 tests/test_create_retry_ack.py
 	python3 tests/test_open_lease.py
+	python3 tests/test_open_busy.py
 	python3 tests/test_unlink_verdict.py
 	python3 tests/test_gc_verdict.py
 	python3 tests/test_put_hint.py
