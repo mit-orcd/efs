@@ -12,6 +12,17 @@
 #include <unistd.h>
 
 #define KV_LSM_MAGIC 0x4B564C31u /* KVL1 */
+#define KV_APPLY_KEYS 32768u
+#define KV_APPLY_BYTES (64ull << 20)
+/* Private to the apply thread, never exported as a snapshot/committed view. */
+static __thread struct {
+    struct kv_lsm *owner;
+    struct kv_mtab mt;
+    int failed, committing;
+} apply_scope;
+static int apply_staging(struct kv_lsm *l)
+{ return apply_scope.owner == l && !apply_scope.committing; }
+
 
 void kv_seg_path(const struct kv_lsm *l, int level, uint64_t seq, char *out,
                  size_t n)
@@ -487,6 +498,15 @@ static int lookup(struct kv_lsm *l, const uint8_t *key, uint32_t klen,
 {
     int guard = 0;
     int kr = kv_key_range(key, klen);
+    if (apply_staging(l)) {
+        int found;
+        uint32_t at = kv_mtab_pos(&apply_scope.mt, key, klen, &found);
+        if (found) {
+            struct kv_ent *e = apply_scope.mt.e[at];
+            *op = e->op;
+            return kv_buf_set(out, e->val, e->vlen);
+        }
+    }
 
     for (;;) {
         struct lsm_view snap;
@@ -571,15 +591,16 @@ int kv_msrc_advance(struct kv_lsm *l, struct msrc *s, const uint8_t *lower,
 {
     for (;;) {
         if (!s->it) {
-            if (s->mi >= l->mt.n) {
+            const struct kv_mtab *m = s->mt ? s->mt : &l->mt;
+            if (s->mi >= m->n) {
                 s->done = 1;
                 return EFS_OK;
             }
-            s->key = l->mt.e[s->mi]->key;
-            s->klen = l->mt.e[s->mi]->klen;
-            s->val = l->mt.e[s->mi]->val;
-            s->vlen = l->mt.e[s->mi]->vlen;
-            s->op = l->mt.e[s->mi]->op;
+            s->key = m->e[s->mi]->key;
+            s->klen = m->e[s->mi]->klen;
+            s->val = m->e[s->mi]->val;
+            s->vlen = m->e[s->mi]->vlen;
+            s->op = m->e[s->mi]->op;
             s->mi++;
         } else {
             int rc = kv_seg_iter_next(s->it, &s->key, &s->klen, &s->val,
@@ -624,12 +645,12 @@ static int merge_scan(struct kv_lsm *l, int private_read,
                                 const uint8_t *val, uint32_t vlen),
                       void *user)
 {
-    struct msrc stack_src[KV_LSM_MAX_SEGS * 2 + 1];
+    struct msrc stack_src[KV_LSM_MAX_SEGS * 2 + 2];
     struct msrc *src = stack_src;
     const uint8_t *seek = slen ? start : prefix;
     uint32_t seek_len = slen ? slen : plen;
-    uint32_t nsrc = 0, i, cap = KV_LSM_MAX_SEGS * 2 + 1;
-    uint32_t need = l->n_l0 + l->n_l1 + 1;
+    uint32_t nsrc = 0, i, cap = KV_LSM_MAX_SEGS * 2 + 2;
+    uint32_t need = l->n_l0 + l->n_l1 + 1 + apply_staging(l);
     int src_heap = 0;
     int rc = EFS_OK;
 
@@ -643,6 +664,15 @@ static int merge_scan(struct kv_lsm *l, int private_read,
     } else {
         memset(src, 0, sizeof(stack_src));
     }
+    if (apply_staging(l)) {
+        src[nsrc].mt = &apply_scope.mt;
+        if (seek_len) {
+            int found;
+            src[nsrc].mi = kv_mtab_pos(&apply_scope.mt, seek, seek_len, &found);
+        }
+        nsrc++;
+    }
+    src[nsrc].mt = &l->mt;
     src[nsrc].mi = 0;
     if (l->mt.n && seek_len) {
         int found;
@@ -746,7 +776,7 @@ static void metadata_dirty(struct kv_lsm *l, const uint8_t *key, uint32_t len)
     }
 }
 
-static int lsm_batch(void *ctx, const struct efs_kv_item *items, uint32_t n)
+static int lsm_batch_committed(void *ctx, const struct efs_kv_item *items, uint32_t n)
 {
     struct kv_lsm *l = ctx;
     uint64_t seq = 0;
@@ -805,6 +835,39 @@ static int lsm_batch(void *ctx, const struct efs_kv_item *items, uint32_t n)
         rc = kv_maybe_flush_locked(l);
     pthread_cond_broadcast(&l->cv);
     pthread_mutex_unlock(&l->mu);
+    return rc;
+}
+
+static int lsm_batch(void *ctx, const struct efs_kv_item *items, uint32_t n)
+{
+    struct kv_lsm *l = ctx;
+    if (!l || (n && !items)) return EFS_ERR_INVAL;
+    if (apply_staging(l)) {
+        if (apply_scope.failed) return apply_scope.failed;
+        for (uint32_t i=0; i<n; i++) {
+            const struct efs_kv_item *it=&items[i];
+            if (!it->key || !it->klen || it->klen>KV_LSM_KLEN_MAX ||
+                it->vlen>KV_LSM_VLEN_MAX ||
+                (it->op!=EFS_KV_PUT && it->op!=EFS_KV_DEL) ||
+                (it->op==EFS_KV_PUT && it->vlen && !it->val))
+                return apply_scope.failed=EFS_ERR_INVAL;
+            int found;
+            uint32_t at=kv_mtab_pos(&apply_scope.mt,it->key,it->klen,&found);
+            uint64_t bytes=apply_scope.mt.bytes;
+            if (found) bytes-=apply_scope.mt.e[at]->vlen;
+            else bytes+=sizeof(struct kv_ent)+sizeof(struct kv_ent *)+sizeof(uint64_t)+it->klen;
+            bytes+=it->op==EFS_KV_PUT?it->vlen:0;
+            if ((!found && apply_scope.mt.n==KV_APPLY_KEYS) || bytes>KV_APPLY_BYTES)
+                return apply_scope.failed=EFS_ERR_NOMEM;
+            int rc=kv_mtab_set(&apply_scope.mt,it->op,it->key,it->klen,it->val,it->vlen);
+            if (rc!=EFS_OK) return apply_scope.failed=rc;
+        }
+        return EFS_OK;
+    }
+    int owned=apply_scope.owner==l;
+    if (!owned) pthread_rwlock_rdlock(&l->writers);
+    int rc=lsm_batch_committed(l,items,n);
+    if (!owned) pthread_rwlock_unlock(&l->writers);
     return rc;
 }
 
@@ -931,6 +994,7 @@ static void lsm_destroy(void *ctx)
     pthread_cond_destroy(&l->compact_cv);
     pthread_cond_destroy(&l->cv);
     pthread_mutex_destroy(&l->mu);
+    pthread_rwlock_destroy(&l->writers);
     free(l);
 }
 
@@ -1015,6 +1079,12 @@ struct efs_kv *efs_kv_lsm_open(const char *dir, const struct efs_kv_lsm_cfg *cfg
         return NULL;
     }
     pthread_mutexattr_destroy(&mattr);
+    if (pthread_rwlock_init(&l->writers,NULL) != 0) {
+        pthread_cond_destroy(&l->compact_cv);
+        pthread_cond_destroy(&l->cv);
+        pthread_mutex_destroy(&l->mu);
+        free(kv); free(l); return NULL;
+    }
     if (manifest_load(l) != EFS_OK) {
         lsm_destroy(l);
         free(kv);
@@ -1206,6 +1276,42 @@ int efs_kv_lsm_pressure(struct efs_kv *kv, struct efs_kv_lsm_pressure *out)
     pthread_mutex_unlock(&l->mu);
     *out = p;
     return EFS_OK;
+}
+
+int efs_kv_lsm_apply_begin(struct efs_kv *kv)
+{
+    if (!kv || kv->ops!=&lsm_ops || !kv->ctx) return EFS_ERR_INVAL;
+    if (apply_scope.owner) return EFS_ERR_BUSY;
+    struct kv_lsm *l=kv->ctx;
+    pthread_rwlock_wrlock(&l->writers);
+    apply_scope.owner=l; apply_scope.failed=0; apply_scope.committing=0;
+    return EFS_OK;
+}
+int efs_kv_lsm_apply_end(struct efs_kv *kv,const struct efs_kv_item *cursor)
+{
+    if (!kv || kv->ops!=&lsm_ops || apply_scope.owner!=kv->ctx)
+        return EFS_ERR_INVAL;
+    struct kv_lsm *l=kv->ctx;
+    int rc=apply_scope.failed;
+    if (cursor && rc==EFS_OK) {
+        uint32_t n=apply_scope.mt.n;
+        struct efs_kv_item *items=calloc((size_t)n+1,sizeof(*items));
+        if (!items) rc=EFS_ERR_NOMEM;
+        else {
+            for (uint32_t i=0;i<n;i++) {
+                struct kv_ent *e=apply_scope.mt.e[i];
+                items[i]=(struct efs_kv_item){e->op,e->key,e->klen,e->val,e->vlen};
+            }
+            items[n]=*cursor;
+            apply_scope.committing=1;
+            rc=lsm_batch(l,items,n+1);
+            free(items);
+        }
+    }
+    kv_mtab_clear(&apply_scope.mt);
+    memset(&apply_scope,0,sizeof(apply_scope));
+    pthread_rwlock_unlock(&l->writers);
+    return rc;
 }
 
 int efs_kv_lsm_sync_hold(struct efs_kv *kv)

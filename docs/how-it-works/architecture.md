@@ -1346,16 +1346,29 @@ physical WALs" rule as [performance.md](performance.md) §5.4. The Raft
 log follows the same shape for the same reason — **one multiplexed record log
 per node**, every group appending to it, concurrent appends sharing one fsync.
 
-**The Raft log is the durability boundary; the applied KV is a replayable
-view.** A committed entry is one a majority holds in its log, and the KV is
-rebuilt by replaying forward from the snapshot point, so a metadata write pays
-one persistence boundary rather than two and the KV owes nothing on the
-critical path. This is not a new decision — it is what the step 4 state
-machine already assumes, since it starts at `last_applied = snap_idx` and
-re-applies everything above it (which is also why apply must stay idempotent,
-I16). It costs exactly one ordering rule: a snapshot drops the log prefix, so
-**no snapshot may advance past what the applied KV has durably stored**. The
-KV's own sync mode is therefore a performance choice, not a correctness one.
+**The Raft log is the replicated durability boundary; applied KV recovery
+also needs an atomic frontier.** A committed entry is one a majority holds in
+its durable log. Each node stages one applied entry's KV changes in a bounded
+scope (32,768 effect keys and 64 MiB), then appends those changes and its
+per-group applied cursor in one atomic KV WAL record. The cursor cannot become
+recoverable independently of the effects. Reads in that scope see staged
+changes; other readers see committed state, and competing KV writers wait
+until the scope commits or aborts. Failed or oversized scopes publish no
+partial entry and do not advance Raft application. Existing durable watermark
+and ACK rules still apply; staging does not make an unsynced WAL durable.
+
+Two fixed node-local cursor keys have an invalid shard prefix and are excluded
+from group snapshot export/import. On restart, the node restores the greater
+of its validated KV cursor and valid legacy `applied.N` checkpoint. Missing
+KV cursors allow upgrade from legacy stores; malformed or unreadable cursors
+refuse startup. A cursor beyond the recovered Raft log also refuses startup.
+This avoids replaying already committed non-idempotent operations, such as a
+hardlink increment, when the separate checkpoint lags. A torn final WAL record
+recovers neither its changes nor its cursor. Snapshots still must not advance
+past durable applied KV. Legacy checkpoints remain for compatibility; before
+returning to an older binary, shut down cleanly so those checkpoints reach the
+applied frontier. Crash downgrade to a binary that ignores KV cursors is not
+supported.
 
 **Step 1 had a hard prerequisite: the carve-up (Phase M, complete).** The
 tree is `raft/ kv/ meta/ wire/ data/ client/ server/` behind interfaces

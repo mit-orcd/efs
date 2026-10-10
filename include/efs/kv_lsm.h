@@ -80,6 +80,15 @@ int efs_kv_lsm_l0_hot(struct efs_kv *kv);
 int efs_kv_lsm_sync_hold(struct efs_kv *kv);
 int efs_kv_lsm_sync_release(struct efs_kv *kv);
 
+/* One bounded Raft entry: reads/scans see this thread's staged changes;
+ * other readers see the old committed table. Writers are excluded until end.
+ * End commits all effects and the supplied cursor in one atomic WAL record,
+ * under the existing sync hold. NULL cursor aborts; no staged effects escape.
+ * At most 32,768 effect keys / 64 MiB plus one cursor, independent of filesystem size.
+ * Non-LSM stores return INVAL; begin/end must run on the same thread. */
+int efs_kv_lsm_apply_begin(struct efs_kv *kv);
+int efs_kv_lsm_apply_end(struct efs_kv *kv, const struct efs_kv_item *cursor);
+
 /* A pinned view is the segment set at pin time. Flush and compaction
  * publish a new set; reads through the view stay on the old files until
  * the last unpin (that is when the file is unlinked). */
