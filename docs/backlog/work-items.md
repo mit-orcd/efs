@@ -2884,7 +2884,9 @@ accepted durability contract or fixing only FUSE flag handling.
 
 **Class:** fencing integration. **Status:** partial; full mount identity, retained
 FUSE CREATE/adoption/OPEN/CLOSE and namespace shard admission are implemented and
-AMD gated. REPORT-wide fencing and production ticketed PUTs remain open.
+AMD gated. REPORT mapping/activation/completion session guards are AMD gated;
+staged typed publication recovery is byte-tested. Default production flush and
+ticketed PUT/storage fencing integration remain open.
 
 **Original evidence (before the Oct 9 integration):** `inode_rpc.c:opid_seed_locked` creates a local random UUID at
 fixed epoch 1. HOLD sends only its base request; FLOCK sends its range but
@@ -3565,6 +3567,19 @@ See [the package evidence](../status/amd-functional-gates-20261008.md).
 
 ## W88 · Legacy span replay loses idempotency after folded-history eviction
 
+**Oct 9 staged recovery update:** immutable budgeted client requests now resolve
+authoritative per-publication results before releasing cache ownership, preserve
+only writes newer than a committed snapshot, and retain retirement identities
+through lost ACKs independently of cache bodies. AMD actual cache/host gates
+preserve peer bytes, return the original committed locator after supersession,
+and reject retired replay after cold restart. Fresh typed overlays require
+complete matching fences; legacy truncate interop updates authority/history
+with the stamp atomically.
+[Checkpoint and evidence](../status/dependency-package-20261009.md#retained-typed-publication-writeback--staged-amd-gated).
+This driver is staged. Default FUSE REPORT/PUT still uses the legacy flow, so the
+original W88 span-history-eviction bug remains open until production integration
+and its full eviction/re-PUT/session/leader-change gates pass.
+
 **Class/state:** publication/retry correctness; isolated metadata reproduction Oct 7, round 6. D1 requires a folded span retry to be a no-op; I16 requires byte-identical retries not to repeat effects. This finding concerns the active legacy path, not the staged durable-result receipt/floor design.
 
 **Evidence:** `meta_apply.c:publish_inner` suppresses a legacy span replay while its generation/range or a folded len-zero tombstone remains in the eight-entry trailer. New spans evict oldest tombstones to make room. After eviction, the old same-epoch span can append again to the current base. `raft_host.c:host_pub_pack` checks `chunk_holds`, but a first span with `base_gen == 0` has no later base-generation check; `pack_publish_cmd` carries neither a durable publication receipt identity nor a retirement floor for this legacy path.
@@ -3764,6 +3779,26 @@ find/stats checkpoint; never treat the private fixture as deployed acceptance.
 
 ## W93 · Broader durable Raft group commit for tiny-file metadata
 
+**Oct 9 verified-overlap experiment:** `devel-persistence-pressure` adds guarded,
+default-off `EFS_RAFT_BATCH_OVERLAP=1`. Stable follower requests with a verified
+matching prefix and new suffix can start/extend bounded durable cohorts;
+admission and byte accounting cover only new entries. Conflicts, read boundaries,
+term changes and storage failures retain their safety barriers. Actual-core
+ASan/UBSan, Linux core/store/wire, NUC POSIX 212/212, peer 64/64 and private
+read/session/publication/membership partition gates pass. A frozen same-binary
+pair of balanced-group 900-second runs measures 120.30 → 129.66 files/s
+(+7.78%) and total operation p99 363.14 → 342.12 ms. n3/n4 entries per sync
+rise 9.66/1.20 → 11.14/1.33; the serial KV/applied-marker tail persists.
+However group 0 idle/mixed read samples worsen, and baseline GC/reap traffic
+is absent in the enabled interval. This is not causal or repeated acceptance.
+Both loaders drain, replicas cover the leader cut, and 256 first/last exact
+cold payload checks and private sync/append/shutdown/WAL-tail/GC fault gates
+pass; experiments and diagnostics are disabled after restoration. Evidence is in
+[overlap results](../status/w93-overlap-suffix-20261009.md).
+Broader NUC sustained-performance acceptance remains open: settle background
+queues, reverse/repeat the pair, and isolate group 0 read tails before default
+enablement. Earlier AMD acceptance does not prove this extension or a device ceiling.
+
 **Oct 9 further persistence-efficiency work:** Experimental no-op cohort
 continuation and bounded noncommitting-prefix group scheduling are implemented
 on `devel-persistence-pressure`, opt-in via `EFS_RAFT_BATCH_NOOP=1` and
@@ -3830,7 +3865,7 @@ new end-to-end batching acceptance. See
 **Implementation update (Oct 8):** Bounded follower durability batching, durable ACK ordering, storage-failure fencing and committed-prefix protection are implemented. Fault/full Linux/live AMD direct/TCP gates pass. Six balanced 4,096-file same-code mixed-load fixtures pass cold verification and physical reclamation, with overlapping close tails; separate pump/barrier diagnostics are retained.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
-**Class/status:** Performance; implemented and covered AMD gates passed. Bounded follower batching, durable ACK ordering, persistence fencing and committed-prefix protection pass fault/cold/POSIX/peer gates. Controlled batching gains repeat; six balanced long same-code mixed-load fixtures show no consistent tail regression.
+**Class/status:** Performance; base batching implemented and covered AMD gates passed. Bounded follower batching, durable ACK ordering, persistence fencing and committed-prefix protection pass fault/cold/POSIX/peer gates. Earlier controlled AMD batching gains repeat; six balanced long same-code mixed-load fixtures show no consistent tail regression. Broader sustained NUC acceptance and optional Oct 9 scheduling/cohort extensions remain open.
 
 **Evidence:** NUC round 7, `c22754236b38-tiny-r7`, buffered/TCP. In an eight-second
 instrumented window, n3 pump thread 1746498 completed 1,024 Raft `fdatasync`
@@ -3840,7 +3875,7 @@ The trace includes replication/catch-up/background work. See the
 [raw trace](../../results/measure/20261008-nuc-tiny-create/round-7/after/follower-sync.txt)
 and [separate profiles](../../results/measure/20261008-nuc-tiny-create/round-7/after/).
 
-**Remaining action:** Retain the bounded batching, fault, cold and same-code mixed-load regressions. W53 end-to-end close tails remain a separate investigation: the diagnostic run does not identify a single pump/barrier stall explaining them. AMD process-crash acceptance is not hardware power-loss or distributed-RDMA proof.
+**Remaining action:** Establish repeatable sustained NUC gains from eligible cohort changes with per-group barrier/entry ratios, idle/mixed p50/p95/p99, bounded memory/queues/lag and the same-code cold/fault gates. A sequential A/B pair is exploratory evidence, not repeatability. Retain base batching regressions. W53 end-to-end close tails remain a separate investigation; W94 client CREATE/lease adoption has independent ownership/fencing prerequisites. Process-crash acceptance is not hardware power-loss or distributed-RDMA proof.
 
 **Governing contracts/related work:** preserve Raft durability, W82 read
 authority, W23/W89 and D30 pressure bounds. W19's older CPU-copy measurement

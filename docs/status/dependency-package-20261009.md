@@ -684,3 +684,184 @@ reclamation/restart and cold namespace/ticket/lease gates pass. Code unchanged
 from the passing full regression run except these live helper assertions.
 Installed AMD service restored; docs5/5. Remaining package is explicitly listed
 above, and D25 / ticketed data-plane activation remains staged.
+
+## REPORT mapping session boundary — implemented/gated
+
+Production REPORT now uses the same full mount UUID/epoch as CREATE/OPEN.
+First-touch touched inode/lane shards register before publication; each new
+Raft REPORT envelope checks every lane's local floor before mapping effects.
+Delta metadata keeps its original bytes. Forwarding now repacks variable-size
+records and preserves flags; malformed/extra suffix bytes are rejected.
+Actual AMD direct/TCP discarded-reply mapping replay, revoked epoch/first-touch
+and cold restart pass. [Evidence](../../results/measure/20261009-report-session/README.md).
+
+This closes the missing mapping-session boundary, not the whole package:
+activation/append-completion effects still need their own serialized guard,
+partial batch results still need per-publication reconciliation, and production
+PUT tickets/storage fences/all-member retirement remain open. Broader fixture
+and regression completion will be recorded at the next checkpoint. D25 staged.
+
+## REPORT activation and append completion — implemented/gated
+
+Both cached mask and single-lane fallback activation now validate REPORT's
+mount UUID/epoch at serialized apply. Append completion freezes the reporting
+session's exact local row before all inode/cursor/lane images in the same
+transaction. Lost COMMIT and partial lane resolution keep session fencing
+BUSY; cold full resolution releases it, and old completed retries stay STALE.
+
+Actual AMD direct/TCP delayed mapping and activation entries submitted directly
+to Raft reject a completed revoked epoch, bypassing receive-side admission.
+Native cold/memory completion tests, core212/212, peer64/64, append800 and
+physical GC/restart pass. [Evidence](../../results/measure/20261009-report-effects/README.md).
+
+This supersedes the activation/completion gap in the previous checkpoint.
+REPORT's operation-result reconciliation, retention of other ambiguous namespace
+requests, production ticketed PUT/storage fences and all-member retirement
+remain open. D25 staged; no production activation or push.
+
+## Publication/WAL checkpoint durability — implemented/gated
+
+The pump previously logged a failed KV WAL release and still saved its applied
+index, including at shutdown. Both checkpoints now require successful WAL
+release. Legacy/typed publication and activation IO/NOMEM keep the pending apply
+index; a batch's earlier STALE cannot conceal later failed storage.
+
+An actual follower WAL fdatasync EIO leaves periodic/shutdown checkpoints
+unchanged. Cold restart replays the durable Raft tail and recovers exact bytes,
+eight follow-up files and nlink2; physical deletion drains. AMD normal
+core212/212, peer64/64, append800, retained session/REPORT gates and GC/restart
+pass. Complete code regressions pass; warning-free Linux build; docs5/5.
+[Evidence](../../results/measure/20261009-publication-durability/README.md).
+
+The initial fault hook targeted fsync; the KV WAL uses fdatasync. That no-fault
+timeout restored service, and the corrected actual fault run passed. Hardware
+power-loss and distributed RDMA remain unclaimed. Installed AMD service restored.
+
+## REPORT shared-log coverage and overflow lanes — implemented/gated
+
+REPORT waits for actual log sync coverage and propagates failed hold/sync;
+background proposals cannot advertise uncovered indices. Invalid records return
+INVAL, retaining client ownership. All uncached lanes beyond the32-inode row
+cache activate before the REPORT hold, preventing self-wait on the shared log.
+
+AMD direct/TCP uploads40 fresh cross-group files in one REPORT and checks exact
+cold sparse bytes and physical reclamation. Core212/212, peer64/64, append800,
+retained identity/revocation and GC/restart gates pass. Full code regressions and
+warning-free Linux build pass; actual nested-hold/cold-reopen regression passes.
+[Evidence and corrected earlier retry claim](../../results/measure/20261009-report-log-coverage/README.md).
+
+Earlier live mapping-retry evidence used an invalid sparse base and the old
+server skipped it asOK. This checkpoint supersedes that claim with an actual
+live span retry and explicit invalid-record refusal; the session-fence evidence
+is unaffected. Production per-publication outcome/reconciliation, retention of
+other ambiguous namespace requests, ticketed PUT/storage fences and captured
+membership/all-member retirement remain open. D25 stays staged.
+
+Final direct/TCP sync fixtures pass O_SYNC/O_DSYNC and mount-wide sync ordinary
+small/queued/append peer-before-close and exact cold-crash byte checks, physical
+deletion, explicit append/fsync boundaries and800-record append audit. These
+refresh W73's direct/TCP acceptance on the REPORT candidate; they do not replace
+the final multi-mode package gate. AMD restored to its installed978caaf7 service,
+all four nodes healthy, both mounts serving, reservation released.
+
+## Next dependency package after the one-hour REPORT work
+
+1. Replace aggregate REPORT recovery with durable per-publication results and
+   immutable retained publication bodies/identities. A mixed partially committed
+   batch must resolve each outcome before rebase/receipt retirement (D29/W88,
+   D27 and W77 dependencies). Session fencing alone does not supply this identity.
+2. Extend retained namespace requests beyond regular-file CREATE: the current
+   UNLINK/RMDIR, RENAME_AT and LINK wrappers still end their operation slots after
+   ambiguous transport failures. Capture exact bodies through authoritative
+   result/revocation; do not advance the acknowledgment floor past unknown work.
+   Legacy CREATE users also need explicit coverage outside retained FUSE create.
+3. Integrate admitted PUT tickets into actual upload/receive/store boundaries:
+   the metadata admission/status transport exists, but production write.c never
+   calls it and PUT_CHUNK still accepts the legacy unticketed payload. Capture
+   membership before upload; durably fence/ack every captured storage member
+   before abandoned-upload retirement. Keep activation staged until these gates.
+
+No source files or harness owned by efs-bench were changed. No push, merge, tag,
+forced write loss or D25 activation occurred in this hour.
+
+Final mixed REPORT gate: actual valid prefix plus invalid tail returns INVAL;
+full40-record retry, exact cold bytes and physical reclamation pass on AMD
+(gc-direct-txewwmg0). The focused fixture also passes retained revocation,
+offline-member/rejoin and cold GC gates, exits0 and restores installed service.
+
+One-hour code commits:9a9f7f4f (REPORT mount-session mapping envelope),573a3a71
+(serialized activation/append-completion session guards),43c70be0 (KV WAL failure
+preserves replay checkpoints),b6e973cf (shared-log durability and overflow lanes).
+The final test/checkpoint commit strengthens partial-invalid REPORT acceptance.
+Full package remains open for the three dependency groups above; D25 staged.
+
+The final partial-prefix gate queries the first mapping before retry, matching
+FileID/object generation/nodes/checksums to prove it already committed. The
+strengthened rerun exits0 with AMD service restored. Working tree checkpoint
+contains only this package's committed work; no owned fixture remains active.
+
+## Retained typed publication writeback — staged, AMD gated
+
+The writer now retains only ranges accepted after a bound publication snapshot.
+A raced pre-PUT snapshot must be recaptured; a committed older snapshot cannot
+replay already committed bytes over a peer winner. A bounded shadow range set
+refuses fragmentation before copying any new application bytes.
+
+A budgeted per-stream queue is reserved before accepting typed application
+bytes, refuses a full window before copying bytes, captures immutable request
+bodies before submission,
+queries authoritative results first, consumes matching terminal evidence under
+the cache slot lock, and retains retirement ownership independently of cache
+body lifetime. Lost publication or retirement replies do not release identity.
+First typed admission installs reserved body and ownership together; it never
+adopts legacy dirty bytes. Cold default-export lane bootstrap now works before
+the first PUT on a dual-host member without inventing unknown export geometry.
+
+AMD direct/TCP real-byte evidence proves lost replies, newer4KiB ownership, peer
+range preservation, cold exact bytes and physical deletion. Core212/212, peer64/64,800 cold append records, O_SYNC/O_DSYNC and GC/restart
+gates pass. Cold receipt replay remains RETIRED; old committed replay returns its
+original index/term without replacing a peer winner. Fresh read overlays require
+complete matching fence history and leave output unchanged on stale authority.
+A complete cut can retire fully clipped ownership only without an unresolved
+publication.
+
+The post-truncate gate exposed legacy fences advancing the lane stamp without
+the bootstrapped authority/history, leaving admission permanently BUSY. The
+cross-group fix writes all three in one batch and passes actual cold truncate;
+the same-group extension also passes actual cold truncate, core212/212,
+peer64/64,800 cold append records, sync writes and GC/restart. Failed batch and bounded
+history overflow leave the authoritative view unchanged. Natural FUSE exit can
+clear cmdline before zombie state; confirmed PF_EXITING is now recognized while
+ambiguous live processes still refuse cleanup.
+[Evidence](../../results/measure/20261009-retained-publication/README.md).
+
+This is staged driver integration, not default FUSE flush activation. The helper
+uses raw unticketed PUTs. Production PUT admission/storage fencing, captured
+membership retirement, other ambiguous namespace identities and final activation
+gates remain open. D25 remains staged; W72/D27/W88 are not globally closed.
+
+This hour's focused code commits:47394c4c (exact post-snapshot ownership),2afaa8fb
+(cold default lane bootstrap),9a6ca38e (confirmed natural FUSE exit discovery),
+643d4404 (atomic legacy truncate/typed authority interop),2002a028 (budgeted
+retained driver, pre-write queue reservation, atomic consumption and fresh read
+overlays),e9f6f2cd (unconsumed retired-floor/pending recovery fault tests).
+
+AMD direct/TCP proves same- and cross-group cold replay and truncate clipping.
+Actual lane leader death also returns the exact RETIRED floor without restoring
+old mappings, with bounded transient election retry. Full default core212/212,
+peer64/64,800 cold append records, O_SYNC/O_DSYNC and GC/restart gates pass. Linux
+code regressions/build and docs5/5 pass; tested source hashes match committed
+production sources. The final owned fixture exited0 and restored all four installed daemons and
+both mounts; reservation released. No efs-bench source/harness was changed; no merge/push/tag/activation.
+
+Final actual lane leader-death gate: b5130037, gc-direct-b9kgkazc, both same/cross
+streams return RETIRED without mapping resurrection, cold bytes/truncate clipping
+and complete physical GC/restart pass. Installed AMD978caaf7 service verified
+healthy4/4, both mounts serving; no owned fixture remains active.
+
+The full package remains open. Next dependency is production PUT tickets and
+durable receive/store fencing with captured membership/all-member ACKs, then
+default FUSE typed flush integration and revoked unknown-intent reconciliation.
+Other ambiguous UNLINK/RMDIR/RENAME/LINK identities also require retained exact
+routed bodies and authoritative results. W88's active legacy eviction/re-PUT
+case remains open; these staged proofs do not activate D25 or close W72/D27/W88.

@@ -1,0 +1,3 @@
+cluster: mac
+/tmp/efs-mac-build-final.sh: line 9: 40583 Terminated: 15          git -C "$EFS_SRC" archive "$build_id"
+     40584                       | tar -xf - -C "$source_snapshot"

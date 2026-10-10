@@ -1,0 +1,16 @@
+cluster: mac
+Stop with: ./scripts/client.sh stop /mnt/efs-c
+Logging efs-fuse to /mnt/efs-fuse-efs-c.log
+Mounted /mnt/efs-c
+written MiB 1 elapsed 0.68
+written MiB 33 elapsed 8.87
+written MiB 65 elapsed 23.86
+written MiB 97 elapsed 30.48
+written MiB 129 elapsed 46.76
+written MiB 161 elapsed 54.84
+written MiB 193 elapsed 69.65
+written MiB 225 elapsed 78.17
+written MiB 257 elapsed 93.45
+written MiB 289 elapsed 111.25
+write+fsync complete 122.74514638099981
+full content verified 128.9644373189999 /mnt/efs-c/large-repair-0m7mrbz2

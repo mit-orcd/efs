@@ -2065,7 +2065,7 @@ static int efs_open_drain_pending(void)
 /* Every returned regular descriptor, including CREATE, owns a server lease.
  * The edge stripe prevents a second open returning before proven OPEN,
  * and prevents a delayed last-close release deleting a new lease. */
-static int efs_open_acquire(efs_ino_t ino)
+static int efs_open_acquire_fileid(efs_ino_t ino, uint64_t create_generation)
 {
     pthread_mutex_t *edge = open_edge_mu(ino);
     pthread_mutex_lock(edge);
@@ -2077,11 +2077,13 @@ static int efs_open_acquire(efs_ino_t ino)
     int first = efs_open_note(ino);
     rc = first < 0 ? first : EFS_OK;
     if (first > 0) {
-        uint64_t generation = 0;
+        uint64_t generation = create_generation;
         uint32_t count = 1;
-        /* GETCHUNKS supplies authoritative FileID; cached attrs contain no
-         * generation and must not invent one across truncate/recovery. */
-        rc = efs_client_rpc_getchunks_fileid(g_client.export_id, ino, 0, 0,
+        /* A completed retained CREATE supplies authoritative FileID. Other
+         * opens fetch it; cached attrs must not invent a generation. The
+         * guarded OPEN validates that FileID across truncate/recovery. */
+        if (!generation)
+            rc = efs_client_rpc_getchunks_fileid(g_client.export_id, ino, 0, 0,
                                                NULL, &count, &generation);
         if (rc == EFS_OK && !generation) rc = EFS_ERR_PROTO;
         struct efs_open_ref *owner = NULL;
@@ -2106,6 +2108,11 @@ static int efs_open_acquire(efs_ino_t ino)
     }
     pthread_mutex_unlock(edge);
     return rc;
+}
+
+static int efs_open_acquire(efs_ino_t ino)
+{
+    return efs_open_acquire_fileid(ino, 0);
 }
 
 /* CLEAR_PENDING shares the inode stripe with OPEN/CLOSE. A descriptor is
@@ -3886,6 +3893,46 @@ static int fuse_create_errno(int create_rc, efs_ino_t parent, const char *name)
     return fuse_stat_errno(found == EFS_ERR_NOT_FOUND ? EFS_ERR_IO : found);
 }
 
+/* Wait only before an identity is allocated. Retained requests always resume
+ * their exact identity; local receipt-window pressure must not turn a short
+ * burst of creates into an application-visible EBUSY. */
+static int efs_fuse_create_begin_wait(struct efs_client_create_request *request,
+    efs_ino_t parent, const char *name, uint32_t mode, uid_t uid, gid_t gid)
+{
+    uint64_t previous=efs_client_rpc_deadline_ms();
+    uint64_t deadline=stats_now_ms()+30000;
+    if(previous && previous<deadline)deadline=previous;
+    efs_client_rpc_set_deadline_ms(deadline);
+    int rc=EFS_ERR_BUSY;
+    while(!efs_client_rpc_past_deadline()) {
+        rc=efs_client_create_begin(request,parent,name,mode,uid,gid);
+        if(rc!=EFS_ERR_BUSY || request->active)break;
+        usleep(1000);
+    }
+    efs_client_rpc_set_deadline_ms(previous);
+    return rc;
+}
+
+/* A transport failure can hide a committed CREATE. Resume its retained
+ * request within the caller budget instead of returning EIO after one try. */
+static int efs_fuse_create_resume_wait(struct efs_client_create_request *request)
+{
+    uint64_t previous=efs_client_rpc_deadline_ms();
+    uint64_t deadline=stats_now_ms()+30000;
+    if(previous && previous<deadline)deadline=previous;
+    efs_client_rpc_set_deadline_ms(deadline);
+    int rc=EFS_ERR_BUSY;
+    while(!efs_client_rpc_past_deadline()) {
+        rc=efs_client_create_resume(request,0);
+        if(request->complete || !request->active ||
+           (rc!=EFS_ERR_BUSY && rc!=EFS_ERR_NET))break;
+        usleep(1000);
+    }
+    if(!request->complete && efs_client_rpc_past_deadline())rc=EFS_ERR_BUSY;
+    efs_client_rpc_set_deadline_ms(previous);
+    return rc;
+}
+
 static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
                               mode_t mode, struct fuse_file_info *fi,
                               efs_ino_t *out_ino, struct efs_inode *created)
@@ -3913,9 +3960,9 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
     efs_ino_t ino = 0;
     struct efs_pending_create *pending_create=efs_pending_create_alloc();
     if(!pending_create)return -ENOMEM;
-    int create_rc=efs_client_create_begin(&pending_create->request,parent.ino,
+    int create_rc=efs_fuse_create_begin_wait(&pending_create->request,parent.ino,
         name,S_IFREG|mode,uid,gid);
-    if(create_rc==EFS_OK)create_rc=efs_client_create_resume(&pending_create->request,0);
+    if(create_rc==EFS_OK)create_rc=efs_fuse_create_resume_wait(&pending_create->request);
     if(create_rc==EFS_OK && pending_create->request.complete) {
         ino=pending_create->request.inode.ino;
         if(created)*created=pending_create->request.inode;
@@ -3970,7 +4017,8 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
             return frc;
         }
         fuse_fi_direct_io(fi);
-        int hrc=efs_open_acquire(ino);
+        int hrc=efs_open_acquire_fileid(ino, pending_create ?
+            pending_create->request.generation : 0);
         if(hrc!=EFS_OK) {
             efs_file_close(fi);
             if(pending_create)efs_pending_create_queue(pending_create);
@@ -6406,7 +6454,12 @@ static void ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
         fuse_reply_err(req, EBUSY);
         return;
     }
+    uint64_t previous=efs_client_rpc_deadline_ms();
+    uint64_t deadline=stats_now_ms()+30000;
+    if(previous && previous<deadline)deadline=previous;
+    efs_client_rpc_set_deadline_ms(deadline);
     ll_create_run(req, parent, name, mode, fi);
+    efs_client_rpc_set_deadline_ms(previous);
     efs_stop_mutation_leave();
 }
 

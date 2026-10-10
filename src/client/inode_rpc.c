@@ -838,6 +838,29 @@ int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
     return EFS_OK;
 }
 
+static int session_shard_admit(uint32_t shard,const struct efs_opid_req *q)
+{
+    if(shard>=4096 || !q)return EFS_ERR_INVAL;
+    uint32_t byte=shard/8;uint8_t bit=(uint8_t)(1u<<(shard%8));
+    pthread_mutex_lock(&opid_mu);
+    int same=g_client.append_session_epoch==q->id.session_epoch &&
+        !memcmp(g_client.append_session_uuid,q->id.client_uuid,EFS_OPID_UUID_LEN);
+    int established=same && (g_client.append_session_shards[byte]&bit);
+    pthread_mutex_unlock(&opid_mu);
+    if(established)return EFS_OK;
+    int rc=efs_client_rpc_publication_session(shard,&q->id);
+    if(rc!=EFS_OK)return rc;
+    pthread_mutex_lock(&opid_mu);
+    if(g_client.append_session_epoch!=q->id.session_epoch ||
+       memcmp(g_client.append_session_uuid,q->id.client_uuid,EFS_OPID_UUID_LEN)) {
+        memset(g_client.append_session_shards,0,sizeof(g_client.append_session_shards));
+        memcpy(g_client.append_session_uuid,q->id.client_uuid,EFS_OPID_UUID_LEN);
+        g_client.append_session_epoch=q->id.session_epoch;
+    }
+    g_client.append_session_shards[byte]|=bit;
+    pthread_mutex_unlock(&opid_mu);return EFS_OK;
+}
+
 int efs_client_create_begin(struct efs_client_create_request *r,efs_ino_t parent,
                              const char *name,uint32_t mode,uid_t uid,gid_t gid)
 {
@@ -897,7 +920,7 @@ int efs_client_create_resume(struct efs_client_create_request *r,int probe_only)
     if(r->complete || probe_only || rc!=EFS_ERR_BUSY)return create_request_revocation(r,rc);
     if(!r->wire.routed)return EFS_ERR_PROTO;
     if(!r->admitted) {
-        rc=efs_client_rpc_publication_session(r->wire.shard,&r->wire.q.id);
+        rc=session_shard_admit(r->wire.shard,&r->wire.q);
         if(rc!=EFS_OK)return create_request_revocation(r,rc);
         r->admitted=1;
     }
@@ -1294,7 +1317,9 @@ int efs_client_lease_resume(struct efs_client_lease_request *r,int probe_only)
         /* Unknown probe is not success; retry only the retained exact edge. */
     }
     if (!r->admitted) {
-        rc=efs_client_rpc_publication_session(efs_kv_inode_shard(r->ino),&r->q.id);
+        /* Reuse only a completed establishment for this exact UUID, epoch
+         * and shard. The guarded edge still validates server revocation. */
+        rc=session_shard_admit(efs_kv_inode_shard(r->ino),&r->q);
         if (rc!=EFS_OK) return lease_request_result(r,rc,0);
         r->admitted=1;
     }
@@ -1772,27 +1797,7 @@ int efs_client_rpc_setattr(efs_export_id_t export_id, efs_ino_t ino,
 /* Cross-client O_APPEND: reserve the next len bytes at the owner.
  * new_size_out is this reservation's end; start_out is the reserved
  * offset (reply atime) when the host stamped reserved+len. */
-static int append_session_admit(efs_ino_t ino,const struct efs_opid_req *q)
-{
-    uint32_t shard=efs_kv_inode_shard(ino),byte=shard/8;uint8_t bit=(uint8_t)(1u<<(shard%8));
-    pthread_mutex_lock(&opid_mu);
-    int same=g_client.append_session_epoch==q->id.session_epoch &&
-        !memcmp(g_client.append_session_uuid,q->id.client_uuid,EFS_OPID_UUID_LEN);
-    int established=same && (g_client.append_session_shards[byte]&bit);
-    pthread_mutex_unlock(&opid_mu);
-    if(established)return EFS_OK;
-    int rc=efs_client_rpc_publication_session(shard,&q->id);
-    if(rc!=EFS_OK)return rc;
-    pthread_mutex_lock(&opid_mu);
-    if(g_client.append_session_epoch!=q->id.session_epoch ||
-       memcmp(g_client.append_session_uuid,q->id.client_uuid,EFS_OPID_UUID_LEN)) {
-        memset(g_client.append_session_shards,0,sizeof(g_client.append_session_shards));
-        memcpy(g_client.append_session_uuid,q->id.client_uuid,EFS_OPID_UUID_LEN);
-        g_client.append_session_epoch=q->id.session_epoch;
-    }
-    g_client.append_session_shards[byte]|=bit;
-    pthread_mutex_unlock(&opid_mu);return EFS_OK;
-}
+
 
 int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
                                   uint64_t len, const struct efs_opid_req *q,
@@ -1806,7 +1811,7 @@ int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
 
     if (!efs_opid_req_valid(q) || q->ack >= q->id.seq)
         return EFS_ERR_INVAL;
-    rc=append_session_admit(ino,q);
+    rc=session_shard_admit(efs_kv_inode_shard(ino),q);
     if(rc!=EFS_OK)return rc;
     memset(buf, 0, sizeof(buf));
     req->export_id = export_id;
@@ -2121,7 +2126,7 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
     if (efs_client_rpc_past_deadline())
         return EFS_ERR_BUSY;
     size_t limit = EFS_MSG_MAX_LEN - 1u;
-    size_t len = sizeof(struct efs_msg_report_chunks);
+    size_t len = sizeof(struct efs_msg_report_chunks) + EFS_REPORT_SESSION_LEN;
     /* Reject impossible counts before touching arrays or allocating. Keep
      * every subtraction in size_t and the eventual wire cast representable. */
     if (ino_count > (limit - len) / sizeof(struct efs_ino_size_rec))
@@ -2140,13 +2145,18 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
             return EFS_ERR_INVAL;
         len += bytes;
     }
+    struct efs_opid session;
+    /* Query the shared mount identity; this does not allocate/ACK an operation. */
+    int identity_rc = efs_client_publication_id(1, &session);
+    if (identity_rc != EFS_OK) return identity_rc;
+    if (!efs_report_session_valid(&session)) return EFS_ERR_INVAL;
     uint8_t *buf = malloc(len);
     if (!buf)
         return EFS_ERR_NOMEM;
     struct efs_msg_report_chunks *hdr = (struct efs_msg_report_chunks *)buf;
     hdr->export_id = export_id;
     hdr->count = count;
-    hdr->sync = sync ? 1u : 0u;
+    hdr->sync = (sync ? EFS_REPORT_F_SYNC : 0u) | EFS_REPORT_F_SESSION;
     hdr->ino_count = ino_count;
     uint8_t *p = buf + sizeof(*hdr);
     if (count) {
@@ -2161,6 +2171,8 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
     }
     if (ino_count)
         memcpy(p, irecs, (size_t)ino_count * sizeof(*irecs));
+    p += (size_t)ino_count * sizeof(*irecs);
+    efs_report_session_pack(p, &session);
     struct efs_msg_inode_reply r;
     /* Reply wait sized to the work: the server packs, publishes and
      * waits for a Raft commit per record (13 us/rec alone, 8 concurrent

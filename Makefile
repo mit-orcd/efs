@@ -92,7 +92,7 @@ COMMON_SRCS = src/common/admission.c src/meta/append_plan.c $(COMMON_DIR)/public
               src/client/ops.c \
               src/client/read.c \
               src/client/write.c \
-              src/client/bufpool.c src/client/writer_state.c src/client/publication_ack_owner.c \
+              src/client/bufpool.c src/client/writer_state.c src/client/publication_ack_owner.c src/client/publication_writeback.c \
               src/client/inode_rpc.c \
               src/client/stage_evict.c \
               src/client/node_cache.c
@@ -258,6 +258,10 @@ test-wb-runtime:
 	python3 tests/test_inode_writer_view_budget.py
 	python3 tests/test_readdir_reply_boundary.py
 	python3 tests/test_report_frame_boundary.py
+	python3 tests/test_report_forward.py
+	python3 tests/test_report_session_apply.py
+	python3 tests/test_report_activation.py
+	python3 tests/test_report_log_coverage.py
 
 test-wb-recovery:
 	@set -e; wb_test=$$(mktemp /tmp/efs-test-wb-recovery.XXXXXX); \
@@ -287,6 +291,7 @@ test: all
 	python3 tests/test_lookup_errno.py
 	python3 tests/test_fuse_open_reply.py
 	python3 tests/test_fuse_lease_retention.py
+	python3 tests/test_create_admission_wait.py
 	python3 tests/test_lookup_replacement.py
 	python3 tests/test_w23_samples.py
 	python3 tests/test_read_verify.py
@@ -337,6 +342,8 @@ test: all
 	python3 tests/test_read_failure_admission.py
 	python3 tests/test_read_refs_window.py
 	python3 tests/test_client_memory.py
+	python3 tests/test_publication_writeback.py
+	python3 tests/test_lane_bootstrap_export.py
 	./tests/test_wire
 	./tests/test_data
 	./tests/test_kv
@@ -346,6 +353,7 @@ test: all
 	python3 tests/test_host_flow.py
 	python3 tests/test_host_inbox.py
 	python3 tests/test_host_checkpoint.py
+	python3 tests/test_recv_overlap.py
 	./tests/test_kv_lsm
 	./tests/test_query_catalog
 	./tests/test_query_disk
@@ -372,6 +380,7 @@ test: all
 	./tests/test_txn
 	./tests/test_txn_resolve_faults
 	python3 tests/test_txn_apply_retry.py
+	python3 tests/test_publication_persistence.py
 	python3 tests/test_follower_read_redirect.py
 	python3 tests/test_txn_parts_bounds.py
 	python3 tests/test_prepare_bounds.py
@@ -433,6 +442,7 @@ test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	python3 tests/test_fuse_workers.py
 	python3 tests/test_fuse_open_reply.py
 	python3 tests/test_fuse_lease_retention.py
+	python3 tests/test_create_admission_wait.py
 	./tests/test_reply_buffers
 	./tests/test_reply_buffers key-failure
 	./tests/test_bufpool
@@ -440,6 +450,8 @@ test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	python3 tests/test_read_failure_admission.py
 	python3 tests/test_read_refs_window.py
 	python3 tests/test_client_memory.py
+	python3 tests/test_publication_writeback.py
+	python3 tests/test_lane_bootstrap_export.py
 
 $(filter src/client/%.o,$(COMMON_OBJS)) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ): src/client/client_internal.h include/efs/wb_recovery.h
 src/client/efs_fuse.o: src/client/reply_buffers.h src/client/stop_control.h

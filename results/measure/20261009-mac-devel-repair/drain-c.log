@@ -1,0 +1,4 @@
+cluster: mac
+Unmounting /mnt/efs-c
+Retiring drained efs-fuse PID 113574 for /mnt/efs-c
+Unmounted /mnt/efs-c

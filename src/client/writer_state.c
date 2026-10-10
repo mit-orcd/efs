@@ -28,6 +28,14 @@ int efs_writer_state_write(struct efs_writer_state **slot,
     int rc = efs_writer_ranges_admit(&next, view, off, len);
     if (rc != EFS_OK)
         return rc;
+    struct efs_dirty_ranges after={0};
+    if (state && state->has_publication) {
+        after=state->after_publication;
+        if (after.chunk_size!=body_len || after.mutation!=state->ranges.bytes.mutation)
+            return EFS_ERR_INVAL;
+        rc=efs_dirty_ranges_write(&after,off,len,view->authority_epoch);
+        if (rc!=EFS_OK) return rc;
+    }
     if (!state) {
         state = efs_writer_state_alloc(body_len);
         if (!state)
@@ -36,6 +44,7 @@ int efs_writer_state_write(struct efs_writer_state **slot,
     /* No remaining failure point after accepted ownership becomes visible. */
     memmove(body + off, src, len);
     state->ranges = next;
+    if (state->has_publication) state->after_publication=after;
     *slot = state;
     return EFS_OK;
 }
@@ -99,10 +108,10 @@ int efs_writer_state_put(struct efs_writer_state *state,
     if (state->ranges.ino != plan->ino || state->ranges.generation != plan->generation ||
         state->ranges.chunk_index != plan->chunk_index ||
         state->ranges.bytes.chunk_size != plan->original.chunk_size ||
-        plan->original.mutation > state->ranges.bytes.mutation)
+        plan->original.mutation != state->ranges.bytes.mutation)
         return EFS_ERR_STALE;
-    /* Equal mutation must describe exactly the accepted ownership. An older
-     * immutable snapshot may differ after a concurrent admission. */
+    /* Bind before PUT. If a write raced the snapshot, recapture before I/O:
+     * its exact newer ranges cannot be reconstructed from a merged union. */
     if (plan->original.mutation == state->ranges.bytes.mutation) {
         struct efs_dirty_ranges original = state->ranges.bytes;
         int match = efs_dirty_ranges_ack(&original, &plan->original);
@@ -112,6 +121,9 @@ int efs_writer_state_put(struct efs_writer_state *state,
     int rc = efs_writer_publication_bind(plan, object_generation, snapshot_sequence,
                                          &state->publication);
     if (rc == EFS_OK) {
+        state->after_publication=(struct efs_dirty_ranges){
+            .chunk_size=state->ranges.bytes.chunk_size,
+            .mutation=state->ranges.bytes.mutation};
         state->has_publication = 1;
         state->publication_ready = 1;
     }
@@ -125,6 +137,10 @@ int efs_writer_state_report(struct efs_writer_state *state,
         return EFS_ERR_INVAL;
     if (!state->publication_ready)
         return EFS_ERR_BUSY;
+    if (efs_dirty_ranges_valid(&state->after_publication)!=EFS_OK ||
+        state->after_publication.chunk_size!=state->ranges.bytes.chunk_size ||
+        state->after_publication.mutation!=state->ranges.bytes.mutation)
+        return EFS_ERR_INVAL;
     int rc = efs_writer_publication_complete(&state->ranges, &state->publication,
                                               object_generation, snapshot_sequence, verdict);
     /* A matching committed old publication is finished even if a concurrent
@@ -135,6 +151,8 @@ int efs_writer_state_report(struct efs_writer_state *state,
         state->ranges.chunk_index == state->publication.plan.chunk_index &&
         object_generation == state->publication.object_generation &&
         snapshot_sequence == state->publication.snapshot_sequence) {
+        state->ranges.bytes=state->after_publication;
+        memset(&state->after_publication,0,sizeof(state->after_publication));
         state->has_publication = 0;
         state->publication_ready = 0;
         memset(&state->publication, 0, sizeof(state->publication));
@@ -191,6 +209,7 @@ int efs_writer_state_finish_put(struct efs_writer_state *state,
     else {
         state->has_publication=0;
         memset(&state->publication,0,sizeof(state->publication));
+        memset(&state->after_publication,0,sizeof(state->after_publication));
     }
     return verdict;
 }

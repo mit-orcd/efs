@@ -27,7 +27,11 @@ def clients(proc=Path('/proc')):
                 # Exit can clear cmdline after the first stat read. Confirm
                 # death or PID reuse before treating this as a live ambiguity.
                 current = (entry/'stat').read_text().rsplit(')', 1)[1].split()
-                if current[0] in ('Z', 'X') or current[19] != fields[19]:
+                # Linux clears mm/cmdline during exit before publishing Z.
+                # PF_EXITING (0x4) proves this task is already departing; an
+                # empty live cmdline without that flag remains ambiguous.
+                if (current[0] in ('Z', 'X') or current[19] != fields[19] or
+                        (not any(args) and int(current[6]) & 0x4)):
                     continue
                 raise RuntimeError(f'cannot identify mount for efs-fuse PID {entry.name}')
             mount = os.fsdecode(args[3])

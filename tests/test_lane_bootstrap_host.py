@@ -34,7 +34,7 @@ static int host_inode_rpc_peer(struct efs_raft_host *h,int rid,uint8_t type,cons
 static struct efs_export *server_export_acquire_locked(struct efs_server *s,efs_export_id_t id) {
     (void)s;return id==19 ? &ex:NULL;
 }
-static uint32_t server_data_chunk_size(struct efs_export *e) { return e->chunk_size; }
+static uint32_t server_data_chunk_size(struct efs_export *e) { return e ? e->chunk_size : EFS_DEFAULT_CHUNK_SIZE; }
 static void server_export_put(struct efs_server *s,struct efs_export *e) { (void)s;(void)e;++puts; }
 int server_raft_host_lane_bootstrap(efs_ino_t ino,uint64_t gen,uint32_t ci,uint32_t cs,int *hint) {
     assert(ino==123 && gen==456 && ci==17 && cs==ex.chunk_size);++boots;*hint=3;return boot_rc;

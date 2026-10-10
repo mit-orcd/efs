@@ -1,0 +1,7 @@
+/mnt/efs-g	retired
+/mnt/efs-b	preserved-refused
+/mnt/efs-d	retired
+/mnt/efs-c	retired
+/mnt/efs-e	retired
+efs1:/mnt/efs-g	retired
+/mnt/efs	preserved-refused-export-restored

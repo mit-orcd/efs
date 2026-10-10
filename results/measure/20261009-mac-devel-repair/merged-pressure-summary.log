@@ -1,0 +1,19 @@
+cluster: mac
+2026-10-09T21:52:49.204Z fsync-split ino=423771 flush_ms=159 report_ms=0 rc=0
+2026-10-09T21:52:49.467Z fsync-split ino=423771 flush_ms=263 report_ms=0 rc=0
+2026-10-09T21:52:49.666Z fsync-split ino=423771 flush_ms=198 report_ms=0 rc=0
+2026-10-09T21:52:49.827Z fsync-split ino=423771 flush_ms=161 report_ms=0 rc=0
+2026-10-09T21:52:49.994Z fsync-split ino=423771 flush_ms=167 report_ms=0 rc=0
+2026-10-09T21:52:50.165Z fsync-split ino=423771 flush_ms=171 report_ms=0 rc=0
+2026-10-09T21:52:50.350Z fsync-split ino=423771 flush_ms=184 report_ms=0 rc=0
+2026-10-09T21:53:22.542Z fsync-split ino=12296 flush_ms=157 report_ms=0 rc=0
+2026-10-09T21:53:24.117Z fsync-split ino=16392 flush_ms=168 report_ms=0 rc=0
+2026-10-09T21:53:24.907Z fsync-split ino=20488 flush_ms=131 report_ms=0 rc=0
+2026-10-09T21:53:46.020Z fsync-split ino=4422 flush_ms=299 report_ms=0 rc=0
+2026-10-09T21:53:47.765Z fsync-split ino=6293 flush_ms=131 report_ms=0 rc=0
+2026-10-09T21:53:50.294Z fsync-split ino=10253 flush_ms=352 report_ms=0 rc=0
+2026-10-09T21:55:27.988Z fsync-split ino=5791 flush_ms=242 report_ms=0 rc=0
+2026-10-09T21:57:56.299Z fsync-split ino=422798 flush_ms=120 report_ms=0 rc=0
+2026-10-09T22:21:13.616Z dcache-pressure live=263454720 reserved=0 backing=268435456 limit=335544320 request=5242880 metadata=1992 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=body
+2026-10-09T22:21:14.382Z dcache-pressure live=303169536 reserved=0 backing=335544320 limit=335544320 request=1572864 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=body
+2026-10-09T22:21:45.260Z dcache-pressure live=313917440 reserved=0 backing=335544320 limit=335544320 request=1572864 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=body

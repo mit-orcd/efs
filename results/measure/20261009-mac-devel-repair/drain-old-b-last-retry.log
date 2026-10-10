@@ -1,0 +1,2 @@
+efs-fuse: stop control refused or unavailable (1); mount retained
+Stop refused; mount and daemon retained. Resolve pending writes or use --force-discard explicitly.

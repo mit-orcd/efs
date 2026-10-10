@@ -1,0 +1,30 @@
+efs1
+USER         PID COMMAND
+efs       297527 efsd
+efs       306195 efs-fuse
+efsd c823c3c2656e (branch devel, built 2026-10-09T22:59:09Z on efs1)
+6f808783bc0702b8b3eef1d477c8e716bcce0185aa58ae2b7fd37f0c4b7a5c6a  /tmp/efs/efsd
+f3c672c85a92311427afa407ec6655d3497529ecd3f4d7b77853b8410334316d  /tmp/efs/efs-fuse
+efs2
+USER         PID COMMAND
+efs       216628 efsd
+efsd c823c3c2656e (branch devel, built 2026-10-09T22:59:09Z on efs2)
+6f808783bc0702b8b3eef1d477c8e716bcce0185aa58ae2b7fd37f0c4b7a5c6a  /tmp/efs/efsd
+f3c672c85a92311427afa407ec6655d3497529ecd3f4d7b77853b8410334316d  /tmp/efs/efs-fuse
+efs3
+USER         PID COMMAND
+efs       215391 efsd
+efsd c823c3c2656e (branch devel, built 2026-10-09T22:59:09Z on efs3)
+6f808783bc0702b8b3eef1d477c8e716bcce0185aa58ae2b7fd37f0c4b7a5c6a  /tmp/efs/efsd
+f3c672c85a92311427afa407ec6655d3497529ecd3f4d7b77853b8410334316d  /tmp/efs/efs-fuse
+efsgw
+USER         PID COMMAND
+efs        61618 efs-fuse
+efs        97607 efs-fuse
+efs       118093 efs-fuse
+efs       122090 efs-fuse
+efs       137491 efs-fuse
+efs       172424 efs-fuse
+efsd c823c3c2656e (branch devel, built 2026-10-09T22:59:09Z on efsgw)
+6f808783bc0702b8b3eef1d477c8e716bcce0185aa58ae2b7fd37f0c4b7a5c6a  /tmp/efs/efsd
+f3c672c85a92311427afa407ec6655d3497529ecd3f4d7b77853b8410334316d  /tmp/efs/efs-fuse

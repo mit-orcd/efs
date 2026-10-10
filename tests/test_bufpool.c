@@ -103,7 +103,9 @@ static void writer_state_lifetime(void)
     assert(efs_writer_state_report(state,1000,1,EFS_OK)==EFS_ERR_INVAL);
     assert(state->has_publication);
     *state=intact;
-    assert(efs_writer_ranges_admit(&state->ranges, &view, 0, 1) == EFS_OK);
+    uint8_t *new_body=calloc(1,EFS_CHUNK_SIZE);assert(new_body);uint8_t rewrite=1;
+    assert(efs_writer_state_write(&state,&view,new_body,EFS_CHUNK_SIZE,0,&rewrite,1)==EFS_OK);
+    free(new_body);
     assert(efs_writer_state_report(state, 1000, 1, EFS_OK) == EFS_ERR_STALE);
     assert(!state->has_publication && state->ranges.bytes.count);
     assert(efs_writer_state_free(state) == EFS_ERR_BUSY);
@@ -176,13 +178,45 @@ static void writer_body_snapshot(void)
     assert(efs_writer_state_owned(state) && !state->has_publication);
     assert(efs_writer_state_snapshot(state,&view,base,body,sizeof(body),&plan,snapshot)==EFS_OK);
     for(unsigned i=0;i<sizeof(snapshot);++i)
-        assert(snapshot[i]==(i<100?'A':i>=200 && i<250?'B':0));
+        assert(snapshot[i]==(i>=200 && i<250?'B':0));
     uint8_t peer[EFS_MIN_CHUNK_SIZE];memset(peer,'P',sizeof(peer));
     assert(efs_dirty_ranges_overlay(&plan.surviving,peer,sizeof(peer),snapshot)==EFS_OK);
-    assert(peer[0]=='A' && peer[100]=='P' && peer[200]=='B' && peer[250]=='P');
+    assert(peer[0]=='P' && peer[100]=='P' && peer[200]=='B' && peer[250]=='P');
+    /* A snapshot raced by an admission cannot bind after the rewrite. */
+    struct efs_writer_plan old_plan=plan;
+    assert(efs_writer_state_write(&state,&view,body,sizeof(body),300,incoming,1)==EFS_OK);
+    assert(efs_writer_state_put(state,&old_plan,401,2)==EFS_ERR_STALE && !state->has_publication);
+    assert(efs_writer_state_snapshot(state,&view,base,body,sizeof(body),&plan,snapshot)==EFS_OK);
     assert(efs_writer_state_put(state,&plan,401,2)==EFS_OK);
     assert(efs_writer_state_report(state,401,2,EFS_OK)==EFS_OK);
     assert(efs_writer_state_free(state)==EFS_OK && g_metadata==before);free(base);
+}
+
+/* A full snapshot merges all bytes into one main range, but the newer-write
+ * shadow still has a hard fragmentation bound. Refusal must precede memcpy. */
+static void writer_pending_fragment_bound(void)
+{
+    uint64_t before=g_metadata;
+    struct efs_writer_state *state=NULL;
+    uint8_t body[EFS_MIN_CHUNK_SIZE], saved[EFS_MIN_CHUNK_SIZE], value=0xa7;
+    memset(body,0x5a,sizeof(body));
+    struct efs_msg_inode_writer_view_reply view={.ino=100,.generation=1};
+    assert(efs_writer_state_write(&state,&view,body,sizeof(body),0,body,sizeof(body))==EFS_OK);
+    struct efs_writer_plan plan;
+    assert(efs_writer_ranges_plan(&state->ranges,&view,0,&plan)==EFS_OK);
+    assert(efs_writer_state_put(state,&plan,700,1)==EFS_OK);
+    for(unsigned i=0;i<EFS_DIRTY_RANGE_MAX;i++)
+        assert(efs_writer_state_write(&state,&view,body,sizeof(body),i*8,&value,1)==EFS_OK);
+    struct efs_writer_state intact=*state;memcpy(saved,body,sizeof(body));
+    assert(state->ranges.bytes.count==1 && state->after_publication.count==EFS_DIRTY_RANGE_MAX);
+    assert(efs_writer_state_write(&state,&view,body,sizeof(body),1024,&value,1)==EFS_ERR_BUSY);
+    assert(!memcmp(state,&intact,sizeof(intact)) && !memcmp(body,saved,sizeof(body)));
+    assert(efs_writer_state_report(state,700,1,EFS_OK)==EFS_ERR_STALE);
+    assert(!state->has_publication && state->ranges.bytes.count==EFS_DIRTY_RANGE_MAX);
+    assert(efs_writer_ranges_plan(&state->ranges,&view,0,&plan)==EFS_OK);
+    assert(efs_writer_state_put(state,&plan,701,2)==EFS_OK);
+    assert(efs_writer_state_report(state,701,2,EFS_OK)==EFS_OK);
+    assert(efs_writer_state_free(state)==EFS_OK && before==g_metadata);
 }
 
 int main(void)
@@ -313,6 +347,7 @@ int main(void)
     writer_state_lifetime();
     writer_admission_copy();
     writer_body_snapshot();
+    writer_pending_fragment_bound();
 #if EFS_FAULTS
     char fault_path[]="/tmp/efs-drain-budget-XXXXXX";
     int fault_fd=mkstemp(fault_path);assert(fault_fd>=0);close(fault_fd);

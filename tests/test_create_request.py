@@ -5,7 +5,7 @@ import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/client/inode_rpc.c').read_text()
 a=s.index('static int opid_begin(');b=s.index('/* A reservation identity',a)
 c=s.index('static void opid_refresh_ack(');d=s.index('static void opid_retry_ack(',c)
-e=s.index('int efs_client_create_begin(');f=s.index('int efs_client_rpc_getattr(',e)
+e=s.index('static int session_shard_admit(');f=s.index('int efs_client_rpc_getattr(',e)
 code=r'''
 #include "client_internal.h"
 #include "efs/session.h"
@@ -67,6 +67,8 @@ int main(void) {
  bad_route=0;stored=1;negative=1;
  assert(efs_client_create_resume(&r,1)==EFS_ERR_EXIST&&r.complete&&!r.inode.ino&&r.slot==-1);
  assert(!efs_client_create_reset(&r));
+ /* Exercise a revoked first touch after losing the local establishment cache. */
+ memset(g_client.append_session_shards,0,sizeof(g_client.append_session_shards));
  stored=0;negative=0;admit_rc=EFS_ERR_STALE;
  assert(!efs_client_create_begin(&r,4097,"new",S_IFREG|0600,11,12));identity=r.wire.q.id;
  revoke_rc=EFS_ERR_NOT_FOUND;assert(efs_client_create_resume(&r,0)==EFS_ERR_STALE&&!r.complete);

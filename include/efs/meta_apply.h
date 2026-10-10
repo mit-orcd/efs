@@ -16,7 +16,7 @@
 
 #define EFS_META_LANES 64
 /* Shared with admission accounting; changing apply capacity changes its charge. */
-#define EFS_META_LANE_FENCE_ITEMS (1u + 32u + 32u)
+#define EFS_META_LANE_FENCE_ITEMS (3u + 32u + 32u)
 #define EFS_META_TRUNCATE_ITEMS (EFS_META_LANES + 1u + EFS_META_LANES * 32u * 2u + 3u)
 #define EFS_META_INO_BYTES   128
 #define EFS_META_DENT_BYTES  20
@@ -165,6 +165,12 @@ int efs_meta_execute_append_owned(struct efs_kv *, const struct efs_meta_append_
 int efs_meta_finish_append(struct efs_kv *kv, efs_ino_t ino, uint64_t offset,
                             int outcome, const struct efs_txid *t,
                             const struct efs_meta_append_ops *ops, void *ctx);
+
+/* REPORT completion: freeze the reporting mount's established local session
+ * row before any inode/cursor/lane images, in the same transaction. */
+int efs_meta_finish_append_owned(struct efs_kv *, efs_ino_t, uint64_t offset,
+    int outcome, const struct efs_opid *, const struct efs_txid *,
+    const struct efs_meta_append_ops *, void *ctx);
 
 /* Internal recording adapter: reads only, emits bounded replacement images
  * to a collector. Materialized KV mutation requires coordinated PREPARE. */

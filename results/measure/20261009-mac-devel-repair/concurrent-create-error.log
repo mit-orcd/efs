@@ -1,0 +1,26 @@
+cluster: mac
+2026-10-09T22:51:49.982Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1232649
+2026-10-09T22:51:50.512Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1264158
+2026-10-09T22:51:51.922Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1046138
+2026-10-09T22:51:52.671Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1117318
+2026-10-09T22:51:54.821Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1025298
+2026-10-09T22:51:58.809Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1085188
+2026-10-09T22:52:00.087Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1117724
+2026-10-09T22:52:01.268Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1140978
+2026-10-09T22:52:02.088Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1039138
+2026-10-09T22:52:02.498Z fsync-split ino=7257 flush_ms=161 report_ms=0 rc=0
+2026-10-09T22:52:04.126Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1016012
+2026-10-09T22:52:09.600Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1099981
+2026-10-09T22:52:10.369Z fsync-split ino=12469 flush_ms=106 report_ms=0 rc=0
+2026-10-09T22:52:10.504Z fsync-split ino=12469 flush_ms=133 report_ms=0 rc=0
+2026-10-09T22:52:13.158Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1038096
+2026-10-09T22:52:13.916Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1145748
+2026-10-09T22:52:14.781Z fsync-split ino=5830 flush_ms=840 report_ms=0 rc=0
+2026-10-09T22:52:17.319Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1041799
+2026-10-09T22:52:17.605Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1153646
+2026-10-09T22:52:17.728Z efs: read hole ino=7421 ci=1 holes=12
+2026-10-09T22:52:19.511Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1087598
+2026-10-09T22:52:19.689Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1047092
+2026-10-09T22:52:21.653Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1023648
+2026-10-09T22:52:23.769Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1258188
+2026-10-09T22:52:23.808Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1318093

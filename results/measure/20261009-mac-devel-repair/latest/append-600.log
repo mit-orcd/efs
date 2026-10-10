@@ -1,0 +1,7 @@
+parallel 2 tests jobs=1 (serial 0 after)
+pass concurrent_appends              
+pass concurrent_appends_two_proc     
+kept test tree: /mnt/efs-h/posix-efsgw-append-600-9c4d-tyrti8qf
+============================================================
+POSIX suite: 2/2 pass, 0 fail, 0 skip, 0 notrun  (439.8s)
+wrote /var/tmp/efs-mac-9c4d-validation/append-600.tsv

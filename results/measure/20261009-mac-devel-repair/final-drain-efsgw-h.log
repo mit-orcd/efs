@@ -1,0 +1,3 @@
+Unmounting /mnt/efs-h
+Retiring drained efs-fuse PID 302437 for /mnt/efs-h
+Unmounted /mnt/efs-h

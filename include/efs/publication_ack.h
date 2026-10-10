@@ -22,6 +22,9 @@ struct efs_publication_ack_queue {
 /* Caller-budgeted, zero-initialized storage. No reset while receipts are owned. */
 int efs_publication_ack_admit(struct efs_publication_ack_queue *,
                              const struct efs_msg_publication *);
+/* Retrieve the exact admitted body for status/submission recovery. */
+int efs_publication_ack_request(const struct efs_publication_ack_queue *,
+    uint64_t sequence, struct efs_msg_publication *);
 /* Call only AFTER cache ownership consumed an exact terminal result. */
 int efs_publication_ack_consumed(struct efs_publication_ack_queue *,
     uint64_t sequence, const struct efs_msg_publication_reply *);

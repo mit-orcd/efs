@@ -42,6 +42,7 @@ p.add_argument('--fixture-quota',choices=('1G','4G','16G'),help='explicit per-da
 p.add_argument('--session-append',action='store_true',help='bounded revoked-session append holes, cold half-completion and exact epoch resume')
 p.add_argument('--session-cleanup',action='store_true',help='staged bounded lease/lock cleanup, global barrier, exact replay and cold physical reclaim')
 p.add_argument('--deferred-close',action='store_true',help='staged identified close, 64 cross-group OPEN appends, crash/resume, exact holes and bounded retirement')
+p.add_argument('--typed-writeback',action='store_true',help='actual typed cache bytes, publication/retirement lost ACK and post-snapshot peer preservation')
 p.add_argument('--guarded-leases',action='store_true',help='sequenced lease wire reorder, lost reply probe, cold replay and last-close reclaim')
 p.add_argument('--put-barrier-fault',action='store_true',help='test-only server fragment fsync refusal, unpublished state, retained-body recovery and cold bytes')
 p.add_argument('--create-live-retry',action='store_true',help='actual FUSE CREATE retries consumed committed reply then BUSY using one identity')
@@ -86,6 +87,7 @@ p.add_argument('--rename-cache', action='store_true', help='root rename evicts t
 p.add_argument('--mixed-reads', action='store_true', help='tiny demand reads while sequential prefetch uses a bounded cache')
 p.add_argument('--ecrawl-binary',type=Path,help='run the actual ecrawl dense/sparse classification gate; requires --allocation')
 p.add_argument('--allocation', action='store_true', help='cold non-writing client allocation reports for dense and sparse files')
+p.add_argument('--kv-wal-persistence-only',action='store_true',help='refuse follower KV WAL fsync; preserve periodic/shutdown checkpoints and cold replay')
 p.add_argument('--transaction-fault-seed',action='store_true',help='prefer the client seed as fault follower for authority redirect validation')
 p.add_argument('--transaction-apply-retry',action='store_true',help='fault follower transaction persistence, retain commit/apply lag, retry and cold namespace bytes')
 p.add_argument('--compactor-pressure', action='store_true', help='fault-build follower pressure with finite stop and recovery')
@@ -196,7 +198,7 @@ posix_failure=None
 
 def run(args, **kwargs):
     try:
-        return subprocess.run([str(x) for x in args], check=True, timeout=kwargs.pop("timeout",60), env=env, **kwargs)
+        return subprocess.run([str(x) for x in args], check=True, timeout=kwargs.pop("timeout",60), env=kwargs.pop("env",env), **kwargs)
     except subprocess.CalledProcessError as error:
         # Captured helper assertions must remain visible in saved gate evidence.
         if error.stdout: print(error.stdout,flush=True)
@@ -237,6 +239,10 @@ def start(prefer_single_host=False):
             node_env.update(LD_PRELOAD=str(work/'store-barrier-fault.so'),
                             EFS_TEST_STORE_BARRIER_FILE=str(work/'put-barrier-fault'),
                             EFS_TEST_STORE_NODE=str(i+1))
+        if a.kv_wal_persistence_only and i==2:
+            node_env.update(LD_PRELOAD=str(work/'kv-wal-fault.so'),
+                            EFS_TEST_KV_WAL_FAULT=str(work/'kv-wal-fault'),
+                            EFS_TEST_KV_CHECKPOINT=str(work/'kv-checkpoint-before-fault.bin'))
         if a.transaction_apply_retry:
             assert a.server_binary,'transaction retry gate requires an explicitly selected fault build'
             node_env['EFS_FAULT_TXN_APPLY_FILE']=str(work/f'transaction-apply-fault-{i+1}')
@@ -390,9 +396,15 @@ try:
     print('Evidence directory: '+str(work),flush=True)
     if a.put_barrier_fault:
         run(['cc','-Wall','-Wextra','-Werror','-shared','-fPIC',source/'tests/live/store_barrier_fault.c','-ldl','-o',work/'store-barrier-fault.so'])
+    if a.kv_wal_persistence_only:
+        run(['cc','-shared','-fPIC','-Wall','-Wextra','-Werror',source/'tests/live/kv_wal_fault.c','-ldl','-o',work/'kv-wal-fault.so'])
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.kv_wal_persistence_only:
+        from kv_wal_persistence import exercise
+        exercise(a,work,roots,mount,run,start,stop,mount_client,unmount,wait,drained)
+        raise SystemExit(0)
     if a.put_barrier_fault:
         from put_barrier_fault import exercise as fail_put_barrier, verify_and_delete as verify_put_barrier
         barrier=fail_put_barrier(mount,work/'put-barrier-fault',lambda ino:chunk_state(ino,allow_absent=True))
@@ -536,6 +548,36 @@ try:
         start();mount_client()
         (work/'session-cleanup.json').write_text(json.dumps({'inos':inos,'records':records},indent=2))
         print('bounded session lease/lock global barrier, exact replay, cold remaining owners and physical reclaim PASS',flush=True)
+    if a.typed_writeback:
+        typed=work/'client-publication-writeback'
+        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_publication_writeback.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',typed])
+        for group in ('cross','same'):
+            typed_env={**env}
+            if group=='same':typed_env['EFS_TYPED_SAME_GROUP']='1'
+            typed_path=mount/('typed-writeback-'+group);typed_path.touch()
+            typed_ino=typed_path.stat().st_ino
+            typed_state=work/('typed-writeback-'+group+'-state.bin')
+            typed_result=run([typed,str(a.port),str(typed_ino),typed_state],capture_output=True,text=True,timeout=180,env=typed_env).stdout
+            (work/('typed-writeback-'+group+'-wire.txt')).write_text(typed_result)
+            typed_ci=int(re.search(r'ci=(\d+)',typed_result).group(1))
+            typed_group=int(re.search(r'group=(\d+)',typed_result).group(1))
+            leaders=[]
+            for node in range(4):
+                raft=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+node}'],capture_output=True,text=True).stdout
+                if re.search(r'group '+str(typed_group)+r' .*role=LEADER',raft):leaders.append(node)
+            assert len(leaders)==1,leaders
+            dead=leaders[0];servers[dead].kill();servers[dead].wait(timeout=10)
+            leader_replay=run([typed,str(a.port),str(typed_ino),typed_state,'receipt-only'],capture_output=True,text=True,timeout=180,env=typed_env).stdout
+            (work/('typed-writeback-'+group+'-leader-replay.txt')).write_text(leader_replay)
+            print('typed retired publication replay after actual lane leader death PASS',flush=True)
+            unmount();stop(crash=True);start();mount_client()
+            expected=bytearray([0x5a])*(128<<10);expected[4096:8192]=bytes([0xa7])*4096;expected[8192:12288]=bytes([0x33])*4096
+            assert typed_path.stat().st_ino==typed_ino and typed_path.read_bytes()==bytes(typed_ci*(128<<10))+expected
+            cold_replay=run([typed,str(a.port),str(typed_ino),typed_state,'verify'],capture_output=True,text=True,timeout=180,env=typed_env).stdout
+            (work/('typed-writeback-'+group+'-cold-replay.txt')).write_text(cold_replay)
+            typed_path.unlink();wait(lambda:not files(typed_ino),'typed writeback physical deletion',180)
+            print('actual typed cache, lost ACKs, newer-range ownership, peer preservation and exact cold bytes PASS',flush=True)
+
     if a.guarded_leases:
         pending_helper=work/'client-pending-create'
         run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_pending_create.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',pending_helper])
@@ -584,6 +626,27 @@ try:
         edge_path=mount/'client-lease-transport';edge_body=b'client lease transport'*2048
         with edge_path.open('wb') as out:out.write(edge_body);out.flush();os.fsync(out.fileno())
         edge_ino=edge_path.stat().st_ino;edge_uuid=(os.urandom(8)+bytes(8)).hex();edge_results=[]
+        many=work/'client-report-many-inodes';many_dir=mount/'report-many-inodes';many_dir.mkdir()
+        many_paths=[many_dir/str(i) for i in range(40)]
+        for path in many_paths:path.touch()
+        many_input=work/'report-many-inodes.txt';many_inos=[path.stat().st_ino for path in many_paths]
+        many_input.write_text(''.join(str(ino)+'\n' for ino in many_inos))
+        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_report_many_inodes.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',many])
+        many_result=run([many,str(a.port),many_input],capture_output=True,text=True,timeout=180).stdout
+        many_rows=re.findall(r'ino=(\d+) ci=(\d+) byte=(\d+)',many_result);assert len(many_rows)==40,many_result
+        (work/'report-many-inodes-wire.txt').write_text(many_result)
+        unmount();stop(crash=True);start();mount_client()
+        for path,ino,row in zip(many_paths,many_inos,many_rows):
+            captured,ci,byte=map(int,row);assert captured==ino and path.stat().st_ino==ino
+            data=path.read_bytes();assert data==bytes(ci*(128<<10))+bytes([byte])*(128<<10),('many-inode REPORT cold bytes',path,row)
+            path.unlink()
+        many_dir.rmdir();wait(lambda:all(not files(ino) for ino in many_inos),'40-inode fresh cross-group REPORT cold bytes and physical reclaim',180)
+
+        report=work/'client-report-session';report_saved=work/'report-session-packet.bin'
+        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_report_session.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',report])
+        report_result=run([report,str(a.port),str(edge_ino),source/'efs-mgmt',report_saved],capture_output=True,text=True,timeout=180).stdout
+        (work/'report-session-wire.txt').write_text(report_result)
+
         namespace=work/'client-namespace-session';ns_path=mount/'namespace-session-fence';ns_path.mkdir()
         run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_namespace_session.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',namespace])
         ns_ino=ns_path.stat().st_ino;ns_saved=work/'namespace-session-packets.bin'
@@ -607,6 +670,9 @@ try:
             edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,stage],capture_output=True,text=True,timeout=90).stdout)
         unmount();stop(crash=True);start();mount_client()
         ns_result+=run([namespace,str(a.port),str(ns_ino),source/'efs-mgmt','cold',ns_saved],capture_output=True,text=True,timeout=90).stdout
+        report_result+=run([report,str(a.port),str(edge_ino),source/'efs-mgmt','cold',report_saved],capture_output=True,text=True,timeout=90).stdout
+        (work/'report-session-wire.txt').write_text(report_result)
+
         (work/'namespace-session-wire.txt').write_text(ns_result)
         (ns_path/'a').unlink();(ns_path/'still-empty').rmdir();ns_path.rmdir();ns_untouched.rmdir()
         edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,'replay'],capture_output=True,text=True,timeout=90).stdout)

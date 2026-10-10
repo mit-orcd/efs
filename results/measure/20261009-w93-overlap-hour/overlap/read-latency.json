@@ -1,0 +1,322 @@
+[
+  {
+    "stage": "idle_before",
+    "group": 0,
+    "us": 18348
+  },
+  {
+    "stage": "idle_before",
+    "group": 2,
+    "us": 7386
+  },
+  {
+    "stage": "idle_before",
+    "group": 0,
+    "us": 4510
+  },
+  {
+    "stage": "idle_before",
+    "group": 2,
+    "us": 10632
+  },
+  {
+    "stage": "idle_before",
+    "group": 0,
+    "us": 4905
+  },
+  {
+    "stage": "idle_before",
+    "group": 2,
+    "us": 5744
+  },
+  {
+    "stage": "idle_before",
+    "group": 0,
+    "us": 5065
+  },
+  {
+    "stage": "idle_before",
+    "group": 2,
+    "us": 5921
+  },
+  {
+    "stage": "idle_before",
+    "group": 0,
+    "us": 4939
+  },
+  {
+    "stage": "idle_before",
+    "group": 2,
+    "us": 5759
+  },
+  {
+    "stage": "idle_before",
+    "group": 0,
+    "us": 5053
+  },
+  {
+    "stage": "idle_before",
+    "group": 2,
+    "us": 5960
+  },
+  {
+    "stage": "idle_before",
+    "group": 0,
+    "us": 4871
+  },
+  {
+    "stage": "idle_before",
+    "group": 2,
+    "us": 7661
+  },
+  {
+    "stage": "idle_before",
+    "group": 0,
+    "us": 5025
+  },
+  {
+    "stage": "idle_before",
+    "group": 2,
+    "us": 6609
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "us": 12324
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "us": 52889
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "us": 2354
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "us": 149494
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "us": 37243
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "us": 309494
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "us": 17534
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "us": 202929
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "us": 25756
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "us": 235408
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "us": 27242
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "us": 207855
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "us": 13940
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "us": 205087
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "us": 14064
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "us": 219453
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "us": 23171
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "us": 209413
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "us": 19946
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "us": 318997
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "us": 38637
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "us": 306006
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "us": 21584
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "us": 305487
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "us": 23717
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "us": 338518
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "us": 17325
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "us": 283389
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "us": 13021
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "us": 281465
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "us": 38645
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "us": 303200
+  },
+  {
+    "stage": "idle_after",
+    "group": 0,
+    "us": 24033
+  },
+  {
+    "stage": "idle_after",
+    "group": 2,
+    "us": 17584
+  },
+  {
+    "stage": "idle_after",
+    "group": 0,
+    "us": 17485
+  },
+  {
+    "stage": "idle_after",
+    "group": 2,
+    "us": 25470
+  },
+  {
+    "stage": "idle_after",
+    "group": 0,
+    "us": 6995
+  },
+  {
+    "stage": "idle_after",
+    "group": 2,
+    "us": 18674
+  },
+  {
+    "stage": "idle_after",
+    "group": 0,
+    "us": 6491
+  },
+  {
+    "stage": "idle_after",
+    "group": 2,
+    "us": 9758
+  },
+  {
+    "stage": "idle_after",
+    "group": 0,
+    "us": 6858
+  },
+  {
+    "stage": "idle_after",
+    "group": 2,
+    "us": 12430
+  },
+  {
+    "stage": "idle_after",
+    "group": 0,
+    "us": 7062
+  },
+  {
+    "stage": "idle_after",
+    "group": 2,
+    "us": 7785
+  },
+  {
+    "stage": "idle_after",
+    "group": 0,
+    "us": 6021
+  },
+  {
+    "stage": "idle_after",
+    "group": 2,
+    "us": 18760
+  },
+  {
+    "stage": "idle_after",
+    "group": 0,
+    "us": 9998
+  },
+  {
+    "stage": "idle_after",
+    "group": 2,
+    "us": 9772
+  }
+]

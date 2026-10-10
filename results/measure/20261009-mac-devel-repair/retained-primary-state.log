@@ -1,0 +1,22 @@
+efs-fuse 43fcefe190dd (branch devel, built 2026-10-09T21:40:35Z on efsgw)
+efs-fuse 885f8c0df206 (branch devel, built 2026-10-09T22:16:57Z on efsgw)
+2026-10-09T22:03:07.475Z inode-rpc: slow-ok type=87 attempts=1 saw_busy=0 status=0 us=1000138
+2026-10-09T22:03:13.696Z fsync-split ino=7932 flush_ms=206 report_ms=0 rc=0
+2026-10-09T22:03:14.695Z inode-rpc: slow-ok type=45 attempts=1 saw_busy=0 status=0 us=1085288
+2026-10-09T22:03:19.145Z inode-rpc: slow-ok type=87 attempts=1 saw_busy=0 status=0 us=1539267
+2026-10-09T22:03:20.704Z inode-rpc: slow-ok type=87 attempts=1 saw_busy=0 status=0 us=1241587
+2026-10-09T22:03:27.744Z efs: read hole ino=13278 ci=0 holes=9
+2026-10-09T22:03:28.477Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1143772
+2026-10-09T22:03:52.824Z dcache-pressure live=263585792 reserved=0 backing=268435456 limit=335544320 request=5242880 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=body
+2026-10-09T22:03:52.832Z dcache-pressure live=263979008 reserved=0 backing=268435456 limit=335544320 request=5242880 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=body
+2026-10-09T22:04:41.768Z dcache-pressure live=323092480 reserved=0 backing=335544320 limit=335544320 request=1572864 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=body
+2026-10-09T22:05:15.273Z dcache-pressure live=264110080 reserved=0 backing=335544320 limit=335544320 request=5242880 metadata=43824 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=body
+2026-10-09T22:05:15.281Z dcache-pressure live=263847936 reserved=0 backing=335544320 limit=335544320 request=5242880 metadata=50464 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=body
+2026-10-09T22:05:45.445Z dcache-pressure live=314441728 reserved=0 backing=335544320 limit=335544320 request=1572864 metadata=50464 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=body
+2026-10-09T22:10:12.425Z stop-refused: unresolved writes or lease releases remain; mount retained
+2026-10-09T23:46:12.630Z stop-refused: unresolved writes or lease releases remain; mount retained
+/mnt/efs      	<world>
+USER         PID COMMAND
+efs        61618 efs-fuse
+efs        97607 efs-fuse
+efs       243593 efs-fuse

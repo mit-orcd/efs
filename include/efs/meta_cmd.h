@@ -15,6 +15,9 @@
  * next batch. Historical LANE_SWEEP retains whole-lane replay semantics. */
 /* W86: [tag:1][immutable ticket:216]. STATUS is ReadIndex-only; ADMIT
  * is serialized apply. Reply salt is ticket state, never permission to PUT. */
+/* REPORT envelope: [tag][uuid:16][epoch:4][legacy PUBLISH:202]*N.
+ * Fences every mapping at serialized apply without reusing delta fields. */
+#define EFS_MD_CMD_REPORT_PUBLISH 41
 #define EFS_MD_CMD_PUT_TICKET_ADMIT 39
 #define EFS_MD_REQ_PUT_TICKET_STATUS 40
 #define EFS_MD_REQ_SESSION_APPEND_NEXT 38 /* RPC only: [uuid:16][epoch:4][shard:4] */
@@ -84,7 +87,8 @@
  * LANE_FENCE runs on the LANE's group and carries one lane's share of a
  * truncate (epoch fence + range delete). Both idempotent. */
 #define EFS_MD_CMD_ACTIVATE_LANE 19 /* [ino:8][lane:1]  (10 B)
-                                     * or [ino:8][mask:8] (17 B) */
+                                     * or [ino:8][mask:8] (17 B); REPORT
+                                     * appends UUID/epoch (20 B) to either form */
 #define EFS_MD_CMD_LANE_FENCE    20 /* [ino:8][gen:8][lane:1][epoch:8][size:8]
                                      * [tail_ci:4][has_tail:1] */
 /* Data-plane GC (spec L7). LANE_SWEEP runs on the LANE's group: deletes the

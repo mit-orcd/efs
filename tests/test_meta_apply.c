@@ -5412,6 +5412,13 @@ static int lane_bootstrap_fail_batch(void *ctx, const struct efs_kv_item *items,
     return EFS_ERR_IO;
 }
 
+static int lane_truncate_fail_batch(void *ctx, const struct efs_kv_item *items, uint32_t count)
+{
+    (void)ctx; (void)items;
+    CHECK(count==5,"same-group inode/cursor/stamp/history/authority atomic batch");
+    return EFS_ERR_IO;
+}
+
 static void test_lane_local_writer_views(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
@@ -5529,6 +5536,59 @@ static void test_lane_local_writer_views(void)
     for (uint32_t i = 0; i < parts.n; ++i)
         CHECK(efs_txn_resolve(kv, &fail, parts.shard[i], EFS_TXN_ABORT) == EFS_OK,
               "failed bootstrap releases inode/history holds");
+    CHECK(efs_meta_get_lane_writer_view(kv,ino,row.generation,17,EFS_MIN_CHUNK_SIZE,&view)==EFS_OK,
+          "legacy fence starts from complete typed lane");
+    saved=view;
+    wrapped=*base;wrapped.batch=lane_bootstrap_fail_batch;kv->ops=&wrapped;
+    CHECK(efs_meta_apply_lane_fence(kv,ino,row.generation,17,saved.authority_epoch+1,10,17,1)==EFS_ERR_IO,
+          "legacy lane fence preserves failed atomic batch");
+    kv->ops=base;
+    CHECK(efs_meta_get_lane_writer_view(kv,ino,row.generation,17,EFS_MIN_CHUNK_SIZE,&view)==EFS_OK &&
+          !memcmp(&view,&saved,sizeof(view)),"failed legacy fence leaves typed authority unchanged");
+    CHECK(efs_meta_apply_lane_fence(kv,ino,row.generation,17,saved.authority_epoch+1,10,17,1)==EFS_OK &&
+          efs_meta_get_lane_writer_view(kv,ino,row.generation,17,EFS_MIN_CHUNK_SIZE,&view)==EFS_OK &&
+          view.authority_epoch==saved.authority_epoch+1 && view.history.count==saved.history.count+1 &&
+          view.history.entries[view.history.count-1].size==10,
+          "legacy cross-group fence atomically advances typed authority and history");
+    saved=view;
+    CHECK(efs_meta_apply_lane_fence(kv,ino,row.generation,17,saved.authority_epoch,10,17,1)==EFS_OK &&
+          efs_meta_get_lane_writer_view(kv,ino,row.generation,17,EFS_MIN_CHUNK_SIZE,&view)==EFS_OK &&
+          !memcmp(&view,&saved,sizeof(view)),"legacy fence replay preserves exact typed view");
+    while(view.history.count<EFS_FENCE_HISTORY_MAX) {
+        CHECK(efs_meta_apply_lane_fence(kv,ino,row.generation,17,view.authority_epoch+1,10,17,1)==EFS_OK &&
+              efs_meta_get_lane_writer_view(kv,ino,row.generation,17,EFS_MIN_CHUNK_SIZE,&view)==EFS_OK,
+              "legacy typed fence bounded history");
+    }
+    saved=view;
+    CHECK(efs_meta_apply_lane_fence(kv,ino,row.generation,17,view.authority_epoch+1,10,17,1)==EFS_ERR_BUSY &&
+          efs_meta_get_lane_writer_view(kv,ino,row.generation,17,EFS_MIN_CHUNK_SIZE,&view)==EFS_OK &&
+          !memcmp(&view,&saved,sizeof(view)),"history overflow changes neither stamp nor authority");
+    efs_ino_t local=0;struct efs_meta_row local_row;
+    CHECK(efs_meta_apply_create_file(kv,&g_at,EFS_ROOT_INO,S_IFREG|0644,"local-truncate",&local)==EFS_OK &&
+          efs_meta_apply_get_inode(kv,local,&local_row)==EFS_OK,"same-group truncate fixture");
+    struct efs_txid local_tx={{0x75}};
+    CHECK(efs_meta_capture_lane_bootstrap(kv,local,local_row.generation,5,EFS_MIN_CHUNK_SIZE,
+          coord_fn,&coord,&q)==EFS_OK,"same-group lane capture");
+    parts.n=1;parts.shard[0]=efs_kv_inode_shard(local);lsh=efs_kv_lane_shard(local,5);
+    if(lsh!=parts.shard[0])parts.shard[parts.n++]=lsh;
+    CHECK(lane_bootstrap_part(kv,&local_tx,&parts,&q,EFS_META_FENCE_INODE)==EFS_OK &&
+          lane_bootstrap_part(kv,&local_tx,&parts,&q,5)==EFS_OK &&
+          efs_txn_decide(kv,efs_txn_coordinator(&local_tx,&parts),&local_tx,EFS_TXN_COMMIT)==EFS_OK,
+          "same-group bootstrap prepares/commits");
+    for(uint32_t i=0;i<parts.n;i++)CHECK(efs_txn_resolve(kv,&local_tx,parts.shard[i],EFS_TXN_COMMIT)==EFS_OK,
+          "same-group bootstrap resolves");
+    struct efs_meta_truncate shrink={.expect_gen=local_row.generation,.lane_mask=~0ULL};
+    CHECK(efs_meta_get_lane_writer_view(kv,local,local_row.generation,5,EFS_MIN_CHUNK_SIZE,&saved)==EFS_OK,
+          "same-group initial complete view");
+    wrapped=*base;wrapped.batch=lane_truncate_fail_batch;kv->ops=&wrapped;
+    CHECK(efs_meta_apply_truncate(kv,local,T0+99,&shrink)==EFS_ERR_IO,"same-group failed batch");
+    kv->ops=base;
+    CHECK(efs_meta_get_lane_writer_view(kv,local,local_row.generation,5,EFS_MIN_CHUNK_SIZE,&view)==EFS_OK &&
+          !memcmp(&view,&saved,sizeof(view)),"same-group failed batch retains authority");
+    CHECK(efs_meta_apply_truncate(kv,local,T0+99,&shrink)==EFS_OK &&
+          efs_meta_get_lane_writer_view(kv,local,local_row.generation,5,EFS_MIN_CHUNK_SIZE,&view)==EFS_OK &&
+          view.authority_epoch==1 && view.history.count==1 && !view.history.entries[0].size,
+          "same-group truncate advances lane/history/authority atomically");
     efs_kv_mem_free(kv);
 }
 

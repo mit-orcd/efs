@@ -1,0 +1,6 @@
+Unmounting /data1/efs/mnt
+Not mounted: /data1/efs/mnt (cleared any stale FUSE handle)
+Unmounting /data1/efs/mnt2
+Not mounted: /data1/efs/mnt2 (cleared any stale FUSE handle)
+deployment-complete
+enhanced-functional-gates-complete
