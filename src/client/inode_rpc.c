@@ -2086,7 +2086,13 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         (type==EFS_MSG_INODE_LINK && req_len==sizeof(mutation.link)+EFS_OPID_WIRE_LEN) ||
         (type==EFS_MSG_INODE_RENAME_AT && req_len==sizeof(mutation.rename)+EFS_OPID_WIRE_LEN);
     if (identified_create) { memcpy(create_retry,req,req_len);req=create_retry; }
-    for (int attempt = 0; attempt < 16; attempt++) {
+    /* MKDIR owns a bounded callback deadline. Keep its original identity
+     * while a cross-shard prepare drains instead of stopping after 16 tries.
+     * Other users retain the legacy attempt cap. */
+    int attempts = identified_create && type == EFS_MSG_INODE_CREATE &&
+        S_ISDIR(((const struct efs_msg_inode_create *)req)->mode) &&
+        efs_client_rpc_deadline_ms() ? 64 : 16;
+    for (int attempt = 0; attempt < attempts; attempt++) {
         if (identified_create) opid_retry_ack(create_retry,req_len);
         efs_node_id_t nid = 0;
         struct efs_conn *conn;
@@ -2104,7 +2110,7 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         if (!conn || efs_conn_send_msg(conn, type, req, req_len) != 0) {
             if (conn)
                 efs_client_conn_drop(nid, conn);
-            if (attempt + 1 < 16) {
+            if (attempt + 1 < attempts) {
                 if (rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
                     return EFS_ERR_BUSY;
                 continue;
@@ -2122,7 +2128,7 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         if (rc != 0) {
             free(payload);
             efs_client_conn_drop(nid, conn);
-            if (attempt + 1 < 16) {
+            if (attempt + 1 < attempts) {
                 fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=recv rc=%d "
                         "req_len=%u recv_ms=%d\n",
                         type, attempt, rc, req_len,
@@ -2155,7 +2161,7 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
             skip = nid;
             target = 0;
             unsigned long long sleep_start = rpc_prof_now_us();
-            if (attempt == 15 || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+            if (attempt + 1 == attempts || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
                 return EFS_ERR_BUSY;
             unsigned long long sleep_us = rpc_prof_now_us() - sleep_start;
             rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, sleep_us);
@@ -2167,7 +2173,7 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
              * REPORT_CHUNKS owns its STALE (W1). */
             saw_busy = 1;
             unsigned long long sleep_start = rpc_prof_now_us();
-            if (attempt == 15 || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+            if (attempt + 1 == attempts || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
                 return EFS_ERR_BUSY;
             unsigned long long sleep_us = rpc_prof_now_us() - sleep_start;
             rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, sleep_us);
@@ -2184,7 +2190,7 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
             unsigned long long sleep_start = rpc_prof_now_us();
             saw_busy = 1;
             target = 0;
-            if (attempt == 15 || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+            if (attempt + 1 == attempts || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
                 return EFS_ERR_BUSY;
             unsigned long long sleep_us = rpc_prof_now_us() - sleep_start;
             rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, sleep_us);
@@ -2194,8 +2200,8 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         target = r->primary_id;
     }
     if (saw_busy)
-        fprintf(stderr, "inode-rpc: dual type=%u exhausted 16 BUSY/STALE "
-                "retries (%.1f s) -> EBUSY\n", type, 10.35);
+        fprintf(stderr, "inode-rpc: dual type=%u exhausted %d BUSY/STALE "
+                "retries (%.1f s) -> EBUSY\n", type, attempts, (rpc_prof_now_us() - t_start) / 1000000.0);
     return saw_busy ? EFS_ERR_BUSY : EFS_ERR_NOT_PRIMARY;
 }
 
