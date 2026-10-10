@@ -1,0 +1,12 @@
+{
+  "/sys/class/nvme/nvme0/model": "Samsung SSD 970 EVO 1TB",
+  "/sys/class/nvme/nvme0/firmware_rev": "2B2QEXE7",
+  "/sys/module/nvme_core/parameters/default_ps_max_latency_us": "100000",
+  "/sys/block/nvme0n1/queue/write_cache": "write back",
+  "/sys/block/nvme0n1/queue/scheduler": "[none] mq-deadline kyber bfq",
+  "/sys/block/sda/queue/write_cache": "write through",
+  "/sys/class/nvme/nvme0/device/power/runtime_status": "active",
+  "lsblk": "NAME        MODEL                     SIZE TYPE FSTYPE      MOUNTPOINTS\nsda         MK0800GEYKE             745.2G disk xfs         /data1\nnvme0n1     Samsung SSD 970 EVO 1TB 931.5G disk             \n\u251c\u2500nvme0n1p1                           600M part vfat        /boot/efi\n\u251c\u2500nvme0n1p2                             2G part xfs         /boot\n\u2514\u2500nvme0n1p3                         928.9G part LVM2_member \n  \u251c\u2500rl-root                            70G lvm  xfs         /\n  \u251c\u2500rl-swap                          15.6G lvm  swap        \n  \u2514\u2500rl-home                         843.4G lvm  xfs         /home\n",
+  "kernel": "Linux nuc 6.12.0-211.62.1.el10_2.x86_64 #1 SMP PREEMPT_DYNAMIC Mon Oct  5 16:39:25 UTC 2026 x86_64 GNU/Linux\n",
+  "telemetry_access": "nvme smart-log/id-ctrl and smartctl denied for efs; no NVMe hwmon sensor; optional root read-only collector requested"
+}
