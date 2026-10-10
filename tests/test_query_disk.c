@@ -67,7 +67,7 @@ int main(void)
     uint64_t bytes=efs_query_catalog_bytes(disk);CHECK(bytes<(4<<20));
     CHECK(efs_query_catalog_build_disk(root,source,disk,1,NULL,NULL,&next)==EFS_ERR_NOMEM && !next);
     CHECK(efs_query_catalog_build_disk(root,source,disk,4<<20,cancel,NULL,&next)==EFS_ERR_BUSY && !next);
-    CHECK(!efs_query_catalog_build_disk(root,source,disk,4<<20,NULL,NULL,&next));CHECK(!efs_query_catalog_rebuilt(next));
+    CHECK(!efs_query_catalog_build_disk(root,source,disk,4<<20,NULL,NULL,&next));CHECK(!efs_query_catalog_rebuilt(next));CHECK(!efs_query_catalog_refolded(next));
     compare(source,memory,next,EFS_ROOT_INO);CHECK(efs_query_catalog_bytes(next)==bytes);efs_query_catalog_free(next);next=NULL;
     efs_kv_lsm_snapshot_release(source);efs_query_catalog_free(memory);memory=NULL;
     CHECK(!efs_meta_apply_rename(kv,dir,"sub",EFS_ROOT_INO,"moved",200));

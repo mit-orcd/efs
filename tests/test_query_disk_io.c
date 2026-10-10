@@ -184,6 +184,20 @@ int main(void)
     close_cache(d);
     for(unsigned i=0;i<SHARDS;i++)for(unsigned k=0;k<4;k++)CHECK(!d->fd_index[i][k]);
     CHECK(!disk_io(d,0,'r',got,17,100,0));CHECK(!memcmp(got,data+100,17));
+    /* Copy-on-write must detach the cached descriptor and preserve the old
+     * inode even when the candidate write is short and fails with ENOSPC. */
+    char retained[]="/tmp/efs-query-retained-XXXXXX",derived[EFS_MAX_PATH];
+    int oldfd=mkstemp(retained);CHECK(oldfd>=0);
+    if(oldfd>=0){
+        CHECK(!io_at(oldfd,data,sizeof(data),0,1));
+        CHECK(!filename(d,SHARDS-2,'d',derived,sizeof(derived)));CHECK(!link(retained,derived));d->shared_d[SHARDS-2]=1;
+        CHECK(!disk_io(d,SHARDS-2,'d',got,17,100,0));CHECK(!memcmp(got,data+100,17));
+        partial_write=1;CHECK(disk_io(d,SHARDS-2,'d',change,sizeof(change),100,1)==EFS_ERR_IO);
+        CHECK(pread(oldfd,got,17,100)==17);CHECK(!memcmp(got,data+100,17));
+        CHECK(!disk_io(d,SHARDS-2,'d',change,sizeof(change),100,1));
+        CHECK(!disk_io(d,SHARDS-2,'d',got,sizeof(change),100,0));CHECK(!memcmp(got,change,sizeof(change)));
+        CHECK(pread(oldfd,got,17,100)==17);CHECK(!memcmp(got,data+100,17));close(oldfd);unlink(retained);
+    }
     efs_query_disk_free(d);
     /* A new raw/index inode has one checked writing-handle barrier. Inject
      * failures in every persisted file class; none may return a candidate or
@@ -241,6 +255,19 @@ int main(void)
                 CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
                 CHECK(!efs_query_disk_inode(next,file,NULL,NULL));efs_query_disk_free(next);next=NULL;
             }
+        }
+        if(old){
+            struct efs_meta_row row;uint8_t k[EFS_KV_KEY_MAX],v[EFS_META_INO_BYTES];uint32_t kn;
+            CHECK(!efs_meta_apply_get_inode(kv,file,&row));row.base_size=999;row.base_mtime=999;
+            CHECK(!efs_kv_key_inode(efs_kv_inode_shard(file),file,k,&kn));CHECK(!efs_meta_pack_inode(&row,v,sizeof(v)));CHECK(!efs_kv_put(kv,k,kn,v,sizeof(v)));
+            struct efs_kv_lsm_snapshot *changed=NULL;CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&changed));
+            fail_write_kind='d';write_faults=0;
+            CHECK(efs_query_disk_build(cache,changed,old,4<<20,NULL,NULL,&next)==EFS_ERR_IO && !next);
+            CHECK(write_faults==1 && !fail_write_kind);
+            struct efs_query_rollup totals;CHECK(!efs_query_disk_stats(old,EFS_ROOT_INO,&totals));CHECK(totals.tree_bytes==465);
+            uint64_t wm[4]={1,2,3,4};CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
+            CHECK(!efs_query_disk_stats(next,EFS_ROOT_INO,&totals));CHECK(totals.tree_bytes==465);
+            efs_query_disk_free(next);next=NULL;efs_kv_lsm_snapshot_release(changed);
         }
         efs_query_disk_free(old);efs_kv_lsm_snapshot_release(source);efs_kv_lsm_close(kv);
     }
