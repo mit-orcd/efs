@@ -80,7 +80,8 @@ matrix, including durable bounded catch-up and 2^32 synthetic index entries.
 Aggregate retained-cache admission passes focused and full native gates;
 100,000- and 1,000,000-file native-format pilots pass complete streaming oracles
 with fixed 3.47 MiB builder memory. Durable catch-up, full scale and deployment
-gates remain in progress.
+gates remain in progress. Durable partition checkpoints and restart catch-up now
+pass focused and full native private-build gates; live validation is pending.
 
 [W92 incremental-cache implementation](query-cache-incremental-20261010.md)
 tracks bounded change/ancestor sets, immutable partition reuse, exact directory

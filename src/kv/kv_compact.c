@@ -158,6 +158,7 @@ int kv_flush_locked(struct kv_lsm *l)
     for (i = 0; i < nneu; i++)
         l->l0[i] = neu[nneu - 1 - i];
     l->n_l0 += nneu;
+    memcpy(l->query_flushed,l->query_revision,sizeof(l->query_flushed));
     rc = kv_manifest_write(l);
     if (rc != EFS_OK)
         return rc;

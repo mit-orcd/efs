@@ -64,7 +64,7 @@ struct efs_query_disk {
     uint64_t tick,count,bytes,limit,disk_bytes,disk_limit,root_bytes,root_limit;
     int budget_fd;
     uint32_t rebuilt,refolded;
-    uint64_t watermark[4];
+    uint64_t watermark[4],lineage[2];
     struct efs_kv kv;
     int (*stop)(void *);void *stop_ctx;
 };
@@ -728,7 +728,7 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
     struct efs_query_disk *d=calloc(1,sizeof(*d));if(!d)return EFS_ERR_NOMEM;
     pthread_once(&reserve_once,configure_reserve);
     d->budget_fd=-1;d->disk_limit=generation_limit;
-    d->disk_bytes=sizeof(d->part)+10*sizeof(uint64_t);
+    d->disk_bytes=sizeof(d->part)+12*sizeof(uint64_t);
     if(d->disk_bytes>d->disk_limit){free(d);return EFS_ERR_QUOTA;}
     d->bytes=working;d->limit=max_bytes;d->stop=stop;d->stop_ctx=ctx;
     d->kv=(struct efs_kv){.ops=&raw_ops,.ctx=d};pthread_mutex_init(&d->mutex,NULL);
@@ -737,7 +737,8 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
     if(admitted){efs_query_disk_free(d);return admitted;}
     int n=snprintf(d->path,sizeof(d->path),"%s/view-XXXXXX",root);
     if(n<0 || (size_t)n>=sizeof(d->path) || !mkdtemp(d->path)){efs_query_disk_free(d);return EFS_ERR_IO;}
-    uint64_t revisions[SHARDS];int rc=efs_kv_lsm_snapshot_revisions(source,revisions,SHARDS);
+    uint64_t revisions[SHARDS];int rc=efs_kv_lsm_snapshot_query_revisions(source,d->lineage,revisions);
+    if(old && memcmp(old->lineage,d->lineage,sizeof(d->lineage)))old=NULL;
     for(uint32_t shard=0;shard<SHARDS && !rc;shard++) {
         if(cancelled(d)){rc=EFS_ERR_BUSY;break;}
         d->part[shard].revision=revisions[shard];
@@ -813,7 +814,7 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
         if(n<0 || (size_t)n>=sizeof(path))rc=EFS_ERR_NAMETOOLONG;
         int fd=rc?-1:open(path,O_CREAT|O_EXCL|O_RDWR|O_CLOEXEC,0600);
         if(fd<0)rc=EFS_ERR_IO;
-        uint64_t header[]={UINT64_C(0x454653514449534b),2,sizeof(struct slot),sizeof(struct disk_node),d->count,SHARDS,0,0,0,0};
+        uint64_t header[]={UINT64_C(0x454653514449534b),3,sizeof(struct slot),sizeof(struct disk_node),d->count,SHARDS,0,0,0,0,d->lineage[0],d->lineage[1]};
         if(!rc)rc=io_at(fd,header,sizeof(header),0,1);
         if(!rc)rc=io_at(fd,d->part,sizeof(d->part),sizeof(header),1);
         if(!rc && fsync(fd))rc=EFS_ERR_IO;
@@ -983,7 +984,7 @@ int efs_query_disk_checkpoint(struct efs_query_disk *d,const uint64_t watermark[
 int efs_query_disk_restore(const char *root,const uint64_t watermark[4],uint64_t max_bytes,struct efs_query_disk **out)
 {
     if(out)*out=NULL;
-    if(!root || !watermark || !out)return EFS_ERR_INVAL;
+    if(!root || !out)return EFS_ERR_INVAL;
     uint64_t bytes=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX+NODE_BATCH*sizeof(struct disk_node)+sizeof(struct fold_parent)+sizeof(struct incremental)+65536+2*RAW_RECORD_MAX;
     if(max_bytes<bytes)return EFS_ERR_NOMEM;
     char current[EFS_MAX_PATH],base[256];int n=snprintf(current,sizeof(current),"%s/current",root);
@@ -995,17 +996,18 @@ int efs_query_disk_restore(const char *root,const uint64_t watermark[4],uint64_t
     d->budget_fd=-1;
     pthread_mutex_init(&d->mutex,NULL);for(int i=0;i<FD_CACHE;i++)d->fds[i].fd=-1;
     pthread_once(&reserve_once,configure_reserve);
-    d->disk_limit=generation_limit;d->disk_bytes=sizeof(d->part)+10*sizeof(uint64_t);
+    d->disk_limit=generation_limit;d->disk_bytes=sizeof(d->part)+12*sizeof(uint64_t);
     d->bytes=bytes;d->limit=max_bytes;d->kv=(struct efs_kv){.ops=&raw_ops,.ctx=d};
     n=snprintf(d->path,sizeof(d->path),"%s/%s",root,base);
     if(n<0 || (size_t)n>=sizeof(d->path)){efs_query_disk_free(d);return EFS_ERR_NAMETOOLONG;}
     char manifest[EFS_MAX_PATH];n=snprintf(manifest,sizeof(manifest),"%s/manifest",d->path);
     int fd=n>0 && (size_t)n<sizeof(manifest)?open(manifest,O_RDONLY|O_CLOEXEC):-1;
-    uint64_t header[10];int rc=fd<0?EFS_ERR_IO:io_at(fd,header,sizeof(header),0,0);
+    uint64_t header[12];int rc=fd<0?EFS_ERR_IO:io_at(fd,header,sizeof(header),0,0);
     if(!rc && d->disk_bytes>d->disk_limit)rc=EFS_ERR_QUOTA;
-    if(!rc && (header[0]!=UINT64_C(0x454653514449534b) || header[1]!=2 || header[2]!=sizeof(struct slot) ||
+    if(!rc && (header[0]!=UINT64_C(0x454653514449534b) || header[1]!=3 || header[2]!=sizeof(struct slot) ||
        header[3]!=sizeof(struct disk_node) || header[5]!=SHARDS))rc=EFS_ERR_PROTO;
-    if(!rc && memcmp(header+6,watermark,4*sizeof(uint64_t)))rc=EFS_ERR_STALE;
+    if(!rc && watermark && memcmp(header+6,watermark,4*sizeof(uint64_t)))rc=EFS_ERR_STALE;
+    if(!rc){memcpy(d->lineage,header+10,sizeof(d->lineage));memcpy(d->watermark,header+6,sizeof(d->watermark));}
     if(!rc)rc=io_at(fd,d->part,sizeof(d->part),sizeof(header),0);
     if(fd>=0)close(fd);
     uint64_t count=0;
@@ -1031,12 +1033,13 @@ int efs_query_disk_restore(const char *root,const uint64_t watermark[4],uint64_t
     }
     if(!rc && count!=header[4])rc=EFS_ERR_PROTO;
     if(rc){efs_query_disk_free(d);return rc;}
-    d->count=count;memcpy(d->watermark,watermark,sizeof(d->watermark));*out=d;return EFS_OK;
+    d->count=count;*out=d;return EFS_OK;
 }
 
 int efs_query_disk_rebase(struct efs_query_disk *d,struct efs_kv_lsm_snapshot *source)
 {
-    uint64_t revisions[SHARDS];int rc=efs_kv_lsm_snapshot_revisions(source,revisions,SHARDS);
-    if(!rc)for(unsigned i=0;i<SHARDS;i++)d->part[i].revision=revisions[i];
+    uint64_t revisions[SHARDS],lineage[2];int rc=efs_kv_lsm_snapshot_query_revisions(source,lineage,revisions);
+    if(!rc && memcmp(d->lineage,lineage,sizeof(lineage)))rc=EFS_ERR_STALE;
+    for(unsigned i=0;i<SHARDS && !rc;i++)if(d->part[i].revision!=revisions[i])rc=EFS_ERR_STALE;
     return rc;
 }

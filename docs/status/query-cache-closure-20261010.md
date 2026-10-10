@@ -9,7 +9,7 @@ profiling rounds do not satisfy them.
 |---|---|
 | Immutable disk catalog, incremental exact aggregates, bounded builder scratch | implemented, differential/live/cold gates pass in previous checkpoint |
 | Aggregate retained-cache admission | implemented; focused and complete native suites pass; live deployment gate pending |
-| Durable changed-key watermarks and bounded catch-up/recovery | pending; current revisions are process-local hints and cold rebasing scans authority |
+| Durable changed-key watermarks and bounded catch-up/recovery | durable partition revisions and restart catch-up implemented in private build; focused gates pass; bounded discovery, live and bounded-discovery gates pending |
 | Explicit cardinality/offset/budget audit | revision saturation and complete source-allocation budgeting implemented; broader audit in progress |
 | Increasing-cardinality RSS, cold-cache, concurrent export/mutation and freshness | pending |
 | Synthetic partitioned index of at least 2^32 entries | pending; sparse offset probes alone cannot satisfy this |
@@ -102,3 +102,42 @@ Matching authoritative checkpoint watermarks already permit restore followed by
 process-local hint rebasing; restore verifies on-disk digests, not the entire source
 namespace. Changed-watermark recovery currently falls back to rebuilding. Durable
 changed-key/catch-up watermarks and bounded discovery remain pending.
+
+## Durable partition checkpoints and cold incremental catch-up
+
+Private implementation now maintains 4096 saturating partition change counters
+independently of the process-local scheduling hints. Each applied metadata-family
+write advances its partition counter, including imports, transaction keys and
+writes while command serving is disabled. They are captured atomically with the
+source snapshot. A flush checkpoints the counters with the exact source MANIFEST;
+WAL replay recovers later changes. Compaction carries only flushed counters, never
+counters for a live WAL tail. Interrupted WAL reset can conservatively replay and
+advance a counter twice; this causes extra rebuilding, never false reuse.
+
+`QUERY-REVISIONS` is an optional 32 KiB derived sidecar in the KV directory. It
+contains a random 128-bit lineage, counters, the BLAKE3 digest of the corresponding
+MANIFEST and a self-digest. Its durable replacement precedes the authoritative
+MANIFEST rename. A crash in between, missing/corrupt sidecar or failed optional
+write makes the pair invalid and gives the next boot a different lineage. Cache
+reuse requires matching lineage and finite counters. Failure to create/read derived
+state does not fail authoritative KV writes or prevent opening metadata; unavailable
+lineage refuses disk-cache publication. This is a local persisted history hint,
+not a replacement for the host's Raft/transaction/import authority seal.
+
+Disk catalog manifest version 3 records this lineage. Version 2 caches are derived
+state and rebuild on upgrade; authoritative KV/WAL formats remain unchanged. Exact
+restore now compares persisted source revisions rather than rebasing old hints.
+A stale completed checkpoint can instead feed the bounded disk builder, which
+reuses unchanged raw partitions and refreshes changed ones; its stale contents
+are never directly published. Host authority/import validation remains required
+before checkpointing and publication. Candidate cancellation leaves the prior
+checkpoint and retained output intact.
+
+Focused Linux regressions pass flush/WAL recovery, disabled-command writes,
+finite retained snapshots, cancelled catch-up, rename/export/aggregate comparison
+with the RAM reference, and missing/corrupt sidecar invalidation. Changed restart
+catch-up rebuilds fewer than 4096 partitions; a new lineage rebuilds all of them.
+The complete native suite and optional-sidecar-write-failure gate pass. Production
+has not yet received this implementation. Reverse-alias and lane-dependency
+discovery still scan immutable index streams; removing global discovery remains
+part of the bounded catch-up work rather than claiming this checkpoint closes W92.

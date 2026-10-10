@@ -117,3 +117,9 @@ conservatively per generation; pinned exports can cause refresh admission refusa
 A refusal preserves the old checkpoint and reports a refresh error. Existing
 valid cache reads remain available after a total-limit reduction.
 See [aggregate admission and acceptance](../status/query-cache-closure-20261010.md).
+
+The metadata directory also keeps an optional fixed-size `QUERY-REVISIONS` sidecar
+for restart catch-up. It is derived state paired with the KV manifest; missing or
+invalid hints force rebuilding rather than preventing metadata recovery. Partition
+change counters continue while command serving is disabled, with no accumulated
+per-operation queue. Disk catalog version 3 rebuilds older local cache generations.

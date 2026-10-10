@@ -8288,6 +8288,10 @@ static void *host_query_thread(void *ctx)
             if(disk_backend) {
                 int restored=EFS_ERR_NOT_FOUND;
                 if(initial)restored=efs_query_catalog_restore_disk(query_root,source,watermark,catalog_bytes,&candidate);
+                if(initial && restored==EFS_ERR_STALE){
+                    restored=efs_query_catalog_catchup_disk(query_root,source,catalog_bytes,host_query_disk_cancel,h,&candidate);
+                    fprintf(stderr,"query-catchup: rc=%d backend=disk\n",restored);
+                }
                 if(initial)fprintf(stderr,"query-restore: rc=%d backend=disk\n",restored);
                 if(restored)rc=efs_query_catalog_build_disk(query_root,source,h->query_view.catalog,
                     catalog_bytes,host_query_disk_cancel,h,&candidate);

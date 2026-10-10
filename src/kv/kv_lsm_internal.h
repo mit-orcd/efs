@@ -233,6 +233,7 @@ struct kv_lsm {
     /* Process-local dirty hints, not Raft watermarks. Incremented under mu
      * by applied metadata-key writes, including transaction resolve/import. */
     uint64_t metadata_revision[4096];
+    uint64_t query_revision[4096],query_flushed[4096],query_lineage[2];
     int query_tracking; /* startup policy; protected by mu */
     uint64_t transaction_revision; /* prepare/resolve/decision fence, under mu */
     struct kv_buf scratch;

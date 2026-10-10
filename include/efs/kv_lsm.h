@@ -131,6 +131,13 @@ int efs_kv_lsm_metadata_revisions(struct efs_kv *kv, uint64_t *out, uint32_t n);
  * the same KV lock as the metadata image. Saturation refuses comparisons. */
 int efs_kv_lsm_transaction_revision(struct efs_kv *kv,uint64_t *out);
 int efs_kv_lsm_snapshot_transaction_revision(struct efs_kv_lsm_snapshot *s,uint64_t *out);
+/* Durable partition change checkpoints, paired with the exact KV manifest.
+ * WAL replay may conservatively advance counters twice after an interrupted
+ * reset. Compare only inside the same lineage; missing/corrupt sidecars create
+ * a new lineage and force a derived rebuild. Tracking remains active while
+ * command serving is disabled. These are not cross-group authority seals. */
+int efs_kv_lsm_snapshot_query_revisions(struct efs_kv_lsm_snapshot *s,
+                                       uint64_t lineage[2],uint64_t revisions[4096]);
 int efs_kv_lsm_snapshot_revisions(struct efs_kv_lsm_snapshot *s,
                                   uint64_t *out, uint32_t n);
 

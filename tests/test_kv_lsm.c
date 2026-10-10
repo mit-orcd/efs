@@ -10,6 +10,7 @@
 #include "../src/kv/kv_lsm_internal.h"
 
 #include <dirent.h>
+#include <fcntl.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1367,6 +1368,47 @@ static void test_full_snapshot(void)
     efs_kv_lsm_close(kv);
 }
 
+static int durable_hints(struct efs_kv *kv,uint64_t id[2],uint64_t revisions[4096])
+{
+    struct efs_kv_lsm_snapshot *s=NULL;int rc=efs_kv_lsm_snapshot_pin(kv,1<<20,&s);
+    if(!rc)rc=efs_kv_lsm_snapshot_query_revisions(s,id,revisions);
+    efs_kv_lsm_snapshot_release(s);return rc;
+}
+static void test_durable_query_hints(void)
+{
+    rmtree(g_dir);struct efs_kv *kv=open_store(EFS_KV_LSM_SYNC,0);
+    CHECK(kv,"durable hints open");if(!kv)return;
+    uint8_t key[]={0,17,EFS_KV_KIND_INODE,1};uint64_t id[2],saved[2],r[4096];
+    CHECK(!durable_hints(kv,saved,r) && !r[17],"new durable lineage");
+    CHECK(!efs_kv_put(kv,key,sizeof(key),(const uint8_t *)"a",1),"first durable metadata");
+    CHECK(!efs_kv_lsm_flush(kv) && !efs_kv_lsm_quiesce(kv),"flush durable hints with source");
+    CHECK(!durable_hints(kv,id,r) && r[17]==1,"flushed counter");
+    efs_kv_lsm_query_tracking(kv,0);
+    CHECK(!efs_kv_put(kv,key,sizeof(key),(const uint8_t *)"b",1),"disabled metadata writes remain tracked durably");
+    CHECK(!durable_hints(kv,id,r) && r[17]==2,"disabled counter advances");
+    efs_kv_lsm_close(kv);kv=open_store(EFS_KV_LSM_SYNC,0);CHECK(kv,"WAL tail reopen");if(!kv)return;
+    CHECK(!durable_hints(kv,id,r) && !memcmp(id,saved,sizeof(id)) && r[17]==2,"same lineage recovers flushed plus WAL counters");
+    CHECK(!efs_kv_lsm_flush(kv) && !efs_kv_lsm_quiesce(kv),"persist recovered counters");
+    efs_kv_lsm_close(kv);kv=open_store(EFS_KV_LSM_SYNC,0);CHECK(kv,"flushed reopen");if(!kv)return;
+    CHECK(!durable_hints(kv,id,r) && !memcmp(id,saved,sizeof(id)) && r[17]==2,"flushed counters do not reset or double");
+    char blocked[sizeof(g_dir)+40];snprintf(blocked,sizeof(blocked),"%s/QUERY-REVISIONS.new",g_dir);
+    CHECK(!mkdir(blocked,0700),"block optional checkpoint write");
+    CHECK(!efs_kv_put(kv,key,sizeof(key),(const uint8_t *)"c",1) && !efs_kv_lsm_flush(kv) && !efs_kv_lsm_quiesce(kv),"derived checkpoint failure cannot fail durable authority writes");
+    efs_kv_lsm_close(kv);kv=open_store(EFS_KV_LSM_SYNC,0);CHECK(kv,"stale sidecar reopen");if(!kv)return;
+    CHECK(!durable_hints(kv,id,r) && memcmp(id,saved,sizeof(id)),"manifest mismatch refuses stale lineage");
+    CHECK(!rmdir(blocked),"remove checkpoint fault");
+    efs_kv_lsm_close(kv);
+    char path[sizeof(g_dir)+40];snprintf(path,sizeof(path),"%s/QUERY-REVISIONS",g_dir);
+    int fd=open(path,O_RDWR);CHECK(fd>=0,"open sidecar for corruption");if(fd>=0){uint8_t bad=0;CHECK(pwrite(fd,&bad,1,0)==1,"corrupt sidecar magic");close(fd);}
+    kv=open_store(EFS_KV_LSM_SYNC,0);CHECK(kv,"corrupt derived hints do not poison authority");if(!kv)return;
+    CHECK(!durable_hints(kv,id,r) && memcmp(id,saved,sizeof(id)),"corrupt hints create different lineage");
+    uint8_t value[2];uint32_t length=sizeof(value);
+    CHECK(!efs_kv_get(kv,key,sizeof(key),value,&length) && length==1 && value[0]=='c',"authority survives hint corruption");
+    memcpy(saved,id,sizeof(id));efs_kv_lsm_close(kv);
+    CHECK(!unlink(path),"remove derived sidecar");kv=open_store(EFS_KV_LSM_SYNC,0);CHECK(kv,"missing derived hints reopen");
+    if(kv){CHECK(!durable_hints(kv,id,r) && memcmp(id,saved,sizeof(id)),"missing sidecar forces a fresh lineage");efs_kv_lsm_close(kv);}
+}
+
 static void test_metadata_dirty_hints(void)
 {
     rmtree(g_dir);
@@ -1482,6 +1524,7 @@ int main(void)
         test_full_snapshot();
         test_snapshot_batch_cut();
         test_metadata_dirty_hints();
+    test_durable_query_hints();
         goto report;
     }
 
@@ -1503,6 +1546,7 @@ int main(void)
     test_full_snapshot();
     test_snapshot_batch_cut();
     test_metadata_dirty_hints();
+    test_durable_query_hints();
     test_compact_crash();
     test_sync_hold();
     test_partitioned_flush();

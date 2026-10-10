@@ -1536,7 +1536,10 @@ verify 78000 files and 724 payload samples, with normal `.efs` opt-out restored.
 [W92 closure work](../status/query-cache-closure-20261010.md) preserves the full acceptance
 matrix, including durable bounded catch-up and 2^32 synthetic index entries.
 Aggregate retained-cache admission passes focused and full native gates;
-closure-scale and deployment gates remain in progress.
+100,000- and 1,000,000-file native-format pilots pass complete streaming oracles
+with fixed 3.47 MiB builder memory. Durable catch-up, full scale and deployment
+gates remain in progress. Durable partition checkpoints and restart catch-up now
+pass focused and full native private-build gates; live validation is pending.
 
 [W92 incremental-cache implementation](../status/query-cache-incremental-20261010.md)
 tracks bounded change/ancestor sets, immutable partition reuse, exact directory
@@ -5813,7 +5816,8 @@ the original record and withdrawn interpretation remain retained.
 ### W92 · .efs/find and .efs/stats server snapshots and large namespace acceptance
 
 Oct 10 closure work is active at the user's request. Aggregate retained-cache
-admission has focused passing gates; durable catch-up and the full scale/fault
+admission has focused and full native passing gates; 100,000/1,000,000 synthetic
+file pilots pass streaming oracles with bounded builder memory. Durable catch-up and the full scale/fault
 acceptance matrix remain open. [Closure ledger](../status/query-cache-closure-20261010.md).
 
 Oct 10 incremental checkpoint: fixed 1024-item change/ancestor sets reuse immutable

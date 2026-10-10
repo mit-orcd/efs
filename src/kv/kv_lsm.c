@@ -1,6 +1,7 @@
 #include "kv_lsm_internal.h"
 #include "efs/kv_key.h"
 #include "efs/raft.h"
+#include "blake3.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -204,6 +205,69 @@ static void drop_segs(struct kv_lsm *l)
     l->n_l1 = 0;
 }
 
+/* Rebuildable query hints are paired with the exact authoritative MANIFEST.
+ * Persist before its rename. A crash between the two invalidates only hints.
+ * Compaction persists flushed counters, never counters for a live WAL tail. */
+struct query_checkpoint {
+    uint64_t magic,lineage[2],revision[4096];
+    uint8_t manifest[32],digest[32];
+};
+static int query_manifest_digest(const char *path,uint8_t digest[32])
+{
+    FILE *f=fopen(path,"rb");
+    if(!f && errno!=ENOENT)return EFS_ERR_IO;
+    blake3_hasher h;blake3_hasher_init(&h);
+    uint8_t buffer[4096];size_t n;
+    if(f){while((n=fread(buffer,1,sizeof(buffer),f)))blake3_hasher_update(&h,buffer,n);
+        int bad=ferror(f);fclose(f);if(bad)return EFS_ERR_IO;}
+    blake3_hasher_finalize(&h,digest,32);return EFS_OK;
+}
+static int query_checkpoint_write(struct kv_lsm *l,const char *manifest)
+{
+    struct query_checkpoint *q=calloc(1,sizeof(*q));if(!q)return EFS_ERR_NOMEM;
+    q->magic=UINT64_C(0x4546535152455631);
+    memcpy(q->lineage,l->query_lineage,sizeof(q->lineage));
+    memcpy(q->revision,l->query_flushed,sizeof(q->revision));
+    int rc=query_manifest_digest(manifest,q->manifest);
+    blake3_hasher h;blake3_hasher_init(&h);
+    blake3_hasher_update(&h,q,offsetof(struct query_checkpoint,digest));
+    blake3_hasher_finalize(&h,q->digest,32);
+    char path[KV_LSM_PATH_MAX+32],temp[KV_LSM_PATH_MAX+32];
+    snprintf(path,sizeof(path),"%s/QUERY-REVISIONS",l->dir);
+    snprintf(temp,sizeof(temp),"%s/QUERY-REVISIONS.new",l->dir);
+    FILE *f=rc?NULL:fopen(temp,"wb");if(!rc && !f)rc=EFS_ERR_IO;
+    if(f){if(fwrite(q,1,sizeof(*q),f)!=sizeof(*q) || fflush(f) || fsync(fileno(f)))rc=EFS_ERR_IO;
+        if(fclose(f) && !rc)rc=EFS_ERR_IO;}
+    if(!rc && rename(temp,path))rc=EFS_ERR_IO;
+    if(rc)unlink(temp);
+    free(q);return rc;
+}
+static int query_checkpoint_load(struct kv_lsm *l)
+{
+    char path[KV_LSM_PATH_MAX+32],manifest[KV_LSM_PATH_MAX+32];
+    snprintf(path,sizeof(path),"%s/QUERY-REVISIONS",l->dir);
+    snprintf(manifest,sizeof(manifest),"%s/MANIFEST",l->dir);
+    struct query_checkpoint *q=calloc(1,sizeof(*q));if(!q)return EFS_ERR_NOMEM;
+    FILE *f=fopen(path,"rb");int valid=0;
+    if(f){valid=fread(q,1,sizeof(*q),f)==sizeof(*q) && fgetc(f)==EOF && !ferror(f);fclose(f);}
+    uint8_t digest[32];blake3_hasher h;blake3_hasher_init(&h);
+    blake3_hasher_update(&h,q,offsetof(struct query_checkpoint,digest));blake3_hasher_finalize(&h,digest,32);
+    valid=valid && q->magic==UINT64_C(0x4546535152455631) && (q->lineage[0] || q->lineage[1]) && !memcmp(q->digest,digest,32);
+    if(valid)valid=!query_manifest_digest(manifest,digest) && !memcmp(q->manifest,digest,32);
+    if(valid){memcpy(l->query_lineage,q->lineage,sizeof(q->lineage));
+        memcpy(l->query_revision,q->revision,sizeof(q->revision));
+        memcpy(l->query_flushed,q->revision,sizeof(q->revision));}
+    free(q);
+    if(valid)return EFS_OK;
+    /* A new incarnation prevents equal numeric revisions from reusing an
+     * index built before a missing/corrupt sidecar or a restored KV backup. */
+    f=fopen("/dev/urandom","rb");
+    if(!f)return EFS_ERR_IO;
+    valid=fread(l->query_lineage,1,sizeof(l->query_lineage),f)==sizeof(l->query_lineage);fclose(f);
+    if(!valid || !(l->query_lineage[0] || l->query_lineage[1]))return EFS_ERR_IO;
+    (void)query_checkpoint_write(l,manifest); /* optional derived state */
+    kv_sync_dir(l->dir);return EFS_OK;
+}
 int kv_manifest_write(struct kv_lsm *l)
 {
     char path[KV_LSM_PATH_MAX + 32];
@@ -227,6 +291,7 @@ int kv_manifest_write(struct kv_lsm *l)
     if (fflush(f) != 0 || fsync(fileno(f)) != 0)
         goto fail;
     fclose(f);
+    (void)query_checkpoint_write(l,tmp);
     if (rename(tmp, path) != 0) {
         unlink(tmp);
         return EFS_ERR_IO;
@@ -728,11 +793,11 @@ out:
 
 static void metadata_dirty(struct kv_lsm *l, const uint8_t *key, uint32_t len)
 {
-    if (!l->query_tracking || len<3) return;
+    if (len<3) return;
     uint32_t shard=((uint32_t)key[0]<<8)|key[1];
     if (shard>EFS_KV_SHARD_MASK) return;
-    if (key[2]==EFS_KV_KIND_INTENT || key[2]==EFS_KV_KIND_GUARD ||
-        key[2]==EFS_KV_KIND_REDUCE || key[2]==EFS_KV_KIND_DECISION) {
+    if (l->query_tracking && (key[2]==EFS_KV_KIND_INTENT || key[2]==EFS_KV_KIND_GUARD ||
+        key[2]==EFS_KV_KIND_REDUCE || key[2]==EFS_KV_KIND_DECISION)) {
         if (l->transaction_revision!=UINT64_MAX) l->transaction_revision++;
     }
     switch (key[2]) {
@@ -740,7 +805,8 @@ static void metadata_dirty(struct kv_lsm *l, const uint8_t *key, uint32_t len)
     case EFS_KV_KIND_INTENT: case EFS_KV_KIND_GUARD: case EFS_KV_KIND_REDUCE:
     case EFS_KV_KIND_DECISION: case EFS_KV_KIND_PVER: case EFS_KV_KIND_DSEQ:
     case EFS_KV_KIND_EXPORT: case EFS_KV_KIND_APPEND_CUR:
-        if(l->metadata_revision[shard]!=UINT64_MAX)l->metadata_revision[shard]++;
+        if(l->query_revision[shard]!=UINT64_MAX)l->query_revision[shard]++;
+        if(l->query_tracking && l->metadata_revision[shard]!=UINT64_MAX)l->metadata_revision[shard]++;
         break;
     default: break;
     }
@@ -952,7 +1018,9 @@ static int replay_item(void *user, uint8_t op, const uint8_t *key,
 
     if (op != KV_OP_PUT && op != KV_OP_DEL)
         return EFS_ERR_PROTO;
-    return kv_mtab_set(&l->mt, op, key, klen, val, vlen);
+    int rc=kv_mtab_set(&l->mt, op, key, klen, val, vlen);
+    if(!rc){int enabled=l->query_tracking;l->query_tracking=0;metadata_dirty(l,key,klen);l->query_tracking=enabled;}
+    return rc;
 }
 
 struct efs_kv *efs_kv_lsm_open(const char *dir, const struct efs_kv_lsm_cfg *cfg)
@@ -1020,6 +1088,7 @@ struct efs_kv *efs_kv_lsm_open(const char *dir, const struct efs_kv_lsm_cfg *cfg
         free(kv);
         return NULL;
     }
+    if(query_checkpoint_load(l)!=EFS_OK)memset(l->query_lineage,0,sizeof(l->query_lineage));
     gc_orphans(l);
     snprintf(wal_path, sizeof(wal_path), "%s/wal", l->dir);
     /* Replayed records rebuild the memtable and stay in the log: the reset
@@ -1390,6 +1459,8 @@ int efs_kv_lsm_snapshot_pin(struct efs_kv *kv, uint64_t mt_limit,
         }
         s->input.mt.cap=l->mt.n;
     }
+    memcpy(s->input.query_revision,l->query_revision,sizeof(l->query_revision));
+    memcpy(s->input.query_lineage,l->query_lineage,sizeof(l->query_lineage));
     s->input.transaction_revision=l->transaction_revision;
     memcpy(s->input.metadata_revision,l->metadata_revision,
            sizeof(l->metadata_revision));
@@ -1436,6 +1507,15 @@ int efs_kv_lsm_snapshot_revisions(struct efs_kv_lsm_snapshot *s,
     return EFS_OK;
 }
 
+int efs_kv_lsm_snapshot_query_revisions(struct efs_kv_lsm_snapshot *s,
+                                       uint64_t lineage[2],uint64_t revisions[4096])
+{
+    if(!s || !lineage || !revisions)return EFS_ERR_INVAL;
+    if(!(s->input.query_lineage[0] || s->input.query_lineage[1]))return EFS_ERR_IO;
+    for(unsigned i=0;i<4096;i++)if(s->input.query_revision[i]==UINT64_MAX)return EFS_ERR_OVERFLOW;
+    memcpy(lineage,s->input.query_lineage,sizeof(s->input.query_lineage));
+    memcpy(revisions,s->input.query_revision,sizeof(s->input.query_revision));return EFS_OK;
+}
 int efs_kv_lsm_transaction_revision(struct efs_kv *kv,uint64_t *out)
 {
     if (!kv || kv->ops!=&lsm_ops || !kv->ctx || !out) return EFS_ERR_INVAL;
