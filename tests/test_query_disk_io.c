@@ -6,6 +6,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#ifdef __linux__
+#include <sys/ioctl.h>
+static int clone_error;
+static int fault_clone(int fd,unsigned long request,int source)
+{ if(clone_error){errno=clone_error;return -1;}return ioctl(fd,request,source); }
+#endif
 static int partial_write;
 static unsigned write_calls;
 static unsigned read_calls;
@@ -51,6 +57,9 @@ static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
     if(partial_write==1){partial_write=2;return pwrite(fd,buf,size<3?size:3,offset);}
     return pwrite(fd,buf,size,offset);
 }
+#ifdef __linux__
+#define ioctl fault_clone
+#endif
 #define pwrite fault_pwrite
 #define pread counted_pread
 #define fsync fault_fsync
@@ -60,11 +69,15 @@ static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
 #undef pread
 #undef fsync
 #undef open
+#ifdef __linux__
+#undef ioctl
+#endif
 static int failures;
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"FAIL %d: %s\n",__LINE__,#x);failures++;}}while(0)
 int main(void)
 {
     struct efs_query_disk *d=calloc(1,sizeof(*d));if(!d)return 1;
+    d->disk_limit=UINT64_MAX;
     strcpy(d->path,"/tmp/efs-query-window-XXXXXX");
     if(!mkdtemp(d->path)){free(d);return 1;}
     pthread_mutex_init(&d->mutex,NULL);
@@ -192,11 +205,24 @@ int main(void)
         CHECK(!io_at(oldfd,data,sizeof(data),0,1));
         CHECK(!filename(d,SHARDS-2,'d',derived,sizeof(derived)));CHECK(!link(retained,derived));d->shared_d[SHARDS-2]=1;
         CHECK(!disk_io(d,SHARDS-2,'d',got,17,100,0));CHECK(!memcmp(got,data+100,17));
+        uint64_t admitted=d->disk_bytes;
+        d->disk_limit=admitted+sizeof(data)-1;
+        CHECK(disk_io(d,SHARDS-2,'d',change,sizeof(change),100,1)==EFS_ERR_QUOTA);
+        CHECK(d->shared_d[SHARDS-2] && d->disk_bytes==admitted);d->disk_limit=UINT64_MAX;
+#ifdef __linux__
+        clone_error=EIO;
+        CHECK(disk_io(d,SHARDS-2,'d',change,sizeof(change),100,1)==EFS_ERR_IO);
+        CHECK(d->shared_d[SHARDS-2] && d->disk_bytes==admitted);
+        clone_error=EOPNOTSUPP; /* Explicitly exercise the non-reflink copy. */
+#endif
         partial_write=1;CHECK(disk_io(d,SHARDS-2,'d',change,sizeof(change),100,1)==EFS_ERR_IO);
         CHECK(pread(oldfd,got,17,100)==17);CHECK(!memcmp(got,data+100,17));
         CHECK(!disk_io(d,SHARDS-2,'d',change,sizeof(change),100,1));
         CHECK(!disk_io(d,SHARDS-2,'d',got,sizeof(change),100,0));CHECK(!memcmp(got,change,sizeof(change)));
         CHECK(pread(oldfd,got,17,100)==17);CHECK(!memcmp(got,data+100,17));close(oldfd);unlink(retained);
+#ifdef __linux__
+        clone_error=0;
+#endif
     }
     efs_query_disk_free(d);
     /* A new raw/index inode has one checked writing-handle barrier. Inject

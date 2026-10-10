@@ -143,10 +143,18 @@ static int private_derived(struct efs_query_disk *d,uint32_t shard)
     if(len<0 || (size_t)len>=sizeof(tmp))return EFS_ERR_NAMETOOLONG;
     int src=open(path,O_RDONLY|O_CLOEXEC),dst=open(tmp,O_CREAT|O_EXCL|O_RDWR|O_CLOEXEC,0600);
     if(src<0 || dst<0)rc=EFS_ERR_IO;
-    int cloned=0;
+    int cloned=0;uint64_t temporary=0;
+    if(!rc){
+        struct stat st;
+        if(fstat(src,&st) || st.st_size<0)rc=EFS_ERR_IO;
+        else{rc=charge_disk(d,(uint64_t)st.st_size);if(!rc)temporary=(uint64_t)st.st_size;}
+    }
     if(!rc && disk_reserve(dst))rc=EFS_ERR_IO;
 #ifdef __linux__
-    if(!rc)cloned=ioctl(dst,FICLONE,src)==0;
+    if(!rc){
+        cloned=ioctl(dst,FICLONE,src)==0;
+        if(!cloned && errno!=EOPNOTSUPP && errno!=ENOTTY && errno!=EXDEV && errno!=EINVAL)rc=EFS_ERR_IO;
+    }
 #endif
     if(!rc && !cloned){
         uint8_t buf[65536];uint64_t off=0;
@@ -162,6 +170,7 @@ static int private_derived(struct efs_query_disk *d,uint32_t shard)
     if(src>=0)close(src);
     if(dst>=0)close(dst);
     if(!rc && rename(tmp,path))rc=EFS_ERR_IO;
+    d->disk_bytes-=temporary;
     if(rc){unlink(tmp);return rc;}
     /* Any cached descriptor/windows refer to the old immutable inode. */
     uint8_t slot=d->fd_index[shard][3];
