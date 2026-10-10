@@ -65,6 +65,7 @@ int main(void){
 '''
 with tempfile.TemporaryDirectory(prefix='efs-applied-interval-') as d:
  p=Path(d)/'test.c';p.write_text(code);out=p.with_suffix('')
- subprocess.run([os.environ.get('CC','cc'),'-std=c99','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(out)],check=True)
+ flags=['-fsanitize=address,undefined','-fno-omit-frame-pointer'] if os.environ.get('EFS_TEST_SANITIZE')=='1' else []
+ subprocess.run([os.environ.get('CC','cc'),*flags,'-std=c99','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(out)],check=True)
  subprocess.run([str(out)],check=True)
 print('applied interval: bounded cadence/tail, durable record, immediate error retry, shutdown force PASS')

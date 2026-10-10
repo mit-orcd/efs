@@ -1,9 +1,19 @@
 """Cold replay of metadata whose KV is durable but applied markers are old."""
-import hashlib,json,os,re,time
+import hashlib,json,os,re,time,subprocess
 from pathlib import Path
 
 def exercise(args,work,roots,mount,run,start,stop,mount_client,unmount,wait,drained):
     target=2;mgmt=Path(__file__).resolve().parents[2]/'efs-mgmt'
+    identities=[]
+    pattern='^'+re.escape(str(args.server_binary or mgmt.with_name('efsd')))+r' .*--port ('+'|'.join(str(args.port+i) for i in range(4))+r')( |$)'
+    for pid in subprocess.check_output(['pgrep','-f',pattern],text=True).split():
+        env=dict(x.split('=',1) for x in Path(f'/proc/{pid}/environ').read_text().split('\0') if '=' in x)
+        identities.append(dict(pid=int(pid),command=Path(f'/proc/{pid}/cmdline').read_bytes().replace(b'\0',b' ').decode(),
+            applied_interval_ms=env.get('EFS_RAFT_APPLIED_INTERVAL_MS','10'),fault_scope=env.get('EFS_TEST_APPLIED_FAULT'),
+            preload=env.get('LD_PRELOAD')))
+    assert len(identities)==4 and all(x['applied_interval_ms']==os.environ.get('EFS_RAFT_APPLIED_INTERVAL_MS','10') for x in identities),identities
+    (work/'applied-checkpoint-processes.json').write_text(json.dumps(identities,indent=2))
+
     def states(node):
         text=run([mgmt,'raft-status',f'127.0.0.1:{args.port+node}'],capture_output=True,text=True).stdout
         return {int(g):(int(c),int(a)) for g,c,a in re.findall(r'group (\d+).*?commit=(\d+) applied=(\d+)',text)}
@@ -31,6 +41,8 @@ def exercise(args,work,roots,mount,run,start,stop,mount_client,unmount,wait,drai
             for g,(c,a) in states(node).items():leaders[g]=max(c,leaders.get(g,0))
         return bool(follower) and all(a>=leaders[g] for g,(c,a) in follower.items())
     wait(caught,'checkpoint follower applied all retained-tail mutations',90)
+    wait(lambda:'test-applied-marker: retaining checkpoint' in (work/'n3.log').read_text(),
+         'actual applied-marker write refused after candidate cadence',30)
     assert checkpoints()==baseline,'marker advanced despite injected write failure'
     before=states(target);old={g:int.from_bytes(baseline[k:k+8],'big') for g,k in ((0,0),(2,16))}
     assert any(a>old[g] for g,(c,a) in before.items()),'no uncheckpointed tail established'
