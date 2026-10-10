@@ -1211,7 +1211,8 @@ static int find_query_fill_stat(const struct efs_inode *parent,
 
 /* POSIX permission check: does the caller (uid/gid) have the requested access
  * (mask: R_OK/W_OK/X_OK) to a file with the given mode/uid/gid? Root (uid 0)
- * bypasses. We enforce this in the daemon (not via the default_permissions
+ * bypasses DAC except execute access to a nondirectory with no execute bits.
+ * We enforce this in the FUSE client (not via the default_permissions
  * mount opt) because that option would also gate the export root, which is
  * owned by root — making the whole mount read-only for unprivileged users.
  * The export root (EFS_ROOT_INO) is therefore also skipped by the dir-wx /
@@ -1257,8 +1258,12 @@ static int caller_in_group(gid_t gid)
 static int check_access(const struct efs_inode *ino, uid_t uid, gid_t gid,
                         int mask)
 {
-    if (uid == 0)
+    if (uid == 0) {
+        if ((mask & X_OK) && !efs_mode_is_dir(ino->mode) &&
+            !(ino->mode & (S_IXUSR | S_IXGRP | S_IXOTH)))
+            return -EACCES;
         return 0;
+    }
     uint32_t perm;
     if (uid == ino->uid)
         perm = (ino->mode >> 6) & 7;        /* owner */

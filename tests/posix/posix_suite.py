@@ -1443,19 +1443,17 @@ def perm_ftruncate_after_chmod(d):
 
 @test
 def perm_access_rwx(d):
-    _skip_root()
     p = os.path.join(d, "f")
     wr(p, b"x")
     os.chmod(p, 0o644)
     assert os.access(p, os.R_OK), "644 R"
     assert os.access(p, os.W_OK), "644 W"
-    if not _root():
-        assert not os.access(p, os.X_OK), "644 not X"
+    assert not os.access(p, os.X_OK), "644 not X, including root"
     os.chmod(p, 0o755)
     assert os.access(p, os.R_OK | os.W_OK | os.X_OK), "755 RWX"
     os.chmod(p, 0o111)
+    assert os.access(p, os.X_OK), "111 X"
     if not _root():
-        assert os.access(p, os.X_OK), "111 X"
         assert not os.access(p, os.R_OK), "111 not R"
         assert not os.access(p, os.W_OK), "111 not W"
 

@@ -92,3 +92,18 @@ assertion; the repair passes locally. Large-group membership uses the separately
 repaired bounded group helper. These conditions are tested with controlled
 caller identities; the production Intel mounts remain restricted to the efs
 service account.
+
+## Privileged execute access
+
+The FUSE DAC helper previously returned success for every UID-zero access
+request, including X_OK on a regular file with mode 0644. Linux requires at
+least one execute bit for privileged execution of a nondirectory; directory
+search remains privileged. See the [Linux access(2) contract](https://www.man7.org/linux/man-pages/man2/access.2.html).
+The helper now preserves that distinction. Its executable regression covers
+all 512 permission modes and all eight access masks for owner, primary group,
+supplementary group, other and privileged callers. Owner checks never fall
+through to another, more permissive class. The baseline fails the privileged
+nondirectory assertion; repaired ordinary and sanitizer fixtures pass locally.
+The existing live access case now also tests execute checks when run as root;
+ordinary Intel mounts run as the efs service account and do not prove root
+mount acceptance.
