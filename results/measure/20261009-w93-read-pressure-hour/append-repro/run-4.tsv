@@ -1,0 +1,6 @@
+# posix-2client host_a=local-a host_b=local-b mnt=/data1/efs/mnt 2026-10-10T03:04:42Z
+# select	peer_append_while_truncate
+test	result	detail
+peer_append_while_truncate	PASS	
+# summary pass=1 fail=0 skip=0 total=1 dur=5.1
+# complete

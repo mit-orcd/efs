@@ -1,0 +1,85 @@
+{
+  "utc": "2026-10-10T03:46:26Z",
+  "version": "efsd 437b7890 (branch devel-persistence-pressure, built 2026-10-10T03:08:18Z on nuc)\n",
+  "servers": [
+    {
+      "pid": 309112,
+      "cmd": "/data1/efs/src/efsd --node-id 1 --addr 127.0.0.1 --port 17432 --storage /data1/efs/n1 --quota 187.5G --direct-io ",
+      "flags": {
+        "EFS_RAFT_FLOW": "1",
+        "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+        "EFS_RAFT_BATCH_OVERLAP": "0",
+        "EFS_RAFT_BATCH_NOOP": "0",
+        "EFS_RAFT_GROUP_DRAIN": "0",
+        "EFS_BATCH_OBS": "0",
+        "EFS_COMMANDS_SERVER": "0"
+      }
+    },
+    {
+      "pid": 311022,
+      "cmd": "/data1/efs/src/efsd --node-id 2 --addr 127.0.0.1 --port 17433 --storage /data1/efs/n2 --quota 187.5G --direct-io --join 127.0.0.1:17432 ",
+      "flags": {
+        "EFS_RAFT_FLOW": "1",
+        "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+        "EFS_RAFT_BATCH_OVERLAP": "0",
+        "EFS_RAFT_BATCH_NOOP": "0",
+        "EFS_RAFT_GROUP_DRAIN": "0",
+        "EFS_BATCH_OBS": "0",
+        "EFS_COMMANDS_SERVER": "0"
+      }
+    },
+    {
+      "pid": 313183,
+      "cmd": "/data1/efs/src/efsd --node-id 3 --addr 127.0.0.1 --port 17434 --storage /data2/efs/n3 --quota 187.5G --direct-io --join 127.0.0.1:17432 ",
+      "flags": {
+        "EFS_RAFT_FLOW": "1",
+        "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+        "EFS_RAFT_BATCH_OVERLAP": "0",
+        "EFS_RAFT_BATCH_NOOP": "0",
+        "EFS_RAFT_GROUP_DRAIN": "0",
+        "EFS_BATCH_OBS": "0",
+        "EFS_COMMANDS_SERVER": "0"
+      }
+    },
+    {
+      "pid": 315690,
+      "cmd": "/data1/efs/src/efsd --node-id 4 --addr 127.0.0.1 --port 17435 --storage /data2/efs/n4 --quota 187.5G --direct-io --join 127.0.0.1:17432 ",
+      "flags": {
+        "EFS_RAFT_FLOW": "1",
+        "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+        "EFS_RAFT_BATCH_OVERLAP": "0",
+        "EFS_RAFT_BATCH_NOOP": "0",
+        "EFS_RAFT_GROUP_DRAIN": "0",
+        "EFS_BATCH_OBS": "0",
+        "EFS_COMMANDS_SERVER": "0"
+      }
+    }
+  ],
+  "clients": [
+    {
+      "pid": 318038,
+      "commands": "0",
+      "cmd": "./efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt "
+    },
+    {
+      "pid": 318075,
+      "commands": "0",
+      "cmd": "./efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt2 "
+    }
+  ],
+  "raft_status": {
+    "17432": "node 1 root=1 salt=1898367047478964614 groups=2\n  group 0 hosted=1 role=LEADER leader=0 term=2327 commit=6699178 applied=6699178 voters=0x7 joint=0\n  group 2 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0xe joint=0\n",
+    "17433": "node 2 root=1 salt=1898367047478964614 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=0 term=2327 commit=6699178 applied=6699178 voters=0x7 joint=0\n  group 2 hosted=1 role=LEADER leader=1 term=2415 commit=4967708 applied=4967708 voters=0xe joint=0\n",
+    "17434": "node 3 root=1 salt=1898367047478964614 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=0 term=2327 commit=6699178 applied=6699178 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=1 term=2415 commit=4967708 applied=4967708 voters=0xe joint=0\n",
+    "17435": "node 4 root=0 salt=1898367047478964614 groups=2\n  group 0 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=1 term=2415 commit=4967708 applied=4967708 voters=0xe joint=0\n"
+  },
+  "mounts": {
+    "/data1/efs/mnt": true,
+    "/data1/efs/mnt2": true
+  },
+  "binary_sha256": {
+    "efsd": "d8b9fa9868ca4104c49fdc37eab4c1c6baeb744e6c1e9ea408b355d227f4c661",
+    "efs-fuse": "5f12b8108eb02e5f455ff3c1999f319b63234feff121be36cc20921ebc4b2f78"
+  },
+  "space": "Filesystem           Size  Used Avail Use% Mounted on\n/dev/sda             745G  282G  464G  38% /data1\n/dev/mapper/rl-home  843G  250G  594G  30% /home\n"
+}
