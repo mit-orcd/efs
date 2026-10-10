@@ -75,3 +75,20 @@ Linux on Intel1 and Intel2. Native macOS directory-bit inheritance differs and
 is not used as the Linux oracle. The fixture explicitly sets its new parent's
 group before applying setgid, so the expected ownership is independent of
 native BSD default group inheritance.
+
+## Ownership-change authorization repair
+
+`check_chown_perm()` refused actual UID changes by non-root callers but allowed
+a nonowner to request unchanged UID/GID values, including `(-1, -1)`. POSIX
+ownership authorization still applies to these calls; successful chown can
+change ctime. The helper now requires the caller to own the inode before
+checking permitted non-root group changes. Root and internal no-request calls
+retain their existing authority.
+
+The actual helper's regression checks nonowners with unchanged/omitted IDs,
+owners changing to primary/supplementary groups, disallowed groups and UID
+changes, plus root/internal calls. The baseline fails its first nonowner
+assertion; the repair passes locally. Large-group membership uses the separately
+repaired bounded group helper. These conditions are tested with controlled
+caller identities; the production Intel mounts remain restricted to the efs
+service account.

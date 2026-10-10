@@ -1319,6 +1319,10 @@ static int check_chown_perm(const struct efs_inode *ino, uid_t uid, gid_t gid)
     const struct fuse_ctx *ctx = ll_ctx();
     if (!ctx || ctx->uid == 0)
         return 0;
+    /* Even an unchanged-owner request requires ownership: a successful
+     * chown can update ctime and is not an authorization-free no-op. */
+    if (ctx->uid != ino->uid)
+        return -EPERM;
     if (uid != (uid_t)-1 && uid != ino->uid)
         return -EPERM;
     if (gid != (gid_t)-1 && gid != ino->gid) {

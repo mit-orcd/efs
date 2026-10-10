@@ -306,6 +306,7 @@ test: all
 	python3 tests/test_lookup_errno.py
 	python3 tests/test_create_credentials.py
 	python3 tests/test_permission_groups.py
+	python3 tests/test_chown_permissions.py
 	python3 tests/test_virtual_export_handles.py
 	python3 tests/test_fuse_open_reply.py
 	python3 tests/test_fuse_lease_retention.py
