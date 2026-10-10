@@ -351,6 +351,12 @@
     "disk-summary.py": "cb2d802953265431d872dcbf72a4e1563b66ed5208c1cf38093cb19826102b16",
     "deploy.sh": "828adf9c6ba43d7aea365ab27c6e2f0c69eda4f32fbf2433595b45477ff24b43",
     "cold-verify.py": "6247cd935c99e10a877d900875fbe2b2a2a5dc1a0ec8d0212e70f3050b5d59a0",
-    "balanced-load.py": "44069aca8a3d29130ea531ceda3b9fd924ddd6b22a8008da0fd7c63cfcb30a56"
-  }
+    "balanced-load.py": "44069aca8a3d29130ea531ceda3b9fd924ddd6b22a8008da0fd7c63cfcb30a56",
+    "final-state.py": "4d9a628bec8becb56408365cc47049907c5f9b068c277916e0ae3516b3e8c7eb"
+  },
+  "unused_helpers": [
+    "balanced-analyze.py",
+    "resource-summary.py",
+    "disk-summary.py"
+  ]
 }
