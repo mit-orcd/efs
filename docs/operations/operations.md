@@ -199,6 +199,14 @@ Use only the seed argument shown above. The FUSE binary still requires an
 export-name token (`fs`, as used by `client.sh`); its current bootstrap builds
 a local shell using that token, rather than selecting a separately created export.
 
+Applied-marker experiment (W93): `EFS_RAFT_APPLIED_INTERVAL_MS=10` is the
+historical default. Explicit integers 10–1,000 select a best-effort checkpoint
+cadence; 1,024 additional applied entries or clean shutdown force persistence.
+These per-group restart hints remain behind a successful KV WAL barrier;
+Raft/publication ACK durability is unchanged. I/O failure can extend replay lag.
+Keep the default pending sustained and recovery acceptance.
+[Investigation and gates](../status/w93-checkpoint-cadence-20261010.md).
+
 Metadata plane (Raft + KV):
 
 ```bash

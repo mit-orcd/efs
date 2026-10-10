@@ -1,0 +1,305 @@
+2026-10-10T05:24:17.686Z storage-engine=files direct_io=on
+2026-10-10T05:24:17.690Z Joined cluster with 4 nodes
+2026-10-10T05:24:17.696Z heartbeat: enabled (2000 ms interval)
+2026-10-10T05:24:17.703Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T05:24:17.703Z raft-host: up raft_id=3 n=4 boot=3446745170743450 salt=4912920706617912070 g0=off g2=hosted
+2026-10-10T05:24:17.703Z efsd d4f2ddb3 (branch devel-persistence-pressure, built 2026-10-10T04:32:02Z on nuc), build=d4f2ddb3-checkpoint: node 4 listening on 127.0.0.1:22593, storage=/home/efs/additional-work-dir/gc-direct-kutj8ceu/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T05:24:17.703Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-10T05:24:19.696Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=989 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T05:24:22.640Z storage-engine=files direct_io=on
+2026-10-10T05:24:22.640Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/gc-direct-kutj8ceu/n4/meta/cluster_nodes.bin
+2026-10-10T05:24:22.640Z   persisted node 1: 127.0.0.1:22590
+2026-10-10T05:24:22.640Z   persisted node 2: 127.0.0.1:22591
+2026-10-10T05:24:22.640Z   persisted node 3: 127.0.0.1:22592
+2026-10-10T05:24:22.640Z   persisted node 4: 127.0.0.1:22593
+2026-10-10T05:24:22.645Z Joined cluster with 4 nodes
+2026-10-10T05:24:22.650Z heartbeat: enabled (2000 ms interval)
+2026-10-10T05:24:22.658Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T05:24:22.658Z kv-obs: mt_bytes=59 l0_bytes=0 l0=0 l1=0
+2026-10-10T05:24:22.658Z raft-host: up raft_id=3 n=4 boot=3446745170743451 salt=6574801848551868965 g0=off g2=hosted
+2026-10-10T05:24:22.658Z efsd d4f2ddb3 (branch devel-persistence-pressure, built 2026-10-10T04:32:02Z on nuc), build=d4f2ddb3-checkpoint: node 4 listening on 127.0.0.1:22593, storage=/home/efs/additional-work-dir/gc-direct-kutj8ceu/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T05:24:24.650Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=987 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T05:24:28.419Z storage-engine=files direct_io=on
+2026-10-10T05:24:28.419Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/gc-direct-kutj8ceu/n4/meta/cluster_nodes.bin
+2026-10-10T05:24:28.419Z   persisted node 1: 127.0.0.1:22590
+2026-10-10T05:24:28.419Z   persisted node 2: 127.0.0.1:22591
+2026-10-10T05:24:28.419Z   persisted node 3: 127.0.0.1:22592
+2026-10-10T05:24:28.419Z   persisted node 4: 127.0.0.1:22593
+2026-10-10T05:24:28.438Z Joined cluster with 4 nodes
+2026-10-10T05:24:28.442Z heartbeat: enabled (2000 ms interval)
+2026-10-10T05:24:28.446Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T05:24:28.446Z kv-obs: mt_bytes=59 l0_bytes=0 l0=0 l1=0
+2026-10-10T05:24:28.446Z raft-host: up raft_id=3 n=4 boot=3446745170743452 salt=10352493413327630236 g0=off g2=hosted
+2026-10-10T05:24:28.446Z efsd d4f2ddb3 (branch devel-persistence-pressure, built 2026-10-10T04:32:02Z on nuc), build=d4f2ddb3-checkpoint: node 4 listening on 127.0.0.1:22593, storage=/home/efs/additional-work-dir/gc-direct-kutj8ceu/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T05:24:30.442Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=991 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T05:24:31.948Z raft-host: applied session index=5 kind=1 shard=0 ino=0
+2026-10-10T05:24:31.956Z raft-host: applied session index=6 kind=2 shard=1 ino=0
+2026-10-10T05:24:33.440Z storage-engine=files direct_io=on
+2026-10-10T05:24:33.440Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/gc-direct-kutj8ceu/n4/meta/cluster_nodes.bin
+2026-10-10T05:24:33.440Z   persisted node 1: 127.0.0.1:22590
+2026-10-10T05:24:33.440Z   persisted node 2: 127.0.0.1:22591
+2026-10-10T05:24:33.440Z   persisted node 3: 127.0.0.1:22592
+2026-10-10T05:24:33.440Z   persisted node 4: 127.0.0.1:22593
+2026-10-10T05:24:33.459Z Joined cluster with 4 nodes
+2026-10-10T05:24:33.463Z heartbeat: enabled (2000 ms interval)
+2026-10-10T05:24:33.472Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T05:24:33.472Z kv-obs: mt_bytes=1158 l0_bytes=0 l0=0 l1=0
+2026-10-10T05:24:33.472Z raft-host: up raft_id=3 n=4 boot=3446745170743453 salt=2935699857545433287 g0=off g2=hosted
+2026-10-10T05:24:33.472Z efsd d4f2ddb3 (branch devel-persistence-pressure, built 2026-10-10T04:32:02Z on nuc), build=d4f2ddb3-checkpoint: node 4 listening on 127.0.0.1:22593, storage=/home/efs/additional-work-dir/gc-direct-kutj8ceu/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T05:24:35.464Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=987 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T05:24:37.176Z raft-host: applied session index=8 kind=1 shard=0 ino=0
+2026-10-10T05:24:37.226Z raft-host: applied session index=9 kind=2 shard=1 ino=0
+2026-10-10T05:24:38.032Z store: put O_DIRECT bounce copy (buf align=3312 len=65536)
+2026-10-10T05:24:38.046Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=2 bytes=131072 errors=0 avg_us=14018 p50_us=15078 max_us=15078 wdisk ops=2 bytes=131072 errors=0 avg_us=13802 p50_us=14750 max_us=14750
+2026-10-10T05:24:38.211Z raft-host: applied session index=10 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.212Z raft-host: applied session index=11 kind=2 shard=868 ino=0
+2026-10-10T05:24:38.215Z raft-host: applied session index=12 kind=7 shard=868 ino=0
+2026-10-10T05:24:38.219Z raft-host: applied session index=13 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.220Z raft-host: applied session index=14 kind=2 shard=1735 ino=0
+2026-10-10T05:24:38.225Z raft-host: applied session index=15 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.226Z raft-host: applied session index=16 kind=2 shard=1107 ino=0
+2026-10-10T05:24:38.237Z raft-host: applied session index=17 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.238Z raft-host: applied session index=18 kind=2 shard=240 ino=0
+2026-10-10T05:24:38.242Z raft-host: applied session index=19 kind=7 shard=240 ino=0
+2026-10-10T05:24:38.246Z raft-host: applied session index=20 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.247Z raft-host: applied session index=21 kind=2 shard=2602 ino=0
+2026-10-10T05:24:38.251Z raft-host: applied session index=22 kind=7 shard=2602 ino=0
+2026-10-10T05:24:38.253Z raft-host: applied session index=23 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.255Z raft-host: applied session index=24 kind=2 shard=2841 ino=0
+2026-10-10T05:24:38.261Z raft-host: applied session index=25 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.264Z raft-host: applied session index=26 kind=2 shard=3469 ino=0
+2026-10-10T05:24:38.271Z raft-host: applied session index=27 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.272Z raft-host: applied session index=28 kind=2 shard=3708 ino=0
+2026-10-10T05:24:38.276Z raft-host: applied session index=29 kind=7 shard=3708 ino=0
+2026-10-10T05:24:38.280Z raft-host: applied session index=30 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.281Z raft-host: applied session index=31 kind=2 shard=479 ino=0
+2026-10-10T05:24:38.285Z raft-host: applied session index=32 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.290Z raft-host: applied session index=33 kind=2 shard=2213 ino=0
+2026-10-10T05:24:38.294Z raft-host: applied session index=34 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.297Z raft-host: applied session index=35 kind=2 shard=1585 ino=0
+2026-10-10T05:24:38.304Z raft-host: applied session index=36 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.304Z raft-host: applied session index=37 kind=2 shard=3080 ino=0
+2026-10-10T05:24:38.308Z raft-host: applied session index=38 kind=7 shard=3080 ino=0
+2026-10-10T05:24:38.312Z raft-host: applied session index=39 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.314Z raft-host: applied session index=40 kind=2 shard=3947 ino=0
+2026-10-10T05:24:38.321Z raft-host: applied session index=41 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.324Z raft-host: applied session index=42 kind=2 shard=2930 ino=0
+2026-10-10T05:24:38.328Z raft-host: applied session index=43 kind=7 shard=2930 ino=0
+2026-10-10T05:24:38.332Z raft-host: applied session index=44 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.333Z raft-host: applied session index=45 kind=2 shard=1824 ino=0
+2026-10-10T05:24:38.338Z raft-host: applied session index=46 kind=7 shard=1824 ino=0
+2026-10-10T05:24:38.343Z raft-host: applied session index=47 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.344Z raft-host: applied session index=48 kind=2 shard=2452 ino=0
+2026-10-10T05:24:38.348Z raft-host: applied session index=49 kind=7 shard=2452 ino=0
+2026-10-10T05:24:38.352Z raft-host: applied session index=50 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.353Z raft-host: applied session index=51 kind=2 shard=2691 ino=0
+2026-10-10T05:24:38.359Z raft-host: applied session index=52 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.362Z raft-host: applied session index=53 kind=2 shard=3319 ino=0
+2026-10-10T05:24:38.366Z raft-host: applied session index=54 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.369Z raft-host: applied session index=55 kind=2 shard=2063 ino=0
+2026-10-10T05:24:38.376Z raft-host: applied session index=56 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.377Z raft-host: applied session index=57 kind=2 shard=3258 ino=0
+2026-10-10T05:24:38.381Z raft-host: applied session index=58 kind=7 shard=3258 ino=0
+2026-10-10T05:24:38.385Z raft-host: applied session index=59 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.388Z raft-host: applied session index=60 kind=2 shard=418 ino=0
+2026-10-10T05:24:38.391Z raft-host: applied session index=61 kind=7 shard=418 ino=0
+2026-10-10T05:24:38.396Z raft-host: applied session index=62 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.397Z raft-host: applied session index=63 kind=2 shard=1346 ino=0
+2026-10-10T05:24:38.400Z raft-host: applied session index=64 kind=7 shard=1346 ino=0
+2026-10-10T05:24:38.405Z raft-host: applied session index=65 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.406Z raft-host: applied session index=66 kind=2 shard=3647 ino=0
+2026-10-10T05:24:38.416Z raft-host: applied session index=67 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.416Z raft-host: applied session index=68 kind=2 shard=2152 ino=0
+2026-10-10T05:24:38.420Z raft-host: applied session index=69 kind=7 shard=2152 ino=0
+2026-10-10T05:24:38.427Z raft-host: applied session index=70 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.430Z raft-host: applied session index=71 kind=2 shard=1763 ino=0
+2026-10-10T05:24:38.434Z raft-host: applied session index=72 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.437Z raft-host: applied session index=73 kind=2 shard=29 ino=0
+2026-10-10T05:24:38.441Z raft-host: applied session index=74 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.446Z raft-host: applied session index=75 kind=2 shard=268 ino=0
+2026-10-10T05:24:38.450Z raft-host: applied session index=76 kind=7 shard=268 ino=0
+2026-10-10T05:24:38.455Z raft-host: applied session index=77 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.458Z raft-host: applied session index=78 kind=2 shard=2391 ino=0
+2026-10-10T05:24:38.462Z raft-host: applied session index=79 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.465Z raft-host: applied session index=80 kind=2 shard=2869 ino=0
+2026-10-10T05:24:38.469Z raft-host: applied session index=81 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.472Z raft-host: applied session index=82 kind=2 shard=1135 ino=0
+2026-10-10T05:24:38.472Z kv-obs: mt_bytes=3232 l0_bytes=0 l0=0 l1=0
+2026-10-10T05:24:38.481Z raft-host: applied session index=83 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.482Z raft-host: applied session index=84 kind=2 shard=1974 ino=0
+2026-10-10T05:24:38.486Z raft-host: applied session index=85 kind=7 shard=1974 ino=0
+2026-10-10T05:24:38.491Z raft-host: applied session index=86 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.494Z raft-host: applied session index=87 kind=2 shard=1524 ino=0
+2026-10-10T05:24:38.497Z raft-host: applied session index=88 kind=7 shard=1524 ino=0
+2026-10-10T05:24:38.502Z raft-host: applied session index=89 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.502Z raft-host: applied session index=90 kind=2 shard=3497 ino=0
+2026-10-10T05:24:38.509Z raft-host: applied session index=91 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.509Z raft-host: applied session index=92 kind=2 shard=1374 ino=0
+2026-10-10T05:24:38.513Z raft-host: applied session index=93 kind=7 shard=1374 ino=0
+2026-10-10T05:24:38.519Z raft-host: applied session index=94 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.519Z raft-host: applied session index=95 kind=2 shard=2630 ino=0
+2026-10-10T05:24:38.522Z raft-host: applied session index=96 kind=7 shard=2630 ino=0
+2026-10-10T05:24:38.527Z raft-host: applied session index=97 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.531Z raft-host: applied session index=98 kind=2 shard=2002 ino=0
+2026-10-10T05:24:38.534Z raft-host: applied session index=99 kind=7 shard=2002 ino=0
+2026-10-10T05:24:38.538Z raft-host: applied session index=100 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.539Z raft-host: applied session index=101 kind=2 shard=657 ino=0
+2026-10-10T05:24:38.543Z raft-host: applied session index=102 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.545Z raft-host: applied session index=103 kind=2 shard=507 ino=0
+2026-10-10T05:24:38.551Z raft-host: applied session index=104 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.555Z raft-host: applied session index=105 kind=2 shard=3169 ino=0
+2026-10-10T05:24:38.561Z raft-host: applied session index=106 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.562Z raft-host: applied session index=107 kind=2 shard=896 ino=0
+2026-10-10T05:24:38.566Z raft-host: applied session index=108 kind=7 shard=896 ino=0
+2026-10-10T05:24:38.572Z raft-host: applied session index=109 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.573Z raft-host: applied session index=110 kind=2 shard=1435 ino=0
+2026-10-10T05:24:38.581Z raft-host: applied session index=111 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.583Z raft-host: applied session index=112 kind=2 shard=957 ino=0
+2026-10-10T05:24:38.593Z raft-host: applied session index=113 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.598Z raft-host: applied session index=114 kind=2 shard=90 ino=0
+2026-10-10T05:24:38.603Z raft-host: applied session index=115 kind=7 shard=90 ino=0
+2026-10-10T05:24:38.606Z raft-host: applied session index=116 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.608Z raft-host: applied session index=117 kind=2 shard=1913 ino=0
+2026-10-10T05:24:38.614Z raft-host: applied session index=118 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.614Z raft-host: applied session index=119 kind=2 shard=1196 ino=0
+2026-10-10T05:24:38.622Z raft-host: applied session index=120 kind=7 shard=1196 ino=0
+2026-10-10T05:24:38.628Z raft-host: applied session index=121 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.628Z raft-host: applied session index=122 kind=2 shard=3886 ino=0
+2026-10-10T05:24:38.636Z raft-host: applied session index=123 kind=7 shard=3886 ino=0
+2026-10-10T05:24:38.641Z raft-host: applied session index=124 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.643Z raft-host: applied session index=125 kind=2 shard=2302 ino=0
+2026-10-10T05:24:38.646Z raft-host: applied session index=126 kind=7 shard=2302 ino=0
+2026-10-10T05:24:38.651Z raft-host: applied session index=127 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.652Z raft-host: applied session index=128 kind=2 shard=718 ino=0
+2026-10-10T05:24:38.655Z raft-host: applied session index=129 kind=7 shard=718 ino=0
+2026-10-10T05:24:38.659Z raft-host: applied session index=130 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.660Z raft-host: applied session index=131 kind=2 shard=3558 ino=0
+2026-10-10T05:24:38.665Z raft-host: applied session index=132 kind=7 shard=3558 ino=0
+2026-10-10T05:24:38.669Z raft-host: applied session index=133 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.671Z raft-host: applied session index=134 kind=2 shard=3797 ino=0
+2026-10-10T05:24:38.677Z raft-host: applied session index=135 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.679Z raft-host: applied session index=136 kind=2 shard=2541 ino=0
+2026-10-10T05:24:38.683Z raft-host: applied session index=137 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.689Z raft-host: applied session index=138 kind=2 shard=1285 ino=0
+2026-10-10T05:24:38.693Z raft-host: applied session index=139 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.696Z raft-host: applied session index=140 kind=2 shard=3019 ino=0
+2026-10-10T05:24:38.706Z raft-host: applied session index=141 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.708Z raft-host: applied session index=142 kind=2 shard=4036 ino=0
+2026-10-10T05:24:38.711Z raft-host: applied session index=143 kind=7 shard=4036 ino=0
+2026-10-10T05:24:38.716Z raft-host: applied session index=144 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.716Z raft-host: applied session index=145 kind=2 shard=329 ino=0
+2026-10-10T05:24:38.726Z raft-host: applied session index=146 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.726Z raft-host: applied session index=147 kind=2 shard=3408 ino=0
+2026-10-10T05:24:38.731Z raft-host: applied session index=148 kind=7 shard=3408 ino=0
+2026-10-10T05:24:38.733Z raft-host: applied session index=149 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.735Z raft-host: applied session index=150 kind=2 shard=807 ino=0
+2026-10-10T05:24:38.742Z raft-host: applied session index=151 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.745Z raft-host: applied session index=152 kind=2 shard=568 ino=0
+2026-10-10T05:24:38.749Z raft-host: applied session index=153 kind=7 shard=568 ino=0
+2026-10-10T05:24:38.753Z raft-host: applied session index=154 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.754Z raft-host: applied session index=155 kind=2 shard=1046 ino=0
+2026-10-10T05:24:38.757Z raft-host: applied session index=156 kind=7 shard=1046 ino=0
+2026-10-10T05:24:38.762Z raft-host: applied session index=157 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.763Z raft-host: applied session index=158 kind=2 shard=2780 ino=0
+2026-10-10T05:24:38.769Z raft-host: applied session index=159 kind=7 shard=2780 ino=0
+2026-10-10T05:24:38.773Z raft-host: applied session index=160 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.777Z raft-host: applied session index=161 kind=2 shard=179 ino=0
+2026-10-10T05:24:38.783Z raft-host: applied session index=162 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.784Z raft-host: applied session index=163 kind=2 shard=1674 ino=0
+2026-10-10T05:24:38.787Z raft-host: applied session index=164 kind=7 shard=1674 ino=0
+2026-10-10T05:24:38.792Z raft-host: applied session index=165 kind=1 shard=0 ino=0
+2026-10-10T05:24:38.792Z raft-host: applied session index=166 kind=2 shard=3736 ino=0
+2026-10-10T05:24:38.796Z raft-host: applied session index=167 kind=7 shard=3736 ino=0
+2026-10-10T05:24:43.049Z iostats: get ops=112 bytes=7340032 errors=0 avg_us=915 p50_us=603 max_us=18715 put ops=55 bytes=3604480 errors=0 avg_us=48189 p50_us=49340 max_us=91343 wdisk ops=55 bytes=3604480 errors=0 avg_us=12064 p50_us=11969 max_us=24104
+2026-10-10T05:24:43.472Z kv-obs: mt_bytes=16153 l0_bytes=0 l0=0 l1=0
+2026-10-10T05:24:48.052Z iostats: get ops=112 bytes=7340032 errors=0 avg_us=915 p50_us=603 max_us=18715 put ops=55 bytes=3604480 errors=0 avg_us=48189 p50_us=49340 max_us=91343 wdisk ops=55 bytes=3604480 errors=0 avg_us=12064 p50_us=11969 max_us=24104
+2026-10-10T05:24:51.468Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=921 passes=18 sampled=0 pending=0,0 reap=0,0 removed=1 file_bytes=69632 payload_bytes=65536 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T05:24:53.057Z iostats: get ops=114 bytes=7471104 errors=0 avg_us=1038 p50_us=603 max_us=18715 put ops=110 bytes=7208960 errors=0 avg_us=44497 p50_us=45028 max_us=91343 wdisk ops=110 bytes=7208960 errors=0 avg_us=10654 p50_us=10663 max_us=24104
+2026-10-10T05:24:53.479Z kv-obs: mt_bytes=27577 l0_bytes=0 l0=0 l1=0
+2026-10-10T05:24:58.270Z storage-engine=files direct_io=on
+2026-10-10T05:24:58.270Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/gc-direct-kutj8ceu/n4/meta/cluster_nodes.bin
+2026-10-10T05:24:58.270Z   persisted node 1: 127.0.0.1:22590
+2026-10-10T05:24:58.270Z   persisted node 2: 127.0.0.1:22591
+2026-10-10T05:24:58.270Z   persisted node 3: 127.0.0.1:22592
+2026-10-10T05:24:58.270Z   persisted node 4: 127.0.0.1:22593
+2026-10-10T05:24:58.276Z Joined cluster with 4 nodes
+2026-10-10T05:24:58.282Z heartbeat: enabled (2000 ms interval)
+2026-10-10T05:24:58.292Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T05:24:58.292Z kv-obs: mt_bytes=34905 l0_bytes=0 l0=0 l1=0
+2026-10-10T05:24:58.292Z raft-host: up raft_id=3 n=4 boot=3446745170743454 salt=16287666764377862115 g0=off g2=hosted
+2026-10-10T05:24:58.292Z efsd d4f2ddb3 (branch devel-persistence-pressure, built 2026-10-10T04:32:02Z on nuc), build=d4f2ddb3-checkpoint: node 4 listening on 127.0.0.1:22593, storage=/home/efs/additional-work-dir/gc-direct-kutj8ceu/n4 (1 paths, stripe=none), used=3538944, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T05:25:00.282Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=985 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T05:25:03.296Z kv-obs: mt_bytes=30873 l0_bytes=0 l0=0 l1=0
+2026-10-10T05:25:08.830Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T05:25:11.175Z store: put O_DIRECT bounce copy (buf align=3216 len=65536)
+2026-10-10T05:25:11.315Z raft-host: applied session index=625 kind=7 shard=90 ino=0
+2026-10-10T05:25:11.322Z raft-host: applied session index=626 kind=7 shard=1824 ino=0
+2026-10-10T05:25:11.328Z raft-host: applied session index=627 kind=7 shard=1346 ino=0
+2026-10-10T05:25:11.332Z raft-host: applied session index=628 kind=7 shard=4036 ino=0
+2026-10-10T05:25:11.336Z raft-host: applied session index=629 kind=7 shard=868 ino=0
+2026-10-10T05:25:11.340Z raft-host: applied session index=630 kind=7 shard=2602 ino=0
+2026-10-10T05:25:11.344Z raft-host: applied session index=631 kind=7 shard=3708 ino=0
+2026-10-10T05:25:11.350Z raft-host: applied session index=632 kind=7 shard=2930 ino=0
+2026-10-10T05:25:11.356Z raft-host: applied session index=633 kind=7 shard=3258 ino=0
+2026-10-10T05:25:11.361Z raft-host: applied session index=634 kind=7 shard=896 ino=0
+2026-10-10T05:25:11.364Z raft-host: applied session index=635 kind=7 shard=2152 ino=0
+2026-10-10T05:25:11.367Z raft-host: applied session index=636 kind=7 shard=2630 ino=0
+2026-10-10T05:25:11.372Z raft-host: applied session index=637 kind=7 shard=268 ino=0
+2026-10-10T05:25:11.375Z raft-host: applied session index=638 kind=7 shard=3886 ino=0
+2026-10-10T05:25:11.377Z raft-host: applied session index=639 kind=7 shard=240 ino=0
+2026-10-10T05:25:11.383Z raft-host: applied session index=640 kind=7 shard=1524 ino=0
+2026-10-10T05:25:11.390Z raft-host: applied session index=641 kind=7 shard=3080 ino=0
+2026-10-10T05:25:11.394Z raft-host: applied session index=642 kind=7 shard=718 ino=0
+2026-10-10T05:25:11.396Z raft-host: applied session index=643 kind=7 shard=2452 ino=0
+2026-10-10T05:25:11.400Z raft-host: applied session index=644 kind=7 shard=2302 ino=0
+2026-10-10T05:25:11.402Z raft-host: applied session index=645 kind=7 shard=1974 ino=0
+2026-10-10T05:25:11.406Z raft-host: applied session index=646 kind=7 shard=1674 ino=0
+2026-10-10T05:25:11.410Z raft-host: applied session index=647 kind=7 shard=1046 ino=0
+2026-10-10T05:25:11.415Z raft-host: applied session index=648 kind=7 shard=2002 ino=0
+2026-10-10T05:25:11.419Z raft-host: applied session index=649 kind=7 shard=3558 ino=0
+2026-10-10T05:25:11.423Z raft-host: applied session index=650 kind=7 shard=3408 ino=0
+2026-10-10T05:25:11.429Z raft-host: applied session index=651 kind=7 shard=418 ino=0
+2026-10-10T05:25:11.431Z raft-host: applied session index=652 kind=7 shard=2780 ino=0
+2026-10-10T05:25:11.435Z raft-host: applied session index=653 kind=7 shard=1196 ino=0
+2026-10-10T05:25:11.438Z raft-host: applied session index=654 kind=7 shard=3736 ino=0
+2026-10-10T05:25:11.442Z raft-host: applied session index=655 kind=7 shard=568 ino=0
+2026-10-10T05:25:11.446Z raft-host: applied session index=656 kind=7 shard=1374 ino=0
+2026-10-10T05:25:15.603Z storage-engine=files direct_io=on
+2026-10-10T05:25:15.603Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/gc-direct-kutj8ceu/n4/meta/cluster_nodes.bin
+2026-10-10T05:25:15.603Z   persisted node 1: 127.0.0.1:22590
+2026-10-10T05:25:15.603Z   persisted node 2: 127.0.0.1:22591
+2026-10-10T05:25:15.603Z   persisted node 3: 127.0.0.1:22592
+2026-10-10T05:25:15.603Z   persisted node 4: 127.0.0.1:22593
+2026-10-10T05:25:15.624Z Joined cluster with 4 nodes
+2026-10-10T05:25:15.628Z heartbeat: enabled (2000 ms interval)
+2026-10-10T05:25:15.638Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T05:25:15.638Z raft-host: up raft_id=3 n=4 boot=3446745170743455 salt=12933097731126467766 g0=off g2=hosted
+2026-10-10T05:25:15.638Z efsd d4f2ddb3 (branch devel-persistence-pressure, built 2026-10-10T04:32:02Z on nuc), build=d4f2ddb3-checkpoint: node 4 listening on 127.0.0.1:22593, storage=/home/efs/additional-work-dir/gc-direct-kutj8ceu/n4 (1 paths, stripe=none), used=7077888, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T05:25:15.638Z kv-obs: mt_bytes=44697 l0_bytes=0 l0=0 l1=0
+2026-10-10T05:25:15.901Z raft-host: applied session index=649 kind=7 shard=3558 ino=0
+2026-10-10T05:25:15.901Z raft-host: applied session index=650 kind=7 shard=3408 ino=0
+2026-10-10T05:25:15.901Z raft-host: applied session index=651 kind=7 shard=418 ino=0
+2026-10-10T05:25:15.901Z raft-host: applied session index=652 kind=7 shard=2780 ino=0
+2026-10-10T05:25:15.901Z raft-host: applied session index=653 kind=7 shard=1196 ino=0
+2026-10-10T05:25:15.901Z raft-host: applied session index=654 kind=7 shard=3736 ino=0
+2026-10-10T05:25:15.901Z raft-host: applied session index=655 kind=7 shard=568 ino=0
+2026-10-10T05:25:15.901Z raft-host: applied session index=656 kind=7 shard=1374 ino=0
+2026-10-10T05:25:16.115Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T05:25:17.628Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=984 passes=2 sampled=0 pending=0,0 reap=0,0 removed=18 file_bytes=1253376 payload_bytes=1179648 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T05:25:20.643Z kv-obs: mt_bytes=40633 l0_bytes=0 l0=0 l1=0
+2026-10-10T05:25:21.116Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T05:25:26.119Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-10T05:25:30.536Z storage-engine=files direct_io=on
+2026-10-10T05:25:30.536Z Loaded 4 persisted cluster node(s) from /home/efs/additional-work-dir/gc-direct-kutj8ceu/n4/meta/cluster_nodes.bin
+2026-10-10T05:25:30.536Z   persisted node 1: 127.0.0.1:22590
+2026-10-10T05:25:30.536Z   persisted node 2: 127.0.0.1:22591
+2026-10-10T05:25:30.536Z   persisted node 3: 127.0.0.1:22592
+2026-10-10T05:25:30.536Z   persisted node 4: 127.0.0.1:22593
+2026-10-10T05:25:30.555Z Joined cluster with 4 nodes
+2026-10-10T05:25:30.561Z heartbeat: enabled (2000 ms interval)
+2026-10-10T05:25:30.575Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-10T05:25:30.575Z raft-host: up raft_id=3 n=4 boot=3636290796720219 salt=7325173329518607273 g0=off g2=hosted
+2026-10-10T05:25:30.575Z efsd d4f2ddb3 (branch devel-persistence-pressure, built 2026-10-10T04:32:02Z on nuc), build=d4f2ddb3-checkpoint: node 4 listening on 127.0.0.1:22593, storage=/home/efs/additional-work-dir/gc-direct-kutj8ceu/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-10T05:25:30.575Z kv-obs: mt_bytes=36569 l0_bytes=0 l0=0 l1=0
+2026-10-10T05:25:32.561Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=981 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-10T05:25:33.814Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=0 errors=1 avg_us=724 p50_us=724 max_us=724 wdisk ops=1 bytes=65536 errors=1 avg_us=421 p50_us=421 max_us=421

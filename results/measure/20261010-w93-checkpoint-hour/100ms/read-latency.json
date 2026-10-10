@@ -1,0 +1,1646 @@
+[
+  {
+    "stage": "idle_before",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 30404
+  },
+  {
+    "stage": "idle_before",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 21491
+  },
+  {
+    "stage": "idle_before",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 5739
+  },
+  {
+    "stage": "idle_before",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 5926
+  },
+  {
+    "stage": "idle_before",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 4793
+  },
+  {
+    "stage": "idle_before",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 7863
+  },
+  {
+    "stage": "idle_before",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 4605
+  },
+  {
+    "stage": "idle_before",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 5710
+  },
+  {
+    "stage": "idle_before",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 5611
+  },
+  {
+    "stage": "idle_before",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 5965
+  },
+  {
+    "stage": "idle_before",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 4325
+  },
+  {
+    "stage": "idle_before",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 7791
+  },
+  {
+    "stage": "idle_before",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 4642
+  },
+  {
+    "stage": "idle_before",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 5778
+  },
+  {
+    "stage": "idle_before",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 7389
+  },
+  {
+    "stage": "idle_before",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 7701
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 42494
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 62595
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 27773
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 119709
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 29804
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 65461
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 26220
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 67989
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 18534
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 62149
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 31111
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 91007
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 29399
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 66164
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 17579
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 87223
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 28424
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 52909
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 17762
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 66825
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 14584
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 90868
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 12633
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 92221
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 18706
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 61932
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 25148
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 78305
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 110068
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 161347
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 155286
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 218969
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 73636
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 288599
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 89606
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 154650
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 96524
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 222242
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 148508
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 166882
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 95139
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 250025
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 91741
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 227642
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 69397
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 196413
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 72720
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 176890
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 66284
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 335977
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 45698
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 179298
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 35825
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 232137
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 31852
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 213752
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 36407
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 184971
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 20411
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 216048
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 27229
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 176300
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 50860
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 328635
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 52763
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 258928
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 19929
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 201907
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 113426
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 216261
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 19374
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 290008
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 36300
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 247224
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 16471
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 187725
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 41176
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 222601
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 90666
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 241740
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 67702
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 201510
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 67331
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 145168
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 95912
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 256338
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 32294
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 160516
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 34074
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 167392
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 55324
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 148930
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 138434
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 261546
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 45563
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 226043
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 97148
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 221015
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 42084
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 134869
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 27438
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 191393
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 134992
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 299072
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 91211
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 191890
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 25830
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 272275
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 69783
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 257471
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 77891
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 201218
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 91350
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 172154
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 67429
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 151819
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 25240
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 304321
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 58964
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 142681
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 99281
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 236135
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 73818
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 182697
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 92622
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 229795
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 72394
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 136685
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 70882
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 136111
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 97894
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 158047
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 37470
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 198011
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 49211
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 191106
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 61621
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 139394
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 110360
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 215533
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 33719
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 240783
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 34972
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 129637
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 156479
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 212533
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 49992
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 260424
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 20537
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 268483
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 74269
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 227049
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 119567
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 208152
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 95863
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 178779
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 69595
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 132275
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 113519
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 144068
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 158665
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 244428
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 22073
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 159433
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 51890
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 225341
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 36822
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 147633
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 110901
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 197243
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 77219
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 203542
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 80769
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 178543
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 81579
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 155442
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 17820
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 170540
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 39595
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 179593
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 9034
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 193002
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 92355
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 176510
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 27817
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 265973
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 96021
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 137261
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 82111
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 206164
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 43390
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 146619
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 59956
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 253371
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 52713
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 137802
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 59992
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 201178
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 70604
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 231252
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 53735
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 114586
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 165935
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 309879
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 83003
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 255352
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 74232
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 327637
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 28513
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 183914
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 58264
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 210371
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 61777
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 376706
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 50233
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 131971
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 44541
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 190792
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 110383
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 244840
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 22807
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 156944
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 28783
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 160957
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 117117
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 215434
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 36162
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 242586
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 47688
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 211058
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 28851
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 152667
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 47059
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 214050
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 168885
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 273001
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 37560
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 177234
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 65191
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 207327
+  },
+  {
+    "stage": "mixed",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 48126
+  },
+  {
+    "stage": "mixed",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 214471
+  },
+  {
+    "stage": "idle_after",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 7031
+  },
+  {
+    "stage": "idle_after",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 18822
+  },
+  {
+    "stage": "idle_after",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 4666
+  },
+  {
+    "stage": "idle_after",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 5992
+  },
+  {
+    "stage": "idle_after",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 4778
+  },
+  {
+    "stage": "idle_after",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 5676
+  },
+  {
+    "stage": "idle_after",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 4503
+  },
+  {
+    "stage": "idle_after",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 5779
+  },
+  {
+    "stage": "idle_after",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 5429
+  },
+  {
+    "stage": "idle_after",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 7308
+  },
+  {
+    "stage": "idle_after",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 4405
+  },
+  {
+    "stage": "idle_after",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 5702
+  },
+  {
+    "stage": "idle_after",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 4623
+  },
+  {
+    "stage": "idle_after",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 7242
+  },
+  {
+    "stage": "idle_after",
+    "group": 0,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d0/read-probe",
+    "us": 6841
+  },
+  {
+    "stage": "idle_after",
+    "group": 2,
+    "path": "/data1/efs/mnt/tiny-w93-overlap-balanced-baseline-20261009/d1/read-probe",
+    "us": 6513
+  }
+]

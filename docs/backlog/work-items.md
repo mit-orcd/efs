@@ -2586,6 +2586,15 @@ results dirs; move this plan's finished rows to project-history.
 
 ## W64 · Durable append reservation replay across leader changes (queue row 0t)
 
+**Oct 10 NUC regression:** integrated d4f2ddb3 private 100 ms checkpoint gate
+fails sequence-2/ACK-1 replay: 31/32 identical requests return offset 16 rather
+than the required 8. Initial/cold/leader-death cases pass. Longer cadence is
+not adopted; this is a safety blocker. Check dual-host receipt visibility and
+exact-image retry; Append-only controls at 10 and 100 ms both pass; these omit the preceding
+sync/crash cases of the failing full batch. Cause/cadence attribution remains
+open; retain the failure before any adoption.
+[Evidence, limits and restoration](../status/w93-checkpoint-cadence-20261010.md).
+
 **Oct 8 New York / Oct 9 UTC RXE acceptance:** integrated source `f6233987`
 passes direct and buffered RXE core POSIX 212/212, peer 64/64, sync/failure
 recovery, durable replay/32-identical-request/leader-death and exact 800-record
@@ -3800,6 +3809,24 @@ find/stats checkpoint; never treat the private fixture as deployed acceptance.
 
 ## W93 · Broader durable Raft group commit for tiny-file metadata
 
+**Oct 10 checkpoint investigation:** All 16 frozen local branch tips are merged
+into `devel-persistence-pressure`. `4bb7b169` fixes failed applied-marker writes
+advancing their retry timestamp and adds an opt-in 10–1,000 ms checkpoint cadence
+(default remains 10 ms), with a 1,024-entry trigger and unchanged KV-before-marker,
+Raft ACK and publication barriers. Diagnostic sync/throttle/error counters and
+actual-source/sanitizer/negative retry controls are added. Merged Linux full
+regression passes. Initial NUC full core is 211/212 (append timeout); isolated
+append 2/2, unchanged full repeat 212/212 and peer 64/64 pass. Keep the intermittent
+first failure open. Private retained-marker EIO/SIGKILL replay passes exact
+rename/link/mode/truncate/delete/payload checks at 1,000 ms. 600-second 10/100 ms
+rates are 66.26/77.05 files/s, common-180 10/100/10 are 94.89/104.06/92.69.
+However the required ACK-bearing append replay gate fails (31/32 wrong offsets);
+longer cadence remains disabled. Remaining fault gates are not run after failure.
+Both default mounts restore and 384 exact cold payload checks pass. Details are in
+[the Oct 10 checkpoint report](../status/w93-checkpoint-cadence-20261010.md).
+This is an experiment, not W93/W97 closure or a new runtime default.
+
+
 **Oct 9 late-hour read/credit investigation:** Fixed-file warmed native
 idle off/on/off probes do not reproduce the earlier large group 0 gap:
 p50 6.43/6.62/6.64 ms, p99 approximately 13 ms, over 6,000 samples per group
@@ -4042,6 +4069,14 @@ or present the Raft improvement as measured KV acceptance.
 <a id="w97"></a>
 
 ## W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
+
+**Oct 10 NUC:** return control reproduces fast-then-slow rates at 10 ms.
+NVMe host flush mean rises 2.38 to 3.70 ms while rates fall; an independent
+low-load XFS overwrite+fdatasync probe with EFS stopped measures NVMe 1.12 ms
+versus SATA 85.9 microseconds at QD1. This localizes persistence costs but does
+not identify the drive/filesystem mechanism or prove a software/hardware ceiling.
+Checkpoint-tail experiment gains throughput but fails append replay acceptance;
+keep the default and W97 open. [Report](../status/w93-checkpoint-cadence-20261010.md).
 
 **Oct 9 completed-credit admission candidate:** `ea23775b` adds default-off
 retirement after KV release and before the marker tail, preserving queue caps,
