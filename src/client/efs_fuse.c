@@ -1659,6 +1659,8 @@ struct readdir_collect_arg {
     struct readdir_ent *ents;
     size_t count;
     size_t cap;
+    size_t *name_index; /* Entry index plus one; zero is an empty bucket. */
+    size_t name_index_cap;
 };
 
 /* Per-opendir listing. fi->fh is this pointer (files carry an open-description handle).
@@ -1705,6 +1707,7 @@ static int dirh_fill(struct efs_dirh *dh, fuse_ino_t ino)
     memset(&col, 0, sizeof(col));
     memset(&row, 0, sizeof(row));
     rc = efs_fuse_readdir_ino(ino, &col, &row);
+    free(col.name_index);
     if (rc != 0 && virt_kind(ino) != 2) {
         free(col.ents);
         return rc;
@@ -1728,15 +1731,68 @@ static int dirh_fill(struct efs_dirh *dh, fuse_ino_t ino)
     return 0;
 }
 
+/* Keep first-seen names while merging shard pages. Indices survive ents
+ * reallocations; this temporary index is released once the listing is filled. */
+static size_t readdir_name_hash(const char *name)
+{
+    uint64_t hash = UINT64_C(14695981039346656037);
+    for (const unsigned char *p = (const unsigned char *)name; *p; p++) {
+        hash ^= *p;
+        hash *= UINT64_C(1099511628211);
+    }
+    return (size_t)hash;
+}
+
+static int readdir_name_reserve(struct readdir_collect_arg *col, size_t need)
+{
+    size_t cap = col->name_index_cap ? col->name_index_cap : 32;
+    if (need > SIZE_MAX / 2)
+        return -ENOMEM;
+    while (cap / 2 < need) {
+        if (cap > SIZE_MAX / 2)
+            return -ENOMEM;
+        cap *= 2;
+    }
+    if (cap == col->name_index_cap)
+        return 0;
+    if (cap > SIZE_MAX / sizeof(size_t))
+        return -ENOMEM;
+    size_t *index = calloc(cap, sizeof(*index));
+    if (!index)
+        return -ENOMEM;
+    for (size_t i = 0; i < col->count; i++) {
+        size_t slot = readdir_name_hash(col->ents[i].name) & (cap - 1);
+        while (index[slot])
+            slot = (slot + 1) & (cap - 1);
+        index[slot] = i + 1;
+    }
+    free(col->name_index);
+    col->name_index = index;
+    col->name_index_cap = cap;
+    return 0;
+}
+
 /* Append one page, skipping name dups (spread dirs merge per-shard scans).
  * Returns 0 or -ENOMEM. */
 static int readdir_collect_page(struct readdir_collect_arg *col,
                                 const struct efs_inode *ents, uint32_t n)
 {
-    if (col->count + n > col->cap) {
+    if (n == 0)
+        return 0;
+    if ((size_t)n > SIZE_MAX - col->count)
+        return -ENOMEM;
+    size_t need = col->count + n;
+    if (readdir_name_reserve(col, need) != 0)
+        return -ENOMEM;
+    if (need > col->cap) {
         size_t ncap = col->cap ? col->cap : 16;
-        while (ncap < col->count + n)
+        while (ncap < need) {
+            if (ncap > SIZE_MAX / 2)
+                return -ENOMEM;
             ncap *= 2;
+        }
+        if (ncap > SIZE_MAX / sizeof(*col->ents))
+            return -ENOMEM;
         struct readdir_ent *ne = realloc(col->ents, ncap * sizeof(*ne));
         if (!ne)
             return -ENOMEM;
@@ -1750,20 +1806,18 @@ static int readdir_collect_page(struct readdir_collect_arg *col,
             continue;
         if (strncmp(ents[i].name, ".parked-", 8) == 0)
             continue;
-        int dup = 0;
-        for (size_t j = 0; j < col->count; j++) {
-            if (strcmp(col->ents[j].name, ents[i].name) == 0) {
-                dup = 1;
-                break;
-            }
-        }
-        if (dup)
+        size_t slot = readdir_name_hash(ents[i].name) & (col->name_index_cap - 1);
+        while (col->name_index[slot] &&
+               strcmp(col->ents[col->name_index[slot] - 1].name, ents[i].name) != 0)
+            slot = (slot + 1) & (col->name_index_cap - 1);
+        if (col->name_index[slot])
             continue;
-        struct readdir_ent *e = &col->ents[col->count++];
+        struct readdir_ent *e = &col->ents[col->count];
         memset(e, 0, sizeof(*e));
         strncpy(e->name, ents[i].name, EFS_MAX_NAME - 1);
         e->st.st_ino = ents[i].ino;
         e->st.st_mode = ents[i].mode;
+        col->name_index[slot] = ++col->count;
     }
     return 0;
 }
