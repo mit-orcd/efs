@@ -61,6 +61,7 @@
 #define EFS_MD_SESS_LEASE_PROBE_DEFERRED 17 /* read-only matching identity domain */
 #define EFS_MD_SESS_LEASE_LOCK_NEXT 14
 #define EFS_MD_SESS_LEASE_LOCK_BATCH 15
+#define EFS_MD_SESS_STORAGE_FENCE 18 /* RPC only: uuid/floor, seal every configured storage member */
 #define EFS_MD_SESS_LEASE_PROBE 13 /* host-only ReadIndex; never a log command */
 /* Both use [tag:1][sub:1][uuid:16][epoch:4][seq:8][ack:8]
  * [ino:8][generation:8][edge_flags:4][pending_token:8]. Route to the

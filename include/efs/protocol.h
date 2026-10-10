@@ -182,7 +182,14 @@ enum efs_msg_type {
     /* Opt-in pending CREATE with exact result proof and retained routing. */
     EFS_MSG_CREATE_RETAINED = 125,
     EFS_MSG_CREATE_RETAINED_REPLY = 126,
+    EFS_MSG_STORAGE_SESSION_FENCE = 127,
+    EFS_MSG_STORAGE_SESSION_FENCE_REPLY = 128,
 };
+
+/* Storage session seal/check. Reply echoes the exact identity and floor.
+ * check_only never writes; missing/corrupt certificates are not success. */
+struct efs_msg_storage_session_fence { uint8_t uuid[16]; uint32_t floor, check_only; };
+struct efs_msg_storage_session_fence_reply { uint8_t uuid[16]; uint32_t floor; int32_t rc; };
 
 /* Trusted reaper only: all lanes swept and no remaining open lease.
  * The durable reap marker is retained until every member confirms cleanup. */

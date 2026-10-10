@@ -61,6 +61,9 @@ int efs_session_begin_fence(struct efs_kv *kv,
                             const uint8_t uuid[EFS_OPID_UUID_LEN]);
 int efs_session_ack_fence(struct efs_kv *kv,
                           const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t shard);
+/* New production completion is epoch-bound; a delayed coordinator cannot
+ * finish a later barrier. The legacy entry point remains for persisted logs. */
+int efs_session_finish_fence_epoch(struct efs_kv *,const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch);
 int efs_session_finish_fence(struct efs_kv *kv,
                              const uint8_t uuid[EFS_OPID_UUID_LEN]);
 /* OK only after ACTIVE(E+1) for dropping epoch `old_epoch` (I23 barrier). */

@@ -34,6 +34,7 @@ p.add_argument('--root', action='append', default=[])
 p.add_argument('--mount', type=Path, help='existing empty, unmounted path allowed by host FUSE policy')
 p.add_argument('--peer-mount', type=Path, help='existing empty, unmounted second policy-allowed mount')
 p.add_argument('--posix', action='store_true')
+p.add_argument('--storage-session-fence-fault',action='store_true',help='private certificate fsync EIO: revocation must remain incomplete, then recover and survive cold restart; requires --guarded-leases')
 p.add_argument('--continue-posix-failure','--continue-regression-failure',dest='continue_posix_failure',action='store_true',help='retain POSIX/peer failure, run independent later gates, then exit unsuccessfully')
 p.add_argument('--tiny-mixed',action='store_true',help='bounded large-writer overlap with 512 tiny CREATE/close operations, cold exact bytes and physical deletion')
 p.add_argument('--tiny-mixed-only',action='store_true',help='run only the mixed-load cold-read/reclamation gate; implies --tiny-mixed')
@@ -155,6 +156,11 @@ for path in sorted(inputs):
                       for name in ('efsd','efs-fuse','efs-mgmt')},
 },indent=2))
 env = dict(os.environ, EFS_MD_RAFT_N='4', EFS_TRANSPORT=a.transport)
+if a.storage_session_fence_fault:
+    assert a.guarded_leases and not (a.put_barrier_fault or a.kv_wal_persistence_only or a.compactor_pressure), 'certificate fault must own its preload'
+    subprocess.run(['cc','-Wall','-Wextra','-Werror','-shared','-fPIC',source/'tests/live/storage_session_fence_fault.c','-ldl','-o',work/'put-session-fault.so'],check=True)
+    env['EFS_TEST_PUT_FENCE_FAULT_FILE']=str(work/'put-fence-armed')
+
 if a.transport == 'rdma':
     device = env.get('EFS_RDMA_DEV', 'rxe0')
     assert (Path('/sys/class/infiniband')/device).is_dir(), 'RDMA device absent; gate not run'
@@ -235,6 +241,7 @@ def start(prefer_single_host=False):
             cmd += ['--storage',second]
         if i:cmd += ['--join',f'127.0.0.1:{a.port}']
         node_env=dict(env)
+        if a.storage_session_fence_fault:node_env['LD_PRELOAD']=str(work/'put-session-fault.so')
         if a.put_barrier_fault:
             node_env.update(LD_PRELOAD=str(work/'store-barrier-fault.so'),
                             EFS_TEST_STORE_BARRIER_FILE=str(work/'put-barrier-fault'),
@@ -656,6 +663,19 @@ try:
         retained=work/'client-retained-lease'
         run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_retained_lease.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',retained])
         edge_results.append(run([retained,str(a.port),str(edge_ino),source/'efs-mgmt'],capture_output=True,text=True,timeout=90).stdout)
+        certificate_match=re.search(r'storage-session-certificate uuid=([0-9a-f]{32}) reject_below=(\d+)',edge_results[-1])
+        assert certificate_match,edge_results[-1]
+        certificate_reader=work/'storage-session-fence'
+        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/storage_session_fence.c',source/'src/server/put_fence.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',certificate_reader])
+        certificate_args=[str(certificate_reader),certificate_match[1],certificate_match[2],*map(str,roots)]
+        def certificate_ready():
+            result=subprocess.run(certificate_args,capture_output=True,text=True,env=env)
+            if result.returncode==0:(work/'storage-session-certificates.txt').write_text(result.stdout)
+            return result.returncode==0
+        wait(certificate_ready,'all four members durably fence old PUT guards',40)
+        if a.storage_session_fence_fault:
+            assert any('test-put-storage-fence: refusing certificate sync' in (work/f'n{i+1}.log').read_text() for i in range(4)), 'certificate fault never exercised'
+
         tickets=work/'client-put-ticket'
         run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_put_ticket.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',tickets])
         ticket_results=[]
@@ -670,6 +690,7 @@ try:
             edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,stage],capture_output=True,text=True,timeout=90).stdout)
         unmount();stop(crash=True);start();mount_client()
         ns_result+=run([namespace,str(a.port),str(ns_ino),source/'efs-mgmt','cold',ns_saved],capture_output=True,text=True,timeout=90).stdout
+        wait(certificate_ready,'cold restart preserves four storage session floors',40)
         report_result+=run([report,str(a.port),str(edge_ino),source/'efs-mgmt','cold',report_saved],capture_output=True,text=True,timeout=90).stdout
         (work/'report-session-wire.txt').write_text(report_result)
 
@@ -2410,6 +2431,7 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
     if posix_failure:raise posix_failure
     print('GC reclamation '+a.mode+' PASS',flush=True)
 finally:
+    if a.storage_session_fence_fault:(work/'put-fence-armed').unlink(missing_ok=True)
     for proc,target in extra_clients:
         subprocess.run(['fusermount3','-uz',str(target)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         proc.terminate()

@@ -493,6 +493,13 @@ send_reply:
             efs_conn_send_msg(conn,EFS_MSG_GC_INODE_REPLY,&rep,sizeof(rep));
             break;
         }
+        case EFS_MSG_STORAGE_SESSION_FENCE: {
+            struct efs_msg_storage_session_fence_reply reply={.rc=EFS_ERR_INVAL};
+            if(payload_len==sizeof(struct efs_msg_storage_session_fence))
+                server_raft_host_storage_session_fence(payload,&reply);
+            efs_conn_send_msg(conn,EFS_MSG_STORAGE_SESSION_FENCE_REPLY,&reply,sizeof(reply));
+            break;
+        }
         case EFS_MSG_GC_STATUS: {
             struct efs_msg_gc_status_reply rep;
             server_gc_status(g_server, &rep);
