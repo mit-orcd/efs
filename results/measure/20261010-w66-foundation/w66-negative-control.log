@@ -1,0 +1,6 @@
+FAIL tests/test_raft.c:708: raft new
+FAIL tests/test_raft.c:708: raft new
+FAIL tests/test_raft.c:708: raft new
+FAIL tests/test_raft.c:708: raft new
+FAIL tests/test_raft.c:945: joint consensus grows three to four
+test_raft: 5 failure(s)

@@ -10,10 +10,11 @@ p.add_argument('--server',type=Path,required=True)
 p.add_argument('--work',type=Path,required=True)
 p.add_argument('--samples',type=int,default=100)
 p.add_argument('--port',type=int,default=27440)
+p.add_argument('--mode',choices=('direct','buffered'),default='direct',help='owned daemon storage mode; functional default is direct/TCP')
 p.add_argument('--recovery',action='store_true',help='after timing, stop each group leader and cold restart all owned daemons')
 a=p.parse_args();assert 10<=a.samples<=1000
 a.work.mkdir(parents=True,exist_ok=False)
-env=dict(os.environ,EFS_MD_RAFT_N='4',EFS_TRANSPORT='tcp',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_READ_PROF='1',EFS_RAFT_OBS='1')
+env=dict(os.environ,EFS_MD_RAFT_N='4',EFS_TRANSPORT='tcp',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_READ_PROF='1',EFS_RAFT_OBS='1',EFS_DIRECT_IO='1' if a.mode=='direct' else '0')
 procs=[];logs=[];mutation_attempts=[];stopped=set();commands=[]
 for port in range(a.port,a.port+4):
  with socket.socket() as s:
@@ -45,7 +46,7 @@ def snapshot():return [call(n,'raft-status') for n in range(4)]
 try:
  for node in range(4):
   root=a.work/f'n{node+1}';root.mkdir();log=(a.work/f'n{node+1}.log').open('w');logs.append(log)
-  args=[str(a.server),'--node-id',str(node+1),'--addr','127.0.0.1','--port',str(a.port+node),'--storage',str(root),'--quota','1G','--writers','0','--no-direct-io']
+  args=[str(a.server),'--node-id',str(node+1),'--addr','127.0.0.1','--port',str(a.port+node),'--storage',str(root),'--quota','1G','--writers','0','--direct-io' if a.mode=='direct' else '--no-direct-io']
   if node:args+=['--join',f'127.0.0.1:{a.port}']
   commands.append(args)
   procs.append(subprocess.Popen(args,env=env,stdout=log,stderr=log))
@@ -61,7 +62,7 @@ try:
   if group not in targets:targets[group]=file;parents[group]=directory
   if len(targets)==2:break
  assert len(targets)==2,('both placement classes required',creation)
- rows={'targets':targets,'parents':parents,'creation':creation,'before':snapshot(),'mutation_attempts':mutation_attempts,'cells':{}}
+ rows={'mode':a.mode,'transport':'tcp','commands':commands,'targets':targets,'parents':parents,'creation':creation,'before':snapshot(),'mutation_attempts':mutation_attempts,'cells':{}}
  def reads(key,node,file):
   samples=[call(node,'raft-getattr',file) for _ in range(a.samples)]
   assert all(ok(r) for r in samples),(key,[r for r in samples if not ok(r)])

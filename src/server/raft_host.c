@@ -659,19 +659,6 @@ static uint32_t group_voters(uint8_t group, int n)
     return 0xeu;     /* nodes 2,3,4 = raft ids 1,2,3 */
 }
 
-/* Same rule as raft.c valid_voters: RF = 2f+1, so the popcount is odd. */
-static int cfg_voters_ok(uint32_t v)
-{
-    int n = 0, i;
-
-    if (v == 0 || (v >> EFS_RAFT_MAX_PEERS))
-        return 0;
-    for (i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
-        if (v & (1u << i))
-            n++;
-    }
-    return n >= 1 && (n % 2) == 1;
-}
 
 static int hosts_group(int raft_id, uint32_t voters)
 {
@@ -6463,7 +6450,7 @@ static uint32_t load_desired(struct efs_raft_host *h, uint8_t group,
     }
     close(fd);
     v = rd32be(buf);
-    return cfg_voters_ok(v) ? v : fallback;
+    return efs_raft_voters_valid(v) ? v : fallback;
 }
 
 static int save_desired(struct efs_raft_host *h, uint8_t group, uint32_t voters)
@@ -6619,7 +6606,7 @@ static int host_cfg(struct efs_raft_host *h, uint8_t group,
         return EFS_ERR_INVAL;
     sub = cmd[1];
     voters = rd32be(cmd + 2);
-    if (!cfg_voters_ok(voters))
+    if (!efs_raft_voters_valid(voters))
         return EFS_ERR_INVAL;
     if (sub != EFS_MD_CFG_NOTE && sub != EFS_MD_CFG_CHANGE)
         return EFS_ERR_INVAL;

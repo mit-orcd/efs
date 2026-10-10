@@ -825,6 +825,143 @@ static void test_grow_3_to_5(void)
     free_n(&n, st, 5);
 }
 
+/* Four-voter engine support is staged. These memory-store checks establish
+ * replication and quorum behavior, not recoverable commit certificates or
+ * production D36 protection. In particular two survivors cannot elect. */
+static void test_four_voters(void)
+{
+    int omitted, lost_a, lost_b;
+
+    CHECK(!efs_raft_voters_valid(0), "empty membership rejected");
+    CHECK(!efs_raft_voters_valid(1u << EFS_RAFT_MAX_PEERS),
+          "out-of-range membership rejected");
+    CHECK(!efs_raft_voters_valid(0xffffffffu), "invalid high bits rejected");
+    CHECK(efs_raft_voters_valid(0xf), "four voters accepted");
+    for (omitted = 0; omitted < 4; omitted++) {
+        struct net n;
+        struct efs_raft_store *st[4];
+        struct app app[4];
+        struct efs_raft_cfg cfg;
+        uint8_t cmd = '4';
+        uint64_t idx = 0, term = 0;
+        int lid, i, copies = 0;
+
+        boot_n(&n, st, app, &cfg, 4, 0xf);
+        for (i = 0; i < 4; i++) {
+            if (!n.r[i]) {
+                free_n(&n, st, 4);
+                return;
+            }
+        }
+        n.drop[omitted] = 1;
+        CHECK(elect(&n, 40) == 1, "three of four elect with any node absent");
+        lid = leader_id(&n);
+        if (lid < 0) {
+            free_n(&n, st, 4);
+            return;
+        }
+        CHECK(efs_raft_propose(n.r[lid], &cmd, 1, &idx) == EFS_OK,
+              "four-voter proposal");
+        CHECK(elect(&n, 8) == 1, "four-voter leader stable");
+        CHECK(efs_raft_commit(n.r[lid]) >= idx, "three of four commit");
+        for (i = 0; i < 4; i++) {
+            uint8_t got = 0;
+            uint32_t len = 1;
+            if (st[i]->get(st[i], idx, &term, &got, &len) == EFS_OK &&
+                len == 1 && got == cmd)
+                copies++;
+        }
+        CHECK(copies == 3, "exact command copied to three reachable stores");
+        /* Independently inspect every two-loss pair: at least one command
+         * copy remains, even when the unavailable replica is a survivor. */
+        for (lost_a = 0; lost_a < 4; lost_a++) {
+            for (lost_b = lost_a + 1; lost_b < 4; lost_b++) {
+                int retained = 0;
+                for (i = 0; i < 4; i++) {
+                    uint8_t got = 0;
+                    uint32_t len = 1;
+                    if (i != lost_a && i != lost_b &&
+                        st[i]->get(st[i], idx, &term, &got, &len) == EFS_OK &&
+                        len == 1 && got == cmd)
+                        retained++;
+                }
+                CHECK(retained >= 1, "every two-loss pair retains a log copy");
+            }
+        }
+        /* A pending read and write must not earn authority from just two
+         * voters. Keep the old leader reachable to test stale leadership. */
+        for (i = 0; i < 4; i++) {
+            if (i != lid && i != omitted) {
+                n.drop[i] = 1;
+                break;
+            }
+        }
+        {
+            uint64_t before = efs_raft_commit(n.r[lid]);
+            uint64_t pending = 0;
+            CHECK(efs_raft_read_begin(n.r[lid]) == EFS_OK,
+                  "read admitted before quorum loss is detected");
+            CHECK(!efs_raft_read_quorum(n.r[lid]) &&
+                  !efs_raft_read_ready(n.r[lid]), "two voters cannot authorize read");
+            CHECK(efs_raft_propose(n.r[lid], &cmd, 1, &pending) == EFS_OK,
+                  "isolated leader may enqueue but cannot commit");
+            CHECK(elect(&n, 40) >= 0, "two-voter ticks succeed");
+            CHECK(efs_raft_commit(n.r[lid]) == before,
+                  "two voters cannot acknowledge a new write");
+            CHECK(!efs_raft_read_quorum(n.r[lid]), "no quorum after timeout");
+        }
+        /* Cold restart all surviving stores with the same four-voter config:
+         * no implicit quorum override or survivor promotion. */
+        for (i = 0; i < 4; i++) {
+            efs_raft_free(n.r[i]);
+            n.r[i] = NULL;
+        }
+        for (i = 0; i < 4; i++) {
+            if (n.drop[i])
+                continue;
+            cfg.id = i; cfg.store = st[i]; cfg.store_ctx = st[i];
+            cfg.app = &app[i]; cfg.boot_id++;
+            n.r[i] = efs_raft_new(&cfg);
+            CHECK(n.r[i] != NULL, "cold four-voter restart");
+        }
+        CHECK(elect(&n, 60) == 0, "two cold survivors cannot elect a leader");
+        free_n(&n, st, 4);
+    }
+}
+
+static void test_grow_3_to_4(void)
+{
+    struct net n;
+    struct efs_raft_store *st[4];
+    struct app app[4];
+    struct efs_raft_cfg cfg;
+    uint8_t cmd = 'J';
+    uint64_t idx = 0;
+    int lid;
+
+    boot_n(&n, st, app, &cfg, 4, 0x7);
+    CHECK(elect(&n, 20) == 1, "elect before four-voter reconfiguration");
+    lid = wait_voters(&n, 0xf, 80);
+    CHECK(lid >= 0, "joint consensus grows three to four");
+    if (lid < 0) {
+        free_n(&n, st, 4);
+        return;
+    }
+    CHECK(efs_raft_propose(n.r[lid], &cmd, 1, &idx) == EFS_OK,
+          "propose after four-voter reconfiguration");
+    elect(&n, 8);
+    CHECK(efs_raft_commit(n.r[lid]) >= idx, "four-voter configuration commits");
+    CHECK(efs_raft_snapshot(n.r[3]) == EFS_OK, "snapshot four-voter membership");
+    efs_raft_free(n.r[3]);
+    cfg.id = 3; cfg.store = st[3]; cfg.store_ctx = st[3]; cfg.app = &app[3];
+    n.r[3] = efs_raft_new(&cfg); /* Bootstrap says three; snapshot is authoritative. */
+    CHECK(n.r[3] && efs_raft_voters(n.r[3]) == 0xf,
+          "cold snapshot restores four-voter membership");
+    lid = wait_voters(&n, 0x7, 80);
+    CHECK(lid >= 0, "joint consensus shrinks four to three");
+    free_n(&n, st, 4);
+}
+
 static void test_i18_joint_quorum(void)
 {
     struct net n;
@@ -1913,6 +2050,8 @@ int main(void)
     test_i3_i4_and_restart();
     test_snapshot();
     test_grow_3_to_5();
+    test_four_voters();
+    test_grow_3_to_4();
     test_solo_durable_cap_then_grow();
     test_i18_joint_quorum();
     test_stale_boot_id();

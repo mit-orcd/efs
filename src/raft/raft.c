@@ -1642,21 +1642,6 @@ static int on_snap_rep(struct efs_raft *r, const struct efs_raft_msg *in)
     return EFS_OK;
 }
 
-static int valid_voters(uint32_t v)
-{
-    int n, i;
-
-    if (v == 0 || (v >> EFS_RAFT_MAX_PEERS))
-        return 0;
-    n = popc(v);
-    if (n < 1 || (n % 2) == 0)
-        return 0;
-    for (i = EFS_RAFT_MAX_PEERS; i < 32; i++) {
-        if (v & (1u << i))
-            return 0;
-    }
-    return 1;
-}
 
 struct efs_raft *efs_raft_new(const struct efs_raft_cfg *cfg)
 {
@@ -1672,7 +1657,7 @@ struct efs_raft *efs_raft_new(const struct efs_raft_cfg *cfg)
     if (!cfg->store->save_hard || !cfg->send)
         return NULL;
     voters = cfg->voters ? cfg->voters : ((1u << cfg->n) - 1);
-    if (!valid_voters(voters))
+    if (!efs_raft_voters_valid(voters))
         return NULL;
     r = calloc(1, sizeof(*r));
     if (!r)
@@ -2165,7 +2150,7 @@ int efs_raft_change(struct efs_raft *r, uint32_t new_voters)
         return EFS_ERR_INVAL;
     if (r->role != EFS_RAFT_LEADER)
         return EFS_ERR_NOT_PRIMARY;
-    if (!valid_voters(new_voters))
+    if (!efs_raft_voters_valid(new_voters))
         return EFS_ERR_INVAL;
     if (r->log_new)
         return EFS_ERR_BUSY;
