@@ -1,0 +1,14 @@
+Unmounting /mnt/efs-b
+Unmounted /mnt/efs-b
+Unmounting /mnt/efs
+Unmounted /mnt/efs
+Stop with: ./scripts/client.sh stop /mnt/efs
+Logging efs-fuse to /mnt/efs-fuse-efs.log
+Mounted /mnt/efs
+Stop with: ./scripts/client.sh stop /mnt/efs-b
+Logging efs-fuse to /mnt/efs-fuse-efs-b.log
+Mounted /mnt/efs-b
+USER         PID COMMAND
+efs       504238 ./efs-fuse 192.168.2.11:17432 fs /mnt/efs-i -o allow_other
+efs       568964 ./efs-fuse 192.168.2.11:17432 fs /mnt/efs -o allow_other
+efs       568997 ./efs-fuse 192.168.2.11:17432 fs /mnt/efs-b -o allow_other
