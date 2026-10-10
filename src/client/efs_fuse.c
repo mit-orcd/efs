@@ -4545,7 +4545,7 @@ static int efs_fuse_link_at(fuse_ino_t src_ino, fuse_ino_t newparent,
     if (wx != 0)
         return wx;
     rc = efs_client_link(src.ino, parent.ino, newname);
-    return fuse_stat_errno(rc);
+    return rc == EFS_ERR_NOT_PRIMARY ? -EBUSY : efs_rc_to_errno(rc);
 }
 
 static int efs_fuse_utimens_ino(fuse_ino_t ino, const struct timespec tv[2])

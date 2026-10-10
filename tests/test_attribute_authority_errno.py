@@ -68,6 +68,8 @@ int main(void){
  for(unsigned i=0;i<sizeof(cases)/sizeof(cases[0]);i++){
   mutation_rc=cases[i][0];assert(efs_fuse_link_at(42,43,"target")==cases[i][1]);
  }
+ int mutation_cases[][2]={{EFS_ERR_QUOTA,-ENOSPC},{EFS_ERR_OVERFLOW,-EOVERFLOW},{EFS_ERR_AGAIN,-EAGAIN},{EFS_ERR_INVAL,-EINVAL},{EFS_ERR_NAMETOOLONG,-ENAMETOOLONG}};
+ for(unsigned i=0;i<sizeof(mutation_cases)/sizeof(mutation_cases[0]);i++){mutation_rc=mutation_cases[i][0];assert(efs_fuse_link_at(42,43,"target")==mutation_cases[i][1]);}
  mutation_rc=EFS_ERR_EXIST;assert(efs_fuse_link_at(42,43,"target")==-EEXIST);
  mutation_rc=0;struct fuse_file_info fi={.flags=O_RDONLY};
  assert(!efs_fuse_open_ino(42,&fi));assert(fi.fh==42 && fi.direct_io && file_opens==1 && lease_opens==1);
