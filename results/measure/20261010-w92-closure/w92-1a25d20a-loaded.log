@@ -1,0 +1,68 @@
+Results as of 2 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:12; no refresh error recorded; expiry unavailable.
+loaded snapshot {"applied_g0": 668066, "applied_g2": 708812, "boot_id": 17023102757887621, "built_ns": 1791627397448444917, "generation": 12, "lag_sample_ns": 1791627398560407891, "pending_age_ms_at_sample": 0, "pending_changes_at_least": 256, "refresh_error": 0, "refresh_min_ms": 2000, "refresh_ms": 2000, "refresh_n": 256, "refresh_overdue": false, "source_ns": 1791627395704315499, "term_g0": 117, "term_g2": 111}
+Results as of 5 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:12; no refresh error recorded; expiry unavailable.
+loaded snapshot {"applied_g0": 668066, "applied_g2": 708812, "boot_id": 17023102757887621, "built_ns": 1791627397448444917, "generation": 12, "lag_sample_ns": 1791627398560407891, "pending_age_ms_at_sample": 0, "pending_changes_at_least": 256, "refresh_error": 0, "refresh_min_ms": 2000, "refresh_ms": 2000, "refresh_n": 256, "refresh_overdue": false, "source_ns": 1791627395704315499, "term_g0": 117, "term_g2": 111}
+Results as of 8 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:12; no refresh error recorded; expiry unavailable.
+loaded snapshot {"applied_g0": 668066, "applied_g2": 708812, "boot_id": 17023102757887621, "built_ns": 1791627397448444917, "generation": 12, "lag_sample_ns": 1791627398560407891, "pending_age_ms_at_sample": 0, "pending_changes_at_least": 256, "refresh_error": 0, "refresh_min_ms": 2000, "refresh_ms": 2000, "refresh_n": 256, "refresh_overdue": false, "source_ns": 1791627395704315499, "term_g0": 117, "term_g2": 111}
+Results as of 8 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:13; no refresh error recorded; expiry unavailable.
+loaded snapshot {"applied_g0": 668699, "applied_g2": 709456, "boot_id": 17023102757887621, "built_ns": 1791627406335225067, "generation": 13, "lag_sample_ns": 1791627406804424445, "pending_age_ms_at_sample": 0, "pending_changes_at_least": 256, "refresh_error": 0, "refresh_min_ms": 2000, "refresh_ms": 2000, "refresh_n": 256, "refresh_overdue": false, "source_ns": 1791627398560548500, "term_g0": 117, "term_g2": 111}
+Results as of 11 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:13; no refresh error recorded; expiry unavailable.
+loaded snapshot {"applied_g0": 668699, "applied_g2": 709456, "boot_id": 17023102757887621, "built_ns": 1791627406335225067, "generation": 13, "lag_sample_ns": 1791627406804424445, "pending_age_ms_at_sample": 0, "pending_changes_at_least": 256, "refresh_error": 0, "refresh_min_ms": 2000, "refresh_ms": 2000, "refresh_n": 256, "refresh_overdue": false, "source_ns": 1791627398560548500, "term_g0": 117, "term_g2": 111}
+concurrent readers and publication PASS [(26, [12, 13], {'sampled_requests': 110, 'busy_requests': 84, 'query_p50_ms': 18.88137599962647, 'query_p95_ms': 505.32701600059227, 'query_p99_ms': 798.7945129998479}), (25, [12, 13], {'sampled_requests': 109, 'busy_requests': 84, 'query_p50_ms': 17.840297000475402, 'query_p95_ms': 619.6647900005701, 'query_p99_ms': 892.5284289998672})]
+Results as of 11 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:13; no refresh error recorded; expiry unavailable.
+Results as of 11 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:13; no refresh error recorded; expiry unavailable.
+Results as of 12 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:13; no refresh error recorded; expiry unavailable.
+Results as of 12 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:13; no refresh error recorded; expiry unavailable.
+Results as of 12 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:13; no refresh error recorded; expiry unavailable.
+Results as of 13 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:13; no refresh error recorded; expiry unavailable.
+Results as of 13 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:13; no refresh error recorded; expiry unavailable.
+Results as of 14 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:13; no refresh error recorded; expiry unavailable.
+Results as of 14 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:13; no refresh error recorded; expiry unavailable.
+Results as of 15 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:13; no refresh error recorded; expiry unavailable.
+Results as of 15 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:13; no refresh error recorded; expiry unavailable.
+Results as of 16 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:13; no refresh error recorded; expiry unavailable.
+Results as of 16 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:13; no refresh error recorded; expiry unavailable.
+Results as of 17 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:13; no refresh error recorded; expiry unavailable.
+Results as of 17 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:13; no refresh error recorded; expiry unavailable.
+Results as of 9 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:14; no refresh error recorded; expiry unavailable.
+Results as of 10 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:14; no refresh error recorded; expiry unavailable.
+Results as of 10 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:14; no refresh error recorded; expiry unavailable.
+Results as of 10 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:14; no refresh error recorded; expiry unavailable.
+Results as of 11 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:14; no refresh error recorded; expiry unavailable.
+Results as of 11 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:14; no refresh error recorded; expiry unavailable.
+Results as of 12 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:14; no refresh error recorded; expiry unavailable.
+Results as of 12 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:14; no refresh error recorded; expiry unavailable.
+Results as of 12 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:14; no refresh error recorded; expiry unavailable.
+Results as of 3 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 17023102757887621:15; no refresh error recorded; expiry unavailable.
+loaded publication PASS files=1126 logical_bytes=288256
+writer latency and exact payload oracle {"converge_seconds": 10.572995310999431, "create_p50_ms": 76.76599649994387, "create_p95_ms": 217.4337619999278, "create_p99_ms": 418.66267200020957, "files": 1126, "fixture": "w92-1a25d20a-loaded-20261010", "payloads_verified": 1126}

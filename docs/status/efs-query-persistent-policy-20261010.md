@@ -1,7 +1,7 @@
 # W92 persistent command policy
 
-Status: implemented and verified on the identified private candidate;
-normal-cluster rollout remains pending. W92 stays open for scale and
+Status: implemented, verified on the private candidate and deployed as
+`1a25d20a193b` on normal Xorinox direct-I/O/TCP services. W92 stays open for scale and
 Mac platform execution.
 
 The current architecture has one export (`default`, id 1). Persist its command

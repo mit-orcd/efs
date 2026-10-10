@@ -1861,11 +1861,13 @@ source scans, incremental row-only folding and durable single-export policy
 are implemented. Full native, policy live/cold/quorum/lost-reply, payload hashes
 and complete exports pass on the identified private candidate. Startup-ceiling
 catch-up also passes (500 payloads); the final proposal-forwarding guard passes
-full native and private live/cold gates. Normal-cluster rollout remains pending.
+full native and private live/cold gates. Normal Xorinox rollout `1a25d20a193b`
+also passes native commands, fresh Linux NFSv4.0, retained payload recovery and
+the loaded eight-writer/two-reader gate (1126 verified payloads).
 The actual 2^32 index fixture is running; the 400 GiB writer stopped on a
 CREATE protocol error after 124983 acknowledged files. The unrouted BUSY retry
-fix passes full native gates; a diagnostic private client is rehashing the
-acknowledged payloads before continuing; Mac NFS execution still needs a privileged mount refresh.
+fix passes full native gates; the diagnostic private client rehashed the
+acknowledged prefix and resumed new writes; Mac NFS execution still needs a privileged mount refresh.
 W92 remains open.
 
 
@@ -5875,7 +5877,8 @@ scratch/tails and row-only stat reuse. Live disabled catch-up, aggregate QUOTA,
 publisher loss and interrupted-cache recovery pass; latest deployment and full
 scale/platform acceptance remain open. Durable single-export policy live/cold,
 quorum, lost-reply, startup-ceiling and storage-error gates pass on the private
-candidate (`49a73b22`); normal rollout is still pending. The real 400 GiB writer
+candidate (`49a73b22`); normal Xorinox direct-I/O/TCP rollout is identified
+as `1a25d20a193b`. The real 400 GiB writer
 stopped after 124983 acknowledged files on CREATE PROTO. A valid unrouted BUSY
 probe retry defect is fixed and passes focused plus full native gates; recovery
 rehashes acknowledged payloads before writing more. No full capacity pass is

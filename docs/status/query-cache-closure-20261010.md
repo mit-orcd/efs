@@ -557,3 +557,42 @@ acknowledgement rehash to install the fixed private client. The new detached
 `w92-capacity-busy-fixed-20261010` resumes from the preserved original write
 checkpoints with client diagnostics captured to a persistent file. Actual full
 payload/cold/export acceptance remains pending.
+
+## Named rollout — 1a25d20a193b
+
+The committed policy and unrouted-CREATE fixes pass the full native suite;
+named `1a25d20a193b` binaries/source are deployed on all six Xorinox guests.
+All three binary SHA-256 digests agree across the six guests. Only normal port
+17432 services/mounts were drained and cold restarted; no data was formatted.
+Separate capacity/policy services and the actual-entry generator stayed running.
+The normal clients on 115/116 remain `.efs` opt-out; gateway and the named
+diagnostic mount remain opted in for platform acceptance. All node policy GETs
+return default version 0/mask 3.
+
+Native commands and one freshly mounted, explicitly NFSv4.0 Linux client pass
+all 141 payload hashes/561174 bytes, exact stats, fresh command convergence,
+retained immutable bytes and complete paged client-path export. Two earlier
+NFS invocations passed but found stacked mounts; they are not the final mount
+gate. The admin user cannot traverse `/home/efs`, so mountpoint checks for cleanup
+now run under sudo before a single fresh mount. Earlier acknowledged disabled
+and quota fixtures also recover all 1000 payloads/4096000 bytes after rollout.
+Mac execution remains pending its user-privileged stale-mount refresh.
+
+[Deployment/digests](../../results/measure/20261010-w92-closure/w92-1a25d20a-deployment.json),
+[native commands](../../results/measure/20261010-w92-closure/w92-1a25d20a-native-commands.log),
+[fresh NFSv4.0](../../results/measure/20261010-w92-closure/w92-1a25d20a-nfs40-fresh-single.log),
+[retained payloads](../../results/measure/20261010-w92-closure/w92-1a25d20a-retained-payloads.log).
+
+The fixed capacity client has rehashed the original acknowledged prefix and
+resumed new writes. Its recorded zero-byte unacknowledged diagnostic tail is
+rewritten, with original failed-run evidence retained. No 400 GiB or actual
+2^32-entry completion gate is claimed. The latest actual-entry population
+checkpoint is 2345664512 entries; whole generator/source-process RSS is
+4305072 KiB, distinct from the fixed query-builder/scratch budgets.
+
+The named [loaded writer/query repeat](../../results/measure/20261010-w92-closure/w92-1a25d20a-loaded.log)
+also passes with eight writers/two concurrent readers: 1126 independently
+verified payloads (288256 bytes), changing publication generations and exact
+post-close stats in 10.573 s. Create p50/p95/p99 are 76.766/217.434/418.663 ms.
+The actual-entry generator and separate real-payload writer overlap this test;
+this shared-load measurement is not a controlled speedup comparison.

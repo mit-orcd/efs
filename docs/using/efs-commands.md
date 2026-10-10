@@ -145,7 +145,7 @@ cache error. See [W92 deployment and remaining gates](../status/query-disk-backe
 
 ## Administrator command policy
 
-On the W92 candidate, the single `default` export has a durable versioned mask.
+The single `default` export has a durable versioned mask.
 Use the current management binary on the trusted cluster network:
 
 ```sh
@@ -164,5 +164,5 @@ The mount still requires `EFS_COMMANDS=1`. A node started with
 `EFS_COMMANDS_SERVER=0` cannot serve commands even when durable policy permits
 them. Fresh queries and export pages check server policy and current quorum;
 already acquired immutable bytes remain readable. Ordinary file I/O continues
-when command policy is disabled. Final candidate rollout/scale acceptance is
+when command policy is disabled. Final scale/platform acceptance is
 tracked in the [W92 ledger](../status/query-cache-closure-20261010.md).
