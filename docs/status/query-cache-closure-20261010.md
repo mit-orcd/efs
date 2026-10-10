@@ -675,3 +675,14 @@ all scale processes have exited. Preserve datasets and raw evidence. Verify
 normal port-17432 daemon arguments, all normal clients, NFS service and retained
 namespace after restoration. No pushes, production formatting, D25 activation,
 W55 incident closure or W66 consensus claim are part of this handoff.
+
+The named 2^32 guest-kernel-cold recovery is queued in detached admin screen
+`w92-2p32-kernel-recovery-20261010`. Its
+[exact wrapper](../../results/measure/20261010-w92-closure/scale-recovery-handoff/w92-scale-recovery-20261010.sh)
+waits for the original marker, refuses a failed/missing original process, checks
+all population/build/cold/mutation verdicts, then clears guest caches and runs
+the named full recovery oracle. It preserves the large private disk budgets and
+sets NOFILE **inside** the `runuser` shell: the guest's `runuser` otherwise resets
+the soft limit to 1024 (hard limit remains 524288). The waiting wrapper is live;
+this is queued work, not completed recovery. Results use the original fixture
+stem plus `-kernel-recovery.{cache-state,log,time,exit,finished}`.
