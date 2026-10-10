@@ -141,3 +141,21 @@ The complete native suite and optional-sidecar-write-failure gate pass. Producti
 has not yet received this implementation. Reverse-alias and lane-dependency
 discovery still scan immutable index streams; removing global discovery remains
 part of the bounded catch-up work rather than claiming this checkpoint closes W92.
+
+## Bounded dependency discovery checkpoint
+
+Each persisted partition now carries a fixed 64-bit conservative lane-dependency
+filter. Unchanged partitions with no possible dependency on a changed source
+partition reuse their derived file without walking its inode rows. Hash collisions
+only add work; the exact per-inode dependency check still decides folding. Revised
+partitions rebuild their filter while streaming rows. This removes global inode
+visits for unchanged refreshes and ordinary lane-free tiny-file updates without
+retaining a namespace-sized reverse map in RAM. Disk manifest version 4 includes
+this field; earlier derived versions rebuild safely.
+
+Linux 12,000-file differential/retained-view tests, IO-fault tests and the rich
+catalog oracle (cross-shard lane-only changes, hardlinks, subtree mutations and
+transaction folding) pass. A detached ten-million-file native-format scale case
+is running in the same isolated fixture. Alias discovery and affected-parent edge
+folding still need their global stream scans removed; this checkpoint is partial
+bounded-discovery progress, not W92 closure.

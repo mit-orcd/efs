@@ -122,4 +122,4 @@ The metadata directory also keeps an optional fixed-size `QUERY-REVISIONS` sidec
 for restart catch-up. It is derived state paired with the KV manifest; missing or
 invalid hints force rebuilding rather than preventing metadata recovery. Partition
 change counters continue while command serving is disabled, with no accumulated
-per-operation queue. Disk catalog version 3 rebuilds older local cache generations.
+per-operation queue. Disk catalog version 4 rebuilds older local cache generations.

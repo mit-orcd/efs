@@ -36,7 +36,7 @@ _Static_assert(FD_CACHE<=UINT8_MAX,"descriptor index must fit");
 static const uint8_t kinds[KINDS]={EFS_KV_KIND_INODE,EFS_KV_KIND_DENTRY,
     EFS_KV_KIND_LANE,EFS_KV_KIND_DSEQ,EFS_KV_KIND_APPEND_CUR,EFS_KV_KIND_PVER};
 struct slot { uint64_t offset;uint32_t key_len,value_len; };
-struct disk_part { uint64_t revision,count,inodes,names,begin[KINDS],end[KINDS];uint8_t digest[4][32]; };
+struct disk_part { uint64_t revision,count,inodes,names,dependencies,begin[KINDS],end[KINDS];uint8_t digest[4][32]; };
 struct disk_node {
     struct efs_meta_row row;
     struct efs_meta_stat stat;
@@ -555,6 +555,15 @@ static int locate(struct efs_query_disk *d,efs_ino_t ino,struct disk_node *n,uin
 }
 static int refuse_coord(void *ctx,const struct efs_txid *tx,uint32_t shard,int *decision)
 { (void)ctx;(void)tx;(void)shard;(void)decision;return EFS_ERR_BUSY; }
+/* Conservative fixed-size dependency filter. Hash collisions only cause
+ * extra scans; no lane-dependent inode can be skipped after a source change. */
+static uint64_t dependency_bits(const struct efs_meta_row *row)
+{
+    uint64_t lanes=S_ISDIR(row->mode)?(row->layout==EFS_META_LAYOUT_LOCAL?0:row->used_shards):row->active_lanes,bits=0;
+    while(lanes){unsigned lane=(unsigned)__builtin_ctzll(lanes);lanes&=lanes-1;
+        bits|=UINT64_C(1)<<(efs_kv_lane_shard(row->ino,(uint8_t)lane)%64);}
+    return bits;
+}
 static int nodes_build(struct efs_query_disk *d,uint32_t shard)
 {
     if(!d->part[shard].inodes)return EFS_OK;
@@ -571,6 +580,7 @@ static int nodes_build(struct efs_query_disk *d,uint32_t shard)
         if(!rc)for(unsigned k=3;k<11;k++)encoded=(encoded<<8)|key[k];
         if(!rc && (encoded!=n.row.ino || efs_kv_inode_shard(encoded)!=shard || (i && encoded<=previous)))rc=EFS_ERR_PROTO;
         previous=encoded;
+        if(!rc)d->part[shard].dependencies|=dependency_bits(&n.row);
         if(!rc)rc=efs_meta_apply_getattr(&d->kv,n.row.ino,refuse_coord,NULL,&n.stat);
         if(!rc && d->refolded<UINT32_MAX)d->refolded++;
         if(!rc){
@@ -814,7 +824,7 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
         if(n<0 || (size_t)n>=sizeof(path))rc=EFS_ERR_NAMETOOLONG;
         int fd=rc?-1:open(path,O_CREAT|O_EXCL|O_RDWR|O_CLOEXEC,0600);
         if(fd<0)rc=EFS_ERR_IO;
-        uint64_t header[]={UINT64_C(0x454653514449534b),3,sizeof(struct slot),sizeof(struct disk_node),d->count,SHARDS,0,0,0,0,d->lineage[0],d->lineage[1]};
+        uint64_t header[]={UINT64_C(0x454653514449534b),4,sizeof(struct slot),sizeof(struct disk_node),d->count,SHARDS,0,0,0,0,d->lineage[0],d->lineage[1]};
         if(!rc)rc=io_at(fd,header,sizeof(header),0,1);
         if(!rc)rc=io_at(fd,d->part,sizeof(d->part),sizeof(header),1);
         if(!rc && fsync(fd))rc=EFS_ERR_IO;
@@ -1004,7 +1014,7 @@ int efs_query_disk_restore(const char *root,const uint64_t watermark[4],uint64_t
     int fd=n>0 && (size_t)n<sizeof(manifest)?open(manifest,O_RDONLY|O_CLOEXEC):-1;
     uint64_t header[12];int rc=fd<0?EFS_ERR_IO:io_at(fd,header,sizeof(header),0,0);
     if(!rc && d->disk_bytes>d->disk_limit)rc=EFS_ERR_QUOTA;
-    if(!rc && (header[0]!=UINT64_C(0x454653514449534b) || header[1]!=3 || header[2]!=sizeof(struct slot) ||
+    if(!rc && (header[0]!=UINT64_C(0x454653514449534b) || header[1]!=4 || header[2]!=sizeof(struct slot) ||
        header[3]!=sizeof(struct disk_node) || header[5]!=SHARDS))rc=EFS_ERR_PROTO;
     if(!rc && watermark && memcmp(header+6,watermark,4*sizeof(uint64_t)))rc=EFS_ERR_STALE;
     if(!rc){memcpy(d->lineage,header+10,sizeof(d->lineage));memcpy(d->watermark,header+6,sizeof(d->watermark));}

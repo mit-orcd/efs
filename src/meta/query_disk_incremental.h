@@ -4,6 +4,7 @@
 #define CHANGE_MAX 1024
 struct dirty_dir { struct disk_node node;uint64_t at;unsigned pending,done; };
 struct incremental {
+    uint64_t changed_partitions;
     efs_ino_t changed[CHANGE_MAX];unsigned changes,count;
     struct dirty_dir dirs[CHANGE_MAX];
 };
@@ -62,6 +63,8 @@ static int incremental_nodes(struct efs_query_disk *d,struct efs_query_disk *old
         if(!rc && link(from,to))rc=EFS_ERR_IO;
         if(!rc)d->shared_d[shard]=1;
     } else if(d->part[shard].inodes){fd=make_file(d,shard,'d');if(fd<0)rc=EFS_ERR_IO;}
+    if(same && !(old->part[shard].dependencies&s->changed_partitions))return rc;
+    if(!same)d->part[shard].dependencies=0;
     efs_ino_t previous=0;
     for(uint64_t i=0;i<d->part[shard].inodes && !rc;i++){
         if(cancelled(d)){rc=EFS_ERR_BUSY;break;}
@@ -84,6 +87,7 @@ static int incremental_nodes(struct efs_query_disk *d,struct efs_query_disk *old
             fold=1;
             if(found){n.stat=before.stat;n.rollup=before.rollup;n.link=before.link;n.children=before.children;}
         }
+        if(!rc && !same)d->part[shard].dependencies|=dependency_bits(&n.row);
         if(!rc && fold){rc=efs_meta_apply_getattr(&d->kv,n.row.ino,refuse_coord,NULL,&n.stat);if(!rc && d->refolded<UINT32_MAX)d->refolded++;}
         int changed=!found || memcmp(&n.row,&before.row,sizeof(n.row)) || memcmp(&n.stat,&before.stat,sizeof(n.stat));
         if(!rc && changed)rc=changed_add(s,n.row.ino);
@@ -120,6 +124,7 @@ static int changed_dentries(struct efs_query_disk *d,struct efs_query_disk *old,
 static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old)
 {
     struct incremental s={0};int rc=EFS_OK;
+    for(uint32_t shard=0;shard<SHARDS;shard++)if(d->part[shard].revision!=old->part[shard].revision)s.changed_partitions|=UINT64_C(1)<<(shard%64);
     for(uint32_t shard=0;shard<SHARDS && !rc;shard++)rc=incremental_nodes(d,old,&s,shard);
     for(uint32_t shard=0;shard<SHARDS && !rc;shard++){
         if(d->part[shard].revision==old->part[shard].revision)continue;
