@@ -4219,6 +4219,21 @@ int efs_dcache_bind_writer(efs_ino_t ino, uint64_t generation, uint32_t ci,
 
 /* Staged typed admission: no RPC under the slot lock and no adoption of
  * previously accepted legacy bytes. Caller obtains lane authority first. */
+static int dcache_typed_admission_idle(const struct dcache_ent *e,
+    efs_ino_t ino,uint64_t generation,uint32_t ci)
+{
+    if (!e || dcache_metadata_idle(e)) return 1;
+    if (!e->writer || e->writer->ranges.ino!=ino ||
+        e->writer->ranges.generation!=generation ||
+        e->writer->ranges.chunk_index!=ci) return 0;
+    /* Exact terminal consumption can leave extra-presence accounting until
+     * the mapping joins the client table. Reuse this same idle slot with its
+     * count intact; never reuse it for another FileID or drop the count here. */
+    struct dcache_ent same=*e;
+    same.present_extra=0;
+    return dcache_metadata_idle(&same);
+}
+
 int efs_dcache_write_lane(efs_ino_t ino, uint64_t generation, uint32_t ci,
     const struct efs_msg_lane_writer_view_reply *view,
     uint32_t off, const uint8_t *src, uint32_t len)
@@ -5285,7 +5300,7 @@ int efs_dcache_admit_lane_write(efs_ino_t ino, uint64_t generation, uint32_t ci,
     uint32_t slot=dcache_slot(ino,ci);pthread_mutex_t *mu=dcache_mu(slot);
     pthread_mutex_lock(mu);
     struct dcache_ent *e=dcache_find_meta(slot,ino,ci);
-    int available=!e || dcache_metadata_idle(e);
+    int available=dcache_typed_admission_idle(e,ino,generation,ci);
     pthread_mutex_unlock(mu);
     if (!available) return EFS_ERR_BUSY;
     uint8_t *body=efs_buf_alloc(view->chunk_size);
@@ -5296,7 +5311,7 @@ int efs_dcache_admit_lane_write(efs_ino_t ino, uint64_t generation, uint32_t ci,
     if (rc==EFS_OK) {
         pthread_mutex_lock(mu);
         e=dcache_find_meta(slot,ino,ci);
-        if (e && !dcache_metadata_idle(e)) rc=EFS_ERR_BUSY;
+        if (!dcache_typed_admission_idle(e,ino,generation,ci)) rc=EFS_ERR_BUSY;
         else rc=dcache_store_owned_locked(ino,ci,body,view->chunk_size,NULL);
         if (rc==EFS_OK) {
             e=dcache_find_meta(slot,ino,ci);e->writer=writer;

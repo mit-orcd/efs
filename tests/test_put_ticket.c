@@ -120,6 +120,7 @@ static void metadata(void)
     changed.ino += 4096;
     assert(efs_put_ticket_admit(kv, &changed) == EFS_ERR_PROTO);
     assert(efs_put_ticket_retire(kv, &t) == EFS_ERR_BUSY);
+    assert(efs_put_ticket_retire_published(kv,&t)==EFS_ERR_BUSY);
     assert(efs_put_ticket_reclaim_begin(kv, &t) == EFS_ERR_BUSY);
     /* Faulting the atomic batch cannot publish a mapping without ownership. */
     assert(efs_kv_mem_fail_next_batch(kv) == EFS_OK);
@@ -152,6 +153,7 @@ static void metadata(void)
     assert(efs_put_ticket_reclaim_begin(kv, &orphan) == EFS_OK);
     assert(efs_put_ticket_retire(kv, &orphan) ==
            EFS_ERR_BUSY); /* deletion ACKs missing */
+    assert(efs_put_ticket_retire_published(kv,&orphan)==EFS_ERR_BUSY);
     assert(efs_put_ticket_delete_ack(kv, &orphan, 3) == EFS_ERR_INVAL);
     for (unsigned bit = 1; bit <= 4; bit <<= 1)
         assert(efs_put_ticket_delete_ack(kv, &orphan, bit) == EFS_OK);
@@ -166,7 +168,9 @@ static void metadata(void)
     assert(efs_put_ticket_retire(kv, &t) == EFS_ERR_IO);
     assert(efs_put_ticket_get(kv, &t, &state) == EFS_OK &&
            state == EFS_PUT_TICKET_PUBLISHED);
-    assert(efs_put_ticket_retire(kv, &t) == EFS_OK);
+    assert(efs_put_ticket_retire_published(kv,&t)==EFS_OK);
+    int retired=0;assert(!efs_put_ticket_retired(kv,&t,&retired) && retired);
+    assert(!efs_put_ticket_retire_published(kv,&t));
     assert(efs_put_ticket_retire(kv, &orphan) == EFS_OK);
     assert(efs_put_ticket_get(kv, &orphan, &state) == EFS_ERR_STALE);
     assert(efs_put_ticket_admit(kv, &orphan) == EFS_ERR_STALE);

@@ -7,7 +7,7 @@ struct efs_client_put_request {
     struct efs_put_ticket ticket;
     efs_node_id_t members[EFS_MAX_NODES];
     uint32_t count;
-    int attempted, published;
+    int attempted, published, retired;
 };
 
 /* Mount membership is immutable while a request is outstanding. Addresses
@@ -93,6 +93,18 @@ int efs_client_put_resume(struct efs_client_put_request *r,int probe_only,
 int efs_client_put_free(struct efs_client_put_request *r)
 {
     if (!r) return EFS_OK;
-    if (r->attempted && !r->published) return EFS_ERR_BUSY;
+    if (r->attempted && (!r->published || !r->retired)) return EFS_ERR_BUSY;
     efs_buf_metadata_free(r,sizeof(*r));return EFS_OK;
+}
+
+int efs_client_put_retire(struct efs_client_put_request *r)
+{
+    if (!r) return EFS_ERR_INVAL;
+    if (!r->published) return EFS_ERR_BUSY;
+    if (r->retired) return EFS_OK;
+    int rc=put_members(r);
+    if (rc!=EFS_OK) return rc;
+    rc=efs_client_rpc_put_ticket_retire(&r->ticket);
+    if (rc==EFS_OK)r->retired=1;
+    return rc;
 }
