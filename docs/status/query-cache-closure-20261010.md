@@ -14,7 +14,7 @@ profiling rounds do not satisfy them.
 | Increasing-cardinality RSS, cold-cache, concurrent export/mutation and freshness | 10m complete kernel-cold and concurrent old/new export oracles pass with fixed builder memory; named live contention/freshness passes; full actual scale pending |
 | Synthetic partitioned index of at least 2^32 entries | pending; sparse offset probes alone cannot satisfy this |
 | Replicated persistent feature policy | native, live, restart, quota, lost-reply and fail-closed gates pass |
-| Staged real-filesystem and fault/platform gates | named native and Linux NFSv4.0 pass; actual 400 GiB write/cold/hash/export and Mac NFS execution pending |
+| Staged real-filesystem and fault/platform gates | named native and Linux NFSv4.0 pass; actual 400 GiB write/cold/hash/export pending; virtual-export fix passes native suite plus fresh Mac/Linux NFS; named fix rollout/repeat owed |
 
 ## Aggregate cache admission
 
@@ -732,3 +732,44 @@ statistics checks will be supplemented by this complete fresh-process gate,
 which still owes a passing terminal verdict.
 [Raw logs and harness/library hashes](../../results/measure/20261010-w92-closure/full-stat-oracle/)
 preserve the strengthened checks. W92 remains open.
+
+## Mac NFS handle-recovery fix
+
+A separate user-owned macOS mount succeeded without sudo, resolving the earlier
+stale-mount prerequisite for the platform gate. The complete oracle then failed
+with ESTALE reading a new directory's `.efs/find`. The manual gateway remount
+also omitted `EFS_FUSE_EXPORT=1`; restoring that required flag did not alone fix
+the failure. The standard cluster gateway helper already sets the flag.
+
+A 15-second gateway capture restricted to the `/dev/fuse` descriptor proves the
+sequence for all four command names: successful LOOKUP returns an ephemeral
+virtual node, entry invalidation sends FORGET, then NFS reconstructs the handle
+with `LOOKUP(nodeid, ".")`. The identity was discarded at FORGET, and that lookup
+returned ENOENT, becoming ESTALE at the Mac.
+
+The fix retains an unreferenced identity in the existing fixed 64-slot table
+until recycling, keeps open/lookup references protected, and supports this
+virtual-file self lookup through the existing attribute/feature/permission
+checks. It adds no unbounded cache or new disk format. Recycled node IDs still
+never alias old handles. Focused extracted-code regressions cover FORGET/CLOSE,
+immutable version/size, both pin types, exhaustion/recycling and denied/missing
+handle recovery; they pass on Mac and Linux and are included in `make test`.
+The entire native suite on the host passes with the candidate (exit 0).
+
+With the candidate gateway, the complete Mac NFSv4.0 oracle passes all 141
+payload hashes (561174 bytes), source/help, lookup-only behavior, stats, JSON,
+NUL, fresh-command convergence, retained-result immutability and full paged
+export paths. A further 96 sequential fresh stats requests pass in 9.021 seconds,
+beyond the identity-table capacity. A fresh Linux NFSv4.0 mount passes the same
+complete oracle. The gateway native FUSE path also passes the same 141-file
+full oracle. The new Mac mount is hard/TCP, port 2049 through the existing
+tunnel; the gateway maps all NFS credentials to root, so this is not a UID-501
+ACL-isolation result. NFS restart grace is 90 seconds and was observed before
+the first successful candidate open; it is separate from the captured ESTALE.
+
+[Failure traces, decoded requests and candidate gate results](../../results/measure/20261010-w92-closure/mac-nfs/)
+are preserved. Candidate human version is
+`1a25d20a193b-virtual-export-candidate`, retaining the compatible client build ID
+for this temporary gateway test; the committed named rollout and repeated
+platform gates remain owed. Storage daemons and both large fixtures kept running.
+These command-handle results do not close the original W55 NFS publication incident.
