@@ -5881,6 +5881,26 @@ find/stats checkpoint; never treat the private fixture as deployed acceptance.
 
 ### W93 · Broader durable Raft group commit for tiny-file metadata
 
+**Oct 9 verified-overlap experiment:** `devel-persistence-pressure` adds guarded,
+default-off `EFS_RAFT_BATCH_OVERLAP=1`. Stable follower requests with a verified
+matching prefix and new suffix can start/extend bounded durable cohorts;
+admission and byte accounting cover only new entries. Conflicts, read boundaries,
+term changes and storage failures retain their safety barriers. Actual-core
+ASan/UBSan, Linux core/store/wire, NUC POSIX 212/212, peer 64/64 and private
+read/session/publication/membership partition gates pass. A frozen same-binary
+pair of balanced-group 900-second runs measures 120.30 → 129.66 files/s
+(+7.78%) and total operation p99 363.14 → 342.12 ms. n3/n4 entries per sync
+rise 9.66/1.20 → 11.14/1.33; the serial KV/applied-marker tail persists.
+However group 0 idle/mixed read samples worsen, and baseline GC/reap traffic
+is absent in the enabled interval. This is not causal or repeated acceptance.
+Both loaders drain, replicas cover the leader cut, and 256 first/last exact
+cold payload checks and private sync/append/shutdown/WAL-tail/GC fault gates
+pass; experiments and diagnostics are disabled after restoration. Evidence is in
+[overlap results](../status/w93-overlap-suffix-20261009.md).
+Broader NUC sustained-performance acceptance remains open: settle background
+queues, reverse/repeat the pair, and isolate group 0 read tails before default
+enablement. Earlier AMD acceptance does not prove this extension or a device ceiling.
+
 **Oct 9 further persistence-efficiency work:** Experimental no-op cohort
 continuation and bounded noncommitting-prefix group scheduling are implemented
 on `devel-persistence-pressure`, opt-in via `EFS_RAFT_BATCH_NOOP=1` and
@@ -5947,7 +5967,7 @@ new end-to-end batching acceptance. See
 **Implementation update (Oct 8):** Bounded follower durability batching, durable ACK ordering, storage-failure fencing and committed-prefix protection are implemented. Fault/full Linux/live AMD direct/TCP gates pass. Six balanced 4,096-file same-code mixed-load fixtures pass cold verification and physical reclamation, with overlapping close tails; separate pump/barrier diagnostics are retained.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
-**Class/status:** Performance; implemented and covered AMD gates passed. Bounded follower batching, durable ACK ordering, persistence fencing and committed-prefix protection pass fault/cold/POSIX/peer gates. Controlled batching gains repeat; six balanced long same-code mixed-load fixtures show no consistent tail regression.
+**Class/status:** Performance; base batching implemented and covered AMD gates passed. Bounded follower batching, durable ACK ordering, persistence fencing and committed-prefix protection pass fault/cold/POSIX/peer gates. Earlier controlled AMD batching gains repeat; six balanced long same-code mixed-load fixtures show no consistent tail regression. Broader sustained NUC acceptance and optional Oct 9 scheduling/cohort extensions remain open.
 
 **Evidence:** NUC round 7, `c22754236b38-tiny-r7`, buffered/TCP. In an eight-second
 instrumented window, n3 pump thread 1746498 completed 1,024 Raft `fdatasync`
@@ -5957,7 +5977,7 @@ The trace includes replication/catch-up/background work. See the
 [raw trace](../../results/measure/20261008-nuc-tiny-create/round-7/after/follower-sync.txt)
 and [separate profiles](../../results/measure/20261008-nuc-tiny-create/round-7/after).
 
-**Remaining action:** Retain the bounded batching, fault, cold and same-code mixed-load regressions. W53 end-to-end close tails remain a separate investigation: the diagnostic run does not identify a single pump/barrier stall explaining them. AMD process-crash acceptance is not hardware power-loss or distributed-RDMA proof.
+**Remaining action:** Establish repeatable sustained NUC gains from eligible cohort changes with per-group barrier/entry ratios, idle/mixed p50/p95/p99, bounded memory/queues/lag and the same-code cold/fault gates. A sequential A/B pair is exploratory evidence, not repeatability. Retain base batching regressions. W53 end-to-end close tails remain a separate investigation; W94 client CREATE/lease adoption has independent ownership/fencing prerequisites. Process-crash acceptance is not hardware power-loss or distributed-RDMA proof.
 
 **Governing contracts/related work:** preserve Raft durability, W82 read
 authority, W23/W89 and D30 pressure bounds. W19's older CPU-copy measurement

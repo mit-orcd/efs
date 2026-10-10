@@ -1,0 +1,2 @@
+test_raft: OK
+ASan/UBSan actual-core PASS

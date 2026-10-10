@@ -1,0 +1,6 @@
+test_raft: OK
+test_raft_store: OK
+test_wire: OK
+actual overlap classifier: duplicate/new suffix/conflict/config/log/overflow PASS
+host checkpoint: failed KV sync cannot advance normal/shutdown markers; save failures retained PASS
+host inbox: stable group order, global read/control/config fences, frame/byte bounds PASS
