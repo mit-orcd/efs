@@ -503,3 +503,48 @@ reproduction and sequential logs are retained in the closure evidence directory.
 The export maps every NFS caller to UID/GID 0; these gates certify that actual
 policy and do not claim per-client UID authorization. Mac native execution,
 persistent remote export policy and the large scale gates remain open.
+
+## Remaining real-payload capacity fixture plan
+
+The historical 400 GiB actual-payload requirement is still open; synthetic files
+are not a substitute. Production quotas total 300 GiB raw and cannot hold that
+2+1 payload safely. Provision three fresh capped 270 GiB XFS test volumes on
+the same Xorinox VMs and run a separate direct-I/O/TCP/files namespace on port
+18432, with 250 GiB quota per node and a distinct client mount. Existing port
+17432 services and /data1 are retained. About 600 GiB raw fragments plus metadata
+fit those private quotas; host physical capacity must be rechecked before launch.
+The generator will stream bounded deterministic nonzero payloads, fsync every
+acknowledged file, and independently verify all data and exact query totals
+through a fresh client after a cold restart. Record namespace cardinality and
+measured physical/logical allocation separately from the actual synthetic gate.
+Do not format any existing filesystem or expand production quotas. The private
+units/disks must be addressed explicitly; shared helpers that discover all efsd
+processes cannot distinguish both namespaces. This is a proposed fixture, not
+a completed gate or an end-to-end billions-of-file capacity claim.
+
+The three private 270 GiB raw disks have now been serial-verified, formatted
+without force, and mounted separately. The port-18432 namespace uses 250 GiB
+per-node quotas and explicit units `w92-capacity-efsd`. Client 115 runs
+`w92-capacity-400g-20261010` detached. The 80-file/20 MiB smoke write and
+independent full hash/stat verification pass; this is a harness check only.
+At the first compact progress check, 23936 of 1638400 real files were acknowledged.
+Full write, cold recovery, every-payload and complete-export gates remain pending.
+
+The first capacity writer stopped at 09:33:38 UTC with exit 1 after 124983
+acknowledged files (32763543552 payload bytes), before the 400 GiB gate. The
+client reported CREATE PROTO (-7), not ENOSPC; all three private daemons remained
+active with about 248 GiB free each and no PUT/disk-write errors. The original
+[failed-run checkpoints](../../results/measure/20261010-w92-closure/w92-capacity-write-failed/write.log)
+are retained. A later diagnostic exclusive CREATE for the absent failing name
+succeeded and left an unacknowledged zero-byte tail. The explicit resume harness
+rehashes every acknowledged payload before proceeding and only rewrites the
+unacknowledged tail, recording each repair. Its full-acknowledgement 80-file
+smoke passes. This recovery does not convert the failed run into a passed gate.
+
+Review found a concrete retained-CREATE retry defect: an initial probe can return
+BUSY before parent ReadIndex determines the route; the client incorrectly
+converted that response to PROTO. The proposed fix preserves BUSY and the exact
+operation identity, and admits/submits nothing until a route is received. The
+actual extracted CREATE regression now exercises three such probes and passes
+on Mac; candidate Linux/live and native repetition follow. The original log
+without per-probe tracing does not prove which validation branch fired.

@@ -585,7 +585,7 @@ static int commands_enabled(void)
 {
     const char *v=getenv("EFS_COMMANDS");
     return v && !strcmp(v,"1") &&
-           (features_current() & EFS_FEATURES_DEFAULT)==EFS_FEATURES_DEFAULT;
+           (features_current() & EFS_FEATURES_DEFAULT)!=0;
 }
 static int command_script(const char *term)
 {
@@ -1532,7 +1532,7 @@ static int efs_fuse_getattr_ino(fuse_ino_t ino, struct stat *stbuf,
     }
     if (vk == 2) {
         struct efs_inode parent;
-        if (!feature_enabled(EFS_FEATURE_FIND))
+        if (!commands_enabled())
             return -ENOENT;
         if (efs_client_stat_ino(virt_parent(ino), &parent) != EFS_OK)
             return -ENOENT;
@@ -1546,11 +1546,10 @@ static int efs_fuse_getattr_ino(fuse_ino_t ino, struct stat *stbuf,
         char term[EFS_MAX_NAME];
         char query_path[EFS_MAX_PATH];
         struct efs_inode parent;
-        if (!feature_enabled(EFS_FEATURE_FIND))
+        if (!commands_enabled())
             return -ENOENT;
         if (vq_lookup(ino, &dir_ino, term, sizeof(term)) != 0)
             return -ENOENT;
-        if (!commands_enabled()) return -ENOENT;
         rc=virtual_access(dir_ino);if (rc) return rc;
         if (command_script(term)) {
             memset(stbuf,0,sizeof(*stbuf));stbuf->st_ino=ino;stbuf->st_mode=S_IFREG|0555;stbuf->st_nlink=1;
@@ -1747,7 +1746,7 @@ static int efs_fuse_readdir_ino(fuse_ino_t ino, struct readdir_collect_arg *col,
         return 0;
     }
     if (virt_kind(ino) == 2) {
-        if (!feature_enabled(EFS_FEATURE_FIND))
+        if (!commands_enabled())
             return -ENOENT;
         return 0; /* .find lists nothing; queries are explicit lookups */
     }
@@ -2310,13 +2309,12 @@ static int efs_fuse_open_ino(fuse_ino_t ino, struct fuse_file_info *fi)
         efs_ino_t dir_ino;
         char term[EFS_MAX_NAME];
         char query_path[EFS_MAX_PATH];
-        if (!feature_enabled(EFS_FEATURE_FIND))
+        if (!commands_enabled())
             return -ENOENT;
         if ((fi->flags & O_ACCMODE) != O_RDONLY)
             return -EACCES;
         if (vq_lookup(ino, &dir_ino, term, sizeof(term)) != 0)
             return -ENOENT;
-        if (!commands_enabled()) return -ENOENT;
         if (command_script(term)) {
             int access=virtual_access(dir_ino);if (access) return access;
             int rc=virtual_file_open(fi,ino,efs_command_source,sizeof(efs_command_source)-1);
@@ -2423,7 +2421,7 @@ static int efs_fuse_read_ino(fuse_ino_t ino, char *buf, size_t size, off_t offse
         efs_ino_t dir_ino;
         char term[EFS_MAX_NAME];
         char query_path[EFS_MAX_PATH];
-        if (!feature_enabled(EFS_FEATURE_FIND))
+        if (!commands_enabled())
             return -ENOENT;
         if (vq_lookup(ino, &dir_ino, term, sizeof(term)) != 0)
             return -ENOENT;
@@ -5317,7 +5315,7 @@ static int efs_fuse_lookup_at(fuse_ino_t parent, const char *name,
             int access=virtual_access(virt_parent(parent));if (access) return access;
         }
         fuse_ino_t q;
-        if (!feature_enabled(EFS_FEATURE_FIND))
+        if (!commands_enabled())
             return -ENOENT;
         if (strcmp(name, ".") == 0)
             return lookup_fill(parent, e, NULL);
@@ -5903,7 +5901,7 @@ static void ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
         return;
     }
     if (vk == 2 || vk == 4) {
-        if (!commands_enabled() || !feature_enabled(EFS_FEATURE_FIND)) {
+        if (!commands_enabled()) {
             t_req = NULL;
             fuse_reply_err(req, ENOENT);
             return;

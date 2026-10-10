@@ -27,10 +27,17 @@ int main(void) {
   assert(policy(txn[i],0,EFS_ERR_NOMEM)==EFS_ERR_NOMEM);
   for(unsigned j=0;j<sizeof(business)/sizeof(business[0]);j++)assert(policy(txn[i],0,business[j])==EFS_OK);
  }
+ for(unsigned j=0;j<sizeof(business)/sizeof(business[0]);j++) {
+  int value=business[j];
+  int expected=(value==EFS_ERR_STALE || value==EFS_ERR_PROTO || value==EFS_ERR_INVAL)?EFS_OK:value;
+  assert(policy(EFS_MD_CMD_QUERY_POLICY,0,value)==expected);
+ }
+ assert(policy(EFS_MD_CMD_QUERY_POLICY,0,EFS_ERR_IO)==EFS_ERR_IO);
+ assert(policy(EFS_MD_CMD_QUERY_POLICY,0,EFS_ERR_NOMEM)==EFS_ERR_NOMEM);
  assert(policy(EFS_MD_CMD_SESSION,EFS_MD_SESS_FENCE_LOC,EFS_ERR_BUSY)==EFS_OK);
  assert(policy(EFS_MD_CMD_SESSION,EFS_MD_SESS_FENCE_LOC,EFS_ERR_IO)==EFS_ERR_IO);
  assert(policy(EFS_MD_CMD_PUT_TICKET_ADMIT,0,EFS_ERR_IO)==EFS_ERR_IO);
- puts("transaction/publication Raft apply: IO/NOMEM preserve pending index; business conflicts advance with ring verdict; session fence and ticket storage failures retry PASS");
+ puts("transaction/publication Raft apply: IO/NOMEM preserve pending index; business conflicts advance with ring verdict; policy CAS conflicts advance while policy IO/NOMEM/BUSY retry; session fence and ticket storage failures retry PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-txn-apply-return-') as d:

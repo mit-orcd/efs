@@ -63,8 +63,8 @@
 #define EFS_HEARTBEAT_MS     2000
 #define EFS_IO_TIMEOUT_MS    30000
 
-/* Query capability mask. Server startup policy gates advertisement; these
- * bits are not a persisted per-export policy or a live efs-mgmt toggle. */
+/* Durable single-export query policy mask. Advertisement and query RPCs
+ * intersect it with the local server startup capability ceiling. */
 #define EFS_FEATURE_STATS    (1u << 0) /* serve directory stats queries */
 #define EFS_FEATURE_FIND     (1u << 1) /* serve directory name queries  */
 #define EFS_FEATURES_DEFAULT (EFS_FEATURE_STATS | EFS_FEATURE_FIND)

@@ -65,3 +65,5 @@ __pycache__/
 /tests/test_store_containers
 
 /tests/test_put_storage_fence
+
+/tests/test_query_policy

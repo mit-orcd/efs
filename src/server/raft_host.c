@@ -1,3 +1,4 @@
+#include "efs/query_policy.h"
 #include "server_internal.h"
 #include "efs/checksum.h"
 #include "efs/raft.h"
@@ -2643,6 +2644,11 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP)
               ? EFS_OK
               : rc;
+    /* Policy CAS rejection is a durable logical verdict, not a reason to
+     * retry this same committed index forever. Storage/pressure failures keep
+     * their core error and retry; the policy did not become visible. */
+    if(cmd[0]==EFS_MD_CMD_QUERY_POLICY &&
+       (rc==EFS_ERR_STALE || rc==EFS_ERR_INVAL || rc==EFS_ERR_PROTO))ret=EFS_OK;
     /* FENCE_LOC BUSY must let a later RESOLVE drain the owner intent. It is
      * a rejected command, not a retryable storage failure at this log index. */
     if (cmd[0] == EFS_MD_CMD_SESSION && clen >= 2 &&
@@ -2981,6 +2987,10 @@ static int host_maybe_snapshot(struct efs_raft_host *h, int gi)
 static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t term, uint8_t group,
                                const uint8_t *cmd, uint32_t clen)
 {
+    if (cmd[0] == EFS_MD_CMD_QUERY_POLICY) {
+        if(clen!=13 || group!=efs_raft_shard_group(1))return EFS_ERR_INVAL;
+        return efs_query_policy_apply(h->kv,rd64be(cmd+1),rd32be(cmd+9));
+    }
     if (cmd[0] == EFS_MD_CMD_MKFS)
         return apply_mkfs_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_SALT)
@@ -4231,7 +4241,11 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
      * A follower's local apply result is not the leader's allocation: its
      * cross-group physical EOF can have advanced independently. Retry the
      * inode RPC on the leader, including a role change after admission. */
-    if (cmd && clen && cmd[0] == EFS_MD_CMD_APPEND_RSV)
+    /* Policy replies carry a policy version, not a Raft index. If leadership
+     * changed after its handler check, let the explicit CAS caller redirect;
+     * never feed that version into this generic apply-ring waiter. */
+    if (cmd && clen && (cmd[0] == EFS_MD_CMD_APPEND_RSV ||
+                        cmd[0] == EFS_MD_CMD_QUERY_POLICY))
         return EFS_ERR_NOT_PRIMARY;
     rc = host_remote_cmd(h, group, cmd, clen, &rep, lid);
     if (rc != EFS_OK)
@@ -8222,6 +8236,24 @@ static int host_query_disk_cancel(void *ctx)
     struct efs_raft_host *h=ctx;
     return !__atomic_load_n(&h->query_running,__ATOMIC_ACQUIRE);
 }
+static int host_query_policy_authority(uint32_t *mask)
+{
+    uint8_t request[2]={efs_raft_shard_group(1),EFS_MD_REQ_QUERY_POLICY};
+    struct efs_msg_raft_mkfs_reply reply;
+    struct host_view view;host_view_get(g_host,request[0],&view);
+    int rc=EFS_OK;
+    if(view.has && view.role==EFS_RAFT_LEADER)
+        server_raft_host_submit(request,sizeof(request),&reply);
+    else rc=host_remote_cmd(g_host,request[0],request+1,1,&reply,-1);
+    if(rc){*mask=0;return rc;}
+    *mask=reply.rc?0:(uint32_t)reply.salt;return reply.rc;
+}
+static int host_query_policy_operation(uint8_t operation)
+{
+    uint32_t mask=0;int rc=host_query_policy_authority(&mask);
+    if(rc)return rc;
+    return mask&(operation==EFS_QUERY_STATS?EFS_FEATURE_STATS:EFS_FEATURE_FIND)?EFS_OK:EFS_ERR_NOT_FOUND;
+}
 static void *host_query_thread(void *ctx)
 {
     struct efs_raft_host *h=ctx;
@@ -8254,6 +8286,8 @@ static void *host_query_thread(void *ctx)
     while (__atomic_load_n(&h->query_running,__ATOMIC_ACQUIRE)) {
         usleep(100000);
         query_page_sweep(0);
+        uint64_t policy_version;uint32_t policy_mask;
+        if(efs_query_policy_get(h->kv,&policy_version,&policy_mask) || !policy_mask)continue;
         uint64_t now=query_mono_ms(),dirty=0;
         if (now-last_attempt<200) continue;
         int rc=efs_kv_lsm_metadata_revisions(h->kv,current,4096);
@@ -8688,11 +8722,14 @@ static int query_consume(void *ctx,const struct efs_server_query_view *view,int 
     if (!rc) r->text_len=q->len;
     return rc;
 }
-/* Startup policy is immutable for a process; change it on every node and
- * restart gracefully. It gates both wire versions, not only synthetic paths. */
+/* Startup capability is a local ceiling. Durable export policy is resolved
+ * through current authority and also gates raw query RPCs and continuations. */
 uint32_t server_raft_host_query_features(void)
 {
-    return g_host && g_host->query_enabled && g_host->query_started ? EFS_FEATURES_DEFAULT : 0;
+    uint32_t mask=0;
+    if(!g_host || !g_host->query_enabled || !g_host->query_started ||
+       host_query_policy_authority(&mask))return 0;
+    return mask;
 }
 int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,const struct efs_query_filters *filters,void **out,uint32_t *len)
 {
@@ -8710,6 +8747,8 @@ int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,con
         (req->version>=EFS_QUERY_COMMAND_VERSION && (strlen(req->term)>120 ||
         (!req->term[0] && req->match!=EFS_NAME_PREFIX && req->match!=EFS_NAME_CONTAINS)))))
         return EFS_ERR_INVAL;
+    int policy_rc=host_query_policy_operation(req->operation);
+    if(policy_rc)return policy_rc;
     if (__atomic_add_fetch(&query_requests,1,__ATOMIC_RELAXED)>8) {
         __atomic_sub_fetch(&query_requests,1,__ATOMIC_RELAXED);return EFS_ERR_BUSY;
     }
@@ -8731,6 +8770,7 @@ int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,con
     reply->version=req->version;
     int rc=q.auth ? server_raft_host_query_read(query_consume,&q,&reply->primary_id) : EFS_ERR_NOMEM;
     free(q.auth);
+    if(!rc)rc=host_query_policy_operation(req->operation);
     reply->status=rc;
     if (rc) reply->text_len=0; /* never deliver a partial result as success */
     *out=reply;*len=sizeof(*reply)+reply->text_len;
@@ -8757,6 +8797,8 @@ int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void
         !memchr(req->base.term,0,sizeof(req->base.term)) || strlen(req->base.term)>120 ||
         strchr(req->base.term,'/') || !efs_query_filters_valid(&req->filters) ||
         (!req->base.term[0] && req->base.match!=EFS_NAME_PREFIX && req->base.match!=EFS_NAME_CONTAINS)) return EFS_ERR_INVAL;
+    int policy_rc=host_query_policy_operation(req->base.operation);
+    if(policy_rc && req->limit)return policy_rc;
     if (pthread_mutex_trylock(&query_page_mu)) return EFS_ERR_BUSY;
     int rc=EFS_OK,created=0;
     uint64_t now=query_mono_ms();
@@ -8815,6 +8857,7 @@ int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void
         q.auth=calloc(HOST_QUERY_AUTH_N,sizeof(*q.auth));
         rc=q.auth ? query_consume(&q,&query_page_session.view,query_page_session.refresh_error) : EFS_ERR_NOMEM;
         free(q.auth);
+        if(!rc)rc=host_query_policy_operation(req->base.operation);
         if (rc && created) query_page_clear();
     }
     reply->status=rc;if (rc) reply->text_len=0;
@@ -9523,6 +9566,22 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     group = payload[0];
     cmd = payload + 1;
     clen = plen - 1;
+    if(clen && (cmd[0]==EFS_MD_CMD_QUERY_POLICY || cmd[0]==EFS_MD_REQ_QUERY_POLICY)) {
+        if(group!=efs_raft_shard_group(1) ||
+           clen!=(cmd[0]==EFS_MD_CMD_QUERY_POLICY?13u:1u)) {out->rc=EFS_ERR_INVAL;return;}
+        struct host_view view;host_view_get(h,group,&view);
+        if(!view.has || view.role!=EFS_RAFT_LEADER) {
+            out->rc=EFS_ERR_NOT_PRIMARY;
+            out->leader_hint=view.has?view.leader:-1;return;
+        }
+        if(cmd[0]==EFS_MD_CMD_QUERY_POLICY)
+            rc=host_propose_wait_idx(h,group,cmd,clen,&hint,&idx);
+        else rc=EFS_OK;
+        uint64_t version=0;uint32_t mask=0;
+        if(!rc)rc=host_read_index(h,group,&hint);
+        if(!rc)rc=efs_query_policy_get(h->kv,&version,&mask);
+        out->rc=rc;out->leader_hint=hint;out->index=version;out->salt=mask;return;
+    }
     if(clen>=2 && cmd[0]==EFS_MD_CMD_SESSION &&
        (cmd[1]==EFS_MD_SESS_STORAGE_FENCE || cmd[1]==EFS_MD_SESS_FINISH)) {
         if(clen!=HOST_SESS_CREATE_LEN && !(cmd[1]==EFS_MD_SESS_FINISH && clen==HOST_SESS_HDR_LEN)){

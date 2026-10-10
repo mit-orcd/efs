@@ -100,7 +100,7 @@ Expiry is **unavailable**. These commands do not set deadlines, renew files or
 schedule deletion. Expiry arguments are rejected, not silently ignored. See the
 [expiry test status](../status/efs-command-options-20261008.md#expiry-testing).
 For activation and restart/catch-up behavior, see
-[server policy](../status/efs-command-policy-20261008.md).
+[persistent server policy](../status/efs-query-persistent-policy-20261010.md).
 
 Human status on stderr uses relative freshness, for example:
 
@@ -142,3 +142,27 @@ fail. Stale/corrupt checkpoints are rebuilt after authority checks. A misplaced
 live directory entry can refuse the entire candidate; raising a memory budget
 does not repair that condition. Do not edit authoritative metadata to clear a
 cache error. See [W92 deployment and remaining gates](../status/query-disk-backend-20261009.md).
+
+## Administrator command policy
+
+On the W92 candidate, the single `default` export has a durable versioned mask.
+Use the current management binary on the trusted cluster network:
+
+```sh
+efs-mgmt commands-policy NODE:PORT get
+# Use the version returned above; this example assumes version 0.
+efs-mgmt commands-policy NODE:PORT set 3 0
+```
+
+Mask 0 disables queries; 1 permits stats; 2 permits find and ls; 3 permits both.
+A set requires the exact current version and increments it, even for the same
+mask. A stale version is refused. After a lost reply, get the current state
+before deciding whether another set is needed. Policy survives restart. This
+interface does not add authenticated administration or multiple exports.
+
+The mount still requires `EFS_COMMANDS=1`. A node started with
+`EFS_COMMANDS_SERVER=0` cannot serve commands even when durable policy permits
+them. Fresh queries and export pages check server policy and current quorum;
+already acquired immutable bytes remain readable. Ordinary file I/O continues
+when command policy is disabled. Final candidate rollout/scale acceptance is
+tracked in the [W92 ledger](../status/query-cache-closure-20261010.md).
