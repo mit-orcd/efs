@@ -6033,13 +6033,14 @@ static void ll_fallocate_run(fuse_req_t req, fuse_ino_t ino, int mode, off_t off
     if (rc != EFS_OK) {
         lookup_memo_mutation_end();
         t_req = NULL;
-        fuse_reply_err(req, efs_rc_to_errno(rc));
+        fuse_reply_err(req, -efs_rc_to_errno(rc));
         return;
     }
-    if (efs_client_stat_ino((efs_ino_t)ino, &row) != EFS_OK) {
+    rc = efs_client_stat_ino((efs_ino_t)ino, &row);
+    if (rc != EFS_OK) {
         lookup_memo_mutation_end();
         t_req = NULL;
-        fuse_reply_err(req, ENOENT);
+        fuse_reply_err(req, -fuse_stat_errno(rc));
         return;
     }
     if (efs_mode_is_dir(row.mode)) {

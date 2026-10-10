@@ -139,3 +139,19 @@ other refusal statuses make one mutation attempt; a NOT_EMPTY rmdir retains
 exactly twenty bounded attempts, and failed source discovery/authorization make
 none. The unchanged callback fails the overflow assertion. This follows W84's
 explicit refusal contract but does not extend its accepted participant envelope.
+
+## FALLOCATE reply sign and unavailable metadata
+
+The FALLOCATE callback passed a negative errno to `fuse_reply_err()`, whose
+argument must be nonnegative, when publishing buffered data failed. It also
+reported every failed post-publication inode stat as ENOENT. The callback now
+uses the correct reply sign and existing authoritative-stat error mapping,
+without proceeding to size mutation on either failure.
+
+Its actual-function regression checks positive errno for quota, IO, network,
+admission, memory, permission and capacity failures; metadata failure remains
+distinct from absence. Request context and lookup-memo mutation ownership are
+cleared before every reply. Existing successful/in-range/unsupported/invalid
+extent behavior and truncate errno are preserved. The original source fails
+the positive-errno assertion. The memo regression now compiles the actual
+status helper used by this callback.

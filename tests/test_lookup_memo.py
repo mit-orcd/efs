@@ -108,7 +108,7 @@ static void fuse_reply_attr(fuse_req_t r,struct stat *s,double timeout) { (void)
 static void fuse_reply_entry(fuse_req_t r,struct fuse_entry_param *e) { (void)r;(void)e; }
 static int fuse_reply_open(fuse_req_t r,struct fuse_file_info *fi) { (void)r;(void)fi; return 0; }
 static int efs_fuse_release_ino(fuse_ino_t ino,struct fuse_file_info *fi) { (void)ino;(void)fi; return 0; }
-''' + "\n".join(function(name) for name in callbacks) + r'''
+''' + "\n".join(function(name) for name in ["fuse_stat_errno"] + callbacks) + r'''
 static void seed(void) {
     t_lookup_memo_serial=lookup_memo_start();
     lookup_memo_put(&current);
