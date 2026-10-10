@@ -51,8 +51,10 @@ index tests must not be presented as real multi-billion-file EFS acceptance.
 [Oct 9 disk backend progress](query-disk-backend-20261009.md) records the new
 persistent partition implementation and initial functional gates. The authorized clean Xorinox
 namespace passes mutation query oracles; the earlier retained-data refusal is
-historical. Per-generation logical disk budgeting is implemented. Incremental
-derived statistics, aggregate cache quotas and large-scale acceptance remain open.
+historical. Per-generation logical disk budgeting is implemented. The [Oct 10 closure work](query-cache-closure-20261010.md) implements incremental
+exact statistics, durable partition checkpoints/catch-up and aggregate cache
+admission. Native, live cold and disabled/re-enabled payload oracles pass;
+actual scale and the remaining fault/platform acceptance are still open.
 Raising the RAM cap alone cannot close W92. Full architecture implementation and
 these scale gates remain open.
 

@@ -38,10 +38,15 @@ def reader():
     # Small explicit buffers avoid exhausting the separate reply-memory cap.
     successes=0
     generations=set()
+    sampled=[]
+    busy=0
     while time.monotonic()<end:
+        started=time.monotonic()
         reply,text=query(int(os.environ['EFS_QUERY_TEST_PORT']),request(
             version=2,operation=1,root=root_ino,uid=os.getuid(),gid=os.getgid(),match=3,term=b'',max_output=4<<20))
+        if len(sampled)<4096:sampled.append((time.monotonic()-started)*1000)
         if reply.status:
+            busy+=1
             assert reply.status==-13 and not text,('concurrent query failure',reply.status)
             continue  # bounded BUSY during mutations; never partial success
         result=json.loads(text)
@@ -50,7 +55,10 @@ def reader():
         assert result['snapshot']['generation']==reply.generation
         generations.add(reply.generation)
         successes+=1
-    return successes,sorted(generations)
+    ordered=sorted(sampled)
+    def pct(p):return ordered[min(len(ordered)-1,int((len(ordered)-1)*p))] if ordered else 0
+    return successes,sorted(generations),dict(sampled_requests=len(ordered),busy_requests=busy,
+        query_p50_ms=pct(.5),query_p95_ms=pct(.95),query_p99_ms=pct(.99))
 
 generations=[]
 with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
@@ -65,7 +73,7 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
         print('loaded snapshot '+json.dumps(snap,sort_keys=True),flush=True)
     counts=[t.result(timeout=30) for t in tasks]
     reader_results=[t.result(timeout=30) for t in readers]
-assert all(count>1 and len(gens)>1 for count,gens in reader_results),reader_results
+assert all(count>1 and len(gens)>1 for count,gens,_ in reader_results),reader_results
 print('concurrent readers and publication PASS '+str(reader_results),flush=True)
 assert sum(counts)>100,counts
 assert len(set(generations))>1,('publication starved under ordinary writes',generations)

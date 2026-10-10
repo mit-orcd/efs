@@ -81,9 +81,21 @@ static int incremental_nodes(struct efs_query_disk *d,struct efs_query_disk *old
             if(lookup && lookup!=EFS_ERR_NOT_FOUND){rc=lookup;break;}
             found=!lookup;
             /* Own-shard lane/PVER/DSEQ changes can affect getattr even if the
-             * inode row is identical. Re-fold every inode in a revised part. */
+             * inode row is identical. Re-fold unless all stat inputs are proved row-only. */
             fold=1;
-            if(found){n.stat=before.stat;n.rollup=before.rollup;n.link=before.link;n.children=before.children;}
+            if(found){
+                n.stat=before.stat;n.rollup=before.rollup;n.link=before.link;n.children=before.children;
+                /* With no stat inputs outside an identical canonical row,
+                 * another inode's own-shard edit cannot change this stat.
+                 * Regular files also require an empty APPEND_CUR family in
+                 * both views; otherwise even inactive lanes may have an open
+                 * append frontier. Keep all lane/auxiliary cases conservative. */
+                int row_only=S_ISDIR(n.row.mode)?n.row.layout==EFS_META_LAYOUT_LOCAL:
+                    (S_ISREG(n.row.mode) && !n.row.active_lanes &&
+                     d->part[shard].begin[4]==d->part[shard].end[4] &&
+                     old->part[shard].begin[4]==old->part[shard].end[4]);
+                if(row_only && !memcmp(&n.row,&before.row,sizeof(n.row)))fold=0;
+            }
         }
         if(!rc && !same)d->part[shard].dependencies|=dependency_bits(&n.row);
         if(!rc && fold){rc=efs_meta_apply_getattr(&d->kv,n.row.ino,refuse_coord,NULL,&n.stat);if(!rc && d->refolded<UINT32_MAX)d->refolded++;}

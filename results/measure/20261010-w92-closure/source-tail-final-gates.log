@@ -1,0 +1,7 @@
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"' -DEFS_VERSION='"unknown"' -DEFS_GIT_BRANCH='"unknown"' -DEFS_BUILD_TIME='"2026-10-10T08:20:08Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_kv_snapshot_tail tests/test_kv_snapshot_tail.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"' -DEFS_VERSION='"unknown"' -DEFS_GIT_BRANCH='"unknown"' -DEFS_BUILD_TIME='"2026-10-10T08:20:08Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_kv_lsm tests/test_kv_lsm.c libefs.a -lpthread -lm -ldl -libverbs
+make: 'tests/test_query_disk' is up to date.
+make: 'tests/test_query_disk_io' is up to date.
+make: 'tests/test_query_catalog' is up to date.
+test_kv_snapshot_tail: tests/test_kv_snapshot_tail.c:34: main: Assertion `kv_seg_iter_seek(it,(const uint8_t *)"a",1)==EFS_ERR_BUSY && !it->blk && !it->ra' failed.
+bash: line 1: 218452 Aborted                 (core dumped) ./tests/test_kv_snapshot_tail

@@ -92,7 +92,19 @@ complete (231.9 s fresh, 2.43 s mutation), and full native gates pass.
 The actual 2^32-entry generator is running on the isolated capped disk. A separate
 ten-million cold-hint catch-up/full-stream oracle passes. Deployed command/pages
 and concurrent publication gates pass, including all 2131 payload hashes and
-measured convergence under contention; recovery/platform/full scale remain open.
+measured convergence under contention. Live disabled/re-enabled catch-up rebuilds
+seven partitions and verifies all 500 fsynced payloads; 26 cold persistence cases
+pass. Aggregate QUOTA refusal and subsequent cold recovery verify another 500
+payloads and exact totals. The first scale source hit its inherited descriptor
+boundary; the fresh retry was intentionally stopped to provision source VM RAM.
+Both partial fixtures are preserved; the latest-code full-scale run is pending.
+Publisher-loss/interrupted-cache recovery also pass: fresh-client verification
+of all 2100 acknowledged payloads, exact totals, orphan cleanup and old-token STALE.
+A final audit bounded source scan scratch and unknown-tail exclusion; focused gates pass.
+Row-only inode stat reuse also passes single-edit and append-cursor invalidation
+regressions; an overflow-probe test race exposed by the full suite is isolated,
+and the corrected complete native suite passes.
+Deployment and platform/full scale validation remain pending.
 Large-export total lifetime is now
 configurable with bounded retention and unchanged idle/permission checks.
 

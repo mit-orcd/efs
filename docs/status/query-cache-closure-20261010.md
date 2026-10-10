@@ -8,10 +8,10 @@ profiling rounds do not satisfy them.
 | Gate | Current state |
 |---|---|
 | Immutable disk catalog, incremental exact aggregates, bounded builder scratch | implemented, differential/live/cold gates pass in previous checkpoint |
-| Aggregate retained-cache admission | implemented; focused and complete native suites pass; live deployment gate pending |
-| Durable changed-key watermarks and bounded catch-up/recovery | durable partition revisions, restart catch-up and bounded discovery implemented; focused and full native gates pass; live validation pending |
+| Aggregate retained-cache admission | implemented; native and live QUOTA/write/cold-recovery oracles pass |
+| Durable changed-key watermarks and bounded catch-up/recovery | durable partition revisions, restart catch-up and bounded discovery implemented; focused/full native and live cold/disable-re-enable/publisher-loss/interrupted-cache gates pass |
 | Explicit cardinality/offset/budget audit | revision saturation, complete source-allocation budgeting and representation audit complete; actual scale/live validation pending |
-| Increasing-cardinality RSS, cold-cache, concurrent export/mutation and freshness | pending |
+| Increasing-cardinality RSS, cold-cache, concurrent export/mutation and freshness | pilots and live contention/freshness pass; full actual scale and final source-scratch deployment pending |
 | Synthetic partitioned index of at least 2^32 entries | pending; sparse offset probes alone cannot satisfy this |
 | Staged real-filesystem and fault/platform gates | previous smaller gates pass; closure matrix pending |
 
@@ -222,12 +222,14 @@ See [version-5 evidence](../../results/measure/20261010-w92-closure/scale-10m-v5
 | Work counters | uint32 refold count saturates; rebuilt partitions at most 4096 | diagnostic work counters do not define namespace size |
 | Incremental changes/ancestors | 1024 entries each, sorted fixed arrays | overflow triggers a full bounded-memory background rebuild, not silent omission |
 | Lane dependencies / decoded inode cache | 64-bit filter per partition; 64 decoded nodes | fixed resident allocations; filter collisions only add work |
+| Query-source scan scratch | at most 256 relevant segments, 128 KiB per iterator block, no sequential readahead; below 33 MiB total | prefix filtering precedes bounded allocation; excessive fan-in/block size refuses BUSY |
 | Source snapshot admission | 64 MiB host limit, complete retained source allocation charged | segment objects/indexes borrowed from authoritative KV are outside the cache snapshot allocation and included in process RSS measurements |
 | Source revision checkpoints | 4096 uint64 counters, fixed sidecar and 128-bit lineage | saturation refuses comparison; invalid history forces derived rebuilding |
 | Query page | uint32 visit budget: v1 at most 1,000,000, v4 paged at most 100,000; requested results at most 10,000 | bounded per call; full export resumes uint64 cursor across pages |
 | Wire output / server reply allocation | output at most 16 MiB; aggregate reply admission 64 MiB | larger namespaces stream; no complete result buffered on server |
 | Authorization scratch / paged export lease | 8192 fixed authorization entries; one server page session, 60 s idle / configurable finite total lease | concurrent exporters may receive BUSY; expired sessions refuse stale continuation |
 | Python display/export | display at most 10,000 entries; file export consumes pages of 1000 | ordering a bounded display is not sorting every file in RAM |
+| Authoritative source segment indexes/descriptors | borrowed from KV, not charged as query allocations; process/VM provisioning measured separately | whole-process RSS includes them; the synthetic process has finite NOFILE 524288, query read descriptors remain 32 |
 | Cache logical disk quotas | default 16 GiB generation, 32 GiB root; each configurable up to 16 TiB | scale requires explicit provision/configuration; shared links charged conservatively |
 
 The native cache working estimate includes fixed record/sort buffers and candidate
@@ -325,3 +327,116 @@ mount; exact counts/545536 bytes converged 6.775 s after the writer phase. Creat
 latency p50/p95/p99 was 44.33/97.91/189.52 ms while other live suites and the
 low-priority scale generator shared the VMs. This is a functional contention and
 truthful freshness measurement, not an uncontended throughput baseline.
+
+
+## Disabled tracking, cold payloads and aggregate refusal
+
+All daemons were restarted with `EFS_COMMANDS_SERVER=0`: capabilities were zero
+and queries refused without successful bytes. A normal client fsynced 500 fresh
+4096-byte payloads. After re-enable, every payload passed its independent oracle;
+exact 500-file/2048000-byte stats returned with refresh_error=0. Startup logs show
+`query-catchup: rc=0`, only seven rebuilt partitions and 755 inode refolds in
+4619 ms. This demonstrates durable tracking while the query worker is disabled,
+not a full 4096-partition rediscovery. All 26 independently derived persistence
+cases also survive this cold restart. Core POSIX is 212/212 on each client,
+concurrent 64/64; extras 4 pass and the existing mmap limitation is skipped.
+
+The aggregate-limit phase configured 1 MiB on every publisher. It returned
+QUOTA (-11), empty failure output, and retained advertised capabilities. The
+first harness incorrectly required the same error again in refresh_error;
+request status already carries it, so the corrected gate accepts either error
+location while forbidding successful bytes. The retry fsynced and independently
+verified another 500 payloads (2048000 bytes) despite cache refusal. Normal
+limits were restored after the phase. All 500 payloads pass again after restart;
+exact 500-file/2048000-byte stats return with refresh_error=0.
+
+## Source-engine descriptor boundary in the actual-entry gate
+
+The first 2^32-target run stopped during source population at 75.854 s, before
+any disk-catalog acceptance. Its inherited soft NOFILE limit was 1024 and its
+source directory had 1020 files; peak process RSS was 142436 KiB. The failed
+fixture/logs are retained and not counted as a populated billions-entry index.
+The printed `files` value in failed population records is the requested target,
+not proof of actual records. The recovery diagnostic on the already failed source
+did not directly reproduce EMFILE, so that trace alone does not prove the cause.
+
+A fresh retry started at 131072 descriptors and remained active past 4101 open
+source descriptors, beyond the original limit. Its finite process limit was
+subsequently raised to the existing hard limit, 524288, to provision the entire
+source segment set; the directory/screen label retains `fd131072` to preserve
+launch history. The query disk read cache is still 32 descriptors. Authoritative
+KV segment descriptors and sparse indexes are separate source-engine costs,
+included in process measurements rather than hidden as query allocations.
+The private generator uses nice 19, idle IO and oom_score_adj=700, preferring it
+over production daemons under memory pressure. Neither failed/progress runs nor
+raising source resource limits satisfy the required actual-entry acceptance.
+
+
+## Live publisher loss and interrupted derived recovery
+
+A paged export was pinned, then fsynced mutation traffic started. The daemon was
+SIGKILLed only after observing a non-current generation without its completed
+manifest (`view-eqSC9N`). Its incomplete directory still existed before restart.
+The two surviving replicas served all 500 earlier payloads through a fresh client;
+the mutation writer acknowledged all 2100 files without error while the publisher
+was absent. After restart, the incomplete orphan was removed. The fresh client
+verified all 2100 deterministic payloads and exact 8601600-byte totals, with no
+refresh error. The old publisher token returned STALE (-14), no bytes, and the
+new snapshot has a different boot identity. These are W92 derived-cache/publisher
+recovery gates; they do not close unrelated W55 NFS publication or W66 routing.
+
+## Query-source scan scratch gap and fix
+
+The final allocation audit found private scans allocated merge slots for every
+source segment before prefix filtering. Their iterator blocks also lacked a
+query-specific bound. This allocation belongs to the query builder's source IO,
+so the catalog-owned 3.69 MiB figure alone did not fully describe its working set.
+Private scans now prefilter immutable ranges before allocation and admit at most
+256 relevant segments, with at most 128 KiB per block and no sequential readahead.
+The iterator/merge scratch is below 33 MiB, separately bounded from the 64 MiB
+retained source snapshot and catalog-owned buffers. Excess fan-in/oversized blocks
+return BUSY and cannot poison authoritative live reads/writes. Live merge scans,
+compaction and authoritative formats retain their existing behavior/limits.
+
+Boundary tests cover exact/one-over fan-in, irrelevant segments, oversized block
+refusal before callback output, and successful authoritative reads afterward.
+KV, disk differential, retained-view and IO/fault gates pass. The complete native
+suite passes after the final private-readahead guard; deployment and actual
+scale validation of this latest fix remain pending. The source engine's borrowed
+sparse indexes/descriptors remain separate provisioned costs, included in measured
+whole-process RSS. No constant whole-process RSS claim hides those inputs.
+
+Private range exclusion also uses a fixed 128 KiB tail buffer when a segment's
+last key is not already cached. It does not promote source-wide tail caches or
+allocate a full block merely to decide whether a segment is irrelevant. Checked
+length arithmetic rejects corrupt tails; oversized unknown tails refuse the
+private scan. A complete-source unit verifies no heap allocation, no cached-tail
+mutation and no readahead on this path.
+
+Incremental own-partition updates now reuse unchanged canonical inode stats when
+their complete stat inputs are row-only: LOCAL directories, or regular files
+with no active lanes and no APPEND_CUR records in either partition view. Lane
+and auxiliary cases retain conservative folding. A focused differential gate
+checks exactly one refold for a single row edit, then a stable-row open append
+cursor updates size correctly. The initial new test incorrectly used a
+directory-only comparison helper on a regular file; it was stopped and corrected
+to compare inode attributes directly. The corrected focused regression passes;
+the complete suite passes with that corrected test.
+
+The second actual-entry attempt was intentionally interrupted before completion
+to provision its source engine: the 3 GiB VM was using 2385 MiB swap, with the
+generator at about 559 MiB resident/2.5 GiB virtual memory. Its terminal 143
+marker records that interruption, not an acceptance failure. The partial fixture
+is retained. A new latest-code run will use a temporarily enlarged source VM;
+this does not change the fixed query-cache budgets or claim constant whole-process
+memory. The full 2^32 gate remains pending.
+
+The complete suite then exposed a pre-existing white-box overflow probe race:
+it published UINT32_MAX segment counts into the live store between locks, and
+the background compactor crashed in kv_seg_first_key while the snapshot test
+waited for the mutex. The preserved coredump identifies that path. The overflow
+probe now uses an isolated structure with its own mutex; the live segment counts
+are never changed. The fan-in fixture also waits for source quiescence before
+borrowing its segment. The corrected complete native suite passes, including the whole-source tail,
+KV, differential catalog, retained-view, IO/fault and architecture gates.
+Raw evidence: [complete gate](../../results/measure/20261010-w92-closure/source-tail-native-passed.log).

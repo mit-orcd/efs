@@ -1550,7 +1550,19 @@ complete (231.9 s fresh, 2.43 s mutation), and full native gates pass.
 The actual 2^32-entry generator is running on the isolated capped disk. A separate
 ten-million cold-hint catch-up/full-stream oracle passes. Deployed command/pages
 and concurrent publication gates pass, including all 2131 payload hashes and
-measured convergence under contention; recovery/platform/full scale remain open.
+measured convergence under contention. Live disabled/re-enabled catch-up rebuilds
+seven partitions and verifies all 500 fsynced payloads; 26 cold persistence cases
+pass. Aggregate QUOTA refusal and subsequent cold recovery verify another 500
+payloads and exact totals. The first scale source hit its inherited descriptor
+boundary; the fresh retry was intentionally stopped to provision source VM RAM.
+Both partial fixtures are preserved; the latest-code full-scale run is pending.
+Publisher-loss/interrupted-cache recovery also pass: fresh-client verification
+of all 2100 acknowledged payloads, exact totals, orphan cleanup and old-token STALE.
+A final audit bounded source scan scratch and unknown-tail exclusion; focused gates pass.
+Row-only inode stat reuse also passes single-edit and append-cursor invalidation
+regressions; an overflow-probe test race exposed by the full suite is isolated,
+and the corrected complete native suite passes.
+Deployment and platform/full scale validation remain pending.
 Large-export total lifetime is now
 configurable with bounded retention and unchanged idle/permission checks.
 
@@ -5832,8 +5844,11 @@ Oct 10 closure work is active at the user's request. Aggregate retained-cache
 admission, durable partition checkpoints/catch-up and bounded incremental discovery
 pass focused/full native gates. Ten-million-entry pilots pass full exports,
 retained mutation and cold-hint catch-up with a fixed 3.69 MiB builder. The actual
-2^32-entry generator is running on an isolated capped disk. Deployment/live
-recovery and full scale/fault acceptance remain open. [Closure ledger](../status/query-cache-closure-20261010.md).
+2^32-entry attempts are preserved; the next latest-code run awaits temporary
+source VM provisioning. Complete native gates pass after bounding private scan
+scratch/tails and row-only stat reuse. Live disabled catch-up, aggregate QUOTA,
+publisher loss and interrupted-cache recovery pass; latest deployment and full
+scale/platform/export-policy acceptance remain open. [Closure ledger](../status/query-cache-closure-20261010.md).
 
 Oct 10 incremental checkpoint: fixed 1024-item change/ancestor sets reuse immutable
 derived partitions and recompute exact affected rollups, with full-build fallback.

@@ -22,8 +22,8 @@ static int compare(struct efs_kv_lsm_snapshot *s,struct efs_query_catalog *memor
     CHECK(!memcmp(&ra,&rb,sizeof(ra)));CHECK(!memcmp(&sa,&sb,sizeof(sa)));
     CHECK(!efs_query_catalog_stats(memory,ino,&a));CHECK(!efs_query_catalog_stats(disk,ino,&b));CHECK(!memcmp(&a,&b,sizeof(a)));
     struct result ma={0},da={0};uint64_t mc=0,dc=0;
-    do { CHECK(!efs_query_catalog_page(memory,ino,EFS_NAME_PREFIX,"",0,&mc,7,NULL,NULL,collect,&ma)); }while(mc!=(UINT64_C(4096)<<32));
-    do { CHECK(!efs_query_catalog_page(disk,ino,EFS_NAME_PREFIX,"",0,&dc,7,NULL,NULL,collect,&da)); }while(dc!=(UINT64_C(4096)<<32));
+    do { int rc=efs_query_catalog_page(memory,ino,EFS_NAME_PREFIX,"",0,&mc,7,NULL,NULL,collect,&ma);CHECK(!rc);if(rc)return rc; }while(mc!=(UINT64_C(4096)<<32));
+    do { int rc=efs_query_catalog_page(disk,ino,EFS_NAME_PREFIX,"",0,&dc,7,NULL,NULL,collect,&da);CHECK(!rc);if(rc)return rc; }while(dc!=(UINT64_C(4096)<<32));
     CHECK(ma.count==da.count && ma.hash==da.hash);
     return 0;
 }
@@ -118,6 +118,41 @@ int main(void)
     CHECK(efs_query_catalog_build_disk(root,source,disk,4<<20,cancel,NULL,&next)==EFS_ERR_BUSY && !next);
     CHECK(!efs_query_catalog_build_disk(root,source,disk,4<<20,NULL,NULL,&next));CHECK(!efs_query_catalog_rebuilt(next));CHECK(!efs_query_catalog_refolded(next));
     compare(source,memory,next,EFS_ROOT_INO);CHECK(efs_query_catalog_bytes(next)==bytes);efs_query_catalog_free(next);next=NULL;
+    /* One row edit must not re-fold every unrelated lane-free inode in its
+     * partition. An APPEND_CUR change, however, must invalidate a stable row. */
+    efs_kv_lsm_snapshot_release(source);source=NULL;efs_query_catalog_free(memory);memory=NULL;
+    struct efs_meta_row edited;CHECK(!efs_meta_apply_get_inode(kv,file,&edited));
+    edited.base_size=123;
+    uint8_t ik[EFS_KV_KEY_MAX],iv[EFS_META_INO_BYTES];uint32_t ikn=0;
+    CHECK(!efs_kv_key_inode(efs_kv_inode_shard(file),file,ik,&ikn));
+    CHECK(!efs_meta_pack_inode(&edited,iv,sizeof(iv)));CHECK(!efs_kv_put(kv,ik,ikn,iv,sizeof(iv)));
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));
+    CHECK(!efs_query_catalog_build_disk(root,source,disk,4<<20,NULL,NULL,&next));
+    CHECK(efs_query_catalog_refolded(next)==1);
+    CHECK(!efs_query_catalog_build(source,NULL,32<<20,NULL,NULL,&memory));
+    compare(source,memory,next,sub);
+    struct efs_meta_row fr1,fr2;struct efs_meta_stat fs1,fs2;
+    CHECK(!efs_query_catalog_inode(memory,file,&fr1,&fs1));
+    CHECK(!efs_query_catalog_inode(next,file,&fr2,&fs2));
+    CHECK(!memcmp(&fr1,&fr2,sizeof(fr1)) && !memcmp(&fs1,&fs2,sizeof(fs1)));
+    efs_query_catalog_free(disk);disk=next;next=NULL;
+    efs_kv_lsm_snapshot_release(source);source=NULL;efs_query_catalog_free(memory);memory=NULL;
+    uint8_t ak[EFS_KV_KEY_MAX],av[24]={0};uint32_t akn=0;
+    /* Big-endian watermark/frontier 512/256 with one open reservation. */
+    av[6]=2;av[14]=1;av[19]=1;
+    CHECK(!efs_kv_key_append_cur(efs_kv_inode_shard(file),file,edited.generation,ak,&akn));
+    CHECK(!efs_kv_put(kv,ak,akn,av,sizeof(av)));
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));
+    CHECK(!efs_query_catalog_build_disk(root,source,disk,4<<20,NULL,NULL,&next));
+    CHECK(efs_query_catalog_refolded(next)>0);
+    CHECK(!efs_query_catalog_build(source,NULL,32<<20,NULL,NULL,&memory));
+    compare(source,memory,next,sub);
+    CHECK(!efs_query_catalog_inode(memory,file,&fr1,&fs1));
+    CHECK(!efs_query_catalog_inode(next,file,&fr2,&fs2));
+    CHECK(!memcmp(&fr1,&fr2,sizeof(fr1)) && !memcmp(&fs1,&fs2,sizeof(fs1)));
+    struct efs_meta_row ar;struct efs_meta_stat ast;
+    CHECK(!efs_query_catalog_inode(next,file,&ar,&ast) && ast.size==256);
+    efs_query_catalog_free(disk);disk=next;next=NULL;
     efs_kv_lsm_snapshot_release(source);efs_query_catalog_free(memory);memory=NULL;
     CHECK(!efs_meta_apply_rename(kv,dir,"sub",EFS_ROOT_INO,"moved",200));
     CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));CHECK(!efs_query_catalog_build(source,NULL,32<<20,NULL,NULL,&memory));

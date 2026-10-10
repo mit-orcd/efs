@@ -3657,8 +3657,11 @@ Oct 10 closure work is active at the user's request. Aggregate retained-cache
 admission, durable partition checkpoints/catch-up and bounded incremental discovery
 pass focused/full native gates. Ten-million-entry pilots pass full exports,
 retained mutation and cold-hint catch-up with a fixed 3.69 MiB builder. The actual
-2^32-entry generator is running on an isolated capped disk. Deployment/live
-recovery and full scale/fault acceptance remain open. [Closure ledger](../status/query-cache-closure-20261010.md).
+2^32-entry attempts are preserved; the next latest-code run awaits temporary
+source VM provisioning. Complete native gates pass after bounding private scan
+scratch/tails and row-only stat reuse. Live disabled catch-up, aggregate QUOTA,
+publisher loss and interrupted-cache recovery pass; latest deployment and full
+scale/platform/export-policy acceptance remain open. [Closure ledger](../status/query-cache-closure-20261010.md).
 
 Oct 10 incremental checkpoint: fixed 1024-item change/ancestor sets reuse immutable
 derived partitions and recompute exact affected rollups, with full-build fallback.
