@@ -820,6 +820,9 @@ try:
         records=[]
         for operation,extra in [('create',['1']),('register',[str(shard),'1']),('establish',[str(shard),'1'])]:
             records.append(run([source/'efs-mgmt','raft-session',f'127.0.0.1:{a.port}',operation,uuid,*extra],capture_output=True,text=True).stdout)
+        # Retain a real owner lease: a previous FUSE CLOSE obligation must not
+        # race this gate's exact 32-reservation cold ownership snapshot.
+        records.append(run([helper,'hold',str(a.port),uuid,str(ino)],capture_output=True,text=True).stdout)
         reserved=run([inspector,'reserve',str(a.port),str(ino),uuid,'64','131072'],capture_output=True,text=True,timeout=180).stdout
         records.append(run([helper,'fence-half',str(a.port),uuid,str(ino)],capture_output=True,text=True,timeout=180).stdout)
         records.append(run([inspector,'late',str(a.port),str(ino),uuid,'131072'],capture_output=True,text=True,timeout=45).stdout)
@@ -841,6 +844,9 @@ try:
         assert all('open=0 ' in text and 'reservations=0 ' in text and 'receipts=0' in text for text in after),after
         start();mount_client()
         assert path.stat().st_size==expected and path.read_bytes()==body+bytes(expected-len(body))
+        released=run([source/'efs-mgmt','raft-session',f'127.0.0.1:{a.port}','cleanup-leases',uuid,'1',str(shard)],capture_output=True,text=True,timeout=180)
+        assert 'rc=0' in released.stdout,released.stdout
+        records.append(released.stdout)
         path.unlink();wait(lambda:not files(ino),'revoked append physical reclaim',180)
         (work/'session-append.json').write_text(json.dumps({'ino':ino,'reserved':reserved,'records':records,'before':before,'after':after,'routing':routing,'expected_bytes':expected},indent=2))
         print('bounded revoked-session append: 32+32 cold transactions, exact retry, original bytes/holes, physical reclaim PASS',flush=True)

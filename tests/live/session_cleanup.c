@@ -74,7 +74,23 @@ int main(int argc,char **argv)
         session(EFS_MD_SESS_FENCE_LOC,group,2,shard,26,EFS_OK);
         next(EFS_ERR_BUSY); /* local rejection alone cannot authorize ownership cleanup */
         session(EFS_MD_SESS_ACK,owner,shard,0,22,EFS_OK);
-        session(EFS_MD_SESS_FINISH,owner,0,0,18,EFS_OK);
+        /* Lease admission also registers guarded metadata participant shards.
+         * Do not assume the hand-registered inode shard is the frozen set. */
+        session(EFS_MD_SESS_FINISH,owner,2,0,22,EFS_ERR_BUSY);
+        for(unsigned word=0;word<EFS_SESSION_BITMAP/8u;word++) {
+            uint8_t query[23]={0};query[0]=owner;query[1]=EFS_MD_CMD_SESSION;
+            memcpy(query+3,uuid,16);be(query+19,EFS_SESSION_BITS+word,4);
+            uint64_t bits=rpc(query,sizeof(query),EFS_OK).salt;
+            for(unsigned bit=0;bit<64;bit++)if(bits&(1ull<<bit)) {
+                unsigned touched=word*64+bit;
+                printf("cleanup frozen touched shard=%u\n",touched);
+                session(EFS_MD_SESS_FENCE_LOC,efs_raft_shard_group(touched),2,touched,26,EFS_OK);
+                session(EFS_MD_SESS_ACK,owner,touched,0,22,EFS_OK);
+            }
+        }
+        session(EFS_MD_SESS_STORAGE_FENCE,owner,2,0,22,EFS_OK);
+        session(EFS_MD_SESS_FINISH,owner,2,0,22,EFS_OK);
+        session(EFS_MD_SESS_FINISH,owner,2,0,22,EFS_OK); /* exact retry */
         assert(next(EFS_OK).salt==0);
         /* Retry the exact first committed set; never select the next five. */
         uint8_t p[28+66*8]={0};p[0]=group;p[1]=EFS_MD_CMD_SESSION;
