@@ -68,6 +68,15 @@ int main(void)
         file_syncs=directory_syncs=0;fail_directory_close=1;shard_io_thread(&a);
         assert(a.result==EFS_ERR_IO && file_syncs==1 && directory_syncs==1);fail_directory_close=0;
     }
+    /* Short TCP worker lifetimes must retire both direct-I/O cache pages.
+     * Valgrind sees lost buffers after join if either TLS destructor is absent. */
+    for (int i=0;i<32;i++) {
+        pthread_t thread;a.direct=1;a.buf=data+(i%2);
+        file_syncs=directory_syncs=0;
+        assert(!pthread_create(&thread,NULL,shard_io_thread,&a));
+        assert(!pthread_join(thread,NULL));
+        assert(a.result==EFS_OK && file_syncs==1 && directory_syncs>=3);
+    }
     assert(!unlink(path));snprintf(path,sizeof(path),"%s/a/b",dir);assert(!rmdir(path));
     snprintf(path,sizeof(path),"%s/a",dir);assert(!rmdir(path));assert(!rmdir(dir));free(data);
     puts("production PUT durability: buffered/direct/bounce file and pathname barriers, retries and fault refusal PASS");

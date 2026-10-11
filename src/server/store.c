@@ -1179,6 +1179,45 @@ static int finish_fragment_put(struct shard_io_arg *a, int fd, size_t bytes)
 #endif
 }
 
+/* Connection and writer threads reuse aligned pages, then release them at
+ * thread retirement. Raw __thread pointers leaked on every short TCP session. */
+struct shard_io_buffers {
+    uint8_t *tail;
+    uint8_t *bounce;
+    uint32_t bounce_len;
+};
+static pthread_key_t shard_io_buffers_key;
+static pthread_once_t shard_io_buffers_once = PTHREAD_ONCE_INIT;
+static int shard_io_buffers_key_error;
+static void shard_io_buffers_free(void *value)
+{
+    struct shard_io_buffers *buffers = value;
+    if (!buffers) return;
+    free(buffers->tail);
+    free(buffers->bounce);
+    free(buffers);
+}
+static void shard_io_buffers_init(void)
+{
+    shard_io_buffers_key_error = pthread_key_create(&shard_io_buffers_key,
+                                                   shard_io_buffers_free);
+}
+static struct shard_io_buffers *shard_io_buffers_get(void)
+{
+    if (pthread_once(&shard_io_buffers_once, shard_io_buffers_init) != 0 ||
+        shard_io_buffers_key_error) return NULL;
+    struct shard_io_buffers *buffers = pthread_getspecific(shard_io_buffers_key);
+    if (!buffers) {
+        buffers = calloc(1, sizeof(*buffers));
+        if (!buffers) return NULL;
+        if (pthread_setspecific(shard_io_buffers_key, buffers) != 0) {
+            free(buffers);
+            return NULL;
+        }
+    }
+    return buffers;
+}
+
 static void *shard_io_thread(void *arg)
 {
     struct shard_io_arg *a = arg;
@@ -1259,23 +1298,22 @@ static void *shard_io_thread(void *arg)
                  * payload + tail. Until Oct 1 the digest forced every
                  * fragment through the 64 KiB memcpy below. */
                 if (a->sum) {
-                    static __thread uint8_t *tail_tls;
-                    if (!tail_tls &&
-                        posix_memalign((void **)&tail_tls, 4096, 4096) != 0) {
-                        tail_tls = NULL;
+                    struct shard_io_buffers *buffers = shard_io_buffers_get();
+                    if (!buffers || (!buffers->tail &&
+                        posix_memalign((void **)&buffers->tail, 4096, 4096) != 0)) {
                         close(fd);
                         a->result = EFS_ERR_NOMEM;
                         return NULL;
                     }
-                    memcpy(tail_tls, a->sum, EFS_HASH_SIZE);
-                    memset(tail_tls + EFS_HASH_SIZE, 0, 4096 - EFS_HASH_SIZE);
+                    memcpy(buffers->tail, a->sum, EFS_HASH_SIZE);
+                    memset(buffers->tail + EFS_HASH_SIZE, 0, 4096 - EFS_HASH_SIZE);
                     static int once_zc;
                     if (!once_zc && __sync_bool_compare_and_swap(&once_zc, 0, 1))
                         fprintf(stderr, "store: put O_DIRECT zero-copy "
                                 "(payload+digest writev) len=%u\n", a->len);
                     struct iovec iov[2] = {
                         { .iov_base = a->buf, .iov_len = a->len },
-                        { .iov_base = tail_tls, .iov_len = 4096 },
+                        { .iov_base = buffers->tail, .iov_len = 4096 },
                     };
                     int rc = writev_all(fd, iov, 2);
                     if (rc != 0) {
@@ -1291,18 +1329,22 @@ static void *shard_io_thread(void *arg)
                 /* Per-thread O_DIRECT bounce buffer for unaligned sources
                  * (TCP fallback path). posix_memalign+free per PUT was pure
                  * churn, so the buffer is cached per thread. */
-                static __thread uint8_t *aligned_tls;
-                static __thread uint32_t aligned_tls_len;
-                if (aligned_tls_len < alloc) {
-                    free(aligned_tls);
-                    aligned_tls = NULL;
-                    if (posix_memalign((void **)&aligned_tls, 4096, alloc) != 0) {
-                        aligned_tls_len = 0;
+                struct shard_io_buffers *buffers = shard_io_buffers_get();
+                if (!buffers) {
+                    close(fd);
+                    a->result = EFS_ERR_NOMEM;
+                    return NULL;
+                }
+                if (buffers->bounce_len < alloc) {
+                    free(buffers->bounce);
+                    buffers->bounce = NULL;
+                    buffers->bounce_len = 0;
+                    if (posix_memalign((void **)&buffers->bounce, 4096, alloc) != 0) {
                         close(fd);
                         a->result = EFS_ERR_NOMEM;
                         return NULL;
                     }
-                    aligned_tls_len = alloc;
+                    buffers->bounce_len = alloc;
                 }
                 static int once_bounce;
                 if (a->sum && !once_bounce &&
@@ -1310,12 +1352,12 @@ static void *shard_io_thread(void *arg)
                     fprintf(stderr, "store: put O_DIRECT bounce copy "
                             "(buf align=%u len=%u)\n",
                             (unsigned)((uintptr_t)a->buf & 4095u), a->len);
-                memcpy(aligned_tls, a->buf, a->len);
+                memcpy(buffers->bounce, a->buf, a->len);
                 if (a->len < alloc)
-                    memset(aligned_tls + a->len, 0, alloc - a->len);
+                    memset(buffers->bounce + a->len, 0, alloc - a->len);
                 if (a->sum)
-                    memcpy(aligned_tls + a->len, a->sum, EFS_HASH_SIZE);
-                wbuf = aligned_tls;
+                    memcpy(buffers->bounce + a->len, a->sum, EFS_HASH_SIZE);
+                wbuf = buffers->bounce;
             }
             while (written < alloc) {
                 ssize_t n = write(fd, wbuf + written, alloc - written);
