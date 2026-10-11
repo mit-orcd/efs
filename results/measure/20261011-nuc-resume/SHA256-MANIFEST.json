@@ -3,6 +3,42 @@
     "bytes": 1038,
     "sha256": "85d28dee971aba649eb7a66e8a637de48619eb2d895fe10448db6f5371eb4c19"
   },
+  "batch-build/all-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "batch-build/all.log": {
+    "bytes": 67203,
+    "sha256": "e55f155188a3bf140e902a545e47a55143300e7668476bbd0b92c9337e6f964d"
+  },
+  "batch-build/clean-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "batch-build/clean.log": {
+    "bytes": 3823,
+    "sha256": "a5dcfdadc42d402043769a56288d8179662ff397ec8a4fbf19fc6892aad1453a"
+  },
+  "batch-build/images.json": {
+    "bytes": 988,
+    "sha256": "403b26393d67459384481e65b6525135f75edb572c3c196e2405b50af7e6884c"
+  },
+  "batch-build/native-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "batch-build/native.log": {
+    "bytes": 63391,
+    "sha256": "61ca67d6e86b37501b4c619fad926895faf412c986303b13cc84a57a864cd4ca"
+  },
+  "batch-build/run-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "batch-build/source-sha256.json": {
+    "bytes": 55216,
+    "sha256": "f1f63c6c5d7bb3e4027977a36bc462a1c42d368af11bd551e70e69dc916ee8f7"
+  },
   "installed-images.json": {
     "bytes": 988,
     "sha256": "d4ec948b8db8199ef22314a7c998179eba8eef06e7552154c15e775c81c42522"
