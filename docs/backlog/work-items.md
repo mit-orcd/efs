@@ -2336,6 +2336,17 @@ the quick ones).** Each row is a queue item; the W number is binding.
 
 ## W52 · a REPORT after thousands of O_APPEND writes answers after > 30 s (plan row 15)
 
+**Oct 11 follow-up candidate:** REPORT now submits one inode-group
+`APPEND_CATCHUP` proposal for every caught-up reservation, then waits for a
+separate guarded lane-barrier retirement transaction before replying. No
+per-reservation completion loop remains. The existing atomic scope bounds the
+admitted backlog at 32,766; concurrent growth refuses before mutation for
+recapture. Actual-KV 20k/maximum-count, atomic-scope rollback, session/fencing,
+partial publication and cold/lost-COMMIT regressions pass on NUC. Full native,
+direct/buffered live, deployed 20k and cold gates remain pending. All voters must
+support the new log command; no timeout or durability guarantee is relaxed.
+[Implementation and acceptance ledger](../status/nuc-w52-w97-resume-20261011.md).
+
 **Oct 11 client feedback fix:** `f52cd2dd` starts append burst age after
 successful publication. Previously a flush exceeding one second immediately
 expired its successor and collapsed batching toward one write per REPORT.

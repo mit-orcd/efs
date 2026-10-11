@@ -42,3 +42,14 @@ new queued PIDs/script hashes are in the retry's queued.json.
 `clock-preserved-short/` passes the installed-engine 2k append/fsync and exact
 warm two-mount byte gate. It is separate from both private mode fixtures;
 its normal cold restart and the subsequent long workload remain pending.
+
+
+`catchup-focused/` retains the draft Linux build/test attempts and their initial
+fixture assertion failures. Final actual-KV 20k and 32,766-entry, atomic-scope
+rollback, cold/lost-COMMIT tests pass (`test-6-exit.txt`); actual host command and
+proportional pressure-accounting tests pass (`host-final-exit.txt`). The final
+source manifest matches committed W52 implementation `32b472c5`. Draft binary
+versions are unknown, and these are not deployment/full-gate acceptance.
+`root-scope-superseded-by-catchup/receipt.json` records two verified idle old-core
+root controllers superseded to sequence the requested W52-first work. No active
+writer or service process was stopped by that action.
