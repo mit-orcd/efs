@@ -1,0 +1,43 @@
+{
+  "totals": [
+    24352,
+    1698389504453,
+    1637298784,
+    700272435656
+  ],
+  "samples": [
+    {
+      "path": "7/001769.txt",
+      "sha256": "ea2be399f02a2bfb6fbdbc42d011e37e756a4237aaa0aabf26a11f9773d180c5"
+    },
+    {
+      "path": "0/004322.txt",
+      "sha256": "97f19096bdfaa4773c46bf1ff97bb9be02e4453f7827af57808bb66ee7cc78a3"
+    },
+    {
+      "path": "2/004336.txt",
+      "sha256": "f0a8b5f6a59e26f02de916f0c2979264453fc30bac8c7cd6c18a392aeadc9283"
+    },
+    {
+      "path": "3/001752.txt",
+      "sha256": "9305a328348bab3b905dcfbd3084fcbbc137509fb8464ae049e9f574ea6f5edf"
+    },
+    {
+      "path": "5/001755.txt",
+      "sha256": "07b8fca2bbd3ca677be4b1e6febbe7d065a13f0efb9da439884428192bde2f76"
+    },
+    {
+      "path": "4/004319.txt",
+      "sha256": "b7a767bdea472dd8a5086b6bac03c396335337430f4b3e7ce3da973c620bd7c6"
+    },
+    {
+      "path": "6/004335.txt",
+      "sha256": "e537f0751f71d63aa13f8b4a33f2584b5cb30e1a932d21516d43b91ef97a65e4"
+    },
+    {
+      "path": "1/001756.txt",
+      "sha256": "ec4ed6537fa15c3c143eb6f8e9e49d14ed6a1aaab87cbf240844fd09f7977be8"
+    }
+  ],
+  "scope": "512-byte create-write-close, eight workers, bounded to 100000 files; sampled peer bytes, no cold/durable gate"
+}

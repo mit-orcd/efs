@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Bounded NUC integrated-code gates; preserve installed source and stores."""
-import hashlib,json,os,signal,socket,subprocess,time,traceback
+import argparse,hashlib,json,os,re,signal,socket,subprocess,time,traceback
 from pathlib import Path
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--resume-buffered',type=Path,help='Retain an already accepted buffered gate only when its exact images and fixture match.')
+args=parser.parse_args()
 base=Path('/data1/efs/devel-nuc-20261011');src=base/'batch-src';out=base/'batch-live';out.mkdir(exist_ok=False)
 env=dict(os.environ,EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_TRANSPORT='tcp',EFS_MD_RAFT_N='4',EFS_RAFT_FLOW='1',EFS_RAFT_FLOW_EARLY_RETIRE='0',EFS_RAFT_BATCH_OVERLAP='0',EFS_RAFT_BATCH_NOOP='0',EFS_RAFT_GROUP_DRAIN='0',EFS_RAFT_APPLIED_INTERVAL_MS='10',EFS_BATCH_OBS='0')
 def wait(fn,seconds,label):
@@ -28,7 +31,24 @@ try:
  wait(lambda:(base/'meta-placement/restore-exit.txt').exists(),7200,'metadata placement restoration')
  wait(lambda:(base/'batch-build/run-exit.txt').exists(),7200,'native suite')
  assert (base/'batch-build/run-exit.txt').read_text().strip()=='0','native failed; do not stop regular service'
- (out/'binaries.json').write_text(json.dumps({n:dict(sha256=hashlib.sha256((src/n).read_bytes()).hexdigest(),version=subprocess.check_output([str(src/n),'--version'],text=True)) for n in ('efsd','efs-fuse','efs-mgmt')},indent=2))
+ images={n:dict(sha256=hashlib.sha256((src/n).read_bytes()).hexdigest(),version=subprocess.check_output([str(src/n),'--version'],text=True)) for n in ('efsd','efs-fuse','efs-mgmt')}
+ (out/'binaries.json').write_text(json.dumps(images,indent=2))
+ codes={}
+ if args.resume_buffered:
+  prior=args.resume_buffered.resolve()
+  assert prior.parent==base and prior.name=='batch-live-initial-failed'
+  assert (prior/'restore-exit.txt').read_text().strip()=='0'
+  assert (prior/'full-buffered-exit.txt').read_text().strip()=='0'
+  log=(prior/'full-buffered.log').read_text()
+  evidence=Path(re.search(r'^Evidence directory: (.+)$',log,re.M)[1])
+  assert evidence.parent==Path('/data1/efs') and evidence.name.startswith('gc-buffered-')
+  manifest=json.loads((evidence/'manifest.json').read_text())
+  assert manifest['mode']=='buffered'
+  assert manifest['test_script_sha256']==hashlib.sha256((src/'tests/live/gc_reclamation.py').read_bytes()).hexdigest()
+  assert manifest['binary_sha256']=={n:v['sha256'] for n,v in images.items()}
+  (out/'inherited-buffered.json').write_text(json.dumps(dict(previous=str(prior),evidence=str(evidence),manifest=manifest,log_sha256=hashlib.sha256((prior/'full-buffered.log').read_bytes()).hexdigest()),indent=2))
+  (out/'full-buffered-exit.txt').write_text('0\n')
+  codes['full-buffered']=0
  pids=subprocess.check_output(['pgrep','-f','^/data1/efs/src/efsd .*--port 1743[2-5]( |$)'],text=True).split();assert len(pids)==4
  stopped=True
  for m in ('mnt','mnt2'):
@@ -39,8 +59,7 @@ try:
   fd=os.pidfd_open(int(pid));signal.pidfd_send_signal(fd,signal.SIGTERM);os.close(fd)
  wait(lambda:all(not Path('/proc',p).exists() for p in pids),180,'regular daemon drain')
  common=[src/'tests/live/gc_reclamation.py','--transport','tcp','--port','26590','--mount','/data1/efs/mnt','--peer-mount','/data1/efs/mnt2','--root','/data1/efs','--root','/home/efs']
- codes={}
- for mode in ('direct','buffered'):
+ for mode in (('direct',) if args.resume_buffered else ('direct','buffered')):
   codes['full-'+mode]=run('full-'+mode,['python3',*common,'--mode',mode,'--append-burst','2000','--fresh-namespace','--posix','--continue-posix-failure','--sync-writes','--sync-write-fault','--append-sync-boundary','--append-replay-race','--append-audit','--stop-dirty-recovery','--shutdown-mutations','--wal-tail-recovery'])
  (out/'verdicts.json').write_text(json.dumps(codes,indent=2));assert all(rc==0 for rc in codes.values()),codes
  (out/'run-exit.txt').write_text('0\n')

@@ -2336,6 +2336,13 @@ the quick ones).** Each row is a queue item; the W number is binding.
 
 ## W52 · a REPORT after thousands of O_APPEND writes answers after > 30 s (plan row 15)
 
+**Oct 11 continuation:** `4afc063c` shares one guarded completion transaction
+across up to eight reservations, shrinking to the unchanged per-shard image
+bound when needed. Actual transaction/cold recovery/session-fencing/gap and
+host fallback regressions pass. Full new-build/live performance acceptance and
+the agreed all-caught-up single proposal remain open.
+[Continuation ledger](../status/nuc-w52-w97-resume-20261011.md).
+
 **Oct 11 NUC partial optimization:** guarded per-reservation REPORT completion
 PREPARE operations share the existing bounded pipeline after owner/inode guards.
 Every applied verdict is checked before COMMIT; refusal cleanup remains durable.
@@ -4442,6 +4449,17 @@ pressure finding, not proof of the historical NUC incident's cause. A separately
 paced 2-MiB/s-per-writer gate cannot close the unpaced failure. Require bounded
 reclamation/admission, fairness and exact cold-byte recovery before claiming a
 fix. [AMD evidence](../status/amd-sustained-20261011.md#unpaced-mixed-load-failure--retained-not-closed).
+
+**Oct 11 deployed continuation:** the validated merged engine is installed on
+preserved NUC stores. A five-minute measured create/write/close run again
+declines ~172 → 57 files/s; NVMe host request/flush elapsed means rise roughly
+1.3 → 3.7 ms while SATA write-request means stay near 0.13–0.16 ms. A frozen-code
+NVMe-data matrix varying only Raft/KV placement completed all three timed/cold
+cells: NVMe 9,763 files, SATA 74,183 files, repeated NVMe 9,971 files in ten minutes.
+SATA metadata keeps Raft sync near 0.1 ms, but throughput still declines as NVMe
+data-write latency rises. Regular-service restoration and previous-payload checks passed.
+No production placement change or hardware ceiling is claimed.
+[Continuation ledger](../status/nuc-w52-w97-resume-20261011.md).
 
 **Oct 11 repeated physical-trace follow-up:** all four 240-second written-ring
 controls pass 49,152 exact reopened blocks. NVMe repeats decline about

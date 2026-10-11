@@ -1,0 +1,74 @@
+{
+  "cuts": {
+    "0": 29588,
+    "2": 36745
+  },
+  "status": [
+    {
+      "node": 1,
+      "group": 0,
+      "hosted": 1,
+      "role": "LEADER",
+      "leader": 0,
+      "term": 1,
+      "commit": 29588,
+      "applied": 29588,
+      "voters": 7
+    },
+    {
+      "node": 1,
+      "group": 2,
+      "hosted": 1,
+      "role": "LEADER",
+      "leader": 0,
+      "term": 3,
+      "commit": 36745,
+      "applied": 36745,
+      "voters": 7
+    },
+    {
+      "node": 2,
+      "group": 0,
+      "hosted": 1,
+      "role": "FOLLOWER",
+      "leader": 0,
+      "term": 1,
+      "commit": 29588,
+      "applied": 29588,
+      "voters": 7
+    },
+    {
+      "node": 2,
+      "group": 2,
+      "hosted": 1,
+      "role": "FOLLOWER",
+      "leader": 0,
+      "term": 3,
+      "commit": 36745,
+      "applied": 36745,
+      "voters": 7
+    },
+    {
+      "node": 3,
+      "group": 0,
+      "hosted": 1,
+      "role": "FOLLOWER",
+      "leader": 0,
+      "term": 1,
+      "commit": 29588,
+      "applied": 29588,
+      "voters": 7
+    },
+    {
+      "node": 3,
+      "group": 2,
+      "hosted": 1,
+      "role": "FOLLOWER",
+      "leader": 0,
+      "term": 3,
+      "commit": 36745,
+      "applied": 36745,
+      "voters": 7
+    }
+  ]
+}

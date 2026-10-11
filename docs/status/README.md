@@ -527,3 +527,5 @@ no ORCD acceptance or W109 closure is implied.
 all current development branches merged and `c52a4643` deployed to eleven hosts.
 Full Linux units and retained file samples pass; loaded POSIX/query gates remain
 failed, and the fresh tiny-file benchmark is running.
+
+- [NUC W52/W97 deployed continuation](nuc-w52-w97-resume-20261011.md): preserved-store rollout, repeated phase/storage latency measurements, staged bounded completion transactions and pending placement controls.

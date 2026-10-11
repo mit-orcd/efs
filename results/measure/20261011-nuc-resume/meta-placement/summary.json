@@ -1,0 +1,840 @@
+{
+  "matrix_accepted": true,
+  "cells": [
+    {
+      "cell": "0-nvme",
+      "accepted": {
+        "tag": "0-nvme",
+        "files": 9763,
+        "errors": [],
+        "cold_checks": 64,
+        "storage": "/home/efs/w97-meta-placement-data-20261011-0",
+        "start_mono": 1127.841088,
+        "seconds": 600
+      },
+      "windows": {
+        "first": {
+          "start_s": 0.29192474199999197,
+          "end_s": 30.000079415000073,
+          "files_s": 41.36911274118829,
+          "group_files_s": {
+            "0": 19.994510145049507,
+            "2": 21.374602596138782
+          },
+          "nodes": [
+            {
+              "node": 1,
+              "counters": {
+                "sync": 4602,
+                "sync_error": 0,
+                "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
+                "flow_busy": 0
+              },
+              "hist": {
+                "sync_us": {
+                  "n": 4602,
+                  "sum": 12258041
+                },
+                "wal_entries": {
+                  "n": 4602,
+                  "sum": 5541
+                },
+                "kv_release_us": {
+                  "n": 25863,
+                  "sum": 12898732
+                },
+                "applied_persist_us": {
+                  "n": 25863,
+                  "sum": 8349514
+                }
+              },
+              "observer_start_s": 0.634996000000001,
+              "observer_end_s": 30.643985000000157
+            },
+            {
+              "node": 2,
+              "counters": {
+                "sync": 4906,
+                "sync_error": 0,
+                "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
+                "flow_busy": 0
+              },
+              "hist": {
+                "sync_us": {
+                  "n": 4906,
+                  "sum": 11533600
+                },
+                "wal_entries": {
+                  "n": 4906,
+                  "sum": 5550
+                },
+                "kv_release_us": {
+                  "n": 7503,
+                  "sum": 10105414
+                },
+                "applied_persist_us": {
+                  "n": 7503,
+                  "sum": 7200159
+                }
+              },
+              "observer_start_s": 0.9360200000000987,
+              "observer_end_s": 30.954570999999987
+            },
+            {
+              "node": 3,
+              "counters": {
+                "sync": 4904,
+                "sync_error": 0,
+                "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
+                "flow_busy": 0
+              },
+              "hist": {
+                "sync_us": {
+                  "n": 4904,
+                  "sum": 11531412
+                },
+                "wal_entries": {
+                  "n": 4904,
+                  "sum": 5548
+                },
+                "kv_release_us": {
+                  "n": 7682,
+                  "sum": 10141166
+                },
+                "applied_persist_us": {
+                  "n": 7682,
+                  "sum": 7148452
+                }
+              },
+              "observer_start_s": 1.211230999999998,
+              "observer_end_s": 31.249736000000212
+            }
+          ],
+          "pooled_raft_sync_ms": 2.450947335553705,
+          "replicated_raft_syncs_per_completed_file": 11.72660699755899,
+          "replicated_raft_entries_per_completed_file": 13.538649308380798,
+          "raft_entries_per_sync": 1.1545240077713017,
+          "pooled_kv_release_ms": 0.8074769050867276,
+          "pooled_applied_persist_ms": 0.5529654307152602
+        },
+        "last": {
+          "start_s": 570.000100145,
+          "end_s": 600.000092386,
+          "files_s": 12.766669968553089,
+          "group_files_s": {
+            "0": 6.300001629390427,
+            "2": 6.466668339162661
+          },
+          "nodes": [
+            {
+              "node": 1,
+              "counters": {
+                "sync": 1321,
+                "sync_error": 0,
+                "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
+                "flow_busy": 0
+              },
+              "hist": {
+                "sync_us": {
+                  "n": 1321,
+                  "sum": 10205470
+                },
+                "wal_entries": {
+                  "n": 1321,
+                  "sum": 1573
+                },
+                "kv_release_us": {
+                  "n": 6483,
+                  "sum": 10416351
+                },
+                "applied_persist_us": {
+                  "n": 6483,
+                  "sum": 8163021
+                }
+              },
+              "observer_start_s": 571.4556150000001,
+              "observer_end_s": 596.508945
+            },
+            {
+              "node": 2,
+              "counters": {
+                "sync": 1630,
+                "sync_error": 0,
+                "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
+                "flow_busy": 0
+              },
+              "hist": {
+                "sync_us": {
+                  "n": 1630,
+                  "sum": 11064466
+                },
+                "wal_entries": {
+                  "n": 1630,
+                  "sum": 1860
+                },
+                "kv_release_us": {
+                  "n": 2155,
+                  "sum": 9480728
+                },
+                "applied_persist_us": {
+                  "n": 2155,
+                  "sum": 8695042
+                }
+              },
+              "observer_start_s": 567.6625120000001,
+              "observer_end_s": 597.7225900000001
+            },
+            {
+              "node": 3,
+              "counters": {
+                "sync": 1633,
+                "sync_error": 0,
+                "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
+                "flow_busy": 0
+              },
+              "hist": {
+                "sync_us": {
+                  "n": 1633,
+                  "sum": 11001089
+                },
+                "wal_entries": {
+                  "n": 1633,
+                  "sum": 1861
+                },
+                "kv_release_us": {
+                  "n": 2299,
+                  "sum": 9647744
+                },
+                "applied_persist_us": {
+                  "n": 2299,
+                  "sum": 8751678
+                }
+              },
+              "observer_start_s": 567.506971,
+              "observer_end_s": 597.5992610000001
+            }
+          ],
+          "pooled_raft_sync_ms": 7.0399269197207675,
+          "replicated_raft_syncs_per_completed_file": 11.968668407310705,
+          "replicated_raft_entries_per_completed_file": 13.822454308093995,
+          "raft_entries_per_sync": 1.1548865619546247,
+          "pooled_kv_release_ms": 2.7013644509463286,
+          "pooled_applied_persist_ms": 2.3415690774435403
+        }
+      },
+      "physical": {
+        "sda": {
+          "first": {
+            "seconds": 29.70815467300008,
+            "write_requests": 5,
+            "write_mean_ms": 0.4,
+            "host_write_MiB": 0.7109375,
+            "flush_requests": 0,
+            "flush_mean_ms": null
+          },
+          "late": {
+            "seconds": 29.999992240999973,
+            "write_requests": 453,
+            "write_mean_ms": 0.7814569536423841,
+            "host_write_MiB": 29.43359375,
+            "flush_requests": 0,
+            "flush_mean_ms": null
+          }
+        },
+        "nvme0n1": {
+          "first": {
+            "seconds": 29.70815467300008,
+            "write_requests": 88767,
+            "write_mean_ms": 1.2204310160307321,
+            "host_write_MiB": 486.14013671875,
+            "flush_requests": 41085,
+            "flush_mean_ms": 1.3823049774857004
+          },
+          "late": {
+            "seconds": 29.999992240999973,
+            "write_requests": 31394,
+            "write_mean_ms": 3.580620500732624,
+            "host_write_MiB": 156.845703125,
+            "flush_requests": 14478,
+            "flush_mean_ms": 3.9508219367315927
+          }
+        }
+      }
+    },
+    {
+      "cell": "1-sata",
+      "accepted": {
+        "tag": "1-sata",
+        "files": 74183,
+        "errors": [],
+        "cold_checks": 64,
+        "storage": "/home/efs/w97-meta-placement-data-20261011-1",
+        "start_mono": 1810.877619,
+        "seconds": 600
+      },
+      "windows": {
+        "first": {
+          "start_s": 0.27015300199991543,
+          "end_s": 30.00007707199984,
+          "files_s": 253.71743238360781,
+          "group_files_s": {
+            "0": 123.47828374389822,
+            "2": 130.23914863970958
+          },
+          "nodes": [
+            {
+              "node": 1,
+              "counters": {
+                "sync": 30270,
+                "sync_error": 0,
+                "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
+                "flow_busy": 4
+              },
+              "hist": {
+                "sync_us": {
+                  "n": 30270,
+                  "sum": 3109826
+                },
+                "wal_entries": {
+                  "n": 30270,
+                  "sum": 31875
+                },
+                "kv_release_us": {
+                  "n": 250783,
+                  "sum": 3575834
+                },
+                "applied_persist_us": {
+                  "n": 250783,
+                  "sum": 399257
+                }
+              },
+              "observer_start_s": 0.6241489999999885,
+              "observer_end_s": 30.628967999999986
+            },
+            {
+              "node": 2,
+              "counters": {
+                "sync": 31421,
+                "sync_error": 0,
+                "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
+                "flow_busy": 5
+              },
+              "hist": {
+                "sync_us": {
+                  "n": 31421,
+                  "sum": 3219307
+                },
+                "wal_entries": {
+                  "n": 31421,
+                  "sum": 31976
+                },
+                "kv_release_us": {
+                  "n": 233795,
+                  "sum": 3534485
+                },
+                "applied_persist_us": {
+                  "n": 233795,
+                  "sum": 391005
+                }
+              },
+              "observer_start_s": 0.9445489999998244,
+              "observer_end_s": 30.9552299999998
+            },
+            {
+              "node": 3,
+              "counters": {
+                "sync": 31075,
+                "sync_error": 0,
+                "inbox_drop": 9,
+                "drop_data": 6,
+                "drop_empty": 3,
+                "drop_other": 0,
+                "flow_busy": 0
+              },
+              "hist": {
+                "sync_us": {
+                  "n": 31075,
+                  "sum": 3307060
+                },
+                "wal_entries": {
+                  "n": 31075,
+                  "sum": 32022
+                },
+                "kv_release_us": {
+                  "n": 149522,
+                  "sum": 3632136
+                },
+                "applied_persist_us": {
+                  "n": 149522,
+                  "sum": 364775
+                }
+              },
+              "observer_start_s": 1.2384589999999207,
+              "observer_end_s": 31.244641999999885
+            }
+          ],
+          "pooled_raft_sync_ms": 0.10387634478149321,
+          "replicated_raft_syncs_per_completed_file": 12.298289805117328,
+          "replicated_raft_entries_per_completed_file": 12.710194882672676,
+          "raft_entries_per_sync": 1.0334928745445529,
+          "pooled_kv_release_ms": 0.016941263207695945,
+          "pooled_applied_persist_ms": 0.0018215376123639803
+        },
+        "last": {
+          "start_s": 570.0001167309999,
+          "end_s": 600.0000801149997,
+          "files_s": 113.06680466847148,
+          "group_files_s": {
+            "0": 55.26673412155829,
+            "2": 57.80007054691319
+          },
+          "nodes": [
+            {
+              "node": 1,
+              "counters": {
+                "sync": 11022,
+                "sync_error": 0,
+                "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
+                "flow_busy": 5
+              },
+              "hist": {
+                "sync_us": {
+                  "n": 11022,
+                  "sum": 1191807
+                },
+                "wal_entries": {
+                  "n": 11022,
+                  "sum": 11710
+                },
+                "kv_release_us": {
+                  "n": 94168,
+                  "sum": 1369360
+                },
+                "applied_persist_us": {
+                  "n": 94168,
+                  "sum": 304710
+                }
+              },
+              "observer_start_s": 570.8276399999997,
+              "observer_end_s": 595.833973
+            },
+            {
+              "node": 2,
+              "counters": {
+                "sync": 11523,
+                "sync_error": 0,
+                "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
+                "flow_busy": 4
+              },
+              "hist": {
+                "sync_us": {
+                  "n": 11523,
+                  "sum": 1247965
+                },
+                "wal_entries": {
+                  "n": 11523,
+                  "sum": 11706
+                },
+                "kv_release_us": {
+                  "n": 87149,
+                  "sum": 1346213
+                },
+                "applied_persist_us": {
+                  "n": 87149,
+                  "sum": 284615
+                }
+              },
+              "observer_start_s": 571.1395989999999,
+              "observer_end_s": 596.1549600000001
+            },
+            {
+              "node": 3,
+              "counters": {
+                "sync": 11322,
+                "sync_error": 0,
+                "inbox_drop": 9,
+                "drop_data": 5,
+                "drop_empty": 4,
+                "drop_other": 0,
+                "flow_busy": 0
+              },
+              "hist": {
+                "sync_us": {
+                  "n": 11322,
+                  "sum": 1242419
+                },
+                "wal_entries": {
+                  "n": 11322,
+                  "sum": 11682
+                },
+                "kv_release_us": {
+                  "n": 56788,
+                  "sum": 1371584
+                },
+                "applied_persist_us": {
+                  "n": 56788,
+                  "sum": 267029
+                }
+              },
+              "observer_start_s": 571.438543,
+              "observer_end_s": 596.4408919999998
+            }
+          ],
+          "pooled_raft_sync_ms": 0.10872504207635751,
+          "replicated_raft_syncs_per_completed_file": 9.984375,
+          "replicated_raft_entries_per_completed_file": 10.347287735849056,
+          "raft_entries_per_sync": 1.0363480674402812,
+          "pooled_kv_release_ms": 0.017165355620419563,
+          "pooled_applied_persist_ms": 0.003596539341886983
+        }
+      },
+      "physical": {
+        "sda": {
+          "first": {
+            "seconds": 29.729924069999925,
+            "write_requests": 224817,
+            "write_mean_ms": 0.09320024731225841,
+            "host_write_MiB": 1053.70703125,
+            "flush_requests": 0,
+            "flush_mean_ms": null
+          },
+          "late": {
+            "seconds": 29.999963383999784,
+            "write_requests": 103616,
+            "write_mean_ms": 0.09829563001852995,
+            "host_write_MiB": 506.6328125,
+            "flush_requests": 0,
+            "flush_mean_ms": null
+          }
+        },
+        "nvme0n1": {
+          "first": {
+            "seconds": 29.729924069999925,
+            "write_requests": 71072,
+            "write_mean_ms": 1.5459674696082846,
+            "host_write_MiB": 1978.30810546875,
+            "flush_requests": 29877,
+            "flush_mean_ms": 1.3034775914583123
+          },
+          "late": {
+            "seconds": 29.999963383999784,
+            "write_requests": 33060,
+            "write_mean_ms": 5.531367211131276,
+            "host_write_MiB": 910.16845703125,
+            "flush_requests": 12299,
+            "flush_mean_ms": 3.9556061468412067
+          }
+        }
+      }
+    },
+    {
+      "cell": "2-nvme",
+      "accepted": {
+        "tag": "2-nvme",
+        "files": 9971,
+        "errors": [],
+        "cold_checks": 64,
+        "storage": "/home/efs/w97-meta-placement-data-20261011-2",
+        "start_mono": 2591.676207,
+        "seconds": 600
+      },
+      "windows": {
+        "first": {
+          "start_s": 0.2780112420000478,
+          "end_s": 30.000074352999945,
+          "files_s": 40.34040286914873,
+          "group_files_s": {
+            "0": 20.018798754915345,
+            "2": 20.32160411423339
+          },
+          "nodes": [
+            {
+              "node": 1,
+              "counters": {
+                "sync": 4480,
+                "sync_error": 0,
+                "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
+                "flow_busy": 0
+              },
+              "hist": {
+                "sync_us": {
+                  "n": 4480,
+                  "sum": 12290719
+                },
+                "wal_entries": {
+                  "n": 4480,
+                  "sum": 5376
+                },
+                "kv_release_us": {
+                  "n": 23213,
+                  "sum": 13023326
+                },
+                "applied_persist_us": {
+                  "n": 23213,
+                  "sum": 8536055
+                }
+              },
+              "observer_start_s": 1.1287130000000616,
+              "observer_end_s": 31.14221600000019
+            },
+            {
+              "node": 2,
+              "counters": {
+                "sync": 4809,
+                "sync_error": 0,
+                "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
+                "flow_busy": 0
+              },
+              "hist": {
+                "sync_us": {
+                  "n": 4809,
+                  "sum": 11673715
+                },
+                "wal_entries": {
+                  "n": 4809,
+                  "sum": 5382
+                },
+                "kv_release_us": {
+                  "n": 6895,
+                  "sum": 10003226
+                },
+                "applied_persist_us": {
+                  "n": 6895,
+                  "sum": 7084703
+                }
+              },
+              "observer_start_s": 1.4583550000002106,
+              "observer_end_s": 31.481971000000158
+            },
+            {
+              "node": 3,
+              "counters": {
+                "sync": 4805,
+                "sync_error": 0,
+                "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
+                "flow_busy": 0
+              },
+              "hist": {
+                "sync_us": {
+                  "n": 4805,
+                  "sum": 11574884
+                },
+                "wal_entries": {
+                  "n": 4805,
+                  "sum": 5377
+                },
+                "kv_release_us": {
+                  "n": 6844,
+                  "sum": 10067862
+                },
+                "applied_persist_us": {
+                  "n": 6844,
+                  "sum": 7167473
+                }
+              },
+              "observer_start_s": 1.748631999999816,
+              "observer_end_s": 31.77685500000007
+            }
+          ],
+          "pooled_raft_sync_ms": 2.5215920249751664,
+          "replicated_raft_syncs_per_completed_file": 11.754795663052544,
+          "replicated_raft_entries_per_completed_file": 13.457047539616347,
+          "raft_entries_per_sync": 1.14481339577125,
+          "pooled_kv_release_ms": 0.8956054882009092,
+          "pooled_applied_persist_ms": 0.6166981760121237
+        },
+        "last": {
+          "start_s": 570.0001000540001,
+          "end_s": 600.0001031380002,
+          "files_s": 12.766665354253414,
+          "group_files_s": {
+            "0": 6.366666012173374,
+            "2": 6.39999934208004
+          },
+          "nodes": [
+            {
+              "node": 1,
+              "counters": {
+                "sync": 1291,
+                "sync_error": 0,
+                "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
+                "flow_busy": 0
+              },
+              "hist": {
+                "sync_us": {
+                  "n": 1291,
+                  "sum": 10082024
+                },
+                "wal_entries": {
+                  "n": 1291,
+                  "sum": 1546
+                },
+                "kv_release_us": {
+                  "n": 6226,
+                  "sum": 10213944
+                },
+                "applied_persist_us": {
+                  "n": 6226,
+                  "sum": 8327619
+                }
+              },
+              "observer_start_s": 571.9358520000001,
+              "observer_end_s": 596.9810149999998
+            },
+            {
+              "node": 2,
+              "counters": {
+                "sync": 1664,
+                "sync_error": 0,
+                "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
+                "flow_busy": 0
+              },
+              "hist": {
+                "sync_us": {
+                  "n": 1664,
+                  "sum": 11255285
+                },
+                "wal_entries": {
+                  "n": 1664,
+                  "sum": 1864
+                },
+                "kv_release_us": {
+                  "n": 2204,
+                  "sum": 9598857
+                },
+                "applied_persist_us": {
+                  "n": 2204,
+                  "sum": 8461858
+                }
+              },
+              "observer_start_s": 568.285715,
+              "observer_end_s": 598.3453340000001
+            },
+            {
+              "node": 3,
+              "counters": {
+                "sync": 1664,
+                "sync_error": 0,
+                "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
+                "flow_busy": 0
+              },
+              "hist": {
+                "sync_us": {
+                  "n": 1664,
+                  "sum": 11416746
+                },
+                "wal_entries": {
+                  "n": 1664,
+                  "sum": 1863
+                },
+                "kv_release_us": {
+                  "n": 2056,
+                  "sum": 9357736
+                },
+                "applied_persist_us": {
+                  "n": 2056,
+                  "sum": 8599131
+                }
+              },
+              "observer_start_s": 568.309784,
+              "observer_end_s": 598.3795020000002
+            }
+          ],
+          "pooled_raft_sync_ms": 7.091157176878112,
+          "replicated_raft_syncs_per_completed_file": 12.060052219321149,
+          "replicated_raft_entries_per_completed_file": 13.767624020887729,
+          "raft_entries_per_sync": 1.1415890885473046,
+          "pooled_kv_release_ms": 2.7818555216479117,
+          "pooled_applied_persist_ms": 2.4211909212283045
+        }
+      },
+      "physical": {
+        "sda": {
+          "first": {
+            "seconds": 29.722063110999898,
+            "write_requests": 10,
+            "write_mean_ms": 0.2,
+            "host_write_MiB": 0.203125,
+            "flush_requests": 0,
+            "flush_mean_ms": null
+          },
+          "late": {
+            "seconds": 30.000003084000127,
+            "write_requests": 19,
+            "write_mean_ms": 0.5263157894736842,
+            "host_write_MiB": 1.2109375,
+            "flush_requests": 0,
+            "flush_mean_ms": null
+          }
+        },
+        "nvme0n1": {
+          "first": {
+            "seconds": 29.722063110999898,
+            "write_requests": 87171,
+            "write_mean_ms": 1.2118135618496977,
+            "host_write_MiB": 473.77783203125,
+            "flush_requests": 40460,
+            "flush_mean_ms": 1.4048442906574394
+          },
+          "late": {
+            "seconds": 30.000003084000127,
+            "write_requests": 31421,
+            "write_mean_ms": 3.5249673785048214,
+            "host_write_MiB": 156.70263671875,
+            "flush_requests": 14609,
+            "flush_mean_ms": 3.9042371141077417
+          }
+        }
+      }
+    }
+  ],
+  "limits": "Fresh three-voter clusters, fixed engine and NVMe data, changing metadata device. First/last completed approximately 30-second windows; cumulative non-atomic Raft histograms have sampling boundary skew. Sync/entry counts sum three replicas and include background work; they are not logical operation counts. Host physical block counters include queue time and other I/O. W52 focused compilation/testing overlaps the first NVMe middle, not an uninstrumented exclusive-host ceiling. Cold checks sample 64 payloads per cell, not every file or power loss."
+}
