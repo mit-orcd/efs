@@ -1,5 +1,6 @@
 # W92 — merged-source suites and three further tiny-file rounds
 
+**Archived Oct 11, 2026:** dated profiling and integration evidence. These rounds do not close W92 or establish the current Intel deployment. The [active W92 acceptance ledger](../../status/query-cache-closure-20261010.md) retains unresolved scale and platform gates.
 Oct 9 EDT / Oct 10 UTC, `devel-find-stats`, Xorinox files/direct-I/O/TCP.
 Baseline `8aeb9c4b` includes the devel, W66 and persistence-pressure merges.
 The user explicitly grants exclusive Xorinox access. No wipe or push.
@@ -100,6 +101,6 @@ is drained/removed. Gateway and both test-client mounts remain available with
 W92 remains open: full derived-stat/rollup passes, aggregate retained-cache
 capacity control and billion-file scale/fault acceptance. W66 authoritative
 consensus/routing and W99 proactive all-writer pressure remain separate work.
-The [raw ledger](../../results/measure/20261009-w92-merged-three-rounds/README.md)
+The [raw ledger](../../../results/measure/20261009-w92-merged-three-rounds/README.md)
 contains complete results, method scripts, original failure/retry logs and hashes
-of retained remote captures. [Status index](README.md) · [W92](../backlog/work-items.md#w92).
+of retained remote captures. [Status index](../../status/README.md) · [W92](../../backlog/work-items.md#w92).

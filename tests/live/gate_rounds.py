@@ -15,14 +15,20 @@ from pathlib import Path
 import subprocess
 import time
 
+# Background launches may inherit SIGINT ignored from nohup. Restore
+# cancellation here and in each exec'ed fixture so its finally block runs.
+signal.signal(signal.SIGINT, signal.default_int_handler)
+
 source=Path(__file__).resolve().parents[2]
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--output',type=Path,required=True)
 parser.add_argument('--start',type=int,default=1)
 parser.add_argument('--end',type=int,default=30)
+parser.add_argument('--port',type=int,default=20510,help='private four-port GC fixture base')
 parser.add_argument('--keep-going',action='store_true',help='record failures and continue independent rounds; final exit remains unsuccessful')
 args=parser.parse_args()
 assert 1<=args.start<=args.end<=30
+assert 1<=args.port<=65532
 args.output.mkdir(parents=True,exist_ok=True)
 # Freeze inputs before launching a matrix. Editing the development tree during
 # a long run must not change later fixtures, compiler inputs or traceback text.
@@ -31,7 +37,7 @@ shutil.copytree(source,snapshot,ignore=shutil.ignore_patterns('.git','logs','__p
 source=snapshot
 
 def gc(mode,*flags):
-    return ['python3','tests/live/gc_reclamation.py','--mode',mode,'--port','20510',*flags]
+    return ['python3','tests/live/gc_reclamation.py','--mode',mode,'--port',str(args.port),*flags]
 rounds=[
  ('W54/W38 authoritative fold and cold GC',gc('direct','--fold-audit')),
  ('W54/W38 buffered fold and cold GC',gc('buffered','--fold-audit')),
@@ -76,17 +82,35 @@ for number in range(args.start,args.end+1):
     start=time.monotonic()
     print(f'ROUND {number:02}: {title}',flush=True)
     with (args.output/f'round{number:02}.log').open('x') as log:
-        proc=subprocess.Popen(command,cwd=source,stdout=log,stderr=subprocess.STDOUT)
-        try:record['exit_code']=proc.wait(timeout=1200)
+        wrapped=[sys.executable,'-c',
+            'import os,signal,sys;signal.signal(signal.SIGINT,signal.SIG_DFL);signal.pthread_sigmask(signal.SIG_UNBLOCK,{signal.SIGINT});os.execvp(sys.argv[1],sys.argv[1:])',*command]
+        # Register the child before an arriving interrupt can unwind us.
+        previous_mask=signal.pthread_sigmask(signal.SIG_BLOCK,{signal.SIGINT})
+        proc=None;cancelled=False
+        try:
+            proc=subprocess.Popen(wrapped,cwd=source,stdout=log,stderr=subprocess.STDOUT)
+            signal.pthread_sigmask(signal.SIG_SETMASK,previous_mask)
+            record['exit_code']=proc.wait(timeout=1200)
+        except KeyboardInterrupt:
+            cancelled=True
+            if proc is not None:
+                proc.send_signal(signal.SIGINT)
+                try:proc.wait(timeout=90)
+                except subprocess.TimeoutExpired:record['cleanup_incomplete_pid']=proc.pid
+            record['exit_code']=130
         except subprocess.TimeoutExpired:
             # Let Python fixtures execute their owned-process finally blocks.
             proc.send_signal(signal.SIGINT)
             try:proc.wait(timeout=90)
             except subprocess.TimeoutExpired:record['cleanup_incomplete_pid']=proc.pid
             record['exit_code']=124
+        finally:
+            signal.pthread_sigmask(signal.SIG_SETMASK,previous_mask)
     record['elapsed_seconds']=time.monotonic()-start
     path.write_text(json.dumps(record,indent=2)+'\n')
     print(f"ROUND {number:02} exit={record['exit_code']} seconds={record['elapsed_seconds']:.1f}",flush=True)
+    if cancelled:
+        raise SystemExit(130)  # No later fixture may start after cancellation.
     if 'cleanup_incomplete_pid' in record:
         raise SystemExit(124)  # Never overlap another round with an unretired fixture.
     if record['exit_code']:

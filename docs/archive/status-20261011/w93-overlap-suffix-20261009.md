@@ -1,5 +1,7 @@
 # W93 verified overlap suffixes — October 9, 2026
 
+Historical investigation: its W93-open disposition predates the later [atomic-apply acceptance](../../status/w93-atomic-apply-20261010.md). Original failed/not-run verdicts and restoration limits below are retained. W97 and [current Intel acceptance](../../status/intel-deployment-acceptance-20261011.md) remain active; this archive move closes no additional gate.
+
 Second user-authorized hour starts 6:23 pm EDT (22:23 UTC) on
 `devel-persistence-pressure`, isolated worktree, NUC only. Preserved stores,
 TCP/direct I/O, commands disabled; no devel merge.

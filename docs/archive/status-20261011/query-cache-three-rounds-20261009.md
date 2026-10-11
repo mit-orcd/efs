@@ -1,5 +1,6 @@
 # W92 — three additional tiny-file cache rounds
 
+**Archived Oct 11, 2026:** dated profiling and integration evidence. These rounds do not close W92 or establish the current Intel deployment. The [active W92 acceptance ledger](../../status/query-cache-closure-20261010.md) retains unresolved scale and platform gates.
 Oct 9 EDT / Oct 10 UTC, `devel-find-stats`; Xorinox files/direct-I/O/TCP.
 Three additional 6000-file trees use the original tiny_files.py with four workers,
 1..512-byte payloads and up to three directory levels. Every storage daemon has
@@ -38,8 +39,8 @@ all five retained tiny trees match their full exported paths and totals, plus
 diagnostic mount is drained/removed, and services are restored. No wipe or push.
 Focused/related gates and all five documentation checks pass; full suite and
 sanitizer acceptance are not claimed. Evidence is recorded in the
-[raw ledger](../../results/measure/20261009-w92-three-rounds/README.md).
+[raw ledger](../../../results/measure/20261009-w92-three-rounds/README.md).
 W92 stays open: derived inode/stat/rollup maintenance still performs a full disk
 pass, aggregate retained-cache capacity control and scale/fault acceptance remain
 unfinished. This does not close W66 foreground consensus/routing work or W55's
-original NFS incident. [Status index](README.md) · [W92](../backlog/work-items.md#w92).
+original NFS incident. [Status index](../../status/README.md) · [W92](../../backlog/work-items.md#w92).

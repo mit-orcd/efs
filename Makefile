@@ -5,15 +5,25 @@ CC = gcc
 # unwinding under --perf. Both are cheap at -O3.
 # Always tune for the build host (compile on the same arch you run on).
 # Build id: nodes refuse to cluster across different builds (see HELLO gate).
+# Deployment passes an already-verified source identity. Do not rescan its
+# filtered remote checkout (including large result artifacts) in that case.
+ifndef EFS_GIT_ID
 EFS_GIT_ID := $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
 ifneq ($(shell git status --porcelain 2>/dev/null | head -1),)
 EFS_GIT_ID := $(EFS_GIT_ID)-dirty
 endif
+endif
 # Human-facing version string (efs/version.h --version, startup logs, the
 # VERSION wire op). Informational only; EFS_BUILD_ID above stays the gate.
+ifndef EFS_GIT_DESCRIBE
 EFS_GIT_DESCRIBE := $(shell git describe --tags --always --dirty 2>/dev/null || echo unknown)
+endif
+ifndef EFS_GIT_BRANCH
 EFS_GIT_BRANCH   := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
+endif
+ifndef EFS_BUILD_TIME
 EFS_BUILD_TIME   := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+endif
 CFLAGS = -O3 -g -fno-omit-frame-pointer -march=native -mtune=native \
          -std=c99 -Wall -Wextra -D_GNU_SOURCE \
          -Wno-stringop-truncation -Wno-format-truncation \
@@ -187,6 +197,7 @@ test-report-pressure:
 	python3 tests/test_append_sequence.py
 	python3 tests/test_append_session_admission.py
 	python3 tests/test_append_session_host.py
+	python3 tests/test_session_read_proof.py
 	python3 tests/test_append_host_authority.py
 	python3 tests/test_report_orphan.py
 
@@ -326,6 +337,7 @@ test: all
 	python3 tests/test_fuse_lease_retention.py
 	python3 tests/test_create_admission_wait.py
 	python3 tests/test_lookup_replacement.py
+	python3 tests/test_lookup_read_group.py
 	python3 tests/test_w23_samples.py
 	python3 tests/test_read_verify.py
 	python3 tests/test_opid_admission.py
@@ -334,6 +346,7 @@ test: all
 	python3 tests/test_session_admission.py
 	python3 tests/test_close_effects.py
 	python3 tests/test_session_cleanup_cli.py
+	python3 tests/test_session_fence_finish.py
 	python3 tests/test_publication_host.py
 	python3 tests/test_txn_read_authority.py
 	python3 tests/test_publication_rpc.py
@@ -410,12 +423,14 @@ test: all
 	./tests/test_kv_snapshot_tail
 	./tests/test_kv_seg_index
 	./tests/test_raft_store
+	python3 tests/test_raft_replay_reads.py
 	./tests/test_mtime_barrier
 	./tests/test_publication_session
 	./tests/test_publication_ack
 	./tests/test_publication_recovery
 	./tests/test_append_receipt
 	./tests/test_append_transaction
+	python3 tests/test_append_prepare_batch.py
 	./tests/test_meta_apply
 	./tests/test_lane_bootstrap_recovery
 	./tests/test_raft
@@ -428,6 +443,16 @@ test: all
 	python3 tests/test_query_snapshot_failover.py
 	python3 tests/test_query_callback_affinity.py
 	python3 tests/test_feature_poll_deadline.py
+	python3 tests/test_feature_discovery_status.py
+	python3 tests/test_close_inspector_scope.py
+	python3 tests/test_close_retire_fastpath.py
+	python3 tests/test_store_tls.py
+	python3 tests/test_report_session_admission.py
+	python3 tests/test_namespace_owner_once.py
+	python3 tests/test_gc_session_admission.py
+	python3 tests/test_partition_fence_verdict.py
+	python3 tests/test_mkdir_committed_reply.py
+	python3 tests/test_namespace_receipt_pending.py
 	python3 tests/test_query_loaded_oracle.py
 	python3 tests/test_valgrind_verdict.py
 	python3 tests/test_txn_parts_bounds.py

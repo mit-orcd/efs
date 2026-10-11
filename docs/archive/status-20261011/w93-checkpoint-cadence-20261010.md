@@ -1,5 +1,7 @@
 # W93 checkpoint cadence investigation — October 10, 2026
 
+Historical investigation: its W93-open disposition predates the later [atomic-apply acceptance](../../status/w93-atomic-apply-20261010.md). Original failed/not-run verdicts and restoration limits below are retained. W97 and [current Intel acceptance](../../status/intel-deployment-acceptance-20261011.md) remain active; this archive move closes no additional gate.
+
 User-authorized hour starts 04:26 UTC (00:26 EDT), NUC only. Branch
 `devel-persistence-pressure`, worktree `i-l/work/efs-find-stats`. Existing stores
 and payload trees are preserved. TCP/direct I/O, four daemons, two mounts;
@@ -9,7 +11,7 @@ W93/W97 investigation, not closure or a hardware-ceiling claim.
 ## Committed branch integration
 
 Frozen branch tips are in
-[merge-tips.json](../../results/measure/20261010-w93-checkpoint-hour/merge-tips.json).
+[merge-tips.json](../../../results/measure/20261010-w93-checkpoint-hour/merge-tips.json).
 All 16 captured local branch tips are ancestors of this branch: first fast-forward
 through `51880999`, then `4be9ecf6` (integrated devel). No other checkout or branch
 pointer is changed; commits made elsewhere after this boundary are outside the
@@ -131,7 +133,7 @@ refused marker attempt before asserting its contract. The service remains idle
 and running on its own stores/mounts during these private fixtures.
 
 The longer cadence fails a required append gate and is not adopted. Raw evidence directory:
-[20261010-w93-checkpoint-hour](../../results/measure/20261010-w93-checkpoint-hour).
+[20261010-w93-checkpoint-hour](../../../results/measure/20261010-w93-checkpoint-hour).
 
 ## First completed control
 

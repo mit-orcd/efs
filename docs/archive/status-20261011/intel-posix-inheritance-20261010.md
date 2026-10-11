@@ -1,5 +1,6 @@
 # Intel POSIX creation inheritance follow-up — Oct 10, 2026
 
+**Archived Oct 11, 2026:** historical repair evidence. Native production-function regressions and the named rename, xattr and setgid POSIX cases pass in the current Intel runs. Broader Intel acceptance remains open in the [current deployment ledger](../../status/intel-deployment-acceptance-20261011.md); archiving this note does not close its remaining timeouts.
 ## Confirmed issue
 
 On Intel2, the integrated `d579c3bf` FUSE client created a child directory

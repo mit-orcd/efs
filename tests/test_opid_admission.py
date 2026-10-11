@@ -27,6 +27,7 @@ static pthread_mutex_t opid_mu=PTHREAD_MUTEX_INITIALIZER;
 static uint64_t test_deadline;
 static uint64_t mono_ms(void) {struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000+t.tv_nsec/1000000;}
 int efs_client_rpc_past_deadline(void) {return test_deadline && mono_ms()>=test_deadline;}
+uint64_t efs_client_rpc_deadline_ms(void) {return test_deadline;}
 static unsigned calls;
 static uint64_t last_ack,last_seq;
 static int rpc_status_to_efs(uint8_t status) { return status?EFS_ERR_IO:EFS_OK; }
@@ -61,6 +62,10 @@ static void *hold_identity(void *value) {
     pthread_mutex_lock(&hold_mu);ready++;pthread_cond_broadcast(&hold_cv);
     while(!release_workers)pthread_cond_wait(&hold_cv,&hold_mu);
     pthread_mutex_unlock(&hold_mu);opid_end(slots[i]);return NULL;
+}
+static void *release_oldest(void *value) {
+    struct timespec delay={1,250000000};nanosleep(&delay,NULL);
+    opid_end((int)(intptr_t)value);return NULL;
 }
 int main(void) {
     struct efs_opid_req held[EFS_OPID_REPLY_CACHE],q;
@@ -103,7 +108,29 @@ int main(void) {
     pthread_attr_destroy(&attr);
     assert(efs_client_rpc_unlink(1,1,"test",0)==EFS_OK && calls==before+1);
     puts("16 simultaneous production identity owners: unique slots/sequences, saturation refuses four mutations, released admission recovers PASS");
+    /* A later completed burst cannot reuse the oldest live receipt slot.
+     * CREATE waits before allocation, then emits exactly one new identity. */
+    for(int i=0;i<EFS_OPID_REPLY_CACHE;i++)assert(opid_begin(&held[i])>=0);
+    for(int i=1;i<EFS_OPID_REPLY_CACHE;i++)opid_end(i);
+    uint64_t admission_next=g_client.opid_next;before=calls;
+    pthread_t releaser;assert(!pthread_create(&releaser,NULL,release_oldest,(void *)(intptr_t)0));
+    begin=mono_ms();test_deadline=begin+3000;
+    assert(efs_client_rpc_create(1,1,"test",S_IFLNK|0777,0,0,0,NULL,NULL)==EFS_OK);
+    assert(!pthread_join(releaser,NULL));
+    assert(mono_ms()-begin>=1200 && mono_ms()-begin<3000);
+    assert(calls==before+1 && last_seq==admission_next && g_client.opid_next==admission_next+1);
+    assert(last_ack==admission_next-1);test_deadline=0;
+    for(int i=0;i<EFS_OPID_REPLY_CACHE;i++)assert(opid_begin(&held[i])>=0);
+    admission_next=g_client.opid_next;before=calls;begin=mono_ms();test_deadline=begin+20;
+    assert(efs_client_rpc_create(1,1,"test",S_IFDIR|0700,0,0,0,NULL,NULL)==EFS_ERR_BUSY);
+    assert(mono_ms()-begin<200 && calls==before && g_client.opid_next==admission_next);
+    for(int i=0;i<EFS_OPID_REPLY_CACHE;i++)opid_end(i);
+    test_deadline=0;
+    puts("namespace admission: waits before allocation, exact one identity, inherited deadline sends nothing PASS");
     g_client.opid_next=UINT64_MAX;
+    begin=mono_ms();test_deadline=begin+3000;
+    assert(efs_client_rpc_create(1,1,"test",S_IFDIR|0700,0,0,0,NULL,NULL)==EFS_ERR_BUSY);
+    assert(mono_ms()-begin<200 && calls==before);test_deadline=0;
     assert(opid_begin(&q)<0 && !efs_opid_req_valid(&q));
     assert(g_client.opid_next==UINT64_MAX);
     puts("namespace opid saturation: four mutations send nothing, released admission keeps watermark, sequence overflow refused PASS");

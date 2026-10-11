@@ -67,7 +67,7 @@ in the larger matched read check. Both NUC mounts are restored on the repaired
 build with default settings. Tested tuning remains opt-in; W53/W94/W97 remain separate.
 
 
-[Oct 10 W93 checkpoint cadence](w93-checkpoint-cadence-20261010.md) records
+[Oct 10 W93 checkpoint cadence](../archive/status-20261011/w93-checkpoint-cadence-20261010.md) records
 all-branch integration, failed-marker immediate retry, bounded checkpoint
 coalescing, original/repeated NUC functional gates and private retained-marker
 crash replay. The 10 ms default remains; performance and remaining recovery
@@ -92,12 +92,12 @@ quotas and large-scale acceptance remain open.
 [W92 tiny-file profiling](query-cache-tiny-profile-20261009.md) records deployed
 bounded read windows and immutable-file persistence reuse: controlled unchanged
 refresh is 2.07× faster; the mixed live creation-rate drop remains unisolated.
-[W92 three additional tiny-file rounds](query-cache-three-rounds-20261009.md)
+[W92 three additional tiny-file rounds](../archive/status-20261011/query-cache-three-rounds-20261009.md)
 records all-node profiles, exact-match lookup, bounded combined-record writes
 and one checked raw/index persistence barrier; controlled syscall and cold
 correctness evidence stays separate from live throughput observations.
 
-[W92 merged-source suites and three further rounds](query-cache-merged-three-rounds-20261009.md)
+[W92 merged-source suites and three further rounds](../archive/status-20261011/query-cache-merged-three-rounds-20261009.md)
 records native, core/concurrent/extras and cold persistence gates, nine all-node
 CPU captures and three logical cache fixes. Frozen-namespace preads fall 78.0%,
 pwrites 23.6% and median process CPU 29.1%, preserving fsync counts; fixed memory
@@ -105,7 +105,7 @@ increases within the tested budget. Live throughput and narrower NFS evidence
 are qualified separately. Runtime `a8a15a14` is restored with ordinary `.efs`
 mount opt-in disabled; eight retained trees pass cold query/payload checks.
 
-[W92 previous integration and three further profiles](query-cache-next-three-rounds-20261010.md)
+[W92 previous integration and three further profiles](../archive/status-20261011/query-cache-next-three-rounds-20261010.md)
 records the captured branch boundary, parent-rollup coalescing and constant-time
 cache descriptor hits, with bounded memory and persistence regressions. Controlled
 measurements show 39.1% fewer preads, 34.9% fewer pwrites and 15.0% lower median
@@ -441,13 +441,15 @@ Spark performance measurement still owed. Grouped open counts are now
 
 ## Intel follow-ups — W100–W106 (indexed Oct 11, 2026)
 
+Current [devel-intel acceptance ledger](intel-deployment-acceptance-20261011.md) retains failures alongside reruns. [Captured evidence](../../results/measure/20261011-intel-devel-intel/acceptance-in-progress.json) remains explicitly in progress until the complete host/mode matrix terminates.
+
 This index adds traceable IDs to the Intel acceptance follow-ups; it does not change the existing queue order or accepted design decisions. Existing sustained tiny-file performance remains W97, protection/repair W74/W66, durability W71/W73 and capacity W99.
 
 | ID | Task | Recorded state |
 | --- | --- | --- |
-| [W100](../backlog/work-items.md#w100) | Intel2 repeated-write POSIX timeout | Correctness/performance investigation; open. |
+| [W100](../backlog/work-items.md#w100) | Intel concurrent POSIX timeouts and mixed-workload EIO | Correctness/performance investigation; open. |
 | [W101](../backlog/work-items.md#w101) | Complete and verify the Intel two-million-file workload | Operational acceptance; in progress. |
-| [W102](../backlog/work-items.md#w102) | Complete Intel2 private peer and GC acceptance | Validation follow-up; blocked by W100 in the full harness. |
+| [W102](../backlog/work-items.md#w102) | Complete Intel2 private peer and GC acceptance | Validation follow-up; in progress, aggregate acceptance remains open. |
 | [W103](../backlog/work-items.md#w103) | Investigate intermittent Intel persistence and stats timeouts | Liveness/performance investigation; open. |
 | [W104](../backlog/work-items.md#w104) | Decide and gate writable shared mmap support | Feature scope/design follow-up; deferred, currently unsupported by specification. |
 | [W105](../backlog/work-items.md#w105) | Stable NFS file handles across EFS client restarts | Gateway acceptance/correctness investigation; open. |

@@ -1,0 +1,12 @@
+{
+  "utc": "2026-10-11T09:42:57.286989+00:00",
+  "script_sha256": "278f6996aa6dc0c9081616c7bb8f0086d49308551ec381b867ed0dabf7e690d4",
+  "before": "Intel1 self-test reported scale16 live PID list; subsequent process read empty. Old oracle counted zombie visibility through kill(pid,0).",
+  "change": "Use existing bounded process-group snapshot; exclude zombie-only groups, retain S/D descendants even after leader exit; failed snapshot keeps conservative kill(pid,0) fallback.",
+  "synthetic_states": "zombie group101 excluded; sleeping descendant group102 and blocked descendant group103 retained; absentgroup104 excluded",
+  "local_self_test": "posix_suite self-test: pass",
+  "Intel_self_tests": {
+    "intel1_efs": "posix_suite self-test: pass",
+    "intel2_efs": "posix_suite self-test: pass"
+  }
+}

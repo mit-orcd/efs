@@ -1166,6 +1166,17 @@ static int sess_rpc(const char *host, uint16_t port, const uint8_t *payload,
             free(reply);out->rc=EFS_ERR_IO;return out->rc;
         }
         memcpy(out,reply,sizeof(*out));free(reply);
+        /* Fresh session reads and exact-floor fences can be BUSY while a
+         * cold participant catches up. These requests are idempotent with
+         * unchanged bytes. BEGIN and cleanup selection retain their one
+         * definite-result requirement, as do all transport failures. */
+        if(out->rc==EFS_ERR_BUSY && plen>=3 && payload[1]==EFS_MD_CMD_SESSION &&
+           ((payload[2]==0 && plen==23) ||
+            (payload[2]==EFS_MD_SESS_FENCE_LOC && plen==27) ||
+            (payload[2]==EFS_MD_SESS_STORAGE_FENCE && plen==23))) {
+            usleep(50000);
+            continue;
+        }
         if(out->rc!=EFS_ERR_NOT_PRIMARY)return out->rc;
         if(out->leader_hint<0) {
             /* Explicit NOT_PRIMARY means this request was not proposed.
@@ -1311,7 +1322,7 @@ static int cmd_raft_session_fence(const char *host, uint16_t port,
     memset(payload,0,sizeof(payload));
     sess_pack_hdr(payload,efs_raft_shard_group(ssh),EFS_MD_SESS_STORAGE_FENCE,uuid);
     wr32be_mgmt(payload+3+EFS_OPID_UUID_LEN,epoch);
-    phase = "storage certificates";
+    phase = "storage-fence";
     rc=sess_storage_barrier(host,port,payload,1+22,&r);
     if(rc!=EFS_OK)goto out;
 
@@ -1347,29 +1358,28 @@ static int cmd_raft_session_fence(const char *host, uint16_t port,
                       uuid);
         wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN, epoch);
         wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN + 4, sh);
-        phase = "local fence";
-        rc = sess_rpc(host, port, payload, 1 + 26, &r);
+        phase = "participant-floor";
+        rc = sess_storage_barrier(host, port, payload, 1 + 26, &r);
         if (rc != EFS_OK)
             goto out;
         memset(payload, 0, sizeof(payload));
         sess_pack_hdr(payload, efs_raft_shard_group(ssh), EFS_MD_SESS_ACK, uuid);
         wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN, sh);
-        phase = "metadata acknowledgement";
+        phase = "participant-ack";
         rc = sess_rpc(host, port, payload, 1 + 22, &r);
         if (rc != EFS_OK)
             goto out;
     }
     memset(payload, 0, sizeof(payload));
     sess_pack_hdr(payload, efs_raft_shard_group(ssh), EFS_MD_SESS_FINISH, uuid);
-    /* FINISH also checks every storage certificate. A cold RDMA peer can
-     * return BUSY after the initial seal succeeded. Retry only this pinned
-     * UUID/epoch; never re-BEGIN or infer completion from a metadata quorum. */
+    /* Freeze the epoch captured after BEGIN. Repeated storage verification
+     * must never finish a later epoch advanced by another coordinator. */
     wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN, epoch);
-    phase = "finish certificate verification";
+    phase = "finish";
     rc = sess_storage_barrier(host, port, payload, 1 + 22, &r);
     if (rc != EFS_OK)
         goto out;
-    phase = "ownership cleanup";
+    phase = "cleanup";
     for (i = 0; i < ntouch; i++) {
         rc=sess_cleanup_bounded(host,port,uuid,old_epoch,shards[i],0,&r);
         if(rc==EFS_OK)rc=sess_cleanup_bounded(host,port,uuid,old_epoch,shards[i],1,&r);
@@ -1391,8 +1401,7 @@ static int cmd_raft_session_fence(const char *host, uint16_t port,
         goto out;
     }
 out:
-    if (rc != EFS_OK)
-        fprintf(stderr, "session fence incomplete: phase=%s epoch=%u rc=%d\n", phase, epoch, rc);
+    if (rc != EFS_OK) fprintf(stderr,"session fence incomplete: phase=%s epoch=%u rc=%d\n",phase,epoch,rc);
     st = 0;
     if (rc == EFS_ERR_NOT_PRIMARY)
         st = 7;

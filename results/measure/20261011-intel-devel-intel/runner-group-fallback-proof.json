@@ -1,0 +1,11 @@
+{
+  "utc": "2026-10-11T09:50:40.946871+00:00",
+  "script_sha256": "ecc9e3297e9dc87d281a858a31fd726cdd61e96cf8f843894686760871651e7b",
+  "change": "On unavailable process-table snapshot, probe existence of whole process group rather than only departed leader PID; no zombie proof inferred from unavailable state.",
+  "synthetic": "Missing snapshot conservatively retains injected existing group104; Z-only excluded only when bounded snapshot proves Z; S/Ddescendants retained.",
+  "local": "posix_suite self-test: pass",
+  "hosts": {
+    "intel1_efs": "posix_suite self-test: pass",
+    "intel2_efs": "posix_suite self-test: pass"
+  }
+}

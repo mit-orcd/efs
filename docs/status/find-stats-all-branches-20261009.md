@@ -32,5 +32,5 @@ by this integration round. [Status index](README.md).
 **Subsequent suite/profile checkpoint:** merged source is now deployed and
 live-tested on Xorinox, followed by three additional W92 fixes. Runtime
 `a8a15a14` passes cold retained-tree checks. The
-[indexed follow-up](query-cache-merged-three-rounds-20261009.md) records suite
+[indexed follow-up](../archive/status-20261011/query-cache-merged-three-rounds-20261009.md) records suite
 coverage, NFS limitations, controlled measurements and restored services.
