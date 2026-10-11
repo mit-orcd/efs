@@ -230,7 +230,7 @@ MiB on the two fanout loads; workload-driver CPU is excluded.
 [Reconciled raw-field summary](../../results/measure/20261011-amd-sustained/followup-summary.json) /
 [reproduction](../../results/measure/20261011-amd-sustained/summarize-followup.py).
 
-The conditional ten-minute direct/buffered tests are now running, each retaining
+The subsequent ten-minute direct/buffered tests retained
 the same rate, quota, survivor oracle and 180-second drain deadline. No complete
 sustained-service or unpaced-overload acceptance is claimed yet. Installed
 service keeps the default idle; private acceptance uses explicit 100 ms.
@@ -244,7 +244,7 @@ and restores the two mounts. W94/W97 remain open; W95 production work stays ORCD
 Fanout's 600-second direct workload completes 65,664 warm-verified generations
 and exact cold survivors, but physical drain times out after 180.20 seconds.
 The longer backlog therefore remains an open gate, despite both short passes.
-Buffered is still running. The opt-in parser now admits 20..1000 ms, matching
+Buffered also fails its physical deadline. The opt-in parser now admits 20..1000 ms, matching
 the existing 20-ms snapshot/shutdown slice. The next private candidate uses
 20 ms only for capped, progressing GC; empty/blocked scans retain 1 second.
 Default scheduling and all work/ACK/authority budgets remain unchanged.
@@ -255,3 +255,62 @@ The 20-ms follow-up also times the existing warm tiny reads, without adding
 I/O. Every generation must still byte-verify before retirement. Read-window
 quantiles are new instrumentation; older cells have no comparable read-tail
 field, so they cannot establish a matched read-latency gain.
+
+Both 100-ms ten-minute modes now have final verdicts: direct warm-verifies
+65,664 generations and buffered 62,016; both exact cold checks pass, but drain
+times out at 180.20/180.21 seconds. Original service restores with exit zero.
+The 20-ms candidate `715b1103` passes full normal/fault native and direct
+functional acceptance; both ten-minute modes now pass cold bytes and physical reclamation (see final verdict below). Warm-read timing
+includes open/read/close, and adds no I/O to the existing oracle.
+
+Final deployment restored canonical `/data1/efs/logs/efsd-n*.log` and PID
+files used by the portal/devops, plus the guarded PID identities under each
+store's `log/`. Earlier manual launches used dedicated deployment logs and
+left the legacy PID files stale; those processes were replaced through guarded
+port ownership checks, never through stale PID files. Both mounts remain TCP
+and commands off. Standard AMD restart defaults are aligned with that
+profile; no RDMA test or global scheduling default is activated.
+
+## One-slice candidate: both ten-minute gates passed
+
+`715b1103` with explicit 20-ms progressing-backlog yield completes 62,720
+warm-verified generations in the 600-second direct workload. Cold restart
+verifies all 512 retained tiny files and four 16-MiB large files; physical
+fragment inventories and GC queues empty in 79.23 seconds, within the unchanged
+180-second deadline. Buffered completes 52,800 verified generations and drains in 77.94 seconds. This closes
+the bounded direct acceptance cell, not W97's unpaced overload/admission issue
+or W94's full data-plane integration. The installed normal service retains
+the 1-second scheduling default.
+
+| 600-s candidate / mode | Warm-verified generations | Full-window closes/s | Mean window close p99 (ms) | Mean window read p99 (ms) | Physical drain |
+|---|---:|---:|---:|---:|---:|
+| 100-ms fanout / direct | 65,664 | 109.15 | See raw summary | Not measured | Failed, 180.20 s |
+| 100-ms fanout / buffered | 62,016 | 102.88 | See raw summary | Not measured | Failed, 180.21 s |
+| 20-ms candidate / direct | 62,720 | 103.94 | 327.79 | 85.09 | Passed, 79.23 s |
+| 20-ms candidate / buffered | 52,800 | 87.48 | 473.59 | 132.54 | Passed, 77.94 s |
+
+These independent cells establish reclamation acceptance, not a throughput
+improvement: observed throughput is lower in both new cells. Quantiles are
+means of 30-second window p99s, not global p99s; reads include open/read/close.
+The new direct/buffered sampled four-daemon-plus-FUSE CPU is 0.79/0.70 cores
+and peak aggregate RSS 548/482 MiB, excluding workload-driver CPU. Charged
+usage still grows during load; bounded post-load drain does not establish a
+steady-state capacity bound, unpaced admission, or fairness under overload.
+
+Full normal/fault native and direct functional (216 core/67 peer) gates pass.
+Final canonical deployment and independent restoration audit exit zero:
+exactly four installed `efsd` processes, two installed FUSE processes, both
+mounts accessible, canonical log/PID identities valid, direct/TCP, four metadata
+voters and commands disabled. No private fixture processes remain. Installed
+version is `715b1103-deploy-normal`; dedicated build source is
+`/data1/efs/devel-amd-gc-yield20-20261011`, while installed binaries are under
+`/data1/efs/src`. Existing stores were retained. The installed GC idle remains
+the default 1000 ms; 20 ms was explicitly set only on private acceptance nodes.
+[Restoration audit](../../results/measure/20261011-amd-sustained/evidence/yield20/restoration-proof.json)
+and [deployment identity](../../results/measure/20261011-amd-sustained/evidence/yield20/deployment/deployment.json).
+
+AMD restart defaults were tested with a clean environment and explicit override
+checks; TCP/direct and commands-off defaults pass, while explicit overrides
+remain supported. The original profile is retained with the evidence. W94/W97
+remain open for their integration/overload gates; W95 production packing remains
+owned by ORCD. No RDMA, D25, container, shared-devel change or push occurred.

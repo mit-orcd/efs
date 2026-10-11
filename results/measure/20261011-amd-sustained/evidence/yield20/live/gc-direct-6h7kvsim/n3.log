@@ -1,0 +1,1125 @@
+2026-10-11T17:28:11.198Z storage-engine=files direct_io=on
+2026-10-11T17:28:11.198Z Storage quota: explicit 4.00 GiB (safe maximum 165.24 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T17:28:11.199Z Joined cluster with 3 nodes
+2026-10-11T17:28:11.201Z heartbeat: enabled (2000 ms interval)
+2026-10-11T17:28:11.202Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T17:28:11.202Z raft-host: up raft_id=2 n=4 boot=4483103185069085 salt=13963889178748753803 g0=hosted g2=hosted
+2026-10-11T17:28:11.202Z efsd 715b1103-deploy-normal (branch devel-amd, built 2026-10-11T17:25:15Z on amd-395), build=715b1103-deploy-normal: node 3 listening on 127.0.0.1:24192, storage=/data1/efs/amd-gc-yield20-20261011/live/gc-direct-ascjjvi9/n3 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T17:28:11.202Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-11T17:28:13.201Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=995 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:28:14.979Z raft-host: applied session index=4 kind=1 shard=0 ino=0
+2026-10-11T17:28:14.987Z raft-host: applied session index=10 kind=1 shard=0 ino=0
+2026-10-11T17:28:14.996Z store: put O_DIRECT bounce copy (buf align=2368 len=65536)
+2026-10-11T17:28:15.003Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=4 bytes=262144 errors=0 avg_us=6516 p50_us=6549 max_us=7041 wdisk ops=4 bytes=262144 errors=0 avg_us=6445 p50_us=6508 max_us=6904
+2026-10-11T17:28:16.202Z kv-obs: mt_bytes=412090 l0_bytes=0 l0=0 l1=0
+2026-10-11T17:28:16.511Z raft-host: applied session index=2255 kind=1 shard=0 ino=0
+2026-10-11T17:28:18.500Z raft-host: applied session index=4899 kind=1 shard=0 ino=0
+2026-10-11T17:28:20.003Z iostats: get ops=302 bytes=19791872 errors=0 avg_us=197 p50_us=174 max_us=554 put ops=982 bytes=64356352 errors=0 avg_us=3189 p50_us=5640 max_us=11977 wdisk ops=982 bytes=64356352 errors=0 avg_us=3153 p50_us=5612 max_us=11945
+2026-10-11T17:28:21.202Z kv-obs: mt_bytes=955072 l0_bytes=0 l0=0 l1=0
+2026-10-11T17:28:25.004Z iostats: get ops=794 bytes=52035584 errors=0 avg_us=210 p50_us=221 max_us=615 put ops=1718 bytes=112590848 errors=0 avg_us=3743 p50_us=6212 max_us=13218 wdisk ops=1718 bytes=112590848 errors=0 avg_us=3704 p50_us=6184 max_us=13191
+2026-10-11T17:28:26.202Z kv-obs: mt_bytes=1520938 l0_bytes=0 l0=0 l1=0
+2026-10-11T17:28:29.203Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=953 passes=18 sampled=0 pending=0,0 reap=0,0 removed=799 file_bytes=55635968 payload_bytes=52363264 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:28:30.004Z iostats: get ops=1144 bytes=74973184 errors=0 avg_us=216 p50_us=183 max_us=867 put ops=2475 bytes=162201600 errors=0 avg_us=4142 p50_us=5410 max_us=13372 wdisk ops=2475 bytes=162201600 errors=0 avg_us=4105 p50_us=5374 max_us=13339
+2026-10-11T17:28:31.202Z kv-obs: mt_bytes=2012371 l0_bytes=0 l0=0 l1=0
+2026-10-11T17:28:35.004Z iostats: get ops=1489 bytes=97583104 errors=0 avg_us=218 p50_us=214 max_us=867 put ops=3189 bytes=208994304 errors=0 avg_us=4357 p50_us=3210 max_us=13372 wdisk ops=3189 bytes=208994304 errors=0 avg_us=4319 p50_us=3172 max_us=13339
+2026-10-11T17:28:36.202Z kv-obs: mt_bytes=2430260 l0_bytes=0 l0=0 l1=0
+2026-10-11T17:28:40.005Z iostats: get ops=1798 bytes=117833728 errors=0 avg_us=225 p50_us=240 max_us=914 put ops=3855 bytes=252641280 errors=0 avg_us=4498 p50_us=5599 max_us=13372 wdisk ops=3855 bytes=252641280 errors=0 avg_us=4458 p50_us=5455 max_us=13339
+2026-10-11T17:28:41.202Z kv-obs: mt_bytes=2813123 l0_bytes=0 l0=0 l1=0
+2026-10-11T17:28:45.006Z iostats: get ops=2140 bytes=140247040 errors=0 avg_us=228 p50_us=220 max_us=1099 put ops=4559 bytes=298778624 errors=0 avg_us=4530 p50_us=4484 max_us=13372 wdisk ops=4559 bytes=298778624 errors=0 avg_us=4491 p50_us=4437 max_us=13339
+2026-10-11T17:28:45.205Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=913 passes=34 sampled=0 pending=0,0 reap=0,0 removed=2316 file_bytes=161267712 payload_bytes=151781376 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:28:46.202Z kv-obs: mt_bytes=3158456 l0_bytes=0 l0=0 l1=0
+2026-10-11T17:28:50.006Z iostats: get ops=2466 bytes=161611776 errors=0 avg_us=235 p50_us=206 max_us=2506 put ops=5220 bytes=342097920 errors=0 avg_us=4595 p50_us=3520 max_us=14459 wdisk ops=5220 bytes=342097920 errors=0 avg_us=4555 p50_us=3488 max_us=13945
+2026-10-11T17:28:51.202Z kv-obs: mt_bytes=3530117 l0_bytes=0 l0=0 l1=0
+2026-10-11T17:28:55.006Z iostats: get ops=2831 bytes=185532416 errors=0 avg_us=238 p50_us=197 max_us=2506 put ops=5906 bytes=387055616 errors=0 avg_us=4633 p50_us=4853 max_us=14459 wdisk ops=5906 bytes=387055616 errors=0 avg_us=4592 p50_us=4811 max_us=13945
+2026-10-11T17:28:56.202Z kv-obs: mt_bytes=3889654 l0_bytes=0 l0=0 l1=0
+2026-10-11T17:28:59.340Z raft-host: gc-pass ms=6 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T17:28:59.340Z kv-compact: start l0=24 inputs=1 range=266 l0only=0
+2026-10-11T17:28:59.345Z kv-compact: end bytes=773396 ms=5 l0=23 l1=1 rc=0
+2026-10-11T17:28:59.345Z kv-compact: start l0=23 inputs=1 range=2 l0only=0
+2026-10-11T17:28:59.349Z kv-compact: end bytes=488632 ms=4 l0=22 l1=2 rc=0
+2026-10-11T17:28:59.349Z kv-compact: start l0=22 inputs=1 range=1 l0only=0
+2026-10-11T17:28:59.352Z kv-compact: end bytes=6280 ms=3 l0=21 l1=3 rc=0
+2026-10-11T17:28:59.352Z kv-compact: start l0=21 inputs=1 range=265 l0only=0
+2026-10-11T17:28:59.355Z kv-compact: end bytes=8480 ms=2 l0=20 l1=4 rc=0
+2026-10-11T17:28:59.355Z kv-compact: start l0=20 inputs=1 range=269 l0only=0
+2026-10-11T17:28:59.359Z kv-compact: end bytes=8480 ms=4 l0=19 l1=5 rc=0
+2026-10-11T17:28:59.359Z kv-compact: start l0=19 inputs=1 range=256 l0only=0
+2026-10-11T17:28:59.362Z kv-compact: end bytes=6784 ms=2 l0=18 l1=6 rc=0
+2026-10-11T17:28:59.362Z kv-compact: start l0=18 inputs=1 range=257 l0only=0
+2026-10-11T17:28:59.365Z kv-compact: end bytes=6784 ms=4 l0=17 l1=7 rc=0
+2026-10-11T17:28:59.365Z kv-compact: start l0=17 inputs=1 range=258 l0only=0
+2026-10-11T17:28:59.369Z kv-compact: end bytes=6784 ms=3 l0=16 l1=8 rc=0
+2026-10-11T17:28:59.369Z kv-compact: start l0=16 inputs=1 range=259 l0only=0
+2026-10-11T17:28:59.372Z kv-compact: end bytes=6784 ms=3 l0=15 l1=9 rc=0
+2026-10-11T17:28:59.372Z kv-compact: start l0=15 inputs=1 range=260 l0only=0
+2026-10-11T17:28:59.375Z kv-compact: end bytes=6784 ms=2 l0=14 l1=10 rc=0
+2026-10-11T17:28:59.375Z kv-compact: start l0=14 inputs=1 range=261 l0only=0
+2026-10-11T17:28:59.378Z kv-compact: end bytes=6784 ms=3 l0=13 l1=11 rc=0
+2026-10-11T17:28:59.378Z kv-compact: start l0=13 inputs=1 range=262 l0only=0
+2026-10-11T17:28:59.382Z kv-compact: end bytes=6784 ms=4 l0=12 l1=12 rc=0
+2026-10-11T17:28:59.382Z kv-compact: start l0=12 inputs=1 range=263 l0only=0
+2026-10-11T17:28:59.385Z kv-compact: end bytes=6784 ms=3 l0=11 l1=13 rc=0
+2026-10-11T17:28:59.385Z kv-compact: start l0=11 inputs=1 range=268 l0only=0
+2026-10-11T17:28:59.388Z kv-compact: end bytes=6784 ms=3 l0=10 l1=14 rc=0
+2026-10-11T17:28:59.388Z kv-compact: start l0=10 inputs=1 range=264 l0only=0
+2026-10-11T17:28:59.392Z kv-compact: end bytes=5088 ms=4 l0=9 l1=15 rc=0
+2026-10-11T17:28:59.392Z kv-compact: start l0=9 inputs=1 range=267 l0only=0
+2026-10-11T17:28:59.395Z kv-compact: end bytes=5088 ms=3 l0=8 l1=16 rc=0
+2026-10-11T17:28:59.395Z kv-compact: start l0=8 inputs=1 range=270 l0only=0
+2026-10-11T17:28:59.399Z kv-compact: end bytes=3392 ms=4 l0=7 l1=17 rc=0
+2026-10-11T17:28:59.399Z kv-compact: start l0=7 inputs=1 range=18 l0only=0
+2026-10-11T17:28:59.402Z kv-compact: end bytes=1696 ms=3 l0=6 l1=18 rc=0
+2026-10-11T17:28:59.402Z kv-compact: start l0=6 inputs=1 range=69 l0only=0
+2026-10-11T17:28:59.405Z kv-compact: end bytes=1696 ms=3 l0=5 l1=19 rc=0
+2026-10-11T17:28:59.405Z kv-compact: start l0=5 inputs=1 range=120 l0only=0
+2026-10-11T17:28:59.408Z kv-compact: end bytes=1696 ms=3 l0=4 l1=20 rc=0
+2026-10-11T17:28:59.408Z kv-compact: start l0=4 inputs=1 range=185 l0only=0
+2026-10-11T17:28:59.413Z kv-compact: end bytes=1696 ms=5 l0=3 l1=21 rc=0
+2026-10-11T17:29:00.007Z iostats: get ops=3167 bytes=207552512 errors=0 avg_us=241 p50_us=201 max_us=2506 put ops=6559 bytes=429850624 errors=0 avg_us=4680 p50_us=6067 max_us=14459 wdisk ops=6559 bytes=429850624 errors=0 avg_us=4640 p50_us=6033 max_us=13945
+2026-10-11T17:29:01.202Z kv-obs: mt_bytes=380210 l0_bytes=2820 l0=3 l1=21
+2026-10-11T17:29:01.207Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=864 passes=50 sampled=0 pending=0,0 reap=0,0 removed=3777 file_bytes=263000064 payload_bytes=247529472 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:29:05.007Z iostats: get ops=3566 bytes=233701376 errors=0 avg_us=242 p50_us=185 max_us=2506 put ops=7235 bytes=474152960 errors=0 avg_us=4729 p50_us=4455 max_us=14459 wdisk ops=7235 bytes=474152960 errors=0 avg_us=4689 p50_us=4407 max_us=14061
+2026-10-11T17:29:06.202Z kv-obs: mt_bytes=1194590 l0_bytes=2820 l0=3 l1=21
+2026-10-11T17:29:10.007Z iostats: get ops=3972 bytes=260308992 errors=0 avg_us=244 p50_us=213 max_us=2506 put ops=7899 bytes=517668864 errors=0 avg_us=4763 p50_us=6303 max_us=14459 wdisk ops=7899 bytes=517668864 errors=0 avg_us=4724 p50_us=6223 max_us=14061
+2026-10-11T17:29:11.202Z kv-obs: mt_bytes=1870956 l0_bytes=2820 l0=3 l1=21
+2026-10-11T17:29:15.007Z iostats: get ops=4291 bytes=281214976 errors=0 avg_us=245 p50_us=207 max_us=2506 put ops=8558 bytes=560857088 errors=0 avg_us=4826 p50_us=9718 max_us=20769 wdisk ops=8558 bytes=560857088 errors=0 avg_us=4787 p50_us=9673 max_us=20736
+2026-10-11T17:29:16.202Z kv-obs: mt_bytes=2479296 l0_bytes=2820 l0=3 l1=21
+2026-10-11T17:29:17.208Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=822 passes=66 sampled=0 pending=0,0 reap=0,0 removed=5223 file_bytes=363687936 payload_bytes=342294528 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:29:20.008Z iostats: get ops=4677 bytes=306511872 errors=0 avg_us=246 p50_us=213 max_us=2506 put ops=9200 bytes=602931200 errors=0 avg_us=4856 p50_us=8811 max_us=20769 wdisk ops=9200 bytes=602931200 errors=0 avg_us=4816 p50_us=8744 max_us=20736
+2026-10-11T17:29:21.203Z kv-obs: mt_bytes=2928798 l0_bytes=2820 l0=3 l1=21
+2026-10-11T17:29:25.008Z iostats: get ops=4998 bytes=327548928 errors=0 avg_us=246 p50_us=226 max_us=2506 put ops=9899 bytes=648740864 errors=0 avg_us=4900 p50_us=5298 max_us=20769 wdisk ops=9899 bytes=648740864 errors=0 avg_us=4860 p50_us=5266 max_us=20736
+2026-10-11T17:29:26.203Z kv-obs: mt_bytes=3335684 l0_bytes=2820 l0=3 l1=21
+2026-10-11T17:29:30.008Z iostats: get ops=5380 bytes=352583680 errors=0 avg_us=246 p50_us=198 max_us=2506 put ops=10573 bytes=692912128 errors=0 avg_us=4931 p50_us=7091 max_us=20769 wdisk ops=10573 bytes=692912128 errors=0 avg_us=4891 p50_us=7065 max_us=20736
+2026-10-11T17:29:31.203Z kv-obs: mt_bytes=3773984 l0_bytes=2820 l0=3 l1=21
+2026-10-11T17:29:33.209Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=781 passes=82 sampled=0 pending=0,0 reap=0,0 removed=6645 file_bytes=462704640 payload_bytes=435486720 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:29:35.009Z iostats: get ops=5759 bytes=377421824 errors=0 avg_us=246 p50_us=243 max_us=2506 put ops=11267 bytes=738394112 errors=0 avg_us=4961 p50_us=7318 max_us=20769 wdisk ops=11267 bytes=738394112 errors=0 avg_us=4921 p50_us=7130 max_us=20736
+2026-10-11T17:29:36.041Z kv-compact: start l0=26 inputs=2 range=266 l0only=0
+2026-10-11T17:29:36.045Z kv-compact: end bytes=1000998 ms=5 l0=25 l1=21 rc=0
+2026-10-11T17:29:36.045Z kv-compact: start l0=25 inputs=2 range=2 l0only=0
+2026-10-11T17:29:36.049Z kv-compact: end bytes=874934 ms=3 l0=24 l1=21 rc=0
+2026-10-11T17:29:36.049Z kv-compact: start l0=24 inputs=2 range=1 l0only=0
+2026-10-11T17:29:36.052Z kv-compact: end bytes=8165 ms=4 l0=23 l1=21 rc=0
+2026-10-11T17:29:36.052Z kv-compact: start l0=23 inputs=2 range=265 l0only=0
+2026-10-11T17:29:36.056Z kv-compact: end bytes=8480 ms=3 l0=22 l1=21 rc=0
+2026-10-11T17:29:36.056Z kv-compact: start l0=22 inputs=2 range=269 l0only=0
+2026-10-11T17:29:36.059Z kv-compact: end bytes=8480 ms=3 l0=21 l1=21 rc=0
+2026-10-11T17:29:36.059Z kv-compact: start l0=21 inputs=2 range=256 l0only=0
+2026-10-11T17:29:36.062Z kv-compact: end bytes=6784 ms=3 l0=20 l1=21 rc=0
+2026-10-11T17:29:36.062Z kv-compact: start l0=20 inputs=2 range=257 l0only=0
+2026-10-11T17:29:36.065Z kv-compact: end bytes=6784 ms=3 l0=19 l1=21 rc=0
+2026-10-11T17:29:36.065Z kv-compact: start l0=19 inputs=2 range=258 l0only=0
+2026-10-11T17:29:36.068Z kv-compact: end bytes=6784 ms=3 l0=18 l1=21 rc=0
+2026-10-11T17:29:36.068Z kv-compact: start l0=18 inputs=2 range=259 l0only=0
+2026-10-11T17:29:36.071Z kv-compact: end bytes=6784 ms=3 l0=17 l1=21 rc=0
+2026-10-11T17:29:36.071Z kv-compact: start l0=17 inputs=2 range=260 l0only=0
+2026-10-11T17:29:36.074Z kv-compact: end bytes=6784 ms=3 l0=16 l1=21 rc=0
+2026-10-11T17:29:36.074Z kv-compact: start l0=16 inputs=2 range=261 l0only=0
+2026-10-11T17:29:36.077Z kv-compact: end bytes=6784 ms=3 l0=15 l1=21 rc=0
+2026-10-11T17:29:36.077Z kv-compact: start l0=15 inputs=2 range=262 l0only=0
+2026-10-11T17:29:36.080Z kv-compact: end bytes=6784 ms=3 l0=14 l1=21 rc=0
+2026-10-11T17:29:36.080Z kv-compact: start l0=14 inputs=2 range=263 l0only=0
+2026-10-11T17:29:36.083Z kv-compact: end bytes=6784 ms=3 l0=13 l1=21 rc=0
+2026-10-11T17:29:36.083Z kv-compact: start l0=13 inputs=2 range=268 l0only=0
+2026-10-11T17:29:36.086Z kv-compact: end bytes=6784 ms=4 l0=12 l1=21 rc=0
+2026-10-11T17:29:36.086Z kv-compact: start l0=12 inputs=2 range=264 l0only=0
+2026-10-11T17:29:36.088Z kv-compact: end bytes=5088 ms=2 l0=11 l1=21 rc=0
+2026-10-11T17:29:36.088Z kv-compact: start l0=11 inputs=2 range=267 l0only=0
+2026-10-11T17:29:36.091Z kv-compact: end bytes=5088 ms=2 l0=10 l1=21 rc=0
+2026-10-11T17:29:36.091Z kv-compact: start l0=10 inputs=2 range=236 l0only=0
+2026-10-11T17:29:36.094Z kv-compact: end bytes=1696 ms=3 l0=8 l1=22 rc=0
+2026-10-11T17:29:36.094Z kv-compact: start l0=8 inputs=2 range=270 l0only=0
+2026-10-11T17:29:36.097Z kv-compact: end bytes=3392 ms=4 l0=7 l1=22 rc=0
+2026-10-11T17:29:36.097Z kv-compact: start l0=7 inputs=2 range=18 l0only=0
+2026-10-11T17:29:36.100Z kv-compact: end bytes=1696 ms=2 l0=6 l1=22 rc=0
+2026-10-11T17:29:36.100Z kv-compact: start l0=6 inputs=2 range=69 l0only=0
+2026-10-11T17:29:36.102Z kv-compact: end bytes=1696 ms=2 l0=5 l1=22 rc=0
+2026-10-11T17:29:36.102Z kv-compact: start l0=5 inputs=2 range=120 l0only=0
+2026-10-11T17:29:36.106Z kv-compact: end bytes=1696 ms=4 l0=4 l1=22 rc=0
+2026-10-11T17:29:36.106Z kv-compact: start l0=4 inputs=2 range=185 l0only=0
+2026-10-11T17:29:36.109Z kv-compact: end bytes=1696 ms=3 l0=3 l1=22 rc=0
+2026-10-11T17:29:36.203Z kv-obs: mt_bytes=53409 l0_bytes=1188 l0=3 l1=22
+2026-10-11T17:29:40.010Z iostats: get ops=6129 bytes=401670144 errors=0 avg_us=247 p50_us=205 max_us=2506 put ops=11940 bytes=782499840 errors=0 avg_us=4951 p50_us=6128 max_us=20769 wdisk ops=11940 bytes=782499840 errors=0 avg_us=4911 p50_us=6096 max_us=20736
+2026-10-11T17:29:41.203Z kv-obs: mt_bytes=933191 l0_bytes=1188 l0=3 l1=22
+2026-10-11T17:29:45.010Z iostats: get ops=6453 bytes=422903808 errors=0 avg_us=247 p50_us=222 max_us=2506 put ops=12616 bytes=826802176 errors=0 avg_us=4952 p50_us=5444 max_us=20769 wdisk ops=12616 bytes=826802176 errors=0 avg_us=4913 p50_us=5414 max_us=20736
+2026-10-11T17:29:46.203Z kv-obs: mt_bytes=1658504 l0_bytes=1188 l0=3 l1=22
+2026-10-11T17:29:49.210Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=740 passes=98 sampled=0 pending=0,0 reap=0,0 removed=8090 file_bytes=563322880 payload_bytes=530186240 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:29:50.011Z iostats: get ops=6761 bytes=443088896 errors=0 avg_us=247 p50_us=199 max_us=2506 put ops=13303 bytes=871825408 errors=0 avg_us=4946 p50_us=4368 max_us=20769 wdisk ops=13303 bytes=871825408 errors=0 avg_us=4906 p50_us=4316 max_us=20736
+2026-10-11T17:29:51.203Z kv-obs: mt_bytes=2364843 l0_bytes=1188 l0=3 l1=22
+2026-10-11T17:29:55.012Z iostats: get ops=7127 bytes=467075072 errors=0 avg_us=247 p50_us=192 max_us=2506 put ops=13991 bytes=916914176 errors=0 avg_us=4954 p50_us=4096 max_us=20769 wdisk ops=13991 bytes=916914176 errors=0 avg_us=4914 p50_us=4063 max_us=20736
+2026-10-11T17:29:56.203Z kv-obs: mt_bytes=3024726 l0_bytes=1188 l0=3 l1=22
+2026-10-11T17:30:00.012Z iostats: get ops=7457 bytes=488701952 errors=0 avg_us=248 p50_us=216 max_us=2506 put ops=14644 bytes=959709184 errors=0 avg_us=4958 p50_us=3363 max_us=20769 wdisk ops=14644 bytes=959709184 errors=0 avg_us=4918 p50_us=3339 max_us=20736
+2026-10-11T17:30:01.203Z kv-obs: mt_bytes=3611237 l0_bytes=1188 l0=3 l1=22
+2026-10-11T17:30:05.012Z iostats: get ops=7781 bytes=509935616 errors=0 avg_us=247 p50_us=197 max_us=2506 put ops=15362 bytes=1006764032 errors=0 avg_us=4932 p50_us=3540 max_us=20769 wdisk ops=15362 bytes=1006764032 errors=0 avg_us=4892 p50_us=3514 max_us=20736
+2026-10-11T17:30:05.211Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=698 passes=114 sampled=0 pending=0,0 reap=0,0 removed=9575 file_bytes=666726400 payload_bytes=627507200 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:30:06.203Z kv-obs: mt_bytes=4044070 l0_bytes=1188 l0=3 l1=22
+2026-10-11T17:30:09.056Z kv-compact: start l0=26 inputs=2 range=266 l0only=0
+2026-10-11T17:30:09.062Z kv-compact: end bytes=1190269 ms=5 l0=25 l1=22 rc=0
+2026-10-11T17:30:09.062Z kv-compact: start l0=25 inputs=2 range=2 l0only=0
+2026-10-11T17:30:09.066Z kv-compact: end bytes=1213649 ms=4 l0=24 l1=22 rc=0
+2026-10-11T17:30:09.066Z kv-compact: start l0=24 inputs=2 range=1 l0only=0
+2026-10-11T17:30:09.068Z kv-compact: end bytes=2075 ms=2 l0=23 l1=22 rc=0
+2026-10-11T17:30:09.068Z kv-compact: start l0=23 inputs=2 range=265 l0only=0
+2026-10-11T17:30:09.071Z kv-compact: end bytes=8480 ms=3 l0=22 l1=22 rc=0
+2026-10-11T17:30:09.071Z kv-compact: start l0=22 inputs=2 range=269 l0only=0
+2026-10-11T17:30:09.074Z kv-compact: end bytes=8480 ms=4 l0=21 l1=22 rc=0
+2026-10-11T17:30:09.074Z kv-compact: start l0=21 inputs=2 range=256 l0only=0
+2026-10-11T17:30:09.077Z kv-compact: end bytes=6784 ms=2 l0=20 l1=22 rc=0
+2026-10-11T17:30:09.077Z kv-compact: start l0=20 inputs=2 range=257 l0only=0
+2026-10-11T17:30:09.080Z kv-compact: end bytes=6784 ms=3 l0=19 l1=22 rc=0
+2026-10-11T17:30:09.080Z kv-compact: start l0=19 inputs=2 range=258 l0only=0
+2026-10-11T17:30:09.083Z kv-compact: end bytes=6784 ms=3 l0=18 l1=22 rc=0
+2026-10-11T17:30:09.083Z kv-compact: start l0=18 inputs=2 range=259 l0only=0
+2026-10-11T17:30:09.087Z kv-compact: end bytes=6784 ms=4 l0=17 l1=22 rc=0
+2026-10-11T17:30:09.087Z kv-compact: start l0=17 inputs=2 range=260 l0only=0
+2026-10-11T17:30:09.090Z kv-compact: end bytes=6784 ms=3 l0=16 l1=22 rc=0
+2026-10-11T17:30:09.090Z kv-compact: start l0=16 inputs=2 range=261 l0only=0
+2026-10-11T17:30:09.093Z kv-compact: end bytes=6784 ms=3 l0=15 l1=22 rc=0
+2026-10-11T17:30:09.093Z kv-compact: start l0=15 inputs=2 range=262 l0only=0
+2026-10-11T17:30:09.096Z kv-compact: end bytes=6784 ms=3 l0=14 l1=22 rc=0
+2026-10-11T17:30:09.096Z kv-compact: start l0=14 inputs=2 range=263 l0only=0
+2026-10-11T17:30:09.098Z kv-compact: end bytes=6784 ms=2 l0=13 l1=22 rc=0
+2026-10-11T17:30:09.098Z kv-compact: start l0=13 inputs=2 range=268 l0only=0
+2026-10-11T17:30:09.102Z kv-compact: end bytes=6784 ms=4 l0=12 l1=22 rc=0
+2026-10-11T17:30:09.102Z kv-compact: start l0=12 inputs=2 range=264 l0only=0
+2026-10-11T17:30:09.105Z kv-compact: end bytes=5088 ms=3 l0=11 l1=22 rc=0
+2026-10-11T17:30:09.105Z kv-compact: start l0=11 inputs=2 range=267 l0only=0
+2026-10-11T17:30:09.108Z kv-compact: end bytes=5088 ms=3 l0=10 l1=22 rc=0
+2026-10-11T17:30:09.108Z kv-compact: start l0=10 inputs=2 range=270 l0only=0
+2026-10-11T17:30:09.114Z kv-compact: end bytes=3392 ms=6 l0=9 l1=22 rc=0
+2026-10-11T17:30:09.114Z kv-compact: start l0=9 inputs=2 range=18 l0only=0
+2026-10-11T17:30:09.117Z kv-compact: end bytes=1696 ms=3 l0=8 l1=22 rc=0
+2026-10-11T17:30:09.117Z kv-compact: start l0=8 inputs=2 range=69 l0only=0
+2026-10-11T17:30:09.119Z kv-compact: end bytes=1696 ms=3 l0=7 l1=22 rc=0
+2026-10-11T17:30:09.119Z kv-compact: start l0=7 inputs=2 range=120 l0only=0
+2026-10-11T17:30:09.122Z kv-compact: end bytes=1696 ms=2 l0=6 l1=22 rc=0
+2026-10-11T17:30:09.122Z kv-compact: start l0=6 inputs=2 range=185 l0only=0
+2026-10-11T17:30:09.126Z kv-compact: end bytes=1696 ms=4 l0=5 l1=22 rc=0
+2026-10-11T17:30:09.126Z kv-compact: start l0=5 inputs=2 range=236 l0only=0
+2026-10-11T17:30:09.129Z kv-compact: end bytes=1696 ms=3 l0=4 l1=22 rc=0
+2026-10-11T17:30:09.129Z kv-compact: start l0=4 inputs=1 range=208 l0only=0
+2026-10-11T17:30:09.131Z kv-compact: end bytes=1060 ms=3 l0=3 l1=23 rc=0
+2026-10-11T17:30:10.012Z iostats: get ops=8102 bytes=530972672 errors=0 avg_us=248 p50_us=214 max_us=2506 put ops=16015 bytes=1049559040 errors=0 avg_us=4934 p50_us=4904 max_us=20769 wdisk ops=16015 bytes=1049559040 errors=0 avg_us=4895 p50_us=4876 max_us=20736
+2026-10-11T17:30:11.203Z kv-obs: mt_bytes=449211 l0_bytes=192 l0=3 l1=23
+2026-10-11T17:30:15.012Z iostats: get ops=8469 bytes=555024384 errors=0 avg_us=248 p50_us=197 max_us=2506 put ops=16717 bytes=1095565312 errors=0 avg_us=4941 p50_us=5579 max_us=20769 wdisk ops=16717 bytes=1095565312 errors=0 avg_us=4901 p50_us=5546 max_us=20736
+2026-10-11T17:30:16.203Z kv-obs: mt_bytes=1291909 l0_bytes=192 l0=3 l1=23
+2026-10-11T17:30:20.012Z iostats: get ops=8797 bytes=576520192 errors=0 avg_us=249 p50_us=213 max_us=2506 put ops=17406 bytes=1140719616 errors=0 avg_us=4936 p50_us=3853 max_us=20769 wdisk ops=17406 bytes=1140719616 errors=0 avg_us=4896 p50_us=3812 max_us=20736
+2026-10-11T17:30:21.203Z kv-obs: mt_bytes=1974552 l0_bytes=192 l0=3 l1=23
+2026-10-11T17:30:21.212Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=657 passes=130 sampled=0 pending=0,0 reap=0,0 removed=11049 file_bytes=769363968 payload_bytes=724107264 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:30:25.012Z iostats: get ops=9140 bytes=598999040 errors=0 avg_us=249 p50_us=196 max_us=2506 put ops=18080 bytes=1184890880 errors=0 avg_us=4935 p50_us=5106 max_us=20769 wdisk ops=18080 bytes=1184890880 errors=0 avg_us=4895 p50_us=5035 max_us=20736
+2026-10-11T17:30:26.203Z kv-obs: mt_bytes=2630110 l0_bytes=192 l0=3 l1=23
+2026-10-11T17:30:30.013Z iostats: get ops=9532 bytes=624689152 errors=0 avg_us=249 p50_us=203 max_us=2506 put ops=18734 bytes=1227751424 errors=0 avg_us=4938 p50_us=3498 max_us=20769 wdisk ops=18734 bytes=1227751424 errors=0 avg_us=4899 p50_us=3474 max_us=20736
+2026-10-11T17:30:31.203Z kv-obs: mt_bytes=3308361 l0_bytes=192 l0=3 l1=23
+2026-10-11T17:30:35.013Z iostats: get ops=9987 bytes=654508032 errors=0 avg_us=248 p50_us=193 max_us=2506 put ops=19435 bytes=1273692160 errors=0 avg_us=4940 p50_us=6053 max_us=20769 wdisk ops=19435 bytes=1273692160 errors=0 avg_us=4901 p50_us=6025 max_us=20736
+2026-10-11T17:30:36.203Z kv-obs: mt_bytes=3997779 l0_bytes=192 l0=3 l1=23
+2026-10-11T17:30:37.212Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=616 passes=146 sampled=0 pending=0,0 reap=0,0 removed=12517 file_bytes=871583744 payload_bytes=820314112 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:30:37.525Z kv-compact: start l0=26 inputs=2 range=266 l0only=0
+2026-10-11T17:30:37.530Z kv-compact: end bytes=1415017 ms=5 l0=25 l1=23 rc=0
+2026-10-11T17:30:37.530Z kv-compact: start l0=25 inputs=2 range=2 l0only=0
+2026-10-11T17:30:37.536Z kv-compact: end bytes=1508509 ms=5 l0=24 l1=23 rc=0
+2026-10-11T17:30:37.536Z kv-compact: start l0=24 inputs=2 range=1 l0only=0
+2026-10-11T17:30:37.539Z kv-compact: end bytes=7730 ms=3 l0=23 l1=23 rc=0
+2026-10-11T17:30:37.539Z kv-compact: start l0=23 inputs=2 range=265 l0only=0
+2026-10-11T17:30:37.542Z kv-compact: end bytes=8480 ms=3 l0=22 l1=23 rc=0
+2026-10-11T17:30:37.542Z kv-compact: start l0=22 inputs=2 range=269 l0only=0
+2026-10-11T17:30:37.545Z kv-compact: end bytes=8480 ms=3 l0=21 l1=23 rc=0
+2026-10-11T17:30:37.545Z kv-compact: start l0=21 inputs=2 range=256 l0only=0
+2026-10-11T17:30:37.548Z kv-compact: end bytes=6784 ms=4 l0=20 l1=23 rc=0
+2026-10-11T17:30:37.549Z kv-compact: start l0=20 inputs=2 range=257 l0only=0
+2026-10-11T17:30:37.552Z kv-compact: end bytes=6784 ms=3 l0=19 l1=23 rc=0
+2026-10-11T17:30:37.552Z kv-compact: start l0=19 inputs=2 range=258 l0only=0
+2026-10-11T17:30:37.556Z kv-compact: end bytes=6784 ms=4 l0=18 l1=23 rc=0
+2026-10-11T17:30:37.556Z kv-compact: start l0=18 inputs=2 range=259 l0only=0
+2026-10-11T17:30:37.559Z kv-compact: end bytes=6784 ms=3 l0=17 l1=23 rc=0
+2026-10-11T17:30:37.559Z kv-compact: start l0=17 inputs=2 range=260 l0only=0
+2026-10-11T17:30:37.562Z kv-compact: end bytes=6784 ms=4 l0=16 l1=23 rc=0
+2026-10-11T17:30:37.562Z kv-compact: start l0=16 inputs=2 range=261 l0only=0
+2026-10-11T17:30:37.566Z kv-compact: end bytes=6784 ms=3 l0=15 l1=23 rc=0
+2026-10-11T17:30:37.566Z kv-compact: start l0=15 inputs=2 range=262 l0only=0
+2026-10-11T17:30:37.569Z kv-compact: end bytes=6784 ms=3 l0=14 l1=23 rc=0
+2026-10-11T17:30:37.569Z kv-compact: start l0=14 inputs=2 range=263 l0only=0
+2026-10-11T17:30:37.572Z kv-compact: end bytes=6784 ms=3 l0=13 l1=23 rc=0
+2026-10-11T17:30:37.572Z kv-compact: start l0=13 inputs=2 range=268 l0only=0
+2026-10-11T17:30:37.575Z kv-compact: end bytes=6784 ms=3 l0=12 l1=23 rc=0
+2026-10-11T17:30:37.575Z kv-compact: start l0=12 inputs=2 range=264 l0only=0
+2026-10-11T17:30:37.578Z kv-compact: end bytes=5088 ms=3 l0=11 l1=23 rc=0
+2026-10-11T17:30:37.578Z kv-compact: start l0=11 inputs=2 range=267 l0only=0
+2026-10-11T17:30:37.581Z kv-compact: end bytes=5088 ms=3 l0=10 l1=23 rc=0
+2026-10-11T17:30:37.581Z kv-compact: start l0=10 inputs=2 range=270 l0only=0
+2026-10-11T17:30:37.584Z kv-compact: end bytes=3392 ms=3 l0=9 l1=23 rc=0
+2026-10-11T17:30:37.584Z kv-compact: start l0=9 inputs=2 range=18 l0only=0
+2026-10-11T17:30:37.587Z kv-compact: end bytes=1696 ms=4 l0=8 l1=23 rc=0
+2026-10-11T17:30:37.587Z kv-compact: start l0=8 inputs=2 range=69 l0only=0
+2026-10-11T17:30:37.591Z kv-compact: end bytes=1696 ms=3 l0=7 l1=23 rc=0
+2026-10-11T17:30:37.591Z kv-compact: start l0=7 inputs=2 range=120 l0only=0
+2026-10-11T17:30:37.594Z kv-compact: end bytes=1696 ms=3 l0=6 l1=23 rc=0
+2026-10-11T17:30:37.594Z kv-compact: start l0=6 inputs=2 range=185 l0only=0
+2026-10-11T17:30:37.597Z kv-compact: end bytes=1696 ms=3 l0=5 l1=23 rc=0
+2026-10-11T17:30:37.598Z kv-compact: start l0=5 inputs=2 range=236 l0only=0
+2026-10-11T17:30:37.601Z kv-compact: end bytes=1696 ms=3 l0=4 l1=23 rc=0
+2026-10-11T17:30:37.601Z kv-compact: start l0=4 inputs=4 range=510 l0only=0
+2026-10-11T17:30:37.605Z kv-compact: end bytes=64 ms=4 l0=0 l1=24 rc=0
+2026-10-11T17:30:40.013Z iostats: get ops=10355 bytes=678625280 errors=0 avg_us=249 p50_us=254 max_us=2506 put ops=20089 bytes=1316552704 errors=0 avg_us=4943 p50_us=6431 max_us=20769 wdisk ops=20089 bytes=1316552704 errors=0 avg_us=4904 p50_us=6391 max_us=20736
+2026-10-11T17:30:41.205Z kv-obs: mt_bytes=710370 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:30:45.014Z iostats: get ops=10695 bytes=700907520 errors=0 avg_us=249 p50_us=201 max_us=2506 put ops=20780 bytes=1361838080 errors=0 avg_us=4946 p50_us=4884 max_us=20769 wdisk ops=20780 bytes=1361838080 errors=0 avg_us=4907 p50_us=4858 max_us=20736
+2026-10-11T17:30:46.205Z kv-obs: mt_bytes=1445451 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:30:50.014Z iostats: get ops=11070 bytes=725483520 errors=0 avg_us=249 p50_us=215 max_us=2506 put ops=21428 bytes=1404305408 errors=0 avg_us=4953 p50_us=6072 max_us=20769 wdisk ops=21428 bytes=1404305408 errors=0 avg_us=4913 p50_us=6042 max_us=20736
+2026-10-11T17:30:51.205Z kv-obs: mt_bytes=2112202 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:30:53.213Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=575 passes=162 sampled=0 pending=0,0 reap=0,0 removed=13960 file_bytes=972062720 payload_bytes=914882560 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:30:55.014Z iostats: get ops=11394 bytes=746717184 errors=0 avg_us=249 p50_us=234 max_us=2506 put ops=22110 bytes=1449000960 errors=0 avg_us=4955 p50_us=5959 max_us=20769 wdisk ops=22110 bytes=1449000960 errors=0 avg_us=4915 p50_us=5893 max_us=20736
+2026-10-11T17:30:56.207Z kv-obs: mt_bytes=2787999 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:31:00.014Z iostats: get ops=11746 bytes=769785856 errors=0 avg_us=249 p50_us=218 max_us=2506 put ops=22775 bytes=1492582400 errors=0 avg_us=4958 p50_us=6669 max_us=20769 wdisk ops=22775 bytes=1492582400 errors=0 avg_us=4918 p50_us=6640 max_us=20736
+2026-10-11T17:31:01.207Z kv-obs: mt_bytes=3465590 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:31:05.015Z iostats: get ops=12090 bytes=792330240 errors=0 avg_us=249 p50_us=186 max_us=2506 put ops=23498 bytes=1539964928 errors=0 avg_us=4953 p50_us=3104 max_us=20769 wdisk ops=23498 bytes=1539964928 errors=0 avg_us=4913 p50_us=3075 max_us=20736
+2026-10-11T17:31:06.118Z kv-compact: start l0=23 inputs=2 range=266 l0only=0
+2026-10-11T17:31:06.123Z kv-compact: end bytes=1589299 ms=5 l0=22 l1=24 rc=0
+2026-10-11T17:31:06.123Z kv-compact: start l0=22 inputs=2 range=2 l0only=0
+2026-10-11T17:31:06.129Z kv-compact: end bytes=1804853 ms=6 l0=21 l1=24 rc=0
+2026-10-11T17:31:06.129Z kv-compact: start l0=21 inputs=2 range=1 l0only=0
+2026-10-11T17:31:06.132Z kv-compact: end bytes=14980 ms=3 l0=20 l1=24 rc=0
+2026-10-11T17:31:06.132Z kv-compact: start l0=20 inputs=2 range=265 l0only=0
+2026-10-11T17:31:06.135Z kv-compact: end bytes=8480 ms=3 l0=19 l1=24 rc=0
+2026-10-11T17:31:06.135Z kv-compact: start l0=19 inputs=2 range=269 l0only=0
+2026-10-11T17:31:06.137Z kv-compact: end bytes=8480 ms=2 l0=18 l1=24 rc=0
+2026-10-11T17:31:06.137Z kv-compact: start l0=18 inputs=2 range=256 l0only=0
+2026-10-11T17:31:06.140Z kv-compact: end bytes=6784 ms=3 l0=17 l1=24 rc=0
+2026-10-11T17:31:06.140Z kv-compact: start l0=17 inputs=2 range=257 l0only=0
+2026-10-11T17:31:06.143Z kv-compact: end bytes=6784 ms=3 l0=16 l1=24 rc=0
+2026-10-11T17:31:06.143Z kv-compact: start l0=16 inputs=2 range=258 l0only=0
+2026-10-11T17:31:06.146Z kv-compact: end bytes=6784 ms=3 l0=15 l1=24 rc=0
+2026-10-11T17:31:06.146Z kv-compact: start l0=15 inputs=2 range=259 l0only=0
+2026-10-11T17:31:06.148Z kv-compact: end bytes=6784 ms=3 l0=14 l1=24 rc=0
+2026-10-11T17:31:06.148Z kv-compact: start l0=14 inputs=2 range=260 l0only=0
+2026-10-11T17:31:06.151Z kv-compact: end bytes=6784 ms=3 l0=13 l1=24 rc=0
+2026-10-11T17:31:06.151Z kv-compact: start l0=13 inputs=2 range=261 l0only=0
+2026-10-11T17:31:06.154Z kv-compact: end bytes=6784 ms=2 l0=12 l1=24 rc=0
+2026-10-11T17:31:06.154Z kv-compact: start l0=12 inputs=2 range=262 l0only=0
+2026-10-11T17:31:06.158Z kv-compact: end bytes=6784 ms=4 l0=11 l1=24 rc=0
+2026-10-11T17:31:06.158Z kv-compact: start l0=11 inputs=2 range=263 l0only=0
+2026-10-11T17:31:06.161Z kv-compact: end bytes=6784 ms=3 l0=10 l1=24 rc=0
+2026-10-11T17:31:06.161Z kv-compact: start l0=10 inputs=2 range=268 l0only=0
+2026-10-11T17:31:06.164Z kv-compact: end bytes=6784 ms=4 l0=9 l1=24 rc=0
+2026-10-11T17:31:06.164Z kv-compact: start l0=9 inputs=2 range=264 l0only=0
+2026-10-11T17:31:06.167Z kv-compact: end bytes=5088 ms=2 l0=8 l1=24 rc=0
+2026-10-11T17:31:06.167Z kv-compact: start l0=8 inputs=2 range=267 l0only=0
+2026-10-11T17:31:06.170Z kv-compact: end bytes=5088 ms=3 l0=7 l1=24 rc=0
+2026-10-11T17:31:06.170Z kv-compact: start l0=7 inputs=2 range=270 l0only=0
+2026-10-11T17:31:06.173Z kv-compact: end bytes=3392 ms=3 l0=6 l1=24 rc=0
+2026-10-11T17:31:06.173Z kv-compact: start l0=6 inputs=2 range=18 l0only=0
+2026-10-11T17:31:06.176Z kv-compact: end bytes=1696 ms=3 l0=5 l1=24 rc=0
+2026-10-11T17:31:06.176Z kv-compact: start l0=5 inputs=2 range=69 l0only=0
+2026-10-11T17:31:06.179Z kv-compact: end bytes=1696 ms=3 l0=4 l1=24 rc=0
+2026-10-11T17:31:06.179Z kv-compact: start l0=4 inputs=2 range=120 l0only=0
+2026-10-11T17:31:06.182Z kv-compact: end bytes=1696 ms=3 l0=3 l1=24 rc=0
+2026-10-11T17:31:06.207Z kv-obs: mt_bytes=19817 l0_bytes=3384 l0=3 l1=24
+2026-10-11T17:31:09.214Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=533 passes=178 sampled=0 pending=0,0 reap=0,0 removed=15435 file_bytes=1074769920 payload_bytes=1011548160 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:31:10.015Z iostats: get ops=12429 bytes=814546944 errors=0 avg_us=249 p50_us=241 max_us=2506 put ops=24180 bytes=1584660480 errors=0 avg_us=4966 p50_us=5382 max_us=20769 wdisk ops=24180 bytes=1584660480 errors=0 avg_us=4926 p50_us=5354 max_us=20736
+2026-10-11T17:31:11.207Z kv-obs: mt_bytes=979959 l0_bytes=3384 l0=3 l1=24
+2026-10-11T17:31:15.015Z iostats: get ops=12754 bytes=835846144 errors=0 avg_us=249 p50_us=202 max_us=2506 put ops=24864 bytes=1629487104 errors=0 avg_us=4973 p50_us=3526 max_us=20769 wdisk ops=24864 bytes=1629487104 errors=0 avg_us=4933 p50_us=3501 max_us=20736
+2026-10-11T17:31:16.207Z kv-obs: mt_bytes=1662290 l0_bytes=3384 l0=3 l1=24
+2026-10-11T17:31:20.017Z iostats: get ops=13121 bytes=859897856 errors=0 avg_us=249 p50_us=189 max_us=2506 put ops=25525 bytes=1672806400 errors=0 avg_us=4990 p50_us=5767 max_us=20769 wdisk ops=25525 bytes=1672806400 errors=0 avg_us=4951 p50_us=5741 max_us=20736
+2026-10-11T17:31:21.207Z kv-obs: mt_bytes=2330731 l0_bytes=3384 l0=3 l1=24
+2026-10-11T17:31:25.018Z iostats: get ops=13450 bytes=881459200 errors=0 avg_us=249 p50_us=202 max_us=2506 put ops=26199 bytes=1716977664 errors=0 avg_us=4985 p50_us=3857 max_us=20769 wdisk ops=26199 bytes=1716977664 errors=0 avg_us=4945 p50_us=3823 max_us=20736
+2026-10-11T17:31:25.215Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=491 passes=194 sampled=0 pending=0,0 reap=0,0 removed=16873 file_bytes=1174900736 payload_bytes=1105788928 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:31:26.207Z kv-obs: mt_bytes=3012596 l0_bytes=3384 l0=3 l1=24
+2026-10-11T17:31:30.018Z iostats: get ops=13816 bytes=905445376 errors=0 avg_us=249 p50_us=254 max_us=2506 put ops=26876 bytes=1761345536 errors=0 avg_us=4994 p50_us=4357 max_us=20769 wdisk ops=26876 bytes=1761345536 errors=0 avg_us=4955 p50_us=4280 max_us=20736
+2026-10-11T17:31:31.207Z kv-obs: mt_bytes=3689147 l0_bytes=3384 l0=3 l1=24
+2026-10-11T17:31:35.008Z kv-compact: start l0=26 inputs=2 range=266 l0only=0
+2026-10-11T17:31:35.014Z kv-compact: end bytes=1778487 ms=6 l0=25 l1=24 rc=0
+2026-10-11T17:31:35.014Z kv-compact: start l0=25 inputs=2 range=2 l0only=0
+2026-10-11T17:31:35.020Z kv-compact: end bytes=2105224 ms=5 l0=24 l1=24 rc=0
+2026-10-11T17:31:35.020Z kv-compact: start l0=24 inputs=2 range=1 l0only=0
+2026-10-11T17:31:35.020Z iostats: get ops=14146 bytes=927072256 errors=0 avg_us=249 p50_us=200 max_us=2506 put ops=27581 bytes=1807548416 errors=0 avg_us=4994 p50_us=3813 max_us=20769 wdisk ops=27581 bytes=1807548416 errors=0 avg_us=4954 p50_us=3785 max_us=20736
+2026-10-11T17:31:35.023Z kv-compact: end bytes=14835 ms=3 l0=23 l1=24 rc=0
+2026-10-11T17:31:35.023Z kv-compact: start l0=23 inputs=2 range=265 l0only=0
+2026-10-11T17:31:35.026Z kv-compact: end bytes=8480 ms=3 l0=22 l1=24 rc=0
+2026-10-11T17:31:35.026Z kv-compact: start l0=22 inputs=2 range=269 l0only=0
+2026-10-11T17:31:35.029Z kv-compact: end bytes=8480 ms=3 l0=21 l1=24 rc=0
+2026-10-11T17:31:35.029Z kv-compact: start l0=21 inputs=2 range=256 l0only=0
+2026-10-11T17:31:35.032Z kv-compact: end bytes=6784 ms=3 l0=20 l1=24 rc=0
+2026-10-11T17:31:35.032Z kv-compact: start l0=20 inputs=2 range=257 l0only=0
+2026-10-11T17:31:35.035Z kv-compact: end bytes=6784 ms=3 l0=19 l1=24 rc=0
+2026-10-11T17:31:35.035Z kv-compact: start l0=19 inputs=2 range=258 l0only=0
+2026-10-11T17:31:35.038Z kv-compact: end bytes=6784 ms=4 l0=18 l1=24 rc=0
+2026-10-11T17:31:35.038Z kv-compact: start l0=18 inputs=2 range=259 l0only=0
+2026-10-11T17:31:35.041Z kv-compact: end bytes=6784 ms=2 l0=17 l1=24 rc=0
+2026-10-11T17:31:35.041Z kv-compact: start l0=17 inputs=2 range=260 l0only=0
+2026-10-11T17:31:35.044Z kv-compact: end bytes=6784 ms=3 l0=16 l1=24 rc=0
+2026-10-11T17:31:35.044Z kv-compact: start l0=16 inputs=2 range=261 l0only=0
+2026-10-11T17:31:35.047Z kv-compact: end bytes=6784 ms=3 l0=15 l1=24 rc=0
+2026-10-11T17:31:35.047Z kv-compact: start l0=15 inputs=2 range=262 l0only=0
+2026-10-11T17:31:35.050Z kv-compact: end bytes=6784 ms=3 l0=14 l1=24 rc=0
+2026-10-11T17:31:35.050Z kv-compact: start l0=14 inputs=2 range=263 l0only=0
+2026-10-11T17:31:35.053Z kv-compact: end bytes=6784 ms=3 l0=13 l1=24 rc=0
+2026-10-11T17:31:35.053Z kv-compact: start l0=13 inputs=2 range=268 l0only=0
+2026-10-11T17:31:35.056Z kv-compact: end bytes=6784 ms=2 l0=12 l1=24 rc=0
+2026-10-11T17:31:35.056Z kv-compact: start l0=12 inputs=2 range=264 l0only=0
+2026-10-11T17:31:35.060Z kv-compact: end bytes=5088 ms=4 l0=11 l1=24 rc=0
+2026-10-11T17:31:35.060Z kv-compact: start l0=11 inputs=2 range=267 l0only=0
+2026-10-11T17:31:35.063Z kv-compact: end bytes=5088 ms=3 l0=10 l1=24 rc=0
+2026-10-11T17:31:35.063Z kv-compact: start l0=10 inputs=3 range=185 l0only=0
+2026-10-11T17:31:35.066Z kv-compact: end bytes=1696 ms=3 l0=8 l1=24 rc=0
+2026-10-11T17:31:35.066Z kv-compact: start l0=8 inputs=3 range=236 l0only=0
+2026-10-11T17:31:35.069Z kv-compact: end bytes=1696 ms=3 l0=6 l1=24 rc=0
+2026-10-11T17:31:35.069Z kv-compact: start l0=6 inputs=2 range=270 l0only=0
+2026-10-11T17:31:35.072Z kv-compact: end bytes=3392 ms=4 l0=5 l1=24 rc=0
+2026-10-11T17:31:35.072Z kv-compact: start l0=5 inputs=2 range=18 l0only=0
+2026-10-11T17:31:35.076Z kv-compact: end bytes=1696 ms=3 l0=4 l1=24 rc=0
+2026-10-11T17:31:35.076Z kv-compact: start l0=4 inputs=2 range=69 l0only=0
+2026-10-11T17:31:35.079Z kv-compact: end bytes=1696 ms=3 l0=3 l1=24 rc=0
+2026-10-11T17:31:36.207Z kv-obs: mt_bytes=283735 l0_bytes=1788 l0=3 l1=24
+2026-10-11T17:31:40.020Z iostats: get ops=14484 bytes=949223424 errors=0 avg_us=248 p50_us=196 max_us=2506 put ops=28258 bytes=1851916288 errors=0 avg_us=4987 p50_us=3011 max_us=20769 wdisk ops=28258 bytes=1851916288 errors=0 avg_us=4947 p50_us=2986 max_us=20736
+2026-10-11T17:31:41.207Z kv-obs: mt_bytes=1180554 l0_bytes=1788 l0=3 l1=24
+2026-10-11T17:31:41.216Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=451 passes=210 sampled=0 pending=0,0 reap=0,0 removed=18360 file_bytes=1278443520 payload_bytes=1203240960 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:31:45.020Z iostats: get ops=14815 bytes=970915840 errors=0 avg_us=248 p50_us=212 max_us=2506 put ops=28955 bytes=1897594880 errors=0 avg_us=4989 p50_us=6035 max_us=20769 wdisk ops=28955 bytes=1897594880 errors=0 avg_us=4950 p50_us=5989 max_us=20736
+2026-10-11T17:31:46.207Z kv-obs: mt_bytes=1858293 l0_bytes=1788 l0=3 l1=24
+2026-10-11T17:31:50.020Z iostats: get ops=15179 bytes=994770944 errors=0 avg_us=249 p50_us=211 max_us=2506 put ops=29618 bytes=1941045248 errors=0 avg_us=4990 p50_us=4671 max_us=20769 wdisk ops=29618 bytes=1941045248 errors=0 avg_us=4951 p50_us=4567 max_us=20736
+2026-10-11T17:31:51.207Z kv-obs: mt_bytes=2552367 l0_bytes=1788 l0=3 l1=24
+2026-10-11T17:31:55.021Z iostats: get ops=15501 bytes=1015873536 errors=0 avg_us=249 p50_us=235 max_us=2506 put ops=30301 bytes=1985806336 errors=0 avg_us=4988 p50_us=3700 max_us=20769 wdisk ops=30301 bytes=1985806336 errors=0 avg_us=4949 p50_us=3642 max_us=20736
+2026-10-11T17:31:56.207Z kv-obs: mt_bytes=3219064 l0_bytes=1788 l0=3 l1=24
+2026-10-11T17:31:57.217Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=409 passes=226 sampled=0 pending=0,0 reap=0,0 removed=19812 file_bytes=1379549184 payload_bytes=1298399232 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:32:00.022Z iostats: get ops=15874 bytes=1040318464 errors=0 avg_us=249 p50_us=188 max_us=2506 put ops=30963 bytes=2029191168 errors=0 avg_us=4996 p50_us=6345 max_us=20769 wdisk ops=30963 bytes=2029191168 errors=0 avg_us=4957 p50_us=6317 max_us=20736
+2026-10-11T17:32:01.207Z kv-obs: mt_bytes=3869176 l0_bytes=1788 l0=3 l1=24
+2026-10-11T17:32:03.595Z kv-compact: start l0=26 inputs=2 range=266 l0only=0
+2026-10-11T17:32:03.601Z kv-compact: end bytes=1967412 ms=5 l0=25 l1=24 rc=0
+2026-10-11T17:32:03.601Z kv-compact: start l0=25 inputs=2 range=2 l0only=0
+2026-10-11T17:32:03.607Z kv-compact: end bytes=2408902 ms=6 l0=24 l1=24 rc=0
+2026-10-11T17:32:03.607Z kv-compact: start l0=24 inputs=2 range=1 l0only=0
+2026-10-11T17:32:03.610Z kv-compact: end bytes=7730 ms=3 l0=23 l1=24 rc=0
+2026-10-11T17:32:03.610Z kv-compact: start l0=23 inputs=2 range=265 l0only=0
+2026-10-11T17:32:03.613Z kv-compact: end bytes=8480 ms=3 l0=22 l1=24 rc=0
+2026-10-11T17:32:03.613Z kv-compact: start l0=22 inputs=2 range=269 l0only=0
+2026-10-11T17:32:03.616Z kv-compact: end bytes=8480 ms=3 l0=21 l1=24 rc=0
+2026-10-11T17:32:03.616Z kv-compact: start l0=21 inputs=2 range=256 l0only=0
+2026-10-11T17:32:03.619Z kv-compact: end bytes=6784 ms=3 l0=20 l1=24 rc=0
+2026-10-11T17:32:03.619Z kv-compact: start l0=20 inputs=2 range=257 l0only=0
+2026-10-11T17:32:03.621Z kv-compact: end bytes=6784 ms=3 l0=19 l1=24 rc=0
+2026-10-11T17:32:03.622Z kv-compact: start l0=19 inputs=2 range=258 l0only=0
+2026-10-11T17:32:03.624Z kv-compact: end bytes=6784 ms=3 l0=18 l1=24 rc=0
+2026-10-11T17:32:03.624Z kv-compact: start l0=18 inputs=2 range=259 l0only=0
+2026-10-11T17:32:03.627Z kv-compact: end bytes=6784 ms=3 l0=17 l1=24 rc=0
+2026-10-11T17:32:03.627Z kv-compact: start l0=17 inputs=2 range=260 l0only=0
+2026-10-11T17:32:03.630Z kv-compact: end bytes=6784 ms=2 l0=16 l1=24 rc=0
+2026-10-11T17:32:03.630Z kv-compact: start l0=16 inputs=2 range=261 l0only=0
+2026-10-11T17:32:03.633Z kv-compact: end bytes=6784 ms=3 l0=15 l1=24 rc=0
+2026-10-11T17:32:03.633Z kv-compact: start l0=15 inputs=2 range=262 l0only=0
+2026-10-11T17:32:03.636Z kv-compact: end bytes=6784 ms=3 l0=14 l1=24 rc=0
+2026-10-11T17:32:03.636Z kv-compact: start l0=14 inputs=2 range=263 l0only=0
+2026-10-11T17:32:03.639Z kv-compact: end bytes=6784 ms=3 l0=13 l1=24 rc=0
+2026-10-11T17:32:03.639Z kv-compact: start l0=13 inputs=2 range=268 l0only=0
+2026-10-11T17:32:03.642Z kv-compact: end bytes=6784 ms=3 l0=12 l1=24 rc=0
+2026-10-11T17:32:03.642Z kv-compact: start l0=12 inputs=2 range=264 l0only=0
+2026-10-11T17:32:03.645Z kv-compact: end bytes=5088 ms=3 l0=11 l1=24 rc=0
+2026-10-11T17:32:03.645Z kv-compact: start l0=11 inputs=2 range=267 l0only=0
+2026-10-11T17:32:03.648Z kv-compact: end bytes=5088 ms=3 l0=10 l1=24 rc=0
+2026-10-11T17:32:03.648Z kv-compact: start l0=10 inputs=3 range=120 l0only=0
+2026-10-11T17:32:03.650Z kv-compact: end bytes=1696 ms=2 l0=8 l1=24 rc=0
+2026-10-11T17:32:03.650Z kv-compact: start l0=8 inputs=2 range=270 l0only=0
+2026-10-11T17:32:03.653Z kv-compact: end bytes=3392 ms=3 l0=7 l1=24 rc=0
+2026-10-11T17:32:03.653Z kv-compact: start l0=7 inputs=2 range=18 l0only=0
+2026-10-11T17:32:03.656Z kv-compact: end bytes=1696 ms=3 l0=6 l1=24 rc=0
+2026-10-11T17:32:03.656Z kv-compact: start l0=6 inputs=2 range=69 l0only=0
+2026-10-11T17:32:03.659Z kv-compact: end bytes=1696 ms=3 l0=5 l1=24 rc=0
+2026-10-11T17:32:03.659Z kv-compact: start l0=5 inputs=2 range=185 l0only=0
+2026-10-11T17:32:03.662Z kv-compact: end bytes=1696 ms=3 l0=4 l1=24 rc=0
+2026-10-11T17:32:03.662Z kv-compact: start l0=4 inputs=2 range=236 l0only=0
+2026-10-11T17:32:03.665Z kv-compact: end bytes=1696 ms=3 l0=3 l1=24 rc=0
+2026-10-11T17:32:05.022Z iostats: get ops=16247 bytes=1064763392 errors=0 avg_us=249 p50_us=180 max_us=2506 put ops=31689 bytes=2076770304 errors=0 avg_us=4995 p50_us=6277 max_us=20769 wdisk ops=31689 bytes=2076770304 errors=0 avg_us=4956 p50_us=6231 max_us=20736
+2026-10-11T17:32:06.207Z kv-obs: mt_bytes=538904 l0_bytes=192 l0=3 l1=24
+2026-10-11T17:32:10.023Z iostats: get ops=16598 bytes=1087766528 errors=0 avg_us=248 p50_us=186 max_us=2506 put ops=32376 bytes=2121793536 errors=0 avg_us=5000 p50_us=6289 max_us=20769 wdisk ops=32376 bytes=2121793536 errors=0 avg_us=4961 p50_us=6238 max_us=20736
+2026-10-11T17:32:11.207Z kv-obs: mt_bytes=1303167 l0_bytes=192 l0=3 l1=24
+2026-10-11T17:32:13.218Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=367 passes=242 sampled=0 pending=0,0 reap=0,0 removed=21213 file_bytes=1477103616 payload_bytes=1390215168 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:32:15.023Z iostats: get ops=16953 bytes=1111031808 errors=0 avg_us=249 p50_us=198 max_us=2506 put ops=33054 bytes=2166226944 errors=0 avg_us=5001 p50_us=4588 max_us=20769 wdisk ops=33054 bytes=2166226944 errors=0 avg_us=4961 p50_us=4563 max_us=20736
+2026-10-11T17:32:16.207Z kv-obs: mt_bytes=1970614 l0_bytes=192 l0=3 l1=24
+2026-10-11T17:32:20.024Z iostats: get ops=17327 bytes=1135542272 errors=0 avg_us=249 p50_us=185 max_us=2506 put ops=33729 bytes=2210463744 errors=0 avg_us=5006 p50_us=5754 max_us=20769 wdisk ops=33729 bytes=2210463744 errors=0 avg_us=4967 p50_us=5699 max_us=20736
+2026-10-11T17:32:21.207Z kv-obs: mt_bytes=2677543 l0_bytes=192 l0=3 l1=24
+2026-10-11T17:32:25.024Z iostats: get ops=17717 bytes=1161101312 errors=0 avg_us=249 p50_us=219 max_us=2506 put ops=34431 bytes=2256470016 errors=0 avg_us=5013 p50_us=7498 max_us=20769 wdisk ops=34431 bytes=2256470016 errors=0 avg_us=4974 p50_us=7385 max_us=20736
+2026-10-11T17:32:26.207Z kv-obs: mt_bytes=3351400 l0_bytes=192 l0=3 l1=24
+2026-10-11T17:32:29.219Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=325 passes=258 sampled=0 pending=0,0 reap=0,0 removed=22723 file_bytes=1582247936 payload_bytes=1489174528 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:32:30.024Z iostats: get ops=18028 bytes=1181483008 errors=0 avg_us=249 p50_us=213 max_us=2506 put ops=35095 bytes=2299985920 errors=0 avg_us=5019 p50_us=4167 max_us=20769 wdisk ops=35095 bytes=2299985920 errors=0 avg_us=4980 p50_us=4075 max_us=20736
+2026-10-11T17:32:31.207Z kv-obs: mt_bytes=4074681 l0_bytes=192 l0=3 l1=24
+2026-10-11T17:32:32.136Z kv-compact: start l0=26 inputs=2 range=266 l0only=0
+2026-10-11T17:32:32.142Z kv-compact: end bytes=2211236 ms=6 l0=25 l1=24 rc=0
+2026-10-11T17:32:32.142Z kv-compact: start l0=25 inputs=2 range=2 l0only=0
+2026-10-11T17:32:32.149Z kv-compact: end bytes=2711557 ms=7 l0=24 l1=24 rc=0
+2026-10-11T17:32:32.149Z kv-compact: start l0=24 inputs=2 range=1 l0only=0
+2026-10-11T17:32:32.152Z kv-compact: end bytes=3960 ms=3 l0=23 l1=24 rc=0
+2026-10-11T17:32:32.152Z kv-compact: start l0=23 inputs=2 range=265 l0only=0
+2026-10-11T17:32:32.154Z kv-compact: end bytes=8480 ms=2 l0=22 l1=24 rc=0
+2026-10-11T17:32:32.154Z kv-compact: start l0=22 inputs=2 range=269 l0only=0
+2026-10-11T17:32:32.157Z kv-compact: end bytes=8480 ms=3 l0=21 l1=24 rc=0
+2026-10-11T17:32:32.157Z kv-compact: start l0=21 inputs=2 range=256 l0only=0
+2026-10-11T17:32:32.161Z kv-compact: end bytes=6784 ms=4 l0=20 l1=24 rc=0
+2026-10-11T17:32:32.161Z kv-compact: start l0=20 inputs=2 range=257 l0only=0
+2026-10-11T17:32:32.163Z kv-compact: end bytes=6784 ms=3 l0=19 l1=24 rc=0
+2026-10-11T17:32:32.164Z kv-compact: start l0=19 inputs=2 range=258 l0only=0
+2026-10-11T17:32:32.167Z kv-compact: end bytes=6784 ms=3 l0=18 l1=24 rc=0
+2026-10-11T17:32:32.167Z kv-compact: start l0=18 inputs=2 range=259 l0only=0
+2026-10-11T17:32:32.170Z kv-compact: end bytes=6784 ms=3 l0=17 l1=24 rc=0
+2026-10-11T17:32:32.170Z kv-compact: start l0=17 inputs=2 range=260 l0only=0
+2026-10-11T17:32:32.173Z kv-compact: end bytes=6784 ms=3 l0=16 l1=24 rc=0
+2026-10-11T17:32:32.173Z kv-compact: start l0=16 inputs=2 range=261 l0only=0
+2026-10-11T17:32:32.176Z kv-compact: end bytes=6784 ms=3 l0=15 l1=24 rc=0
+2026-10-11T17:32:32.176Z kv-compact: start l0=15 inputs=2 range=262 l0only=0
+2026-10-11T17:32:32.179Z kv-compact: end bytes=6784 ms=3 l0=14 l1=24 rc=0
+2026-10-11T17:32:32.179Z kv-compact: start l0=14 inputs=2 range=263 l0only=0
+2026-10-11T17:32:32.183Z kv-compact: end bytes=6784 ms=4 l0=13 l1=24 rc=0
+2026-10-11T17:32:32.183Z kv-compact: start l0=13 inputs=2 range=268 l0only=0
+2026-10-11T17:32:32.186Z kv-compact: end bytes=6784 ms=3 l0=12 l1=24 rc=0
+2026-10-11T17:32:32.186Z kv-compact: start l0=12 inputs=2 range=264 l0only=0
+2026-10-11T17:32:32.189Z kv-compact: end bytes=5088 ms=2 l0=11 l1=24 rc=0
+2026-10-11T17:32:32.189Z kv-compact: start l0=11 inputs=2 range=267 l0only=0
+2026-10-11T17:32:32.193Z kv-compact: end bytes=5088 ms=4 l0=10 l1=24 rc=0
+2026-10-11T17:32:32.193Z kv-compact: start l0=10 inputs=2 range=270 l0only=0
+2026-10-11T17:32:32.196Z kv-compact: end bytes=3392 ms=3 l0=9 l1=24 rc=0
+2026-10-11T17:32:32.196Z kv-compact: start l0=9 inputs=2 range=18 l0only=0
+2026-10-11T17:32:32.200Z kv-compact: end bytes=1696 ms=4 l0=8 l1=24 rc=0
+2026-10-11T17:32:32.200Z kv-compact: start l0=8 inputs=2 range=69 l0only=0
+2026-10-11T17:32:32.203Z kv-compact: end bytes=1696 ms=3 l0=7 l1=24 rc=0
+2026-10-11T17:32:32.203Z kv-compact: start l0=7 inputs=2 range=120 l0only=0
+2026-10-11T17:32:32.206Z kv-compact: end bytes=1696 ms=3 l0=6 l1=24 rc=0
+2026-10-11T17:32:32.206Z kv-compact: start l0=6 inputs=2 range=185 l0only=0
+2026-10-11T17:32:32.210Z kv-compact: end bytes=1696 ms=4 l0=5 l1=24 rc=0
+2026-10-11T17:32:32.210Z kv-compact: start l0=5 inputs=2 range=236 l0only=0
+2026-10-11T17:32:32.213Z kv-compact: end bytes=1696 ms=3 l0=4 l1=24 rc=0
+2026-10-11T17:32:32.213Z kv-compact: start l0=4 inputs=5 range=510 l0only=0
+2026-10-11T17:32:32.217Z kv-compact: end bytes=64 ms=4 l0=0 l1=24 rc=0
+2026-10-11T17:32:35.024Z iostats: get ops=18424 bytes=1207435264 errors=0 avg_us=249 p50_us=182 max_us=2506 put ops=35806 bytes=2346582016 errors=0 avg_us=5023 p50_us=6113 max_us=20769 wdisk ops=35806 bytes=2346582016 errors=0 avg_us=4984 p50_us=6045 max_us=20736
+2026-10-11T17:32:36.207Z kv-obs: mt_bytes=790892 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:32:40.024Z iostats: get ops=18841 bytes=1234763776 errors=0 avg_us=249 p50_us=206 max_us=2506 put ops=36494 bytes=2391670784 errors=0 avg_us=5027 p50_us=6693 max_us=20769 wdisk ops=36494 bytes=2391670784 errors=0 avg_us=4988 p50_us=6664 max_us=20736
+2026-10-11T17:32:41.207Z kv-obs: mt_bytes=1515231 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:32:45.024Z iostats: get ops=19210 bytes=1258946560 errors=0 avg_us=249 p50_us=226 max_us=2506 put ops=37199 bytes=2437873664 errors=0 avg_us=5035 p50_us=7782 max_us=20769 wdisk ops=37199 bytes=2437873664 errors=0 avg_us=4996 p50_us=7754 max_us=20736
+2026-10-11T17:32:45.220Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=283 passes=274 sampled=0 pending=0,0 reap=0,0 removed=24070 file_bytes=1676042240 payload_bytes=1577451520 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:32:46.207Z kv-obs: mt_bytes=2175202 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:32:50.026Z iostats: get ops=19584 bytes=1283457024 errors=0 avg_us=249 p50_us=225 max_us=2506 put ops=37846 bytes=2480275456 errors=0 avg_us=5038 p50_us=8220 max_us=20769 wdisk ops=37846 bytes=2480275456 errors=0 avg_us=4999 p50_us=8189 max_us=20736
+2026-10-11T17:32:51.208Z kv-obs: mt_bytes=2884361 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:32:55.026Z iostats: get ops=19931 bytes=1306198016 errors=0 avg_us=249 p50_us=195 max_us=2506 put ops=38527 bytes=2524905472 errors=0 avg_us=5040 p50_us=7338 max_us=20769 wdisk ops=38527 bytes=2524905472 errors=0 avg_us=5001 p50_us=7312 max_us=20736
+2026-10-11T17:32:56.208Z kv-obs: mt_bytes=3547741 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:33:00.027Z iostats: get ops=20295 bytes=1330053120 errors=0 avg_us=249 p50_us=216 max_us=2506 put ops=39182 bytes=2567831552 errors=0 avg_us=5045 p50_us=7231 max_us=20769 wdisk ops=39182 bytes=2567831552 errors=0 avg_us=5006 p50_us=7191 max_us=20736
+2026-10-11T17:33:01.177Z kv-compact: start l0=23 inputs=2 range=266 l0only=0
+2026-10-11T17:33:01.184Z kv-compact: end bytes=2444326 ms=7 l0=22 l1=24 rc=0
+2026-10-11T17:33:01.184Z kv-compact: start l0=22 inputs=2 range=2 l0only=0
+2026-10-11T17:33:01.191Z kv-compact: end bytes=3025650 ms=7 l0=21 l1=24 rc=0
+2026-10-11T17:33:01.191Z kv-compact: start l0=21 inputs=2 range=1 l0only=0
+2026-10-11T17:33:01.194Z kv-compact: end bytes=6280 ms=3 l0=20 l1=24 rc=0
+2026-10-11T17:33:01.194Z kv-compact: start l0=20 inputs=2 range=265 l0only=0
+2026-10-11T17:33:01.197Z kv-compact: end bytes=8480 ms=3 l0=19 l1=24 rc=0
+2026-10-11T17:33:01.197Z kv-compact: start l0=19 inputs=2 range=269 l0only=0
+2026-10-11T17:33:01.199Z kv-compact: end bytes=8480 ms=3 l0=18 l1=24 rc=0
+2026-10-11T17:33:01.199Z kv-compact: start l0=18 inputs=2 range=256 l0only=0
+2026-10-11T17:33:01.202Z kv-compact: end bytes=6784 ms=2 l0=17 l1=24 rc=0
+2026-10-11T17:33:01.202Z kv-compact: start l0=17 inputs=2 range=257 l0only=0
+2026-10-11T17:33:01.205Z kv-compact: end bytes=6784 ms=2 l0=16 l1=24 rc=0
+2026-10-11T17:33:01.205Z kv-compact: start l0=16 inputs=2 range=258 l0only=0
+2026-10-11T17:33:01.208Z kv-compact: end bytes=6784 ms=3 l0=15 l1=24 rc=0
+2026-10-11T17:33:01.208Z kv-compact: start l0=15 inputs=2 range=259 l0only=0
+2026-10-11T17:33:01.208Z kv-obs: mt_bytes=7803 l0_bytes=61484 l0=15 l1=24
+2026-10-11T17:33:01.211Z kv-compact: end bytes=6784 ms=3 l0=14 l1=24 rc=0
+2026-10-11T17:33:01.211Z kv-compact: start l0=14 inputs=2 range=260 l0only=0
+2026-10-11T17:33:01.214Z kv-compact: end bytes=6784 ms=3 l0=13 l1=24 rc=0
+2026-10-11T17:33:01.214Z kv-compact: start l0=13 inputs=2 range=261 l0only=0
+2026-10-11T17:33:01.217Z kv-compact: end bytes=6784 ms=3 l0=12 l1=24 rc=0
+2026-10-11T17:33:01.217Z kv-compact: start l0=12 inputs=2 range=262 l0only=0
+2026-10-11T17:33:01.220Z kv-compact: end bytes=6784 ms=3 l0=11 l1=24 rc=0
+2026-10-11T17:33:01.221Z kv-compact: start l0=11 inputs=2 range=263 l0only=0
+2026-10-11T17:33:01.221Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=243 passes=290 sampled=0 pending=0,0 reap=0,0 removed=25495 file_bytes=1775267840 payload_bytes=1670840320 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:33:01.224Z kv-compact: end bytes=6784 ms=3 l0=10 l1=24 rc=0
+2026-10-11T17:33:01.224Z kv-compact: start l0=10 inputs=2 range=268 l0only=0
+2026-10-11T17:33:01.227Z kv-compact: end bytes=6784 ms=3 l0=9 l1=24 rc=0
+2026-10-11T17:33:01.227Z kv-compact: start l0=9 inputs=2 range=264 l0only=0
+2026-10-11T17:33:01.230Z kv-compact: end bytes=5088 ms=3 l0=8 l1=24 rc=0
+2026-10-11T17:33:01.230Z kv-compact: start l0=8 inputs=2 range=267 l0only=0
+2026-10-11T17:33:01.233Z kv-compact: end bytes=5088 ms=3 l0=7 l1=24 rc=0
+2026-10-11T17:33:01.233Z kv-compact: start l0=7 inputs=2 range=270 l0only=0
+2026-10-11T17:33:01.236Z kv-compact: end bytes=3392 ms=3 l0=6 l1=24 rc=0
+2026-10-11T17:33:01.236Z kv-compact: start l0=6 inputs=2 range=18 l0only=0
+2026-10-11T17:33:01.239Z kv-compact: end bytes=1696 ms=3 l0=5 l1=24 rc=0
+2026-10-11T17:33:01.240Z kv-compact: start l0=5 inputs=2 range=69 l0only=0
+2026-10-11T17:33:01.243Z kv-compact: end bytes=1696 ms=3 l0=4 l1=24 rc=0
+2026-10-11T17:33:01.243Z kv-compact: start l0=4 inputs=2 range=120 l0only=0
+2026-10-11T17:33:01.246Z kv-compact: end bytes=1696 ms=3 l0=3 l1=24 rc=0
+2026-10-11T17:33:05.027Z iostats: get ops=20635 bytes=1352335360 errors=0 avg_us=249 p50_us=194 max_us=2506 put ops=39869 bytes=2612854784 errors=0 avg_us=5042 p50_us=7302 max_us=20769 wdisk ops=39869 bytes=2612854784 errors=0 avg_us=5003 p50_us=7248 max_us=20736
+2026-10-11T17:33:06.208Z kv-obs: mt_bytes=908815 l0_bytes=3384 l0=3 l1=24
+2026-10-11T17:33:10.027Z iostats: get ops=20971 bytes=1374355456 errors=0 avg_us=249 p50_us=213 max_us=2506 put ops=40585 bytes=2659778560 errors=0 avg_us=5037 p50_us=5135 max_us=20769 wdisk ops=40585 bytes=2659778560 errors=0 avg_us=4997 p50_us=5106 max_us=20736
+2026-10-11T17:33:11.208Z kv-obs: mt_bytes=1663083 l0_bytes=3384 l0=3 l1=24
+2026-10-11T17:33:15.028Z iostats: get ops=21376 bytes=1400897536 errors=0 avg_us=249 p50_us=243 max_us=2506 put ops=41263 bytes=2704211968 errors=0 avg_us=5042 p50_us=7743 max_us=20769 wdisk ops=41263 bytes=2704211968 errors=0 avg_us=5003 p50_us=7717 max_us=20736
+2026-10-11T17:33:16.209Z kv-obs: mt_bytes=2314047 l0_bytes=3384 l0=3 l1=24
+2026-10-11T17:33:17.222Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=201 passes=306 sampled=0 pending=0,0 reap=0,0 removed=26905 file_bytes=1873448960 payload_bytes=1763246080 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:33:20.028Z iostats: get ops=21702 bytes=1422262272 errors=0 avg_us=249 p50_us=224 max_us=2506 put ops=41927 bytes=2747727872 errors=0 avg_us=5038 p50_us=6565 max_us=20769 wdisk ops=41927 bytes=2747727872 errors=0 avg_us=4998 p50_us=6534 max_us=20736
+2026-10-11T17:33:21.209Z kv-obs: mt_bytes=3034518 l0_bytes=3384 l0=3 l1=24
+2026-10-11T17:33:25.028Z iostats: get ops=22038 bytes=1444282368 errors=0 avg_us=249 p50_us=218 max_us=2506 put ops=42633 bytes=2793996288 errors=0 avg_us=5037 p50_us=6313 max_us=20769 wdisk ops=42633 bytes=2793996288 errors=0 avg_us=4998 p50_us=6286 max_us=20736
+2026-10-11T17:33:26.209Z kv-obs: mt_bytes=3691069 l0_bytes=3384 l0=3 l1=24
+2026-10-11T17:33:30.029Z iostats: get ops=22400 bytes=1468006400 errors=0 avg_us=249 p50_us=260 max_us=2506 put ops=43303 bytes=2837905408 errors=0 avg_us=5050 p50_us=9059 max_us=20769 wdisk ops=43303 bytes=2837905408 errors=0 avg_us=5011 p50_us=9031 max_us=20736
+2026-10-11T17:33:30.219Z kv-compact: start l0=26 inputs=2 range=266 l0only=0
+2026-10-11T17:33:30.227Z kv-compact: end bytes=2720935 ms=8 l0=25 l1=24 rc=0
+2026-10-11T17:33:30.227Z kv-compact: start l0=25 inputs=2 range=2 l0only=0
+2026-10-11T17:33:30.234Z kv-compact: end bytes=3337881 ms=8 l0=24 l1=24 rc=0
+2026-10-11T17:33:30.234Z kv-compact: start l0=24 inputs=2 range=1 l0only=0
+2026-10-11T17:33:30.238Z kv-compact: end bytes=3960 ms=3 l0=23 l1=24 rc=0
+2026-10-11T17:33:30.238Z kv-compact: start l0=23 inputs=2 range=265 l0only=0
+2026-10-11T17:33:30.241Z kv-compact: end bytes=8480 ms=3 l0=22 l1=24 rc=0
+2026-10-11T17:33:30.241Z kv-compact: start l0=22 inputs=2 range=269 l0only=0
+2026-10-11T17:33:30.244Z kv-compact: end bytes=8480 ms=3 l0=21 l1=24 rc=0
+2026-10-11T17:33:30.244Z kv-compact: start l0=21 inputs=2 range=256 l0only=0
+2026-10-11T17:33:30.247Z kv-compact: end bytes=6784 ms=4 l0=20 l1=24 rc=0
+2026-10-11T17:33:30.248Z kv-compact: start l0=20 inputs=2 range=257 l0only=0
+2026-10-11T17:33:30.250Z kv-compact: end bytes=6784 ms=2 l0=19 l1=24 rc=0
+2026-10-11T17:33:30.251Z kv-compact: start l0=19 inputs=2 range=258 l0only=0
+2026-10-11T17:33:30.254Z kv-compact: end bytes=6784 ms=3 l0=18 l1=24 rc=0
+2026-10-11T17:33:30.254Z kv-compact: start l0=18 inputs=2 range=259 l0only=0
+2026-10-11T17:33:30.257Z kv-compact: end bytes=6784 ms=3 l0=17 l1=24 rc=0
+2026-10-11T17:33:30.257Z kv-compact: start l0=17 inputs=2 range=260 l0only=0
+2026-10-11T17:33:30.260Z kv-compact: end bytes=6784 ms=4 l0=16 l1=24 rc=0
+2026-10-11T17:33:30.260Z kv-compact: start l0=16 inputs=2 range=261 l0only=0
+2026-10-11T17:33:30.264Z kv-compact: end bytes=6784 ms=3 l0=15 l1=24 rc=0
+2026-10-11T17:33:30.264Z kv-compact: start l0=15 inputs=2 range=262 l0only=0
+2026-10-11T17:33:30.267Z kv-compact: end bytes=6784 ms=3 l0=14 l1=24 rc=0
+2026-10-11T17:33:30.267Z kv-compact: start l0=14 inputs=2 range=263 l0only=0
+2026-10-11T17:33:30.271Z kv-compact: end bytes=6784 ms=4 l0=13 l1=24 rc=0
+2026-10-11T17:33:30.271Z kv-compact: start l0=13 inputs=2 range=268 l0only=0
+2026-10-11T17:33:30.274Z kv-compact: end bytes=6784 ms=3 l0=12 l1=24 rc=0
+2026-10-11T17:33:30.274Z kv-compact: start l0=12 inputs=2 range=264 l0only=0
+2026-10-11T17:33:30.277Z kv-compact: end bytes=5088 ms=3 l0=11 l1=24 rc=0
+2026-10-11T17:33:30.277Z kv-compact: start l0=11 inputs=2 range=267 l0only=0
+2026-10-11T17:33:30.280Z kv-compact: end bytes=5088 ms=4 l0=10 l1=24 rc=0
+2026-10-11T17:33:30.280Z kv-compact: start l0=10 inputs=3 range=185 l0only=0
+2026-10-11T17:33:30.283Z kv-compact: end bytes=1696 ms=3 l0=8 l1=24 rc=0
+2026-10-11T17:33:30.283Z kv-compact: start l0=8 inputs=3 range=236 l0only=0
+2026-10-11T17:33:30.287Z kv-compact: end bytes=1696 ms=3 l0=6 l1=24 rc=0
+2026-10-11T17:33:30.287Z kv-compact: start l0=6 inputs=2 range=270 l0only=0
+2026-10-11T17:33:30.290Z kv-compact: end bytes=3392 ms=4 l0=5 l1=24 rc=0
+2026-10-11T17:33:30.290Z kv-compact: start l0=5 inputs=2 range=18 l0only=0
+2026-10-11T17:33:30.293Z kv-compact: end bytes=1696 ms=2 l0=4 l1=24 rc=0
+2026-10-11T17:33:30.293Z kv-compact: start l0=4 inputs=2 range=69 l0only=0
+2026-10-11T17:33:30.296Z kv-compact: end bytes=1696 ms=4 l0=3 l1=24 rc=0
+2026-10-11T17:33:31.209Z kv-obs: mt_bytes=226243 l0_bytes=1788 l0=3 l1=24
+2026-10-11T17:33:33.223Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=159 passes=322 sampled=0 pending=0,0 reap=0,0 removed=28293 file_bytes=1970098176 payload_bytes=1854210048 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:33:35.029Z iostats: get ops=22741 bytes=1490354176 errors=0 avg_us=249 p50_us=208 max_us=2506 put ops=44015 bytes=2884567040 errors=0 avg_us=5055 p50_us=4777 max_us=20769 wdisk ops=44015 bytes=2884567040 errors=0 avg_us=5016 p50_us=4752 max_us=20736
+2026-10-11T17:33:36.209Z kv-obs: mt_bytes=1065100 l0_bytes=1788 l0=3 l1=24
+2026-10-11T17:33:40.029Z iostats: get ops=23124 bytes=1515454464 errors=0 avg_us=249 p50_us=207 max_us=2506 put ops=44739 bytes=2932015104 errors=0 avg_us=5052 p50_us=2742 max_us=20769 wdisk ops=44739 bytes=2932015104 errors=0 avg_us=5012 p50_us=2708 max_us=20736
+2026-10-11T17:33:41.210Z kv-obs: mt_bytes=1876818 l0_bytes=1788 l0=3 l1=24
+2026-10-11T17:33:45.029Z iostats: get ops=23483 bytes=1538981888 errors=0 avg_us=249 p50_us=201 max_us=2506 put ops=45453 bytes=2978807808 errors=0 avg_us=5050 p50_us=4930 max_us=20769 wdisk ops=45453 bytes=2978807808 errors=0 avg_us=5010 p50_us=4903 max_us=20736
+2026-10-11T17:33:46.209Z kv-obs: mt_bytes=2545056 l0_bytes=1788 l0=3 l1=24
+2026-10-11T17:33:49.224Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=118 passes=338 sampled=0 pending=0,0 reap=0,0 removed=29759 file_bytes=2072178688 payload_bytes=1950285824 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:33:50.030Z iostats: get ops=23817 bytes=1560870912 errors=0 avg_us=249 p50_us=195 max_us=2506 put ops=46141 bytes=3023896576 errors=0 avg_us=5047 p50_us=3929 max_us=20769 wdisk ops=46141 bytes=3023896576 errors=0 avg_us=5007 p50_us=3901 max_us=20736
+2026-10-11T17:33:51.209Z kv-obs: mt_bytes=3281430 l0_bytes=1788 l0=3 l1=24
+2026-10-11T17:33:55.030Z iostats: get ops=24178 bytes=1584529408 errors=0 avg_us=249 p50_us=248 max_us=2506 put ops=46798 bytes=3066953728 errors=0 avg_us=5057 p50_us=5499 max_us=20769 wdisk ops=46798 bytes=3066953728 errors=0 avg_us=5017 p50_us=5448 max_us=20736
+2026-10-11T17:33:56.209Z kv-obs: mt_bytes=3892871 l0_bytes=1788 l0=3 l1=24
+2026-10-11T17:33:58.923Z kv-compact: start l0=26 inputs=2 range=266 l0only=0
+2026-10-11T17:33:58.930Z kv-compact: end bytes=2986813 ms=7 l0=25 l1=24 rc=0
+2026-10-11T17:33:58.930Z kv-compact: start l0=25 inputs=2 range=2 l0only=0
+2026-10-11T17:33:58.938Z kv-compact: end bytes=3648834 ms=8 l0=24 l1=24 rc=0
+2026-10-11T17:33:58.938Z kv-compact: start l0=24 inputs=2 range=1 l0only=0
+2026-10-11T17:33:58.941Z kv-compact: end bytes=10195 ms=3 l0=23 l1=24 rc=0
+2026-10-11T17:33:58.941Z kv-compact: start l0=23 inputs=2 range=265 l0only=0
+2026-10-11T17:33:58.944Z kv-compact: end bytes=8480 ms=3 l0=22 l1=24 rc=0
+2026-10-11T17:33:58.944Z kv-compact: start l0=22 inputs=2 range=269 l0only=0
+2026-10-11T17:33:58.947Z kv-compact: end bytes=8480 ms=3 l0=21 l1=24 rc=0
+2026-10-11T17:33:58.947Z kv-compact: start l0=21 inputs=2 range=256 l0only=0
+2026-10-11T17:33:58.950Z kv-compact: end bytes=6784 ms=3 l0=20 l1=24 rc=0
+2026-10-11T17:33:58.950Z kv-compact: start l0=20 inputs=2 range=257 l0only=0
+2026-10-11T17:33:58.953Z kv-compact: end bytes=6784 ms=3 l0=19 l1=24 rc=0
+2026-10-11T17:33:58.953Z kv-compact: start l0=19 inputs=2 range=258 l0only=0
+2026-10-11T17:33:58.957Z kv-compact: end bytes=6784 ms=4 l0=18 l1=24 rc=0
+2026-10-11T17:33:58.957Z kv-compact: start l0=18 inputs=2 range=259 l0only=0
+2026-10-11T17:33:58.960Z kv-compact: end bytes=6784 ms=3 l0=17 l1=24 rc=0
+2026-10-11T17:33:58.960Z kv-compact: start l0=17 inputs=2 range=260 l0only=0
+2026-10-11T17:33:58.963Z kv-compact: end bytes=6784 ms=3 l0=16 l1=24 rc=0
+2026-10-11T17:33:58.963Z kv-compact: start l0=16 inputs=2 range=261 l0only=0
+2026-10-11T17:33:58.966Z kv-compact: end bytes=6784 ms=3 l0=15 l1=24 rc=0
+2026-10-11T17:33:58.966Z kv-compact: start l0=15 inputs=2 range=262 l0only=0
+2026-10-11T17:33:58.970Z kv-compact: end bytes=6784 ms=4 l0=14 l1=24 rc=0
+2026-10-11T17:33:58.970Z kv-compact: start l0=14 inputs=2 range=263 l0only=0
+2026-10-11T17:33:58.974Z kv-compact: end bytes=6784 ms=4 l0=13 l1=24 rc=0
+2026-10-11T17:33:58.974Z kv-compact: start l0=13 inputs=2 range=268 l0only=0
+2026-10-11T17:33:58.977Z kv-compact: end bytes=6784 ms=3 l0=12 l1=24 rc=0
+2026-10-11T17:33:58.977Z kv-compact: start l0=12 inputs=2 range=264 l0only=0
+2026-10-11T17:33:58.981Z kv-compact: end bytes=5088 ms=4 l0=11 l1=24 rc=0
+2026-10-11T17:33:58.982Z kv-compact: start l0=11 inputs=2 range=267 l0only=0
+2026-10-11T17:33:58.985Z kv-compact: end bytes=5088 ms=3 l0=10 l1=24 rc=0
+2026-10-11T17:33:58.985Z kv-compact: start l0=10 inputs=3 range=120 l0only=0
+2026-10-11T17:33:58.988Z kv-compact: end bytes=1696 ms=3 l0=8 l1=24 rc=0
+2026-10-11T17:33:58.988Z kv-compact: start l0=8 inputs=2 range=270 l0only=0
+2026-10-11T17:33:58.992Z kv-compact: end bytes=3392 ms=4 l0=7 l1=24 rc=0
+2026-10-11T17:33:58.992Z kv-compact: start l0=7 inputs=2 range=18 l0only=0
+2026-10-11T17:33:58.995Z kv-compact: end bytes=1696 ms=3 l0=6 l1=24 rc=0
+2026-10-11T17:33:58.997Z kv-compact: start l0=6 inputs=2 range=69 l0only=0
+2026-10-11T17:33:59.001Z kv-compact: end bytes=1696 ms=4 l0=5 l1=24 rc=0
+2026-10-11T17:33:59.001Z kv-compact: start l0=5 inputs=2 range=185 l0only=0
+2026-10-11T17:33:59.004Z kv-compact: end bytes=1696 ms=4 l0=4 l1=24 rc=0
+2026-10-11T17:33:59.005Z kv-compact: start l0=4 inputs=2 range=236 l0only=0
+2026-10-11T17:33:59.008Z kv-compact: end bytes=1696 ms=4 l0=3 l1=24 rc=0
+2026-10-11T17:34:00.030Z iostats: get ops=24518 bytes=1606811648 errors=0 avg_us=250 p50_us=273 max_us=2506 put ops=47477 bytes=3111452672 errors=0 avg_us=5071 p50_us=4575 max_us=20769 wdisk ops=47477 bytes=3111452672 errors=0 avg_us=5032 p50_us=4528 max_us=20736
+2026-10-11T17:34:01.209Z kv-obs: mt_bytes=473488 l0_bytes=192 l0=3 l1=24
+2026-10-11T17:34:05.031Z iostats: get ops=24843 bytes=1628110848 errors=0 avg_us=250 p50_us=221 max_us=3700 put ops=48129 bytes=3154182144 errors=0 avg_us=5090 p50_us=5891 max_us=20769 wdisk ops=48129 bytes=3154182144 errors=0 avg_us=5051 p50_us=5866 max_us=20736
+2026-10-11T17:34:05.225Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=76 passes=354 sampled=0 pending=0,0 reap=0,0 removed=31089 file_bytes=2164789248 payload_bytes=2037448704 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:34:06.209Z kv-obs: mt_bytes=1190590 l0_bytes=192 l0=3 l1=24
+2026-10-11T17:34:10.031Z iostats: get ops=25154 bytes=1648492544 errors=0 avg_us=251 p50_us=201 max_us=3700 put ops=48774 bytes=3196452864 errors=0 avg_us=5139 p50_us=5444 max_us=270719 wdisk ops=48774 bytes=3196452864 errors=0 avg_us=5099 p50_us=5417 max_us=270636
+2026-10-11T17:34:11.209Z kv-obs: mt_bytes=1780633 l0_bytes=192 l0=3 l1=24
+2026-10-11T17:34:15.031Z iostats: get ops=25490 bytes=1670512640 errors=0 avg_us=253 p50_us=213 max_us=5240 put ops=49339 bytes=3233480704 errors=0 avg_us=5241 p50_us=5503 max_us=270719 wdisk ops=49339 bytes=3233480704 errors=0 avg_us=5201 p50_us=5472 max_us=270636
+2026-10-11T17:34:16.209Z kv-obs: mt_bytes=2292030 l0_bytes=192 l0=3 l1=24
+2026-10-11T17:34:20.031Z iostats: get ops=25711 bytes=1684996096 errors=0 avg_us=255 p50_us=270 max_us=6295 put ops=49876 bytes=3268673536 errors=0 avg_us=5293 p50_us=13926 max_us=270719 wdisk ops=49876 bytes=3268673536 errors=0 avg_us=5253 p50_us=13892 max_us=270636
+2026-10-11T17:34:21.209Z kv-obs: mt_bytes=2726383 l0_bytes=192 l0=3 l1=24
+2026-10-11T17:34:21.226Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=29 passes=370 sampled=0 pending=0,0 reap=0,0 removed=32180 file_bytes=2240757760 payload_bytes=2108948480 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:34:25.031Z iostats: get ops=25974 bytes=1702232064 errors=0 avg_us=258 p50_us=209 max_us=10855 put ops=50437 bytes=3305439232 errors=0 avg_us=5360 p50_us=6278 max_us=270719 wdisk ops=50437 bytes=3305439232 errors=0 avg_us=5320 p50_us=6239 max_us=270636
+2026-10-11T17:34:26.209Z kv-obs: mt_bytes=3242023 l0_bytes=192 l0=3 l1=24
+2026-10-11T17:34:30.031Z iostats: get ops=26285 bytes=1722613760 errors=0 avg_us=259 p50_us=224 max_us=10855 put ops=50982 bytes=3341156352 errors=0 avg_us=5421 p50_us=7316 max_us=270719 wdisk ops=50982 bytes=3341156352 errors=0 avg_us=5382 p50_us=7284 max_us=270636
+2026-10-11T17:34:31.210Z kv-obs: mt_bytes=3709526 l0_bytes=192 l0=3 l1=24
+2026-10-11T17:34:35.032Z iostats: get ops=26577 bytes=1741750272 errors=0 avg_us=260 p50_us=236 max_us=10855 put ops=51562 bytes=3379167232 errors=0 avg_us=5516 p50_us=8914 max_us=270719 wdisk ops=51562 bytes=3379167232 errors=0 avg_us=5476 p50_us=8855 max_us=270636
+2026-10-11T17:34:36.210Z kv-obs: mt_bytes=4159268 l0_bytes=192 l0=3 l1=24
+2026-10-11T17:34:36.801Z kv-compact: start l0=26 inputs=2 range=266 l0only=0
+2026-10-11T17:34:36.811Z kv-compact: end bytes=3269648 ms=11 l0=25 l1=24 rc=0
+2026-10-11T17:34:36.812Z kv-compact: start l0=25 inputs=2 range=2 l0only=0
+2026-10-11T17:34:36.822Z kv-compact: end bytes=4004809 ms=10 l0=24 l1=24 rc=0
+2026-10-11T17:34:36.822Z kv-compact: start l0=24 inputs=2 range=1 l0only=0
+2026-10-11T17:34:36.826Z kv-compact: end bytes=8020 ms=4 l0=23 l1=24 rc=0
+2026-10-11T17:34:36.826Z kv-compact: start l0=23 inputs=2 range=265 l0only=0
+2026-10-11T17:34:36.829Z kv-compact: end bytes=8480 ms=3 l0=22 l1=24 rc=0
+2026-10-11T17:34:36.829Z kv-compact: start l0=22 inputs=2 range=269 l0only=0
+2026-10-11T17:34:36.833Z kv-compact: end bytes=8480 ms=4 l0=21 l1=24 rc=0
+2026-10-11T17:34:36.833Z kv-compact: start l0=21 inputs=2 range=256 l0only=0
+2026-10-11T17:34:36.837Z kv-compact: end bytes=6784 ms=4 l0=20 l1=24 rc=0
+2026-10-11T17:34:36.837Z kv-compact: start l0=20 inputs=2 range=257 l0only=0
+2026-10-11T17:34:36.840Z kv-compact: end bytes=6784 ms=3 l0=19 l1=24 rc=0
+2026-10-11T17:34:36.840Z kv-compact: start l0=19 inputs=2 range=258 l0only=0
+2026-10-11T17:34:36.843Z kv-compact: end bytes=6784 ms=3 l0=18 l1=24 rc=0
+2026-10-11T17:34:36.843Z kv-compact: start l0=18 inputs=2 range=259 l0only=0
+2026-10-11T17:34:36.846Z kv-compact: end bytes=6784 ms=3 l0=17 l1=24 rc=0
+2026-10-11T17:34:36.846Z kv-compact: start l0=17 inputs=2 range=260 l0only=0
+2026-10-11T17:34:36.849Z kv-compact: end bytes=6784 ms=3 l0=16 l1=24 rc=0
+2026-10-11T17:34:36.849Z kv-compact: start l0=16 inputs=2 range=261 l0only=0
+2026-10-11T17:34:36.853Z kv-compact: end bytes=6784 ms=3 l0=15 l1=24 rc=0
+2026-10-11T17:34:36.853Z kv-compact: start l0=15 inputs=2 range=262 l0only=0
+2026-10-11T17:34:36.856Z kv-compact: end bytes=6784 ms=3 l0=14 l1=24 rc=0
+2026-10-11T17:34:36.856Z kv-compact: start l0=14 inputs=2 range=263 l0only=0
+2026-10-11T17:34:36.860Z kv-compact: end bytes=6784 ms=4 l0=13 l1=24 rc=0
+2026-10-11T17:34:36.860Z kv-compact: start l0=13 inputs=2 range=268 l0only=0
+2026-10-11T17:34:36.865Z kv-compact: end bytes=6784 ms=5 l0=12 l1=24 rc=0
+2026-10-11T17:34:36.865Z kv-compact: start l0=12 inputs=2 range=264 l0only=0
+2026-10-11T17:34:36.868Z kv-compact: end bytes=5088 ms=3 l0=11 l1=24 rc=0
+2026-10-11T17:34:36.868Z kv-compact: start l0=11 inputs=2 range=267 l0only=0
+2026-10-11T17:34:36.871Z kv-compact: end bytes=5088 ms=4 l0=10 l1=24 rc=0
+2026-10-11T17:34:36.871Z kv-compact: start l0=10 inputs=2 range=270 l0only=0
+2026-10-11T17:34:36.875Z kv-compact: end bytes=3392 ms=3 l0=9 l1=24 rc=0
+2026-10-11T17:34:36.875Z kv-compact: start l0=9 inputs=2 range=18 l0only=0
+2026-10-11T17:34:36.879Z kv-compact: end bytes=1696 ms=4 l0=8 l1=24 rc=0
+2026-10-11T17:34:36.879Z kv-compact: start l0=8 inputs=2 range=69 l0only=0
+2026-10-11T17:34:36.882Z kv-compact: end bytes=1696 ms=4 l0=7 l1=24 rc=0
+2026-10-11T17:34:36.882Z kv-compact: start l0=7 inputs=2 range=120 l0only=0
+2026-10-11T17:34:36.886Z kv-compact: end bytes=1696 ms=3 l0=6 l1=24 rc=0
+2026-10-11T17:34:36.886Z kv-compact: start l0=6 inputs=2 range=185 l0only=0
+2026-10-11T17:34:36.889Z kv-compact: end bytes=1696 ms=3 l0=5 l1=24 rc=0
+2026-10-11T17:34:36.889Z kv-compact: start l0=5 inputs=2 range=236 l0only=0
+2026-10-11T17:34:36.893Z kv-compact: end bytes=1696 ms=4 l0=4 l1=24 rc=0
+2026-10-11T17:34:36.893Z kv-compact: start l0=4 inputs=5 range=510 l0only=0
+2026-10-11T17:34:36.897Z kv-compact: end bytes=64 ms=4 l0=0 l1=24 rc=0
+2026-10-11T17:34:37.228Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=987 passes=385 sampled=0 pending=0,0 reap=0,0 removed=33232 file_bytes=2314010624 payload_bytes=2177892352 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:34:40.032Z iostats: get ops=26721 bytes=1751187456 errors=0 avg_us=262 p50_us=308 max_us=10855 put ops=52053 bytes=3411345408 errors=0 avg_us=5592 p50_us=5100 max_us=270719 wdisk ops=52053 bytes=3411345408 errors=0 avg_us=5553 p50_us=5004 max_us=270636
+2026-10-11T17:34:41.210Z kv-obs: mt_bytes=689548 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:34:45.033Z iostats: get ops=27081 bytes=1774780416 errors=0 avg_us=265 p50_us=228 max_us=10855 put ops=52571 bytes=3445293056 errors=0 avg_us=5659 p50_us=8486 max_us=270719 wdisk ops=52571 bytes=3445293056 errors=0 avg_us=5619 p50_us=8460 max_us=270636
+2026-10-11T17:34:46.210Z kv-obs: mt_bytes=1151295 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:34:50.033Z iostats: get ops=27320 bytes=1790443520 errors=0 avg_us=266 p50_us=231 max_us=10855 put ops=53092 bytes=3479437312 errors=0 avg_us=5699 p50_us=17284 max_us=270719 wdisk ops=53092 bytes=3479437312 errors=0 avg_us=5659 p50_us=17251 max_us=270636
+2026-10-11T17:34:51.210Z kv-obs: mt_bytes=1559139 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:34:53.229Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=942 passes=401 sampled=0 pending=0,0 reap=0,0 removed=34315 file_bytes=2389422080 payload_bytes=2248867840 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:34:55.038Z iostats: get ops=27474 bytes=1800536064 errors=0 avg_us=268 p50_us=270 max_us=10855 put ops=53603 bytes=3512926208 errors=0 avg_us=5787 p50_us=13789 max_us=270719 wdisk ops=53603 bytes=3512926208 errors=0 avg_us=5747 p50_us=13742 max_us=270636
+2026-10-11T17:34:56.210Z kv-obs: mt_bytes=2136109 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:35:00.038Z iostats: get ops=27802 bytes=1822031872 errors=0 avg_us=270 p50_us=250 max_us=10855 put ops=54205 bytes=3552378880 errors=0 avg_us=5850 p50_us=4825 max_us=270719 wdisk ops=54205 bytes=3552378880 errors=0 avg_us=5810 p50_us=4780 max_us=270636
+2026-10-11T17:35:01.210Z kv-obs: mt_bytes=2606222 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:35:05.039Z iostats: get ops=28122 bytes=1843003392 errors=0 avg_us=271 p50_us=282 max_us=10855 put ops=54753 bytes=3588292608 errors=0 avg_us=5912 p50_us=9899 max_us=270719 wdisk ops=54753 bytes=3588292608 errors=0 avg_us=5872 p50_us=9862 max_us=270636
+2026-10-11T17:35:06.215Z kv-obs: mt_bytes=3046138 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:35:09.230Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=900 passes=417 sampled=0 pending=0,0 reap=0,0 removed=35422 file_bytes=2466504704 payload_bytes=2321416192 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:35:10.049Z iostats: get ops=28286 bytes=1853751296 errors=0 avg_us=272 p50_us=240 max_us=10855 put ops=55307 bytes=3624599552 errors=0 avg_us=5948 p50_us=9591 max_us=270719 wdisk ops=55307 bytes=3624599552 errors=0 avg_us=5908 p50_us=9543 max_us=270636
+2026-10-11T17:35:11.215Z kv-obs: mt_bytes=3589776 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:35:15.050Z iostats: get ops=28589 bytes=1873608704 errors=0 avg_us=273 p50_us=296 max_us=10855 put ops=55872 bytes=3661627392 errors=0 avg_us=6007 p50_us=4161 max_us=270719 wdisk ops=55872 bytes=3661627392 errors=0 avg_us=5967 p50_us=4121 max_us=270636
+2026-10-11T17:35:16.216Z kv-obs: mt_bytes=4128850 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:35:17.172Z kv-compact: start l0=23 inputs=2 range=266 l0only=0
+2026-10-11T17:35:17.186Z kv-compact: end bytes=3550139 ms=14 l0=22 l1=24 rc=0
+2026-10-11T17:35:17.186Z kv-compact: start l0=22 inputs=2 range=2 l0only=0
+2026-10-11T17:35:17.201Z kv-compact: end bytes=4354088 ms=15 l0=21 l1=24 rc=0
+2026-10-11T17:35:17.201Z kv-compact: start l0=21 inputs=2 range=1 l0only=0
+2026-10-11T17:35:17.204Z kv-compact: end bytes=7585 ms=3 l0=20 l1=24 rc=0
+2026-10-11T17:35:17.204Z kv-compact: start l0=20 inputs=2 range=265 l0only=0
+2026-10-11T17:35:17.209Z kv-compact: end bytes=8480 ms=5 l0=19 l1=24 rc=0
+2026-10-11T17:35:17.209Z kv-compact: start l0=19 inputs=2 range=269 l0only=0
+2026-10-11T17:35:17.212Z kv-compact: end bytes=8480 ms=3 l0=18 l1=24 rc=0
+2026-10-11T17:35:17.212Z kv-compact: start l0=18 inputs=2 range=256 l0only=0
+2026-10-11T17:35:17.219Z kv-compact: end bytes=6784 ms=7 l0=17 l1=24 rc=0
+2026-10-11T17:35:17.219Z kv-compact: start l0=17 inputs=2 range=257 l0only=0
+2026-10-11T17:35:17.222Z kv-compact: end bytes=6784 ms=4 l0=16 l1=24 rc=0
+2026-10-11T17:35:17.222Z kv-compact: start l0=16 inputs=2 range=258 l0only=0
+2026-10-11T17:35:17.225Z kv-compact: end bytes=6784 ms=2 l0=15 l1=24 rc=0
+2026-10-11T17:35:17.225Z kv-compact: start l0=15 inputs=2 range=259 l0only=0
+2026-10-11T17:35:17.233Z kv-compact: end bytes=6784 ms=8 l0=14 l1=24 rc=0
+2026-10-11T17:35:17.233Z kv-compact: start l0=14 inputs=2 range=260 l0only=0
+2026-10-11T17:35:17.236Z kv-compact: end bytes=6784 ms=3 l0=13 l1=24 rc=0
+2026-10-11T17:35:17.236Z kv-compact: start l0=13 inputs=2 range=261 l0only=0
+2026-10-11T17:35:17.244Z kv-compact: end bytes=6784 ms=8 l0=12 l1=24 rc=0
+2026-10-11T17:35:17.244Z kv-compact: start l0=12 inputs=2 range=262 l0only=0
+2026-10-11T17:35:17.247Z kv-compact: end bytes=6784 ms=3 l0=11 l1=24 rc=0
+2026-10-11T17:35:17.247Z kv-compact: start l0=11 inputs=2 range=263 l0only=0
+2026-10-11T17:35:17.255Z kv-compact: end bytes=6784 ms=8 l0=10 l1=24 rc=0
+2026-10-11T17:35:17.255Z kv-compact: start l0=10 inputs=2 range=268 l0only=0
+2026-10-11T17:35:17.258Z kv-compact: end bytes=6784 ms=3 l0=9 l1=24 rc=0
+2026-10-11T17:35:17.258Z kv-compact: start l0=9 inputs=2 range=264 l0only=0
+2026-10-11T17:35:17.261Z kv-compact: end bytes=5088 ms=3 l0=8 l1=24 rc=0
+2026-10-11T17:35:17.261Z kv-compact: start l0=8 inputs=2 range=267 l0only=0
+2026-10-11T17:35:17.269Z kv-compact: end bytes=5088 ms=8 l0=7 l1=24 rc=0
+2026-10-11T17:35:17.269Z kv-compact: start l0=7 inputs=2 range=270 l0only=0
+2026-10-11T17:35:17.272Z kv-compact: end bytes=3392 ms=3 l0=6 l1=24 rc=0
+2026-10-11T17:35:17.272Z kv-compact: start l0=6 inputs=2 range=18 l0only=0
+2026-10-11T17:35:17.282Z kv-compact: end bytes=1696 ms=10 l0=5 l1=24 rc=0
+2026-10-11T17:35:17.282Z kv-compact: start l0=5 inputs=2 range=69 l0only=0
+2026-10-11T17:35:17.286Z kv-compact: end bytes=1696 ms=4 l0=4 l1=24 rc=0
+2026-10-11T17:35:17.286Z kv-compact: start l0=4 inputs=2 range=120 l0only=0
+2026-10-11T17:35:17.288Z kv-compact: end bytes=1696 ms=2 l0=3 l1=24 rc=0
+2026-10-11T17:35:20.054Z iostats: get ops=28895 bytes=1893662720 errors=0 avg_us=275 p50_us=250 max_us=10855 put ops=56366 bytes=3694002176 errors=0 avg_us=6071 p50_us=41028 max_us=270719 wdisk ops=56366 bytes=3694002176 errors=0 avg_us=6030 p50_us=40943 max_us=270636
+2026-10-11T17:35:21.216Z kv-obs: mt_bytes=604878 l0_bytes=3384 l0=3 l1=24
+2026-10-11T17:35:25.054Z iostats: get ops=29119 bytes=1908342784 errors=0 avg_us=276 p50_us=221 max_us=10855 put ops=56942 bytes=3731750912 errors=0 avg_us=6133 p50_us=7797 max_us=270719 wdisk ops=56942 bytes=3731750912 errors=0 avg_us=6093 p50_us=7772 max_us=270636
+2026-10-11T17:35:25.232Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=857 passes=433 sampled=0 pending=0,0 reap=0,0 removed=36459 file_bytes=2538713088 payload_bytes=2389377024 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:35:26.217Z kv-obs: mt_bytes=1117435 l0_bytes=3384 l0=3 l1=24
+2026-10-11T17:35:30.055Z iostats: get ops=29366 bytes=1924530176 errors=0 avg_us=279 p50_us=243 max_us=30512 put ops=57515 bytes=3769303040 errors=0 avg_us=6192 p50_us=6469 max_us=270719 wdisk ops=57515 bytes=3769303040 errors=0 avg_us=6151 p50_us=6439 max_us=270636
+2026-10-11T17:35:31.217Z kv-obs: mt_bytes=1676074 l0_bytes=3384 l0=3 l1=24
+2026-10-11T17:35:35.056Z iostats: get ops=29691 bytes=1945829376 errors=0 avg_us=280 p50_us=233 max_us=30512 put ops=58042 bytes=3803840512 errors=0 avg_us=6249 p50_us=10996 max_us=270719 wdisk ops=58042 bytes=3803840512 errors=0 avg_us=6209 p50_us=10971 max_us=270636
+2026-10-11T17:35:36.217Z kv-obs: mt_bytes=2062055 l0_bytes=3384 l0=3 l1=24
+2026-10-11T17:35:40.056Z iostats: get ops=29939 bytes=1962082304 errors=0 avg_us=281 p50_us=224 max_us=30512 put ops=58558 bytes=3837657088 errors=0 avg_us=6326 p50_us=12334 max_us=270719 wdisk ops=58558 bytes=3837657088 errors=0 avg_us=6286 p50_us=12290 max_us=270636
+2026-10-11T17:35:41.217Z kv-obs: mt_bytes=2624189 l0_bytes=3384 l0=3 l1=24
+2026-10-11T17:35:41.233Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=815 passes=449 sampled=0 pending=0,0 reap=0,0 removed=37494 file_bytes=2610782208 payload_bytes=2457206784 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:35:45.056Z iostats: get ops=30176 bytes=1977614336 errors=0 avg_us=281 p50_us=236 max_us=30512 put ops=59167 bytes=3877568512 errors=0 avg_us=6355 p50_us=6247 max_us=270719 wdisk ops=59167 bytes=3877568512 errors=0 avg_us=6315 p50_us=6219 max_us=270636
+2026-10-11T17:35:46.224Z kv-obs: mt_bytes=3089843 l0_bytes=3384 l0=3 l1=24
+2026-10-11T17:35:50.058Z iostats: get ops=30442 bytes=1995046912 errors=0 avg_us=282 p50_us=304 max_us=30512 put ops=59674 bytes=3910795264 errors=0 avg_us=6398 p50_us=11328 max_us=270719 wdisk ops=59674 bytes=3910795264 errors=0 avg_us=6358 p50_us=11303 max_us=270636
+2026-10-11T17:35:51.224Z kv-obs: mt_bytes=3611446 l0_bytes=3384 l0=3 l1=24
+2026-10-11T17:35:55.059Z iostats: get ops=30767 bytes=2016346112 errors=0 avg_us=283 p50_us=266 max_us=30512 put ops=60262 bytes=3949330432 errors=0 avg_us=6451 p50_us=8442 max_us=270719 wdisk ops=60262 bytes=3949330432 errors=0 avg_us=6411 p50_us=8378 max_us=270636
+2026-10-11T17:35:56.224Z kv-obs: mt_bytes=4030181 l0_bytes=3384 l0=3 l1=24
+2026-10-11T17:35:57.234Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=772 passes=465 sampled=0 pending=0,0 reap=0,0 removed=38536 file_bytes=2683338752 payload_bytes=2525495296 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:35:57.359Z kv-compact: start l0=26 inputs=2 range=266 l0only=0
+2026-10-11T17:35:57.372Z kv-compact: end bytes=3787174 ms=13 l0=25 l1=24 rc=0
+2026-10-11T17:35:57.372Z kv-compact: start l0=25 inputs=2 range=2 l0only=0
+2026-10-11T17:35:57.387Z kv-compact: end bytes=4714227 ms=14 l0=24 l1=24 rc=0
+2026-10-11T17:35:57.387Z kv-compact: start l0=24 inputs=2 range=1 l0only=0
+2026-10-11T17:35:57.390Z kv-compact: end bytes=9615 ms=2 l0=23 l1=24 rc=0
+2026-10-11T17:35:57.390Z kv-compact: start l0=23 inputs=2 range=265 l0only=0
+2026-10-11T17:35:57.395Z kv-compact: end bytes=8480 ms=5 l0=22 l1=24 rc=0
+2026-10-11T17:35:57.395Z kv-compact: start l0=22 inputs=2 range=269 l0only=0
+2026-10-11T17:35:57.398Z kv-compact: end bytes=8480 ms=3 l0=21 l1=24 rc=0
+2026-10-11T17:35:57.398Z kv-compact: start l0=21 inputs=2 range=256 l0only=0
+2026-10-11T17:35:57.403Z kv-compact: end bytes=6784 ms=5 l0=20 l1=24 rc=0
+2026-10-11T17:35:57.403Z kv-compact: start l0=20 inputs=2 range=257 l0only=0
+2026-10-11T17:35:57.405Z kv-compact: end bytes=6784 ms=2 l0=19 l1=24 rc=0
+2026-10-11T17:35:57.405Z kv-compact: start l0=19 inputs=2 range=258 l0only=0
+2026-10-11T17:35:57.410Z kv-compact: end bytes=6784 ms=4 l0=18 l1=24 rc=0
+2026-10-11T17:35:57.410Z kv-compact: start l0=18 inputs=2 range=259 l0only=0
+2026-10-11T17:35:57.414Z kv-compact: end bytes=6784 ms=4 l0=17 l1=24 rc=0
+2026-10-11T17:35:57.414Z kv-compact: start l0=17 inputs=2 range=260 l0only=0
+2026-10-11T17:35:57.419Z kv-compact: end bytes=6784 ms=5 l0=16 l1=24 rc=0
+2026-10-11T17:35:57.419Z kv-compact: start l0=16 inputs=2 range=261 l0only=0
+2026-10-11T17:35:57.423Z kv-compact: end bytes=6784 ms=3 l0=15 l1=24 rc=0
+2026-10-11T17:35:57.423Z kv-compact: start l0=15 inputs=2 range=262 l0only=0
+2026-10-11T17:35:57.428Z kv-compact: end bytes=6784 ms=5 l0=14 l1=24 rc=0
+2026-10-11T17:35:57.428Z kv-compact: start l0=14 inputs=2 range=263 l0only=0
+2026-10-11T17:35:57.430Z kv-compact: end bytes=6784 ms=3 l0=13 l1=24 rc=0
+2026-10-11T17:35:57.430Z kv-compact: start l0=13 inputs=2 range=268 l0only=0
+2026-10-11T17:35:57.436Z kv-compact: end bytes=6784 ms=5 l0=12 l1=24 rc=0
+2026-10-11T17:35:57.436Z kv-compact: start l0=12 inputs=2 range=264 l0only=0
+2026-10-11T17:35:57.440Z kv-compact: end bytes=5088 ms=4 l0=11 l1=24 rc=0
+2026-10-11T17:35:57.440Z kv-compact: start l0=11 inputs=2 range=267 l0only=0
+2026-10-11T17:35:57.446Z kv-compact: end bytes=5088 ms=6 l0=10 l1=24 rc=0
+2026-10-11T17:35:57.446Z kv-compact: start l0=10 inputs=3 range=185 l0only=0
+2026-10-11T17:35:57.450Z kv-compact: end bytes=1696 ms=4 l0=8 l1=24 rc=0
+2026-10-11T17:35:57.450Z kv-compact: start l0=8 inputs=3 range=236 l0only=0
+2026-10-11T17:35:57.457Z kv-compact: end bytes=1696 ms=7 l0=6 l1=24 rc=0
+2026-10-11T17:35:57.457Z kv-compact: start l0=6 inputs=2 range=270 l0only=0
+2026-10-11T17:35:57.460Z kv-compact: end bytes=3392 ms=3 l0=5 l1=24 rc=0
+2026-10-11T17:35:57.460Z kv-compact: start l0=5 inputs=2 range=18 l0only=0
+2026-10-11T17:35:57.468Z kv-compact: end bytes=1696 ms=8 l0=4 l1=24 rc=0
+2026-10-11T17:35:57.468Z kv-compact: start l0=4 inputs=2 range=69 l0only=0
+2026-10-11T17:35:57.471Z kv-compact: end bytes=1696 ms=3 l0=3 l1=24 rc=0
+2026-10-11T17:36:00.059Z iostats: get ops=30979 bytes=2030239744 errors=0 avg_us=285 p50_us=279 max_us=30512 put ops=60791 bytes=3983998976 errors=0 avg_us=6500 p50_us=9194 max_us=270719 wdisk ops=60791 bytes=3983998976 errors=0 avg_us=6460 p50_us=9164 max_us=270636
+2026-10-11T17:36:01.225Z kv-obs: mt_bytes=573754 l0_bytes=1788 l0=3 l1=24
+2026-10-11T17:36:05.062Z iostats: get ops=31209 bytes=2045313024 errors=0 avg_us=286 p50_us=266 max_us=30512 put ops=61368 bytes=4021813248 errors=0 avg_us=6528 p50_us=5350 max_us=270719 wdisk ops=61368 bytes=4021813248 errors=0 avg_us=6487 p50_us=5269 max_us=270636
+2026-10-11T17:36:06.225Z kv-obs: mt_bytes=1137942 l0_bytes=1788 l0=3 l1=24
+2026-10-11T17:36:10.062Z iostats: get ops=31518 bytes=2065563648 errors=0 avg_us=288 p50_us=232 max_us=30512 put ops=61866 bytes=4054450176 errors=0 avg_us=6577 p50_us=5437 max_us=270719 wdisk ops=61866 bytes=4054450176 errors=0 avg_us=6536 p50_us=5412 max_us=270636
+2026-10-11T17:36:11.225Z kv-obs: mt_bytes=1639548 l0_bytes=1788 l0=3 l1=24
+2026-10-11T17:36:13.236Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=727 passes=481 sampled=0 pending=0,0 reap=0,0 removed=39599 file_bytes=2757357568 payload_bytes=2595160064 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:36:13.520Z raft-host: gc-pass ms=8 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T17:36:15.062Z iostats: get ops=31843 bytes=2086862848 errors=0 avg_us=289 p50_us=211 max_us=30512 put ops=62471 bytes=4094099456 errors=0 avg_us=6604 p50_us=4812 max_us=270719 wdisk ops=62471 bytes=4094099456 errors=0 avg_us=6564 p50_us=4786 max_us=270636
+2026-10-11T17:36:16.225Z kv-obs: mt_bytes=2106784 l0_bytes=1788 l0=3 l1=24
+2026-10-11T17:36:20.062Z iostats: get ops=32102 bytes=2103836672 errors=0 avg_us=290 p50_us=229 max_us=30512 put ops=62999 bytes=4128702464 errors=0 avg_us=6638 p50_us=7830 max_us=270719 wdisk ops=62999 bytes=4128702464 errors=0 avg_us=6597 p50_us=7797 max_us=270636
+2026-10-11T17:36:21.225Z kv-obs: mt_bytes=2591599 l0_bytes=1788 l0=3 l1=24
+2026-10-11T17:36:25.066Z iostats: get ops=32282 bytes=2115633152 errors=0 avg_us=291 p50_us=289 max_us=30512 put ops=63572 bytes=4166254592 errors=0 avg_us=6671 p50_us=6600 max_us=270719 wdisk ops=63572 bytes=4166254592 errors=0 avg_us=6630 p50_us=6568 max_us=270636
+2026-10-11T17:36:26.225Z kv-obs: mt_bytes=3127825 l0_bytes=1788 l0=3 l1=24
+2026-10-11T17:36:29.237Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=676 passes=497 sampled=0 pending=0,0 reap=0,0 removed=40684 file_bytes=2832908288 payload_bytes=2666266624 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:36:30.066Z iostats: get ops=32590 bytes=2135818240 errors=0 avg_us=292 p50_us=236 max_us=30512 put ops=64113 bytes=4201709568 errors=0 avg_us=6697 p50_us=7970 max_us=270719 wdisk ops=64113 bytes=4201709568 errors=0 avg_us=6656 p50_us=7934 max_us=270636
+2026-10-11T17:36:31.225Z kv-obs: mt_bytes=3559205 l0_bytes=1788 l0=3 l1=24
+2026-10-11T17:36:35.066Z iostats: get ops=32912 bytes=2156920832 errors=0 avg_us=294 p50_us=280 max_us=30512 put ops=64609 bytes=4234215424 errors=0 avg_us=6767 p50_us=36058 max_us=270719 wdisk ops=64609 bytes=4234215424 errors=0 avg_us=6726 p50_us=36025 max_us=270636
+2026-10-11T17:36:36.225Z kv-obs: mt_bytes=4021193 l0_bytes=1788 l0=3 l1=24
+2026-10-11T17:36:37.808Z kv-compact: start l0=26 inputs=2 range=266 l0only=0
+2026-10-11T17:36:37.818Z kv-compact: end bytes=4012431 ms=10 l0=25 l1=24 rc=0
+2026-10-11T17:36:37.818Z kv-compact: start l0=25 inputs=2 range=2 l0only=0
+2026-10-11T17:36:37.828Z kv-compact: end bytes=5071286 ms=10 l0=24 l1=24 rc=0
+2026-10-11T17:36:37.828Z kv-compact: start l0=24 inputs=2 range=1 l0only=0
+2026-10-11T17:36:37.832Z kv-compact: end bytes=2220 ms=4 l0=23 l1=24 rc=0
+2026-10-11T17:36:37.832Z kv-compact: start l0=23 inputs=2 range=265 l0only=0
+2026-10-11T17:36:37.835Z kv-compact: end bytes=8480 ms=3 l0=22 l1=24 rc=0
+2026-10-11T17:36:37.835Z kv-compact: start l0=22 inputs=2 range=269 l0only=0
+2026-10-11T17:36:37.838Z kv-compact: end bytes=8480 ms=3 l0=21 l1=24 rc=0
+2026-10-11T17:36:37.838Z kv-compact: start l0=21 inputs=2 range=256 l0only=0
+2026-10-11T17:36:37.841Z kv-compact: end bytes=6784 ms=3 l0=20 l1=24 rc=0
+2026-10-11T17:36:37.841Z kv-compact: start l0=20 inputs=2 range=257 l0only=0
+2026-10-11T17:36:37.844Z kv-compact: end bytes=6784 ms=3 l0=19 l1=24 rc=0
+2026-10-11T17:36:37.844Z kv-compact: start l0=19 inputs=2 range=258 l0only=0
+2026-10-11T17:36:37.847Z kv-compact: end bytes=6784 ms=3 l0=18 l1=24 rc=0
+2026-10-11T17:36:37.848Z kv-compact: start l0=18 inputs=2 range=259 l0only=0
+2026-10-11T17:36:37.851Z kv-compact: end bytes=6784 ms=3 l0=17 l1=24 rc=0
+2026-10-11T17:36:37.851Z kv-compact: start l0=17 inputs=2 range=260 l0only=0
+2026-10-11T17:36:37.854Z kv-compact: end bytes=6784 ms=3 l0=16 l1=24 rc=0
+2026-10-11T17:36:37.854Z kv-compact: start l0=16 inputs=2 range=261 l0only=0
+2026-10-11T17:36:37.857Z kv-compact: end bytes=6784 ms=3 l0=15 l1=24 rc=0
+2026-10-11T17:36:37.857Z kv-compact: start l0=15 inputs=2 range=262 l0only=0
+2026-10-11T17:36:37.860Z kv-compact: end bytes=6784 ms=3 l0=14 l1=24 rc=0
+2026-10-11T17:36:37.860Z kv-compact: start l0=14 inputs=2 range=263 l0only=0
+2026-10-11T17:36:37.864Z kv-compact: end bytes=6784 ms=3 l0=13 l1=24 rc=0
+2026-10-11T17:36:37.864Z kv-compact: start l0=13 inputs=2 range=268 l0only=0
+2026-10-11T17:36:37.868Z kv-compact: end bytes=6784 ms=4 l0=12 l1=24 rc=0
+2026-10-11T17:36:37.868Z kv-compact: start l0=12 inputs=2 range=264 l0only=0
+2026-10-11T17:36:37.871Z kv-compact: end bytes=5088 ms=3 l0=11 l1=24 rc=0
+2026-10-11T17:36:37.871Z kv-compact: start l0=11 inputs=2 range=267 l0only=0
+2026-10-11T17:36:37.874Z kv-compact: end bytes=5088 ms=3 l0=10 l1=24 rc=0
+2026-10-11T17:36:37.874Z kv-compact: start l0=10 inputs=3 range=120 l0only=0
+2026-10-11T17:36:37.878Z kv-compact: end bytes=1696 ms=3 l0=8 l1=24 rc=0
+2026-10-11T17:36:37.878Z kv-compact: start l0=8 inputs=2 range=270 l0only=0
+2026-10-11T17:36:37.881Z kv-compact: end bytes=3392 ms=4 l0=7 l1=24 rc=0
+2026-10-11T17:36:37.881Z kv-compact: start l0=7 inputs=2 range=18 l0only=0
+2026-10-11T17:36:37.885Z kv-compact: end bytes=1696 ms=3 l0=6 l1=24 rc=0
+2026-10-11T17:36:37.885Z kv-compact: start l0=6 inputs=2 range=69 l0only=0
+2026-10-11T17:36:37.889Z kv-compact: end bytes=1696 ms=4 l0=5 l1=24 rc=0
+2026-10-11T17:36:37.889Z kv-compact: start l0=5 inputs=2 range=185 l0only=0
+2026-10-11T17:36:37.892Z kv-compact: end bytes=1696 ms=3 l0=4 l1=24 rc=0
+2026-10-11T17:36:37.892Z kv-compact: start l0=4 inputs=2 range=236 l0only=0
+2026-10-11T17:36:37.896Z kv-compact: end bytes=1696 ms=4 l0=3 l1=24 rc=0
+2026-10-11T17:36:40.067Z iostats: get ops=33093 bytes=2168782848 errors=0 avg_us=295 p50_us=241 max_us=30512 put ops=65216 bytes=4273995776 errors=0 avg_us=6801 p50_us=12054 max_us=270719 wdisk ops=65216 bytes=4273995776 errors=0 avg_us=6760 p50_us=12020 max_us=270636
+2026-10-11T17:36:41.226Z kv-obs: mt_bytes=487272 l0_bytes=192 l0=3 l1=24
+2026-10-11T17:36:45.067Z iostats: get ops=33385 bytes=2187919360 errors=0 avg_us=296 p50_us=199 max_us=30512 put ops=65776 bytes=4310695936 errors=0 avg_us=6846 p50_us=7867 max_us=270719 wdisk ops=65776 bytes=4310695936 errors=0 avg_us=6805 p50_us=7837 max_us=270636
+2026-10-11T17:36:45.238Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=632 passes=513 sampled=0 pending=0,0 reap=0,0 removed=41745 file_bytes=2906787840 payload_bytes=2735800320 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:36:46.226Z kv-obs: mt_bytes=1152670 l0_bytes=192 l0=3 l1=24
+2026-10-11T17:36:50.067Z iostats: get ops=33722 bytes=2210004992 errors=0 avg_us=298 p50_us=252 max_us=30512 put ops=66273 bytes=4343267328 errors=0 avg_us=6889 p50_us=11962 max_us=270719 wdisk ops=66273 bytes=4343267328 errors=0 avg_us=6848 p50_us=11922 max_us=270636
+2026-10-11T17:36:51.226Z kv-obs: mt_bytes=1535924 l0_bytes=192 l0=3 l1=24
+2026-10-11T17:36:55.067Z iostats: get ops=33881 bytes=2220425216 errors=0 avg_us=300 p50_us=435 max_us=30512 put ops=66816 bytes=4378853376 errors=0 avg_us=6918 p50_us=26917 max_us=270719 wdisk ops=66816 bytes=4378853376 errors=0 avg_us=6877 p50_us=26861 max_us=270636
+2026-10-11T17:36:56.226Z kv-obs: mt_bytes=2026947 l0_bytes=192 l0=3 l1=24
+2026-10-11T17:37:00.067Z iostats: get ops=34163 bytes=2238906368 errors=0 avg_us=301 p50_us=396 max_us=30512 put ops=67381 bytes=4415881216 errors=0 avg_us=6942 p50_us=4095 max_us=270719 wdisk ops=67381 bytes=4415881216 errors=0 avg_us=6901 p50_us=4064 max_us=270636
+2026-10-11T17:37:01.226Z kv-obs: mt_bytes=2552436 l0_bytes=192 l0=3 l1=24
+2026-10-11T17:37:01.239Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=587 passes=529 sampled=0 pending=0,0 reap=0,0 removed=42731 file_bytes=2975444992 payload_bytes=2800418816 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:37:05.067Z iostats: get ops=34465 bytes=2258698240 errors=0 avg_us=303 p50_us=279 max_us=30512 put ops=67903 bytes=4450091008 errors=0 avg_us=6995 p50_us=6926 max_us=270719 wdisk ops=67903 bytes=4450091008 errors=0 avg_us=6954 p50_us=6900 max_us=270636
+2026-10-11T17:37:06.226Z kv-obs: mt_bytes=3049428 l0_bytes=192 l0=3 l1=24
+2026-10-11T17:37:10.069Z iostats: get ops=34708 bytes=2274623488 errors=0 avg_us=303 p50_us=207 max_us=30512 put ops=68462 bytes=4486725632 errors=0 avg_us=7015 p50_us=7010 max_us=270719 wdisk ops=68462 bytes=4486725632 errors=0 avg_us=6974 p50_us=6983 max_us=270636
+2026-10-11T17:37:11.226Z kv-obs: mt_bytes=3453973 l0_bytes=192 l0=3 l1=24
+2026-10-11T17:37:15.069Z iostats: get ops=34949 bytes=2290417664 errors=0 avg_us=304 p50_us=264 max_us=30512 put ops=68986 bytes=4521066496 errors=0 avg_us=7056 p50_us=12510 max_us=270719 wdisk ops=68986 bytes=4521066496 errors=0 avg_us=7015 p50_us=12478 max_us=270636
+2026-10-11T17:37:16.226Z kv-obs: mt_bytes=4001695 l0_bytes=192 l0=3 l1=24
+2026-10-11T17:37:17.240Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=542 passes=545 sampled=0 pending=0,0 reap=0,0 removed=43795 file_bytes=3049533440 payload_bytes=2870149120 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:37:18.394Z kv-compact: start l0=26 inputs=2 range=266 l0only=0
+2026-10-11T17:37:18.405Z kv-compact: end bytes=4269452 ms=11 l0=25 l1=24 rc=0
+2026-10-11T17:37:18.405Z kv-compact: start l0=25 inputs=2 range=2 l0only=0
+2026-10-11T17:37:18.417Z kv-compact: end bytes=5437104 ms=12 l0=24 l1=24 rc=0
+2026-10-11T17:37:18.417Z kv-compact: start l0=24 inputs=2 range=1 l0only=0
+2026-10-11T17:37:18.420Z kv-compact: end bytes=3960 ms=3 l0=23 l1=24 rc=0
+2026-10-11T17:37:18.420Z kv-compact: start l0=23 inputs=2 range=265 l0only=0
+2026-10-11T17:37:18.429Z kv-compact: end bytes=8480 ms=9 l0=22 l1=24 rc=0
+2026-10-11T17:37:18.429Z kv-compact: start l0=22 inputs=2 range=269 l0only=0
+2026-10-11T17:37:18.432Z kv-compact: end bytes=8480 ms=3 l0=21 l1=24 rc=0
+2026-10-11T17:37:18.432Z kv-compact: start l0=21 inputs=2 range=256 l0only=0
+2026-10-11T17:37:18.436Z kv-compact: end bytes=6784 ms=4 l0=20 l1=24 rc=0
+2026-10-11T17:37:18.436Z kv-compact: start l0=20 inputs=2 range=257 l0only=0
+2026-10-11T17:37:18.439Z kv-compact: end bytes=6784 ms=3 l0=19 l1=24 rc=0
+2026-10-11T17:37:18.439Z kv-compact: start l0=19 inputs=2 range=258 l0only=0
+2026-10-11T17:37:18.446Z kv-compact: end bytes=6784 ms=7 l0=18 l1=24 rc=0
+2026-10-11T17:37:18.446Z kv-compact: start l0=18 inputs=2 range=259 l0only=0
+2026-10-11T17:37:18.449Z kv-compact: end bytes=6784 ms=3 l0=17 l1=24 rc=0
+2026-10-11T17:37:18.449Z kv-compact: start l0=17 inputs=2 range=260 l0only=0
+2026-10-11T17:37:18.457Z kv-compact: end bytes=6784 ms=8 l0=16 l1=24 rc=0
+2026-10-11T17:37:18.457Z kv-compact: start l0=16 inputs=2 range=261 l0only=0
+2026-10-11T17:37:18.460Z kv-compact: end bytes=6784 ms=3 l0=15 l1=24 rc=0
+2026-10-11T17:37:18.460Z kv-compact: start l0=15 inputs=2 range=262 l0only=0
+2026-10-11T17:37:18.467Z kv-compact: end bytes=6784 ms=7 l0=14 l1=24 rc=0
+2026-10-11T17:37:18.467Z kv-compact: start l0=14 inputs=2 range=263 l0only=0
+2026-10-11T17:37:18.471Z kv-compact: end bytes=6784 ms=4 l0=13 l1=24 rc=0
+2026-10-11T17:37:18.471Z kv-compact: start l0=13 inputs=2 range=268 l0only=0
+2026-10-11T17:37:18.474Z kv-compact: end bytes=6784 ms=3 l0=12 l1=24 rc=0
+2026-10-11T17:37:18.474Z kv-compact: start l0=12 inputs=2 range=264 l0only=0
+2026-10-11T17:37:18.481Z kv-compact: end bytes=5088 ms=7 l0=11 l1=24 rc=0
+2026-10-11T17:37:18.481Z kv-compact: start l0=11 inputs=2 range=267 l0only=0
+2026-10-11T17:37:18.484Z kv-compact: end bytes=5088 ms=3 l0=10 l1=24 rc=0
+2026-10-11T17:37:18.484Z kv-compact: start l0=10 inputs=2 range=270 l0only=0
+2026-10-11T17:37:18.492Z kv-compact: end bytes=3392 ms=8 l0=9 l1=24 rc=0
+2026-10-11T17:37:18.492Z kv-compact: start l0=9 inputs=2 range=18 l0only=0
+2026-10-11T17:37:18.505Z kv-compact: end bytes=1696 ms=13 l0=8 l1=24 rc=0
+2026-10-11T17:37:18.505Z kv-compact: start l0=8 inputs=2 range=69 l0only=0
+2026-10-11T17:37:18.512Z kv-compact: end bytes=1696 ms=7 l0=7 l1=24 rc=0
+2026-10-11T17:37:18.512Z kv-compact: start l0=7 inputs=2 range=120 l0only=0
+2026-10-11T17:37:18.515Z kv-compact: end bytes=1696 ms=3 l0=6 l1=24 rc=0
+2026-10-11T17:37:18.515Z kv-compact: start l0=6 inputs=2 range=185 l0only=0
+2026-10-11T17:37:18.525Z kv-compact: end bytes=1696 ms=10 l0=5 l1=24 rc=0
+2026-10-11T17:37:18.525Z kv-compact: start l0=5 inputs=2 range=236 l0only=0
+2026-10-11T17:37:18.533Z kv-compact: end bytes=1696 ms=8 l0=4 l1=24 rc=0
+2026-10-11T17:37:18.533Z kv-compact: start l0=4 inputs=5 range=510 l0only=0
+2026-10-11T17:37:18.536Z kv-compact: end bytes=64 ms=3 l0=0 l1=24 rc=0
+2026-10-11T17:37:20.069Z iostats: get ops=35272 bytes=2311585792 errors=0 avg_us=305 p50_us=275 max_us=30512 put ops=69560 bytes=4558684160 errors=0 avg_us=7091 p50_us=11181 max_us=270719 wdisk ops=69561 bytes=4558749696 errors=0 avg_us=7050 p50_us=11108 max_us=270636
+2026-10-11T17:37:21.226Z kv-obs: mt_bytes=387175 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:37:25.070Z iostats: get ops=35578 bytes=2331639808 errors=0 avg_us=307 p50_us=281 max_us=30512 put ops=70096 bytes=4593811456 errors=0 avg_us=7133 p50_us=14956 max_us=270719 wdisk ops=70096 bytes=4593811456 errors=0 avg_us=7092 p50_us=14904 max_us=270636
+2026-10-11T17:37:26.226Z kv-obs: mt_bytes=971792 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:37:30.070Z iostats: get ops=35738 bytes=2342125568 errors=0 avg_us=308 p50_us=273 max_us=30512 put ops=70662 bytes=4630904832 errors=0 avg_us=7183 p50_us=7582 max_us=270719 wdisk ops=70662 bytes=4630904832 errors=0 avg_us=7142 p50_us=7553 max_us=270636
+2026-10-11T17:37:31.226Z kv-obs: mt_bytes=1486582 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:37:33.241Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=499 passes=561 sampled=0 pending=0,0 reap=0,0 removed=44823 file_bytes=3121115136 payload_bytes=2937520128 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:37:35.071Z iostats: get ops=36012 bytes=2360082432 errors=0 avg_us=310 p50_us=276 max_us=30512 put ops=71218 bytes=4667342848 errors=0 avg_us=7214 p50_us=10135 max_us=270719 wdisk ops=71218 bytes=4667342848 errors=0 avg_us=7173 p50_us=10060 max_us=270636
+2026-10-11T17:37:36.227Z kv-obs: mt_bytes=1927266 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:37:40.073Z iostats: get ops=36308 bytes=2379481088 errors=0 avg_us=311 p50_us=300 max_us=30512 put ops=71716 bytes=4699979776 errors=0 avg_us=7262 p50_us=17071 max_us=270719 wdisk ops=71716 bytes=4699979776 errors=0 avg_us=7221 p50_us=17023 max_us=270636
+2026-10-11T17:37:41.227Z kv-obs: mt_bytes=2382142 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:37:45.076Z iostats: get ops=36568 bytes=2396520448 errors=0 avg_us=312 p50_us=278 max_us=30512 put ops=72318 bytes=4739432448 errors=0 avg_us=7277 p50_us=10548 max_us=270719 wdisk ops=72318 bytes=4739432448 errors=0 avg_us=7236 p50_us=10503 max_us=270636
+2026-10-11T17:37:46.228Z kv-obs: mt_bytes=2893051 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:37:49.242Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=454 passes=577 sampled=0 pending=0,0 reap=0,0 removed=45876 file_bytes=3194437632 payload_bytes=3006529536 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:37:50.076Z iostats: get ops=36779 bytes=2410348544 errors=0 avg_us=312 p50_us=240 max_us=30512 put ops=72871 bytes=4775673856 errors=0 avg_us=7292 p50_us=8467 max_us=270719 wdisk ops=72871 bytes=4775673856 errors=0 avg_us=7251 p50_us=8442 max_us=270636
+2026-10-11T17:37:51.228Z kv-obs: mt_bytes=3423884 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:37:55.076Z iostats: get ops=37100 bytes=2431385600 errors=0 avg_us=313 p50_us=227 max_us=30512 put ops=73403 bytes=4810539008 errors=0 avg_us=7325 p50_us=4814 max_us=270719 wdisk ops=73403 bytes=4810539008 errors=0 avg_us=7284 p50_us=4780 max_us=270636
+2026-10-11T17:37:56.231Z kv-obs: mt_bytes=3910031 l0_bytes=0 l0=0 l1=24
+2026-10-11T17:37:59.115Z kv-compact: start l0=23 inputs=2 range=266 l0only=0
+2026-10-11T17:37:59.126Z kv-compact: end bytes=4558761 ms=11 l0=22 l1=24 rc=0
+2026-10-11T17:37:59.126Z kv-compact: start l0=22 inputs=2 range=1 l0only=0
+2026-10-11T17:37:59.129Z kv-compact: end bytes=9470 ms=2 l0=21 l1=24 rc=0
+2026-10-11T17:37:59.129Z kv-compact: start l0=21 inputs=2 range=265 l0only=0
+2026-10-11T17:37:59.132Z kv-compact: end bytes=8480 ms=3 l0=20 l1=24 rc=0
+2026-10-11T17:37:59.132Z kv-compact: start l0=20 inputs=2 range=269 l0only=0
+2026-10-11T17:37:59.136Z kv-compact: end bytes=8480 ms=4 l0=19 l1=24 rc=0
+2026-10-11T17:37:59.136Z kv-compact: start l0=19 inputs=2 range=256 l0only=0
+2026-10-11T17:37:59.140Z kv-compact: end bytes=6784 ms=4 l0=18 l1=24 rc=0
+2026-10-11T17:37:59.140Z kv-compact: start l0=18 inputs=2 range=257 l0only=0
+2026-10-11T17:37:59.143Z kv-compact: end bytes=6784 ms=3 l0=17 l1=24 rc=0
+2026-10-11T17:37:59.143Z kv-compact: start l0=17 inputs=2 range=258 l0only=0
+2026-10-11T17:37:59.146Z kv-compact: end bytes=6784 ms=4 l0=16 l1=24 rc=0
+2026-10-11T17:37:59.146Z kv-compact: start l0=16 inputs=2 range=259 l0only=0
+2026-10-11T17:37:59.150Z kv-compact: end bytes=6784 ms=4 l0=15 l1=24 rc=0
+2026-10-11T17:37:59.150Z kv-compact: start l0=15 inputs=2 range=260 l0only=0
+2026-10-11T17:37:59.154Z kv-compact: end bytes=6784 ms=3 l0=14 l1=24 rc=0
+2026-10-11T17:37:59.154Z kv-compact: start l0=14 inputs=2 range=261 l0only=0
+2026-10-11T17:37:59.157Z kv-compact: end bytes=6784 ms=4 l0=13 l1=24 rc=0
+2026-10-11T17:37:59.157Z kv-compact: start l0=13 inputs=2 range=262 l0only=0
+2026-10-11T17:37:59.160Z kv-compact: end bytes=6784 ms=3 l0=12 l1=24 rc=0
+2026-10-11T17:37:59.161Z kv-compact: start l0=12 inputs=2 range=263 l0only=0
+2026-10-11T17:37:59.164Z kv-compact: end bytes=6784 ms=3 l0=11 l1=24 rc=0
+2026-10-11T17:37:59.164Z kv-compact: start l0=11 inputs=2 range=268 l0only=0
+2026-10-11T17:37:59.168Z kv-compact: end bytes=6784 ms=4 l0=10 l1=24 rc=0
+2026-10-11T17:37:59.168Z kv-compact: start l0=10 inputs=2 range=264 l0only=0
+2026-10-11T17:37:59.171Z kv-compact: end bytes=5088 ms=3 l0=9 l1=24 rc=0
+2026-10-11T17:37:59.171Z kv-compact: start l0=9 inputs=2 range=267 l0only=0
+2026-10-11T17:37:59.174Z kv-compact: end bytes=5088 ms=4 l0=8 l1=24 rc=0
+2026-10-11T17:37:59.175Z kv-compact: start l0=8 inputs=2 range=270 l0only=0
+2026-10-11T17:37:59.178Z kv-compact: end bytes=3392 ms=3 l0=7 l1=24 rc=0
+2026-10-11T17:37:59.178Z kv-compact: start l0=7 inputs=2 range=18 l0only=0
+2026-10-11T17:37:59.181Z kv-compact: end bytes=1696 ms=4 l0=6 l1=24 rc=0
+2026-10-11T17:37:59.181Z kv-compact: start l0=6 inputs=2 range=69 l0only=0
+2026-10-11T17:37:59.185Z kv-compact: end bytes=1696 ms=3 l0=5 l1=24 rc=0
+2026-10-11T17:37:59.185Z kv-compact: start l0=5 inputs=2 range=120 l0only=0
+2026-10-11T17:37:59.188Z kv-compact: end bytes=1696 ms=3 l0=4 l1=24 rc=0
+2026-10-11T17:37:59.188Z kv-compact: start l0=4 inputs=2 range=185 l0only=0
+2026-10-11T17:37:59.191Z kv-compact: end bytes=1696 ms=3 l0=3 l1=24 rc=0
+2026-10-11T17:38:00.076Z iostats: get ops=37426 bytes=2452750336 errors=0 avg_us=314 p50_us=261 max_us=30512 put ops=73921 bytes=4844486656 errors=0 avg_us=7358 p50_us=10009 max_us=270719 wdisk ops=73921 bytes=4844486656 errors=0 avg_us=7317 p50_us=9979 max_us=270636
+2026-10-11T17:38:01.231Z kv-obs: mt_bytes=370394 l0_bytes=662107 l0=3 l1=24
+2026-10-11T17:38:05.076Z iostats: get ops=37605 bytes=2464481280 errors=0 avg_us=315 p50_us=245 max_us=30512 put ops=74539 bytes=4884987904 errors=0 avg_us=7371 p50_us=7759 max_us=270719 wdisk ops=74539 bytes=4884987904 errors=0 avg_us=7329 p50_us=7729 max_us=270636
+2026-10-11T17:38:05.243Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=409 passes=593 sampled=0 pending=0,0 reap=0,0 removed=46978 file_bytes=3271172096 payload_bytes=3078750208 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:38:06.231Z kv-obs: mt_bytes=964815 l0_bytes=662107 l0=3 l1=24
+2026-10-11T17:38:10.077Z iostats: get ops=37885 bytes=2482831360 errors=0 avg_us=316 p50_us=279 max_us=30512 put ops=75020 bytes=4916510720 errors=0 avg_us=7409 p50_us=6075 max_us=270719 wdisk ops=75020 bytes=4916510720 errors=0 avg_us=7368 p50_us=6041 max_us=270636
+2026-10-11T17:38:11.231Z kv-obs: mt_bytes=1496629 l0_bytes=662107 l0=3 l1=24
+2026-10-11T17:38:15.079Z iostats: get ops=38201 bytes=2503540736 errors=0 avg_us=317 p50_us=241 max_us=30512 put ops=75588 bytes=4953735168 errors=0 avg_us=7444 p50_us=6251 max_us=302495 wdisk ops=75588 bytes=4953735168 errors=0 avg_us=7403 p50_us=6218 max_us=302423
+2026-10-11T17:38:16.231Z kv-obs: mt_bytes=1945114 l0_bytes=662107 l0=3 l1=24
+2026-10-11T17:38:20.686Z storage-engine=files direct_io=on
+2026-10-11T17:38:20.686Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-gc-yield20-20261011/live/gc-direct-ascjjvi9/n3/meta/cluster_nodes.bin
+2026-10-11T17:38:20.686Z   persisted node 1: 127.0.0.1:24190
+2026-10-11T17:38:20.686Z   persisted node 2: 127.0.0.1:24191
+2026-10-11T17:38:20.686Z   persisted node 3: 127.0.0.1:24192
+2026-10-11T17:38:20.686Z   persisted node 4: 127.0.0.1:24193
+2026-10-11T17:38:20.964Z Storage quota: explicit 4.00 GiB (safe maximum 161.13 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T17:38:21.008Z Joined cluster with 4 nodes
+2026-10-11T17:38:21.009Z heartbeat: enabled (2000 ms interval)
+2026-10-11T17:38:21.234Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T17:38:21.234Z raft-host: up raft_id=2 n=4 boot=4483103185069086 salt=16410947133653310648 g0=hosted g2=hosted
+2026-10-11T17:38:21.234Z efsd 715b1103-deploy-normal (branch devel-amd, built 2026-10-11T17:25:15Z on amd-395), build=715b1103-deploy-normal: node 3 listening on 127.0.0.1:24192, storage=/data1/efs/amd-gc-yield20-20261011/live/gc-direct-ascjjvi9/n3 (1 paths, stripe=none), used=1843462144, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T17:38:21.234Z kv-obs: mt_bytes=2273103 l0_bytes=662107 l0=3 l1=24
+2026-10-11T17:38:21.249Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T17:38:23.010Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=765 passes=2 sampled=0 pending=0,0 reap=0,0 removed=782 file_bytes=54452224 payload_bytes=51249152 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:38:24.954Z raft-host: applied session index=5845 kind=1 shard=0 ino=0
+2026-10-11T17:38:26.234Z kv-obs: mt_bytes=2548002 l0_bytes=662107 l0=3 l1=24
+2026-10-11T17:38:26.249Z iostats: get ops=207 bytes=13565952 errors=0 avg_us=178 p50_us=179 max_us=319 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T17:38:31.235Z kv-obs: mt_bytes=2745568 l0_bytes=662107 l0=3 l1=24
+2026-10-11T17:38:31.250Z iostats: get ops=776 bytes=50855936 errors=0 avg_us=462 p50_us=688 max_us=14707 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T17:38:36.235Z kv-obs: mt_bytes=2994811 l0_bytes=662107 l0=3 l1=24
+2026-10-11T17:38:36.250Z iostats: get ops=776 bytes=50855936 errors=0 avg_us=462 p50_us=688 max_us=14707 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T17:38:39.015Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=569 passes=18 sampled=0 pending=0,0 reap=0,0 removed=14079 file_bytes=980348928 payload_bytes=922681344 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:38:41.235Z kv-obs: mt_bytes=3382112 l0_bytes=662107 l0=3 l1=24
+2026-10-11T17:38:41.253Z iostats: get ops=776 bytes=50855936 errors=0 avg_us=462 p50_us=688 max_us=14707 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T17:38:46.235Z kv-obs: mt_bytes=3940261 l0_bytes=662107 l0=3 l1=24
+2026-10-11T17:38:46.255Z iostats: get ops=776 bytes=50855936 errors=0 avg_us=462 p50_us=688 max_us=14707 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T17:38:51.235Z kv-obs: mt_bytes=4186448 l0_bytes=662107 l0=3 l1=24
+2026-10-11T17:38:51.257Z iostats: get ops=776 bytes=50855936 errors=0 avg_us=462 p50_us=688 max_us=14707 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T17:38:51.690Z kv-compact: start l0=26 inputs=3 range=2 l0only=0
+2026-10-11T17:38:51.701Z kv-compact: end bytes=3117082 ms=11 l0=24 l1=24 rc=0
+2026-10-11T17:38:51.701Z kv-compact: start l0=24 inputs=2 range=266 l0only=0
+2026-10-11T17:38:51.710Z kv-compact: end bytes=3785365 ms=9 l0=23 l1=24 rc=0
+2026-10-11T17:38:51.710Z kv-compact: start l0=23 inputs=2 range=1 l0only=0
+2026-10-11T17:38:51.713Z kv-compact: end bytes=563 ms=3 l0=22 l1=24 rc=0
+2026-10-11T17:38:51.713Z kv-compact: start l0=22 inputs=3 range=236 l0only=0
+2026-10-11T17:38:51.715Z kv-compact: end bytes=36 ms=3 l0=20 l1=24 rc=0
+2026-10-11T17:38:51.715Z kv-compact: start l0=20 inputs=2 range=265 l0only=0
+2026-10-11T17:38:51.718Z kv-compact: end bytes=180 ms=2 l0=19 l1=24 rc=0
+2026-10-11T17:38:51.718Z kv-compact: start l0=19 inputs=2 range=269 l0only=0
+2026-10-11T17:38:51.721Z kv-compact: end bytes=180 ms=3 l0=18 l1=24 rc=0
+2026-10-11T17:38:51.721Z kv-compact: start l0=18 inputs=2 range=256 l0only=0
+2026-10-11T17:38:51.724Z kv-compact: end bytes=144 ms=3 l0=17 l1=24 rc=0
+2026-10-11T17:38:51.724Z kv-compact: start l0=17 inputs=2 range=257 l0only=0
+2026-10-11T17:38:51.726Z kv-compact: end bytes=144 ms=2 l0=16 l1=24 rc=0
+2026-10-11T17:38:51.726Z kv-compact: start l0=16 inputs=2 range=258 l0only=0
+2026-10-11T17:38:51.729Z kv-compact: end bytes=144 ms=3 l0=15 l1=24 rc=0
+2026-10-11T17:38:51.729Z kv-compact: start l0=15 inputs=2 range=259 l0only=0
+2026-10-11T17:38:51.732Z kv-compact: end bytes=144 ms=3 l0=14 l1=24 rc=0
+2026-10-11T17:38:51.732Z kv-compact: start l0=14 inputs=2 range=260 l0only=0
+2026-10-11T17:38:51.734Z kv-compact: end bytes=144 ms=3 l0=13 l1=24 rc=0
+2026-10-11T17:38:51.734Z kv-compact: start l0=13 inputs=2 range=261 l0only=0
+2026-10-11T17:38:51.737Z kv-compact: end bytes=144 ms=2 l0=12 l1=24 rc=0
+2026-10-11T17:38:51.737Z kv-compact: start l0=12 inputs=2 range=262 l0only=0
+2026-10-11T17:38:51.739Z kv-compact: end bytes=144 ms=3 l0=11 l1=24 rc=0
+2026-10-11T17:38:51.739Z kv-compact: start l0=11 inputs=2 range=263 l0only=0
+2026-10-11T17:38:51.742Z kv-compact: end bytes=144 ms=2 l0=10 l1=24 rc=0
+2026-10-11T17:38:51.742Z kv-compact: start l0=10 inputs=2 range=268 l0only=0
+2026-10-11T17:38:51.744Z kv-compact: end bytes=144 ms=2 l0=9 l1=24 rc=0
+2026-10-11T17:38:51.744Z kv-compact: start l0=9 inputs=2 range=264 l0only=0
+2026-10-11T17:38:51.746Z kv-compact: end bytes=108 ms=3 l0=8 l1=24 rc=0
+2026-10-11T17:38:51.746Z kv-compact: start l0=8 inputs=2 range=267 l0only=0
+2026-10-11T17:38:51.748Z kv-compact: end bytes=108 ms=1 l0=7 l1=24 rc=0
+2026-10-11T17:38:51.748Z kv-compact: start l0=7 inputs=2 range=270 l0only=0
+2026-10-11T17:38:51.750Z kv-compact: end bytes=72 ms=2 l0=6 l1=24 rc=0
+2026-10-11T17:38:51.750Z kv-compact: start l0=6 inputs=2 range=18 l0only=0
+2026-10-11T17:38:51.751Z kv-compact: end bytes=36 ms=1 l0=5 l1=24 rc=0
+2026-10-11T17:38:51.751Z kv-compact: start l0=5 inputs=2 range=69 l0only=0
+2026-10-11T17:38:51.752Z kv-compact: end bytes=36 ms=2 l0=4 l1=24 rc=0
+2026-10-11T17:38:51.752Z kv-compact: start l0=4 inputs=2 range=120 l0only=0
+2026-10-11T17:38:51.754Z kv-compact: end bytes=36 ms=1 l0=3 l1=24 rc=0
+2026-10-11T17:38:55.016Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=451 passes=34 sampled=0 pending=0,0 reap=0,0 removed=21441 file_bytes=1492979712 payload_bytes=1405157376 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:38:56.235Z kv-obs: mt_bytes=298077 l0_bytes=508 l0=3 l1=24
+2026-10-11T17:38:56.259Z iostats: get ops=776 bytes=50855936 errors=0 avg_us=462 p50_us=688 max_us=14707 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T17:39:01.235Z kv-obs: mt_bytes=617779 l0_bytes=508 l0=3 l1=24
+2026-10-11T17:39:01.260Z iostats: get ops=776 bytes=50855936 errors=0 avg_us=462 p50_us=688 max_us=14707 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T17:39:06.235Z kv-obs: mt_bytes=933031 l0_bytes=508 l0=3 l1=24
+2026-10-11T17:39:06.262Z iostats: get ops=776 bytes=50855936 errors=0 avg_us=462 p50_us=688 max_us=14707 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T17:39:11.018Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=408 passes=50 sampled=0 pending=0,0 reap=0,0 removed=23636 file_bytes=1645821952 payload_bytes=1549008896 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:39:11.235Z kv-obs: mt_bytes=1254857 l0_bytes=508 l0=3 l1=24
+2026-10-11T17:39:11.265Z iostats: get ops=776 bytes=50855936 errors=0 avg_us=462 p50_us=688 max_us=14707 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T17:39:16.236Z kv-obs: mt_bytes=1584009 l0_bytes=508 l0=3 l1=24
+2026-10-11T17:39:16.267Z iostats: get ops=776 bytes=50855936 errors=0 avg_us=462 p50_us=688 max_us=14707 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T17:39:21.238Z kv-obs: mt_bytes=1915449 l0_bytes=508 l0=3 l1=24
+2026-10-11T17:39:21.268Z iostats: get ops=776 bytes=50855936 errors=0 avg_us=462 p50_us=688 max_us=14707 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T17:39:26.238Z kv-obs: mt_bytes=2233763 l0_bytes=508 l0=3 l1=24
+2026-10-11T17:39:26.269Z iostats: get ops=776 bytes=50855936 errors=0 avg_us=462 p50_us=688 max_us=14707 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T17:39:27.019Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=366 passes=66 sampled=0 pending=0,0 reap=0,0 removed=25864 file_bytes=1800962048 payload_bytes=1695023104 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:39:31.241Z kv-obs: mt_bytes=2557477 l0_bytes=508 l0=3 l1=24
+2026-10-11T17:39:31.271Z iostats: get ops=776 bytes=50855936 errors=0 avg_us=462 p50_us=688 max_us=14707 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T17:39:36.241Z kv-obs: mt_bytes=2871779 l0_bytes=508 l0=3 l1=24
+2026-10-11T17:39:36.275Z iostats: get ops=776 bytes=50855936 errors=0 avg_us=462 p50_us=688 max_us=14707 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T17:39:41.242Z kv-obs: mt_bytes=3188705 l0_bytes=508 l0=3 l1=24
+2026-10-11T17:39:41.278Z iostats: get ops=776 bytes=50855936 errors=0 avg_us=462 p50_us=688 max_us=14707 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T17:39:43.020Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=323 passes=82 sampled=0 pending=0,0 reap=0,0 removed=28054 file_bytes=1953456128 payload_bytes=1838546944 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T17:39:46.244Z kv-obs: mt_bytes=3358529 l0_bytes=508 l0=3 l1=24

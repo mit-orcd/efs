@@ -1,0 +1,100 @@
+[
+  {
+    "pid": 983792,
+    "argv": [
+      "/data1/efs/devel-amd-gc-fanout-20261011/efsd",
+      "--node-id",
+      "1",
+      "--addr",
+      "127.0.0.1",
+      "--port",
+      "24190",
+      "--storage",
+      "/data1/efs/amd-gc-fanout-20261011/long/gc-direct-hxv34nk9/n1",
+      "--quota",
+      "4G",
+      "--direct-io"
+    ],
+    "configuration": [
+      "EFS_GC_BACKLOG_IDLE_MS=100",
+      "EFS_TRANSPORT=tcp",
+      "EFS_COMMANDS=0",
+      "EFS_COMMANDS_SERVER=0"
+    ]
+  },
+  {
+    "pid": 983827,
+    "argv": [
+      "/data1/efs/devel-amd-gc-fanout-20261011/efsd",
+      "--node-id",
+      "2",
+      "--addr",
+      "127.0.0.1",
+      "--port",
+      "24191",
+      "--storage",
+      "/data1/efs/amd-gc-fanout-20261011/long/gc-direct-hxv34nk9/n2",
+      "--quota",
+      "4G",
+      "--direct-io",
+      "--join",
+      "127.0.0.1:24190"
+    ],
+    "configuration": [
+      "EFS_GC_BACKLOG_IDLE_MS=100",
+      "EFS_TRANSPORT=tcp",
+      "EFS_COMMANDS=0",
+      "EFS_COMMANDS_SERVER=0"
+    ]
+  },
+  {
+    "pid": 983863,
+    "argv": [
+      "/data1/efs/devel-amd-gc-fanout-20261011/efsd",
+      "--node-id",
+      "3",
+      "--addr",
+      "127.0.0.1",
+      "--port",
+      "24192",
+      "--storage",
+      "/data1/efs/amd-gc-fanout-20261011/long/gc-direct-ma8bz9wt/n3",
+      "--quota",
+      "4G",
+      "--direct-io",
+      "--join",
+      "127.0.0.1:24190"
+    ],
+    "configuration": [
+      "EFS_GC_BACKLOG_IDLE_MS=100",
+      "EFS_TRANSPORT=tcp",
+      "EFS_COMMANDS=0",
+      "EFS_COMMANDS_SERVER=0"
+    ]
+  },
+  {
+    "pid": 983900,
+    "argv": [
+      "/data1/efs/devel-amd-gc-fanout-20261011/efsd",
+      "--node-id",
+      "4",
+      "--addr",
+      "127.0.0.1",
+      "--port",
+      "24193",
+      "--storage",
+      "/data1/efs/amd-gc-fanout-20261011/long/gc-direct-ma8bz9wt/n4",
+      "--quota",
+      "4G",
+      "--direct-io",
+      "--join",
+      "127.0.0.1:24190"
+    ],
+    "configuration": [
+      "EFS_GC_BACKLOG_IDLE_MS=100",
+      "EFS_TRANSPORT=tcp",
+      "EFS_COMMANDS=0",
+      "EFS_COMMANDS_SERVER=0"
+    ]
+  }
+]

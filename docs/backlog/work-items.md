@@ -4422,8 +4422,9 @@ fix. [AMD evidence](../status/amd-sustained-20261011.md#unpaced-mixed-load-failu
 **Oct 11 AMD continuation:** fragment-budget scheduling passes buffered short
 sustained acceptance but direct drain still fails. All-member inode-fence fanout
 passes full normal/fault native, direct functional and both 180-second paced
-cold-byte/physical gates; drain takes 87.69/92.57 seconds. Ten-minute gates are
-running. Default idle stays 1 second; the experiment uses explicit 100 ms.
+cold-byte/physical gates; drain takes 87.69/92.57 seconds. Both 100-ms ten-minute cold-byte checks pass but physical drain fails.
+A 20-ms follow-up passes native/direct functional and both ten-minute cold/physical gates (79.23/77.94-s drains). Canonical normal service restoration passes.
+Default idle stays 1 second; these are explicit private experiments.
 Independent cells do not prove a general throughput improvement, and this
 does not resolve the unpaced quota/admission finding or historical NUC cause.
 [Verdicts and raw summary](../status/amd-sustained-20261011.md#fanout-build-e9ea8ca1--short-gates-accepted).
