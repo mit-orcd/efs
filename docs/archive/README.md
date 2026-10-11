@@ -161,3 +161,5 @@ Superseded deployment and integration checkpoints retain their raw evidence and 
 - [intel-posix-inheritance-20261010](status-20261011/intel-posix-inheritance-20261010.md)
 
 - [Oct 9 W93 overlap investigation](status-20261011/w93-overlap-suffix-20261009.md) and [Oct 10 checkpoint-cadence investigation](status-20261011/w93-checkpoint-cadence-20261010.md) — intermediate measurements and retained failures superseded for W93 by the later atomic-apply acceptance. W97 and Intel acceptance remain active.
+
+- [Historical Intel candidate observations](status-20261011/intel-candidate-history-20261011.md) — preceding candidate counterexamples and partial results moved from the active Intel ledger; all unresolved current acceptance obligations remain active.
