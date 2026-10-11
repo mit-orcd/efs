@@ -28,7 +28,8 @@ only two are attributable to sampled EFS sockets. All 25 selected error/drop/
 retry-related counters on mlx5_2 remain unchanged across all eleven nodes.
 Historical ACK/CQ error totals predate the baseline and have no timestamp or
 process attribution. Zero counter growth does not exclude transient receive
-starvation: the transport defaults to unbounded RNR retry. Nonblocking EAGAIN
+starvation: hardware RNR retry is unbounded, but software guards overdue sends
+at five seconds and bounds reply waits. Nonblocking EAGAIN
 and zero/5-ms poll returns are not failed RPCs. No per-op lost-message rate is
 available from these captures.
 
@@ -47,6 +48,10 @@ larger frames intentionally use TCP. Message types were not decoded, so do not
 assign these bytes to a particular opcode/file or call this a failed RDMA
 upgrade. Low average port bandwidth does not exclude microbursts or congestion.
 No pure-TCP cluster-mode comparison or switch congestion capture was performed.
+
+[Deeper findings and repair hypotheses](orcd-communication-hypotheses-20261011.md)
+record the incremental-query budget, compaction correlation, TCP DSACK/probe
+evidence, GC batch semantics and deadline audit, with tests to distinguish causes.
 
 ## Closure gates
 

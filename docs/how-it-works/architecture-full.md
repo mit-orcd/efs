@@ -1934,6 +1934,11 @@ retransmissions, unchanged IB error counters, 22–50 ms metadata apply waits an
 substantial query-build CPU. No transport root cause or gate closure is claimed.
 W95 packing and W106 broader hardware acceptance remain separate work.
 
+[Deeper investigation and repair hypotheses](../status/orcd-communication-hypotheses-20261011.md):
+prioritize the 1,024-change query fallback; distinguish compaction correlation,
+GC partial-progress BUSY and TCP duplicate probes from established failures.
+W109/W110 remain open on orcd-test.
+
 
 ## Appendix 2 — In flight — the current handoff block
 
@@ -7069,6 +7074,12 @@ load with no FAIL/NOTRUN, complete/correct query results and cold preserved
 bytes. Related W66/W92/W23/D30 remain independently open. See
 [evidence and closure plan](../status/orcd-communication-20261011.md).
 
+**Investigation update (Oct 11):** sustained deltas exceed the 1,024-change
+incremental budget while each publication refolds over a million rows. Full
+fallback is the strongest repair hypothesis; compaction overlap and GC BUSY
+semantics need separate attribution. See the
+[findings, hypotheses and discriminating tests](../status/orcd-communication-hypotheses-20261011.md).
+
 <a id="w110"></a>
 
 ### W110 · ORCD communication-loss diagnosis across EFS, IB and TCP
@@ -7088,6 +7099,12 @@ ambiguous-request recovery and acknowledged cold bytes with existing fault/
 persistence gates. Use a private TCP comparison if needed; retain W106 broader
 acceptance. Do not confuse EAGAIN, empty polls or retransmission with permanent
 message loss. See [capture and plan](../status/orcd-communication-20261011.md).
+
+**Investigation update (Oct 11):** loss-probe/DSACK counter deltas support a
+duplicate-probe hypothesis rather than demonstrated permanent RPC loss. The
+five-second software send guard qualifies the hardware RNR retry concern.
+Per-flow causality and deadline/recovery gates remain open; see the
+[evidence and test hypotheses](../status/orcd-communication-hypotheses-20261011.md).
 
 
 ## Appendix 5 — Naming
