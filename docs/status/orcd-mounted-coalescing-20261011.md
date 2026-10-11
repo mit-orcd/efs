@@ -2,7 +2,9 @@
 
 This continuation implements W95's mounted writer and the distributed shared
 object lifetime coordinator. The last verified live ORCD revision is
-`795516914d43`; its quiet mounted stress run still fails. Exact terminal packed
+`627d48ba518b`; both retained-store and fresh-store quiet mounted stress
+retests still fail. The preceding
+`795516914d43` wave still fails. Exact terminal packed
 rejections now atomically cancel their admitted pending reference, while the
 client retains accepted bytes for ordinary rebase. Full Linux, cold mounted
 reads, pinned stats and real native-RDMA shared-object lifetime gates pass.
@@ -594,3 +596,51 @@ The focused Linux gate verifies two overlapping retirements, exclusive stack
 reuse, all sixteen records executed exactly once, inherited deadlines, error
 retention, and a caller-only fallback when helper creation fails. Full Linux and
 mounted validation of this follow-up remain required before acceptance.
+
+
+The corrected shared worker gate in `627d48ba518b` compiles the refactored
+production executor, rather than the removed `pack_publish_run` name. Its full
+Linux suite and 660-file exact source manifest pass; all eleven canonical builds,
+installed executable identities, cold mixed fixture (27/27), previously retired
+shared-object physical absence and pinned stats live gate pass. The quiet packing-enabled full seven-client stress retest has finished with
+timeouts; no profiler or build load overlapped it.
+
+Existing publisher logs from the `795516914d43` wave show refresh BUSY at
+22:19:02 and 22:19:32 UTC while the full mutation burst runs. Afterward,
+fcstor005 publishes generation 11 at 22:19:56 with 2,412 rebuilt partitions,
+9,547 refolded rows, 2 ms snapshot pin time and 9,751 ms build time. That is
+concrete evidence of delayed transaction-safe capture followed by a costly
+catalog build; it does not establish receipt retirement as the sole cause of
+namespace timeouts. Standalone quiet query concurrency passes, but the full-load
+release gate remains open. These diagnostic logs are retained with the next
+revision's evidence.
+
+
+## Same-revision fresh-store diagnostic and older receipt retirement
+
+The retained-store `627d48ba518b-wave1` has 210 PASS/three FAIL on fcstor007,
+fcstor012 and fcstor013; the other four clients have 209 PASS/four FAIL. Each
+has one expected SKIP and seven NOTRUN. Directory deep nesting and virtual
+stats/find still time out; some clients also cancel dir_many_files workers.
+
+All 24 active validation roots were then reversibly renamed to
+`-before-627d48ba518b-fresh-diagnostic`; all older original-fixture backups remain
+untouched. The same installed code was formatted/mounted on empty scratch stores.
+The fresh-store quiet full wave also fails: fcstor007 has 206 PASS/seven FAIL;
+fcstor008/009/010/012 have 209 PASS/four FAIL; fcstor011/013 have 208 PASS/five FAIL.
+Again each has one SKIP/seven NOTRUN. This rules out accumulated validation data
+as a sufficient explanation. The reset is diagnostic, not a passed recovery or
+scale gate. Before reset, retained cold data and shared physical GC checks passed;
+new cold/GC fixtures must be created for the fresh namespace.
+
+The next metadata fix handles a previously recorded exact terminal rejection
+whose shared reference is still PENDING. PUBLICATION_RETIRE cancels that exact
+bound reference in the same batch that deletes its receipt and advances the
+file's replay floor. A failed batch preserves both proof and pending reference;
+a successful retry preserves LIVE neighbors and allows upload retirement/cold
+GC eligibility. The isolated Linux regression emulates the earlier persisted
+state and passes failure retention, exact retirement replay, neighboring mapping
+and cold checks. It does not reinterpret ambiguous requests or already discarded
+receipt proofs; producer fencing remains necessary for unrelated abandoned
+pending objects. Full native and deployment validation of this follow-up remains
+required.
