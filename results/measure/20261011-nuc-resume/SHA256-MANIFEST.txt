@@ -77,9 +77,7 @@ f6fbf34e3318206e0fb404d9263debc4f0cddd3272b5d56bf4b71da52dd82bbf  catchup-base-l
 ae30eb92f6debe2a95e06b6cb43eb59730a1ea0e4c4c9b0ac4595bd585c5ec88  catchup-base-live/full-direct-evidence/fuse.log
 c0a695c41542e2405e370e49262164f4cfd755b607de4b361f5f7efe362b8005  catchup-base-live/full-direct-evidence/last-close-gc-effect.json
 a31656c4a40d178343d8bf09c91fec5ebe0c7b3601b52ad909ea0c49945f6b23  catchup-base-live/full-direct-evidence/manifest.json
-8640114d803144bce8554987c7edd9d30431799c3480b09ee9b0e0b92de29006  catchup-base-live/full-direct-evidence/n1/mdraft/log/raft.log
 b6e91defcd03b17ae373fca76de1ccd8002e1bd4c8130bc18657aef9937bd9a8  catchup-base-live/full-direct-evidence/n1.log
-7f86a4499c0ff2de595d7b83b629f3dbe21361bf20cbe13b431f944636af84bd  catchup-base-live/full-direct-evidence/n2/mdraft/log/raft.log
 47dbebb9609013128eaa8471078d60fc9c2c4779b7ee4d31cee498c3d31ba9bd  catchup-base-live/full-direct-evidence/n2.log
 572015284923201200e932d431fd5aae5e84946e77ec2e038cf9c03f41403f0d  catchup-base-live/full-direct-evidence/n3.log
 e4a030a1b0873388eb1dd45b25f79a5e00952f85bad0de0246e079b79a05c671  catchup-base-live/full-direct-evidence/n4.log
@@ -89,6 +87,7 @@ a11031d140235306d3f3ded2a069b7f2941fbf872b86901f5d87b3847b4d986a  catchup-base-l
 ae3b020cd6267054e79a1adfd8de72bbb4bcc4132d4ceffea54a0d5a7d6004ef  catchup-base-live/full-direct-evidence/posix2.tsv
 19760034bc15865b95523551f4388a721cf20cb3afb62a8c3b2a3acf515c3b98  catchup-base-live/full-direct-evidence/shutdown-mutations.json
 1e24ee20c4a78dcff71de5f2714c66ed35027206ed17ead639bf1a7718916e6e  catchup-base-live/full-direct-evidence/stop-dirty-recovery.json
+90d7ea8acf771bb457569f2af0e3180a2e2d209a01267cec8558738197949918  catchup-base-live/full-direct-evidence/store-copy-correction.json
 0d98eca5edcf6a030059d514b739cad3227014760231adb294f141e5182e4e79  catchup-base-live/full-direct-evidence/sync-peer.log
 70a812130f5e47cc9fd37f1182c03a2df73bdf52c65f845cf44477693ba528c1  catchup-base-live/full-direct-evidence/synchronous-write-fault.json
 57fa280452ce3416b1b12297380af12cfcc66461d64ee6ce0bf33845c1872ceb  catchup-base-live/full-direct-evidence/synchronous-writes.json
