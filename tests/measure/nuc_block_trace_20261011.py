@@ -21,7 +21,14 @@ def port(p):
  except OSError:return False
 stopped=False;bench=None
 try:
- wait(lambda:(base/'append-comparison-v3/restore-exit.txt').exists(),3000,'append comparison restoration')
+ wait(lambda:(base/'append-comparison-v3/restore-exit.txt').exists(),5400,'append comparison restoration')
+ import datetime
+ remaining=datetime.datetime(2026,10,11,14,56,19,tzinfo=datetime.timezone.utc).timestamp()-time.time()
+ if remaining<20*60:
+  (out/'NOTRUN.json').write_text(json.dumps(dict(reason='insufficient remaining session time for drive matrix and preserved-store restoration',remaining_seconds=remaining)))
+  raise SystemExit(0)
+ seconds=240 if remaining>=32*60 else 120 if remaining>=24*60 else 60
+ (out/'duration.json').write_text(json.dumps(dict(seconds_per_cell=seconds,remaining_seconds_at_launch=remaining)))
  pids=subprocess.check_output(['pgrep','-f','^/data1/efs/src/efsd .*--port 1743[2-5]( |$)'],text=True).split();assert len(pids)==4
  stopped=True
  for m in ('mnt','mnt2'):
@@ -37,18 +44,18 @@ try:
   name=f'{order}-{drive}';cell=out/name
   root=(Path('/home/efs') if drive=='nvme' else Path('/data1/efs'))/f'w97-block-20261011-{name}'
   with (out/(name+'.log')).open('w') as log:
-   bench=subprocess.Popen(['python3',str(src/'tests/measure/nuc_durable_io.py'),str(root),str(cell),'--mode','written-ring','--seconds','240'],stdout=log,stderr=subprocess.STDOUT,env=env)
+   bench=subprocess.Popen(['python3',str(src/'tests/measure/nuc_durable_io.py'),str(root),str(cell),'--mode','written-ring','--seconds',str(seconds)],stdout=log,stderr=subprocess.STDOUT,env=env)
    wait(lambda:(cell/'ready.json').exists() or bench.poll() is not None,180,'written extents ready')
    assert bench.poll() is None,'benchmark failed before timing'
    (cell/'policy.json').write_text(json.dumps({p:Path(p).read_text().strip() for p in ('/sys/block/sda/queue/write_cache','/sys/block/nvme0n1/queue/write_cache','/sys/block/sda/queue/fua','/sys/block/nvme0n1/queue/fua','/sys/block/sda/queue/scheduler','/sys/block/nvme0n1/queue/scheduler','/sys/class/nvme/nvme0/firmware_rev','/sys/module/nvme_core/parameters/default_ps_max_latency_us')},indent=2))
    ready=json.loads((cell/'ready.json').read_text());origin=ready['monotonic']
-   for phase,delay in (('early',5),('late',205)):
+   for phase,delay in (('early',5 if seconds>=120 else 3),('late',seconds-35 if seconds>=120 else seconds-30)):
     wait(lambda:time.monotonic()-origin>=delay,250,'trace window')
     assert bench.poll() is None,'writer ended before trace window'
     physical='nvme0n1' if drive=='nvme' else 'sda'
     major,minor=map(int,Path('/sys/block',physical,'dev').read_text().strip().split(':'))
     device=(major<<20)|minor
-    command=['perf','record','-a','-e','block:block_rq_issue','--filter',f'dev == {device}','-e','block:block_rq_complete','--filter',f'dev == {device}','-o',str(cell/(phase+'.data')),'--','sleep','20']
+    command=['perf','record','-a','-e','block:block_rq_issue','--filter',f'dev == {device}','-e','block:block_rq_complete','--filter',f'dev == {device}','-o',str(cell/(phase+'.data')),'--','sleep',str(20 if seconds>=120 else 10)]
     with (cell/(phase+'-record.log')).open('w') as trace:
      rc=subprocess.run(command,stdout=trace,stderr=subprocess.STDOUT,timeout=45).returncode
     (cell/(phase+'-record-exit.txt')).write_text(str(rc)+'\n');assert rc==0

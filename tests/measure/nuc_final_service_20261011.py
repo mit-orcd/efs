@@ -7,7 +7,7 @@ while True:
  loaded=base/'loaded-append-v2'
  if (loaded/'restore-exit.txt').exists():break
  if (loaded/'failure.txt').exists() and not (loaded/'mnt-stop-exit.txt').exists():
-  assert (base/'block-traces/restore-exit.txt').exists();break
+  assert (base/'block-traces/restore-exit.txt').exists() or ((base/'block-traces/NOTRUN.json').exists() and (base/'append-comparison-v3/restore-exit.txt').exists());break
  assert time.monotonic()<deadline,'final restoration wait timed out'
  time.sleep(.5)
 prior=json.loads((base/'prior-final-service.json').read_text());installed=Path('/data1/efs/src')

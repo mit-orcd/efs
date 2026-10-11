@@ -21,7 +21,7 @@ def port(p):
  except OSError:return False
 stopped=False
 try:
- wait(lambda:(base/'block-traces/restore-exit.txt').exists(),5400,'block trace restoration')
+ wait(lambda:(base/'block-traces/restore-exit.txt').exists() or (base/'block-traces/NOTRUN.json').exists(),5400,'block trace restoration')
  assert time.time()<1791729660,'insufficient time for another private fixture within this session; preserve restored service'
  assert not src.exists()
  subprocess.run(['cp','-a','--reflink=auto',str(base/'candidate'),str(src)],check=True)
