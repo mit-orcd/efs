@@ -780,6 +780,44 @@ writes share an inode.
   region), and no returned write is ever lost. Reservations are never
   rolled back, because later appenders already received offsets past them.
 
+### W52 serialized completion command — candidate implementation
+
+The NUC candidate completes all reservations covered by an already committed
+REPORT EOF in one inode-group `APPEND_CATCHUP` entry. It does not publish chunks
+or recompute EOF from a replica's lane view. The host subsequently waits for a
+guarded cross-shard transaction to retire lane barriers before replying to
+REPORT. A partial publication retains the remaining barriers. Implementation
+and outstanding live acceptance are recorded in the
+[W52/NUC ledger](../../status/nuc-w52-w97-resume-20261011.md).
+
+The internal Raft command uses big-endian integers:
+
+| Byte offset | Field | Bytes |
+| --- | --- | --- |
+| 0 | Command tag, 45 | 1 |
+| 1 | Inode | 8 |
+| 9 | Inode generation | 8 |
+| 17 | Content epoch | 8 |
+| 25 | Previously published EOF | 8 |
+| 33 | Captured outstanding-reservation allocation bound | 4 |
+| 37 | Session present, exactly 0 or 1 | 1 |
+| 38 | Client UUID, present only when the flag is 1 | 16 |
+| 54 | Session epoch, present only when the flag is 1 | 4 |
+
+Exactly 38 or 58 bytes are accepted, on the inode's Raft group only. Generation,
+content epoch, session and intent checks precede mutation. Completion rows and
+the cursor share one atomic KV apply scope with the applied marker. IO or
+allocation failure discards the scope and retries the committed entry; logical
+refusals advance the log with a failed verdict. A lost reply after completion
+retries barrier retirement without another completion proposal.
+
+The existing scope admits at most 32,766 outstanding reservations and scan rows.
+An outstanding count above the captured bound returns BUSY for recapture; an
+unsupported backlog returns OVERFLOW before mutation. There is no serial
+per-reservation fallback or widened request timeout. All voters must understand
+tag 45 before admission. No persistent row format changes, but an old binary
+must not replay a log containing an uncheckpointed command it cannot decode.
+
 ## Stale-target fencing — targets are dumb, metadata decides
 
 Because clients write directly to data targets, Raft terms on the metadata
