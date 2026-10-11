@@ -159,6 +159,33 @@ int main(void)
     a.excl = 1; shard_io_thread(&a); assert(a.result == EFS_ERR_EXIST); check(path, aligned, a.len, sum, 0);
     unlink(path); a.excl = 0; a.no_create = 1; shard_io_thread(&a);
     assert(a.result == EFS_ERR_NOT_FOUND && access(path, F_OK) == -1);
+    /* Actual admission path: no create or charge on BUSY, but an existing
+     * retry remains writable and a full live dataset still reports QUOTA. */
+    struct efsd_server server = {0};
+    pthread_mutex_init(&server.lock, NULL);
+    server.id = 1; server.node_count = 1; server.nodes[0].id = 1;
+    server.quota = 1000; server.nodes[0].used = 900;
+    server.data_gc_admission = 1; server.gc_last_delete_us = gc_clock_us();
+    struct efs_export ex = {.id = 1};
+    efs_tls_path_hint = EFS_PATH_HINT_SKIP;
+    assert(server_write_fragment_to_path(&server,&ex,42,0,0,aligned,10,path,NULL)==EFS_ERR_BUSY);
+    assert(access(path,F_OK)==-1 && server.nodes[0].used==900);
+    image(path,10); efs_tls_path_hint = -1;
+    assert(server_write_fragment_to_path(&server,&ex,42,0,0,aligned,10,path,NULL)==EFS_OK);
+    assert(server.nodes[0].used==900); check(path,aligned,10,NULL,0); unlink(path);
+    server.nodes[0].used=1000;
+    assert(server_write_fragment_to_path(&server,&ex,42,0,0,aligned,10,path,NULL)==EFS_ERR_QUOTA);
+    server.nodes[0].used=700; efs_tls_path_hint=EFS_PATH_HINT_SKIP;
+    assert(server_write_fragment_to_path(&server,&ex,42,0,0,aligned,10,path,NULL)==EFS_OK);
+    assert(server.nodes[0].used==710); unlink(path);
+    assert(!efs_data_gc_pressure(0,1000,900,1,1,1));
+    assert(!efs_data_gc_pressure(1,1000,900,1,0,1));
+    assert(!efs_data_gc_pressure(1,1000,900,1,2,1));
+    assert(!efs_data_gc_pressure(1,1000,900,1,1,5000002));
+    assert(!efs_data_gc_pressure(1,1000,1000,1,1,1));
+    assert(!efs_data_gc_pressure(1,UINT64_MAX,UINT64_MAX,1,1,1));
+    assert(efs_data_gc_pressure(1,UINT64_MAX,UINT64_MAX-1,1,1,1));
+    pthread_mutex_destroy(&server.lock);
     free(aligned); rmdir(dir);
     puts("store overwrite: exact buffered/direct/bounce tails, grow/shrink, zero, errors and create guards PASS");
     return 0;

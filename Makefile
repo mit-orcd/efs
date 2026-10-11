@@ -548,7 +548,7 @@ src/raft/raft_disk.o src/raft/raft_log.o: src/raft/raft_disk_internal.h
 tests/test_store_durability: tests/test_store_durability.c src/server/store.c src/server/server_internal.h src/bench/writer.o src/bench/store_containers.o $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o src/bench/store_containers.o $(LIB) $(LDFLAGS)
 
-tests/test_store_overwrite: tests/test_store_overwrite.c src/server/store.c src/server/server_internal.h src/bench/writer.o src/bench/store_containers.o $(LIB)
+tests/test_store_overwrite: tests/test_store_overwrite.c src/server/store.c src/server/data_pressure.h src/server/server_internal.h src/bench/writer.o src/bench/store_containers.o $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o src/bench/store_containers.o $(LIB) $(LDFLAGS)
 
 tests/test_store_gc: tests/test_store_gc.c src/server/store.c src/server/server_internal.h src/bench/writer.o src/bench/store_containers.o $(LIB)

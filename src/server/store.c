@@ -1,5 +1,6 @@
 #include "server_internal.h"
 #include "store_containers.h"
+#include "data_pressure.h"
 #include "efs/checksum.h"
 #include "efs/kv_key.h"
 #include "efs/protocol.h"
@@ -1931,6 +1932,21 @@ int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export
                                         const uint8_t *data, uint32_t data_len,
                                         const uint8_t checksum[EFS_HASH_SIZE]);
 
+static int server_data_gc_busy(struct efsd_server *s, uint64_t used, uint64_t charge)
+{
+    if (!s->data_gc_admission) return 0;
+    int busy = efs_data_gc_pressure(1, s->quota, used, charge,
+        __atomic_load_n(&s->gc_last_delete_us, __ATOMIC_RELAXED), gc_clock_us());
+    if (busy) {
+        uint64_t count = __atomic_add_fetch(&s->data_gc_busy, 1, __ATOMIC_RELAXED);
+        if (count == 1 || !(count % 1024))
+            fprintf(stderr, "data-gc-admission busy=%llu used=%llu quota=%llu\n",
+                (unsigned long long)count, (unsigned long long)used,
+                (unsigned long long)s->quota);
+    }
+    return busy;
+}
+
 /* path must be the server_fragment_path() result for this fragment.
  * checksum, when non-NULL, is stored in the file (4 KiB tail under
  * O_DIRECT, 32 bytes otherwise). */
@@ -1978,7 +1994,7 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
 
     int do_charge = 0;
     if (may_charge && !first_write) {
-        int under;
+        int under, pressured;
         pthread_mutex_lock(&s->lock);
         struct efs_node *local = server_local_node(s);
         if (!local) {
@@ -1987,6 +2003,8 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
         }
         under = data_len <= UINT64_MAX - local->used &&
                 (!s->quota || (local->used <= s->quota && data_len <= s->quota - local->used));
+        pressured = server_data_gc_busy(s, local->used, data_len);
+        under = under && !pressured;
         pthread_mutex_unlock(&s->lock);
         if (under) {
             arg.excl = 1;
@@ -2006,7 +2024,7 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
             if (arg.result == EFS_OK)
                 return EFS_OK; /* overwrite: no charge */
             if (!under)
-                return EFS_ERR_QUOTA;
+                return pressured ? EFS_ERR_BUSY : EFS_ERR_QUOTA;
             if (arg.result != EFS_ERR_NOT_FOUND)
                 return EFS_ERR_IO;
             do_charge = 1;
@@ -2056,6 +2074,10 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
                 (s->quota && (local->used > s->quota || data_len > s->quota - local->used))) {
             pthread_mutex_unlock(&s->lock);
             return EFS_ERR_QUOTA;
+        }
+        if (server_data_gc_busy(s, local->used, data_len)) {
+            pthread_mutex_unlock(&s->lock);
+            return EFS_ERR_BUSY;
         }
         local->used += data_len;
         /* Persist at most every ~64 MiB charged (writer thread, not heartbeat). */
