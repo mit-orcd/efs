@@ -72,7 +72,7 @@ try:
             run(['perf','stat','-x',',','-a','-e','xfs:xfs_log_force,xfs:xlog_iclog_force,xfs:xlog_iclog_sync','--','sleep','20'],cell/'host-xfs-tracepoints.txt',40)
             run(['perf','record','-F','99','-g','-p',str(bench.pid),'-o',cell/'cycles.data','--','sleep','15'],cell/'cycles-record.txt',35)
             run(['perf','report','--stdio','--no-children','--percent-limit','1','-i',cell/'cycles.data'],cell/'cycles-report.txt',40)
-            run(['timeout','--signal=INT','10','strace','-f','-c','-p',str(bench.pid)],cell/'strace-summary.txt',30)
+            run(['timeout','--signal=INT','10','strace','-f','-c','-w','-p',str(bench.pid)],cell/'strace-summary.txt',30)
             rc=bench.wait(timeout=120);bench=None;log.close()
             (cell/'exit.txt').write_text(str(rc)+'\n');assert rc==0
     (out/'run-exit.txt').write_text('0\n')
