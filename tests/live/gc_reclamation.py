@@ -869,16 +869,29 @@ try:
         assert 'two concurrent receipt PREPAREs' in namespace_guard,namespace_guard
         (work/'namespace-guard-wire.txt').write_text(namespace_guard)
         guard_path=mount/'legacy-close-guard'
-        # The absent-value PREPARE below owns the test marker. Keep the real
-        # descriptor open until RESOLVE: closing it first queues its own
-        # CLOSE_STEP and makes the fixture race unrelated GC retirement.
-        with guard_path.open('wb') as guard_file:
-            guard_file.write(b'guard');guard_file.flush();os.fsync(guard_file.fileno())
-            guard_ino=guard_path.stat().st_ino
-            guarded_wire=run([helper,'--legacy-guard',str(a.port),str(guard_ino)],capture_output=True,text=True,timeout=45).stdout
-            assert 'later RESOLVE and retry' in guarded_wire,guarded_wire
-            (work/'legacy-close-guard.txt').write_text(guarded_wire)
+        # Ordinary unleased CREATE isolates the legacy wire guard from
+        # mounted CREATE adoption: CLEAR_PENDING queues its own CLOSE_STEP,
+        # even while a normal descriptor remains open. Never overwrite it.
+        for node in range(4):
+            guard_create=subprocess.run([str(source/'efs-mgmt'),'raft-create',
+                f'127.0.0.1:{a.port+node}','1',guard_path.name],env=env,
+                capture_output=True,text=True,timeout=30)
+            if guard_create.returncode==0 and 'status=0' in guard_create.stdout:break
+        else:raise AssertionError('legacy guard CREATE failed: '+guard_create.stdout+guard_create.stderr)
+        guard_ino=int(re.search(r'ino=(\d+)',guard_create.stdout).group(1))
+        assert guard_path.stat().st_ino==guard_ino
+        guarded_wire=run([helper,'--legacy-guard',str(a.port),str(guard_ino)],capture_output=True,text=True,timeout=45).stdout
+        assert 'later RESOLVE and retry' in guarded_wire,guarded_wire
+        (work/'legacy-close-guard.txt').write_text(guard_create.stdout+guarded_wire)
         guard_path.unlink();wait(lambda:not files(guard_ino),'legacy prepared-close guard physical reclaim',180)
+        def legacy_guard_inode_gone():
+            for node in range(4):
+                result=subprocess.run([str(source/'efs-mgmt'),'raft-getattr',
+                    f'127.0.0.1:{a.port+node}',str(guard_ino)],env=env,
+                    capture_output=True,text=True,timeout=10)
+                if result.returncode==0 and re.search(r'status=1\b',result.stdout):return True
+            return False
+        wait(legacy_guard_inode_gone,'legacy prepared-close guard inode reclaimed',90)
 
         # Error constants are extracted from the build header, not host errno.
         header=(source/'include/efs/common.h').read_text()

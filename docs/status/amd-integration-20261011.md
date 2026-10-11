@@ -19,10 +19,17 @@ PREPARE for an artificial marker. Real CLOSE queues its own cleanup marker,
 so that setup races bounded asynchronous GC rather than isolating the intended
 prepared-marker guard. No marker was overwritten or deleted for this diagnosis.
 
-The corrected fixture writes and fsyncs while retaining the real descriptor
-through PREPARE, the expected legacy OPEN/BUSY, RESOLVE/ABORT and successful
-legacy OPEN/CLOSE. It closes the descriptor afterward and retains the physical
-reclamation oracle. The helper now reports exhaustion counts for connection,
+The initial correction kept the real descriptor open, but the rerun still
+failed: diagnostics show 60 redirects and 60 STALE replies, with zero transport
+failures. Actual combined CLEAR_PENDING also creates a CLOSE_STEP marker, and
+that marker remains while the normal lease is held. The original descriptor
+setup therefore cannot supply the absent-marker precondition.
+
+The final fixture uses ordinary unleased CREATE for an empty inode before
+PREPARE, expected legacy OPEN/BUSY, RESOLVE/ABORT and successful legacy
+OPEN/CLOSE. It never overwrites an existing marker or weakens a timeout. It
+checks both physical absence and authoritative inode removal after unlink;
+the earlier mounted CREATE/adoption cases retain exact-byte cold oracles. The helper now reports exhaustion counts for connection,
 transport, redirect, cleanup STALE/BUSY and session BUSY without extending or
 weakening its existing retry budget. Actual live acceptance remains pending.
 
