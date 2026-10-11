@@ -49,7 +49,7 @@ with tempfile.TemporaryDirectory(prefix='efs-namespace-route-') as d:
 for name in ['mkdir','rmdir']:
  a=s.index('void server_raft_host_'+name+'(efs_ino_t parent,');b=s.index('\n}',a)
  body=s[a:b];route=body.index('host_namespace_leader_hint(')
- assert route<body.index('host_namespace_session_admit(')
+ assert route<body.index('host_namespace_session_admit_covered(')
  assert route<body.index('host_read_index(')
  assert route<body.index('host_command_cohort_begin(')
  assert 'set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;' in body

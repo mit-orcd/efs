@@ -3,7 +3,7 @@
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text()
-a=s.index('static int host_namespace_session_admit(');b=s.index('\n}',a)+2
+a=s.index('static int host_namespace_session_admit_covered(');b=s.index('\n}',s.index('static int host_namespace_session_admit(',a))+2
 code=r'''
 #include "efs/session.h"
 #include "efs/opid.h"
@@ -23,9 +23,9 @@ struct efs_raft_host {struct efs_kv *kv;};
 struct efs_msg_raft_mkfs_reply {int leader_hint;uint64_t salt;};
 static int local_floor,owner_rc,owner_hosted=1,est_rc,command_rc;
 static uint64_t owner_value;
-static unsigned creates,registers,establishes,owner_reads,est_checks,accepts;
+static unsigned creates,registers,establishes,owner_reads,est_checks,accepts,fences;static int read_error;
 static void wr32be(uint8_t *p,uint32_t n){p[0]=n>>24;p[1]=n>>16;p[2]=n>>8;p[3]=n;}
-static int host_read_index(struct efs_raft_host*h,uint8_t group,int *hint){(void)h;(void)group;(void)hint;return 0;}
+static int host_read_index(struct efs_raft_host*h,uint8_t group,int *hint){(void)h;(void)group;(void)hint;fences++;return read_error?EFS_ERR_IO:0;}
 int efs_kv_key_sess_local(uint32_t sh,const uint8_t id[EFS_OPID_UUID_LEN],uint8_t *key,uint32_t *kl){(void)sh;(void)id;key[0]=0;*kl=1;return 0;}
 static int efs_kv_get(void *kv,const uint8_t *key,uint32_t kl,uint8_t *v,uint32_t *vl){(void)kv;(void)key;(void)kl;(void)v;(void)vl;return local_floor?0:EFS_ERR_NOT_FOUND;}
 int efs_session_accept(struct efs_kv *kv,uint32_t sh,const uint8_t id[EFS_OPID_UUID_LEN],uint32_t epoch){(void)kv;(void)sh;(void)id;(void)epoch;accepts++;return 0;}
@@ -37,10 +37,11 @@ static int host_namespace_session_command(struct efs_raft_host *h,uint8_t group,
  if(q[1]==EFS_MD_SESS_CREATE){assert(n==22);creates++;}
  else if(q[1]==EFS_MD_SESS_REGISTER){assert(n==26);registers++;}
  else {assert(q[1]==EFS_MD_SESS_ESTABLISH && n==26);establishes++;}return command_rc;}
-static int host_session_establish_admit(struct efs_raft_host *h,const uint8_t *q,uint32_t n,uint8_t group,int *hint){(void)h;(void)q;(void)n;(void)group;(void)hint;est_checks++;return est_rc;}
+static int host_session_establish_admit_covered(struct efs_raft_host *h,const uint8_t *q,uint32_t n,uint8_t group,int *hint,uint8_t covered){(void)h;(void)q;(void)n;(void)group;(void)hint;(void)covered;est_checks++;return est_rc;}
 int efs_opid_req_valid(const struct efs_opid_req *q){return q!=NULL;}
+static int host_session_get_covered(struct efs_raft_host *h,const uint8_t *q,uint32_t n,uint8_t group,int *hint,uint64_t *out,uint8_t covered){if(!(covered&(1u<<group))){int rc=host_read_index(h,group,hint);if(rc)return rc;}return host_session_get(h,q,n,group,hint,out);}
 '''+s[a:b]+r'''
-static void reset(void){local_floor=owner_rc=est_rc=command_rc=0;owner_value=7ull|((uint64_t)EFS_SESSION_ACTIVE<<32);creates=registers=establishes=owner_reads=est_checks=accepts=0;}
+static void reset(void){local_floor=owner_rc=est_rc=command_rc=0;owner_value=7ull|((uint64_t)EFS_SESSION_ACTIVE<<32);creates=registers=establishes=owner_reads=est_checks=accepts=fences=0;read_error=0;}
 int main(void){struct efs_raft_host h={0};struct efs_opid_req q={0};int hint=-1;q.id.seq=1;q.id.session_epoch=7;
  for(unsigned remote=0;remote<2;remote++){owner_hosted=!remote;
  reset();assert(!host_namespace_session_admit(&h,2,&q,&hint));assert(!creates && registers==1 && establishes==1 && owner_reads==1 && est_checks==1 && accepts==1);
@@ -53,6 +54,13 @@ int main(void){struct efs_raft_host h={0};struct efs_opid_req q={0};int hint=-1;
  reset();owner_value|=1ull<<40;est_rc=EFS_ERR_BUSY;assert(host_namespace_session_admit(&h,2,&q,&hint)==EFS_ERR_BUSY && est_checks==1 && !establishes && !accepts);
  reset();local_floor=1;assert(!host_namespace_session_admit(&h,2,&q,&hint) && !owner_reads && accepts==1);
  }
+ owner_hosted=1;reset();
+ assert(!host_namespace_session_admit(&h,1,&q,&hint) && fences==1); /* one local group */
+ assert(!host_namespace_session_admit(&h,1,&q,&hint) && fences==2); /* independent RPC is fresh */
+ reset();assert(!host_namespace_session_admit(&h,2,&q,&hint) && fences==2); /* new owner group */
+ reset();assert(!host_namespace_session_admit_covered(&h,2,&q,&hint,5) && !fences); /* caller already fenced both */
+ reset();read_error=1;assert(host_namespace_session_admit(&h,2,&q,&hint)==EFS_ERR_IO && !creates && !registers && !establishes && !owner_reads);
+ reset();read_error=1;assert(host_namespace_session_admit_covered(&h,2,&q,&hint,4)==EFS_ERR_IO && fences==1 && !registers && !establishes);
  puts("namespace admission: fresh local/remote authority, absent owner, ACTIVE/touched shortcuts, stale/fenced/error rejection and final durable floor PASS");
 }
 '''

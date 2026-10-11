@@ -598,3 +598,17 @@ The current admission helper starts several independent ReadIndex rounds
 within the same operation, including immediately after its own successful
 REGISTER/ESTABLISH settlement. Request-scoped authority reuse is the next
 lead; independent RPCs and new groups must still obtain fresh authority.
+
+Namespace session admission now reuses only authority already obtained within
+the same MKDIR/RMDIR RPC. It still reads the current session row and validates
+ACTIVE state, epoch, registration and the durably applied local floor. Remote
+owner checks and independent RPCs keep fresh ReadIndex rounds. The original
+protocol wrappers supply no inherited coverage. Scope/error/fencing tests and
+focused Linux session, cold-WAL, transaction, resolve and authority gates pass.
+The unchanged native deep pair still fails 0/2 in 35.6 seconds, with normal
+cleanup (`results/mac-readindex-resume/native-session-authority-deep.txt`).
+Sampled admission phases often fall to 35–55 ms, but outliers remain and no
+paired improvement or native pass is claimed. LOOKUP measurements show 2,891
+calls averaging 5.59 ms: queued already-accounted read replies may hold later
+fresh rounds behind the durability tail. This requires a conservative exact-
+prefix control-path test, preserving replication bookkeeping whenever needed.

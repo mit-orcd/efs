@@ -4,8 +4,9 @@ from pathlib import Path
 import os, shlex, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text()
-a=s.index('static int host_session_establish_admit(')
-f=s[a:s.index('\n}',a)+2]
+f=''
+for name in ('host_session_establish_admit_covered','host_session_establish_admit'):
+ a=s.index('static int '+name+'(');f+='\n'+s[a:s.index('\n}',a)+2]
 for name in ('host_session_cleanup_admit','host_pack_session_cleanup','host_unpack_session_cleanup'):
  a=s.index('static int '+name+'(');f+='\n'+s[a:s.index('\n}',a)+2]
 source=r'''
@@ -50,6 +51,8 @@ static int host_remote_cmd(struct efs_raft_host *h,uint8_t group,const uint8_t *
  assert(prefer==-1);uint64_t result;int hint;
  int rc=host_session_get(h,cmd,len,group,&hint,&result);local_reads--;remote_reads++;out->salt=result;return rc;
 }
+static int host_session_get_covered(struct efs_raft_host *h,const uint8_t *cmd,uint32_t len,
+ uint8_t group,int *hint,uint64_t *out,uint8_t covered){(void)covered;return host_session_get(h,cmd,len,group,hint,out);}
 ''' + f + r'''
 int main(void) {
  struct efs_raft_host host;uint8_t cmd[26]={EFS_MD_CMD_SESSION,EFS_MD_SESS_ESTABLISH};

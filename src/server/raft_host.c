@@ -9594,19 +9594,22 @@ void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
         out->leader_hint = hint;
 }
 
-static int host_session_get(struct efs_raft_host *h, const uint8_t *cmd,
+static int host_session_get_covered(struct efs_raft_host *h, const uint8_t *cmd,
                             uint32_t clen, uint8_t group, int *hint,
-                            uint64_t *salt_out)
+                            uint64_t *salt_out,uint8_t covered)
 {
     uint8_t uuid[EFS_OPID_UUID_LEN];
     uint32_t shard = 0;
     struct efs_session_rec rec;
     int rc;
 
+    if(!h || !cmd || !salt_out || clen<HOST_SESS_HDR_LEN ||
+        (group!=EFS_RAFT_GROUP_SHARD && group!=EFS_RAFT_GROUP_SHARD2))
+        return EFS_ERR_INVAL;
     memcpy(uuid, cmd + 2, EFS_OPID_UUID_LEN);
     if (clen >= HOST_SESS_REG_LEN - 4)
         shard = rd32be(cmd + 18);
-    rc = host_read_index(h, group, hint);
+    rc = (covered&(1u<<group)) ? EFS_OK : host_read_index(h, group, hint);
     if (rc != EFS_OK)
         return rc;
     rc = efs_session_get(h->kv, uuid, &rec);
@@ -9631,12 +9634,18 @@ static int host_session_get(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
+static int host_session_get(struct efs_raft_host *h,const uint8_t *cmd,
+    uint32_t clen,uint8_t group,int *hint,uint64_t *salt)
+{
+    return host_session_get_covered(h,cmd,clen,group,hint,salt,0);
+}
+
 /* ESTABLISH must follow authoritative ACTIVE + REGISTER on the session
  * owner. This is a one-time admission check, not a global lookup per write.
  * If fencing starts after this read, REGISTER is already in its frozen set;
  * ordered FENCE_LOC then rejects a delayed old-epoch ESTABLISH on the lane. */
-static int host_session_establish_admit(struct efs_raft_host *h,
-    const uint8_t *cmd, uint32_t clen, uint8_t group, int *hint)
+static int host_session_establish_admit_covered(struct efs_raft_host *h,
+    const uint8_t *cmd, uint32_t clen, uint8_t group, int *hint,uint8_t covered)
 {
     if (clen != HOST_SESS_REG_LEN) return EFS_ERR_INVAL;
     uint32_t epoch=rd32be(cmd+18), shard=rd32be(cmd+22);
@@ -9647,7 +9656,7 @@ static int host_session_establish_admit(struct efs_raft_host *h,
     wr32be(query+18,shard);
     uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(cmd+2));
     uint64_t salt=0;int rc;
-    if (host_hosts(h,owner)) rc=host_session_get(h,query,sizeof(query),owner,hint,&salt);
+    if (host_hosts(h,owner)) rc=host_session_get_covered(h,query,sizeof(query),owner,hint,&salt,covered);
     else {
         struct efs_msg_raft_mkfs_reply reply;
         memset(&reply,0,sizeof(reply));
@@ -9661,6 +9670,12 @@ static int host_session_establish_admit(struct efs_raft_host *h,
     if (state!=EFS_SESSION_ACTIVE) return EFS_ERR_PROTO;
     if (epoch!=current) return EFS_ERR_STALE;
     return (salt & (1ull<<40)) ? EFS_OK : EFS_ERR_BUSY;
+}
+
+static int host_session_establish_admit(struct efs_raft_host *h,
+    const uint8_t *cmd,uint32_t clen,uint8_t group,int *hint)
+{
+    return host_session_establish_admit_covered(h,cmd,clen,group,hint,0);
 }
 
 /* Global authority is consulted before proposal, never during replicated
@@ -10841,13 +10856,15 @@ static int host_namespace_session_command(struct efs_raft_host *h,uint8_t group,
     if(reply.leader_hint>=0)*hint=reply.leader_hint;
     return rc;
 }
-static int host_namespace_session_admit(struct efs_raft_host *h,uint32_t shard,
-    const struct efs_opid_req *q,int *hint)
+static int host_namespace_session_admit_covered(struct efs_raft_host *h,uint32_t shard,
+    const struct efs_opid_req *q,int *hint,uint8_t covered)
 {
     if(!q || !efs_opid_req_valid(q) || !q->id.session_epoch)return EFS_OK;
     if(q->ack>=q->id.seq || shard>=EFS_SESSION_BITS)return EFS_ERR_INVAL;
     uint8_t group=efs_raft_shard_group(shard);
-    int rc=host_read_index(h,group,hint);if(rc!=EFS_OK)return rc;
+    int rc=(covered&(1u<<group))?EFS_OK:host_read_index(h,group,hint);
+    if(rc!=EFS_OK)return rc;
+    covered|=(uint8_t)(1u<<group);
     uint8_t key[EFS_KV_KEY_MAX],value[EFS_SESS_LOCAL_VAL];uint32_t kl=0,vl=sizeof(value);
     rc=efs_kv_key_sess_local(shard,q->id.client_uuid,key,&kl);
     if(rc==EFS_OK)rc=efs_kv_get(h->kv,key,kl,value,&vl);
@@ -10863,7 +10880,7 @@ static int host_namespace_session_admit(struct efs_raft_host *h,uint32_t shard,
     uint8_t query[HOST_SESS_HDR_LEN+4];
     memcpy(query,cmd,HOST_SESS_HDR_LEN);query[1]=HOST_SESS_GET;wr32be(query+18,shard);
     uint64_t session=0;
-    if(host_hosts(h,owner))rc=host_session_get(h,query,sizeof(query),owner,hint,&session);
+    if(host_hosts(h,owner))rc=host_session_get_covered(h,query,sizeof(query),owner,hint,&session,covered);
     else {
         struct efs_msg_raft_mkfs_reply reply={0};
         rc=host_remote_cmd(h,owner,query,sizeof(query),&reply,-1);
@@ -10885,12 +10902,20 @@ static int host_namespace_session_admit(struct efs_raft_host *h,uint32_t shard,
     cmd[1]=EFS_MD_SESS_REGISTER;
     if(!registered)rc=host_namespace_session_command(h,owner,cmd,sizeof(cmd),hint);
     if(rc!=EFS_OK)return rc;
+    if(host_hosts(h,owner))covered|=(uint8_t)(1u<<owner);
     cmd[1]=EFS_MD_SESS_ESTABLISH;
-    rc=host_session_establish_admit(h,cmd,sizeof(cmd),group,hint);
+    rc=host_session_establish_admit_covered(h,cmd,sizeof(cmd),group,hint,covered);
     if(rc==EFS_OK)rc=host_namespace_session_command(h,group,cmd,sizeof(cmd),hint);
-    if(rc==EFS_OK)rc=host_read_index(h,group,hint);
+    /* Command settlement already waited for our hosted floor to apply;
+     * its exact verdict plus this RPC's authority covers the final accept. */
     if(rc==EFS_OK)rc=efs_session_accept(h->kv,shard,q->id.client_uuid,q->id.session_epoch);
     return rc;
+}
+
+static int host_namespace_session_admit(struct efs_raft_host *h,uint32_t shard,
+    const struct efs_opid_req *q,int *hint)
+{
+    return host_namespace_session_admit_covered(h,shard,q,hint,0);
 }
 
 /* I16 leader-side probe: the op's window lives on `shard` (the dentry
@@ -12572,7 +12597,7 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
     if (rc == EFS_OK) {
         struct efs_opid_reply rep;
         phase=prof?now_us_():0;
-        int admitted=host_namespace_session_admit(h,dsh,q,&hint);
+        int admitted=host_namespace_session_admit_covered(h,dsh,q,&hint,(uint8_t)((1u<<efs_raft_shard_group(psh))|(1u<<efs_raft_shard_group(dsh))|(1u<<efs_raft_shard_group(csh))));
         if(prof)session_us=now_us_()-phase;
         int hit=admitted==EFS_OK?host_opid_replay(h,dsh,q,&rep):admitted;
 
@@ -12865,7 +12890,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
         /* I16: a committed rmdir's retry finds no dentry; answer the
          * recorded OK instead of ENOENT. */
         struct efs_opid_reply rep;
-        int admitted=host_namespace_session_admit(h,dsh,q,&hint);
+        int admitted=host_namespace_session_admit_covered(h,dsh,q,&hint,(uint8_t)((1u<<efs_raft_shard_group(psh))|(1u<<efs_raft_shard_group(dsh))));
         int hit=admitted==EFS_OK?host_opid_replay(h,dsh,q,&rep):admitted;
 
         if (hit < 0) {
