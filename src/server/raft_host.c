@@ -2198,7 +2198,11 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     }
     /* A blocked local fence is not a completed revocation barrier. Preserve
      * its business verdict in the apply ring so the coordinator cannot ACK it. */
-    if (cmd[1] == EFS_MD_SESS_FINISH || cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
+    /* First-touch namespace admission bootstraps only after REGISTER's
+     * authoritative NOT_FOUND. Turning that verdict into OK skips CREATE
+     * and makes an existing name appear absent on a fresh mount. */
+    if (cmd[1] == EFS_MD_SESS_REGISTER || cmd[1] == EFS_MD_SESS_ESTABLISH ||
+        cmd[1] == EFS_MD_SESS_FINISH || cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
         cmd[1] == EFS_MD_SESS_LEASE_EDGE_DEFERRED || cmd[1] == EFS_MD_SESS_LEASE_OPEN ||
         cmd[1] == EFS_MD_SESS_LEASE_CLOSE) return rc;
     if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_INVAL || rc == EFS_ERR_BUSY ||

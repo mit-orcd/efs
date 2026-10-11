@@ -451,6 +451,7 @@ test: all
 	python3 tests/test_store_tls.py
 	python3 tests/test_report_session_admission.py
 	python3 tests/test_namespace_owner_once.py
+	python3 tests/test_namespace_session_apply.py
 	python3 tests/test_gc_session_admission.py
 	python3 tests/test_partition_fence_verdict.py
 	python3 tests/test_mkdir_committed_reply.py
