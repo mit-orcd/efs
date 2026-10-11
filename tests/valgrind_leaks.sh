@@ -62,7 +62,7 @@ EXPORT="vgtest"
 MODE=${EFS_VG_MODE:-buffered}
 case "$MODE" in direct) IO_FLAG=--direct-io;; buffered) IO_FLAG=--no-direct-io;; *) echo 'invalid EFS_VG_MODE' >&2; exit 2;; esac
 OWN_PIDS=()
-VG="valgrind --leak-check=full --show-leak-kinds=definite,indirect,possible"
+VG="valgrind --error-exitcode=99 --errors-for-leak-kinds=definite,indirect --leak-check=full --show-leak-kinds=definite,indirect,possible"
 # Current unit suite (the old-engine tests were deleted in step 11 inc 2).
 # test_lock is included for coverage: its 6 pre-existing getlk failures are
 # functional, not leaks, and this gate only parses valgrind logs.
@@ -301,13 +301,17 @@ trap cleanup EXIT
 note "mode=$MODE transport=${EFS_TRANSPORT:-auto}; evidence retained at $WORK"
 
 note "building (after any rsync --delete) ..."
-# Unit-test make targets carry the tests/ prefix (tests/test_meta_v6, ...).
+# Unit-test make targets carry the tests/ prefix; use the current canonical C list.
 make -s efsd efs-fuse efs-mgmt efs-bench \
     $(for t in $UNIT_TESTS; do echo "tests/$t"; done) >/dev/null 2>&1 \
     || { echo "[leaks] build failed"; exit 2; }
 
 # ---------------------------------------------------------------- unit ---
 note "phase 1: unit tests under valgrind"
+case "${EFS_VG_SKIP_UNITS:-0}" in 0|1) ;; *) echo invalid EFS_VG_SKIP_UNITS >&2; exit 2;; esac
+if [ "${EFS_VG_SKIP_UNITS:-0}" = 1 ]; then
+    note "phase 1: units SKIP — caller reuses its separate unchanged-source unit verdict"
+else
 for t in $UNIT_TESTS; do
     log="$WORK-unit-$t.vg"
     timeout --signal=TERM --kill-after=10 300 $VG --log-file="$log" "./tests/$t" >"$WORK-unit-$t.out" 2>&1
@@ -315,6 +319,7 @@ for t in $UNIT_TESTS; do
     [ "$rc" = 0 ] || fail "unit/$t: process exit $rc"
     gate "$log" "unit/$t"
 done
+fi
 
 # ---------------------------------------------------------------- efsd ---
 note "phase 2: efsd under valgrind (3-node raft group, efs-bench workload)"
@@ -429,7 +434,7 @@ fi
 # ---------------------------------------------------------------- done ---
 echo
 if [ "$fails" -eq 0 ]; then
-    note "PASS — no definite/indirect leaks, no uninit-on-wire, no invalid rw"
+    note "PASS memory gates in selected mode; separately recorded SKIPs remain SKIP"
     exit 0
 fi
 note "$fails gate failure(s) — logs under $WORK-*.vg (kept on failure)"
