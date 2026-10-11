@@ -1,0 +1,39 @@
+{
+  "binaries": {
+    "efsd": {
+      "sha256": "ab299f5f0ce55729c65e21777d4a3b6511885c8eafef8459cf66e445527157d4",
+      "version": "efsd 108afa3e-nuc (branch devel-nuc, built 2026-10-11T13:24:25Z on nuc)\n"
+    },
+    "efs-fuse": {
+      "sha256": "50c4c4b7cce9fff122331403bb9b64b3a33edc017ed76bdf6e746152cfe0aa57",
+      "version": "efs-fuse 108afa3e-nuc (branch devel-nuc, built 2026-10-11T13:24:25Z on nuc)\n"
+    },
+    "efs-mgmt": {
+      "sha256": "836d340953b76c2ac04b62c56cde03579590db00d4614d8c5020f1a36fa40af1",
+      "version": "efs-mgmt 108afa3e-nuc (branch devel-nuc, built 2026-10-11T13:24:25Z on nuc)\n"
+    }
+  },
+  "flags": {
+    "EFS_MD_RAFT_N": "3",
+    "EFS_RAFT_FLOW": "1",
+    "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+    "EFS_RAFT_BATCH_OVERLAP": "0",
+    "EFS_RAFT_BATCH_NOOP": "0",
+    "EFS_RAFT_GROUP_DRAIN": "0",
+    "EFS_RAFT_APPLIED_INTERVAL_MS": "10",
+    "EFS_COMMANDS_SERVER": "0",
+    "EFS_COMMANDS": "0",
+    "EFS_TRANSPORT": "tcp",
+    "EFS_BATCH_OBS": "1"
+  },
+  "seconds_per_cell": 600,
+  "port": 26770,
+  "vary": "data",
+  "accepted_baseline": true,
+  "profile_late": true,
+  "cells": [
+    "0-sata",
+    "1-nvme",
+    "2-sata"
+  ]
+}

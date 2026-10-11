@@ -1876,7 +1876,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | 0a | STALE replay that never converges; remedy = **D27** (decided) | correctness | runtime foundations present; strict timing, fault/recovery/contention and RSS gates remain in handoff | [full text](#0a--stale-replay-that-never-converges-queue-row-0a) · [D27](#appendix-3--decisions--taken-and-pending-register-d1d31) |
 | 0h | **W44** · the leader's GC frag pass scans the whole prefix every 1.2 s; remedy = **D26** | performance | D26 in tree + gated (dev cluster, Oct 4): watermark gates the scan, cursor bounds the pass; idle leaders logged no `gc-pass` line for 10 min; a 5120-record `rm` drained at ~514 records/pass; Oct 7 10-GiB physical reclamation passes; retained-table active GC latency regression remains (1393-ms pass); idle-hour/committed-tail results in the acceptance ledger | [full text](#w44--the-group-leaders-gc-frag-pass-scans-the-whole-prefix-every-12-s-queue-row-0h) · [D26](#appendix-3--decisions--taken-and-pending-register-d1d31) |
 | 12 | **W48** · four of the 16 dd streams ended early | investigation | investigate — evidence only | [full text](#w48--four-of-the-16-dd-streams-ended-early--investigate-plan-row-12) |
-| 15 | **W52** · a REPORT after thousands of O_APPEND writes answers after > 30 s | correctness | approved shape A, not implemented: current host_resolve_caught_up still proposes each reservation serially; batch implementation and append_gate owed | [full text](#w52--a-report-after-thousands-of-o_append-writes-answers-after--30-s-plan-row-15) |
+| 15 | **W52** · a REPORT after thousands of O_APPEND writes answers after > 30 s | correctness | approved single-proposal shape A still open; bounded eight-reservation transaction and append timer fix await full acceptance, exact 20k append gate owed | [full text](#w52--a-report-after-thousands-of-o_append-writes-answers-after--30-s-plan-row-15) |
 | 16 | **W53** · W41's create/close-storm p99 regression — keep or revert | investigation | investigate — evidence only, then the user decides | [full text](#w53--w41s-createclose-storm-tail-under-concurrent-big-writers--investigate-plan-row-16) |
 | E | **D17** · `st_blocks` = 0 for files this client did not write | performance | in tree + gated (dev cluster, Oct 4): lane-stamp present count, summed at getattr, client takes max with its local table; Closed: NUC direct/buffered actual ecrawl reports zero dense-file false sparse classifications, two true sparse files and zero errors; cold non-writer partial-tail/truncate/empty allocation gates pass | [D17](#appendix-3--decisions--taken-and-pending-register-d1d31) |
 | P2.2 | **D26** · the GC pass | performance | in tree + gated (dev cluster, Oct 4): per-anchor pending-GC watermark maintained in the apply, derived once per recovery/import, `zero_if` clamp on a drained pass; `test_gc_watermark`; live: 514 records/pass drain, 10 idle min with no `gc-pass` line; Oct 7 10-GiB physical reclamation passes; retained-table active GC latency regression remains (1393-ms pass); idle-hour/committed-tail results in the acceptance ledger | [full text](#p22--d26--the-gc-pass-performance-plan-row) · [D26](#appendix-3--decisions--taken-and-pending-register-d1d31) |
@@ -4780,6 +4780,35 @@ the quick ones).** Each row is a queue item; the W number is binding.
 
 ### W52 · a REPORT after thousands of O_APPEND writes answers after > 30 s (plan row 15)
 
+**Oct 11 follow-up candidate:** REPORT now submits one inode-group
+`APPEND_CATCHUP` proposal for every caught-up reservation, then waits for a
+separate guarded lane-barrier retirement transaction before replying. No
+per-reservation completion loop remains. The existing atomic scope bounds the
+admitted backlog at 32,766; concurrent growth refuses before mutation for
+recapture. Actual-KV 20k/maximum-count, atomic-scope rollback, session/fencing,
+partial publication and cold/lost-COMMIT regressions pass on NUC. The full native
+suites passed for the initial matched builds. Release coordination then found
+that command tag 45 collides with ORCD packing; APPEND_CATCHUP is reassigned to
+52 before any NUC admission. New-tag native, direct/buffered live, deployed
+20k and cold gates remain pending. All voters must
+support the new log command; no timeout or durability guarantee is relaxed.
+[Implementation and acceptance ledger](../status/nuc-w52-w97-resume-20261011.md).
+
+**Oct 11 client feedback fix:** `f52cd2dd` starts append burst age after
+successful publication. Previously a flush exceeding one second immediately
+expired its successor and collapsed batching toward one write per REPORT.
+Failed drains now retry before new admission. The actual-function regression
+passes and fails under the old timing behavior. No RPC budget or durability
+barrier is widened. The complete Linux native suite passes after retained
+documentation-fixture failures are repaired without changing the core. The
+full direct and buffered live suites pass, each with POSIX 216/216, peer
+67/67, 2,000 exact 4 KiB records, final fsync and cold bytes. Direct writes
+take 169.046 seconds; buffered writes take 164.413 seconds. The unchanged
+accepted images are installed after a retained startup BUSY and read-only
+readiness retry verifying all prior samples. The separate preserved-store
+20k/cold gates remain pending;
+the earlier candidate's corrected direct fixture times out and is not installed.
+
 **Oct 11 continuation:** `4afc063c` shares one guarded completion transaction
 across up to eight reservations, shrinking to the unchanged per-shard image
 bound when needed. Actual transaction/cold recovery/session-fencing/gap and
@@ -6936,6 +6965,22 @@ paced 2-MiB/s-per-writer gate cannot close the unpaced failure. Require bounded
 reclamation/admission, fairness and exact cold-byte recovery before claiming a
 fix. [AMD evidence](../status/amd-sustained-20261011.md#unpaced-mixed-load-failure--retained-not-closed).
 
+**Oct 11 controlled data placement:** with the same accepted engine and SATA
+metadata, the first SATA-data cell passes 212,648 files and 64 cold samples;
+throughput falls 567 → 283 files/s and SATA write-request elapsed rises
+0.211 → 0.489 ms. The NVMe-data cell passes 71,248 files and 64 cold samples;
+throughput falls 250 → 102 files/s, while SATA Raft sync falls slightly and
+NVMe write/flush elapsed rises. The SATA repeat passes 169,387 files and 64
+cold samples, declining 538 → 271 files/s. A retained quota-only cold retry
+uses 60 GiB instead of the now-unsafe 80 GiB; all timed data is unchanged.
+The full matrix and preserved-service restoration pass.
+The files-engine root-barrier candidate `19cbb11f` plus caller fix `766814c8` reuses the existing startup
+ancestry seal, retaining file, descendant-directory and root syncs and full
+fallback for uninitialized roots. The actual production Linux regression
+passes and the old scope fails its new assertion. Full native/live acceptance
+and measured benefit remain pending; it is not part of the frozen append-timer candidate.
+[Current placement and source ledger](../status/nuc-w52-w97-resume-20261011.md).
+
 **Oct 11 deployed continuation:** the validated merged engine is installed on
 preserved NUC stores. A five-minute measured create/write/close run again
 declines ~172 → 57 files/s; NVMe host request/flush elapsed means rise roughly
@@ -9050,6 +9095,44 @@ writes share an inode.
   returned success, it reads as zeros (indistinguishable from a sparse
   region), and no returned write is ever lost. Reservations are never
   rolled back, because later appenders already received offsets past them.
+
+#### W52 serialized completion command — candidate implementation
+
+The NUC candidate completes all reservations covered by an already committed
+REPORT EOF in one inode-group `APPEND_CATCHUP` entry. It does not publish chunks
+or recompute EOF from a replica's lane view. The host subsequently waits for a
+guarded cross-shard transaction to retire lane barriers before replying to
+REPORT. A partial publication retains the remaining barriers. Implementation
+and outstanding live acceptance are recorded in the
+[W52/NUC ledger](../status/nuc-w52-w97-resume-20261011.md).
+
+The internal Raft command uses big-endian integers:
+
+| Byte offset | Field | Bytes |
+| --- | --- | --- |
+| 0 | Command tag, 52 | 1 |
+| 1 | Inode | 8 |
+| 9 | Inode generation | 8 |
+| 17 | Content epoch | 8 |
+| 25 | Previously published EOF | 8 |
+| 33 | Captured outstanding-reservation allocation bound | 4 |
+| 37 | Session present, exactly 0 or 1 | 1 |
+| 38 | Client UUID, present only when the flag is 1 | 16 |
+| 54 | Session epoch, present only when the flag is 1 | 4 |
+
+Exactly 38 or 58 bytes are accepted, on the inode's Raft group only. Generation,
+content epoch, session and intent checks precede mutation. Completion rows and
+the cursor share one atomic KV apply scope with the applied marker. IO or
+allocation failure discards the scope and retries the committed entry; logical
+refusals advance the log with a failed verdict. A lost reply after completion
+retries barrier retirement without another completion proposal.
+
+The existing scope admits at most 32,766 outstanding reservations and scan rows.
+An outstanding count above the captured bound returns BUSY for recapture; an
+unsupported backlog returns OVERFLOW before mutation. There is no serial
+per-reservation fallback or widened request timeout. All voters must understand
+tag 52 before admission. No persistent row format changes, but an old binary
+must not replay a log containing an uncheckpointed command it cannot decode.
 
 ### Stale-target fencing — targets are dumb, metadata decides
 

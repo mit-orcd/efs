@@ -1,0 +1,3 @@
+Stop with: /data1/efs/src/scripts/client.sh stop /data1/efs/devel-nuc-20261011/data-placement/mnt
+Logging efs-fuse to /data1/efs/devel-nuc-20261011/data-placement/efs-fuse-mnt.log
+Mounted /data1/efs/devel-nuc-20261011/data-placement/mnt

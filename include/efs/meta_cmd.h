@@ -26,6 +26,7 @@
 #define EFS_MD_CMD_PACK_ADMIT 45 /* canonical EFSUPLD1 manifest */
 #define EFS_MD_REQ_PACK_STATUS 46 /* same manifest, fresh authority only */
 #define EFS_MD_CMD_QUERY_POLICY 43 /* expected version:8, mask:4 */
+#define EFS_MD_CMD_APPEND_CATCHUP 52 /* ino/gen/epoch/published EOF + optional REPORT session */
 #define EFS_MD_REQ_QUERY_POLICY 44 /* ReadIndex only, reply index=version/salt=mask */
 #define EFS_MD_CMD_REPORT_PUBLISH 41
 #define EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED 42

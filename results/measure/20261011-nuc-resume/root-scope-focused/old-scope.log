@@ -1,0 +1,1 @@
+test: /data1/efs/devel-nuc-20261011/root-scope-old-src/tests/test_store_durability.c:70: main: Assertion `a.result==EFS_OK && file_syncs==1 && directory_syncs==3 && !sync_opens' failed.

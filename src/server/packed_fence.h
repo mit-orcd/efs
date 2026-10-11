@@ -69,7 +69,9 @@ int server_fence_packed_object(struct efsd_server *s,efs_export_id_t eid,uint64_
         }
         int sr;do{sr=fsync(fd);}while(sr<0 && errno==EINTR);
         int cr=close(fd);if(sr<0 || cr<0)rc=EFS_ERR_IO;
-        if(!rc)rc=sync_fragment_parents(path);
+        /* Keep certificate publication's existing full-ancestry barrier;
+         * the scoped candidate changes fragment PUT paths only. */
+        if(!rc)rc=sync_fragment_parents(NULL,path);
     }
     pthread_rwlock_unlock(mu);return rc;
 #endif

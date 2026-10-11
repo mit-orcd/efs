@@ -1,0 +1,22 @@
+{
+  "efsd": {
+    "sha256": "9326f958e8ca60030a24d89cd27965b0521363efbc04c6a3917a0602bf0c8aca",
+    "version": "efsd 32b472c5-w52-nuc (branch devel-nuc, built 2026-10-11T21:17:18Z on nuc)\n"
+  },
+  "efs-fuse": {
+    "sha256": "37d65f489d3959df682f97eea7425a08b49a586dac5382f851f828f7c06212a6",
+    "version": "efs-fuse 32b472c5-w52-nuc (branch devel-nuc, built 2026-10-11T21:17:18Z on nuc)\n"
+  },
+  "efs-mgmt": {
+    "sha256": "26099f80bc8b05f08ce0ea3d58ef197cb60a0558625007225d5d671f59e1f3e6",
+    "version": "efs-mgmt 32b472c5-w52-nuc (branch devel-nuc, built 2026-10-11T21:17:18Z on nuc)\n"
+  },
+  "efs-query": {
+    "sha256": "4ba847e3cd8afd883bee4c71b3fd94eecc2efcab9f25cfc0f5018c3ae4851e7d",
+    "version": "efs-query 32b472c5-w52-nuc (branch devel-nuc, built 2026-10-11T21:17:18Z on nuc)\n"
+  },
+  "efs-bench": {
+    "sha256": "96ff46e22f5bda08fd94e884a7de5d417d81a7aa8e98b879e2a2f0d590f819e6",
+    "version": "efs-bench 32b472c5-w52-nuc (branch devel-nuc, built 2026-10-11T21:17:18Z on nuc)\n"
+  }
+}

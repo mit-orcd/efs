@@ -2336,6 +2336,35 @@ the quick ones).** Each row is a queue item; the W number is binding.
 
 ## W52 · a REPORT after thousands of O_APPEND writes answers after > 30 s (plan row 15)
 
+**Oct 11 follow-up candidate:** REPORT now submits one inode-group
+`APPEND_CATCHUP` proposal for every caught-up reservation, then waits for a
+separate guarded lane-barrier retirement transaction before replying. No
+per-reservation completion loop remains. The existing atomic scope bounds the
+admitted backlog at 32,766; concurrent growth refuses before mutation for
+recapture. Actual-KV 20k/maximum-count, atomic-scope rollback, session/fencing,
+partial publication and cold/lost-COMMIT regressions pass on NUC. The full native
+suites passed for the initial matched builds. Release coordination then found
+that command tag 45 collides with ORCD packing; APPEND_CATCHUP is reassigned to
+52 before any NUC admission. New-tag native, direct/buffered live, deployed
+20k and cold gates remain pending. All voters must
+support the new log command; no timeout or durability guarantee is relaxed.
+[Implementation and acceptance ledger](../status/nuc-w52-w97-resume-20261011.md).
+
+**Oct 11 client feedback fix:** `f52cd2dd` starts append burst age after
+successful publication. Previously a flush exceeding one second immediately
+expired its successor and collapsed batching toward one write per REPORT.
+Failed drains now retry before new admission. The actual-function regression
+passes and fails under the old timing behavior. No RPC budget or durability
+barrier is widened. The complete Linux native suite passes after retained
+documentation-fixture failures are repaired without changing the core. The
+full direct and buffered live suites pass, each with POSIX 216/216, peer
+67/67, 2,000 exact 4 KiB records, final fsync and cold bytes. Direct writes
+take 169.046 seconds; buffered writes take 164.413 seconds. The unchanged
+accepted images are installed after a retained startup BUSY and read-only
+readiness retry verifying all prior samples. The separate preserved-store
+20k/cold gates remain pending;
+the earlier candidate's corrected direct fixture times out and is not installed.
+
 **Oct 11 continuation:** `4afc063c` shares one guarded completion transaction
 across up to eight reservations, shrinking to the unchanged per-shard image
 bound when needed. Actual transaction/cold recovery/session-fencing/gap and
@@ -4491,6 +4520,22 @@ pressure finding, not proof of the historical NUC incident's cause. A separately
 paced 2-MiB/s-per-writer gate cannot close the unpaced failure. Require bounded
 reclamation/admission, fairness and exact cold-byte recovery before claiming a
 fix. [AMD evidence](../status/amd-sustained-20261011.md#unpaced-mixed-load-failure--retained-not-closed).
+
+**Oct 11 controlled data placement:** with the same accepted engine and SATA
+metadata, the first SATA-data cell passes 212,648 files and 64 cold samples;
+throughput falls 567 → 283 files/s and SATA write-request elapsed rises
+0.211 → 0.489 ms. The NVMe-data cell passes 71,248 files and 64 cold samples;
+throughput falls 250 → 102 files/s, while SATA Raft sync falls slightly and
+NVMe write/flush elapsed rises. The SATA repeat passes 169,387 files and 64
+cold samples, declining 538 → 271 files/s. A retained quota-only cold retry
+uses 60 GiB instead of the now-unsafe 80 GiB; all timed data is unchanged.
+The full matrix and preserved-service restoration pass.
+The files-engine root-barrier candidate `19cbb11f` plus caller fix `766814c8` reuses the existing startup
+ancestry seal, retaining file, descendant-directory and root syncs and full
+fallback for uninitialized roots. The actual production Linux regression
+passes and the old scope fails its new assertion. Full native/live acceptance
+and measured benefit remain pending; it is not part of the frozen append-timer candidate.
+[Current placement and source ledger](../status/nuc-w52-w97-resume-20261011.md).
 
 **Oct 11 deployed continuation:** the validated merged engine is installed on
 preserved NUC stores. A five-minute measured create/write/close run again

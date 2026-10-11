@@ -1134,15 +1134,29 @@ static int finish_shard_write(int fd, size_t bytes, int sync_write, int direct)
 }
 
 #ifndef EFS_BENCH_BUILD
-/* A fragment ACK protects both its contents and its pathname. Sync every
- * ancestor after the file barrier: an earlier failed/retried PUT may have
- * created directories without ever acknowledging their persistence. No
- * directory cache or O_DIRECT completion substitutes for this barrier. */
-static int sync_fragment_parents(const char *path)
+/* Startup/attach seals each canonical root's ancestry before publishing its
+ * initialized target. Runtime PUT still fences every directory below that
+ * root and the root itself, including retries after a failed namespace sync.
+ * Unknown/uninitialized roots retain the full ancestry barrier. */
+static int sync_fragment_parents(struct efsd_server *s, const char *path)
 {
-    char parent[8192];
+    char parent[8192], root[EFS_MAX_PATH] = {0};
     size_t n = strlen(path);
     if (!n || n >= sizeof(parent)) return EFS_ERR_INVAL;
+    if (s) {
+        size_t best = 0;
+        pthread_mutex_lock(&s->lock);
+        for (uint32_t i = 0; i < s->storage_path_count; ++i) {
+            const char *candidate = s->storage_paths[i];
+            size_t length = strlen(candidate);
+            if (!s->container_targets[i] || !length || length <= best ||
+                length >= n || strncmp(path, candidate, length) ||
+                (length != 1 && path[length] != '/')) continue;
+            memcpy(root, candidate, length + 1);
+            best = length;
+        }
+        pthread_mutex_unlock(&s->lock);
+    }
     memcpy(parent, path, n + 1);
     char *slash = strrchr(parent, '/');
     if (!slash) strcpy(parent, ".");
@@ -1156,7 +1170,8 @@ static int sync_fragment_parents(const char *path)
         do { rc = fsync(fd); } while (rc < 0 && errno == EINTR);
         int closed = close(fd);
         if (rc < 0 || closed < 0) return EFS_ERR_IO;
-        if (!strcmp(parent, "/") || !strcmp(parent, ".")) break;
+        if (!strcmp(parent, root) || !strcmp(parent, "/") ||
+            !strcmp(parent, ".")) break;
         slash = strrchr(parent, '/');
         if (!slash) strcpy(parent, ".");
         else if (slash == parent) parent[1] = '\0';
@@ -1176,7 +1191,7 @@ static int finish_fragment_put(struct shard_io_arg *a, int fd, size_t bytes)
      * Production does not open O_SYNC, so always establish an explicit file
      * barrier, including same-length direct writes and checksum tails. */
     int rc = finish_shard_write(fd, bytes, 1, 0);
-    return rc == EFS_OK ? sync_fragment_parents(a->path) : rc;
+    return rc == EFS_OK ? sync_fragment_parents(a->s, a->path) : rc;
 #endif
 }
 
@@ -2422,7 +2437,7 @@ static int write_packed_fragment_unfenced(struct efsd_server *s, efs_export_id_t
                 }
                 int sr; do { sr = fsync(fd); } while (sr < 0 && errno == EINTR);
                 int cr = close(fd);
-                rc = sr < 0 || cr < 0 ? EFS_ERR_IO : sync_fragment_parents(path);
+                rc = sr < 0 || cr < 0 ? EFS_ERR_IO : sync_fragment_parents(s, path);
                 synced = rc == EFS_OK;
                 break;
             }

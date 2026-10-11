@@ -320,6 +320,47 @@ int efs_meta_finish_append_owned(struct efs_kv *kv,efs_ino_t ino,uint64_t offset
     const struct efs_meta_append_ops *ops,void *ctx)
 {return efs_meta_finish_append_batch_owned(kv,ino,&offset,1,outcome,id,tx,ops,ctx);}
 
+int efs_meta_retire_append_barriers(struct efs_kv *kv,efs_ino_t ino,
+    const struct efs_opid *id,const struct efs_txid *tx,
+    const struct efs_meta_append_ops *ops,void *ctx)
+{
+    if(!kv || !ino || !tx || !ops || !ops->prepare || !ops->decide ||
+       !ops->resolve)return EFS_ERR_INVAL;
+    struct finish_capture capture={.base=kv};
+    const struct efs_kv_ops capture_ops={.get=finish_get};
+    struct efs_kv reader={.ops=&capture_ops,.ctx=&capture};
+    int rc=efs_meta_collect_append_barrier_retirement(&reader,ino,finish_batch,&capture);
+    struct append_owner_context owner={.ops=ops,.ctx=ctx,.first=1};
+    const struct efs_meta_append_ops owned_ops={append_owner_prepare,append_owner_decide,append_owner_resolve};
+    if(rc==EFS_OK && capture.mutations && id) {
+        uint32_t shard=efs_kv_inode_shard(ino);
+        struct efs_opid_req q={.id=*id};q.id.seq=1;
+        if(!efs_opid_req_valid(&q) || !id->session_epoch)rc=EFS_ERR_INVAL;
+        if(rc==EFS_OK)rc=efs_session_accept(kv,shard,id->client_uuid,id->session_epoch);
+        if(rc==EFS_OK)rc=efs_kv_key_sess_local(shard,id->client_uuid,owner.owner.key,&owner.owner.klen);
+        owner.owner.expected_len=EFS_SESS_LOCAL_VAL;
+        if(rc==EFS_OK)rc=efs_kv_get(kv,owner.owner.key,owner.owner.klen,
+                                    owner.owner.expected,&owner.owner.expected_len);
+        if(rc==EFS_OK && owner.owner.expected_len!=EFS_SESS_LOCAL_VAL)rc=EFS_ERR_PROTO;
+        if(rc==EFS_OK) {
+            uint32_t established=0,floor=0;
+            for(unsigned i=0;i<4;i++) {
+                established=established<<8|owner.owner.expected[i];
+                floor=floor<<8|owner.owner.expected[4+i];
+            }
+            if(floor>id->session_epoch)rc=EFS_ERR_STALE;
+            else if(established!=id->session_epoch)rc=EFS_ERR_BUSY;
+        }
+        if(rc==EFS_OK) {
+            owner.owner.op=EFS_TXN_PUT;owner.owner.new_len=EFS_SESS_LOCAL_VAL;
+            memcpy(owner.owner.value,owner.owner.expected,EFS_SESS_LOCAL_VAL);
+        }
+    }
+    if(rc==EFS_OK && capture.mutations)
+        rc=finish_execute(&capture,tx,id?&owned_ops:ops,id?(void *)&owner:ctx);
+    finish_free(&capture);return rc;
+}
+
 int efs_meta_finish_append_fenced(struct efs_kv *kv,efs_ino_t ino,uint64_t generation,
     uint64_t offset,const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch,
     const struct efs_txid *t,const struct efs_meta_append_ops *ops,void *ctx)
@@ -524,12 +565,21 @@ int efs_meta_retire_append_session(struct efs_kv *kv,uint32_t shard,
         if(!selected.kl)return EFS_OK;
     }
     efs_ino_t ino=0;for(unsigned i=3;i<11;i++)ino=ino<<8|selected.key[i];
+    uint64_t watermark=0;uint32_t open=0;
+    rc=efs_meta_apply_append_state(kv,ino,&watermark,NULL,&open);
+    if(rc!=EFS_OK)return rc;
+    if(watermark && !open) {
+        /* Interrupted REPORT completed its inode rows but still owes lane
+         * retirement. Use this cleanup txid only once; the next step prunes. */
+        rc=efs_meta_retire_append_barriers(kv,ino,NULL,tx,ops,ctx);
+        if(rc==EFS_OK)*progress=1;
+        return rc;
+    }
     /* Both cursor and inode are captured before deciding that OPEN dependencies
      * are gone. An incoming foreign append must win the same inode guard. */
     struct finish_capture c={.base=kv};
     const struct efs_kv_ops capture_ops={.get=finish_get};
     struct efs_kv capture={.ops=&capture_ops,.ctx=&c};
-    uint32_t open=0;
     rc=efs_meta_apply_append_state(&capture,ino,NULL,NULL,&open);
     if(rc==EFS_OK && open)rc=EFS_ERR_BUSY;
     unsigned removed=0;

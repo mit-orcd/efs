@@ -1,0 +1,41 @@
+In file included from /data1/efs/devel-nuc-20261011/root-scope-old-src/tests/test_store_durability.c:45:
+/data1/efs/devel-nuc-20261011/root-scope-old-src/tests/../src/server/store.c: In function ‘server_local_node.part.0’:
+/data1/efs/devel-nuc-20261011/root-scope-old-src/tests/../src/server/store.c:1832:9: warning: ‘strncpy’ output may be truncated copying 63 bytes from a string of length 63 [-Wstringop-truncation]
+ 1832 |         strncpy(n->addr, s->addr, sizeof(n->addr) - 1);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/data1/efs/devel-nuc-20261011/root-scope-old-src/tests/../src/server/store.c: In function ‘server_add_storage_paths’:
+/data1/efs/devel-nuc-20261011/root-scope-old-src/tests/../src/server/store.c:1693:33: warning: ‘%s’ directive output may be truncated writing up to 98303 bytes into a region of size 8192 [-Wformat-truncation=]
+ 1693 |     snprintf(sub, sizeof(sub), "%s/data", root);
+      |                                 ^~
+In function ‘prepare_storage_root’,
+    inlined from ‘server_add_storage_paths’ at /data1/efs/devel-nuc-20261011/root-scope-old-src/tests/../src/server/store.c:1768:56:
+/data1/efs/devel-nuc-20261011/root-scope-old-src/tests/../src/server/store.c:1693:5: note: ‘snprintf’ output between 6 and 98309 bytes into a destination of size 8192
+ 1693 |     snprintf(sub, sizeof(sub), "%s/data", root);
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/data1/efs/devel-nuc-20261011/root-scope-old-src/tests/../src/server/store.c: In function ‘server_add_storage_paths’:
+/data1/efs/devel-nuc-20261011/root-scope-old-src/tests/../src/server/store.c:1695:33: warning: ‘%s’ directive output may be truncated writing up to 98303 bytes into a region of size 8192 [-Wformat-truncation=]
+ 1695 |     snprintf(sub, sizeof(sub), "%s/meta", root);
+      |                                 ^~
+In function ‘prepare_storage_root’,
+    inlined from ‘server_add_storage_paths’ at /data1/efs/devel-nuc-20261011/root-scope-old-src/tests/../src/server/store.c:1768:56:
+/data1/efs/devel-nuc-20261011/root-scope-old-src/tests/../src/server/store.c:1695:5: note: ‘snprintf’ output between 6 and 98309 bytes into a destination of size 8192
+ 1695 |     snprintf(sub, sizeof(sub), "%s/meta", root);
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/data1/efs/devel-nuc-20261011/root-scope-old-src/tests/../src/server/store.c: In function ‘server_add_storage_paths’:
+/data1/efs/devel-nuc-20261011/root-scope-old-src/tests/../src/server/store.c:1697:33: warning: ‘%s’ directive output may be truncated writing up to 98303 bytes into a region of size 8192 [-Wformat-truncation=]
+ 1697 |     snprintf(sub, sizeof(sub), "%s/log", root);
+      |                                 ^~
+In function ‘prepare_storage_root’,
+    inlined from ‘server_add_storage_paths’ at /data1/efs/devel-nuc-20261011/root-scope-old-src/tests/../src/server/store.c:1768:56:
+/data1/efs/devel-nuc-20261011/root-scope-old-src/tests/../src/server/store.c:1697:5: note: ‘snprintf’ output between 5 and 98308 bytes into a destination of size 8192
+ 1697 |     snprintf(sub, sizeof(sub), "%s/log", root);
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/data1/efs/devel-nuc-20261011/root-scope-old-src/tests/../src/server/store.c: In function ‘server_add_storage_paths’:
+/data1/efs/devel-nuc-20261011/root-scope-old-src/tests/../src/server/store.c:1802:5: warning: ‘strncpy’ output may be truncated copying 63 bytes from a string of length 63 [-Wstringop-truncation]
+ 1802 |     strncpy(h.addr, s->addr, sizeof(h.addr) - 1);
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/data1/efs/devel-nuc-20261011/root-scope-old-src/tests/../src/server/store.c: In function ‘server_sync_local_membership’:
+/data1/efs/devel-nuc-20261011/root-scope-old-src/tests/../src/server/store.c:1892:5: warning: ‘strncpy’ output may be truncated copying 63 bytes from a string of length 63 [-Wstringop-truncation]
+ 1892 |     strncpy(local->addr, s->addr, sizeof(local->addr) - 1);
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/data1/efs/devel-nuc-20261011/root-scope-old-src/tests/../src/server/store.c:1892:5: warning: ‘strncpy’ output may be truncated copying 63 bytes from a string of length 63 [-Wstringop-truncation]

@@ -1,24 +1,27 @@
 #!/usr/bin/env python3
 """One bounded, explicitly instrumented window during the exact long append gate."""
-import hashlib,json,os,subprocess,time,traceback
+import argparse,hashlib,json,os,subprocess,time,traceback
 from pathlib import Path
 
 base=Path('/data1/efs/devel-nuc-20261011')
-out=base/'w52-long-profile';out.mkdir(exist_ok=False)
+parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--variant',choices=('batch','clock'),default='batch');args=parser.parse_args()
+gate='w52-clock-20000' if args.variant=='clock' else 'w52-fixed-20000'
+out=base/('w52-clock-long-profile' if args.variant=='clock' else 'w52-long-profile');out.mkdir(exist_ok=False)
 end=time.monotonic()+14400
 try:
     while True:
         assert time.monotonic()<end,'long append progress wait timeout'
-        for phase in ('batch-build','batch-live','batch-install','w52-fixed-20000'):
+        for phase in (args.variant+'-build',args.variant+'-live',args.variant+'-install',gate):
             assert not (base/phase/'failure.txt').exists(),phase+' failed'
-        progress=base/'w52-fixed-20000/append-burst-progress.json'
+            assert not (base/phase/'blocked-prerequisite.json').exists(),phase+' not run'
+        progress=base/gate/'append-burst-progress.json'
         if progress.exists():
             try:row=json.loads(progress.read_text())
             except json.JSONDecodeError:row={}
             if row.get('phase')=='writes' and row.get('records',0)>=2000:break
             assert row.get('phase')!='final-fsync','long gate finished before profile'
         time.sleep(1)
-    images=json.loads((base/'batch-install/images.json').read_text())
+    images=json.loads((base/(args.variant+'-install/images.json')).read_text())
     processes=[]
     for proc in Path('/proc').iterdir():
         if not proc.name.isdigit():continue

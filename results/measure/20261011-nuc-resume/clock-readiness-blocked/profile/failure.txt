@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/data1/efs/devel-nuc-20261011/nuc_w52_profile_20261011.py", line 15, in <module>
+    assert not (base/phase/'failure.txt').exists(),phase+' failed'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: clock-install failed

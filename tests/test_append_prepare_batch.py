@@ -100,56 +100,6 @@ static int host_report_release(struct efs_raft_host *h,int held){assert(held&&h-
 static int host_propose_mode(struct efs_raft_host *h,uint8_t group,const uint8_t *cmd,uint32_t n,uint64_t *idx,uint64_t *term,int *hint,int local){assert(local);return host_propose(h,group,cmd,n,idx,term,hint);}
 '''+cohort+'\n'+function('host_prep_raw')+'\n'+function('host_wait_refs')+'\n'+helpers+r'''
 
-typedef uint64_t efs_ino_t;
-struct efs_opid {int owner;};
-#define EFS_ERR_NOT_FOUND -2
-#define EFS_META_APPEND_COMPLETED 0
-static unsigned report_done,report_authority,report_reads;
-static int report_error;
-static unsigned report_batch_max=8,report_refusals;
-static int efs_meta_apply_append_open(void *kv,efs_ino_t ino,uint64_t *offs,uint64_t *lens,uint32_t *n) {
- (void)kv;assert(ino==11&&*n==64);report_reads++;
- *n=report_done==2?0:2-report_done;
- for(unsigned i=0;i<*n;i++){offs[i]=(report_done+i)*8;lens[i]=8;}
- return 0;
-}
-static int host_append_authority(struct efs_raft_host *h,int *hint) {
- (void)h;*hint=1;report_authority++;return 0;
-}
-static void fill_txid(struct efs_raft_host *h,struct efs_txid *t) {(void)h;t->id=19;}
-static int report_finish(void *kv,efs_ino_t ino,uint64_t offset,int outcome,
- const struct efs_opid *owner,const struct efs_txid *t,const struct efs_meta_append_ops *ops,void *ctx) {
- (void)kv;assert(ino==11&&offset==report_done*8&&outcome==0);
- struct host_append_reserve_ctx *c=ctx;
- assert(ops==&host_append_reserve_ops&&!c->nrefs&&c->leading==(owner?2:1));
- struct efs_txn_parts p={2};
- struct efs_meta_append_image im={.klen=4,.expected_len=1,.new_len=1,.op=3};
- im.key[1]=1;im.key[2]=1;
- for(unsigned i=0;i<(owner?6:5);i++) {
-  int rc=ops->prepare(ctx,t,&p,&im);
-  if(rc){assert(!ops->decide(ctx,t,&p,EFS_TXN_ABORT));assert(!ops->resolve(ctx,t,&p,EFS_TXN_ABORT));return rc;}
- }
- if(report_error)applied_error[c->refs[0].idx]=report_error;
- int rc=ops->decide(ctx,t,&p,EFS_TXN_COMMIT);
- if(!rc)rc=ops->resolve(ctx,t,&p,EFS_TXN_COMMIT);
- if(!rc)report_done++;
- return rc;
-}
-static int efs_meta_finish_append_batch(void *kv,efs_ino_t ino,const uint64_t *offsets,uint32_t count,int outcome,
- const struct efs_txid *t,const struct efs_meta_append_ops *ops,void *ctx) {
- if(count>report_batch_max){report_refusals++;return EFS_ERR_INVAL;}
- int rc=report_finish(kv,ino,offsets[0],outcome,NULL,t,ops,ctx);
- if(!rc)report_done+=count-1;
- return rc;
-}
-static int efs_meta_finish_append_batch_owned(void *kv,efs_ino_t ino,const uint64_t *offsets,uint32_t count,int outcome,
- const struct efs_opid *id,const struct efs_txid *t,const struct efs_meta_append_ops *ops,void *ctx) {
- if(count>report_batch_max){report_refusals++;return EFS_ERR_INVAL;}
- int rc=report_finish(kv,ino,offsets[0],outcome,id,t,ops,ctx);
- if(!rc)report_done+=count-1;
- return rc;
-}
-''' + function('host_resolve_caught_up') + r'''
 static struct efs_raft_disk disk;
 static struct efs_raft_host host={.mu=PTHREAD_MUTEX_INITIALIZER,.disk=&disk,.r={{.role=EFS_RAFT_LEADER,.voters=7},{0},{.role=EFS_RAFT_LEADER,.voters=7}}};
 static struct efs_txid tx={19};static struct efs_txn_parts parts={2};static int hint;
@@ -201,23 +151,6 @@ int main(void) {
  reset(&c,0);encode_error=EFS_ERR_INVAL;assert(host_append_reserve_ops.prepare(&c,&tx,&parts,&image)==EFS_ERR_INVAL&&!proposals&&!c.nrefs);
  reset(&c,0);c.nrefs=sizeof(c.refs)/sizeof(c.refs[0]);assert(host_append_reserve_ops.prepare(&c,&tx,&parts,&image)==EFS_ERR_INVAL&&!proposals);
 
- for(int owned=0;owned<2;owned++) {
-  struct efs_opid id={1};int hint=0;
-  reset(&c,0);report_done=report_authority=report_reads=report_error=0;
-  assert(!host_resolve_caught_up(&host,11,16,owned?&id:NULL,&hint));
-  assert(report_done==2&&report_authority==1&&report_reads==3);
-  assert(syncs==(unsigned)(owned?2:1)&&proposals==4&&checks==4&&decisions==1&&resolutions==1);
-  reset(&c,0);report_done=report_authority=report_reads=report_refusals=report_error=0;report_batch_max=1;
-  assert(!host_resolve_caught_up(&host,11,16,owned?&id:NULL,&hint));
-  assert(report_done==2&&report_refusals==1&&decisions==2&&resolutions==2);
-  report_batch_max=8;
-  reset(&c,0);report_done=report_authority=report_reads=report_error=0;
-  assert(!host_resolve_caught_up(&host,11,8,owned?&id:NULL,&hint));
-  assert(report_done==1&&decisions==1&&resolutions==1);
-  reset(&c,0);report_done=report_authority=report_reads=0;report_error=EFS_ERR_STALE;
-  assert(host_resolve_caught_up(&host,11,16,owned?&id:NULL,&hint)==EFS_ERR_BUSY);
-  assert(!report_done&&report_authority==1&&last_decision==EFS_TXN_ABORT&&last_resolve==EFS_TXN_ABORT);
- }
  puts("append PREPARE: ordered floor/inode guards, bounded cohorts, every applied verdict before decision, refusal/abort cleanup and ambiguous COMMIT retention PASS");
  return 0;
 }

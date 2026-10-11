@@ -1,0 +1,33 @@
+{
+  "inode": 159745,
+  "successful_contiguous_4k_reservations": 2000,
+  "logged_inode_publications": 149,
+  "advancing_publications": 149,
+  "append_records_per_advancing_publication": {
+    "2": 1,
+    "6": 9,
+    "7": 15,
+    "8": 25,
+    "9": 13,
+    "10": 12,
+    "11": 10,
+    "12": 8,
+    "13": 9,
+    "14": 7,
+    "15": 2,
+    "16": 5,
+    "18": 3,
+    "19": 4,
+    "21": 4,
+    "22": 2,
+    "25": 2,
+    "27": 2,
+    "30": 1,
+    "31": 1,
+    "32": 14
+  },
+  "mean_records_per_advancing_publication": 13.422818791946309,
+  "first_reservation": "2026-10-11T19:13:01.764Z",
+  "last_reservation": "2026-10-11T19:15:50.800Z",
+  "limits": "Derived from client logs for the exact 2k inode. Logged inode publication is not a count of server Raft entries or all wire REPORT/SESSION messages. No matched code speedup is inferred."
+}

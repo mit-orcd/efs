@@ -1,0 +1,6 @@
+{
+  "path": "/data1/efs/devel-nuc-20261011/clock-src/results",
+  "target": "/data1/efs/devel-nuc-20261011/batch-src/results",
+  "core_unchanged": true,
+  "resumed_missing_sidecar": true
+}
