@@ -9440,9 +9440,9 @@ void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
         out->leader_hint = hint;
 }
 
-static int host_session_get(struct efs_raft_host *h, const uint8_t *cmd,
+static int host_session_get_after_group(struct efs_raft_host *h, const uint8_t *cmd,
                             uint32_t clen, uint8_t group, int *hint,
-                            uint64_t *salt_out)
+                            uint64_t *salt_out, int covered_group)
 {
     uint8_t uuid[EFS_OPID_UUID_LEN];
     uint32_t shard = 0;
@@ -9452,9 +9452,13 @@ static int host_session_get(struct efs_raft_host *h, const uint8_t *cmd,
     memcpy(uuid, cmd + 2, EFS_OPID_UUID_LEN);
     if (clen >= HOST_SESS_REG_LEN - 4)
         shard = rd32be(cmd + 18);
-    rc = host_read_index(h, group, hint);
-    if (rc != EFS_OK)
-        return rc;
+    /* APPEND has just established both group views within this request.
+     * Ordinary callers and every unmatched owner still require a fresh read. */
+    if (group != covered_group) {
+        rc = host_read_index(h, group, hint);
+        if (rc != EFS_OK)
+            return rc;
+    }
     rc = efs_session_get(h->kv, uuid, &rec);
     if (rc != EFS_OK)
         return rc;
@@ -9475,6 +9479,13 @@ static int host_session_get(struct efs_raft_host *h, const uint8_t *cmd,
     if (efs_session_bit_get(rec.touched, shard))
         *salt_out |= 1ull << 40;
     return EFS_OK;
+}
+
+static int host_session_get(struct efs_raft_host *h, const uint8_t *cmd,
+                            uint32_t clen, uint8_t group, int *hint,
+                            uint64_t *salt_out)
+{
+    return host_session_get_after_group(h,cmd,clen,group,hint,salt_out,-1);
 }
 
 /* ESTABLISH must follow authoritative ACTIVE + REGISTER on the session
@@ -9537,15 +9548,15 @@ static int host_session_cleanup_admit(struct efs_raft_host *h,
 
 /* Legacy unregistered append identities remain compatible. Once a session is
  * registered, absence/error is never authority to bypass its global/local floor. */
-static int host_append_session_admit(struct efs_raft_host *h,efs_ino_t ino,
-    const struct efs_opid_req *q,int *hint,int *registered)
+static int host_append_session_admit_after_group(struct efs_raft_host *h,efs_ino_t ino,
+    const struct efs_opid_req *q,int *hint,int *registered,int covered_group)
 {
     uint32_t shard=efs_kv_inode_shard(ino);uint8_t query[HOST_SESS_HDR_LEN+4]={EFS_MD_CMD_SESSION,HOST_SESS_GET};
     memcpy(query+2,q->id.client_uuid,16);wr32be(query+18,shard);
     uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(q->id.client_uuid));
     uint64_t salt=0;int rc;
     *registered=0;
-    if(host_hosts(h,owner))rc=host_session_get(h,query,sizeof(query),owner,hint,&salt);
+    if(host_hosts(h,owner))rc=host_session_get_after_group(h,query,sizeof(query),owner,hint,&salt,covered_group);
     else {
         struct efs_msg_raft_mkfs_reply reply={0};
         rc=host_remote_cmd(h,owner,query,sizeof(query),&reply,-1);salt=reply.salt;
@@ -9562,6 +9573,12 @@ static int host_append_session_admit(struct efs_raft_host *h,efs_ino_t ino,
     rc=efs_session_accept(h->kv,shard,q->id.client_uuid,q->id.session_epoch);
     if(rc==EFS_OK)*registered=1;
     return rc;
+}
+
+static int host_append_session_admit(struct efs_raft_host *h,efs_ino_t ino,
+    const struct efs_opid_req *q,int *hint,int *registered)
+{
+    return host_append_session_admit_after_group(h,ino,q,hint,registered,-1);
 }
 
 static int host_pack_session_cleanup(struct efs_raft_host *h,const uint8_t *cmd,
@@ -11762,7 +11779,12 @@ static int host_append_transaction(struct efs_raft_host *h,efs_ino_t ino,uint64_
 {
     struct host_resize_ctx ctx={h,hint};struct efs_txid t;
     int registered=0,rc=host_append_authority(h,hint);
-    if(rc==EFS_OK)rc=host_append_session_admit(h,ino,q,hint,&registered);
+    if(rc==EFS_OK) {
+        uint8_t groups[2];host_need_both(groups);
+        uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(q->id.client_uuid));
+        int covered=(owner==groups[0] || owner==groups[1])?owner:-1;
+        rc=host_append_session_admit_after_group(h,ino,q,hint,&registered,covered);
+    }
     if(rc!=EFS_OK)return rc;
     /* Replayed reservations do not need cleanup or a new transaction. */
     rc=efs_meta_append_result(h->kv,ino,len,q,offset);
