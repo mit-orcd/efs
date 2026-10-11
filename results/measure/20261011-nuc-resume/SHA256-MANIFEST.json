@@ -656,8 +656,8 @@
     "sha256": "4580bbf7d1483ecf8ba3de0f1ca051a76592b817acc69722292c37826c12318f"
   },
   "meta-placement/summary.json": {
-    "bytes": 25899,
-    "sha256": "c9a8621650e30484b35f59d454ca957b86924c07116248a70f9b4feabf9e1cf3"
+    "bytes": 152937,
+    "sha256": "3d95570cc6ba1735fad4a02558cad5d2b7bab529aa72602b02cd031fd5452029"
   },
   "meta-placement/tests-exit.txt": {
     "bytes": 2,
