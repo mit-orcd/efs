@@ -20,12 +20,26 @@ static unsigned raw_syncs,index_syncs,sync_faults;
 static char fail_sync_kind,fail_write_kind;
 static unsigned write_faults,fail_derived_after;
 static char descriptor_kind[4096];
+static unsigned char writing_raw[4096];
+static unsigned raw_handles,raw_handles_high;
+#ifdef __linux__
+static int writeback_error;
+static unsigned writeback_calls;
+static int fault_writeback(int fd,off64_t offset,off64_t bytes,unsigned flags)
+{
+    writeback_calls++;
+    if(writeback_error){errno=writeback_error;return -1;}
+    return sync_file_range(fd,offset,bytes,flags);
+}
+#endif
 static int tracked_open(const char *path,int flags,...)
 {
     mode_t mode=0;
     if(flags&O_CREAT){va_list args;va_start(args,flags);mode=va_arg(args,int);va_end(args);}
     int fd=open(path,flags,mode);
     if(fd>=0 && fd<(int)sizeof(descriptor_kind)){
+        /* Test code also closes descriptors outside the production wrapper. */
+        if(writing_raw[fd]){writing_raw[fd]=0;raw_handles--;}
         size_t n=strlen(path);char kind=0;
         if(!(flags&O_DIRECTORY)){
             if(n>=2 && path[n-2]=='.')kind=path[n-1];
@@ -33,8 +47,20 @@ static int tracked_open(const char *path,int flags,...)
         }
         descriptor_kind[fd]=kind;
         if(kind=='a')alias_opens++;
+        if((flags&O_CREAT) && (kind=='r' || kind=='i')){
+            writing_raw[fd]=1;raw_handles++;
+            if(raw_handles>raw_handles_high)raw_handles_high=raw_handles;
+        }
     }
     return fd;
+}
+static int tracked_close(int fd)
+{
+    if(fd>=0 && fd<(int)sizeof(writing_raw)){
+        if(writing_raw[fd]){writing_raw[fd]=0;raw_handles--;}
+        descriptor_kind[fd]=0;
+    }
+    return close(fd);
 }
 static int fault_fsync(int fd)
 {
@@ -66,11 +92,19 @@ static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
 #define pread counted_pread
 #define fsync fault_fsync
 #define open tracked_open
+#define close tracked_close
+#ifdef __linux__
+#define sync_file_range fault_writeback
+#endif
 #include "../src/meta/query_disk.c"
 #undef pwrite
 #undef pread
 #undef fsync
 #undef open
+#undef close
+#ifdef __linux__
+#undef sync_file_range
+#endif
 #ifdef __linux__
 #undef ioctl
 #endif
@@ -108,6 +142,48 @@ static void rebuild_cache_test(void)
     efs_query_disk_free(disk);efs_kv_lsm_snapshot_release(source);efs_kv_lsm_close(kv);
 }
 static int cancel_budget(void *ctx){(void)ctx;return 1;}
+static void raw_sync_batch_test(void)
+{
+    char root[]="/tmp/efs-query-sync-batch-XXXXXX";CHECK(mkdtemp(root));
+    struct efs_query_disk *d=calloc(1,sizeof(*d));CHECK(d);if(!d)return;
+    unsigned modes=3;
+#ifdef __linux__
+    modes=5;
+#endif
+    for(unsigned mode=0;mode<modes;mode++){
+        struct raw_sync_batch batch={0};int descriptors[3];char paths[3][256];
+        memset(writing_raw,0,sizeof(writing_raw));raw_handles=raw_handles_high=0;
+        for(unsigned i=0;i<3;i++){
+            snprintf(paths[i],sizeof(paths[i]),"%s/%u-%u.r",root,mode,i);
+            descriptors[i]=tracked_open(paths[i],O_CREAT|O_EXCL|O_RDWR,0600);
+            CHECK(descriptors[i]>=0);if(descriptors[i]>=0){
+                CHECK(pwrite(descriptors[i],"data",4,0)==4);
+                batch.fd[batch.count++]=descriptors[i];
+            }
+        }
+        unsigned before=raw_syncs;sync_faults=0;
+        d->stop=mode==1?cancel_budget:NULL;
+        if(mode==2)fail_sync_kind='r';
+#ifdef __linux__
+        writeback_calls=0;
+        writeback_error=mode==3?ENOSYS:mode==4?EIO:0;
+#endif
+        int rc=raw_sync_finish(d,&batch,EFS_OK);
+        CHECK(rc==(mode==0 || mode==3?EFS_OK:mode==1?EFS_ERR_BUSY:EFS_ERR_IO));
+        CHECK(raw_syncs-before==(mode==0 || mode==3?3:mode==2?1:0));
+        CHECK(sync_faults==(mode==2));fail_sync_kind=0;
+#ifdef __linux__
+        CHECK(writeback_calls==(mode==1?0:mode==4?1:3));
+        writeback_error=0;
+#endif
+        CHECK(batch.count==0 && raw_handles==0);
+        for(unsigned i=0;i<3;i++){
+            errno=0;CHECK(fcntl(descriptors[i],F_GETFD)==-1 && errno==EBADF);
+            CHECK(!unlink(paths[i]));
+        }
+    }
+    free(d);CHECK(!rmdir(root));
+}
 static void budget_test(void)
 {
     char root[]="/tmp/efs-query-budget-XXXXXX",a[EFS_MAX_PATH],b[EFS_MAX_PATH],c[EFS_MAX_PATH],path[EFS_MAX_PATH];
@@ -229,6 +305,7 @@ static void alias_batch_test(void)
 }
 int main(void)
 {
+    raw_sync_batch_test();
     alias_batch_test();
     rebuild_cache_test();
     {
@@ -468,8 +545,21 @@ int main(void)
             CHECK(!efs_kv_key_inode(efs_kv_inode_shard(extra),extra,k,&kn));
             CHECK(!efs_meta_pack_inode(&row,v,sizeof(v)));CHECK(!efs_kv_put(kv,k,kn,v,sizeof(v)));
         }
+        /* Inactive historical lanes remain valid snapshot inputs. Spread
+         * them across 64 physical raw partitions so this production build
+         * exercises full sync batches and a nonempty final tail. */
+        struct efs_meta_row lane_owner;CHECK(!efs_meta_apply_get_inode(kv,file,&lane_owner));
+        for(unsigned lane=0;lane<64;lane++){
+            uint8_t key[EFS_KV_KEY_MAX],value[EFS_META_LANE_BYTES]={0};uint32_t kn;
+            CHECK(!efs_kv_key_lane(efs_kv_lane_shard(file,(uint8_t)lane),file,
+                                  lane_owner.generation,(uint8_t)lane,key,&kn));
+            CHECK(!efs_kv_put(kv,key,kn,value,sizeof(value)));
+        }
         CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));raw_syncs=index_syncs=0;
+        memset(writing_raw,0,sizeof(writing_raw));raw_handles=raw_handles_high=0;
         CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&old));
+        CHECK(raw_handles==0 && raw_handles_high==RAW_SYNC_FILES);
+        printf("raw sync batch: writing_handles_high=%u bound=%u retained=0\n",raw_handles_high,RAW_SYNC_FILES);
         if(old){
             struct efs_query_rollup totals;
             CHECK(!efs_query_disk_stats(old,EFS_ROOT_INO,&totals));
@@ -504,9 +594,19 @@ int main(void)
             CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
             CHECK(!efs_query_disk_inode(next,file,NULL,NULL));efs_query_disk_free(next);next=NULL;
             const char kinds_to_fail[]={'r','i','n','d','a','m'};
+#ifdef __linux__
+            /* A scheduling-hint I/O error is also an unpublished candidate,
+             * never a full-rebuild request or a lost writing descriptor. */
+            writeback_error=EIO;writeback_calls=0;
+            CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&next)==EFS_ERR_IO && !next);
+            CHECK(writeback_calls==1 && raw_handles==0);writeback_error=0;
+            CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
+            CHECK(!efs_query_disk_inode(next,file,NULL,NULL));efs_query_disk_free(next);next=NULL;
+#endif
             for(unsigned i=0;i<sizeof(kinds_to_fail);i++){
                 fail_sync_kind=kinds_to_fail[i];sync_faults=0;
                 CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&next)==EFS_ERR_IO && !next);
+                CHECK(raw_handles==0 && raw_handles_high<=RAW_SYNC_FILES);
                 CHECK(sync_faults==1);fail_sync_kind=0;
                 CHECK(!efs_query_disk_inode(old,file,NULL,NULL));
                 CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));

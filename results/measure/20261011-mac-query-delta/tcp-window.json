@@ -1,0 +1,225 @@
+{
+  "scope": "Whole Mac VM TCP counters, including SSH and EFS; not per-process loss attribution",
+  "before": [
+    {
+      "node": "efs1",
+      "time": 1791728491.9399693,
+      "tcp": {
+        "RtoAlgorithm": 1,
+        "RtoMin": 200,
+        "RtoMax": 120000,
+        "MaxConn": -1,
+        "ActiveOpens": 195833,
+        "PassiveOpens": 96397,
+        "AttemptFails": 4189,
+        "EstabResets": 76,
+        "CurrEstab": 28,
+        "InSegs": 7183512,
+        "OutSegs": 8181703,
+        "RetransSegs": 196,
+        "InErrs": 0,
+        "OutRsts": 3964,
+        "InCsumErrors": 0
+      }
+    },
+    {
+      "node": "efs2",
+      "time": 1791728491.4289067,
+      "tcp": {
+        "RtoAlgorithm": 1,
+        "RtoMin": 200,
+        "RtoMax": 120000,
+        "MaxConn": -1,
+        "ActiveOpens": 37277,
+        "PassiveOpens": 83546,
+        "AttemptFails": 1484,
+        "EstabResets": 1,
+        "CurrEstab": 21,
+        "InSegs": 4271347,
+        "OutSegs": 4238816,
+        "RetransSegs": 90,
+        "InErrs": 0,
+        "OutRsts": 1530,
+        "InCsumErrors": 0
+      }
+    },
+    {
+      "node": "efs3",
+      "time": 1791728491.7111228,
+      "tcp": {
+        "RtoAlgorithm": 1,
+        "RtoMin": 200,
+        "RtoMax": 120000,
+        "MaxConn": -1,
+        "ActiveOpens": 37314,
+        "PassiveOpens": 83507,
+        "AttemptFails": 1545,
+        "EstabResets": 0,
+        "CurrEstab": 20,
+        "InSegs": 6775598,
+        "OutSegs": 6537597,
+        "RetransSegs": 157,
+        "InErrs": 0,
+        "OutRsts": 1954,
+        "InCsumErrors": 0
+      }
+    },
+    {
+      "node": "efsgw",
+      "time": 1791728491.955327,
+      "tcp": {
+        "RtoAlgorithm": 1,
+        "RtoMin": 200,
+        "RtoMax": 120000,
+        "MaxConn": -1,
+        "ActiveOpens": 145,
+        "PassiveOpens": 52,
+        "AttemptFails": 0,
+        "EstabResets": 0,
+        "CurrEstab": 37,
+        "InSegs": 665611,
+        "OutSegs": 1106285,
+        "RetransSegs": 60,
+        "InErrs": 0,
+        "OutRsts": 3,
+        "InCsumErrors": 0
+      }
+    }
+  ],
+  "after": [
+    {
+      "node": "efs1",
+      "time": 1791728677.9826086,
+      "tcp": {
+        "RtoAlgorithm": 1,
+        "RtoMin": 200,
+        "RtoMax": 120000,
+        "MaxConn": -1,
+        "ActiveOpens": 197033,
+        "PassiveOpens": 97004,
+        "AttemptFails": 4189,
+        "EstabResets": 76,
+        "CurrEstab": 34,
+        "InSegs": 7299125,
+        "OutSegs": 8595227,
+        "RetransSegs": 196,
+        "InErrs": 0,
+        "OutRsts": 3964,
+        "InCsumErrors": 0
+      }
+    },
+    {
+      "node": "efs2",
+      "time": 1791728677.6069717,
+      "tcp": {
+        "RtoAlgorithm": 1,
+        "RtoMin": 200,
+        "RtoMax": 120000,
+        "MaxConn": -1,
+        "ActiveOpens": 37502,
+        "PassiveOpens": 84075,
+        "AttemptFails": 1484,
+        "EstabResets": 1,
+        "CurrEstab": 24,
+        "InSegs": 4329162,
+        "OutSegs": 4387767,
+        "RetransSegs": 92,
+        "InErrs": 0,
+        "OutRsts": 1530,
+        "InCsumErrors": 0
+      }
+    },
+    {
+      "node": "efs3",
+      "time": 1791728678.0257244,
+      "tcp": {
+        "RtoAlgorithm": 1,
+        "RtoMin": 200,
+        "RtoMax": 120000,
+        "MaxConn": -1,
+        "ActiveOpens": 37539,
+        "PassiveOpens": 84035,
+        "AttemptFails": 1545,
+        "EstabResets": 0,
+        "CurrEstab": 22,
+        "InSegs": 6833154,
+        "OutSegs": 6681084,
+        "RetransSegs": 157,
+        "InErrs": 0,
+        "OutRsts": 1954,
+        "InCsumErrors": 0
+      }
+    },
+    {
+      "node": "efsgw",
+      "time": 1791728679.9480414,
+      "tcp": {
+        "RtoAlgorithm": 1,
+        "RtoMin": 200,
+        "RtoMax": 120000,
+        "MaxConn": -1,
+        "ActiveOpens": 156,
+        "PassiveOpens": 53,
+        "AttemptFails": 0,
+        "EstabResets": 0,
+        "CurrEstab": 48,
+        "InSegs": 721524,
+        "OutSegs": 1307409,
+        "RetransSegs": 62,
+        "InErrs": 0,
+        "OutRsts": 3,
+        "InCsumErrors": 0
+      }
+    }
+  ],
+  "delta": [
+    {
+      "node": "efs1",
+      "seconds": 186.043,
+      "delta": {
+        "OutSegs": 413524,
+        "RetransSegs": 0,
+        "AttemptFails": 0,
+        "EstabResets": 0,
+        "InErrs": 0,
+        "InCsumErrors": 0
+      }
+    },
+    {
+      "node": "efs2",
+      "seconds": 186.178,
+      "delta": {
+        "OutSegs": 148951,
+        "RetransSegs": 2,
+        "AttemptFails": 0,
+        "EstabResets": 0,
+        "InErrs": 0,
+        "InCsumErrors": 0
+      }
+    },
+    {
+      "node": "efs3",
+      "seconds": 186.315,
+      "delta": {
+        "OutSegs": 143487,
+        "RetransSegs": 0,
+        "AttemptFails": 0,
+        "EstabResets": 0,
+        "InErrs": 0,
+        "InCsumErrors": 0
+      }
+    },
+    {
+      "node": "efsgw",
+      "seconds": 187.993,
+      "delta": {
+        "OutSegs": 201124,
+        "RetransSegs": 2,
+        "AttemptFails": 0,
+        "EstabResets": 0,
+        "InErrs": 0,
+        "InCsumErrors": 0
+      }
+    }
+  ]
+}

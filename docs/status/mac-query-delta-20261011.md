@@ -63,7 +63,8 @@ rebuild causes or the complete W109 contention package.
 The journal and first sequential-merge changes were built on the Mac seed;
 full `make test` passed and those binaries were shipped to all three storage
 VMs and gateway. Later focused query fixes passed the targeted seed oracles;
-a fresh full gate and deployment of the latest commit remain pending. The cluster uses
+a fresh full gate passed on the seed using data-disk fixture space, and the latest
+query code is deployed to all Mac service nodes (see the checkpoint below). The cluster uses
 `NODE_QUOTA=10G`: its former explicit 15G exceeds the current safety estimate
 (12.09 GiB on node 1). Cluster-script commit `386c710` permits a per-run quota
 override. Existing stores were preserved; no wipe or forced write discard.
@@ -231,3 +232,177 @@ The actual efsd is relinked with this code; controlled Mac rollout is running.
 
 `04ba852d` commits the live mutation helper and foreground/drain lifecycle fix;
 run5 and run6 acceptance are distinct from the original failed large live gates.
+
+
+### 13:30 UTC Mac checkpoint: failed-build phase attribution
+
+`e679adb7` adds diagnostic-only phase timing to failed query disk builds. The
+Mac targeted query delta/disk/catalog/IO gates pass. The actual efsd is relinked
+and shipped; installed service is restored with buffered/TCP and opt-in existing
+Raft/client RPC counters. No other cluster is touched.
+
+The first measured installed failure reports **index 261,430 ms / stats 345 ms /
+persist 0 ms**, 40,939 inode rows; the same retained orphan directory rejects
+publication. This rules out inode stat refolding as the expensive phase for this
+attempt. It does not yet separate raw/index fsync cost from snapshot scans and
+name sorting; that needs separate syscall/profile captures. RPC samples show
+reply waits dominate pool checkout and sends. Observed Raft persist maxima are
+roughly 69–92 ms; these are intervals, not proof of a causal mechanism.
+
+The isolated native rerun is **137/216 PASS, 16 FAIL, 63 NOTRUN**, 244.4 seconds,
+with an unchanged local-filesystem baseline of 216/216 PASS. Original deadlines
+remain, and append worker survival aborts later cases. The initial peer attempt
+was NOTRUN: its fixed `/mnt/efs/posix-2c` directory has historical permissions
+incompatible with the test user. The cluster wrapper now uses a unique parent
+for local peer mounts as it already did for remote peers. A fresh full peer run
+is in progress; this fixture repair is not a passed EFS correctness gate.
+
+
+### Full installed Mac peer acceptance, before raw-sync batching
+
+The unique-parent local two-mount peer gate completed **67/67 PASS, 0 FAIL**
+in 1,534.8 seconds. All 800 concurrent append records were present, complete and
+unique. Append versus truncate, reverse extension completion, rename/unlink
+source and destination races, hardlinks and range locks pass. The harness exited
+and normally drained the secondary mount; no forced discard or killed client.
+This is two independent FUSE mounts on one gateway against three Mac storage VMs,
+not two physical client hosts. It does not turn the native deadline failures into
+passes. A separate syscall/profile capture follows this correctness run.
+
+
+### Raw-cache writeback repair (`a39edfa2`)
+
+Separate syscall capture after peer teardown measured 330 query raw/index fsyncs
+with mean 30.112 ms and median 27.748 ms. GC data/death-fence syncing is also
+substantial (164 / 97 calls); Raft log, WAL and applied-checkpoint syncing remain.
+These barriers protect durable ACKs and were not removed. The 30-second CPU
+profile has only 58 task-clock samples, insufficient to rank CPU hot paths;
+flat, thread and caller reports are retained.
+
+A matched 128-file probe checks every byte after its timing interval. Merely
+holding 16 writing descriptors before fsync showed no improvement and that
+candidate was discarded. Initiating asynchronous Linux writeback for the bounded
+batch, then fsyncing **every original writing handle**, shows:
+
+| Sample | Sequential fsync (ms) | Writeback hint + checked fsyncs (ms) |
+| --- | ---: | ---: |
+| 1 | 4,008.6 | 885.6 |
+| 2 | 4,463.3 | 884.4 |
+| 3 | 3,912.3 | 735.1 |
+
+`a39edfa2` adds that ordering to the actual query disk builder. A fixed 16-handle
+queue is charged to working admission; the existing 32-entry read FD cache stays
+bounded. Unsupported hints fall back to the same fsync barriers. Hint I/O errors,
+fsync errors and cancellation abort the candidate and close all writing handles.
+No durable generation is published before checked writer barriers, digests,
+manifest and directory sync. Disk format and authoritative metadata are unchanged.
+
+Mac production-builder gates exercise 64 historical inactive-lane partitions,
+reach exactly 16 retained writing handles, and leave none open on success/failure.
+Fallback, cancellation, hint EIO, every persisted-file fsync failure, partial
+ENOSPC, retained checkpoint, cold restore, 6,000/60,000-file exact RAM oracles,
+lane-only changes/removal and dirty-directory boundary gates pass.
+
+The first broader unit run hit the unmodified benchmark direct/split/punch
+30-second deadline under installed-service I/O. The same four-case test passed
+in 4.750 seconds after clean service stop, and the **complete unchanged `make
+test` then passed** with data-disk fixtures and service interference removed.
+The failure is preserved; benchmark code/deadlines remain untouched. This isolates
+installed-service interference collectively, not query-versus-GC causality.
+The committed optimization is now being deployed to Mac, buffered/TCP; installed
+native and peer gates are repeated separately. The retained orphan remains open.
+
+### Installed writeback result and remaining foreground lead
+
+With `a39edfa2` deployed, failed initial-build indexing measured 28,487 / 29,288
+ms before the native workload and 34,067–51,231 ms during native/peer activity,
+versus the prior 251,658–265,382 ms observations. Exact-stat folding remains
+roughly 0.3–0.5 seconds in most samples. These are repeated phase observations
+on retained, changing data, not matched end-to-end healthy publications: orphan
+directory 4091 still prevents publication. No metadata repair was guessed.
+
+The unchanged native suite after the writeback repair is **137/216 PASS,
+16 FAIL, 63 NOTRUN**, 240.9 seconds. Its local-filesystem baseline is 216/216
+PASS in 10.2 seconds. This is essentially unchanged from the prior 137/216,
+244.4-second run. The query indexing improvement does not close foreground
+liveness. The independent full peer rerun is pending.
+
+Read profiling at 14:19:28 UTC reports 9,075 leader ReadIndex calls averaging
+41,797 microseconds; lookup's parent ReadIndex averages 44,240 microseconds,
+versus 15 microseconds for the local KV lookup. Lookup's lane authority work
+adds 25,314 microseconds on average. Later cumulative averages depend on the
+workload mix and must not be treated as paired latency samples.
+
+The pump publishes/wakes satisfied views before its off-lock durability tail,
+but remains the sole pump during WAL release and applied-checkpoint syncing.
+An incoming heartbeat reply therefore may await that tail before the next
+inbox drain. This is a code-supported hypothesis for remaining ReadIndex waits,
+not proven timing causality. The next discriminating gate should correlate
+request admission, outbound probe, reply enqueue/drain and view publication
+with existing KV-release/applied-persistence phase timings. Delay each barrier
+independently in a private preserved-byte fixture before proposing any pump
+split. Keep the KV-before-checkpoint ordering, bounded replay tail and all
+acknowledged-byte recovery gates. Raising native deadlines would hide the issue.
+
+A 186–188-second whole-host Mac TCP window during the peer run records:
+
+| VM | Sent segments | Retransmitted segments | Failed connects / resets / input errors |
+| --- | ---: | ---: | --- |
+| efs1 | 413,524 | 0 | 0 / 0 / 0 |
+| efs2 | 148,951 | 2 | 0 / 0 / 0 |
+| efs3 | 143,487 | 0 | 0 / 0 / 0 |
+| efsgw | 201,124 | 2 | 0 / 0 / 0 |
+
+SSH is included. These counters do not identify lost EFS RPCs or rule out
+intermittent stalls. Mac buffered/TCP results do not close ORCD IB/RDMA gates.
+
+A separate, tracer-free 20-second `/proc` observation during the peer workload
+adds a storage-layer constraint:
+
+| VM | Data write MiB/s | Data-device busy | Flushes/s | Full I/O pressure time |
+| --- | ---: | ---: | ---: | ---: |
+| efs1 | 3.00 | 96.9% | 294.8 | 31.5% |
+| efs2 | 1.90 | 98.7% | 255.8 | 41.4% |
+| efs3 | 2.12 | 86.5% | 158.8 | 37.0% |
+
+Counters are whole-VM `vdb` and pressure deltas, including background work;
+device busy is not physical-device utilization or an EFS-only percentage.
+CPU pressure averages are near zero. EFS kernel wait samples include
+`submit_bio_wait`, `xlog_wait_on_iclog` and `__flush_workqueue`. Per-cycle Raft
+durability-tail maxima in the same interval are approximately 45–61 ms,
+while pump-held work is usually under one millisecond. These observations
+support durability waiting rather than CPU/network bandwidth as the next lead;
+they do not distinguish query, GC and foreground causality. GC reports 1,223
+removed files / 80,189,664 file bytes since service start, with pending work and
+47 reap errors; classify those outcomes before calling them communication loss.
+
+All four Mac nodes have matching query source and binary hashes. Every running
+server and both gateway FUSE executables match the installed binary byte for
+byte. Build identities and raw counter observations are retained with evidence.
+
+
+### Final deadline checkpoint
+
+The two-hour authorization ended at 14:52:50 UTC. No new implementation or
+tests were started by the later heartbeat. The heartbeat is disabled.
+
+The persistent cluster result for the latest peer run records **all 67 cases
+PASS**, including all 800 concurrent append records. It has no final summary
+or captured successful process/teardown exit, so this is case-level acceptance,
+not a confirmed clean full-suite completion. The earlier independent peer run
+has a complete 67/67 summary and verified normal mount drain. Latest native
+acceptance remains 137/216 PASS, 16 FAIL and 63 NOTRUN. Full unchanged unit
+acceptance passed with installed-service interference removed.
+
+At the later heartbeat, /private/tmp checkouts and raw local test output were
+missing. Commits and the persistent cluster case results survived. Tart reports
+all four Mac VMs stopped; gateway SSH times out. Current mount health and
+teardown cannot be verified, and no VM was restarted after the deadline.
+The last verified running deployment was a39edfa2, buffered/TCP, with matching
+source/binary hashes and running executables. All implementation and earlier
+evidence commits remain on devel-mac. No other cluster, push or merge was used.
+
+Remaining blockers: retained orphan directory 4091 prevents query publication;
+native ReadIndex/durability latency still causes deadline failures; the dirty-
+directory fallback bound remains. Mac evidence does not close ORCD hardware
+IB/RDMA or representative million-row liveness gates.

@@ -35,6 +35,7 @@ _Static_assert(FD_CACHE<=UINT8_MAX,"descriptor index must fit");
 _Static_assert(2*RAW_WRITE_WINDOW<=SORT_ROWS*sizeof(struct efs_name_entry),
                "raw writer scratch must fit the existing sort admission charge");
 #define NODE_BATCH 8
+#define RAW_SYNC_FILES 16
 #define INODE_CACHE 64
 #define VALUE_MAX 16384
 #define RAW_RECORD_MAX (EFS_KV_KEY_MAX+VALUE_MAX)
@@ -470,8 +471,44 @@ static int make_file(const struct efs_query_disk *d,uint32_t shard,char kind)
     char p[EFS_MAX_PATH];if(filename(d,shard,kind,p,sizeof(p)))return -1;
     return open(p,O_CREAT|O_EXCL|O_RDWR|O_CLOEXEC,0600);
 }
-static int raw_build(struct efs_query_disk *d,struct efs_kv_lsm_snapshot *source,uint32_t shard)
+/* Retain a fixed number of original writing handles. Several partitions can
+ * reach writeback together, rather than submitting two flushes before writing
+ * the next partition. Every handle still observes its own fsync/writeback
+ * errors before inode folding or publication. Reopening a file for this
+ * barrier could miss an error already recorded on its writing descriptor. */
+struct raw_sync_batch { int fd[RAW_SYNC_FILES];unsigned count; };
+static int raw_writeback_start(int fd)
 {
+#if defined(__linux__) && defined(SYNC_FILE_RANGE_WRITE)
+    int rc;
+    do {rc=sync_file_range(fd,0,0,SYNC_FILE_RANGE_WRITE);} while(rc<0 && errno==EINTR);
+    /* Optional writeback scheduling, never a durability barrier. Filesystems
+     * without this hint retain the identical checked writing-handle fsyncs. */
+    if(rc<0 && errno!=ENOSYS && errno!=EINVAL && errno!=EOPNOTSUPP)return EFS_ERR_IO;
+#else
+    (void)fd;
+#endif
+    return EFS_OK;
+}
+static int raw_sync_finish(struct efs_query_disk *d,struct raw_sync_batch *batch,int rc)
+{
+    for(unsigned i=0;i<batch->count && !rc;i++){
+        if(cancelled(d))rc=EFS_ERR_BUSY;
+        else rc=raw_writeback_start(batch->fd[i]);
+    }
+    for(unsigned i=0;i<batch->count;i++){
+        if(!rc && cancelled(d))rc=EFS_ERR_BUSY;
+        if(!rc && fsync(batch->fd[i]))rc=EFS_ERR_IO;
+        close(batch->fd[i]);
+    }
+    batch->count=0;return rc;
+}
+static int raw_build(struct efs_query_disk *d,struct efs_kv_lsm_snapshot *source,uint32_t shard,
+                     struct raw_sync_batch *sync)
+{
+    if(sync->count==RAW_SYNC_FILES){
+        int rc=raw_sync_finish(d,sync,EFS_OK);if(rc)return rc;
+    }
     uint8_t prefix[3]={(uint8_t)(shard>>8),(uint8_t)shard,0};
     const uint8_t refuse[]={EFS_KV_KIND_INTENT,EFS_KV_KIND_GUARD,EFS_KV_KIND_REDUCE};
     for(unsigned i=0;i<sizeof(refuse);i++){
@@ -488,7 +525,10 @@ static int raw_build(struct efs_query_disk *d,struct efs_kv_lsm_snapshot *source
     d->part[shard].count=w.count;d->part[shard].inodes=d->part[shard].end[0]-d->part[shard].begin[0];
     d->part[shard].names=d->part[shard].end[1]-d->part[shard].begin[1];
     if(!rc)rc=writer_flush(&w);
-    if(!rc && w.count && (fsync(w.raw) || fsync(w.index)))rc=EFS_ERR_IO;
+    if(!rc && w.count){
+        sync->fd[sync->count++]=w.raw;sync->fd[sync->count++]=w.index;
+        w.raw=w.index=-1;
+    }
     if(w.raw>=0)close(w.raw);
     if(w.index>=0)close(w.index);
     free(w.buffer);return rc;
@@ -865,7 +905,7 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
     if(out)*out=NULL;
     if(times)memset(times,0,sizeof(*times));
     uint64_t phase_start=query_build_clock();
-    uint64_t working=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX+NODE_BATCH*sizeof(struct disk_node)+sizeof(struct fold_parent)+sizeof(struct incremental)+64*sizeof(struct efs_meta_dir_ent)+65536+2*RAW_RECORD_MAX;
+    uint64_t working=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX+NODE_BATCH*sizeof(struct disk_node)+sizeof(struct fold_parent)+sizeof(struct incremental)+sizeof(struct raw_sync_batch)+64*sizeof(struct efs_meta_dir_ent)+65536+2*RAW_RECORD_MAX;
     if(!root || !source || !out)return EFS_ERR_INVAL;
     if(max_bytes<working)return EFS_ERR_NOMEM;
     if(mkdir(root,0700) && errno!=EEXIST)return EFS_ERR_IO;
@@ -882,6 +922,7 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
     int n=snprintf(d->path,sizeof(d->path),"%s/view-XXXXXX",root);
     if(n<0 || (size_t)n>=sizeof(d->path) || !mkdtemp(d->path)){efs_query_disk_free(d);return EFS_ERR_IO;}
     uint64_t revisions[SHARDS];int rc=efs_kv_lsm_snapshot_query_revisions(source,d->lineage,revisions);
+    struct raw_sync_batch sync={0};
     if(old && memcmp(old->lineage,d->lineage,sizeof(d->lineage)))old=NULL;
     for(uint32_t shard=0;shard<SHARDS && !rc;shard++) {
         if(cancelled(d)){rc=EFS_ERR_BUSY;break;}
@@ -905,7 +946,7 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
                 if(!rc && link(from,to))rc=EFS_ERR_IO;
             }
         } else {
-            d->rebuilt++;rc=raw_build(d,source,shard);
+            d->rebuilt++;rc=raw_build(d,source,shard,&sync);
             if(rc)fprintf(stderr,"query-disk: raw shard=%u rc=%d errno=%d\n",shard,rc,errno);
             if(!rc) {
                 rc=names_build(d,shard,'n');
@@ -917,6 +958,7 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
         if(UINT64_MAX-d->count<d->part[shard].inodes)rc=EFS_ERR_OVERFLOW;
         else d->count+=d->part[shard].inodes;
     }
+    rc=raw_sync_finish(d,&sync,rc);
     if(times)times->index_ns=query_build_elapsed(phase_start);
     phase_start=query_build_clock();
     if(!rc && old)rc=incremental_build(d,(struct efs_query_disk *)old);

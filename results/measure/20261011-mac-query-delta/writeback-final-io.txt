@@ -1,0 +1,16 @@
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"' -DEFS_VERSION='"unknown"' -DEFS_GIT_BRANCH='"unknown"' -DEFS_BUILD_TIME='"2026-10-11T14:09:23Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_query_disk_io tests/test_query_disk_io.c libefs.a -lpthread -lm -ldl -libverbs
+query-disk: nodes shard=1 previous=28673 rc=-1
+query-disk: raw shard=419 rc=-1 errno=5
+query-disk: raw shard=419 rc=-1 errno=5
+query-disk: raw shard=419 rc=-1 errno=5
+alias batch: shards=64 ids=256 opens=16384->64 reads=32768->128
+merge names: rows=6098 reads=10 writes=9
+merge aliases: rows=6098 reads=10 writes=9
+raw batch: records=10000 writes=16
+raw sync batch: writing_handles_high=16 bound=16 retained=0
+query disk I/O: windows, lookup, packed records, partial ENOSPC, FD reuse and fsync refusal PASS
+.
+----------------------------------------------------------------------
+Ran 1 test in 4.750s
+
+OK
