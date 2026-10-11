@@ -13,7 +13,9 @@ p.add_argument('--seconds',type=int,default=480)
 p.add_argument('--mode',choices=('grow','ring'),required=True)
 a=p.parse_args();a.root.mkdir(exist_ok=False);a.output.mkdir(exist_ok=False)
 size=65536;slots=4096;gate=threading.Barrier(4);rows=[];stop=threading.Event()
-seed=hashlib.sha256(b'NUC durable allocation control').digest()*2048
+# Generate once outside timing. A repeated 32-byte pattern would confound a
+# device comparison if a controller compresses payloads internally.
+seed=hashlib.shake_256(b'NUC durable allocation control').digest(size)
 def worker(n):
     path=a.root/f'writer{n}';fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_RDWR,0o600)
     try:
@@ -71,5 +73,5 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
             time.sleep(5)
     for f in futures:f.result()
 cpu_after=os.times()
-(a.output/'final.json').write_text(json.dumps(dict(mode=a.mode,seconds=a.seconds,writers=rows,total_operations_s=sum(r['operations_s'] for r in rows),verified=True,cpu_user_seconds=cpu_after.user-cpu_before.user,cpu_system_seconds=cpu_after.system-cpu_before.system),indent=2))
+(a.output/'final.json').write_text(json.dumps(dict(mode=a.mode,seconds=a.seconds,writers=rows,total_operations_s=sum(r['operations_s'] for r in rows),verified=True,body='64 KiB SHAKE-derived tail plus unique 8-byte counter',body_sha256=hashlib.sha256(seed).hexdigest(),cpu_user_seconds=cpu_after.user-cpu_before.user,cpu_system_seconds=cpu_after.system-cpu_before.system),indent=2))
 print(a.mode,sum(r['operations_s'] for r in rows),'PASS',flush=True)
