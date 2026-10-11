@@ -10,7 +10,7 @@ from pathlib import Path
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('root',type=Path);p.add_argument('output',type=Path)
 p.add_argument('--seconds',type=int,default=480)
-p.add_argument('--mode',choices=('grow','ring'),required=True)
+p.add_argument('--mode',choices=('grow','ring','written-ring'),required=True)
 a=p.parse_args();a.root.mkdir(exist_ok=False);a.output.mkdir(exist_ok=False)
 size=65536;slots=4096;gate=threading.Barrier(4);rows=[];stop=threading.Event()
 # Generate once outside timing. A repeated 32-byte pattern would confound a
@@ -19,7 +19,13 @@ seed=hashlib.shake_256(b'NUC durable allocation control').digest(size)
 def worker(n):
     path=a.root/f'writer{n}';fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_RDWR,0o600)
     try:
-        if a.mode=='ring':os.posix_fallocate(fd,0,size*slots)
+        if a.mode in ('ring','written-ring'):os.posix_fallocate(fd,0,size*slots)
+        if a.mode=='written-ring':
+            # Convert every extent and persist actual bytes before timing.
+            # Distinct initial counters keep the first timed pass a mutation.
+            for slot in range(slots):
+                body=(2**63+slot).to_bytes(8,'little')+seed[8:]
+                assert os.pwrite(fd,body,slot*size)==size
         os.fsync(fd)
         d=os.open(a.root,os.O_DIRECTORY);os.fsync(d);os.close(d)
     except BaseException:
@@ -46,10 +52,10 @@ def worker(n):
         os.close(fd);fd=-1
         # New descriptor, complete current file. This is close/reopen, not a
         # kernel-cold/power-loss oracle. Preserve every file after verification.
-        verify_slots=min(count,slots) if a.mode=='ring' else (count%slots or min(count,slots))
+        verify_slots=slots if a.mode=='written-ring' else min(count,slots) if a.mode=='ring' else (count%slots or min(count,slots))
         with path.open('rb',buffering=0) as source:
             for slot in range(verify_slots):
-                version=((count-1-slot)//slots)*slots+slot
+                version=2**63+slot if a.mode=='written-ring' and slot>=count else ((count-1-slot)//slots)*slots+slot
                 assert source.read(size)==version.to_bytes(8,'little')+seed[8:]
         def pct(p):
             total=0

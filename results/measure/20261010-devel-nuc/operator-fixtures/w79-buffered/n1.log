@@ -1,0 +1,44 @@
+2026-10-11T04:20:04.295Z storage-engine=files direct_io=off
+2026-10-11T04:20:04.304Z Joined cluster with 2 nodes
+2026-10-11T04:20:04.308Z heartbeat: enabled (2000 ms interval)
+2026-10-11T04:20:04.321Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T04:20:04.321Z raft-host: up raft_id=1 n=3 boot=15637465294548199 salt=6777683656155847207 g0=hosted g2=hosted
+2026-10-11T04:20:04.321Z efsd 3df19310-nuc (branch devel-nuc, built 2026-10-11T04:12:28Z on nuc), build=3df1931032b8-nuc: node 2 listening on 127.0.0.1:21341, storage=/tmp/efs-read-freshness-8d3xtvnw/n1 (1 paths, stripe=none), used=0, quota=0, direct_io=off, writers=4 shared
+2026-10-11T04:20:04.321Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-11T04:20:05.191Z raft-host: applied session index=9 kind=1 shard=0 ino=0
+2026-10-11T04:20:06.308Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=981 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T04:20:09.321Z kv-obs: mt_bytes=2012 l0_bytes=0 l0=0 l1=0
+2026-10-11T04:20:09.417Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:10.311Z heartbeat: node 1 (127.0.0.1:21340) unresponsive — marked down for 30s
+2026-10-11T04:20:10.312Z heartbeat: node 3 (127.0.0.1:21342) unresponsive — marked down for 30s
+2026-10-11T04:20:10.491Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:11.566Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:12.640Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:13.714Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:14.789Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:15.862Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:16.935Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:18.008Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:19.083Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:20.157Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:21.231Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:21.318Z raft-host: read-sleep us=400072 group=0 want=9 read_idx=9 applied=9 pending=1
+2026-10-11T04:20:21.721Z raft-host: read-sleep us=400064 group=0 want=9 read_idx=9 applied=9 pending=1
+2026-10-11T04:20:22.124Z raft-host: read-sleep us=400036 group=0 want=9 read_idx=9 applied=9 pending=1
+2026-10-11T04:20:22.307Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:22.317Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=9 passes=18 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T04:20:22.533Z raft-host: read-sleep us=400058 group=0 want=9 read_idx=9 applied=9 pending=1
+2026-10-11T04:20:22.533Z raft-host: read-sleep us=400055 group=0 want=9 read_idx=9 applied=9 pending=1
+2026-10-11T04:20:22.535Z raft-host: read-sleep us=400055 group=0 want=9 read_idx=9 applied=9 pending=1
+2026-10-11T04:20:22.535Z raft-host: read-sleep us=400053 group=0 want=9 read_idx=9 applied=9 pending=1
+2026-10-11T04:20:22.536Z raft-host: read-sleep us=400055 group=0 want=9 read_idx=9 applied=9 pending=1
+2026-10-11T04:20:22.536Z raft-host: read-sleep us=400083 group=0 want=9 read_idx=9 applied=9 pending=1
+2026-10-11T04:20:22.537Z raft-host: read-sleep us=400054 group=0 want=9 read_idx=9 applied=9 pending=1
+2026-10-11T04:20:22.537Z raft-host: read-sleep us=400054 group=0 want=9 read_idx=9 applied=9 pending=1
+2026-10-11T04:20:22.939Z raft-host: read-sleep us=400090 group=0 want=9 read_idx=9 applied=9 pending=1
+2026-10-11T04:20:23.342Z raft-host: read-sleep us=400063 group=0 want=9 read_idx=9 applied=9 pending=1
+2026-10-11T04:20:23.381Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:23.745Z raft-host: read-sleep us=392527 group=0 want=9 read_idx=9 applied=9 pending=1
+2026-10-11T04:20:23.794Z raft-host: applied session index=19 kind=3 shard=0 ino=0
+2026-10-11T04:20:23.794Z raft-host: read-sleep us=43713 group=0 want=9 read_idx=9 applied=9 pending=1
+2026-10-11T04:20:23.808Z raft-host: applied session index=20 kind=3 shard=0 ino=0

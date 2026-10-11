@@ -1,0 +1,24 @@
+Stopped efsd for storage /tmp/efs-owner-dccubge1/store (if any)
+Stale daemon identity for PID 3658065; process retained
+Stopped efsd for storage /tmp/efs-owner-dccubge1/store (if any)
+Invalid PID record /tmp/efs-owner-dccubge1/store/log/efsd.pid; no process signaled
+Stopped efsd for storage /tmp/efs-owner-dccubge1/store (if any)
+Invalid PID record /tmp/efs-owner-dccubge1/store/log/efsd.pid; no process signaled
+Stopped efsd for storage /tmp/efs-owner-dccubge1/store (if any)
+Stale daemon identity for PID 3658058; process retained
+Stopped efsd for storage /tmp/efs-owner-dccubge1/store (if any)
+Stale daemon identity for PID 3658059; process retained
+Stopped efsd for storage /tmp/efs-owner-dccubge1/store (if any)
+Stale daemon identity for PID 3658059; process retained
+Stopped efsd for storage /tmp/efs-owner-dccubge1/other (if any)
+Stopping owned efsd PID 3658059 (storage /tmp/efs-owner-dccubge1/store)
+Stopped efsd for storage /tmp/efs-owner-dccubge1/store (if any)
+Stale daemon identity for PID 3658112; process retained
+Stale daemon identity for PID 3658058; process retained
+Stopping owned perf PID 3658112 (perf /tmp/efs-owner-dccubge1/efsd.data)
+Evidence: /tmp/efs-wrapper-start-70q3qjlj
+wrapper real start/stop: invalid unrelated process retained PASS
+wrapper real start/stop: unrelated unrelated process retained PASS
+wrapper real start/stop: dead unrelated process retained PASS
+perf wrapper: unrelated/wrong-output processes retained; owned recorder flushed with SIGINT PASS
+server wrapper: invalid/reused/wrong-storage/stale-start PIDs retained; matching daemon gracefully stopped PASS

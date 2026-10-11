@@ -1,0 +1,15 @@
+{
+  "pid": 4048437,
+  "tids": "4048437,4048438,4048439,4048440",
+  "cmdline": [
+    "python3",
+    "/data1/efs/devel-nuc-20261010/src/tests/measure/nuc_durable_io.py",
+    "/data1/efs/devel-nuc-20261010/w96-data/profile-sata-ring",
+    "/data1/efs/devel-nuc-20261010/allocation-profile/sata-ring/data",
+    "--mode",
+    "ring",
+    "--seconds",
+    "180",
+    ""
+  ]
+}

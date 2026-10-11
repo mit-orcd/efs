@@ -1,0 +1,12 @@
+{
+  "exchange": [
+    {
+      "request_hex": "5f",
+      "successful_reply_hex": "600000000000000000070000000000000027da2325602b0f5e0000000000000000",
+      "delivered_bytes": 0
+    }
+  ],
+  "exit": 1,
+  "stdout": "",
+  "stderr": "Failed to raft-mkfs\n"
+}

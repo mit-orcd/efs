@@ -3,6 +3,21 @@
 [Status index](README.md) · [Decisions](decisions.md) ·
 [Architecture](../how-it-works/architecture.md)
 
+**Current ORCD assignment — Oct 11:** user authorizes source transfer, builds,
+tests and coordinated deployment on ORCD until resolved. Work on `devel-orcd`;
+W95/P4.1 production tiny-payload packing is first, followed by ORCD W109/W97,
+W108, W110 and remaining W99/W42/W106 gates. The fcstor007 `tiny-files` screen
+is the requested benchmark. Preserve current files and original acceptance
+oracles. [Implementation and measured storage checkpoint](orcd-tiny-packing-20261011.md).
+Codec, packed files storage, shared-lifetime planning, typed upload fences and
+a staged persistent minimum-reader barrier are implemented with private gates.
+The lower-layer packing gate is not mounted publication/GC acceptance. Next
+connect typed upload/session admission, same-group durable mapping/receipt
+batches and GETCHUNKS/cold reads; then client coalescing and shared-object GC.
+The live runtime remains `52bc8edb`; do not infer activation from unit gates.
+The bounded query pause was restored to policy mask 3, version 2. The
+older package instructions below are historical context for this assignment.
+
 Reviewed Oct 8, 2026. Historical rollout facts are in the
 [30-round ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md);
 previous handoff text is [archived](../archive/handoff-20261007.md).
@@ -130,9 +145,12 @@ measurement work and decisions. This handoff adds no deployment authorization.
 
 ## Operator review findings
 
-[W78–W80](README.md#source-findings-awaiting-triage) record conditional stale
-PID-file signaling, misleading mkfs name syntax and zero-filled `efs-query`
-statistics. These are source findings with gates, not a new execution order.
+[W78–W80](devel-nuc-closure-20261010.md) close on Oct11 current-code NUC
+operator acceptance: actual stale-PID startup/stop, both mkfs aliases and
+consumed-reply retry, and explicit retired-query refusal without false totals.
+W70's running-quota reporting and W96's isolated allocation/recovery gates also
+close in that report. W97 remains open; neither raw drive controls nor these
+operator gates establish sustained EFS throughput or a hardware ceiling.
 Use the corrected operations guide; query zeros are not GC completion evidence.
 W81 separately records the missing automatic directory pressure trigger; its
 size-based admission/migrator exists and the pressure policy still needs review.

@@ -1,0 +1,4 @@
+PRIVATE_ROOT=/tmp/efs-w95-codec-4dv95w18
+UID=246111 HOST=fcstor006
+small segment geometry: all 2-of-3 recovery, padding, bounds and legacy isolation PASS
+test_erasure: OK

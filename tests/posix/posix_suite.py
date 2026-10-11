@@ -1985,9 +1985,22 @@ def dir_deep_nesting_beyond_64(d):
     # must still work via the client's no-ancestor retry / per-component walk.
     depth = 100
     cur = d
-    for _ in range(depth):
-        cur = os.path.join(cur, "d")
-        os.mkdir(cur)
+    # Build the ancestors through directory handles: repeatedly walking every
+    # preceding component makes setup quadratic and can consume the whole
+    # case budget before the depth-limit assertions run. Keep the final MKDIR
+    # and every leaf operation on the full absolute path beyond the batch cap.
+    fd = os.open(d, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for _ in range(depth - 1):
+            os.mkdir("d", dir_fd=fd)
+            child = os.open("d", os.O_RDONLY | os.O_DIRECTORY, dir_fd=fd)
+            os.close(fd)
+            fd = child
+            cur = os.path.join(cur, "d")
+    finally:
+        os.close(fd)
+    cur = os.path.join(cur, "d")
+    os.mkdir(cur)
     p = os.path.join(cur, "leaf")
     wr(p, b"deep")
     eq(rd(p), b"deep", "read at depth ~%d" % depth)
@@ -4692,14 +4705,17 @@ def _self_test():
         if not os.path.exists(path):
             return []
         alive = []
+        snapshot = _process_snapshot(1.0)
         for tok in open(path).read().split():
             pid = int(tok)
-            try:
-                os.kill(pid, 0)
-            except OSError as e:
-                if e.errno != errno.ESRCH:
+            running = _running_in_group(pid, snapshot)
+            if running is not None:
+                if running:
                     alive.append(pid)
-            else:
+                continue
+            # If ps failed, retain any existing group, even after its
+            # leader exited. A zombie-only group cannot be proved dead here.
+            if _pgid_alive(pid):
                 alive.append(pid)
         return alive
 
@@ -4922,6 +4938,27 @@ def _self_test():
             fails.append("synthetic cleanup did not reap and probe exactly "
                          "the fake groups (reap=%s alive=%s)" %
                          (reaped, alive_checks))
+
+        # Cancellation may return before init collects orphaned zombies.
+        # Keep the oracle about running groups, including live descendants
+        # of a departed leader, rather than kill(pid, 0)'s zombie visibility.
+        oracle_pids = os.path.join(td, "oracle-groups.pids")
+        with open(oracle_pids, "w") as f:
+            f.write("101 102 103 104\n")
+        _ps_hook = lambda timeout: b"101 101 Z\n202 102 S\n203 103 D\n"
+        try:
+            expect(_pids_alive(oracle_pids) == [102, 103],
+                   "group oracle must retain sleeping/blocked descendants and exclude zombies")
+        finally:
+            _ps_hook = None
+        _ps_hook = lambda timeout: None
+        _pgid_alive_hook = lambda pgid: pgid == 104
+        try:
+            expect(_pids_alive(oracle_pids) == [104],
+                   "failed snapshot must conservatively probe the whole group")
+        finally:
+            _ps_hook = None
+            _pgid_alive_hook = None
 
         def _cancel_n(n):
             pidfile = os.path.join(td, "scale-%d.pids" % n)

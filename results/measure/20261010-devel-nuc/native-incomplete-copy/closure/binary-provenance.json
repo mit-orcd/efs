@@ -1,0 +1,22 @@
+{
+  "efsd": {
+    "sha256": "bedecaaff550c3c33d6d4733c2b69e84c2a99252382ad892a6524bb775147a67",
+    "version": "efsd 3df19310-nuc (branch devel-nuc, built 2026-10-11T04:12:28Z on nuc)\n"
+  },
+  "efs-fuse": {
+    "sha256": "612180b3e08da171c61480a561eae62aabacb0914bd9592b4ca5ccbfe2d8462b",
+    "version": "efs-fuse 3df19310-nuc (branch devel-nuc, built 2026-10-11T04:12:28Z on nuc)\n"
+  },
+  "efs-mgmt": {
+    "sha256": "00c0416a1e9b4a87c50b7e574d693e91e71fb1e9dc527ebc8d5140177ff7f358",
+    "version": "efs-mgmt 3df19310-nuc (branch devel-nuc, built 2026-10-11T04:12:28Z on nuc)\n"
+  },
+  "efs-query": {
+    "sha256": "2343b70c5a1a21d2fd0697b788a395311094d87345b82a3c6fa1011fb3140bcd",
+    "version": "efs-query 3df19310-nuc (branch devel-nuc, built 2026-10-11T04:12:28Z on nuc)\n"
+  },
+  "efs-bench": {
+    "sha256": "d1d0e2adc613bc4ec1ff9e5d5b1576446158bf2f07bf2ec976ef1081b43b50a7",
+    "version": "efs-bench 3df19310-nuc (branch devel-nuc, built 2026-10-11T04:12:28Z on nuc)\n"
+  }
+}

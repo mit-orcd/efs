@@ -50,7 +50,7 @@ static int coord_ok(void *user, const struct efs_txid *t, uint32_t shard,
     struct kvs *k = user;
 
     if (k->fail)
-        return EFS_ERR_IO;
+        return k->fail == 2 ? EFS_ERR_BUSY : k->fail == 3 ? EFS_ERR_NOT_PRIMARY : EFS_ERR_IO;
     return efs_txn_decision_get(k->kv, shard, t, dec);
 }
 
@@ -132,6 +132,14 @@ static void test_i9(void)
     n = sizeof(got);
     CHECK(efs_txn_read(kv, key, klen, coord_ok, &ctx, got, &n) == EFS_ERR_IO,
           "I9 never absent");
+    ctx.fail = 2;
+    n = sizeof(got);
+    CHECK(efs_txn_read(kv, key, klen, coord_ok, &ctx, got, &n) == EFS_ERR_BUSY,
+          "fresh quorum pending is retryable, never absence or old bytes");
+    ctx.fail = 3;
+    n = sizeof(got);
+    CHECK(efs_txn_read(kv, key, klen, coord_ok, &ctx, got, &n) == EFS_ERR_NOT_PRIMARY,
+          "foreign coordinator redirects without exposing old bytes");
     efs_kv_mem_free(kv);
 }
 
@@ -697,7 +705,13 @@ static void test_opid_reduce(void)
     CHECK(efs_txn_decide(kv, efs_txn_coordinator(&a, &p), &a, EFS_TXN_COMMIT) ==
               EFS_OK,
           "decide a");
+    CHECK(efs_meta_apply_opid_probe(kv, 1, &q1.id, &got) == 0,
+          "committed receipt remains unmaterialized before resolve");
+    CHECK(efs_txn_key_busy(kv, key, klen) == EFS_ERR_BUSY,
+          "committed receipt absence must wait for its reduction");
     CHECK(efs_txn_resolve(kv, &a, 1, EFS_TXN_COMMIT) == EFS_OK, "resolve a");
+    CHECK(efs_txn_key_busy(kv, key, klen) == EFS_OK,
+          "materialized receipt key is free");
     rc = efs_meta_apply_opid_probe(kv, 1, &q1.id, &got);
     CHECK(rc == 1 && got.rc == EFS_OK && got.ino == 4242, "seq 1 recorded");
     CHECK(efs_meta_apply_opid_probe(kv, 1, &q2.id, &got) == 0, "seq 2 new");

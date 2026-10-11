@@ -1,8 +1,30 @@
 # Project status — current work and index
 
+Production tiny-file packing is the first ORCD priority on `devel-orcd`: see
+[W95/P4.1 plan and allocation baseline](orcd-tiny-packing-20261011.md). The
+408× calculation is for 512-byte payloads in separate full-sized fragments;
+production packing and measured savings remain open.
+[W108 owner-name rendering](w108-owner-name-display-20261011.md) is retained
+in the ORCD queue after the packing priority.
+
 [Architecture](../how-it-works/architecture.md) · [Current handoff](in-flight.md) ·
 [Decisions](decisions.md) · [Work-item details](../backlog/work-items.md) ·
 [Operations](../operations/operations.md) · [Archive](../archive/README.md)
+
+## NUC closure session — October 10–11
+
+[Current NUC acceptance](devel-nuc-closure-20261010.md) closes W70, W78, W79
+and W80 for their named operator-correctness scopes, plus W96's isolated
+allocation and software recovery acceptance. Full native, actual stale
+PID startup/stop, both mkfs aliases' consumed-reply recovery and explicit
+retired-query outcomes pass. W96's sixteen drive comparisons, exact retained
+replay, ASan/UBSan and Valgrind pass. Both full live modes pass POSIX214/214,
+peer66/66, cold/fault/GC and actual follower WAL-fsync refusal recovery.
+W97's clean allocation, separate XFS profiles and written-ring controls all
+finish: NVMe latency rises even on written extents; W97 remains open. The
+three-hour session restores four regular daemons and both mounts, verifies
+installed/live hashes and16 existing payload samples. New-binary installation
+remains approval-blocked; the original installed build is retained.
 
 ## Governing node-count contract — D36
 
@@ -60,7 +82,7 @@ in the larger matched read check. Both NUC mounts are restored on the repaired
 build with default settings. Tested tuning remains opt-in; W53/W94/W97 remain separate.
 
 
-[Oct 10 W93 checkpoint cadence](w93-checkpoint-cadence-20261010.md) records
+[Oct 10 W93 checkpoint cadence](../archive/status-20261011/w93-checkpoint-cadence-20261010.md) records
 all-branch integration, failed-marker immediate retry, bounded checkpoint
 coalescing, original/repeated NUC functional gates and private retained-marker
 crash replay. The 10 ms default remains; performance and remaining recovery
@@ -69,8 +91,8 @@ acceptance are recorded separately from implementation.
 
 [W93–W96: NUC profiling evidence and next experiments](tiny-file-performance-plan-20261008.md)
 register broader Raft group commit, atomic CREATE/open lease, tiny-file data
-persistence/packing, and KV WAL preallocation. W93 is now closed by the final acceptance above; W94–W96 retain their
-separate remaining implementation/acceptance obligations. W95 refines existing P4.1,
+persistence/packing, and KV WAL preallocation. W93 is closed by its final acceptance, and W96 closes after the Oct11 isolated
+NUC gate above. W94/W95 retain separate implementation/acceptance obligations. W95 refines existing P4.1,
 so the earlier grouped count below is retained as a dated baseline rather than
 recomputed by blindly adding four. W90–W92 keep their existing scopes.
 
@@ -85,12 +107,12 @@ quotas and large-scale acceptance remain open.
 [W92 tiny-file profiling](query-cache-tiny-profile-20261009.md) records deployed
 bounded read windows and immutable-file persistence reuse: controlled unchanged
 refresh is 2.07× faster; the mixed live creation-rate drop remains unisolated.
-[W92 three additional tiny-file rounds](query-cache-three-rounds-20261009.md)
+[W92 three additional tiny-file rounds](../archive/status-20261011/query-cache-three-rounds-20261009.md)
 records all-node profiles, exact-match lookup, bounded combined-record writes
 and one checked raw/index persistence barrier; controlled syscall and cold
 correctness evidence stays separate from live throughput observations.
 
-[W92 merged-source suites and three further rounds](query-cache-merged-three-rounds-20261009.md)
+[W92 merged-source suites and three further rounds](../archive/status-20261011/query-cache-merged-three-rounds-20261009.md)
 records native, core/concurrent/extras and cold persistence gates, nine all-node
 CPU captures and three logical cache fixes. Frozen-namespace preads fall 78.0%,
 pwrites 23.6% and median process CPU 29.1%, preserving fsync counts; fixed memory
@@ -98,7 +120,7 @@ increases within the tested budget. Live throughput and narrower NFS evidence
 are qualified separately. Runtime `a8a15a14` is restored with ordinary `.efs`
 mount opt-in disabled; eight retained trees pass cold query/payload checks.
 
-[W92 previous integration and three further profiles](query-cache-next-three-rounds-20261010.md)
+[W92 previous integration and three further profiles](../archive/status-20261011/query-cache-next-three-rounds-20261010.md)
 records the captured branch boundary, parent-rollup coalescing and constant-time
 cache descriptor hits, with bounded memory and persistence regressions. Controlled
 measurements show 39.1% fewer preads, 34.9% fewer pwrites and 15.0% lower median
@@ -330,9 +352,9 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | scratch-expiry | **W90** · scratch-file expiry metadata and safe lifecycle | feature | design accepted D33; opt-in fixed deadlines and safe lifecycle; implementation/gates open | [work item](../backlog/work-items.md#w90) · [design](scratch-expiry-interface.md) |
 | virtual-commands | **W91** · directory-local virtual `.efs/` command interface | usability feature | design accepted D34; `.efs/` commands and bounded query paths; implementation/compatibility gates remain | [work item](../backlog/work-items.md#w91) · [design](scratch-expiry-interface.md) |
 | tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | partial — independent indexed packing, publication/GC fault and 24-sample AMD churn gates pass; P4.1 production-format and migration decision remain | [work item](../backlog/work-items.md#w95) |
-| tiny-kv | **W96** · bounded KV WAL preallocation | performance experiment | partial — recovery/reservation/fault and final guard cold gates pass; isolated NUC acceptance owed | [work item](../backlog/work-items.md#w96) |
+| tiny-kv | **W96** · bounded KV WAL preallocation | performance experiment | Closed Oct11: isolated SATA/NVMe repeated matrix, exact replay/reset/reservation, full native/POSIX/peer/fault/cold and WAL sanitizer gates pass; conditional benefit and SATA tails retained | [closure](devel-nuc-closure-20261010.md) |
 | decisions | **D28** client-death loss policy · **D29** durable publication receipts · **D30** bounded admission/pacing | accepted design | accepted Oct 8: salvage deferred; D29/W88 implementation first, then D30/W23/W89; implementation and acceptance remain open | [contracts and gates](decisions.md#d28d30--accepted-oct-8-2026) |
-| op1 | **W70** · shrink-quota falsely reports background migration | operator observability bug | truthful running-quota reporting implemented; NUC accepted/refused shrink and unchanged-byte gates pass; no migration or persistence claim | [work item](../backlog/work-items.md#w70) |
+| op1 | **W70** · shrink-quota falsely reports background migration | operator observability bug | Closed Oct11: current NUC direct/buffered × one/two-root accepted/refused reductions, truthful running quota and exact retained bytes pass; no migration/persistence claim | [closure](devel-nuc-closure-20261010.md) |
 
 ### Source findings awaiting triage
 
@@ -348,9 +370,9 @@ positions do not assign an execution order or override the active handoff.
 | spec5 | **W75** · fragment integrity trust / missing checksum fallback | integrity correctness | missing/corrupt evidence fails closed; captured metadata digest and PUT validation gates pass on NUC; identity-bound format remains open | [evidence and gate](../backlog/work-items.md#w75) |
 | spec6 | **W76** · opid table exhaustion sends unprotected namespace retries | conditional correctness | Closed: bounded identity admission refuses saturation safely; Oct9 reserves receipt capacity with16 unacknowledged positions (512 tracker slots); all four lost-reply mutations replay across leader death/restart with one effect | [evidence and gate](../backlog/work-items.md#w76) |
 | spec7 | **W77** · atomic multi-chunk public publication/observation | integration gap | per-group REPORT/per-chunk publication; request-wide decision/read-validation gate unestablished | [evidence and gate](../backlog/work-items.md#w77) |
-| op2 | **W78** · server wrapper trusts PID-file process identity | conditional operator correctness | identity-checked pidfd daemon/recorder retirement implemented; NUC ownership fixtures pass; daemon shutdown remains W65 | [evidence and gate](../backlog/work-items.md#w78) |
-| op3 | **W79** · mkfs help/name argument disagrees with single-export handler | operator observability | legacy label explicitly reported as ignored; extra arguments rejected; NUC repeated mkfs preserves salt/namespace | [evidence and gate](../backlog/work-items.md#w79) |
-| op4 | **W80** · efs-query reports retired zero-filled statistics as totals | operator observability | unsupported status and CLI nonzero exit replace invented zero totals; NUC RPC/CLI gates pass; actual totals remain unimplemented | [evidence and gate](../backlog/work-items.md#w80) |
+| op2 | **W78** · server wrapper trusts PID-file process identity | conditional operator correctness | Closed Oct11: actual NUC startup/stop retains unrelated processes; absent/dead/invalid/wrong-storage/stale-start and recorder ownership gates pass; shutdown remains W65 | [closure](devel-nuc-closure-20261010.md) |
+| op3 | **W79** · mkfs help/name argument disagrees with single-export handler | operator observability | Closed Oct11: aliases/help/argument refusals, ignored label, consumed successful replies and explicit retry preserve namespace/salt in both NUC I/O modes | [closure](devel-nuc-closure-20261010.md) |
+| op4 | **W80** · efs-query reports retired zero-filled statistics as totals | operator observability | Closed Oct11 for retired endpoint: nonempty namespace normal/raw, help, legacy and malformed replies pass; mounted stats/scale remain W92 | [closure](devel-nuc-closure-20261010.md) |
 | scale1 | **W81** · automatic directory spreading lacks a pressure trigger | scalability feature gap | size trigger/migrator exist; pressure policy remains unspecified and unwired | [evidence and gate](../backlog/work-items.md#w81) |
 | proto1 | **W82** · stale completed ReadIndex authority survives leader isolation | read correctness | Closed: stale LOOKUP/GETATTR/session/publication/transaction views and configuration partition gates pass; coordinator callback refuses untrusted absence | [evidence and gate](../backlog/work-items.md#w82) |
 | proto2 | **W83** · transaction decision records lack safe retirement | metadata lifecycle gap | resolve/drop remove participant records; no decision acknowledgement/GC path found | [evidence and gate](../backlog/work-items.md#w83) |
@@ -434,13 +456,15 @@ Spark performance measurement still owed. Grouped open counts are now
 
 ## Intel follow-ups — W100–W106 (indexed Oct 11, 2026)
 
+Current [devel-intel acceptance ledger](intel-deployment-acceptance-20261011.md) retains failures alongside reruns. [Captured evidence](../../results/measure/20261011-intel-devel-intel/acceptance-in-progress.json) remains explicitly in progress until the complete host/mode matrix terminates.
+
 This index adds traceable IDs to the Intel acceptance follow-ups; it does not change the existing queue order or accepted design decisions. Existing sustained tiny-file performance remains W97, protection/repair W74/W66, durability W71/W73 and capacity W99.
 
 | ID | Task | Recorded state |
 | --- | --- | --- |
-| [W100](../backlog/work-items.md#w100) | Intel2 repeated-write POSIX timeout | Correctness/performance investigation; open. |
+| [W100](../backlog/work-items.md#w100) | Intel concurrent POSIX timeouts and mixed-workload EIO | Correctness/performance investigation; open. |
 | [W101](../backlog/work-items.md#w101) | Complete and verify the Intel two-million-file workload | Operational acceptance; in progress. |
-| [W102](../backlog/work-items.md#w102) | Complete Intel2 private peer and GC acceptance | Validation follow-up; blocked by W100 in the full harness. |
+| [W102](../backlog/work-items.md#w102) | Complete Intel2 private peer and GC acceptance | Validation follow-up; in progress, aggregate acceptance remains open. |
 | [W103](../backlog/work-items.md#w103) | Investigate intermittent Intel persistence and stats timeouts | Liveness/performance investigation; open. |
 | [W104](../backlog/work-items.md#w104) | Decide and gate writable shared mmap support | Feature scope/design follow-up; deferred, currently unsupported by specification. |
 | [W105](../backlog/work-items.md#w105) | Stable NFS file handles across EFS client restarts | Gateway acceptance/correctness investigation; open. |

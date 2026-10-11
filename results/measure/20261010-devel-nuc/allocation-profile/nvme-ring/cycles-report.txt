@@ -1,0 +1,269 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 165  of event 'cycles:P'
+# Event count (approx.): 1578688146
+#
+# Overhead  Command  Shared Object         Symbol                                   
+# ........  .......  ....................  .........................................
+#
+    11.70%  python3  libc.so.6             [.] __memmove_evex_unaligned_erms
+            |
+            ---__memmove_evex_unaligned_erms
+               |          
+               |--9.57%--0x7f4337daefa0
+               |          
+                --2.13%--_PyEval_EvalFrameDefault
+
+     7.40%  python3  libpython3.12.so.1.0  [.] _PyEval_EvalFrameDefault
+            |
+            ---_PyEval_EvalFrameDefault
+               |          
+               |--2.86%--0x7f4337e1f9b0
+               |          0x562dfd9df820
+               |          0x562dfd938980
+               |          
+               |--2.37%--0x562dfd9df820
+               |          0x562dfd938980
+               |          
+                --2.16%--0x562dfd938980
+
+     6.60%  python3  [kernel.kallsyms]     [k] copy_page_from_iter_atomic
+            |
+            ---copy_page_from_iter_atomic
+               iomap_write_iter
+               iomap_file_buffered_write
+               xfs_file_buffered_write
+               vfs_write
+               __x64_sys_pwrite64
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __libc_pwrite
+
+     3.79%  python3  [kernel.kallsyms]     [k] kmem_cache_alloc_noprof
+            |
+            ---kmem_cache_alloc_noprof
+               |          
+                --3.47%--mempool_alloc_noprof
+                          bio_alloc_bioset
+                          |          
+                          |--1.98%--iomap_add_to_ioend
+                          |          xfs_writeback_range
+                          |          iomap_writeback_folio
+                          |          iomap_writepages
+                          |          xfs_vm_writepages
+                          |          do_writepages
+                          |          filemap_fdatawrite_wbc
+                          |          __filemap_fdatawrite_range
+                          |          file_write_and_wait_range
+                          |          xfs_file_fsync
+                          |          do_fsync
+                          |          __x64_sys_fdatasync
+                          |          do_syscall_64
+                          |          entry_SYSCALL_64_after_hwframe
+                          |          fdatasync
+                          |          
+                           --1.49%--bio_alloc_clone
+                                     alloc_io
+                                     dm_split_and_process_bio
+                                     dm_submit_bio
+                                     __submit_bio
+                                     __submit_bio_noacct
+                                     submit_bio_wait
+                                     blkdev_issue_flush
+                                     xfs_file_fsync
+                                     do_fsync
+                                     __x64_sys_fdatasync
+                                     do_syscall_64
+                                     entry_SYSCALL_64_after_hwframe
+                                     fdatasync
+
+     2.68%  python3  libpython3.12.so.1.0  [.] take_gil
+            |
+            ---take_gil
+               |          
+                --1.85%--0x100000001
+
+     2.57%  python3  libc.so.6             [.] malloc
+            |
+            ---malloc
+               |          
+                --1.72%--0
+
+     2.28%  python3  [kernel.kallsyms]     [k] __mod_memcg_lruvec_state
+            |
+            ---__mod_memcg_lruvec_state
+               __lruvec_stat_mod_folio
+               |          
+                --1.86%--folio_account_dirtied
+                          __folio_mark_dirty
+                          filemap_dirty_folio
+                          iomap_write_end
+                          iomap_write_iter
+                          iomap_file_buffered_write
+                          xfs_file_buffered_write
+                          vfs_write
+                          __x64_sys_pwrite64
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __libc_pwrite
+
+     2.16%  python3  [kernel.kallsyms]     [k] bio_associate_blkg_from_css
+            |
+            ---bio_associate_blkg_from_css
+               bio_associate_blkg
+               bio_init
+               blkdev_issue_flush
+               xfs_file_fsync
+               do_fsync
+               __x64_sys_fdatasync
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               fdatasync
+
+     1.95%  python3  [kernel.kallsyms]     [k] xas_find_marked
+            |
+            ---xas_find_marked
+               tag_pages_for_writeback
+               writeback_iter
+               iomap_writepages
+               xfs_vm_writepages
+               do_writepages
+               filemap_fdatawrite_wbc
+               __filemap_fdatawrite_range
+               file_write_and_wait_range
+               xfs_file_fsync
+               do_fsync
+               __x64_sys_fdatasync
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               fdatasync
+
+     1.68%  python3  [kernel.kallsyms]     [k] __srcu_read_lock
+            |
+            ---__srcu_read_lock
+               dm_submit_bio
+               __submit_bio
+               __submit_bio_noacct
+               submit_bio_wait
+               blkdev_issue_flush
+               xfs_file_fsync
+               do_fsync
+               __x64_sys_fdatasync
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               fdatasync
+
+     1.51%  python3  [kernel.kallsyms]     [k] vfs_write
+            |
+            ---vfs_write
+               __x64_sys_pwrite64
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __libc_pwrite
+
+     1.49%  python3  [kernel.kallsyms]     [k] sched_balance_update_blocked_averages
+            |
+            ---sched_balance_update_blocked_averages
+               sched_balance_newidle
+               pick_next_task_fair
+               __pick_next_task
+               __schedule
+               schedule
+
+     1.47%  python3  libc.so.6             [.] __GI___pthread_enable_asynccancel
+            |
+            ---__GI___pthread_enable_asynccancel
+
+     1.39%  python3  [xfs]                 [k] xfs_file_fsync
+            |
+            ---xfs_file_fsync
+               do_fsync
+               __x64_sys_fdatasync
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               fdatasync
+
+     1.19%  python3  [kernel.kallsyms]     [k] update_curr
+            |
+            ---update_curr
+               dequeue_entity
+               dequeue_entities
+               dequeue_task_fair
+               try_to_block_task.constprop.0.isra.0
+               __schedule
+               schedule
+               futex_do_wait
+               __futex_wait
+               futex_wait
+               do_futex
+               __x64_sys_futex
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __futex_abstimed_wait_common
+
+     1.18%  python3  [kernel.kallsyms]     [k] folio_clear_dirty_for_io
+            |
+            ---folio_clear_dirty_for_io
+               writeback_get_folio
+               writeback_iter
+               iomap_writepages
+               xfs_vm_writepages
+               do_writepages
+               filemap_fdatawrite_wbc
+               __filemap_fdatawrite_range
+               file_write_and_wait_range
+               xfs_file_fsync
+               do_fsync
+               __x64_sys_fdatasync
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               fdatasync
+
+     1.14%  python3  [kernel.kallsyms]     [k] filemap_dirty_folio
+            |
+            ---filemap_dirty_folio
+               iomap_write_end
+               iomap_write_iter
+               iomap_file_buffered_write
+               xfs_file_buffered_write
+               vfs_write
+               __x64_sys_pwrite64
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __libc_pwrite
+
+     1.10%  python3  [kernel.kallsyms]     [k] update_io_ticks
+            |
+            ---update_io_ticks
+               blk_account_io_start
+               blk_mq_submit_bio
+               __submit_bio
+               __submit_bio_noacct
+               iomap_ioend_writeback_submit
+               iomap_writepages
+               xfs_vm_writepages
+               do_writepages
+               filemap_fdatawrite_wbc
+               __filemap_fdatawrite_range
+               file_write_and_wait_range
+               xfs_file_fsync
+               do_fsync
+               __x64_sys_fdatasync
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               fdatasync
+
+     1.05%  python3  [kernel.kallsyms]     [k] perf_ctx_disable
+     1.05%  python3  libpython3.12.so.1.0  [.] long_dealloc
+            |
+            ---long_dealloc
+               0
+
+
+
+#
+# (Tip: To see call chains by final symbol taking CPU time (bottom up) use perf report -G)
+#

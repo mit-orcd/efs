@@ -1,0 +1,6 @@
+212758,,xfs:xfs_log_force,4253836131,100.00,,
+0,,xfs:xlog_iclog_force,4253836131,100.00,,
+79762,,xfs:xlog_iclog_sync,4253838539,100.00,,
+106377,,syscalls:sys_enter_fdatasync,4253847141,100.00,,
+106350,,syscalls:sys_enter_pwrite64,4253851453,100.00,,
+27,,syscalls:sys_enter_ftruncate,4253856235,100.00,,

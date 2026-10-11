@@ -33,7 +33,8 @@ Both `ls` and `find` accept:
 
 | Option | Behavior |
 | --- | --- |
-| `-l`, `--long` | Permissions, numeric `uid:gid`, logical size, modification date, path |
+| `-l`, `--long` | Permissions, local owner/group names with numeric fallback, logical size, modification date, path |
+| `-n`, `--numeric-uid-gid` | Numeric `uid:gid`; implies long listing |
 | `--human-readable` | Long-list sizes in B, KiB, MiB, GiB, etc. |
 | `--sort name\|mtime\|size` | Default raw-byte name/path order; newest or largest first for the other keys |
 | `-r`, `--reverse` | Reverse the chosen order, including path tie-breaks |
@@ -205,3 +206,8 @@ opens (90 seconds on Xorinox). Keep the normal gateway mount opted out after
 testing by omitting `EFS_COMMANDS=1`, while retaining `EFS_FUSE_EXPORT=1`.
 NFS credential mapping remains the export administrator's responsibility; a
 client mapped to root does not prove per-user ACL isolation.
+
+Long listings resolve names using the executing host's account database (NSS).
+User and group lookups are independent. An invocation caches up to 2,048
+recent identity lookups, including unknown IDs; evicted entries may be looked
+up again. JSON always retains numeric IDs.

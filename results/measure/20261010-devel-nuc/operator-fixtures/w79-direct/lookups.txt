@@ -1,0 +1,5 @@
+raft-lookup status=5 primary=1 parent=1 name=before-rename ino=0 mode=00 nlink=0
+
+raft-lookup status=5 primary=1 parent=1 name=before-rename ino=0 mode=00 nlink=0
+
+raft-lookup status=5 primary=1 parent=1 name=before-rename ino=0 mode=00 nlink=0

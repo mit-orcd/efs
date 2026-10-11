@@ -1,0 +1,20 @@
+{
+  "authoritative_name": "before-rename",
+  "queries": [
+    {
+      "flags": [],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "Logical query statistics are unavailable: server query integration is not implemented.\n"
+    },
+    {
+      "flags": [
+        "--raw"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "Logical query statistics are unavailable: server query integration is not implemented.\n"
+    }
+  ],
+  "help": "efs-query - Query the legacy server statistics endpoint\n\nUsage:\n  efs-query [--raw] NODE:PORT\n\nOptions:\n  --raw                 Legacy compatibility flag\n  -h, --help            Show this help\n  --version             Show the program version\n\nExamples:\n  efs-query 127.0.0.1:17432\n\nNotes:\n  The legacy QUERY_STATS endpoint is retired on current servers.\n  Use a mounted directory's .efs/stats command for server-owned snapshots.\n"
+}
