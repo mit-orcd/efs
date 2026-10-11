@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Private direct/TCP W88 actual-fragment replay and cold FUSE byte gate.
+"""Private TCP W88 actual-fragment replay and cold FUSE byte gate.
 Requires a clean, empty, host-approved borrowed mount. Never changes installed stores.
 """
 import argparse
@@ -16,6 +16,7 @@ source=Path(__file__).resolve().parents[2]
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('work',type=Path)
 p.add_argument('--mount',type=Path,required=True)
+p.add_argument('--mode',choices=('direct','buffered'),default='direct',help='storage I/O mode; default preserves the original direct fixture')
 p.add_argument('--cross-group',action='store_true',help='bootstrap and publish on a lane in the other metadata group')
 a=p.parse_args();work=a.work.resolve();work.mkdir(parents=True,exist_ok=False)
 mount=a.mount.resolve();assert mount.is_dir() and not os.path.ismount(mount) and not any(mount.iterdir())
@@ -36,7 +37,7 @@ probe=work/'probe'
 subprocess.run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),
                 str(source/'tests/live/publication_replay.c'),str(source/'libefs.a'),
                 '-lpthread','-lm','-ldl','-libverbs','-o',str(probe)],check=True)
-(work/'manifest.json').write_text(json.dumps({'mode':'direct','transport':'tcp','cross_group':a.cross_group,'source':str(source),'probe_source_sha256':hashlib.sha256((source/'tests/live/publication_replay.c').read_bytes()).hexdigest(),'binary_sha256':{name:hashlib.sha256((source/name).read_bytes()).hexdigest() for name in ['efsd','efs-fuse','efs-mgmt','libefs.a']}},indent=2))
+(work/'manifest.json').write_text(json.dumps({'mode':a.mode,'transport':'tcp','cross_group':a.cross_group,'source':str(source),'probe_source_sha256':hashlib.sha256((source/'tests/live/publication_replay.c').read_bytes()).hexdigest(),'binary_sha256':{name:hashlib.sha256((source/name).read_bytes()).hexdigest() for name in ['efsd','efs-fuse','efs-mgmt','libefs.a']}},indent=2))
 procs=[];logs=[];fuse=None
 def cold_bytes(label):
     global fuse
@@ -63,7 +64,8 @@ def start(suffix):
     for n in range(4):
         f=(work/f'n{n+1}{suffix}.log').open('w');logs.append(f)
         cmd=[str(source/'efsd'),'--node-id',str(n+1),'--addr','127.0.0.1','--port',str(base+n),
-             '--storage',str(work/f'n{n+1}'),'--quota','1G','--writers','0','--direct-io']
+             '--storage',str(work/f'n{n+1}'),'--quota','1G','--writers','0']
+        if a.mode=='direct':cmd.append('--direct-io')
         if n:cmd+=['--join',f'127.0.0.1:{base}']
         procs.append(subprocess.Popen(cmd,env=env,stdout=f,stderr=f))
         wait(lambda:'listening' in (work/f'n{n+1}{suffix}.log').read_text())
