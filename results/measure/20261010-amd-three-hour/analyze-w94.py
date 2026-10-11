@@ -8,6 +8,9 @@ p.add_argument('--partial',action='store_true')
 a=p.parse_args();cases=[];missing=[]
 source_controls=json.loads((a.root/'source-controls.json').read_text())
 assert source_controls['matching_server_rpc'] is True
+full=source_controls['production_source_hashes']
+assert full['separate'].keys()==full['combined'].keys()
+assert [path for path in full['separate'] if full['separate'][path]!=full['combined'][path]]==['src/client/efs_fuse.c']
 for path in ('src/server/raft_host.c','src/client/inode_rpc.c'):
     assert source_controls['source_hashes']['separate'][path]==source_controls['source_hashes']['combined'][path]
 for variant,digest in source_controls['expected_fuse_hashes'].items():

@@ -52,7 +52,8 @@ and immutable identities for all 64 control files; cold reads add the same
 OPEN/CLOSE pair to both paths. Text logs omit successful deferred edges.
 
 `source-proof.py` verifies the frozen separate/combined FUSE revisions against
-committed hashes and identical server/RPC sources; it preserves the complete
+committed hashes and identical production C/header sources outside the FUSE
+adoption implementation; it preserves the complete
 adoption diff.
 
 `analyze-w94.py LOCAL_AB_EVIDENCE [--partial]` verifies case markers, payload,
@@ -106,3 +107,7 @@ after an unknown reply, preserves the original CREATE FileID, and
 allocates pending-only cleanup before retiring the known negative body. Its
 live invalid-FileID and server-batch tests remain queued. A/B binaries stay
 frozen; performance results describe the earlier successful-path candidate.
+
+`final-native-run.sh` waits for successful fault lifecycle gates and mount
+restoration, copies the private source, cleans it, and rebuilds/runs the full
+native suite with `EFS_FAULTS=0`. It does not deploy that build or borrow mounts.
