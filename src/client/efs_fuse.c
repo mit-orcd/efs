@@ -299,7 +299,7 @@ static uint32_t features_ttl_ms(void)
 
 /* Query each seed node for the export's current feature mask. Returns 1 and
  * sets *out on a definitive reply, 0 if no node answered. */
-static int features_poll(uint32_t *out)
+static int features_poll_wire(uint32_t *out)
 {
     char name[EFS_MAX_NAME];
     pthread_mutex_lock(&g_client.lock);
@@ -340,6 +340,20 @@ static int features_poll(uint32_t *out)
         }
     }
     return 0;
+}
+
+/* Feature discovery is advisory; the query RPC still checks durable policy.
+ * A slow seed must not spend a socket's 30-second timeout just to learn an
+ * optional capability. Preserve the caller's tighter budget and restore it. */
+static int features_poll(uint32_t *out)
+{
+    uint64_t previous=efs_client_rpc_deadline_ms();
+    uint64_t end=stats_now_ms()+1000;
+    if (previous && previous<end) end=previous;
+    efs_client_rpc_set_deadline_ms(end);
+    int ok=features_poll_wire(out);
+    efs_client_rpc_set_deadline_ms(previous);
+    return ok;
 }
 
 /* Current feature mask; refreshed over the wire at most once per TTL. */
