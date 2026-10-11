@@ -213,8 +213,9 @@ subsequently closes through the final recovery and sustained acceptance above.
 records reproduced unpaced ENOSPC, an implemented opt-in transient data-pressure
 candidate, full normal/fault native passes, an ENOSPC control with cold recovery,
 and no-refusal 180-second direct/buffered cold/physical passes; ten-minute
-unpaced fairness/recovery gates are running, with functional compatibility
-queued behind their strict verdict checks.
+unpaced fairness/recovery gates pass (no refusals, 58.09/53.98-s drain and
+post-pressure cold writes); full admission-enabled 216/67 functional gates pass,
+with retained service deployment/audit next.
 
 [W94/W97 AMD sustained mixed-load follow-up](amd-sustained-20261011.md) retains
 an unpaced private-quota failure, successful quiescent GC progress and an

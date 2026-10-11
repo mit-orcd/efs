@@ -1,0 +1,8 @@
+pending_uuid=d7de218a11917cff072344ecf95cf2b8 ino=6001 name=pending shard=1905 hashed=0
+pending CREATE epoch7: same inode on retry, exact adoption/CLOSE and replay cannot reacquire pending ownership PASS ino=6001
+pending_uuid=c73cd5cd8ebc2b3d7d270fbebd1ae52f ino=2002 name=pending1 shard=2002 hashed=1
+pending CREATE epoch7: same inode on retry, exact adoption/CLOSE and replay cannot reacquire pending ownership PASS ino=2002
+pending_uuid=a12168d26eadf8d0632f62ea91e3701e ino=14193 name=pending shard=1905 hashed=0 combined_seq=11 known=1
+pending CREATE epoch7: same inode on retry, exact adoption/CLOSE and replay cannot reacquire pending ownership PASS ino=14193
+pending_uuid=e338eec846af41e4b85f0057306013bb ino=6098 name=pending1 shard=2002 hashed=1 combined_seq=11 known=1
+pending CREATE epoch7: same inode on retry, exact adoption/CLOSE and replay cannot reacquire pending ownership PASS ino=6098

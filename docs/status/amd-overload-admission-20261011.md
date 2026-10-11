@@ -100,3 +100,34 @@ These observed rates are not matched throughput/efficiency claims.
 Full functional compatibility with admission enabled is queued only after both
 long cells pass the no-refusal, last-period worker progress, cold/physical and
 post-pressure cold-write checks.
+
+## Ten-minute unpaced gates passed
+
+| Mode, admission on | Successful tiny closes | Refused I/O | Physical drain | Fresh post-pressure cold write |
+|---|---:|---:|---:|---|
+| Direct | 16,320 | 0 | 58.09 s | Passed |
+| Buffered | 16,384 | 0 | 53.98 s | Passed |
+
+Both requests run for 600 seconds; final generation settlement extends wall
+time to 618.05/616.99 seconds. Each cold oracle checks 512 retained tiny files
+and 64 MiB of acknowledged large-file fsync prefixes. A subsequent fresh
+32-KiB acknowledged write survives another cold restart, then fully reclaims.
+All eight tiny workers and four large writers make progress over the final
+observed interval, about 450→570 seconds: each tiny worker completes at least
+335/333 closes in direct/buffered, and each large writer advances at least
+1,804/1,912 fsynced 1-MiB writes. This is observed fairness for this workload,
+not a starvation-free scheduling proof for arbitrary workloads.
+
+Peak sampled node charge is 3,865,444,352/3,865,772,032 bytes, approximately
+90% of the 4-GiB quota; no sample exceeds hard quota. These are 30-second
+samples, not a universal instantaneous physical-allocation bound. Sampled
+four-daemon/FUSE CPU is 1.07/1.13 cores and peak aggregate RSS 596/586 MiB.
+Full-window tiny closes are 26.62/26.77 per second under unpaced large writes.
+Admission controls offered work; these independent cases do not establish a
+general throughput improvement.
+
+The gated full direct functional suite passes with admission on: 216/216 POSIX,
+67/67 two-client, zero skips/failures, plus guarded recovery, offline-member
+retention, exact cold bytes and physical cleanup. Retained normal service
+deployment is now authorized by those completed gates;
+W94/W97 remain open globally for the integration and NUC persistence gates.

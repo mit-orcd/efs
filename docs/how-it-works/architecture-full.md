@@ -1688,8 +1688,9 @@ subsequently closes through the final recovery and sustained acceptance above.
 records reproduced unpaced ENOSPC, an implemented opt-in transient data-pressure
 candidate, full normal/fault native passes, an ENOSPC control with cold recovery,
 and no-refusal 180-second direct/buffered cold/physical passes; ten-minute
-unpaced fairness/recovery gates are running, with functional compatibility
-queued behind their strict verdict checks.
+unpaced fairness/recovery gates pass (no refusals, 58.09/53.98-s drain and
+post-pressure cold writes); full admission-enabled 216/67 functional gates pass,
+with retained service deployment/audit next.
 
 [W94/W97 AMD sustained mixed-load follow-up](../status/amd-sustained-20261011.md) retains
 an unpaced private-quota failure, successful quiescent GC progress and an
@@ -6818,8 +6819,9 @@ does not resolve the unpaced quota/admission finding or historical NUC cause.
 ENOSPC. An opt-in data-quota/actual-GC-progress BUSY candidate passes full
 normal/fault native and both 180-second unpaced cold/physical gates without
 refusals. The admission-off control reproduces ENOSPC but now passes an
-acknowledged-byte cold recovery oracle. Ten-minute fairness/recovery
-gates are running; no W97 closure or W99 capacity-domain policy is claimed.
+acknowledged-byte cold recovery oracle. Both ten-minute unpaced fairness/recovery
+gates pass without refusals, with 58.09/53.98-s physical drain and post-pressure
+cold writes; full admission-enabled 216/67 functional compatibility passes; no W97 closure or W99 capacity-domain policy is claimed.
 [Indexed follow-up](../status/amd-overload-admission-20261011.md).
 
 **Oct11 NUC isolated follow-up:** two eight-minute growing-file repeats outside

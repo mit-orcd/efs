@@ -28,7 +28,8 @@
         4131848192,
         3446407168
       ],
-      "last_approximately_150s_worker_progress": null,
+      "last_observed_worker_progress": null,
+      "worker_progress_interval_s": null,
       "evidence": "evidence/live/control-direct/gc-direct-0s7bqvdq/tiny-sustained.json"
     },
     {
@@ -54,7 +55,8 @@
         3865444352,
         3865444352
       ],
-      "last_approximately_150s_worker_progress": null,
+      "last_observed_worker_progress": null,
+      "worker_progress_interval_s": null,
       "evidence": "evidence/live/admission-direct/gc-direct-udltqs2g/tiny-sustained.json"
     },
     {
@@ -80,8 +82,103 @@
         3865378816,
         3023634432
       ],
-      "last_approximately_150s_worker_progress": null,
+      "last_observed_worker_progress": null,
+      "worker_progress_interval_s": null,
       "evidence": "evidence/live/admission-buffered/gc-buffered-tie8qrcv/tiny-sustained.json"
+    },
+    {
+      "phase": "long",
+      "case": "admission-direct",
+      "oracle_exit": 0,
+      "load_pass": true,
+      "cold_and_physical_pass": true,
+      "seconds_requested": 600,
+      "wall_s": 618.0495587830083,
+      "successful_tiny_closes": 16320,
+      "overload_errnos": [],
+      "cold_tiny": 512,
+      "cold_large_bytes": 67108864,
+      "gc_drain_s": 58.09433906999766,
+      "post_pressure_cold_write": true,
+      "full_window_closes_s": 26.621666666666666,
+      "sampled_cpu_cores": 1.0708151027072685,
+      "peak_sampled_rss_kib": 609916,
+      "peak_sampled_node_charged_bytes": [
+        3865444352,
+        3172466688,
+        3865444352,
+        3175874560
+      ],
+      "last_observed_worker_progress": {
+        "tiny_closed_by_worker": [
+          355,
+          366,
+          345,
+          355,
+          335,
+          336,
+          369,
+          347
+        ],
+        "large_synced_writes_by_worker": [
+          1804,
+          1820,
+          1888,
+          1836
+        ]
+      },
+      "worker_progress_interval_s": [
+        450.0217072009982,
+        570.0272920350253
+      ],
+      "evidence": "evidence/long/admission-direct/gc-direct-wnbpsthq/tiny-sustained.json"
+    },
+    {
+      "phase": "long",
+      "case": "admission-buffered",
+      "oracle_exit": 0,
+      "load_pass": true,
+      "cold_and_physical_pass": true,
+      "seconds_requested": 600,
+      "wall_s": 616.988115020009,
+      "successful_tiny_closes": 16384,
+      "overload_errnos": [],
+      "cold_tiny": 512,
+      "cold_large_bytes": 67108864,
+      "gc_drain_s": 53.98214077798184,
+      "post_pressure_cold_write": true,
+      "full_window_closes_s": 26.768333333333334,
+      "sampled_cpu_cores": 1.127093101547524,
+      "peak_sampled_rss_kib": 599996,
+      "peak_sampled_node_charged_bytes": [
+        3180396544,
+        3865706496,
+        3179216896,
+        3865772032
+      ],
+      "last_observed_worker_progress": {
+        "tiny_closed_by_worker": [
+          378,
+          333,
+          376,
+          375,
+          355,
+          368,
+          362,
+          333
+        ],
+        "large_synced_writes_by_worker": [
+          2068,
+          1956,
+          1912,
+          2084
+        ]
+      },
+      "worker_progress_interval_s": [
+        450.0149361290096,
+        570.0183800600062
+      ],
+      "evidence": "evidence/long/admission-buffered/gc-buffered-gxmlprlc/tiny-sustained.json"
     }
   ],
   "limits": [
