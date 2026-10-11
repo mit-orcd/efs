@@ -1,0 +1,97 @@
+{
+  "elapsed_s": 60.004956535005476,
+  "window_counts": {
+    "0": {
+      "open": 4423,
+      "close": 4415,
+      "delete": 4352
+    },
+    "1": {
+      "open": 4073,
+      "close": 4076,
+      "delete": 3840
+    },
+    "2": {
+      "open": 1,
+      "close": 1,
+      "delete": 0
+    }
+  },
+  "process_samples": [
+    {
+      "seconds": 0.0035486080159898847,
+      "processes": {
+        "983969": {
+          "rss_kib": 9988,
+          "cpu_ticks": 0
+        },
+        "983792": {
+          "rss_kib": 7196,
+          "cpu_ticks": 12
+        },
+        "983827": {
+          "rss_kib": 6992,
+          "cpu_ticks": 10
+        },
+        "983863": {
+          "rss_kib": 6944,
+          "cpu_ticks": 12
+        },
+        "983900": {
+          "rss_kib": 6260,
+          "cpu_ticks": 7
+        }
+      }
+    },
+    {
+      "seconds": 30.004102734994376,
+      "processes": {
+        "983969": {
+          "rss_kib": 100612,
+          "cpu_ticks": 308
+        },
+        "983792": {
+          "rss_kib": 34740,
+          "cpu_ticks": 1087
+        },
+        "983827": {
+          "rss_kib": 29476,
+          "cpu_ticks": 560
+        },
+        "983863": {
+          "rss_kib": 30048,
+          "cpu_ticks": 507
+        },
+        "983900": {
+          "rss_kib": 18808,
+          "cpu_ticks": 169
+        }
+      }
+    },
+    {
+      "seconds": 60.00462237800821,
+      "processes": {
+        "983969": {
+          "rss_kib": 108688,
+          "cpu_ticks": 610
+        },
+        "983792": {
+          "rss_kib": 44348,
+          "cpu_ticks": 2162
+        },
+        "983827": {
+          "rss_kib": 36892,
+          "cpu_ticks": 1128
+        },
+        "983863": {
+          "rss_kib": 36868,
+          "cpu_ticks": 1017
+        },
+        "983900": {
+          "rss_kib": 19296,
+          "cpu_ticks": 340
+        }
+      }
+    }
+  ]
+}

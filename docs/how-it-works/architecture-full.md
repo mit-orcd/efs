@@ -1687,7 +1687,7 @@ subsequently closes through the final recovery and sustained acceptance above.
 [W94/W97 AMD sustained mixed-load follow-up](../status/amd-sustained-20261011.md) retains
 an unpaced private-quota failure, successful quiescent GC progress and an
 intentionally interrupted 300-second bounded baseline. Progress-conditioned GC scheduling
-passes native/direct functional gates but fails the direct 180-second drain deadline; extra quiescent recovery empties all four stores. The deployed fragment-budget build (`85fb3a4b`) passes native/direct functional and buffered sustained gates; direct sustained cold bytes pass but its drain deadline fails. Serial all-member inode fencing dominates sampled reap time; bounded fanout is the next candidate; W94/W97 remain open. The same note
+passes native/direct functional gates but fails the direct 180-second drain deadline; extra quiescent recovery empties all four stores. The deployed fragment-budget build (`85fb3a4b`) passes native/direct functional and buffered sustained gates; direct sustained cold bytes pass but its drain deadline fails. All-member inode-fence fanout (`e9ea8ca1`) passes full native/direct functional and both 180-second paced cold/physical gates; ten-minute gates are running; W94/W97 remain open. The same note
 records the completed W95 retained experiment review and its format limits.
 
 ### Storage pressure policy
@@ -6796,6 +6796,15 @@ pressure finding, not proof of the historical NUC incident's cause. A separately
 paced 2-MiB/s-per-writer gate cannot close the unpaced failure. Require bounded
 reclamation/admission, fairness and exact cold-byte recovery before claiming a
 fix. [AMD evidence](../status/amd-sustained-20261011.md#unpaced-mixed-load-failure--retained-not-closed).
+
+**Oct 11 AMD continuation:** fragment-budget scheduling passes buffered short
+sustained acceptance but direct drain still fails. All-member inode-fence fanout
+passes full normal/fault native, direct functional and both 180-second paced
+cold-byte/physical gates; drain takes 87.69/92.57 seconds. Ten-minute gates are
+running. Default idle stays 1 second; the experiment uses explicit 100 ms.
+Independent cells do not prove a general throughput improvement, and this
+does not resolve the unpaced quota/admission finding or historical NUC cause.
+[Verdicts and raw summary](../status/amd-sustained-20261011.md#fanout-build-e9ea8ca1--short-gates-accepted).
 
 **Oct11 NUC isolated follow-up:** two eight-minute growing-file repeats outside
 EFS reproduce aggregate430/428→188/186 durable64KiB writes/s, per-writer mean

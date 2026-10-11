@@ -4419,6 +4419,15 @@ paced 2-MiB/s-per-writer gate cannot close the unpaced failure. Require bounded
 reclamation/admission, fairness and exact cold-byte recovery before claiming a
 fix. [AMD evidence](../status/amd-sustained-20261011.md#unpaced-mixed-load-failure--retained-not-closed).
 
+**Oct 11 AMD continuation:** fragment-budget scheduling passes buffered short
+sustained acceptance but direct drain still fails. All-member inode-fence fanout
+passes full normal/fault native, direct functional and both 180-second paced
+cold-byte/physical gates; drain takes 87.69/92.57 seconds. Ten-minute gates are
+running. Default idle stays 1 second; the experiment uses explicit 100 ms.
+Independent cells do not prove a general throughput improvement, and this
+does not resolve the unpaced quota/admission finding or historical NUC cause.
+[Verdicts and raw summary](../status/amd-sustained-20261011.md#fanout-build-e9ea8ca1--short-gates-accepted).
+
 **Oct11 NUC isolated follow-up:** two eight-minute growing-file repeats outside
 EFS reproduce aggregate430/428→188/186 durable64KiB writes/s, per-writer mean
 sync~6.9→~16ms. Preallocated-ring repeats finish near438ops/s, with materially
