@@ -4,6 +4,7 @@ import hashlib,json,math,struct,sys,zlib
 from pathlib import Path
 base=Path(sys.argv[1]);results=[]
 for metadata in sorted((base/'w96').glob('*-batch*-*.json')):
+    if not metadata.name.endswith(('-control.json','-reserve.json')):continue
     row=json.loads(metadata.read_text());batch=row['batch'];records=row['records']
     name=metadata.stem
     root=base/'w96-data' if name.startswith('sata-') else Path('/home/efs/devel-nuc-w96-20261010')
