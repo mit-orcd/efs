@@ -113,7 +113,7 @@ Ordinary mounts remain opted out; the acceptance mount explicitly enables comman
 
 ## Additional measured cache improvements
 
-The [three additional tiny-file rounds](query-cache-three-rounds-20261009.md)
+The [three additional tiny-file rounds](../archive/status-20261011/query-cache-three-rounds-20261009.md)
 advance the runtime to `b4212453`: exact inode matches stop early, raw key/value
 fields share a bounded write, and new raw/index files use one checked barrier
 on their writing descriptors. Digests and publication barriers remain intact.

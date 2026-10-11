@@ -1556,12 +1556,12 @@ quotas and large-scale acceptance remain open.
 [W92 tiny-file profiling](../status/query-cache-tiny-profile-20261009.md) records deployed
 bounded read windows and immutable-file persistence reuse: controlled unchanged
 refresh is 2.07× faster; the mixed live creation-rate drop remains unisolated.
-[W92 three additional tiny-file rounds](../status/query-cache-three-rounds-20261009.md)
+[W92 three additional tiny-file rounds](../archive/status-20261011/query-cache-three-rounds-20261009.md)
 records all-node profiles, exact-match lookup, bounded combined-record writes
 and one checked raw/index persistence barrier; controlled syscall and cold
 correctness evidence stays separate from live throughput observations.
 
-[W92 merged-source suites and three further rounds](../status/query-cache-merged-three-rounds-20261009.md)
+[W92 merged-source suites and three further rounds](../archive/status-20261011/query-cache-merged-three-rounds-20261009.md)
 records native, core/concurrent/extras and cold persistence gates, nine all-node
 CPU captures and three logical cache fixes. Frozen-namespace preads fall 78.0%,
 pwrites 23.6% and median process CPU 29.1%, preserving fsync counts; fixed memory
@@ -1569,7 +1569,7 @@ increases within the tested budget. Live throughput and narrower NFS evidence
 are qualified separately. Runtime `a8a15a14` is restored with ordinary `.efs`
 mount opt-in disabled; eight retained trees pass cold query/payload checks.
 
-[W92 previous integration and three further profiles](../status/query-cache-next-three-rounds-20261010.md)
+[W92 previous integration and three further profiles](../archive/status-20261011/query-cache-next-three-rounds-20261010.md)
 records the captured branch boundary, parent-rollup coalescing and constant-time
 cache descriptor hits, with bounded memory and persistence regressions. Controlled
 measurements show 39.1% fewer preads, 34.9% fewer pwrites and 15.0% lower median
@@ -5995,7 +5995,7 @@ by the Oct 10 work above; aggregate disk control remains open.
 
 **Oct 9 additional three rounds:** exact inode matches stop early, raw key/value
 bytes use one bounded write and new raw/index files retain one checked writing-
-handle fsync rather than a duplicate final barrier. See [indexed evidence](../status/query-cache-three-rounds-20261009.md).
+handle fsync rather than a duplicate final barrier. See [indexed evidence](../archive/status-20261011/query-cache-three-rounds-20261009.md).
 Controlled traces reduce preads and pwrites; no namespace-growing live speedup
 is claimed. Persistence failures retain the old checkpoint.
 
@@ -6006,13 +6006,13 @@ pwrites 23.6%, preserving fsync counts. Three alternating trials show 29.1% lowe
 median process CPU; live growing-namespace creation rate is not a speedup claim.
 Fixed candidate scratch is 2897032 bytes, below the tested 4 MiB budget.
 Merged-source native, POSIX core/concurrent/extras and cold persistence evidence
-is [indexed here](../status/query-cache-merged-three-rounds-20261009.md).
+is [indexed here](../archive/status-20261011/query-cache-merged-three-rounds-20261009.md).
 Full derived passes and aggregate cache-space admission remain open.
 
 **Oct 10 integration and three further profiles:** all captured branch tips are
 included; parent rollups coalesce in canonical dentry order and cached descriptor
 hits use a bounded 16 KiB index. Actual-source fault, differential and quota gates
-pass. [Indexed checkpoint](../status/query-cache-next-three-rounds-20261010.md)
+pass. [Indexed checkpoint](../archive/status-20261011/query-cache-next-three-rounds-20261010.md)
 records controlled measurements, all-node profiles and restart validation.
 Frozen preads fall 39.1%, pwrites 34.9% and median process CPU 15.0%; fsync
 counts stay unchanged, with 2914016 accounted candidate bytes below 4 MiB.

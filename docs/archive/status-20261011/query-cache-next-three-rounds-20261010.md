@@ -1,12 +1,13 @@
 # W92 — branch integration and three further tiny-file profiles
 
+**Archived Oct 11, 2026:** dated profiling and integration evidence. These rounds do not close W92 or establish the current Intel deployment. The [active W92 acceptance ledger](../../status/query-cache-closure-20261010.md) retains unresolved scale and platform gates.
 October 10, 2026 EDT, isolated `devel-find-stats`, exclusive Xorinox,
 files/direct-I/O/TCP. Retained namespace preserved; no wipe or push.
 
 ## Integration boundary
 
 Every local branch tip captured before this round is an ancestor of the merged
-branch. [Boundary and ancestry proof](../../results/measure/20261010-w92-next-three-rounds/branch-coverage.tsv)
+branch. [Boundary and ancestry proof](../../../results/measure/20261010-w92-next-three-rounds/branch-coverage.tsv)
 includes fifteen branches. Only three needed new merges: `devel` at `39fb25da`
 via `25745e6d`, persistence-pressure at `8ee8b69e` via `a4c0a73b`, and W66 at
 `7ff7cb70` via `51880999`. This imports the durable published-ticket retirement
@@ -122,6 +123,6 @@ W66 authoritative consensus/routing and W99 proactive capacity protection remain
 separate. Native FUSE evidence does not close the original NFS-specific W55 gate.
 No sanitizer, hardware power-loss or cold physical-media acceptance is claimed.
 
-[Raw ledger](../../results/measure/20261010-w92-next-three-rounds/README.md) ·
+[Raw ledger](../../../results/measure/20261010-w92-next-three-rounds/README.md) ·
 [Previous checkpoint](query-cache-merged-three-rounds-20261009.md) ·
-[W92](../backlog/work-items.md#w92) · [Status index](README.md).
+[W92](../../backlog/work-items.md#w92) · [Status index](../../status/README.md).
