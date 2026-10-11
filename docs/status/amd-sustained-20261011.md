@@ -108,7 +108,9 @@ format/compatibility decisions, already assigned to ORCD; no packing is enabled.
 remains the existing 1,000-ms idle. Strict startup validation accepts only
 100..1000 milliseconds. A shorter idle is used only after a leader's capped
 reap scan and observed physical deletion progress during that pass. Idle,
-blocked/offline work and counter reset retain 1-second backoff. All group scan,
+wholly blocked work and counter reset retain 1-second backoff. Partially blocked
+work can accelerate when other deletions succeed; live offline-member gates
+must preserve all-member retention. All group scan,
 fragment/ACK budgets and 20-ms snapshot/shutdown slices remain unchanged; no
 collection authority, mutation ordering, quota or durability rule changes.
 The actual-source regression covers default, malformed/range configuration,
