@@ -306,6 +306,7 @@ test: all
 	./tests/test_store_containers
 	python3 tests/test_lookup_errno.py
 	python3 tests/test_storage_capacity.py
+	python3 tests/test_status_version.py
 	python3 tests/test_create_credentials.py
 	python3 tests/test_permission_groups.py
 	python3 tests/test_chown_permissions.py

@@ -84,6 +84,17 @@ static int probe_node_up(const char *nhost, uint16_t nport, struct efs_msg_statu
     return ok;
 }
 
+/* Build hosts and timestamps are diagnostics, not source identity. Keep the
+ * commit/dirty version and branch; unknown builds cannot establish equality. */
+static void status_version_identity(const char *version, char *identity, size_t size)
+{
+    snprintf(identity, size, "%s", version);
+    char *built = strstr(identity, ", built ");
+    if (built && !strstr(identity, "no git metadata")) {
+        built[0] = ')'; built[1] = '\0';
+    }
+}
+
 static int cmd_status(int argc, char **argv)
 {
     if (argc < 1) {
@@ -213,6 +224,10 @@ static int cmd_status(int argc, char **argv)
         double pct = 100.0 * (double)usable_used / (double)usable_cap;
         printf("Usable (2+1 logical): used=%s  free=%s  capacity=%s (%.1f%%; filesystem capacity)\n",
                used_s, free_s, cap_s, pct);
+        /* Machine consumers must not reconstruct bytes from rounded TiB. */
+        printf("Usable bytes: used=%llu free=%llu capacity=%llu\n",
+               (unsigned long long)usable_used, (unsigned long long)usable_free,
+               (unsigned long long)usable_cap);
     } else if (down_nodes > 0) {
         printf("Usable (2+1 logical): degraded (%d/%u nodes up)\n",
                up_nodes, list->node_count);
@@ -269,21 +284,11 @@ static int cmd_status(int argc, char **argv)
             free(vp);
             close(vfd);
         }
-        /* ident[i] is vers[i] with the trailing "on <host>" removed. */
         char ident[EFS_MAX_NODES][EFS_VERSION_REPLY_LEN];
         for (uint32_t i = 0; i < ncopy; i++) {
-            char *on = NULL, *p;
-            size_t n;
-            if (!have[i]) {
-                ident[i][0] = '\0';
-                continue;
-            }
-            snprintf(ident[i], sizeof(ident[i]), "%s", vers[i]);
-            n = strlen(ident[i]);
-            for (p = ident[i]; (p = strstr(p, " on ")) != NULL; p += 4)
-                on = p;
-            if (on && n >= 1 && ident[i][n - 1] == ')')
-                memmove(on, ")", 2);
+            ident[i][0] = '\0';
+            if (have[i])
+                status_version_identity(vers[i], ident[i], sizeof(ident[i]));
         }
         for (uint32_t i = 0; i < ncopy; i++) {
             if (!have[i])
