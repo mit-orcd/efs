@@ -479,6 +479,12 @@ int main(void)
             CHECK(!efs_meta_apply_get_inode(kv,file,&row));row.base_size=999;row.base_mtime=999;
             CHECK(!efs_kv_key_inode(efs_kv_inode_shard(file),file,k,&kn));CHECK(!efs_meta_pack_inode(&row,v,sizeof(v)));CHECK(!efs_kv_put(kv,k,kn,v,sizeof(v)));
             struct efs_kv_lsm_snapshot *changed=NULL;CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&changed));
+            /* A partial change-journal write must abort the incremental
+             * candidate, preserve the retained view and never trigger FULL. */
+            fail_write_kind='c';write_faults=0;
+            CHECK(efs_query_disk_build(cache,changed,old,4<<20,NULL,NULL,NULL,&next)==EFS_ERR_IO && !next);
+            CHECK(write_faults==1 && !fail_write_kind);
+            struct efs_query_rollup retained;CHECK(!efs_query_disk_stats(old,EFS_ROOT_INO,&retained));CHECK(retained.tree_bytes==465);
             fail_write_kind='d';write_faults=0;
             CHECK(efs_query_disk_build(cache,changed,old,4<<20,NULL,NULL,NULL,&next)==EFS_ERR_IO && !next);
             CHECK(write_faults==1 && !fail_write_kind);
