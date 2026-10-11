@@ -1,17 +1,32 @@
 """Matched three-voter NVMe-data cells with NVMe/SATA/NVMe metadata; preserve service stores."""
-import gzip,hashlib,json,os,re,signal,socket,subprocess,time
+import argparse,gzip,hashlib,json,os,re,signal,socket,subprocess,sys,time
 from pathlib import Path
 from nuc_sync_counters import SyncCounters
-base=Path('/data1/efs/devel-nuc-20261011/meta-placement');base.mkdir(exist_ok=False)
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--vary',choices=('metadata','data'),default='metadata')
+args=parser.parse_args();session=Path('/data1/efs/devel-nuc-20261011')
+if args.vary=='data':
+ end=time.monotonic()+14400
+ while not (session/'w52-fixed-20000/run-exit.txt').exists():
+  assert time.monotonic()<end,'long append prerequisite timeout'
+  assert not any((session/p/'failure.txt').exists() for p in ('batch-fixture-retry','w52-fixed-20000')),'prerequisite failed'
+  time.sleep(1)
+ assert (session/'w52-fixed-20000/run-exit.txt').read_text().strip()=='0'
+ assert (session/'batch-install/run-exit.txt').read_text().strip()=='0'
+ while not any((session/'w52-long-profile'/name).exists() for name in ('run-exit.txt','failure.txt')):
+  assert time.monotonic()<end,'profile cleanup prerequisite timeout'
+  time.sleep(1)
+base=session/('meta-placement' if args.vary=='metadata' else 'data-placement');base.mkdir(exist_ok=False)
 src=Path('/data1/efs/src');port=26770;meta_roots=[]
 flags=dict(EFS_MD_RAFT_N='3',EFS_RAFT_FLOW='1',EFS_RAFT_FLOW_EARLY_RETIRE='0',EFS_RAFT_BATCH_OVERLAP='0',EFS_RAFT_BATCH_NOOP='0',EFS_RAFT_GROUP_DRAIN='0',EFS_RAFT_APPLIED_INTERVAL_MS='10',EFS_COMMANDS_SERVER='0',EFS_COMMANDS='0',EFS_TRANSPORT='tcp',EFS_BATCH_OBS='1')
 env=dict(os.environ,**flags);mount=base/'mnt';mount.mkdir(exist_ok=True);servers=[];handles=[];loader=None;counters=None
 # Record actual identities; installed engine is frozen for both cells.
 identity={n:dict(sha256=hashlib.sha256((src/n).read_bytes()).hexdigest(),version=subprocess.check_output([str(src/n),'--version'],text=True)) for n in ('efsd','efs-fuse','efs-mgmt')}
-assert identity['efsd']['version'].startswith('efsd 108afa3e-nuc ')
-previous=json.loads(Path('/data1/efs/devel-nuc-20261011/deployment-20261011/installed-images.json').read_text())
+assert identity['efsd']['version'].startswith('efsd '+('108afa3e-nuc' if args.vary=='metadata' else '4afc063c-nuc')+' ')
+previous=json.loads((session/('deployment-20261011/installed-images.json' if args.vary=='metadata' else 'batch-install/images.json')).read_text())
 assert all(v['sha256']==previous[n]['sha256'] for n,v in identity.items())
-(base/'identity.json').write_text(json.dumps(dict(binaries=identity,flags=flags,seconds_per_cell=600,port=port),indent=2))
+drives=('nvme','sata','nvme') if args.vary=='metadata' else ('sata','nvme','sata')
+(base/'identity.json').write_text(json.dumps(dict(binaries=identity,flags=flags,seconds_per_cell=600,port=port,vary=args.vary,cells=[f'{i}-{d}' for i,d in enumerate(drives)]),indent=2))
 def run(args,**kw):return subprocess.run(list(map(str,args)),check=True,**kw)
 def rpc(command,n):return subprocess.check_output([str(src/'efs-mgmt'),command,f'127.0.0.1:{port+n-1}'],text=True,timeout=15)
 def wait(fn,seconds,label):
@@ -128,9 +143,10 @@ try:
  service_stopped=True
  wait(lambda:all(not Path('/proc',pid).exists() for pid in pids),180,'service drain')
  assert not subprocess.run(['pgrep','-x','efsd'],stdout=subprocess.DEVNULL).returncode==0,'unrelated server active'
- for iteration,drive in enumerate(('nvme','sata','nvme')):
-  data=Path('/home/efs')/f'w97-meta-placement-data-20261011-{iteration}'
-  metadata=Path('/home/efs' if drive=='nvme' else '/data1/efs')/f'w97-meta-placement-meta-20261011-{iteration}'
+ for iteration,drive in enumerate(drives):
+  prefix='w97-meta-placement' if args.vary=='metadata' else 'w97-data-placement'
+  data=Path('/home/efs' if args.vary=='metadata' or drive=='nvme' else '/data1/efs')/f'{prefix}-data-20261011-{iteration}'
+  metadata=Path('/home/efs' if args.vary=='metadata' and drive=='nvme' else '/data1/efs')/f'{prefix}-meta-20261011-{iteration}'
   cell_test(f'{iteration}-{drive}',data,metadata)
   time.sleep(30)
  (base/'tests-exit.txt').write_text('0\n')
@@ -150,4 +166,9 @@ finally:
    for n,v in identity.items():assert hashlib.sha256((src/n).read_bytes()).hexdigest()==v['sha256']
    for sample in json.loads(Path('/data1/efs/devel-nuc-20261011/final-service.json').read_text())['existing_payload_samples_equal_on_both_mounts']:
     for m in ('mnt','mnt2'):assert hashlib.sha256((Path('/data1/efs',m)/sample['path']).read_bytes()).hexdigest()==sample['sha256']
+   if args.vary=='data':
+    sys.path.insert(0,str(src/'tests/live'));import append_burst
+    hashes={m:append_burst.verify(Path('/data1/efs',m,'w52-fixed-20000-20261011','append-burst'),20000) for m in ('mnt','mnt2')}
+    assert len(set(hashes.values()))==1
+    (base/'preserved-long-append-cold.json').write_text(json.dumps(dict(records=20000,record_bytes=4096,hashes=hashes,limits='Exact cold client/daemon restart bytes; not a hardware power-loss gate.'),indent=2))
    (base/'restore-exit.txt').write_text('0\n')

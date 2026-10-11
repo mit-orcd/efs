@@ -5,7 +5,11 @@ from pathlib import Path
 from nuc_disk_windows import windows
 p=argparse.ArgumentParser(description=__doc__);p.add_argument('root',type=Path);a=p.parse_args()
 cells=[]
-for tag in ('0-nvme','1-sata','2-nvme'):
+identity=json.loads((a.root/'identity.json').read_text())
+role=identity.get('vary','metadata');assert role in ('metadata','data')
+expected=['0-nvme','1-sata','2-nvme'] if role=='metadata' else ['0-sata','1-nvme','2-sata']
+tags=identity.get('cells',expected);assert tags==expected,'wrong/duplicate placement cells'
+for tag in tags:
     root=a.root/tag
     if not (root/'samples.jsonl').exists():continue
     samples=[json.loads(l) for l in (root/'samples.jsonl').read_text().splitlines()]
@@ -49,7 +53,7 @@ for tag in ('0-nvme','1-sata','2-nvme'):
     accepted=json.loads((root/'complete.json').read_text()) if (root/'complete.json').exists() else None
     cells.append(dict(cell=tag,accepted=accepted,windows=ranges,physical=physical))
 complete=len(cells)==3 and all(r['accepted'] for r in cells) and all((a.root/n).exists() and (a.root/n).read_text().strip()=='0' for n in ('tests-exit.txt','restore-exit.txt'))
-report=dict(matrix_accepted=complete,cells=cells,limits='Fresh three-voter clusters, fixed engine and NVMe data, changing metadata device. First/last completed approximately 30-second windows; cumulative non-atomic Raft histograms have sampling boundary skew. Sync/entry counts sum three replicas and include background work; they are not logical operation counts. Host physical block counters include queue time and other I/O. W52 focused compilation/testing overlaps the first NVMe middle, not an uninstrumented exclusive-host ceiling. Cold checks sample 64 payloads per cell, not every file or power loss.')
+report=dict(matrix_accepted=complete,vary=identity.get('vary','metadata'),cells=cells,limits='Fresh three-voter clusters and fixed engine. Metadata matrix fixes NVMe data; data matrix fixes SATA metadata. First/last completed approximately 30-second windows; cumulative non-atomic Raft histograms have sampling boundary skew. Sync/entry counts sum three replicas and include background work; they are not logical operation counts. Host physical block counters include queue time and other I/O. W52 focused compilation/testing overlaps the first metadata-matrix NVMe middle, not an uninstrumented exclusive-host ceiling. Cold checks sample 64 payloads per cell, not every file or power loss.')
 (a.root/'summary.json').write_text(json.dumps(report,indent=2)+'\n')
 for cell in cells:
     print(cell['cell'],'accepted',bool(cell['accepted']),{k:dict(files_s=round(v['files_s'],2),sync_ms=v['pooled_raft_sync_ms']) for k,v in cell['windows'].items()})

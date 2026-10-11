@@ -1,5 +1,6 @@
 {
   "matrix_accepted": true,
+  "vary": "metadata",
   "cells": [
     {
       "cell": "0-nvme",
@@ -836,5 +837,5 @@
       }
     }
   ],
-  "limits": "Fresh three-voter clusters, fixed engine and NVMe data, changing metadata device. First/last completed approximately 30-second windows; cumulative non-atomic Raft histograms have sampling boundary skew. Sync/entry counts sum three replicas and include background work; they are not logical operation counts. Host physical block counters include queue time and other I/O. W52 focused compilation/testing overlaps the first NVMe middle, not an uninstrumented exclusive-host ceiling. Cold checks sample 64 payloads per cell, not every file or power loss."
+  "limits": "Fresh three-voter clusters and fixed engine. Metadata matrix fixes NVMe data; data matrix fixes SATA metadata. First/last completed approximately 30-second windows; cumulative non-atomic Raft histograms have sampling boundary skew. Sync/entry counts sum three replicas and include background work; they are not logical operation counts. Host physical block counters include queue time and other I/O. W52 focused compilation/testing overlaps the first metadata-matrix NVMe middle, not an uninstrumented exclusive-host ceiling. Cold checks sample 64 payloads per cell, not every file or power loss."
 }
