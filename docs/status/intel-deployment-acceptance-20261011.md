@@ -1,44 +1,52 @@
-# Intel deployment acceptance — 2026-10-11
+# Intel devel-intel acceptance — 2026-10-11
 
-Deployed code is `775d935c`, branch devel, build `2026-10-11T01:53:55Z`. Commit `a7c2af80` and this acceptance record add documentation only; deployed executable code remains `775d935c`. A fresh wildcard origin fetch and ancestry audit finds all 19 visible local/remote refs contained in devel. Original staged/unstaged user documentation remains preserved in its original checkout. Nothing was pushed.
+Current production candidate is `8238f20b` on `devel-intel`; this ledger is in progress. The prior `1b6796ef` full native and 75 standalone scripts pass on both hosts. The complete-source final matrix is `intel-session-accept-8238f20b`; the earlier `e66feefd-ready` matrix remains retained as pre-backpressure evidence. The earlier incomplete-source `e66feefd` run is excluded from acceptance and retired without live fixtures. The [earlier 775d935c acceptance](../archive/status-20261011/intel-deployment-acceptance-775d935c-20261011.md) preserves historical failures and workload evidence.
 
-## Deployment contract
+## Deployment and test contract
 
-Four files-engine daemons: Intel1 (`10.0.0.207`) n1/n2 on 17432/17433 using `/data1/efs/n1` and `/data2/efs/n2`; Intel2 (`10.0.0.209`) n3/n4 using `/data1/efs/n3` and `/data2/efs/n4`. Each has direct I/O and 400 GiB quota (429496729600 bytes). Existing stores, mkfs markers and the data2 symlink are preserved. Both clients drain before any daemon stops.
+Two daemons per physical Intel host use TCP, with 400 GiB quota per daemon. Each host has one `/data1/efs/mnt` client seeded from the opposite host. `.efs` is enabled. Acceptance exercises both direct and buffered storage I/O, concurrent POSIX and peer operations, query publication/policy/failover/load gates, session and guarded-lease cleanup, cold payload recovery, real Valgrind daemon/client tests, sanitizer regressions and all independent live rounds. RDMA acceptance belongs on AMD software RDMA or `orcd-test` hardware IB/RDMA.
 
-Exactly one production mount per host at `/data1/efs/mnt`, Intel1 via Intel2:17432, Intel2 via Intel1:17432. The extra production mount directories are absent. Both `.efs/stats --json` commands return complete snapshots with refresh_error=0 in the retained command acceptance capture; snapshots explicitly may lag current writes. The rendered portal shows both physical hosts, four daemons and two clients. Runtime audits compare owned processes with installed binaries and verify mount seeds, quota, direct I/O and command opt-in.
+## Repairs on this branch
 
-## Repairs and evidence
+- Preserve failed pooled-query routing decisions and exact first-page publisher ownership.
+- Preserve authoritative feature-discovery errors rather than presenting unavailable policy as successful disabled commands.
+- Require both file-count and byte-count convergence in the loaded query oracle.
+- Free real direct-I/O thread-local buffers when TCP workers retire.
+- Bound and join REPORT first-touch session admissions while retaining their durable fencing proofs.
+- Scope offline cleanup checks to owned test inodes, while retaining unrelated marker diagnostics.
+- Retire an empty tiny-file close obligation through the existing atomic barrier; held leases, locks, append reservations and append cursors still refuse early retirement.
+- Preserve replay identity while a committed namespace receipt is still materializing.
+- Retry explicit BUSY responses for readonly session queries and exact-epoch fences within the existing bounded management budget. Fence participant floors within the existing barrier deadline and send the captured epoch to FINISH, preventing a later session epoch from being finished.
+- Preserve retryable fresh-quorum refusal through transaction reads and route foreign-coordinator reads from partial hosts to dual hosts.
+- Reuse a LOOKUP quorum proof only within the same request and group, retaining transaction-aware reads and other-group proofs.
+- Avoid remote Git scans when the deployment supplies verified build identity.
+- Batch sequential Raft replay into bounded 64 KiB windows; hard read errors refuse recovery without truncating the durable log.
+- Make memory verdicts require complete unit, client and daemon evidence; deliberate crash-child leak lifetimes remain explicitly excluded rather than claimed leak-free.
 
-The source-only READDIR cursor repair retains its source when its name is empty, preventing repeated earlier pages at exact source boundaries. The old actual-callback regression fails; the repaired fixture passes on macOS and both native Intel hosts. The real corrected wire probe reaches EOF with 92,557 entries in 1.580 seconds; FUSE returns the same count in 1.183 seconds. See [cursor repair](intel-readdir-source-cursor-20261011.md).
+## Acceptance remains open
 
-Authoritative CREATE EXIST remains EEXIST without a second LOOKUP replacing it with BUSY/IO. Actual helper negative controls fail on the old source; repaired tests pass on all three platforms. The earlier private MKDIR EIO remains retained without assigning an unproved cause; the corrected live wired exclusive-MKDIR race passes. See [creation verdict](intel-create-exist-verdict-20261011.md).
+Original failures are retained alongside reruns. Concurrent mixed-workload `fsync` EIO and timeout observations remain under investigation. Earlier production core and extras timeout verdicts do not become passes because later isolated commands succeed. Writable shared mmap remains an explicit unsupported skip. Repair/protection faults retain the W66/W74 gap under D36.
 
-Other integrated Intel repairs cover setgid inheritance, competing-MKDIR ownership, bounded supplementary groups, unchanged chown authorization, indexed readdir collection, privileged execute permission, unsupported rename flag refusal, operation errno propagation, empty user xattr names and authoritative peer directory bindings. The regressions execute production functions and retain old-source failures where applicable.
+Intel1 completed exactly 1,000,000 files with exit 0. Intel2's strict inventory later verified 611,060 existing files and its writer added 31, reaching 611,091 before stopping on EEXIST for a newly created folder. A retained server trace shows COMMIT returned BUSY before the receipt materialized; the receipt guard repairs that demonstrated retry gap. Earlier resume inventory EIO is retained separately. No existing file is overwritten or silently skipped. Resuming actual creation and checking immutable size/SHA256 samples remain required.
 
-The old read-only cyclic request blocked graceful client retirement. Ordinary STOP returned 0, quiescing accepted mutations. After a fresh successful ordinary drain and exact owned identity verification, that clean Intel2 client required pidfd SIGKILL to release the read-only loop. Normal unmount then returned 0. No force-discard, lazy detach, formatting or store deletion was used. Preserved hashes and full strict resume passed through the corrected cold clients.
+Repeated partial-host trials of the routing repair pass on both hosts in both modes: 16 peer mkdir race repeats (128 races) plus the two deep-directory cases at unchanged deadlines. The old diagnostic fails with a matching missing-coordinator-group trace. These targeted results do not close the full concurrent POSIX gate.
 
-## Final-build validation
+Real durable replay tests pass on both hosts, including EINTR, short reads, payloads crossing buffer boundaries and nondestructive injected EIO. Normal replay uses 9 preads for a 559,624-byte test log instead of 2,049. The old implementation's EIO negative control truncates that private log to 8 bytes; the repaired implementation preserves the entire file and refuses open. The earlier production cold readiness failure at 180 seconds remains recorded; The `1b6796ef` restart still failed readiness. Devops `15b1db0` launches all persisted peers before readiness checks; the previously missing n4 then started in about 22 seconds and both opposite-host mounts were restored. The fresh `e66feefd` rollout then passed startup in 105.25 seconds, restored all four peers and both opposite-host mounts, and passed immutable size/SHA256 checks for 256 payload samples on each host. `.efs/help` reads pass on both hosts. Mode-switch and final recovery acceptance remain required.
 
-| Gate | Intel1 | Intel2 |
-|---|---|---|
-| Canonical make test | PASS | PASS |
-| Additional standalone regressions | 75/75 PASS | 75/75 PASS |
-| Fault suite | 19 PASS, 2 GAP (exit 2) | 19 PASS, 2 GAP (exit 2) |
-| Cold persistence | 27 prepare +27 verify PASS on unchanged repeat | 27 prepare +27 verify PASS |
-| Production core during tiny writes | 214/214 PASS | 214/214 PASS |
-| Production extras | 4 PASS, 1 shared-mmap SKIP on unchanged repeat; initial timeout retained | 4 PASS, 1 shared-mmap SKIP |
-| Private GC, core and peer | Full GC PASS; 214/214 core, 66/66 peer | 213/214 core on both attempts; mtime timeout; later private gates NOTRUN |
-| Immutable sample through cold client | 256 exact size/SHA256 PASS | 256 exact size/SHA256 PASS |
+Terminal per-host and per-mode verdicts, runtime identity, current tiny-file progress and remaining W-item obligations will be recorded after the active matrices finish.
 
-The wired cross-host peer suite passes 66/66 during actual Intel2 tiny writes. Logs retain code/build identity; old partial/failing runs are not substituted for final-build results. Standalone/fault/canonical verdicts are filtered by the new build timestamp.
+The focused exact-epoch fencing run passes direct mode on Intel1. Intel2 direct mode fails in the concurrent tiny/large workload with close EIO and retained flush-meta BUSY evidence; it does not establish a fencing pass. Buffered follow-ons and full final-source verdicts remain pending.
 
-Initial Intel1 persistence preparation timed out at the unchanged 60-second many-files limit (303/500 fixture entries). Its unchanged full repeat passes 27/27 prepare in 49.8 s and 27/27 verify in 15.4 s. Intel2 prepare/verify pass in 47.5 s / 34.0 s. Initial Intel2 private core mtime_monotonic_many_writes exceeds 30 s while private and production harnesses overlap: 213/214, fullGC abort exit 1. Initial Intel1 extras virt_stats_readable exceeds 30 s with a worker still alive at verdict; two cases are NOTRUN. Later exact process observation finds no remaining stats/extras worker. The unchanged Intel2 private repeat again fails the same mtime case with only the tiny-file writer as the other workload: 213/214, 390.8 s, full harness exit 1; peer and remaining post-POSIX GC gates are NOTRUN on that host. This shows overlapping test harnesses are not necessary for the failure. No injected delay setting was found in the normal private setup; the cause remains unproved. Intel1 extras unchanged repeat passes 4/5 with the expected mmap skip in 12.7 s, including stats/find; stats reports an available older snapshot with a refresh BUSY warning. Initial failures remain retained; no causal performance repair is claimed.
+The complete-source final native target and 75 additional standalone regressions pass on both hosts. Intel2 query/.efs gates pass direct (69.30 s) and buffered (59.88 s). Intel1 direct fails loaded-reader generation advancement and buffered fails the unchanged 12-second stats subprocess budget; neither is accepted. Strict resumed inventory precedes actual tiny-file creation; a running inventory is not reported as writer progress.
 
-## Preserved workload and limits
+REPORT admission repair `8238f20b` returns BUSY before side effects when a multi-shard batch cannot obtain the bounded admission workers. It preserves existing deadlines, fencing and exact publication retry identity. Full native rechecks pass on both hosts. Targeted worker retirement, mixed tiny/large writes, cold-byte checks, session cleanup, guarded leases and physical reclamation pass on both hosts in both modes: Intel1 direct 538.83 s / buffered 540.22 s; Intel2 direct 472.26 s / buffered 413.91 s. Initial review-tree native failures due to incomplete documentation inputs remain recorded separately from the successful complete-input rechecks.
 
-Intel1 completes exactly 1,000,000 TOTAL files, exit0. It is not restarted for an additional million. Intel2 strict resume validates its entire preserved tree and resumes creation toward 1,000,000 TOTAL; a final capture at 02:32:46Z records 533,174 files, no exit marker, actual writing at 16 files/s. The job remains a detached service-account wrapper with a per-host lock. Inventory rejects metadata errors, special files and invalid sizes; it does not hash every payload. The separate 256-path immutable manifest checks exact bytes through each cold client.
+Cold ticket regression `008faaa0` retries only NOTPRIMARY/BUSY with the identical ticket and payload inside the original deadline. Hard failures and stale-ticket assertions remain failures. Actual CLI/sanitizer regressions and focused live cold-ticket checks pass on both hosts in both modes.
 
-Fault protection/automatic-repair GAPs, writable shared mmap, broader W66/W97/durability/capacity/NFS obligations and historical intermittent append timeouts remain open. Unchanged passing repeats do not erase original failures or establish their cause. Both RTL8126/r8169 wired links report 5000 Mb/s, but no hardware RDMA device is exposed; modinfo finds neither rdma_rxe nor siw in the installed kernels. TCP remains the tested transport. Installed gcc/make/fuse3-devel/pkgconf-pkg-config and rdma-core-devel satisfy the ordinary build; optional ASan/UBSan runtime packages remain absent and sanitizer execution on Intel is not claimed.
+The pre-backpressure production direct run passes all 66 wired two-client cases. Core results remain failed: Intel1 211/214, Intel2 206/214. Each extras run has two passes, two failures and one unsupported mmap skip. Both cold persistence checks pass. The final revision's direct and buffered matrices are running; these older failures are not overwritten. Seven historical status checkpoints have been archived; W100–W106 and current acceptance remain active.
 
-The requested maintenance period is complete. Intel remains deployed and the Intel2 million-file target remains active. Acceptance is **not all green**: its private repeated-write timeout remains unresolved, alongside the documented GAP/SKIP obligations. Future causal performance work must retain the original limits and exact payload checks.
+The final `8238f20b` native target and all 76 additional standalone regressions pass on both hosts. The filtered deployment completes in 24.80 s; aggregate startup/mount checks complete in 181.86 s without changing per-node readiness deadlines. Runtime checks verify the installed build identity, all four 400 GiB direct-I/O daemons, opposite-host seed clients and enabled `.efs` commands. Final query gates: Intel2 direct PASS (60.70 s), Intel1 buffered PASS (107.18 s), Intel1 direct FAIL (111.97 s), with a retained 12-second loaded-stats subprocess timeout. Other final-source acceptance phases remain pending.
+
+Intel2 final direct resume strictly verifies 614,948 existing files in 392.8 seconds before actual creation resumes (615,119 observed). Both hosts pass the 256 immutable payload sample checks after deployment. Final production concurrent core/extras/peer tests run while the resumed writer is active. Final private direct acceptance still retains a beyond-64-level directory timeout; no deadline is increased.
+
+Intel2 final buffered query passes reader freshness (generations 2–7) and exact closed-writer publication (601 files / 153,856 logical bytes), then the original sequential payload oracle exceeds the unchanged 150-second harness budget. The bounded-reader repair is committed with both-host regression proof; its live follow-ons remain pending.

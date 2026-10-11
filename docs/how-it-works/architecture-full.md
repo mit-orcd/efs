@@ -1905,13 +1905,15 @@ Spark performance measurement still owed. Grouped open counts are now
 
 ### Intel follow-ups — W100–W106 (indexed Oct 11, 2026)
 
+Current [devel-intel acceptance ledger](../status/intel-deployment-acceptance-20261011.md) retains failures alongside reruns. [Captured evidence](../../results/measure/20261011-intel-devel-intel/acceptance-in-progress.json) remains explicitly in progress until the complete host/mode matrix terminates.
+
 This index adds traceable IDs to the Intel acceptance follow-ups; it does not change the existing queue order or accepted design decisions. Existing sustained tiny-file performance remains W97, protection/repair W74/W66, durability W71/W73 and capacity W99.
 
 | ID | Task | Recorded state |
 | --- | --- | --- |
-| [W100](#w100) | Intel2 repeated-write POSIX timeout | Correctness/performance investigation; open. |
+| [W100](#w100) | Intel concurrent POSIX timeouts and mixed-workload EIO | Correctness/performance investigation; open. |
 | [W101](#w101) | Complete and verify the Intel two-million-file workload | Operational acceptance; in progress. |
-| [W102](#w102) | Complete Intel2 private peer and GC acceptance | Validation follow-up; blocked by W100 in the full harness. |
+| [W102](#w102) | Complete Intel2 private peer and GC acceptance | Validation follow-up; in progress, aggregate acceptance remains open. |
 | [W103](#w103) | Investigate intermittent Intel persistence and stats timeouts | Liveness/performance investigation; open. |
 | [W104](#w104) | Decide and gate writable shared mmap support | Feature scope/design follow-up; deferred, currently unsupported by specification. |
 | [W105](#w105) | Stable NFS file handles across EFS client restarts | Gateway acceptance/correctness investigation; open. |
@@ -6926,15 +6928,15 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 
 <a id="w100"></a>
 
-### W100 · Intel2 repeated-write POSIX timeout
+### W100 · Intel concurrent POSIX timeouts and mixed-workload EIO
 
 **Class/state:** Correctness/performance investigation; open.
 
-**Evidence/current state:** The deployed Intel build passes 213/214 private core cases on two unchanged attempts. `mtime_monotonic_many_writes` exceeds the original 30-second limit while the production tiny-file writer is active. Production core passes 214/214. Harness overlap is not necessary for the private failure; its cause remains unproved.
+**Evidence/current state:** Original Intel2 private `mtime_monotonic_many_writes` exceeds its unchanged 30-second limit; a bounded diagnostic preserves exact bytes and monotonic timestamps but takes 33.828 seconds. Later production runs on both hosts also retain deep-directory, many-entry and concurrent-append timeout verdicts. Mixed tiny/large private runs intermittently report fsync EIO or exceed the 180-second tiny-worker limit. Successful repeats do not establish a universal repair.
 
-**Remaining action:** Capture per-operation write/close/stat timing and server persistence/queue evidence, isolate the cause, and implement a causal repair. W52/W53/W97 are related investigations, not established diagnoses.
+**Remaining action:** Correlate per-operation and quorum/queue timings on current `devel-intel`, repeat both TCP storage modes with the existing tiny writer, and repair demonstrated causes. Bounded REPORT session admission and empty close-marker retirement are implemented with fencing regressions. A partial-host trace demonstrates a foreign transaction coordinator being queried on an unhosted group; routing is repaired and 128 peer mkdir races plus both deep-path cases pass per host/mode in targeted trials. Fresh-quorum BUSY propagation and same-request quorum reuse retain their authority proofs. Contended multi-shard REPORT admission now returns BUSY before side effects instead of spending the request deadline on serial fallback; targeted worker/tiny/cold-byte/fencing/reclamation gates pass on both hosts in both modes. Final full acceptance remains in progress. W52/W53/W97 are related investigations, not established diagnoses.
 
-**Gate:** Repeat the unchanged private case and full core suite under the concurrent production workload, retaining the 30-second limit, exact payload checks and original failure evidence.
+**Gate:** Repeat unchanged private and production core, extras and peer suites under concurrent workload, retaining all original limits, exact payload checks and original failure evidence.
 
 <a id="w101"></a>
 
@@ -6942,7 +6944,7 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 
 **Class/state:** Operational acceptance; in progress.
 
-**Evidence/current state:** Intel1 completed exactly 1,000,000 total files with exit 0. At 2026-10-11T02:45:11Z, Intel2 reported 551,734/1,000,000 total files and an active writer. This is a dated observation, not a live status guarantee.
+**Evidence/current state:** Intel1 completed exactly 1,000,000 total files with exit 0. Intel2 later strictly inventoried 611,060 preserved files and added 31, reaching 611,091 before a new-folder EEXIST stopped the writer. The server returned BUSY after COMMIT but before its receipt materialized; the replay guard repairs that demonstrated gap. The earlier strict inventory EIO and later successful stat remain separate dated observations. Creation is not claimed while inventory is incomplete. The final 823 deployment strictly validates 614,948 preserved files and resumes actual creation, reaching 615,119 in the captured log. Immutable size/SHA256 checks pass for 256 payload samples per host. These are dated observations, not live status guarantees.
 
 **Remaining action:** Let the existing locked Intel2 resume job reach its total target, check terminal status and strict inventory, and verify preserved payload samples. Do not create another million on Intel1 or discard existing files.
 
@@ -6952,9 +6954,9 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 
 ### W102 · Complete Intel2 private peer and GC acceptance
 
-**Class/state:** Validation follow-up; blocked by W100 in the full harness.
+**Class/state:** Validation follow-up; in progress, aggregate acceptance remains open.
 
-**Evidence/current state:** Both Intel2 private attempts stop after the 213/214 core verdict; later peer and post-POSIX GC gates are NOTRUN. Production wired peer passes 66/66, but does not substitute for these private gates.
+**Evidence/current state:** Initial Intel2 private attempts stopped after the 213/214 core verdict, leaving later gates NOTRUN. Independent rounds now preserve per-round verdicts while continuing, and the current combined harness continues after core failure without changing its failed aggregate. The offline inspector now scopes markers/reservations to every owned fixture inode; unrelated production-style markers remain diagnostic. Earlier global-marker false failures remain recorded. Production wired peer passed 66/66 direct, with a later buffered append timeout retained; neither substitutes for full private acceptance.
 
 **Remaining action:** Exercise independent remaining gates while preserving the failing aggregate verdict if needed; after W100 is repaired, repeat the entire unchanged private harness. Retain code/build identity and individual verdicts.
 
@@ -6966,7 +6968,7 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 
 **Class/state:** Liveness/performance investigation; open.
 
-**Evidence/current state:** Intel1 initially timed out at the 60-second many-files persistence preparation limit and the 30-second virt_stats_readable limit. Unchanged repeats passed. The stats repeat used an available older snapshot with a BUSY refresh warning; no causal repair or universal freshness guarantee is established.
+**Evidence/current state:** Intel1 initially timed out at the 60-second many-files persistence preparation limit and the 30-second virt_stats_readable limit. Unchanged repeats passed. The stats repeat used an available older snapshot with a BUSY refresh warning. Four later production cold-persistence checks pass. A subsequent cold startup exceeds the 180-second readiness bound while making about 27 million small reads from a roughly 2 GB Raft log. Bounded replay batching and nondestructive read-error refusal pass real durable-store/fault tests; Fresh e66 startup passes in 105.25 seconds and the final 823 aggregate startup/mount checks pass in 181.86 seconds at unchanged per-node limits; all four peers and both opposite-host mounts are verified. The final direct pre-backpressure persistence checks pass on both hosts, with final-mode persistence reruns pending. A separate demonstrated feature-discovery defect converted unavailable authoritative policy into successful disabled commands; the repair preserves unavailable status and existing advisory feature state, and named policy/load/query gates pass both storage modes on both hosts. Final 823 query acceptance passes Intel2 direct and Intel1 buffered; Intel1 direct retains a 12-second stats timeout. Intel2 buffered passes loaded publication and exact 601-file/153,856-byte convergence, then exceeds the 150-second harness budget during sequential payload verification. Commit 12e65920 uses four bounded readers while retaining exact length/SHA checks for every file; local and both-host corruption/short/missing/concurrency regressions pass, with live reruns pending. No universal freshness or timeout repair is established.
 
 **Remaining action:** Correlate storage, queue and query refresh timings; obtain bounded reproducible evidence and fix any demonstrated cause. Persistence relates to W53/W97; command snapshot semantics remain W91/W92.
 

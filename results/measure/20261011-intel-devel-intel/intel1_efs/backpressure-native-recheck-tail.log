@@ -1,0 +1,81 @@
+Last 80 lines of complete native recheck; full log retained in /data1/efs/logs/intel-report-backpressure-review/native-recheck.log
+append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS
+./tests/test_meta_apply
+test_meta_apply: OK
+./tests/test_lane_bootstrap_recovery
+lane bootstrap durable crash recovery PASS
+./tests/test_raft
+test_raft: OK
+./tests/test_sim
+test_sim: OK
+./tests/test_txn
+test_txn: OK
+./tests/test_txn_resolve_faults
+transaction resolve: version/batch failures preserve old row/version and epoch guard; exact retry commits once then permits revocation PASS
+python3 tests/test_txn_apply_retry.py
+transaction/publication Raft apply: IO/NOMEM preserve pending index; business conflicts advance with ring verdict; policy CAS conflicts advance while policy IO/NOMEM/BUSY retry; session fence and ticket storage failures retry PASS
+python3 tests/test_publication_persistence.py
+publication persistence: IO overrides STALE, hold/release failures and periodic/forced checkpoint refusal PASS
+python3 tests/test_follower_read_redirect.py
+follower read: applied timeout redirects to validated remote leader; unknown/self/out-of-range/transport and storage errors never grant a local read PASS
+python3 tests/test_query_snapshot_failover.py
+query routing: alternate before excluded pool, failed hints cleared, pinned pages never rerouted PASS
+python3 tests/test_query_callback_affinity.py
+query callback affinity: same nonce keeps owner, new nonce/caller starts independently, every callback reauthorizes PASS
+python3 tests/test_feature_poll_deadline.py
+feature discovery: bounded refresh, tighter/expired caller deadline retained, scope restored on success/failure PASS
+python3 tests/test_feature_discovery_status.py
+feature discovery: transient authority unavailable; genuine disabled mask remains authoritative; startup ceiling and reply status PASS
+python3 tests/test_close_inspector_scope.py
+offline close inspector: owned markers/reservations/receipts only; unrelated and short keys do not contaminate the verdict PASS
+python3 tests/test_close_retire_fastpath.py
+close GC: empty files retire through existing atomic barriers in one proposal; BUSY follows bounded lock/append cleanup; stale/error identities are preserved PASS
+python3 tests/test_store_tls.py
+direct I/O TLS: actual owner reuse, 400 concurrent thread retirements, zero outstanding allocations PASS
+python3 tests/test_report_session_admission.py
+REPORT sessions: exact dedup, bounded four-way admission, retryable contention/create-failure backpressure, fencing and joined error ownership PASS
+python3 tests/test_namespace_receipt_pending.py
+Namespace replay: pending receipt refusal, concurrent materialization re-probe, existing verdict and hard-error propagation PASS
+python3 tests/test_query_loaded_oracle.py
+loaded query oracle: count/bytes converge jointly, incomplete snapshots never pass, original 40-attempt bound retained PASS
+python3 tests/test_valgrind_verdict.py
+valgrind verdict: empty/truncated reports refused, complete zero-loss accepted, real leaks fail PASS
+valgrind cleanup: exact owned argument/start identity, prefix and stale PID refused PASS
+python3 tests/test_txn_parts_bounds.py
+Transaction parts: exact configured-capacity participant wire, canaries, short output, invalid counts and null pointers PASS
+python3 tests/test_prepare_bounds.py
+PREPARE maximum participant/key/CAS payload canaries PASS
+python3 tests/test_raft_tail.py
+Raft tail: CRC, committed bounds, groups, replacement and torn append PASS
+python3 tests/test_query_policy_forward.py
+policy leadership race: explicit redirect; no policy-version/apply-ring mix; ordinary forwarding retained PASS
+python3 tests/test_command_policy_mount.py
+command mount: explicit opt-in, disabled and partial feature masks PASS
+python3 tests/test_efs_commands.py
+............................
+----------------------------------------------------------------------
+Ran 28 tests in 1.964s
+
+OK
+python3 tests/test_namespace_bounds.py
+raft-host: namespace-capacity phase=ancestry used=144 limit=144 rc=-22: operation exceeds supported transaction envelope
+raft-host: namespace-capacity phase=participants used=144 limit=144 rc=-22: operation exceeds supported transaction envelope
+raft-host: namespace-capacity phase=participants used=144 limit=144 rc=-22: operation exceeds supported transaction envelope
+namespace: 65/144 same-shard guards, 145 OVERFLOW, deep observed cycle INVAL, ReadIndex IO, participant boundary PASS
+python3 tests/test_rename_budget.py
+rename budget: nested BUSY bounded, tighter/expired caller deadline preserved, transient success PASS
+./tests/test_namespace_session
+namespace session: fenced replay/effects refused; concurrent shared guards block revocation through commit/abort and delayed prepare; cold WAL guards/floors PASS
+./tests/test_session
+test_session: OK
+./tests/test_erasure
+test_erasure: OK
+./tests/test_placement
+test_placement: OK
+./tests/test_lock
+test_lock: OK
+./tests/test_stage_evict
+test_stage_evict: OK
+./tests/test_conn_fd
+test_conn_fd: OK
+NATIVE_RECHECK_EXIT=0
