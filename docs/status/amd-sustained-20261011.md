@@ -5,8 +5,9 @@ pass on the [captured integration](amd-integration-20261011.md). This follow-up
 targets sustained service, without claiming full production session/PUT-ticket
 integration or selecting a new storage format.
 
-The existing private four-node TCP fixture runs direct then buffered, 600
-seconds each. Eight tiny workers rotate 64 names per worker, writing 512-byte
+The initial plan uses the private four-node TCP fixture for direct then
+buffered, 600 seconds each. The actual timed round shortened follow-up runs as
+recorded below; no completed 600-second gate is claimed. Eight tiny workers rotate 64 names per worker, writing 512-byte
 generation-specific bodies. Every acknowledged generation is byte-checked
 before unlink; names are reused only after unlink. Four large writers overlap
 16-MiB rings of 1-MiB writes, fsync every four writes and at completion. The
@@ -113,3 +114,16 @@ collection authority, mutation ordering, quota or durability rule changes.
 The actual-source regression covers default, malformed/range configuration,
 idle/blocked/reset and progress cases. Full AMD native and candidate live gates
 are required before promotion; this round does not change the default.
+
+## Timed-round scope adjustment
+
+The 2-MiB/s-per-writer baseline is intentionally interrupted after five minutes
+so the opt-in scheduling candidate can receive native and live validation in
+the user's 30-minute round. It retains interval counts and final GC/quota
+status, but has no cold-byte acceptance oracle and is not a passed sustained
+run. The candidate is scheduled for full normal/fault native suites, direct
+POSIX/peer and guarded-lease/GC recovery, then 180-second mixed-load gates in
+both direct and buffered modes with cold survivors and physical drain. The
+shorter candidate load does not satisfy the originally planned ten-minute
+or full sustained W94/W97 obligations; neither workload rate nor quota is
+changed between the bounded baseline and candidate. Default idle is unchanged.
