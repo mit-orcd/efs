@@ -2336,6 +2336,15 @@ the quick ones).** Each row is a queue item; the W number is binding.
 
 ## W52 · a REPORT after thousands of O_APPEND writes answers after > 30 s (plan row 15)
 
+**Oct 11 NUC partial optimization:** guarded per-reservation REPORT completion
+PREPARE operations share the existing bounded pipeline after owner/inode guards.
+Every applied verdict is checked before COMMIT; refusal cleanup remains durable.
+The actual-loop regression fails on the old synchronous loop. Matched controls
+and the exact 20,000-record peer/cold/fsync gate are pending. The accepted
+single-proposal completion of all caught-up reservations remains open; this
+smaller pipeline is not that implementation.
+[Integration ledger](../status/devel-nuc-integration-20261011.md).
+
 **Implementation check, Oct 7.** Approved shape A is still pending:
 `host_resolve_caught_up()` loops over each eligible reservation and calls
 `host_propose_wait()` separately. The ordinary append POSIX/concurrency
@@ -2920,6 +2929,15 @@ accepted durability contract or fixing only FUSE flag handling.
 <a id="w72"></a>
 
 ## W72 · Production mount session lifecycle is not connected to I23 (queue row spec2)
+
+**Oct 11 NUC integration follow-up:** REGISTER-first namespace admission was
+masking the real missing-owner verdict, causing a false ENOENT on the first
+cold-mount mutation. Preserve REGISTER/ESTABLISH apply verdicts and advance Raft
+for business refusals while retrying IO/NOMEM. Actual-dispatcher and apply-policy
+regressions fail on their respective old sources. Six cold-mount first-mutation
+and full direct/buffered acceptance are in progress; the intermediate failed
+fixtures are retained. This does not close production publication integration.
+[Integration ledger](../status/devel-nuc-integration-20261011.md).
 
 **Class:** fencing integration. **Status:** partial; full mount identity, retained
 FUSE CREATE/adoption/OPEN/CLOSE and namespace shard admission are implemented and

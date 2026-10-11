@@ -11,6 +11,13 @@ in the ORCD queue after the packing priority.
 [Decisions](decisions.md) · [Work-item details](../backlog/work-items.md) ·
 [Operations](../operations/operations.md) · [Archive](../archive/README.md)
 
+## NUC integration session — October 11
+
+[Current two-hour integration and repair ledger](devel-nuc-integration-20261011.md)
+records the captured all-branch merge, W72 fresh-mount admission fixes, a bounded
+W52 prepare-pipeline experiment and their retained failures. Corrected full
+native/direct/buffered suites and matched append controls are in progress.
+
 ## NUC closure session — October 10–11
 
 [Current NUC acceptance](devel-nuc-closure-20261010.md) closes W70, W78, W79
