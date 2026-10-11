@@ -100,3 +100,16 @@ Sampled allocation excludes transient manifest replacement; pre-publication
 admission is a separate check. Process crashes do not prove hardware power-loss
 safety. W95 stays open for mounted/shared-object production integration and P4.1
 format/compatibility decisions, already assigned to ORCD; no packing is enabled.
+
+## Opt-in GC scheduling candidate
+
+`EFS_GC_BACKLOG_IDLE_MS=100` is an experimental scheduling candidate; unset
+remains the existing 1,000-ms idle. Strict startup validation accepts only
+100..1000 milliseconds. A shorter idle is used only after a leader's capped
+reap scan and observed physical deletion progress during that pass. Idle,
+blocked/offline work and counter reset retain 1-second backoff. All group scan,
+fragment/ACK budgets and 20-ms snapshot/shutdown slices remain unchanged; no
+collection authority, mutation ordering, quota or durability rule changes.
+The actual-source regression covers default, malformed/range configuration,
+idle/blocked/reset and progress cases. Full AMD native and candidate live gates
+are required before promotion; this round does not change the default.

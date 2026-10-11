@@ -408,6 +408,7 @@ struct efs_raft_host {
     int pressure_enabled;
     int flow_enabled, inbox_pressure, group_drain, flow_early_retire;
     uint64_t applied_persist_us; /* pump-only bounded checkpoint cadence */
+    unsigned gc_backlog_idle_ms; /* opt-in; preserve default 1s idle */
     unsigned inbox_work_n;
     uint64_t inbox_work_bytes;
     uint64_t inbox_probe_sent[HOST_NGROUPS][EFS_RAFT_MAX_PEERS];
@@ -8095,6 +8096,29 @@ static void host_snap_import_pass(struct efs_raft_host *h)
     }
 }
 
+static int host_gc_backlog_config(const char *value, unsigned *ms)
+{
+    *ms = GC_LOOP_MS;
+    if (!value) return EFS_OK;
+    if (!*value) return EFS_ERR_INVAL;
+    for (const char *p = value; *p; p++)
+        if (*p < '0' || *p > '9') return EFS_ERR_INVAL;
+    char *end;
+    errno = 0;
+    unsigned long n = strtoul(value, &end, 10);
+    if (errno || *end || n < 100 || n > GC_LOOP_MS) return EFS_ERR_INVAL;
+    *ms = (unsigned)n;
+    return EFS_OK;
+}
+
+static unsigned host_gc_backlog_idle(unsigned configured, int capped,
+                                     uint64_t removed_before, uint64_t removed_after)
+{
+    /* No acceleration for idle scans, blocked/offline deletion or counter
+     * reset. Keep all per-group work/ACK budgets and a >=100ms fair yield. */
+    return capped && removed_after > removed_before ? configured : GC_LOOP_MS;
+}
+
 static void *host_gc_thread(void *arg)
 {
     struct efs_raft_host *h = arg;
@@ -8104,6 +8128,8 @@ static void *host_gc_thread(void *arg)
         uint64_t t0, t_orphan = 0, t_reap = 0, t_frag = 0, t_spread, t_rec, t_all;
         struct efs_kv_scan_stats sc_frag, sc_all;
         struct reap_times reap_times = {0};
+        uint64_t removed_before = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED);
+        int reap_capped = 0;
 
         __atomic_store_n(&h->s->gc_pass_start_us, efs_iostats_now_us(), __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_stage, 1, __ATOMIC_RELAXED);
@@ -8146,6 +8172,7 @@ static void *host_gc_thread(void *arg)
             t_orphan += now_us_() - ta;
             ta = now_us_();
             host_gc_reap_pass(h, h->g[g].group, anchor, &reap_times);
+            reap_capped |= __atomic_load_n(&h->s->gc_reap_capped[g], __ATOMIC_RELAXED);
             t_reap += now_us_() - ta;
             ta = now_us_();
             {
@@ -8212,9 +8239,14 @@ static void *host_gc_thread(void *arg)
         __atomic_fetch_add(&h->s->gc_passes, 1, __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_stage, 0, __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_pass_start_us, 0, __ATOMIC_RELAXED);
-        /* ~1s between passes, in 20 ms slices so shutdown is prompt.
+        uint64_t removed_after = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED);
+        unsigned idle_ms = host_gc_backlog_idle(h->gc_backlog_idle_ms, reap_capped, removed_before, removed_after);
+        if (idle_ms < GC_LOOP_MS && env_on("EFS_RAFT_OBS"))
+            fprintf(stderr, "raft-host: gc-backlog-idle ms=%u removed=%llu\n", idle_ms,
+                    (unsigned long long)(removed_after - removed_before));
+        /* Default 1s between passes, in 20 ms slices so shutdown is prompt.
          * A snapshot export queued by the pump starts on the next slice. */
-        for (g = 0; g < GC_LOOP_MS / 20 && h->gc_running; g++) {
+        for (g = 0; g < (int)((idle_ms + 19) / 20) && h->gc_running; g++) {
             host_snap_export_pass(h);
             host_snap_import_pass(h);
             usleep(20 * 1000);
@@ -9012,6 +9044,11 @@ int server_raft_host_start(struct efsd_server *s)
         fprintf(stderr,"raft-host: EFS_COMMANDS_SERVER must be 0 or 1\n");
         return EFS_ERR_INVAL;
     }
+    unsigned gc_backlog_idle_ms;
+    if (host_gc_backlog_config(getenv("EFS_GC_BACKLOG_IDLE_MS"), &gc_backlog_idle_ms) != EFS_OK) {
+        fprintf(stderr, "raft-host: EFS_GC_BACKLOG_IDLE_MS must be 100..1000\n");
+        return EFS_ERR_INVAL;
+    }
     int query_enabled=!commands || !strcmp(commands,"1");
     const char *flow=getenv("EFS_RAFT_FLOW");
     if (flow && strcmp(flow,"0") && strcmp(flow,"1")) return EFS_ERR_INVAL;
@@ -9054,6 +9091,7 @@ int server_raft_host_start(struct efsd_server *s)
     if (efs_admission_init(&h->proposal_queue,&limits) != EFS_OK) { free(h); return EFS_ERR_IO; }
     h->applied_persist_us=applied_interval;
     h->flow_enabled=flow && !strcmp(flow,"1");
+    h->gc_backlog_idle_ms = gc_backlog_idle_ms;
     h->flow_early_retire=early_retire && !strcmp(early_retire,"1"); /* candidate opt-in until acceptance */
     h->group_drain=group_drain && !strcmp(group_drain,"1");
     h->pressure_enabled=pressure && !strcmp(pressure,"1");
