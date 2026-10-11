@@ -31,7 +31,7 @@ OPEN/CLOSE. It never overwrites an existing marker or weakens a timeout. It
 checks both physical absence and authoritative inode removal after unlink;
 the earlier mounted CREATE/adoption cases retain exact-byte cold oracles. The helper now reports exhaustion counts for connection,
 transport, redirect, cleanup STALE/BUSY and session BUSY without extending or
-weakening its existing retry budget. The direct live matrix now passes; buffered acceptance is in progress.
+weakening its existing retry budget. Both earlier-candidate live matrices subsequently passed; their acceptance is recorded below.
 
 ## Gates and remaining scope
 
@@ -70,8 +70,8 @@ it does not activate production ticket integration.
 [Before](../../results/measure/20261011-amd-integration/register-verdict-before.log) /
 [after](../../results/measure/20261011-amd-integration/register-verdict-after.log).
 
-Post-repair full normal/fault native suites and the direct live matrix pass;
-buffered follow-up is running. W72 and W94 remain partially open.
+Post-repair full normal/fault native suites and both earlier-candidate live
+matrices pass. W72 and W94 remain partially open.
 
 ## Applied checkpoint evidence correction
 
@@ -94,7 +94,7 @@ latency and cold-byte observations are unchanged.
 
 The full repaired direct/TCP matrix now passes, including the prepared legacy
 guard, authoritative inode reclaim, normal CREATE EEXIST cold replay, pending
-LOCAL/HASHED cold edges and POSIX/peer. Buffered follow-up is running.
+LOCAL/HASHED cold edges and POSIX/peer. Buffered follow-up subsequently passed.
 The production source is unchanged since the successful `8e0e4f3c` normal and
 fault-native gates; the final fixture revision is `5360c735`.
 
@@ -119,8 +119,33 @@ evidence, not claimed for the follow-up source.
 [buffered](../../results/measure/20261011-amd-integration/evidence/live/buffered.log) /
 [restoration](../../results/measure/20261011-amd-integration/evidence/restoration-proof.json).
 
-The follow-up candidate is queued for fresh full normal/fault builds and both
-TCP matrices, also covering six cold first-mutation namespace paths without
-prior OPEN, identical APPEND replay and cross-group append/sync recovery.
-Production queries remain disabled; Mac/ORCD query runtime acceptance is not
-claimed by this AMD gate. W72/W94 remain partial.
+## Final captured-candidate acceptance
+
+Candidate `90a47313` (captured production source `611ea8ad`) passes fresh full
+normal and fault-enabled native suites and both complete AMD TCP matrices.
+Each mode passes core **216/216**, peer **67/67**, all six cold first-mutation
+CREATE/MKDIR/UNLINK/RMDIR/RENAME/LINK cases without prior OPEN, prepared legacy
+lease guards, retained CREATE/reply-loss/negative verdicts and cold name reuse.
+Both modes also pass 32 identical APPEND RPCs, lost replies and ACK retirement,
+O_SYNC/O_DSYNC visibility before close, cross-group append/peer extension,
+failed-sync retained-byte recovery and exact cold crash bytes. Final restart
+verifies empty fragment inventory, drained ledgers, zero quota and late PUT
+fencing on every member. No native or live failures remain in this capture.
+
+Normal, fault, native-round, direct, buffered, live-round and restoration exit
+markers are all zero. The independent restoration audit verifies the original
+four installed daemons and two TCP/commands-off clients; no private screens or
+24190–24193 listeners remain. Installed stores and binaries were not replaced.
+[Acceptance and file hashes](../../results/measure/20261011-amd-integration/final-acceptance.json),
+[normal native](../../results/measure/20261011-amd-integration/evidence/final/normal-native.log),
+[fault native](../../results/measure/20261011-amd-integration/evidence/final/fault-native.log),
+[direct](../../results/measure/20261011-amd-integration/evidence/final/live/direct.log),
+[buffered](../../results/measure/20261011-amd-integration/evidence/final/live/buffered.log),
+[restoration](../../results/measure/20261011-amd-integration/evidence/final/restoration-proof.json).
+
+This accepts the recorded starting inventory plus the three follow-up captured
+tips, not commits added to other active branches after that capture. Production
+queries remain disabled; Mac/ORCD query runtime acceptance is not claimed.
+W72/W94 remain partial: full production flush/PUT-ticket integration and
+sustained-service acceptance remain. W64's wider failover obligations and W66's
+D36/scale decisions remain unchanged. No RDMA gates, pushes or D25 activation.

@@ -1,0 +1,22 @@
+{
+  "stages": [
+    [
+      "0",
+      "10",
+      "4097"
+    ],
+    [
+      "1",
+      "10",
+      "4097"
+    ],
+    [
+      "2",
+      "10",
+      "4097"
+    ]
+  ],
+  "original_durable_inode": 4097,
+  "cold_bytes": true,
+  "genuine_exclusive_conflict": true
+}
