@@ -736,3 +736,12 @@ resolve the retained orphan or promise native acceptance. Boundary, huge-count,
 overflow and success-reset scheduling tests pass locally and on Mac Linux.
 The full Linux make test passed on the Mac seed after append completion and
 this retry change (latest-linux-unit.txt).
+
+Ordinary inode/lane reads now overlap fresh locally led groups predicted
+from unfenced row hints. The helper rereads transactionally afterward and
+fences new authoritative groups; hints never supply reply data or authority.
+Stale/missing hints and speculative BUSY/routing failures fall back to scalar
+fencing; storage failures remain failures. Independent-RPC, changed lanes,
+directory shard, pair admission, replacement absence and coordinator failure
+gates pass on Mac Linux (inode-overlap-unit.txt); no build warnings.
+A new full native gate is next, with original assertions/deadlines.

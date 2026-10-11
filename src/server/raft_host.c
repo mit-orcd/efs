@@ -5768,7 +5768,28 @@ static int host_read_inode_lanes_covered(struct efs_raft_host *h, efs_ino_t ino,
 static int host_read_inode_lanes(struct efs_raft_host *h, efs_ino_t ino,
                                  int *leader_hint)
 {
-    return host_read_inode_lanes_covered(h,ino,leader_hint,0);
+    /* Unfenced bytes are scheduling hints only. Overlap known lane groups,
+     * then reread the inode transactionally and fence every newly discovered
+     * group. Neither stale/missing hints nor a completed earlier RPC grant
+     * reply authority. Speculative route/time failures retain scalar fallback. */
+    uint8_t ig=efs_raft_shard_group(efs_kv_inode_shard(ino)),planned=ig;
+    struct efs_meta_row hint;
+    if(efs_meta_apply_get_inode(h->kv,ino,&hint)==EFS_OK) {
+        uint64_t bits=S_ISDIR(hint.mode) && hint.layout!=EFS_META_LAYOUT_LOCAL?
+                        hint.used_shards:hint.active_lanes;
+        for(unsigned i=0;i<EFS_META_LANES;i++)
+            if(bits&(1ull<<i)) {
+                uint8_t lg=efs_raft_shard_group(efs_kv_lane_shard(ino,(uint8_t)i));
+                if(lg!=ig && host_hosts(h,lg)){planned=lg;break;}
+            }
+    }
+    uint8_t covered=0;
+    if(planned!=ig) {
+        int rc=host_read_index_pair(h,ig,planned,leader_hint);
+        if(rc==EFS_OK)covered=(uint8_t)((1u<<ig)|(1u<<planned));
+        else if(rc!=EFS_ERR_BUSY && rc!=EFS_ERR_NOT_PRIMARY)return rc;
+    }
+    return host_read_inode_lanes_covered(h,ino,leader_hint,covered);
 }
 
 /* Stable per-group order, bounded chunks, and global control fences. Only
