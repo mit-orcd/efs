@@ -12,6 +12,10 @@ struct efs_query_build_times {
     uint32_t restored;
 };
 struct efs_query_build_times efs_query_catalog_build_times(const struct efs_query_catalog *);
+/* A failed derived build may remember one orphan-directory identity. It is
+ * only a hint: each retry rechecks an immutable source before avoiding scratch
+ * I/O. No authoritative row, published generation or watermark is changed. */
+struct efs_query_build_failure { efs_ino_t directory; };
 struct efs_query_rollup {
     uint64_t imm_files, imm_dirs, imm_bytes, imm_tmin, imm_tmax;
     uint64_t tree_files, tree_dirs, tree_bytes, tree_tmin, tree_tmax;
@@ -35,6 +39,9 @@ int efs_query_catalog_build(struct efs_kv_lsm_snapshot *source,
 int efs_query_catalog_build_disk(const char *root,struct efs_kv_lsm_snapshot *source,
     const struct efs_query_catalog *old,uint64_t max_bytes,int (*stop)(void *),void *ctx,
     struct efs_query_catalog **out);
+int efs_query_catalog_build_disk_checked(const char *root,struct efs_kv_lsm_snapshot *source,
+    const struct efs_query_catalog *old,uint64_t max_bytes,int (*stop)(void *),void *ctx,
+    struct efs_query_build_failure *failure,struct efs_query_catalog **out);
 /* Checkpoint/restore require identical applied indexes and terms for both
  * metadata groups, supplied only after the host establishes authority. */
 int efs_query_catalog_checkpoint(struct efs_query_catalog *,const uint64_t watermark[4]);

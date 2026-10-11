@@ -837,3 +837,29 @@ changing its assertions. Evidence: atomic-session-wire-cold.txt.
 Complete Mac Linux make test passes after the combined session admission
 change; architecture documentation gate remains 5/5. Evidence:
 atomic-session-build-full-unit.txt. No native acceptance claim yet.
+
+The complete installed Mac native gate on production 21619c91 (source
+checkpoint a133718e) finished 211/216, five timeouts, no skips, in 859 seconds
+including normal cleanup. Both deep-directory cases and both 300 MiB truncate
+cases pass. Remaining failures are dir_many_files (75 s), names_crazy_dirs,
+concurrent_creates_same_dir, mtime_monotonic_many_writes (20 s each), and
+concurrent_appends_two_proc (30 s). Deadlines and assertions remain unchanged.
+Evidence: native-atomic-session-full-j1.txt/.rc; atomic-session-full-sample.json.
+
+The next candidate retains only the identity of one directory rejected by a
+failed derived query build. Each retry revalidates its current inode, parent
+and authoritative LOCAL/SPLITTING/HASHED backlink against a new immutable KV
+snapshot before creating scratch files. Prepared ownership or cancellation is
+inconclusive; wide scans fall back to the complete builder. A still-proven
+orphan reports IO without repeating thousands of scratch writes and barriers.
+It neither repairs authoritative rows nor publishes a catalog/watermark.
+On Mac Linux, tests pass for the original failed graph, unchanged scratch
+write/sync counts on retry, immutable old sources after live repair, successful
+fresh repair, all three layouts, guarded ownership, missing hints and wide
+parent fallback. Existing query disk fault/sort/oracle tests also pass.
+Evidence: orphan-preflight-unit.txt. Installed native acceptance is pending.
+
+Preflight also scans the immutable source for a backlink under any other
+parent before returning IO. Such a backlink, including an inconclusive stale
+layout copy during a cross-group rename cut, falls back to the original
+builder. The bounded-scratch test covers this alternate-parent case.

@@ -8613,6 +8613,7 @@ static void *host_query_thread(void *ctx)
     struct efs_raft_host *h=ctx;
     uint64_t published[4096]={0},current[4096],first_dirty=0,last_attempt=0;
     int failed=0,last_error=0;uint64_t last_error_log=0;
+    struct efs_query_build_failure build_failure={0};
     uint64_t catalog_bytes=HOST_QUERY_BYTES;
     const char *backend=getenv("EFS_QUERY_BACKEND");
     int disk_backend=!backend || strcmp(backend,"ram");
@@ -8694,8 +8695,8 @@ static void *host_query_thread(void *ctx)
                     fprintf(stderr,"query-catchup: rc=%d backend=disk\n",restored);
                 }
                 if(initial)fprintf(stderr,"query-restore: rc=%d backend=disk\n",restored);
-                if(restored)rc=efs_query_catalog_build_disk(query_root,source,h->query_view.catalog,
-                    catalog_bytes,host_query_disk_cancel,h,&candidate);
+                if(restored)rc=efs_query_catalog_build_disk_checked(query_root,source,h->query_view.catalog,
+                    catalog_bytes,host_query_disk_cancel,h,&build_failure,&candidate);
                 if(!rc) {
                     pthread_mutex_lock(&h->mu);
                     if(!host_query_capable(h))rc=EFS_ERR_NOT_PRIMARY;

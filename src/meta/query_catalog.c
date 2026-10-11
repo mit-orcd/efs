@@ -526,20 +526,24 @@ int efs_query_catalog_build(struct efs_kv_lsm_snapshot *source, const struct efs
     c->stop=NULL;c->stop_ctx=NULL;
     *out=c;return EFS_OK;
 }
-int efs_query_catalog_build_disk(const char *root,struct efs_kv_lsm_snapshot *source,
+int efs_query_catalog_build_disk_checked(const char *root,struct efs_kv_lsm_snapshot *source,
     const struct efs_query_catalog *old,uint64_t max_bytes,int (*stop)(void *),void *ctx,
-    struct efs_query_catalog **out)
+    struct efs_query_build_failure *failure,struct efs_query_catalog **out)
 {
     if(out)*out=NULL;
     if(!out || !source || !root)return EFS_ERR_INVAL;
     if(max_bytes<sizeof(struct efs_query_catalog))return EFS_ERR_NOMEM;
     struct efs_query_catalog *c=calloc(1,sizeof(*c));if(!c)return EFS_ERR_NOMEM;
     c->refs=1;
-    int rc=efs_query_disk_build(root,source,old?old->disk:NULL,max_bytes-sizeof(*c),stop,ctx,&c->times,&c->disk);
+    int rc=efs_query_disk_build_checked(root,source,old?old->disk:NULL,max_bytes-sizeof(*c),stop,ctx,&c->times,failure,&c->disk);
     if(rc){free(c);return rc;}
     c->bytes=sizeof(*c)+efs_query_disk_bytes(c->disk);c->rebuilt=efs_query_disk_rebuilt(c->disk);
     *out=c;return EFS_OK;
 }
+int efs_query_catalog_build_disk(const char *root,struct efs_kv_lsm_snapshot *source,
+    const struct efs_query_catalog *old,uint64_t max_bytes,int (*stop)(void *),void *ctx,
+    struct efs_query_catalog **out)
+{ return efs_query_catalog_build_disk_checked(root,source,old,max_bytes,stop,ctx,NULL,out); }
 int efs_query_catalog_checkpoint(struct efs_query_catalog *c,const uint64_t watermark[4])
 {
     return c && c->disk?efs_query_disk_checkpoint(c->disk,watermark):EFS_ERR_INVAL;
