@@ -449,3 +449,16 @@ This index adds traceable IDs to the Intel acceptance follow-ups; it does not ch
 Pending choices retain their existing homes: W99 cache-only pressure escalation and numeric thresholds; W54 additional live-reference GC guard; W66/W74 metadata mechanism under accepted D36. W104 separately records the deferred shared-mmap scope choice. No new D number or policy acceptance is implied.
 
 **RDMA test placement — user instruction, Oct 11, 2026:** All RDMA work is tested on AMD using software RDMA, or on `orcd-test` using hardware IB/RDMA, according to the claim being validated. Keep software and hardware verdicts separate. Intel continues to provide TCP acceptance. This applies to all RDMA gates, including older W-item hardware obligations.
+
+
+## ORCD communication follow-ups — W109/W110
+
+| Item | Assigned cluster | State / next action |
+| --- | --- | --- |
+| [W109](../backlog/work-items.md#w109) | orcd-test | Open: correlate metadata apply/query contention with original EBUSY/timeouts; preserve deadlines and full-load gates. |
+| [W110](../backlog/work-items.md#w110) | orcd-test | Open: distinguish EFS retries/loss from TCP retransmission and native-IB errors; establish per-op correlation and recovery gates. |
+
+[Capture summary and closure plans](orcd-communication-20261011.md): two EFS TCP
+retransmissions, unchanged IB error counters, 22–50 ms metadata apply waits and
+substantial query-build CPU. No transport root cause or gate closure is claimed.
+W95 packing and W106 broader hardware acceptance remain separate work.
