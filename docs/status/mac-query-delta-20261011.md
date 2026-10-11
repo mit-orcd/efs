@@ -673,3 +673,28 @@ unchanged native suite and local baseline are now running with one outer
 fixture at a time; intrinsic multiprocess cases and original deadlines are
 retained. Its deep-60 and 300-file cases have still exceeded their deadlines.
 Live read samples: LOOKUP 3.71 ms average, KV body 7 us, lanes 3 us.
+
+The one-outer-fixture native run completed incomplete: 144/216 PASS, 8 FAIL,
+64 NOTRUN in 538.5 seconds. The surviving timed-out process group was in
+concurrent_create_unlink_two_proc (not concurrent_appends_two_proc). Both
+append cases also timed out. Workers later exited. Normal tree cleanup
+finished; a stop attempted during cleanup refused safely and retained servers.
+After cleanup the next stop drained normally. No force discard was used.
+
+Fresh matched-prefix follower read probes now acknowledge before KV apply,
+while requests owing commit/apply still enter ordinary receive. Only known
+boot/current term/stable voters and previously persisted matching log prefixes
+qualify. Leader applied-prefix authority remains mandatory. Zero-context
+empty traffic contributes liveness only, never a fresh read vote. Parked
+follower apply, prefix mismatch, deferred storage, fresh/old contexts and
+normal queued apply regressions pass, including core ASAN/UBSAN and Mac Linux.
+
+The checkpoint worker can defer a newer no-credit hint while its accepted job
+is blocked, strictly below the original 1,024-entry cap measured from COMPLETED
+marker floors. Captured work is not overwritten; pending credits and cap
+boundaries still backpressure. Stop drains accepted work and retains the
+existing forced latest checkpoint. Blocked cap/credit, captured-prefix, error
+repair and shutdown tests pass under sanitizers and Mac Linux. Live deep pair
+remains 0/2 (35.9 seconds including normal cleanup); neither fix closes the
+native gate. Evidence: native-bounded-marker-deep.txt and
+bounded-marker-sample-efs1.json under results/mac-readindex-resume.

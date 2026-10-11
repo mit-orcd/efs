@@ -6328,7 +6328,7 @@ struct host_checkpoint_worker {
     pthread_cond_t cv;
     pthread_t tid;
     int started,busy,stop,result;
-    uint64_t idx[HOST_NGROUPS],now,bytes;
+    uint64_t idx[HOST_NGROUPS],saved[HOST_NGROUPS],now,bytes;
     unsigned n;
 };
 
@@ -6347,6 +6347,10 @@ static void *host_checkpoint_work(void *arg)
         int rc=host_checkpoint_retire(w->host,idx,now,EFS_OK,n,bytes);
         if(BO_ON())BO_HIST(BH_APPLIED_PERSIST_US,efs_batch_obs_now_us()-start);
         pthread_mutex_lock(&w->mu);
+        /* Publish only floors belonging to the captured hosted groups. An
+         * unattached group (idx zero) may be initialized by another thread. */
+        for (unsigned i=0;i<HOST_NGROUPS;i++)
+            if(idx[i])w->saved[i]=w->host->g[i].applied_saved;
         w->result=rc;w->busy=0;
         pthread_cond_broadcast(&w->cv);
     }
@@ -6385,6 +6389,21 @@ static int host_checkpoint_dispatch(struct host_checkpoint_worker *w,
         int previous=w->result;
         pthread_mutex_unlock(&w->mu);
         return previous;
+    }
+    /* A marker is a replay hint, not write durability. Defer a new hint
+     * while the accepted one is blocked, but only below the existing replay
+     * tail cap measured from COMPLETED markers. Never discard owed credits.
+     * The next pump iteration retries, and stop forces the latest prefix. */
+    if(w->busy && (!w->host->flow_enabled || !n)) {
+        int bounded=1;
+        for(unsigned i=0;i<HOST_NGROUPS;i++)
+            if(idx[i]<w->saved[i] ||
+               idx[i]-w->saved[i]>=HOST_APPLIED_MAX_TAIL)bounded=0;
+        if(bounded) {
+            int previous=w->result;
+            pthread_mutex_unlock(&w->mu);
+            return previous;
+        }
     }
     while(w->busy)pthread_cond_wait(&w->cv,&w->mu);
     int previous=w->result;
