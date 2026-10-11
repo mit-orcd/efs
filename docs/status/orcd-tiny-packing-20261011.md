@@ -499,3 +499,22 @@ waiting for cohort flush/network progress; otherwise blocked close callers
 can prevent other writers from filling the cohort. Later writes remain owned
 in the existing post-publication state until the first packed receipt resolves,
 then promote through the ordinary path as required.
+
+
+### Retained packed publication adapter
+
+The retained writer token now holds the exact completed PUT record, including
+its packed reference and flag. `efs_dcache_publication_report` constructs retries
+from that immutable token rather than mutable cache placement. Its allocation
+remains charged through `sizeof(efs_writer_state)` in the metadata budget.
+The plan adapter accepts a packed PUT only for a fresh, absent base at chunk
+zero whose single owned range starts at zero and exactly covers the tiny record.
+It checks FileID, captured epoch, record generation, geometry and bounds before
+making publication ready. Ordinary sparse merges retain their existing path.
+
+The actual cache-function gate checks invalid identities, epoch, extent and
+flags without releasing accepted bytes; it then changes cache placement and
+retries after a lost result using the same packed reference and digest. Exact
+matching durable completion releases the body. This is another integration
+checkpoint, not mounted coalescer activation: the group scheduler, upload-permit
+ownership and distributed shared-object GC remain required.

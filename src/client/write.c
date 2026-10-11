@@ -4337,6 +4337,7 @@ int efs_dcache_finish_publication(efs_ino_t ino, uint64_t generation, uint32_t c
     }
     rc=efs_writer_state_finish_put(e->writer,object,sequence,verdict);
     if (rc==EFS_OK) {
+        e->writer->publication.put_result=report;
         e->object_gen=object;e->object_seq=sequence;
         memcpy(e->object_nodes,report.nodes,sizeof(e->object_nodes));
         memcpy(e->object_cks,report.checksums,sizeof(e->object_cks));
@@ -4365,11 +4366,8 @@ int efs_dcache_publication_report(efs_ino_t ino, uint64_t generation, uint32_t c
         (e->data && efs_writer_buffers_overlap(out,sizeof(*out),e->data,e->len))) {
         rc=EFS_ERR_INVAL;goto done;
     }
-    struct efs_chunk_rec put={0};put.ino=ino;put.chunk_index=ci;put.chunk_generation=object;
-    put.publish_flags=e->object_publish_flags & EFS_CHUNK_REC_F_FRESH_OBJECT;
-    memcpy(put.nodes,e->object_nodes,sizeof(put.nodes));
-    memcpy(put.checksums,e->object_cks,sizeof(put.checksums));
-    rc=efs_writer_plan_report(&e->writer->publication.plan,&put,out);
+    rc=efs_writer_plan_report(&e->writer->publication.plan,
+                             &e->writer->publication.put_result,out);
 done:
     pthread_mutex_unlock(mu);return rc;
 }
