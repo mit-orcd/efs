@@ -17,6 +17,14 @@
  * is serialized apply. Reply salt is ticket state, never permission to PUT. */
 /* REPORT envelope: [tag][uuid:16][epoch:4][legacy PUBLISH:202]*N.
  * Fences every mapping at serialized apply without reusing delta fields. */
+/* Internal coordinator commands; public control RPC cannot forge ACKs. */
+#define EFS_MD_CMD_PACK_GC_ACK 48
+#define EFS_MD_CMD_PACK_CANCEL 49
+#define EFS_MD_CMD_PACK_GC_RETIRE 50
+#define EFS_MD_REQ_PACK_GC_VIEW 51
+#define EFS_MD_CMD_PACK_UPLOAD_RETIRE 47 /* completed permit only; retain live object ledger */
+#define EFS_MD_CMD_PACK_ADMIT 45 /* canonical EFSUPLD1 manifest */
+#define EFS_MD_REQ_PACK_STATUS 46 /* same manifest, fresh authority only */
 #define EFS_MD_CMD_QUERY_POLICY 43 /* expected version:8, mask:4 */
 #define EFS_MD_REQ_QUERY_POLICY 44 /* ReadIndex only, reply index=version/salt=mask */
 #define EFS_MD_CMD_REPORT_PUBLISH 41
@@ -139,5 +147,10 @@
 #define EFS_XATTR_NAME_MAX  255
 #define EFS_XATTR_VALUE_MAX 4096
 #define EFS_XATTR_BLOB_MAX  16384
+
+/* LEASE_LOCK_NEXT reply: BUSY with zero index/term and this salt certifies
+ * selection/admission refused before any cleanup command was proposed.
+ * An ordinary BUSY (including an uncertain submitted batch) has no marker. */
+#define EFS_MD_SESSION_CLEANUP_RETRY_SALT 2ull
 
 #endif

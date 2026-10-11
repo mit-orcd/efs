@@ -4,6 +4,10 @@ Production tiny-file packing is the first ORCD priority on `devel-orcd`: see
 [W95/P4.1 plan and allocation baseline](orcd-tiny-packing-20261011.md). The
 408× calculation is for 512-byte payloads in separate full-sized fragments;
 production packing and measured savings remain open.
+[ORCD integration and retained writer checkpoint](orcd-branch-integration-20261011.md)
+records the latest captured branch batch, bounded packed-read scratch and exact
+packed publication retries. Loaded query capacity/refold failures remain open;
+fresh-namespace regression results are reported separately.
 [W108 owner-name rendering](w108-owner-name-display-20261011.md) is retained
 in the ORCD queue after the packing priority.
 
@@ -15,8 +19,13 @@ in the ORCD queue after the packing priority.
 
 [Current two-hour integration and repair ledger](devel-nuc-integration-20261011.md)
 records the captured all-branch merge, W72 fresh-mount admission fixes, a bounded
-W52 prepare-pipeline experiment and their retained failures. Corrected full
-native/direct/buffered suites and matched append controls are in progress.
+W52 prepare-pipeline experiment and their retained failures. Corrected native
+and both full live modes pass (POSIX 216/216, peer 67/67 per mode). Additional
+loaded APPEND/GC rounds pass in both modes. Four written-ring drive controls
+repeat the NVMe decline with physical request evidence; no cache diagnosis or
+hardware ceiling is claimed. Long 20k append gates remain incomplete. Enabled
+command/options gates pass in both modes, final native passes, and the original
+installed runtime and retained sample bytes are verified after restoration.
 
 ## NUC closure session — October 10–11
 
@@ -507,13 +516,13 @@ Spark performance measurement still owed. Grouped open counts are now
 
 ## Intel follow-ups — W100–W106 (indexed Oct 11, 2026)
 
-Current [devel-intel acceptance ledger](intel-deployment-acceptance-20261011.md) retains failures alongside reruns. [Captured evidence](../../results/measure/20261011-intel-devel-intel/acceptance-in-progress.json) remains explicitly in progress until the complete host/mode matrix terminates.
+Current [devel-intel acceptance ledger](intel-deployment-acceptance-20261011.md) retains failures alongside reruns. Frozen `f9e77c9f` repairs REGISTER apply-verdict propagation and is undergoing complete TCP/direct and TCP/buffered acceptance on both Intel hosts. [Earlier captured evidence](../../results/measure/20261011-intel-devel-intel/acceptance-in-progress.json) is a historical checkpoint; it does not establish current-source acceptance. The ledger links exact-source failures, native proof and the historical simulator NOTRUN correction.
 
 This index adds traceable IDs to the Intel acceptance follow-ups; it does not change the existing queue order or accepted design decisions. Existing sustained tiny-file performance remains W97, protection/repair W74/W66, durability W71/W73 and capacity W99.
 
 | ID | Task | Recorded state |
 | --- | --- | --- |
-| [W100](../backlog/work-items.md#w100) | Intel concurrent POSIX timeouts and mixed-workload EIO | Correctness/performance investigation; open. |
+| [W100](../backlog/work-items.md#w100) | Intel concurrent POSIX timeouts and mixed-workload EIO | Correctness/performance investigation; open. REGISTER verdict repair passes real pending-CREATE recovery; ACTIVE-proof optimization passes native/sanitizers; live concurrent acceptance pending. |
 | [W101](../backlog/work-items.md#w101) | Complete and verify the Intel two-million-file workload | Operational acceptance; in progress. |
 | [W102](../backlog/work-items.md#w102) | Complete Intel2 private peer and GC acceptance | Validation follow-up; in progress, aggregate acceptance remains open. |
 | [W103](../backlog/work-items.md#w103) | Investigate intermittent Intel persistence and stats timeouts | Liveness/performance investigation; open. |
@@ -556,3 +565,5 @@ no ORCD acceptance or W109 closure is implied.
 all current development branches merged and `c52a4643` deployed to eleven hosts.
 Full Linux units and retained file samples pass; loaded POSIX/query gates remain
 failed, and the fresh tiny-file benchmark is running.
+
+- [NUC W52/W97 deployed continuation](nuc-w52-w97-resume-20261011.md): preserved-store rollout, repeated phase/storage latency measurements, staged bounded completion transactions and pending placement controls.

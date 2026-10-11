@@ -12,6 +12,8 @@
 #include "efs/query_filters.h"
 #include "efs/publication.h"
 #include "efs/put_ticket.h"
+#include "efs/pack_admission.h"
+#include "efs/packed_upload.h"
 #include "efs/meta_cmd.h"
 #include "efs/dir_layout.h"
 #include "efs/dir_spread.h"
@@ -120,6 +122,8 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
 #define HOST_PUBLICATION_LEN (HOST_PUBLISH_LEN + 28u)
 #define HOST_PUBLICATION_TICKET_LEN (HOST_PUBLICATION_LEN + 36u)
 #define HOST_PUB_F_TICKETED 4
+#define HOST_PUB_F_PACKED 8
+#define HOST_PUBLICATION_PACK_LEN (HOST_PUBLICATION_LEN + EFS_PACK_REF_BYTES)
 #define HOST_PUB_TAIL_TRIES  4 /* cross-group truncate tail CAS retries */
 #define HOST_ACTIVATE_LANE_LEN 10 /* tag + ino:8 + lane:1 */
 #define HOST_ACTIVATE_MASK_LEN 17 /* tag + ino:8 + mask:8 */
@@ -2065,6 +2069,26 @@ static int host_unpack_session_cleanup(const uint8_t *cmd,uint32_t clen,
     return EFS_OK;
 }
 
+/* A REGISTER's applied result can carry its exact ACTIVE epoch and shard.
+ * This is request-local, index/term-matched evidence, not an owner cache.
+ * FENCING idempotent REGISTER success must never mint this admission proof. */
+static uint64_t host_session_register_active_proof(uint32_t epoch,uint32_t shard)
+{
+    return (1ull<<63) | ((uint64_t)shard<<32) | epoch;
+}
+static int host_session_register_apply(struct efs_raft_host *h,
+    const uint8_t *uuid,uint32_t epoch,uint32_t shard)
+{
+    h->apply_extra=0;
+    int rc=efs_session_register(h->kv,uuid,epoch,shard);
+    struct efs_session_rec owner;
+    if(rc==EFS_OK && efs_session_get(h->kv,uuid,&owner)==EFS_OK &&
+       owner.state==EFS_SESSION_ACTIVE && owner.epoch==epoch &&
+       efs_session_bit_get(owner.touched,shard))
+        h->apply_extra=host_session_register_active_proof(epoch,shard);
+    return rc;
+}
+
 static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                              uint32_t clen, uint64_t index)
 {
@@ -2090,7 +2114,7 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
             return EFS_OK;
         epoch = rd32be(cmd + 18);
         shard = rd32be(cmd + 22);
-        rc = efs_session_register(h->kv, uuid, epoch, shard);
+        rc = host_session_register_apply(h, uuid, epoch, shard);
         break;
     case EFS_MD_SESS_ESTABLISH:
         if (clen < HOST_SESS_REG_LEN)
@@ -2213,7 +2237,9 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                 rc,(unsigned long long)index,(unsigned long long)ino);
         return rc;
     }
-    /* A blocked local fence is not a completed revocation barrier. Preserve
+    /* REGISTER must expose missing-owner and fenced-owner verdicts so its
+     * caller can bootstrap only a genuinely absent owner.
+     * A blocked local fence is not a completed revocation barrier. Preserve
      * its business verdict in the apply ring so the coordinator cannot ACK it. */
     /* First-touch namespace admission bootstraps only after REGISTER's
      * authoritative NOT_FOUND. Turning that verdict into OK skips CREATE
@@ -2280,14 +2306,19 @@ static int apply_lock_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 
 /* Same encoding as sim apply_publish_cmd (plus the host FileID/lane_local
  * tail). clen may be N * HOST_PUBLISH_LEN — one Raft entry, many pubs. */
-static int host_publication_command_valid(const uint8_t *cmd,uint32_t len)
+static int host_publication_command_valid(const uint8_t *cmd, uint32_t len)
 {
-    if (!cmd || (len!=HOST_PUBLICATION_LEN && len!=HOST_PUBLICATION_TICKET_LEN) ||
-        (cmd[0]!=EFS_MD_CMD_PUBLICATION && cmd[0]!=EFS_MD_CMD_PUBLICATION_ADMIT &&
-         cmd[0]!=EFS_MD_CMD_PUBLICATION_RETIRE)) return 0;
-    uint8_t flags=cmd[HOST_PUBLISH_LEN-1];
-    return !(flags & ~(HOST_PUB_F_LANE_LOCAL|HOST_PUB_F_FRESH_OBJECT|HOST_PUB_F_TICKETED)) &&
-        !!(flags & HOST_PUB_F_TICKETED)==(len==HOST_PUBLICATION_TICKET_LEN) &&
+    if (!cmd || (len != HOST_PUBLICATION_LEN && len != HOST_PUBLICATION_TICKET_LEN && len != HOST_PUBLICATION_PACK_LEN) ||
+        (cmd[0] != EFS_MD_CMD_PUBLICATION && cmd[0] != EFS_MD_CMD_PUBLICATION_ADMIT &&
+         cmd[0] != EFS_MD_CMD_PUBLICATION_RETIRE)) return 0;
+    uint8_t flags = cmd[HOST_PUBLISH_LEN - 1];
+    if (flags & ~(HOST_PUB_F_LANE_LOCAL | HOST_PUB_F_FRESH_OBJECT | HOST_PUB_F_TICKETED | HOST_PUB_F_PACKED)) return 0;
+    if (flags & HOST_PUB_F_PACKED) {
+        struct efs_pack_ref ref;
+        return len == HOST_PUBLICATION_PACK_LEN && !(flags & (HOST_PUB_F_TICKETED | HOST_PUB_F_LANE_LOCAL)) &&
+            (flags & HOST_PUB_F_FRESH_OBJECT) && !efs_pack_ref_decode(cmd + HOST_PUBLICATION_LEN, EFS_PACK_REF_BYTES, &ref);
+    }
+    return len != HOST_PUBLICATION_PACK_LEN && !!(flags & HOST_PUB_F_TICKETED) == (len == HOST_PUBLICATION_TICKET_LEN) &&
         (!(flags & HOST_PUB_F_TICKETED) || (flags & HOST_PUB_F_FRESH_OBJECT));
 }
 
@@ -2328,6 +2359,8 @@ static void unpack_publication(const uint8_t *cmd, struct efs_meta_pub *p,
         memcpy(p->publication_id.client_uuid,cmd+HOST_PUBLISH_LEN,EFS_OPID_UUID_LEN);
         p->publication_id.session_epoch=rd32be(cmd+HOST_PUBLISH_LEN+16);
         p->publication_id.seq=rd64be(cmd+HOST_PUBLISH_LEN+20);
+        if (q[16] & HOST_PUB_F_PACKED)
+            (void)efs_pack_ref_decode(cmd + HOST_PUBLICATION_LEN, EFS_PACK_REF_BYTES, &p->ch.packed);
         if (q[16] & HOST_PUB_F_TICKETED) {
             p->ticketed=1;
             memcpy(p->put_id.client_uuid,cmd+HOST_PUBLICATION_LEN,EFS_OPID_UUID_LEN);
@@ -2640,7 +2673,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_APPEND_RES ||
            cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_PUBLISH ||
            cmd[0] == EFS_MD_CMD_REPORT_PUBLISH ||
-           cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
+           cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PACK_GC_ACK || cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_GC_RETIRE || cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_UPLOAD_RETIRE || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
            cmd[0] == EFS_MD_CMD_XATTR || cmd[0] == EFS_MD_CMD_SALT ||
            cmd[0] == EFS_MD_CMD_LOCK ||
            cmd[0] == EFS_MD_CMD_UNLINK || cmd[0] == EFS_MD_CMD_SETATTR ||
@@ -2677,7 +2710,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
-         cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
+         cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_PACK_GC_ACK || cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_GC_RETIRE || cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_UPLOAD_RETIRE || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
          cmd[0] == EFS_MD_CMD_REPORT_PUBLISH || cmd[0] == EFS_MD_CMD_ACTIVATE_LANE ||
          cmd[0] == EFS_MD_CMD_PUBLISH || cmd[0] == EFS_MD_CMD_PUBLICATION ||
          cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE ||
@@ -3039,6 +3072,24 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
     if (cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT) {
         if (!host_publication_command_valid(cmd,clen)) return EFS_ERR_PROTO;
         return apply_one_publish(h,cmd,index,term,group);
+    }
+    if(cmd[0]==EFS_MD_CMD_PACK_GC_ACK || cmd[0]==EFS_MD_CMD_PACK_CANCEL || cmd[0]==EFS_MD_CMD_PACK_GC_RETIRE) {
+        if(clen<7 || cmd[1]>1)return EFS_ERR_INVAL;
+        struct efs_pack_object object;
+        int rc=efs_pack_object_decode(cmd+6,clen-6,&object);if(rc)return rc;
+        if(group!=object.ledger.publication_group)return EFS_ERR_INVAL;
+        if(cmd[0]==EFS_MD_CMD_PACK_GC_ACK)
+            return efs_pack_admission_ack(h->kv,&object,rd32be(cmd+2),cmd[1]);
+        if(cmd[1] || rd32be(cmd+2))return EFS_ERR_INVAL;
+        return cmd[0]==EFS_MD_CMD_PACK_CANCEL ? efs_pack_admission_cancel_verified(h->kv,&object) :
+            efs_pack_admission_retire(h->kv,&object);
+    }
+    if (cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_UPLOAD_RETIRE) {
+        struct efs_pack_object object; struct efs_pack_ref refs[EFS_PACK_MAX_RECORDS]; uint32_t count;
+        int rc = efs_pack_upload_decode(cmd + 1, clen - 1, &object, refs, EFS_PACK_MAX_RECORDS, &count);
+        if (rc) return rc;
+        if (group != object.ledger.publication_group) return EFS_ERR_INVAL;
+        return cmd[0] == EFS_MD_CMD_PACK_UPLOAD_RETIRE ? efs_pack_upload_retire(h->kv, &object) : efs_pack_admit(h->kv, &object, refs, count);
     }
     if(cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT || cmd[0]==EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED) {
         struct efs_put_ticket ticket;
@@ -4136,7 +4187,7 @@ static int host_pressure_admit(void *app, const struct efs_raft_entry *entries,
  * only read-your-writes (a committed index is unique). */
 static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
                         const uint8_t *cmd, uint32_t clen, uint64_t *idx,
-                        uint64_t *term, int *leader_hint)
+                        uint64_t *term, int *leader_hint, int local_only)
 {
     struct efs_raft *r;
     int rc;
@@ -4169,6 +4220,12 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
         lid = efs_raft_leader(r);
         if (leader_hint)
             *leader_hint = lid;
+        if (local_only && solo) {
+            pthread_mutex_unlock(&h->mu);
+            propose_q_sub();
+            if (quiet) (void)efs_raft_disk_sync_release(h->disk);
+            return EFS_ERR_NOT_PRIMARY;
+        }
         if (efs_raft_role(r) == EFS_RAFT_LEADER && solo && quiet) {
             /* One voter commits inside propose. Drop the hold first so
              * that commit's append fsyncs before it returns. */
@@ -4268,6 +4325,7 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
     propose_q_sub();
     if (quiet)
         (void)efs_raft_disk_sync_release(h->disk);
+    if (local_only) return EFS_ERR_NOT_PRIMARY;
     /* Not the leader: forward to it. host_remote_cmd is a blocking peer
      * RPC; no host lock is held across it. The command is already fully
      * formed and the Raft log + apply-side validation order it against
@@ -4401,19 +4459,26 @@ static int host_wait_settled(struct efs_raft_host *h, uint8_t group,
     return rc;
 }
 
-static int host_propose(struct efs_raft_host *h, uint8_t group,
+static int host_propose_mode(struct efs_raft_host *h, uint8_t group,
                         const uint8_t *cmd, uint32_t clen, uint64_t *idx,
-                        uint64_t *term, int *leader_hint)
+                        uint64_t *term, int *leader_hint, int local_only)
 {
-    if (!h->pressure_enabled) return host_propose_impl(h,group,cmd,clen,idx,term,leader_hint);
+    if (!h->pressure_enabled) return host_propose_impl(h,group,cmd,clen,idx,term,leader_hint,local_only);
     struct efs_admission_ticket ticket={0};
     int rc = efs_admission_try(&h->proposal_queue,(uint64_t)clen+4096,
                                host_pressure_recovery(cmd,clen),&ticket);
     if (rc != EFS_OK) return rc;
-    rc=host_propose_impl(h,group,cmd,clen,idx,term,leader_hint);
+    rc=host_propose_impl(h,group,cmd,clen,idx,term,leader_hint,local_only);
     (void)efs_admission_release(&ticket);
     return rc;
 }
+static int host_propose(struct efs_raft_host *h, uint8_t group,
+                        const uint8_t *cmd, uint32_t clen, uint64_t *idx,
+                        uint64_t *term, int *leader_hint)
+{
+    return host_propose_mode(h,group,cmd,clen,idx,term,leader_hint,0);
+}
+
 
 static int host_propose_wait_idx_impl(struct efs_raft_host *h, uint8_t group,
                                  const uint8_t *cmd, uint32_t clen, int *hint,
@@ -4422,7 +4487,7 @@ static int host_propose_wait_idx_impl(struct efs_raft_host *h, uint8_t group,
     uint64_t idx = 0, term = 0;
     int rc;
 
-    rc = host_propose_impl(h, group, cmd, clen, &idx, &term, hint);
+    rc = host_propose_impl(h, group, cmd, clen, &idx, &term, hint, 0);
     if (rc != EFS_OK)
         return rc;
     if (idx_out)
@@ -4466,7 +4531,7 @@ static int host_propose_wait_ex_impl(struct efs_raft_host *h, uint8_t group,
     uint64_t idx = 0, term = 0;
     int rc, erc;
 
-    rc = host_propose_impl(h, group, cmd, clen, &idx, &term, hint);
+    rc = host_propose_impl(h, group, cmd, clen, &idx, &term, hint, 0);
     if (rc != EFS_OK)
         return rc;
     rc = host_wait_applied(h, group, idx, hint);
@@ -4868,8 +4933,8 @@ static void host_fwd_getchunks(struct efs_raft_host *h, efs_export_id_t export_i
         rid = host_pick_peer(h, groups, ng, skip);
         if (rid < 0)
             return;
-        if (host_inode_rpc_peer(h, rid, EFS_MSG_INODE_GETCHUNKS, &req,
-                                sizeof(req), EFS_MSG_INODE_GETCHUNKS_REPLY,
+        if (host_inode_rpc_peer(h, rid, EFS_MSG_GETCHUNKS_PACKED, &req,
+                                sizeof(req), EFS_MSG_GETCHUNKS_PACKED_REPLY,
                                 out, sizeof(*out)) != 0) {
             skip = rid;
             out->status = EFS_INODE_RPC_NOT_PRIMARY;
@@ -5651,8 +5716,11 @@ static int host_row_lanes_hosted(struct efs_raft_host *h, efs_ino_t ino,
     return 1;
 }
 
-static int host_read_inode_lanes_after_group(struct efs_raft_host *h, efs_ino_t ino,
-                                 int *leader_hint, int covered_group)
+/* covered belongs to this operation only: successful earlier ReadIndexes
+ * already linearize reads of that group after this request arrived. Never
+ * retain this mask across RPCs or use it for a group not actually fenced. */
+static int host_read_inode_lanes_reuse(struct efs_raft_host *h, efs_ino_t ino,
+                                 int *leader_hint, uint8_t *covered)
 {
     struct efs_meta_row row;
     uint32_t ish;
@@ -5663,15 +5731,9 @@ static int host_read_inode_lanes_after_group(struct efs_raft_host *h, efs_ino_t 
 
     ish = efs_kv_inode_shard(ino);
     ig = efs_raft_shard_group(ish);
-    /* LOOKUP already established a fresh ReadIndex for its parent group.
-     * Reuse that proof only within this request when the child is on that
-     * same group. Transaction-aware inode reads still resolve pending state,
-     * and every other lane group still gets its own fresh ReadIndex. */
-    if (ig != covered_group) {
-        rc = host_read_index(h, ig, leader_hint);
-        if (rc != EFS_OK)
-            return rc;
-    }
+    rc = (*covered & (1u << ig)) ? EFS_OK : host_read_index(h, ig, leader_hint);
+    if (rc != EFS_OK)
+        return rc;
     struct host_txn_read_context txn={.host=h};
     rc = efs_meta_apply_get_inode_tx(h->kv, ino, host_txn_read_coord, &txn, &row);
     if (rc != EFS_OK && txn.unhosted_coordinator)
@@ -5688,7 +5750,7 @@ static int host_read_inode_lanes_after_group(struct efs_raft_host *h, efs_ino_t 
      * this loop issued it 32 times for one stat (Sep 30, du/find on
      * fstor007: 5–7 ms per stat of a >10 MiB file, 0.2 ms for a small
      * one). The read index is a property of the group, not the lane. */
-    uint8_t seen = (uint8_t)(1u << ig);
+    uint8_t seen = (uint8_t)(*covered | (1u << ig));
     for (i = 0; i < EFS_META_LANES; i++) {
         uint32_t lsh;
         uint8_t lg;
@@ -5718,13 +5780,20 @@ static int host_read_inode_lanes_after_group(struct efs_raft_host *h, efs_ino_t 
             return rc;
         }
     }
+    *covered = seen;
     return EFS_OK;
 }
+static int host_read_inode_lanes_covered(struct efs_raft_host *h, efs_ino_t ino,
+                                 int *leader_hint, uint8_t covered)
+{
+    return host_read_inode_lanes_reuse(h,ino,leader_hint,&covered);
+}
+
 
 static int host_read_inode_lanes(struct efs_raft_host *h, efs_ino_t ino,
                                  int *leader_hint)
 {
-    return host_read_inode_lanes_after_group(h, ino, leader_hint, -1);
+    return host_read_inode_lanes_covered(h,ino,leader_hint,0);
 }
 
 /* Stable per-group order, bounded chunks, and global control fences. Only
@@ -7772,7 +7841,7 @@ static int host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
     uint32_t plen = 0;
     uint64_t t0 = now_us_();
     int64_t pend;
-    int nack = 0, scans = 0, recs = 0, ack_progress = 0;
+    int nack = 0, scans = 0, recs = 0, ack_progress = 0, budget_capped = 0;
     int i;
 
     int prc, src;
@@ -7861,9 +7930,11 @@ static int host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
             /* Room for one whole record's acks, so a record is never
              * split across two entries (the apply folds a record's
              * fragments within one batch). */
-            if (nack + EFS_NUM_FRAGMENTS > GC_ACK_MAX &&
-                host_gc_ack_flush(h, group, acks, &nack) != EFS_OK)
-                goto out;
+            if (nack + EFS_NUM_FRAGMENTS > GC_ACK_MAX) {
+                if (host_gc_ack_flush(h, group, acks, &nack) != EFS_OK)
+                    goto out;
+                ack_progress = 1;
+            }
             host_gc_record(h, ex, c.keys[i], c.vals[i], acks, &nack);
             recs++;
         }
@@ -7877,9 +7948,12 @@ static int host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
          * applies; a rescan from the cursor starts after them. Stop
          * when the scan was not full, the budget is spent, or the
          * host is going down; otherwise yield the KV lock and rescan. */
-        if (!c.full || !h->gc_running || !h->running ||
-            now_us_() - t0 > GC_FRAG_BUDGET_US)
+        if (!c.full || !h->gc_running || !h->running)
             break;
+        if (now_us_() - t0 > GC_FRAG_BUDGET_US) {
+            budget_capped = 1;
+            break;
+        }
         usleep(GC_FRAG_YIELD_US);
     }
 out:
@@ -7891,11 +7965,11 @@ out:
         fprintf(stderr, "raft-host: gc-frag group=%u scans=%d records=%d ms=%llu\n",
                 group, scans, recs,
                 (unsigned long long)((now_us_() - t0) / 1000));
-    /* Live-file overwrites have fragment GC without dead-inode REAP.
-     * Require durable ACK progress, pending work and a full budget-limited
-     * batch; idle/blocked scans retain the ordinary backoff. */
-    return ack_progress && pend > 0 && c.full &&
-           now_us_() - t0 > GC_FRAG_BUDGET_US;
+    /* Only a successful, progressing pass stopped by its work budget can
+     * request shorter opt-in idle. Errors, exhausted scans and shutdown keep
+     * the default backoff even if they also consumed time. */
+    return ack_progress && budget_capped && pend > 0;
+
 }
 
 static void host_dir_spread_pass(struct efs_raft_host *h);
@@ -8133,6 +8207,8 @@ static void host_snap_import_pass(struct efs_raft_host *h)
     }
 }
 
+#include "packed_gc.h"
+
 static int host_gc_backlog_config(const char *value, unsigned *ms)
 {
     *ms = GC_LOOP_MS;
@@ -8155,6 +8231,7 @@ static unsigned host_gc_backlog_idle(unsigned configured, int capped,
      * reset. Keep all per-group work/ACK budgets and a >=20ms fair yield. */
     return capped && removed_after > removed_before ? configured : GC_LOOP_MS;
 }
+
 
 static void *host_gc_thread(void *arg)
 {
@@ -8206,6 +8283,7 @@ static void *host_gc_thread(void *arg)
             host_gc_close_step_pass(h, h->g[g].group, anchor);
             host_gc_close_pass(h, h->g[g].group, anchor);
             host_gc_orphan_pass(h, h->g[g].group, anchor);
+            host_gc_pack_pass(h,h->g[g].group,anchor);
             t_orphan += now_us_() - ta;
             ta = now_us_();
             host_gc_reap_pass(h, h->g[g].group, anchor, &reap_times);
@@ -8308,7 +8386,7 @@ static uint64_t query_mono_ms(void)
     clock_gettime(CLOCK_MONOTONIC,&ts);
     return (uint64_t)ts.tv_sec*1000+(uint64_t)ts.tv_nsec/1000000;
 }
-/* One retained export generation per host, bounded by the catalog cap.
+/* Retained export generations remain bounded by aggregate disk admission.
  * Fresh per-page permissions still apply. Idle expiry also runs without RPCs. */
 static pthread_once_t query_export_once=PTHREAD_ONCE_INIT;
 static uint64_t query_export_max_ms=3600000;
@@ -8322,26 +8400,99 @@ static int query_export_expired(uint64_t now,uint64_t touched,uint64_t born)
     pthread_once(&query_export_once,query_export_configure);
     return efs_query_export_expired(now,touched,born,query_export_max_ms);
 }
+/* Bounded independent streams. The directory mutex protects admission/lifetime,
+ * never quorum waits or scans. Busy slots cannot expire or be reused. Catalog
+ * references share immutable generations; disk admission still enforces the
+ * aggregate retained-generation budget. */
+#define HOST_QUERY_PAGE_SESSIONS 16
 static pthread_mutex_t query_page_mu=PTHREAD_MUTEX_INITIALIZER;
-static struct {
+static pthread_cond_t query_page_cv=PTHREAD_COND_INITIALIZER;
+static struct query_page_session {
     uint64_t token,touched,born;
+    int busy;
     struct efs_msg_query_snapshot_v4 request;
     struct efs_server_query_view view;
     int refresh_error;
-} query_page_session;
-static void query_page_clear(void)
+} query_page_sessions[HOST_QUERY_PAGE_SESSIONS];
+static uint64_t query_page_serial;
+/* Detach under admission lock; final disk-generation destruction may unlink
+ * thousands of files and must run after dropping that lock. */
+static struct efs_query_catalog *query_page_clear(struct query_page_session *session)
 {
-    efs_query_catalog_free(query_page_session.view.catalog);
-    memset(&query_page_session,0,sizeof(query_page_session));
+    struct efs_query_catalog *old=session->view.catalog;
+    memset(session,0,sizeof(*session));
+    return old;
 }
 static void query_page_sweep(int force)
 {
+    struct efs_query_catalog *retired[HOST_QUERY_PAGE_SESSIONS];unsigned count=0;
     if (force) pthread_mutex_lock(&query_page_mu);
     else if (pthread_mutex_trylock(&query_page_mu)) return;
+    if (force) {
+        int busy;
+        do {
+            busy=0;
+            for (unsigned i=0;i<HOST_QUERY_PAGE_SESSIONS;i++) busy|=query_page_sessions[i].busy;
+            if (busy) pthread_cond_wait(&query_page_cv,&query_page_mu);
+        } while (busy);
+    }
     uint64_t now=query_mono_ms();
-    if (force || (query_page_session.token &&
-        query_export_expired(now,query_page_session.touched,query_page_session.born))) query_page_clear();
+    for (unsigned i=0;i<HOST_QUERY_PAGE_SESSIONS;i++) {
+        struct query_page_session *session=&query_page_sessions[i];
+        if (!session->busy && session->token &&
+            (force || query_export_expired(now,session->touched,session->born))) retired[count++]=query_page_clear(session);
+    }
     pthread_mutex_unlock(&query_page_mu);
+    for(unsigned i=0;i<count;i++)efs_query_catalog_free(retired[i]);
+}
+/* Return an exclusively reserved stream, including repeated first-page opens
+ * for the same immutable virtual inode. Tokens are never shared across callers. */
+static int query_page_acquire(const struct efs_msg_query_snapshot_v4 *req,
+                              struct query_page_session **out,int *created)
+{
+    struct efs_query_catalog *retired[HOST_QUERY_PAGE_SESSIONS];unsigned count=0;
+    struct efs_msg_query_snapshot_v4 identity=*req;
+    identity.token=identity.cursor=0;identity.limit=0;
+    *out=NULL;*created=0;
+    uint64_t now=query_mono_ms();
+    pthread_mutex_lock(&query_page_mu);
+    struct query_page_session *empty=NULL,*session=NULL;
+    for (unsigned i=0;i<HOST_QUERY_PAGE_SESSIONS;i++) {
+        struct query_page_session *p=&query_page_sessions[i];
+        if (!p->busy && p->token && query_export_expired(now,p->touched,p->born)) retired[count++]=query_page_clear(p);
+        if (!p->token) { if (!empty) empty=p;continue; }
+        if (req->token ? p->token==req->token : !memcmp(&identity,&p->request,sizeof(identity))) { session=p;break; }
+    }
+    int rc=EFS_OK;
+    if (!session && req->token) rc=EFS_ERR_STALE;
+    else if (session && memcmp(&identity,&session->request,sizeof(identity))) rc=EFS_ERR_ACCES;
+    else if (session && session->busy) rc=EFS_ERR_BUSY;
+    else if (!session && !empty) rc=EFS_ERR_BUSY;
+    else {
+        if (!session) {
+            session=empty;*created=1;session->request=identity;
+            /* Counter prevents collisions even when requests share a clock tick. */
+            if (!query_page_serial) query_page_serial=(now_ns()^g_host->boot_id)&UINT64_C(0x00ffffffffffffff);
+            session->token=((uint64_t)(g_host->raft_id+1)<<56)|
+                ((++query_page_serial)&UINT64_C(0x00ffffffffffffff));
+            session->born=now;
+        }
+        session->busy=1;session->touched=now;*out=session;
+    }
+    pthread_mutex_unlock(&query_page_mu);
+    for(unsigned i=0;i<count;i++)efs_query_catalog_free(retired[i]);
+    return rc;
+}
+static void query_page_release(struct query_page_session *session,int clear)
+{
+    if (!session) return;
+    pthread_mutex_lock(&query_page_mu);
+    struct efs_query_catalog *retired=NULL;
+    if (clear) retired=query_page_clear(session);
+    else { session->touched=query_mono_ms();session->busy=0; }
+    pthread_cond_broadcast(&query_page_cv);
+    pthread_mutex_unlock(&query_page_mu);
+    efs_query_catalog_free(retired);
 }
 static int host_query_cancel(void *ctx)
 {
@@ -8543,8 +8694,14 @@ static void *host_query_thread(void *ctx)
         if(rc && candidate){efs_query_catalog_free(candidate);candidate=NULL;}
         h->query_cancel_checks=0; /* Always enforce the deadline before publication. */
         if (!rc && host_query_cancel(h)) { efs_query_catalog_free(candidate);candidate=NULL;rc=EFS_ERR_BUSY; }
+        struct efs_query_catalog *retired=NULL;
         pthread_rwlock_wrlock(&h->query_lock);
         h->query_error=rc;failed=rc!=EFS_OK;
+        /* A failed disk build can itself exceed the retry interval. Start
+         * its backoff at completion, otherwise a retained invalid namespace
+         * immediately launches another full disk build. Successful refreshes
+         * retain their start-to-start coalescing and pending-age reporting. */
+        if (failed) last_attempt=query_mono_ms();
         if (rc && rc!=EFS_ERR_NOT_PRIMARY && (rc!=last_error || now-last_error_log>=30000)) {
             fprintf(stderr,"query-refresh: rc=%d cap_mib=%llu initial=%d elapsed_ms=%llu\n",
                     rc,(unsigned long long)(catalog_bytes>>20),initial,
@@ -8568,11 +8725,13 @@ static void *host_query_thread(void *ctx)
                 (unsigned long long)view.build_ms,root_rc,(unsigned long long)root.tree_files,
                 (unsigned long long)root.tree_dirs,(unsigned long long)root.tree_bytes);
             memcpy(published,revisions,sizeof(published));first_dirty=0;
-            /* query_lock drains readers before retirement; one builder bounds
-             * simultaneous old/candidate generations to two per host. */
-            efs_query_catalog_free(old);
+            /* The write lock drained borrowed readers. Retained page pins
+             * hold their own references. Drop the publisher reference after
+             * unlocking; finish destruction before building another candidate. */
+            retired=old;
         }
         pthread_rwlock_unlock(&h->query_lock);
+        efs_query_catalog_free(retired);
     }
     if(disk_lease>=0)close(disk_lease);
     return NULL;
@@ -8632,7 +8791,7 @@ struct query_auth {
 struct query_request {
     struct efs_raft_host *h;
     const struct efs_msg_query_snapshot_v4 *page;
-    uint64_t cursor;
+    uint64_t cursor,page_token;
     uint32_t emitted;
     int more_confirmed;
     const struct efs_msg_query_snapshot *req;
@@ -8844,12 +9003,18 @@ static int query_consume(void *ctx,const struct efs_server_query_view *view,int 
                 char text[1024];
                 int n=snprintf(text,sizeof(text),
                     "\"stats\":{\"imm_files\":%llu,\"imm_dirs\":%llu,\"imm_bytes\":%llu,\"imm_tmin\":%llu,\"imm_tmax\":%llu,"
-                    "\"tree_files\":%llu,\"tree_dirs\":%llu,\"tree_bytes\":%llu,\"tree_tmin\":%llu,\"tree_tmax\":%llu}}",
+                    "\"tree_files\":%llu,\"tree_dirs\":%llu,\"tree_bytes\":%llu,\"tree_tmin\":%llu,\"tree_tmax\":%llu}",
                     (unsigned long long)stats.imm_files,(unsigned long long)stats.imm_dirs,
                     (unsigned long long)stats.imm_bytes,(unsigned long long)stats.imm_tmin,(unsigned long long)stats.imm_tmax,
                     (unsigned long long)stats.tree_files,(unsigned long long)stats.tree_dirs,
                     (unsigned long long)stats.tree_bytes,(unsigned long long)stats.tree_tmin,(unsigned long long)stats.tree_tmax);
                 rc=n<0 || (size_t)n>=sizeof(text) ? EFS_ERR_OVERFLOW : query_append(q,text,(size_t)n);
+                if (!rc && q->page) {
+                    char tail[192];
+                    n=snprintf(tail,sizeof(tail),",\"page\":{\"token\":\"%llu\",\"cursor\":\"0\",\"more\":false,\"more_confirmed\":false}}",
+                        (unsigned long long)q->page_token);
+                    rc=n<0 || (size_t)n>=sizeof(tail) ? EFS_ERR_OVERFLOW : query_append(q,tail,(size_t)n);
+                } else if (!rc) rc=query_append(q,"}",1);
             }
         } else if (!rc) {
             rc=query_append(q,"\"entries\":[",11);
@@ -8862,7 +9027,7 @@ static int query_consume(void *ctx,const struct efs_server_query_view *view,int 
                     char tail[256];
                     int more=q->cursor!=(UINT64_C(4096)<<32);
                     int n=snprintf(tail,sizeof(tail),"],\"truncated\":%s,\"page\":{\"token\":\"%llu\",\"cursor\":\"%llu\",\"more\":%s,\"more_confirmed\":%s}}",
-                        more ? "true" : "false",(unsigned long long)query_page_session.token,
+                        more ? "true" : "false",(unsigned long long)q->page_token,
                         (unsigned long long)q->cursor,more ? "true" : "false",q->more_confirmed ? "true" : "false");
                     rc=n<0 || (size_t)n>=sizeof(tail) ? EFS_ERR_OVERFLOW : query_append(q,tail,(size_t)n);
                 }
@@ -8977,8 +9142,8 @@ int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,con
 
 static int query_page_capture(void *ctx,const struct efs_server_query_view *view,int error)
 {
-    (void)ctx;
-    query_page_session.view=*view;query_page_session.refresh_error=error;
+    struct query_page_session *session=ctx;
+    session->view=*view;session->refresh_error=error;
     efs_query_catalog_retain(view->catalog);
     return EFS_OK;
 }
@@ -8987,7 +9152,7 @@ int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void
     if (out) *out=NULL;
     if (!g_host || !g_host->query_enabled) return EFS_ERR_NOT_FOUND;
     if (!req || !out || !len || req->base.version!=EFS_QUERY_PAGE_VERSION ||
-        !req->base.root || req->base.operation<EFS_QUERY_FIND || req->base.operation>EFS_QUERY_LS ||
+        !req->base.root || req->base.operation>EFS_QUERY_LS ||
         req->base.ngroups>EFS_QUERY_GROUPS || req->base.match>EFS_NAME_CONTAINS || req->limit>10000 ||
         (!req->token && (!req->limit || req->cursor)) || req->cursor>(UINT64_C(4096)<<32) ||
         req->base.max_output<16384 || req->base.max_output>EFS_QUERY_MAX_OUTPUT ||
@@ -8995,37 +9160,25 @@ int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void
         !memchr(req->base.term,0,sizeof(req->base.term)) || strlen(req->base.term)>120 ||
         strchr(req->base.term,'/') || !efs_query_filters_valid(&req->filters) ||
         (!req->base.term[0] && req->base.match!=EFS_NAME_PREFIX && req->base.match!=EFS_NAME_CONTAINS)) return EFS_ERR_INVAL;
+    if (req->base.operation==EFS_QUERY_STATS && (req->base.term[0] || req->cursor || req->limit>1 ||
+        req->filters.flags || req->filters.kind || req->filters.min_size || req->filters.max_size ||
+        req->filters.after_ns || req->filters.before_ns)) return EFS_ERR_INVAL;
     int policy_rc=host_query_policy_operation(req->base.operation);
     if(policy_rc && req->limit)return policy_rc;
-    if (pthread_mutex_trylock(&query_page_mu)) return EFS_ERR_BUSY;
-    int rc=EFS_OK,created=0;
-    uint64_t now=query_mono_ms();
-    if (query_page_session.token && query_export_expired(now,query_page_session.touched,query_page_session.born)) query_page_clear();
-    struct efs_msg_query_snapshot_v4 identity=*req;
-    identity.token=identity.cursor=0;identity.limit=0;
-    if (req->token) {
-        if (req->token!=query_page_session.token) rc=EFS_ERR_STALE;
-        else if (memcmp(&identity,&query_page_session.request,sizeof(identity))) rc=EFS_ERR_ACCES;
-    } else if (query_page_session.token && memcmp(&identity,&query_page_session.request,sizeof(identity))) rc=EFS_ERR_BUSY;
+    int created=0;
+    struct query_page_session *session=NULL;
+    int rc=query_page_acquire(req,&session,&created);
     uint16_t primary=0;
-    if (!rc && !req->token && !query_page_session.token) {
-        rc=server_raft_host_query_read(query_page_capture,NULL,&primary);
-        if (!rc) {
-            created=1;query_page_session.request=identity;
-            query_page_session.token=((uint64_t)(g_host->raft_id+1)<<56)|
-                ((now_ns()^g_host->boot_id)&UINT64_C(0x00ffffffffffffff));
-            query_page_session.born=now;
-        }
-    }
+    if (!rc && created) rc=server_raft_host_query_read(query_page_capture,session,&primary);
     /* Even continuations need current quorum/ReadIndex before fresh checks. */
-    if (!rc && query_page_session.token && req->limit) {
+    if (!rc && session->token && req->limit) {
         for (int i=0;i<HOST_NGROUPS && !rc;i++) { int hint=-1;rc=host_read_index(g_host,g_host->g[i].group,&hint); }
         pthread_mutex_lock(&g_host->mu);
         if (!rc && !host_query_capable(g_host)) rc=EFS_ERR_BUSY;
         pthread_mutex_unlock(&g_host->mu);
     }
     uint64_t bytes=sizeof(struct query_allocation)+sizeof(struct efs_msg_query_snapshot_reply)+req->base.max_output;
-    /* Serialized pages share the existing reply budget with old protocol RPCs. */
+    /* Independent pages share the existing reply budget with old protocol RPCs. */
     struct query_allocation *a=NULL;
     int admitted=__atomic_add_fetch(&query_requests,1,__ATOMIC_RELAXED)<=8;
     int reserved=0;
@@ -9041,26 +9194,23 @@ int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void
     }
     if (!a) {
         __atomic_sub_fetch(&query_requests,1,__ATOMIC_RELAXED);
-        if (created) query_page_clear();
-        pthread_mutex_unlock(&query_page_mu);return EFS_ERR_BUSY;
+        query_page_release(session,created);return EFS_ERR_BUSY;
     }
     a->bytes=bytes;
     struct efs_msg_query_snapshot_reply *reply=(void *)(a+1);
     reply->version=EFS_QUERY_PAGE_VERSION;reply->primary_id=primary;
-    if (!rc && !req->limit) query_page_clear();
-    else if (!rc) {
-        query_page_session.touched=now;
-        struct query_request q={.h=g_host,.req=&req->base,.filters=&req->filters,.page=req,
+    if (!rc && req->limit) {
+        struct query_request q={.h=g_host,.req=&req->base,.filters=&req->filters,.page=req,.page_token=session->token,
             .reply=reply,.text=(char *)(reply+1),.deadline=query_mono_ms()+5000};
         q.auth=calloc(HOST_QUERY_AUTH_N,sizeof(*q.auth));
-        rc=q.auth ? query_consume(&q,&query_page_session.view,query_page_session.refresh_error) : EFS_ERR_NOMEM;
+        rc=q.auth ? query_consume(&q,&session->view,session->refresh_error) : EFS_ERR_NOMEM;
         free(q.auth);
         if(!rc)rc=host_query_policy_operation(req->base.operation);
-        if (rc && created) query_page_clear();
+
     }
     reply->status=rc;if (rc) reply->text_len=0;
     *out=reply;*len=sizeof(*reply)+reply->text_len;
-    pthread_mutex_unlock(&query_page_mu);
+    query_page_release(session,(created && rc) || (!rc && !req->limit));
     return EFS_OK;
 }
 
@@ -9410,6 +9560,35 @@ void server_raft_host_stop(void)
     free(h);
 }
 
+/* The pump's off-lock durability tail need not park an independent fresh
+ * read probe. Try the existing mutex only; never wait or invert inbox order.
+ * Pending inbox work and all state-changing frames retain normal processing. */
+static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n)
+{
+    struct efs_raft_msg msg;
+    int handled=0;
+    if (n!=EFS_WIRE_RAFT_HDR_LEN ||
+        (p[0]!=EFS_RAFT_MSG_AE_REQ && p[0]!=EFS_RAFT_MSG_AE_REP) ||
+        efs_wire_raft_decode(p,n,&msg,NULL,0)!=EFS_OK ||
+        pthread_mutex_trylock(&h->mu)!=0)
+        return 0;
+    pthread_mutex_lock(&h->inbox_mu);
+    int pending=h->inbox_n;
+    pthread_mutex_unlock(&h->inbox_mu);
+    if (!pending) {
+        struct efs_raft *r=group_raft(h,msg.group);
+        handled=efs_raft_read_control(r,&msg);
+        if (handled==1) BO_COUNT(BO_READ_CONTROL_REQUEST);
+        if (handled==2) BO_COUNT(BO_READ_CONTROL_REPLY);
+        if (handled==2) {
+            host_publish_group(h,msg.group);
+            host_waiters_wake(h);
+        }
+    }
+    pthread_mutex_unlock(&h->mu);
+    return handled==1;
+}
+
 int server_raft_host_inbox(const uint8_t *payload, uint32_t plen,
                            struct efs_raft_flow_reply *feedback)
 {
@@ -9422,6 +9601,11 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen,
     if (!h->flow_enabled) feedback->status=3;
     if (!payload || plen < EFS_WIRE_RAFT_HDR_LEN) return EFS_ERR_PROTO;
     if (plen > HOST_FRAME_MAX) return EFS_ERR_INVAL;
+    if (host_read_control(h,payload,plen)) {
+        feedback->status=h->flow_enabled ? EFS_RAFT_FLOW_OK : 3;
+        /* No queued work consumes admission credits. */
+        return EFS_OK;
+    }
     if (h->flow_enabled) {
         if (!efs_raft_flow_frame(payload,plen) ||
             efs_raft_flow_rd32(payload+8)!=(unsigned)h->raft_id) return EFS_ERR_PROTO;
@@ -9764,6 +9948,8 @@ static int host_storage_fence_members(struct efs_raft_host *h,const uint8_t uuid
     pthread_mutex_unlock(&h->s->lock);return same?EFS_OK:EFS_ERR_BUSY;
 }
 
+#include "publication_session_fast.h"
+
 /* Payload: group byte, then command bytes (empty command = ReadIndex).
  * A hosted replica proposes (or ReadIndexes) even when it is not the
  * leader; an unhosted node forwards a non-empty command to a voter.
@@ -9793,6 +9979,24 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     group = payload[0];
     cmd = payload + 1;
     clen = plen - 1;
+    /* Only the local verified GC coordinator may emit mutation proofs.
+     * Public/forwarded control cannot supply a fabricated member ACK. */
+    if(clen && (cmd[0]==EFS_MD_CMD_PACK_GC_ACK || cmd[0]==EFS_MD_CMD_PACK_CANCEL || cmd[0]==EFS_MD_CMD_PACK_GC_RETIRE)) {
+        out->rc=EFS_ERR_ACCES;return;
+    }
+    if(clen && cmd[0]==EFS_MD_REQ_PACK_GC_VIEW) {
+        struct efs_pack_object expected,current;
+        rc=efs_pack_object_decode(cmd+1,clen-1,&expected);
+        if(rc || group!=expected.ledger.publication_group){out->rc=rc?rc:EFS_ERR_INVAL;return;}
+        if(!host_hosts(h,group)) {
+            rc=host_remote_cmd(h,group,cmd,clen,out,-1);if(rc)out->rc=rc;return;
+        }
+        rc=host_read_index(h,group,&hint);
+        if(!rc)rc=efs_pack_lifetime_get(h->kv,&expected,&current);
+        out->rc=rc;out->leader_hint=hint;
+        if(!rc)out->salt=current.ledger.phase|((uint64_t)current.ledger.fence_acks<<32);
+        return;
+    }
     if(clen && (cmd[0]==EFS_MD_CMD_QUERY_POLICY || cmd[0]==EFS_MD_REQ_QUERY_POLICY)) {
         if(group!=efs_raft_shard_group(1) ||
            clen!=(cmd[0]==EFS_MD_CMD_QUERY_POLICY?13u:1u)) {out->rc=EFS_ERR_INVAL;return;}
@@ -9837,6 +10041,55 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
        (clen!=46 || !rd64be(cmd+1) ||
         group!=efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd+1))))) {
         out->rc=EFS_ERR_INVAL;return;
+    }
+    if (clen && (cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_REQ_PACK_STATUS || cmd[0] == EFS_MD_CMD_PACK_UPLOAD_RETIRE)) {
+        struct efs_pack_object object, current; struct efs_pack_ref refs[EFS_PACK_MAX_RECORDS]; uint32_t count;
+        rc = efs_pack_upload_decode(cmd + 1, clen - 1, &object, refs, EFS_PACK_MAX_RECORDS, &count);
+        if (rc || group != object.ledger.publication_group) { out->rc = rc ? rc : EFS_ERR_INVAL; return; }
+        if (cmd[0] == EFS_MD_CMD_PACK_ADMIT && object.ledger.member_mask != ((1u << h->n) - 1u)) {
+            out->rc = EFS_ERR_INVAL; return;
+        }
+        /* Storage PUT checks status locally on every placement member. Keep
+         * follower ReadIndex and unhosted status forwarding for those checks. */
+        if (cmd[0]==EFS_MD_REQ_PACK_STATUS && !host_hosts(h,group)) {
+            rc=host_remote_cmd(h,group,cmd,clen,out,-1);
+            if (rc) out->rc=rc;
+            return;
+        }
+        /* Like policy/session commands, packed lifecycle RPCs must not form
+         * nested follower forwarding chains. The caller retries the leader;
+         * only that leader performs fresh owner admission and proposal. */
+        struct host_view view;host_view_get(h,group,&view);
+        if (cmd[0]!=EFS_MD_REQ_PACK_STATUS && (!view.has || view.role!=EFS_RAFT_LEADER)) {
+            out->rc=EFS_ERR_NOT_PRIMARY;
+            out->leader_hint=view.has ? view.leader : host_pick_peer(h,&group,1,-1);
+            return;
+        }
+        uint32_t shard = group == EFS_RAFT_GROUP_SHARD ? 1 : 2;
+        uint8_t admission[HOST_SESS_REG_LEN] = {EFS_MD_CMD_SESSION, EFS_MD_SESS_ESTABLISH};
+        memcpy(admission + 2, object.ledger.owner.client_uuid, 16);
+        wr32be(admission + 18, object.ledger.owner.session_epoch); wr32be(admission + 22, shard);
+        rc = host_session_establish_admit(h, admission, sizeof(admission), group, &hint);
+        if (rc) { out->rc = rc; out->leader_hint = hint; return; }
+        if (cmd[0] != EFS_MD_REQ_PACK_STATUS) rc = host_propose_wait_idx(h, group, cmd, clen, &hint, &idx);
+        if (rc == EFS_OK || rc == EFS_ERR_BUSY || rc == EFS_ERR_STALE) {
+            int proof = host_read_index(h, group, &hint);
+            if (!proof) proof = efs_session_accept(h->kv, shard, object.ledger.owner.client_uuid, object.ledger.owner.session_epoch);
+            if (!proof && cmd[0] == EFS_MD_CMD_PACK_UPLOAD_RETIRE) {
+                int retired = 0; proof = efs_pack_upload_is_retired(h->kv, &object, &retired);
+                if (!proof && !retired) proof = EFS_ERR_BUSY;
+                if (!proof) { out->rc = EFS_OK; out->salt = EFS_PACK_UPLOAD_RETIRED;
+                    out->index = idx; out->leader_hint = hint; return; }
+            }
+            if (!proof) proof = efs_pack_admission_get(h->kv, &object, &current);
+            if (!proof && current.ledger.phase != EFS_PACK_ACTIVE) proof = EFS_ERR_STALE;
+            for (uint32_t i = 0; !proof && i < current.ledger.count; i++)
+                if (current.ledger.state[i] > EFS_PACK_LIVE) proof = EFS_ERR_STALE;
+            if (!proof) { rc = EFS_OK; salt = EFS_PACK_ACTIVE; }
+            else if (rc == EFS_OK || proof != EFS_ERR_NOT_FOUND) rc = proof;
+        }
+        out->rc = rc; out->salt = rc == EFS_OK ? salt : 0; out->index = idx; out->leader_hint = hint;
+        return;
     }
     if(clen && (cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT || cmd[0]==EFS_MD_REQ_PUT_TICKET_STATUS ||
                cmd[0]==EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED)) {
@@ -10016,7 +10269,14 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     if (clen>=2 && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_LOCK_NEXT) {
         uint32_t packed=0;
         rc=host_pack_session_cleanup(h,cmd,clen,group,&hint,cleanup_cmd,&packed);
-        if (rc!=EFS_OK) {out->rc=rc;out->leader_hint=hint;return;}
+        if (rc!=EFS_OK) {
+            out->rc=rc;out->leader_hint=hint;
+            /* No proposal has occurred: a cold ReadIndex or unfinished
+             * barrier may refuse selection. Never attach this certificate
+             * to a submitted batch's timeout or apply verdict. */
+            if (rc==EFS_ERR_BUSY) out->salt=EFS_MD_SESSION_CLEANUP_RETRY_SALT;
+            return;
+        }
         if (!packed) {
             struct host_view v;host_view_get(h,group,&v);
             out->rc=EFS_OK;out->salt=1;out->index=v.applied;return;
@@ -10033,8 +10293,11 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     }
     if (clen >= 2 && cmd[0] == EFS_MD_CMD_SESSION &&
         cmd[1] == EFS_MD_SESS_ESTABLISH) {
-        rc = host_session_establish_admit(h, cmd, clen, group, &hint);
-        if (rc != EFS_OK) { out->rc = rc; return; }
+        int reused=0;
+        rc = host_session_establish_reuse(h,cmd,clen,group,&hint,&reused);
+        if (rc != EFS_OK || reused) {
+            out->rc=rc;out->leader_hint=hint;return;
+        }
     }
     if (clen == 0) {
         rc = host_read_index(h, group, &hint);
@@ -10682,6 +10945,7 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
         return;
     }
     rc = host_read_index(h, pg, &hint);
+    uint8_t covered = rc == EFS_OK ? (uint8_t)(1u << pg) : 0;
     if (prof)
         p1 = now_us_();
     if (rc == EFS_OK)
@@ -10701,6 +10965,8 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
             rc = host_read_index(h, hg, &hh);
             if (rc != EFS_OK)
                 hint = hh;
+            else
+                covered |= (uint8_t)(1u << hg);
         }
     }
     if (rc == EFS_OK)
@@ -10738,7 +11004,7 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
             }
             return;
         }
-        rc = host_read_inode_lanes_after_group(h, dent.ino, &hint, pg);
+        rc = host_read_inode_lanes_covered(h, dent.ino, &hint, covered);
         if (rc == EFS_ERR_NOT_PRIMARY) {
             uint8_t need[2];
 
@@ -10812,6 +11078,38 @@ static int host_namespace_session_command(struct efs_raft_host *h,uint8_t group,
     if(reply.leader_hint>=0)*hint=reply.leader_hint;
     return rc;
 }
+static int host_namespace_session_register(struct efs_raft_host *h,uint8_t group,
+    const uint8_t *cmd,uint32_t bytes,int *hint,uint64_t *active_proof)
+{
+    *active_proof=0;
+    /* A fresh owner view avoids CREATE for existing sessions and REGISTER
+     * for a participant already durably included in the current ACTIVE epoch.
+     * Otherwise REGISTER supplies its own exact apply proof. No owner view
+     * or proof survives this request. */
+    uint32_t shard=rd32be(cmd+22),epoch=rd32be(cmd+18);
+    uint8_t query[HOST_SESS_HDR_LEN+4];
+    memcpy(query,cmd,HOST_SESS_HDR_LEN);query[1]=HOST_SESS_GET;wr32be(query+18,shard);
+    uint64_t session=0;int rc;
+    if(host_hosts(h,group))rc=host_session_get(h,query,sizeof(query),group,hint,&session);
+    else {
+        struct efs_msg_raft_mkfs_reply reply={0};
+        rc=host_remote_cmd(h,group,query,sizeof(query),&reply,-1);
+        if(reply.leader_hint>=0)*hint=reply.leader_hint;
+        if(rc==EFS_OK)session=reply.salt;
+    }
+    if(rc!=EFS_OK)return rc;
+    if((uint32_t)session!=epoch)return EFS_ERR_STALE;
+    uint8_t state=(uint8_t)(session>>32);
+    if(state==EFS_SESSION_FENCING)return EFS_ERR_BUSY;
+    if(state!=EFS_SESSION_ACTIVE)return EFS_ERR_PROTO;
+    if(session&(1ull<<40)) {
+        *active_proof=host_session_register_active_proof(epoch,shard);
+        return EFS_OK;
+    }
+    if(host_hosts(h,group))
+        return host_propose_wait_ex(h,group,cmd,bytes,hint,active_proof);
+    return host_namespace_session_command(h,group,cmd,bytes,hint);
+}
 static int host_namespace_session_prepare_owner(struct efs_raft_host *h,
     const struct efs_opid_req *q,int *hint)
 {
@@ -10843,18 +11141,25 @@ static int host_namespace_session_admit_after_group(struct efs_raft_host *h,
     uint8_t cmd[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_REGISTER};
     memcpy(cmd+2,q->id.client_uuid,16);wr32be(cmd+18,q->id.session_epoch);wr32be(cmd+22,shard);
     uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(q->id.client_uuid));
-    /* REGISTER itself proves the current owner's epoch/state and durably
-     * includes this participant. Existing owners need no idempotent CREATE.
+    /* REGISTER durably includes this participant; ACTIVE admission also
+     * needs its exact apply proof or the independent fresh owner query. Existing owners need no idempotent CREATE.
      * Only the authoritative missing-record verdict can bootstrap an owner;
      * neither refusal nor an uncertain I/O result grants that permission. */
-    rc=host_namespace_session_command(h,owner,cmd,sizeof(cmd),hint);
+    uint64_t active_proof=0;
+    rc=host_namespace_session_register(h,owner,cmd,sizeof(cmd),hint,&active_proof);
     if(rc==EFS_ERR_NOT_FOUND && !owner_prepared) {
         rc=host_namespace_session_prepare_owner(h,q,hint);
-        if(rc==EFS_OK)rc=host_namespace_session_command(h,owner,cmd,sizeof(cmd),hint);
+        if(rc==EFS_OK)rc=host_namespace_session_register(h,owner,cmd,sizeof(cmd),hint,&active_proof);
     }
     if(rc!=EFS_OK)return rc;
     cmd[1]=EFS_MD_SESS_ESTABLISH;
-    rc=host_session_establish_admit(h,cmd,sizeof(cmd),group,hint);
+    /* A fresh owner view or REGISTER proved ACTIVE + this participant at its own
+     * point. A later BEGIN includes the registered shard in its frozen set;
+     * FENCE_LOC writes a monotonic floor even when ESTABLISH has not arrived.
+     * Delayed old-epoch establishment/mutation therefore remains rejected.
+     * No proof (including an idempotent FENCING REGISTER) keeps the old query. */
+    if(active_proof!=host_session_register_active_proof(q->id.session_epoch,shard))
+        rc=host_session_establish_admit(h,cmd,sizeof(cmd),group,hint);
     if(rc==EFS_OK)rc=host_namespace_session_command(h,group,cmd,sizeof(cmd),hint);
     if(rc==EFS_OK)rc=host_read_index(h,group,hint);
     if(rc==EFS_OK)rc=efs_session_accept(h->kv,shard,q->id.client_uuid,q->id.session_epoch);
@@ -11426,6 +11731,94 @@ static int host_wait_refs(struct efs_raft_host *h, struct host_idx_ref *refs,
     return rc;
 }
 
+/* Async namespace prepares used to defer only the apply wait: each still
+ * released its own log hold. Bound collection to eight ordinary PREP entries,
+ * preserving order and each exact (index,term) verdict. Bounded locally
+ * led nonsolo prefixes share the physical log barrier across groups. A role change
+ * fails local-only submission; it cannot forward while the log is held. */
+#define HOST_CMD_COHORT_MAX 8
+struct host_command_cohort {
+    struct efs_raft_host *host;
+    unsigned n;
+    struct {
+        struct host_idx_ref *ref;
+        uint32_t bytes;
+        uint8_t cmd[EFS_TXN_PREPARE_MAX];
+    } item[HOST_CMD_COHORT_MAX];
+};
+static __thread struct host_command_cohort *host_command_capture;
+static int host_report_release(struct efs_raft_host *h, int held);
+
+static int host_command_cohort_flush(struct host_command_cohort *c,int *hint)
+{
+    unsigned i=0;
+    int rc=EFS_OK;
+    while (i<c->n && rc==EFS_OK) {
+        unsigned end=i;
+        int held=0;
+        pthread_mutex_lock(&c->host->mu);
+        /* All hosted groups share one physical Raft log. A bounded local
+         * prefix can therefore share its checked fsync across groups without
+         * reordering commands or changing any group's quorum/apply verdict. */
+        while(end<c->n) {
+            struct efs_raft *r=group_raft(c->host,c->item[end].ref->group);
+            uint32_t voters=r ? efs_raft_voters(r) : 0;
+            if(!r || efs_raft_role(r)!=EFS_RAFT_LEADER || !voters ||
+                !(voters&(voters-1)))break;
+            end++;
+        }
+        pthread_mutex_unlock(&c->host->mu);
+        if(end==i)end=i+1;
+        if (c->host->disk && end-i>1 &&
+            efs_raft_disk_sync_depth(c->host->disk)==0 &&
+            efs_raft_disk_sync_hold(c->host->disk)==EFS_OK)
+            held=1;
+        for (;i<end && rc==EFS_OK;i++) {
+            struct host_idx_ref *ref=c->item[i].ref;
+            rc=host_propose_mode(c->host,ref->group,c->item[i].cmd,
+                c->item[i].bytes,&ref->idx,&ref->term,hint,held);
+        }
+        /* Close on every error as well as success. Failed persistence must
+         * override an earlier admission/role error, never become a verdict. */
+        int sync_rc=held ? host_report_release(c->host,held) : EFS_OK;
+        if (sync_rc!=EFS_OK) rc=sync_rc;
+    }
+    c->n=0;
+    return rc;
+}
+
+static int host_command_cohort_add(struct efs_raft_host *h,
+    struct host_idx_ref *ref,const uint8_t *cmd,uint32_t bytes,int *hint)
+{
+    struct host_command_cohort *c=host_command_capture;
+    if (!c || c->host!=h) return host_propose(h,ref->group,cmd,bytes,
+                                            &ref->idx,&ref->term,hint);
+    if (bytes>sizeof(c->item[0].cmd)) return EFS_ERR_INVAL;
+    if (c->n==HOST_CMD_COHORT_MAX) {
+        int rc=host_command_cohort_flush(c,hint);
+        if (rc!=EFS_OK) return rc;
+    }
+    c->item[c->n].ref=ref;c->item[c->n].bytes=bytes;
+    memcpy(c->item[c->n].cmd,cmd,bytes);c->n++;
+    return EFS_OK;
+}
+
+static void host_command_cohort_begin(struct host_command_cohort *c,
+                                        struct efs_raft_host *h)
+{
+    memset(c,0,sizeof(*c));c->host=h;host_command_capture=c;
+}
+
+static int host_command_cohort_end(struct host_command_cohort *c,int prior,
+                                     int *hint)
+{
+    host_command_capture=NULL;
+    /* A packing/capture failure leaves no accepted promise for remaining
+     * buffered commands. Already flushed PREPs retain normal abort cleanup. */
+    if (prior!=EFS_OK) {c->n=0;return prior;}
+    return host_command_cohort_flush(c,hint);
+}
+
 /* DECIDE COMMIT at the coordinator, then RESOLVE COMMIT on every part
  * (proposed together, waited together). A wait that runs out after the
  * DECIDE is in the log goes to the finisher; the caller still sees the
@@ -11489,15 +11882,17 @@ static int host_txn_commit(struct efs_raft_host *h, const struct efs_txid *t,
 #ifdef EFS_FAULTS
     host_txn_fault_barrier(h, parts, "commit");
 #endif
+    struct host_command_cohort cohort;
+    host_command_cohort_begin(&cohort,h);
     for (i = 0; i < parts->n && i < EFS_TXN_MAX_PART; i++) {
         pack_resolve(cmd, t, parts->shard[i], EFS_TXN_COMMIT);
         refs[n].group = efs_raft_shard_group(parts->shard[i]);
-        rc = host_propose(h, refs[n].group, cmd, 22, &refs[n].idx,
-                          &refs[n].term, hint);
+        rc = host_command_cohort_add(h,&refs[n],cmd,22,hint);
         if (rc != EFS_OK)
             break;
         n++;
     }
+    rc=host_command_cohort_end(&cohort,rc,hint);
     if (rc == EFS_OK)
         rc = host_wait_refs(h, refs, n, hint);
     if (rc != EFS_OK)
@@ -11538,8 +11933,7 @@ static int host_prep_async(struct efs_raft_host *h, uint32_t shard, int kind,
     if (n > sizeof(cmd))
         return EFS_ERR_INVAL;
     ref->group = efs_raft_shard_group(shard);
-    return host_propose(h, ref->group, cmd, n, &ref->idx, &ref->term,
-                        hint);
+    return host_command_cohort_add(h,ref,cmd,n,hint);
 }
 
 /* Commutative parts (§7.2). `ref` NULL = propose and wait (host_prep
@@ -11562,8 +11956,7 @@ static int host_prep_raw(struct efs_raft_host *h, uint32_t shard, int kind,
     if (!ref)
         return host_propose_wait(h, efs_raft_shard_group(shard), cmd, n, hint);
     ref->group = efs_raft_shard_group(shard);
-    return host_propose(h, ref->group, cmd, n, &ref->idx, &ref->term,
-                        hint);
+    return host_command_cohort_add(h,ref,cmd,n,hint);
 }
 
 /* Namespace rows can change through unversioned log applies. Compare their
@@ -11834,7 +12227,7 @@ static const struct efs_meta_append_ops host_append_ops={
  * REPORT completion uses the same ordered guards; pruning stays synchronous. */
 struct host_append_reserve_ctx {
     struct host_resize_ctx base;
-    struct host_idx_ref refs[EFS_META_LANES+5];
+    struct host_idx_ref refs[EFS_META_LANES+5+EFS_META_APPEND_COMPLETE_MAX];
     int nrefs,leading;
 };
 static int host_append_reserve_prepare(void *user,const struct efs_txid *t,
@@ -12516,6 +12909,24 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
  * nlink++ always; times ride the parent row for LOCAL, the dir-lane stamp
  * (plus a first-use used_shards bit) for HASHED/SPLITTING. dseq bumps on
  * (dsh, lane). A node that does not host a participant group bounces. */
+/* Route before session admission or transaction effects. A parent leader
+ * is useful only when its committed membership also hosts both scratch
+ * groups: redirecting to a single-group voter would bounce back forever.
+ * Unknown configuration/leadership keeps the ordinary forwarding path. */
+static int host_namespace_leader_hint(struct efs_raft_host *h,uint8_t group)
+{
+    int rid=host_local_leader(h,group);
+    if (rid<0 || rid>=h->n || rid==h->raft_id) return -1;
+    pthread_mutex_lock(&h->mu);
+    for (unsigned i=0;i<HOST_NGROUPS;i++) {
+        struct host_group *s=group_slot(h,(uint8_t)(i<<1));
+        uint32_t voters=s ? (s->r ? efs_raft_voters(s->r) : s->voters) : 0;
+        if (!voters || !hosts_group(rid,voters)) {rid=-1;break;}
+    }
+    pthread_mutex_unlock(&h->mu);
+    return rid;
+}
+
 void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
                             uint32_t uid, uint32_t gid,
                             const struct efs_opid_req *q,
@@ -12545,6 +12956,9 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
     int hint = -1;
     int rc, i, np = 0;
     int stage = 0, stamp_lane = 0;
+    int prof=read_prof_on();
+    uint64_t started=prof?now_us_():0,session_us=0,prep_us=0,wait_us=0,commit_us=0;
+    uint64_t phase=0;
 
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
@@ -12558,6 +12972,8 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
         mode |= 0755;
     now = now_ns();
     psh = efs_kv_inode_shard(parent);
+    hint=host_namespace_leader_hint(h,efs_raft_shard_group(psh));
+    if (hint>=0) {set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;}
     if (!host_hosts(h, efs_raft_shard_group(psh))) {
         uint8_t need[2];
         need[0] = EFS_RAFT_GROUP_SHARD;
@@ -12616,7 +13032,9 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
         dsh = 0;
     if (rc == EFS_OK) {
         struct efs_opid_reply rep;
+        phase=prof?now_us_():0;
         int admitted=host_namespace_session_admit_after_group(h,dsh,q,0,efs_raft_shard_group(dsh),&hint);
+        if(prof)session_us=now_us_()-phase;
         int hit=admitted==EFS_OK?host_opid_replay(h,dsh,q,&rep):admitted;
 
         if (hit < 0) {
@@ -12653,9 +13071,12 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
                 rc = pack_create_cmd(mkcmd, &mklen, parent, mode, name, &at2, 0,
                                      next, prow.layout, q, 0);
         }
-        if (rc == EFS_OK)
+        if (rc == EFS_OK) {
+            phase=prof?now_us_():0;
             rc = host_propose_wait(h, efs_raft_shard_group(psh), mkcmd, mklen,
                                    &hint);
+            if(prof)commit_us=now_us_()-phase;
+        }
         goto mkdir_done;
     }
     if (rc == EFS_OK) {
@@ -12730,6 +13151,9 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
             goto mkdir_done;
         stage = 9;
         fill_txid(h, &t);
+        struct host_command_cohort cohort;
+        phase=prof?now_us_():0;
+        host_command_cohort_begin(&cohort,h);
         np = 0;
         for (i = 0; i < parts.n && rc == EFS_OK; i++) {
             uint32_t sh = parts.shard[i];
@@ -12775,14 +13199,19 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
                     np++;
             }
         }
+        rc=host_command_cohort_end(&cohort,rc,&hint);
+        if(prof) {prep_us=now_us_()-phase;phase=now_us_();}
         if (rc == EFS_OK)
             rc = host_wait_refs(h, prefs, np, &hint);
+        if(prof)wait_us=now_us_()-phase;
         if (rc != EFS_OK)
             (void)host_drop_parts(h, &t, &parts, &hint);
         else {
             stage = 10;
             coord = efs_txn_coordinator(&t, &parts);
+            phase=prof?now_us_():0;
             rc = host_txn_commit(h, &t, &parts, coord, &hint);
+            if(prof)commit_us=now_us_()-phase;
         }
     }
 mkdir_done:
@@ -12799,6 +13228,18 @@ mkdir_done:
                 "hint=%d psh=%u csh=%u dsh=%u stage=%d ino=%llu\n",
                 (unsigned long long)parent, name, rc, hint, psh,
                 csh, dsh, stage, (unsigned long long)ino);
+    if(prof) {
+        static uint64_t last;
+        uint64_t now=now_us_(),old=__atomic_load_n(&last,__ATOMIC_RELAXED);
+        if(now-old>=1000000ull && __atomic_compare_exchange_n(&last,&old,now,0,
+            __ATOMIC_RELAXED,__ATOMIC_RELAXED))
+            fprintf(stderr,"namespace-prof: mkdir rc=%d parent=%llu psh=%u csh=%u dsh=%u "
+                "total_us=%llu session_us=%llu prep_us=%llu wait_us=%llu commit_us=%llu\n",
+                rc,(unsigned long long)parent,psh,csh,dsh,
+                (unsigned long long)(now-started),(unsigned long long)session_us,
+                (unsigned long long)prep_us,(unsigned long long)wait_us,
+                (unsigned long long)commit_us);
+    }
     set_inode_rc(out, rc, hint);
     if (rc == EFS_OK) {
         stat_to_inode(&st, &out->inode);
@@ -12847,6 +13288,8 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
     }
     now = now_ns();
     psh = efs_kv_inode_shard(parent);
+    hint=host_namespace_leader_hint(h,efs_raft_shard_group(psh));
+    if (hint>=0) {set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;}
     if (!host_hosts(h, efs_raft_shard_group(psh))) {
         uint8_t need[2];
         need[0] = EFS_RAFT_GROUP_SHARD;
@@ -13056,6 +13499,8 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
         if (rc != EFS_OK)
             goto rmdir_done;
         fill_txid(h, &t);
+        struct host_command_cohort cohort;
+        host_command_cohort_begin(&cohort,h);
         npref = 0;
         for (i = 0; i < parts.n && rc == EFS_OK; i++) {
             uint32_t sh = parts.shard[i];
@@ -13132,6 +13577,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
                     npref++;
             }
         }
+        rc=host_command_cohort_end(&cohort,rc,&hint);
         if (rc == EFS_OK)
             rc = host_wait_refs(h, prefs, npref, &hint);
         if (rc != EFS_OK)
@@ -13638,7 +14084,7 @@ static void host_utimens(efs_ino_t ino, uint32_t mask, uint64_t mtime,
         rc = host_wait_settled(h, g, idx, term, &hint);
 collect:
     if (rc == EFS_OK)
-        rc = host_read_inode_lanes(h, ino, &hint);
+        rc = host_read_inode_lanes_covered(h, ino, &hint, (uint8_t)(1u << g));
     if (rc == EFS_OK)
         rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
     set_inode_rc(out, rc, hint);
@@ -14002,7 +14448,7 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
     if (rc == EFS_OK)
         rc = host_wait_settled(h, g, idx, term, &hint);
     if (rc == EFS_OK)
-        rc = host_read_inode_lanes(h, ino, &hint);
+        rc = host_read_inode_lanes_covered(h, ino, &hint, (uint8_t)(1u << g));
     if (rc == EFS_OK)
         rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
     set_inode_rc(out, rc, hint);
@@ -15157,16 +15603,26 @@ static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
             /* Freeze owner (when present) and inode before pipelining the
              * exact cursor/reservation/lane images. The shared callback checks
              * every applied verdict before committing the transaction. */
-            struct host_append_reserve_ctx batch={.base={h,hint},
-                                                   .leading=session?2:1};
-            fill_txid(h,&t);
-            rc = session ?
-                efs_meta_finish_append_owned(h->kv, ino, offs[i], EFS_META_APPEND_COMPLETED,
-                                             session, &t, &host_append_reserve_ops, &batch) :
-                efs_meta_finish_append(h->kv, ino, offs[i], EFS_META_APPEND_COMPLETED,
-                                       &t, &host_append_reserve_ops, &batch);
+            uint32_t count=1;
+            while(count<EFS_META_APPEND_COMPLETE_MAX && i+count<n &&
+                  offs[i+count]+lens[i+count]<=sz)++count;
+            for(;;) {
+                struct host_append_reserve_ctx batch={.base={h,hint},
+                                                       .leading=session?2:1};
+                fill_txid(h,&t);
+                rc = session ?
+                    efs_meta_finish_append_batch_owned(h->kv, ino, offs+i, count,
+                        EFS_META_APPEND_COMPLETED, session, &t, &host_append_reserve_ops, &batch) :
+                    efs_meta_finish_append_batch(h->kv, ino, offs+i, count,
+                        EFS_META_APPEND_COMPLETED, &t, &host_append_reserve_ops, &batch);
+                /* An unusual active-lane distribution can exhaust the unchanged
+                 * per-shard image bound. Recapture a smaller batch; never raise
+                 * that bound or discard a guard to make it fit. */
+                if(rc!=EFS_ERR_INVAL || count==1)break;
+                count=(count+1)/2;
+            }
             if(rc!=EFS_OK)return rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
-            did++;
+            did+=count;i+=count-1;
         }
         if (!did && i==n)
             return EFS_OK;
@@ -16019,7 +16475,7 @@ static int host_publication_committed(struct efs_raft_host *h, uint8_t group,
     uint64_t applied=efs_raft_applied(r),top=v.read_index;
     rc=EFS_ERR_BUSY;
     for (unsigned n=0;store && top>applied && n<64;n++,top--) {
-        uint8_t cmd[HOST_PUBLICATION_TICKET_LEN],got_digest[EFS_HASH_SIZE];
+        uint8_t cmd[HOST_PUBLICATION_PACK_LEN],got_digest[EFS_HASH_SIZE];
         uint32_t len=sizeof(cmd);uint64_t entry_term=0;
         int grc=store->get(store,top,&entry_term,cmd,&len);
         if ((grc==EFS_ERR_INVAL && len>sizeof(cmd)) || grc==EFS_ERR_NOT_FOUND) continue;
@@ -16073,7 +16529,7 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
          * must have a replicated terminal result, and retries use that result. */
         p.now=now_ns();p.durable_result=1;
         p.lane_local=group!=efs_raft_shard_group(efs_kv_inode_shard(p.ino));
-        uint8_t cmd[HOST_PUBLICATION_TICKET_LEN];uint32_t len=0;
+        uint8_t cmd[HOST_PUBLICATION_PACK_LEN];uint32_t len=0;
         rc=pack_publish_cmd(cmd,&len,&p);
         if(rc==EFS_OK) {
             cmd[0]=query_only==2?EFS_MD_CMD_PUBLICATION_RETIRE:EFS_MD_CMD_PUBLICATION;
@@ -16087,7 +16543,15 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
                 wr32be(cmd+len+28,p.put_fragment_len);wr32be(cmd+len+32,p.put_member_mask);
                 len+=36;
             }
-            if(!query_only && rc==EFS_OK) {
+            if (p.coding_profile_id == EFS_META_PROFILE_PACK_K2F1) {
+                cmd[HOST_PUBLISH_LEN - 1] |= HOST_PUB_F_PACKED;
+                rc = efs_pack_ref_encode(&p.ch.packed, cmd + len); len += EFS_PACK_REF_BYTES;
+            }
+            /* Packed objects already have a durable admission and immutable
+             * PENDING record manifest. Apply can atomically install the mapping,
+             * LIVE reference and terminal receipt without an extra per-file
+             * PENDING proposal. Unknown outcomes still retain client ownership. */
+            if(!query_only && rc==EFS_OK && p.coding_profile_id!=EFS_META_PROFILE_PACK_K2F1) {
                 /* Pending is issued only after replicated admission is visible
                  * under fresh authority, never from a proposed index/term. */
                 cmd[0]=EFS_MD_CMD_PUBLICATION_ADMIT;
@@ -16246,8 +16710,9 @@ void server_raft_host_lane_writer_view(const struct efs_msg_lane_writer_view *re
     }
 }
 
-void server_raft_host_writer_view(const struct efs_msg_inode_writer_view *req,
-                                   struct efs_msg_inode_writer_view_reply *out)
+void server_raft_host_writer_view_reuse(const struct efs_msg_inode_writer_view *req,
+                                   struct efs_msg_inode_writer_view_reply *out,
+                                   uint8_t *covered)
 {
     struct efs_raft_host *h = g_host;
     struct efs_meta_writer_view view;
@@ -16278,9 +16743,17 @@ void server_raft_host_writer_view(const struct efs_msg_inode_writer_view *req,
         }
         return;
     }
-    rc = host_read_index(h, groups[0], &hint);
-    if (rc == EFS_OK && ng == 2)
-        rc = host_read_index(h, groups[1], &hint);
+    /* This mask belongs to one inbound request. Every record still reads its
+     * current FileID/epoch; only successful local group barriers are reused.
+     * Forwarded views cannot establish coverage on this host. */
+    rc = EFS_OK;
+    for (int i = 0; i < ng && rc == EFS_OK; i++) {
+        uint8_t bit = (uint8_t)(1u << groups[i]);
+        if (!(*covered & bit)) {
+            rc = host_read_index(h, groups[i], &hint);
+            if (rc == EFS_OK) *covered |= bit;
+        }
+    }
     uint64_t gen = req->generation;
     if (rc == EFS_OK && !gen) {
         struct efs_meta_row row;
@@ -16301,6 +16774,13 @@ void server_raft_host_writer_view(const struct efs_msg_inode_writer_view *req,
         out->oldest_complete_epoch = view.oldest_complete_epoch;
         out->history = view.history;
     }
+}
+
+void server_raft_host_writer_view(const struct efs_msg_inode_writer_view *req,
+                                   struct efs_msg_inode_writer_view_reply *out)
+{
+    uint8_t covered = 0;
+    server_raft_host_writer_view_reuse(req, out, &covered);
 }
 
 void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32_t start, uint32_t max, uint64_t generation,
@@ -16414,6 +16894,11 @@ void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32
                    sizeof(out->recs[out->count].nodes));
             memcpy(out->recs[out->count].checksums, ch.checksums,
                    sizeof(out->recs[out->count].checksums));
+            if (ch.coding_profile_id == EFS_META_PROFILE_PACK_K2F1) {
+                out->recs[out->count].publish_flags = EFS_CHUNK_REC_F_PACKED_BASE;
+                out->recs[out->count].packed = ch.packed;
+                out->recs[out->count].file_generation = ch.packed.inode_generation;
+            }
             out->recs[out->count].base_gen = ch.generation;
             out->recs[out->count].chunk_generation = ch.generation;
             out->recs[out->count].delta_off = 0;
@@ -16604,6 +17089,7 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
     const char *p;
     uint32_t nh = 0;
     char last_name[EFS_MAX_NAME];
+    uint8_t covered = 0; /* Request-local group authority, including ancestors. */
     int hint = -1;
     int rc;
 
@@ -16628,7 +17114,7 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
             return;
         }
     }
-    rc = host_read_inode_lanes(h, cur, &hint);
+    rc = host_read_inode_lanes_reuse(h, cur, &hint, &covered);
     if (rc == EFS_ERR_NOT_PRIMARY) {
         uint8_t need[2];
 
@@ -16688,8 +17174,10 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
             host_fwd_lookup_path(h, start, path, out, need, nn);
             return;
         }
-        if (dg != pg)
+        if (!(covered & (1u << dg))) {
             rc = host_read_index(h, dg, &hint);
+            if (rc == EFS_OK) covered |= (uint8_t)(1u << dg);
+        }
         if (rc == EFS_OK)
             rc = efs_meta_apply_lookup_tx(h->kv, cur, name, host_txn_coord, h, &dent);
         if (rc == EFS_OK) {
@@ -16702,6 +17190,10 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
                     need[nn++] = cg;
                 host_fwd_lookup_path(h, start, path, out, need, nn);
                 return;
+            }
+            if (!(covered & (1u << cg))) {
+                rc = host_read_index(h, cg, &hint);
+                if (rc == EFS_OK) covered |= (uint8_t)(1u << cg);
             }
         }
         if (rc == EFS_OK)
@@ -16721,7 +17213,7 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
         rc = EFS_ERR_INVAL;
     if (rc == EFS_OK && nh > 0) {
         out->ancestor_count = nh > 1 ? nh - 1 : 0;
-        rc = host_read_inode_lanes(h, cur, &hint);
+        rc = host_read_inode_lanes_reuse(h, cur, &hint, &covered);
         if (rc == EFS_ERR_NOT_PRIMARY) {
             uint8_t need[2];
 

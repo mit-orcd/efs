@@ -27,15 +27,22 @@ int efs_publication_digest(const struct efs_meta_pub *r, uint8_t out[EFS_HASH_SI
 {
     if (!r || !out || !r->ino || !r->inode_gen || !r->candidate_gen ||
         r->expected_gen == EFS_CHUNK_BASE_UNCOND ||
-        r->coding_profile_id != EFS_META_PROFILE_K2F1)
+        (r->coding_profile_id != EFS_META_PROFILE_K2F1 &&
+         r->coding_profile_id != EFS_META_PROFILE_PACK_K2F1))
         return EFS_ERR_INVAL;
     unsigned nonzero = 0;
     for (unsigned i = 0; i < EFS_OPID_UUID_LEN; i++)
         nonzero |= r->publication_id.client_uuid[i];
     if (!nonzero || !r->publication_id.seq || !r->publication_id.session_epoch)
         return EFS_ERR_INVAL;
-    uint8_t buf[160 + EFS_NUM_FRAGMENTS * (4 + EFS_HASH_SIZE)], *p = buf;
-    put(&p, r->ticketed ? 3 : r->fresh_object ? 2 : 1, 4);
+    uint8_t buf[160 + EFS_NUM_FRAGMENTS * (4 + EFS_HASH_SIZE) + EFS_PACK_REF_BYTES], *p = buf;
+    int packed = r->coding_profile_id == EFS_META_PROFILE_PACK_K2F1;
+    if (packed && (r->ticketed || !r->fresh_object || r->chunk_index || r->expected_gen ||
+        r->delta_off || r->delta_len || r->delta_base_n || r->delta_base_seq ||
+        r->ch.packed.ino != r->ino || r->ch.packed.inode_generation != r->inode_gen ||
+        r->ch.packed.content_epoch != r->content_epoch || r->ch.packed.record_generation != r->candidate_gen ||
+        r->new_size != r->ch.packed.len)) return EFS_ERR_INVAL;
+    put(&p, packed ? 4 : r->ticketed ? 3 : r->fresh_object ? 2 : 1, 4);
     memcpy(p, r->publication_id.client_uuid, EFS_OPID_UUID_LEN);
     p += EFS_OPID_UUID_LEN;
     put(&p, r->publication_id.session_epoch, 4);
@@ -66,6 +73,10 @@ int efs_publication_digest(const struct efs_meta_pub *r, uint8_t out[EFS_HASH_SI
         memcpy(p, r->ch.checksums[i], EFS_HASH_SIZE);
         p += EFS_HASH_SIZE;
     }
+    if (packed) {
+        if (efs_pack_ref_encode(&r->ch.packed, p)) return EFS_ERR_INVAL;
+        p += EFS_PACK_REF_BYTES;
+    }
     efs_hash(buf, (size_t)(p - buf), out);
     return EFS_OK;
 }
@@ -74,8 +85,12 @@ int efs_publication_from_rec(const struct efs_chunk_rec *r, uint64_t size,
                              struct efs_meta_pub *p)
 {
     uint64_t epoch;
-    if (!r || !p || !(r->publish_flags & EFS_CHUNK_REC_F_CAPTURED_FILEID) ||
-        efs_chunk_publish_authority(r, r->file_generation, r->publish_epoch, &epoch) != EFS_OK)
+    if (!r || !p) return EFS_ERR_INVAL;
+    struct efs_chunk_rec authority = *r;
+    int packed = !!(r->publish_flags & EFS_CHUNK_REC_F_PACKED_BASE);
+    authority.publish_flags &= ~EFS_CHUNK_REC_F_PACKED_BASE;
+    if ( !(r->publish_flags & EFS_CHUNK_REC_F_CAPTURED_FILEID) ||
+        efs_chunk_publish_authority(&authority, r->file_generation, r->publish_epoch, &epoch) != EFS_OK)
         return EFS_ERR_INVAL;
     memset(p, 0, sizeof(*p));
     p->ino = r->ino;
@@ -86,7 +101,8 @@ int efs_publication_from_rec(const struct efs_chunk_rec *r, uint64_t size,
     p->candidate_gen = r->chunk_generation;
     p->fresh_object = !!(r->publish_flags & EFS_CHUNK_REC_F_FRESH_OBJECT);
     p->content_epoch = epoch;
-    p->coding_profile_id = EFS_META_PROFILE_K2F1;
+    p->coding_profile_id = packed ? EFS_META_PROFILE_PACK_K2F1 : EFS_META_PROFILE_K2F1;
+    if (packed) p->ch.packed = r->packed;
     p->delta_off = r->delta_off;
     p->delta_len = r->delta_len;
     p->delta_base_n = r->delta_base_n;

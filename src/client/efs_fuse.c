@@ -3284,7 +3284,7 @@ static pthread_mutex_t *append_mu(efs_ino_t ino)
  * that pins it (dirty, or clean-before-PUT inside a PUT window — the pin
  * is held until the slot is dropped). These are the three places
  * unpublished data lives (project-state "nothing to flush"). */
-static int efs_ino_has_unpublished(efs_ino_t ino)
+static int efs_ino_has_queued_write(efs_ino_t ino)
 {
     int pending = 0;
 
@@ -3293,7 +3293,12 @@ static int efs_ino_has_unpublished(efs_ino_t ino)
         pending = efs_wb_ino_pending_locked(ino);
         pthread_mutex_unlock(&g_wb.mu);
     }
-    return pending || efs_client_ino_is_dirty(ino) ||
+    return pending;
+}
+
+static int efs_ino_has_unpublished(efs_ino_t ino)
+{
+    return efs_ino_has_queued_write(ino) || efs_client_ino_is_dirty(ino) ||
            efs_dcache_ino_pinned(ino);
 }
 
@@ -3568,13 +3573,24 @@ static int append_publish_burst(efs_ino_t ino)
     pthread_mutex_unlock(&g_open_mu);
     if(!publish)return EFS_OK;
     int rc=efs_append_flush_report(NULL,ino);
+    uint64_t completed_ms=stats_now_ms();
     pthread_mutex_lock(&g_open_mu);
     for(struct efs_open_ref *r=g_open_refs;r;r=r->next) {
         if(r->ino!=ino)continue;
         r->append_publishing=0;
         /* BUSY backoff caps at 64 ms. Leave a 100 ms admission window
          * after durable publication so a competing client can retry. */
-        if(rc==EFS_OK)r->append_handoff_ms=stats_now_ms()+100;
+        if(rc==EFS_OK) {
+            /* Age measures unpublished ownership, not time spent completing
+             * the previous publication. A slow REPORT must not consume the
+             * next burst's entire age budget before its first write. */
+            r->append_burst_ms=completed_ms;
+            r->append_handoff_ms=completed_ms+100;
+        } else {
+            /* The next write has not been accepted. Retry the outstanding
+             * publication before opening a fresh burst after a failed drain. */
+            r->append_burst=32;
+        }
         break;
     }
     pthread_mutex_unlock(&g_open_mu);
@@ -3698,7 +3714,7 @@ static int fuse_write_admit(size_t size)
     return -EAGAIN;
 }
 
-static int efs_fuse_write_admitted(const char *path, const char *buf, size_t size,
+static int efs_fuse_write_admitted_run(const char *path, const char *buf, size_t size,
                           off_t offset, struct fuse_file_info *fi)
 {
     (void)path;
@@ -3715,6 +3731,13 @@ static int efs_fuse_write_admitted(const char *path, const char *buf, size_t siz
         return 0;
     if (fuse_odirect_unaligned(fi, offset, size))
         return -EINVAL;
+    int pack_rc=efs_client_pack_flush(ino);
+    if(pack_rc)return fuse_stat_errno(pack_rc);
+    if(size<=4096 && offset==0 && !(fi && (fi->flags&O_APPEND)) && !efs_ino_has_queued_write(ino) && !efs_dcache_ino_pinned(ino)) {
+        pack_rc=efs_client_pack_write(ino,(uint64_t)offset,(uint32_t)size,(const uint8_t *)buf);
+        if(pack_rc==EFS_OK)return (int)size;
+        if(pack_rc!=EFS_ERR_NOT_FOUND)return fuse_stat_errno(pack_rc);
+    }
     int append = fi && (fi->flags & O_APPEND);
     if (append) {
         int publish_rc = append_publish_burst(ino);
@@ -3768,6 +3791,16 @@ static int efs_fuse_write_admitted(const char *path, const char *buf, size_t siz
         return fuse_stat_errno(rc);
     }
     return (int)size;
+}
+
+static int efs_fuse_write_admitted(const char *path,const char *buf,size_t size,off_t offset,struct fuse_file_info *fi)
+{
+    int serialize=efs_client_pack_enabled() && fi && !(fi->flags&O_APPEND);
+    efs_ino_t ino=efs_file_ino(fi,0);
+    if(serialize) {int rc=wb_lock_budget(append_mu(ino));if(rc)return fuse_stat_errno(rc);}
+    int rc=efs_fuse_write_admitted_run(path,buf,size,offset,fi);
+    if(serialize)pthread_mutex_unlock(append_mu(ino));
+    return rc;
 }
 
 static int efs_fuse_write_run(const char *path, const char *buf, size_t size,
@@ -3830,7 +3863,7 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
 
 /* write_buf: copy the FUSE receive buffer. Small writes still try an
  * in-place dcache patch; large writes go to the writeback pool. */
-static int efs_fuse_write_buf_admitted(const char *path, struct fuse_bufvec *buf,
+static int efs_fuse_write_buf_admitted_run(const char *path, struct fuse_bufvec *buf,
                               off_t offset, struct fuse_file_info *fi)
 {
     (void)path;
@@ -3849,6 +3882,12 @@ static int efs_fuse_write_buf_admitted(const char *path, struct fuse_bufvec *buf
     if (fuse_odirect_unaligned(fi, offset, size))
         return -EINVAL;
 
+    int pack_rc=efs_client_pack_flush(ino);if(pack_rc)return fuse_stat_errno(pack_rc);
+    if(efs_client_pack_enabled() && size<=4096 && !(fi && (fi->flags&O_APPEND))) {
+        uint8_t small[4096];struct fuse_bufvec dst=FUSE_BUFVEC_INIT(size);dst.buf[0].mem=small;
+        if(fuse_buf_copy(&dst,buf,FUSE_BUF_NO_SPLICE)!=(ssize_t)size)return -EIO;
+        return efs_fuse_write_admitted_run(path,(const char *)small,size,offset,fi);
+    }
     int append = fi && (fi->flags & O_APPEND);
     if (append) {
         int publish_rc = append_publish_burst(ino);
@@ -4011,6 +4050,16 @@ static int efs_fuse_write_buf_admitted(const char *path, struct fuse_bufvec *buf
         }
         return (int)size;
     }
+}
+
+static int efs_fuse_write_buf_admitted(const char *path,struct fuse_bufvec *buf,off_t offset,struct fuse_file_info *fi)
+{
+    int serialize=efs_client_pack_enabled() && fi && !(fi->flags&O_APPEND);
+    efs_ino_t ino=efs_file_ino(fi,0);
+    if(serialize) {int rc=wb_lock_budget(append_mu(ino));if(rc)return fuse_stat_errno(rc);}
+    int rc=efs_fuse_write_buf_admitted_run(path,buf,offset,fi);
+    if(serialize)pthread_mutex_unlock(append_mu(ino));
+    return rc;
 }
 
 static int efs_fuse_write_buf_run(const char *path, struct fuse_bufvec *buf,
@@ -4862,6 +4911,7 @@ static void efs_fuse_destroy(void *userdata)
     (void)userdata;
     int wrc = efs_wb_sync();
     int drc = efs_dcache_flush_all();
+    efs_client_pack_stop();
     if (wrc != EFS_OK || drc != EFS_OK)
         fprintf(stderr, "efs-fuse: unmount: data flush incomplete "
                         "(writeback=%d dcache=%d)\n", wrc, drc);
@@ -5946,6 +5996,8 @@ static void ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
     char *buf;
     int n, owned = 0;
     t_req = req;
+    int pack_rc=efs_client_pack_flush((efs_ino_t)ino);
+    if(pack_rc) {t_req=NULL;fuse_reply_err(req,-fuse_stat_errno(pack_rc));return;}
     /* Zero-copy reply: a chunk-aligned read whose chunks are all in the
      * read cache goes to the kernel as one writev of the cached images
      * (fuse_reply_iov; fuse_reply_data would copy a multi-buffer vector

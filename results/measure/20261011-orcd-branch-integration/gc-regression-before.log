@@ -1,0 +1,13 @@
+/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-frag-backlog-8rkc9vg5/t.c:55:40: error: variable 'ack_progress' set but not used [-Werror,-Wunused-but-set-variable]
+   55 |     int nack = 0, scans = 0, recs = 0, ack_progress = 0;
+      |                                        ^
+/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-frag-backlog-8rkc9vg5/t.c:174:1: error: non-void function does not return a value in all control paths [-Werror,-Wreturn-type]
+  174 | }
+      | ^
+2 errors generated.
+Traceback (most recent call last):
+  File "/Users/mike/Documents/Codex/2026-10-08/efs/work/devel-orcd/tests/test_gc_fragment_backlog.py", line 68, in <module>
+    subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(exe)],check=True)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 528, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['cc', '-std=gnu11', '-Wall', '-Wextra', '-Werror', '-I/Users/mike/Documents/Codex/2026-10-08/efs/work/devel-orcd/include', '/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-frag-backlog-8rkc9vg5/t.c', '-o', '/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-frag-backlog-8rkc9vg5/t']' returned non-zero exit status 1.

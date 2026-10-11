@@ -1,0 +1,5 @@
+packed -> ordinary promotion / grow / fsync exact bytes PASS
+packed truncate-zero exact EOF PASS
+packed unlink PASS
+packed hardlink survivor after original unlink PASS
+all twelve neighboring packed files retained exact bytes PASS

@@ -292,3 +292,245 @@ PID 1381139 was still running: 1,881,198 / 10,000,000 files, 4,918.5 seconds,
 Mounted writes still use legacy fragments. Production admission/session and
 receipt checks, versioned mapping/GETCHUNKS reads, bounded client coalescing,
 shared reclamation and matched ORCD throughput acceptance remain necessary.
+
+## Authoritative reference and publication checkpoint · Oct 11
+
+The staged profile `PACK_K2F1` extends the ordinary 128-byte base metadata image
+with one canonical 96-byte packed reference. Ordinary delta records follow that
+extension, rather than overwriting it. Metadata reads bind the reference to the
+row's inode, inode generation, chunk zero and owning publication group, and
+reject mismatched record generations/epochs, truncated references and malformed
+trailers. Legacy base images retain their existing encoding. Private marked LSM
+stores retain the packed reference and mixed delta list through compaction and
+cold reopen; no new wire format or mounted writer is activated by this change.
+
+`PACK_OBJECT` (kind 36) reserves a group-anchor key for an immutable segment
+identity. Its checksummed `EFSPMAP1` value binds placement and fragment checksums
+to the existing shared lifetime ledger. A bounded mapping planner loads each
+shared object once per cohort, checks transaction exclusion and local upload
+owner epoch for new references, and returns ledger changes to commit in the
+same batch as mappings and durable receipts. It does not establish admission,
+prove durable PUT or grant permission to publish a new packed object.
+
+The existing publication apply now uses that planner when an authoritative
+packed base is present: ordinary deltas preserve its LIVE reference, and
+promotion to an ordinary full chunk retires the exact old reference atomically
+with the new mapping and durable publication receipt. Legacy publications take
+the existing path without additional ledger/mapping lookups. Lost-ACK retries
+return the stored receipt without restoring released ownership. Unsupported
+packed retirement paths still fail BUSY instead of putting shared fragments
+into the ordinary per-inode GC queue. Those paths must be connected before
+activation; this guard is not completed shared-object GC.
+
+Private ORCD tests cover actual chunk metadata keys, mixed deltas, corrupt image
+refusal, multiple members sharing one ledger, failed atomic batches, prepared
+ledger exclusion, retained neighbors, terminal-reference replay rejection,
+actual publication promotion/receipt replay, abrupt WAL exit and cold
+compaction. The complete Linux `make test` suite passes on fcstor006, and the
+successful development build has zero compiler warnings.
+[Development overlay gate and source manifest](../../results/measure/20261011-orcd-packed-metadata/).
+This is a metadata integration checkpoint, not distributed packed PUT/GET,
+mounted coalescing, physical reclamation or throughput acceptance.
+
+Containers and logical packing compose at separate layers:
+`logical files → packed segment → erasure-coded fragments → container extents`.
+Existing fragment containers retain padding inside their input fragments. Packed
+fragments are initially supported by the files backend only; the staged storage
+helper explicitly rejects containers. Container support must preserve immutable
+segment identity, typed upload fences and shared-reference retirement, and
+reclaim extents only after the segment's captured-member fence/delete protocol.
+It needs separate backend durability, recovery, allocation and survivor tests.
+
+The user now explicitly permits erasing ORCD test data if needed for this work.
+No stores were erased for these private gates. This authorization does not
+extend to unrelated clusters or change their retention requirements.
+
+
+## Admission, distributed reads and coalescing checkpoint · Oct 11
+
+The development path now admits an immutable `EFSUPLD1` manifest through Raft,
+with exact owner/session epoch, deterministic segment identity, placement,
+checksums, record identities and captured membership. Group-local upload permits
+are bounded to 128 outstanding cohorts per session. Fresh authority and the
+stored immutable manifest resolve uncertain admission replies; absence never
+permits a PUT. Completed permits retire in order behind a durable floor while
+LIVE shared-object rows remain for later reclamation. Keeping permits until file
+deletion would otherwise stop a writer after its first 128 live cohorts.
+
+Typed packed PUT/GET RPCs persist actual variable-length fragments in the files
+backend. PUT requires a fresh ACTIVE admission, current FileID/content epochs,
+matching placement/checksum and the durable local session guard. GET validates
+geometry, actual checksum tails and exact payload length. Initial packed
+publication binds each reference into the intent digest, then commits the
+mapping, LIVE ledger transition and publication receipt in one metadata batch.
+The versioned GETCHUNKS path returns authoritative references; the client reads
+any two valid fragments, verifies the immutable body/record digest, and
+zero-fills the logical chunk before applying existing delta/fence semantics.
+Legacy publication tickets retain their existing command encoding.
+
+Packed reference retirement is now atomic with ordinary promotion, bounded and
+historical lane sweeps, truncate range deletion, truncate tail promotion and
+verified chunk materialization. Packed objects never enter per-inode fragment
+GC. Tests cover failed cleanup batches, repeated cleanup, surviving neighbors,
+last-reference transition and cold compaction. Physical shared-object deletion
+requires a durable typed fence, checks exact generation/checksum/geometry,
+serializes against PUT and repeats directory barriers on retries; quota and GC
+accounting change only once. Its internal caller must still prove all captured
+members fenced before physical deletion.
+
+A bounded cohort primitive copies captured snapshots into caller-owned storage,
+coalesces only within one publication group, flushes at capacity or deadline,
+and supports explicit singleton sync/shutdown flush. Immutable owner/body/refs
+survive retry without new identities. Its memory must be charged before byte
+acceptance; the caller must pin each writer snapshot until durable publication
+or fenced cancellation is reconciled. This primitive is exercised through the
+private RPC driver; the mounted write-cache scheduler is not yet connected.
+
+A private four-server TCP/direct-I/O cluster on ORCD port 19832 passes real
+16-record coalesced upload/publication, durable receipts, retired permit probes,
+degraded reads with either data server stopped, and all-server cold restart.
+The actual FUSE client reads those packed files and writes/fsyncs an ordinary file
+alongside them. Mounted promotion/grow/fsync, truncate-zero, unlink and hard-link
+survival also pass; a cold client and all-server restart retains exact modified
+ordinary bytes and all twelve surviving packed neighbors. An audit across the
+four private nodes finds three 12,288-byte allocated fragments per original
+16-record/8,192-byte cohort, or 4.5× payload before metadata/WAL/directories.
+The separate eight-worker, 20-minute randomized physical soak
+passes 299,520 cohorts, including buffered/direct I/O, retry PUT, degraded EC
+reads, fences, GC and cold quota inventories. These are correctness gates,
+not mounted tiny-file throughput acceptance. The full Linux regression suite
+passes; a final focused refinement also rejects legacy session epoch zero.
+AddressSanitizer passes the coalescing, packed reader and actual metadata
+lifecycle implementations. UBSan could not link because the host lacks its
+runtime library; no UBSan result is claimed.
+[Source manifests, logs and private runtime hashes](../../results/measure/20261011-orcd-packed-integration/).
+
+Snapshot import now durably installs the minimum-reader capability before
+committing packed mappings or admission/lifetime rows, including prepare and
+empty-diff imports. A permanent replicated capability row survives retirement
+of the final object, preventing a snapshot from silently losing its format
+requirement. Unsupported incoming versions fail before changing rows.
+
+The native RPC record struct is extended in this development build. All private
+servers and the tested client use matching binaries; an eventual live rollout
+must drain and update every server/client together unless an explicit legacy
+ABI translation/negotiation path is added. A minimum-reader disk marker does
+not itself provide network feature negotiation. Packed read scratch is bounded
+per call but must also be included in the mounted client's aggregate memory
+budget before activation.
+
+Production remains `c52a4643` on port 17432 with the legacy mounted write path.
+No production stores were erased. Remaining activation work is the mounted
+coalescing scheduler and accepted-byte/cache/close/fsync ownership integration;
+a distributed shared-object GC and abandoned-PENDING cancellation coordinator;
+peer capability negotiation and cache persistence review; then mixed POSIX,
+fault/recovery and matched baseline/candidate throughput/physical-allocation
+runs. The existing tiny-file benchmark still exercises legacy fragments, so
+its 408× format amplification has not yet been removed from that workload.
+
+
+Before measuring throughput, batch fresh record-authority validation within a
+cohort's existing metadata group. The current correctness-first PUT checks
+writer authority for each record separately, so a sixteen-record cohort can
+perform sixteen fresh ReadIndex rounds per receiving fragment. Replace that
+with one fresh same-group read barrier and transaction-aware checks of every
+captured FileID/epoch, retaining the local session and object guards. Likewise
+measure/batch same-group publication without weakening per-file CAS/receipts.
+Otherwise data padding savings may coexist with increased metadata latency.
+Sweep 1–5 ms cohort deadlines against actual close arrivals rather than assuming
+sixteen workers always produce a full sixteen-record cohort.
+
+## Next implementation checkpoint
+
+Connect the cohort primitive to the existing retained writer/publication state,
+rather than introducing a second completion contract. Only eligible fresh,
+whole-file snapshots at chunk zero and at most 4,096 bytes enter a cohort;
+existing files, append, oversized writes and unsupported backends use the
+ordinary path. Allocate the cohort's storage and publication ownership before
+accepting its bytes. A group-local scheduler seals on capacity, deadline or an
+explicit close/fsync/O_SYNC/shutdown request, including a singleton. Keep each
+captured FileID, epoch, writer snapshot sequence and publication identity pinned
+while admission, PUT or publication is uncertain. Retry the same body and IDs;
+consume only the exact durable per-record verdict, and retire upload permits in
+order after all records have terminal states. A failed cohort must not silently
+fall back with replacement identities after any ambiguous PUT/publication.
+
+The packed decoder now accepts caller-supplied scratch, and mounted reads
+allocate it through the existing bounded client body pool. Its maximum scratch
+is three fragments plus one reconstructed body, or 2.5 times segment geometry.
+The mounted-branch budget gate exercises real pool exhaustion: it refuses before
+fetch, leaves output and retained body charges unchanged, honors the deadline,
+and releases scratch on both failed and successful reads. The decoder gate also
+rejects undersized or overlapping scratch. Standalone tools retain an allocating
+convenience wrapper. Coalescer copies and wire/EC staging still need inclusion in
+that aggregate budget; this change does not activate mounted packing.
+
+Implement shared GC as a durable coordinator over the existing ledger phases.
+Only RECLAIMING objects with no LIVE or PENDING slots may start deletion.
+Obtain actual durable generation-specific fence ACKs from every captured member,
+replicate those ACKs, then delete exact placement/checksum/geometry identities
+and replicate actual durable delete/absence ACKs. A missing member is not an
+ACK. Retire the object only after all required proofs and the ordered upload
+floor are durable. For abandoned PENDING cohorts, prove completed authoritative
+session revocation and each local rejection floor before cancellation; elapsed
+time or transport loss cannot supply that proof. Replay the same captured
+membership and identities after coordinator crashes or leadership changes.
+
+Keep mounted writes disabled until peer capability/native ABI rollout and the
+scheduler/GC correctness gates pass. Then deploy matching committed binaries to
+all four servers and seven clients, run mixed packed/ordinary POSIX and peer
+fault gates, and use fresh benchmark siblings for alternating baseline/candidate
+runs. Measure cohort occupancy and deadline distribution, fragment bytes/count,
+metadata/WAL writes and p50/p95/p99 durable close latency as well as files/s.
+Packing can reduce fragment padding while CREATE, per-record ReadIndex or
+publication coordination still limits throughput; those costs need separate
+attribution and same-group batching.
+
+
+The concrete writer entry points are `efs_dcache_begin_publication`,
+`efs_dcache_publication_request_ticketed`, `efs_dcache_consume_publication` and
+`efs_dcache_flush_ino` in `src/client/write.c`. Select packed versus ordinary
+publication before `result_bound` freezes the token's identity/size/digest.
+Patching a previously admitted ordinary request into a packed request would
+change its immutable intent and must fail. Build a dedicated packed request
+from the same captured snapshot and its sealed reference, then reuse the
+existing exact receipt-consumption path. Release dcache shard locks before
+waiting for cohort flush/network progress; otherwise blocked close callers
+can prevent other writers from filling the cohort. Later writes remain owned
+in the existing post-publication state until the first packed receipt resolves,
+then promote through the ordinary path as required.
+
+
+### Retained packed publication adapter
+
+The retained writer token now holds the exact completed PUT record, including
+its packed reference and flag. `efs_dcache_publication_report` constructs retries
+from that immutable token rather than mutable cache placement. Its allocation
+remains charged through `sizeof(efs_writer_state)` in the metadata budget.
+The plan adapter accepts a packed PUT only for a fresh, absent base at chunk
+zero whose single owned range starts at zero and exactly covers the tiny record.
+It checks FileID, captured epoch, record generation, geometry and bounds before
+making publication ready. Ordinary sparse merges retain their existing path.
+
+The actual cache-function gate checks invalid identities, epoch, extent and
+flags without releasing accepted bytes; it then changes cache placement and
+retries after a lost result using the same packed reference and digest. Exact
+matching durable completion releases the body. This is another integration
+checkpoint, not mounted coalescer activation: the group scheduler, upload-permit
+ownership and distributed shared-object GC remain required.
+
+
+The matching `fd83b30d` private cold gate passes sixteen authoritative mappings,
+durable receipts and zero-filled packed RPC reads. A separate fresh FUSE mount
+passes 28 exact packed reads, the preserved promoted/grown record, a zero-length
+truncate, unlinked records and ordinary mixed data. The private mount and four
+servers then stop cleanly. See [integration evidence](orcd-branch-integration-20261011.md).
+These fixtures validate the decoder/lifecycle path; the normal mounted write
+benchmark still selects the ordinary format.
+
+Final integrated rollout `fd83b30d`: the fresh ordinary baseline completed
+10,000 fixed 512-byte files in 21.0 seconds (476 files/s, 16 workers).
+Sampling inode 942415 and its exact three placement files confirms 208,896
+allocated bytes, still **408×** payload. This is evidence that ordinary mounted
+writes have not activated packing, even though the private packed cold-read
+and publication gates pass. See the [integration evidence](orcd-branch-integration-20261011.md).

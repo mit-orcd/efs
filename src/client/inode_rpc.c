@@ -1332,18 +1332,34 @@ int efs_client_rpc_publication_session(uint32_t shard,const struct efs_opid *ide
     unsigned nonzero=0;
     for (unsigned i=0;i<EFS_OPID_UUID_LEN;i++) nonzero|=identity->client_uuid[i];
     if (!nonzero) return EFS_ERR_INVAL;
-    uint8_t command[26]={EFS_MD_CMD_SESSION,EFS_MD_SESS_CREATE};
+    uint8_t command[26]={EFS_MD_CMD_SESSION,0};
     memcpy(command+2,identity->client_uuid,EFS_OPID_UUID_LEN);
-    for (unsigned i=0;i<4;i++) {
-        command[18+i]=(uint8_t)(identity->session_epoch>>(24-8*i));
-        command[22+i]=(uint8_t)(shard>>(24-8*i));
-    }
+    lease_command_be(command+18,shard,4);
     uint32_t owner=efs_kv_session_shard(identity->client_uuid);
-    int rc=publication_session_command(owner,command,22);
-    if (rc!=EFS_OK) return rc;
-    command[1]=EFS_MD_SESS_REGISTER;
-    rc=publication_session_command(owner,command,sizeof(command));
-    if (rc!=EFS_OK) return rc;
+    uint64_t view=0;
+    int rc=session_command_reply(owner,command,22,&view,2);
+    int registered=0;
+    if(rc==EFS_OK) {
+        uint32_t epoch=(uint32_t)view;unsigned state=(unsigned)((view>>32)&255u);
+        if((view>>41) || !epoch || (state!=EFS_SESSION_ACTIVE && state!=EFS_SESSION_FENCING))return EFS_ERR_PROTO;
+        if(epoch!=identity->session_epoch)return EFS_ERR_STALE;
+        if(state==EFS_SESSION_FENCING)return EFS_ERR_BUSY;
+        registered=!!(view&(1ull<<40));
+    } else if(rc==EFS_ERR_NOT_FOUND) {
+        command[1]=EFS_MD_SESS_CREATE;
+        lease_command_be(command+18,identity->session_epoch,4);
+        rc=publication_session_command(owner,command,22);
+        if(rc)return rc;
+    } else return rc;
+    lease_command_be(command+18,identity->session_epoch,4);
+    lease_command_be(command+22,shard,4);
+    if(!registered) {
+        command[1]=EFS_MD_SESS_REGISTER;
+        rc=publication_session_command(owner,command,sizeof(command));
+        if(rc)return rc;
+    }
+    /* ESTABLISH always rechecks fresh owner authority and the participant's
+     * durable rejection floor. This is an RPC-local proof, not a client cache. */
     command[1]=EFS_MD_SESS_ESTABLISH;
     return publication_session_command(shard,command,sizeof(command));
 }
@@ -1743,7 +1759,7 @@ int efs_client_rpc_getchunks_fileid(efs_export_id_t export_id, efs_ino_t ino,
         if (target)
             nid = target;
         unsigned long long t1 = prof ? rpc_prof_now_us() : 0;
-        if (!conn || efs_conn_send_msg(conn, EFS_MSG_INODE_GETCHUNKS, &req,
+        if (!conn || efs_conn_send_msg(conn, EFS_MSG_GETCHUNKS_PACKED, &req,
                                       sizeof(req)) != 0) {
             if (conn) efs_client_conn_drop(nid, conn);
             /* This immutable read is safe to repeat after endpoint loss.
@@ -1777,7 +1793,7 @@ int efs_client_rpc_getchunks_fileid(efs_export_id_t export_id, efs_ino_t ino,
             return EFS_ERR_BUSY;
         }
         rpc_prof_add(EFS_MSG_INODE_GETCHUNKS, t1 - t0, t2 - t1, t3 - t2, 0);
-        if (rtype != EFS_MSG_INODE_GETCHUNKS_REPLY ||
+        if (rtype != EFS_MSG_GETCHUNKS_PACKED_REPLY ||
             plen != sizeof(struct efs_msg_inode_getchunks_reply)) {
             free(payload);
             return EFS_ERR_PROTO;

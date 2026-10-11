@@ -2,11 +2,15 @@
 """Production REPORT/background durability flags follow completed log coverage."""
 from pathlib import Path
 import subprocess
+import re
 import tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text()
 def fn(name):
- a=s.index('static int '+name+'(');return s[a:s.index('\n}',a)+2]
+ # Require a definition: a forward declaration is not executable coverage.
+ match=re.search(r'static int '+re.escape(name)+r'\([^;{]*\)\s*\{',s)
+ assert match is not None,name
+ a=match.start();return s[a:s.index('\n}',a)+2]
 code=r'''
 #include "efs/common.h"
 #include <assert.h>

@@ -1,7 +1,0 @@
-# Intel large-directory cursor reset — 2026-10-11
-
-Intel2's strict resume stopped with EIO during directory enumeration on 297ab13f. A subsequent full FUSE listing stayed active for over ten minutes. A read-only production-wire pagination probe found the deterministic defect: page 164 returned 10,560 accumulated entries with `next_src=9`, empty `next_name`, and `next_done=0`; page 165 restarted at source 1 with the same first-page name. The 165-page sequence repeated until the bounded 5,000-page probe refused completion. This is not a storage-speed inference or successful full inventory.
-
-The server reconstructed the source cookie only when the name cookie was nonempty. Exactly filling a page at a source boundary legitimately advances source and clears name. Dropping that source-only position restarts at zero, repeats earlier names and can prevent EOF. The callback now always preserves after_src, copying after_name when present. No wire/storage format or read-authority barrier changes.
-
-The regression executes the actual production server callback with two exact 64-entry sources and a one-entry final source. Source-only resume, full/partial/one-entry pages yield exactly 129 unique entries and EOF. It fails on the old callback and passes after correction on macOS and both Intel Linux hosts; it joins make test. Live corrected root pagination, strict tiny-file resume and full deployed suites remain required. The earlier EIO and independent private racing-MKDIR failure remain retained rather than being erased by these unit results.

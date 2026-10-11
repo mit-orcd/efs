@@ -9,6 +9,8 @@ def function(name):
 start=s.index('static int host_append_prepare_ref(')
 end=s.index('static int host_append_authority(',start)
 helpers=s[start:end]
+ca=s.index('#define HOST_CMD_COHORT_MAX');cb=s.index('/* DECIDE COMMIT at the coordinator',ca)
+cohort=s[ca:cb]
 if os.environ.get('EFS_APPEND_BATCH_SYNC')=='1':
  a=helpers.index('static int host_append_reserve_prepare(');b=helpers.index('\n}',a)+2
  helpers=helpers[:a]+'''static int host_append_reserve_prepare(void *user,const struct efs_txid *t,
@@ -20,6 +22,7 @@ if os.environ.get('EFS_APPEND_BATCH_SYNC')=='1':
 }'''+helpers[b:]
 code=r'''
 #include <stdint.h>
+#define EFS_META_APPEND_COMPLETE_MAX 8u
 #include <stddef.h>
 #include <string.h>
 #include <assert.h>
@@ -42,7 +45,11 @@ code=r'''
 struct efs_txid {uint64_t id;};
 struct efs_txn_parts {unsigned n;};
 struct host_idx_ref {uint8_t group;uint64_t idx,term;};
-struct efs_raft_host {pthread_mutex_t mu;void *kv;};
+struct efs_raft {int role;unsigned voters;};
+struct efs_raft_disk {unsigned depth;};
+#define EFS_RAFT_LEADER 1
+#define EFS_ERR_NOT_PRIMARY -10
+struct efs_raft_host {pthread_mutex_t mu;void *kv;struct efs_raft_disk *disk;struct efs_raft r[3];};
 struct host_resize_ctx {struct efs_raft_host *host;int *hint;};
 struct efs_meta_append_image {uint8_t key[64];uint32_t klen,expected_len,new_len;int op;uint8_t expected[1024],value[1024];};
 struct efs_meta_append_ops {
@@ -83,7 +90,15 @@ static int host_resize_decide(void *user,const struct efs_txid *t,const struct e
 static int host_resize_resolve(void *user,const struct efs_txid *t,const struct efs_txn_parts *p,int d) {
  struct host_resize_ctx *ctx=user;assert(ctx->host&&ctx->hint&&t->id==19&&p->n==2);resolutions++;last_resolve=d;return resolve_error;
 }
-'''+function('host_prep_raw')+'\n'+function('host_wait_refs')+'\n'+helpers+r'''
+
+static struct efs_raft *group_raft(struct efs_raft_host *h,uint8_t group){return &h->r[group];}
+static int efs_raft_role(const struct efs_raft *r){return r->role;}
+static unsigned efs_raft_voters(const struct efs_raft *r){return r->voters;}
+static unsigned efs_raft_disk_sync_depth(struct efs_raft_disk *d){return d->depth;}
+static int efs_raft_disk_sync_hold(struct efs_raft_disk *d){d->depth++;return 0;}
+static int host_report_release(struct efs_raft_host *h,int held){assert(held&&h->disk->depth==1);h->disk->depth--;return 0;}
+static int host_propose_mode(struct efs_raft_host *h,uint8_t group,const uint8_t *cmd,uint32_t n,uint64_t *idx,uint64_t *term,int *hint,int local){assert(local);return host_propose(h,group,cmd,n,idx,term,hint);}
+'''+cohort+'\n'+function('host_prep_raw')+'\n'+function('host_wait_refs')+'\n'+helpers+r'''
 
 typedef uint64_t efs_ino_t;
 struct efs_opid {int owner;};
@@ -91,6 +106,7 @@ struct efs_opid {int owner;};
 #define EFS_META_APPEND_COMPLETED 0
 static unsigned report_done,report_authority,report_reads;
 static int report_error;
+static unsigned report_batch_max=8,report_refusals;
 static int efs_meta_apply_append_open(void *kv,efs_ino_t ino,uint64_t *offs,uint64_t *lens,uint32_t *n) {
  (void)kv;assert(ino==11&&*n==64);report_reads++;
  *n=report_done==2?0:2-report_done;
@@ -119,16 +135,23 @@ static int report_finish(void *kv,efs_ino_t ino,uint64_t offset,int outcome,
  if(!rc)report_done++;
  return rc;
 }
-static int efs_meta_finish_append(void *kv,efs_ino_t ino,uint64_t off,int outcome,
+static int efs_meta_finish_append_batch(void *kv,efs_ino_t ino,const uint64_t *offsets,uint32_t count,int outcome,
  const struct efs_txid *t,const struct efs_meta_append_ops *ops,void *ctx) {
- return report_finish(kv,ino,off,outcome,NULL,t,ops,ctx);
+ if(count>report_batch_max){report_refusals++;return EFS_ERR_INVAL;}
+ int rc=report_finish(kv,ino,offsets[0],outcome,NULL,t,ops,ctx);
+ if(!rc)report_done+=count-1;
+ return rc;
 }
-static int efs_meta_finish_append_owned(void *kv,efs_ino_t ino,uint64_t off,int outcome,
+static int efs_meta_finish_append_batch_owned(void *kv,efs_ino_t ino,const uint64_t *offsets,uint32_t count,int outcome,
  const struct efs_opid *id,const struct efs_txid *t,const struct efs_meta_append_ops *ops,void *ctx) {
- return report_finish(kv,ino,off,outcome,id,t,ops,ctx);
+ if(count>report_batch_max){report_refusals++;return EFS_ERR_INVAL;}
+ int rc=report_finish(kv,ino,offsets[0],outcome,id,t,ops,ctx);
+ if(!rc)report_done+=count-1;
+ return rc;
 }
 ''' + function('host_resolve_caught_up') + r'''
-static struct efs_raft_host host={.mu=PTHREAD_MUTEX_INITIALIZER};
+static struct efs_raft_disk disk;
+static struct efs_raft_host host={.mu=PTHREAD_MUTEX_INITIALIZER,.disk=&disk,.r={{.role=EFS_RAFT_LEADER,.voters=7},{0},{.role=EFS_RAFT_LEADER,.voters=7}}};
 static struct efs_txid tx={19};static struct efs_txn_parts parts={2};static int hint;
 static struct efs_meta_append_image image={.klen=4,.expected_len=1,.new_len=1,.op=3};
 static void reset(struct host_append_reserve_ctx *c,int leading) {
@@ -146,6 +169,12 @@ static void ready(struct host_append_reserve_ctx *c,int leading) {
 }
 int main(void) {
  struct host_append_reserve_ctx c;
+ reset(&c,0);struct host_command_cohort captured;
+ host_command_cohort_begin(&captured,&host);
+ for(unsigned i=0;i<4;i++){image.key[1]=i%2;assert(!host_append_reserve_ops.prepare(&c,&tx,&parts,&image));}
+ assert(c.nrefs==4&&!proposals&&!checks&&!decisions);
+ assert(!host_command_cohort_end(&captured,0,&hint)&&proposals==4&&!disk.depth);
+ assert(!host_append_reserve_ops.decide(&c,&tx,&parts,EFS_TXN_COMMIT)&&checks==4&&waits==2&&last_decision==EFS_TXN_COMMIT);
  assert(host_append_ops.prepare==host_append_prepare && host_append_ops.decide==host_resize_decide);
  for(int leading=1;leading<=2;leading++) {
   ready(&c,leading);assert(!host_append_reserve_ops.decide(&c,&tx,&parts,EFS_TXN_COMMIT));
@@ -177,7 +206,14 @@ int main(void) {
   reset(&c,0);report_done=report_authority=report_reads=report_error=0;
   assert(!host_resolve_caught_up(&host,11,16,owned?&id:NULL,&hint));
   assert(report_done==2&&report_authority==1&&report_reads==3);
-  assert(syncs==(unsigned)(owned?4:2)&&proposals==8&&checks==8&&decisions==2&&resolutions==2);
+  assert(syncs==(unsigned)(owned?2:1)&&proposals==4&&checks==4&&decisions==1&&resolutions==1);
+  reset(&c,0);report_done=report_authority=report_reads=report_refusals=report_error=0;report_batch_max=1;
+  assert(!host_resolve_caught_up(&host,11,16,owned?&id:NULL,&hint));
+  assert(report_done==2&&report_refusals==1&&decisions==2&&resolutions==2);
+  report_batch_max=8;
+  reset(&c,0);report_done=report_authority=report_reads=report_error=0;
+  assert(!host_resolve_caught_up(&host,11,8,owned?&id:NULL,&hint));
+  assert(report_done==1&&decisions==1&&resolutions==1);
   reset(&c,0);report_done=report_authority=report_reads=0;report_error=EFS_ERR_STALE;
   assert(host_resolve_caught_up(&host,11,16,owned?&id:NULL,&hint)==EFS_ERR_BUSY);
   assert(!report_done&&report_authority==1&&last_decision==EFS_TXN_ABORT&&last_resolve==EFS_TXN_ABORT);

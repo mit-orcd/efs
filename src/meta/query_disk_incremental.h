@@ -2,14 +2,17 @@
  * FULL result is a resource/coverage fallback, never an IO-error fallback. */
 #define INCREMENTAL_FULL 1
 #define DIRTY_MAX 1024
+#define DIRTY_HEAP_MAX (16u << 20)
 #define CHANGE_BATCH 256
 struct dirty_dir { struct disk_node node;uint64_t at;unsigned pending,done; };
 struct incremental {
     uint64_t changed_partitions,changes,change_bytes;
     int changes_fd;
-    unsigned buffered,count;
+    unsigned buffered,count,capacity;
+    struct dirty_dir *dirs;
+    size_t heap_bytes;
     efs_ino_t changed[CHANGE_BATCH];
-    struct dirty_dir dirs[DIRTY_MAX];
+    struct dirty_dir initial[DIRTY_MAX];
 };
 /* Each inode is visited once in the candidate stream; removed IDs occur only
  * in the old-only pass. No namespace-sized deduplication set is needed.
@@ -44,10 +47,21 @@ static int dirty_add(struct efs_query_disk *d,struct incremental *s,efs_ino_t in
 {
     unsigned at=dir_lower(s,ino);
     if(at<s->count && s->dirs[at].node.row.ino==ino)return EFS_OK;
-    if(s->count==DIRTY_MAX){
-        fprintf(stderr,"query-disk: incremental fallback=dirty-directory-budget count=%u limit=%u ino=%llu\n",
-                s->count,DIRTY_MAX,(unsigned long long)ino);
-        return INCREMENTAL_FULL;
+    if(s->count==s->capacity){
+        size_t bytes=(size_t)s->capacity*2*sizeof(*s->dirs);
+        /* Charge simultaneous old/new scratch before allocation. The inline
+         * initial buffer stays in working admission; heap growth is bounded
+         * by both the caller's unchanged memory cap and a 16MiB scratch cap. */
+        if(bytes>DIRTY_HEAP_MAX || bytes>d->limit-d->bytes){
+            fprintf(stderr,"query-disk: incremental fallback=dirty-directory-budget count=%u limit=%u ino=%llu\n",
+                    s->count,s->capacity,(unsigned long long)ino);
+            return INCREMENTAL_FULL;
+        }
+        struct dirty_dir *next=malloc(bytes);if(!next)return EFS_ERR_NOMEM;
+        memcpy(next,s->dirs,s->count*sizeof(*next));
+        if(s->heap_bytes)free(s->dirs);
+        d->bytes+=bytes-s->heap_bytes;s->heap_bytes=bytes;
+        s->dirs=next;s->capacity*=2;
     }
     struct dirty_dir dir={0};int rc=locate(d,ino,&dir.node,&dir.at);
     if(rc==EFS_ERR_NOT_FOUND){
@@ -192,6 +206,17 @@ static int incremental_nodes(struct efs_query_disk *d,struct efs_query_disk *old
     if(fd>=0)close(fd);
     return rc;
 }
+/* An old-only edge may belong to a removed subtree. Its surviving ancestor
+ * is independently invalidated by that directory's old parent edge. A missing
+ * old parent therefore needs no candidate rollup; new edges still require a
+ * real parent and keep the strict validation/fallback below. */
+static int dirty_old_parent(struct efs_query_disk *d,struct incremental *s,efs_ino_t ino)
+{
+    if(dirty_find(s,ino))return EFS_OK;
+    struct disk_node node;int rc=locate(d,ino,&node,NULL);
+    if(rc==EFS_ERR_NOT_FOUND)return EFS_OK;
+    return rc ? rc : dirty_add(d,s,ino);
+}
 /* Compare only revised dentry streams. Mark both sides of deletes/renames,
  * not just parents visible in the new generation. */
 static int changed_dentries(struct efs_query_disk *d,struct efs_query_disk *old,struct incremental *s,uint32_t shard)
@@ -207,7 +232,7 @@ static int changed_dentries(struct efs_query_disk *d,struct efs_query_disk *old,
         int cmp=!havea?1:!haveb?-1:cmpkey(ak,x.key_len,bk,y.key_len);
         int different=cmp || x.value_len!=y.value_len || memcmp(av,bv,x.value_len);
         struct efs_name_entry e;
-        if(different && cmp<=0 && havea){rc=entry_from(ak,x.key_len,av,x.value_len,&e);if(!rc)rc=dirty_add(d,s,e.parent);}
+        if(different && cmp<=0 && havea){rc=entry_from(ak,x.key_len,av,x.value_len,&e);if(!rc)rc=dirty_old_parent(d,s,e.parent);}
         if(different && cmp>=0 && haveb && !rc){rc=entry_from(bk,y.key_len,bv,y.value_len,&e);if(!rc)rc=dirty_add(d,s,e.parent);}
         if(cmp<=0)a++;
         if(cmp>=0)b++;
@@ -280,7 +305,7 @@ static int parent_fold_entry(void *user,const uint8_t *key,uint32_t kn,const uin
 }
 static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old)
 {
-    struct incremental s={.changes_fd=-1};int rc=EFS_OK;
+    struct incremental s={.changes_fd=-1,.capacity=DIRTY_MAX};s.dirs=s.initial;int rc=EFS_OK;
     for(uint32_t shard=0;shard<SHARDS;shard++)if(d->part[shard].revision!=old->part[shard].revision)s.changed_partitions|=UINT64_C(1)<<(shard%64);
     for(uint32_t shard=0;shard<SHARDS && !rc;shard++)rc=incremental_nodes(d,old,&s,shard);
     for(uint32_t shard=0;shard<SHARDS && !rc;shard++){
@@ -370,5 +395,6 @@ static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old
         if(cleanup)rc=cleanup;
         else d->disk_bytes-=s.change_bytes;
     }
+    if(s.heap_bytes)free(s.dirs);
     return rc;
 }

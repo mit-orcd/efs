@@ -6,6 +6,7 @@
 
 #include "efs/common.h"
 #include "efs/fence_view.h"
+#include "efs/packed_segment.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -44,12 +45,20 @@ struct efs_chunk_entry {
     uint64_t delta_seq; /* newest delta seq; 0 if ndelta == 0 */
     struct efs_fence_view read_view; /* authoritative GETCHUNKS masks; count 0 = local row */
     struct efs_chunk_delta deltas[EFS_CHUNK_DELTA_MAX];
+    struct efs_pack_ref packed; /* segment_id zero means ordinary base */
 };
 
 /* Decoded bytes depend on masks as well as immutable object names. */
 static inline uint64_t efs_chunk_read_key(const struct efs_chunk_entry *ce)
 {
     uint64_t g = ce->generation;
+    if (ce->packed.segment_id) {
+        g = (g ^ ce->packed.segment_id) * 1099511628211ull;
+        g = (g ^ ce->packed.segment_generation) * 1099511628211ull;
+        g = (g ^ ce->packed.offset) * 1099511628211ull;
+        g = (g ^ ce->packed.len) * 1099511628211ull;
+        for (unsigned i = 0; i < EFS_HASH_SIZE; i++) g = (g ^ ce->packed.digest[i]) * 1099511628211ull;
+    }
     if (ce->ndelta) {
         g ^= (uint64_t)ce->ndelta * 0x9E3779B97F4A7C15ULL;
         g ^= ce->deltas[ce->ndelta - 1].generation;
@@ -465,6 +474,7 @@ int efs_export_set_chunk_gen(struct efs_export *ex, efs_ino_t ino,
                              uint32_t chunk_index, uint64_t generation);
 /* Replace the chunk's delta list. n == 0 clears it. Does not touch the
  * base generation or its fragment set. */
+int efs_export_set_chunk_packed(struct efs_export *, efs_ino_t, uint32_t, const struct efs_pack_ref *);
 int efs_export_set_chunk_view(struct efs_export *ex, efs_ino_t ino,
                                uint32_t ci, const struct efs_fence_view *view);
 int efs_export_set_chunk_deltas(struct efs_export *ex, efs_ino_t ino,

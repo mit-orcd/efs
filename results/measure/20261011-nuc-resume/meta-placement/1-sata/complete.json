@@ -1,0 +1,9 @@
+{
+  "tag": "1-sata",
+  "files": 74183,
+  "errors": [],
+  "cold_checks": 64,
+  "storage": "/home/efs/w97-meta-placement-data-20261011-1",
+  "start_mono": 1810.877619,
+  "seconds": 600
+}

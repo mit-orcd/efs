@@ -1,0 +1,2 @@
+drwx------ 246111:246111          0 2026-10-11 17:05Z  /tmp/efs-mount/posix-fcstor011-integration-fd83b30d7e4a-ddylp4k4
+drwxr-xr-x 246111:246111          0 2026-10-11 17:06Z  /tmp/efs-mount/posix-peer-fd83b30d7e4a

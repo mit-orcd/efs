@@ -1,0 +1,90 @@
+[
+  {
+    "node": 1,
+    "command": [
+      "raft-status",
+      "127.0.0.1:26590"
+    ],
+    "rc": 0,
+    "stdout": "node 1 root=1 salt=6824670702482483796 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=1 term=42 commit=3116 applied=3116 voters=0x7 joint=0\n  group 2 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0xe joint=0\n",
+    "stderr": ""
+  },
+  {
+    "node": 1,
+    "command": [
+      "raft-lookup",
+      "127.0.0.1:26590",
+      "1",
+      "sentinel"
+    ],
+    "rc": 0,
+    "stdout": "raft-lookup status=0 primary=2 parent=1 name=sentinel ino=81921 mode=0100600 nlink=1\n",
+    "stderr": ""
+  },
+  {
+    "node": 2,
+    "command": [
+      "raft-status",
+      "127.0.0.1:26591"
+    ],
+    "rc": 0,
+    "stdout": "node 2 root=1 salt=6824670702482483796 groups=2\n  group 0 hosted=1 role=LEADER leader=1 term=42 commit=3116 applied=3116 voters=0x7 joint=0\n  group 2 hosted=1 role=LEADER leader=1 term=19 commit=1614 applied=1614 voters=0xe joint=0\n",
+    "stderr": ""
+  },
+  {
+    "node": 2,
+    "command": [
+      "raft-lookup",
+      "127.0.0.1:26591",
+      "1",
+      "sentinel"
+    ],
+    "rc": 0,
+    "stdout": "raft-lookup status=0 primary=2 parent=1 name=sentinel ino=81921 mode=0100600 nlink=1\n",
+    "stderr": ""
+  },
+  {
+    "node": 3,
+    "command": [
+      "raft-status",
+      "127.0.0.1:26592"
+    ],
+    "rc": 0,
+    "stdout": "node 3 root=1 salt=6824670702482483796 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=1 term=42 commit=3116 applied=3116 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=1 term=19 commit=1614 applied=1614 voters=0xe joint=0\n",
+    "stderr": ""
+  },
+  {
+    "node": 3,
+    "command": [
+      "raft-lookup",
+      "127.0.0.1:26592",
+      "1",
+      "sentinel"
+    ],
+    "rc": 0,
+    "stdout": "raft-lookup status=0 primary=2 parent=1 name=sentinel ino=81921 mode=0100600 nlink=1\n",
+    "stderr": ""
+  },
+  {
+    "node": 4,
+    "command": [
+      "raft-status",
+      "127.0.0.1:26593"
+    ],
+    "rc": 0,
+    "stdout": "node 4 root=0 salt=6824670702482483796 groups=2\n  group 0 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=1 term=19 commit=1614 applied=1614 voters=0xe joint=0\n",
+    "stderr": ""
+  },
+  {
+    "node": 4,
+    "command": [
+      "raft-lookup",
+      "127.0.0.1:26593",
+      "1",
+      "sentinel"
+    ],
+    "rc": 0,
+    "stdout": "raft-lookup status=0 primary=2 parent=1 name=sentinel ino=81921 mode=0100600 nlink=1\n",
+    "stderr": ""
+  }
+]

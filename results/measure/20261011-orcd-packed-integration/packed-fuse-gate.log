@@ -1,0 +1,13 @@
+2026-10-11T14:20:35.067Z efs-fuse (no git metadata, branch unknown, built 2026-10-11T14:16:33Z on fcstor006), build=unknown: starting export=default mount=/tmp/efs-packed-mount-20261011
+2026-10-11T14:20:35.067Z Discovered 4 cluster nodes from 172.16.223.57:19832
+2026-10-11T14:20:35.067Z   node id=1 172.16.223.57:19832
+2026-10-11T14:20:35.067Z   node id=2 172.16.223.58:19832
+2026-10-11T14:20:35.067Z   node id=3 172.16.223.59:19832
+2026-10-11T14:20:35.067Z   node id=4 172.16.223.60:19832
+2026-10-11T14:20:35.067Z fetching metadata...
+2026-10-11T14:20:35.068Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T14:20:35.068Z export id=1 name=default
+2026-10-11T14:20:35.068Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-11T14:20:35.068Z efs-fuse daemon pid=1289206
+2026-10-11T14:20:35.070Z efs-fuse: workers max=10 idle=10
+2026-10-11T14:20:35.072Z fuse serving

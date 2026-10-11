@@ -126,10 +126,35 @@ int main(void)
         efs_query_catalog_free(oracle);oracle=NULL;efs_query_catalog_free(old);old=next;next=NULL;
         efs_kv_lsm_snapshot_release(source);source=NULL;
     }
+    /* Removing a whole subtree must not refold every unrelated file simply
+     * because an old edge's parent no longer exists in the candidate. */
+    if(old){
+        efs_ino_t removed;CHECK(!efs_meta_apply_mkdir(kv,&attrs,EFS_ROOT_INO,S_IFDIR|0755,"removed-subtree",&removed));
+        efs_ino_t child;CHECK(!efs_meta_apply_create_file(kv,&attrs,removed,S_IFREG|0644,"leaf",&child));
+        CHECK(!efs_kv_lsm_snapshot_pin(kv,16<<20,&source));
+        CHECK(!efs_query_catalog_build_disk(cache,source,old,4<<20,NULL,NULL,&next));
+        efs_kv_lsm_snapshot_release(source);source=NULL;
+        efs_query_catalog_free(old);old=next;next=NULL;
+        CHECK(!efs_meta_apply_unlink(kv,removed,"leaf",400));
+        CHECK(!efs_meta_apply_rmdir(kv,EFS_ROOT_INO,"removed-subtree",400));
+        CHECK(!efs_kv_lsm_snapshot_pin(kv,16<<20,&source));
+        CHECK(!efs_query_catalog_build_disk(cache,source,old,4<<20,NULL,NULL,&next));
+        CHECK(!efs_query_catalog_build(source,NULL,256<<20,NULL,NULL,&oracle));
+        if(next && oracle){
+            struct efs_query_rollup a,b;
+            CHECK(!efs_query_catalog_stats(next,EFS_ROOT_INO,&a));CHECK(!efs_query_catalog_stats(oracle,EFS_ROOT_INO,&b));CHECK(!memcmp(&a,&b,sizeof(a)));
+            CHECK(efs_query_catalog_refolded(next)<files);
+            CHECK(efs_query_catalog_stats(next,removed,&a)==EFS_ERR_NOT_FOUND);
+            printf("removed subtree: refolded=%u unrelated_files=%u\n",efs_query_catalog_refolded(next),files);
+        }
+        efs_query_catalog_free(oracle);oracle=NULL;efs_query_catalog_free(old);old=next;next=NULL;
+        efs_kv_lsm_snapshot_release(source);source=NULL;
+    }
     if(old && getenv("EFS_QUERY_DELTA_DIRS")){
         /* Distinct changed directories need their common root as well.
          * Preserve the documented resource fallback and prove its result
-         * still agrees with the full RAM oracle on both sides of the bound. */
+         * still agrees with the full RAM oracle on both sides of the bound, and
+         * a larger existing caller budget permits bounded scratch growth. */
         efs_ino_t dirs[1025];
         for(unsigned i=0;i<1025;i++){
             char name[32];snprintf(name,sizeof(name),"dir-%04u",i);
@@ -149,11 +174,11 @@ int main(void)
                 CHECK(!efs_kv_put(kv,key,kn,value,sizeof(value)));
             }
             CHECK(!efs_kv_lsm_snapshot_pin(kv,16<<20,&source));
-            CHECK(!efs_query_catalog_build_disk(cache,source,old,4<<20,NULL,NULL,&next));
+            CHECK(!efs_query_catalog_build_disk(cache,source,old,(round==2?32:4)<<20,NULL,NULL,&next));
             CHECK(!efs_query_catalog_build(source,NULL,256<<20,NULL,NULL,&oracle));
             if(next && oracle){
                 unsigned refolded=efs_query_catalog_refolded(next);
-                CHECK(refolded==(round?files+parents+1027:count));
+                CHECK(refolded==(round==1?files+parents+1027:count));
                 for(unsigned i=0;i<1025;i++){
                     struct efs_meta_stat a,b;struct efs_query_rollup x,y;
                     CHECK(!efs_query_catalog_inode(next,dirs[i],NULL,&a));CHECK(!efs_query_catalog_inode(oracle,dirs[i],NULL,&b));CHECK(!memcmp(&a,&b,sizeof(a)));
@@ -161,7 +186,7 @@ int main(void)
                 }
                 struct efs_query_rollup a,b;
                 CHECK(!efs_query_catalog_stats(next,EFS_ROOT_INO,&a));CHECK(!efs_query_catalog_stats(oracle,EFS_ROOT_INO,&b));CHECK(!memcmp(&a,&b,sizeof(a)));
-                printf("dirty-directory delta=%u closure=%u refolded=%u fallback=%s\n",count,count+1,refolded,round?"budget":"none");
+                printf("dirty-directory delta=%u closure=%u refolded=%u fallback=%s\n",count,count+1,refolded,round==1?"budget":"none");
             }
             efs_query_catalog_free(oracle);oracle=NULL;efs_query_catalog_free(old);old=next;next=NULL;
             efs_kv_lsm_snapshot_release(source);source=NULL;

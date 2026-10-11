@@ -1,0 +1,1 @@
+Idle queued plan replaced before any service interruption by smoke-derived budget check. No measurements in this plan.

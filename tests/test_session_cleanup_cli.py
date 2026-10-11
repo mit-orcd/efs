@@ -6,6 +6,10 @@ root=Path(__file__).resolve().parents[1]
 s=(root/'src/mgmt/efs_mgmt.c').read_text()
 a=s.index('static int sess_cleanup_bounded(')
 f=s[a:s.index('\n}',a)+2]
+server=(root/'src/server/raft_host.c').read_text()
+start=server.index('    if (clen>=2 && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_LOCK_NEXT) {')
+end=server.index('    } else if (clen>=2 && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_LOCK_BATCH)',start)
+route=server[start:end]+'    }\n'
 c=r'''
 #include "efs/protocol.h"
 #include "efs/meta_cmd.h"
@@ -16,6 +20,12 @@ c=r'''
 #include <stdio.h>
 static unsigned calls, mode, append_mode;
 static int tick;
+static uint64_t deadline;
+static unsigned waits;
+static uint64_t efs_net_deadline_ms(void){return deadline;}
+static void efs_net_set_deadline_ms(uint64_t value){deadline=value;}
+static int efs_net_remaining_ms(int cap){int remaining=(int)deadline-tick*1000;return remaining<cap?remaining:cap;}
+static int usleep(unsigned n){assert(n==50000);waits++;tick++;return 0;}
 static int fake_clock(clockid_t id,struct timespec *t)
 {assert(id==CLOCK_MONOTONIC);t->tv_sec=tick;t->tv_nsec=0;return 0;}
 #define clock_gettime fake_clock
@@ -35,10 +45,21 @@ static int sess_rpc(const char *host,uint16_t port,const uint8_t *p,uint32_t n,
  assert(p[19]==0 && p[22]==1 && p[23]==0 && p[26]==7);
  for(unsigned i=3;i<19;i++)assert(p[i]==42);
  }
- calls++;
+ assert(deadline && deadline<=30000);calls++;memset(r,0,sizeof(*r));
+ if(mode==6 && calls<13)return EFS_ERR_NOT_PRIMARY;
+ if(mode==7)return EFS_ERR_NOT_PRIMARY;
+ if(mode==8)return EFS_ERR_STALE;
+ if(mode==9)return EFS_ERR_INVAL;
+ if(mode>=10 && mode<=13 && calls<13) {
+   r->salt=EFS_MD_SESSION_CLEANUP_RETRY_SALT;
+   if(mode==11)r->index=99;
+   if(mode==12)r->term=7;
+   if(mode==13)r->salt=0;
+   return EFS_ERR_BUSY;
+ }
  if(mode==1)return EFS_ERR_IO; /* ambiguous submission: do not reselect */
  if(mode==2)return EFS_ERR_BUSY; /* active or incomplete global barrier */
- r->salt=mode==3?2:mode==4?0:calls==4?1:0;
+ r->salt=mode==3?2:mode==4?0:((mode==6 || mode==10)?calls==16:calls==4)?1:0;
  if(mode==5)tick=30;
  return EFS_OK;
 }
@@ -54,10 +75,70 @@ int main(void) {
  mode=5;calls=0;assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1);
  append_mode=1;mode=0;calls=0;tick=0;
  assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_OK && calls==4);
+ assert(!deadline);
+ for(append_mode=0;append_mode<2;append_mode++) {
+   mode=6;calls=waits=0;tick=0;
+   assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_OK && calls==16 && waits==12 && !deadline);
+   mode=7;calls=waits=0;tick=0;
+   assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==30 && waits==30 && !deadline);
+   for(mode=8;mode<=9;mode++) {
+     calls=waits=0;tick=0;
+     assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==(mode==8?EFS_ERR_STALE:EFS_ERR_INVAL) && calls==1 && !waits && !deadline);
+   }
+   mode=7;calls=waits=0;tick=0;deadline=3000;
+   assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==3 && waits==3 && deadline==3000);
+   deadline=0;
+ }
+ append_mode=0;mode=10;calls=waits=0;tick=0;
+ assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_OK && calls==16 && waits==12 && !deadline);
+ for(mode=11;mode<=13;mode++) {
+   calls=waits=0;tick=0;
+   assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
+ }
+ append_mode=1;mode=10;calls=waits=0;tick=0;
+ assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
  puts("session CLI: bounded batches, explicit empty proof, ambiguity stops, deadline and work budget PASS");
 }
 '''
+server_c=r'''
+#include "efs/protocol.h"
+#include "efs/meta_cmd.h"
+#include <assert.h>
+#include <string.h>
+#include <stdio.h>
+#define HOST_SESS_REG_LEN 26
+struct host_view {uint64_t applied;};
+static int verdict, nonempty, selections, proposals;
+static int host_pack_session_cleanup(void *h,const uint8_t *cmd,uint32_t len,
+ uint8_t group,int *hint,uint8_t *packed,uint32_t *size)
+{assert(!h && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_LOCK_NEXT && len==26 && group==0);selections++;*hint=2;*size=nonempty?26:0;memcpy(packed,cmd,26);packed[1]=EFS_MD_SESS_LEASE_LOCK_BATCH;return verdict;}
+static void host_view_get(void *h,uint8_t group,struct host_view *v)
+{assert(!h && !group);v->applied=17;}
+static void dispatch(const uint8_t *cmd,uint32_t clen,struct efs_msg_raft_mkfs_reply *out)
+{void *h=NULL;uint8_t group=0,cleanup_cmd[128];int hint=-1,rc;memset(out,0,sizeof(*out));
+'''+route+r'''
+ assert(cmd==cleanup_cmd && clen==26 && cmd[1]==EFS_MD_SESS_LEASE_LOCK_BATCH);
+ proposals++;
+}
+int main(void) {
+ uint8_t cmd[26]={EFS_MD_CMD_SESSION,EFS_MD_SESS_LEASE_LOCK_NEXT};struct efs_msg_raft_mkfs_reply out;
+ int errors[]={EFS_ERR_BUSY,EFS_ERR_NOT_PRIMARY,EFS_ERR_IO,EFS_ERR_STALE,EFS_ERR_INVAL};
+ for(unsigned i=0;i<sizeof(errors)/sizeof(errors[0]);i++) {
+   verdict=errors[i];selections=proposals=0;nonempty=1;dispatch(cmd,26,&out);
+   assert(selections==1 && !proposals && out.rc==verdict && !out.index && !out.term && out.leader_hint==2);
+   assert(out.salt==(verdict==EFS_ERR_BUSY?EFS_MD_SESSION_CLEANUP_RETRY_SALT:0));
+ }
+ verdict=EFS_OK;nonempty=0;selections=proposals=0;dispatch(cmd,26,&out);
+ assert(selections==1 && !proposals && out.rc==EFS_OK && out.salt==1 && out.index==17);
+ nonempty=1;selections=proposals=0;dispatch(cmd,26,&out);
+ assert(selections==1 && proposals==1 && !out.salt && !out.index && !out.term);
+ puts("session server: admission-only retry certificate; no submitted-batch certificate PASS");
+}
+'''
 with tempfile.TemporaryDirectory(prefix='efs-cleanup-cli-') as tmp:
-    p=Path(tmp);(p/'test.c').write_text(c)
+    p=Path(tmp);(p/'server.c').write_text(server_c)
+    subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p/'server.c'),'-o',str(p/'server')],check=True)
+    subprocess.run([str(p/'server')],check=True)
+    (p/'test.c').write_text(c)
     subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p/'test.c'),'-o',str(p/'test')],check=True)
     subprocess.run([str(p/'test')],check=True)

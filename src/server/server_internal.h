@@ -447,6 +447,10 @@ int server_raft_host_lane_bootstrap(efs_ino_t ino, uint64_t generation,
                                      uint32_t ci, uint32_t chunk_size, int *hint);
 void server_raft_host_writer_view(const struct efs_msg_inode_writer_view *req,
                                    struct efs_msg_inode_writer_view_reply *out);
+/* Internal only: zero on arrival; never retain across inbound requests. */
+void server_raft_host_writer_view_reuse(const struct efs_msg_inode_writer_view *req,
+                                   struct efs_msg_inode_writer_view_reply *out,
+                                   uint8_t *covered);
 void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32_t start, uint32_t max, uint64_t generation,
                                 struct efs_msg_inode_getchunks_reply *out);
 
@@ -480,6 +484,13 @@ int server_packed_fragment_path(struct efsd_server *, uint32_t root, efs_export_
  * ACK persists a typed, generation-specific upload fence; no bytes deleted. */
 int server_fence_packed_object(struct efsd_server *, efs_export_id_t,
                                uint64_t id, uint64_t generation);
+/* Caller proves authoritative all-member fencing before deletion. */
+int server_delete_packed_fragment(struct efsd_server *, efs_export_id_t,
+    uint64_t id, uint64_t generation, uint32_t fi, uint32_t fragment_len,
+    const uint8_t expected_sum[EFS_HASH_SIZE]);
+int server_packed_gc(struct efsd_server *, const uint8_t *, uint32_t);
+int server_packed_upload(struct efsd_server *, const uint8_t *, uint32_t);
+int server_packed_get(struct efsd_server *, const uint8_t *, uint32_t, uint8_t *, uint32_t, uint32_t *);
 int server_write_packed_fragment(struct efsd_server *, efs_export_id_t,
                                  uint64_t id, uint64_t generation, uint32_t fi,
                                  const uint8_t *, uint32_t fragment_len, const uint8_t sum[EFS_HASH_SIZE]);

@@ -25,6 +25,15 @@ import tempfile
 from raft_tail import commands as raft_commands
 import time
 
+# Background shells can exec Python with SIGINT ignored. Restore a catchable
+# interrupt so private fixture shutdown still runs its finally cleanup.
+signal.signal(signal.SIGINT, signal.default_int_handler)
+
+def interrupt_fixture(signum, frame):
+    raise KeyboardInterrupt('private fixture interrupted by signal '+str(signum))
+
+signal.signal(signal.SIGTERM, interrupt_fixture)
+
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--peer-mkdir-race-only',action='store_true',help='64 competing peer mkdir races in an isolated cluster, then cold namespace verification')
 p.add_argument('--peer-open-contention-only',action='store_true',help='twenty concurrent append/OPEN races, full peer POSIX, exact cold bytes and physical cleanup only')
@@ -68,7 +77,10 @@ p.add_argument('--sync-write-fault',action='store_true',help='actual O_SYNC/O_DS
 p.add_argument('--sync-writes',action='store_true',help='O_SYNC/O_DSYNC publication before write replies, including queued append across lane groups')
 p.add_argument('--append-sync-boundary',action='store_true',help='append/fsync across lane groups, peer visibility and cold crash bytes')
 p.add_argument('--append-replay-race', action='store_true', help='32 identical concurrent APPEND RPCs allocate once')
+p.add_argument('--efs-commands-only',action='store_true',help='enabled two-mount command/options gates with dedicated-tree physical cleanup')
 p.add_argument('--fresh-namespace',action='store_true',help='six first-mutation namespace operations on fresh cold mounts with no prior file OPEN')
+p.add_argument('--append-loaded-only',action='store_true',help='only repeated two-mount mixed-lifetime append during GC, exact cold records and cleanup')
+p.add_argument('--append-loaded-rounds',type=int,default=20,help='1..20 loaded append rounds (default: 20)')
 p.add_argument('--append-burst-only',action='store_true',help='only exact APPEND burst, peer/cold bytes and physical cleanup')
 p.add_argument('--append-burst',type=int,default=0,help='100..20000 unique 4-KiB O_APPEND writes, final fsync, exact peer/cold blocks')
 p.add_argument('--append-audit', action='store_true', help='mixed append descriptions during physical GC, then exact cold records')
@@ -124,6 +136,7 @@ p.add_argument('--port', type=int, default=20190)
 a = p.parse_args()
 if not 0 <= a.tiny_sustained_large_mib_s <= 64:p.error('--tiny-sustained-large-mib-s must be 0..64')
 if not 0 <= a.tiny_sustained_seconds <= 1800:p.error('--tiny-sustained-seconds must be 0..1800')
+if not 1<=a.append_loaded_rounds<=20:p.error('--append-loaded-rounds must be 1..20')
 if a.append_burst_only and not a.append_burst:p.error('--append-burst-only requires --append-burst')
 if a.append_burst and not 100<=a.append_burst<=20000:p.error('--append-burst must be 100..20000')
 if a.posix_jobs < 1:
@@ -183,6 +196,7 @@ if a.replication_pressure:
     run_preload=work/'raft-slow-sync.so'
     subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-shared','-fPIC',source/'tests/live/raft_slow_sync.c','-ldl','-o',run_preload],check=True)
     env.update(LD_PRELOAD=str(run_preload),EFS_TEST_RAFT_SLOW_FILE=str(work/'raft-slow-armed'))
+if a.efs_commands_only:env.update(EFS_COMMANDS='1',EFS_COMMANDS_SERVER='1',EFS_QUERY_TEST_PORT=str(a.port))
 if a.storage_session_fence_fault:
     assert a.guarded_leases and not (a.put_barrier_fault or a.kv_wal_persistence_only or a.compactor_pressure), 'certificate fault must own its preload'
     subprocess.run(['cc','-Wall','-Wextra','-Werror','-shared','-fPIC',source/'tests/live/storage_session_fence_fault.c','-ldl','-o',work/'put-session-fault.so'],check=True)
@@ -478,6 +492,21 @@ try:
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.efs_commands_only:
+        peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
+        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+        wait(lambda:os.path.ismount(peer_mount),'enabled command peer mounted',40)
+        before={p.name for p in mount.iterdir()}
+        for script in ('efs_commands.py','efs_command_options.py'):
+            run(['python3',source/'tests/live'/script,mount,peer_mount],timeout=180)
+        created={p.name for p in mount.iterdir()}-before
+        assert created and all(n.startswith('efs-command-gates-') or n=='efs-options-gates' for n in created),created
+        for name in created:shutil.rmtree(mount/name)
+        wait(drained,'enabled command trees GC drained',180)
+        wait(lambda:totals(status())['data_usage_bytes']==0,'enabled command tree quota zero',180)
+        wait(lambda:all(not [x for x in (root/'data/exports/1').glob('**/*') if x.is_file()] for root in data_roots),'enabled command physical cleanup',180)
+        print('enabled two-mount command/options, permissions, immutable output and physical cleanup PASS',flush=True)
+        raise SystemExit(0)
     if a.fresh_namespace:
         fresh=mount/'fresh-namespace';fresh.mkdir()
         for name in ('unlink','rename','link'):
@@ -509,6 +538,22 @@ try:
             (work/'fresh-namespace.json').write_text(json.dumps(checks,indent=2))
         shutil.rmtree(fresh);wait(drained,'fresh namespace cold first-mutation physical cleanup',180)
         print('six cold mounts first CREATE/MKDIR/UNLINK/RMDIR/RENAME/LINK without prior OPEN PASS',flush=True)
+    if a.append_loaded_only:
+        import append_loaded
+        peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
+        def loaded_peer_start():
+            global peer
+            peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+            wait(lambda:os.path.ismount(peer_mount),'loaded append peer mounted',40)
+        def loaded_peer_stop():
+            global peer
+            run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
+        loaded_peer_start()
+        append_loaded.run(mount,peer_mount,work,a.append_loaded_rounds,totals,status,drained,wait,unmount,stop,start,mount_client,loaded_peer_stop,loaded_peer_start)
+        wait(lambda:all(not [x for x in (root/'data/exports/1').glob('**/*') if x.is_file()] for root in data_roots),'loaded append physical cleanup',180)
+        wait(lambda:totals(status())['data_usage_bytes']==0,'loaded append quota zero',180)
+        print('loaded append exact warm/peer/cold records and zero quota PASS',flush=True)
+        raise SystemExit(0)
     if a.append_burst_only:
         import append_burst
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
@@ -2673,7 +2718,16 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
         print('POSIX deletes advance GC passes and physical removal counters PASS',flush=True)
     if a.append_burst:
         import append_burst
+        # POSIX/peer cleanup above retires its client. The append gate must
+        # verify real peer bytes, rather than reading an empty mount directory.
+        if not os.path.ismount(peer_mount):
+            peer_log=open(work/'append-burst-peer-fuse.log','ab');handles.append(peer_log)
+            peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+            wait(lambda:os.path.ismount(peer_mount),'append burst peer mounted',40)
         burst_path,burst_report=append_burst.run(mount,peer_mount,a.append_burst,work)
+        # Retire both clients normally before cold daemon recovery.
+        run([source/'scripts/client.sh','stop',peer_mount])
+        if peer is not None:peer.wait(timeout=15);peer=None
         unmount();stop();start();mount_client()
         cold_hash=append_burst.verify(burst_path,a.append_burst)
         assert cold_hash==burst_report['warm_primary_sha256']

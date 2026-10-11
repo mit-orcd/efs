@@ -1,0 +1,19 @@
+{
+  "writers": 4,
+  "records_per_writer": 200,
+  "exact_cold_records": 800,
+  "sha256": "e50bc6b040b6959521730793582753bc1f810156a5d72e2845d96d9cf75e8b19",
+  "before_gc": {
+    "passes": 1117,
+    "removed_fragments": 23106,
+    "reclaimed_payload_bytes": 1514274816,
+    "data_usage_bytes": 25165824
+  },
+  "after_gc": {
+    "passes": 1147,
+    "removed_fragments": 23709,
+    "reclaimed_payload_bytes": 1553793024,
+    "data_usage_bytes": 68812800
+  },
+  "mixed_per_record_close_and_persistent_descriptions": true
+}

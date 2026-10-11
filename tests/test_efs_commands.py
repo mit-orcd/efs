@@ -24,6 +24,7 @@ def envelope(op, paths=()):
                                 applied_g0=3, applied_g2=4, term_g0=5, term_g2=6,
                                 refresh_error=0, refresh_n=256, refresh_ms=2000))
     if op == "stats":
+        result["page"] = dict(token="144115188075855873", cursor="0", more=False, more_confirmed=False)
         result["stats"] = dict(imm_files=1, imm_dirs=0, imm_bytes=7, imm_tmin=1, imm_tmax=2,
                                tree_files=1, tree_dirs=0, tree_bytes=7, tree_tmin=1, tree_tmax=2)
     else:
@@ -48,7 +49,7 @@ class Commands(unittest.TestCase):
 
     def result(self, op, paths=(), term=b"", match="contains"):
         with patch.object(commands.os, 'urandom', lambda n: bytes(n)):
-            name = commands.query_name(op, term, match) if op == "stats" else commands.page_name(op, term, match, None, 100)
+            name = commands.page_name(op, term, match, None, 1 if op == "stats" else 100)
         path = self.directory / ".query" / name
         path.write_text(json.dumps(envelope(op, paths)))
         return path
@@ -402,6 +403,13 @@ int main(int argc,char **argv) {
             subprocess.run([os.environ.get("CC", "cc"), "-std=c99", "-D_GNU_SOURCE", "-Wall", "-Wextra", "-Werror",
                             "-I" + str(ROOT / "include"), str(source), "-o", str(binary)], check=True)
             filters = dict(type="file", min_size=7, max_size=None, modified_after_ns=None, modified_before_ns=None)
+            for limit, token in ((1, 0), (0, 144115188075855873)):
+                result = subprocess.run([str(binary), commands.page_name("stats", b"", "contains", None, limit, token, 0, 123)], capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, ("4 0 3 %d %d 0 123 0 " % (limit, token)).encode())
+            for limit, cursor, f in ((2, 0, None), (1, 1, None), (1, 0, filters)):
+                bad = commands.page_name("stats", b"", "contains", f, limit, 0, cursor, 123)
+                self.assertNotEqual(subprocess.run([str(binary), bad]).returncode, 0)
             for term in (b"", b"f", b"ff", b"fff", b"\xff\n*", b"x"*120):
                 name = commands.page_name("find", term, "contains", filters, 10000, 144115188075855873, 4096 << 32, 123)
                 self.assertLessEqual(len(name), 255)

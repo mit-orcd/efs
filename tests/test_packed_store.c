@@ -10,7 +10,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include "efs/packed_segment.h"
-static int fail_file, fail_directory;
+static int fail_file, fail_directory, fail_after_unlink;
 static unsigned file_syncs, directory_syncs;
 static int fault_sync(int fd)
 {
@@ -24,9 +24,17 @@ static int fault_sync(int fd)
     }
     return fsync(fd);
 }
+static int fault_unlink(const char *path)
+{
+    int rc = unlink(path);
+    if (!rc && fail_after_unlink) { fail_after_unlink = 0; fail_directory = 1; }
+    return rc;
+}
+#define unlink fault_unlink
 #define fsync fault_sync
 #include "../src/server/store.c"
 #undef fsync
+#undef unlink
 static struct efsd_server server;
 static int cleanup(const char *path,const struct stat *st,int kind,struct FTW *f)
 { (void)st;(void)f;return kind==FTW_DP?rmdir(path):unlink(path); }
@@ -65,6 +73,7 @@ int main(void)
             allocated+=(uint64_t)st.st_blocks*512;
         }
         assert(server.nodes[0].used==3u*flen);
+        assert(server_delete_packed_fragment(&server,1,501,503,0,flen,sums[0])==EFS_ERR_BUSY);
         /* Idempotent retry neither repads nor double charges, even with rerouting. */
         efs_tls_write_root=1;file_syncs=directory_syncs=0;
         assert(!server_write_packed_fragment(&server,1,501,503,0,f[0],flen,sums[0]));
@@ -146,11 +155,26 @@ int main(void)
         assert(!server_fence_packed_object(&server,1,501,503));
         /* Fencing changes upload admission, not existing reader bytes. */
         cap=flen;assert(!server_read_packed_fragment(&server,1,501,503,0,flen,r[0],&cap,wrong));
-        /* Simulate collection of private exact objects; no GC RPC is claimed. */
+        /* Actual typed deletion: refuse wrong evidence and retain accounting
+         * across an unlink followed by failed directory sync and lost ACK. */
+        memcpy(wrong,sums[0],sizeof(wrong));wrong[0]^=1;
+        uint64_t used_before=server.nodes[0].used;
+        assert(server_delete_packed_fragment(&server,1,501,503,0,flen,wrong)==EFS_ERR_CHECKSUM);
+        assert(server.nodes[0].used==used_before);
+        fail_after_unlink=1;
+        assert(server_delete_packed_fragment(&server,1,501,503,0,flen,sums[0])==EFS_ERR_IO);
+        assert(server.nodes[0].used==used_before-flen);
+        file_syncs=directory_syncs=0;
+        assert(!server_delete_packed_fragment(&server,1,501,503,0,flen,sums[0]));
+        assert(file_syncs && directory_syncs && server.nodes[0].used==used_before-flen);
+        for(unsigned fi=1;fi<3;fi++)
+            assert(!server_delete_packed_fragment(&server,1,501,503,fi,flen,sums[fi]));
         for(unsigned fi=0;fi<3;fi++) {
-            char path[8192];assert(!server_packed_fragment_path(&server,0,1,501,503,fi,path,sizeof(path)));
-            assert(!unlink(path));
+            uint32_t missing_capacity=flen;
+            assert(server_read_packed_fragment(&server,1,501,503,fi,flen,r[fi],&missing_capacity,wrong)==EFS_ERR_NOT_FOUND);
+            assert(!server_delete_packed_fragment(&server,1,501,503,fi,flen,sums[fi]));
         }
+        assert(server.nodes[0].used==used_before-3u*flen);
         server_storage_engine_close(&server);assert(!server_storage_engine_init(&server));
         for(unsigned fi=0;fi<3;fi++)
             assert(server_write_packed_fragment(&server,1,501,503,fi,f[fi],flen,sums[fi])==EFS_ERR_STALE);
@@ -169,5 +193,5 @@ int main(void)
         assert(!nftw(root,cleanup,32,FTW_DEPTH|FTW_PHYS));
     }
     free(image);free(decoded);free(frags);free(read);
-    puts("packed store: explicit geometry, immutable retries, barriers, cold EC reads, quota, inode-GC isolation and durable typed upload fences PASS");
+    puts("packed store: explicit geometry, immutable retries, barriers, cold EC reads, quota, inode-GC isolation, durable typed upload fences and actual checksum-bound GC retries PASS");
 }

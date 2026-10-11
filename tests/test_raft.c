@@ -479,6 +479,11 @@ static void test_read_quorum_before_apply(void)
     old.last_log_index=efs_raft_read_round(n.r[leader])-1;
     for(int i=0;i<3;i++)if(i!=leader){old.from=i;(void)efs_raft_recv(n.r[leader],&old);}
     CHECK(!efs_raft_read_quorum(n.r[leader]),"old round replies cannot prove current request");
+    old.last_log_index=efs_raft_read_round(n.r[leader]);
+    for(int i=0;i<3;i++)if(i!=leader){old.from=i;
+        CHECK(efs_raft_read_control(n.r[leader],&old)==2,"early read ACK noted with apply parked");}
+    CHECK(efs_raft_read_quorum(n.r[leader]) && !efs_raft_read_ready(n.r[leader]),
+          "early quorum never bypasses required apply");
     for(int i=0;i<3;i++)n.drop[i]=0;
     elect(&n,4);
     CHECK(efs_raft_read_quorum(n.r[leader]),"fresh quorum proof independent of apply");
@@ -490,6 +495,81 @@ static void test_read_quorum_before_apply(void)
           "release permits authoritative reads");
     old.term++;old.from=(leader+1)%3;(void)efs_raft_recv(n.r[leader],&old);
     CHECK(!efs_raft_read_quorum(n.r[leader]),"stepdown invalidates proof authority");
+    for(int i=0;i<3;i++){efs_raft_free(n.r[i]);efs_raft_mem_free(store[i]);}
+}
+
+/* The network can service a pure current read round while the pump is in
+ * an unrelated durability tail. No term/config/log/apply work may bypass it. */
+static void test_readindex_control(void)
+{
+    struct net n={.n=3};struct app app[3]={0};struct efs_raft_store *store[3];
+    struct efs_raft_cfg cfg={0};
+    cfg.n=3;cfg.send=send_now;cfg.net=&n;cfg.apply=apply_cmd;cfg.heartbeat_ticks=1;
+    for(int i=0;i<3;i++) {
+        store[i]=efs_raft_mem_create();cfg.id=i;cfg.store=store[i];cfg.store_ctx=store[i];
+        cfg.election_ticks=4+i*4;cfg.app=&app[i];n.r[i]=efs_raft_new(&cfg);
+    }
+    CHECK(elect(&n,20)==1,"control fixture elects");
+    int leader=leader_id(&n),follower=(leader+1)%3;
+    uint64_t index=0;uint8_t cmd='C';
+    CHECK(efs_raft_propose(n.r[leader],&cmd,1,&index)==EFS_OK,"control write");
+    elect(&n,8);n.hold_ae_replies=1;
+    CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"control fresh round begins");
+    CHECK(!efs_raft_read_ready(n.r[leader]),"control read waits for live ACK");
+    struct efs_raft_msg probe={0};probe.type=EFS_RAFT_MSG_AE_REQ;
+    probe.from=leader;probe.to=follower;probe.boot_id=1;
+    probe.term=efs_raft_term(n.r[leader]);probe.prev_index=index;
+    probe.prev_term=probe.term;probe.leader_commit=index;
+    probe.last_log_index=efs_raft_read_round(n.r[leader]);
+    int applied=app[follower].n;n.cap_rep=1;n.cap_n=0;
+    CHECK(efs_raft_read_control(n.r[follower],&probe)==1,"known applied pure probe handled");
+    CHECK(n.cap_n==1 && n.cap_ok && n.cap_match==index,"control ACK exact matched prefix");
+    CHECK(app[follower].n==applied,"pure probe never applies");
+    probe.leader_commit=index+1;
+    CHECK(!efs_raft_read_control(n.r[follower],&probe),"unapplied commit stays on pump");
+    probe.leader_commit=index;probe.prev_term++;
+    CHECK(!efs_raft_read_control(n.r[follower],&probe),"unmatched prefix stays on pump");
+    probe.prev_term--;probe.term++;
+    CHECK(!efs_raft_read_control(n.r[follower],&probe),"term transition stays on pump");
+    probe.term--;probe.boot_id=2;
+    CHECK(!efs_raft_read_control(n.r[follower],&probe),"new boot stays on pump");
+    probe.boot_id=1;probe.nentries=1;
+    CHECK(!efs_raft_read_control(n.r[follower],&probe),"log bytes stay on pump");
+    probe.nentries=0;probe.last_log_index=0;
+    CHECK(!efs_raft_read_control(n.r[follower],&probe),"ordinary heartbeat stays on pump");
+    struct efs_raft_msg reply={0};reply.type=EFS_RAFT_MSG_AE_REP;
+    reply.from=follower;reply.to=leader;reply.term=efs_raft_term(n.r[leader]);
+    reply.boot_id=1;reply.success=1;reply.match_index=index;
+    reply.last_log_index=efs_raft_read_round(n.r[leader])-1;
+    CHECK(!efs_raft_read_control(n.r[leader],&reply),"old round is not read authority");
+    reply.last_log_index++;
+    reply.success=0;
+    CHECK(!efs_raft_read_control(n.r[leader],&reply),"failed/pressure ACK is not authority");
+    reply.success=1;reply.boot_id=2;
+    CHECK(!efs_raft_read_control(n.r[leader],&reply),"new boot ACK stays on pump");
+    reply.boot_id=1;reply.term++;
+    CHECK(!efs_raft_read_control(n.r[leader],&reply),"new term ACK stays on pump");
+    reply.term--;reply.group=EFS_RAFT_GROUP_SHARD2;
+    CHECK(!efs_raft_read_control(n.r[leader],&reply),"different group cannot grant authority");
+    reply.group=0;
+    uint64_t commit=efs_raft_commit(n.r[leader]);applied=app[leader].n;
+    CHECK(efs_raft_read_control(n.r[leader],&reply)==2,"current reply noted before bookkeeping");
+    CHECK(efs_raft_read_ready(n.r[leader]),"fresh quorum unblocks applied read");
+    CHECK(efs_raft_commit(n.r[leader])==commit && app[leader].n==applied,
+          "early read ACK neither advances replication commit nor applies");
+    CHECK(efs_raft_recv(n.r[leader],&reply)==EFS_OK,"normal reply bookkeeping retained");
+    CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"next request begins independent round");
+    CHECK(!efs_raft_read_control(n.r[leader],&reply) && !efs_raft_read_ready(n.r[leader]),
+          "prior completed round cannot authorize next request");
+    n.hold_ae_replies=0;elect(&n,4);
+    /* Installing an uncommitted joint configuration disables this path,
+     * even before the committed configuration switches. */
+    for(int i=0;i<3;i++)n.drop[i]=(i!=leader);
+    CHECK(efs_raft_change(n.r[leader],7u&~(1u<<((leader+2)%3)))==EFS_OK,
+          "control fixture has pending joint configuration");
+    CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"joint read begins normal quorum round");
+    reply.last_log_index=efs_raft_read_round(n.r[leader]);
+    CHECK(!efs_raft_read_control(n.r[leader],&reply),"pending joint configuration stays on pump");
     for(int i=0;i<3;i++){efs_raft_free(n.r[i]);efs_raft_mem_free(store[i]);}
 }
 
@@ -2286,6 +2366,7 @@ static void test_pressure_quorum_and_owned_backlog(void)
 
 int main(void)
 {
+    test_readindex_control();
     test_read_quorum_before_apply();
     test_pressure_quorum_and_owned_backlog();
     test_follower_apply_retry();

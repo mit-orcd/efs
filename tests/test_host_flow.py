@@ -58,6 +58,9 @@ struct efs_raft_host {
 };
 static struct efs_raft_host *g_host;
 static void host_pump_kick(struct efs_raft_host *h) {(void)h;}
+/* Pure read control is gated separately; exercise the admission fallback. */
+static int host_read_control(struct efs_raft_host *h,const uint8_t*p,uint32_t n)
+{(void)h;(void)p;(void)n;return 0;}
 static int outbox_nentries(const uint8_t*p,uint32_t n) {return n<80?-1:(int)efs_raft_flow_rd32(p+76);}
 '''+function('server_raft_host_inbox')+'\n'+function('host_inbox_retire')+r'''
 static int peer_addr(struct efs_raft_host*h,int peer,char*host,size_t cap,uint16_t*port)

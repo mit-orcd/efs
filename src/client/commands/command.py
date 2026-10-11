@@ -64,7 +64,7 @@ def page_name(command, term, match, filters, limit, token=0, cursor=0, nonce=0):
     query_name(command, term, match, filters)
     f = filters or dict(type=None, **{key: None for key in FILTER_FIELDS})
     flags = sum(1 << i for i, key in enumerate(FILTER_FIELDS) if f[key] is not None)
-    raw = struct.pack(">BBHQQIIIQQQQ", 1 if command == "find" else 2,
+    raw = struct.pack(">BBHQQIIIQQQQ", {"stats": 0, "find": 1, "ls": 2}[command],
         MATCHES[match], limit, token, cursor, nonce, flags, TYPES.index(f["type"]),
         *(f[key] or 0 for key in FILTER_FIELDS)) + term
     return "v3." + base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
@@ -482,8 +482,11 @@ def main(argv=None, script_path=None):
         parser.error(str(error))
     directory = os.path.dirname(script)
     if command == "stats":
-        result = read_result(directory, name)
-        paths = validate_result(result, command, filters)
+        pages = result_pages(directory, command, b"", "contains", None, 1)
+        try:
+            result, paths = next(pages)
+        finally:
+            pages.close()
         ordered = []
     else:
         term = os.fsencode(args.pattern) if command == "find" else b""

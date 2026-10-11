@@ -1,0 +1,17 @@
+{
+  "utc": "2026-10-11T13:33:07.527999+00:00",
+  "host": "fcstor006",
+  "private_overlay": "/tmp/efs-packed-metadata-ef317ce3b60e-tar",
+  "base_revision": "c52a464391a685a766ee49aa76a162de58162a81",
+  "source_sha256": {
+    "Makefile": "0547590c93d436608247699e1b2b7c7366088d6a1064e71aa12b8681f5f2648b",
+    "include/efs/meta_apply.h": "0c6657adb1335822c6d2e6915a58751e01364b3a5a6d965dd06e6f8d2b4a4c1f",
+    "include/efs/kv_key.h": "d68d150a03c32cdcd65b92ca314579422bff84f798dd9b158195e23a5ad62e48",
+    "include/efs/pack_mapping.h": "95adc2573799573c2b10cc19218352c0d80dcfa8bb41c2305ac25888d39d0617",
+    "src/meta/meta_apply.c": "251bdd1ad512e9a50141cc58d5a529cf0ec21a00fb46a50096f8bc1907fbdd03",
+    "src/meta/pack_mapping.c": "157f1f76a5581854f1c0739372b8e7e4a9672bdd66829e7ab3958e168c089271",
+    "tests/test_packed_metadata.c": "eb8fad95d75cc59856569dcf59b7c12d97c83305fe55e1d6bc98c8e5d46ff8c0",
+    "tests/test_pack_mapping.c": "84321b02699305c07e1a89a2e455c075d2b8dcdf423410f107fe8a04176da664"
+  },
+  "mounted_packing_activated": false
+}

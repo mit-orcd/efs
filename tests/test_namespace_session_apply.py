@@ -4,7 +4,8 @@ import os,shlex,subprocess,tempfile
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
 s=Path(os.environ.get('EFS_SESSION_APPLY_SOURCE',root/'src/server/raft_host.c')).read_text()
-a=s.index('static int apply_session_cmd(');b=s.index('\n}',a)+2
+a=s.index('static uint64_t host_session_register_active_proof(')
+b=s.index('\n}',s.index('static int apply_session_cmd(',a))+2
 code=r'''
 #include "efs/session.h"
 #include "efs/protocol.h"
@@ -18,7 +19,7 @@ code=r'''
 #define HOST_SESS_CREATE_LEN 22
 #define HOST_SESS_REG_LEN 26
 #define HOST_SESS_LEASE_LEN 38
-struct efs_raft_host {struct efs_kv *kv;void *s;pthread_mutex_t wait_mu;};
+struct efs_raft_host {struct efs_kv *kv;void *s;pthread_mutex_t wait_mu;uint64_t apply_extra;};
 static uint32_t rd32be(const uint8_t *p){return (uint32_t)p[0]<<24|(uint32_t)p[1]<<16|(uint32_t)p[2]<<8|p[3];}
 static uint64_t rd64be(const uint8_t *p){return (uint64_t)rd32be(p)<<32|rd32be(p+4);}
 static void wr32be(uint8_t *p,uint32_t v){p[0]=v>>24;p[1]=v>>16;p[2]=v>>8;p[3]=v;}
@@ -36,9 +37,11 @@ int main(void) {
  struct efs_session_rec owner;
  /* Real missing-owner apply must drive the host's CREATE fallback. */
  assert(apply_session_cmd(&h,cmd,26,1)==EFS_ERR_NOT_FOUND);
+ assert(!h.apply_extra);
  assert(efs_session_get(kv,cmd+2,&owner)==EFS_ERR_NOT_FOUND);
  cmd[1]=EFS_MD_SESS_CREATE;assert(!apply_session_cmd(&h,cmd,22,3));
  cmd[1]=EFS_MD_SESS_REGISTER;assert(!apply_session_cmd(&h,cmd,26,4));
+ assert(h.apply_extra==host_session_register_active_proof(1,1));
  assert(!efs_session_get(kv,cmd+2,&owner)&&efs_session_bit_get(owner.touched,1));
  cmd[1]=EFS_MD_SESS_ESTABLISH;assert(!apply_session_cmd(&h,cmd,26,5));
  assert(!efs_session_accept(kv,1,cmd+2,1));
@@ -49,6 +52,7 @@ int main(void) {
  assert(!efs_session_begin_fence(kv,cmd+2));
  cmd[1]=EFS_MD_SESS_REGISTER;wr32be(cmd+18,2);wr32be(cmd+22,2);
  assert(apply_session_cmd(&h,cmd,26,6)==EFS_ERR_BUSY);
+ assert(!h.apply_extra);
  wr32be(cmd+18,1);assert(apply_session_cmd(&h,cmd,26,7)==EFS_ERR_STALE);
  wr32be(cmd+22,EFS_SESSION_BITS);assert(apply_session_cmd(&h,cmd,26,8)==EFS_ERR_INVAL);
  efs_kv_mem_free(kv);

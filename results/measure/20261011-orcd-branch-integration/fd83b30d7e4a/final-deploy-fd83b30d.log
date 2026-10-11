@@ -1,0 +1,33 @@
+== build fcstor003
+== build fcstor004
+== build fcstor005
+fcstor004: build passed
+fcstor003: build passed
+fcstor005: build passed
+== build fcstor007
+== build fcstor008
+== build fcstor006
+fcstor007: build passed
+fcstor008: build passed
+fcstor006: build passed
+== build fcstor010
+== build fcstor009
+== build fcstor011
+fcstor009: build passed
+fcstor010: build passed
+fcstor011: build passed
+== build fcstor013
+== build fcstor012
+fcstor013: build passed
+fcstor012: build passed
+fcstor003: installed fd83b30d7e4a, previous source retained at /tmp/efs-before-orcd-test-fd83b30d7e4a
+fcstor004: installed fd83b30d7e4a, previous source retained at /tmp/efs-before-orcd-test-fd83b30d7e4a
+fcstor005: installed fd83b30d7e4a, previous source retained at /tmp/efs-before-orcd-test-fd83b30d7e4a
+fcstor006: installed fd83b30d7e4a, previous source retained at /tmp/efs-before-orcd-test-fd83b30d7e4a
+fcstor007: installed fd83b30d7e4a, previous source retained at /tmp/efs-before-orcd-test-fd83b30d7e4a
+fcstor008: installed fd83b30d7e4a, previous source retained at /tmp/efs-before-orcd-test-fd83b30d7e4a
+fcstor009: installed fd83b30d7e4a, previous source retained at /tmp/efs-before-orcd-test-fd83b30d7e4a
+fcstor010: installed fd83b30d7e4a, previous source retained at /tmp/efs-before-orcd-test-fd83b30d7e4a
+fcstor011: installed fd83b30d7e4a, previous source retained at /tmp/efs-before-orcd-test-fd83b30d7e4a
+fcstor012: installed fd83b30d7e4a, previous source retained at /tmp/efs-before-orcd-test-fd83b30d7e4a
+fcstor013: installed fd83b30d7e4a, previous source retained at /tmp/efs-before-orcd-test-fd83b30d7e4a

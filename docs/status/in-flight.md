@@ -7,13 +7,22 @@
 tests and coordinated deployment on ORCD until resolved. Work on `devel-orcd`;
 W95/P4.1 production tiny-payload packing is first, followed by ORCD W109/W97,
 W108, W110 and remaining W99/W42/W106 gates. The fcstor007 `tiny-files` screen
-is the requested benchmark. Preserve current files and original acceptance
-oracles. [Implementation and measured storage checkpoint](orcd-tiny-packing-20261011.md).
-Codec, packed files storage, shared-lifetime planning, typed upload fences and
-a staged persistent minimum-reader barrier are implemented with private gates.
-The lower-layer packing gate is not mounted publication/GC acceptance. Next
-connect typed upload/session admission, same-group durable mapping/receipt
-batches and GETCHUNKS/cold reads; then client coalescing and shared-object GC.
+is the requested benchmark. Preserve the original acceptance oracles; the
+user explicitly permits erasing ORCD test data if needed for packing rollout. [Implementation and measured storage checkpoint](orcd-tiny-packing-20261011.md).
+Packed admission/session validation, actual packed PUT/GET, initial Raft
+publication and durable receipts, versioned GETCHUNKS/client reads, snapshot
+capability barriers and atomic reference retirement now pass private Linux
+and four-server ORCD gates. Bounded immutable cohorts pass deadline/sync/capacity
+and retry gates. Actual FUSE reads packed mappings and fsyncs mixed ordinary
+files; mounted promotion/grow/fsync, truncate, unlink and hard-link survival
+pass, including exact bytes after a cold client/all-server restart. Retired
+upload permits and receipts survive leader loss and cold restart.
+The 20-minute randomized storage soak passes 299,520 cohorts. [Integration evidence](../../results/measure/20261011-orcd-packed-integration/).
+Next connect mounted writer snapshot/cache/close/fsync ownership to the cohort
+scheduler, implement distributed shared GC and abandoned-cohort cancellation,
+and finish mixed fault/recovery and matched throughput acceptance. Private
+port 19832 is separate from the live RDMA runtime. No mounted writer selects
+packing yet; lower-layer gates do not close W95/P4.1.
 The live runtime is now `c52a4643` (`devel-orcd`), merged from all current
 branches and deployed to four servers/seven clients with native RDMA/direct I/O.
 Full Linux units and preserved file samples pass. Loaded 30-second POSIX gates

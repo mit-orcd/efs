@@ -23,7 +23,8 @@ int efs_kv_group_import(struct efs_kv *kv, uint8_t group, const uint8_t *data,
 /* Read the whole file and efs_kv_group_import it. */
 int efs_kv_group_import_file(struct efs_kv *kv, uint8_t group, const char *path);
 /* Diff incoming against a local image already in the same blob format
- * (a pinned-view export). Does not scan or write the live store.
+ * (a pinned-view export). Does not scan or change live rows. Packed images first durably raise
+ * the store minimum-reader requirement, even when the computed diff is empty.
  * *diff points into *hold_a / *hold_b; the caller batches, then frees
  * all three. *hold_a and *hold_b are the two file images. */
 int efs_kv_group_import_prepare(struct efs_kv *kv, uint8_t group,

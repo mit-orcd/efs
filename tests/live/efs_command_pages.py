@@ -53,8 +53,12 @@ assert r.status == 0, r.status
 first = json.loads(raw);token = int(first['page']['token']);cursor = int(first['page']['cursor'])
 identity = (r.boot_id, r.generation)
 seen = {e['path_hex'] for e in first['entries']}
-r, _ = query(port, page_request(**fields, nonce=2))
-assert r.status == -13, 'second retained export must refuse resource admission'
+r, second_raw = query(port, page_request(**fields, nonce=2))
+assert r.status == 0, 'independent stream must coexist with retained export'
+second_token = int(json.loads(second_raw)['page']['token'])
+assert second_token != token
+r, _ = query(port, page_request(**fields, nonce=2, token=second_token, limit=0))
+assert r.status == 0
 (root / 'new-after-pin.txt').write_bytes(b'new')
 time.sleep(3)
 while first['page']['more']:

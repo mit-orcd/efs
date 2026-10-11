@@ -186,6 +186,16 @@ enum efs_msg_type {
     EFS_MSG_STORAGE_SESSION_FENCE_REPLY = 128,
     EFS_MSG_PUT_TICKETED = 129,
     EFS_MSG_PUT_TICKETED_REPLY = 130,
+    EFS_MSG_PUT_PACKED = 131,
+    EFS_MSG_PUT_PACKED_REPLY = 132,
+    EFS_MSG_GET_PACKED = 133,
+    EFS_MSG_GET_PACKED_REPLY = 134,
+    EFS_MSG_GETCHUNKS_PACKED = 135,
+    EFS_MSG_GETCHUNKS_PACKED_REPLY = 136,
+    EFS_MSG_GC_PACKED = 137,
+    EFS_MSG_GC_PACKED_REPLY = 138,
+    EFS_MSG_PACK_CAPABILITIES = 139,
+    EFS_MSG_PACK_CAPABILITIES_REPLY = 140,
 };
 
 /* Storage session seal/check. Reply echoes the exact identity and floor.
@@ -906,6 +916,7 @@ struct efs_msg_inode_flock {
 #define EFS_CHUNK_REC_F_CAPTURED_EPOCH 1u
 #define EFS_CHUNK_REC_F_CAPTURED_FILEID 2u
 #define EFS_CHUNK_REC_F_FRESH_OBJECT 4u
+#define EFS_CHUNK_REC_F_PACKED_BASE 8u /* packed base, exact immutable reference */
 struct efs_chunk_rec {
     efs_ino_t ino;
     uint32_t chunk_index;
@@ -930,6 +941,7 @@ struct efs_chunk_rec {
     uint64_t delta_base_seq;
     struct efs_fence_view read_view; /* GETCHUNKS only; REPORT leaves zero */
     struct efs_chunk_delta deltas[EFS_CHUNK_DELTA_MAX];
+    struct efs_pack_ref packed;
 };
 
 /* Per-publication transport status is separate from its durable verdict.
@@ -1001,6 +1013,16 @@ static inline int efs_chunk_publish_authority(const struct efs_chunk_rec *r,
 static inline int efs_chunk_rec_view_valid(const struct efs_chunk_rec *r)
 {
     const struct efs_fence_view *v = &r->read_view;
+    if (r->publish_flags & EFS_CHUNK_REC_F_PACKED_BASE) {
+        const struct efs_pack_ref *p = &r->packed;
+        if (r->chunk_index || !p->segment_id || !p->segment_generation || p->ino != r->ino ||
+            p->inode_generation != r->file_generation || p->record_generation != r->chunk_generation ||
+            !p->len || p->len > EFS_PACK_MAX_PAYLOAD || p->geometry < EFS_SEGMENT_ALIGNMENT ||
+            p->geometry > EFS_SEGMENT_MAX_SIZE || p->geometry % EFS_SEGMENT_ALIGNMENT ||
+            !p->inode_generation || !p->record_generation ||
+            p->offset < EFS_PACK_HEADER_BYTES + EFS_PACK_RECORD_BYTES ||
+            (uint64_t)p->offset + p->len + EFS_HASH_SIZE > p->geometry) return EFS_ERR_PROTO;
+    } else if (r->packed.segment_id) return EFS_ERR_PROTO;
     if (r->delta_base_n > EFS_CHUNK_DELTA_MAX ||
         v->count != r->delta_base_n + 1 ||
         v->fence_epoch > v->revision ||

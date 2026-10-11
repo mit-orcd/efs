@@ -1,0 +1,21 @@
+/tmp/efs-append-prepares-qglv7yga/test.c: In function ‘efs_meta_finish_append_batch’:
+/tmp/efs-append-prepares-qglv7yga/test.c:238:2: error: this ‘if’ clause does not guard... [-Werror=misleading-indentation]
+  238 |  if(!rc)report_done+=count-1;return rc;
+      |  ^~
+/tmp/efs-append-prepares-qglv7yga/test.c:238:30: note: ...this statement, but the latter is misleadingly indented as if it were guarded by the ‘if’
+  238 |  if(!rc)report_done+=count-1;return rc;
+      |                              ^~~~~~
+/tmp/efs-append-prepares-qglv7yga/test.c: In function ‘efs_meta_finish_append_batch_owned’:
+/tmp/efs-append-prepares-qglv7yga/test.c:244:2: error: this ‘if’ clause does not guard... [-Werror=misleading-indentation]
+  244 |  if(!rc)report_done+=count-1;return rc;
+      |  ^~
+/tmp/efs-append-prepares-qglv7yga/test.c:244:30: note: ...this statement, but the latter is misleadingly indented as if it were guarded by the ‘if’
+  244 |  if(!rc)report_done+=count-1;return rc;
+      |                              ^~~~~~
+cc1: all warnings being treated as errors
+Traceback (most recent call last):
+  File "/data1/efs/devel-nuc-20261011/batch-src/tests/test_append_prepare_batch.py", line 204, in <module>
+    subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=c99','-Wall','-Wextra','-Werror','-pthread',str(p),'-o',str(binary)],check=True)
+  File "/usr/lib64/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['cc', '-std=c99', '-Wall', '-Wextra', '-Werror', '-pthread', '/tmp/efs-append-prepares-qglv7yga/test.c', '-o', '/tmp/efs-append-prepares-qglv7yga/test']' returned non-zero exit status 1.

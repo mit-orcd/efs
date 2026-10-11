@@ -1,0 +1,26 @@
+2026-10-11T13:22:39.952Z storage-engine=files direct_io=off
+2026-10-11T13:22:39.952Z Storage quota: explicit 1.00 GiB (safe maximum 294.87 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T13:22:39.958Z Joined cluster with 3 nodes
+2026-10-11T13:22:39.961Z heartbeat: enabled (2000 ms interval)
+2026-10-11T13:22:39.975Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T13:22:39.975Z raft-host: up raft_id=2 n=4 boot=10012731441187916 salt=6573449758857338323 g0=hosted g2=hosted
+2026-10-11T13:22:39.975Z efsd 2669064e-nuc (branch devel-nuc, built 2026-10-11T13:18:42Z on nuc), build=2669064e-nuc: node 3 listening on 127.0.0.1:26592, storage=/home/efs/gc-buffered-79d87ur2/n3 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-11T13:22:39.975Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-11T13:22:41.962Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=981 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T13:22:44.577Z raft-host: mkdir parent=1 name=fresh-namespace rc=-13 hint=1 psh=1 csh=3050 dsh=0 stage=3 ino=0
+2026-10-11T13:22:44.979Z kv-obs: mt_bytes=506 l0_bytes=0 l0=0 l1=0
+2026-10-11T13:22:45.680Z raft-host: mkdir parent=1 name=fresh-namespace rc=-13 hint=1 psh=1 csh=3050 dsh=0 stage=3 ino=0
+2026-10-11T13:22:47.683Z raft-host: mkdir parent=1 name=fresh-namespace rc=-13 hint=1 psh=1 csh=3050 dsh=0 stage=3 ino=0
+2026-10-11T13:22:50.085Z raft-host: mkdir parent=1 name=fresh-namespace rc=-13 hint=1 psh=1 csh=3050 dsh=0 stage=3 ino=0
+2026-10-11T13:22:52.487Z raft-host: mkdir parent=1 name=fresh-namespace rc=-13 hint=1 psh=1 csh=3050 dsh=0 stage=3 ino=0
+2026-10-11T13:22:54.888Z raft-host: mkdir parent=1 name=fresh-namespace rc=-13 hint=1 psh=1 csh=3050 dsh=0 stage=3 ino=0
+2026-10-11T13:22:57.291Z raft-host: mkdir parent=1 name=fresh-namespace rc=-13 hint=1 psh=1 csh=3050 dsh=0 stage=3 ino=0
+2026-10-11T13:22:57.968Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=891 passes=18 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T13:22:59.693Z raft-host: mkdir parent=1 name=fresh-namespace rc=-13 hint=1 psh=1 csh=3050 dsh=0 stage=3 ino=0
+2026-10-11T13:23:02.096Z raft-host: mkdir parent=1 name=fresh-namespace rc=-13 hint=1 psh=1 csh=3050 dsh=0 stage=3 ino=0
+2026-10-11T13:23:04.498Z raft-host: mkdir parent=1 name=fresh-namespace rc=-13 hint=1 psh=1 csh=3050 dsh=0 stage=3 ino=0
+2026-10-11T13:23:06.900Z raft-host: mkdir parent=1 name=fresh-namespace rc=-13 hint=1 psh=1 csh=3050 dsh=0 stage=3 ino=0
+2026-10-11T13:23:09.303Z raft-host: mkdir parent=1 name=fresh-namespace rc=-13 hint=1 psh=1 csh=3050 dsh=0 stage=3 ino=0
+2026-10-11T13:23:11.706Z raft-host: mkdir parent=1 name=fresh-namespace rc=-13 hint=1 psh=1 csh=3050 dsh=0 stage=3 ino=0
+2026-10-11T13:23:13.974Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=796 passes=34 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T13:23:14.109Z raft-host: mkdir parent=1 name=fresh-namespace rc=-13 hint=1 psh=1 csh=3050 dsh=0 stage=3 ino=0

@@ -1,0 +1,12 @@
+{
+  "data": {
+    "/home/efs/w97-meta-placement-data-20261011-0/n1": "/dev/mapper/rl-home xfs",
+    "/home/efs/w97-meta-placement-data-20261011-0/n2": "/dev/mapper/rl-home xfs",
+    "/home/efs/w97-meta-placement-data-20261011-0/n3": "/dev/mapper/rl-home xfs"
+  },
+  "metadata": {
+    "/home/efs/w97-meta-placement-meta-20261011-0/n1": "/dev/mapper/rl-home xfs",
+    "/home/efs/w97-meta-placement-meta-20261011-0/n2": "/dev/mapper/rl-home xfs",
+    "/home/efs/w97-meta-placement-meta-20261011-0/n3": "/dev/mapper/rl-home xfs"
+  }
+}

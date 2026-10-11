@@ -1,0 +1,29 @@
+======================================================================
+ERROR: test_locked_multicall_update_and_punch (__main__.RangeTests.test_locked_multicall_update_and_punch) (direct=True, punch=True)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/efs/tests/test_storage_ranges.py", line 34, in test_locked_multicall_update_and_punch
+    self.run_case(root,'hot-locked',direct,extra)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/efs/tests/test_storage_ranges.py", line 17, in run_case
+    p=subprocess.run(args,text=True,capture_output=True,timeout=30,env=env)
+  File "/usr/lib64/python3.13/subprocess.py", line 556, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.13/subprocess.py", line 1222, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.13/subprocess.py", line 2155, in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.13/subprocess.py", line 1269, in _check_timeout
+    raise TimeoutExpired(
+    ...<2 lines>...
+            stderr=b''.join(stderr_seq) if stderr_seq else None)
+subprocess.TimeoutExpired: Command '['/tmp/efs/efs-bench', '--bench', 'ranges', '--storage', '/data1/mac-unit-fixtures-20261011/tmpfje7ib83', '--access', 'hot-locked', '--container-bytes', '1048576', '--payload-size', '8192', '--qd', '4', '--steps', '1000', '--persist', 'batch', '--batch-size', '32', '--direct-io', '--split-write', '--punch-before-write']' timed out after 30 seconds
+
+----------------------------------------------------------------------
+Ran 6 tests in 123.684s
+
+FAILED (errors=1)
+make: *** [Makefile:357: test] Error 1

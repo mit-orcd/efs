@@ -1,0 +1,13 @@
+{
+  "revision": "658e42a20702",
+  "engine_core": "108afa3e",
+  "command": [
+    "make",
+    "-j4",
+    "test",
+    "EFS_GIT_ID=658e42a20702-nuc",
+    "EFS_GIT_DESCRIBE=658e42a20702-nuc",
+    "EFS_GIT_BRANCH=devel-nuc"
+  ],
+  "scope": "Separate source copy, current tracked test/docs/Makefile overlay. No installed source or cluster store changes. Live acceptance remains on the identical core built as 108afa3e-nuc."
+}

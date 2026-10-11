@@ -1,0 +1,62 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 802  of event 'cycles:P'
+# Event count (approx.): 7537510285
+#
+# Overhead  Shared Object      Symbol                                     
+# ........  .................  ...........................................
+#
+     3.25%  [nf_tables]        [k] nft_do_chain
+     2.16%  efsd               [.] host_pump
+     1.85%  libc.so.6          [.] pthread_mutex_lock@@GLIBC_2.2.5
+     1.32%  [kernel.kallsyms]  [k] _raw_spin_lock_irqsave
+     1.22%  [kernel.kallsyms]  [k] dequeue_entity
+     1.18%  efsd               [.] host_sender
+     1.10%  [kernel.kallsyms]  [k] _raw_spin_lock_irq
+     1.07%  [kernel.kallsyms]  [k] _raw_spin_lock
+     1.07%  [kernel.kallsyms]  [k] sched_balance_update_blocked_averages
+     1.01%  [kernel.kallsyms]  [k] __update_load_avg_cfs_rq
+     0.96%  [kernel.kallsyms]  [k] update_load_avg
+     0.92%  [kernel.kallsyms]  [k] submit_bio_noacct
+     0.88%  efsd               [.] kv_mtab_pos
+     0.87%  libc.so.6          [.] __GI___pthread_disable_asynccancel
+     0.85%  [kernel.kallsyms]  [k] __rcu_read_unlock
+     0.78%  [kernel.kallsyms]  [k] __update_load_avg_se
+     0.75%  [kernel.kallsyms]  [k] __intel_pmu_enable_all.isra.0
+     0.71%  [kernel.kallsyms]  [k] pick_next_task_fair
+     0.71%  [kernel.kallsyms]  [k] native_sched_clock
+     0.69%  [kernel.kallsyms]  [k] avg_vruntime
+     0.67%  [kernel.kallsyms]  [k] __calc_delta.constprop.0
+     0.67%  [kernel.kallsyms]  [k] clear_bhb_loop
+     0.67%  [kernel.kallsyms]  [k] update_curr
+     0.65%  efsd               [.] kv_msrc_advance
+     0.63%  libc.so.6          [.] malloc
+     0.62%  [kernel.kallsyms]  [k] try_to_block_task.constprop.0.isra.0
+     0.62%  [kernel.kallsyms]  [k] tcp_recvmsg_locked
+     0.62%  [kernel.kallsyms]  [k] security_file_permission
+     0.61%  [kernel.kallsyms]  [k] __get_user_8
+     0.60%  libc.so.6          [.] __GI___pthread_mutex_unlock_usercnt
+     0.60%  [kernel.kallsyms]  [k] kmem_cache_alloc_node_noprof
+     0.60%  [kernel.kallsyms]  [k] rseq_ip_fixup
+     0.59%  [kernel.kallsyms]  [k] select_task_rq_fair
+     0.58%  [kernel.kallsyms]  [k] tcp_sendmsg
+     0.57%  [kernel.kallsyms]  [k] __wake_up_common
+     0.57%  [kernel.kallsyms]  [k] __rcu_read_lock
+     0.57%  libc.so.6          [.] __memset_evex_unaligned_erms
+     0.56%  libc.so.6          [.] _int_free
+     0.55%  [kernel.kallsyms]  [k] release_sock
+     0.55%  [kernel.kallsyms]  [k] __skb_datagram_iter
+     0.52%  [xfs]              [k] xfs_log_reserve
+     0.52%  libc.so.6          [.] __libc_recv
+     0.52%  [kernel.kallsyms]  [k] x64_sys_call
+     0.51%  libc.so.6          [.] __libc_pwrite
+     0.50%  [kernel.kallsyms]  [k] cpuacct_charge
+     0.50%  libc.so.6          [.] clock_gettime@@GLIBC_2.17
+
+
+#
+# (Tip: Treat branches as callchains: perf record -b ... ; perf report --branch-history)
+#

@@ -1,0 +1,76 @@
+fcstor003: directories prepared
+fcstor005: directories prepared
+fcstor004: directories prepared
+fcstor008: directories prepared
+fcstor007: directories prepared
+fcstor006: directories prepared
+fcstor009: directories prepared
+fcstor010: directories prepared
+fcstor011: directories prepared
+fcstor012: directories prepared
+fcstor013: directories prepared
+fcstor003: started
+fcstor004: started
+fcstor005: started
+fcstor006: started
+Daemons started. For new stores run init-export once, then mount.
+Cluster nodes (4):
+  node 1: 172.16.223.57:17432  up  used=654.72 GiB  quota=29.33 TiB (2.2%)  storage(6):
+      /data1/01/efs-orcd-test-erbmi1
+      /data1/02/efs-orcd-test-erbmi1
+      /data1/03/efs-orcd-test-erbmi1
+      /data1/04/efs-orcd-test-erbmi1
+      /data1/05/efs-orcd-test-erbmi1
+      /data1/06/efs-orcd-test-erbmi1
+  node 2: 172.16.223.58:17432  up  used=654.72 GiB  quota=29.31 TiB (2.2%)  storage(6):
+      /data1/01/efs-orcd-test-erbmi1
+      /data1/02/efs-orcd-test-erbmi1
+      /data1/03/efs-orcd-test-erbmi1
+      /data1/04/efs-orcd-test-erbmi1
+      /data1/05/efs-orcd-test-erbmi1
+      /data1/06/efs-orcd-test-erbmi1
+  node 3: 172.16.223.59:17432  up  used=654.76 GiB  quota=29.31 TiB (2.2%)  storage(6):
+      /data1/01/efs-orcd-test-erbmi1
+      /data1/02/efs-orcd-test-erbmi1
+      /data1/03/efs-orcd-test-erbmi1
+      /data1/04/efs-orcd-test-erbmi1
+      /data1/05/efs-orcd-test-erbmi1
+      /data1/06/efs-orcd-test-erbmi1
+  node 4: 172.16.223.60:17432  up  used=654.70 GiB  quota=29.33 TiB (2.2%)  storage(6):
+      /data1/01/efs-orcd-test-erbmi1
+      /data1/02/efs-orcd-test-erbmi1
+      /data1/03/efs-orcd-test-erbmi1
+      /data1/04/efs-orcd-test-erbmi1
+      /data1/05/efs-orcd-test-erbmi1
+      /data1/06/efs-orcd-test-erbmi1
+Usable (2+1 logical): used=1.71 TiB  free=76.48 TiB  capacity=78.19 TiB (2.2%; filesystem capacity)
+Usable bytes: used=1874676285440 free=84090913288948 capacity=85965589574388
+Cluster state: OK (4 up, 0 down)
+Versions: efsd v0.2.2-pre-alpha-185-g66be74b7 (branch devel-orcd) — 4/4 identical
+Node 172.16.223.57:17432 state: active
+Heal:
+  node 1: idle
+  node 2: idle
+  node 3: idle
+  node 4: idle
+Stop with: scripts/client.sh stop /tmp/efs-mount
+Logging efs-fuse to /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor007/efs-fuse.log
+Mounted /tmp/efs-mount
+Stop with: scripts/client.sh stop /tmp/efs-mount
+Logging efs-fuse to /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor008/efs-fuse.log
+Mounted /tmp/efs-mount
+Stop with: scripts/client.sh stop /tmp/efs-mount
+Logging efs-fuse to /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor009/efs-fuse.log
+Mounted /tmp/efs-mount
+Stop with: scripts/client.sh stop /tmp/efs-mount
+Logging efs-fuse to /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor010/efs-fuse.log
+Mounted /tmp/efs-mount
+Stop with: scripts/client.sh stop /tmp/efs-mount
+Logging efs-fuse to /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor011/efs-fuse.log
+Mounted /tmp/efs-mount
+Stop with: scripts/client.sh stop /tmp/efs-mount
+Logging efs-fuse to /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor012/efs-fuse.log
+Mounted /tmp/efs-mount
+Stop with: scripts/client.sh stop /tmp/efs-mount
+Logging efs-fuse to /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor013/efs-fuse.log
+Mounted /tmp/efs-mount

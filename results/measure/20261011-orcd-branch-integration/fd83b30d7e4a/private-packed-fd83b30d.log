@@ -1,0 +1,8 @@
+fcstor003 
+fcstor004 
+fcstor005 
+fcstor006 
+packed RPC: 16 authoritative mappings, durable publication receipts and exact zero-filled packed reads PASS
+Stop with: scripts/client.sh stop /tmp/efs-packed-mount-20261011
+Logging efs-fuse to /home/erbmi1/orcd/scratch/efs/orcd-test/private-packed-fuse-fd83b30d.log
+Mounted /tmp/efs-packed-mount-20261011

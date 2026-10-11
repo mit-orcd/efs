@@ -1,0 +1,233 @@
+strace: Process 48520 attached with 43 threads
+strace: Process 48532 attached with 40 threads
+strace: Process 48544 attached with 69 threads
+strace: Process 48565 attached with 52 threads
+strace: pid 48568: entering, ptrace_syscall_info.op == 2
+strace: Process 48560 detached
+strace: Process 49210 detached
+strace: Process 49225 detached
+strace: Process 49224 detached
+strace: Process 49223 detached
+strace: Process 49222 detached
+strace: Process 49206 detached
+strace: Process 49195 detached
+strace: Process 49194 detached
+strace: Process 49193 detached
+strace: Process 49192 detached
+strace: Process 49191 detached
+strace: Process 49190 detached
+strace: Process 49189 detached
+strace: Process 49188 detached
+strace: Process 49187 detached
+strace: Process 49185 detached
+strace: Process 49184 detached
+strace: Process 49183 detached
+strace: Process 49162 detached
+strace: Process 49161 detached
+strace: Process 49159 detached
+strace: Process 49157 detached
+strace: Process 49022 detached
+strace: Process 49021 detached
+strace: Process 49020 detached
+strace: Process 49018 detached
+strace: Process 49016 detached
+strace: Process 49014 detached
+strace: Process 49006 detached
+strace: Process 49004 detached
+strace: Process 48999 detached
+strace: Process 48997 detached
+strace: Process 48956 detached
+strace: Process 48738 detached
+strace: Process 48726 detached
+strace: Process 48601 detached
+strace: Process 48597 detached
+strace: Process 48594 detached
+strace: Process 48591 detached
+strace: Process 48588 detached
+strace: Process 48586 detached
+strace: Process 48582 detached
+strace: Process 48578 detached
+strace: Process 48577 detached
+strace: Process 48575 detached
+strace: Process 48574 detached
+strace: Process 48573 detached
+strace: Process 48572 detached
+strace: Process 48571 detached
+strace: Process 48570 detached
+strace: Process 48565 detached
+strace: Process 49209 detached
+strace: Process 49208 detached
+strace: Process 49207 detached
+strace: Process 49205 detached
+strace: Process 49203 detached
+strace: Process 49197 detached
+strace: Process 49196 detached
+strace: Process 49182 detached
+strace: Process 49181 detached
+strace: Process 49180 detached
+strace: Process 49179 detached
+strace: Process 49178 detached
+strace: Process 49170 detached
+strace: Process 49168 detached
+strace: Process 49166 detached
+strace: Process 49165 detached
+strace: Process 49164 detached
+strace: Process 49163 detached
+strace: Process 49160 detached
+strace: Process 49158 detached
+strace: Process 49156 detached
+strace: Process 49154 detached
+strace: Process 49153 detached
+strace: Process 49152 detached
+strace: Process 49151 detached
+strace: Process 49067 detached
+strace: Process 49066 detached
+strace: Process 49065 detached
+strace: Process 49064 detached
+strace: Process 49063 detached
+strace: Process 49012 detached
+strace: Process 49011 detached
+strace: Process 49005 detached
+strace: Process 49001 detached
+strace: Process 49000 detached
+strace: Process 48998 detached
+strace: Process 48971 detached
+strace: Process 48907 detached
+strace: Process 48902 detached
+strace: Process 48885 detached
+strace: Process 48878 detached
+strace: Process 48865 detached
+strace: Process 48752 detached
+strace: Process 48748 detached
+strace: Process 48737 detached
+strace: Process 48736 detached
+strace: Process 48728 detached
+strace: Process 48727 detached
+strace: Process 48600 detached
+strace: Process 48593 detached
+strace: Process 48590 detached
+strace: Process 48587 detached
+strace: Process 48585 detached
+strace: Process 48581 detached
+strace: Process 48580 detached
+strace: Process 48568 detached
+strace: Process 48567 detached
+strace: Process 48562 detached
+strace: Process 48559 detached
+strace: Process 48555 detached
+strace: Process 48554 detached
+strace: Process 48552 detached
+strace: Process 48551 detached
+strace: Process 48550 detached
+strace: Process 48549 detached
+strace: Process 48548 detached
+strace: Process 48547 detached
+strace: Process 48544 detached
+strace: Process 49702 detached
+strace: Process 49213 detached
+strace: Process 49212 detached
+strace: Process 49211 detached
+strace: Process 49204 detached
+strace: Process 49202 detached
+strace: Process 49186 detached
+strace: Process 49177 detached
+strace: Process 49176 detached
+strace: Process 49171 detached
+strace: Process 49169 detached
+strace: Process 49002 detached
+strace: Process 48996 detached
+strace: Process 48995 detached
+strace: Process 48994 detached
+strace: Process 48936 detached
+strace: Process 48731 detached
+strace: Process 48721 detached
+strace: Process 48719 detached
+strace: Process 48717 detached
+strace: Process 48659 detached
+strace: Process 48599 detached
+strace: Process 48596 detached
+strace: Process 48589 detached
+strace: Process 48584 detached
+strace: Process 48583 detached
+strace: Process 48569 detached
+strace: Process 48558 detached
+strace: Process 48546 detached
+strace: Process 48542 detached
+strace: Process 48541 detached
+strace: Process 48540 detached
+strace: Process 48539 detached
+strace: Process 48538 detached
+strace: Process 48537 detached
+strace: Process 48536 detached
+strace: Process 48535 detached
+strace: Process 48534 detached
+strace: Process 48532 detached
+strace: Process 49216 detached
+strace: Process 49215 detached
+strace: Process 49214 detached
+strace: Process 49201 detached
+strace: Process 49175 detached
+strace: Process 49174 detached
+strace: Process 49173 detached
+strace: Process 49172 detached
+strace: Process 49167 detached
+strace: Process 49155 detached
+strace: Process 49019 detached
+strace: Process 49017 detached
+strace: Process 49015 detached
+strace: Process 49013 detached
+strace: Process 49010 detached
+strace: Process 49003 detached
+strace: Process 48983 detached
+strace: Process 48886 detached
+strace: Process 48730 detached
+strace: Process 48725 detached
+strace: Process 48724 detached
+strace: Process 48723 detached
+strace: Process 48722 detached
+strace: Process 48598 detached
+strace: Process 48595 detached
+strace: Process 48592 detached
+strace: Process 48566 detached
+strace: Process 48563 detached
+strace: Process 48561 detached
+strace: Process 48557 detached
+strace: Process 48556 detached
+strace: Process 48545 detached
+strace: Process 48533 detached
+strace: Process 48530 detached
+strace: Process 48529 detached
+strace: Process 48528 detached
+strace: Process 48527 detached
+strace: Process 48526 detached
+strace: Process 48525 detached
+strace: Process 48524 detached
+strace: Process 48523 detached
+strace: Process 48522 detached
+strace: Process 48520 detached
+strace: Process 48553 detached
+strace: Process 48576 detached
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 45.29  265.866702        5157     51546           recvfrom
+ 28.02  164.479365        5114     32159      3615 futex
+ 12.19   71.535324       34963      2046           clock_nanosleep
+ 10.31   60.539065        6211      9747           poll
+  3.04   17.854277        2570      6946           fdatasync
+  0.91    5.347331      381952        14           restart_syscall
+  0.07    0.409655          23     17332           writev
+  0.05    0.282346          15     18682           setsockopt
+  0.03    0.172413         478       360           fsync
+  0.03    0.168384          26      6392           read
+  0.03    0.153402          16      9256           write
+  0.02    0.126457          17      7036           pwrite64
+  0.01    0.046628        1332        35           pread64
+  0.00    0.007666          14       515       120 openat
+  0.00    0.004142          10       395           close
+  0.00    0.001069          21        50           mprotect
+  0.00    0.001019          17        58           madvise
+  0.00    0.000428          28        15           unlink
+  0.00    0.000309          10        30           fstat
+  0.00    0.000059          59         1           fallocate
+------ ----------- ----------- --------- --------- ----------------
+100.00  586.996042        3609    162615      3735 total

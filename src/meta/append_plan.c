@@ -59,7 +59,7 @@ int efs_meta_execute_append_owned(struct efs_kv *kv,const struct efs_meta_append
 struct finish_image {
     uint8_t key[EFS_KV_KEY_MAX];
     uint32_t klen, expected_len, new_len;
-    int op;
+    int op, changed;
     uint8_t *expected, *replacement;
 };
 struct finish_capture {
@@ -88,10 +88,11 @@ static int finish_record(struct finish_capture *c,const uint8_t *key,uint32_t n,
             return EFS_ERR_BUSY; /* source moved while collecting */
         *slot=i;return EFS_OK;
     }
-    if(c->count>=EFS_META_LANES+5)return EFS_ERR_OVERFLOW;
+    if(c->count>=EFS_META_LANES+5+EFS_META_APPEND_COMPLETE_MAX)return EFS_ERR_OVERFLOW;
     if(c->count==c->capacity) {
         uint32_t cap=c->capacity?c->capacity*2:16;
-        if(cap>EFS_META_LANES+5)cap=EFS_META_LANES+5;
+        if(cap>EFS_META_LANES+5+EFS_META_APPEND_COMPLETE_MAX)
+            cap=EFS_META_LANES+5+EFS_META_APPEND_COMPLETE_MAX;
         size_t bytes=(size_t)cap*sizeof(*c->images);
         if(cap<c->capacity || bytes/sizeof(*c->images)!=cap)return EFS_ERR_NOMEM;
         struct finish_image *images=realloc(c->images,bytes);
@@ -111,6 +112,16 @@ static int finish_record(struct finish_capture *c,const uint8_t *key,uint32_t n,
 static int finish_get(void *ctx,const uint8_t *key,uint32_t n,uint8_t *value,uint32_t *length)
 {
     struct finish_capture *c=ctx;
+    /* Later completions see the earlier planned cursor/frontier, but every
+     * PREPARE still compares against the original durable source image. */
+    for(uint32_t i=0;i<c->count;++i) {
+        struct finish_image *im=&c->images[i];
+        if(!im->changed || im->klen!=n || memcmp(im->key,key,n))continue;
+        if(im->op==EFS_TXN_DEL)return EFS_ERR_NOT_FOUND;
+        if(*length<im->new_len){*length=im->new_len;return EFS_ERR_OVERFLOW;}
+        if(im->new_len)memcpy(value,im->replacement,im->new_len);
+        *length=im->new_len;return EFS_OK;
+    }
     int rc=efs_kv_get(c->base,key,n,value,length);
     if((rc==EFS_OK || rc==EFS_ERR_NOT_FOUND) && finish_data_key(key,n)) {
         uint32_t slot;
@@ -119,44 +130,68 @@ static int finish_get(void *ctx,const uint8_t *key,uint32_t n,uint8_t *value,uin
     }
     return rc;
 }
+struct finish_scan_overlay {
+    struct finish_capture *capture;
+    int (*callback)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t);
+    void *user;
+};
+static int finish_scan_row(void *ctx,const uint8_t *key,uint32_t kl,
+    const uint8_t *value,uint32_t vl)
+{
+    struct finish_scan_overlay *s=ctx;
+    for(uint32_t i=0;i<s->capture->count;++i) {
+        struct finish_image *im=&s->capture->images[i];
+        if(!im->changed || im->klen!=kl || memcmp(im->key,key,kl))continue;
+        if(im->op==EFS_TXN_DEL)return 0;
+        return s->callback(s->user,key,kl,im->replacement,im->new_len);
+    }
+    return s->callback(s->user,key,kl,value,vl);
+}
 static int finish_scan(void *ctx,const uint8_t *prefix,uint32_t n,
                          int (*callback)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *user)
 {
     struct finish_capture *c=ctx;
     /* The captured cursor and inode guard own reservation-set changes.
      * Materialized cursor reads and scans must stay in the same domain. */
-    return efs_kv_scan_prefix(c->base,prefix,n,callback,user);
+    struct finish_scan_overlay scan={c,callback,user};
+    return efs_kv_scan_prefix(c->base,prefix,n,finish_scan_row,&scan);
 }
 static int finish_scan_from(void *ctx,const uint8_t *prefix,uint32_t n,
                               const uint8_t *start,uint32_t sn,
                               int (*callback)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *user)
 {
     struct finish_capture *c=ctx;
-    return efs_kv_scan_from(c->base,prefix,n,start,sn,callback,user);
+    struct finish_scan_overlay scan={c,callback,user};
+    return efs_kv_scan_from(c->base,prefix,n,start,sn,finish_scan_row,&scan);
 }
 static int finish_batch(void *ctx,const struct efs_kv_item *items,uint32_t count)
 {
     struct finish_capture *c=ctx;
-    if(c->mutations || !count)return EFS_ERR_INVAL;
+    if(!count)return EFS_ERR_INVAL;
     for(uint32_t i=0;i<count;++i) {
         const struct efs_kv_item *q=&items[i];
         uint8_t old[EFS_OPID_VAL_MAX];uint32_t n=sizeof(old),slot;
         if(!finish_data_key(q->key,q->klen) ||
            (q->op!=EFS_KV_PUT && q->op!=EFS_KV_DEL) || q->vlen>sizeof(old))return EFS_ERR_INVAL;
-        int rc=efs_kv_get(c->base,q->key,q->klen,old,&n);
-        if(rc!=EFS_OK && rc!=EFS_ERR_NOT_FOUND)return rc;
-        rc=finish_record(c,q->key,q->klen,old,rc==EFS_OK?n:EFS_TXN_ABSENT,&slot);
-        if(rc!=EFS_OK)return rc;
+        for(slot=0;slot<c->count;++slot)
+            if(c->images[slot].klen==q->klen && !memcmp(c->images[slot].key,q->key,q->klen))break;
+        if(slot==c->count) {
+            int rc=efs_kv_get(c->base,q->key,q->klen,old,&n);
+            if(rc!=EFS_OK && rc!=EFS_ERR_NOT_FOUND)return rc;
+            rc=finish_record(c,q->key,q->klen,old,rc==EFS_OK?n:EFS_TXN_ABSENT,&slot);
+            if(rc!=EFS_OK)return rc;
+        }
         struct finish_image *im=&c->images[slot];
-        if(im->replacement)return EFS_ERR_INVAL;
+        free(im->replacement);im->replacement=NULL;
         im->op=q->op==EFS_KV_PUT?EFS_TXN_PUT:EFS_TXN_DEL;
         im->new_len=q->op==EFS_KV_PUT?q->vlen:0;
         if(im->new_len) {
             im->replacement=malloc(im->new_len);if(!im->replacement)return EFS_ERR_NOMEM;
             memcpy(im->replacement,q->val,im->new_len);
         }
+        im->changed=1;
     }
-    c->mutations=count;return EFS_OK;
+    c->mutations+=count;return EFS_OK;
 }
 static int finish_execute(struct finish_capture *capture,const struct efs_txid *t,
                             const struct efs_meta_append_ops *ops,void *ctx)
@@ -170,7 +205,8 @@ static int finish_execute(struct finish_capture *capture,const struct efs_txid *
        c.images[0].key[2]!=(c.close_ino?EFS_KV_KIND_CLOSE_STEP:EFS_KV_KIND_INODE)) {
         rc=EFS_ERR_INVAL;goto out;
     }
-    if(c.count>EFS_META_LANES+4+(c.close_ino!=0)){rc=EFS_ERR_INVAL;goto out;}
+    if(c.count>EFS_META_LANES+4+EFS_META_APPEND_COMPLETE_MAX+(c.close_ino!=0))
+        {rc=EFS_ERR_INVAL;goto out;}
     for(uint32_t i=0;i<c.count;++i) {
         struct finish_image *im=&c.images[i];
         if(memcmp(im->key+3,c.images[0].key+3,8)){rc=EFS_ERR_INVAL;goto out;}
@@ -221,28 +257,39 @@ static void finish_free(struct finish_capture *c)
     for(uint32_t i=0;i<c->count;++i){free(c->images[i].expected);free(c->images[i].replacement);}
     free(c->images);
 }
-int efs_meta_finish_append(struct efs_kv *kv,efs_ino_t ino,uint64_t offset,
+int efs_meta_finish_append_batch(struct efs_kv *kv,efs_ino_t ino,
+                            const uint64_t *offsets,uint32_t count,
                             int outcome,const struct efs_txid *t,
                             const struct efs_meta_append_ops *ops,void *ctx)
 {
     struct finish_capture c={.base=kv};
     const struct efs_kv_ops capture_ops={.get=finish_get,.scan_prefix=finish_scan,.scan_from=finish_scan_from};
     struct efs_kv capture={.ops=&capture_ops,.ctx=&c};
-    if(!kv || !ino || !t || !ops || !ops->prepare || !ops->decide || !ops->resolve)
+    if(!kv || !ino || !offsets || !count || count>EFS_META_APPEND_COMPLETE_MAX ||
+       !t || !ops || !ops->prepare || !ops->decide || !ops->resolve)
         return EFS_ERR_INVAL;
-    int rc=efs_meta_collect_append_completion(&capture,ino,offset,outcome,finish_batch,&c);
+    int rc=EFS_OK;
+    /* Completion only changes existing reservation keys: scans can overlay
+     * replacements in their original ordering without an insertion merge. */
+    for(uint32_t i=0;i<count && rc==EFS_OK;++i)
+        rc=efs_meta_collect_append_completion(&capture,ino,offsets[i],outcome,finish_batch,&c);
     if(rc==EFS_OK && c.mutations)rc=finish_execute(&c,t,ops,ctx);
     finish_free(&c);return rc;
 }
+int efs_meta_finish_append(struct efs_kv *kv,efs_ino_t ino,uint64_t offset,
+    int outcome,const struct efs_txid *tx,const struct efs_meta_append_ops *ops,void *ctx)
+{return efs_meta_finish_append_batch(kv,ino,&offset,1,outcome,tx,ops,ctx);}
 
-int efs_meta_finish_append_owned(struct efs_kv *kv, efs_ino_t ino, uint64_t offset,
+int efs_meta_finish_append_batch_owned(struct efs_kv *kv, efs_ino_t ino,
+    const uint64_t *offsets,uint32_t count,
     int outcome, const struct efs_opid *id, const struct efs_txid *tx,
     const struct efs_meta_append_ops *ops, void *ctx)
 {
     struct efs_opid_req q = {0};
     if (id) q.id = *id;
     q.id.seq = 1; /* Session ownership guard, not a new operation receipt. */
-    if (!kv || !ino || !id || !id->session_epoch || !efs_opid_req_valid(&q) ||
+    if (!kv || !ino || !offsets || !count || count>EFS_META_APPEND_COMPLETE_MAX ||
+        !id || !id->session_epoch || !efs_opid_req_valid(&q) ||
         !tx || !ops || !ops->prepare || !ops->decide || !ops->resolve)
         return EFS_ERR_INVAL;
     uint32_t shard = efs_kv_inode_shard(ino);
@@ -266,8 +313,12 @@ int efs_meta_finish_append_owned(struct efs_kv *kv, efs_ino_t ino, uint64_t offs
     memcpy(c.owner.value, c.owner.expected, EFS_SESS_LOCAL_VAL);
     const struct efs_meta_append_ops owned_ops = {
         append_owner_prepare, append_owner_decide, append_owner_resolve};
-    return efs_meta_finish_append(kv, ino, offset, outcome, tx, &owned_ops, &c);
+    return efs_meta_finish_append_batch(kv, ino, offsets, count, outcome, tx, &owned_ops, &c);
 }
+int efs_meta_finish_append_owned(struct efs_kv *kv,efs_ino_t ino,uint64_t offset,
+    int outcome,const struct efs_opid *id,const struct efs_txid *tx,
+    const struct efs_meta_append_ops *ops,void *ctx)
+{return efs_meta_finish_append_batch_owned(kv,ino,&offset,1,outcome,id,tx,ops,ctx);}
 
 int efs_meta_finish_append_fenced(struct efs_kv *kv,efs_ino_t ino,uint64_t generation,
     uint64_t offset,const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch,

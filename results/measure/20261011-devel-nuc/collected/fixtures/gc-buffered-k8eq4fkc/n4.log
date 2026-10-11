@@ -1,0 +1,17 @@
+2026-10-11T14:32:39.607Z storage-engine=files direct_io=off
+2026-10-11T14:32:39.607Z Storage quota: explicit 1.00 GiB (safe maximum 293.04 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T14:32:39.614Z Joined cluster with 4 nodes
+2026-10-11T14:32:39.618Z heartbeat: enabled (2000 ms interval)
+2026-10-11T14:32:39.631Z raft-host: up raft_id=3 n=4 boot=11461235034151134 salt=12823039851941964016 g0=off g2=hosted
+2026-10-11T14:32:39.631Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-11T14:32:39.631Z efsd 108afa3e-nuc (branch devel-nuc, built 2026-10-11T13:24:25Z on nuc), build=108afa3e-nuc: node 4 listening on 127.0.0.1:26593, storage=/home/efs/gc-buffered-42s5nzfs/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-11T14:32:41.619Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=981 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T14:32:43.493Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=5369 p50_us=5369 max_us=5369 wdisk ops=1 bytes=65536 errors=0 avg_us=5250 p50_us=5250 max_us=5250
+2026-10-11T14:32:44.631Z kv-obs: mt_bytes=6179 l0_bytes=0 l0=0 l1=0
+2026-10-11T14:32:45.467Z raft-host: applied session index=39 kind=1 shard=0 ino=0
+2026-10-11T14:32:48.194Z raft-host: applied session index=69 kind=1 shard=0 ino=0
+2026-10-11T14:32:48.494Z iostats: get ops=8 bytes=524288 errors=0 avg_us=64 p50_us=66 max_us=96 put ops=9 bytes=589824 errors=0 avg_us=4448 p50_us=3926 max_us=8685 wdisk ops=9 bytes=589824 errors=0 avg_us=4366 p50_us=3797 max_us=8616
+2026-10-11T14:32:49.634Z kv-obs: mt_bytes=29151 l0_bytes=0 l0=0 l1=0
+2026-10-11T14:32:51.475Z raft-host: applied session index=193 kind=1 shard=0 ino=0
+2026-10-11T14:32:53.497Z iostats: get ops=8 bytes=524288 errors=0 avg_us=64 p50_us=66 max_us=96 put ops=23 bytes=1507328 errors=0 avg_us=4961 p50_us=4034 max_us=10848 wdisk ops=23 bytes=1507328 errors=0 avg_us=4886 p50_us=3972 max_us=10666
+2026-10-11T14:32:54.638Z kv-obs: mt_bytes=26366 l0_bytes=0 l0=0 l1=0

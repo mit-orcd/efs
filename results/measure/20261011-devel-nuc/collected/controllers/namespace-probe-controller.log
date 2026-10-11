@@ -1,0 +1,10 @@
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 2298061 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 2298096 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+[{"action": "stat", "result": {"size": 9437184, "ino": 81921}}, {"action": "read", "result": {"sha256": "7dfadec8819e0284f3efe29e2a44a9558fca4c715034f753bbbc74f41cd71824"}}, {"action": "unlink", "result": null}, {"action": "stat-after", "errno": 2, "error": "[Errno 2] No such file or directory: '/data1/efs/mnt/sentinel'"}]
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 2299803 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
