@@ -1,0 +1,83 @@
+{
+  "reason": "Idle prerequisite waits must cover two allowed three-hour append fixtures plus full suites and restarts. No actual fixture or application request deadline changes. Native-accepted source and running writer untouched.",
+  "stopped": [
+    {
+      "name": "catchup-base-live",
+      "receipt": {
+        "pid": 117543,
+        "command": [
+          "python3",
+          "/data1/efs/devel-nuc-20261011/nuc_catchup_live_20261011.py",
+          "--variant",
+          "catchup-base"
+        ],
+        "script_sha256": "76edb7d350ef7440b89f16cbccc75c86ec58b34cb247e579335074b7b32184f8",
+        "started_utc": "2026-10-11T22:03:24Z",
+        "scope": "Prerequisite-gated; normal drain, preserved stores"
+      },
+      "entries": []
+    },
+    {
+      "name": "catchup-install",
+      "receipt": {
+        "pid": 117544,
+        "command": [
+          "python3",
+          "/data1/efs/devel-nuc-20261011/nuc_catchup_install_20261011.py"
+        ],
+        "script_sha256": "2910b38a3611d1343ce11dadde09085b38c70b7362668ae5f320b30119e72d7c",
+        "started_utc": "2026-10-11T22:03:24Z",
+        "scope": "Prerequisite-gated; normal drain, preserved stores"
+      },
+      "entries": []
+    },
+    {
+      "name": "catchup-service-cold",
+      "receipt": {
+        "pid": 117545,
+        "command": [
+          "python3",
+          "/data1/efs/devel-nuc-20261011/nuc_catchup_service_cold_20261011.py"
+        ],
+        "script_sha256": "f4f40e6bab35ad368ab5db253ddc65ee784e7c0e21ffebdf03bbfac19caa436b",
+        "started_utc": "2026-10-11T22:03:24Z",
+        "scope": "Prerequisite-gated; normal drain, preserved stores"
+      },
+      "entries": []
+    },
+    {
+      "name": "catchup-root-live",
+      "receipt": {
+        "pid": 117547,
+        "command": [
+          "python3",
+          "/data1/efs/devel-nuc-20261011/nuc_catchup_live_20261011.py",
+          "--variant",
+          "catchup-root"
+        ],
+        "script_sha256": "76edb7d350ef7440b89f16cbccc75c86ec58b34cb247e579335074b7b32184f8",
+        "started_utc": "2026-10-11T22:03:24Z",
+        "scope": "Prerequisite-gated; normal drain, preserved stores"
+      },
+      "entries": []
+    },
+    {
+      "name": "catchup-w97-abba",
+      "receipt": {
+        "pid": 117548,
+        "command": [
+          "python3",
+          "/data1/efs/devel-nuc-20261011/nuc_catchup_w97_abba_20261011.py"
+        ],
+        "script_sha256": "1968fe848feb1f0fe50e8d92499914cce440b14ce02b46e31e6923ef6e18dd8e",
+        "started_utc": "2026-10-11T22:03:24Z",
+        "scope": "Prerequisite-gated; normal drain, preserved stores"
+      },
+      "entries": [
+        "mnt"
+      ]
+    }
+  ],
+  "utc": "2026-10-11T22:21:55Z",
+  "regular_writer_untouched": true
+}

@@ -1,22 +1,22 @@
 {
   "efsd": {
-    "sha256": "98a008c416e96dd7cb888d355ba6636fc129219ef6dcde6635de8af36090fd02",
-    "version": "efsd 32b472c5-root-nuc (branch devel-nuc, built 2026-10-11T21:29:54Z on nuc)\n"
+    "sha256": "fb65556eff7584cc839d608b9de446133987096e74a68459185f6941c1e686e1",
+    "version": "efsd ba73f304-root-nuc (branch devel-nuc, built 2026-10-11T22:11:22Z on nuc)\n"
   },
   "efs-fuse": {
-    "sha256": "ec51e9c636932def5988f66e8c10992397399b7c911d91d4816577afa0fad05d",
-    "version": "efs-fuse 32b472c5-root-nuc (branch devel-nuc, built 2026-10-11T21:29:54Z on nuc)\n"
+    "sha256": "22a84a8b111ff99aa431e39e3204c889c8bb63d4b8469753614561f8c93ed1ab",
+    "version": "efs-fuse ba73f304-root-nuc (branch devel-nuc, built 2026-10-11T22:11:22Z on nuc)\n"
   },
   "efs-mgmt": {
-    "sha256": "594602c4d4d5462c54cd7984cf5d05d7ee67ac88fc22c2d9af6a51e707cba3f6",
-    "version": "efs-mgmt 32b472c5-root-nuc (branch devel-nuc, built 2026-10-11T21:29:54Z on nuc)\n"
+    "sha256": "c1156b61b35ae29a3c6d498dd89345e6f7c6a78d5f5f06c1d862e3cf6809654a",
+    "version": "efs-mgmt ba73f304-root-nuc (branch devel-nuc, built 2026-10-11T22:11:22Z on nuc)\n"
   },
   "efs-query": {
-    "sha256": "c31cb0ff3d58b34a7df801e5c4d6f5f8cf80ab7d000a0373eccf971a25e3b24e",
-    "version": "efs-query 32b472c5-root-nuc (branch devel-nuc, built 2026-10-11T21:29:54Z on nuc)\n"
+    "sha256": "55d39fa3e0922dfba2a0f537cc94f402913755b573e778c842597a598a77f968",
+    "version": "efs-query ba73f304-root-nuc (branch devel-nuc, built 2026-10-11T22:11:22Z on nuc)\n"
   },
   "efs-bench": {
-    "sha256": "206407423b12d52b4d739e1de012eca3918bee95d100addf14d7e58034b4efbb",
-    "version": "efs-bench 32b472c5-root-nuc (branch devel-nuc, built 2026-10-11T21:29:54Z on nuc)\n"
+    "sha256": "e93d7f005223e3c9156595bc5f9342a805194fc339a60e27929b69302e4c0826",
+    "version": "efs-bench ba73f304-root-nuc (branch devel-nuc, built 2026-10-11T22:11:22Z on nuc)\n"
   }
 }

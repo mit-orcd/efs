@@ -1,0 +1,185 @@
+{
+  "processes": [
+    {
+      "pid": 130298,
+      "kind": "efsd",
+      "sha256": "952e5b94e5b51f6320d0ad442a39e3294ec697008badee728b7d07b3ed0a690b"
+    },
+    {
+      "pid": 130507,
+      "kind": "efsd",
+      "sha256": "952e5b94e5b51f6320d0ad442a39e3294ec697008badee728b7d07b3ed0a690b"
+    },
+    {
+      "pid": 130726,
+      "kind": "efsd",
+      "sha256": "952e5b94e5b51f6320d0ad442a39e3294ec697008badee728b7d07b3ed0a690b"
+    },
+    {
+      "pid": 130950,
+      "kind": "efsd",
+      "sha256": "952e5b94e5b51f6320d0ad442a39e3294ec697008badee728b7d07b3ed0a690b"
+    },
+    {
+      "pid": 131191,
+      "kind": "efs-fuse",
+      "sha256": "1e336ed1bf6f2bf341332f56c4313174f556333aeb43409e0ccfd4378bc62c36"
+    },
+    {
+      "pid": 131291,
+      "kind": "efs-fuse",
+      "sha256": "1e336ed1bf6f2bf341332f56c4313174f556333aeb43409e0ccfd4378bc62c36"
+    }
+  ],
+  "payloads": [
+    {
+      "path": "/data1/efs/mnt/w52-clock-20000-before-2000-20261011/append-burst",
+      "records": 2000,
+      "sha256": "3dc0bebc63ce0f4f9f8c3f072aea966ae136171338626636f147c08088f0fad9"
+    },
+    {
+      "path": "/data1/efs/mnt2/w52-clock-20000-before-2000-20261011/append-burst",
+      "records": 2000,
+      "sha256": "3dc0bebc63ce0f4f9f8c3f072aea966ae136171338626636f147c08088f0fad9"
+    },
+    {
+      "path": "/data1/efs/mnt/w52-clock-20000-20261011/append-burst",
+      "records": 20000,
+      "sha256": "1075295d16ff4f24d1548ba048cd3fc46e986163a833f7ef9f622b5b10a647d4"
+    },
+    {
+      "path": "/data1/efs/mnt2/w52-clock-20000-20261011/append-burst",
+      "records": 20000,
+      "sha256": "1075295d16ff4f24d1548ba048cd3fc46e986163a833f7ef9f622b5b10a647d4"
+    },
+    {
+      "path": "/data1/efs/mnt/efs-command-gates-1703654/$(touch PWNED).txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt2/efs-command-gates-1703654/$(touch PWNED).txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt/efs-command-gates-1703654/escape\u001b.txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt2/efs-command-gates-1703654/escape\u001b.txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt/efs-command-gates-1703654/file.txt",
+      "sha256": "239f59ed55e737c77147cf55ad0c1b030b6d7ee748a7426952f9b852d5a935e5"
+    },
+    {
+      "path": "/data1/efs/mnt2/efs-command-gates-1703654/file.txt",
+      "sha256": "239f59ed55e737c77147cf55ad0c1b030b6d7ee748a7426952f9b852d5a935e5"
+    },
+    {
+      "path": "/data1/efs/mnt/efs-command-gates-1703654/invalid\udcff.txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt2/efs-command-gates-1703654/invalid\udcff.txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt/efs-command-gates-1703654/line\nbreak.txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt2/efs-command-gates-1703654/line\nbreak.txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt/efs-command-gates-1736291/$(touch PWNED).txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt2/efs-command-gates-1736291/$(touch PWNED).txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt/efs-command-gates-1736291/escape\u001b.txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt2/efs-command-gates-1736291/escape\u001b.txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt/efs-command-gates-1736291/file.txt",
+      "sha256": "239f59ed55e737c77147cf55ad0c1b030b6d7ee748a7426952f9b852d5a935e5"
+    },
+    {
+      "path": "/data1/efs/mnt2/efs-command-gates-1736291/file.txt",
+      "sha256": "239f59ed55e737c77147cf55ad0c1b030b6d7ee748a7426952f9b852d5a935e5"
+    },
+    {
+      "path": "/data1/efs/mnt/efs-command-gates-1736291/invalid\udcff.txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt2/efs-command-gates-1736291/invalid\udcff.txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt/efs-command-gates-1736291/line\nbreak.txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt2/efs-command-gates-1736291/line\nbreak.txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt/efs-command-gates-1844745/$(touch PWNED).txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt2/efs-command-gates-1844745/$(touch PWNED).txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt/efs-command-gates-1844745/escape\u001b.txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt2/efs-command-gates-1844745/escape\u001b.txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt/efs-command-gates-1844745/file.txt",
+      "sha256": "239f59ed55e737c77147cf55ad0c1b030b6d7ee748a7426952f9b852d5a935e5"
+    },
+    {
+      "path": "/data1/efs/mnt2/efs-command-gates-1844745/file.txt",
+      "sha256": "239f59ed55e737c77147cf55ad0c1b030b6d7ee748a7426952f9b852d5a935e5"
+    },
+    {
+      "path": "/data1/efs/mnt/efs-command-gates-1844745/invalid\udcff.txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt2/efs-command-gates-1844745/invalid\udcff.txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt/efs-command-gates-1844745/line\nbreak.txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt2/efs-command-gates-1844745/line\nbreak.txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt/efs-command-gates-1854491/$(touch PWNED).txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    },
+    {
+      "path": "/data1/efs/mnt2/efs-command-gates-1854491/$(touch PWNED).txt",
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    }
+  ],
+  "limits": "Normal process restart and fresh mounts; not a power-loss test."
+}

@@ -67,7 +67,7 @@ try:
             if not (base / name / 'run-exit.txt').exists(): return False
             assert (base / name / 'run-exit.txt').read_text().strip() == '0'
         return True
-    wait(ready, 32400, 'full private acceptance')
+    wait(ready, 86400, 'full private acceptance')
     live = base / 'catchup-base-live'
     for name in ('full-direct', 'full-buffered', 'long-direct', 'long-buffered', 'restore'):
         assert (live / (name + '-exit.txt')).read_text().strip() == '0'

@@ -72,7 +72,7 @@ try:
         if not marker.exists(): return False
         assert marker.read_text().strip() == '0'
         return True
-    wait(installed, 39600, 'accepted deployment')
+    wait(installed, 86400, 'accepted deployment')
     images = json.loads((base / 'catchup-install/images.json').read_text())
     mapped()
     sys.path.insert(0, str(src / 'tests/live'))
