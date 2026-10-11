@@ -18,8 +18,8 @@ def quantiles(values):
             for q in (50, 95, 99)} | {'max_us': values[-1]}
 
 
-def exercise(mount, pids, seconds, evidence):
-    assert 1 <= seconds <= 1800
+def exercise(mount, pids, seconds, evidence, large_mib_s=0):
+    assert 1 <= seconds <= 1800 and 0 <= large_mib_s <= 64
     folder = Path(mount) / 'tiny-sustained'
     folder.mkdir()
     tiny_workers, large_workers, slots = 8, 4, 64
@@ -66,11 +66,15 @@ def exercise(mount, pids, seconds, evidence):
         fd = os.open(folder/f'large-{worker}', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         written = 0
         gate.wait(timeout=30)
+        writer_start = time.monotonic()
         try:
             while written < 16 or not stop.is_set():
                 assert os.pwrite(fd, data, (written % 16)*len(data)) == len(data)
                 written += 1
                 if written % 4 == 0: os.fsync(fd)
+                if large_mib_s:
+                    delay = written/large_mib_s-(time.monotonic()-writer_start)
+                    if delay > 0: stop.wait(delay)
             os.fsync(fd)
         finally: os.close(fd)
         return written*len(data)
@@ -111,6 +115,7 @@ def exercise(mount, pids, seconds, evidence):
               'generations': generations, 'created': sum(generations)*slots,
               'warm_verified': sum(generations)*slots, 'retained': tiny_workers*slots,
               'large_workers': large_workers, 'large_live_bytes_each':16<<20,
+              'large_offered_mib_s_per_worker':large_mib_s,
               'large_written_bytes': written, 'windows': windows,
               'process_samples':process_samples, 'cpu_hz':os.sysconf('SC_CLK_TCK')}
     assert record['wall_s'] >= seconds

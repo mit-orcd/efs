@@ -4409,6 +4409,16 @@ or present the Raft improvement as measured KV acceptance.
 
 ## W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
 
+**Oct 11 AMD mixed-load follow-up:** eight rotating tiny workers plus four
+unpaced 16-MiB overwrite-ring writers reach the explicit 4-GiB-per-node quota
+within about one minute. The host has 389 GiB free. A separate cold/no-writer
+60-second run reclaims about 1.2 GiB payload per node with successful GC ACKs;
+the failed load has not passed a cold-byte oracle. This is a retained GC/admission
+pressure finding, not proof of the historical NUC incident's cause. A separately
+paced 2-MiB/s-per-writer gate cannot close the unpaced failure. Require bounded
+reclamation/admission, fairness and exact cold-byte recovery before claiming a
+fix. [AMD evidence](../status/amd-sustained-20261011.md#unpaced-mixed-load-failure--retained-not-closed).
+
 **Oct11 NUC isolated follow-up:** two eight-minute growing-file repeats outside
 EFS reproduce aggregate430/428→188/186 durable64KiB writes/s, per-writer mean
 sync~6.9→~16ms. Preallocated-ring repeats finish near438ops/s, with materially

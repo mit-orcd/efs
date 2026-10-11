@@ -1,0 +1,67 @@
+{
+  "elapsed_s": 30.004902062995825,
+  "window_counts": {
+    "0": {
+      "open": 2251,
+      "close": 2245,
+      "delete": 2048
+    },
+    "1": {
+      "open": 1,
+      "close": 0,
+      "delete": 0
+    }
+  },
+  "process_samples": [
+    {
+      "seconds": 0.003738173982128501,
+      "processes": {
+        "771450": {
+          "rss_kib": 9856,
+          "cpu_ticks": 0
+        },
+        "771101": {
+          "rss_kib": 7436,
+          "cpu_ticks": 11
+        },
+        "771136": {
+          "rss_kib": 6996,
+          "cpu_ticks": 10
+        },
+        "771172": {
+          "rss_kib": 7424,
+          "cpu_ticks": 11
+        },
+        "771209": {
+          "rss_kib": 6280,
+          "cpu_ticks": 6
+        }
+      }
+    },
+    {
+      "seconds": 30.004463571007363,
+      "processes": {
+        "771450": {
+          "rss_kib": 104340,
+          "cpu_ticks": 1196
+        },
+        "771101": {
+          "rss_kib": 36008,
+          "cpu_ticks": 1521
+        },
+        "771136": {
+          "rss_kib": 46628,
+          "cpu_ticks": 1663
+        },
+        "771172": {
+          "rss_kib": 51272,
+          "cpu_ticks": 2073
+        },
+        "771209": {
+          "rss_kib": 34508,
+          "cpu_ticks": 1561
+        }
+      }
+    }
+  ]
+}

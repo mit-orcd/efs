@@ -9,7 +9,8 @@ The existing private four-node TCP fixture runs direct then buffered, 600
 seconds each. Eight tiny workers rotate 64 names per worker, writing 512-byte
 generation-specific bodies. Every acknowledged generation is byte-checked
 before unlink; names are reused only after unlink. Four large writers overlap
-16-MiB rings of 1-MiB writes, fsync every four writes and at completion. Thirty-
+16-MiB rings of 1-MiB writes, fsync every four writes and at completion. The
+follow-up offers 2 MiB/s per writer; the unpaced failure below is retained. Thirty-
 second windows record CREATE/close/delete completions and latency, with process
 CPU ticks and RSS samples. Explicit per-daemon quota is 4 GiB; installed data
 and daemons are retained. This measures the accepted combined-adoption build;
@@ -23,6 +24,44 @@ No RDMA, D25 activation, production packing or pushes are part of this gate.
 
 [Reproducible runner](../../results/measure/20261011-amd-sustained/run.sh).
 Acceptance and remaining blockers will be recorded after the actual verdicts.
+
+## Unpaced mixed-load failure — retained, not closed
+
+The initial invocation missed the fixture's required second root argument and
+stopped before private nodes started. It restored both mounts; this setup
+failure is retained separately. Both reproducible AMD runners now explicitly
+supply two parent roots, which may share the same AMD filesystem.
+
+The corrected unpaced run hit ENOSPC at a large writer's fsync/close about one
+minute after starting. Explicit per-node logical fragment quota was 4 GiB;
+allocated fragment files approached 4.1–4.2 GiB per node including checksum and
+allocation overhead. The host still had 389 GiB available. Four logical large
+files occupy at most 64 MiB; this is overwritten-generation/GC pressure, not a
+full host filesystem. PUT counters reached roughly 5 GB per node and recorded
+quota failures. The 30-second sample completed 2,245 tiny closes, before the
+failure. It is not a sustained throughput or cold-byte acceptance result.
+[Failed run](../../results/measure/20261011-amd-sustained/evidence/unpaced/direct.log).
+
+A separate 60-second cold restart without writers enables actual GC identity,
+delete and ACK diagnostics. Per-node sampled allocation falls from
+4,484,579,328/4,382,011,392/4,466,475,008/4,404,641,792 bytes to
+3,217,346,560/3,019,173,888/3,202,654,208/3,223,613,440. Node 1 removes 18,274
+fragments, reports 1,197,604,864 logical payload bytes reclaimed and zero final
+delete/checksum/sweep/reap/ACK/scan errors. Committed GC ACKs succeed. This
+establishes progress under quiescence, not complete drain, a proven leak cause,
+or exact acknowledged-byte recovery of the failed run. Concurrent inventory
+samples explicitly count files that disappeared between scan and stat; the
+first inventory-race audit attempt is also retained.
+[Cold recovery observations](../../results/measure/20261011-amd-sustained/evidence/unpaced/cold-gc-recovery.json).
+
+The unpaced offered load exceeds the observed quiescent reclaim rate. Source
+uses bounded GC scans/ACKs, a 200-ms fragment budget per group and one-second
+loop; increasing these or adding pressure admission needs fairness/durability
+acceptance. No unsafe GC deletion, timeout increase or quota inflation is
+adopted. The new 2-MiB/s-per-writer run is a distinct bounded-service gate;
+pacing does not repair or close this overload behavior. W94 full sustained
+acceptance and W97 pressure/reclamation work remain open.
+
 
 ## W95 retained AMD experiment review completed
 

@@ -29,7 +29,7 @@ for mode in direct buffered; do
  python3 -u tests/live/gc_reclamation.py --mode "$mode" --transport tcp \
   --root "$out" --root "$out" --port 24190 --fixture-quota 4G \
   --mount /data1/efs/mnt --peer-mount /data1/efs/mnt2 \
-  --tiny-sustained-seconds 600 > "$out/$mode.log" 2>&1
+  --tiny-sustained-seconds 600 --tiny-sustained-large-mib-s 2 > "$out/$mode.log" 2>&1
  rc=$?
  set -e
  echo "$rc" > "$out/$mode.exit"
