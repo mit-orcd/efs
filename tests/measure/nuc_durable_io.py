@@ -61,9 +61,15 @@ def worker(n):
         stop.set();raise
     finally:
         if fd>=0:os.close(fd)
+cpu_before=os.times()
 with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
     futures=[pool.submit(worker,n) for n in range(3)]
     gate.wait(timeout=120)
+    with (a.output/'host.jsonl').open('w') as out:
+        while any(not f.done() for f in futures):
+            out.write(json.dumps(dict(monotonic=time.monotonic(),utc=time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),diskstats=Path('/proc/diskstats').read_text(),host_stat=Path('/proc/stat').read_text(),process_stat=Path('/proc/self/stat').read_text(),process_io=Path('/proc/self/io').read_text(),meminfo=Path('/proc/meminfo').read_text()))+'\n');out.flush()
+            time.sleep(5)
     for f in futures:f.result()
-(a.output/'final.json').write_text(json.dumps(dict(mode=a.mode,seconds=a.seconds,writers=rows,total_operations_s=sum(r['operations_s'] for r in rows),verified=True),indent=2))
+cpu_after=os.times()
+(a.output/'final.json').write_text(json.dumps(dict(mode=a.mode,seconds=a.seconds,writers=rows,total_operations_s=sum(r['operations_s'] for r in rows),verified=True,cpu_user_seconds=cpu_after.user-cpu_before.user,cpu_system_seconds=cpu_after.system-cpu_before.system),indent=2))
 print(a.mode,sum(r['operations_s'] for r in rows),'PASS',flush=True)
