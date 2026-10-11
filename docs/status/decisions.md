@@ -167,3 +167,14 @@ W84 sizing and W91 command/script clarifications.
 Accepted policy does not establish deployment acceptance. Numeric W81 settings,
 query encoding and other implementation details must satisfy the linked gates;
 configured expiry TTL is an operator choice, not a selected global default.
+
+
+## RDMA test placement — accepted user instruction Oct 11, 2026
+
+All RDMA work is tested either on the AMD cluster with software RDMA or on
+`orcd-test` with hardware InfiniBand/RDMA. Hardware claims require the hardware
+environment; software results remain separately scoped. Intel is the TCP
+acceptance deployment, and its RDMA prerequisites do not block this work.
+This selects test environments, not a new storage/protection contract or an
+acceptance verdict. Track current-code transport validation under
+[W106](../backlog/work-items.md#w106) and preserve each related work item's gates.

@@ -4584,12 +4584,14 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 
 <a id="w106"></a>
 
-## W106 · Intel RDMA feasibility and transport acceptance
+## W106 · RDMA acceptance on AMD software RDMA and orcd-test hardware IB/RDMA
 
-**Class/state:** Optional transport investigation; hardware/software prerequisite blocked.
+**Class/state:** Transport validation; open. Test placement decided by the user Oct 11, 2026.
 
-**Evidence/current state:** Both Intel wired links report 5000 Mb/s using RTL8126/r8169. No hardware RDMA device is exposed, and installed kernels have neither rdma_rxe nor siw modules. TCP is the validated deployment transport; link speed alone does not establish RoCE support.
+**Governing test policy:** All RDMA work is tested on the AMD cluster using software RDMA, or on `orcd-test` using hardware InfiniBand/RDMA. Select the environment appropriate to the claim; software acceptance does not establish hardware acceptance. This policy applies to RDMA gates throughout the backlog, not just W106.
 
-**Remaining action:** Determine supported NIC/driver hardware capabilities and software RDMA kernel availability. Present concrete hardware/package changes before choosing an RDMA deployment; distinguish software RXE/SIW from hardware RoCE.
+**Evidence/current state:** AMD software-RXE functional evidence already exists; current-code distributed and hardware acceptance must retain their own named gates. Intel remains the TCP acceptance deployment. Its 5 Gb/s links and absence of exposed RDMA devices/software modules do not block RDMA testing on the designated environments.
 
-**Gate:** If enabled, actual cross-host RDMA device/connection evidence plus unchanged POSIX, peer, direct-I/O, persistence and fault gates. Until then report TCP acceptance only.
+**Remaining action:** Run relevant current-code software RDMA gates on AMD and hardware IB/RDMA gates on `orcd-test`, retaining actual transport/device, code/build, topology and per-suite verdict evidence. Intel RDMA enablement or NIC/package changes are not part of this task.
+
+**Gate:** Actual cross-host RDMA connection/device evidence plus unchanged POSIX, peer, direct-I/O, persistence and fault gates on the designated environment. Report AMD software and `orcd-test` hardware verdicts separately; neither TCP nor software-only results close hardware-specific obligations.
