@@ -28,7 +28,7 @@ forced dirty discard, main merge, push or tag is requested.
 | W79 | Both aliases and help, real consumed successful mkfs replies, uncertain-outcome retry preserves namespace/salt, explicit extra-argument refusal | Closed Oct11; direct/buffered private gates pass |
 | W70 | Accepted/refused quota reductions, unchanged bytes and no fictitious migration | Closed Oct11; direct/buffered × one/two-root current-code gates pass |
 | W80 | Retired QUERY_STATS gives nonzero unavailable response with no false totals in normal/raw output; current help and legacy/malformed reply tests | Closed Oct11 for retired endpoint; current-code nonempty namespace, fragment, help and reply gates pass |
-| W97 | Three-writer durable file controls outside EFS; growing/reset files versus preallocated rings, reversed repeats, barrier distributions, disk/CPU counters and exact reopened blocks | Running eight-minute ABBA cells; no closure yet |
+| W97 | Three-writer durable file controls outside EFS; growing/reset files versus preallocated rings, reversed repeats, barrier distributions, disk/CPU counters and exact reopened blocks | Investigation advanced: eight clean cells, four profiles and four written-ring cells pass; remains open |
 
 W73/W64 retain production-session/platform obligations. W53 explicitly requires
 investigation followed by the user's keep/revert decision. W54/W38's physical
@@ -64,9 +64,11 @@ host contention and process CPU rather than assuming zero software overhead.
 
 ## Terminal evidence
 
-The overall session is not complete. The completed operator verdicts below
-close only their named scopes. W96 final live gates pass; W97 controls remain
-in progress.
+The three-hour session completes five named closures: W70/W78/W79/W80/W96.
+All planned private gates and drive controls have terminal successful verdicts;
+W97 remains an investigation, not a sixth closure. Regular service restoration
+and bounded existing-data reads pass; installation of the newer tested binaries
+remains approval-blocked.
 
 Named NUC engine build: `3df1931032b8-nuc`, branch `devel-nuc`; production
 C/header/Makefile code is unchanged from the captured devel tip. The copied
@@ -300,3 +302,46 @@ health during matched idle/active repeats, then actual direct-I/O fragment and
 ancestor-barrier geometry. W95 can test a specified bounded indexed-packing
 candidate at equal durability. Neither an unsupported format change nor cache/
 power setting changes are adopted from these file controls.
+
+## Final written-ring matrix and service state
+
+All four480s written-ring cells exit0, each verifies12288 current64KiB blocks.
+Preparation and initial extent conversion remain outside timing. Rates sum
+three independent writers; early/late are complete30s windows.
+
+| Order / volume | Whole-run ops/s | First window ops/s | Late window ops/s | First → late per-writer sync mean |
+| --- | ---: | ---: | ---: | --- |
+| 0 NVMe | 653.35 | 1372.53 | 450.18 | ~2.12 → ~6.56ms |
+| 1 SATA | 7058.49 | 6796.88 | 7114.32 | ~0.430 → ~0.408ms |
+| 2 SATA | 6976.79 | 7099.12 | 7100.30 | ~0.411 → ~0.409ms |
+| 3 NVMe | 641.61 | 1356.34 | 438.56 | ~2.15 → ~6.74ms |
+
+NVMe's second repeat also increases physical write-request mean1.042→3.310ms
+and flush mean1.289→3.593ms. SATA request means stay~0.40–0.42ms, with no
+physical flush counter increments. NVMe p99 is~9.9ms and SATA~0.78–0.83ms
+for these complete cells. `written-ring/written-summary.json` retains all
+intervals, counts, block-counter edges, CPU totals and exact reopen results.
+The lower block-path increase repeats on fully written extents. Allocation
+adds confirmed XFS journal work, but is not the whole decline. Cache/firmware,
+power/thermal and kernel/queue attribution remain unproven; W97 stays open.
+
+Final verification at06:37:08UTC: all four regular listeners, four daemons,
+two mounted clients, installed/live binary hashes and16 existing nonempty
+payload samples equal on both mounts PASS. This is a bounded final read check,
+not a complete before/after inventory. Stores and prior TCP/direct configuration
+are retained, with commands/server catalogs disabled as before the experiments.
+Normal engine remains installed6b8f05ac, branch macrodevel-persistence-pressure;
+private gate engine is3df1931032b8-nuc. No installation is claimed. All task
+controllers, private writers and tracers exit; raw fixtures remain for review.
+
+The initial missing-evidence-copy native failure is retained and resolved by
+an unchanged full native pass. No final required gate fails. Supplementary
+NVMe wall strace remains explicitly NOTRUN as documented above. Future harness
+guard/wall-accounting improvements are committed without pretending that the
+completed original profiler used them. Production C/header/Makefile contents
+on this branch remain identical to captured devel746ae9f0; this session adds
+acceptance tests, measurements and documented closures.
+
+No devel merge, push, tag, other-host work, reboot, cache/APST change, device wipe
+or installed source/binary replacement runs. Deployment is a concrete prepared
+follow-up, pending the user's answer to the automatic-review approval request.

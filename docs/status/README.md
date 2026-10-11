@@ -13,8 +13,11 @@ PID startup/stop, both mkfs aliases' consumed-reply recovery and explicit
 retired-query outcomes pass. W96's sixteen drive comparisons, exact retained
 replay, ASan/UBSan and Valgrind pass. Both full live modes pass POSIX214/214,
 peer66/66, cold/fault/GC and actual follower WAL-fsync refusal recovery.
-W97 allocation controls are running. This entry describes
-the active private validation, not a completed regular-service deployment.
+W97's clean allocation, separate XFS profiles and written-ring controls all
+finish: NVMe latency rises even on written extents; W97 remains open. The
+three-hour session restores four regular daemons and both mounts, verifies
+installed/live hashes and16 existing payload samples. New-binary installation
+remains approval-blocked; the original installed build is retained.
 
 ## Governing node-count contract — D36
 

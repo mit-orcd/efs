@@ -5,3 +5,8 @@ END mnt2-stop 0
 START written-0-nvme 2026-10-11T05:59:41Z
 END written-0-nvme 0
 START written-1-sata 2026-10-11T06:07:46Z
+END written-1-sata 0
+START written-2-sata 2026-10-11T06:15:53Z
+END written-2-sata 0
+START written-3-nvme 2026-10-11T06:24:00Z
+END written-3-nvme 0

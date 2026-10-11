@@ -1484,8 +1484,11 @@ PID startup/stop, both mkfs aliases' consumed-reply recovery and explicit
 retired-query outcomes pass. W96's sixteen drive comparisons, exact retained
 replay, ASan/UBSan and Valgrind pass. Both full live modes pass POSIX214/214,
 peer66/66, cold/fault/GC and actual follower WAL-fsync refusal recovery.
-W97 allocation controls are running. This entry describes
-the active private validation, not a completed regular-service deployment.
+W97's clean allocation, separate XFS profiles and written-ring controls all
+finish: NVMe latency rises even on written extents; W97 remains open. The
+three-hour session restores four regular daemons and both mounts, verifies
+installed/live hashes and16 existing payload samples. New-binary installation
+remains approval-blocked; the original installed build is retained.
 
 ### Governing node-count contract — D36
 
@@ -6624,8 +6627,11 @@ or present the Raft improvement as measured KV acceptance.
 EFS reproduce aggregate430/428→188/186 durable64KiB writes/s, per-writer mean
 sync~6.9→~16ms. Preallocated-ring repeats finish near438ops/s, with materially
 different initial windows and tails. Allocation/overwrite behaviour matters,
-but XFS versus drive/cache attribution is not yet isolated. SATA repeats,
-separate XFS/perf/strace profiles and fully written-ring controls continue.
+but XFS versus drive/cache attribution is not yet isolated. All eight allocation cells, four separate XFS/perf/strace profiles and four
+fully written-ring cells finish with exact reopen checks. Written NVMe repeats
+also decline1373/1356→450/439ops/s, while block write/flush elapsed averages
+increase~3×; written SATA stays near7100ops/s. This excludes allocation as the
+whole cause but does not isolate drive firmware from the block queue.
 W97 remains open; no drive settings or production defaults change.
 [Evidence and limitations](../status/devel-nuc-closure-20261010.md).
 

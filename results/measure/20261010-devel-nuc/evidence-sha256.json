@@ -1,0 +1,2739 @@
+{
+  "files": [
+    {
+      "path": "allocation-profile/mnt-stop.log",
+      "bytes": 108,
+      "sha256": "764879d96c09d6e1453dcb48b3d954b3e7a5a970506b4535f128f73ba5ada2d2"
+    },
+    {
+      "path": "allocation-profile/mnt-stop.log.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile/mnt2-stop.log",
+      "bytes": 111,
+      "sha256": "71a63c2bf5fb81f8d1aca2b5e470a31bd758afd2a783e6cb63fdb503ae533293"
+    },
+    {
+      "path": "allocation-profile/mnt2-stop.log.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile/nvme-grow/cycles-record.txt",
+      "bytes": 177,
+      "sha256": "51a06d5b16d5aa704db866b125255455fa167d56435df9d87eff23918f82ed11"
+    },
+    {
+      "path": "allocation-profile/nvme-grow/cycles-record.txt.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile/nvme-grow/cycles-report.txt",
+      "bytes": 23409,
+      "sha256": "4ef4aa9068d158982ce93bfa3e32a0972ed6db3d5486ec025ddda25310eec401"
+    },
+    {
+      "path": "allocation-profile/nvme-grow/cycles-report.txt.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile/nvme-grow/cycles.data",
+      "bytes": 59204,
+      "sha256": "777b94f3a9196494e6fb9b023218affbfe02b7337e698391baa24009c029e97e"
+    },
+    {
+      "path": "allocation-profile/nvme-grow/data/final.json",
+      "bytes": 1802,
+      "sha256": "7cd50d51858e4c85c20da49b562320fee52c71e7be7e057c8502cb523ab6f49a"
+    },
+    {
+      "path": "allocation-profile/nvme-grow/data/host.jsonl",
+      "bytes": 297659,
+      "sha256": "5064c0106ae40b0cf1d6909e447fbce3df189c8b4d9a0dd492d0d62b658b83bf"
+    },
+    {
+      "path": "allocation-profile/nvme-grow/data/writer0-final.json",
+      "bytes": 422,
+      "sha256": "3bc4013398eaf2180c65f12b4988363e8a26d96249bcec5778ba0d0faf80cfed"
+    },
+    {
+      "path": "allocation-profile/nvme-grow/data/writer0.jsonl",
+      "bytes": 732,
+      "sha256": "836160eba903a71679f7a0227cb7022656b3805fded6defd02e7e36f7fe57a7b"
+    },
+    {
+      "path": "allocation-profile/nvme-grow/data/writer1-final.json",
+      "bytes": 421,
+      "sha256": "c202bcdd54cd13d339438995f906b780bd6d77b97b89710ae876c4447564324c"
+    },
+    {
+      "path": "allocation-profile/nvme-grow/data/writer1.jsonl",
+      "bytes": 736,
+      "sha256": "dd9957acf0e243f9a9f3e7b763d0beb658f9152b15fb8154d8e8ae627369b096"
+    },
+    {
+      "path": "allocation-profile/nvme-grow/data/writer2-final.json",
+      "bytes": 421,
+      "sha256": "e471a97130b460601b7347c74e15e406acd871551810a225fc9a0cee365c4e11"
+    },
+    {
+      "path": "allocation-profile/nvme-grow/data/writer2.jsonl",
+      "bytes": 734,
+      "sha256": "91723279efc0d00e8d44c3221c11b750b9d95583e8c67c8cf0f83ce9b77272b5"
+    },
+    {
+      "path": "allocation-profile/nvme-grow/exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile/nvme-grow/host-xfs-tracepoints.txt",
+      "bytes": 140,
+      "sha256": "8d132091affa63724ea1c65e4d3590e6a186498c3c71df4844575f9128845201"
+    },
+    {
+      "path": "allocation-profile/nvme-grow/host-xfs-tracepoints.txt.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile/nvme-grow/identity.json",
+      "bytes": 363,
+      "sha256": "261cca931a78121ff3e4932726d3042d50ac446ce3386a9b5561fb3f5334aaac"
+    },
+    {
+      "path": "allocation-profile/nvme-grow/run.log",
+      "bytes": 28,
+      "sha256": "b3d8ecf6ce6c2e3d4045e51ea319176689bc1987dcff794e1f971f0885606d50"
+    },
+    {
+      "path": "allocation-profile/nvme-grow/strace-summary.txt",
+      "bytes": 1077,
+      "sha256": "c901f7b9264834183a7b01dd067d4edc4a135aebbfe9a363a30db7bf803104f4"
+    },
+    {
+      "path": "allocation-profile/nvme-grow/strace-summary.txt.exit",
+      "bytes": 4,
+      "sha256": "ca2ebdf97d7469496b1f4b78958f9dc8447efdcb623953fee7b6996b762f6fff"
+    },
+    {
+      "path": "allocation-profile/nvme-grow/strace-wall-NOTRUN.txt",
+      "bytes": 77,
+      "sha256": "64aa954e3d069b42dde7a34c17de05a6efe2c02ed2373d9b539792a5ac632f66"
+    },
+    {
+      "path": "allocation-profile/nvme-grow/tracepoints.txt",
+      "bytes": 289,
+      "sha256": "a724ac46d6b4313fa5a6e78e4b2520a4951ea3470dd76a6ee891322e7b31c496"
+    },
+    {
+      "path": "allocation-profile/nvme-grow/tracepoints.txt.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile/nvme-ring/cycles-record.txt",
+      "bytes": 178,
+      "sha256": "12b6534b67a2e653bce023d4167e5957c76f68b62dbbe37d28caea333a946c56"
+    },
+    {
+      "path": "allocation-profile/nvme-ring/cycles-record.txt.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile/nvme-ring/cycles-report.txt",
+      "bytes": 9391,
+      "sha256": "2f0d978dc2186fdc91b146a25c1cf6b34cfd22029298d4708ea0bffb7ab8d42b"
+    },
+    {
+      "path": "allocation-profile/nvme-ring/cycles-report.txt.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile/nvme-ring/cycles.data",
+      "bytes": 68076,
+      "sha256": "d769d5ce214386c63a03c62e35d414b7c8525b1eb72c9564c24063b2632c2bda"
+    },
+    {
+      "path": "allocation-profile/nvme-ring/data/final.json",
+      "bytes": 1784,
+      "sha256": "2d67f1792e3e0ee64df03503c97ac4163c738365f03132859cc7116b2fb585dc"
+    },
+    {
+      "path": "allocation-profile/nvme-ring/data/host.jsonl",
+      "bytes": 297567,
+      "sha256": "841b67b930aded460084bdb37c28fb7449d58b28769717c40c5788cb2f37120a"
+    },
+    {
+      "path": "allocation-profile/nvme-ring/data/writer0-final.json",
+      "bytes": 414,
+      "sha256": "378b224adc68cefe7537d09712b451e6f3f2e37267d8cfd80529ee4808f600ca"
+    },
+    {
+      "path": "allocation-profile/nvme-ring/data/writer0.jsonl",
+      "bytes": 882,
+      "sha256": "2194b7486dec32213a22c4f3e0fa1539d3fe450acc5a66e136aeacab6e0b3515"
+    },
+    {
+      "path": "allocation-profile/nvme-ring/data/writer1-final.json",
+      "bytes": 415,
+      "sha256": "eb71b12370efd150a49ec3ef4060720006a8051d98aed66cd3a2ddc4b0401cc9"
+    },
+    {
+      "path": "allocation-profile/nvme-ring/data/writer1.jsonl",
+      "bytes": 737,
+      "sha256": "182e65fc117cd20f0e3fa22dd19e7966c737c152ebeea16f6d6e479e44b5ac3c"
+    },
+    {
+      "path": "allocation-profile/nvme-ring/data/writer2-final.json",
+      "bytes": 415,
+      "sha256": "1b4037c6319ac8578840328767959c7cb5163ee3a4fbd244e4313f75f74e338b"
+    },
+    {
+      "path": "allocation-profile/nvme-ring/data/writer2.jsonl",
+      "bytes": 734,
+      "sha256": "5135c069e4955554616a89a0417a83bbe6cd067853e6243ffd523f1f746770a2"
+    },
+    {
+      "path": "allocation-profile/nvme-ring/exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile/nvme-ring/host-xfs-tracepoints.txt",
+      "bytes": 134,
+      "sha256": "4ea4ad95bb136568757d639bc2938ad910d9e9c798cc4170b65d2e4a927898f3"
+    },
+    {
+      "path": "allocation-profile/nvme-ring/host-xfs-tracepoints.txt.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile/nvme-ring/identity.json",
+      "bytes": 363,
+      "sha256": "7ff8fcbc5aeb502cc72ca8eca8ecd58e8a8b7f98a98cfa517bb354e8a8549a62"
+    },
+    {
+      "path": "allocation-profile/nvme-ring/run.log",
+      "bytes": 28,
+      "sha256": "ff3338bd6cc2094607f05971193b4912ef377b7a586f3448bf9d0864c8244b8e"
+    },
+    {
+      "path": "allocation-profile/nvme-ring/strace-summary.txt",
+      "bytes": 1134,
+      "sha256": "7ad97dadb356eac1f3c88b37bc8660d0f29e804bd6be6da35b8287f3b9eff232"
+    },
+    {
+      "path": "allocation-profile/nvme-ring/strace-summary.txt.exit",
+      "bytes": 4,
+      "sha256": "ca2ebdf97d7469496b1f4b78958f9dc8447efdcb623953fee7b6996b762f6fff"
+    },
+    {
+      "path": "allocation-profile/nvme-ring/strace-wall-NOTRUN.txt",
+      "bytes": 77,
+      "sha256": "64aa954e3d069b42dde7a34c17de05a6efe2c02ed2373d9b539792a5ac632f66"
+    },
+    {
+      "path": "allocation-profile/nvme-ring/tracepoints.txt",
+      "bytes": 289,
+      "sha256": "af3e6078163e9f7b96bb022994cd7b5462077efcc99446e0e6e72e0f6ecad2c9"
+    },
+    {
+      "path": "allocation-profile/nvme-ring/tracepoints.txt.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile/restore-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile/restore.log",
+      "bytes": 12879,
+      "sha256": "487b56c978f146bf697a5b2555c381147dcc19cddc895257a1309c7c1bc8871c"
+    },
+    {
+      "path": "allocation-profile/run-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile/sata-grow/cycles-record.txt",
+      "bytes": 178,
+      "sha256": "639850d4978687b45e2d1edb05db96e2ca624c7f28917795b109d67899c30a50"
+    },
+    {
+      "path": "allocation-profile/sata-grow/cycles-record.txt.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile/sata-grow/cycles-report.txt",
+      "bytes": 4290,
+      "sha256": "191e0d4c23ac4ede92c8321d691a6920bb46efebb47f5b9464c27190d0ba9a90"
+    },
+    {
+      "path": "allocation-profile/sata-grow/cycles-report.txt.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile/sata-grow/cycles.data",
+      "bytes": 98932,
+      "sha256": "b77e2c1ec9b3fb3396e933aaca3688b387d8c543336b5ad081fb721536091c5a"
+    },
+    {
+      "path": "allocation-profile/sata-grow/data/final.json",
+      "bytes": 1805,
+      "sha256": "f26beb2a6839632d061964d2602e14d876561cf27ebfe42d67859f1dcf40b4f3"
+    },
+    {
+      "path": "allocation-profile/sata-grow/data/host.jsonl",
+      "bytes": 297728,
+      "sha256": "e7586bc20665a68c8043a279cc24b2145c3b762f12ede0717a51fff7e5f4c2a6"
+    },
+    {
+      "path": "allocation-profile/sata-grow/data/writer0-final.json",
+      "bytes": 421,
+      "sha256": "42a587451349173236004f87215e0f2b823caf046cbb0bcea51b1d83ecd32237"
+    },
+    {
+      "path": "allocation-profile/sata-grow/data/writer0.jsonl",
+      "bytes": 751,
+      "sha256": "fa60347d0bae24882b1a37b79ac7c457808c3cc5d98929b37415c5249adf1b93"
+    },
+    {
+      "path": "allocation-profile/sata-grow/data/writer1-final.json",
+      "bytes": 420,
+      "sha256": "011086395eeffe28df2a199e45b398d6ab91fd53ee40467eb23a6ab019f6fb40"
+    },
+    {
+      "path": "allocation-profile/sata-grow/data/writer1.jsonl",
+      "bytes": 744,
+      "sha256": "2ff3bf0aca3bf3caf6c5e365a8009eb3dc156a317e99b562a68153051f8517f2"
+    },
+    {
+      "path": "allocation-profile/sata-grow/data/writer2-final.json",
+      "bytes": 423,
+      "sha256": "c0283c3cf5fd98b953f507dbd14f9f889fcce60a64cc1c0f4d8a83dd675a8848"
+    },
+    {
+      "path": "allocation-profile/sata-grow/data/writer2.jsonl",
+      "bytes": 748,
+      "sha256": "7dba8fbab00af86a8ab70dc725fbfabef420145a08b84fd9df4da0ea7720807e"
+    },
+    {
+      "path": "allocation-profile/sata-grow/exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile/sata-grow/host-xfs-tracepoints.txt",
+      "bytes": 143,
+      "sha256": "4bd39c943bf1ae6d752ac2db1fe2f7bc681e4c350803a1a3c90a04b28c01d4ff"
+    },
+    {
+      "path": "allocation-profile/sata-grow/host-xfs-tracepoints.txt.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile/sata-grow/identity.json",
+      "bytes": 369,
+      "sha256": "90f5089a26e5bab6ac09f252ee671d1afbf511845d576824dc511d2087c1f4b2"
+    },
+    {
+      "path": "allocation-profile/sata-grow/run.log",
+      "bytes": 28,
+      "sha256": "e0255f53673af4a712714e3bba25004f23d24b453da41798d3cd09e69cf4dfc4"
+    },
+    {
+      "path": "allocation-profile/sata-grow/strace-summary.txt",
+      "bytes": 1195,
+      "sha256": "bab281785df5ed6c54a410b0d8abb9e7a659e9905295ace2fac42b67a4526899"
+    },
+    {
+      "path": "allocation-profile/sata-grow/strace-summary.txt.exit",
+      "bytes": 4,
+      "sha256": "ca2ebdf97d7469496b1f4b78958f9dc8447efdcb623953fee7b6996b762f6fff"
+    },
+    {
+      "path": "allocation-profile/sata-grow/strace-wall-exit.txt",
+      "bytes": 4,
+      "sha256": "ca2ebdf97d7469496b1f4b78958f9dc8447efdcb623953fee7b6996b762f6fff"
+    },
+    {
+      "path": "allocation-profile/sata-grow/strace-wall.txt",
+      "bytes": 1137,
+      "sha256": "f5f063e93ee0be374859496170ac50cffd1bb39315717379bd230bcde5258965"
+    },
+    {
+      "path": "allocation-profile/sata-grow/tracepoints.txt",
+      "bytes": 303,
+      "sha256": "4639820c543540f9b5edddb0833691802c2c7c38955cfe5d652efc3a68f96800"
+    },
+    {
+      "path": "allocation-profile/sata-grow/tracepoints.txt.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile/sata-ring/cycles-record.txt",
+      "bytes": 178,
+      "sha256": "f1172bdd2bf55c168f88aef5aee7b3069dc27b0b2006ed1238fdb5bce3f6132d"
+    },
+    {
+      "path": "allocation-profile/sata-ring/cycles-record.txt.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile/sata-ring/cycles-report.txt",
+      "bytes": 5981,
+      "sha256": "9869389d5f63e359c08a39519cb1680321ba756fac9a124e4a7ce9e61d0523fc"
+    },
+    {
+      "path": "allocation-profile/sata-ring/cycles-report.txt.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile/sata-ring/cycles.data",
+      "bytes": 87384,
+      "sha256": "434be2885219c381bb26587fdb46d47aff726e8efbda896ee232a41f113d0f84"
+    },
+    {
+      "path": "allocation-profile/sata-ring/data/final.json",
+      "bytes": 1780,
+      "sha256": "9f081c389a30ea47a8dd11aabf5c2ef294810afb3f795521b6a5137008970cc0"
+    },
+    {
+      "path": "allocation-profile/sata-ring/data/host.jsonl",
+      "bytes": 297699,
+      "sha256": "96d18a1fa6c5250389992b43f83f286bd0e2fea3bec7f92cd8026dfc32ac6db5"
+    },
+    {
+      "path": "allocation-profile/sata-ring/data/writer0-final.json",
+      "bytes": 412,
+      "sha256": "05eebd5f5be46e0dfd1bf8104973be7886445f1b5f28763b3de79d222f3d5c25"
+    },
+    {
+      "path": "allocation-profile/sata-ring/data/writer0.jsonl",
+      "bytes": 746,
+      "sha256": "3fbdfa87164a0285fc466bdd96f296439a1c5ecfc7275ad3d534074de1b63af4"
+    },
+    {
+      "path": "allocation-profile/sata-ring/data/writer1-final.json",
+      "bytes": 413,
+      "sha256": "ea05f295136d9bc4df70dce1d2e9409891d61745c2160bc5b10935c28c732b9d"
+    },
+    {
+      "path": "allocation-profile/sata-ring/data/writer1.jsonl",
+      "bytes": 745,
+      "sha256": "59c684e72651b61e31f70b987e4b002daeb525275bb3d507281b5bb96cb929a7"
+    },
+    {
+      "path": "allocation-profile/sata-ring/data/writer2-final.json",
+      "bytes": 414,
+      "sha256": "4f753a6d839913bdecf7c8f54df0c63ca5d7efdca61221c0b2eeea700e95a592"
+    },
+    {
+      "path": "allocation-profile/sata-ring/data/writer2.jsonl",
+      "bytes": 739,
+      "sha256": "02f33435e0d8c7dc4e4ed27c99fcbbe0a0d92cb295a8ee64145b57ae1e5133b8"
+    },
+    {
+      "path": "allocation-profile/sata-ring/exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile/sata-ring/host-xfs-tracepoints.txt",
+      "bytes": 135,
+      "sha256": "95c5eb429f42c88a29d7f1c81f82201e9811db1b6d8e3eb08e361e6728a69a0d"
+    },
+    {
+      "path": "allocation-profile/sata-ring/host-xfs-tracepoints.txt.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile/sata-ring/identity.json",
+      "bytes": 369,
+      "sha256": "81443ee76b30fced35bff421bc65848ebbda1f54347d0bd11228d39aae0e2141"
+    },
+    {
+      "path": "allocation-profile/sata-ring/run.log",
+      "bytes": 28,
+      "sha256": "26b1741beed45cb4897c0bf4458158f80258e1df17c38bfc8199bf8d0e32f00f"
+    },
+    {
+      "path": "allocation-profile/sata-ring/strace-summary.txt",
+      "bytes": 1134,
+      "sha256": "9196f17acd47feddaf927d21b8c3ae5d0495cf80206a145edd04da68c838c829"
+    },
+    {
+      "path": "allocation-profile/sata-ring/strace-summary.txt.exit",
+      "bytes": 4,
+      "sha256": "ca2ebdf97d7469496b1f4b78958f9dc8447efdcb623953fee7b6996b762f6fff"
+    },
+    {
+      "path": "allocation-profile/sata-ring/strace-wall-exit.txt",
+      "bytes": 4,
+      "sha256": "ca2ebdf97d7469496b1f4b78958f9dc8447efdcb623953fee7b6996b762f6fff"
+    },
+    {
+      "path": "allocation-profile/sata-ring/strace-wall.txt",
+      "bytes": 1076,
+      "sha256": "142ac3c7c8bbcb10661101440a0ac1c0bc73b0a6a4d276d57020fd52d1b772f2"
+    },
+    {
+      "path": "allocation-profile/sata-ring/tracepoints.txt",
+      "bytes": 293,
+      "sha256": "43605df799af2e77c96e8e9711769ce96cf7f1636d1aca4ace6670b375c165be"
+    },
+    {
+      "path": "allocation-profile/sata-ring/tracepoints.txt.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "allocation-profile-controller.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "allocation-profile-queued-v1.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "allocation-profile-queued-v2.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "closure/allocation-summary-nvme.json",
+      "bytes": 4057,
+      "sha256": "945c360420f6f6ffae6db3a3d95477a32ffe72f9a72b5152dceecdc28a388a86"
+    },
+    {
+      "path": "closure/allocation-summary.json",
+      "bytes": 7811,
+      "sha256": "c6b461c6308d861cf046a73d37c1b547d1dcf8c39a658900b8cb9de6e09f4442"
+    },
+    {
+      "path": "closure/binary-provenance.json",
+      "bytes": 988,
+      "sha256": "1eb6bc7f773a1bbc709889d49b9ee8e0f8f6d8c9b8c684b0c57304be826f3b9e"
+    },
+    {
+      "path": "closure/build-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "closure/build.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "closure/full-buffered-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "closure/full-buffered.log",
+      "bytes": 17601,
+      "sha256": "10ea5f1da0d2e7b7640ea68801f37edec902153492881f17fa0c3233f2301027"
+    },
+    {
+      "path": "closure/full-direct-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "closure/full-direct.log",
+      "bytes": 17594,
+      "sha256": "29e55b6c92790c1502a7a478843a4afa98acce23be7b4bcda351a5925d7370ce"
+    },
+    {
+      "path": "closure/mnt-stop-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "closure/mnt-stop.log",
+      "bytes": 108,
+      "sha256": "a32309eb0d0b00bd86bd220cbff62178ad42d8aa163995e1a300a12c707c7019"
+    },
+    {
+      "path": "closure/mnt2-stop-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "closure/mnt2-stop.log",
+      "bytes": 111,
+      "sha256": "fdc42d19bb3bf0b13264cff75115d304ec42aa7f0e906b883242e86f1edb1be0"
+    },
+    {
+      "path": "closure/native-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "closure/native.log",
+      "bytes": 53123,
+      "sha256": "95b62cade4b2c721f797cfb6225a4c451d8b18a9e2f3c649c9cceb3bab6af3c2"
+    },
+    {
+      "path": "closure/peer-stall.strace",
+      "bytes": 202410,
+      "sha256": "72383c0ba71f5b4fdf0b93b755235398b564f9145bbd48077b88dcf173181c23"
+    },
+    {
+      "path": "closure/restore-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "closure/restore.log",
+      "bytes": 16070,
+      "sha256": "491b6dbbf11e382cea596e53681a0ea3f43406c296d3295390debcda86ca32a5"
+    },
+    {
+      "path": "closure/run-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "closure/w70-w80-integrity-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "closure/w70-w80-integrity.log",
+      "bytes": 2905,
+      "sha256": "2e4cc931d3fcdf5d8f2a8c7dc04fb68d78cb8c8b94479f6a8b5fff82af8fb77f"
+    },
+    {
+      "path": "closure/w78-processes-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "closure/w78-processes.log",
+      "bytes": 1604,
+      "sha256": "f0e12b31c28f18a8e580df2d42bbe75da5ea506c396f6494482b8439731fd937"
+    },
+    {
+      "path": "closure/w79-buffered-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "closure/w79-buffered.log",
+      "bytes": 907,
+      "sha256": "0dadb87002b4aa7fa359d058f1b6d8eecc7a12f25f48a63bbc137fa0f01750ce"
+    },
+    {
+      "path": "closure/w79-direct-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "closure/w79-direct.log",
+      "bytes": 905,
+      "sha256": "c679272087b755fc44bbaed234194c5d4d704f510e2d1402a713ef8858732c45"
+    },
+    {
+      "path": "closure/w80-replies-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "closure/w80-replies.log",
+      "bytes": 94,
+      "sha256": "7a9e0fdcf7e714a58d2d34c602a8be4c7fa4831143418765d712611cd6bd3696"
+    },
+    {
+      "path": "closure/w96-wal-failure-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "closure/w96-wal-failure.log",
+      "bytes": 732,
+      "sha256": "48c132684c506083acde101fdcf90ad18c3e493045f1044c97e23680177f5d2e"
+    },
+    {
+      "path": "closure/w97-nvme-0-grow/final.json",
+      "bytes": 1796,
+      "sha256": "3e720607d6d5e4c77541e177de5834e5379e58d77a81fab9df687280cbbc4fa1"
+    },
+    {
+      "path": "closure/w97-nvme-0-grow/host.jsonl",
+      "bytes": 771946,
+      "sha256": "0c83169fdf2e6024050616b8d7265d6cfa90597a093eb39cad18756b1b57135c"
+    },
+    {
+      "path": "closure/w97-nvme-0-grow/writer0-final.json",
+      "bytes": 418,
+      "sha256": "29353cf890d5f0a550d1e96c067e285ac1375e2a14a6822e482381a5f6b4a21c"
+    },
+    {
+      "path": "closure/w97-nvme-0-grow/writer0.jsonl",
+      "bytes": 2209,
+      "sha256": "d54023c7024a11283b798b4f45164d26f90022fe3ec988423f407c30504dcdb2"
+    },
+    {
+      "path": "closure/w97-nvme-0-grow/writer1-final.json",
+      "bytes": 419,
+      "sha256": "6f9267ad36c35f9023c45597ba348325748da02be8891bd93e036bf3eff43cb4"
+    },
+    {
+      "path": "closure/w97-nvme-0-grow/writer1.jsonl",
+      "bytes": 2212,
+      "sha256": "1c68221980139067f8226718aedf188f69e2ca791dc45925533b4dd34b019426"
+    },
+    {
+      "path": "closure/w97-nvme-0-grow/writer2-final.json",
+      "bytes": 419,
+      "sha256": "264673dea54ab8a0824b35f884638b0f85d0da680a935dd45b6415f8fa2d2b2a"
+    },
+    {
+      "path": "closure/w97-nvme-0-grow/writer2.jsonl",
+      "bytes": 2209,
+      "sha256": "4819c623fa81b8218c6cb8d378f1f39def8f0521fa997f2ed5443d0902d6b87a"
+    },
+    {
+      "path": "closure/w97-nvme-0-grow-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "closure/w97-nvme-0-grow.log",
+      "bytes": 29,
+      "sha256": "4dceb5eec893bcecc2dc92c609d0d6c3c284cd25236c8b55a3914bc88418228d"
+    },
+    {
+      "path": "closure/w97-nvme-1-ring/final.json",
+      "bytes": 1799,
+      "sha256": "e4c0ddfdca3bd9316b1c8c923a48475862e685dc934ae7d726a9ed2cbd8e6e50"
+    },
+    {
+      "path": "closure/w97-nvme-1-ring/host.jsonl",
+      "bytes": 780047,
+      "sha256": "c8d870c662be4d7b24b8f3e9626aa62444930535f03bceae80dd94a264ae9d05"
+    },
+    {
+      "path": "closure/w97-nvme-1-ring/writer0-final.json",
+      "bytes": 414,
+      "sha256": "6713f0f360dff68e5754b2f757f16ff708e9bd6a8751f7427954108ffac19ea9"
+    },
+    {
+      "path": "closure/w97-nvme-1-ring/writer0.jsonl",
+      "bytes": 2203,
+      "sha256": "fa169d8a8670a919a3e77f2ca1e35be39676b5988489b67784d6ab5e4a84e3cc"
+    },
+    {
+      "path": "closure/w97-nvme-1-ring/writer1-final.json",
+      "bytes": 416,
+      "sha256": "7592cfac31294d191e5cc0655cc5d8c362f7ec42e3a2f965207a037086bc8a84"
+    },
+    {
+      "path": "closure/w97-nvme-1-ring/writer1.jsonl",
+      "bytes": 2202,
+      "sha256": "cbe924664d5281ff5f53137051e5b97a71f6e0ee7d59f2d9d1e993cf16375b4d"
+    },
+    {
+      "path": "closure/w97-nvme-1-ring/writer2-final.json",
+      "bytes": 414,
+      "sha256": "043bfad31dca71dc59b7baa48c56a00e76b522855c292f0fbdbee201ad30cefb"
+    },
+    {
+      "path": "closure/w97-nvme-1-ring/writer2.jsonl",
+      "bytes": 2210,
+      "sha256": "c6cd55889a106596b65cde64c60ad5515fb08ac47811e3e8f571d22be2cd7665"
+    },
+    {
+      "path": "closure/w97-nvme-1-ring-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "closure/w97-nvme-1-ring.log",
+      "bytes": 29,
+      "sha256": "20316f780b01e756bb2cfe8a012b75e2e703b611a2270895abc3646f704b8b43"
+    },
+    {
+      "path": "closure/w97-nvme-2-ring/final.json",
+      "bytes": 1785,
+      "sha256": "1309af5de7d1797e0379455023d2d9199e1985ef430942734cfad7f861322960"
+    },
+    {
+      "path": "closure/w97-nvme-2-ring/host.jsonl",
+      "bytes": 780395,
+      "sha256": "dd4613262e025920d5282a927e42953b214fe7156dacfffc57b8e8784a56507a"
+    },
+    {
+      "path": "closure/w97-nvme-2-ring/writer0-final.json",
+      "bytes": 414,
+      "sha256": "5f432246e3882e6ff69a79b8d36360dc5d03ad0c45cde8b4ea9c2a0be08976e9"
+    },
+    {
+      "path": "closure/w97-nvme-2-ring/writer0.jsonl",
+      "bytes": 2205,
+      "sha256": "eeccfc2c1e5a6a5976efe5613432f1aad1a8816d0f7756c32d746ba7a1c91116"
+    },
+    {
+      "path": "closure/w97-nvme-2-ring/writer1-final.json",
+      "bytes": 416,
+      "sha256": "49223b1c498766cce696b414454f4a77620f6a6c818eb3dce9c807fb58939171"
+    },
+    {
+      "path": "closure/w97-nvme-2-ring/writer1.jsonl",
+      "bytes": 2202,
+      "sha256": "fe6f6a284c9ff091c7ce9dbb2f22882031eb7c36b3c95e692e475ab4cd60832d"
+    },
+    {
+      "path": "closure/w97-nvme-2-ring/writer2-final.json",
+      "bytes": 414,
+      "sha256": "5bfd9b70a28c04f5a5b23aa65a7a3bdfa6ffbbb093bff6d768a40fa242d76e7f"
+    },
+    {
+      "path": "closure/w97-nvme-2-ring/writer2.jsonl",
+      "bytes": 2206,
+      "sha256": "10a0bba9bf46e5087d294888f397c22f38bb1fc80429292f086a3329111d7be9"
+    },
+    {
+      "path": "closure/w97-nvme-2-ring-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "closure/w97-nvme-2-ring.log",
+      "bytes": 28,
+      "sha256": "16ec80165d21f2ca1a868e93ba5501437ef9c636bc7146c96c5073d49348b8a6"
+    },
+    {
+      "path": "closure/w97-nvme-3-grow/final.json",
+      "bytes": 1819,
+      "sha256": "bb2829955281a498c012793ae404fae9e5021bfcdf846b6877c7a49f2df63b8c"
+    },
+    {
+      "path": "closure/w97-nvme-3-grow/host.jsonl",
+      "bytes": 780203,
+      "sha256": "15df81e2ac180c3409656be5d31acd69860d9bee2bc04403fd31aabcfa02c94e"
+    },
+    {
+      "path": "closure/w97-nvme-3-grow/writer0-final.json",
+      "bytes": 427,
+      "sha256": "91dd8a40b8d8ecff7c2ef6ccc8c770c8cce7a831161d7f04a986bb753710bf89"
+    },
+    {
+      "path": "closure/w97-nvme-3-grow/writer0.jsonl",
+      "bytes": 2210,
+      "sha256": "722a02021a98074459e6a32693dc156432e49517937c1fc8dd8af991e3cfd57e"
+    },
+    {
+      "path": "closure/w97-nvme-3-grow/writer1-final.json",
+      "bytes": 426,
+      "sha256": "49ca6cbe5452b3cd350ff9553ca5b798276f860adefd62434cfe9636af47bd00"
+    },
+    {
+      "path": "closure/w97-nvme-3-grow/writer1.jsonl",
+      "bytes": 2209,
+      "sha256": "c5795961c6e4fb0d2c8d692248bb30896ab3d917cd3898a2ab0db02b5d68450c"
+    },
+    {
+      "path": "closure/w97-nvme-3-grow/writer2-final.json",
+      "bytes": 426,
+      "sha256": "3c0269d2dac67b4c18c86e5049e22be28b0c2370471d2330de4bcf51bd93b2a9"
+    },
+    {
+      "path": "closure/w97-nvme-3-grow/writer2.jsonl",
+      "bytes": 2213,
+      "sha256": "2523a9a05f72fbf7f404b40e169501f2fdfd3a4f02eee9028158b23a32cd337f"
+    },
+    {
+      "path": "closure/w97-nvme-3-grow-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "closure/w97-nvme-3-grow.log",
+      "bytes": 29,
+      "sha256": "4be2071a1514d7fc0abcbd2eea51a97331fc9e173964651f299a9610dbdc2c8c"
+    },
+    {
+      "path": "closure/w97-sata-0-grow/final.json",
+      "bytes": 1810,
+      "sha256": "f6c806f6055d953a3fe758d829805f8b968cc0562eae058b974dc3bdd41c955f"
+    },
+    {
+      "path": "closure/w97-sata-0-grow/host.jsonl",
+      "bytes": 780812,
+      "sha256": "76264748810156b357ae547710df3569b88d77e72abfc24524ede8d8a3a22f17"
+    },
+    {
+      "path": "closure/w97-sata-0-grow/writer0-final.json",
+      "bytes": 423,
+      "sha256": "25eec91c7bd39e76850aa614c444d2a32bda3724cfa84b074051b852a2ac0f65"
+    },
+    {
+      "path": "closure/w97-sata-0-grow/writer0.jsonl",
+      "bytes": 2262,
+      "sha256": "e48a390aedf892e4d6684e210da99edf532298bc59c95052e460341ff7fae03f"
+    },
+    {
+      "path": "closure/w97-sata-0-grow/writer1-final.json",
+      "bytes": 424,
+      "sha256": "b7e033e1a190f87b122f2ede2214252aa341ad2e4a04f337ba0a27b1a6e80706"
+    },
+    {
+      "path": "closure/w97-sata-0-grow/writer1.jsonl",
+      "bytes": 2259,
+      "sha256": "385e7e3a360f237ad7b3bdd478475b0f8cd0ad5c8f1dc22def86fbc7c07c9081"
+    },
+    {
+      "path": "closure/w97-sata-0-grow/writer2-final.json",
+      "bytes": 423,
+      "sha256": "a30fa213cba8b59faa52868f346ecf65dac290fe6404c49b1ef2c815a02339b4"
+    },
+    {
+      "path": "closure/w97-sata-0-grow/writer2.jsonl",
+      "bytes": 2253,
+      "sha256": "1dd7bf55e209d6edd749dd81bdaacf3c6fefd45cac11b2ff62e4cfe92731c0de"
+    },
+    {
+      "path": "closure/w97-sata-0-grow-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "closure/w97-sata-0-grow.log",
+      "bytes": 27,
+      "sha256": "d2ff696ae0b8546ecb48719ac3d6032ddb79442e21fab6c8a89b97a3d767536f"
+    },
+    {
+      "path": "closure/w97-sata-1-ring/final.json",
+      "bytes": 1786,
+      "sha256": "56a84fcb8d627821061d945eb3c69167812ad2122e040fa71394a25b40c474c7"
+    },
+    {
+      "path": "closure/w97-sata-1-ring/host.jsonl",
+      "bytes": 780862,
+      "sha256": "6438ff1e56b0dc12d332cd6d1142c92d7971cd2a7bb4e5681b940eb496fea87c"
+    },
+    {
+      "path": "closure/w97-sata-1-ring/writer0-final.json",
+      "bytes": 415,
+      "sha256": "6d538e7679bb435464701b2794e5d8bac32ee2da4af145f8aa82490fbcbc96ae"
+    },
+    {
+      "path": "closure/w97-sata-1-ring/writer0.jsonl",
+      "bytes": 2237,
+      "sha256": "524730c108f67d6cdf0593bc5ebe9e88f15dbde01a5e5f40955d6226c0bb1b44"
+    },
+    {
+      "path": "closure/w97-sata-1-ring/writer1-final.json",
+      "bytes": 415,
+      "sha256": "d9c19700d93289879d26e032e6d9a9d0fab888e59c85e1d2de7f47fcafd8303c"
+    },
+    {
+      "path": "closure/w97-sata-1-ring/writer1.jsonl",
+      "bytes": 2238,
+      "sha256": "a07427a24430613a941d3ac88e91ec0bb4840db38a85c5d896a339a3d72aa1bb"
+    },
+    {
+      "path": "closure/w97-sata-1-ring/writer2-final.json",
+      "bytes": 415,
+      "sha256": "3789b906e61a139070cd820c5442c94854b27501eba11565ccf6e20a3993729d"
+    },
+    {
+      "path": "closure/w97-sata-1-ring/writer2.jsonl",
+      "bytes": 2240,
+      "sha256": "c32a3b2c290baa2c0fddf2b95e452c4c55d34b55ed4996c2699621d3f09a073d"
+    },
+    {
+      "path": "closure/w97-sata-1-ring-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "closure/w97-sata-1-ring.log",
+      "bytes": 28,
+      "sha256": "2f1e0f05cd827b54b066d8007e77eacfde40fb2b7fa363e6457549badeec766c"
+    },
+    {
+      "path": "closure/w97-sata-2-ring/final.json",
+      "bytes": 1780,
+      "sha256": "4097d57a31ca4845b5efbefc65a6e0c3b33f6d87068a1a572acfcc0625a8e996"
+    },
+    {
+      "path": "closure/w97-sata-2-ring/host.jsonl",
+      "bytes": 780857,
+      "sha256": "f25cd34d26dec31cca8a9581bf8a8489365a38ec61631904d024397d9a5a2e73"
+    },
+    {
+      "path": "closure/w97-sata-2-ring/writer0-final.json",
+      "bytes": 412,
+      "sha256": "4eb74b3526d85b7f36f3712f867a7cca5f46fc5dc42caac58561250e10a80dc2"
+    },
+    {
+      "path": "closure/w97-sata-2-ring/writer0.jsonl",
+      "bytes": 2247,
+      "sha256": "b82202d69fa3353a1e407e5b4996c604b94b1d1ec8c15695eb95cc312259cd4b"
+    },
+    {
+      "path": "closure/w97-sata-2-ring/writer1-final.json",
+      "bytes": 413,
+      "sha256": "cfce45762a0e248d4ccaa0977652c35c5719393c0025536efeeebd5b9aaaec4b"
+    },
+    {
+      "path": "closure/w97-sata-2-ring/writer1.jsonl",
+      "bytes": 2240,
+      "sha256": "9d4dd25fa6e4fd09d133e847d547f7e68fe2ecaa727add113b7e711f9f917420"
+    },
+    {
+      "path": "closure/w97-sata-2-ring/writer2-final.json",
+      "bytes": 414,
+      "sha256": "ac15ff2777b40a0e83044074d6247f15c736392a0cbfd49d922ff3457df99f03"
+    },
+    {
+      "path": "closure/w97-sata-2-ring/writer2.jsonl",
+      "bytes": 2243,
+      "sha256": "d25651e059e4fd0a69c262102b679254c1a583bf585d9a4cc0921d1c76c17477"
+    },
+    {
+      "path": "closure/w97-sata-2-ring-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "closure/w97-sata-2-ring.log",
+      "bytes": 28,
+      "sha256": "3498790aa6ad3e8199106969a3fb8c8a5b803fbba0c74ae827f0950eb582fb7c"
+    },
+    {
+      "path": "closure/w97-sata-3-grow/final.json",
+      "bytes": 1811,
+      "sha256": "602888206354449c1a117d431809e34d580fd3c2a1e4c13f46267013e7b2a2c6"
+    },
+    {
+      "path": "closure/w97-sata-3-grow/host.jsonl",
+      "bytes": 780814,
+      "sha256": "de738a89850232d01c5f99465b24c52028e0507b257d6bdd4f980d3b4fd1b92e"
+    },
+    {
+      "path": "closure/w97-sata-3-grow/writer0-final.json",
+      "bytes": 424,
+      "sha256": "ac62adb98365416422e05cbb8b8e80a0a9b39107b92a9af7d493807e581220c2"
+    },
+    {
+      "path": "closure/w97-sata-3-grow/writer0.jsonl",
+      "bytes": 2253,
+      "sha256": "013fdc8839d497302d7b8fc549509b14643bb326df47d58c5e9cfa51b03bd9fb"
+    },
+    {
+      "path": "closure/w97-sata-3-grow/writer1-final.json",
+      "bytes": 423,
+      "sha256": "10986175806c7f1b456fe700bdfa7deeb0cf12b080f004b11f559edc83f6203d"
+    },
+    {
+      "path": "closure/w97-sata-3-grow/writer1.jsonl",
+      "bytes": 2259,
+      "sha256": "72893cf4e03bc835897eeeda2b3bd00d08cc1c906d24aea5f6e5f36a6c222a45"
+    },
+    {
+      "path": "closure/w97-sata-3-grow/writer2-final.json",
+      "bytes": 422,
+      "sha256": "662aca8484edf472c7cdfd3e8e5a4069ea57ad7b10eb09e4864e3f46c8512c09"
+    },
+    {
+      "path": "closure/w97-sata-3-grow/writer2.jsonl",
+      "bytes": 2262,
+      "sha256": "de5f8d7a3ff6cc8001f1e64ea0de44119b64ffa23b84449e7ea6234660bf140d"
+    },
+    {
+      "path": "closure/w97-sata-3-grow-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "closure/w97-sata-3-grow.log",
+      "bytes": 29,
+      "sha256": "064f75d93c8a1b0e039261cfd53f3a2357603a6e044fadb93d6eda85c8fa1006"
+    },
+    {
+      "path": "closure-controller.log",
+      "bytes": 1143,
+      "sha256": "1ff59bbb10223155761d515d001668bb7c0f4344e686f4e93c2cd83a1271bae5"
+    },
+    {
+      "path": "device-context.json",
+      "bytes": 684,
+      "sha256": "1d6c6747ae015fac5f36f18c040eeff07b512a8bbc03398393fc6ee430a9bf0a"
+    },
+    {
+      "path": "final-service.json",
+      "bytes": 7175,
+      "sha256": "3d3877be017c0c29fd778da7c92ba9fe7dd8d01db40c99065b4392f3c4a9a68b"
+    },
+    {
+      "path": "full-fixtures/buffered/append-leader-death.json",
+      "bytes": 85,
+      "sha256": "055358bf55870bcabee6e3fca58dcc74656d5924f4ec52a33d10a711c30b9cb7"
+    },
+    {
+      "path": "full-fixtures/buffered/append-replay-acknowledged-next.log",
+      "bytes": 915,
+      "sha256": "59ea46234f4071886697d50b9b519c966b81919317dc6960256de12c6f8a415a"
+    },
+    {
+      "path": "full-fixtures/buffered/append-replay-changed-payload.log",
+      "bytes": 883,
+      "sha256": "16b66c9bbf83b6ad3d1217e9b3860d6d418077766fcb12cdb56b3f83d26352ea"
+    },
+    {
+      "path": "full-fixtures/buffered/append-replay-cold-next.log",
+      "bytes": 915,
+      "sha256": "59ea46234f4071886697d50b9b519c966b81919317dc6960256de12c6f8a415a"
+    },
+    {
+      "path": "full-fixtures/buffered/append-replay-cold-retired.log",
+      "bytes": 883,
+      "sha256": "16b66c9bbf83b6ad3d1217e9b3860d6d418077766fcb12cdb56b3f83d26352ea"
+    },
+    {
+      "path": "full-fixtures/buffered/append-replay-cold-retry.log",
+      "bytes": 883,
+      "sha256": "83887341bd5df0967242b6e9c574850cc9e2a9c7d73902b98d57ceab4920043d"
+    },
+    {
+      "path": "full-fixtures/buffered/append-replay-initial.log",
+      "bytes": 883,
+      "sha256": "83887341bd5df0967242b6e9c574850cc9e2a9c7d73902b98d57ceab4920043d"
+    },
+    {
+      "path": "full-fixtures/buffered/append-replay-leader-death.log",
+      "bytes": 883,
+      "sha256": "83887341bd5df0967242b6e9c574850cc9e2a9c7d73902b98d57ceab4920043d"
+    },
+    {
+      "path": "full-fixtures/buffered/append-replay-retired.log",
+      "bytes": 883,
+      "sha256": "16b66c9bbf83b6ad3d1217e9b3860d6d418077766fcb12cdb56b3f83d26352ea"
+    },
+    {
+      "path": "full-fixtures/buffered/final-status.json",
+      "bytes": 5107,
+      "sha256": "2c0718ec9caabac8de129f8159f67d251ea214d490271e50ea6f03742af3b7e6"
+    },
+    {
+      "path": "full-fixtures/buffered/fuse.log",
+      "bytes": 4587423,
+      "sha256": "98cd4e5fbc5cd101665e9d694319547c459bdcaa9fda5215b442854421607939"
+    },
+    {
+      "path": "full-fixtures/buffered/last-close-gc-effect.json",
+      "bytes": 335,
+      "sha256": "2893ccc5f55bf1192af8f3d6fb088747ea2e7af3bdeea61cd368596f90b6c6dc"
+    },
+    {
+      "path": "full-fixtures/buffered/manifest.json",
+      "bytes": 3297,
+      "sha256": "623f06e46acacfcfc359c6ae7994135ce70edaa6e3d2a520789a36b84c8e9244"
+    },
+    {
+      "path": "full-fixtures/buffered/n1/mdraft/log/raft.log",
+      "bytes": 6291456,
+      "sha256": "ad9bf3154bd68a74cae41f36b96d860a9edf304f2e9a959dc7536f759de635cb"
+    },
+    {
+      "path": "full-fixtures/buffered/n1.log",
+      "bytes": 321474,
+      "sha256": "0d7950d93210270b263d2524acca97079241e227d479787a48b1decbf4c551ae"
+    },
+    {
+      "path": "full-fixtures/buffered/n2/mdraft/log/raft.log",
+      "bytes": 8388608,
+      "sha256": "3c8248ba3c3860d86026e07993ca8cefd20ec651ca62fe6d6630cb07f67bf08a"
+    },
+    {
+      "path": "full-fixtures/buffered/n2.log",
+      "bytes": 354459,
+      "sha256": "848b122193a3392410aa049343abf321a76668ecb013248435ecb9909e8b1608"
+    },
+    {
+      "path": "full-fixtures/buffered/n3.log",
+      "bytes": 585934,
+      "sha256": "9e240a6b25f3194e3aa515e2e8fade1c070ce3bf6e30b5cf85f40363327f9ec6"
+    },
+    {
+      "path": "full-fixtures/buffered/n4.log",
+      "bytes": 121092,
+      "sha256": "3bc36f93a6ee073a043fe71f0c43af9e306f4f5202fd9c517ae37cf26293fe52"
+    },
+    {
+      "path": "full-fixtures/buffered/peer-fuse.log",
+      "bytes": 480212,
+      "sha256": "bdcf6e0b85120a71518ed726ad878b0f9bf7fbbe107dd69b4fb6097d73f5756a"
+    },
+    {
+      "path": "full-fixtures/buffered/posix-gc-effect.json",
+      "bytes": 274,
+      "sha256": "7cee94ce738f1ee619906aedb4d3216b543b848b7f1527c12c259d8795b982cb"
+    },
+    {
+      "path": "full-fixtures/buffered/posix.tsv",
+      "bytes": 12865,
+      "sha256": "3d67f7022ba0e6568237aba462e0e06022825d9c2b49a8ec401ce7166ec3a20f"
+    },
+    {
+      "path": "full-fixtures/buffered/posix2.tsv",
+      "bytes": 4284,
+      "sha256": "d94e7ce750df9ac74a90079e74226ce87bb3fddbd0b83e890b46896e9a460db6"
+    },
+    {
+      "path": "full-fixtures/buffered/shutdown-mutations.json",
+      "bytes": 345,
+      "sha256": "a479c6230e83eee2eb9ba348b1cafbb22128c31d9c2a17af8e833978906b8067"
+    },
+    {
+      "path": "full-fixtures/buffered/stop-dirty-recovery.json",
+      "bytes": 298,
+      "sha256": "91ea8b708f6ff477c029021239302d999fdcd1f3df19e537e8d44955e373fe2f"
+    },
+    {
+      "path": "full-fixtures/buffered/sync-peer.log",
+      "bytes": 3602,
+      "sha256": "322c3732dba6656d18df9eae9f9f0c945d7a8c837e7d4cb8dc5fcb3c86fe4534"
+    },
+    {
+      "path": "full-fixtures/buffered/synchronous-write-fault.json",
+      "bytes": 469,
+      "sha256": "70a812130f5e47cc9fd37f1182c03a2df73bdf52c65f845cf44477693ba528c1"
+    },
+    {
+      "path": "full-fixtures/buffered/synchronous-writes.json",
+      "bytes": 2895,
+      "sha256": "f57dcf2729a1612ea31620c8ad650f312288385646f573b6be8127d023e168f5"
+    },
+    {
+      "path": "full-fixtures/buffered/wal-tail-recovery.json",
+      "bytes": 800,
+      "sha256": "2bc1277b5f274c8148bcb39b0830a2c1dcc8f74f6abd18d10e46721ce7087ce0"
+    },
+    {
+      "path": "full-fixtures/direct/append-leader-death.json",
+      "bytes": 85,
+      "sha256": "055358bf55870bcabee6e3fca58dcc74656d5924f4ec52a33d10a711c30b9cb7"
+    },
+    {
+      "path": "full-fixtures/direct/append-replay-acknowledged-next.log",
+      "bytes": 915,
+      "sha256": "59ea46234f4071886697d50b9b519c966b81919317dc6960256de12c6f8a415a"
+    },
+    {
+      "path": "full-fixtures/direct/append-replay-changed-payload.log",
+      "bytes": 883,
+      "sha256": "16b66c9bbf83b6ad3d1217e9b3860d6d418077766fcb12cdb56b3f83d26352ea"
+    },
+    {
+      "path": "full-fixtures/direct/append-replay-cold-next.log",
+      "bytes": 915,
+      "sha256": "59ea46234f4071886697d50b9b519c966b81919317dc6960256de12c6f8a415a"
+    },
+    {
+      "path": "full-fixtures/direct/append-replay-cold-retired.log",
+      "bytes": 883,
+      "sha256": "16b66c9bbf83b6ad3d1217e9b3860d6d418077766fcb12cdb56b3f83d26352ea"
+    },
+    {
+      "path": "full-fixtures/direct/append-replay-cold-retry.log",
+      "bytes": 883,
+      "sha256": "83887341bd5df0967242b6e9c574850cc9e2a9c7d73902b98d57ceab4920043d"
+    },
+    {
+      "path": "full-fixtures/direct/append-replay-initial.log",
+      "bytes": 883,
+      "sha256": "83887341bd5df0967242b6e9c574850cc9e2a9c7d73902b98d57ceab4920043d"
+    },
+    {
+      "path": "full-fixtures/direct/append-replay-leader-death.log",
+      "bytes": 883,
+      "sha256": "83887341bd5df0967242b6e9c574850cc9e2a9c7d73902b98d57ceab4920043d"
+    },
+    {
+      "path": "full-fixtures/direct/append-replay-retired.log",
+      "bytes": 883,
+      "sha256": "16b66c9bbf83b6ad3d1217e9b3860d6d418077766fcb12cdb56b3f83d26352ea"
+    },
+    {
+      "path": "full-fixtures/direct/final-status.json",
+      "bytes": 5103,
+      "sha256": "62555b2b81035a8f022cfbf12ff1dfa7b85c388891c3758c730a29f7328ed592"
+    },
+    {
+      "path": "full-fixtures/direct/fuse.log",
+      "bytes": 4754567,
+      "sha256": "76d50db86aafafeb6e20450b96855cd761938a4fb8f88f4b80c1f37f0af43d82"
+    },
+    {
+      "path": "full-fixtures/direct/last-close-gc-effect.json",
+      "bytes": 335,
+      "sha256": "d092c78f6a9ba4a2b9b4b1386d9f9e0f02086ab3e677a0f134734b5b02bfbc80"
+    },
+    {
+      "path": "full-fixtures/direct/manifest.json",
+      "bytes": 3277,
+      "sha256": "0b97640da16a5eb281c909ff1a794b060ff2b4563bf530b092f1119630d14902"
+    },
+    {
+      "path": "full-fixtures/direct/n1/mdraft/log/raft.log",
+      "bytes": 3145728,
+      "sha256": "f7f06c2a0ba26cd11c30d895abf9d0406be9023b550178cffbd0aacc8f151c81"
+    },
+    {
+      "path": "full-fixtures/direct/n1.log",
+      "bytes": 186414,
+      "sha256": "7d8b0ffbf2e36ef714eba7a640f28022ea337dca6fda1e4edb4f243a47e4b4d2"
+    },
+    {
+      "path": "full-fixtures/direct/n2/mdraft/log/raft.log",
+      "bytes": 9437184,
+      "sha256": "8358b4f82219aabd5f4a7c9b2f9655cf8db1db8a26f6fde6768f10c7e00c0c65"
+    },
+    {
+      "path": "full-fixtures/direct/n2.log",
+      "bytes": 512264,
+      "sha256": "7ce070676c1979b37b1b4265fefd0611ecf1e159f322a58977d00d972242588f"
+    },
+    {
+      "path": "full-fixtures/direct/n3.log",
+      "bytes": 367388,
+      "sha256": "37921ec934f6d98bbd92b9772007ef29277fb90683b91d0c40d6d91efd77ccad"
+    },
+    {
+      "path": "full-fixtures/direct/n4.log",
+      "bytes": 285237,
+      "sha256": "ff2156831c8b1ca60eb570316891cdfea06c811f773517f7e7ce6d768ceda6d8"
+    },
+    {
+      "path": "full-fixtures/direct/peer-fuse.log",
+      "bytes": 659976,
+      "sha256": "a5e8d6c3f999adb8497c8aa722553ca5f217686b10bb302a284044068d3e8667"
+    },
+    {
+      "path": "full-fixtures/direct/posix-gc-effect.json",
+      "bytes": 275,
+      "sha256": "1726af9853787a4bd7cf6a3c53830acdce8fb1216551f444a0a61172f2dd1a27"
+    },
+    {
+      "path": "full-fixtures/direct/posix.tsv",
+      "bytes": 12865,
+      "sha256": "41f9da74c1bb55bb92a5e69aa3b5a12bc200b38a6fbc4a7aa1fc3b873a38a6c3"
+    },
+    {
+      "path": "full-fixtures/direct/posix2.tsv",
+      "bytes": 4285,
+      "sha256": "fe7ef40e68d2d9bdcc1d7143523bca74da4f98418bb3cfd26fe7922000d8a18a"
+    },
+    {
+      "path": "full-fixtures/direct/shutdown-mutations.json",
+      "bytes": 347,
+      "sha256": "699d5d7f3cfbffd07da0d44c4835a7bda5a4989d94bffb5d0fa73c4cca2a4740"
+    },
+    {
+      "path": "full-fixtures/direct/stop-dirty-recovery.json",
+      "bytes": 299,
+      "sha256": "07cec73c61ac57d5199dbff0e283e773e6418157de5a9e06804aeead38f3498c"
+    },
+    {
+      "path": "full-fixtures/direct/sync-peer.log",
+      "bytes": 3602,
+      "sha256": "bc055d3c9f050aa69d6ee41702f866c3cdb3e6fd61d9819a0a08a573e1cd3fea"
+    },
+    {
+      "path": "full-fixtures/direct/synchronous-write-fault.json",
+      "bytes": 469,
+      "sha256": "70a812130f5e47cc9fd37f1182c03a2df73bdf52c65f845cf44477693ba528c1"
+    },
+    {
+      "path": "full-fixtures/direct/synchronous-writes.json",
+      "bytes": 2894,
+      "sha256": "61660ed0c3ab36457bd63e0690b7bd287bfc527770ff1baca8ddbc572fc1e5af"
+    },
+    {
+      "path": "full-fixtures/direct/wal-tail-recovery.json",
+      "bytes": 792,
+      "sha256": "ec29d020432318caf17ee001d5bf4716734c69404d1f8610d3da4513576a40c6"
+    },
+    {
+      "path": "full-fixtures/wal-failure/fuse.log",
+      "bytes": 1700,
+      "sha256": "c2375ae5703c4bf017a9f68392b3414fb1c4b0f0234db84c8bb012963e90c6a6"
+    },
+    {
+      "path": "full-fixtures/wal-failure/kv-wal-persistence.json",
+      "bytes": 364,
+      "sha256": "768c8b2e501af325271ed6006eef85e6d676e43daa3aee5bbe2b5eeaf554cf03"
+    },
+    {
+      "path": "full-fixtures/wal-failure/manifest.json",
+      "bytes": 3284,
+      "sha256": "f3a1a5496238f2521b080ce2e9bf140b34cc88183492667d581b18c0a2355f62"
+    },
+    {
+      "path": "full-fixtures/wal-failure/n1/mdraft/log/raft.log",
+      "bytes": 1048576,
+      "sha256": "6db89e3163e7f34d9fe0d01f594fd794cdb382044e506e13be7f673149b65dad"
+    },
+    {
+      "path": "full-fixtures/wal-failure/n1.log",
+      "bytes": 5033,
+      "sha256": "19c62d26d423c3dbdce7bb7e01e8fd865d851fbee625ee2366e47348cdc27731"
+    },
+    {
+      "path": "full-fixtures/wal-failure/n2/mdraft/log/raft.log",
+      "bytes": 1048576,
+      "sha256": "347cd2a67720366bfa52271c20a1dc39fb7e4cac2c98e5127d3b6e16a4466a1d"
+    },
+    {
+      "path": "full-fixtures/wal-failure/n2.log",
+      "bytes": 5315,
+      "sha256": "b295ce839685ecdd38dff0f4b68ad91c508f6ae657858d2c43be2fc58aa8659f"
+    },
+    {
+      "path": "full-fixtures/wal-failure/n3.log",
+      "bytes": 4017,
+      "sha256": "3529689b1b844347643d6daf95c10530ee0019dd58813de11f0c9406c598027f"
+    },
+    {
+      "path": "full-fixtures/wal-failure/n4.log",
+      "bytes": 3089,
+      "sha256": "ba7c9bae5fe93384c647c0149d17adeb6180d363ff233075ca8a3a2b3937b388"
+    },
+    {
+      "path": "native-incomplete-copy/closure/binary-provenance.json",
+      "bytes": 988,
+      "sha256": "1eb6bc7f773a1bbc709889d49b9ee8e0f8f6d8c9b8c684b0c57304be826f3b9e"
+    },
+    {
+      "path": "native-incomplete-copy/closure/build-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "native-incomplete-copy/closure/build.log",
+      "bytes": 63675,
+      "sha256": "1534d7f81f145e474d0758d6f126027a337822837eef2a757740180ac27f004b"
+    },
+    {
+      "path": "native-incomplete-copy/closure/failure.txt",
+      "bytes": 402,
+      "sha256": "1cf1de6837a6f553ff8870dfe9ef1bfd0babd32ced9e5270b6022e0f78a5100e"
+    },
+    {
+      "path": "native-incomplete-copy/closure/native-exit.txt",
+      "bytes": 2,
+      "sha256": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3"
+    },
+    {
+      "path": "native-incomplete-copy/closure/native.log",
+      "bytes": 53904,
+      "sha256": "23ee5282c6e8b2300b785fc9b8645c9158326671897bee38181e6d06177e040c"
+    },
+    {
+      "path": "native-incomplete-copy/closure-controller.log",
+      "bytes": 494,
+      "sha256": "b7d7aef267a6cb00bbde8ccbe9f93e52689b1939a2a29fa27361658bb2dfb50d"
+    },
+    {
+      "path": "native-incomplete-copy/sanitizer-controller.log",
+      "bytes": 267,
+      "sha256": "d5c51585fc0c7e7d2a989a9eb2fcd4e36a064934f25af2df7d21e545abce31b2"
+    },
+    {
+      "path": "nuc_closure.py",
+      "bytes": 5096,
+      "sha256": "8f0543ecea99e38463ca0d88e29e5c0397b44ba0dac4034717ef11de7aa1650e"
+    },
+    {
+      "path": "nuc_durable_written.py",
+      "bytes": 5545,
+      "sha256": "5b19108a8f39f70f8504a9638cc793b818159e55bce07b4fa1301d0fe6f804d2"
+    },
+    {
+      "path": "nuc_sanitizers.py",
+      "bytes": 1524,
+      "sha256": "880ab20dcd800b1003f8e1fa66badee5ffa36960ea911e7ebcca9aa8505c4b4c"
+    },
+    {
+      "path": "nuc_w96.py",
+      "bytes": 4074,
+      "sha256": "863dc56b066c7b256c861fd2429a042fc3fb47d8d2d557a54bdb8d52c84a3df7"
+    },
+    {
+      "path": "nuc_w96_replay.py",
+      "bytes": 1885,
+      "sha256": "766d148e72de3c44e13927b6f6bd14e62a968f3db0064235cd4b159c22f04a3a"
+    },
+    {
+      "path": "nuc_wall_strace.py",
+      "bytes": 1238,
+      "sha256": "b230b28f7b888b0693527f96b3c20a86dfc933616ca510540d1663201d5a6266"
+    },
+    {
+      "path": "nuc_written_ring.py",
+      "bytes": 3064,
+      "sha256": "2d5167cf4b0db8941f0967881c6ddf66d8d4ebd57863e5c0b16749287fb62c6c"
+    },
+    {
+      "path": "operator-fixtures/w78/dead/.efs-engine",
+      "bytes": 128,
+      "sha256": "6cc7db6463ad0b65d871ee5705b9e1a10fb3f70f16000012e91506004f7a093c"
+    },
+    {
+      "path": "operator-fixtures/w78/dead/.efs-engine-lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "operator-fixtures/w78/dead/log/efsd.log",
+      "bytes": 683,
+      "sha256": "1d97ca22bfd2078524e8afa607ce98291dcba6647962c589e3e12b191d9cb9ac"
+    },
+    {
+      "path": "operator-fixtures/w78/dead/mdraft/boot.bin",
+      "bytes": 8,
+      "sha256": "02c58f4ddf8603cf270cb1212e44fe7334d52bd2a87e9636af3a69d2d6fed3bb"
+    },
+    {
+      "path": "operator-fixtures/w78/dead/mdraft/kv/QUERY-REVISIONS",
+      "bytes": 32856,
+      "sha256": "944c9b397d2dbabcbd18c8c553cd653007bdcfcc1881d61b72b9818489050035"
+    },
+    {
+      "path": "operator-fixtures/w78/dead/mdraft/kv/wal",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "operator-fixtures/w78/dead/mdraft/log/raft.log",
+      "bytes": 1048576,
+      "sha256": "744b5925aed5a2e3afef11d04834e88e6cffb9a6ac4a6a8c5eddc39a44d627c7"
+    },
+    {
+      "path": "operator-fixtures/w78/dead/meta/cluster_nodes.bin",
+      "bytes": 4212,
+      "sha256": "888012ffc9bb54bdca163edf15ee6ca6c569a68b9eb8c5326024288b65d86abe"
+    },
+    {
+      "path": "operator-fixtures/w78/dead/meta/usage.bin",
+      "bytes": 16,
+      "sha256": "598a7d96705af3f4a1f4a1868de2aaec54dfb2a720f73433a146e2d161e82204"
+    },
+    {
+      "path": "operator-fixtures/w78/dead-start.log",
+      "bytes": 466,
+      "sha256": "a38d2d2ddec30235d29ddfa0034cc8741fb751abecd33127d6d828a94cb5c342"
+    },
+    {
+      "path": "operator-fixtures/w78/dead-stop.log",
+      "bytes": 150,
+      "sha256": "31daf8da7e0a3c43416be58f56b57f846024eb7a8e294ce590948425100aedb9"
+    },
+    {
+      "path": "operator-fixtures/w78/invalid/.efs-engine",
+      "bytes": 128,
+      "sha256": "6c80bb8cfc2e705ed8484f97d841e0716bae8f298f35ded6860dc2cc0bb4f9af"
+    },
+    {
+      "path": "operator-fixtures/w78/invalid/.efs-engine-lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "operator-fixtures/w78/invalid/log/efsd.log",
+      "bytes": 687,
+      "sha256": "a4796ca25dfa17547befc86d4cb5e0d6a1e8061f13894452fd4da370688009c0"
+    },
+    {
+      "path": "operator-fixtures/w78/invalid/mdraft/boot.bin",
+      "bytes": 8,
+      "sha256": "4d67ca545128caf4e4799a83696a0b1e60c9a73ed526ba29d9d193a19a41b3fc"
+    },
+    {
+      "path": "operator-fixtures/w78/invalid/mdraft/kv/QUERY-REVISIONS",
+      "bytes": 32856,
+      "sha256": "38dde9d13a084d392c3507c1f06e112982e1dd72408758734f1262b5f81b6d12"
+    },
+    {
+      "path": "operator-fixtures/w78/invalid/mdraft/kv/wal",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "operator-fixtures/w78/invalid/mdraft/log/raft.log",
+      "bytes": 1048576,
+      "sha256": "744b5925aed5a2e3afef11d04834e88e6cffb9a6ac4a6a8c5eddc39a44d627c7"
+    },
+    {
+      "path": "operator-fixtures/w78/invalid/meta/cluster_nodes.bin",
+      "bytes": 4212,
+      "sha256": "dc126294a95a87daf3b474bb2eaa2cfb7de5a82eb9cf804fe3e50a5a00a202b0"
+    },
+    {
+      "path": "operator-fixtures/w78/invalid/meta/usage.bin",
+      "bytes": 16,
+      "sha256": "598a7d96705af3f4a1f4a1868de2aaec54dfb2a720f73433a146e2d161e82204"
+    },
+    {
+      "path": "operator-fixtures/w78/invalid-start.log",
+      "bytes": 512,
+      "sha256": "b6ed4cc83ec72a12748a683db64cf02236046246afde22784a478d7bae13b1ea"
+    },
+    {
+      "path": "operator-fixtures/w78/invalid-stop.log",
+      "bytes": 156,
+      "sha256": "bca818d0a15cef46d2588048003cc7bfcb99896d8fff9bdfc1687dc00e830a11"
+    },
+    {
+      "path": "operator-fixtures/w78/result.json",
+      "bytes": 1916,
+      "sha256": "dae6e590c91424f8a62fd1cc69b1948ad3f03bbc13964873835a2a594ff1cd86"
+    },
+    {
+      "path": "operator-fixtures/w78/unrelated/.efs-engine",
+      "bytes": 128,
+      "sha256": "82a35fc8b4b4a7bbff7e708f53722e1404e045170c08f7bcc8aa723ebfd1324a"
+    },
+    {
+      "path": "operator-fixtures/w78/unrelated/.efs-engine-lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "operator-fixtures/w78/unrelated/log/efsd.log",
+      "bytes": 688,
+      "sha256": "cd6ef00ca7d9e933b5d7bba7cd9cbde1c96d4742119702f0db7952341b9b99e3"
+    },
+    {
+      "path": "operator-fixtures/w78/unrelated/mdraft/boot.bin",
+      "bytes": 8,
+      "sha256": "921f499d0e7ef833232eae3a1af34eaff50be023dd7b6dae3471bb67770434d1"
+    },
+    {
+      "path": "operator-fixtures/w78/unrelated/mdraft/kv/QUERY-REVISIONS",
+      "bytes": 32856,
+      "sha256": "a500b97725a1cf9c1a44ccca5e7e326267f2a9a1b979e21e4b83ff39889370e5"
+    },
+    {
+      "path": "operator-fixtures/w78/unrelated/mdraft/kv/wal",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "operator-fixtures/w78/unrelated/mdraft/log/raft.log",
+      "bytes": 1048576,
+      "sha256": "744b5925aed5a2e3afef11d04834e88e6cffb9a6ac4a6a8c5eddc39a44d627c7"
+    },
+    {
+      "path": "operator-fixtures/w78/unrelated/meta/cluster_nodes.bin",
+      "bytes": 4212,
+      "sha256": "9c855f670ab86d3020c952c66c9b2908d1dc03755573b9a3b24eaddadbd858c6"
+    },
+    {
+      "path": "operator-fixtures/w78/unrelated/meta/usage.bin",
+      "bytes": 16,
+      "sha256": "598a7d96705af3f4a1f4a1868de2aaec54dfb2a720f73433a146e2d161e82204"
+    },
+    {
+      "path": "operator-fixtures/w78/unrelated-start.log",
+      "bytes": 481,
+      "sha256": "c4cb99cd1a3c15c5e1bff64ef1644b060c2bcac3aa315dc80d5344556930e19b"
+    },
+    {
+      "path": "operator-fixtures/w78/unrelated-stop.log",
+      "bytes": 160,
+      "sha256": "1e9caaf4aaf766fdd661ea103f0cfdc8267d092782900ca8a87107a01a8a73c6"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/connect.c",
+      "bytes": 869,
+      "sha256": "df0f823dbf9ffb71909e997677c65552e1a545b57c7897a428ca3fd0423fb456"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/connect.so",
+      "bytes": 16080,
+      "sha256": "607f70872dc3a842f5ab5f47b8f02d23a15d4466136ec404b4ca8edc78cf8d7d"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/lookups.txt",
+      "bytes": 245,
+      "sha256": "01323e5fc5ef1dbc7596897eb6cd078db2af8d8c0db2b78c123741481b03eb1a"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/manifest.json",
+      "bytes": 135,
+      "sha256": "389272db207097c7f8c3ec263cfacee5e0e5e15992581a6bfdf2c10b0538b0bc"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/mkfs-lost-reply.json",
+      "bytes": 255,
+      "sha256": "9231d19b0165785acb6b25c75bc452e6dc19ba20423ecc3d8684664c0f23a81b"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n0/.efs-engine",
+      "bytes": 128,
+      "sha256": "d7bb91330b6d778f258cbeffb024906454c9268c0b816bbfadc365bd4599f8a0"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n0/.efs-engine-lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n0/mdraft/applied.0",
+      "bytes": 16,
+      "sha256": "83b0d4db8e772a6a7c53a74f44ea88f8679870114909a4bc52cc44f6f1c81581"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n0/mdraft/applied.2",
+      "bytes": 16,
+      "sha256": "5fcebe7f8eb8928fb440764befee53b8e431b9dee503a32ae2fc157668fa8fc4"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n0/mdraft/boot.bin",
+      "bytes": 8,
+      "sha256": "089cd5dd0fdb613bbde7bab39da4f3799fd4dea02c75c814f222736323f835c1"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n0/mdraft/kv/QUERY-REVISIONS",
+      "bytes": 32856,
+      "sha256": "7235936d366ce1a2524083458fd0c222353c18de35aaf3cdf6449f796344394e"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n0/mdraft/kv/wal",
+      "bytes": 1048576,
+      "sha256": "44da71eb1294d3419b76dd64d0c9f1c2d6a8bf32c3d05ef975799ef3d02eb0ed"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n0/mdraft/log/raft.log",
+      "bytes": 1048576,
+      "sha256": "c0c149acec932561c624872f0a0229761d35a3af31504ffe9a9f99e4894754b9"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n0/meta/cluster_nodes.bin",
+      "bytes": 12612,
+      "sha256": "0b9588a79b1d662627a6468d18de51923bae9bdd4f989c4cf4e2dbcea1841af9"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n0/meta/put-session/00000000000000000000000000000002",
+      "bytes": 56,
+      "sha256": "017a4e12ae84f5ea40f05656c4979e32d7074afa9fd5753560e11b80c2c4f850"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n0/meta/usage.bin",
+      "bytes": 16,
+      "sha256": "598a7d96705af3f4a1f4a1868de2aaec54dfb2a720f73433a146e2d161e82204"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n0.log",
+      "bytes": 17559,
+      "sha256": "e92efa739b189d2f071e02d17e736e3863edd89fc39410735a23f06af803eee4"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n1/.efs-engine",
+      "bytes": 128,
+      "sha256": "9f59fd4fc3ff3a193f6bfafac8e2ff1a37b448a16ab848bcb73ccf40e7a92f6a"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n1/.efs-engine-lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n1/mdraft/applied.0",
+      "bytes": 16,
+      "sha256": "83b0d4db8e772a6a7c53a74f44ea88f8679870114909a4bc52cc44f6f1c81581"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n1/mdraft/applied.2",
+      "bytes": 16,
+      "sha256": "5fcebe7f8eb8928fb440764befee53b8e431b9dee503a32ae2fc157668fa8fc4"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n1/mdraft/boot.bin",
+      "bytes": 8,
+      "sha256": "fc56350fd24efee530ebda9cebe662219458eb359d5aea0c7f12f8189090066f"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n1/mdraft/kv/QUERY-REVISIONS",
+      "bytes": 32856,
+      "sha256": "b5f361347150fe2f61abfc61365efaa9676c3b52ed1dc611b2c481e602300142"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n1/mdraft/kv/wal",
+      "bytes": 1048576,
+      "sha256": "44da71eb1294d3419b76dd64d0c9f1c2d6a8bf32c3d05ef975799ef3d02eb0ed"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n1/mdraft/log/raft.log",
+      "bytes": 1048576,
+      "sha256": "b320d05f1db029fd4ed1967955f41cdfc2da250c089fe6dddce2242adbd848f6"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n1/meta/cluster_nodes.bin",
+      "bytes": 12612,
+      "sha256": "0b9588a79b1d662627a6468d18de51923bae9bdd4f989c4cf4e2dbcea1841af9"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n1/meta/put-session/00000000000000000000000000000002",
+      "bytes": 56,
+      "sha256": "017a4e12ae84f5ea40f05656c4979e32d7074afa9fd5753560e11b80c2c4f850"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n1/meta/usage.bin",
+      "bytes": 16,
+      "sha256": "598a7d96705af3f4a1f4a1868de2aaec54dfb2a720f73433a146e2d161e82204"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n1.log",
+      "bytes": 6382,
+      "sha256": "e2b06974ff11c34d7d9d50c131be7b47e9dd00b27cd4dad3d92833c0a5cba388"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n2/.efs-engine",
+      "bytes": 128,
+      "sha256": "2418a6c3696a01c88966bd15c87e4abe04dad1ef2478b7be0bccdac0c0db7ff7"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n2/.efs-engine-lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n2/mdraft/applied.0",
+      "bytes": 16,
+      "sha256": "83b0d4db8e772a6a7c53a74f44ea88f8679870114909a4bc52cc44f6f1c81581"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n2/mdraft/applied.2",
+      "bytes": 16,
+      "sha256": "5fcebe7f8eb8928fb440764befee53b8e431b9dee503a32ae2fc157668fa8fc4"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n2/mdraft/boot.bin",
+      "bytes": 8,
+      "sha256": "d026b718fa465425716dd11e2436ae4e74fc4cda3b52ffc917ff76c54b78cf58"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n2/mdraft/kv/QUERY-REVISIONS",
+      "bytes": 32856,
+      "sha256": "645b360a22f3ff49b0e3eb747f7fe78bd1def7d76c7364a1b267cbd478a1b4fb"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n2/mdraft/kv/wal",
+      "bytes": 1048576,
+      "sha256": "44da71eb1294d3419b76dd64d0c9f1c2d6a8bf32c3d05ef975799ef3d02eb0ed"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n2/mdraft/log/raft.log",
+      "bytes": 1048576,
+      "sha256": "32d00ed1c9e8ee474a1040cf39f1850e14f72bf19e8cb6242f327a7e5994b0a1"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n2/meta/cluster_nodes.bin",
+      "bytes": 12612,
+      "sha256": "0b9588a79b1d662627a6468d18de51923bae9bdd4f989c4cf4e2dbcea1841af9"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n2/meta/put-session/00000000000000000000000000000002",
+      "bytes": 56,
+      "sha256": "017a4e12ae84f5ea40f05656c4979e32d7074afa9fd5753560e11b80c2c4f850"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n2/meta/usage.bin",
+      "bytes": 16,
+      "sha256": "598a7d96705af3f4a1f4a1868de2aaec54dfb2a720f73433a146e2d161e82204"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/n2.log",
+      "bytes": 1634,
+      "sha256": "0a6ba057cdb988f83bd16b0a9b87e6ec54ffdb30118c945387962096049fa887"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/query-unavailable.json",
+      "bytes": 896,
+      "sha256": "3625ffac674c08d302763fd483f455adda82b5e3b8c726abafe11b8aa355e738"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/raft-mkfs-lost-reply.json",
+      "bytes": 255,
+      "sha256": "36dd87368a8a095b89f4f368d98f7ca7b448c964475db5fcaea69c5647cf9f7f"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/replies.txt",
+      "bytes": 725,
+      "sha256": "e76a0f31602ac26f00c596966be4a8cb59561219087b2b12b7c62c1d5e890cc8"
+    },
+    {
+      "path": "operator-fixtures/w79-buffered/sessions.txt",
+      "bytes": 700,
+      "sha256": "fe0de55d984805ea114ae3b85987b5a94b45077dbc4a32ae0656277c25bf9433"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/connect.c",
+      "bytes": 869,
+      "sha256": "df0f823dbf9ffb71909e997677c65552e1a545b57c7897a428ca3fd0423fb456"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/connect.so",
+      "bytes": 16080,
+      "sha256": "607f70872dc3a842f5ab5f47b8f02d23a15d4466136ec404b4ca8edc78cf8d7d"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/lookups.txt",
+      "bytes": 245,
+      "sha256": "d3035c5ff982f186ad02426907b65877c9b90e83af6aacc02c4ffc8680d4f01c"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/manifest.json",
+      "bytes": 133,
+      "sha256": "8b9328b429e21767ba6f8fc364f30a818697f4e50f7ec6d26173d3b9497a2e3c"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/mkfs-lost-reply.json",
+      "bytes": 255,
+      "sha256": "b7f774ea632fb29507293e7073c765c1a8a5790e27af7c0ecc2cf1eec646c249"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n0/.efs-engine",
+      "bytes": 128,
+      "sha256": "a619d5ab8ca3a6ff6983f7065a9f56542b111efb07181f235724c13b7e7ee08c"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n0/.efs-engine-lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n0/mdraft/applied.0",
+      "bytes": 16,
+      "sha256": "83b0d4db8e772a6a7c53a74f44ea88f8679870114909a4bc52cc44f6f1c81581"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n0/mdraft/applied.2",
+      "bytes": 16,
+      "sha256": "aac0a70659fa0f93b84a37ecc44882a3ff3ef261128c9c371caae0c8080578fc"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n0/mdraft/boot.bin",
+      "bytes": 8,
+      "sha256": "8c6d5074e4ca97f71fc51985caf559d89e46744dbca301537ca7602cbe1ce154"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n0/mdraft/kv/QUERY-REVISIONS",
+      "bytes": 32856,
+      "sha256": "61e91b982cea11c6e52c58bb456b837226dfe637679095c9bfa4482f07feb166"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n0/mdraft/kv/wal",
+      "bytes": 1048576,
+      "sha256": "02bfbd51440b118751d58b1ae5b65d04aba8deb15dffc70e7a9503a79337a18d"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n0/mdraft/log/raft.log",
+      "bytes": 1048576,
+      "sha256": "1650123f90d9a7b3fbab31ad35479645333db768cf430cfb58e4ddf698873230"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n0/meta/cluster_nodes.bin",
+      "bytes": 12612,
+      "sha256": "672dbbee6bf798772c9008a33991e0a98c0728689cf291360ab330d53f829296"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n0/meta/put-session/00000000000000000000000000000002",
+      "bytes": 56,
+      "sha256": "017a4e12ae84f5ea40f05656c4979e32d7074afa9fd5753560e11b80c2c4f850"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n0/meta/usage.bin",
+      "bytes": 16,
+      "sha256": "598a7d96705af3f4a1f4a1868de2aaec54dfb2a720f73433a146e2d161e82204"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n0.log",
+      "bytes": 6397,
+      "sha256": "cb35ad19d033400e337f28a8a9f38a1ed994bd1f06e8650cdfa3d2ef8f1105b6"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n1/.efs-engine",
+      "bytes": 128,
+      "sha256": "523eedcf7fca871cb741c3107934f24979c03daca044f5465d2ea93d4bd65c58"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n1/.efs-engine-lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n1/mdraft/applied.0",
+      "bytes": 16,
+      "sha256": "83b0d4db8e772a6a7c53a74f44ea88f8679870114909a4bc52cc44f6f1c81581"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n1/mdraft/applied.2",
+      "bytes": 16,
+      "sha256": "aac0a70659fa0f93b84a37ecc44882a3ff3ef261128c9c371caae0c8080578fc"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n1/mdraft/boot.bin",
+      "bytes": 8,
+      "sha256": "acf8e993d93950d462c38c3bb04f9d85344921c1f440c55e5e7f5f92900e3712"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n1/mdraft/kv/QUERY-REVISIONS",
+      "bytes": 32856,
+      "sha256": "dcd803265c86ba3dc090ac79b3e3aa7ea75c251e7bf0beadf6b92323637215c2"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n1/mdraft/kv/wal",
+      "bytes": 1048576,
+      "sha256": "02bfbd51440b118751d58b1ae5b65d04aba8deb15dffc70e7a9503a79337a18d"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n1/mdraft/log/raft.log",
+      "bytes": 1048576,
+      "sha256": "0f857dc6cc6a1cd44f8c8bc96d5ff16e1ed82966bd41ad5f4e9155fb549378b4"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n1/meta/cluster_nodes.bin",
+      "bytes": 12612,
+      "sha256": "672dbbee6bf798772c9008a33991e0a98c0728689cf291360ab330d53f829296"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n1/meta/put-session/00000000000000000000000000000002",
+      "bytes": 56,
+      "sha256": "017a4e12ae84f5ea40f05656c4979e32d7074afa9fd5753560e11b80c2c4f850"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n1/meta/usage.bin",
+      "bytes": 16,
+      "sha256": "598a7d96705af3f4a1f4a1868de2aaec54dfb2a720f73433a146e2d161e82204"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n1.log",
+      "bytes": 1632,
+      "sha256": "43671b0c0497c2b8a9b8145b544d5a864271c237d49fc17907a03973a3568db6"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n2/.efs-engine",
+      "bytes": 128,
+      "sha256": "df70c92c2966f096242afe6d103ea29bed6da886431a1f43a74171ca33ba9f6e"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n2/.efs-engine-lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n2/mdraft/applied.0",
+      "bytes": 16,
+      "sha256": "83b0d4db8e772a6a7c53a74f44ea88f8679870114909a4bc52cc44f6f1c81581"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n2/mdraft/applied.2",
+      "bytes": 16,
+      "sha256": "aac0a70659fa0f93b84a37ecc44882a3ff3ef261128c9c371caae0c8080578fc"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n2/mdraft/boot.bin",
+      "bytes": 8,
+      "sha256": "fbc0eff71c9b4dbd5572db95e016819dcd7349cc69ccee4138afcc634fbb5694"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n2/mdraft/kv/QUERY-REVISIONS",
+      "bytes": 32856,
+      "sha256": "5e867bf1ce447ef7e1f5545947de01ac51f1563eab57930ea984de226c30bcad"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n2/mdraft/kv/wal",
+      "bytes": 1048576,
+      "sha256": "02bfbd51440b118751d58b1ae5b65d04aba8deb15dffc70e7a9503a79337a18d"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n2/mdraft/log/raft.log",
+      "bytes": 1048576,
+      "sha256": "07d2398865a851f420c0b498ec0ab2585fc0e699e6276cef45461878ccbe023e"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n2/meta/cluster_nodes.bin",
+      "bytes": 12612,
+      "sha256": "672dbbee6bf798772c9008a33991e0a98c0728689cf291360ab330d53f829296"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n2/meta/put-session/00000000000000000000000000000002",
+      "bytes": 56,
+      "sha256": "017a4e12ae84f5ea40f05656c4979e32d7074afa9fd5753560e11b80c2c4f850"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n2/meta/usage.bin",
+      "bytes": 16,
+      "sha256": "598a7d96705af3f4a1f4a1868de2aaec54dfb2a720f73433a146e2d161e82204"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/n2.log",
+      "bytes": 17825,
+      "sha256": "e80f37a93d65be6c498652d8a42521b7799892f56458f84fed42cdc6eec65214"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/query-unavailable.json",
+      "bytes": 896,
+      "sha256": "3625ffac674c08d302763fd483f455adda82b5e3b8c726abafe11b8aa355e738"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/raft-mkfs-lost-reply.json",
+      "bytes": 255,
+      "sha256": "eb459188542812d51b9ef5f7308789821c5bd58c8b2a1a0ba010e05189990c11"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/replies.txt",
+      "bytes": 725,
+      "sha256": "87223dc46b6ef8ea656f9b3ae4f321e3096c8dc8afc54402527d7c402a170747"
+    },
+    {
+      "path": "operator-fixtures/w79-direct/sessions.txt",
+      "bytes": 700,
+      "sha256": "0c072ab4f57772cc42b72938662b1e3219ab71c411a2a141793585499371f08b"
+    },
+    {
+      "path": "profile-controller-executed.py",
+      "bytes": 5468,
+      "sha256": "02f3c375e51d31c1e662f3e06cdae17cfc52cc0cd8f96f0a67b9dffb9b4abd0f"
+    },
+    {
+      "path": "sanitizer-controller.log",
+      "bytes": 38,
+      "sha256": "e670994c1cd1920c8fe36d5724101165c35e0fbb0e8e9710b98b715845670e6d"
+    },
+    {
+      "path": "sanitizers/asan-ubsan-wal-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "sanitizers/asan-ubsan-wal.log",
+      "bytes": 45,
+      "sha256": "f847bad6566cf64e394168a4bb717612987a4c300bf50570536ca4adfc25eec2"
+    },
+    {
+      "path": "sanitizers/exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "sanitizers/valgrind-binary-libraries.txt",
+      "bytes": 140,
+      "sha256": "3153a9de4d217c0eca293fc449d250e3eac5540912ef50719c16c8ee3d26f70b"
+    },
+    {
+      "path": "sanitizers/valgrind-wal-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "sanitizers/valgrind-wal.log",
+      "bytes": 1095,
+      "sha256": "dcc33301d603850b2f3dfd0df1c17320f53b4d66ce9a813b3b98f3ab5effd037"
+    },
+    {
+      "path": "source-provenance-initial.json",
+      "bytes": 17456,
+      "sha256": "5e2d0d4c082a4cc728708db15b572d50b423a8aea692cd70aff6a8565dee738e"
+    },
+    {
+      "path": "source-provenance.json",
+      "bytes": 17635,
+      "sha256": "d8a6d0ae32d6e2cab213aceb06b20e176a51df6676ed8f4f0895b83e2c5ac52a"
+    },
+    {
+      "path": "source-verification-final.json",
+      "bytes": 154,
+      "sha256": "72a9bdfc73e8dcff7100c00609de1de5ff53344293153e04b4008ed8035eaabe"
+    },
+    {
+      "path": "source-verification.json",
+      "bytes": 92,
+      "sha256": "2d646b63bf658faa876bf2d61ffbfff3d1040bd21ca8ec9cbb557d2686eb374f"
+    },
+    {
+      "path": "w96/baseline.json",
+      "bytes": 21659,
+      "sha256": "9389e72f2478126038d46ec50763a1e01e8276c554b3864dd22b1c6c46e6421a"
+    },
+    {
+      "path": "w96/exact-replay.json",
+      "bytes": 3610,
+      "sha256": "9ddf5e6eebe6dea4730557ae4657052d888b89bfdfef02d5067fded4df2d4897"
+    },
+    {
+      "path": "w96/exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "w96/identity.json",
+      "bytes": 315,
+      "sha256": "79240946babfa13911200d255f9a7c6f9cb45fc3d035bdc3e70f210b6a19bee9"
+    },
+    {
+      "path": "w96/mnt-stop.log",
+      "bytes": 108,
+      "sha256": "59c878a12da78dc92c30d6673ef52e87b808a2b90bef711b5cf596d1d6e4d1fb"
+    },
+    {
+      "path": "w96/mnt2-stop.log",
+      "bytes": 111,
+      "sha256": "a31cc0c1803ab96a0a2a4c47f4fb1d76720f5680a343db7c21033bdb1fb49ffc"
+    },
+    {
+      "path": "w96/nvme-batch1-0-control-host.json",
+      "bytes": 19480,
+      "sha256": "47a54e75544c619b94310ec79f206be69403d196aab4b97f500e6eccb974348a"
+    },
+    {
+      "path": "w96/nvme-batch1-0-control.json",
+      "bytes": 341,
+      "sha256": "e49c67f1256e0167065cbaa9ba2bb57c9c10b90a061d24265f02f97e059c7704"
+    },
+    {
+      "path": "w96/nvme-batch1-0-control.jsonl",
+      "bytes": 252,
+      "sha256": "66c01ae5f7c7c6f4ca1459f49196c5fccb348e9a8ccec7a417ec60bc6227091c"
+    },
+    {
+      "path": "w96/nvme-batch1-1-reserve-host.json",
+      "bytes": 19411,
+      "sha256": "37c9ed2cd34956c98176fa4a5896d8cfb74b0b799cf8133cc8ccdd041767fc5c"
+    },
+    {
+      "path": "w96/nvme-batch1-1-reserve.json",
+      "bytes": 354,
+      "sha256": "632810246282166e85d7d240a3364281254f0908deb52fc649f10b6758446031"
+    },
+    {
+      "path": "w96/nvme-batch1-1-reserve.jsonl",
+      "bytes": 170,
+      "sha256": "5e2bd33018b5295f1532de332519db264d8601c73bb6d69d3bb48617f48a0dbb"
+    },
+    {
+      "path": "w96/nvme-batch1-2-reserve-host.json",
+      "bytes": 19414,
+      "sha256": "c83812271a061996c94101c75a6545fefd15c9943ae7c14f57a32dfc8d137b72"
+    },
+    {
+      "path": "w96/nvme-batch1-2-reserve.json",
+      "bytes": 353,
+      "sha256": "62aa70de27e9c8732b926ae63d35aca75a284dae575c725c5741e034914cabe0"
+    },
+    {
+      "path": "w96/nvme-batch1-2-reserve.jsonl",
+      "bytes": 170,
+      "sha256": "d42fa92df7fd7cdb805eddf464a6277061cf343531393ffd149e8196579a4862"
+    },
+    {
+      "path": "w96/nvme-batch1-3-control-host.json",
+      "bytes": 19543,
+      "sha256": "6c5576dd9abbf9c34e7aab579168eedba5c393cc430f23c6fc1f5813305e13e7"
+    },
+    {
+      "path": "w96/nvme-batch1-3-control.json",
+      "bytes": 341,
+      "sha256": "378448c48e602d6889875d8353219e61381ed0499107f10909e0fe1ece35479c"
+    },
+    {
+      "path": "w96/nvme-batch1-3-control.jsonl",
+      "bytes": 252,
+      "sha256": "efdad8d84f4727fb8bcc6837f916a43921c2c45f49569fd99f6527ce634c80e4"
+    },
+    {
+      "path": "w96/nvme-batch16-0-control-host.json",
+      "bytes": 21113,
+      "sha256": "3ac4a67e38b069cde49e18b806d05e70c9e8b6d09a028800069d3f387da7b1f4"
+    },
+    {
+      "path": "w96/nvme-batch16-0-control.json",
+      "bytes": 344,
+      "sha256": "fe1126b43675b9f16ffeb02f036aaa5ce8c132319d01a41560eab403d7c334da"
+    },
+    {
+      "path": "w96/nvme-batch16-0-control.jsonl",
+      "bytes": 168,
+      "sha256": "88e8c65b50940f6103f46bd2d81bd3f3e8925b85a12bbd5b92b9808c06bfacbc"
+    },
+    {
+      "path": "w96/nvme-batch16-1-reserve-host.json",
+      "bytes": 44417,
+      "sha256": "4d79455001622faba113c196b79c1d727eebf0acf6daa8d7336bfb0d2705a2cd"
+    },
+    {
+      "path": "w96/nvme-batch16-1-reserve.json",
+      "bytes": 355,
+      "sha256": "7aaf5d2f849f3c3dd107de77c891029af22d1747e7c18620e8b8884ade767386"
+    },
+    {
+      "path": "w96/nvme-batch16-1-reserve.jsonl",
+      "bytes": 170,
+      "sha256": "dffd767233cd39cc8b649dd9c37ec21e3d453a13432b3c925b26da74cbc3ef91"
+    },
+    {
+      "path": "w96/nvme-batch16-2-reserve-host.json",
+      "bytes": 21149,
+      "sha256": "675559b3798827a03dd712bcdc8d93a625fe48df2b582d5e96420dae1d7256ea"
+    },
+    {
+      "path": "w96/nvme-batch16-2-reserve.json",
+      "bytes": 355,
+      "sha256": "18f4f9555da5892f89b36ef2cbcf5960791bc6d340bfd78299140b913ce18bea"
+    },
+    {
+      "path": "w96/nvme-batch16-2-reserve.jsonl",
+      "bytes": 170,
+      "sha256": "11271621a1bb122bddb3dd558c7d30a81e849c93f72a631f6cc2fe231c9b1e10"
+    },
+    {
+      "path": "w96/nvme-batch16-3-control-host.json",
+      "bytes": 19637,
+      "sha256": "d5342369a3485763ea868ad711d0bf78003d291a8902a6750eb39ad3393458ac"
+    },
+    {
+      "path": "w96/nvme-batch16-3-control.json",
+      "bytes": 344,
+      "sha256": "f3ec895cbb43551be28b43b14d504c2a66feb469b552be5e7d23734cf8babc8c"
+    },
+    {
+      "path": "w96/nvme-batch16-3-control.jsonl",
+      "bytes": 168,
+      "sha256": "684f2d0d819df77bd0f595556dd22d54d5b96f2d61cbad559cdaf09c6143cba1"
+    },
+    {
+      "path": "w96/nvme-placement.txt",
+      "bytes": 90,
+      "sha256": "06dc0e2aae2e7b1777e2c7e32b40b2e911c94a42103c046f8dd443d9843124f3"
+    },
+    {
+      "path": "w96/restore-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "w96/restore.log",
+      "bytes": 16319,
+      "sha256": "d1b5f397103018903365ffa78966d37915b87bdfab891e0113f67b16ddb13358"
+    },
+    {
+      "path": "w96/restored.json",
+      "bytes": 20564,
+      "sha256": "8afc70e66eba5e1c030f5aadd898365ac9dbf1a860faae133ed777bb2a150094"
+    },
+    {
+      "path": "w96/sata-batch1-0-control-host.json",
+      "bytes": 20936,
+      "sha256": "d8b8ef606e94f4cc8bf7aad94cf0bf9f4da95cb27f46689f829b0eb02cf25f00"
+    },
+    {
+      "path": "w96/sata-batch1-0-control.json",
+      "bytes": 342,
+      "sha256": "7d6d24eed650dcb2915988f7fb22839ec22721a64fa5fa97fac77eca70c4ffe3"
+    },
+    {
+      "path": "w96/sata-batch1-0-control.jsonl",
+      "bytes": 174,
+      "sha256": "d46f7062a18e1ff932ca5d5a921272b2905607fb89ad47222b1bd8772d4d54ef"
+    },
+    {
+      "path": "w96/sata-batch1-1-reserve-host.json",
+      "bytes": 32435,
+      "sha256": "f963b893b50fe8ac259f6d8d6c8260485ffdef446e05b5c8ebd5079695c28a1e"
+    },
+    {
+      "path": "w96/sata-batch1-1-reserve.json",
+      "bytes": 356,
+      "sha256": "27489f59cf1d0b683a8a5832391555ec11fdc4db9922eec33e1718671764fd1c"
+    },
+    {
+      "path": "w96/sata-batch1-1-reserve.jsonl",
+      "bytes": 176,
+      "sha256": "13efd5e38e463bba49e418c10230661c576acd8415630edbd9c5816e69bfce25"
+    },
+    {
+      "path": "w96/sata-batch1-2-reserve-host.json",
+      "bytes": 19333,
+      "sha256": "fb8dc1fd729f789afab065d4005c17afcc8d2ab7310e030bb032fc27fd0c296d"
+    },
+    {
+      "path": "w96/sata-batch1-2-reserve.json",
+      "bytes": 356,
+      "sha256": "74ae5f817deaa7f24d51af6ea16fe7e7652e6a5a256558266c85aa7fafd0ab61"
+    },
+    {
+      "path": "w96/sata-batch1-2-reserve.jsonl",
+      "bytes": 176,
+      "sha256": "bf796a4d59ef3509020fa93c4190e94ea0b89465e77429ea92c8dd5ce70d8046"
+    },
+    {
+      "path": "w96/sata-batch1-3-control-host.json",
+      "bytes": 19363,
+      "sha256": "299cf617adf76738a8858be8544747e069173798e1f20567c2e052b9532a3462"
+    },
+    {
+      "path": "w96/sata-batch1-3-control.json",
+      "bytes": 342,
+      "sha256": "9b4f7738850f04a51bb6abccbc5a21a30b8908b55002e7f9257cef4978a5570b"
+    },
+    {
+      "path": "w96/sata-batch1-3-control.jsonl",
+      "bytes": 174,
+      "sha256": "d7ba8e853ec4bfd254d61ed1b6af5b11bccac1c27ff037d758b28000b20ef19e"
+    },
+    {
+      "path": "w96/sata-batch16-0-control-host.json",
+      "bytes": 19419,
+      "sha256": "2d2fd5b898b25ee7c39a405a1cbc0cae825709bd2c8e2581f68b0178f1311e4b"
+    },
+    {
+      "path": "w96/sata-batch16-0-control.json",
+      "bytes": 347,
+      "sha256": "0acf3e5e56fc4f78ed07b2a6a6a4badb19d4514dff99921adf089aca7dadf72d"
+    },
+    {
+      "path": "w96/sata-batch16-0-control.jsonl",
+      "bytes": 174,
+      "sha256": "3e8c7060e60ac907c8e655e03d12435e41973e95321774c4186a21da4e8e937e"
+    },
+    {
+      "path": "w96/sata-batch16-1-reserve-host.json",
+      "bytes": 19325,
+      "sha256": "20a2e310c2cb1b80aae9ec46e141e6d994a01353c4d673532a7718e6a79f734e"
+    },
+    {
+      "path": "w96/sata-batch16-1-reserve.json",
+      "bytes": 359,
+      "sha256": "88b912404286334926efd80e9fb66694956a7eb09944e28463a83ebebf996351"
+    },
+    {
+      "path": "w96/sata-batch16-1-reserve.jsonl",
+      "bytes": 174,
+      "sha256": "d86037f00622078ad94ae5d4c463cc837eb1db58d870621a643a3c08204f44cc"
+    },
+    {
+      "path": "w96/sata-batch16-2-reserve-host.json",
+      "bytes": 19382,
+      "sha256": "efd6a5f46c72b4ed0f4d6c08e4f85c58e227a1cbf58c537e2e6435f41c6ea89a"
+    },
+    {
+      "path": "w96/sata-batch16-2-reserve.json",
+      "bytes": 359,
+      "sha256": "5c32455b6271b87ecee1921a885270ac7e0f957dcc0ee10d6f9543e0557eae2d"
+    },
+    {
+      "path": "w96/sata-batch16-2-reserve.jsonl",
+      "bytes": 174,
+      "sha256": "187472743d6be821ec57d6ab53c93d92099354861fb8310ada26a95b62ae7503"
+    },
+    {
+      "path": "w96/sata-batch16-3-control-host.json",
+      "bytes": 19371,
+      "sha256": "839779425d7be72469513ab72ca8907904eeae141fad66755d7b25d2f13d0cdf"
+    },
+    {
+      "path": "w96/sata-batch16-3-control.json",
+      "bytes": 348,
+      "sha256": "c4b6f8d08abdeddd04a53c4486a07ed9e9e34b6c134c514d03a0bd5a627ed895"
+    },
+    {
+      "path": "w96/sata-batch16-3-control.jsonl",
+      "bytes": 174,
+      "sha256": "819a5b27526d016c9c737a712a438b466481f421da1e0c5dfc7a190025707f64"
+    },
+    {
+      "path": "w96/sata-placement.txt",
+      "bytes": 79,
+      "sha256": "13cf8fdf89357413dc93f13e49e385da1f12290f959f3112d6e700e74df86f06"
+    },
+    {
+      "path": "w96/summary.json",
+      "bytes": 3890,
+      "sha256": "b55f4ad8c08eb34013bbe996ae01171dc04af53066d420ceac917b7da732bc28"
+    },
+    {
+      "path": "w96-controller.log",
+      "bytes": 764,
+      "sha256": "fca3915a000cab1e4bd258072d79c8eb7a64286c175ed316b466eb50f7dc22e2"
+    },
+    {
+      "path": "wall-strace-controller.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "written-ring/mnt-stop-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "written-ring/mnt-stop.log",
+      "bytes": 108,
+      "sha256": "2632b0cf96df9be6065efee50b061bb0ca1170decca4ae3179355c992d2e3dfc"
+    },
+    {
+      "path": "written-ring/mnt2-stop-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "written-ring/mnt2-stop.log",
+      "bytes": 111,
+      "sha256": "0a32931d07b04ceef93e6498a2a16c6ab60356d8e944e25eab94f6abfebc2ac3"
+    },
+    {
+      "path": "written-ring/restore-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "written-ring/restore.log",
+      "bytes": 12673,
+      "sha256": "23b2eb571de5bd1a54508352814a4ab3609e254163e821e53ce0967565c112d0"
+    },
+    {
+      "path": "written-ring/run-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "written-ring/written-0-nvme/final.json",
+      "bytes": 1795,
+      "sha256": "4ce6a833beece9e782977968835b3b2ad9c3e56fe6536b46ef482f94de3a9c3c"
+    },
+    {
+      "path": "written-ring/written-0-nvme/host.jsonl",
+      "bytes": 780598,
+      "sha256": "511fc42d1c9215c45c2f34f00279714bd2be0e758baca4fd9b6d2e25d5b9bffd"
+    },
+    {
+      "path": "written-ring/written-0-nvme/writer0-final.json",
+      "bytes": 415,
+      "sha256": "0e12d6400e564fe18862f62ef003bbac9764bbcbe43a03a008d6e4bfeb420f8e"
+    },
+    {
+      "path": "written-ring/written-0-nvme/writer0.jsonl",
+      "bytes": 2210,
+      "sha256": "fe3a59cefd94989231f433844088271cb7c8dd32bbc7a7a14c8492b84b2a54b9"
+    },
+    {
+      "path": "written-ring/written-0-nvme/writer1-final.json",
+      "bytes": 415,
+      "sha256": "a17cd967c9731177ab6276765fc10c2cb00b294d2adea8a7a163f160b8104dda"
+    },
+    {
+      "path": "written-ring/written-0-nvme/writer1.jsonl",
+      "bytes": 2208,
+      "sha256": "912e4f3e1242d4dfff1f9014f90ce04913fa2ad35e08374c8e3c06b461de4420"
+    },
+    {
+      "path": "written-ring/written-0-nvme/writer2-final.json",
+      "bytes": 416,
+      "sha256": "0ccf3a107b05d592216df22f030e84063f781c9d93b36785a08d6e3ae4e0625b"
+    },
+    {
+      "path": "written-ring/written-0-nvme/writer2.jsonl",
+      "bytes": 2211,
+      "sha256": "e8c06679319cc79762e0722fc34c3b64a814289adbacba40d431dca35f5e6f5d"
+    },
+    {
+      "path": "written-ring/written-0-nvme-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "written-ring/written-0-nvme.log",
+      "bytes": 36,
+      "sha256": "2ff841c967df3dfcbbed64fd0399ef2238f67df4dc653f122ec4ef4998f139cd"
+    },
+    {
+      "path": "written-ring/written-1-sata/final.json",
+      "bytes": 1808,
+      "sha256": "dcd6a39dfb51ae0a55a346c09845e6092aaba531260a73ed6e28b04cb4b17023"
+    },
+    {
+      "path": "written-ring/written-1-sata/host.jsonl",
+      "bytes": 780959,
+      "sha256": "90af54bdb7e05f63f5fbb82c5c82757d4ae1e1848d968ea6c8b56df2e3c448ec"
+    },
+    {
+      "path": "written-ring/written-1-sata/writer0-final.json",
+      "bytes": 415,
+      "sha256": "b0b2fcae4b31a2c41eae7002d028773180899ee95db012c849fcaf62a34ab680"
+    },
+    {
+      "path": "written-ring/written-1-sata/writer0.jsonl",
+      "bytes": 2246,
+      "sha256": "31f21e333feaed8a31f1cb6e034a48de6437386940c8623781dabb13cbc55483"
+    },
+    {
+      "path": "written-ring/written-1-sata/writer1-final.json",
+      "bytes": 414,
+      "sha256": "873d023ab09aed1d6765c80176a575ac25b29f362db4e02e7577eafee3473fe8"
+    },
+    {
+      "path": "written-ring/written-1-sata/writer1.jsonl",
+      "bytes": 2240,
+      "sha256": "ec8a41f2bb873d9ee9928bf7625725958cd2b927f8d787a3e4ed5e959974fcf3"
+    },
+    {
+      "path": "written-ring/written-1-sata/writer2-final.json",
+      "bytes": 416,
+      "sha256": "b1372b1ad5f02746d6b81221fbc7948c5d45754b0d8b78f3e381c4b0b4c5035b"
+    },
+    {
+      "path": "written-ring/written-1-sata/writer2.jsonl",
+      "bytes": 2241,
+      "sha256": "822c122443b8f438addaf7cda8c34390be128b3d3268df6e780c772d1c339646"
+    },
+    {
+      "path": "written-ring/written-1-sata-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "written-ring/written-1-sata.log",
+      "bytes": 37,
+      "sha256": "0114b636cc7a4c07026346700427c6c1d31ceb35916de6c24ff64fd9886d74f1"
+    },
+    {
+      "path": "written-ring/written-2-sata/final.json",
+      "bytes": 1792,
+      "sha256": "875f232d847604675c27d8debf6b92374b469e1658a65c0a34c14b38de493f20"
+    },
+    {
+      "path": "written-ring/written-2-sata/host.jsonl",
+      "bytes": 780754,
+      "sha256": "5535f4e56719a147b1237a2cf83dab4c427286d25811c72cde16757490d66e92"
+    },
+    {
+      "path": "written-ring/written-2-sata/writer0-final.json",
+      "bytes": 415,
+      "sha256": "05e9b37f470d0cae154c93a7b04dc34460abc70869207e91aaf3e0713cb179cd"
+    },
+    {
+      "path": "written-ring/written-2-sata/writer0.jsonl",
+      "bytes": 2235,
+      "sha256": "2171a24f1ae3e4d5891d8fa841c9d0cd4eb156d6d9939e78670fda7bfb44f551"
+    },
+    {
+      "path": "written-ring/written-2-sata/writer1-final.json",
+      "bytes": 413,
+      "sha256": "655a7f185b46cc7f5b47a0b0565b405e67cb0a05ca482ce5915949a448be1906"
+    },
+    {
+      "path": "written-ring/written-2-sata/writer1.jsonl",
+      "bytes": 2246,
+      "sha256": "f926a3eef30d99e62a07499b263f4211986c52d60d288ba3b214ba2757e09e0c"
+    },
+    {
+      "path": "written-ring/written-2-sata/writer2-final.json",
+      "bytes": 415,
+      "sha256": "f325bbb015d49115d518cc9920c96835a092a15d145b734f48fd1dcea2c3e920"
+    },
+    {
+      "path": "written-ring/written-2-sata/writer2.jsonl",
+      "bytes": 2236,
+      "sha256": "3729e0cab708ef7922d403a31422fbe222109f4108566e7ba960c274be11b9c4"
+    },
+    {
+      "path": "written-ring/written-2-sata-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "written-ring/written-2-sata.log",
+      "bytes": 36,
+      "sha256": "be7ac0ac29436a9f4463bf538cd8149020f9d5166057822bec0a11d1da724ac9"
+    },
+    {
+      "path": "written-ring/written-3-nvme/final.json",
+      "bytes": 1793,
+      "sha256": "3eff2882fd6ad6cb640dfb618829383c43474df240ed3f36ab46074832df2adc"
+    },
+    {
+      "path": "written-ring/written-3-nvme/host.jsonl",
+      "bytes": 780983,
+      "sha256": "ee9575cd689807fffac8def28e37903b06820f79f2b93fc42fe574cb3ad700ba"
+    },
+    {
+      "path": "written-ring/written-3-nvme/writer0-final.json",
+      "bytes": 415,
+      "sha256": "7f1708acf26135c74f850c44cd43695b12fffae5036c168b17f1689eb7dbdcef"
+    },
+    {
+      "path": "written-ring/written-3-nvme/writer0.jsonl",
+      "bytes": 2211,
+      "sha256": "c84d67df057629ce7cac23a4d13eacb7e767c613b629b5da331eee1dbd8180ae"
+    },
+    {
+      "path": "written-ring/written-3-nvme/writer1-final.json",
+      "bytes": 415,
+      "sha256": "37fd282d2aeb5603e1cfd595a3290e65ea8c9d4d462f4992c395188e10ef9044"
+    },
+    {
+      "path": "written-ring/written-3-nvme/writer1.jsonl",
+      "bytes": 2203,
+      "sha256": "3174f7b3607219490164617a1bb3b34926604361cfb9a9f80e4cee415decf27e"
+    },
+    {
+      "path": "written-ring/written-3-nvme/writer2-final.json",
+      "bytes": 415,
+      "sha256": "3fa25d84c2930fa792a73f9a8db229de9f89f81b9791001b62721dd0895a8e9f"
+    },
+    {
+      "path": "written-ring/written-3-nvme/writer2.jsonl",
+      "bytes": 2204,
+      "sha256": "c24c5fee6d846384c8e9b010bf75e2fdfe4190fbf7a9625a83c1414f783aab28"
+    },
+    {
+      "path": "written-ring/written-3-nvme-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "written-ring/written-3-nvme.log",
+      "bytes": 35,
+      "sha256": "4049478547bf66720ca1bf55a49e236d50bfc06a4d978cad16d92a2a9649976e"
+    },
+    {
+      "path": "written-ring/written-summary.json",
+      "bytes": 4838,
+      "sha256": "65c5105d03e44fe3cdb2b85e899eb3f9e4a877b8293892f76c5beddd267c688b"
+    },
+    {
+      "path": "written-ring-controller.log",
+      "bytes": 356,
+      "sha256": "8e35c5a8e73ff00fb69ee0f10ec590c47d367126c155e5000af0e87802f36330"
+    }
+  ]
+}

@@ -4333,8 +4333,11 @@ or present the Raft improvement as measured KV acceptance.
 EFS reproduce aggregate430/428→188/186 durable64KiB writes/s, per-writer mean
 sync~6.9→~16ms. Preallocated-ring repeats finish near438ops/s, with materially
 different initial windows and tails. Allocation/overwrite behaviour matters,
-but XFS versus drive/cache attribution is not yet isolated. SATA repeats,
-separate XFS/perf/strace profiles and fully written-ring controls continue.
+but XFS versus drive/cache attribution is not yet isolated. All eight allocation cells, four separate XFS/perf/strace profiles and four
+fully written-ring cells finish with exact reopen checks. Written NVMe repeats
+also decline1373/1356→450/439ops/s, while block write/flush elapsed averages
+increase~3×; written SATA stays near7100ops/s. This excludes allocation as the
+whole cause but does not isolate drive firmware from the block queue.
 W97 remains open; no drive settings or production defaults change.
 [Evidence and limitations](../status/devel-nuc-closure-20261010.md).
 
