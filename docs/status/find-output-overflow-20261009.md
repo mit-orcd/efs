@@ -92,7 +92,7 @@ for example:
 ```
 
 No runtime fix is implemented or claimed by this investigation.
-[Raw evidence](../../results/measure/20261009-find-output-overflow/).
+[Raw evidence](../../results/measure/20261009-find-output-overflow).
 
 
 ## Follow-up: bounded display and full export

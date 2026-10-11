@@ -72,13 +72,27 @@ static int probe_node_up(const char *nhost, uint16_t nport, struct efs_msg_statu
     if (efs_send_msg(pfd, EFS_MSG_STATUS, NULL, 0) == 0 &&
         efs_recv_msg(pfd, &type, &preply, &preply_len) == 0 &&
         type == EFS_MSG_STATUS_REPLY &&
-        preply_len == sizeof(struct efs_msg_status_reply)) {
-        if (status) memcpy(status, preply, sizeof(*status));
+        preply_len >= 24) {
+        if (status) {
+            memset(status, 0, sizeof(*status));
+            memcpy(status, preply, preply_len < sizeof(*status) ? preply_len : sizeof(*status));
+        }
         ok = 1;
     }
     free(preply);
     close(pfd);
     return ok;
+}
+
+/* Build hosts and timestamps are diagnostics, not source identity. Keep the
+ * commit/dirty version and branch; unknown builds cannot establish equality. */
+static void status_version_identity(const char *version, char *identity, size_t size)
+{
+    snprintf(identity, size, "%s", version);
+    char *built = strstr(identity, ", built ");
+    if (built && !strstr(identity, "no git metadata")) {
+        built[0] = ')'; built[1] = '\0';
+    }
 }
 
 static int cmd_status(int argc, char **argv)
@@ -132,14 +146,14 @@ static int cmd_status(int argc, char **argv)
     int full_nodes = 0;
     int up_nodes = 0;
     int down_nodes = 0;
-    int all_have_quota = (list->node_count > 0);
-    /* W42: per-node quota and remaining room of the UP nodes, fed to
+    int all_have_capacity = (list->node_count > 0);
+    /* W42: per-node capacity and available space of the UP nodes, fed to
      * efs_capacity_logical (same model as FUSE statfs). */
     uint64_t cap_quota[EFS_MAX_NODES], cap_room[EFS_MAX_NODES];
     uint32_t ncap = 0;
     for (uint32_t i = 0; i < list->node_count; i++) {
         /* Probe every advertised addr (may differ from the seed string we used). */
-        struct efs_msg_status_reply current;
+        struct efs_msg_status_reply current = {0};
         int up = probe_node_up(list->nodes[i].addr, list->nodes[i].port, &current);
         if (up) {
             list->nodes[i].used = current.used;
@@ -167,18 +181,19 @@ static int cmd_status(int argc, char **argv)
                    reach, used_str, quota_str, pct, npaths);
             if (up && list->nodes[i].used >= list->nodes[i].quota)
                 full_nodes++;
-            if (up && ncap < EFS_MAX_NODES) {
-                cap_quota[ncap] = list->nodes[i].quota;
-                cap_room[ncap] = (list->nodes[i].used < list->nodes[i].quota)
-                                     ? (list->nodes[i].quota - list->nodes[i].used)
-                                     : 0;
-                ncap++;
-            }
         } else {
-            all_have_quota = 0;
             printf("  node %u: %s:%u  %s  used=%s  quota=unlimited  storage(%u):\n",
                    list->nodes[i].id, list->nodes[i].addr, list->nodes[i].port,
                    reach, used_str, npaths);
+        }
+        if (up && current.capacity_valid && ncap < EFS_MAX_NODES) {
+            cap_quota[ncap] = current.capacity_bytes;
+            cap_room[ncap++] = current.available_bytes;
+        } else if (up && current.quota && ncap < EFS_MAX_NODES) {
+            cap_quota[ncap] = current.quota;
+            cap_room[ncap++] = current.quota > current.used ? current.quota - current.used : 0;
+        } else {
+            all_have_capacity = 0;
         }
         char paths[EFS_MAX_PATH];
         strncpy(paths, list->nodes[i].storage_path, sizeof(paths) - 1);
@@ -195,7 +210,7 @@ static int cmd_status(int argc, char **argv)
      * equal ones) — the same model FUSE df uses, over the nodes that are
      * up. Fewer than three up: nothing can be written; the state line
      * says why. */
-    if (all_have_quota && ncap >= EFS_NUM_FRAGMENTS) {
+    if (all_have_capacity && ncap >= EFS_NUM_FRAGMENTS) {
         uint64_t usable_cap = efs_capacity_logical(cap_quota, ncap);
         uint64_t usable_free = efs_capacity_logical(cap_room, ncap);
         if (usable_free > usable_cap)
@@ -207,13 +222,17 @@ static int cmd_status(int argc, char **argv)
         format_bytes(usable_free, free_s, sizeof(free_s));
         format_bytes(usable_cap, cap_s, sizeof(cap_s));
         double pct = 100.0 * (double)usable_used / (double)usable_cap;
-        printf("Usable (2+1 logical): used=%s  free=%s  capacity=%s (%.1f%%)\n",
+        printf("Usable (2+1 logical): used=%s  free=%s  capacity=%s (%.1f%%; filesystem capacity)\n",
                used_s, free_s, cap_s, pct);
+        /* Machine consumers must not reconstruct bytes from rounded TiB. */
+        printf("Usable bytes: used=%llu free=%llu capacity=%llu\n",
+               (unsigned long long)usable_used, (unsigned long long)usable_free,
+               (unsigned long long)usable_cap);
     } else if (down_nodes > 0) {
         printf("Usable (2+1 logical): degraded (%d/%u nodes up)\n",
                up_nodes, list->node_count);
     } else {
-        printf("Usable (2+1 logical): n/a (set a quota on every node)\n");
+        printf("Usable (2+1 logical): n/a (storage capacity unavailable)\n");
     }
 
     const char *cluster_state = "OK";
@@ -265,21 +284,11 @@ static int cmd_status(int argc, char **argv)
             free(vp);
             close(vfd);
         }
-        /* ident[i] is vers[i] with the trailing "on <host>" removed. */
         char ident[EFS_MAX_NODES][EFS_VERSION_REPLY_LEN];
         for (uint32_t i = 0; i < ncopy; i++) {
-            char *on = NULL, *p;
-            size_t n;
-            if (!have[i]) {
-                ident[i][0] = '\0';
-                continue;
-            }
-            snprintf(ident[i], sizeof(ident[i]), "%s", vers[i]);
-            n = strlen(ident[i]);
-            for (p = ident[i]; (p = strstr(p, " on ")) != NULL; p += 4)
-                on = p;
-            if (on && n >= 1 && ident[i][n - 1] == ')')
-                memmove(on, ")", 2);
+            ident[i][0] = '\0';
+            if (have[i])
+                status_version_identity(vers[i], ident[i], sizeof(ident[i]));
         }
         for (uint32_t i = 0; i < ncopy; i++) {
             if (!have[i])
@@ -1272,10 +1281,11 @@ static int cmd_raft_session_fence(const char *host, uint16_t port,
                                   const uint8_t uuid[EFS_OPID_UUID_LEN])
 {
     uint8_t payload[1 + 26];
-    struct efs_msg_raft_mkfs_reply r;
+    struct efs_msg_raft_mkfs_reply r = {.leader_hint = -1};
     uint32_t ssh, epoch = 0, old_epoch = 0, state = 0, word, i, ntouch = 0;
     uint32_t shards[4096];
     int rc, st;
+    const char *phase = "begin";
 
     ssh = efs_kv_session_shard(uuid);
     memset(payload, 0, sizeof(payload));
@@ -1301,6 +1311,7 @@ static int cmd_raft_session_fence(const char *host, uint16_t port,
     memset(payload,0,sizeof(payload));
     sess_pack_hdr(payload,efs_raft_shard_group(ssh),EFS_MD_SESS_STORAGE_FENCE,uuid);
     wr32be_mgmt(payload+3+EFS_OPID_UUID_LEN,epoch);
+    phase = "storage certificates";
     rc=sess_storage_barrier(host,port,payload,1+22,&r);
     if(rc!=EFS_OK)goto out;
 
@@ -1336,21 +1347,29 @@ static int cmd_raft_session_fence(const char *host, uint16_t port,
                       uuid);
         wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN, epoch);
         wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN + 4, sh);
+        phase = "local fence";
         rc = sess_rpc(host, port, payload, 1 + 26, &r);
         if (rc != EFS_OK)
             goto out;
         memset(payload, 0, sizeof(payload));
         sess_pack_hdr(payload, efs_raft_shard_group(ssh), EFS_MD_SESS_ACK, uuid);
         wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN, sh);
+        phase = "metadata acknowledgement";
         rc = sess_rpc(host, port, payload, 1 + 22, &r);
         if (rc != EFS_OK)
             goto out;
     }
     memset(payload, 0, sizeof(payload));
     sess_pack_hdr(payload, efs_raft_shard_group(ssh), EFS_MD_SESS_FINISH, uuid);
-    rc = sess_rpc(host, port, payload, 1 + 18, &r);
+    /* FINISH also checks every storage certificate. A cold RDMA peer can
+     * return BUSY after the initial seal succeeded. Retry only this pinned
+     * UUID/epoch; never re-BEGIN or infer completion from a metadata quorum. */
+    wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN, epoch);
+    phase = "finish certificate verification";
+    rc = sess_storage_barrier(host, port, payload, 1 + 22, &r);
     if (rc != EFS_OK)
         goto out;
+    phase = "ownership cleanup";
     for (i = 0; i < ntouch; i++) {
         rc=sess_cleanup_bounded(host,port,uuid,old_epoch,shards[i],0,&r);
         if(rc==EFS_OK)rc=sess_cleanup_bounded(host,port,uuid,old_epoch,shards[i],1,&r);
@@ -1372,6 +1391,8 @@ static int cmd_raft_session_fence(const char *host, uint16_t port,
         goto out;
     }
 out:
+    if (rc != EFS_OK)
+        fprintf(stderr, "session fence incomplete: phase=%s epoch=%u rc=%d\n", phase, epoch, rc);
     st = 0;
     if (rc == EFS_ERR_NOT_PRIMARY)
         st = 7;

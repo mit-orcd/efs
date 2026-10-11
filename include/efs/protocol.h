@@ -468,6 +468,10 @@ struct efs_msg_status_reply {
     uint64_t quota;
     uint64_t used;
     uint32_t state; /* efsd_server_state: 0=active, 3=draining, 4=drained, ... */
+    uint32_t reserved; /* Preserve the legacy 24-byte STATUS prefix. */
+    uint64_t capacity_bytes;
+    uint64_t available_bytes;
+    uint64_t capacity_valid;
 };
 
 /* IO_STATS reply: one row per op class (0 = GET_CHUNK handler, 1 =

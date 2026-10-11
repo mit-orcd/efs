@@ -1,5 +1,6 @@
 #include "efs/cli_help.h"
 #include "efs/common.h"
+#include "efs/storage_capacity.h"
 #include "efs/log_ts.h"
 #include "efs/network.h"
 #include "efs/version.h"
@@ -498,6 +499,40 @@ int main(int argc, char **argv)
     server_sync_local_membership(&server);
     /* Prefer meta/usage.bin; fall back to one full data/ scan. */
     server_init_local_usage(&server);
+
+    /* Fail closed before exposing an endpoint. Existing fragment usage is
+     * inventoried per root so external occupancy reduces the safe allowance. */
+    uint64_t root_usage[EFS_MAX_STORAGE_PATHS], safe_quota;
+    for (uint32_t i = 0; i < server.storage_path_count; i++)
+        root_usage[i] = server_compute_usage(server.storage_paths[i]);
+    if (efs_storage_safe_quota(server.storage_paths, root_usage,
+                               server.storage_path_count, &safe_quota)) {
+        fprintf(stderr, "Storage quota: cannot establish safe headroom; refusing startup\n");
+        return 1;
+    }
+    const double gib = (double)(UINT64_C(1) << 30);
+    const double tib = (double)(UINT64_C(1) << 40);
+    const char *maximum_unit = safe_quota >= (UINT64_C(1) << 40) ? "TiB" : "GiB";
+    double maximum_scale = safe_quota >= (UINT64_C(1) << 40) ? tib : gib;
+    const char *quota_unit = server.quota >= (UINT64_C(1) << 40) ? "TiB" : "GiB";
+    double quota_scale = server.quota >= (UINT64_C(1) << 40) ? tib : gib;
+    if (server.quota > safe_quota) {
+        fprintf(stderr, "Storage quota %.2f %s exceeds safe maximum %.2f %s; refusing startup\n",
+                (double)server.quota / quota_scale, quota_unit,
+                (double)safe_quota / maximum_scale, maximum_unit);
+        return 1;
+    }
+    int automatic_quota = server.quota == 0;
+    if (automatic_quota) {
+        server.quota = safe_quota;
+        quota_unit = maximum_unit;
+        quota_scale = maximum_scale;
+    }
+    server_sync_local_membership(&server);
+    fprintf(stderr, "Storage quota: %s %.2f %s (safe maximum %.2f %s; reserve 20%%, minimum 1 GiB per filesystem)\n",
+            automatic_quota ? "automatic" : "explicit",
+            (double)server.quota / quota_scale, quota_unit,
+            (double)safe_quota / maximum_scale, maximum_unit);
 
     /* Start listening first. If the configured address/port cannot be bound,
        fail immediately before contacting peers. */

@@ -1776,7 +1776,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | virtual-io | **W91/W92 · `.efs/` commands — server snapshots and safe reads** | correctness / performance / access control | in progress — disk index, bounded incremental catch-up, aggregate quota and replicated policy landed; named native/live/cold and Linux NFSv4.0 gates pass; actual 2^32/400 GiB gates and named virtual-export fix rollout remain open; Mac/Linux NFS candidate oracles pass | [closure](../status/query-cache-closure-20261010.md) · [persistent policy](../status/efs-query-persistent-policy-20261010.md) |
 | gc-obs | **W63** · GC backlog, reclaimed bytes and retry progress are missing | observability enhancement | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w63) |
 | 0e | **W38** · ior-hard fold tombstone without the span's bytes | correctness | code present; dated Oct 5 checkpoint — replay preserves live spans; folds require byte observations; deterministic regression + ASan/UBSan pass; traced real IOR-hard + independent cold hardscan pass (108000 records, bad=0, short=0); nine physical hosts remain; AMD software-RXE fold/GC gate passes, hardware RDMA remains | [full text](#w38--ior-hard-fold-tombstone-without-the-spans-bytes-queue-row-0e) |
-| 2a | **W42** · `df` / `efs-mgmt status` report the 3-node capacity model on any node count | correctness | capacity helper is used by both clients; NUC four-node status/df record 500 GiB for 4 × 187.5 GiB quotas; NUC limited-member write/cold-read/reclaim gate passes; protection debt/repair and named 19810 capacity acceptance remain open | [full text](#w42--df--efs-mgmt-status-report-the-3-node-capacity-model-on-any-node-count-queue-row-2a) |
+| 2a | **W42** · `df` / `efs-mgmt status` report the 3-node capacity model on any node count | correctness | capacity helper is used by both clients; NUC four-node status/df record 500 GiB for 4 × 187.5 GiB quotas; NUC limited-member write/cold-read/reclaim gate passes; [ORCD unlimited-capacity correction](../status/orcd-capacity-tests-20261011.md) passes live capacity/POSIX and private native-RDMA GC gates; protection debt/repair and named 19810 capacity acceptance remain open | [full text](#w42--df--efs-mgmt-status-report-the-3-node-capacity-model-on-any-node-count-queue-row-2a) |
 | 0b | **W27** · REPORT identity from the staging table | correctness | closed: owned-PUT predicate shared by both builders; nonzero unowned observations rejected; 2048-file cold copy/trace and GC/restart pass | [full text](#w27--report-identity-from-the-staging-table-queue-row-0b) |
 | 0g | **W43** · large truncate is refused; logical truncate = **D25** (decided) | correctness | explicit failure is implemented; `3a1b4a52` makes oversized legacy truncate fail atomically; D25 metadata/read/resize foundations exist, but FUSE publication, live-file sweep and public activation remain open | [full text](#w43--truncateo_trunc-of-a-file-with--32-chunks-in-a-lane-is-a-silent-no-op-queue-row-0g) · [D25](#appendix-3--decisions--taken-and-pending-register-d1d31) |
 | 0a | STALE replay that never converges; remedy = **D27** (decided) | correctness | runtime foundations present; strict timing, fault/recovery/contention and RSS gates remain in handoff | [full text](#0a--stale-replay-that-never-converges-queue-row-0a) · [D27](#appendix-3--decisions--taken-and-pending-register-d1d31) |
@@ -1920,6 +1920,24 @@ This index adds traceable IDs to the Intel acceptance follow-ups; it does not ch
 Pending choices retain their existing homes: W99 cache-only pressure escalation and numeric thresholds; W54 additional live-reference GC guard; W66/W74 metadata mechanism under accepted D36. W104 separately records the deferred shared-mmap scope choice. No new D number or policy acceptance is implied.
 
 **RDMA test placement — user instruction, Oct 11, 2026:** All RDMA work is tested on AMD using software RDMA, or on `orcd-test` using hardware IB/RDMA, according to the claim being validated. Keep software and hardware verdicts separate. Intel continues to provide TCP acceptance. This applies to all RDMA gates, including older W-item hardware obligations.
+
+
+### ORCD communication follow-ups — W109/W110
+
+| Item | Assigned cluster | State / next action |
+| --- | --- | --- |
+| [W109](#w109) | orcd-test | Open: correlate metadata apply/query contention with original EBUSY/timeouts; preserve deadlines and full-load gates. |
+| [W110](#w110) | orcd-test | Open: distinguish EFS retries/loss from TCP retransmission and native-IB errors; establish per-op correlation and recovery gates. |
+
+[Capture summary and closure plans](../status/orcd-communication-20261011.md): two EFS TCP
+retransmissions, unchanged IB error counters, 22–50 ms metadata apply waits and
+substantial query-build CPU. No transport root cause or gate closure is claimed.
+W95 packing and W106 broader hardware acceptance remain separate work.
+
+[Deeper investigation and repair hypotheses](../status/orcd-communication-hypotheses-20261011.md):
+prioritize the 1,024-change query fallback; distinguish compaction correlation,
+GC partial-progress BUSY and TCP duplicate probes from established failures.
+W109/W110 remain open on orcd-test.
 
 
 ## Appendix 2 — In flight — the current handoff block
@@ -4386,6 +4404,16 @@ next rollout. No cluster rollout or artifact cleanup in this follow-up.
 
 ### W42 · df / efs-mgmt status report the 3-node capacity model on any node count (queue row 2a)
 
+**October 11 ORCD correction:** unlimited stores formerly reported zero capacity
+and skipped files-engine usage accounting. STATUS now carries deduplicated
+filesystem capacity/free bytes, shared by FUSE and management; the portal accepts
+TiB. Native-RDMA unlimited-store and guarded-session reclamation gates pass.
+See [capacity and test evidence](../status/orcd-capacity-tests-20261011.md).
+Live ORCD deployment confirms nonzero matching capacity, preservation of the
+100 GiB file samples, 1526 live POSIX passes and 264 peer passes. Other W42
+protection-debt/repair gates remain open.
+
+
 **Gate follow-up (Oct 7):** NUC full-node gate: one member limited to 64 KiB, 32 MiB write, cold remount bytes, physical deletion and restart all pass. This does not prove three-fragment protection debt/repair or the named 19810 capacity gate. See [gate ledger](../status/gate-30-rounds-20261007.md).
 
 **Current state, reviewed Oct 7.** Both FUSE statfs and management status
@@ -4400,7 +4428,7 @@ third fragment. Trace and validate protection debt/repair before closing W42.
 [Evidence and limits](../archive/queue-review-20261007-round2.md).
 
 
-**W42 · `df` / `efs-mgmt status` report the 3-node capacity model on any node count** (Oct 1 2026, user). **IN TREE Oct 2:** `efs_capacity_logical` (placement.c, binary search on the Σ min(cᵢ, M) ≥ 3M bound), used by `efs_fuse_statfs` (total = quotas, avail = room, used = total − avail) and `efs-mgmt status`; `test_placement` covers 3 equal / 4 equal / 100/100/1000 → 200 / 6 equal / < 3 nodes → 0. Still to do: verify on 19810 (`df` vs `4 × 36T × 2/3`) and the one-QUOTA-member PUT question
+**W42 · `df` / `efs-mgmt status` report the 3-node capacity model on any node count** (Oct 1 2026, user). **IN TREE Oct 2:** `efs_capacity_logical` (placement.c, binary search on the Σ min(cᵢ, M) ≥ 3M bound), used by `efs_fuse_statfs` (filesystem capacity and available bytes, optionally quota-bounded; used = total − avail) and `efs-mgmt status`; `test_placement` covers 3 equal / 4 equal / 100/100/1000 → 200 / 6 equal / < 3 nodes → 0. Still to do: verify on 19810 (`df` vs `4 × 36T × 2/3`) and the one-QUOTA-member PUT question
 
 **Follow-up steps.** mechanical: replace `total_logical = 2 × min_quota` (`efs_fuse_statfs`, `efs_fuse.c:3108–3120`) and `usable_cap = 2 × min_quota` / `usable_free = 2 × min_free` (`efs_mgmt.c:129–185`) with the 3-of-N placement bound: the largest `M` (chunks) with `Σ_i min(c_i, M) ≥ 3M`, `c_i` = node `i`'s quota (or free) in 64 KiB fragments, times 128 KiB; count only up nodes with a quota, as today. Reduces to `2 × min` on three nodes and to `Σ × 2/3` on N equal nodes. Also make `f_blocks` and the used figure come from the same model (statfs today derives used from `Σ phys × 2/3` and total from `2 × min`, so on four nodes used can exceed total and `avail` clamps to 0 while writes still succeed). Unit test with 3 equal, 4 equal, 3 unequal (100/100/1000 → 200, not 800). Then verify on 19810 (`df` vs `efs-mgmt status` vs `4 × 36T × 2/3`)
 
@@ -7044,6 +7072,57 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 **Remaining action:** Run relevant current-code software RDMA gates on AMD and hardware IB/RDMA gates on `orcd-test`, retaining actual transport/device, code/build, topology and per-suite verdict evidence. Intel RDMA enablement or NIC/package changes are not part of this task.
 
 **Gate:** Actual cross-host RDMA connection/device evidence plus unchanged POSIX, peer, direct-I/O, persistence and fault gates on the designated environment. Report AMD software and `orcd-test` hardware verdicts separately; neither TCP nor software-only results close hardware-specific obligations.
+
+
+<a id="w109"></a>
+
+### W109 · ORCD metadata/query contention under load
+
+**Class/state:** liveness/performance investigation; open.
+**Assigned cluster:** `orcd-test` — native IB/RDMA, direct I/O.
+
+C profiles show substantial query rebuild work (42.96% inclusive on fcstor005);
+fcstor004 logs 15 apply waits of 21.668–50.117 ms. Earlier full-load gates retain
+namespace EBUSY and deep-directory/virtual-query timeouts. A causal connection
+is not yet established. Correlate lookup/writeback timing, Raft authority/apply
+queues, storage durability and query refresh before selecting a repair.
+
+**Gate:** repeat unchanged-limit full native and peer gates under representative
+load with no FAIL/NOTRUN, complete/correct query results and cold preserved
+bytes. Related W66/W92/W23/D30 remain independently open. See
+[evidence and closure plan](../status/orcd-communication-20261011.md).
+
+**Investigation update (Oct 11):** sustained deltas exceed the 1,024-change
+incremental budget while each publication refolds over a million rows. Full
+fallback is the strongest repair hypothesis; compaction overlap and GC BUSY
+semantics need separate attribution. See the
+[findings, hypotheses and discriminating tests](../status/orcd-communication-hypotheses-20261011.md).
+
+<a id="w110"></a>
+
+### W110 · ORCD communication-loss diagnosis across EFS, IB and TCP
+
+**Class/state:** transport observability/validation investigation; open.
+**Assigned cluster:** `orcd-test` — native hardware IB/RDMA and TCP side-channel.
+
+Observed two EFS TCP retransmissions without resets/hard network errors, and
+zero growth in selected IB error counters across eleven hosts. These samples
+cannot provide an exact lost-RPC rate or exclude intermittent stalls; historical
+IB totals and host-wide retransmissions are not EFS failure attribution.
+Large frames intentionally use TCP even when RDMA is enabled.
+
+**Remaining action/gate:** correlate request identity/outcome and retry timing
+with endpoint/QP, TCP and IB evidence during a reproduced stall; validate
+ambiguous-request recovery and acknowledged cold bytes with existing fault/
+persistence gates. Use a private TCP comparison if needed; retain W106 broader
+acceptance. Do not confuse EAGAIN, empty polls or retransmission with permanent
+message loss. See [capture and plan](../status/orcd-communication-20261011.md).
+
+**Investigation update (Oct 11):** loss-probe/DSACK counter deltas support a
+duplicate-probe hypothesis rather than demonstrated permanent RPC loss. The
+five-second software send guard qualifies the hardware RNR retry concern.
+Per-flow causality and deadline/recovery gates remain open; see the
+[evidence and test hypotheses](../status/orcd-communication-hypotheses-20261011.md).
 
 
 ## Appendix 5 — Naming

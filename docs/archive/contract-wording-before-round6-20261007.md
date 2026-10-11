@@ -28,7 +28,7 @@ change — the file cap still forces a compaction, but of one subrange.
 
 **Source (Sep 29 2026 04:07–04:27Z, `results/measure/20260929-040800-idle-trace/ana`,
 perf + `strace -f -tt -T` on every daemon, a user `ecopy` 04:15–04:22Z
-writing 408K fragments per server; the handoff archive in [../project-history.md](../archive/project-history.md) has the full list).**
+writing 408K fragments per server; the handoff archive in [../project-history.md](project-history.md) has the full list).**
 
 - `kv_maybe_flush_locked` (`kv_compact.c:711`) waits on `l->cv` while
   `n_l0 + KV_LSM_RANGE_MAX > KV_LSM_MAX_SEGS` (i.e. L0 ≥ 48 files). The
@@ -137,7 +137,7 @@ follower-lag admission rule) — bring the numbers, do not pick.
 
 - **Read:** `src/kv/kv_compact.c` (`kv_maybe_flush_locked`, `compactor_main`,
   `kv_compact_locked`), `src/kv/kv_lsm.c` (`kv_flush_locked`), `src/kv/kv_seg.c`,
-  W13 (closed; [../project-history.md](../archive/project-history.md) "START-HERE closed items") and the
+  W13 (closed; [../project-history.md](project-history.md) "START-HERE closed items") and the
   "L1 compaction is a background thread" learning in the project-state rule.
 - **Forbidden:** raising `KV_LSM_MEM_DEFAULT` or `KV_LSM_L0_DEFAULT` as the
   fix (W13, closed); raising the election timeout, `HOST_TICK_US`, or the 400 ms
@@ -287,7 +287,7 @@ peer acceptance. W36 is accepted for those recorded builds; repeating the
 gate on a new rollout is a release obligation, not evidence that the old
 implementation remains unaccepted. The historical recurrence/next-rollout
 instructions below are superseded by the
-[round-2 ledger](../archive/queue-review-20261007-round2.md).
+[round-2 ledger](queue-review-20261007-round2.md).
 
 
 **Oct 6 reply-path fix:** `75b06624` makes simple UNLINK wait for the actual apply verdict. Previously an apply NOT_FOUND/BUSY was hidden by `host_wait_settled`, allowing both operations to report success even when unlink lost. This is distinct from the earlier exact-source PREP protection against dangling entries. NUC race gate 20/20 and full posix2 PASS; repeat on the current xorinox build before closing its recurrence.
@@ -343,7 +343,7 @@ this review. The full-stripe protection question remains open: current PUT
 returns OK with two ACKs and fewer than two quota failures, and its outer
 retry loop returns immediately on OK, without rerouting a quota-rejected
 third fragment. Trace and validate protection debt/repair before closing W42.
-[Evidence and limits](../archive/queue-review-20261007-round2.md).
+[Evidence and limits](queue-review-20261007-round2.md).
 
 
 **W42 · `df` / `efs-mgmt status` report the 3-node capacity model on any node count** (Oct 1 2026, user). **IN TREE Oct 2:** `efs_capacity_logical` (placement.c, binary search on the Σ min(cᵢ, M) ≥ 3M bound), used by `efs_fuse_statfs` (total = quotas, avail = room, used = total − avail) and `efs-mgmt status`; `test_placement` covers 3 equal / 4 equal / 100/100/1000 → 200 / 6 equal / < 3 nodes → 0. Still to do: verify on 19810 (`df` vs `4 × 36T × 2/3`) and the one-QUOTA-member PUT question
@@ -409,7 +409,7 @@ nonzero-node staging-identity fallback remains; this is not a complete W27 close
 **Acceptance update, Oct 7.** Final NUC raw TSVs show all seven directory-time
 tests and `peer_dir_mtime_bump_visible` passing on `128f6b7d`; this supersedes
 the 6/7 single-client and peer-gate-pending statements below. The row is archived
-as accepted on that build. [Raw evidence](../archive/queue-review-20261007-round2.md).
+as accepted on that build. [Raw evidence](queue-review-20261007-round2.md).
 
 
 **Parent directory mtime/ctime must bump on entry create/unlink/rename/link/mkdir/rmdir — POSIX, and ruled a bug if missing (user, Oct 6 2026: "EFS is as much as possible POSIX compliant").** The open "bug vs. intended" question is closed: intended = POSIX.

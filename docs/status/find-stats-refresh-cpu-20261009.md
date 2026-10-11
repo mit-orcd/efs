@@ -88,7 +88,7 @@ private run was invalidated when deployment moved its build directory before
 the restart stage; the complete suite was rerun from the stable installed path.
 
 [Raw profiles, annotations, timings, screen capture, validation and deployment
-evidence](../../results/measure/20261009-catalog-ordinal/).
+evidence](../../results/measure/20261009-catalog-ordinal).
 
 User observed node-id 2 at 100% CPU and requested strace investigation.
 Installed build: devel `ab050595c3b8`, direct I/O/TCP, `.efs` enabled.
@@ -167,7 +167,7 @@ rollup; this CPU investigation does not audit that space difference.
 No implementation fix or improved throughput is claimed. The active generator
 and `.efs` service were left running. Raw perf data/reports, thread counters,
 strace summary, refresh excerpts and cluster status are retained in
-[measurement evidence](../../results/measure/20261009-node2-query-cpu/).
+[measurement evidence](../../results/measure/20261009-node2-query-cpu).
 
 ## Requested 30-second callgraph follow-up
 
@@ -321,7 +321,7 @@ suffix gate still times out at the same scan cap; the options repeat refuses
 its already existing test directory, so it adds no acceptance evidence.
 
 Raw deployment/profile evidence is retained in
-[results/measure/20261009-catalog-incremental](../../results/measure/20261009-catalog-incremental/)
+[results/measure/20261009-catalog-incremental](../../results/measure/20261009-catalog-incremental)
 and on NUC at `/data1/efs/deploy-query-5084f8c2`. Native unit/build logs and private
 fixture logs remain under `/data1/efs/query-incremental-*`.
 

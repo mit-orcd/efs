@@ -7,6 +7,7 @@
 #include "efs/put_upload.h"
 #include "efs/opid.h"
 #include "efs/version.h"
+#include "efs/storage_capacity.h"
 #include "server_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -627,6 +628,10 @@ send_reply:
             /* No drain/leave state machine; always ACTIVE. */
             reply.state = 0;
             pthread_mutex_unlock(&g_server->lock);
+            reply.capacity_valid = efs_storage_capacity(
+                g_server->storage_paths, g_server->storage_path_count,
+                reply.quota, reply.used, &reply.capacity_bytes,
+                &reply.available_bytes) == 0;
             efs_conn_send_msg(conn, EFS_MSG_STATUS_REPLY, &reply, sizeof(reply));
             break;
         }

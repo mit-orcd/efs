@@ -297,6 +297,7 @@ test: all
 	./tests/test_put_storage_fence
 	python3 tests/test_storage_fence_members.py
 	python3 tests/test_storage_fence_retry.py
+	python3 tests/test_session_finish_retry.py
 	$(MAKE) tests/test_put_upload_server
 	./tests/test_put_upload_server
 	$(MAKE) tests/test_put_upload_client
@@ -304,6 +305,8 @@ test: all
 	python3 tests/test_applied_interval.py
 	./tests/test_store_containers
 	python3 tests/test_lookup_errno.py
+	python3 tests/test_storage_capacity.py
+	python3 tests/test_status_version.py
 	python3 tests/test_create_credentials.py
 	python3 tests/test_permission_groups.py
 	python3 tests/test_chown_permissions.py
@@ -399,6 +402,7 @@ test: all
 	./tests/test_store_durability
 	./tests/test_put_ticket
 	./tests/test_store_gc
+	./tests/test_store_gc unlimited
 	./tests/test_writer_routing
 	./tests/test_kv_snapshot_tail
 	./tests/test_kv_seg_index
@@ -418,6 +422,11 @@ test: all
 	python3 tests/test_txn_apply_retry.py
 	python3 tests/test_publication_persistence.py
 	python3 tests/test_follower_read_redirect.py
+	python3 tests/test_query_snapshot_failover.py
+	python3 tests/test_query_callback_affinity.py
+	python3 tests/test_feature_poll_deadline.py
+	python3 tests/test_query_loaded_oracle.py
+	python3 tests/test_valgrind_verdict.py
 	python3 tests/test_txn_parts_bounds.py
 	python3 tests/test_prepare_bounds.py
 	python3 tests/test_raft_tail.py

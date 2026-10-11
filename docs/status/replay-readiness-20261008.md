@@ -345,5 +345,5 @@ activation or new gate pass is claimed by recording these decisions.
 `devel-find-stats` was merged into devel at the user's request. The merged
 production source passes full AMD units and direct/TCP private query/POSIX/peer
 and replay/sync/GC/shutdown/cold recovery gates. Installed AMD service restored;
-no installed-binary rollout, push or activation. [Merge checkpoint](find-stats-merge-20261008.md)
+no installed-binary rollout, push or activation. [Merge checkpoint](../archive/status-20261011/find-stats-merge-20261008.md)
 records exact commits, source/binary hashes, results and remaining obligations.

@@ -89,3 +89,33 @@ and recovery against the declared failure target, and test every allowed node
 loss combination. Do not advertise any-two-of-four survival. Coordinate this
 consensus requirement with W66 and the architecture rather than changing voter
 sets as part of W92 cache work.
+
+## Oct 11: startup quota admission
+
+`efsd` now derives a maximum startup fragment-payload quota from each backing
+filesystem. It reserves 20% of total filesystem bytes, with a 1 GiB minimum,
+then budgets 7/8 of the remaining available bytes for new payloads. Existing
+inventoried payload bytes are added back, capped at 7/8 of total bytes minus
+the reserve. External occupancy therefore reduces the allowance. Storage roots
+sharing a filesystem are grouped before calculating this budget; their usage
+is summed and their capacity counted once. This applies to files and containers.
+
+An omitted `--quota` selects this estimate. An explicit quota above the estimate,
+a failed inventory, or a filesystem already inside its protected reserve
+refuses startup before listening or joining peers. Quota diagnostics select
+GiB or TiB; management and portal usable-capacity reporting retain human units.
+
+This startup estimate does **not** reserve disk blocks, coordinate independent
+daemon budgets on a shared filesystem, or protect against later external
+consumption. Aggregate node quotas also do not enforce individual target
+budgets when data placement is uneven. Those runtime capacity-domain admission
+requirements remain open under W99; the startup check must not be described
+as completion of proactive storage protection. Existing explicit quotas below
+the estimate continue to apply. Runtime shrink only reduces that quota.
+
+Validation: policy/unit tests cover external occupancy, shared roots, insufficient
+reserve and integer overflow. ORCD fcstor007 private daemon startup accepted an
+automatic 280.59 GiB quota and explicit 1 GiB quota, and rejected 1000 TiB before
+listening. Fixtures used temporary local stores and were stopped and removed;
+installed service and user data were untouched. All five architecture doc gates
+passed. This is not a constrained-filesystem runtime pressure gate.

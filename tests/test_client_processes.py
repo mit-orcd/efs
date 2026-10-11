@@ -18,6 +18,12 @@ with tempfile.TemporaryDirectory(prefix='efs-processes-') as directory:
     (p/'cmdline').write_bytes(b'./efs-fuse\0seed:17432\0fs\0/mnt/a/../efs\0-o\0allow_other\0')
     (p/'stat').write_text('123 (efs-fuse) '+' '.join(['S']+['0']*18+['99']))
     assert m.clients(proc)==[(123,'/mnt/efs','99')]
+    (p/'cmdline').write_bytes(b'/usr/libexec/valgrind/memcheck-amd64-linux\0--leak-check=full\0--log-file=/tmp/client.vg\0./efs-fuse\0seed:17432\0fs\0/mnt/efs\0-f\0')
+    assert m.clients(proc)==[(123,'/mnt/efs','99')]
+    (p/'cmdline').write_bytes(b'/usr/libexec/valgrind/memcheck-amd64-linux\0./efs-fuse\0seed\0fs\0/mnt/efs\0./efs-fuse\0')
+    try: m.clients(proc)
+    except RuntimeError: pass
+    else: raise AssertionError('duplicate wrapped clients must remain ambiguous')
     (p/'cmdline').write_bytes(b'./efs-fuse\0--stop\0/mnt/efs\0')
     assert not m.clients(proc)
     (p/'cmdline').write_bytes(b'./efs-fuse\0seed\0')

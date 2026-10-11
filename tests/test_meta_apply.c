@@ -5854,7 +5854,7 @@ static void test_create_initial_lease_atomic(void)
         CHECK(efs_lease_any(kv,new_ino,1)==1,
               "retired old request cannot affect later CREATE ownership");
     }
-    kv->ops=original;efs_kv_destroy(kv);
+    kv->ops=original;efs_kv_mem_free(kv);
   }
 }
 

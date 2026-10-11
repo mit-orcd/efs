@@ -61,7 +61,7 @@ script access, standalone getattr and dot-directory access retain their checks.
 ## Evidence
 
 Raw profiles, syscall traces, source patches, build/deploy logs and timing JSON
-are retained in [the evidence directory](../../results/measure/20261008-efs-command-perf/)
+are retained in [the evidence directory](../../results/measure/20261008-efs-command-perf)
 and on NUC under `/data1/efs/command-perf/`. The completed results and final gates
 are recorded below.
 

@@ -9976,7 +9976,7 @@ fail if a disk or the quota is full.
 
 **This is the current handoff block** (the "1b. In flight" block the work
 queue refers to). Older blocks are archived in
-[project-history.md](../archive/project-history.md) under "START-HERE
+[project-history.md](project-history.md) under "START-HERE
 handoff archive".
 
 [Work queue + status](README.md) · [Decisions](decisions.md) ·
@@ -9989,7 +9989,7 @@ handoff archive".
 Whoever picks the project up next does **this first**. Update or delete
 this block when done — an "in flight" block older than the last commit
 is a bug in this page. One block only; the previous one moves to
-[project-history.md](../archive/project-history.md) "START-HERE handoff archive"
+[project-history.md](project-history.md) "START-HERE handoff archive"
 when it is replaced.
 
 **Oct 2 2026 19:05Z — TWO CORRECTNESS ROWS OPENED BY THE 17:00Z GATE;
@@ -10157,6 +10157,6 @@ rewritten as the P0/P1 rows of that plan, the rest stands:**
    gate result.
 
 Handoff blocks before Oct 2 01:20Z (Sep 28 – Oct 1 22:00Z) are verbatim
-in project-history.md ([Oct 1 18:00–22:00Z](../archive/project-history.md#ph-start-here-handoff-archive-oct-1-2026-1800z--2200z--moved-oc-8297ba),
-[Sep 28 – Oct 1 14:00Z](../archive/project-history.md#ph-start-here-handoff-archive-sep-28--oct-1-2026-1400z--moved-o-4e37f3)).
+in project-history.md ([Oct 1 18:00–22:00Z](project-history.md#ph-start-here-handoff-archive-oct-1-2026-1800z--2200z--moved-oc-8297ba),
+[Sep 28 – Oct 1 14:00Z](project-history.md#ph-start-here-handoff-archive-sep-28--oct-1-2026-1400z--moved-o-4e37f3)).
 A `§1b <time> block` reference in the queue below points there.
