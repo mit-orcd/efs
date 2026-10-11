@@ -1,0 +1,12 @@
+parallel 3 tests jobs=4 (serial 0 after)
+pass virt_find_not_a_real_dir        
+Showing 1 results; no more results. Total matches were not counted.
+Results as of just now; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 6329200985596530:19; no refresh error recorded; expiry unavailable.
+pass virt_find_query                 
+Results as of 1 second ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 6316057658486419:20; no refresh error recorded; expiry unavailable.
+pass virt_stats_readable             
+============================================================
+POSIX suite: 3/3 pass, 0 fail, 0 skip, 0 notrun  (2.6s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/integration-a48076c4e937-query-only/fcstor012/all.tsv

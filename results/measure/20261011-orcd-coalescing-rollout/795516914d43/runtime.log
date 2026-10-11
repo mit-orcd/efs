@@ -1,0 +1,42 @@
+All eleven live processes match deployed revision, UID, native RDMA and installed executable
+Cluster nodes (4):
+  node 1: 172.16.223.57:17432  up  used=1.20 GiB  quota=28.69 TiB (0.0%)  storage(6):
+      /data1/01/efs-orcd-test-erbmi1
+      /data1/02/efs-orcd-test-erbmi1
+      /data1/03/efs-orcd-test-erbmi1
+      /data1/04/efs-orcd-test-erbmi1
+      /data1/05/efs-orcd-test-erbmi1
+      /data1/06/efs-orcd-test-erbmi1
+  node 2: 172.16.223.58:17432  up  used=1.19 GiB  quota=28.67 TiB (0.0%)  storage(6):
+      /data1/01/efs-orcd-test-erbmi1
+      /data1/02/efs-orcd-test-erbmi1
+      /data1/03/efs-orcd-test-erbmi1
+      /data1/04/efs-orcd-test-erbmi1
+      /data1/05/efs-orcd-test-erbmi1
+      /data1/06/efs-orcd-test-erbmi1
+  node 3: 172.16.223.59:17432  up  used=1.19 GiB  quota=28.67 TiB (0.0%)  storage(6):
+      /data1/01/efs-orcd-test-erbmi1
+      /data1/02/efs-orcd-test-erbmi1
+      /data1/03/efs-orcd-test-erbmi1
+      /data1/04/efs-orcd-test-erbmi1
+      /data1/05/efs-orcd-test-erbmi1
+      /data1/06/efs-orcd-test-erbmi1
+  node 4: 172.16.223.60:17432  up  used=1.19 GiB  quota=28.69 TiB (0.0%)  storage(6):
+      /data1/01/efs-orcd-test-erbmi1
+      /data1/02/efs-orcd-test-erbmi1
+      /data1/03/efs-orcd-test-erbmi1
+      /data1/04/efs-orcd-test-erbmi1
+      /data1/05/efs-orcd-test-erbmi1
+      /data1/06/efs-orcd-test-erbmi1
+Usable (2+1 logical): used=3.18 GiB  free=76.47 TiB  capacity=76.48 TiB (0.0%; filesystem capacity)
+Usable bytes: used=3413368832 free=84083212271690 capacity=84086625640522
+Cluster state: OK (4 up, 0 down)
+Versions: efsd v0.2.2-pre-alpha-268-g79551691 (branch devel-orcd) — 4/4 identical
+Node 172.16.223.57:17432 state: active
+Heal:
+  node 1: idle
+  node 2: idle
+  node 3: idle
+  node 4: idle
+commands-policy rc=0 version=0 mask=3 leader_hint=0
+Fresh validation namespace; retained-file cold check is recorded for the preserved prior stores

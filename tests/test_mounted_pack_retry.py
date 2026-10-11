@@ -7,13 +7,26 @@ s=(root/'src/client/pack_write.c').read_text()
 code=s[:s.index('static uint64_t pack_now(')]+r'''
 #include <assert.h>
 #include <stdio.h>
+#include <errno.h>
 #include "efs/publication_ack.h"
 #include "efs/erasure.h"
 struct efs_client g_client;
 static unsigned sends[3],publications[2],loads[2],retirements[2],released;
-static unsigned commands,upload_retired;
+static unsigned commands,upload_retired,retire_inflight,retire_peak;
 static int admit_fail,put_fail,publication_fail,load_fail,retire_fail,upload_fail;
 static int terminal_reject,rejection_proven;static struct efs_publication_ack_queue queues[2];
+static unsigned exercised[PACK_WRITERS],parallel_live,parallel_peak;static int thread_fail;
+static int fault_create(pthread_t *thread,const pthread_attr_t *attr,void *(*worker)(void *),void *context)
+{return thread_fail?EAGAIN:pthread_create(thread,attr,worker,context);}
+static int exercise_one(void *context,uint32_t i)
+{
+ assert(context==exercised&&i<PACK_WRITERS&&efs_client_rpc_deadline_ms()==12345);
+ assert(__atomic_fetch_add(&exercised[i],1,__ATOMIC_SEQ_CST)==0);
+ unsigned live=__atomic_add_fetch(&parallel_live,1,__ATOMIC_SEQ_CST),peak=__atomic_load_n(&parallel_peak,__ATOMIC_SEQ_CST);
+ while(live>peak&&!__atomic_compare_exchange_n(&parallel_peak,&peak,live,0,__ATOMIC_SEQ_CST,__ATOMIC_SEQ_CST)){}
+ usleep(20000);__atomic_sub_fetch(&parallel_live,1,__ATOMIC_SEQ_CST);
+ return i==11?EFS_ERR_NET:EFS_OK;
+}
 static uint32_t current_fi;static uint8_t digest[EFS_HASH_SIZE];static int have_digest;
 static uint64_t pack_now(void){return 1000000000;}
 static __thread uint64_t deadline;
@@ -65,10 +78,13 @@ int efs_client_pull_chunks_range(efs_ino_t ino,uint32_t a,uint32_t b){
 void efs_dcache_drop(efs_ino_t ino,uint32_t ci){assert((ino==101||ino==103)&&!ci);}
 int efs_client_publication_retire(struct efs_publication_ack_queue *q){
  unsigned i=q==&queues[0]?0:1;assert(q==&queues[i]);retirements[i]++;
+ unsigned live=__atomic_add_fetch(&retire_inflight,1,__ATOMIC_SEQ_CST),peak=__atomic_load_n(&retire_peak,__ATOMIC_SEQ_CST);
+ while(live>peak&&!__atomic_compare_exchange_n(&retire_peak,&peak,live,0,__ATOMIC_SEQ_CST,__ATOMIC_SEQ_CST)){}
+ usleep(20000);__atomic_sub_fetch(&retire_inflight,1,__ATOMIC_SEQ_CST);
  if(i==1&&retire_fail){retire_fail=0;return EFS_ERR_NET;}return 0;
 }
 int efs_client_publication_ack_free(struct efs_publication_ack_queue *q){assert(q);__atomic_fetch_add(&released,1,__ATOMIC_RELAXED);return 0;}
-'''+s[s.index('static int pack_retire_group('):s.index('static int pack_capabilities(')]+s[s.index('static int pack_publish_record('):s.index('static void *pack_worker(')]+r'''
+'''+s[s.index('struct pack_parallel_run {'):s.index('static int pack_capabilities(')].replace('pthread_create(', 'fault_create(')+s[s.index('static int pack_publish_record('):s.index('static void *pack_worker(')]+r'''
 int main(void){
  static struct pack_context p;g_client.node_count=4;
  for(unsigned i=0;i<4;i++)g_client.nodes[i].id=i+1;
@@ -97,13 +113,26 @@ int main(void){
  p.cohort.count=0;
  /* Close is complete, but exact ACKs/manifest still survive all cleanup errors.
   * The data context is reusable; its cleanup slot cannot be overwritten. */
+ p.busy=1;assert(pack_retire_group(0)==EFS_ERR_BUSY&&!released);p.busy=0;
+ p.stack_busy=1;assert(pack_retire_group(0)==EFS_ERR_BUSY&&!released);
+ p.cohort.count=2;assert(pack_flush_group(0,1)==EFS_ERR_BUSY&&!released);p.cohort.count=0;p.stack_busy=0;
  assert(pack_retire_group(0)==EFS_ERR_NET && retirement.active && released==1 && pack_ack_credits==1);
+ assert(retire_peak==2&&!retire_inflight&&!p.stack_busy&&!retirement.busy);
  assert(pack_retire_group(0)==EFS_ERR_NET && retirement.active && released==2 && !pack_ack_credits && !upload_retired);
  assert(!pack_retire_group(0) && !retirement.active && upload_retired==1);
  assert(!pack_retire_group(0) && upload_retired==1);
  assert(sends[0]==1&&sends[1]==2&&sends[2]==1); /* no re-PUT after publication */
  assert(publications[0]==1&&publications[1]==2 && loads[0]==1&&loads[1]==2);
  assert(retirements[0]==1&&retirements[1]==2);
+ efs_client_rpc_set_deadline_ms(12345);
+ assert(pack_parallel(&p,PACK_WRITERS,exercise_one,exercised)==EFS_ERR_NET);
+ for(unsigned i=0;i<PACK_WRITERS;i++)assert(exercised[i]==1);
+ assert(parallel_peak==PACK_PUBLISH_WORKERS&&!parallel_live&&efs_client_rpc_deadline_ms()==12345);
+ memset(exercised,0,sizeof(exercised));parallel_peak=0;thread_fail=1;
+ assert(pack_parallel(&p,PACK_WRITERS,exercise_one,exercised)==EFS_ERR_NET);
+ for(unsigned i=0;i<PACK_WRITERS;i++)assert(exercised[i]==1);
+ assert(parallel_peak==1&&!parallel_live&&efs_client_rpc_deadline_ms()==12345);
+ thread_fail=0;efs_client_rpc_set_deadline_ms(0);
  /* A transport/session STALE without exact consumed evidence retains packing.
   * A proven terminal rejection hands off only to the still-owned ordinary
   * dirty cache; it never loads/drops data or discards the rejected ACK. */

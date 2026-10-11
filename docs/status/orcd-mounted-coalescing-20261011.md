@@ -2,11 +2,12 @@
 
 This continuation implements W95's mounted writer and the distributed shared
 object lifetime coordinator. The last verified live ORCD revision is
-`00c1b548cfc8`; its quiet mounted stress run still fails. Follow-ups
-`45a1046034ff` (admission discovery) and `a48076c4e937` (pinned stats) are
-committed; the latter is undergoing full validation before deployment. Bounded independent query streams are implemented, but full
-packing-enabled concurrent acceptance still fails under load. Cold mounted
-reads and the real native-RDMA shared-object lifetime gate pass. Matched tiny
+`795516914d43`; its quiet mounted stress run still fails. Exact terminal packed
+rejections now atomically cancel their admitted pending reference, while the
+client retains accepted bytes for ordinary rebase. Full Linux, cold mounted
+reads, pinned stats and real native-RDMA shared-object lifetime gates pass.
+The separate seven-client concurrent query-only run passes 21/21. Full
+packing-enabled namespace/query acceptance remains open. Matched tiny
 file throughput/allocation acceptance remains pending; the old 408× benchmark
 has not yet been replaced by a measured mounted packing result.
 
@@ -556,3 +557,40 @@ timed-out worker cancellation. This is not a release acceptance checkpoint.
 The stats identity fix alone does not close the transaction-cut starvation or
 packing/namespace throughput failures. Raw results and the live stats proof
 are preserved alongside revision-specific full Linux source manifests.
+
+
+## Exact rejection and bounded cleanup follow-up
+
+`795516914d43` is deployed on all eleven hosts after full Linux success and a
+660-file exact committed-source manifest check. Its mounted cold mixed fixture
+passes 27/27; the previously retired shared object remains physically absent on
+all storage members; pinned stats refresh, permission revocation and exact close
+pass. The quiet full mounted wave still fails: fcstor007/010/012 have 206 PASS,
+seven FAIL; fcstor008/009/013 have 209 PASS, four FAIL; fcstor011 has 207 PASS,
+six FAIL. Every client has one expected SKIP and seven NOTRUN after timed-out
+worker cancellation. Raw results are in the revision's `-wave1` evidence folder.
+The quiet query-only run on `a48076c4e937` passes three tests on each of seven
+clients (21/21); its raw results are saved separately. The full-load failure is
+not explained by independent query-session capacity alone.
+
+The rejection regression applies an actual inode content fence before terminal
+publication. A storage-batch fault leaves the receipt absent and the reference
+PENDING. Successful terminal rejection commits its exact receipt and CANCELLED
+reference together; a LIVE neighbor survives, upload authority retires, cold
+replay returns the same rejection, and releasing the final neighbor enables GC.
+Transport/session STALE without exact consumed rejection proof keeps the packed
+record unresolved. Exact rejection hands its still-owned dirty cache to the
+ordinary flush; it does not load/drop accepted bytes or invent successful
+publication. Real cache ownership tests additionally verify wrong-digest refusal,
+retained bytes/charge after rejection, and fresh ordinary publication identity
+and completion.
+
+The next bounded cleanup candidate retires independent file-stream ACK queues
+with the same maximum four workers as publication. Both operations exclusively
+lease the existing precharged helper stacks; no extra stack allocation or ACK
+credit is introduced. Each queue keeps its own exact ordered retirement, failed
+ACKs remain owned, and PACK_UPLOAD_RETIRE occurs only after every queue succeeds.
+The focused Linux gate verifies two overlapping retirements, exclusive stack
+reuse, all sixteen records executed exactly once, inherited deadlines, error
+retention, and a caller-only fallback when helper creation fails. Full Linux and
+mounted validation of this follow-up remain required before acceptance.
