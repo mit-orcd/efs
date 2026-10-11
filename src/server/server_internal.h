@@ -440,6 +440,8 @@ void server_raft_host_lane_bootstrap_rpc(const struct efs_msg_lane_bootstrap *,
                                           struct efs_msg_lane_writer_view_reply *);
 void server_raft_host_publication(const struct efs_msg_publication *, int query_only, /* 0 submit, 1 status, 2 exact retirement */
                                   struct efs_msg_publication_reply *);
+void server_raft_host_publication_batch(const struct efs_msg_publication_batch *,
+                                        struct efs_msg_publication_batch_reply *);
 void server_raft_host_lane_writer_view(const struct efs_msg_lane_writer_view *,
                                         struct efs_msg_lane_writer_view_reply *);
 /* Internal cold coordinator; not enabled in application write admission yet. */

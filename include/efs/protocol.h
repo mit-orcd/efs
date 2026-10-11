@@ -196,6 +196,8 @@ enum efs_msg_type {
     EFS_MSG_GC_PACKED_REPLY = 138,
     EFS_MSG_PACK_CAPABILITIES = 139,
     EFS_MSG_PACK_CAPABILITIES_REPLY = 140,
+    EFS_MSG_PUBLICATION_BATCH = 141,
+    EFS_MSG_PUBLICATION_BATCH_REPLY = 142,
 };
 
 /* Storage session seal/check. Reply echoes the exact identity and floor.
@@ -973,6 +975,25 @@ struct efs_msg_publication_reply {
     uint32_t receipt_group;
     uint64_t receipt_index, receipt_term;
 };
+
+/* Transport batching only: each record retains its existing durable command,
+ * immutable identity and independent terminal/retirement proof. Never infer a
+ * record's success from the envelope status or an omitted record. */
+#define EFS_PUBLICATION_BATCH_MAX 16u
+#define EFS_PUBLICATION_BATCH_VERSION 1u
+struct efs_msg_publication_batch {
+    uint32_t version, mode, group, count; /* mode: 0 publication, 2 retirement */
+    struct efs_msg_publication records[EFS_PUBLICATION_BATCH_MAX];
+};
+struct efs_msg_publication_batch_reply {
+    struct efs_msg_inode_reply rpc;
+    uint32_t version, mode, group, count;
+    struct efs_msg_publication_reply records[EFS_PUBLICATION_BATCH_MAX];
+};
+static inline size_t efs_publication_batch_bytes(uint32_t count)
+{ return offsetof(struct efs_msg_publication_batch,records)+count*sizeof(struct efs_msg_publication); }
+static inline size_t efs_publication_batch_reply_bytes(uint32_t count)
+{ return offsetof(struct efs_msg_publication_batch_reply,records)+count*sizeof(struct efs_msg_publication_reply); }
 
 /* Resolve the publication epoch before any registration/proposal side effect.
  * The apply-side fence check must still cover a race after this snapshot. */

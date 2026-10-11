@@ -372,6 +372,7 @@ test: all
 	python3 tests/test_publication_host.py
 	python3 tests/test_txn_read_authority.py
 	python3 tests/test_publication_rpc.py
+	python3 tests/test_publication_batch_rpc.py
 	python3 tests/test_publication_session_rpc.py
 	python3 tests/test_publication_session_reuse.py
 	python3 tests/test_lease_edge_rpc.py
@@ -524,6 +525,7 @@ test: all
 	python3 tests/test_packed_gc.py
 	python3 tests/test_packed_gc_budget.py
 	python3 tests/test_mounted_pack_retry.py
+	python3 tests/test_mounted_pack_batch.py
 	python3 tests/test_mounted_pack_parallel.py
 	python3 tests/test_pack_lifecycle_routing.py
 	python3 tests/test_packed_writer_view_reuse.py

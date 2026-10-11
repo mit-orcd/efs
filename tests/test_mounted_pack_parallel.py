@@ -36,7 +36,8 @@ static int pack_publish_record(struct pack_context *p,uint32_t i){
  if((int)i==fail_index)return EFS_ERR_NET;
  __atomic_store_n(&p->writers[i].done,1,__ATOMIC_RELEASE);return 0;
 }
-'''+s[s.index('struct pack_parallel_run {'):s.index('static int pack_retire_one(')]+s[s.index('static int pack_publish_one('):s.index('static int pack_progress(')]+r'''
+static void pack_publish_batch(struct pack_context *p){(void)p;assert(0);}
+'''+s[s.index('struct pack_parallel_run {'):s.index('static int pack_retire_one(')]+s[s.index('static int pack_publish_one('):s.index('static void pack_publish_batch(')]+s[s.index('static int pack_publish_cohort('):s.index('static int pack_progress(')]+r'''
 int main(void){context.cohort.count=PACK_WRITERS;deadline=12345;barrier=1;
  assert(pack_publish_cohort(&context)==EFS_ERR_NET&&deadline==12345&&!active&&peak==PACK_PUBLISH_WORKERS);
  for(unsigned i=0;i<PACK_WRITERS;i++)assert(calls[i]==1&&context.writers[i].done==(i!=5));

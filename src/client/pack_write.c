@@ -38,9 +38,12 @@ struct pack_context {
     /* Charged with this nonmoving context before accepting any byte. Join
      * every helper before reusing either its stack or any writer state. */
     uint8_t publication_stacks[PACK_PUBLISH_WORKERS-1][PACK_PUBLISH_STACK_BYTES+PACK_PUBLISH_STACK_ALIGN];
+    struct efs_msg_publication_batch batch_request;
+    struct efs_msg_publication_batch_reply batch_reply;
+    int batch_results[PACK_WRITERS];
     uint32_t members,put_mask;
     uint64_t retry_after;
-    int busy,last_error,built,stack_busy;
+    int busy,last_error,built,stack_busy,batch;
 };
 /* Only immutable authority/ACK state survives completed publication. Body
  * buffers can serve the next cohort while this bounded slot retains cleanup. */
@@ -49,8 +52,10 @@ struct pack_retirement {
     struct efs_pack_ref refs[PACK_WRITERS];
     struct efs_publication_ack_queue *acks[PACK_WRITERS];
     uint8_t wire[EFS_PACK_UPLOAD_MAX+2];
+    struct efs_msg_publication_batch batch_request;
+    struct efs_msg_publication_batch_reply batch_reply;
     uint32_t group,count;
-    int active,busy,last_error;
+    int active,busy,last_error,batch;
 };
 static struct pack_retirement *pack_retirements[2];
 /* At most two cohorts' worth of charged ACK queues across active + cleanup. */
@@ -61,6 +66,7 @@ static pthread_t pack_tid;
 static int pack_started,pack_running;
 static uint32_t pack_capability_members;
 static uint64_t pack_capability_checked;
+static int pack_capability_batch;
 static uint64_t pack_now(void)
 {
     struct timespec t;if(clock_gettime(CLOCK_MONOTONIC,&t))return 0;
@@ -160,6 +166,47 @@ static int pack_retire_one(void *context,uint32_t i)
     pthread_mutex_lock(&pack_mu);pack_ack_credits--;pthread_mutex_unlock(&pack_mu);
     return EFS_OK;
 }
+static int pack_batch_status(uint8_t status)
+{
+    switch(status) {
+    case EFS_INODE_RPC_OK:return EFS_OK;
+    case EFS_INODE_RPC_NOT_FOUND:return EFS_ERR_NOT_FOUND;
+    case EFS_INODE_RPC_BUSY:return EFS_ERR_BUSY;
+    case EFS_INODE_RPC_STALE:return EFS_ERR_STALE;
+    case EFS_INODE_RPC_INVAL:return EFS_ERR_INVAL;
+    case EFS_INODE_RPC_NOT_PRIMARY:return EFS_ERR_NOT_PRIMARY;
+    default:return EFS_ERR_IO;
+    }
+}
+static int pack_retire_batch(struct pack_retirement *r)
+{
+    struct efs_msg_publication_batch *b=&r->batch_request;
+    *b=(struct efs_msg_publication_batch){.version=EFS_PUBLICATION_BATCH_VERSION,.mode=2,.group=r->group};
+    uint32_t slots[PACK_WRITERS];int error=EFS_OK;
+    for(uint32_t i=0;i<r->count;i++)if(r->acks[i]) {
+        /* Lost replies retain the exact oldest consumed intent. Empty queues
+         * may only result from an earlier exact completed retirement. */
+        int rc=efs_publication_ack_next(r->acks[i],&b->records[b->count]);
+        if(rc==EFS_ERR_NOT_FOUND && !r->acks[i]->count) {
+            rc=efs_client_publication_ack_free(r->acks[i]);
+            if(!rc){r->acks[i]=NULL;pthread_mutex_lock(&pack_mu);pack_ack_credits--;pthread_mutex_unlock(&pack_mu);}
+        } else if(!rc)slots[b->count++]=i;
+        if(rc && !error)error=rc;
+    }
+    if(!b->count)return error;
+    int rc=efs_client_rpc_publication_batch(b,&r->batch_reply);
+    if(rc==EFS_ERR_PROTO){r->batch=0;return rc;} /* Exact scalar replay is safe. */
+    if(rc)return rc;
+    for(uint32_t j=0;j<b->count;j++) {
+        uint32_t i=slots[j];const struct efs_msg_publication_reply *reply=&r->batch_reply.records[j];
+        rc=pack_batch_status(reply->rpc.status);
+        if(!rc)rc=efs_publication_ack_complete(r->acks[i],b->records[j].id.seq,reply);
+        if(!rc)rc=efs_client_publication_ack_free(r->acks[i]);
+        if(!rc){r->acks[i]=NULL;pthread_mutex_lock(&pack_mu);pack_ack_credits--;pthread_mutex_unlock(&pack_mu);}
+        if(rc && !error)error=rc;
+    }
+    return error;
+}
 static int pack_retire_group(unsigned gi)
 {
     pthread_mutex_lock(&pack_mu);
@@ -171,7 +218,8 @@ static int pack_retire_group(unsigned gi)
     r->busy=1;p->stack_busy=1;pthread_mutex_unlock(&pack_mu);
     /* Each ACK belongs to a different file stream. Preserve ordered retirement
      * within every queue; upload authority advances only after all succeed. */
-    int rc=pack_parallel(p,r->count,pack_retire_one,r);
+    int rc=r->batch?pack_retire_batch(r):pack_parallel(p,r->count,pack_retire_one,r);
+    if(rc==EFS_ERR_PROTO && !r->batch)rc=pack_parallel(p,r->count,pack_retire_one,r);
     if(!rc)rc=pack_command_wire(r->group,&r->object,r->refs,r->count,
         r->wire,sizeof(r->wire),EFS_MD_CMD_PACK_UPLOAD_RETIRE);
     pthread_mutex_lock(&pack_mu);
@@ -183,6 +231,7 @@ static int pack_capabilities(uint32_t *members)
     *members=0;
     if(g_client.node_count<3 || g_client.node_count>EFS_MAX_NODES)return EFS_ERR_BUSY;
     uint32_t roster=0;
+    int batch=1;
     for(uint32_t i=0;i<g_client.node_count;i++) {
         efs_node_id_t id=g_client.nodes[i].id;
         if(!id || id>EFS_MAX_NODES || (roster&(1u<<(id-1))))return EFS_ERR_PROTO;
@@ -201,16 +250,25 @@ static int pack_capabilities(uint32_t *members)
         if(!id || id>EFS_MAX_NODES)return EFS_ERR_PROTO;
         struct efs_conn *c=efs_client_conn_get(id);if(!c)return EFS_ERR_NET;
         uint8_t type=0;void *raw=NULL;uint32_t n=0;
-        if(efs_conn_send_msg(c,EFS_MSG_PACK_CAPABILITIES,NULL,0) || efs_conn_recv_msg(c,&type,&raw,&n)) {
-            free(raw);efs_client_conn_drop(id,c);return EFS_ERR_NET;
+        uint8_t request[4];efs_put_upload_wr32(request,2);
+        uint32_t capability=0;
+        for(unsigned probe=0;probe<2;probe++) {
+            if(efs_conn_send_msg(c,EFS_MSG_PACK_CAPABILITIES,probe?NULL:request,probe?0:4) || efs_conn_recv_msg(c,&type,&raw,&n)) {
+                free(raw);efs_client_conn_drop(id,c);return EFS_ERR_NET;
+            }
+            int valid=type==EFS_MSG_PACK_CAPABILITIES_REPLY && n==4;
+            if(valid)capability=efs_put_upload_rd32(raw);
+            free(raw);raw=NULL;
+            if(!valid){efs_client_conn_release(id,c);return EFS_ERR_PROTO;}
+            if(capability || probe)break;
         }
         efs_client_conn_release(id,c);
-        int ok=type==EFS_MSG_PACK_CAPABILITIES_REPLY && n==4 && efs_put_upload_rd32(raw)==1;
-        free(raw);if(!ok)return EFS_ERR_PROTO;
+        if(capability!=1 && capability!=2)return EFS_ERR_PROTO;
+        if(capability!=2)batch=0;
         *members|=1u<<(id-1);
     }
     pthread_mutex_lock(&pack_mu);
-    pack_capability_members=*members;pack_capability_checked=pack_now();
+    pack_capability_members=*members;pack_capability_checked=pack_now();pack_capability_batch=batch;
     pthread_mutex_unlock(&pack_mu);
     return EFS_OK;
 }
@@ -229,7 +287,7 @@ static int pack_publish_record(struct pack_context *p,uint32_t i)
         w->put_bound=1;
     }
     if(!w->published) {
-        rc=efs_client_publication_writeback(w->acks,w->plan.ino,w->plan.generation,0,w->object,w->plan.cache_sequence,w->len);
+        rc=p->batch?p->batch_results[i]:efs_client_publication_writeback(w->acks,w->plan.ino,w->plan.generation,0,w->object,w->plan.cache_sequence,w->len);
         if(rc) {
             int verdict;
             if((rc==EFS_ERR_STALE || rc==EFS_ERR_INVAL) &&
@@ -255,8 +313,66 @@ static int pack_publish_record(struct pack_context *p,uint32_t i)
 }
 static int pack_publish_one(void *context,uint32_t i)
 {return pack_publish_record(context,i);}
+static void pack_publish_batch(struct pack_context *p)
+{
+    struct efs_msg_publication_batch *b=&p->batch_request;
+    *b=(struct efs_msg_publication_batch){.version=EFS_PUBLICATION_BATCH_VERSION,.group=p->cohort.group};
+    uint32_t slots[PACK_WRITERS];
+    for(uint32_t i=0;i<p->cohort.count;i++) {
+        struct pack_writer *w=&p->writers[i];p->batch_results[i]=EFS_OK;
+        if(w->done || w->published)continue;
+        int rc=EFS_OK;
+        if(!w->put_bound) {
+            struct efs_chunk_rec put={.ino=w->plan.ino,.chunk_generation=w->object,
+                .publish_flags=EFS_CHUNK_REC_F_FRESH_OBJECT|EFS_CHUNK_REC_F_PACKED_BASE,.packed=p->cohort.refs[i]};
+            memcpy(put.nodes,p->object.nodes,sizeof(put.nodes));memcpy(put.checksums,p->object.checksums,sizeof(put.checksums));
+            rc=efs_dcache_finish_publication(w->plan.ino,w->plan.generation,0,w->object,w->plan.cache_sequence,EFS_OK,&put);
+            if(!rc)w->put_bound=1;
+        }
+        struct efs_msg_publication *request=&b->records[b->count];
+        if(!rc) {
+            rc=efs_publication_ack_request(w->acks,w->plan.cache_sequence,request);
+            if(rc==EFS_ERR_NOT_FOUND) {
+                rc=efs_dcache_publication_request(w->plan.ino,w->plan.generation,0,w->object,w->plan.cache_sequence,w->len,request);
+                if(!rc)rc=efs_publication_ack_admit(w->acks,request);
+            }
+        }
+        if(!rc && (request->rec.ino!=w->plan.ino || request->rec.file_generation!=w->plan.generation ||
+                   request->rec.chunk_index || request->rec.chunk_generation!=w->object))rc=EFS_ERR_STALE;
+        int consumed=0;
+        if(!rc)for(uint32_t j=0;j<w->acks->count;j++) {
+            const struct efs_publication_ack_entry *e=&w->acks->entries[(w->acks->head+j)%EFS_META_PUBLICATION_MAX_RECEIPTS];
+            if(e->request.id.seq==w->plan.cache_sequence && e->consumed_state) {
+                rc=e->consumed_verdict;consumed=1;break;
+            }
+        }
+        p->batch_results[i]=rc;
+        if(!rc && !consumed)slots[b->count++]=i;
+    }
+    if(!b->count)return;
+    int rc=efs_client_rpc_publication_batch(b,&p->batch_reply);
+    if(rc==EFS_ERR_PROTO){p->batch=0;return;} /* Replay same immutable requests. */
+    for(uint32_t j=0;j<b->count;j++) {
+        struct pack_writer *w=&p->writers[slots[j]];
+        const struct efs_msg_publication_reply *reply=&p->batch_reply.records[j];
+        int one=rc?rc:pack_batch_status(reply->rpc.status);
+        if(!one && reply->state!=EFS_PUBLICATION_COMMITTED && reply->state!=EFS_PUBLICATION_REJECTED)one=EFS_ERR_BUSY;
+        if(!one) {
+            int consumed=0;
+            one=efs_dcache_consume_publication(w->plan.ino,w->plan.generation,0,w->object,w->plan.cache_sequence,reply,&consumed);
+            if(consumed) {
+                one=efs_publication_ack_consumed(w->acks,w->plan.cache_sequence,reply);
+                if(!one)one=reply->verdict;
+            } else if(!one)one=EFS_ERR_BUSY;
+        }
+        p->batch_results[slots[j]]=one;
+    }
+}
 static int pack_publish_cohort(struct pack_context *p)
-{return pack_parallel(p,p->cohort.count,pack_publish_one,p);}
+{
+    if(p->batch)pack_publish_batch(p);
+    return pack_parallel(p,p->cohort.count,pack_publish_one,p);
+}
 static int pack_progress(struct pack_context *p)
 {
     int rc=EFS_OK;
@@ -313,7 +429,7 @@ static int pack_flush_group(unsigned gi,int force)
         struct pack_retirement *r=pack_retirements[gi];
         if(r->active)rc=EFS_ERR_BUSY;
         else {
-            r->object=p->object;r->group=p->cohort.group;r->count=p->cohort.count;
+            r->object=p->object;r->group=p->cohort.group;r->count=p->cohort.count;r->batch=p->batch;
             memcpy(r->refs,p->cohort.refs,r->count*sizeof(r->refs[0]));
             for(uint32_t i=0;i<r->count;i++)r->acks[i]=p->writers[i].acks;
             r->active=1;r->last_error=EFS_OK;
@@ -397,7 +513,7 @@ int efs_client_pack_write(efs_ino_t ino,uint64_t off,uint32_t len,const uint8_t 
             continue;
         }
         if(!p->cohort.count) {
-            p->members=members;rc=efs_client_put_id(&p->cohort.owner);
+            p->members=members;p->batch=pack_capability_batch;rc=efs_client_put_id(&p->cohort.owner);
             if(rc){pthread_mutex_unlock(&pack_mu);return rc;}
             p->busy=1;
             pthread_mutex_unlock(&pack_mu);
