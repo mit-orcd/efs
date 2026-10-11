@@ -4786,6 +4786,17 @@ fallback is the strongest repair hypothesis; compaction overlap and GC BUSY
 semantics need separate attribution. See the
 [findings, hypotheses and discriminating tests](../status/orcd-communication-hypotheses-20261011.md).
 
+**Mac confirmation (Oct 11, devel-mac):** production-builder oracle tests
+reproduce the 1,024 changed-inode cliff. Commits `7c3b48d2`, `dadbb2ef`, `ff5f1c87`, `408043b6` and `c09ef7f8`
+journal larger deltas with bounded RAM, merge inode streams, validate exact
+stat dependencies and batch alias lookups by shard. Mac buffered/TCP gates
+and deployment are recorded separately from other clusters.
+Dirty-directory fallback, representative performance and original liveness
+gates remain open. The retained Mac namespace also rejects an old unlinked
+directory during initial query build. See
+[Mac evidence and gate checkpoint](../status/mac-query-delta-20261011.md).
+
+
 <a id="w110"></a>
 
 ## W110 · ORCD communication-loss diagnosis across EFS, IB and TCP

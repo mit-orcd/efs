@@ -1,0 +1,103 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 20  of event 'task-clock:ppp'
+# Event count (approx.): 202020200
+#
+# Overhead  Shared Object      Symbol                               
+# ........  .................  .....................................
+#
+     5.00%  [kernel.kallsyms]  [k] __arch_copy_from_user
+     5.00%  [kernel.kallsyms]  [k] __arch_copy_to_user
+     5.00%  [kernel.kallsyms]  [k] __arm64_sys_ppoll
+     5.00%  [kernel.kallsyms]  [k] __pi_clear_page
+     5.00%  [kernel.kallsyms]  [k] __xfs_btree_check_ptr
+     5.00%  [kernel.kallsyms]  [k] cleanup_module
+     5.00%  [kernel.kallsyms]  [k] copy_from_kernel_nofault.part.0
+     5.00%  [kernel.kallsyms]  [k] selinux_inode_permission
+     5.00%  [kernel.kallsyms]  [k] vp_notify
+     5.00%  [kernel.kallsyms]  [k] wait_for_completion
+     5.00%  [kernel.kallsyms]  [k] xfs_buf_item_log
+     5.00%  [kernel.kallsyms]  [k] xfs_defer_restore_resources
+     5.00%  [kernel.kallsyms]  [k] xfs_inode_item_sort
+     5.00%  [kernel.kallsyms]  [k] xfs_rui_init
+     5.00%  [kernel.kallsyms]  [k] xlog_cil_insert_items
+     5.00%  efsd               [.] drain_inbox
+     5.00%  efsd               [.] kv_seg_snapshot_excludes
+     5.00%  efsd               [.] memcmp@plt
+     5.00%  efsd               [.] recv_can_batch
+     5.00%  libc.so.6          [.] memcmp
+
+
+#
+# (Tip: Show individual samples with: perf script)
+strace: Process 25078 attached with 27 threads
+strace: Process 1021898 attached
+strace: Process 1021899 attached
+strace: Process 1021900 attached
+strace: Process 1021901 attached
+strace: Process 1021971 attached
+strace: Process 1021979 attached
+strace: Process 1021987 attached
+strace: Process 1021989 attached
+strace: Process 1021990 attached
+strace: Process 1021991 attached
+strace: Process 1021992 attached
+strace: Process 1022065 attached
+strace: Process 1022073 attached
+strace: Process 1022081 attached
+strace: Process 1022083 attached
+strace: Process 1022084 attached
+strace: Process 1022085 attached
+strace: Process 1022086 attached
+strace: Process 1022158 attached
+strace: Process 1022166 attached
+strace: Process 1022174 attached
+strace: Process 1022283 attached
+strace: Process 1022284 attached
+strace: Process 1022285 attached
+strace: Process 1022286 attached
+strace: Process 1022358 attached
+strace: Process 1022366 attached
+strace: Process 1022374 attached
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 49.55    3.191187        1715      1860         3 recvfrom
+ 28.04    1.806225        1314      1374       190 futex
+  8.55    0.550807        1049       525         2 clock_nanosleep
+  7.94    0.511519         244      2096         2 ppoll
+  2.11    0.135594          10     13477           unlinkat
+  1.53    0.098243         264       371           fsync
+  0.59    0.037883       12627         3           restart_syscall
+  0.46    0.029824          29      1028           openat
+  0.22    0.014121           5      2614           pread64
+  0.21    0.013803          18       742           writev
+  0.14    0.009330          12       729           pwrite64
+  0.14    0.009016         290        31           fdatasync
+  0.13    0.008156           5      1434           close
+  0.11    0.007381          22       329           renameat
+  0.08    0.005244          15       341           read
+  0.06    0.003897           4       852           setsockopt
+  0.05    0.003042           8       344           write
+  0.03    0.001697         154        11           munmap
+  0.01    0.000823          29        28           clone3
+  0.01    0.000604          40        15           getdents64
+  0.01    0.000521           6        80           fstat
+  0.01    0.000434           3       138           rt_sigprocmask
+  0.01    0.000339           6        55           madvise
+  0.00    0.000248           2       112           fcntl
+  0.00    0.000198           7        28           accept
+  0.00    0.000107           3        28           rseq
+  0.00    0.000079           2        28           set_robust_list
+  0.00    0.000062           7         8           newfstatat
+  0.00    0.000026           3         8           statfs
+  0.00    0.000018           2         8           uname
+  0.00    0.000016           5         3           shutdown
+  0.00    0.000011           3         3           fstatfs
+  0.00    0.000005           5         1         1 readlinkat
+  0.00    0.000005           5         1         1 rt_sigreturn
+  0.00    0.000001           1         1           getpid
+------ ----------- ----------- --------- --------- ----------------
+100.00    6.440466         224     28706       199 total

@@ -1,0 +1,9 @@
+cluster: mac
+accde4ebd3c749d81ae0e9ee82afa375346669b7d42d29b3b4e3e7d610c0a6b2  /tmp/efs/efsd
+4cc948623dae583c715648c0f3e60cdceb2362675627c131a53ab1dd65a39c62  /tmp/efs/efs-fuse
+accde4ebd3c749d81ae0e9ee82afa375346669b7d42d29b3b4e3e7d610c0a6b2  /tmp/efs/efsd
+4cc948623dae583c715648c0f3e60cdceb2362675627c131a53ab1dd65a39c62  /tmp/efs/efs-fuse
+accde4ebd3c749d81ae0e9ee82afa375346669b7d42d29b3b4e3e7d610c0a6b2  /tmp/efs/efsd
+4cc948623dae583c715648c0f3e60cdceb2362675627c131a53ab1dd65a39c62  /tmp/efs/efs-fuse
+accde4ebd3c749d81ae0e9ee82afa375346669b7d42d29b3b4e3e7d610c0a6b2  /tmp/efs/efsd
+4cc948623dae583c715648c0f3e60cdceb2362675627c131a53ab1dd65a39c62  /tmp/efs/efs-fuse

@@ -467,3 +467,12 @@ W95 packing and W106 broader hardware acceptance remain separate work.
 prioritize the 1,024-change query fallback; distinguish compaction correlation,
 GC partial-progress BUSY and TCP duplicate probes from established failures.
 W109/W110 remain open on orcd-test.
+
+
+## Mac verification of W109's changed-inode fallback
+
+[Mac query delta evidence](mac-query-delta-20261011.md): `devel-mac` confirms
+the exact 1,024-ID cliff, removes it with a bounded candidate journal, and
+optimizes inode diff scans. Mac buffered/TCP deployment and unit gates passed.
+Installed-namespace bootstrap and broader live gates retain their own verdicts;
+no ORCD acceptance or W109 closure is implied.

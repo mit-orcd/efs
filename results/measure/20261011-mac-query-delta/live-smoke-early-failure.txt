@@ -1,0 +1,29 @@
+fixture=/data1/mac-query-gates-20261011/run4 ports=24800-24803 mode=buffered transport=tcp
+raft-mkfs rc=-15 leader_hint=-1 index=0 salt=1514085969561075623
+raft-mkfs rc=-15 leader_hint=-1 index=2 salt=10078300828189403879
+raft-mkfs rc=0 leader_hint=1 index=3 salt=10078300828189403879
+initial complete-group catalogs PASS
+raft-create status=0 primary=1 parent=1 name=file-0 ino=4097 mode=0100644 nlink=1
+raft-create status=0 primary=1 parent=1 name=file-1 ino=8193 mode=0100644 nlink=1
+raft-create status=0 primary=1 parent=1 name=file-2 ino=12289 mode=0100644 nlink=1
+raft-create status=0 primary=1 parent=1 name=file-3 ino=16385 mode=0100644 nlink=1
+quiet metadata refresh and partial-host refusal PASS
+v1 RPC stats/find, unchanged publication, redirects and explicit errors PASS
+v2 command JSON stats/find/ls, immutable catalog identity and explicit limits PASS
+v3 type/size predicates, canonical fields and explicit limits PASS
+Traceback (most recent call last):
+  File "/tmp/efs/tests/live/query_publication.py", line 160, in <module>
+    assert result.returncode==0,(work/'large-delta-gates.log').read_text()
+           ^^^^^^^^^^^^^^^^^^^^
+AssertionError: {"expected_files": 64, "expected_bytes": 0, "snapshot": {"boot_id": 5051374345468892, "generation": 4, "source_ns": 1791724125488996509, "built_ns": 1791724125579007263, "applied_g0": 572, "applied_g2": 2, "term_g0": 1, "term_g2": 1, "refresh_error": 0, "refresh_n": 256, "refresh_ms": 2000, "refresh_min_ms": 2000, "pending_changes_at_least": 0, "pending_age_ms_at_sample": 0, "lag_sample_ns": 1791724125579007638, "refresh_overdue": false}, "build": {"kind": "build", "pin_ms": 0, "total_ms": 90, "index_ns": 23058307, "stats_ns": 2035058, "persist_ns": 50183105, "restore_ns": 0}}
+all indexed mtime/size fields agree with metadata mutation PASS
+phase=0 acknowledged and peer-verified=64 elapsed_s=12.764
+Traceback (most recent call last):
+  File "/tmp/efs/tests/live/query_large_delta.py", line 59, in <module>
+    check(count,count*len(data(0,phase)))
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/efs/tests/live/query_large_delta.py", line 49, in check
+    assert obj['snapshot']['refresh_error']==0,obj
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'version': 1, 'operation': 'stats', 'complete': True, 'expiry': 'unavailable', 'snapshot': {'boot_id': 5051374345468892, 'generation': 4, 'source_ns': 1791724125488996509, 'built_ns': 1791724125579007263, 'applied_g0': 572, 'applied_g2': 2, 'term_g0': 1, 'term_g2': 1, 'refresh_error': -13, 'refresh_n': 256, 'refresh_ms': 2000, 'refresh_min_ms': 2000, 'pending_changes_at_least': 254, 'pending_age_ms_at_sample': 2768, 'lag_sample_ns': 1791724128548645695, 'refresh_overdue': True}, 'build': {'kind': 'build', 'pin_ms': 0, 'total_ms': 90, 'index_ns': 23058307, 'stats_ns': 2035058, 'persist_ns': 50183105, 'restore_ns': 0}, 'stats': {'imm_files': 64, 'imm_dirs': 0, 'imm_bytes': 0, 'imm_tmin': 1577836800000000000, 'imm_tmax': 1791724124286571321, 'tree_files': 64, 'tree_dirs': 0, 'tree_bytes': 0, 'tree_tmin': 1577836800000000000, 'tree_tmax': 1791724124286571321}}
+

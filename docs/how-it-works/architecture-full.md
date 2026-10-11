@@ -1940,6 +1940,15 @@ GC partial-progress BUSY and TCP duplicate probes from established failures.
 W109/W110 remain open on orcd-test.
 
 
+### Mac verification of W109's changed-inode fallback
+
+[Mac query delta evidence](../status/mac-query-delta-20261011.md): `devel-mac` confirms
+the exact 1,024-ID cliff, removes it with a bounded candidate journal, and
+optimizes inode diff scans. Mac buffered/TCP deployment and unit gates passed.
+Installed-namespace bootstrap and broader live gates retain their own verdicts;
+no ORCD acceptance or W109 closure is implied.
+
+
 ## Appendix 2 — In flight — the current handoff block
 
 *Source: `status/in-flight.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
@@ -7079,6 +7088,17 @@ incremental budget while each publication refolds over a million rows. Full
 fallback is the strongest repair hypothesis; compaction overlap and GC BUSY
 semantics need separate attribution. See the
 [findings, hypotheses and discriminating tests](../status/orcd-communication-hypotheses-20261011.md).
+
+**Mac confirmation (Oct 11, devel-mac):** production-builder oracle tests
+reproduce the 1,024 changed-inode cliff. Commits `7c3b48d2`, `dadbb2ef`, `ff5f1c87`, `408043b6` and `c09ef7f8`
+journal larger deltas with bounded RAM, merge inode streams, validate exact
+stat dependencies and batch alias lookups by shard. Mac buffered/TCP gates
+and deployment are recorded separately from other clusters.
+Dirty-directory fallback, representative performance and original liveness
+gates remain open. The retained Mac namespace also rejects an old unlinked
+directory during initial query build. See
+[Mac evidence and gate checkpoint](../status/mac-query-delta-20261011.md).
+
 
 <a id="w110"></a>
 
