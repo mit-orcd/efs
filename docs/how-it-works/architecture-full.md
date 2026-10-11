@@ -9132,6 +9132,13 @@ S receives a mutation naming (client_uuid, E), and has no local record:
     -> only then may S cache "E is authoritative" and proceed
 ```
 
+If the session authority and S share one Raft group, one committed command
+may atomically record the bitmap bit and S's established epoch. Apply must
+recheck the current ACTIVE epoch, preserve the rejection floor and respect
+prepared key ownership. A preceding FENCING entry rejects this admission; a
+following FENCING entry sees the committed participant. Different Raft groups
+retain registration before establishment; missing rows never imply authority.
+
 This is **once per (session, shard)**, not per request: a client that works
 against 200 shards pays 200 registrations over the life of its mount. The
 hot path is unaffected — an established shard answers from its own committed

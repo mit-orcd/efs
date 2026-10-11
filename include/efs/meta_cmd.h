@@ -61,6 +61,7 @@
  * Reply salt=1 means this phase is empty; salt=0 means one batch progressed. */
 #define EFS_MD_SESS_LEASE_EDGE_DEFERRED 16 /* staged atomic close obligation */
 #define EFS_MD_SESS_LEASE_PROBE_DEFERRED 17 /* read-only matching identity domain */
+#define EFS_MD_SESS_REGISTER_ESTABLISH 19 /* atomic admission, same Raft group only */
 #define EFS_MD_SESS_LEASE_LOCK_NEXT 14
 #define EFS_MD_SESS_LEASE_LOCK_BATCH 15
 #define EFS_MD_SESS_STORAGE_FENCE 18 /* RPC only: uuid/floor, seal every configured storage member */

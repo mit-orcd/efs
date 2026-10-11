@@ -34,6 +34,61 @@ static void uuid_of(uint8_t u[EFS_OPID_UUID_LEN], uint8_t n)
     u[15] = n;
 }
 
+
+struct admission_fault {struct efs_kv *base;int error;unsigned batches;};
+static int admission_get(void *ctx,const uint8_t*k,uint32_t kn,uint8_t*v,uint32_t*vn)
+{ return efs_kv_get(((struct admission_fault*)ctx)->base,k,kn,v,vn); }
+static int admission_prefix(void *ctx,const uint8_t*p,uint32_t pn,
+    int (*cb)(void*,const uint8_t*,uint32_t,const uint8_t*,uint32_t),void*u)
+{ return efs_kv_scan_prefix(((struct admission_fault*)ctx)->base,p,pn,cb,u); }
+static int admission_batch(void *ctx,const struct efs_kv_item *items,uint32_t n)
+{
+    struct admission_fault *f=ctx;f->batches++;
+    CHECK(n==2,"combined admission exactly two rows");
+    return f->error?f->error:efs_kv_batch(f->base,items,n);
+}
+static void test_register_establish(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();uint8_t uuid[16];uuid_of(uuid,227);
+    CHECK(kv!=NULL,"combined admission KV");if(!kv)return;
+    struct efs_session_rec rec;
+    CHECK(efs_session_register_establish(kv,uuid,1,7)==EFS_ERR_NOT_FOUND,"missing global never ACTIVE");
+    CHECK(!efs_session_create(kv,uuid,1),"combined global create");
+    static const struct efs_kv_ops ops={.get=admission_get,.scan_prefix=admission_prefix,.batch=admission_batch};
+    struct admission_fault fault={kv,EFS_ERR_IO,0};struct efs_kv wrapped={&ops,&fault};
+    int errors[]={EFS_ERR_IO,EFS_ERR_NOMEM};
+    for(unsigned i=0;i<2;i++){
+        fault.error=errors[i];
+        CHECK(efs_session_register_establish(&wrapped,uuid,1,7)==errors[i],"batch failure audible");
+        CHECK(!efs_session_get(kv,uuid,&rec) && !efs_session_bit_get(rec.touched,7),"failed batch no touched bit");
+        CHECK(efs_session_accept(kv,7,uuid,1)==EFS_ERR_BUSY,"failed batch no floor");
+    }
+    fault.error=0;CHECK(!efs_session_register_establish(&wrapped,uuid,1,7),"atomic retry");
+    CHECK(fault.batches==3 && !efs_session_accept(kv,7,uuid,1),"one batch establishes floor");
+    CHECK(!efs_session_get(kv,uuid,&rec) && efs_session_bit_get(rec.touched,7),"one batch registers domain");
+    CHECK(!efs_session_register_establish(kv,uuid,1,7),"combined idempotence");
+    CHECK(!efs_session_begin_fence(kv,uuid),"BEGIN after combined includes participant");
+    CHECK(efs_session_register_establish(kv,uuid,1,7)==EFS_ERR_STALE,"FENCING rejects even existing old bit");
+    CHECK(efs_session_register_establish(kv,uuid,2,7)==EFS_ERR_BUSY,"new epoch waits for fence");
+    CHECK(!efs_session_fence_local(kv,7,uuid,2) && !efs_session_ack_fence(kv,uuid,7) && !efs_session_finish_fence(kv,uuid),"full participant barrier");
+    CHECK(!efs_session_register_establish(kv,uuid,2,7),"next ACTIVE epoch admitted");
+    CHECK(efs_session_accept(kv,7,uuid,1)==EFS_ERR_STALE && !efs_session_accept(kv,7,uuid,2),"floor retained");
+    CHECK(efs_session_register_establish(kv,uuid,0,7)==EFS_ERR_INVAL,"zero epoch refused");
+    CHECK(efs_session_register_establish(kv,uuid,2,EFS_SESSION_BITS)==EFS_ERR_INVAL,"invalid domain refused");
+    struct efs_txid tx={{0}};tx.bytes[15]=81;struct efs_txn_parts parts={.n=1,.shard={7}};
+    CHECK(!efs_session_prepare_owner(kv,7,uuid,2,&tx,&parts),"prepare session owner");
+    CHECK(efs_session_register_establish(kv,uuid,2,7)==EFS_ERR_BUSY,"compound cannot overwrite prepared floor");
+    CHECK(!efs_txn_resolve(kv,&tx,7,EFS_TXN_ABORT),"drain owner guard");
+    efs_kv_mem_free(kv);
+    char directory[]="/tmp/efs-session-admission-cold-XXXXXX";CHECK(mkdtemp(directory)!=NULL,"cold admission directory");
+    struct efs_kv_lsm_cfg cfg={0};kv=efs_kv_lsm_open(directory,&cfg);CHECK(kv!=NULL,"cold admission KV");
+    if(kv){
+        CHECK(!efs_session_create(kv,uuid,1) && !efs_session_register_establish(kv,uuid,1,7),"durable two-row admission");
+        efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(directory,&cfg);CHECK(kv!=NULL,"cold reopen");
+        if(kv){CHECK(!efs_session_get(kv,uuid,&rec) && efs_session_bit_get(rec.touched,7) && !efs_session_accept(kv,7,uuid,1),"cold touched bit and floor survive together");efs_kv_lsm_close(kv);}
+    }
+}
+
 static void test_register_and_fence(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
@@ -1164,6 +1219,7 @@ int main(void)
     test_pending_cold_edges();
     test_pending_create_ownership();
     test_register_and_fence();
+    test_register_establish();
     test_i19_lease();
     test_unlink_no_lease();
     test_fence_drops_opid();

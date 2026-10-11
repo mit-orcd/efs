@@ -2076,6 +2076,10 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         shard = rd32be(cmd + 22);
         rc = efs_session_register(h->kv, uuid, epoch, shard);
         break;
+    case EFS_MD_SESS_REGISTER_ESTABLISH:
+        if(clen!=HOST_SESS_REG_LEN)return EFS_ERR_PROTO;
+        rc=efs_session_register_establish(h->kv,uuid,rd32be(cmd+18),rd32be(cmd+22));
+        break;
     case EFS_MD_SESS_ESTABLISH:
         if (clen < HOST_SESS_REG_LEN)
             return EFS_OK;
@@ -2199,7 +2203,7 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     }
     /* A blocked local fence is not a completed revocation barrier. Preserve
      * its business verdict in the apply ring so the coordinator cannot ACK it. */
-    if (cmd[1] == EFS_MD_SESS_FINISH || cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
+    if (cmd[1] == EFS_MD_SESS_REGISTER_ESTABLISH || cmd[1] == EFS_MD_SESS_FINISH || cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
         cmd[1] == EFS_MD_SESS_LEASE_EDGE_DEFERRED || cmd[1] == EFS_MD_SESS_LEASE_OPEN ||
         cmd[1] == EFS_MD_SESS_LEASE_CLOSE) return rc;
     if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_INVAL || rc == EFS_ERR_BUSY ||
@@ -2641,7 +2645,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     /* FINISH/FENCE_LOC BUSY must let later ACK/RESOLVE drain ownership. It is
      * a rejected command, not a retryable storage failure at this log index. */
     if (cmd[0] == EFS_MD_CMD_SESSION && clen >= 2 &&
-        (cmd[1] == EFS_MD_SESS_FINISH || cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
+        (cmd[1] == EFS_MD_SESS_REGISTER_ESTABLISH || cmd[1] == EFS_MD_SESS_FINISH || cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
          cmd[1] == EFS_MD_SESS_LEASE_EDGE_DEFERRED || cmd[1] == EFS_MD_SESS_LEASE_OPEN ||
          cmd[1] == EFS_MD_SESS_LEASE_CLOSE) &&
         rc != EFS_ERR_IO && rc != EFS_ERR_NOMEM)
@@ -2996,9 +3000,22 @@ static int host_maybe_snapshot(struct efs_raft_host *h, int gi)
     return efs_raft_snapshot(h->g[gi].r);
 }
 
+static int host_session_combined_group(const uint8_t *cmd,uint32_t clen,uint8_t group)
+{
+    if(clen!=HOST_SESS_REG_LEN ||
+       group!=efs_raft_shard_group(efs_kv_session_shard(cmd+2)) ||
+       rd32be(cmd+22)>=EFS_SESSION_BITS || group!=efs_raft_shard_group(rd32be(cmd+22)))
+        return EFS_ERR_INVAL;
+    return EFS_OK;
+}
+
 static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t term, uint8_t group,
                                const uint8_t *cmd, uint32_t clen)
 {
+    if(cmd[0]==EFS_MD_CMD_SESSION && clen>=2 && cmd[1]==EFS_MD_SESS_REGISTER_ESTABLISH) {
+        int rc=host_session_combined_group(cmd,clen,group);
+        if(rc)return rc;
+    }
     if (cmd[0] == EFS_MD_CMD_QUERY_POLICY) {
         if(clen!=13 || group!=efs_raft_shard_group(1))return EFS_ERR_INVAL;
         return efs_query_policy_apply(h->kv,rd64be(cmd+1),rd32be(cmd+9));
@@ -4063,6 +4080,10 @@ static uint64_t host_pressure_command_charge(const uint8_t *cmd, uint32_t n)
         cmd[0] == EFS_MD_CMD_APPEND_RES)
         return UINT64_MAX;
     if (cmd[0]==EFS_MD_CMD_SESSION && n>=2) {
+        if(cmd[1]==EFS_MD_SESS_REGISTER_ESTABLISH) {
+            uint64_t rows=host_pressure_rows_charge(2,1,EFS_SESSION_VAL);
+            return charge>rows?charge:rows;
+        }
         if (cmd[1]==EFS_MD_SESS_LEASE_DROP) return UINT64_MAX;
         if(cmd[1]==EFS_MD_SESS_LEASE_EDGE_DEFERRED) {
             uint64_t rows=host_pressure_rows_charge(19,1,EFS_OPID_VAL_MAX);
@@ -11065,6 +11086,16 @@ static int host_namespace_session_admit_covered(struct efs_raft_host *h,uint32_t
         else registered=(session&(1ull<<40))!=0;
     }
     if(rc!=EFS_OK)return rc;
+    if(owner==group) {
+        /* One ordered entry can make registration and establishment atomic.
+         * Apply rechecks ACTIVE/epoch, guards both keys and publishes neither
+         * row if fencing/ownership/storage rejects admission. Cross-group
+         * owners still need the original REGISTER-before-ESTABLISH protocol. */
+        cmd[1]=EFS_MD_SESS_REGISTER_ESTABLISH;
+        rc=host_namespace_session_command(h,group,cmd,sizeof(cmd),hint);
+        if(!rc)rc=efs_session_accept(h->kv,shard,q->id.client_uuid,q->id.session_epoch);
+        return rc;
+    }
     cmd[1]=EFS_MD_SESS_REGISTER;
     if(!registered)rc=host_namespace_session_command(h,owner,cmd,sizeof(cmd),hint);
     if(rc!=EFS_OK)return rc;

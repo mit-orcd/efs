@@ -799,3 +799,28 @@ mode, truncate and deletion. Deletion queues drain normally. Native acceptance
 is still pending.
 Evidence: cursor-checkpoint-unit-fault.txt, cursor-checkpoint-private-recovery.txt
 and cursor-checkpoint-cold-replay.txt.
+
+Durable-cursor candidate 9142015b passes the complete Mac Linux make test
+and documentation gate (5/5). Installed Mac buffered/TCP rollout drained
+without forced loss. Native deep pair is 1/2: the 100-level case passes, but
+the recursive 60-level makedirs case still misses 20 seconds. Multiprocess
+append remains 0/1 at 30 seconds (31.5 with cleanup). The sampled checkpoint
+worker average is 8.4 us and only two applied-file syncs occur, compared with
+thousands previously; Raft log barriers still average 19.2 ms. Different run
+lengths/partial workloads do not establish a paired throughput comparison.
+A separate 60-level diagnostic completes makedirs in 10.1 seconds and cleanup
+in 6.9 seconds, leaving little deadline margin; the native gate remains OPEN.
+Evidence: cursor-checkpoint-full-unit.txt, native-cursor-deep.txt,
+native-cursor-append.txt, cursor-deep-sample.json and makedirs-cursor-diag.txt.
+
+Next candidate combines namespace REGISTER and ESTABLISH only when both
+domains share one Raft group. One atomic two-row KV batch rechecks ACTIVE and
+exact epoch, guards global/local keys and preserves established/rejection
+floors. BEGIN before admission rejects it; BEGIN afterward includes the new
+participant. Cross-group protocol stays sequential. Wrong group/length/shard
+commands are rejected, logical verdicts remain audible without blocking the
+log, and storage errors remain retryable. Unit tests pass on Mac Linux for
+failed batches (neither row changes), prepared ownership, fence/new epoch,
+cold persistence, routing and unchanged cross-group admission. Native and
+private-cluster session gates for this candidate are pending.
+Evidence: atomic-session-unit.txt.
