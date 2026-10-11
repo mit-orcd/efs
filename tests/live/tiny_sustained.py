@@ -18,7 +18,7 @@ def quantiles(values):
             for q in (50, 95, 99)} | {'max_us': values[-1]}
 
 
-def exercise(mount, pids, seconds, evidence, large_mib_s=0):
+def exercise(mount, pids, seconds, evidence, large_mib_s=0, capture_overload=False):
     assert 1 <= seconds <= 1800 and 0 <= large_mib_s <= 64
     folder = Path(mount) / 'tiny-sustained'
     folder.mkdir()
@@ -26,6 +26,9 @@ def exercise(mount, pids, seconds, evidence, large_mib_s=0):
     gate = threading.Barrier(tiny_workers + large_workers)
     stop = threading.Event()
     samples = {}
+    acknowledged = {}
+    large_synced = [0] * 4
+    errors = []
     lock = threading.Lock()
     start = time.monotonic()
     deadline = start + seconds
@@ -51,6 +54,8 @@ def exercise(mount, pids, seconds, evidence, large_mib_s=0):
                 finally:
                     before = time.monotonic_ns(); os.close(fd)
                     measure('close', (time.monotonic_ns()-before)/1000)
+                if capture_overload:
+                    with lock: acknowledged[path.name] = [worker, generation]
             # Every acknowledged generation is byte-checked before retirement.
             for slot in range(slots):
                 path = folder / f'tiny-{worker}-{slot}'
@@ -61,7 +66,10 @@ def exercise(mount, pids, seconds, evidence, large_mib_s=0):
                 return generation
             for slot in range(slots):
                 before = time.monotonic_ns()
-                (folder / f'tiny-{worker}-{slot}').unlink()
+                path = folder / f'tiny-{worker}-{slot}'
+                path.unlink()
+                if capture_overload:
+                    with lock: acknowledged.pop(path.name, None)
                 measure('delete', (time.monotonic_ns()-before)/1000)
     def large(worker):
         data = hashlib.sha256(f'large-{worker}'.encode()).digest()*32768
@@ -73,11 +81,14 @@ def exercise(mount, pids, seconds, evidence, large_mib_s=0):
             while written < 16 or not stop.is_set():
                 assert os.pwrite(fd, data, (written % 16)*len(data)) == len(data)
                 written += 1
-                if written % 4 == 0: os.fsync(fd)
+                if written % 4 == 0:
+                    os.fsync(fd)
+                    large_synced[worker] = written
                 if large_mib_s:
                     delay = written/large_mib_s-(time.monotonic()-writer_start)
                     if delay > 0: stop.wait(delay)
             os.fsync(fd)
+            large_synced[worker] = written
         finally: os.close(fd)
         return written*len(data)
     def process_snapshot():
@@ -88,6 +99,12 @@ def exercise(mount, pids, seconds, evidence, large_mib_s=0):
             fields = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()
             result[str(pid)] = {'rss_kib': rss, 'cpu_ticks': int(fields[11])+int(fields[12])}
         return result
+    def settled(future):
+        try: return future.result(timeout=120)
+        except OSError as error:
+            if not capture_overload or error.errno not in (11, 16, 28): raise
+            errors.append({'errno': error.errno, 'message': str(error)})
+            return 0
     futures = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
         big = [pool.submit(large, i) for i in range(large_workers)]
@@ -96,7 +113,10 @@ def exercise(mount, pids, seconds, evidence, large_mib_s=0):
         try:
             while time.monotonic() < deadline:
                 for future in futures:
-                    if future.done() and future.exception(): raise future.exception()
+                    if future.done() and future.exception():
+                        if not capture_overload: raise future.exception()
+                        stop.set()
+                if stop.is_set(): break
                 process_samples.append({'seconds': time.monotonic()-start, 'processes': process_snapshot()})
                 with lock:
                     counts = {str(k): {n: len(v) for n,v in s.items()} for k,s in samples.items()}
@@ -105,9 +125,9 @@ def exercise(mount, pids, seconds, evidence, large_mib_s=0):
                 Path(evidence).write_text(json.dumps(record, indent=2)+'\n')
                 print(f'sustained seconds={record["elapsed_s"]:.1f} counts={counts}', flush=True)
                 stop.wait(min(30, max(0, deadline-time.monotonic())))
-            generations = [f.result(timeout=120) for f in small]
+            generations = [settled(f) for f in small]
         finally: stop.set()
-        written = [f.result(timeout=120) for f in big]
+        written = [settled(f) for f in big]
     windows = []
     for window, sample in sorted(samples.items()):
         windows.append({'window': window, 'counts': {k:len(v) for k,v in sample.items()},
@@ -120,7 +140,12 @@ def exercise(mount, pids, seconds, evidence, large_mib_s=0):
               'large_offered_mib_s_per_worker':large_mib_s,
               'large_written_bytes': written, 'windows': windows,
               'process_samples':process_samples, 'cpu_hz':os.sysconf('SC_CLK_TCK')}
-    assert record['wall_s'] >= seconds
+    if capture_overload:
+        record.update(overload_errors=errors, acknowledged_tiny=acknowledged,
+                      acknowledged_large_sync_writes=large_synced,
+                      warm_verified=sum(w['counts']['read'] for w in windows),
+                      created=sum(w['counts']['close'] for w in windows))
+    assert record['wall_s'] >= seconds or (capture_overload and errors)
     Path(evidence).write_text(json.dumps(record, indent=2)+'\n')
     return record
 
@@ -140,3 +165,26 @@ def verify_and_delete(mount, generations):
             assert stream.read(1) == b'', path
         path.unlink()
     folder.rmdir()
+
+
+def verify_overload_and_delete(mount, record):
+    """Cold-check only durable acknowledgements, including runs that refused I/O."""
+    folder = Path(mount) / 'tiny-sustained'
+    for name, (worker, generation) in record['acknowledged_tiny'].items():
+        assert (folder/name).read_bytes() == payload(worker,generation), name
+    checked_large = 0
+    for worker, writes in enumerate(record['acknowledged_large_sync_writes']):
+        data = hashlib.sha256(f'large-{worker}'.encode()).digest()*32768
+        chunks = min(writes,16)
+        if chunks:
+            with (folder/f'large-{worker}').open('rb') as stream:
+                for _ in range(chunks): assert stream.read(len(data)) == data
+            checked_large += chunks*len(data)
+    # Unacknowledged fixture files may exist after a refused close. They carry
+    # no success claim, but are retired too so physical cleanup has an oracle.
+    for path in folder.iterdir():
+        assert path.is_file(), path
+        path.unlink()
+    folder.rmdir()
+    record.update(cold_acknowledged_tiny=len(record['acknowledged_tiny']),
+                  cold_acknowledged_large_bytes=checked_large)

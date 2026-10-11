@@ -41,6 +41,7 @@ p.add_argument('--posix-jobs', type=int, default=4, help='parallel POSIX cases (
 p.add_argument('--storage-session-fence-fault',action='store_true',help='private certificate fsync EIO: revocation must remain incomplete, then recover and survive cold restart; requires --guarded-leases')
 p.add_argument('--continue-posix-failure','--continue-regression-failure',dest='continue_posix_failure',action='store_true',help='retain POSIX/peer failure, run independent later gates, then exit unsuccessfully')
 p.add_argument('--tiny-sustained-large-mib-s',type=float,default=0,help='0=unpaced; otherwise 0..64 MiB/s per large writer in sustained gate')
+p.add_argument('--tiny-overload',action='store_true',help='retain refused-I/O verdicts and cold-check acknowledged bytes in sustained gate')
 p.add_argument('--tiny-sustained-seconds',type=int,default=0,help='1..1800 seconds of bounded tiny/large churn; cold exact survivors and physical reclaim, then exit')
 p.add_argument('--tiny-mixed',action='store_true',help='bounded large-writer overlap with 512 tiny CREATE/close operations, cold exact bytes and physical deletion')
 p.add_argument('--tiny-create-only',action='store_true',help='finite eight-worker tiny CREATE/write/close benchmark with exact cold bytes and physical reclaim, without large writers')
@@ -696,10 +697,13 @@ try:
     if a.tiny_sustained_seconds:
         from tiny_sustained import exercise as sustained,verify_and_delete as verify_sustained
         record=sustained(mount,[client.pid,*[proc.pid for proc in servers]],
-                         a.tiny_sustained_seconds,work/'tiny-sustained.json',a.tiny_sustained_large_mib_s)
+                         a.tiny_sustained_seconds,work/'tiny-sustained.json',a.tiny_sustained_large_mib_s,a.tiny_overload)
         cold_start=time.monotonic()
         unmount();stop(crash=True);start();mount_client()
-        verify_sustained(mount,record['generations'])
+        if a.tiny_overload:
+            from tiny_sustained import verify_overload_and_delete
+            verify_overload_and_delete(mount,record)
+        else: verify_sustained(mount,record['generations'])
         record.update(cold_verified=True,physical_inventory_empty=False,
                       cold_recovery_wall_s=time.monotonic()-cold_start)
         (work/'tiny-sustained.json').write_text(json.dumps(record,indent=2))
@@ -712,7 +716,7 @@ try:
         finally:
             record.update(gc_drain_wall_s=time.monotonic()-drain_start,gc_drain_deadline_s=180)
             (work/'tiny-sustained.json').write_text(json.dumps(record,indent=2))
-        print('sustained tiny/large warm generations, cold bytes and physical reclamation PASS',flush=True)
+        print(('overload acknowledged-byte recovery and physical reclamation PASS; refused I/O remains in verdict' if a.tiny_overload else 'sustained tiny/large warm generations, cold bytes and physical reclamation PASS'),flush=True)
         raise SystemExit(0)
     if a.tiny_churn:
         from tiny_churn import exercise as churn,verify_and_delete as verify_churn
