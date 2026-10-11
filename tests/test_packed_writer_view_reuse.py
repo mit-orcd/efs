@@ -4,7 +4,10 @@ from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text()
-a=s.index('void server_raft_host_writer_view_reuse(');b=s.index('void server_raft_host_getchunks(',a)
+def function(name):
+    a=s.index('void '+name+'(')
+    return s[a:s.index('\n}',a)+2]
+views=function('server_raft_host_writer_view_reuse')+'\n'+function('server_raft_host_writer_view')
 code=r'''
 #include "efs/protocol.h"
 #include "efs/meta_apply.h"
@@ -25,7 +28,7 @@ static int host_inode_rpc_peer(struct efs_raft_host *h,int rid,uint8_t type,cons
 int efs_meta_apply_get_inode_tx(struct efs_kv *kv,efs_ino_t ino,efs_txn_coord_fn fn,void *u,struct efs_meta_row *r){(void)kv;(void)ino;(void)fn;(void)u;r->generation=5;return 0;}
 int efs_meta_get_writer_chunk_view_tx(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,uint32_t ci,efs_txn_coord_fn fn,void *u,struct efs_meta_writer_view *v){(void)kv;(void)fn;(void)u;reads++;memset(v,0,sizeof(*v));v->ino=ino;v->generation=gen;(void)ci;v->authority_epoch=epoch;return gen==5?0:EFS_ERR_STALE;}
 static int rc_to_inode_status(int rc){return rc==0?EFS_INODE_RPC_OK:rc==EFS_ERR_BUSY?EFS_INODE_RPC_BUSY:EFS_INODE_RPC_STALE;}
-'''+s[a:b]+r'''
+'''+views+r'''
 int main(void){
  uint8_t covered=0;struct efs_msg_inode_writer_view q={.ino=101,.generation=5};struct efs_msg_inode_writer_view_reply out;
  server_raft_host_writer_view_reuse(&q,&out,&covered);assert(out.status==EFS_INODE_RPC_OK&&covered==1&&barriers[0]==1&&reads==1);
