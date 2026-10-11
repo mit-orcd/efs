@@ -2196,10 +2196,13 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                 rc,(unsigned long long)index,(unsigned long long)ino);
         return rc;
     }
-    /* REGISTER's missing-owner verdict permits namespace bootstrap; a
-     * refusal must never look like successful admission. Blocked fences
-     * likewise cannot acknowledge a completed revocation barrier. */
-    if (cmd[1] == EFS_MD_SESS_REGISTER || cmd[1] == EFS_MD_SESS_FINISH || cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
+    /* A blocked local fence is not a completed revocation barrier. Preserve
+     * its business verdict in the apply ring so the coordinator cannot ACK it. */
+    /* First-touch namespace admission bootstraps only after REGISTER's
+     * authoritative NOT_FOUND. Turning that verdict into OK skips CREATE
+     * and makes an existing name appear absent on a fresh mount. */
+    if (cmd[1] == EFS_MD_SESS_REGISTER || cmd[1] == EFS_MD_SESS_ESTABLISH ||
+        cmd[1] == EFS_MD_SESS_FINISH || cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
         cmd[1] == EFS_MD_SESS_LEASE_EDGE_DEFERRED || cmd[1] == EFS_MD_SESS_LEASE_OPEN ||
         cmd[1] == EFS_MD_SESS_LEASE_CLOSE) return rc;
     if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_INVAL || rc == EFS_ERR_BUSY ||
@@ -2638,10 +2641,13 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
      * their core error and retry; the policy did not become visible. */
     if(cmd[0]==EFS_MD_CMD_QUERY_POLICY &&
        (rc==EFS_ERR_STALE || rc==EFS_ERR_INVAL || rc==EFS_ERR_PROTO))ret=EFS_OK;
-    /* REGISTER refusal and FINISH/FENCE_LOC BUSY must permit later
-     * CREATE/ACK/RESOLVE. These are business verdicts, not storage failures. */
+    /* REGISTER's missing-owner verdict must let the following CREATE apply.
+     * Admission refusals remain in the ring; IO/NOMEM still retry this index.
+     * FINISH/FENCE_LOC BUSY must let later ACK/RESOLVE drain ownership. It is
+     * a rejected command, not a retryable storage failure at this log index. */
     if (cmd[0] == EFS_MD_CMD_SESSION && clen >= 2 &&
-        (cmd[1] == EFS_MD_SESS_REGISTER || cmd[1] == EFS_MD_SESS_FINISH || cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
+        (cmd[1] == EFS_MD_SESS_REGISTER || cmd[1] == EFS_MD_SESS_ESTABLISH ||
+         cmd[1] == EFS_MD_SESS_FINISH || cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
          cmd[1] == EFS_MD_SESS_LEASE_EDGE_DEFERRED || cmd[1] == EFS_MD_SESS_LEASE_OPEN ||
          cmd[1] == EFS_MD_SESS_LEASE_CLOSE) &&
         rc != EFS_ERR_IO && rc != EFS_ERR_NOMEM)
@@ -11750,7 +11756,7 @@ static const struct efs_meta_append_ops host_append_ops={
 /* Reservations keep their floor and inode guards synchronous and ordered.
  * The remaining exact images can share Raft durability cohorts. No decision
  * precedes the existing term/index-matched result check for EVERY proposal.
- * Completion/pruning continue using the synchronous callbacks above. */
+ * REPORT completion uses the same ordered guards; pruning stays synchronous. */
 struct host_append_reserve_ctx {
     struct host_resize_ctx base;
     struct host_idx_ref refs[EFS_META_LANES+5];
@@ -15046,7 +15052,7 @@ static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
 {
     uint64_t offs[64], lens[64];
     uint32_t n = 64, i;
-    struct host_resize_ctx ctx={h,hint};struct efs_txid t;
+    struct efs_txid t;
     int rc,authoritative=0;
 
     /* append_open caps at 64. A 400-record O_APPEND burst is 400 OPEN
@@ -15073,12 +15079,17 @@ static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
                  * Recollect OPEN ranges from the current complete view. */
                 break;
             }
+            /* Freeze owner (when present) and inode before pipelining the
+             * exact cursor/reservation/lane images. The shared callback checks
+             * every applied verdict before committing the transaction. */
+            struct host_append_reserve_ctx batch={.base={h,hint},
+                                                   .leading=session?2:1};
             fill_txid(h,&t);
             rc = session ?
                 efs_meta_finish_append_owned(h->kv, ino, offs[i], EFS_META_APPEND_COMPLETED,
-                                             session, &t, &host_append_ops, &ctx) :
+                                             session, &t, &host_append_reserve_ops, &batch) :
                 efs_meta_finish_append(h->kv, ino, offs[i], EFS_META_APPEND_COMPLETED,
-                                       &t, &host_append_ops, &ctx);
+                                       &t, &host_append_reserve_ops, &batch);
             if(rc!=EFS_OK)return rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
             did++;
         }

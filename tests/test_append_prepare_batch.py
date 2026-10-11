@@ -42,7 +42,7 @@ code=r'''
 struct efs_txid {uint64_t id;};
 struct efs_txn_parts {unsigned n;};
 struct host_idx_ref {uint8_t group;uint64_t idx,term;};
-struct efs_raft_host {pthread_mutex_t mu;};
+struct efs_raft_host {pthread_mutex_t mu;void *kv;};
 struct host_resize_ctx {struct efs_raft_host *host;int *hint;};
 struct efs_meta_append_image {uint8_t key[64];uint32_t klen,expected_len,new_len;int op;uint8_t expected[1024],value[1024];};
 struct efs_meta_append_ops {
@@ -84,6 +84,50 @@ static int host_resize_resolve(void *user,const struct efs_txid *t,const struct 
  struct host_resize_ctx *ctx=user;assert(ctx->host&&ctx->hint&&t->id==19&&p->n==2);resolutions++;last_resolve=d;return resolve_error;
 }
 '''+function('host_prep_raw')+'\n'+function('host_wait_refs')+'\n'+helpers+r'''
+
+typedef uint64_t efs_ino_t;
+struct efs_opid {int owner;};
+#define EFS_ERR_NOT_FOUND -2
+#define EFS_META_APPEND_COMPLETED 0
+static unsigned report_done,report_authority,report_reads;
+static int report_error;
+static int efs_meta_apply_append_open(void *kv,efs_ino_t ino,uint64_t *offs,uint64_t *lens,uint32_t *n) {
+ (void)kv;assert(ino==11&&*n==64);report_reads++;
+ *n=report_done==2?0:2-report_done;
+ for(unsigned i=0;i<*n;i++){offs[i]=(report_done+i)*8;lens[i]=8;}
+ return 0;
+}
+static int host_append_authority(struct efs_raft_host *h,int *hint) {
+ (void)h;*hint=1;report_authority++;return 0;
+}
+static void fill_txid(struct efs_raft_host *h,struct efs_txid *t) {(void)h;t->id=19;}
+static int report_finish(void *kv,efs_ino_t ino,uint64_t offset,int outcome,
+ const struct efs_opid *owner,const struct efs_txid *t,const struct efs_meta_append_ops *ops,void *ctx) {
+ (void)kv;assert(ino==11&&offset==report_done*8&&outcome==0);
+ struct host_append_reserve_ctx *c=ctx;
+ assert(ops==&host_append_reserve_ops&&!c->nrefs&&c->leading==(owner?2:1));
+ struct efs_txn_parts p={2};
+ struct efs_meta_append_image im={.klen=4,.expected_len=1,.new_len=1,.op=3};
+ im.key[1]=1;im.key[2]=1;
+ for(unsigned i=0;i<(owner?6:5);i++) {
+  int rc=ops->prepare(ctx,t,&p,&im);
+  if(rc){assert(!ops->decide(ctx,t,&p,EFS_TXN_ABORT));assert(!ops->resolve(ctx,t,&p,EFS_TXN_ABORT));return rc;}
+ }
+ if(report_error)applied_error[c->refs[0].idx]=report_error;
+ int rc=ops->decide(ctx,t,&p,EFS_TXN_COMMIT);
+ if(!rc)rc=ops->resolve(ctx,t,&p,EFS_TXN_COMMIT);
+ if(!rc)report_done++;
+ return rc;
+}
+static int efs_meta_finish_append(void *kv,efs_ino_t ino,uint64_t off,int outcome,
+ const struct efs_txid *t,const struct efs_meta_append_ops *ops,void *ctx) {
+ return report_finish(kv,ino,off,outcome,NULL,t,ops,ctx);
+}
+static int efs_meta_finish_append_owned(void *kv,efs_ino_t ino,uint64_t off,int outcome,
+ const struct efs_opid *id,const struct efs_txid *t,const struct efs_meta_append_ops *ops,void *ctx) {
+ return report_finish(kv,ino,off,outcome,id,t,ops,ctx);
+}
+''' + function('host_resolve_caught_up') + r'''
 static struct efs_raft_host host={.mu=PTHREAD_MUTEX_INITIALIZER};
 static struct efs_txid tx={19};static struct efs_txn_parts parts={2};static int hint;
 static struct efs_meta_append_image image={.klen=4,.expected_len=1,.new_len=1,.op=3};
@@ -127,6 +171,17 @@ int main(void) {
  reset(&c,2);assert(host_append_reserve_ops.decide(&c,&tx,&parts,EFS_TXN_COMMIT)==EFS_ERR_INVAL&&last_decision==EFS_TXN_ABORT&&last_resolve==EFS_TXN_ABORT);
  reset(&c,0);encode_error=EFS_ERR_INVAL;assert(host_append_reserve_ops.prepare(&c,&tx,&parts,&image)==EFS_ERR_INVAL&&!proposals&&!c.nrefs);
  reset(&c,0);c.nrefs=sizeof(c.refs)/sizeof(c.refs[0]);assert(host_append_reserve_ops.prepare(&c,&tx,&parts,&image)==EFS_ERR_INVAL&&!proposals);
+
+ for(int owned=0;owned<2;owned++) {
+  struct efs_opid id={1};int hint=0;
+  reset(&c,0);report_done=report_authority=report_reads=report_error=0;
+  assert(!host_resolve_caught_up(&host,11,16,owned?&id:NULL,&hint));
+  assert(report_done==2&&report_authority==1&&report_reads==3);
+  assert(syncs==(unsigned)(owned?4:2)&&proposals==8&&checks==8&&decisions==2&&resolutions==2);
+  reset(&c,0);report_done=report_authority=report_reads=0;report_error=EFS_ERR_STALE;
+  assert(host_resolve_caught_up(&host,11,16,owned?&id:NULL,&hint)==EFS_ERR_BUSY);
+  assert(!report_done&&report_authority==1&&last_decision==EFS_TXN_ABORT&&last_resolve==EFS_TXN_ABORT);
+ }
  puts("append PREPARE: ordered floor/inode guards, bounded cohorts, every applied verdict before decision, refusal/abort cleanup and ambiguous COMMIT retention PASS");
  return 0;
 }

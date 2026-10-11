@@ -29,14 +29,17 @@ static int core(unsigned kind, int rc) {
 int main(void) {
     const int business[] = {EFS_OK, EFS_ERR_NOT_FOUND, EFS_ERR_INVAL,
                             EFS_ERR_BUSY, EFS_ERR_STALE};
+    const unsigned admissions[] = {EFS_MD_SESS_REGISTER, EFS_MD_SESS_ESTABLISH};
+    for (unsigned k = 0; k < 2; k++)
     for (unsigned i = 0; i < sizeof(business)/sizeof(business[0]); i++) {
-        assert(audible(EFS_MD_SESS_REGISTER, business[i]) == business[i]);
-        assert(core(EFS_MD_SESS_REGISTER, business[i]) == EFS_OK);
+        assert(audible(admissions[k], business[i]) == business[i]);
+        assert(core(admissions[k], business[i]) == EFS_OK);
     }
     const int storage[] = {EFS_ERR_IO, EFS_ERR_NOMEM};
+    for (unsigned k = 0; k < 2; k++)
     for (unsigned i = 0; i < sizeof(storage)/sizeof(storage[0]); i++) {
-        assert(audible(EFS_MD_SESS_REGISTER, storage[i]) == storage[i]);
-        assert(core(EFS_MD_SESS_REGISTER, storage[i]) == storage[i]);
+        assert(audible(admissions[k], storage[i]) == storage[i]);
+        assert(core(admissions[k], storage[i]) == storage[i]);
     }
     /* Existing idempotent CREATE handling is deliberately unchanged. */
     assert(audible(EFS_MD_SESS_CREATE, EFS_ERR_NOT_FOUND) == EFS_OK);

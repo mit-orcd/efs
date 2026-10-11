@@ -64,6 +64,9 @@ p.add_argument('--sync-write-fault',action='store_true',help='actual O_SYNC/O_DS
 p.add_argument('--sync-writes',action='store_true',help='O_SYNC/O_DSYNC publication before write replies, including queued append across lane groups')
 p.add_argument('--append-sync-boundary',action='store_true',help='append/fsync across lane groups, peer visibility and cold crash bytes')
 p.add_argument('--append-replay-race', action='store_true', help='32 identical concurrent APPEND RPCs allocate once')
+p.add_argument('--fresh-namespace',action='store_true',help='six first-mutation namespace operations on fresh cold mounts with no prior file OPEN')
+p.add_argument('--append-burst-only',action='store_true',help='only exact APPEND burst, peer/cold bytes and physical cleanup')
+p.add_argument('--append-burst',type=int,default=0,help='100..20000 unique 4-KiB O_APPEND writes, final fsync, exact peer/cold blocks')
 p.add_argument('--append-audit', action='store_true', help='mixed append descriptions during physical GC, then exact cold records')
 p.add_argument('--integrity', action='store_true')
 p.add_argument('--namespace', action='store_true')
@@ -115,6 +118,8 @@ p.add_argument('--idle-seconds',type=int,default=0,help='measure live-table idle
 p.add_argument('--full-node',action='store_true',help='one node quota exhausted while three fragment targets remain writable')
 p.add_argument('--port', type=int, default=20190)
 a = p.parse_args()
+if a.append_burst_only and not a.append_burst:p.error('--append-burst-only requires --append-burst')
+if a.append_burst and not 100<=a.append_burst<=20000:p.error('--append-burst must be 100..20000')
 if a.posix_jobs < 1:
     p.error("--posix-jobs must be positive")
 if a.mount_sync:a.sync_writes=True
@@ -461,6 +466,55 @@ try:
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.fresh_namespace:
+        fresh=mount/'fresh-namespace';fresh.mkdir()
+        for name in ('unlink','rename','link'):
+            with (fresh/name).open('xb',buffering=0) as fd:
+                assert fd.write(b'fresh-owner:'+name.encode())==12+len(name)
+                os.fsync(fd.fileno())
+        (fresh/'rmdir').mkdir()
+        checks=[]
+        for action in ('unlink','rename','rmdir','mkdir','create','link'):
+            unmount();stop();start();mount_client()
+            # Read-only stat/LOOKUP can precede the mutation. A file OPEN
+            # must not silently bootstrap the global session in this gate.
+            target=fresh/action
+            started=time.monotonic()
+            if action=='unlink':target.unlink();assert not target.exists()
+            elif action=='rename':
+                target.rename(fresh/'renamed')
+                assert (fresh/'renamed').read_bytes()==b'fresh-owner:rename'
+            elif action=='rmdir':target.rmdir();assert not target.exists()
+            elif action=='mkdir':target.mkdir();assert target.is_dir()
+            elif action=='create':
+                with target.open('xb',buffering=0) as fd:
+                    assert fd.write(b'new-owner')==9;os.fsync(fd.fileno())
+                assert target.read_bytes()==b'new-owner'
+            else:
+                os.link(target,fresh/'linked');assert target.stat().st_nlink==2
+                assert (fresh/'linked').read_bytes()==b'fresh-owner:link'
+            checks.append(dict(first_mutation=action,elapsed_s=time.monotonic()-started,passed=True))
+            (work/'fresh-namespace.json').write_text(json.dumps(checks,indent=2))
+        shutil.rmtree(fresh);wait(drained,'fresh namespace cold first-mutation physical cleanup',180)
+        print('six cold mounts first CREATE/MKDIR/UNLINK/RMDIR/RENAME/LINK without prior OPEN PASS',flush=True)
+    if a.append_burst_only:
+        import append_burst
+        peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
+        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+        wait(lambda:os.path.ismount(peer_mount),'append burst peer mounted',40)
+        burst_path,burst_report=append_burst.run(mount,peer_mount,a.append_burst,work)
+        burst_ino=burst_path.stat().st_ino
+        run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
+        unmount();stop();start();mount_client()
+        burst_report['cold_sha256']=append_burst.verify(burst_path,a.append_burst)
+        assert burst_report['cold_sha256']==burst_report['warm_primary_sha256']
+        burst_path.unlink()
+        wait(lambda:not files(burst_ino),'append burst physical fragments empty',180)
+        wait(drained,'append burst GC drained',180)
+        wait(lambda:totals(status())['data_usage_bytes']==0,'append burst quota zero',180)
+        (work/'append-burst.json').write_text(json.dumps(burst_report,indent=2))
+        print('append burst exact peer/cold blocks, final fsync and zero physical/quota PASS',flush=True)
+        raise SystemExit(0)
     if a.peer_mkdir_race_only:
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
         peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
@@ -2506,6 +2560,16 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
         (work/'posix-gc-effect.json').write_text(json.dumps({
             'before': posix_checkpoint, 'after': after_posix}, indent=2))
         print('POSIX deletes advance GC passes and physical removal counters PASS',flush=True)
+    if a.append_burst:
+        import append_burst
+        burst_path,burst_report=append_burst.run(mount,peer_mount,a.append_burst,work)
+        unmount();stop();start();mount_client()
+        cold_hash=append_burst.verify(burst_path,a.append_burst)
+        assert cold_hash==burst_report['warm_primary_sha256']
+        burst_report['cold_sha256']=cold_hash
+        (work/'append-burst.json').write_text(json.dumps(burst_report,indent=2))
+        burst_path.unlink();wait(drained,'append burst physical deletion drained',180)
+        print('append burst exact peer/cold blocks and final fsync PASS',flush=True)
     if a.append_audit:
         from collections import Counter
         path=mount/'append-cold-audit';path.touch()
