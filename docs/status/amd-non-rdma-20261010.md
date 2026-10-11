@@ -114,3 +114,16 @@ OPEN/CLOSE pair for the cold byte oracle. This counts distinct committed Raft
 entries, not replicas, retries or log lines. Successful deferred lease edges
 return before the ordinary server log message, so text logs alone cannot prove
 this reduction. [Decoded committed identities and applied bounds](../../results/measure/20261010-amd-three-hour/lease-consensus-proof.json).
+
+The early-exit tiny fixture now requires actual physical absence alongside
+sampled-zero GC counters. Independent stopped-store inspection verifies the
+completed controls and first four long cases. A bounded untimed profile shows
+background Raft/GC work while the client waits idle; this reclamation phase is
+excluded from creation throughput. The first matched pair is provisional;
+three additional alternating repeats per mode remain.
+
+Additional live gates are queued for the fault-only consumed combined-adoption
+reply loss (failed descriptor cleanup, original inode reclamation, name reuse
+and cold bytes), and LOCAL/cross-group HASHED crashes before/after adoption.
+Normal and fault-enabled actual-source lease compile/regressions pass; these
+new live variants are not yet accepted.

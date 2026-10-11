@@ -1398,6 +1398,19 @@ int efs_client_lease_resume(struct efs_client_lease_request *r,int probe_only)
     r->attempted=1;
     rc=efs_client_rpc_lease_edge(r->ino,r->generation,&r->q,r->flags,
                                  r->pending_token,0,&known);
+#if EFS_FAULTS
+    /* Private functional gate: hide one consumed durable combined-adoption
+     * reply. Leave the exact request active so normal cleanup must prove its
+     * receipt before compensating CLOSE; no descriptor was acknowledged. */
+    const char *marker=getenv("EFS_FAULT_CREATE_ADOPT_REPLY_FILE");
+    if (rc==EFS_OK && known==1 &&
+        r->flags==(EFS_LEASE_EDGE_OPEN|EFS_LEASE_EDGE_CLEAR_PENDING) &&
+        marker && unlink(marker)==0) {
+        fprintf(stderr,"test-create-adopt-reply-loss seq=%llu ino=%llu known=1 hidden=1\n",
+                (unsigned long long)r->q.id.seq,(unsigned long long)r->ino);
+        return lease_request_result(r,EFS_ERR_NET,0);
+    }
+#endif
     return lease_request_result(r,rc,known);
 }
 

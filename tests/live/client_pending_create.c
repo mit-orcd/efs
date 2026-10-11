@@ -53,13 +53,12 @@ int main(int argc,char **argv)
     struct efs_opid_req q={.id={.session_epoch=7,.seq=10}};
     assert(!efs_client_publication_id(10,&q.id));q.id.session_epoch=7;
     if(argc==5) {
-        assert((!strcmp(argv[3],"resume") || !strcmp(argv[3],"resume-hashed")) && strlen(argv[4])==32);
+        assert((!strcmp(argv[3],"resume") || !strcmp(argv[3],"resume-hashed") || !strcmp(argv[3],"resume-adopt") || !strcmp(argv[3],"resume-adopt-hashed")) && strlen(argv[4])==32);
         for(unsigned i=0;i<16;i++){unsigned n;assert(sscanf(argv[4]+2*i,"%2x",&n)==1);q.id.client_uuid[i]=(uint8_t)n;}
     }
     assert(!efs_client_rpc_publication_session(shard,&q.id));
     efs_ino_t ino=create(port,parent,&q);assert(create(port,parent,&q)==ino);
-    if(argc==4) {
-        assert((!strcmp(argv[3],"create") || !strcmp(argv[3],"create-hashed")));
+    if(argc==4 && (!strcmp(argv[3],"create") || !strcmp(argv[3],"create-hashed"))) {
         printf("pending_uuid=");for(unsigned i=0;i<16;i++)printf("%02x",q.id.client_uuid[i]);
         printf(" ino=%llu name=%s shard=%u hashed=%d\n",(unsigned long long)ino,create_name,shard,hashed);return 0;
     }
@@ -68,6 +67,14 @@ int main(int argc,char **argv)
     assert(shard==efs_kv_inode_shard(ino));
     struct efs_opid_req edge=q;edge.id.seq=11;edge.ack=0;uint64_t known=0;
     assert(!efs_client_rpc_lease_edge(ino,gen,&edge,EFS_LEASE_EDGE_OPEN|EFS_LEASE_EDGE_CLEAR_PENDING,10,0,&known)&&known==1);
+    if(argc==4) {
+        assert(!strcmp(argv[3],"adopt") || !strcmp(argv[3],"adopt-hashed"));
+        /* Exit before handing any descriptor back. The harness kills/restarts
+         * the daemons, then resumes this exact edge after its token is gone. */
+        printf("pending_uuid=");for(unsigned i=0;i<16;i++)printf("%02x",q.id.client_uuid[i]);
+        printf(" ino=%llu name=%s shard=%u hashed=%d combined_seq=11 known=1\n",(unsigned long long)ino,create_name,shard,hashed);
+        return 0;
+    }
     edge.id.seq=12;edge.ack=11;
     assert(!efs_client_rpc_lease_edge(ino,gen,&edge,EFS_LEASE_EDGE_CLOSE,0,0,&known)&&known==1);
     assert(create(port,parent,&q)==ino); /* replay must not reinstall pending owner */

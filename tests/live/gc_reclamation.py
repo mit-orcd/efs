@@ -41,6 +41,7 @@ p.add_argument('--posix-jobs', type=int, default=4, help='parallel POSIX cases (
 p.add_argument('--storage-session-fence-fault',action='store_true',help='private certificate fsync EIO: revocation must remain incomplete, then recover and survive cold restart; requires --guarded-leases')
 p.add_argument('--continue-posix-failure','--continue-regression-failure',dest='continue_posix_failure',action='store_true',help='retain POSIX/peer failure, run independent later gates, then exit unsuccessfully')
 p.add_argument('--tiny-mixed',action='store_true',help='bounded large-writer overlap with 512 tiny CREATE/close operations, cold exact bytes and physical deletion')
+p.add_argument('--tiny-create-only',action='store_true',help='finite eight-worker tiny CREATE/write/close benchmark with exact cold bytes and physical reclaim, without large writers')
 p.add_argument('--tiny-mixed-only',action='store_true',help='run only the mixed-load cold-read/reclamation gate; implies --tiny-mixed')
 p.add_argument('--tiny-mixed-files',type=int,default=512,help='8..8192 tiny files, divisible by eight; use 4096 for longer mixed-load timing')
 p.add_argument('--fixture-quota',choices=('1G','4G','16G'),help='explicit per-daemon private quota; default preserves each gate existing quota')
@@ -50,6 +51,7 @@ p.add_argument('--deferred-close',action='store_true',help='staged identified cl
 p.add_argument('--typed-writeback',action='store_true',help='actual typed cache bytes, publication/retirement lost ACK and post-snapshot peer preservation')
 p.add_argument('--guarded-leases',action='store_true',help='sequenced lease wire reorder, lost reply probe, cold replay and last-close reclaim')
 p.add_argument('--put-barrier-fault',action='store_true',help='test-only server fragment fsync refusal, unpublished state, retained-body recovery and cold bytes')
+p.add_argument('--create-adopt-reply-loss',action='store_true',help='hide one committed combined CREATE adoption reply; failed descriptor cleanup, name reuse and cold bytes; requires fault build')
 p.add_argument('--create-live-retry',action='store_true',help='actual FUSE CREATE retries consumed committed reply then BUSY using one identity')
 p.add_argument('--create-negative-replay',action='store_true',help='ordinary CREATE EEXIST identity survives unlink, cold restart and name reuse')
 p.add_argument('--unique-create',action='store_true',help='16-worker unique O_EXCL, genuine EEXIST and name reuse, then cold exact bytes/reclamation')
@@ -296,11 +298,13 @@ def mount_client():
     global client
     log=open(work/'fuse.log','ab');handles.append(log)
     client_env=dict(env)
+    if a.create_adopt_reply_loss:
+        client_env['EFS_FAULT_CREATE_ADOPT_REPLY_FILE']=str(work/'create-adopt-reply-fault')
     if a.create_live_retry:
         client_env['EFS_FAULT_CREATE_RETRY_FILE']=str(work/'create-retry-fault')
     if a.fuse_reply_failure:
         from fuse_reply_failure import prepare
-        client_env=prepare(work,env)
+        client_env=prepare(work,client_env)
     client=subprocess.Popen([str(a.client_binary or source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(mount),'-f',*(['-o','sync'] if a.mount_sync else []),*(['-o','max_threads=16,max_idle_threads=1'] if a.workers else [])],env=client_env,stdout=log,stderr=log)
     def ready():
         if client.poll() is not None:raise AssertionError('FUSE exited')
@@ -517,6 +521,40 @@ try:
             'stages':stages,'original_durable_inode':ino,'cold_bytes':True,
             'genuine_exclusive_conflict':True},indent=2))
         print('actual FUSE CREATE lost committed reply, BUSY replay, same opid/inode and cold bytes PASS',flush=True)
+    if a.create_adopt_reply_loss:
+        marker=work/'create-adopt-reply-fault';marker.touch()
+        path=mount/'w94-adopt-reply-loss'
+        try:
+            fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+        except OSError as error:
+            assert error.errno==errno.EIO,error
+        else:
+            os.close(fd);raise AssertionError('combined adoption reply loss not injected')
+        assert not marker.exists(),'fault build did not consume adoption marker'
+        ino=path.stat().st_ino
+        matches=re.findall(r'test-create-adopt-reply-loss seq=(\d+) ino=(\d+) known=1 hidden=1',
+                           (work/'fuse.log').read_text())
+        assert len(matches)==1 and int(matches[0][1])==ino,matches
+        path.unlink()
+        def inode_gone():
+            for node in range(4):
+                reply=subprocess.run([str(source/'efs-mgmt'),'raft-getattr',
+                    f'127.0.0.1:{a.port+node}',str(ino)],env=env,capture_output=True,text=True,timeout=10)
+                if reply.returncode==0 and re.search(r'status=1\b',reply.stdout):return True
+            return False
+        wait(inode_gone,'lost combined ACK descriptor cleanup releases original inode',90)
+        payload=b'W94 recreated after hidden durable combined lease reply'
+        with path.open('xb',buffering=0) as out:
+            assert out.write(payload)==len(payload);os.fsync(out.fileno())
+        reused_ino=path.stat().st_ino;assert reused_ino!=ino
+        unmount();stop(crash=True);start();mount_client()
+        assert path.read_bytes()==payload
+        path.unlink();wait(lambda:not files(reused_ino),'combined reply-loss name reuse cold bytes reclaimed',180)
+        (work/'create-adopt-reply-loss.json').write_text(json.dumps(dict(
+            hidden_edge_sequence=int(matches[0][0]),original_inode=ino,
+            initial_errno=errno.EIO,descriptor_acknowledged=False,original_inode_reclaimed=True,
+            recreated_inode=reused_ino,cold_bytes_verified=True),indent=2))
+        print('actual FUSE lost combined adoption ACK: failed descriptor cleanup, name reuse and cold bytes PASS',flush=True)
     if a.create_negative_replay:
         helper=work/'create-negative-replay'
         run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),
@@ -574,15 +612,24 @@ try:
         wait(drained,'tiny churn cold generations and physical deletion drained',180)
         (work/'tiny-churn.json').write_text(json.dumps(record,indent=2))
         print('tiny create/overwrite/delete/recreate: exact cold identities and physical reclamation PASS',flush=True)
-    if a.tiny_mixed or a.tiny_mixed_only:
+    if a.tiny_mixed or a.tiny_mixed_only or a.tiny_create_only:
         from tiny_mixed import exercise,verify_and_delete
-        mixed=exercise(mount,[client.pid,*[proc.pid for proc in servers]],a.tiny_mixed_files)
+        large_workers=0 if a.tiny_create_only else 4
+        mixed=exercise(mount,[client.pid,*[proc.pid for proc in servers]],a.tiny_mixed_files,large_workers)
         unmount();stop(crash=True);start();mount_client()
-        verify_and_delete(mount,a.tiny_mixed_files)
-        wait(drained,'mixed tiny/large cold bytes and physical deletion drained',180+a.tiny_mixed_files//16)
+        verification_workers=8 if a.tiny_create_only else 1
+        verify_and_delete(mount,a.tiny_mixed_files,large_workers,verification_workers)
+        mixed['cold_verification_workers']=verification_workers
+        # Sampled-zero counters can predate the final unlink. The early-exit
+        # fixture must independently prove physical absence, as the ordinary
+        # full fixture does after restart. Scan only when queues look empty.
+        wait(lambda:drained() and all(not any(path.is_file() for path in
+             (root/'data/exports/1').glob('**/*')) for root in data_roots),
+             'mixed tiny/large cold bytes and physical deletion drained',180+a.tiny_mixed_files//16)
+        mixed.update(cold_verified=True,physical_inventory_empty=True)
         (work/'tiny-mixed.json').write_text(json.dumps(mixed,indent=2))
-        print(f'{a.tiny_mixed_files} tiny CREATE/close under bounded large writers; exact cold bytes and reclaim PASS',flush=True)
-        if a.tiny_mixed_only:
+        print(f'{a.tiny_mixed_files} tiny CREATE/close, large_workers={large_workers}; exact cold bytes and reclaim PASS',flush=True)
+        if a.tiny_mixed_only or a.tiny_create_only:
             raise SystemExit(0)  # finally still drains all owned processes
     if a.session_cleanup:
         helper=work/'session-cleanup'
@@ -660,7 +707,7 @@ try:
         pending_helper=work/'client-pending-create'
         run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_pending_create.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',pending_helper])
         pending_results=[]
-        for hashed in (False,True):
+        for hashed,adopt_before_crash in ((False,False),(True,False),(False,True),(True,True)):
             pending_dir=mount/('pending-create-hashed' if hashed else 'pending-create-wire');pending_dir.mkdir()
             if hashed:
                 for operation in ('begin','finish'):
@@ -668,7 +715,7 @@ try:
                         spread=subprocess.run([str(source/'efs-mgmt'),'raft-dir',f'127.0.0.1:{a.port+node}',str(pending_dir.stat().st_ino),operation],capture_output=True,text=True,timeout=30,env=env)
                         if spread.returncode==0 and 'status=0' in spread.stdout:break
                     else:raise AssertionError('pending CREATE spread failed: '+spread.stdout+spread.stderr)
-            stage='create-hashed' if hashed else 'create'
+            stage=('adopt-hashed' if hashed else 'adopt') if adopt_before_crash else ('create-hashed' if hashed else 'create')
             created_pending=run([pending_helper,str(a.port),str(pending_dir.stat().st_ino),stage],capture_output=True,text=True,timeout=90).stdout
             pending_uuid=created_pending.split('pending_uuid=')[1].split()[0]
             pending_name=created_pending.split('name=')[1].split()[0]
@@ -676,7 +723,7 @@ try:
             pending_before=pending_path.stat().st_ino
             unmount();stop(crash=True);start();mount_client()
             assert pending_path.stat().st_ino==pending_before,'pending CREATE lost across cold WAL replay'
-            stage='resume-hashed' if hashed else 'resume'
+            stage=('resume-adopt-hashed' if hashed else 'resume-adopt') if adopt_before_crash else ('resume-hashed' if hashed else 'resume')
             pending_reply=subprocess.run([str(pending_helper),str(a.port),str(pending_dir.stat().st_ino),stage,pending_uuid],capture_output=True,text=True,timeout=90)
             assert pending_reply.returncode==0,pending_reply.stderr
             pending_results.append(created_pending+pending_reply.stdout)
