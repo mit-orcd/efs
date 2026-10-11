@@ -13,6 +13,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <time.h>
 static void fence(unsigned port,const char *mgmt,const struct efs_opid *id)
 {
     char hex[33],address[64];for(unsigned i=0;i<16;i++)snprintf(hex+2*i,3,"%02x",id->client_uuid[i]);
@@ -37,11 +38,31 @@ static void fragment_probe(unsigned port,const struct efs_put_ticket *ticket,int
    assert(!memcmp((uint8_t *)reply+33,data,ticket->fragment_len));free(reply);
   }
   uint8_t header[EFS_PUT_UPLOAD_HEADER_LEN];assert(!efs_put_upload_header(ticket,1,fi,header));
-  assert(!efs_send_msg_parts(fd,EFS_MSG_PUT_TICKETED,header,sizeof(header),data,ticket->fragment_len));
-  uint8_t type;void *reply=NULL;uint32_t bytes;
-  assert(!efs_recv_msg(fd,&type,&reply,&bytes));close(fd);
-  assert(type==EFS_MSG_PUT_TICKETED_REPLY&&bytes==EFS_PUT_UPLOAD_REPLY_LEN);
-  int rc=(int32_t)efs_put_upload_rd32(reply);free(reply);
+  /* Cold leadership can change between the fresh ticket probe and upload.
+   * Keep the exact ticket/body and require the real terminal verdict within
+   * the existing 15-second fragment budget. Refusals never count as success. */
+  uint64_t previous=efs_net_deadline_ms();struct timespec now;
+  assert(!clock_gettime(CLOCK_MONOTONIC,&now));
+  uint64_t deadline=(uint64_t)now.tv_sec*1000+now.tv_nsec/1000000+15000;
+  if(previous && previous<deadline)deadline=previous;
+  efs_net_set_deadline_ms(deadline);
+  int rc=EFS_ERR_BUSY;
+  for(unsigned attempt=0;attempt<16;attempt++) {
+   assert(!clock_gettime(CLOCK_MONOTONIC,&now));
+   if((uint64_t)now.tv_sec*1000+now.tv_nsec/1000000>=deadline){if(!attempt)close(fd);break;}
+   if(attempt){fd=efs_connect_tcp("127.0.0.1",port+ticket->nodes[fi]-1);assert(fd>=0);}
+   assert(!efs_send_msg_parts(fd,EFS_MSG_PUT_TICKETED,header,sizeof(header),data,ticket->fragment_len));
+   uint8_t type;void *reply=NULL;uint32_t bytes;
+   assert(!efs_recv_msg(fd,&type,&reply,&bytes));close(fd);
+   assert(type==EFS_MSG_PUT_TICKETED_REPLY&&bytes==EFS_PUT_UPLOAD_REPLY_LEN);
+   rc=(int32_t)efs_put_upload_rd32(reply);free(reply);
+   if(rc!=EFS_ERR_NOT_PRIMARY && rc!=EFS_ERR_BUSY)break;
+   assert(!clock_gettime(CLOCK_MONOTONIC,&now));
+   uint64_t current=(uint64_t)now.tv_sec*1000+now.tv_nsec/1000000;
+   if(current>=deadline || deadline-current<=100)break;
+   usleep(100000);
+  }
+  efs_net_set_deadline_ms(previous);
   if(rc!=expected)fprintf(stderr,"ticket upload fi=%u rc=%d expected=%d\n",fi,rc,expected);
   assert(rc==expected);
  }

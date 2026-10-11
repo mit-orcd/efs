@@ -1,0 +1,7 @@
+minimum reader: legacy preservation, durable retries, apply abort, cold recovery and unknown-format refusal PASS
+pack ledger: durable mapping cohort, abrupt WAL recovery, cold compaction, neighbor retention and GC ACK replay PASS
+PACK_CONTROL direct=0 records=16 payload=8192 legacy_allocated_bytes=3342336 packed_allocated_bytes=36864 reduction=90.666667
+PACK_STORE direct=0 records=16 payload=8192 fragment_payload_bytes=24576 allocated_bytes=36864
+PACK_CONTROL direct=1 records=16 payload=8192 legacy_allocated_bytes=3342336 packed_allocated_bytes=36864 reduction=90.666667
+PACK_STORE direct=1 records=16 payload=8192 fragment_payload_bytes=24576 allocated_bytes=36864
+packed store: explicit geometry, immutable retries, barriers, cold EC reads, quota, inode-GC isolation and durable typed upload fences PASS

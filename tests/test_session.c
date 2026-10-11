@@ -501,6 +501,39 @@ static void test_guarded_pending_and_fence(void)
     q=guarded_request(uuid,1,0);q.id.session_epoch=2;
     CHECK(efs_lease_guarded_edge(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_OK,"new epoch has independent sequence identity");
     efs_kv_mem_free(kv);
+    kv=efs_kv_mem_create();CHECK(kv!=NULL,"combined adoption KV");if(!kv)return;
+    guarded_session_init(kv,uuid);
+    create=guarded_request(uuid,1,0);ino=0;
+    CHECK(efs_meta_apply_create_file_log_pending(kv,&g_at,EFS_ROOT_INO,S_IFREG|0600,"combined-adoption",0,-1,&create,uuid,1,&ino)==EFS_OK,"combined adoption starts pending");
+    q=guarded_request(uuid,2,1);
+    unsigned combined=EFS_LEASE_EDGE_OPEN|EFS_LEASE_EDGE_CLEAR_PENDING;
+    const struct efs_kv_ops *combined_original=kv->ops;
+    struct efs_kv_ops combined_ops=*combined_original;
+    guarded_batch_original=combined_ops.batch;combined_ops.batch=guarded_batch_fault;kv->ops=&combined_ops;
+    guarded_batch_fail=1;
+    CHECK(efs_lease_guarded_edge(kv,ino,1,&q,combined,1)==EFS_ERR_IO && efs_lease_any(kv,ino,1)==1,"failed combined batch retains pending ownership");
+    int combined_verdict=999;
+    CHECK(efs_lease_guarded_probe(kv,ino,1,&q,combined,1,&combined_verdict)==0,"failed combined batch publishes no success receipt");
+    guarded_batch_fail=0;
+    CHECK(efs_lease_guarded_edge(kv,ino,1,&q,combined,1)==EFS_OK && efs_lease_any(kv,ino,1)==1,"atomic combined edge adopts normal ownership");
+    CHECK(efs_lease_guarded_probe(kv,ino,1,&q,combined,1,&combined_verdict)==1 && combined_verdict==EFS_OK,"lost combined reply has exact durable verdict");
+    CHECK(efs_lease_guarded_edge(kv,ino,1,&q,combined,1)==EFS_OK,"identical combined retry survives cleared pending token");
+    CHECK(efs_lease_guarded_edge(kv,ino,1,&q,combined,2)==EFS_ERR_PROTO,"changed combined pending token cannot replay success");
+    q.id.seq=3;q.ack=2;
+    CHECK(efs_lease_guarded_edge(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK && efs_lease_any(kv,ino,1)==0,"combined adoption leaves no pending hold after final CLOSE");
+    kv->ops=combined_original;
+    efs_kv_mem_free(kv);
+    kv=efs_kv_mem_create();CHECK(kv!=NULL,"negative combined adoption KV");if(!kv)return;
+    guarded_session_init(kv,uuid);ino=0;create=guarded_request(uuid,1,0);
+    CHECK(efs_meta_apply_create_file_log_pending(kv,&g_at,EFS_ROOT_INO,S_IFREG|0600,"negative-combined",0,-1,&create,uuid,1,&ino)==EFS_OK,"negative adoption pending fixture");
+    q=guarded_request(uuid,2,1);
+    CHECK(efs_lease_guarded_edge_deferred(kv,ino,2,&q,combined,1)==EFS_ERR_STALE,"wrong FileID records negative combined verdict");
+    CHECK(efs_lease_guarded_probe_deferred(kv,ino,2,&q,combined,1,&combined_verdict)==1 && combined_verdict==EFS_ERR_STALE,"negative combined edge has durable exact proof");
+    CHECK(!efs_lease_any(kv,ino,2) && efs_lease_any(kv,ino,1)==1,"negative combined edge acquires nothing and preserves original pending ownership");
+    struct efs_opid_req clear=guarded_request(uuid,3,1);
+    CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&clear,EFS_LEASE_EDGE_CLEAR_PENDING,1)==EFS_OK && !efs_lease_any(kv,ino,1),"original CREATE token can clear without fictional CLOSE");
+    CHECK(efs_lease_guarded_probe_deferred(kv,ino,2,&q,combined,1,&combined_verdict)==1 && combined_verdict==EFS_ERR_STALE,"later cleanup preserves original negative verdict");
+    efs_kv_mem_free(kv);
 }
 static void test_guarded_retire_missing_authority(void)
 {
@@ -970,11 +1003,25 @@ static void test_deferred_close_identity(void)
     q.id.seq=2;
     CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK && efs_lease_any(kv,ino,1)==1,"old close cannot remove reopened lease");
     n=sizeof(value);CHECK(efs_kv_get(kv,key,len,value,&n)==EFS_OK && !memcmp(before,value,n),"old close does not recreate obligation");
+    CHECK(efs_close_step_apply(kv,ino,before,EFS_CLOSE_STEP_RETIRE)==EFS_ERR_BUSY,"early retirement retains reopened lease");
     q.id.seq=4;q.ack=3;
     CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK,"next close changes obligation");
     n=sizeof(value);CHECK(efs_kv_get(kv,key,len,value,&n)==EFS_OK && value[35]==4,"later close has new exact identity");
     CHECK(efs_close_step_apply(kv,ino,before,EFS_CLOSE_STEP_RETIRE)==EFS_ERR_STALE,"obsolete cleanup cannot retire later close");
+    uint8_t obligation[EFS_KV_KEY_MAX],one=1;uint32_t obligation_len;
+    uint32_t inode_shard=efs_kv_inode_shard(ino);
+    CHECK(efs_kv_key_lock(inode_shard,ino,1,1,0,UINT64_MAX,1,1,uuid,1,obligation,&obligation_len)==EFS_OK &&
+          efs_kv_put(kv,obligation,obligation_len,&one,1)==EFS_OK,"early retirement lock fixture");
+    CHECK(efs_close_step_apply(kv,ino,value,EFS_CLOSE_STEP_RETIRE)==EFS_ERR_BUSY,"early retirement retains outstanding locks");
     CHECK(efs_close_step_apply(kv,ino,value,EFS_CLOSE_STEP_LOCKS)==EFS_OK,"identified lock phase");
+    CHECK(efs_kv_key_append_rsv(inode_shard,ino,1,0,obligation,&obligation_len)==EFS_OK &&
+          efs_kv_put(kv,obligation,obligation_len,&one,1)==EFS_OK,"early retirement append fixture");
+    CHECK(efs_close_step_apply(kv,ino,value,EFS_CLOSE_STEP_RETIRE)==EFS_ERR_BUSY,"early retirement retains outstanding append rows");
+    CHECK(efs_kv_del(kv,obligation,obligation_len)==EFS_OK,"clear owned append fixture");
+    CHECK(efs_kv_key_append_cur(inode_shard,ino,1,obligation,&obligation_len)==EFS_OK &&
+          efs_kv_put(kv,obligation,obligation_len,&one,1)==EFS_OK,"early retirement cursor fixture");
+    CHECK(efs_close_step_apply(kv,ino,value,EFS_CLOSE_STEP_RETIRE)==EFS_ERR_BUSY,"early retirement retains append cursor");
+    CHECK(efs_kv_del(kv,obligation,obligation_len)==EFS_OK,"clear owned cursor fixture");
     CHECK(efs_close_step_apply(kv,ino,value,EFS_CLOSE_STEP_RETIRE)==EFS_OK,"empty append/lock state retires exact obligation");
     CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK,"lost close reply remains known after cleanup");
     n=sizeof(value);CHECK(efs_kv_get(kv,key,len,value,&n)==EFS_ERR_NOT_FOUND,"known close replay cannot recreate retired obligation");

@@ -9,13 +9,15 @@ rpc=s.index('static int sess_rpc(',a)
 b=s.index('\n}\n',rpc)+3  # only the named helper, not adjacent CLI commands
 source=r'''
 #include "efs/protocol.h"
+#include "efs/meta_cmd.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
 static unsigned requests,discoveries,connections,waits;
-static int fail_transport,loop,invalid_count,unknown,no_hint;
+static int fail_transport,loop,invalid_count,unknown,no_hint,busy;
+static uint32_t expected_len=27;
 static uint8_t immutable[27];
 static int efs_connect_tcp(const char *host,uint16_t port) {
  assert((!strcmp(host,"seed")&&port==1)||(!strcmp(host,"leader.example")&&port==9300));connections++;return 7;
@@ -32,13 +34,13 @@ static int send_recv(int fd,uint8_t t,const void *p,uint32_t n,uint8_t *rt,void 
   strcpy(r->nodes[0].addr,"leader.example");r->nodes[0].port=9300;
   *out=r;*len=sizeof(*r);*rt=EFS_MSG_LIST_NODES_REPLY;return 0;
  }
- assert(t==EFS_MSG_RAFT_MKFS && n==sizeof(immutable) && !memcmp(p,immutable,n));requests++;
+ assert(t==EFS_MSG_RAFT_MKFS && n==expected_len && !memcmp(p,immutable,n));requests++;
  struct efs_msg_raft_mkfs_reply *r=calloc(1,sizeof(*r));assert(r);
- r->rc=(requests==1 || loop)?EFS_ERR_NOT_PRIMARY:EFS_OK;r->leader_hint=no_hint?-1:2;
+ r->rc=(requests==1 || loop)?(busy?EFS_ERR_BUSY:EFS_ERR_NOT_PRIMARY):EFS_OK;r->leader_hint=no_hint?-1:2;
  *out=r;*len=sizeof(*r);*rt=EFS_MSG_RAFT_MKFS_REPLY;return fail_transport;
 }
 ''' +s[a:b]+r'''
-static void reset(void){requests=discoveries=connections=waits=0;fail_transport=loop=invalid_count=unknown=no_hint=0;}
+static void reset(void){requests=discoveries=connections=waits=0;fail_transport=loop=invalid_count=unknown=no_hint=busy=0;expected_len=27;memset(immutable,0xa5,sizeof(immutable));}
 int main(void) {
  struct efs_msg_raft_mkfs_reply out;memset(immutable,0xa5,sizeof(immutable));
  reset();assert(sess_rpc("seed",1,immutable,sizeof(immutable),&out)==EFS_OK && requests==2 && discoveries==1);
@@ -49,6 +51,20 @@ int main(void) {
  reset();loop=1;assert(sess_rpc("seed",1,immutable,sizeof(immutable),&out)==EFS_ERR_NOT_PRIMARY && requests==8);
  reset();invalid_count=1;assert(sess_rpc("seed",1,immutable,sizeof(immutable),&out)==EFS_ERR_PROTO && requests==1);
  reset();unknown=1;assert(sess_rpc("seed",1,immutable,sizeof(immutable),&out)==EFS_ERR_NOT_PRIMARY && requests==1);
+ reset();busy=1;immutable[1]=EFS_MD_CMD_SESSION;immutable[2]=EFS_MD_SESS_FENCE_LOC;
+ assert(sess_rpc("seed",1,immutable,27,&out)==EFS_OK && requests==2 && waits==1 && !discoveries);
+ reset();busy=loop=1;immutable[1]=EFS_MD_CMD_SESSION;immutable[2]=EFS_MD_SESS_FENCE_LOC;
+ assert(sess_rpc("seed",1,immutable,27,&out)==EFS_ERR_BUSY && requests==8 && waits==8);
+ reset();busy=1;expected_len=23;immutable[1]=EFS_MD_CMD_SESSION;immutable[2]=0;
+ assert(sess_rpc("seed",1,immutable,23,&out)==EFS_OK && requests==2 && waits==1);
+ reset();busy=1;expected_len=23;immutable[1]=EFS_MD_CMD_SESSION;immutable[2]=EFS_MD_SESS_STORAGE_FENCE;
+ assert(sess_rpc("seed",1,immutable,23,&out)==EFS_OK && requests==2 && waits==1);
+ reset();busy=1;immutable[1]=EFS_MD_CMD_SESSION;immutable[2]=EFS_MD_SESS_BEGIN;
+ assert(sess_rpc("seed",1,immutable,27,&out)==EFS_ERR_BUSY && requests==1 && !waits);
+ reset();busy=1;immutable[1]=EFS_MD_CMD_SESSION;immutable[2]=EFS_MD_SESS_LEASE_LOCK_NEXT;
+ assert(sess_rpc("seed",1,immutable,27,&out)==EFS_ERR_BUSY && requests==1 && !waits);
+ reset();busy=1;immutable[1]=EFS_MD_CMD_SESSION;immutable[2]=EFS_MD_SESS_FENCE_LOC;fail_transport=1;
+ assert(sess_rpc("seed",1,immutable,27,&out)==EFS_ERR_IO && requests==1 && !waits);
  puts("management session routing: advertised leader, exact retries, bounded loop and ambiguous transport PASS");
 }
 '''

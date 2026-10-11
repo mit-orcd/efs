@@ -1,0 +1,8 @@
+[
+  "raft-session status=0 rc=0 primary=1 op=fence ssh=1353 shard=1 epoch=2 state=1 touched=1 index=747\nstorage-session-certificate uuid=6b74650d4b1b8ad8f10cb43c58ea13eb reject_below=2\ndurably revoked epoch: authoritative global proof, future/missing rejection and terminal retained lease recovery PASS\nactual retained sequenced client lease: authoritative FileID, full UUID, OPEN/CLOSE stored proof, legacy mutation barrier and safe reset PASS\n",
+  "actual client lease open: generation=1 stored exact replay and unknown probe PASS\n",
+  "actual client lease close: generation=1 stored exact replay and unknown probe PASS\n",
+  "actual client lease replay: generation=1 stored exact replay and unknown probe PASS\n",
+  "raft-session status=0 rc=0 primary=2 op=fence ssh=2658 shard=1 epoch=2 state=1 touched=1 index=422\nactual hot legacy append cache: exact offset=45056; durable fence rejects cached replay STALE PASS\n",
+  "actual full-UUID HOLD/FLOCK after durable revocation rejected STALE PASS\n"
+]

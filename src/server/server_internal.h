@@ -363,7 +363,7 @@ struct efs_server_query_view {
     uint64_t boot_id,source_ns,built_ns,generation,applied[2],terms[2],pin_ms,build_ms;
     uint64_t pending_changes,pending_since_ms,lag_sample_ms,lag_sample_ns;
 };
-uint32_t server_raft_host_query_features(void);
+int server_raft_host_query_features_checked(uint32_t *mask);
 int server_raft_host_query_read(int (*consume)(void *,const struct efs_server_query_view *,int),
                                  void *ctx,uint16_t *primary_id);
 
@@ -468,5 +468,22 @@ void server_load_nodes(struct efsd_server *s);
 
 /* Try to rejoin the cluster using any persisted peer. Returns 0 on success. */
 int server_rejoin_cluster(struct efsd_server *s);
+
+/* Staged W95 files-backend objects; no RPC selects these until upload
+ * authority/shared lifetime integration is complete. Explicit geometry. */
+int server_packed_fragment_path(struct efsd_server *, uint32_t root, efs_export_id_t,
+                                uint64_t id, uint64_t generation, uint32_t fi,
+                                char *, size_t);
+/* Internal only: caller verifies authoritative shared-ledger retirement.
+ * ACK persists a typed, generation-specific upload fence; no bytes deleted. */
+int server_fence_packed_object(struct efsd_server *, efs_export_id_t,
+                               uint64_t id, uint64_t generation);
+int server_write_packed_fragment(struct efsd_server *, efs_export_id_t,
+                                 uint64_t id, uint64_t generation, uint32_t fi,
+                                 const uint8_t *, uint32_t fragment_len, const uint8_t sum[EFS_HASH_SIZE]);
+int server_read_packed_fragment(struct efsd_server *, efs_export_id_t,
+                                uint64_t id, uint64_t generation, uint32_t fi,
+                                uint32_t fragment_len, uint8_t *, uint32_t *capacity,
+                                uint8_t sum[EFS_HASH_SIZE]);
 
 #endif

@@ -210,7 +210,7 @@ do not advance application. Oversized entries refuse above 32,768 effect keys
 or 64 MiB. Before downgrading to a binary without atomic cursors, shut down
 cleanly to bring legacy hints current; crash downgrade is unsupported.
 Keep the default pending sustained and recovery acceptance.
-[Investigation and gates](../status/w93-checkpoint-cadence-20261010.md).
+[Investigation and gates](../archive/status-20261011/w93-checkpoint-cadence-20261010.md).
 
 Metadata plane (Raft + KV):
 

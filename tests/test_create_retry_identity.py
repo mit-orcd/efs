@@ -39,6 +39,7 @@ static unsigned long long rpc_prof_now_us(void){return 0;}
 static void rpc_prof_add(unsigned t,unsigned long long a,unsigned long long b,unsigned long long c,unsigned long long d){(void)t;(void)a;(void)b;(void)c;(void)d;}
 static void rpc_note_slow_ok(unsigned t,int a,int b,unsigned st,unsigned long long start){(void)t;(void)a;(void)b;(void)st;(void)start;}
 static int efs_client_rpc_past_deadline(void){return 0;}
+static uint64_t efs_client_rpc_deadline_ms(void){return 0;}
 static int rpc_writer_retry_pause(unsigned n){(void)n;pauses++;return EFS_OK;}
 static void efs_client_node_note_fail(efs_node_id_t n){(void)n;}
 static void efs_client_node_note_ok(efs_node_id_t n){(void)n;}

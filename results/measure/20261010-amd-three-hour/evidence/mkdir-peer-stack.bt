@@ -1,0 +1,151 @@
+[New LWP 1817485]
+[New LWP 1817472]
+[New LWP 1817470]
+[New LWP 1817469]
+[New LWP 1817468]
+[New LWP 1817467]
+[New LWP 1817466]
+[New LWP 1817465]
+[New LWP 1817464]
+[New LWP 1817463]
+[New LWP 1817462]
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/usr/lib/x86_64-linux-gnu/libthread_db.so.1".
+__syscall_cancel_arch () at ../sysdeps/unix/sysv/linux/x86_64/syscall_cancel.S:56
+
+warning: 56	../sysdeps/unix/sysv/linux/x86_64/syscall_cancel.S: No such file or directory
+
+Thread 12 (Thread 0x771cd5bff6c0 (LWP 1817462) "efs-fuse"):
+#0  __syscall_cancel_arch () at ../sysdeps/unix/sysv/linux/x86_64/syscall_cancel.S:56
+#1  0x0000771cd5ca039c in __internal_syscall_cancel (a1=130965728455576, a2=1, a3=100, a4=0, a5=0, a6=0, nr=7) at ./nptl/cancellation.c:49
+#2  __syscall_cancel (a1=a1@entry=130965728455576, a2=a2@entry=1, a3=a3@entry=100, a4=a4@entry=0, a5=a5@entry=0, a6=a6@entry=0, nr=7) at ./nptl/cancellation.c:75
+#3  0x0000771cd5d27c0e in __GI___poll (fds=fds@entry=0x771cd5b8eb98, nfds=nfds@entry=1, timeout=timeout@entry=100) at ../sysdeps/unix/sysv/linux/poll.c:29
+#4  0x00005b2d3357d8c5 in poll (__fds=0x771cd5b8eb98, __nfds=1, __timeout=100) at /usr/include/x86_64-linux-gnu/bits/poll2.h:44
+#5  efs_stop_server (unused=<optimized out>) at src/client/stop_control.h:182
+#6  0x0000771cd5ca3dfa in start_thread (arg=<optimized out>) at ./nptl/pthread_create.c:454
+#7  0x0000771cd5d375cc in __GI___clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:78
+
+Thread 11 (Thread 0x771cd53fe6c0 (LWP 1817463) "efs-fuse"):
+#0  __syscall_cancel_arch () at ../sysdeps/unix/sysv/linux/x86_64/syscall_cancel.S:56
+#1  0x0000771cd5ca030c in __internal_syscall_cancel (a1=a1@entry=100249694326952, a2=<optimized out>, a3=a3@entry=0, a4=a4@entry=0, a5=a5@entry=0, a6=a6@entry=4294967295, nr=202) at ./nptl/cancellation.c:49
+#2  0x0000771cd5ca06e7 in __futex_abstimed_wait_common64 (private=0, futex_word=0x5b2d336b50a8 <g_inval+72>, expected=0, op=393, abstime=0x0, cancel=true) at ./nptl/futex-internal.c:57
+#3  __futex_abstimed_wait_common (futex_word=0x5b2d336b50a8 <g_inval+72>, expected=0, clockid=0, abstime=0x0, private=0, cancel=true) at ./nptl/futex-internal.c:87
+#4  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0x5b2d336b50a8 <g_inval+72>, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=0) at ./nptl/futex-internal.c:139
+#5  0x0000771cd5ca30c7 in __pthread_cond_wait_common (cond=0x5b2d336b5088 <g_inval+40>, mutex=0x5b2d336b5060 <g_inval>, clockid=0, abstime=0x0) at ./nptl/pthread_cond_wait.c:421
+#6  ___pthread_cond_wait (cond=cond@entry=0x5b2d336b5088 <g_inval+40>, mutex=mutex@entry=0x5b2d336b5060 <g_inval>) at ./nptl/pthread_cond_wait.c:453
+#7  0x00005b2d33579060 in ll_inval_thread (arg=<optimized out>) at src/client/efs_fuse.c:845
+#8  0x0000771cd5ca3dfa in start_thread (arg=<optimized out>) at ./nptl/pthread_create.c:454
+#9  0x0000771cd5d375cc in __GI___clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:78
+
+Thread 10 (Thread 0x771cd4bfd6c0 (LWP 1817464) "fuse_worker"):
+#0  __syscall_cancel_arch () at ../sysdeps/unix/sysv/linux/x86_64/syscall_cancel.S:56
+#1  0x0000771cd5ca039c in __internal_syscall_cancel (a1=<optimized out>, a2=<optimized out>, a3=<optimized out>, a4=0, a5=0, a6=0, nr=0) at ./nptl/cancellation.c:49
+#2  __syscall_cancel (a1=<optimized out>, a2=<optimized out>, a3=<optimized out>, a4=a4@entry=0, a5=a5@entry=0, a6=a6@entry=0, nr=0) at ./nptl/cancellation.c:75
+#3  0x0000771cd5d2816e in __GI___libc_read (fd=<optimized out>, buf=<optimized out>, nbytes=<optimized out>) at ../sysdeps/unix/sysv/linux/read.c:26
+#4  0x0000771cd601f77b in ?? () from /usr/lib/x86_64-linux-gnu/libfuse3.so.4
+#5  0x0000771cd601fd71 in ?? () from /usr/lib/x86_64-linux-gnu/libfuse3.so.4
+#6  0x0000771cd5ca3dfa in start_thread (arg=<optimized out>) at ./nptl/pthread_create.c:454
+#7  0x0000771cd5d375cc in __GI___clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:78
+
+Thread 9 (Thread 0x771ccffff6c0 (LWP 1817465) "fuse_worker"):
+#0  __syscall_cancel_arch () at ../sysdeps/unix/sysv/linux/x86_64/syscall_cancel.S:56
+#1  0x0000771cd5ca030c in __internal_syscall_cancel (a1=a1@entry=0, a2=a2@entry=0, a3=a3@entry=130965631986608, a4=a4@entry=0, a5=a5@entry=0, a6=a6@entry=0, nr=230) at ./nptl/cancellation.c:49
+#2  0x0000771cd5cf5af2 in __GI___clock_nanosleep (clock_id=<optimized out>, clock_id@entry=0, flags=flags@entry=0, req=req@entry=0x771ccff8ebb0, rem=rem@entry=0x0) at ../sysdeps/unix/sysv/linux/clock_nanosleep.c:48
+#3  0x0000771cd5d03707 in __GI___nanosleep (req=req@entry=0x771ccff8ebb0, rem=rem@entry=0x0) at ../sysdeps/unix/sysv/linux/nanosleep.c:25
+#4  0x0000771cd5d3713a in usleep (useconds=useconds@entry=100000) at ../sysdeps/posix/usleep.c:31
+#5  0x00005b2d33581b72 in efs_open_retry_worker (unused=<optimized out>) at src/client/efs_fuse.c:2398
+#6  0x0000771cd5ca3dfa in start_thread (arg=<optimized out>) at ./nptl/pthread_create.c:454
+#7  0x0000771cd5d375cc in __GI___clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:78
+
+Thread 8 (Thread 0x771ccf7fe6c0 (LWP 1817466) "fuse_worker"):
+#0  __syscall_cancel_arch () at ../sysdeps/unix/sysv/linux/x86_64/syscall_cancel.S:56
+#1  0x0000771cd5ca030c in __internal_syscall_cancel (a1=a1@entry=100249694777408, a2=<optimized out>, a3=a3@entry=0, a4=a4@entry=0, a5=a5@entry=0, a6=a6@entry=4294967295, nr=202) at ./nptl/cancellation.c:49
+#2  0x0000771cd5ca06e7 in __futex_abstimed_wait_common64 (private=0, futex_word=0x5b2d33723040 <g_client+52256>, expected=0, op=393, abstime=0x0, cancel=true) at ./nptl/futex-internal.c:57
+#3  __futex_abstimed_wait_common (futex_word=0x5b2d33723040 <g_client+52256>, expected=0, clockid=0, abstime=0x0, private=0, cancel=true) at ./nptl/futex-internal.c:87
+#4  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0x5b2d33723040 <g_client+52256>, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=0) at ./nptl/futex-internal.c:139
+#5  0x0000771cd5ca30c7 in __pthread_cond_wait_common (cond=<optimized out>, mutex=0x5b2d33722ff8 <g_client+52184>, clockid=0, abstime=0x0) at ./nptl/pthread_cond_wait.c:421
+#6  ___pthread_cond_wait (cond=<optimized out>, mutex=0x5b2d33722ff8 <g_client+52184>) at ./nptl/pthread_cond_wait.c:453
+#7  0x00005b2d335e1340 in meta_flush_main (arg=<optimized out>) at src/client/write.c:2135
+#8  0x0000771cd5ca3dfa in start_thread (arg=<optimized out>) at ./nptl/pthread_create.c:454
+#9  0x0000771cd5d375cc in __GI___clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:78
+
+Thread 7 (Thread 0x771cceffd6c0 (LWP 1817467) "fuse_worker"):
+#0  __syscall_cancel_arch () at ../sysdeps/unix/sysv/linux/x86_64/syscall_cancel.S:56
+#1  0x0000771cd5ca030c in __internal_syscall_cancel (a1=a1@entry=100249694777408, a2=<optimized out>, a3=a3@entry=0, a4=a4@entry=0, a5=a5@entry=0, a6=a6@entry=4294967295, nr=202) at ./nptl/cancellation.c:49
+#2  0x0000771cd5ca06e7 in __futex_abstimed_wait_common64 (private=0, futex_word=0x5b2d33723040 <g_client+52256>, expected=0, op=393, abstime=0x0, cancel=true) at ./nptl/futex-internal.c:57
+#3  __futex_abstimed_wait_common (futex_word=0x5b2d33723040 <g_client+52256>, expected=0, clockid=0, abstime=0x0, private=0, cancel=true) at ./nptl/futex-internal.c:87
+#4  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0x5b2d33723040 <g_client+52256>, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=0) at ./nptl/futex-internal.c:139
+#5  0x0000771cd5ca30c7 in __pthread_cond_wait_common (cond=<optimized out>, mutex=0x5b2d33722ff8 <g_client+52184>, clockid=0, abstime=0x0) at ./nptl/pthread_cond_wait.c:421
+#6  ___pthread_cond_wait (cond=<optimized out>, mutex=0x5b2d33722ff8 <g_client+52184>) at ./nptl/pthread_cond_wait.c:453
+#7  0x00005b2d335e1340 in meta_flush_main (arg=<optimized out>) at src/client/write.c:2135
+#8  0x0000771cd5ca3dfa in start_thread (arg=<optimized out>) at ./nptl/pthread_create.c:454
+#9  0x0000771cd5d375cc in __GI___clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:78
+
+Thread 6 (Thread 0x771cce7fc6c0 (LWP 1817468) "fuse_worker"):
+#0  __syscall_cancel_arch () at ../sysdeps/unix/sysv/linux/x86_64/syscall_cancel.S:56
+#1  0x0000771cd5ca030c in __internal_syscall_cancel (a1=a1@entry=100249694777408, a2=<optimized out>, a3=a3@entry=0, a4=a4@entry=0, a5=a5@entry=0, a6=a6@entry=4294967295, nr=202) at ./nptl/cancellation.c:49
+#2  0x0000771cd5ca06e7 in __futex_abstimed_wait_common64 (private=0, futex_word=0x5b2d33723040 <g_client+52256>, expected=0, op=393, abstime=0x0, cancel=true) at ./nptl/futex-internal.c:57
+#3  __futex_abstimed_wait_common (futex_word=0x5b2d33723040 <g_client+52256>, expected=0, clockid=0, abstime=0x0, private=0, cancel=true) at ./nptl/futex-internal.c:87
+#4  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0x5b2d33723040 <g_client+52256>, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=0) at ./nptl/futex-internal.c:139
+#5  0x0000771cd5ca30c7 in __pthread_cond_wait_common (cond=<optimized out>, mutex=0x5b2d33722ff8 <g_client+52184>, clockid=0, abstime=0x0) at ./nptl/pthread_cond_wait.c:421
+#6  ___pthread_cond_wait (cond=<optimized out>, mutex=0x5b2d33722ff8 <g_client+52184>) at ./nptl/pthread_cond_wait.c:453
+#7  0x00005b2d335e1340 in meta_flush_main (arg=<optimized out>) at src/client/write.c:2135
+#8  0x0000771cd5ca3dfa in start_thread (arg=<optimized out>) at ./nptl/pthread_create.c:454
+#9  0x0000771cd5d375cc in __GI___clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:78
+
+Thread 5 (Thread 0x771ccdffb6c0 (LWP 1817469) "fuse_worker"):
+#0  __syscall_cancel_arch () at ../sysdeps/unix/sysv/linux/x86_64/syscall_cancel.S:56
+#1  0x0000771cd5ca030c in __internal_syscall_cancel (a1=a1@entry=100249694777408, a2=<optimized out>, a3=a3@entry=0, a4=a4@entry=0, a5=a5@entry=0, a6=a6@entry=4294967295, nr=202) at ./nptl/cancellation.c:49
+#2  0x0000771cd5ca06e7 in __futex_abstimed_wait_common64 (private=0, futex_word=0x5b2d33723040 <g_client+52256>, expected=0, op=393, abstime=0x0, cancel=true) at ./nptl/futex-internal.c:57
+#3  __futex_abstimed_wait_common (futex_word=0x5b2d33723040 <g_client+52256>, expected=0, clockid=0, abstime=0x0, private=0, cancel=true) at ./nptl/futex-internal.c:87
+#4  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0x5b2d33723040 <g_client+52256>, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=0) at ./nptl/futex-internal.c:139
+#5  0x0000771cd5ca30c7 in __pthread_cond_wait_common (cond=<optimized out>, mutex=0x5b2d33722ff8 <g_client+52184>, clockid=0, abstime=0x0) at ./nptl/pthread_cond_wait.c:421
+#6  ___pthread_cond_wait (cond=<optimized out>, mutex=0x5b2d33722ff8 <g_client+52184>) at ./nptl/pthread_cond_wait.c:453
+#7  0x00005b2d335e1340 in meta_flush_main (arg=<optimized out>) at src/client/write.c:2135
+#8  0x0000771cd5ca3dfa in start_thread (arg=<optimized out>) at ./nptl/pthread_create.c:454
+#9  0x0000771cd5d375cc in __GI___clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:78
+
+Thread 4 (Thread 0x771ccd7fa6c0 (LWP 1817470) "fuse_worker"):
+#0  __syscall_cancel_arch () at ../sysdeps/unix/sysv/linux/x86_64/syscall_cancel.S:56
+#1  0x0000771cd5ca030c in __internal_syscall_cancel (a1=a1@entry=100249739027040, a2=<optimized out>, a3=a3@entry=2359434496, a4=a4@entry=3474303049193238784, a5=a5@entry=0, a6=a6@entry=4294967295, nr=202) at ./nptl/cancellation.c:49
+#2  0x0000771cd5ca06e7 in __futex_abstimed_wait_common64 (private=0, futex_word=0x5b2d36156260 <g_evict_cv+32>, expected=2359434496, op=393, abstime=0x3037343731383100, cancel=true) at ./nptl/futex-internal.c:57
+#3  __futex_abstimed_wait_common (futex_word=0x5b2d36156260 <g_evict_cv+32>, expected=2359434496, clockid=0, abstime=0x3037343731383100, private=0, cancel=true) at ./nptl/futex-internal.c:87
+#4  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0x5b2d36156260 <g_evict_cv+32>, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x771ccd789ba0, private=private@entry=0) at ./nptl/futex-internal.c:139
+#5  0x0000771cd5ca3382 in __pthread_cond_wait_common (cond=0x5b2d36156240 <g_evict_cv>, mutex=0x5b2d36156280 <g_evict_mu>, clockid=<optimized out>, abstime=0x771ccd789ba0) at ./nptl/pthread_cond_wait.c:421
+#6  ___pthread_cond_timedwait64 (cond=cond@entry=0x5b2d36156240 <g_evict_cv>, mutex=mutex@entry=0x5b2d36156280 <g_evict_mu>, abstime=abstime@entry=0x771ccd789ba0) at ./nptl/pthread_cond_wait.c:478
+#7  0x00005b2d335fcb79 in stage_evict_main (arg=<optimized out>) at src/client/stage_evict.c:630
+#8  0x0000771cd5ca3dfa in start_thread (arg=<optimized out>) at ./nptl/pthread_create.c:454
+#9  0x0000771cd5d375cc in __GI___clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:78
+
+Thread 3 (Thread 0x771cccff96c0 (LWP 1817472) "fuse_worker"):
+#0  __syscall_cancel_arch () at ../sysdeps/unix/sysv/linux/x86_64/syscall_cancel.S:56
+#1  0x0000771cd5ca039c in __internal_syscall_cancel (a1=<optimized out>, a2=<optimized out>, a3=<optimized out>, a4=0, a5=0, a6=0, nr=0) at ./nptl/cancellation.c:49
+#2  __syscall_cancel (a1=<optimized out>, a2=<optimized out>, a3=<optimized out>, a4=a4@entry=0, a5=a5@entry=0, a6=a6@entry=0, nr=0) at ./nptl/cancellation.c:75
+#3  0x0000771cd5d2816e in __GI___libc_read (fd=<optimized out>, buf=<optimized out>, nbytes=<optimized out>) at ../sysdeps/unix/sysv/linux/read.c:26
+#4  0x0000771cd601f77b in ?? () from /usr/lib/x86_64-linux-gnu/libfuse3.so.4
+#5  0x0000771cd601fd71 in ?? () from /usr/lib/x86_64-linux-gnu/libfuse3.so.4
+#6  0x0000771cd5ca3dfa in start_thread (arg=<optimized out>) at ./nptl/pthread_create.c:454
+#7  0x0000771cd5d375cc in __GI___clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:78
+
+Thread 2 (Thread 0x771cc54fd6c0 (LWP 1817485) "fuse_worker"):
+#0  __syscall_cancel_arch () at ../sysdeps/unix/sysv/linux/x86_64/syscall_cancel.S:56
+#1  0x0000771cd5ca039c in __internal_syscall_cancel (a1=<optimized out>, a2=<optimized out>, a3=<optimized out>, a4=0, a5=0, a6=0, nr=0) at ./nptl/cancellation.c:49
+#2  __syscall_cancel (a1=<optimized out>, a2=<optimized out>, a3=<optimized out>, a4=a4@entry=0, a5=a5@entry=0, a6=a6@entry=0, nr=0) at ./nptl/cancellation.c:75
+#3  0x0000771cd5d2816e in __GI___libc_read (fd=<optimized out>, buf=<optimized out>, nbytes=<optimized out>) at ../sysdeps/unix/sysv/linux/read.c:26
+#4  0x0000771cd601f77b in ?? () from /usr/lib/x86_64-linux-gnu/libfuse3.so.4
+#5  0x0000771cd601fd71 in ?? () from /usr/lib/x86_64-linux-gnu/libfuse3.so.4
+#6  0x0000771cd5ca3dfa in start_thread (arg=<optimized out>) at ./nptl/pthread_create.c:454
+#7  0x0000771cd5d375cc in __GI___clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:78
+
+Thread 1 (Thread 0x771cd69599c0 (LWP 1817456) "efs-fuse"):
+#0  __syscall_cancel_arch () at ../sysdeps/unix/sysv/linux/x86_64/syscall_cancel.S:56
+#1  0x0000771cd5ca030c in __internal_syscall_cancel (a1=a1@entry=100250754590976, a2=<optimized out>, a3=a3@entry=0, a4=a4@entry=0, a5=a5@entry=0, a6=a6@entry=4294967295, nr=202) at ./nptl/cancellation.c:49
+#2  0x0000771cd5ca06e7 in __futex_abstimed_wait_common64 (private=<optimized out>, futex_word=0x5b2d729da900, expected=0, op=<optimized out>, abstime=0x0, cancel=true) at ./nptl/futex-internal.c:57
+#3  __futex_abstimed_wait_common (futex_word=0x5b2d729da900, expected=0, clockid=0, abstime=0x0, private=<optimized out>, cancel=true) at ./nptl/futex-internal.c:87
+#4  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0x5b2d729da900, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=<optimized out>) at ./nptl/futex-internal.c:139
+#5  0x0000771cd5cac66f in do_futex_wait (sem=sem@entry=0x5b2d729da900, abstime=0x0, clockid=0) at ./nptl/sem_waitcommon.c:111
+#6  0x0000771cd5cac708 in __new_sem_wait_slow64 (sem=0x5b2d729da900, abstime=0x0, clockid=0) at ./nptl/sem_waitcommon.c:183
+#7  0x0000771cd60197ac in fuse_session_loop_mt_312 () from /usr/lib/x86_64-linux-gnu/libfuse3.so.4
+#8  0x00005b2d33577720 in efs_fuse_main_mt (argc=<optimized out>, argv=0x7ffcd056f570) at src/client/efs_fuse.c:7834
+#9  main (argc=<optimized out>, argv=<optimized out>) at src/client/efs_fuse.c:7696
+[Inferior 1 (process 1817456) detached]

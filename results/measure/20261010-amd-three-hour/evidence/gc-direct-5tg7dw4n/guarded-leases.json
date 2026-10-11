@@ -1,0 +1,128 @@
+[
+  {
+    "seq": 1,
+    "ack": 0,
+    "flags": 1,
+    "probe": 1,
+    "expected": -13,
+    "discard": 0,
+    "result": "rc=-13 known=0 shard=1 group=0"
+  },
+  {
+    "seq": 1,
+    "ack": 0,
+    "flags": 1,
+    "probe": 1,
+    "expected": -13,
+    "discard": 0,
+    "result": "rc=-13 known=0 shard=1 group=0"
+  },
+  {
+    "seq": 2,
+    "ack": 0,
+    "flags": 2,
+    "probe": 0,
+    "expected": 0,
+    "discard": 0,
+    "result": "rc=0 known=1 shard=1 group=0"
+  },
+  {
+    "seq": 1,
+    "ack": 0,
+    "flags": 1,
+    "probe": 0,
+    "expected": -14,
+    "discard": 0,
+    "result": "rc=-14 known=1 shard=1 group=0"
+  },
+  {
+    "seq": 3,
+    "ack": 0,
+    "flags": 1,
+    "probe": 1,
+    "expected": 0,
+    "discard": 0,
+    "result": "rc=0 known=1 shard=1 group=0"
+  },
+  {
+    "seq": 3,
+    "ack": 0,
+    "flags": 1,
+    "probe": 1,
+    "expected": 0,
+    "discard": 0,
+    "result": "rc=0 known=1 shard=1 group=0"
+  },
+  {
+    "seq": 4,
+    "ack": 3,
+    "flags": 2,
+    "probe": 0,
+    "expected": 0,
+    "discard": 0,
+    "result": "rc=0 known=1 shard=1 group=0"
+  },
+  {
+    "seq": 4,
+    "ack": 3,
+    "flags": 2,
+    "probe": 1,
+    "expected": 0,
+    "discard": 0,
+    "result": "rc=0 known=1 shard=1 group=0"
+  },
+  {
+    "seq": 4,
+    "ack": 3,
+    "flags": 2,
+    "probe": 1,
+    "expected": 0,
+    "discard": 0,
+    "result": "rc=0 known=1 shard=1 group=0"
+  },
+  {
+    "seq": 5,
+    "ack": 4,
+    "flags": 1,
+    "probe": 0,
+    "expected": -3,
+    "discard": 0,
+    "result": "rc=-3 known=1 shard=1 group=0"
+  },
+  {
+    "seq": 3,
+    "ack": 0,
+    "flags": 1,
+    "probe": 0,
+    "expected": -14,
+    "discard": 0,
+    "result": "rc=-14 known=0 shard=1 group=0"
+  },
+  {
+    "seq": 6,
+    "ack": 5,
+    "flags": 1,
+    "probe": 1,
+    "expected": -13,
+    "discard": 0,
+    "result": "rc=-13 known=0 shard=1 group=0"
+  },
+  {
+    "seq": 6,
+    "ack": 5,
+    "flags": 1,
+    "probe": 0,
+    "expected": 0,
+    "discard": 0,
+    "result": "rc=0 known=1 shard=1 group=0"
+  },
+  {
+    "seq": 7,
+    "ack": 6,
+    "flags": 1,
+    "probe": 0,
+    "expected": -14,
+    "discard": 0,
+    "result": "rc=-14 known=0 shard=1 group=0"
+  }
+]

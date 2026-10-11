@@ -262,7 +262,7 @@ static int opid_begin(struct efs_opid_req *q)
             pthread_mutex_unlock(&opid_mu);return slot;
         }
         pthread_mutex_unlock(&opid_mu);
-        if(exhausted)return -1;
+        if(exhausted)return -2; /* sequence exhaustion is permanent */
         usleep(1000);
     }
     uint64_t oldest=0,next;unsigned live=0;
@@ -839,6 +839,12 @@ int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
         g_client.flock_token = 1;
     req->owner = g_client.flock_token;
     slot = opid_begin(&q);
+    /* A full local receipt window has sent no CREATE and allocated no
+     * identity. Wait only inside an existing caller deadline, as retained
+     * regular CREATE does; admitted transport retries keep one identity. */
+    while (slot == -1 && efs_client_rpc_deadline_ms() &&
+           !efs_client_rpc_past_deadline())
+        slot = opid_begin(&q);
     if (slot < 0)
         return EFS_ERR_BUSY;
     slen = opid_suffix(buf, sizeof(*req), &q);
@@ -931,6 +937,33 @@ static int create_request_rpc(struct efs_client_create_request *r,int probe)
        (reply.routed && reply.shard>=EFS_SESSION_BITS) ||
        (r->wire.routed && reply.routed && r->wire.shard!=reply.shard))return EFS_ERR_PROTO;
     if(reply.routed){r->wire.routed=1;r->wire.shard=reply.shard;}
+#if EFS_FAULTS
+    /* The mounted CREATE path uses retained framing, not the historical
+     * INODE_CREATE suffix. Hide exact durable replies here; routing/probe and
+     * the contiguous ACK may advance, while identity and CREATE bytes must not. */
+    const char *marker=getenv("EFS_FAULT_CREATE_RETRY_FILE");
+    if (marker && !access(marker,F_OK) && !strcmp(request.create.name,"w58-live-retry") &&
+        reply.known==1 && reply.rpc.status==EFS_INODE_RPC_OK) {
+        static pthread_mutex_t mu=PTHREAD_MUTEX_INITIALIZER;
+        static unsigned stage;
+        static struct efs_msg_create_retained original;
+        static efs_ino_t ino;
+        static uint64_t generation;
+        pthread_mutex_lock(&mu);
+        if (stage<3) {
+            if (!stage) { original=request;ino=reply.rpc.inode.ino;generation=reply.generation; }
+            if (memcmp(&original.create,&request.create,sizeof(request.create)) ||
+                memcmp(original.q.id.client_uuid,request.q.id.client_uuid,EFS_OPID_UUID_LEN) ||
+                original.q.id.session_epoch!=request.q.id.session_epoch || original.q.id.seq!=request.q.id.seq ||
+                ino!=reply.rpc.inode.ino || generation!=reply.generation) abort();
+            unsigned current=stage++;
+            fprintf(stderr,"test-create-retry: stage=%u seq=%llu ino=%llu identical=1 retained=1\n",
+                current,(unsigned long long)request.q.id.seq,(unsigned long long)ino);
+            pthread_mutex_unlock(&mu);
+            if (current<2) return current==0?EFS_ERR_NET:EFS_ERR_BUSY;
+        } else pthread_mutex_unlock(&mu);
+    }
+#endif
     rc=rpc_status_to_efs(reply.rpc.status);
     /* A successful submission without a replay receipt is still ambiguous.
      * Keep the same identity/slot and retry until durable terminal proof;
@@ -1332,6 +1365,17 @@ int efs_client_lease_begin(struct efs_client_lease_request *r,efs_ino_t ino,
     *r = (struct efs_client_lease_request){.q=q,.ino=ino,
         .generation=generation,.pending_token=token,.flags=flags,
         .slot=slot,.active=1};
+#if EFS_FAULTS
+    /* Corrupt only the guarded request's FileID before its first send. The
+     * caller retains CREATE's correct generation for pending-only cleanup. */
+    const char *marker=getenv("EFS_FAULT_CREATE_ADOPT_NEGATIVE_FILE");
+    if (flags==(EFS_LEASE_EDGE_OPEN|EFS_LEASE_EDGE_CLEAR_PENDING) &&
+        marker && unlink(marker)==0) {
+        r->generation=generation==UINT64_MAX ? generation-1 : generation+1;
+        fprintf(stderr,"test-create-adopt-negative-request ino=%llu generation=%llu original=%llu\n",
+            (unsigned long long)ino,(unsigned long long)r->generation,(unsigned long long)generation);
+    }
+#endif
     return EFS_OK;
 }
 
@@ -1382,6 +1426,19 @@ int efs_client_lease_resume(struct efs_client_lease_request *r,int probe_only)
     r->attempted=1;
     rc=efs_client_rpc_lease_edge(r->ino,r->generation,&r->q,r->flags,
                                  r->pending_token,0,&known);
+#if EFS_FAULTS
+    /* Private functional gate: hide one consumed durable combined-adoption
+     * reply. Leave the exact request active so normal cleanup must prove its
+     * receipt before compensating CLOSE; no descriptor was acknowledged. */
+    const char *marker=getenv("EFS_FAULT_CREATE_ADOPT_REPLY_FILE");
+    if (rc==EFS_OK && known==1 &&
+        r->flags==(EFS_LEASE_EDGE_OPEN|EFS_LEASE_EDGE_CLEAR_PENDING) &&
+        marker && unlink(marker)==0) {
+        fprintf(stderr,"test-create-adopt-reply-loss seq=%llu ino=%llu known=1 hidden=1\n",
+                (unsigned long long)r->q.id.seq,(unsigned long long)r->ino);
+        return lease_request_result(r,EFS_ERR_NET,0);
+    }
+#endif
     return lease_request_result(r,rc,known);
 }
 

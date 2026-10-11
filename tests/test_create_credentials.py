@@ -52,9 +52,9 @@ static int efs_file_open(struct fuse_file_info *fi,efs_ino_t ino){(void)fi;(void
 static void efs_file_close(struct fuse_file_info *fi){(void)fi;}
 static void fuse_fi_direct_io(struct fuse_file_info *fi){(void)fi;}
 static int efs_open_acquire_fileid(efs_ino_t ino,uint64_t gen){(void)ino;(void)gen;return EFS_OK;}
-static int efs_open_adopt(efs_ino_t ino,uint64_t gen,uint64_t token,int *handoff){(void)ino;(void)gen;(void)token;*handoff=1;return EFS_OK;}
-static int efs_fuse_release_ino(efs_ino_t ino,struct fuse_file_info *fi){(void)ino;(void)fi;return 0;}
+static int efs_open_acquire_created(efs_ino_t ino,uint64_t gen,uint64_t token,int *handoff){(void)ino;(void)gen;(void)token;*handoff=1;return EFS_OK;}
 static int efs_client_create_result(efs_ino_t p,const char *name,mode_t mode,uid_t uid,gid_t gid,int flags,efs_ino_t *out){(void)p;(void)name;(void)flags;capture(mode,uid,gid);if(create_rc)return create_rc;*out=42;return EFS_OK;}
+static int efs_client_create_result_inode(efs_ino_t p,const char *name,mode_t mode,uid_t uid,gid_t gid,int flags,efs_ino_t *out,struct efs_inode *created){int rc=efs_client_create_result(p,name,mode,uid,gid,flags,out);if(created){memset(created,0,sizeof(*created));if(!rc){created->ino=*out;created->mode=mode;created->uid=uid;created->gid=gid;}}return rc;}
 static int efs_client_write(efs_ino_t ino,uint64_t off,size_t n,const void *data){(void)ino;(void)off;(void)n;(void)data;return EFS_OK;}
 static int efs_client_report_dirty_ino(efs_ino_t ino,int all){(void)ino;(void)all;return EFS_OK;}
 ''' + '\n'.join(fn(n) for n in ['efs_create_credentials','fuse_stat_errno','fuse_create_errno','efs_fuse_create_at','efs_fuse_mkdir_at','efs_fuse_symlink_at']) + r'''
@@ -64,7 +64,7 @@ static void check_all(int setgid,int context){
  struct fuse_file_info fi={0};efs_ino_t ino=0;
  assert(!efs_fuse_create_at(1,"file",0640,&fi,&ino,NULL));
  assert(captured_gid==expected_gid && captured_uid==expected_uid && captured_mode==(S_IFREG|0640));
- assert(!efs_fuse_mkdir_at(1,"dir",0750,&ino));
+ assert(!efs_fuse_mkdir_at(1,"dir",0750,&ino,NULL));
  assert(captured_gid==expected_gid && captured_uid==expected_uid && captured_mode==(S_IFDIR|0750|(setgid?S_ISGID:0)));
  assert(!efs_fuse_symlink_at("file",1,"link",&ino));
  assert(captured_gid==expected_gid && captured_uid==expected_uid && captured_mode==(S_IFLNK|0777));
@@ -72,11 +72,11 @@ static void check_all(int setgid,int context){
 int main(void){
  check_all(1,1);check_all(0,1);check_all(1,0);check_all(0,0);
  efs_ino_t ino=999;create_rc=EFS_ERR_EXIST;
- assert(efs_fuse_mkdir_at(1,"raced",0755,&ino)==-EEXIST && ino==999);
+ assert(efs_fuse_mkdir_at(1,"raced",0755,&ino,NULL)==-EEXIST && ino==999);
  create_rc=EFS_ERR_BUSY;
- assert(efs_fuse_mkdir_at(1,"raced",0755,&ino)==-EBUSY && ino==999);
+ assert(efs_fuse_mkdir_at(1,"raced",0755,&ino,NULL)==-EBUSY && ino==999);
  create_rc=EFS_ERR_QUOTA;
- assert(efs_fuse_mkdir_at(1,"raced",0755,&ino)==-ENOSPC && ino==999);
+ assert(efs_fuse_mkdir_at(1,"raced",0755,&ino,NULL)==-ENOSPC && ino==999);
  return 0;
 }
 '''

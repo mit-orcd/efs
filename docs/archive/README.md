@@ -139,3 +139,25 @@ Superseded deployment and integration checkpoints retain their raw evidence and 
 - [find-stats-checkpoint-20261008](status-20261011/find-stats-checkpoint-20261008.md)
 - [find-stats-merge-20261008](status-20261011/find-stats-merge-20261008.md)
 - [devel-integration-20261009](status-20261011/devel-integration-20261009.md)
+
+- [Earlier Intel deployment acceptance, 775d935c](status-20261011/intel-deployment-acceptance-775d935c-20261011.md)
+
+
+## W92 profiling checkpoints archived Oct 11, 2026 (W92 remains open)
+
+Superseded deployment and integration checkpoints retain their raw evidence and remaining obligations. Current execution state belongs in the status index.
+
+- [query-cache-three-rounds-20261009](status-20261011/query-cache-three-rounds-20261009.md)
+- [query-cache-merged-three-rounds-20261009](status-20261011/query-cache-merged-three-rounds-20261009.md)
+- [query-cache-next-three-rounds-20261010](status-20261011/query-cache-next-three-rounds-20261010.md)
+
+
+## Intel repair notes archived Oct 11, 2026 (current acceptance remains open)
+
+Superseded deployment and integration checkpoints retain their raw evidence and remaining obligations. Current execution state belongs in the status index.
+
+- [intel-rename-flags-20261010](status-20261011/intel-rename-flags-20261010.md)
+- [intel-xattr-names-20261010](status-20261011/intel-xattr-names-20261010.md)
+- [intel-posix-inheritance-20261010](status-20261011/intel-posix-inheritance-20261010.md)
+
+- [Oct 9 W93 overlap investigation](status-20261011/w93-overlap-suffix-20261009.md) and [Oct 10 checkpoint-cadence investigation](status-20261011/w93-checkpoint-cadence-20261010.md) — intermediate measurements and retained failures superseded for W93 by the later atomic-apply acceptance. W97 and Intel acceptance remain active.

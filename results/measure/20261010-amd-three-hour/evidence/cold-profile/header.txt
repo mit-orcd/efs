@@ -1,0 +1,37 @@
+# ========
+# captured on    : Sun Oct 11 00:30:48 2026
+# header version : 1
+# data offset    : 53000
+# data size      : 982096
+# feat offset    : 1035096
+# hostname : amd-395
+# os release : 7.0.0-38-generic
+# perf version : 7.0.14
+# arch : x86_64
+# nrcpus online : 32
+# nrcpus avail : 32
+# cpudesc : AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+# cpuid : AuthenticAMD,26,112,0
+# total memory : 125038688 kB
+# cmdline : /usr/bin/perf 
+# event desc: not available or unable to read
+# CPU_TOPOLOGY info available, use -I to display
+# NUMA_TOPOLOGY info available, use -I to display
+# pmu mappings: cpu = 4, amd_iommu_0 = 12, breakpoint = 5, hwmon_acpi_fan = 4294901761, hwmon_acpitz_0 = 4294901762, hwmon_acpitz_1 = 4294901763, hwmon_acpitz_2 = 4294901764, hwmon_amdgpu = 4294901774, hwmon_asus_custom_fan_curve = 4294901772, hwmon_asus = 4294901771, hwmon_bat0 = 4294901765, hwmon_hid_0018_04f3_43c7.0001_battery = 4294901767, hwmon_k10temp = 4294901770, hwmon_nvme = 4294901766, hwmon_ucsi_source_psy_usbc000_001 = 4294901768, hwmon_ac0 = 4294901760, hwmon_mt7925_phy0 = 4294901773, hwmon_ucsi_source_psy_usbc000_002 = 4294901769, ibs_fetch = 10, ibs_op = 11, kprobe = 8, msr = 13, power = 14, power_core = 15, software = 1, tool = 4294967294, tracepoint = 2, uprobe = 9
+# CACHE info available, use -I to display
+# time of first sample : 184761.123820
+# time of last sample : 184781.104518
+# sample duration :  19980.697 ms
+# MEM_TOPOLOGY info available, use -I to display
+# bpf_prog_info empty
+# btf info empty
+# cpu pmu capabilities: branches=16, max_precise=0
+# ibs_fetch pmu capabilities: zen4_ibs_extensions=1
+# ibs_op pmu capabilities: zen4_ibs_extensions=1, ldlat=1, dtlb_pgsize=1
+# AMD systems uses ibs_op// PMU for some precise events, e.g.: cycles:p, see the 'perf list' man page for further details.
+# CPU_DOMAIN_INFO info available, use -I to display
+# e_machine : 62
+#   e_flags : 0
+# missing features: TRACING_DATA BUILD_ID BRANCH_STACK GROUP_DESC AUXTRACE STAT CLOCKID DIR_FORMAT COMPRESSED CLOCK_DATA HYBRID_TOPOLOGY 
+# ========
+#
