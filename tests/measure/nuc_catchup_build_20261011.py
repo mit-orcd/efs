@@ -13,8 +13,10 @@ src = base / (args.variant + '-src')
 out.mkdir(exist_ok=args.resume_timestamps)
 try:
     manifest = json.loads((base / 'efs-catchup-build-input.json').read_text())
-    assert manifest['engine_commit'] == '32b472c5'
-    archive = base / 'efs-catchup-9598d03e.tar.gz'
+    assert manifest['command_tag'] == 52
+    assert len(manifest['engine_commit']) == 40 and all(c in '0123456789abcdef' for c in manifest['engine_commit'])
+    assert Path(manifest['archive_name']).name == manifest['archive_name']
+    archive = base / manifest['archive_name']
     assert hashlib.sha256(archive.read_bytes()).hexdigest() == manifest['archive_sha256']
     if not args.resume_timestamps:
         assert not src.exists()
@@ -63,7 +65,8 @@ try:
             (out / name).rename(retained / name)
         (out / 'timestamp-retry.json').write_text(json.dumps(dict(before=before, corrected_mtime=timestamp,
             source_bytes_unchanged=True, scope='Three baseline overlay source-file mtimes only; rerun full native, no skipped tests.'), indent=2))
-    identity = '32b472c5-' + ('w52-nuc' if args.variant == 'catchup-base' else 'root-nuc')
+    assert '#define EFS_MD_CMD_APPEND_CATCHUP 52' in (src / 'include/efs/meta_cmd.h').read_text()
+    identity = manifest['engine_commit'][:8] + '-' + ('w52-nuc' if args.variant == 'catchup-base' else 'root-nuc')
     (out / 'provenance.json').write_text(json.dumps(dict(
         variant=args.variant, build_id=identity, input=manifest, core_sha256=actual,
         difference='Only store.c, packed_fence.h and corresponding durability test differ between the variants.',

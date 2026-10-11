@@ -4701,8 +4701,10 @@ per-reservation completion loop remains. The existing atomic scope bounds the
 admitted backlog at 32,766; concurrent growth refuses before mutation for
 recapture. Actual-KV 20k/maximum-count, atomic-scope rollback, session/fencing,
 partial publication and cold/lost-COMMIT regressions pass on NUC. The full native
-suites pass for both matched W52-only and W52-plus-W97 builds. Direct/buffered
-live, deployed 20k and cold gates remain pending. All voters must
+suites passed for the initial matched builds. Release coordination then found
+that command tag 45 collides with ORCD packing; APPEND_CATCHUP is reassigned to
+52 before any NUC admission. New-tag native, direct/buffered live, deployed
+20k and cold gates remain pending. All voters must
 support the new log command; no timeout or durability guarantee is relaxed.
 [Implementation and acceptance ledger](../status/nuc-w52-w97-resume-20261011.md).
 
@@ -8877,7 +8879,7 @@ The internal Raft command uses big-endian integers:
 
 | Byte offset | Field | Bytes |
 | --- | --- | --- |
-| 0 | Command tag, 45 | 1 |
+| 0 | Command tag, 52 | 1 |
 | 1 | Inode | 8 |
 | 9 | Inode generation | 8 |
 | 17 | Content epoch | 8 |
@@ -8898,7 +8900,7 @@ The existing scope admits at most 32,766 outstanding reservations and scan rows.
 An outstanding count above the captured bound returns BUSY for recapture; an
 unsupported backlog returns OVERFLOW before mutation. There is no serial
 per-reservation fallback or widened request timeout. All voters must understand
-tag 45 before admission. No persistent row format changes, but an old binary
+tag 52 before admission. No persistent row format changes, but an old binary
 must not replay a log containing an uncheckpointed command it cannot decode.
 
 ### Stale-target fencing — targets are dumb, metadata decides

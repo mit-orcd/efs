@@ -107,7 +107,7 @@ try:
     (out / 'images.json').write_text(json.dumps(images, indent=2))
     (out / 'installed-core-sha256.json').write_text(json.dumps(installed, indent=2))
     (out / 'after.json').write_text(json.dumps(dict(processes=after, payloads=verified,
-        limits='W52-only root baseline; original regular stores preserved. Every voter supports command 45.'), indent=2))
+        limits='W52-only root baseline; original regular stores preserved. Every voter supports command 52.'), indent=2))
     (out / 'run-exit.txt').write_text('0\n')
     stopped = False
 except BaseException:
@@ -116,7 +116,7 @@ except BaseException:
     raise
 finally:
     if stopped:
-        # An upgraded Raft log may contain command 45. Never automatically
+        # An upgraded Raft log may contain command 52. Never automatically
         # downgrade that log to the previous binary after candidate startup.
         (out / 'recovery-policy.txt').write_text('Retain live mounts/daemons and stores. No forced discard or automatic old-binary replay.\n')
         if not changed and not any(os.path.ismount('/data1/efs/' + m) for m in ('mnt', 'mnt2')):

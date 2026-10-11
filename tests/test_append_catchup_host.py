@@ -21,7 +21,6 @@ code = r'''
 #define EFS_ERR_IO -6
 #define EFS_ERR_NOT_FOUND -2
 #define EFS_OPID_UUID_LEN 16
-#define EFS_MD_CMD_APPEND_CATCHUP 45
 #define EFS_KV_KEY_MAX 64
 #define EFS_META_LANES 64
 #define EFS_META_APPEND_CATCHUP_MAX 32766
@@ -66,7 +65,7 @@ static int efs_meta_apply_get_inode(void *kv,efs_ino_t ino,struct efs_meta_row *
  (void)kv;assert(ino==11);row->generation=7;row->content_epoch=9;return inode_error;
 }
 static int host_propose_wait(struct efs_raft_host *host,uint8_t group,const uint8_t *cmd,uint32_t len,int *hint){
- (void)host;(void)hint;assert(group==2&&cmd[0]==45&&(len==38||len==58));proposals++;
+ (void)host;(void)hint;assert(group==2&&cmd[0]==EFS_MD_CMD_APPEND_CATCHUP&&(len==38||len==58));proposals++;
  memcpy(captured,cmd,len);captured_length=len;
  assert(rd64be(cmd+1)==11&&rd64be(cmd+9)==7&&rd64be(cmd+17)==9);
  if(proposal_error)return proposal_error;
