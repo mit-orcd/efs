@@ -787,3 +787,11 @@ modern recovery. All four corrected fixtures pass against the Linux library
 with their existing warning checks. Batch ownership continues to use the actual
 helper in its separate fault gate. No production behavior changed in these
 fixture corrections. Full native acceptance remains pending.
+
+
+Atomic tag53 introduced a plan-size dependency in the minimal tag52 catch-up
+fixture's copied admission switch. That fixture now excludes the unrelated
+tag53 arm while preserving all catch-up charge and routing assertions. The
+real-header host pressure gate explicitly checks atomic plan plus predicate
+image charging. Both pass locally. This is fixture reconciliation, not reduced
+production accounting or a larger admission limit.
