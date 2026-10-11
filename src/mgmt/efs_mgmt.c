@@ -1272,17 +1272,30 @@ static int sess_cleanup_bounded(const char *host, uint16_t port,
     }
     /* An invocation has a finite work budget; unfinished ownership remains
      * durable and must not be reported as a completed cleanup. */
-    struct timespec start, now;
+    struct timespec start;
     if (clock_gettime(CLOCK_MONOTONIC, &start)) return EFS_ERR_IO;
+    uint64_t saved = efs_net_deadline_ms();
+    uint64_t deadline = (uint64_t)start.tv_sec * 1000 + start.tv_nsec / 1000000 + 30000;
+    if (saved && saved < deadline) deadline = saved;
+    efs_net_set_deadline_ms(deadline);
+    int result = EFS_ERR_BUSY;
     for (unsigned batch = 0; batch < 4096; batch++) {
-        if (clock_gettime(CLOCK_MONOTONIC, &now)) return EFS_ERR_IO;
-        if (now.tv_sec - start.tv_sec >= 30) return EFS_ERR_BUSY;
+        if (efs_net_remaining_ms(0x7fffffff) <= 0) break;
         int rc = sess_rpc(host, port, payload, length, reply);
-        if (rc != EFS_OK) return rc;
-        if (reply->salt == 1) return EFS_OK;
-        if (reply->salt != 0) return EFS_ERR_PROTO;
+        /* NOT_PRIMARY explicitly rejects proposal admission. Cold owners can
+         * remain leaderless beyond sess_rpc's redirect window. Retry only
+         * that definite rejection, with the same UUID/epoch/shard and the
+         * original invocation deadline (also bounding socket waits). */
+        if (rc == EFS_ERR_NOT_PRIMARY) {
+            usleep(50000);
+            continue;
+        }
+        if (rc != EFS_OK) { result = rc; break; }
+        if (reply->salt == 1) { result = EFS_OK; break; }
+        if (reply->salt != 0) { result = EFS_ERR_PROTO; break; }
     }
-    return EFS_ERR_BUSY;
+    efs_net_set_deadline_ms(saved);
+    return result;
 }
 
 /* Coordinator-driven I23 barrier (10.5c-35c). BEGIN freezes touched[],

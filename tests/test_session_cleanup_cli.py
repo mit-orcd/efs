@@ -16,6 +16,12 @@ c=r'''
 #include <stdio.h>
 static unsigned calls, mode, append_mode;
 static int tick;
+static uint64_t deadline;
+static unsigned waits;
+static uint64_t efs_net_deadline_ms(void){return deadline;}
+static void efs_net_set_deadline_ms(uint64_t value){deadline=value;}
+static int efs_net_remaining_ms(int cap){int remaining=(int)deadline-tick*1000;return remaining<cap?remaining:cap;}
+static int usleep(unsigned n){assert(n==50000);waits++;tick++;return 0;}
 static int fake_clock(clockid_t id,struct timespec *t)
 {assert(id==CLOCK_MONOTONIC);t->tv_sec=tick;t->tv_nsec=0;return 0;}
 #define clock_gettime fake_clock
@@ -35,10 +41,14 @@ static int sess_rpc(const char *host,uint16_t port,const uint8_t *p,uint32_t n,
  assert(p[19]==0 && p[22]==1 && p[23]==0 && p[26]==7);
  for(unsigned i=3;i<19;i++)assert(p[i]==42);
  }
- calls++;
+ assert(deadline && deadline<=30000);calls++;
+ if(mode==6 && calls<13)return EFS_ERR_NOT_PRIMARY;
+ if(mode==7)return EFS_ERR_NOT_PRIMARY;
+ if(mode==8)return EFS_ERR_STALE;
+ if(mode==9)return EFS_ERR_INVAL;
  if(mode==1)return EFS_ERR_IO; /* ambiguous submission: do not reselect */
  if(mode==2)return EFS_ERR_BUSY; /* active or incomplete global barrier */
- r->salt=mode==3?2:mode==4?0:calls==4?1:0;
+ r->salt=mode==3?2:mode==4?0:(mode==6?calls==16:calls==4)?1:0;
  if(mode==5)tick=30;
  return EFS_OK;
 }
@@ -54,6 +64,20 @@ int main(void) {
  mode=5;calls=0;assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1);
  append_mode=1;mode=0;calls=0;tick=0;
  assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_OK && calls==4);
+ assert(!deadline);
+ for(append_mode=0;append_mode<2;append_mode++) {
+   mode=6;calls=waits=0;tick=0;
+   assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_OK && calls==16 && waits==12 && !deadline);
+   mode=7;calls=waits=0;tick=0;
+   assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==30 && waits==30 && !deadline);
+   for(mode=8;mode<=9;mode++) {
+     calls=waits=0;tick=0;
+     assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==(mode==8?EFS_ERR_STALE:EFS_ERR_INVAL) && calls==1 && !waits && !deadline);
+   }
+   mode=7;calls=waits=0;tick=0;deadline=3000;
+   assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==3 && waits==3 && deadline==3000);
+   deadline=0;
+ }
  puts("session CLI: bounded batches, explicit empty proof, ambiguity stops, deadline and work budget PASS");
 }
 '''
