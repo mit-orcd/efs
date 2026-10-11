@@ -262,7 +262,7 @@ static int opid_begin(struct efs_opid_req *q)
             pthread_mutex_unlock(&opid_mu);return slot;
         }
         pthread_mutex_unlock(&opid_mu);
-        if(exhausted)return -1;
+        if(exhausted)return -2; /* sequence exhaustion is permanent */
         usleep(1000);
     }
     uint64_t oldest=0,next;unsigned live=0;
@@ -839,6 +839,12 @@ int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
         g_client.flock_token = 1;
     req->owner = g_client.flock_token;
     slot = opid_begin(&q);
+    /* A full local receipt window has sent no CREATE and allocated no
+     * identity. Wait only inside an existing caller deadline, as retained
+     * regular CREATE does; admitted transport retries keep one identity. */
+    while (slot == -1 && efs_client_rpc_deadline_ms() &&
+           !efs_client_rpc_past_deadline())
+        slot = opid_begin(&q);
     if (slot < 0)
         return EFS_ERR_BUSY;
     slen = opid_suffix(buf, sizeof(*req), &q);

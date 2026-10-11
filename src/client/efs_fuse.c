@@ -6540,7 +6540,12 @@ static void ll_symlink(fuse_req_t req, const char *link, fuse_ino_t parent,
         fuse_reply_err(req, EBUSY);
         return;
     }
+    uint64_t previous=efs_client_rpc_deadline_ms();
+    uint64_t deadline=stats_now_ms()+30000;
+    if(previous && previous<deadline)deadline=previous;
+    efs_client_rpc_set_deadline_ms(deadline);
     ll_symlink_run(req, link, parent, name);
+    efs_client_rpc_set_deadline_ms(previous);
     efs_stop_mutation_leave();
 }
 
