@@ -1,0 +1,122 @@
+[
+  {
+    "host": "fcstor003",
+    "old_root": "/data1/01/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/01/efs-orcd-test-erbmi1"
+  },
+  {
+    "host": "fcstor003",
+    "old_root": "/data1/02/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/02/efs-orcd-test-erbmi1"
+  },
+  {
+    "host": "fcstor003",
+    "old_root": "/data1/03/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/03/efs-orcd-test-erbmi1"
+  },
+  {
+    "host": "fcstor003",
+    "old_root": "/data1/04/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/04/efs-orcd-test-erbmi1"
+  },
+  {
+    "host": "fcstor003",
+    "old_root": "/data1/05/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/05/efs-orcd-test-erbmi1"
+  },
+  {
+    "host": "fcstor003",
+    "old_root": "/data1/06/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/06/efs-orcd-test-erbmi1"
+  },
+  {
+    "host": "fcstor004",
+    "old_root": "/data1/01/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/01/efs-orcd-test-erbmi1"
+  },
+  {
+    "host": "fcstor004",
+    "old_root": "/data1/02/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/02/efs-orcd-test-erbmi1"
+  },
+  {
+    "host": "fcstor004",
+    "old_root": "/data1/03/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/03/efs-orcd-test-erbmi1"
+  },
+  {
+    "host": "fcstor004",
+    "old_root": "/data1/04/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/04/efs-orcd-test-erbmi1"
+  },
+  {
+    "host": "fcstor004",
+    "old_root": "/data1/05/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/05/efs-orcd-test-erbmi1"
+  },
+  {
+    "host": "fcstor004",
+    "old_root": "/data1/06/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/06/efs-orcd-test-erbmi1"
+  },
+  {
+    "host": "fcstor005",
+    "old_root": "/data1/01/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/01/efs-orcd-test-erbmi1"
+  },
+  {
+    "host": "fcstor005",
+    "old_root": "/data1/02/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/02/efs-orcd-test-erbmi1"
+  },
+  {
+    "host": "fcstor005",
+    "old_root": "/data1/03/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/03/efs-orcd-test-erbmi1"
+  },
+  {
+    "host": "fcstor005",
+    "old_root": "/data1/04/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/04/efs-orcd-test-erbmi1"
+  },
+  {
+    "host": "fcstor005",
+    "old_root": "/data1/05/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/05/efs-orcd-test-erbmi1"
+  },
+  {
+    "host": "fcstor005",
+    "old_root": "/data1/06/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/06/efs-orcd-test-erbmi1"
+  },
+  {
+    "host": "fcstor006",
+    "old_root": "/data1/01/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/01/efs-orcd-test-erbmi1"
+  },
+  {
+    "host": "fcstor006",
+    "old_root": "/data1/02/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/02/efs-orcd-test-erbmi1"
+  },
+  {
+    "host": "fcstor006",
+    "old_root": "/data1/03/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/03/efs-orcd-test-erbmi1"
+  },
+  {
+    "host": "fcstor006",
+    "old_root": "/data1/04/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/04/efs-orcd-test-erbmi1"
+  },
+  {
+    "host": "fcstor006",
+    "old_root": "/data1/05/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/05/efs-orcd-test-erbmi1"
+  },
+  {
+    "host": "fcstor006",
+    "old_root": "/data1/06/efs-orcd-test-erbmi1-before-627d48ba518b-fresh-diagnostic",
+    "active_root": "/data1/06/efs-orcd-test-erbmi1"
+  }
+]

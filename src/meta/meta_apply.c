@@ -4069,9 +4069,20 @@ int efs_meta_apply_publication_retire(struct efs_kv *kv,const struct efs_meta_pu
     if(!scan.count || scan.first!=p->publication_id.seq)return EFS_ERR_BUSY;
     uint8_t key[51],fk[51],value[12];publication_key(p,key);memcpy(fk,key,sizeof(fk));
     fk[2]=EFS_KV_KIND_PUBLICATION_FLOOR;be32(value,1);be64(value+4,p->publication_id.seq);
-    struct efs_kv_item items[2]={{EFS_KV_DEL,key,sizeof(key),NULL,0},
+    struct efs_kv_item items[3]={{EFS_KV_DEL,key,sizeof(key),NULL,0},
         {EFS_KV_PUT,fk,43,value,sizeof(value)}};
-    return meta_write_batch(kv,items,2);
+    struct efs_pack_mapping_plan rejected={0};unsigned count=2;
+    if((verdict==EFS_ERR_STALE || verdict==EFS_ERR_INVAL) &&
+        p->coding_profile_id==EFS_META_PROFILE_PACK_K2F1) {
+        /* Older writers may have a durable rejection but a pending lifetime
+         * reference. Do not erase that exact proof before cancelling its slot.
+         * Already-cancelled/live/retired objects remain unchanged. */
+        rc=efs_pack_mapping_reject(kv,p,&rejected);
+        if(rc!=EFS_OK && rc!=EFS_ERR_INVAL && rc!=EFS_ERR_STALE && rc!=EFS_ERR_NOT_FOUND)return rc;
+        if(!rc)items[count++]=rejected.items[0];
+    }
+    rc=meta_write_batch(kv,items,count);efs_pack_mapping_plan_free(&rejected);
+    return rc;
 }
 int efs_meta_publication_receipt(struct efs_kv *kv, const struct efs_meta_pub *p, int *verdict,
                                   struct efs_publication_locator *locator)
