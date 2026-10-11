@@ -1,6 +1,7 @@
 /* Authoritative inode attributes for atomic namespace refusal checks. */
 #include "efs/protocol.h"
 #include "efs/network.h"
+#include "efs/kv_key.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,6 +9,24 @@
 #include <unistd.h>
 int main(int argc,char **argv)
 {
+    /* Predict fixture placement with the actual production hash. No RPC or
+     * filesystem mutation is needed while rejecting candidate names. */
+    if(argc==6 && !strcmp(argv[1],"choose")) {
+        efs_ino_t parent=strtoull(argv[2],NULL,10);
+        uint64_t salt=strtoull(argv[3],NULL,10);
+        unsigned char used[EFS_KV_SHARD_MASK+1]={0};unsigned shard;
+        int fresh=!strcmp(argv[5],"fresh");
+        assert(fresh || !strcmp(argv[5],"member"));
+        while(scanf("%u",&shard)==1){assert(shard<=EFS_KV_SHARD_MASK);used[shard]=1;}
+        for(unsigned attempt=0;attempt<65536;attempt++) {
+            char name[128];int count=snprintf(name,sizeof(name),"%s-%u",argv[4],attempt);
+            assert(count>0 && count<(int)sizeof(name));
+            shard=efs_kv_mkdir_shard(parent,name,salt);
+            if((!used[shard])==fresh){printf("%u %s\n",shard,name);return 0;}
+        }
+        fprintf(stderr,"no namespace fixture placement within bounded search\n");
+        return 1;
+    }
     assert(argc==3);
     unsigned port=(unsigned)atoi(argv[1]);
     struct efs_msg_inode_getattr q={.export_id=1,.ino=strtoull(argv[2],NULL,10)};
