@@ -188,8 +188,21 @@ try:
     assert 'status=0' in mgmt(old,'raft-setattr',1,1,'0755')
     assert 'status=0' in mgmt(old,'raft-create',1,'before-rename')
     assert 'status=0' in mgmt(old,'raft-lookup',1,'before-rename')
+    # W80 must include a nonempty authoritative namespace, not merely an
+    # unreferenced fragment PUT in the separate integrity matrix.
+    queries=[]
+    for flags in ([],['--raw']):
+        reply=subprocess.run([str(source/'efs-query'),*flags,f'127.0.0.1:{base+old}'],capture_output=True,text=True,timeout=10)
+        assert reply.returncode==2 and not reply.stdout and 'unavailable' in reply.stderr,reply
+        queries.append(dict(flags=flags,exit=reply.returncode,stdout=reply.stdout,stderr=reply.stderr))
+    help_reply=subprocess.run([str(source/'efs-query'),'--help'],capture_output=True,text=True,check=True)
+    assert 'retired' in help_reply.stdout and '.efs/stats' in help_reply.stdout
+    (work/'query-unavailable.json').write_text(json.dumps(dict(authoritative_name='before-rename',queries=queries,help=help_reply.stdout),indent=2))
+    print('PASS: nonempty authoritative namespace returns explicit unavailable query status, no false totals',flush=True)
     first_salt = re.search(r'salt=(\d+)',mgmt(old,'raft-status')).group(1)
     for command in ('mkfs','raft-mkfs'):
+        help_reply=subprocess.run([str(source/'efs-mgmt'),command,'--help'],capture_output=True,text=True,check=True)
+        assert '[legacy-label]' in help_reply.stdout and 'ignored' in help_reply.stdout,help_reply.stdout
         lost_mkfs_reply(old,command,work)
         repeated = mgmt(old,command,'compatibility-name')
         assert 'rc=0' in repeated and 'is ignored' in repeated,repeated
