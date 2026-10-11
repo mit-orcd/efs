@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""W90 real-mount regression gates; nonzero exit for any required failure."""
+"""Current .efs query gates; retired .find/.stats remain ordinary user names."""
 import argparse,errno,json,os,time,traceback
 from pathlib import Path
 p=argparse.ArgumentParser();p.add_argument('mount');p.add_argument('peer');p.add_argument('--case',default='all');p.add_argument('--freshness-s',type=float,default=10);a=p.parse_args()
@@ -10,39 +10,60 @@ def gate(name,fn):
     try:fn();results.append(dict(case=name,status='PASS',seconds=round(time.monotonic()-t,3)))
     except Exception as e:results.append(dict(case=name,status='FAIL',error=repr(e),traceback=traceback.format_exc()))
     print(json.dumps(results[-1]),flush=True)
+def query_path(directory, pattern):
+    raw = os.fsencode(pattern)
+    mode = 0
+    if raw.startswith(b'*') and raw.endswith(b'*'):
+        mode, raw = 3, raw[1:-1]
+    elif raw.endswith(b'*'):
+        mode, raw = 1, raw[:-1]
+    elif raw.startswith(b'*'):
+        mode, raw = 2, raw[1:]
+    return directory / '.efs/.query' / ('v1.find.%d.%s' % (mode, raw.hex()))
+def find_bytes(path):
+    value = json.loads(contents(path))
+    assert value['complete'], value
+    directory = path.parent.parent.parent
+    return b''.join(os.fsencode(directory) + b'/' + bytes.fromhex(e['path_hex']) + b'\n' for e in value['entries'])
 def contents(path):
-    with open(path,'rb',buffering=0) as f:return f.read()
+    for attempt in range(8):
+        try:
+            with open(path,'rb',buffering=0) as f:return f.read()
+        except OSError as error:
+            if error.errno not in (errno.ESTALE,errno.EAGAIN,errno.EBUSY) or attempt==7:raise
+            time.sleep(.025*(attempt+1))
 def snapshot():
     d=root/'snapshot';d.mkdir()
     for i in range(100): (d/f'match-{i:04}').write_bytes(b'x')
-    query=d/'.find'/'match-*'
+    query=query_path(d,'match-*')
     wanted={str(d/f'match-{i:04}').encode() for i in range(100)}
     deadline=time.monotonic()+a.freshness_s
     while True:
         expected=contents(query)
-        if set(expected.splitlines())==wanted:break
+        if set(find_bytes(query).splitlines())==wanted:break
         assert time.monotonic()<deadline,(wanted-set(expected.splitlines()),expected)
         time.sleep(.2)
     fd=os.open(query,os.O_RDONLY)
     try:
+        expected=os.read(fd,1<<20);os.lseek(fd,0,0)
         prefix=os.read(fd,17)
         (peer/'snapshot'/'match-new').write_bytes(b'y');time.sleep(5.2)
-        # Evict all legacy result-cache slots while this fd remains open.
-        for i in range(20):contents(d/'.find'/f'absent-{i:03}*')
+        # Fill distinct current query slots while this fd remains open.
+        for i in range(20):contents(query_path(d,f'absent-{i:03}*'))
         rest=b''
         while b:=os.read(fd,31):rest+=b
         assert prefix+rest==expected,(len(prefix+rest),len(expected))
         assert os.fstat(fd).st_size==len(expected)
         os.lseek(fd,0,0);assert os.read(fd,len(expected)+100)==expected
     finally:os.close(fd)
-    assert b'match-new' in contents(query)
+    assert b'match-new' in find_bytes(query)
 def stats():
     d=root/'stats';d.mkdir();(peer/'stats'/'payload').write_bytes(b'x'*4096)
     values=expect_stats(d,imm_files=1,imm_bytes=4096)
     assert int(values['imm_files'])==1,values
     assert int(values['imm_bytes'])==4096,values
 def stats_values(d):
-    return dict(line.split('=',1) for line in contents(d/'.stats').decode().splitlines())
+    return json.loads(contents(d/'.efs/.query/v1.stats'))['stats']
 def expect_stats(d,**want):
     deadline=time.monotonic()+a.freshness_s
     while True:
@@ -64,18 +85,18 @@ def stats_mutations():
     # Pure directory rename must converge even without new payload writes.
     os.rename(sub,pd/'moved')
     expect_stats(d,imm_dirs=1,tree_files=2,tree_bytes=2<<20)
-    matches=contents(d/'.find'/'payload')
+    matches=find_bytes(query_path(d,'payload'))
     assert b'moved/payload' in matches,matches
     os.unlink(pd/'alias');os.unlink(pd/'moved'/'payload');os.rmdir(pd/'moved')
     expect_stats(d,imm_files=0,imm_dirs=0,imm_bytes=0,tree_files=0,tree_dirs=0,tree_bytes=0)
 def invalid():
-    try:contents(root/'.find'/'a*b*c')
+    try:contents(root/'.efs/.query/v1.find.99.61')
     except OSError as e:assert e.errno==errno.EINVAL,e;return
     raise AssertionError('invalid query accepted')
 def permissions():
     d=root/'protected';d.mkdir();(d/'secret-file').write_bytes(b'x');os.chmod(d,0o100)
     try:
-        for q in [d/'.stats',d/'.find'/'secret-*']:
+        for q in [d/'.efs/.query/v1.stats',query_path(d,'secret-*')]:
             try:contents(q)
             except OSError as e:assert e.errno==errno.EACCES,e
             else:raise AssertionError('protected query succeeded: '+str(q))
@@ -83,9 +104,9 @@ def permissions():
 def nested_authorization():
     d=root/'authorization';d.mkdir();secret=d/'hidden';secret.mkdir()
     (secret/'secret-payload').write_bytes(b'classified')
-    query=d/'.find'/'secret-*'
+    query=query_path(d,'secret-*')
     deadline=time.monotonic()+a.freshness_s
-    while b'secret-payload' not in contents(query):
+    while b'secret-payload' not in find_bytes(query):
         assert time.monotonic()<deadline,'index did not converge';time.sleep(.2)
     fd=os.open(query,os.O_RDONLY);expected=os.read(fd,1<<20);os.lseek(fd,0,0)
     os.chmod(secret,0)
@@ -123,40 +144,43 @@ def name_limits():
     d=root/'name-limits';d.mkdir();(d/'line\nbreak').write_bytes(b'x')
     deadline=time.monotonic()+a.freshness_s
     while True:
-        try:contents(d/'.find'/'*line*')
-        except OSError as e:
-            assert e.errno==errno.EILSEQ,e;break
-        assert time.monotonic()<deadline,'newline name silently absent';time.sleep(.2)
+        result=json.loads(contents(query_path(d,'*line*')))
+        if any(bytes.fromhex(e['path_hex'])==b'line\nbreak' for e in result['entries']):break
+        assert time.monotonic()<deadline,'raw newline name absent';time.sleep(.2)
     deep=d/'deep';deep.mkdir();current=deep
     for _ in range(140):current=current/'x';current.mkdir()
     (current/'deep-payload').write_bytes(b'x')
     deadline=time.monotonic()+a.freshness_s
-    while b'deep-payload' not in contents(deep/'.find'/'deep-payload'):
+    while b'deep-payload' not in find_bytes(query_path(deep,'deep-payload')):
         assert time.monotonic()<deadline,'deep indexed query did not converge';time.sleep(.2)
 def fd_capacity():
     d=root/'capacity';d.mkdir(exist_ok=True);(d/'capacity-file').write_bytes(b'x')
-    q=d/'.find'/'capacity-*';expected=contents(q);fds=[];bounded=False
+    q=query_path(d,'capacity-*');expected=contents(q);fds=[];bounded=False
     try:
         for _ in range(80):
-            try:fds.append(os.open(d/'.find'/f'absent-capacity-{_:03}*',os.O_RDONLY))
+            try:fds.append(os.open(query_path(d,f'absent-capacity-{_:03}*'),os.O_RDONLY))
             except OSError as e:
                 assert e.errno==errno.ENOMEM,(len(fds),e)
                 bounded=True;break
         assert bounded and len(fds)>=20,len(fds)
-        for fd in fds:assert os.read(fd,4096)==b''
+        for fd in fds:assert not json.loads(os.read(fd,1<<20))['entries']
     finally:
         for fd in fds:os.close(fd)
-    assert contents(q)==expected
+    assert json.loads(contents(q))['entries']==json.loads(expected)['entries']
 def recovery():
     d=root/'recovery';d.mkdir()
     for i in range(256):
-        q=d/'.find'/f'absent-stat-{i:03}*'
-        assert os.stat(q).st_size==0
+        q=query_path(d,f'absent-stat-{i:03}*')
+        assert os.stat(q).st_size>0
     for i in range(128):
-        assert contents(d/'.find'/f'absent-open-{i:03}*')==b''
+        assert not json.loads(contents(query_path(d,f'absent-open-{i:03}*')))['entries']
     # Exhaust and drain twice, then use a different directory/query version.
     fd_capacity();fd_capacity();fd_capacity_repeat=d/'repeat';fd_capacity_repeat.mkdir()
-    assert contents(fd_capacity_repeat/'.find'/'fresh-*')==b''
-gate('recovery',recovery);gate('snapshot',snapshot);gate('stats',stats);gate('stats_mutations',stats_mutations);gate('invalid',invalid);gate('permissions',permissions);gate('nested_authorization',nested_authorization);gate('name_limits',name_limits);gate('fd_capacity',fd_capacity)
+    assert not json.loads(contents(query_path(fd_capacity_repeat,'fresh-*')))['entries']
+def retired_names():
+    for old in ('.find','.stats'):
+        path=root/old;path.write_bytes(b'ordinary user file')
+        assert contents(path)==b'ordinary user file'
+gate('retired_names',retired_names);gate('recovery',recovery);gate('snapshot',snapshot);gate('stats',stats);gate('stats_mutations',stats_mutations);gate('invalid',invalid);gate('permissions',permissions);gate('nested_authorization',nested_authorization);gate('name_limits',name_limits);gate('fd_capacity',fd_capacity)
 print(json.dumps(dict(root=str(root),results=results)),flush=True)
 raise SystemExit(any(r['status']!='PASS' for r in results))

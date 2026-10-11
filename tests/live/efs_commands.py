@@ -112,7 +112,8 @@ with open_query(query) as held:
     old = held.read()
     os.chmod(other, 0)
     try:
-        denied = command(root, 'stats', '--json', expected=1)
+        denied = command(root, 'stats', '--json', expected=2)
+        assert b'Permission denied' in denied.stderr, denied
         assert not denied.stdout, denied
         held.seek(0)
         assert held.read() == old

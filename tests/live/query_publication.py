@@ -168,6 +168,13 @@ try:
                                    *map(str,mounts),str(work)],env=env,stdout=output,stderr=subprocess.STDOUT,timeout=240)
         assert result.returncode==0,(work/'page-gates.log').read_text()
         print('bounded display, streaming export, pinned generation and permissions PASS',flush=True)
+        if os.environ.get('EFS_QUERY_VIRTUAL')=='1':
+            with (work/'virtual-regression-gates.log').open('w') as output:
+                result=subprocess.run([sys.executable,str(source/'tests/live/virtual_interfaces.py'),
+                                       *map(str,mounts)],env=env,stdout=output,stderr=subprocess.STDOUT,timeout=360)
+            assert result.returncode==0,(work/'virtual-regression-gates.log').read_text()
+            print('current query snapshots, permission, raw names and FD recovery PASS',flush=True)
+
 
 
         if os.environ.get('EFS_QUERY_POSIX')=='1':
@@ -184,11 +191,22 @@ try:
             lost=procs.pop(1);lost.terminate();lost.wait(15)
             marker=mounts[1]/'failover-marker'
             marker.write_bytes(b'leader change payload')
+            recovery_deadline=time.monotonic()+45
             def failover_query():
-                result=subprocess.run([sys.executable,str(mounts[0]/'.efs/find'),
-                                       'failover-marker','--match','exact','--json'],
-                                      env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=20)
-                if result.returncode: return False
+                remaining=recovery_deadline-time.monotonic()
+                if remaining<=0:return False
+                try:
+                    result=subprocess.run([sys.executable,str(mounts[0]/'.efs/find'),
+                                           'failover-marker','--match','exact','--json'],
+                                          env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+                                          timeout=min(35,remaining))
+                except subprocess.TimeoutExpired as error:
+                    with (work/'failover-attempts.log').open('a') as output:
+                        output.write('query attempt timed out within recovery budget: '+repr(error)+'\n')
+                    return False
+                with (work/'failover-attempts.log').open('ab') as output:
+                    output.write(result.stderr)
+                if result.returncode:return False
                 entries=json.loads(result.stdout)['entries']
                 return any(bytes.fromhex(e['path_hex'])==b'failover-marker' for e in entries)
             wait_for(failover_query,45)
@@ -198,6 +216,7 @@ try:
                   '--writers','0',io_flag,'--join',f'127.0.0.1:{base}']
             procs.append(subprocess.Popen(args,env=env,stdout=log,stderr=log))
             wait_for(lambda:'listening' in (work/'n2-rejoin.log').read_text(),20)
+            recovery_deadline=time.monotonic()+30
             wait_for(failover_query,30)
             print('full-group publisher loss, peer query and persisted rejoin PASS',flush=True)
         if os.environ.get('EFS_QUERY_LOAD')=='1':

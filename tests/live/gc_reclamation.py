@@ -248,6 +248,8 @@ def start(prefer_single_host=False):
         root.mkdir(exist_ok=True)
         log=open(work/f'n{i+1}.log','ab');handles.append(log)
         cmd=[a.server_binary or source/'efsd','--node-id',str(i+1),'--addr','127.0.0.1','--port',str(a.port+i),'--storage',root,'--quota',a.fixture_quota or ('16G' if (a.ior_binary or a.gc_bulk_gib) else ('4G' if a.compactor_pressure else '1G')),'--'+('direct-io' if a.mode=='direct' else 'no-direct-io')]
+        if a.fixture_quota == '0':
+            quota_arg = cmd.index('--quota');del cmd[quota_arg:quota_arg+2]
         if a.storage_roots==2:
             first=root/'storage0';second=root/'storage1'
             first.mkdir(exist_ok=True);second.mkdir(exist_ok=True)
@@ -2254,10 +2256,13 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
     peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
     peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
     wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'peer mounted',40)
-    transport_proof([peer])
     fold=mount/'peer-fold';f1=os.open(fold,os.O_CREAT|os.O_EXCL|os.O_RDWR,0o600)
     os.write(f1,b'\0'*(128*1024));os.fsync(f1)
     f2=os.open(peer_mount/'peer-fold',os.O_RDWR)
+    # Mount registration can precede the first verbs connection. Establish
+    # actual peer I/O before checking that RDMA was used, never accept TCP.
+    assert os.pread(f2,16,0)==bytes(16)
+    transport_proof([peer])
     model=bytearray(128*1024)
     fold_states=[]
     if a.fold_audit:fold_states.append(chunk_state(os.fstat(f1).st_ino))

@@ -401,6 +401,7 @@ test: all
 	./tests/test_store_durability
 	./tests/test_put_ticket
 	./tests/test_store_gc
+	./tests/test_store_gc unlimited
 	./tests/test_writer_routing
 	./tests/test_kv_snapshot_tail
 	./tests/test_kv_seg_index
