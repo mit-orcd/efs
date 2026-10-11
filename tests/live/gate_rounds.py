@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import json
 import signal
+import sys
 import shutil
 from pathlib import Path
 import subprocess
@@ -19,6 +20,7 @@ parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--output',type=Path,required=True)
 parser.add_argument('--start',type=int,default=1)
 parser.add_argument('--end',type=int,default=30)
+parser.add_argument('--keep-going',action='store_true',help='record failures and continue independent rounds; final exit remains unsuccessful')
 args=parser.parse_args()
 assert 1<=args.start<=args.end<=30
 args.output.mkdir(parents=True,exist_ok=True)
@@ -62,6 +64,7 @@ rounds=[
  ('Combined direct POSIX/GC/namespace/worker gate',gc('direct','--fold-audit','--memo','--rename-cache','--allocation','--integrity','--workers','--opid','--namespace-boundary','--posix')),
  ('Combined buffered POSIX/GC/namespace/worker gate',gc('buffered','--fold-audit','--memo','--rename-cache','--allocation','--integrity','--workers','--opid','--namespace-boundary','--posix')),
 ]
+failed=False
 for number in range(args.start,args.end+1):
     title,command=rounds[number-1]
     record={'round':number,'title':title,'command':command,'started_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),
@@ -84,4 +87,7 @@ for number in range(args.start,args.end+1):
     record['elapsed_seconds']=time.monotonic()-start
     path.write_text(json.dumps(record,indent=2)+'\n')
     print(f"ROUND {number:02} exit={record['exit_code']} seconds={record['elapsed_seconds']:.1f}",flush=True)
-    if record['exit_code']:raise SystemExit(record['exit_code'])
+    if record['exit_code']:
+        failed=True
+        if not args.keep_going:raise SystemExit(record['exit_code'])
+raise SystemExit(1 if failed else 0)
