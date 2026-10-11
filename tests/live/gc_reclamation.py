@@ -744,6 +744,8 @@ try:
                          a.tiny_sustained_seconds,work/'tiny-sustained.json',a.tiny_sustained_large_mib_s)
         unmount();stop(crash=True);start();mount_client()
         verify_sustained(mount,record['generations'])
+        record.update(cold_verified=True,physical_inventory_empty=False)
+        (work/'tiny-sustained.json').write_text(json.dumps(record,indent=2))
         wait(lambda:drained() and all(not any(path.is_file() for path in
              (root/'data/exports/1').glob('**/*')) for root in data_roots),
              'sustained cold bytes and physical deletion drained',180)
