@@ -297,6 +297,7 @@ test: all
 	./tests/test_put_storage_fence
 	python3 tests/test_storage_fence_members.py
 	python3 tests/test_storage_fence_retry.py
+	python3 tests/test_session_finish_retry.py
 	$(MAKE) tests/test_put_upload_server
 	./tests/test_put_upload_server
 	$(MAKE) tests/test_put_upload_client

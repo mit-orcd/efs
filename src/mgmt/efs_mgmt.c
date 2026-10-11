@@ -1276,10 +1276,11 @@ static int cmd_raft_session_fence(const char *host, uint16_t port,
                                   const uint8_t uuid[EFS_OPID_UUID_LEN])
 {
     uint8_t payload[1 + 26];
-    struct efs_msg_raft_mkfs_reply r;
+    struct efs_msg_raft_mkfs_reply r = {.leader_hint = -1};
     uint32_t ssh, epoch = 0, old_epoch = 0, state = 0, word, i, ntouch = 0;
     uint32_t shards[4096];
     int rc, st;
+    const char *phase = "begin";
 
     ssh = efs_kv_session_shard(uuid);
     memset(payload, 0, sizeof(payload));
@@ -1305,6 +1306,7 @@ static int cmd_raft_session_fence(const char *host, uint16_t port,
     memset(payload,0,sizeof(payload));
     sess_pack_hdr(payload,efs_raft_shard_group(ssh),EFS_MD_SESS_STORAGE_FENCE,uuid);
     wr32be_mgmt(payload+3+EFS_OPID_UUID_LEN,epoch);
+    phase = "storage certificates";
     rc=sess_storage_barrier(host,port,payload,1+22,&r);
     if(rc!=EFS_OK)goto out;
 
@@ -1340,21 +1342,29 @@ static int cmd_raft_session_fence(const char *host, uint16_t port,
                       uuid);
         wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN, epoch);
         wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN + 4, sh);
+        phase = "local fence";
         rc = sess_rpc(host, port, payload, 1 + 26, &r);
         if (rc != EFS_OK)
             goto out;
         memset(payload, 0, sizeof(payload));
         sess_pack_hdr(payload, efs_raft_shard_group(ssh), EFS_MD_SESS_ACK, uuid);
         wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN, sh);
+        phase = "metadata acknowledgement";
         rc = sess_rpc(host, port, payload, 1 + 22, &r);
         if (rc != EFS_OK)
             goto out;
     }
     memset(payload, 0, sizeof(payload));
     sess_pack_hdr(payload, efs_raft_shard_group(ssh), EFS_MD_SESS_FINISH, uuid);
-    rc = sess_rpc(host, port, payload, 1 + 18, &r);
+    /* FINISH also checks every storage certificate. A cold RDMA peer can
+     * return BUSY after the initial seal succeeded. Retry only this pinned
+     * UUID/epoch; never re-BEGIN or infer completion from a metadata quorum. */
+    wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN, epoch);
+    phase = "finish certificate verification";
+    rc = sess_storage_barrier(host, port, payload, 1 + 22, &r);
     if (rc != EFS_OK)
         goto out;
+    phase = "ownership cleanup";
     for (i = 0; i < ntouch; i++) {
         rc=sess_cleanup_bounded(host,port,uuid,old_epoch,shards[i],0,&r);
         if(rc==EFS_OK)rc=sess_cleanup_bounded(host,port,uuid,old_epoch,shards[i],1,&r);
@@ -1376,6 +1386,8 @@ static int cmd_raft_session_fence(const char *host, uint16_t port,
         goto out;
     }
 out:
+    if (rc != EFS_OK)
+        fprintf(stderr, "session fence incomplete: phase=%s epoch=%u rc=%d\n", phase, epoch, rc);
     st = 0;
     if (rc == EFS_ERR_NOT_PRIMARY)
         st = 7;
