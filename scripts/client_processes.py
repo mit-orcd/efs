@@ -21,6 +21,17 @@ def clients(proc=Path('/proc')):
             if fields[0] in ('Z', 'X'):
                 continue
             args = (entry/'cmdline').read_bytes().split(b'\0')
+            # Memcheck keeps its options before the client argv, while comm
+            # may still be efs-fuse. Recognize only the known wrapper and one
+            # exact executable basename; retain refusal for ambiguous input.
+            wrapper = os.path.basename(args[0]) if args else b''
+            if wrapper == b'valgrind' or wrapper.startswith(b'memcheck-'):
+                targets = [i for i, value in enumerate(args[1:], 1)
+                           if os.path.basename(value) == b'efs-fuse']
+                if len(targets) == 1:
+                    args = args[targets[0]:]
+                else:
+                    raise RuntimeError(f'ambiguous memcheck client PID {entry.name}')
             if len(args) > 1 and args[1] in (b'--stop', b'--resume', b'--version', b'--help'):
                 continue
             if len(args) < 4 or args[1].startswith(b'--'):
