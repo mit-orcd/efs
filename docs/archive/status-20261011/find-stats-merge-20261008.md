@@ -1,5 +1,6 @@
 # devel-find-stats merged into devel — Oct 8, 2026
 
+**Archived Oct 11, 2026:** historical checkpoint. Build IDs, process IDs and running-job descriptions below are dated evidence, not current operating instructions. Current work and decisions remain in [the status index](../../status/README.md).
 Requested merge completed as `9ad82cb1`; test integration follow-ups are
 `bcdaa98f` and `23c087fc`. Existing devel append, durability, deadline and clean
 stop fixes remain present. No source changes were made to efs-bench.
@@ -12,7 +13,7 @@ leader-death/replay, peer EOF extension, sync writes, retained dirty-stop
 recovery, active leader shutdown, exact 800-record cold append integrity,
 physical GC/retry/offline-member recovery and zero cold inventory/quota.
 
-[Evidence, hashes and limitations](../../results/measure/20261008-find-stats-merge/README.md).
+[Evidence, hashes and limitations](../../../results/measure/20261008-find-stats-merge/README.md).
 AMD installed service is restored with four daemons/two mounts, direct I/O/TCP;
 its prior binaries/stores were preserved. This is merged-source acceptance in
 private fixtures, not deployment of the merged binaries onto installed stores.

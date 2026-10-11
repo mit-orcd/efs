@@ -2820,7 +2820,7 @@ See [next-five ledger](../status/next-five-gates-20261007.md).
 
 **Evidence/current state:** Existing queue row 0j now has a W identity. Mutation serial/invalidation code exists; historical dates do not establish current targeted rollout acceptance.
 
-**Home:** [current detail](../backlog/work-items.md#0j--the-clients-50-ms-lookup-memo-returns-pre-mutation-stats-queue-row-0j).
+**Home:** [current detail](work-items.md#0j--the-clients-50-ms-lookup-memo-returns-pre-mutation-stats-queue-row-0j).
 
 **Gate:** Follow the original 0j POSIX/Spark du and stale-reply concurrency gates; record the build and current result.
 
@@ -4130,7 +4130,7 @@ calls totaling 7.394 s (mean 7.22 ms). This is one thread's measured syscall
 elapsed time, not a cluster-wide CPU percentage or a per-created-file ratio.
 The trace includes replication/catch-up/background work. See the
 [raw trace](../../results/measure/20261008-nuc-tiny-create/round-7/after/follower-sync.txt)
-and [separate profiles](../../results/measure/20261008-nuc-tiny-create/round-7/after/).
+and [separate profiles](../../results/measure/20261008-nuc-tiny-create/round-7/after).
 
 **Disposition:** The remaining sustained NUC/per-group/read-tail/cold/fault gates are completed in the linked final report. Retain batching, cursor and ACK regressions. W53 end-to-end close tails, W94 CREATE/lease adoption and W97 pressure handling remain separate; process-crash acceptance does not establish hardware power-loss or distributed-RDMA guarantees.
 

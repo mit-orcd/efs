@@ -226,7 +226,7 @@ commits, `w90-*` test/load paths and retained evidence keep their historical
 labels; they refer to this repair, not scratch expiry. Do not overwrite or
 import concurrent main-checkout edits while reconciling documentation.
 
-Latest executable continuation state: [Oct 8 checkpoint](find-stats-checkpoint-20261008.md).
+Latest executable continuation state: [Oct 8 checkpoint](../archive/status-20261011/find-stats-checkpoint-20261008.md).
 
 
 Offline query foundations now exist on this branch: full local KV snapshots
