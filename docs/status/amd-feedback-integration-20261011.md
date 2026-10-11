@@ -68,3 +68,22 @@ The first fault-native invocation passed its code tests but failed documentation
 checks because the source snapshot omitted the new status leaf/generated
 updates. Those files are synchronized and the corrected gate is rerunning;
 the original failure log is retained, not counted as a pass.
+
+## Corrected native and deterministic race gates passed
+
+Corrected full fault-native and normal-native gates pass on AMD. The same
+slow-lane fairness regression fails specifically at its starvation assertion
+against the original production source on AMD Linux, and passes the corrected
+source including Linux async transport coverage. Assertions retain critical
+FIFO and bounded per-class progress without imposing a fixed inter-class order.
+
+A deterministic CREATE-adoption/competing-OPEN barrier test holds the combined
+reply while another opener reaches the actual inode-stripe wait. That opener
+cannot acquire a second lease or descriptor before adoption completes. Both
+then own descriptors under one lease; the first close retains ownership and
+the last close releases it once. The actual helper test passes locally and on
+AMD; it is not a live network-race or distributed-failover claim.
+
+Full direct feedback-enabled lifecycle/POSIX/peer, cold bytes and physical GC
+passes. Buffered and the subsequent real fault/pressure matrix are running;
+normal service feedback remains disabled pending the final verdicts.

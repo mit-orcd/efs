@@ -1544,8 +1544,10 @@ unimplemented; unavailable/refusal tests are not lifecycle acceptance.
 is in progress: actual Linux async and two-mode full lifecycle/POSIX/cold gates
 with feedback on, followed by pressure/recovery and repeated comparisons.
 Slow-lane control/read-probe starvation is reproduced and repaired (`4ff779d0`);
-actual CREATE-owner allocation and slow-follower barrier regressions pass. Live
-acceptance of the corrected scheduler is pending. Normal stores and the completed
+actual CREATE-owner allocation, deterministic adoption/competing-OPEN and
+slow-follower barrier regressions pass. Corrected full native/fault and direct
+live lifecycle gates pass; buffered and subsequent fault/pressure acceptance
+are pending. Normal stores and the completed
 AMD admission closure are retained.
 
 **Scope split — Oct 11:** [W111](../status/w111-nuc-persistence-investigation-20261011.md)

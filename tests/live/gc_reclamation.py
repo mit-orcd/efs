@@ -710,7 +710,7 @@ try:
                 def snapshot(stage):
                     rows=[run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+i}'],capture_output=True,text=True,timeout=10).stdout for i in range(4)]
                     with (work/'replication-pressure.jsonl').open('a') as out:
-                        out.write(json.dumps(dict(stage=stage,seconds=time.monotonic()-began,nodes=rows,slow_node=slow_node))+'\n')
+                        out.write(json.dumps(dict(stage=stage,seconds=time.monotonic()-began,mono_us=int(time.monotonic()*1000000),nodes=rows,slow_node=slow_node))+'\n')
                     return rows
                 try:
                     rows=snapshot('before')
@@ -735,6 +735,7 @@ try:
             if pressure_thread:pressure_thread.join(timeout=45)
         if a.replication_pressure:
             assert not pressure_thread.is_alive() and not pressure_errors,pressure_errors
+            record['load_settled_mono_us']=int(time.monotonic()*1000000)
             # Freeze the actual leader cuts after acknowledged workload settles;
             # each hosted follower must reach those cuts before cold restart.
             def views():
