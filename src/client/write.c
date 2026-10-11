@@ -6196,7 +6196,8 @@ static int dcache_flush_ino_pass(efs_ino_t ino)
 
 int efs_dcache_flush_ino(efs_ino_t ino)
 {
-    int rc = dcache_flush_ino_pass(ino);
+    int rc=efs_client_pack_flush(ino);if(rc)return rc;
+    rc = dcache_flush_ino_pass(ino);
     int w;
 
     if (rc != EFS_OK)
@@ -6221,6 +6222,7 @@ int efs_dcache_flush_ino(efs_ino_t ino)
  * after REPORT releases this page. Mutations are already quiesced. */
 int efs_dcache_drain_pending(void)
 {
+    int pack_rc=efs_client_pack_drain();if(pack_rc)return pack_rc;
     efs_ino_t inodes[64];unsigned count=0;
     dcache_ensure();
     for(uint32_t slot=0;slot<DCACHE_SLOTS && count<64;++slot) {
@@ -6244,6 +6246,7 @@ int efs_dcache_drain_pending(void)
 
 int efs_dcache_flush_all(void)
 {
+    int pack_rc=efs_client_pack_drain();if(pack_rc)return pack_rc;
     return dcache_flush_all_slots();
 }
 
@@ -7576,4 +7579,26 @@ static int write_chunks_no_replicate(efs_ino_t ino, uint64_t offset, size_t size
     efs_client_unlock_dir(ino);
 
     return EFS_OK;
+}
+
+void efs_dcache_note_packed_size(efs_ino_t ino,uint64_t size)
+{dcache_note_size(ino,size);}
+/* Only a private pre-accept candidate with no storage/admission send may be
+ * abandoned here. The mounted scheduler serializes this inode and never calls
+ * this helper for an application-accepted or uncertain publication. */
+int efs_dcache_abort_pack_admission(efs_ino_t ino,uint64_t generation)
+{
+    dcache_ensure();uint32_t slot=dcache_slot(ino,0);
+    pthread_mutex_lock(dcache_mu(slot));struct dcache_ent *e=dcache_find_meta(slot,ino,0);
+    int rc=EFS_ERR_STALE;
+    if(e && e->writer && e->writer->ranges.generation==generation && !e->writer->publication_ready) {
+        e->writer->has_publication=0;e->writer->ranges.bytes.count=0;
+        e->writer->after_publication.count=0;
+        efs_writer_state_free(e->writer);e->writer=NULL;
+        if(e->dirty)dcache_note_dirty_bytes(-(int64_t)e->len);
+        dcache_dirty_unlink(e,slot);e->dirty=0;dcache_pin_release(e);
+        if(e->data)efs_buf_free(e->data,e->len);
+        e->data=NULL;e->len=0;e->have_base=0;e->nrange=0;rc=EFS_OK;
+    }
+    pthread_mutex_unlock(dcache_mu(slot));return rc;
 }

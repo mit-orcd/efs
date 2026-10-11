@@ -194,6 +194,8 @@ enum efs_msg_type {
     EFS_MSG_GETCHUNKS_PACKED_REPLY = 136,
     EFS_MSG_GC_PACKED = 137,
     EFS_MSG_GC_PACKED_REPLY = 138,
+    EFS_MSG_PACK_CAPABILITIES = 139,
+    EFS_MSG_PACK_CAPABILITIES_REPLY = 140,
 };
 
 /* Storage session seal/check. Reply echoes the exact identity and floor.

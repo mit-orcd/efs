@@ -3,7 +3,7 @@
 #include "efs/erasure.h"
 
 /* Staged W95 immutable packed object format. Callers must establish durable
- * authority/ownership separately. No current mounted write path selects it.
+ * authority/ownership separately. Mounted writes require explicit opt-in.
  * All integers on disk are big-endian; no native struct is persisted. */
 #define EFS_PACK_VERSION 1u
 #define EFS_PACK_HEADER_BYTES 96u

@@ -19,6 +19,8 @@ typedef uint64_t efs_ino_t;
 struct dcache_ent {efs_ino_t ino;int dirty;void *data;struct dcache_ent *next;};
 static struct {struct dcache_ent e[DCACHE_SLOTS];} g_dcache;
 static struct dcache_ent entries[75];static pthread_mutex_t mutex[DCACHE_SLOTS];
+static int pack_rc;
+static int efs_client_pack_drain(void) {return pack_rc;}
 static unsigned calls,seen[100],expire_after;static efs_ino_t fail_ino;
 static void dcache_ensure(void) {}
 static pthread_mutex_t *dcache_mu(unsigned s) {return &mutex[s];}
@@ -35,7 +37,7 @@ static int efs_dcache_flush_ino(efs_ino_t ino) {
 }
 '''+function+r'''
 static void setup(void) {
- calls=0;fail_ino=0;expire_after=0;
+ calls=0;fail_ino=0;expire_after=0;pack_rc=0;
  for(unsigned i=0;i<100;++i)seen[i]=0;
  for(unsigned s=0;s<DCACHE_SLOTS;++s)g_dcache.e[s]=(struct dcache_ent){0};
  for(unsigned i=0;i<75;++i) {
@@ -50,7 +52,9 @@ static void setup(void) {
 }
 int main(void) {
  for(unsigned s=0;s<DCACHE_SLOTS;++s)assert(!pthread_mutex_init(&mutex[s],NULL));
- setup();assert(efs_dcache_drain_pending()==EFS_OK && calls==64);
+ setup();pack_rc=EFS_ERR_BUSY;assert(efs_dcache_drain_pending()==EFS_ERR_BUSY && !calls);
+ pack_rc=EFS_ERR_IO;assert(efs_dcache_drain_pending()==EFS_ERR_IO && !calls);
+ pack_rc=0;assert(efs_dcache_drain_pending()==EFS_OK && calls==64);
  assert(efs_dcache_drain_pending()==EFS_OK && calls==71);
  for(unsigned i=1;i<=71;++i)assert(seen[i]==1);
  assert(efs_dcache_drain_pending()==EFS_OK && calls==71);

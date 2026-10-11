@@ -102,7 +102,7 @@ COMMON_SRCS = src/common/admission.c src/meta/append_plan.c $(COMMON_DIR)/public
               src/client/ops.c \
               src/client/read.c \
               src/client/write.c \
-              src/client/bufpool.c src/client/writer_state.c src/client/publication_ack_owner.c src/client/publication_writeback.c src/client/put_ticket_owner.c src/client/put_upload.c \
+              src/client/bufpool.c src/client/writer_state.c src/client/publication_ack_owner.c src/client/publication_writeback.c src/client/pack_write.c src/client/put_ticket_owner.c src/client/put_upload.c \
               src/client/inode_rpc.c \
               src/client/stage_evict.c \
               src/client/node_cache.c
@@ -489,6 +489,9 @@ test: all
 	./tests/test_packed_reader
 	python3 tests/test_packed_read_budget.py
 	python3 tests/test_packed_gc.py
+	python3 tests/test_mounted_pack_retry.py
+	python3 tests/test_mounted_pack_admission.py
+	python3 tests/test_mounted_pack_capability.py
 	./tests/test_pack_mapping
 	./tests/test_packed_store
 	./tests/test_pack_ledger

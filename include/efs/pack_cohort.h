@@ -5,7 +5,7 @@
  * storage, accounts sizeof(*cohort) against its memory budget BEFORE accepting
  * bytes, and pins each captured writer snapshot until terminal reconciliation.
  * No allocation, background thread, network ACK or cache ownership transfer is
- * hidden here. The mounted writer has not yet selected this path. */
+ * hidden here. The mounted writer selects it only with EFS_PACKED_WRITES=1. */
 #define EFS_PACK_COHORT_RECORDS 128u
 struct efs_pack_cohort {
     uint32_t group, limit, count, payload_bytes;

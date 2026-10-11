@@ -400,6 +400,11 @@ send_reply:
             }
             break;
         }
+        case EFS_MSG_PACK_CAPABILITIES: {
+            uint8_t reply[4];efs_put_upload_wr32(reply,
+                !payload_len && !g_server->storage_engine && server_raft_host_active()?1:0);
+            efs_conn_send_msg(conn,EFS_MSG_PACK_CAPABILITIES_REPLY,reply,sizeof(reply));break;
+        }
         case EFS_MSG_GC_PACKED: {
             uint8_t reply[4];int rc=server_packed_gc(g_server,payload,payload_len);
             efs_put_upload_wr32(reply,(uint32_t)rc);

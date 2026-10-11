@@ -8177,6 +8177,8 @@ static void host_snap_import_pass(struct efs_raft_host *h)
     }
 }
 
+#include "packed_gc.h"
+
 static int host_gc_backlog_config(const char *value, unsigned *ms)
 {
     *ms = GC_LOOP_MS;
@@ -8200,7 +8202,6 @@ static unsigned host_gc_backlog_idle(unsigned configured, int capped,
     return capped && removed_after > removed_before ? configured : GC_LOOP_MS;
 }
 
-#include "packed_gc.h"
 
 static void *host_gc_thread(void *arg)
 {
