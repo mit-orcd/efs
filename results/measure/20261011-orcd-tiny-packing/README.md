@@ -35,3 +35,9 @@ exercise every 8 KiB geometry through 128 KiB, 1/17/512-byte and half-boundary
 payloads, every missing fragment, zero padding, invalid geometry and ordinary
 chunk isolation. The existing erasure regression also passes under sanitizers.
 No production-packed file or throughput improvement is claimed.
+
+The user subsequently authorized ORCD source transfer and testing. The private
+Linux codec gate passed on fcstor006 under UID 246111; see
+[raw gate](linux-codec-gate.txt). The actual audit tool independently confirmed
+all mapped backing files; [JSON](fragment-audits.json) includes timestamps,
+paths, device/inode identities, sizes, allocation and completeness checks.

@@ -1,0 +1,71 @@
+[
+  {
+    "complete": true,
+    "errors": [],
+    "expected_bytes": 69632,
+    "host": "fcstor006",
+    "mapping": {
+      "chunk": 0,
+      "export": 1,
+      "fragment": 0,
+      "generation": 3379240209574875210,
+      "inode": 20650
+    },
+    "matches": [
+      {
+        "allocated_bytes": 69632,
+        "backing_inode": 7517594124,
+        "device": 66306,
+        "path": "/data1/01/efs-orcd-test-erbmi1/data/exports/1/0000/0000/0000/0002/0650/0/0.0.3379240209574875210",
+        "size": 69632
+      }
+    ],
+    "timestamp_ns": 1791695165405041667
+  },
+  {
+    "complete": true,
+    "errors": [],
+    "expected_bytes": 69632,
+    "host": "fcstor003",
+    "mapping": {
+      "chunk": 0,
+      "export": 1,
+      "fragment": 1,
+      "generation": 3379240209574875210,
+      "inode": 20650
+    },
+    "matches": [
+      {
+        "allocated_bytes": 69632,
+        "backing_inode": 1447285,
+        "device": 66306,
+        "path": "/data1/01/efs-orcd-test-erbmi1/data/exports/1/0000/0000/0000/0002/0650/0/0.1.3379240209574875210",
+        "size": 69632
+      }
+    ],
+    "timestamp_ns": 1791695167493533943
+  },
+  {
+    "complete": true,
+    "errors": [],
+    "expected_bytes": 69632,
+    "host": "fcstor004",
+    "mapping": {
+      "chunk": 0,
+      "export": 1,
+      "fragment": 2,
+      "generation": 3379240209574875210,
+      "inode": 20650
+    },
+    "matches": [
+      {
+        "allocated_bytes": 69632,
+        "backing_inode": 1075241803,
+        "device": 66316,
+        "path": "/data1/05/efs-orcd-test-erbmi1/data/exports/1/0000/0000/0000/0002/0650/0/0.2.3379240209574875210",
+        "size": 69632
+      }
+    ],
+    "timestamp_ns": 1791695169527719386
+  }
+]

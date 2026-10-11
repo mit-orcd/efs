@@ -48,7 +48,7 @@ BLAKE3_ARCH_SRCS =
 endif
 
 COMMON_SRCS = src/common/admission.c src/meta/append_plan.c $(COMMON_DIR)/publication.c $(COMMON_DIR)/publication_ack.c \
-              $(COMMON_DIR)/common.c \
+              $(COMMON_DIR)/common.c $(COMMON_DIR)/packed_segment.c \
               $(COMMON_DIR)/log_ts.c \
               $(COMMON_DIR)/batch_obs.c \
               $(COMMON_DIR)/version.c \
@@ -101,10 +101,10 @@ COMMON_OBJS = $(COMMON_SRCS:.c=.o)
 LIB = libefs.a
 
 TEST_SRCS = tests/test_query_policy.c tests/test_query_refresh.c tests/test_txn_resolve_faults.c tests/test_namespace_session.c tests/test_admission.c tests/test_store_containers.c tests/test_principles_index_fault.c tests/test_principles_index.c tests/test_query_catalog.c tests/test_name_index.c tests/test_append_transaction.c tests/test_store_durability.c tests/test_append_receipt.c tests/test_put_ticket.c tests/test_store_gc.c tests/test_bench_latency.c tests/test_store_overwrite.c tests/test_writer_routing.c tests/test_kv_snapshot_tail.c tests/test_kv_seg_index.c tests/test_mtime_barrier.c tests/test_publication_session.c tests/test_publication_ack.c tests/test_publication_recovery.c tests/test_lane_bootstrap_recovery.c tests/test_fence_view.c tests/test_reply_buffers.c tests/test_bufpool.c tests/test_erasure.c tests/test_placement.c tests/test_rdma_xprt.c tests/test_wire.c tests/test_data.c tests/test_kv.c tests/test_kv_lsm.c tests/test_raft_store.c tests/test_meta_apply.c tests/test_raft.c tests/test_sim.c tests/test_txn.c tests/test_session.c tests/test_lock.c tests/test_stage_evict.c tests/test_conn_fd.c tests/test_query_disk.c tests/test_query_disk_io.c
-TEST_SRCS += tests/test_small_segment.c
+TEST_SRCS += tests/test_small_segment.c tests/test_packed_segment.c
 TEST_BINS = tests/test_query_policy tests/test_query_refresh tests/test_txn_resolve_faults tests/test_namespace_session tests/test_admission tests/test_store_containers tests/test_principles_index_fault tests/test_principles_index tests/test_query_catalog tests/test_name_index tests/test_append_transaction tests/test_store_durability tests/test_append_receipt tests/test_put_ticket tests/test_store_gc tests/test_bench_latency tests/test_store_overwrite tests/test_writer_routing tests/test_kv_snapshot_tail tests/test_kv_seg_index tests/test_mtime_barrier tests/test_publication_session tests/test_publication_ack tests/test_publication_recovery tests/test_lane_bootstrap_recovery tests/test_fence_view tests/test_reply_buffers tests/test_bufpool tests/test_erasure tests/test_placement tests/test_rdma_xprt tests/test_wire tests/test_data tests/test_kv tests/test_kv_lsm tests/test_raft_store tests/test_meta_apply tests/test_raft tests/test_sim tests/test_txn tests/test_session tests/test_lock tests/test_stage_evict tests/test_conn_fd tests/test_query_disk tests/test_query_disk_io
 
-TEST_BINS += tests/test_small_segment
+TEST_BINS += tests/test_small_segment tests/test_packed_segment
 
 SERVER_SRCS = src/server/put_fence.c src/server/put_upload.c src/server/efsd.c src/server/store.c src/server/store_nvme.c src/server/store_containers.c \
               src/server/handler.c \
@@ -442,6 +442,7 @@ test: all
 	./tests/test_session
 	./tests/test_erasure
 	./tests/test_small_segment
+	./tests/test_packed_segment
 	./tests/test_placement
 	./tests/test_lock
 	./tests/test_stage_evict
@@ -655,3 +656,7 @@ src/meta/query_catalog.o src/meta/query_disk.o tests/test_query_disk_io: src/met
 
 tests/test_small_segment: tests/test_small_segment.c src/data/erasure.c include/efs/erasure.h
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ tests/test_small_segment.c src/data/erasure.c
+
+src/common/packed_segment.o: include/efs/packed_segment.h include/efs/erasure.h
+tests/test_packed_segment: tests/test_packed_segment.c $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS)

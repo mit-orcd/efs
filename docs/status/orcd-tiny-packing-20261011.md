@@ -79,10 +79,11 @@ those fields would omit durable publication and shared-object reclamation.
 
 ## Expected geometry, not a performance result
 
-For an illustrative record header of 64 bytes and pack header of 64 bytes,
+For the staged format's 72-byte record entry, 96-byte pack header and
+32-byte body digest,
 round each data fragment up to 4 KiB, then add one 4 KiB checksum tail to each
 of three fragments. The table excludes metadata, index/WAL writes and garbage;
-header sizes and exact encoding are design inputs, not an adopted wire format.
+this is a staged packed-object format, not an activated production wire format.
 
 | 512-byte files per pack | Application bytes | Stored fragment bytes | Ratio | Reduction versus separate fragments |
 | ---: | ---: | ---: | ---: | ---: |
@@ -156,9 +157,25 @@ wrong-sized or nonregular fragment files fail the audit; missing files are never
 reported as zero allocation. Its path/bounds/failure regressions pass locally.
 Both tests are registered in `make test`.
 
-A private Linux codec test on fcstor006 was prepared, with no daemon switch or
-benchmark interruption. Automatic approval review rejected sending the source
-files to that host, requiring explicit authorization for the transfer. No source
-transfer or Linux codec result is claimed; the local checks and read-only live
-allocation baseline are complete. Production deployment and matched A/B remain
-pending the format, publication and GC work above and coordinated cluster access.
+The user explicitly authorized ORCD source transfer/build/test/deployment and
+continued ownership. The private Linux codec tests then passed on fcstor006
+under UID 246111. The audit tool independently confirms all three exact physical
+fragments. [Linux gate](../../results/measure/20261011-orcd-tiny-packing/linux-codec-gate.txt)
+and [timestamped allocation audits](../../results/measure/20261011-orcd-tiny-packing/fragment-audits.json).
+No daemon switch or benchmark interruption occurred for those gates.
+
+The next code step introduces a bounded immutable packed-object format with
+big-endian fields, inode identity/generation, content epoch, record generation,
+segment identity/generation, publication group, geometry and per-record digests.
+Header and body checksums cover identities and ranges; padding must be zero.
+A reader matches the authoritative reference before returning bytes. Unknown
+versions, duplicated records, corrupt bodies, noncanonical ranges and stale
+references fail closed. References have a canonical 96-byte encoding, intended
+for a separately versioned metadata record; no native structs are persisted.
+Local ASan/UBSan gates recover every member through every missing EC fragment,
+cover 1/17/512/4096-byte payloads, bounded maximum record count, corrupt checksums
+and structures, reference mismatches and atomic rejection on capacity failure.
+
+Durable Raft publication/ownership, real GETCHUNKS/client selection, upload
+receipts, shared-object GC and matched A/B remain open. Codec/format unit gates
+must not be described as production packing or a throughput gain.
