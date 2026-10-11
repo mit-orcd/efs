@@ -304,6 +304,7 @@ docs-check:
 	python3 docs/check-architecture.py
 
 test: all
+	python3 tests/faults/test_create_retry_fault.py
 	$(MAKE) tests/test_put_storage_fence
 	./tests/test_put_storage_fence
 	python3 tests/test_storage_fence_members.py
