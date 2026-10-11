@@ -11749,7 +11749,7 @@ static const struct efs_meta_append_ops host_append_ops={
 /* Reservations keep their floor and inode guards synchronous and ordered.
  * The remaining exact images can share Raft durability cohorts. No decision
  * precedes the existing term/index-matched result check for EVERY proposal.
- * Completion/pruning continue using the synchronous callbacks above. */
+ * REPORT completion uses the same ordered guards; pruning stays synchronous. */
 struct host_append_reserve_ctx {
     struct host_resize_ctx base;
     struct host_idx_ref refs[EFS_META_LANES+5];
@@ -15045,7 +15045,7 @@ static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
 {
     uint64_t offs[64], lens[64];
     uint32_t n = 64, i;
-    struct host_resize_ctx ctx={h,hint};struct efs_txid t;
+    struct efs_txid t;
     int rc,authoritative=0;
 
     /* append_open caps at 64. A 400-record O_APPEND burst is 400 OPEN
@@ -15072,12 +15072,17 @@ static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
                  * Recollect OPEN ranges from the current complete view. */
                 break;
             }
+            /* Freeze owner (when present) and inode before pipelining the
+             * exact cursor/reservation/lane images. The shared callback checks
+             * every applied verdict before committing the transaction. */
+            struct host_append_reserve_ctx batch={.base={h,hint},
+                                                   .leading=session?2:1};
             fill_txid(h,&t);
             rc = session ?
                 efs_meta_finish_append_owned(h->kv, ino, offs[i], EFS_META_APPEND_COMPLETED,
-                                             session, &t, &host_append_ops, &ctx) :
+                                             session, &t, &host_append_reserve_ops, &batch) :
                 efs_meta_finish_append(h->kv, ino, offs[i], EFS_META_APPEND_COMPLETED,
-                                       &t, &host_append_ops, &ctx);
+                                       &t, &host_append_reserve_ops, &batch);
             if(rc!=EFS_OK)return rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
             did++;
         }
