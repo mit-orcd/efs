@@ -379,3 +379,30 @@ removed files / 80,189,664 file bytes since service start, with pending work and
 All four Mac nodes have matching query source and binary hashes. Every running
 server and both gateway FUSE executables match the installed binary byte for
 byte. Build identities and raw counter observations are retained with evidence.
+
+
+### Final deadline checkpoint
+
+The two-hour authorization ended at 14:52:50 UTC. No new implementation or
+tests were started by the later heartbeat. The heartbeat is disabled.
+
+The persistent cluster result for the latest peer run records **all 67 cases
+PASS**, including all 800 concurrent append records. It has no final summary
+or captured successful process/teardown exit, so this is case-level acceptance,
+not a confirmed clean full-suite completion. The earlier independent peer run
+has a complete 67/67 summary and verified normal mount drain. Latest native
+acceptance remains 137/216 PASS, 16 FAIL and 63 NOTRUN. Full unchanged unit
+acceptance passed with installed-service interference removed.
+
+At the later heartbeat, /private/tmp checkouts and raw local test output were
+missing. Commits and the persistent cluster case results survived. Tart reports
+all four Mac VMs stopped; gateway SSH times out. Current mount health and
+teardown cannot be verified, and no VM was restarted after the deadline.
+The last verified running deployment was a39edfa2, buffered/TCP, with matching
+source/binary hashes and running executables. All implementation and earlier
+evidence commits remain on devel-mac. No other cluster, push or merge was used.
+
+Remaining blockers: retained orphan directory 4091 prevents query publication;
+native ReadIndex/durability latency still causes deadline failures; the dirty-
+directory fallback bound remains. Mac evidence does not close ORCD hardware
+IB/RDMA or representative million-row liveness gates.
