@@ -209,6 +209,10 @@ records latency controls, the rejected credit-order experiment and independent
 functional recovery fixes. That early-credit experiment is not promoted; W97 remains open. W93
 subsequently closes through the final recovery and sustained acceptance above.
 
+[W94/W97 AMD unpaced admission follow-up](amd-overload-admission-20261011.md)
+records the isolated reproduction and proposed opt-in data-pressure gate;
+implementation and acceptance are pending.
+
 [W94/W97 AMD sustained mixed-load follow-up](amd-sustained-20261011.md) retains
 an unpaced private-quota failure, successful quiescent GC progress and an
 intentionally interrupted 300-second bounded baseline. Progress-conditioned GC scheduling
