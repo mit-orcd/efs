@@ -378,6 +378,7 @@ test: all
 	python3 tests/test_client_memory.py
 	python3 tests/test_rollup_allocation_failure.py
 	python3 tests/test_rollup_budget.py
+	python3 tests/test_recorder_stop.py
 	python3 tests/test_publication_writeback.py
 	python3 tests/test_lane_bootstrap_export.py
 	./tests/test_wire
@@ -501,6 +502,7 @@ test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	python3 tests/test_client_memory.py
 	python3 tests/test_rollup_allocation_failure.py
 	python3 tests/test_rollup_budget.py
+	python3 tests/test_recorder_stop.py
 	python3 tests/test_publication_writeback.py
 	python3 tests/test_lane_bootstrap_export.py
 

@@ -22,6 +22,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include "../common/recorder_stop.h"
 #include <time.h>
 #include <unistd.h>
 
@@ -202,17 +203,7 @@ static pid_t start_perf_recorder(pid_t target, const char *perf_path)
 
 static void stop_perf_recorder(void)
 {
-    if (g_perf_pid > 0) {
-        kill(g_perf_pid, SIGTERM);
-        for (int i = 0; i < 50; i++) {
-            if (waitpid(g_perf_pid, NULL, WNOHANG) == g_perf_pid)
-                break;
-            usleep(100000);
-        }
-        kill(g_perf_pid, SIGKILL);
-        waitpid(g_perf_pid, NULL, 0);
-        g_perf_pid = -1;
-    }
+    efs_stop_recorder(&g_perf_pid);
 }
 
 /* These optional probes must not silently discard a shell failure. */
