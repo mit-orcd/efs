@@ -6,12 +6,14 @@ from nuc_disk_windows import windows
 p=argparse.ArgumentParser(description=__doc__);p.add_argument('root',type=Path);a=p.parse_args();rows=[]
 for i,drive in enumerate(('nvme','sata','sata','nvme')):
     name=f'written-{i}-{drive}';folder=a.root/name
+    if not folder.exists():
+        name=f'{a.root.name}-{i}-{drive}';folder=a.root/name
     assert (a.root/(name+'-exit.txt')).read_text().strip()=='0'
     data=json.loads((folder/'final.json').read_text());assert data['verified'] and data['mode']=='written-ring'
     first=[];last=[]
     for writer in range(3):
         intervals=[json.loads(s) for s in (folder/f'writer{writer}.jsonl').read_text().splitlines()]
-        assert len(intervals)>=14;first.append(intervals[0]);last.append(intervals[-1])
+        assert len(intervals)>=max(1,data['seconds']//30-2);first.append(intervals[0]);last.append(intervals[-1])
     hosts=[json.loads(s) for s in (folder/'host.jsonl').read_text().splitlines()]
     row=dict(name=name,drive=drive,mean_operations_s=data['total_operations_s'],
              first_operations_s=sum(w['operations_s'] for w in first),late_operations_s=sum(w['operations_s'] for w in last),
