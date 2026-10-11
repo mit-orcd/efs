@@ -2110,6 +2110,11 @@ full Linux/staged-build gates pass, but concurrent mounted POSIX acceptance stil
 fails on timeouts and matched performance/allocation comparisons remain pending.
 Packing is not yet release accepted.
 
+AMD release update: [seven-client packed GC backlog](../status/v030-pre-alpha-release.md#amd-seven-client-packed-gc-backlog-oct-11)
+records both-mode POSIX/cold-byte passes and the physical reclamation timeout.
+The bounded scheduler fix has focused regression coverage; merged live acceptance
+is pending. W95 remains open. Nothing is tagged or pushed.
+
 
 ## Appendix 2 — In flight — the current handoff block
 

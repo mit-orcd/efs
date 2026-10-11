@@ -1,0 +1,11 @@
+2026-10-11T22:43:53.775Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-11T22:42:08Z on amd-395), build=f1c322e1-release-normal: starting export=default mount=/data1/efs/release-v030-results-20261011-f1c322e1/mounted/direct/gc-direct-qzf0b6b6/pack-client-2
+2026-10-11T22:43:53.775Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-11T22:43:53.775Z   node id=1 127.0.0.1:24210
+2026-10-11T22:43:53.775Z   node id=2 127.0.0.1:24211
+2026-10-11T22:43:53.775Z   node id=3 127.0.0.1:24212
+2026-10-11T22:43:53.775Z   node id=4 127.0.0.1:24213
+2026-10-11T22:43:53.775Z fetching metadata...
+2026-10-11T22:43:53.775Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T22:43:53.775Z export id=1 name=default
+2026-10-11T22:43:53.775Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+fusermount3: mount failed: Permission denied
