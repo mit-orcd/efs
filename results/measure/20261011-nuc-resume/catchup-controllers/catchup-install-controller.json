@@ -1,10 +1,10 @@
 {
-  "pid": 109759,
+  "pid": 117544,
   "command": [
     "python3",
     "/data1/efs/devel-nuc-20261011/nuc_catchup_install_20261011.py"
   ],
-  "script_sha256": "640fc3f2345ad02db24060aaa06d2ffc1f9bc74437efd13f26b42ab3e36f6f0c",
-  "started_utc": "2026-10-11T21:29:48Z",
+  "script_sha256": "2910b38a3611d1343ce11dadde09085b38c70b7362668ae5f320b30119e72d7c",
+  "started_utc": "2026-10-11T22:03:24Z",
   "scope": "Prerequisite-gated; normal drain, preserved stores"
 }
