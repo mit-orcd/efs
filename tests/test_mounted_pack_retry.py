@@ -4,13 +4,16 @@ from pathlib import Path
 import os, shlex, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/client/pack_write.c').read_text()
-code=s[:s.index('static uint64_t pack_now(')]+r'''
+code=s[:s.index('static uint64_t pack_now(')].replace('static int pack_batch_peer_unsupported(void);\n','')+r'''
 #include <assert.h>
 #include <stdio.h>
 #include <errno.h>
 #include "efs/publication_ack.h"
 #include "efs/erasure.h"
 struct efs_client g_client;
+/* This gate drives scalar retry ownership. The actual compatibility helper
+ * and both batch downgrade paths are exercised by their dedicated gates. */
+static int pack_batch_peer_unsupported(void){return 0;}
 static unsigned sends[3],publications[2],loads[2],retirements[2],released;
 static unsigned commands,upload_retired,retire_inflight,retire_peak;
 static int admit_fail,put_fail,publication_fail,load_fail,retire_fail,upload_fail;

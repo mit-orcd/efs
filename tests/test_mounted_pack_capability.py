@@ -3,7 +3,7 @@
 from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/client/pack_write.c').read_text()
-code=s[:s.index('static uint64_t pack_now(')]+r'''
+code=s[:s.index('static uint64_t pack_now(')].replace('static int pack_batch_peer_unsupported(void);\n','')+r'''
 #include <assert.h>
 #include <stdio.h>
 struct efs_client g_client;
@@ -30,6 +30,11 @@ int main(void){
  now+=PACK_CAPABILITY_NS;legacy=0;mixed=1;g_client.node_count=4;
  assert(!pack_capabilities(&members)&&probes==31&&!pack_capability_batch);
  now+=PACK_CAPABILITY_NS;mixed=0;assert(!pack_capabilities(&members)&&probes==35&&pack_capability_batch);
+ assert(!pack_batch_peer_unsupported() && probes==39 && pack_capability_batch);
+ network_fail=1;assert(!pack_batch_peer_unsupported() && probes==40);network_fail=0;
+ legacy=1;assert(pack_batch_peer_unsupported() && probes==48 && !pack_capability_batch);
+ network_fail=1;assert(!pack_batch_peer_unsupported() && probes==49 && !pack_capability_batch);
+ network_fail=0;legacy=0;assert(!pack_batch_peer_unsupported() && probes==53 && pack_capability_batch);
  puts("mounted pack compatibility: exact roster, bounded positive cache, expiry/backward clock, mixed-version/network refusal and no negative caching PASS");
 }
 '''

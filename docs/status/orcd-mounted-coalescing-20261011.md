@@ -776,3 +776,14 @@ the general adapter is now behind the atomic selector. The assertion now
 follows that wrapper and verifies both selection and unchanged ordered guard
 configuration. This test-only correction passes locally; a complete native
 rerun is still required and this interrupted run is retained as failed.
+
+
+The review fallback adds a forward declaration outside the scalar fixture's
+extracted functions. Dedicated admission and fanout extracts omit that unrelated
+declaration; the scalar retry fixture supplies a non-downgrading boundary double.
+The capability fixture executes the actual fresh helper and proves modern,
+failed probe, confirmed older peer, failed probe after an older result, and
+modern recovery. All four corrected fixtures pass against the Linux library
+with their existing warning checks. Batch ownership continues to use the actual
+helper in its separate fault gate. No production behavior changed in these
+fixture corrections. Full native acceptance remains pending.
