@@ -182,6 +182,13 @@ int efs_meta_finish_append_owned(struct efs_kv *, efs_ino_t, uint64_t offset,
     int outcome, const struct efs_opid *, const struct efs_txid *,
     const struct efs_meta_append_ops *, void *ctx);
 
+/* Single-shard completion only. Eligibility collects every EOF dependency;
+ * serialized apply rechecks the domain, session floor, generation and guards.
+ * Cross-shard changes return BUSY with no effect and use normal transactions. */
+int efs_meta_append_completion_atomic_eligible(struct efs_kv *, efs_ino_t, uint64_t);
+int efs_meta_apply_append_complete_atomic(struct efs_kv *, efs_ino_t, uint64_t generation,
+    uint64_t offset, const struct efs_opid *, uint64_t content_epoch, const uint8_t reservation[48]);
+
 /* Internal recording adapter: reads only, emits bounded replacement images
  * to a collector. Materialized KV mutation requires coordinated PREPARE. */
 int efs_meta_collect_append_completion(struct efs_kv *kv, efs_ino_t ino,

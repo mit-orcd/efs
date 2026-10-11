@@ -8,6 +8,7 @@ c=s.index('struct host_append_batch {');d=s.index('static int host_append_transa
 code=r'''
 #include "efs/raft.h"
 #include "efs/meta_apply.h"
+#include "efs/meta_cmd.h"
 #include "efs/session.h"
 #include <assert.h>
 #include <pthread.h>
@@ -19,14 +20,17 @@ struct host_idx_ref {uint8_t group;uint64_t idx,term;};
 struct host_resize_ctx {struct efs_raft_host *host;int *hint;};
 static unsigned submitted,holds,waited,commits,aborts,resolves,prepared;
 static int sync_rc,wait_rc,commit_rc,abort_rc,pack_rc,execute_rc,first_prepare_rc,reopen;
-static unsigned first_prepared;
+static unsigned first_prepared,atomic_calls;
+static int atomic_eligible,atomic_propose_rc,atomic_wait_rc;
 static struct efs_raft *group_raft(struct efs_raft_host *h,uint8_t g){(void)g;return &h->r;}
 int efs_raft_role(const struct efs_raft *r){return r->role;}
 uint32_t efs_raft_voters(const struct efs_raft *r){(void)r;return 7;}
 static int efs_raft_disk_sync_depth(struct efs_raft_disk *d){return d->depth;}
 static int efs_raft_disk_sync_hold(struct efs_raft_disk *d){d->depth++;holds++;return 0;}
 static int host_propose_mode(struct efs_raft_host*h,uint8_t g,const uint8_t*p,uint32_t n,uint64_t*i,uint64_t*t,int*hint,int local){
- (void)h;(void)g;(void)hint;(void)local;assert(n==1 && p[0]==submitted);*i=++submitted;*t=3;return 0;}
+ (void)h;(void)g;(void)hint;
+ if(n==EFS_MD_APPEND_COMPLETE_ATOMIC_LEN && p[0]==EFS_MD_CMD_APPEND_COMPLETE_ATOMIC){assert(local && p[8]==42 && p[16]==9 && p[24]==8 && p[44]==7);atomic_calls++;*i=123;*t=3;return atomic_propose_rc;}
+ assert(n==1 && p[0]==submitted);*i=++submitted;*t=3;return 0;}
 static int host_propose(struct efs_raft_host*h,uint8_t g,const uint8_t*p,uint32_t n,uint64_t*i,uint64_t*t,int*hint){return host_propose_mode(h,g,p,n,i,t,hint,0);}
 '''+s[a:b]+r'''
 static int host_report_release(struct efs_raft_host*h,int held){assert(held && h->disk->depth);h->disk->depth--;return sync_rc;}
@@ -47,6 +51,13 @@ int efs_meta_execute_append(const struct efs_meta_append_plan *p,const struct ef
  for(unsigned i=0;i<p->count;i++){im.key[1]=(uint8_t)i;int rc=ops->prepare(ctx,t,&p->parts,&im);if(rc){int aborted=ops->decide(ctx,t,&p->parts,EFS_TXN_ABORT);if(aborted)return aborted;(void)ops->resolve(ctx,t,&p->parts,EFS_TXN_ABORT);return rc;}}
  if(!p->count)return 0;int rc=ops->decide(ctx,t,&p->parts,EFS_TXN_COMMIT);return rc?rc:ops->resolve(ctx,t,&p->parts,EFS_TXN_COMMIT);}
 int efs_meta_execute_append_owned(struct efs_kv*k,const struct efs_meta_append_plan*p,const struct efs_opid_req*q,const struct efs_txid*t,const struct efs_meta_append_ops*ops,void*ctx){(void)k;(void)q;return efs_meta_execute_append(p,t,ops,ctx);}
+int efs_meta_append_completion_atomic_eligible(struct efs_kv*k,efs_ino_t ino,uint64_t off){(void)k;(void)ino;(void)off;return atomic_eligible;}
+int efs_kv_key_append_rsv(uint32_t sh,efs_ino_t ino,uint64_t gen,uint64_t off,uint8_t *key,uint32_t *n){(void)sh;assert(ino==42 && gen==9 && off==8);memset(key,0,27);*n=27;return 0;}
+static int completion_get(void*k,const uint8_t *key,uint32_t kl,uint8_t *value,uint32_t*n){(void)k;(void)key;assert(kl==27 && *n==48);memset(value,0,48);return 0;}
+int efs_meta_apply_get_inode(struct efs_kv*k,efs_ino_t ino,struct efs_meta_row *r){(void)k;assert(ino==42);r->generation=9;r->content_epoch=2;return EFS_OK;}
+static int host_wait_verdict(struct efs_raft_host*h,uint8_t g,uint64_t i,uint64_t t,int*hint){(void)h;(void)g;(void)hint;assert(i==123 && t==3);return atomic_wait_rc;}
+static void wr64be(uint8_t*p,uint64_t n){for(unsigned i=0;i<8;i++)p[i]=(uint8_t)(n>>(56-8*i));}
+static void wr32be(uint8_t*p,uint32_t n){for(unsigned i=0;i<4;i++)p[i]=(uint8_t)(n>>(24-8*i));}
 static unsigned owned_completions,pruned;
 int efs_meta_finish_append(struct efs_kv*k,efs_ino_t ino,uint64_t off,int outcome,const struct efs_txid*t,const struct efs_meta_append_ops*ops,void*ctx){
  (void)k;assert(ino==42 && off==8 && outcome==EFS_META_APPEND_COMPLETED);struct efs_meta_append_plan p={.count=11};return efs_meta_execute_append(&p,t,ops,ctx);}
@@ -104,6 +115,15 @@ int main(void){struct efs_raft_disk disk={0};struct efs_raft_host h={.mu=PTHREAD
  reset();commit_rc=EFS_ERR_BUSY;assert(host_append_close_batched(&h,42,8,close_identity,&t,&hint,NULL)==EFS_ERR_BUSY && commits==1 && !aborts && !host_command_capture);
  struct host_command_cohort other;host_command_cohort_begin(&other,&h);
  assert(host_append_execute_batched(&h,&p,&q,&t,0,&hint)==EFS_ERR_BUSY && host_command_capture==&other);host_command_cohort_end(&other,EFS_ERR_BUSY,&hint);
+ reset();atomic_eligible=1;
+ const struct efs_kv_ops kvops={.get=completion_get};struct efs_kv kv={.ops=&kvops};h.kv=&kv;
+ assert(!host_append_complete_batched(&h,42,8,&id,&t,&hint) && atomic_calls==1 && !submitted && !holds && !commits);
+ atomic_wait_rc=EFS_ERR_BUSY;assert(host_append_complete_batched(&h,42,8,&id,&t,&hint)==EFS_ERR_BUSY && atomic_calls==2 && !aborts);
+ atomic_propose_rc=EFS_ERR_NOT_PRIMARY;assert(host_append_complete_batched(&h,42,8,&id,&t,&hint)==EFS_ERR_NOT_PRIMARY && atomic_calls==3 && !aborts);
+ atomic_propose_rc=atomic_wait_rc=0;atomic_eligible=EFS_ERR_BUSY;
+ assert(host_append_complete_batched(&h,42,8,&id,&t,&hint)==EFS_ERR_BUSY && atomic_calls==3 && !submitted);
+ atomic_eligible=1;h.r.role=EFS_RAFT_FOLLOWER;
+ assert(!host_append_complete_batched(&h,42,8,&id,&t,&hint) && atomic_calls==3 && submitted==11 && commits==1);
  puts("append cohort: captured identities, bounded batches, verdict-before-COMMIT, pre-decision ABORT, ambiguous COMMIT and TLS cleanup PASS");}
 '''
 with tempfile.TemporaryDirectory(prefix='efs-append-cohort-') as d:

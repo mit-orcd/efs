@@ -43,6 +43,9 @@ int efs_raft_backlog_charge(struct efs_raft *r,efs_raft_charge_fn fn,uint64_t li
 int main(void) {
  struct efs_raft_host h={.pressure_enabled=1};
  h.g[0].host=&h;h.g[0].r=(struct efs_raft*)&h;
+ uint8_t completion[EFS_MD_APPEND_COMPLETE_ATOMIC_LEN]={EFS_MD_CMD_APPEND_COMPLETE_ATOMIC};
+ assert(host_pressure_command_charge(completion,sizeof(completion))>=sizeof(struct efs_meta_append_plan));
+ assert(host_pressure_recovery(completion,sizeof(completion)) && !host_pressure_recovery(completion,44));
  uint8_t close_step[46]={EFS_MD_CMD_CLOSE_STEP};
  assert(host_pressure_command_charge(close_step,sizeof(close_step))>=host_pressure_rows_charge(64,1,0));
  assert(host_pressure_recovery(close_step,sizeof(close_step)));

@@ -695,5 +695,110 @@ static void atomic_reservation(int cold)
  puts("atomic append: exact single-shard images, guarded conflict/no partial batch, canonical cold replay and revoked floors PASS");
 }
 
+static int completion_apply(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,uint64_t off,const struct efs_opid *id)
+{
+ struct efs_meta_row row;int rc=efs_meta_apply_get_inode(kv,ino,&row);if(rc)return rc;
+ uint8_t key[EFS_KV_KEY_MAX],value[48];uint32_t kl,n=sizeof(value);
+ rc=efs_kv_key_append_rsv(efs_kv_inode_shard(ino),ino,row.generation,off,key,&kl);
+ if(!rc)rc=efs_kv_get(kv,key,kl,value,&n);
+ if(rc)return rc;
+ assert(n==48);
+ return efs_meta_apply_append_complete_atomic(kv,ino,gen,off,id,row.content_epoch,value);
+}
+static void atomic_completion(int cold)
+{
+ char dir[]="/tmp/efs-complete-atomic-XXXXXX";if(cold)assert(mkdtemp(dir));
+ struct efs_kv *kv=cold?efs_kv_lsm_open(dir,NULL):efs_kv_mem_create();assert(kv);
+ efs_ino_t ino;uint64_t gen;fixture(kv,&ino,&gen);
+ struct efs_meta_row row;assert(!efs_meta_apply_get_inode(kv,ino,&row));
+ row.active_lanes=1;row.base_size=200;
+ uint8_t ik[EFS_KV_KEY_MAX],iv[EFS_META_INO_BYTES];uint32_t ikl;
+ assert(!efs_kv_key_inode(efs_kv_inode_shard(ino),ino,ik,&ikl));
+ assert(!efs_meta_pack_inode(&row,iv,sizeof(iv)) && !efs_kv_put(kv,ik,ikl,iv,sizeof(iv)));
+ struct efs_opid_req q=identity(1,0);uint32_t shard=efs_kv_inode_shard(ino);
+ assert(!efs_session_create(kv,q.id.client_uuid,1) && !efs_session_register(kv,q.id.client_uuid,1,shard) &&
+        !efs_session_establish(kv,shard,q.id.client_uuid,1));
+ struct efs_meta_append_plan *p=malloc(sizeof(*p));assert(p);
+ for(unsigned i=0;i<2;i++) {
+  q.id.seq=i+1;q.ack=i;
+  assert(!efs_meta_capture_append(kv,ino,8,&q,decision,kv,p));
+  assert(!efs_meta_apply_append_atomic(kv,p,&q));
+ }
+ uint8_t lane_key[EFS_KV_KEY_MAX],lane_value[EFS_OPID_VAL_MAX];uint32_t lane_kl,lane_vl=sizeof(lane_value);
+ assert(!efs_kv_key_lane(shard,ino,gen,0,lane_key,&lane_kl));
+ assert(!efs_kv_get(kv,lane_key,lane_kl,lane_value,&lane_vl));
+ assert(!efs_kv_del(kv,lane_key,lane_kl));
+ assert(efs_meta_append_completion_atomic_eligible(kv,ino,208)==EFS_ERR_BUSY);
+ assert(completion_apply(kv,ino,gen,208,&q.id)==EFS_ERR_BUSY);
+ assert(!efs_kv_put(kv,lane_key,lane_kl,lane_value,lane_vl));
+ assert(efs_meta_append_completion_atomic_eligible(kv,ino,208)==1);
+ assert(completion_apply(kv,ino,gen+1,208,&q.id)==EFS_ERR_STALE);
+ struct efs_txid tx={{229}};struct efs_txn_parts parts={.n=1,.shard={shard}};
+ uint64_t version;assert(!efs_txn_ver_get(kv,ik,ikl,&version));
+ assert(!efs_txn_prepare_guard(kv,&tx,&parts,ik,ikl,version));
+ assert(completion_apply(kv,ino,gen,208,&q.id)==EFS_ERR_BUSY);
+ assert(!efs_txn_resolve(kv,&tx,shard,EFS_TXN_ABORT));
+ uint8_t owner[EFS_KV_KEY_MAX],ov[EFS_SESS_LOCAL_VAL];uint32_t ol,vl=sizeof(ov);
+ assert(!efs_kv_key_sess_local(shard,q.id.client_uuid,owner,&ol));
+ assert(!efs_kv_get(kv,owner,ol,ov,&vl));tx.bytes[1]=1;
+ assert(!efs_txn_prepare_excl_value(kv,&tx,&parts,owner,ol,ov,vl,EFS_TXN_PUT,ov,vl));
+ assert(completion_apply(kv,ino,gen,208,&q.id)==EFS_ERR_BUSY);
+ assert(!efs_txn_resolve(kv,&tx,shard,EFS_TXN_ABORT));
+ if(!cold){assert(!efs_kv_mem_fail_next_batch(kv));assert(completion_apply(kv,ino,gen,208,&q.id)==EFS_ERR_IO);}
+ uint32_t open;uint64_t frontier;
+ assert(!efs_meta_apply_append_state(kv,ino,NULL,&frontier,&open) && open==2 && frontier==200);
+ uint8_t binding_key[EFS_KV_KEY_MAX],binding[48];uint32_t binding_kl,binding_n=48;
+ assert(!efs_kv_key_append_rsv(shard,ino,gen,200,binding_key,&binding_kl));
+ assert(!efs_kv_get(kv,binding_key,binding_kl,binding,&binding_n));
+ uint64_t binding_epoch=row.content_epoch;
+ uint8_t wrong[48];memcpy(wrong,binding,48);wrong[43]^=1;
+ assert(efs_meta_apply_append_complete_atomic(kv,ino,gen,200,&q.id,binding_epoch,wrong)==EFS_ERR_STALE);
+ assert(efs_meta_apply_append_complete_atomic(kv,ino,gen,200,&q.id,binding_epoch+1,binding)==EFS_ERR_STALE);
+ /* Out-of-order completion cannot advance over an unresolved reservation. */
+ assert(!completion_apply(kv,ino,gen,208,&q.id));
+ assert(!efs_meta_apply_append_state(kv,ino,NULL,&frontier,&open) && open==1 && frontier==200);
+ assert(!efs_txn_ver_get(kv,ik,ikl,&version));
+ if(cold){efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(dir,NULL);assert(kv);}
+ assert(!completion_apply(kv,ino,gen,208,&q.id));
+ uint64_t after;assert(!efs_txn_ver_get(kv,ik,ikl,&after));
+ assert(after==version);
+ assert(!completion_apply(kv,ino,gen,200,&q.id));
+ assert(!efs_meta_apply_append_state(kv,ino,NULL,&frontier,&open) && !open);
+ assert(!efs_meta_apply_get_inode(kv,ino,&row) && row.base_size==216);
+ assert(!efs_txn_ver_get(kv,ik,ikl,&after) && after>version);
+ tx.bytes[1]=2;assert(efs_txn_prepare_guard(kv,&tx,&parts,ik,ikl,version)==EFS_ERR_STALE);
+ /* A queued old completion cannot consume a new reservation at the same offset. */
+ assert(!efs_meta_apply_append_complete_atomic(kv,ino,gen,200,&q.id,binding_epoch,binding));
+ struct efs_meta_truncate truncate={.expect_gen=gen,.size=200,.lane_mask=UINT64_MAX,.keep_tail=1};
+ assert(!efs_meta_apply_truncate(kv,ino,400,&truncate));
+ unsigned removed;tx.bytes[1]=8;assert(!efs_meta_prune_append(kv,ino,&tx,&ops,kv,&removed) && removed==2);
+ q.id.seq=3;q.ack=2;assert(!efs_meta_capture_append(kv,ino,8,&q,decision,kv,p) && p->offset==200);
+ assert(!efs_meta_apply_append_atomic(kv,p,&q));
+ assert(efs_meta_append_completion_atomic_eligible(kv,ino,200)==1);
+ assert(efs_meta_apply_append_complete_atomic(kv,ino,gen,200,&q.id,binding_epoch,binding)==EFS_ERR_STALE);
+ assert(!efs_meta_apply_get_inode(kv,ino,&row));
+ assert(efs_meta_apply_append_complete_atomic(kv,ino,gen,200,&q.id,row.content_epoch,binding)==EFS_ERR_STALE);
+ assert(!efs_meta_apply_append_state(kv,ino,NULL,NULL,&open) && open==1);
+ assert(!completion_apply(kv,ino,gen,200,&q.id));
+ /* A lane activation between routing and apply falls back without changes. */
+ q.id.seq=4;q.ack=3;
+ assert(!efs_meta_capture_append(kv,ino,8,&q,decision,kv,p));
+ assert(!efs_meta_apply_append_atomic(kv,p,&q));
+ assert(efs_meta_append_completion_atomic_eligible(kv,ino,208)==1);
+ assert(!efs_meta_apply_activate_lanes(kv,ino,3));
+ assert(efs_meta_append_completion_atomic_eligible(kv,ino,208)==0);
+ assert(completion_apply(kv,ino,gen,208,&q.id)==EFS_ERR_BUSY);
+ assert(!efs_meta_apply_append_state(kv,ino,NULL,NULL,&open) && open==1);
+ tx.bytes[1]=3;assert(!efs_meta_finish_append_owned(kv,ino,208,EFS_META_APPEND_COMPLETED,&q.id,&tx,&ops,kv));
+ assert(!efs_session_fence_local(kv,shard,q.id.client_uuid,2));
+ assert(completion_apply(kv,ino,gen,208,&q.id)==EFS_ERR_STALE);
+ free(p);
+ if(cold){efs_kv_lsm_close(kv);DIR*d=opendir(dir);assert(d);struct dirent*e;
+  while((e=readdir(d))){if(e->d_name[0]=='.')continue;char path[512];snprintf(path,sizeof(path),"%s/%s",dir,e->d_name);assert(!unlink(path));}
+  closedir(d);assert(!rmdir(dir));
+ }else efs_kv_mem_free(kv);
+ puts("atomic completion: guarded session/generation, no partial failure, out-of-order frontier, cold replay, versions and cross-shard fallback PASS");
+}
+
 int main(void)
-{atomic_reservation(0);atomic_reservation(1);bounded_completed_bursts(0);bounded_completed_bursts(1);for(unsigned v=0;v<3;v++){receipt_capture_race(v,0);receipt_capture_race(v,1);}session_owned_completion(0);session_owned_completion(1);retired_append_receipts(0);retired_append_receipts(1);session_owned_append(0);session_owned_append(1);fenced_completion();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}
+{atomic_completion(0);atomic_completion(1);atomic_reservation(0);atomic_reservation(1);bounded_completed_bursts(0);bounded_completed_bursts(1);for(unsigned v=0;v<3;v++){receipt_capture_race(v,0);receipt_capture_race(v,1);}session_owned_completion(0);session_owned_completion(1);retired_append_receipts(0);retired_append_receipts(1);session_owned_append(0);session_owned_append(1);fenced_completion();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}

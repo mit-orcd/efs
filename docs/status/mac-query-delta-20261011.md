@@ -1114,3 +1114,63 @@ handoff (100.1 seconds, original 240-second budget), physically drained
 deletions and normal mount/daemon stop. Local ASAN/UBSAN routing tests pass.
 Evidence: cover-routing-build-wire.txt. Ready for qualified Mac rollout;
 the previous 214/216 result remains the current full native acceptance.
+
+
+Coverage routing 0f869394 is installed normally on all Mac daemons/gateway.
+Both-group original-budget diagnostic passes concurrent CREATE, but mtime
+fails its 20-second body in both groups; no full native success is claimed.
+Evidence: native-cover-both-groups.txt. Separate 80-append timing is 18.93
+seconds, 13.85 in flush/close (post-cover-mtime-stages.txt); variance remains.
+
+New uncommitted single-shard completion uses command 54 (101-byte exact
+inode/generation/offset/UUID/epoch). It allocates no offset. Existing collector
+and session-owned completion rules validate every dependency, then commit
+owned image bytes plus predicate versions atomically. Cross-shard lanes or
+activation races retain BUSY/normal transaction fallback; missing active
+lanes refuse authority. Follower coordinators retain the existing path.
+Tests caught a temporary-image lifetime error before deployment; fixed by
+owning bytes through the final KV batch. Mac Linux real mem/cold tests pass
+session/inode guards, batch EIO with no partial effect, out-of-order frontier,
+exact replay/version stability, stale generations/floors and cross-shard
+fallback. Private cold append/truncate gates are in progress. Installed
+service stays 0f869394 pending qualification.
+
+Single-file identified REPORT also prefers its known inode primary before
+publication, only with committed coverage of both authority groups. This
+makes leader-only completion available without bouncing through a follower;
+one-group primaries and multi-record reports retain existing routing.
+
+Full Mac Linux make test passes (exit 0), including architecture 5/5,
+real mem/cold completion and reservation state machines. It exposed an
+outdated pending CREATE fixture; 51215bb4 repairs production-struct extraction
+and models inactive reset/adopted-token cleanup without weakening assertions.
+Earlier qualification failures are retained. Final completion binding adds
+content epoch and immutable reservation bytes to command 54 (101 bytes);
+DONE of that same identity proves replay, while truncate/offset reuse refuses
+both old epochs and old reservation identities. The real adapter passes
+ASAN/UBSAN with these regression cases. No installed rollout yet.
+Evidence: atomic-completion-bound-full-units-final.txt (rc 0),
+atomic-completion-bound-asan-fixed.txt (rc 0). Earlier 45-byte candidate's
+eight cold peer races, 800-record handoff (212.5 seconds, original 240 budget),
+and physical deletion pass; stopped Raft logs contain 400 command-54 entries
+on n2, confirming actual execution, not fallback-only testing. Final 101-byte
+candidate is now running the same full cold gate.
+
+Final private fixture initially fails during setup fsync with an 8-second
+REPORT timeout, before append races. Diagnosis: new REPORT preference caller
+held h->mu around host_leader_cover_pick, which already owns that non-recursive
+mutex. Remove the redundant caller lock; production helper lock ownership is
+now covered in the routing regression. No installed candidate rollout occurred.
+Evidence: atomic-completion-bound-cold-wire.txt and bound-failure-logs.txt.
+This is a routing deadlock, not a reservation-binding refusal. Corrected
+candidate must repeat the full cold gate before rollout.
+
+Corrected final 101-byte candidate passes all eight Mac private buffered/TCP
+append/truncate races, cold restart after four, exact 800-record handoff,
+physical deletion accounting and normal mount/daemon drains (exit 0).
+No assertions/deadlines were weakened. Evidence:
+atomic-completion-bound-routing-fixed-wire.txt. Full make test passed before
+the isolated REPORT caller-lock correction; its actual routing/cohort helper
+regressions pass again afterward. The final metadata adapter passes cold
+mem/LSM and ASAN/UBSAN, including epoch and reservation offset-reuse binding.
+Ready for a qualified normal Mac rollout and unchanged native 216 acceptance.

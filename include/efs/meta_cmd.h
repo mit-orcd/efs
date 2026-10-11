@@ -18,6 +18,8 @@
 /* REPORT envelope: [tag][uuid:16][epoch:4][legacy PUBLISH:202]*N.
  * Fences every mapping at serialized apply without reusing delta fields. */
 /* Exact single-shard APPEND image envelope; no replica-local EOF selection. */
+#define EFS_MD_APPEND_COMPLETE_ATOMIC_LEN 101u
+#define EFS_MD_CMD_APPEND_COMPLETE_ATOMIC 54 /* ino/gen/offset/UUID/epoch/content epoch/reservation: 101 bytes */
 #define EFS_MD_CMD_APPEND_ATOMIC 53
 #define EFS_MD_CMD_QUERY_POLICY 43 /* expected version:8, mask:4 */
 #define EFS_MD_REQ_QUERY_POLICY 44 /* ReadIndex only, reply index=version/salt=mask */
