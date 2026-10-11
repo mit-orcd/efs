@@ -482,3 +482,19 @@ Mac service normally drained, including asynchronous sender/admission, durable
 Raft disk, crash recovery, query corruption/fault and host checkpoint gates.
 The candidate was shipped to all three storage nodes and the gateway. No
 benchmark source or harness was changed. Installed native validation follows.
+
+Pure read control is confirmed active by per-process counters on all three
+Mac replicas, but the default-cadence native deep-directory probe still failed
+both original 20-second deadlines (0/2, clean completion in 32.6 seconds).
+No full-suite acceptance is inferred. Another demonstrated amplification is
+batched LOOKUP_PATH: alternating ancestors repeatedly fenced already-covered
+name groups within one RPC. It now carries its own successful group fences
+through the bounded ancestor walk, explicitly fencing a newly encountered child
+inode group before reading it. Final lane/directory validation records all
+additional successful fences. Each independent RPC starts with an empty mask.
+The existing 64-component protocol bound and client fallback are unchanged.
+A production-handler regression walks 64 alternating-group ancestors with two
+fresh fences, verifies permission ancestors, repeats with independent fences,
+and checks missing groups, IO errors, absence and the existing depth boundary.
+It and the operation/LOOKUP/transaction/control/sender/architecture gates pass
+on the Mac Linux seed. Native deep-directory retesting is pending.

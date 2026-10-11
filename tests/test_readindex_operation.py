@@ -34,7 +34,7 @@ static void host_need_both(uint8_t need[2]){need[0]=0;need[1]=2;}
 static int host_pick_peer(struct efs_raft_host *h,const uint8_t *need,int n,int skip) {
  (void)h;(void)skip;assert(n==2 && need[0]==0 && need[1]==2);return 4;
 }
-''' + function('host_read_inode_lanes_covered') + function('host_read_inode_lanes') + r'''
+''' + function('host_read_inode_lanes_reuse') + function('host_read_inode_lanes_covered') + function('host_read_inode_lanes') + r'''
 int main(void) {
  struct efs_raft_host h={0};int hint=-1;row.mode=S_IFREG;
  assert(!host_read_inode_lanes(&h,1,&hint));assert(calls[0]==1 && !calls[2]);

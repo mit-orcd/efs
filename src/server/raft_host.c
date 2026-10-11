@@ -5624,8 +5624,8 @@ static int host_row_lanes_hosted(struct efs_raft_host *h, efs_ino_t ino,
 /* covered belongs to this operation only: successful earlier ReadIndexes
  * already linearize reads of that group after this request arrived. Never
  * retain this mask across RPCs or use it for a group not actually fenced. */
-static int host_read_inode_lanes_covered(struct efs_raft_host *h, efs_ino_t ino,
-                                 int *leader_hint, uint8_t covered)
+static int host_read_inode_lanes_reuse(struct efs_raft_host *h, efs_ino_t ino,
+                                 int *leader_hint, uint8_t *covered)
 {
     struct efs_meta_row row;
     uint32_t ish;
@@ -5636,7 +5636,7 @@ static int host_read_inode_lanes_covered(struct efs_raft_host *h, efs_ino_t ino,
 
     ish = efs_kv_inode_shard(ino);
     ig = efs_raft_shard_group(ish);
-    rc = (covered & (1u << ig)) ? EFS_OK : host_read_index(h, ig, leader_hint);
+    rc = (*covered & (1u << ig)) ? EFS_OK : host_read_index(h, ig, leader_hint);
     if (rc != EFS_OK)
         return rc;
     struct host_txn_read_context txn={.host=h};
@@ -5655,7 +5655,7 @@ static int host_read_inode_lanes_covered(struct efs_raft_host *h, efs_ino_t ino,
      * this loop issued it 32 times for one stat (Sep 30, du/find on
      * fstor007: 5–7 ms per stat of a >10 MiB file, 0.2 ms for a small
      * one). The read index is a property of the group, not the lane. */
-    uint8_t seen = (uint8_t)(covered | (1u << ig));
+    uint8_t seen = (uint8_t)(*covered | (1u << ig));
     for (i = 0; i < EFS_META_LANES; i++) {
         uint32_t lsh;
         uint8_t lg;
@@ -5685,8 +5685,15 @@ static int host_read_inode_lanes_covered(struct efs_raft_host *h, efs_ino_t ino,
             return rc;
         }
     }
+    *covered = seen;
     return EFS_OK;
 }
+static int host_read_inode_lanes_covered(struct efs_raft_host *h, efs_ino_t ino,
+                                 int *leader_hint, uint8_t covered)
+{
+    return host_read_inode_lanes_reuse(h,ino,leader_hint,&covered);
+}
+
 
 static int host_read_inode_lanes(struct efs_raft_host *h, efs_ino_t ino,
                                  int *leader_hint)
@@ -16308,6 +16315,7 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
     const char *p;
     uint32_t nh = 0;
     char last_name[EFS_MAX_NAME];
+    uint8_t covered = 0; /* Request-local group authority, including ancestors. */
     int hint = -1;
     int rc;
 
@@ -16332,7 +16340,7 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
             return;
         }
     }
-    rc = host_read_inode_lanes(h, cur, &hint);
+    rc = host_read_inode_lanes_reuse(h, cur, &hint, &covered);
     if (rc == EFS_ERR_NOT_PRIMARY) {
         uint8_t need[2];
 
@@ -16384,8 +16392,10 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
             host_fwd_lookup_path(h, start, path, out, need, nn);
             return;
         }
-        if (dg != pg)
+        if (!(covered & (1u << dg))) {
             rc = host_read_index(h, dg, &hint);
+            if (rc == EFS_OK) covered |= (uint8_t)(1u << dg);
+        }
         if (rc == EFS_OK)
             rc = efs_meta_apply_lookup_tx(h->kv, cur, name, host_txn_coord, h, &dent);
         if (rc == EFS_OK) {
@@ -16398,6 +16408,10 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
                     need[nn++] = cg;
                 host_fwd_lookup_path(h, start, path, out, need, nn);
                 return;
+            }
+            if (!(covered & (1u << cg))) {
+                rc = host_read_index(h, cg, &hint);
+                if (rc == EFS_OK) covered |= (uint8_t)(1u << cg);
             }
         }
         if (rc == EFS_OK)
@@ -16417,7 +16431,7 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
         rc = EFS_ERR_INVAL;
     if (rc == EFS_OK && nh > 0) {
         out->ancestor_count = nh > 1 ? nh - 1 : 0;
-        rc = host_read_inode_lanes(h, cur, &hint);
+        rc = host_read_inode_lanes_reuse(h, cur, &hint, &covered);
         if (rc == EFS_ERR_NOT_PRIMARY) {
             uint8_t need[2];
 
