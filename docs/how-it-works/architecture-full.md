@@ -1487,8 +1487,10 @@ AMD normal/fault native qualification passes at `d1197381`; mounted packing
 two-client packing passes in direct/buffered (cold bytes and physical GC).
 Final parser/sanitizer gates pass at `f1c322e1`. Seven-client AMD file-operation
 and cold-byte checks pass both modes, but physical packed GC exceeds 180s.
-Scheduler repair `6146f264` and typed FUSE read-error repair are under full merged
-qualification at `bbb84e41`.
+Scheduler repair `6146f264` and typed FUSE read-error repair pass complete merged
+normal/fault native, sanitizers and both-mode seven-client/jobs4 acceptance at
+`bbb84e41`, including zero remaining packed-object rows and restored mounts.
+The newer batch-integrated `f0bb0208` is under full merged qualification.
 Bounded transport batching is integrated, with its merged qualification pending.
 ORCD packing timeouts remain
 a release blocker. Small-file packing and code-review correctness have priority. Branch checkpoints

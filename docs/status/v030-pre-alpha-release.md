@@ -270,3 +270,23 @@ narrows the unresolved workload failure to enabled packing. Global per-group
 packing context waits and repeated authority/admission RPCs are diagnostic
 candidates, not established causes. Review owner is examining the submitted
 batch for correctness independently of the performance acceptance.
+
+### AMD scheduler repair accepted in both-mode jobs4 gate
+
+`bbb84e41` passes the complete merged normal/fault native suites and all four
+sanitizer gates; post-native verification confirms all 940 frozen inputs remain
+unchanged. [Exact native evidence](../../results/measure/20261011-v030-merged-native/bbb84e41/acceptance-summary.json).
+The corrected runner passes seven concurrent clients at jobs4 in direct and
+buffered TCP, unchanged 30-second cases and 180-second packed physical deadline:
+all clients 220 PASS/0 FAIL/1 expected mmap SKIP/0 NOTRUN; peer and acknowledged
+cold hashes pass. Physical packs are empty and GC queue estimates drain. Offline
+copies of stopped n1/n2 stores contain zero packed-object rows in both modes,
+zero orphans and zero upload streams. Normal mount restoration is successful.
+[Raw both-mode acceptance and inventories](../../results/measure/20261011-v030-seven-packing/bbb84e41/acceptance-summary.json).
+
+This closes the reproduced AMD jobs4 packed reclamation timeout under the
+existing opt-in 20ms backlog setting. It does not close W95/P4.1, certify ORCD
+jobs16 or prove throughput improvement. The newer batch-integrated `f0bb0208`
+is separately staged with all source and linked documentation inputs verified;
+full merged normal/fault/sanitizer qualification is running, followed serially
+by direct/buffered seven-client jobs16 acceptance. Nothing is tagged or pushed.

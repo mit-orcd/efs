@@ -60,11 +60,14 @@ changes pass full normal/fault native and four sanitizer gates at `f1c322e1`.
 Seven-client AMD direct and buffered runs at the production-identical
 `39b4297b` pass all file-operation and cold-byte checks but exceed the original
 180-second physical packed GC deadline. A bounded scheduler correction is
-undergoing full merged qualification at `bbb84e41`.
+accepted on AMD at `bbb84e41`: complete merged normal/fault native and sanitizer
+gates pass, and seven-client/jobs4 physical GC passes within the unchanged
+deadline in both I/O modes. The newer batch-integrated `f0bb0208` has separate
+full merged and seven-client/jobs16 qualification in progress.
 
 Four loopback daemons on one AMD host are functional evidence, not proof of
 independent hardware failure resilience. Current fixed2+1 data and three-voter
-metadata groups do not implement D36's four-node/two-loss guarantee. AMD physical packed GC and ORCD
+metadata groups do not implement D36's four-node/two-loss guarantee. ORCD
 seven-client directory/query timeouts, owner-reported live/cold/long APPEND gates and
 final exact-source acceptance still block promotion and tagging.
 
