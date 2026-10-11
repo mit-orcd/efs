@@ -12257,7 +12257,7 @@ static int host_append_transaction(struct efs_raft_host *h,efs_ino_t ino,uint64_
     /* Bound this request's cleanup effort. BUSY retains the caller's identity
      * and deadline; a later attempt resumes from durable deleted pages. */
     for(unsigned page=0;page<32;++page) {
-        rc=efs_meta_append_prune_pending(h->kv,ino);
+        rc=efs_meta_append_prune_due(h->kv,ino);
         if(rc<=0)break;
         unsigned removed;fill_txid(h,&t);
         rc=host_append_prune_batched(h,ino,&t,hint,&removed);

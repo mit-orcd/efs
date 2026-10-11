@@ -182,6 +182,9 @@ int efs_meta_collect_append_completion(struct efs_kv *kv, efs_ino_t ino,
 /* Closed bursts retain DONE records until bounded cleanup. Pending returns
  * 0/1 or an error. Prune never removes records while an OPEN cursor exists. */
 int efs_meta_append_prune_pending(struct efs_kv *kv, efs_ino_t ino);
+/* New-burst admission may retain fewer than eight completed rows below the
+ * inode base_size floor; shrink/reset ranges still demand cleanup. */
+int efs_meta_append_prune_due(struct efs_kv *kv, efs_ino_t ino);
 int efs_meta_prune_append(struct efs_kv *kv, efs_ino_t ino,
                            const struct efs_txid *t,
                            const struct efs_meta_append_ops *ops, void *ctx,

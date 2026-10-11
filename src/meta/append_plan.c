@@ -299,7 +299,7 @@ int efs_meta_finish_append_fenced(struct efs_kv *kv,efs_ino_t ino,uint64_t gener
 /* Eight deletes plus inode/cursor guards fit the resolver's fixed 48-item
  * per-participant atomic batch (each EXCL consumes up to three items). */
 #define APPEND_PRUNE_PAGE 8
-struct prune_scan {struct finish_capture *capture;unsigned count;int rc;};
+struct prune_scan {struct finish_capture *capture;unsigned count,minimum;uint64_t frontier;int rc,unsafe;};
 static int prune_row(void *user,const uint8_t *key,uint32_t kl,const uint8_t *val,uint32_t vl)
 {
     struct prune_scan *s=user;uint32_t slot;
@@ -312,24 +312,29 @@ static int prune_row(void *user,const uint8_t *key,uint32_t kl,const uint8_t *va
         s->rc=EFS_ERR_PROTO;return 1;
     }
     ++s->count;
-    if(!s->capture)return 1;
+    if(!s->capture) {
+        if(!s->minimum)return 1;
+        s->unsafe=offset+length>s->frontier;
+        return s->unsafe || s->count==s->minimum;
+    }
     s->rc=finish_record(s->capture,key,kl,val,vl,&slot);
     if(s->rc!=EFS_OK)return 1;
     s->capture->images[slot].op=EFS_TXN_DEL;
     s->capture->images[slot].new_len=0;
     return s->count==APPEND_PRUNE_PAGE;
 }
-static int prune_capture(struct efs_kv *kv,efs_ino_t ino,struct finish_capture *c,unsigned *count)
+static int prune_capture(struct efs_kv *kv,efs_ino_t ino,struct finish_capture *c,unsigned *count,unsigned minimum)
 {
     uint8_t key[EFS_KV_KEY_MAX],value[EFS_OPID_VAL_MAX];uint32_t kl,n;
     struct efs_meta_row row;
-    struct prune_scan scan={.capture=c};
+    struct prune_scan scan={.capture=c,.minimum=minimum};
     const struct efs_kv_ops capture_ops={.get=finish_get};
     struct efs_kv capture={.ops=&capture_ops,.ctx=c};
     struct efs_kv *reader=c?&capture:kv;
     *count=0;
     int rc=efs_meta_apply_get_inode(reader,ino,&row);
     if(rc!=EFS_OK)return rc;
+    scan.frontier=row.base_size;
     rc=efs_kv_key_append_cur(efs_kv_inode_shard(ino),ino,row.generation,key,&kl);
     if(rc!=EFS_OK)return rc;
     n=sizeof(value);rc=efs_kv_get(reader,key,kl,value,&n);
@@ -337,17 +342,29 @@ static int prune_capture(struct efs_kv *kv,efs_ino_t ino,struct finish_capture *
         if(n!=24)return EFS_ERR_PROTO;
         /* DONE entries still carry frontier dependencies while OPEN exists. */
         if(value[16] || value[17] || value[18] || value[19])return EFS_OK;
+        uint64_t frontier=0;for(unsigned i=8;i<16;i++)frontier=frontier<<8|value[i];
+        if(frontier<scan.frontier)scan.frontier=frontier;
     } else if(rc!=EFS_ERR_NOT_FOUND)return rc;
     rc=efs_kv_key_append_rsv_prefix(efs_kv_inode_shard(ino),ino,row.generation,key,&kl);
     if(rc==EFS_OK)rc=efs_kv_scan_prefix(kv,key,kl,prune_row,&scan);
     if(scan.rc!=EFS_OK)return scan.rc;
-    *count=scan.count;return rc==1?EFS_OK:rc;
+    *count=scan.unsafe?minimum:scan.count;return rc==1?EFS_OK:rc;
 }
 int efs_meta_append_prune_pending(struct efs_kv *kv,efs_ino_t ino)
 {
     unsigned count; if(!kv || !ino)return EFS_ERR_INVAL;
-    int rc=prune_capture(kv,ino,NULL,&count);
+    int rc=prune_capture(kv,ino,NULL,&count,0);
     return rc==EFS_OK?(count?1:0):rc;
+}
+/* Last completion removes its cursor and folds the frontier into base_size.
+ * Completed rows wholly below that inode-authoritative floor cannot affect a
+ * later burst; its exact inode image is guarded before reservation. Retain
+ * fewer than one cleanup page; shrink/reset ranges still demand retirement. */
+int efs_meta_append_prune_due(struct efs_kv *kv,efs_ino_t ino)
+{
+    if(!kv || !ino)return EFS_ERR_INVAL;
+    unsigned count;int rc=prune_capture(kv,ino,NULL,&count,APPEND_PRUNE_PAGE);
+    return rc==EFS_OK?(count>=APPEND_PRUNE_PAGE):rc;
 }
 int efs_meta_prune_append(struct efs_kv *kv,efs_ino_t ino,const struct efs_txid *t,
                            const struct efs_meta_append_ops *ops,void *ctx,unsigned *removed)
@@ -356,7 +373,7 @@ int efs_meta_prune_append(struct efs_kv *kv,efs_ino_t ino,const struct efs_txid 
     if(!kv || !ino || !t || !ops || !ops->prepare || !ops->decide || !ops->resolve || !removed)
         return EFS_ERR_INVAL;
     *removed=0;
-    int rc=prune_capture(kv,ino,&c,&count);
+    int rc=prune_capture(kv,ino,&c,&count,0);
     if(rc==EFS_OK && count)rc=finish_execute(&c,t,ops,ctx);
     if(rc==EFS_OK)*removed=count;
     finish_free(&c);return rc;
@@ -406,7 +423,7 @@ int efs_meta_prune_append_close(struct efs_kv *kv,efs_ino_t ino,
         return EFS_ERR_INVAL;
     *removed=0;
     int rc=close_capture(kv,ino,identity,&c);
-    if(rc==EFS_OK)rc=prune_capture(kv,ino,&c,&count);
+    if(rc==EFS_OK)rc=prune_capture(kv,ino,&c,&count,0);
     if(rc==EFS_OK && count)rc=finish_execute(&c,t,ops,ctx);
     if(rc==EFS_OK)*removed=count;
     finish_free(&c);return rc;
@@ -482,7 +499,7 @@ int efs_meta_retire_append_session(struct efs_kv *kv,uint32_t shard,
     rc=efs_meta_apply_append_state(&capture,ino,NULL,NULL,&open);
     if(rc==EFS_OK && open)rc=EFS_ERR_BUSY;
     unsigned removed=0;
-    if(rc==EFS_OK)rc=prune_capture(kv,ino,&c,&removed);
+    if(rc==EFS_OK)rc=prune_capture(kv,ino,&c,&removed,0);
     if(rc==EFS_OK && !removed && selected.kl==27)rc=EFS_ERR_BUSY;
     if(rc==EFS_OK && !removed) {
         uint32_t slot;

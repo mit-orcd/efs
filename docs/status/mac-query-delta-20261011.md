@@ -905,3 +905,38 @@ mutex tests cover 256 same-shard inodes across 241 shards, concurrent first
 initialization, 16,000 same-inode increments, same-file exclusion and distinct
 file progress while another stripe is held. Local ASAN/UBSAN passes. Existing
 lease ownership/retention tests pass locally; Mac Linux full gate is pending.
+
+Inode lock candidate 393caadb passes complete Mac Linux make test, including
+architecture 5/5, with private temporary stores on data1. No compiler warnings
+were emitted in the targeted build. Evidence: inode-stripes-unit-build.txt
+and inode-stripes-full-unit.txt. Local production-mutex tests and sanitizers
+also pass. Installed rollout and unchanged native gates remain pending.
+
+Installed 393caadb still times out both native 20-second cases; the first
+concurrent-create run overlapped the initial rebuild. A separate complete
+80-write diagnostic takes 26.9 seconds: OPEN 2.40 s, CLOSE/user-buffer flush
+22.17 s, STAT 2.09 s. RPC profiling after a normal remount shows append and
+REPORT dominate receive waits, with no BUSY backoff. This is diagnostic
+measurement, not a native gate pass. Evidence: native-stripes-two.txt,
+mtime-stripes-stages.txt and mtime-rpc-stages.txt.
+
+The next candidate keeps fewer than eight completed reservations only when
+all their ranges are wholly below inode base_size (the folded completed
+frontier). Capture freezes that exact inode image before allocating a new
+reservation. A full page, an unsafe range after shrink/reset, or malformed
+state still refuses admission until bounded cleanup succeeds. OPEN cursors
+retain their existing dependencies; close/session cleanup still drains every
+DONE row, and durable receipts/rejection floors are unchanged. Actual memory
+KV and cold LSM tests pass for eight separate completed bursts, canonical
+replay, forced page retirement, truncate-to-zero refusal and offset-zero
+resume after cleanup. Full Mac Linux and private peer/cold gates are pending.
+Evidence: append-burst-unit.txt.
+
+Bounded completed-append candidate passes the complete Mac Linux make test
+(exit 0; architecture 5/5) and the private four-daemon buffered/TCP wire gate:
+eight peer append/truncate races, cold remount halfway through, all 800
+concurrent append records and physical deletion drain. The handoff takes
+232.6 seconds within its unchanged 240-second fixture budget; this is
+correctness evidence, not native timing acceptance. All owned fixtures drain
+and unmount normally. Evidence: append-burst-full-unit.txt and
+append-burst-cold-wire.txt. Installed rollout/native timing gates follow.

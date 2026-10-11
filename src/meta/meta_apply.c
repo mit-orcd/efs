@@ -7544,9 +7544,9 @@ int efs_meta_capture_append(struct efs_kv *kv, efs_ino_t ino, uint64_t len,
         if (rc) return rc > 0 ? EFS_ERR_BUSY : rc;
     }
     if (!cur.nopen) {
-        /* A previous coordinated close may still have DONE rows. They must
-         * be retired before a new burst (including after a truncate). */
-        rc = efs_meta_append_prune_pending(kv, ino);
+        /* A bounded completed page below inode base_size can survive a new
+         * burst. Shrink/reset ranges beyond that floor still force cleanup. */
+        rc = efs_meta_append_prune_due(kv, ino);
         if (rc) return rc > 0 ? EFS_ERR_BUSY : rc;
     }
     out->offset = max_u64(phys, cur.watermark);

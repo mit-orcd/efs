@@ -699,6 +699,15 @@ writes share an inode.
   installed on its active lanes — the same bounded inode fence truncate uses
   (≤65 authorities), taken once when the reservation set becomes non-empty
   and released once when it drains, **per append burst, not per append**.
+  Once the set drains, completion folds its frontier into inode `base_size`
+  and removes the cursor. New-burst admission may retain fewer than eight
+  completed reservation rows wholly below that captured inode floor. The
+  next full page is retired in a bounded transaction before admission;
+  records beyond the floor after shrink/reset still require immediate cleanup.
+  An OPEN cursor retains its frontier dependencies. Exact inode/cursor guards
+  reject concurrent completion or truncate races, and the independent durable
+  receipt window and rejection floor continue to protect replay.
+
   Its rule at a lane leader is narrow, and it is a rule about EOF only:
 
   ```text
