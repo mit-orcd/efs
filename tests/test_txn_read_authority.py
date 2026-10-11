@@ -24,7 +24,7 @@ int main(void) {
  struct efs_raft_host host={.kv=(struct efs_kv *)1};struct efs_txid id={{1}};int decision=0;
  int refusals[]={EFS_ERR_BUSY,EFS_ERR_NOT_PRIMARY,EFS_ERR_IO};
  for(unsigned i=0;i<3;i++) {
-  read_rc=refusals[i];assert(host_txn_coord(&host,&id,1,&decision)==EFS_ERR_IO);
+  read_rc=refusals[i];assert(host_txn_coord(&host,&id,1,&decision)==(read_rc==EFS_ERR_BUSY?EFS_ERR_BUSY:EFS_ERR_IO));
   assert(!gets && !decision);
  }
  read_rc=EFS_OK;decision_rc=EFS_ERR_NOT_FOUND;

@@ -5453,7 +5453,9 @@ static int host_txn_coord(void *user, const struct efs_txid *t,
     group = efs_raft_shard_group(coord_shard);
     rc = host_read_index(h, group, &hint);
     if (rc != EFS_OK)
-        return EFS_ERR_IO; /* I9: cannot establish authority, never absence */
+        /* A pending fresh quorum is retryable, never decision absence.
+         * Hard authority failures retain I9's IO refusal. */
+        return rc == EFS_ERR_BUSY ? EFS_ERR_BUSY : EFS_ERR_IO;
     return efs_txn_decision_get(h->kv, coord_shard, t, dec);
 }
 
