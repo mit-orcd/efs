@@ -20,6 +20,11 @@ int efs_pack_admit(struct efs_kv *, const struct efs_pack_object *, const struct
 int efs_pack_admission_get(struct efs_kv *, const struct efs_pack_object *, struct efs_pack_object *);
 /* ACK calls require an actual durable storage result for this exact object,
  * checked by the coordinator before proposing. No delete ACK before all fences. */
+/* Exact lifetime identity remains checkable after upload floor retirement. */
+int efs_pack_lifetime_get(struct efs_kv *, const struct efs_pack_object *, struct efs_pack_object *);
+/* Serialized local apply only AFTER coordinator proves completed global
+ * revocation. This independently checks the durable local rejection floor. */
+int efs_pack_admission_cancel_verified(struct efs_kv *, const struct efs_pack_object *);
 int efs_pack_admission_ack(struct efs_kv *, const struct efs_pack_object *, uint32_t member_bit, int deletion);
 /* Cancellation requires colocated authoritative completed global revocation
  * and local floor. Distributed hosts must use a separate verified coordinator. */

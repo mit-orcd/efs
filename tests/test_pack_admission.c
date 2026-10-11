@@ -26,7 +26,7 @@ static void make(struct efs_pack_object *o, struct efs_pack_ref refs[2], uint64_
 }
 static void retire(struct efs_kv *kv, struct efs_pack_object *o)
 {
-    assert(!efs_pack_admission_cancel(kv, o));
+    assert(!efs_pack_admission_cancel_verified(kv, o));
     assert(efs_pack_admission_retire(kv, o) == EFS_ERR_BUSY);
     assert(efs_pack_admission_ack(kv, o, 1, 1) == EFS_ERR_BUSY);
     for (unsigned i = 0; i < 4; i++) assert(!efs_pack_admission_ack(kv, o, 1u << i, 0));
@@ -62,6 +62,7 @@ static void run(uint32_t group)
     refs[1].ino = refs[0].ino; assert(efs_pack_admit(kv, &a, refs, 2) == EFS_ERR_INVAL);
     make(&a, refs, 1, group);
     assert(efs_pack_admission_cancel(kv, &a) != EFS_OK);
+    assert(efs_pack_admission_cancel_verified(kv, &a) != EFS_OK);
     for (uint64_t seq = 2; seq <= EFS_PACK_ADMISSION_MAX; seq++) { make(&b, refs, seq, group); assert(!efs_pack_admit(kv, &b, refs, 2)); }
     make(&b, refs, EFS_PACK_ADMISSION_MAX + 1, group);
     assert(efs_pack_admit(kv, &b, refs, 2) == EFS_ERR_BUSY);

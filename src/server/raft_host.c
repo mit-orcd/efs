@@ -13,6 +13,7 @@
 #include "efs/publication.h"
 #include "efs/put_ticket.h"
 #include "efs/pack_admission.h"
+#include "efs/packed_upload.h"
 #include "efs/meta_cmd.h"
 #include "efs/dir_layout.h"
 #include "efs/dir_spread.h"
@@ -2656,7 +2657,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_APPEND_RES ||
            cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_PUBLISH ||
            cmd[0] == EFS_MD_CMD_REPORT_PUBLISH ||
-           cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_UPLOAD_RETIRE || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
+           cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PACK_GC_ACK || cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_GC_RETIRE || cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_UPLOAD_RETIRE || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
            cmd[0] == EFS_MD_CMD_XATTR || cmd[0] == EFS_MD_CMD_SALT ||
            cmd[0] == EFS_MD_CMD_LOCK ||
            cmd[0] == EFS_MD_CMD_UNLINK || cmd[0] == EFS_MD_CMD_SETATTR ||
@@ -2693,7 +2694,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
-         cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_UPLOAD_RETIRE || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
+         cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_PACK_GC_ACK || cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_GC_RETIRE || cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_UPLOAD_RETIRE || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
          cmd[0] == EFS_MD_CMD_REPORT_PUBLISH || cmd[0] == EFS_MD_CMD_ACTIVATE_LANE ||
          cmd[0] == EFS_MD_CMD_PUBLISH || cmd[0] == EFS_MD_CMD_PUBLICATION ||
          cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE ||
@@ -3055,6 +3056,17 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
     if (cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT) {
         if (!host_publication_command_valid(cmd,clen)) return EFS_ERR_PROTO;
         return apply_one_publish(h,cmd,index,term,group);
+    }
+    if(cmd[0]==EFS_MD_CMD_PACK_GC_ACK || cmd[0]==EFS_MD_CMD_PACK_CANCEL || cmd[0]==EFS_MD_CMD_PACK_GC_RETIRE) {
+        if(clen<7 || cmd[1]>1)return EFS_ERR_INVAL;
+        struct efs_pack_object object;
+        int rc=efs_pack_object_decode(cmd+6,clen-6,&object);if(rc)return rc;
+        if(group!=object.ledger.publication_group)return EFS_ERR_INVAL;
+        if(cmd[0]==EFS_MD_CMD_PACK_GC_ACK)
+            return efs_pack_admission_ack(h->kv,&object,rd32be(cmd+2),cmd[1]);
+        if(cmd[1] || rd32be(cmd+2))return EFS_ERR_INVAL;
+        return cmd[0]==EFS_MD_CMD_PACK_CANCEL ? efs_pack_admission_cancel_verified(h->kv,&object) :
+            efs_pack_admission_retire(h->kv,&object);
     }
     if (cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_UPLOAD_RETIRE) {
         struct efs_pack_object object; struct efs_pack_ref refs[EFS_PACK_MAX_RECORDS]; uint32_t count;
@@ -8188,6 +8200,8 @@ static unsigned host_gc_backlog_idle(unsigned configured, int capped,
     return capped && removed_after > removed_before ? configured : GC_LOOP_MS;
 }
 
+#include "packed_gc.h"
+
 static void *host_gc_thread(void *arg)
 {
     struct efs_raft_host *h = arg;
@@ -8238,6 +8252,7 @@ static void *host_gc_thread(void *arg)
             host_gc_close_step_pass(h, h->g[g].group, anchor);
             host_gc_close_pass(h, h->g[g].group, anchor);
             host_gc_orphan_pass(h, h->g[g].group, anchor);
+            host_gc_pack_pass(h,h->g[g].group,anchor);
             t_orphan += now_us_() - ta;
             ta = now_us_();
             host_gc_reap_pass(h, h->g[g].group, anchor, &reap_times);
@@ -9864,6 +9879,24 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     group = payload[0];
     cmd = payload + 1;
     clen = plen - 1;
+    /* Only the local verified GC coordinator may emit mutation proofs.
+     * Public/forwarded control cannot supply a fabricated member ACK. */
+    if(clen && (cmd[0]==EFS_MD_CMD_PACK_GC_ACK || cmd[0]==EFS_MD_CMD_PACK_CANCEL || cmd[0]==EFS_MD_CMD_PACK_GC_RETIRE)) {
+        out->rc=EFS_ERR_ACCES;return;
+    }
+    if(clen && cmd[0]==EFS_MD_REQ_PACK_GC_VIEW) {
+        struct efs_pack_object expected,current;
+        rc=efs_pack_object_decode(cmd+1,clen-1,&expected);
+        if(rc || group!=expected.ledger.publication_group){out->rc=rc?rc:EFS_ERR_INVAL;return;}
+        if(!host_hosts(h,group)) {
+            rc=host_remote_cmd(h,group,cmd,clen,out,-1);if(rc)out->rc=rc;return;
+        }
+        rc=host_read_index(h,group,&hint);
+        if(!rc)rc=efs_pack_lifetime_get(h->kv,&expected,&current);
+        out->rc=rc;out->leader_hint=hint;
+        if(!rc)out->salt=current.ledger.phase|((uint64_t)current.ledger.fence_acks<<32);
+        return;
+    }
     if(clen && (cmd[0]==EFS_MD_CMD_QUERY_POLICY || cmd[0]==EFS_MD_REQ_QUERY_POLICY)) {
         if(group!=efs_raft_shard_group(1) ||
            clen!=(cmd[0]==EFS_MD_CMD_QUERY_POLICY?13u:1u)) {out->rc=EFS_ERR_INVAL;return;}

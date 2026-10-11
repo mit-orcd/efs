@@ -482,6 +482,7 @@ int server_fence_packed_object(struct efsd_server *, efs_export_id_t,
 int server_delete_packed_fragment(struct efsd_server *, efs_export_id_t,
     uint64_t id, uint64_t generation, uint32_t fi, uint32_t fragment_len,
     const uint8_t expected_sum[EFS_HASH_SIZE]);
+int server_packed_gc(struct efsd_server *, const uint8_t *, uint32_t);
 int server_packed_upload(struct efsd_server *, const uint8_t *, uint32_t);
 int server_packed_get(struct efsd_server *, const uint8_t *, uint32_t, uint8_t *, uint32_t, uint32_t *);
 int server_write_packed_fragment(struct efsd_server *, efs_export_id_t,

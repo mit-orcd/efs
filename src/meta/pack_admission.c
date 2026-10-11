@@ -185,7 +185,7 @@ static int save(struct efs_kv *kv, const struct efs_pack_object *o)
     if (!rc) rc = efs_pack_object_encode(o, bytes, sizeof(bytes), &len);
     return rc ? rc : efs_kv_put(kv, key, sizeof(key), bytes, len);
 }
-static int lifetime_get(struct efs_kv *kv, const struct efs_pack_object *request, struct efs_pack_object *out)
+int efs_pack_lifetime_get(struct efs_kv *kv, const struct efs_pack_object *request, struct efs_pack_object *out)
 {
     uint8_t expected[EFS_HASH_SIZE], actual[EFS_HASH_SIZE];
     int rc = manifest(request, expected); if (rc) return rc;
@@ -223,13 +223,13 @@ int efs_pack_upload_retire(struct efs_kv *kv, const struct efs_pack_object *requ
 int efs_pack_admission_ack(struct efs_kv *kv, const struct efs_pack_object *request, uint32_t bit, int deletion)
 {
     if (deletion != 0 && deletion != 1) return EFS_ERR_INVAL;
-    struct efs_pack_object o; int rc = lifetime_get(kv, request, &o); if (rc) return rc;
+    struct efs_pack_object o; int rc = efs_pack_lifetime_get(kv, request, &o); if (rc) return rc;
     rc = deletion ? efs_pack_ledger_delete_ack(&o.ledger, bit) : efs_pack_ledger_fence_ack(&o.ledger, bit);
     return rc ? rc : save(kv, &o);
 }
 int efs_pack_admission_cancel(struct efs_kv *kv, const struct efs_pack_object *request)
 {
-    struct efs_pack_object o; int rc = lifetime_get(kv, request, &o); if (rc) return rc;
+    struct efs_pack_object o; int rc = efs_pack_lifetime_get(kv, request, &o); if (rc) return rc;
     rc = efs_session_reclaimable(kv, anchor(o.ledger.publication_group), o.ledger.owner.client_uuid, o.ledger.owner.session_epoch); if (rc) return rc;
     for (uint32_t i = 0; i < o.ledger.count; i++) if (o.ledger.state[i] == EFS_PACK_PENDING) o.ledger.state[i] = EFS_PACK_CANCELLED;
     rc = efs_pack_ledger_reclaim_begin(&o.ledger);
@@ -239,7 +239,7 @@ int efs_pack_admission_cancel(struct efs_kv *kv, const struct efs_pack_object *r
 int efs_pack_admission_retire(struct efs_kv *kv, const struct efs_pack_object *request)
 {
     if (!kv) return EFS_ERR_INVAL;
-    struct efs_pack_object o; int rc = lifetime_get(kv, request, &o);
+    struct efs_pack_object o; int rc = efs_pack_lifetime_get(kv, request, &o);
     if (rc == EFS_ERR_NOT_FOUND) {
         uint8_t key[19], stream[31], floor[23]; uint64_t f;
         rc = keys(request, key, stream, floor); if (!rc) rc = floor_get(kv, floor, &f);
@@ -253,4 +253,18 @@ int efs_pack_admission_retire(struct efs_kv *kv, const struct efs_pack_object *r
     uint8_t key[19]; rc = efs_pack_object_key(o.ledger.publication_group, o.ledger.segment_id, o.ledger.segment_generation, key);
     if (!rc) rc = unlocked(kv, key, sizeof(key));
     return rc ? rc : efs_kv_del(kv, key, sizeof(key));
+}
+
+int efs_pack_admission_cancel_verified(struct efs_kv *kv, const struct efs_pack_object *request)
+{
+    struct efs_pack_object o;
+    int rc=efs_pack_lifetime_get(kv,request,&o);if(rc)return rc;
+    rc=efs_session_cleanup_floor(kv,anchor(o.ledger.publication_group),
+        o.ledger.owner.client_uuid,o.ledger.owner.session_epoch);
+    if(rc)return rc;
+    for(uint32_t i=0;i<o.ledger.count;i++)
+        if(o.ledger.state[i]==EFS_PACK_PENDING)o.ledger.state[i]=EFS_PACK_CANCELLED;
+    rc=efs_pack_ledger_reclaim_begin(&o.ledger);
+    if(rc!=EFS_OK && rc!=EFS_ERR_BUSY)return rc;
+    return save(kv,&o);
 }

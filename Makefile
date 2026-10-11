@@ -488,6 +488,7 @@ test: all
 	./tests/test_pack_cohort
 	./tests/test_packed_reader
 	python3 tests/test_packed_read_budget.py
+	python3 tests/test_packed_gc.py
 	./tests/test_pack_mapping
 	./tests/test_packed_store
 	./tests/test_pack_ledger
@@ -748,3 +749,5 @@ src/meta/pack_mapping.o: include/efs/pack_mapping.h include/efs/pack_ledger.h in
 
 tests/test_pack_cohort: tests/test_pack_cohort.c $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(LIB) $(LDFLAGS)
+
+src/server/raft_host.o: src/server/packed_gc.h

@@ -17,6 +17,11 @@
  * is serialized apply. Reply salt is ticket state, never permission to PUT. */
 /* REPORT envelope: [tag][uuid:16][epoch:4][legacy PUBLISH:202]*N.
  * Fences every mapping at serialized apply without reusing delta fields. */
+/* Internal coordinator commands; public control RPC cannot forge ACKs. */
+#define EFS_MD_CMD_PACK_GC_ACK 48
+#define EFS_MD_CMD_PACK_CANCEL 49
+#define EFS_MD_CMD_PACK_GC_RETIRE 50
+#define EFS_MD_REQ_PACK_GC_VIEW 51
 #define EFS_MD_CMD_PACK_UPLOAD_RETIRE 47 /* completed permit only; retain live object ledger */
 #define EFS_MD_CMD_PACK_ADMIT 45 /* canonical EFSUPLD1 manifest */
 #define EFS_MD_REQ_PACK_STATUS 46 /* same manifest, fresh authority only */

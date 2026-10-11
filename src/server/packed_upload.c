@@ -61,3 +61,30 @@ int server_packed_get(struct efsd_server *s, const uint8_t *request, uint32_t by
     if (!rc) { efs_put_upload_wr32(out + 4, len); memcpy(out + 8, sum, sizeof(sum)); memcpy(out + EFS_PACKED_GET_REPLY, payload, len); }
     *written = EFS_PACKED_GET_REPLY + (rc ? 0 : len); free(payload); return EFS_OK;
 }
+
+/* A physical ACK is produced only after fresh exact-object authority and
+ * actual storage barriers. The object may outlive its upload replay floor. */
+int server_packed_gc(struct efsd_server *s,const uint8_t *request,uint32_t length)
+{
+    if(!s || !request || length<2 || request[0]>1)return EFS_ERR_INVAL;
+    struct efs_pack_object o;
+    int rc=efs_pack_object_decode(request+1,length-1,&o);if(rc)return rc;
+    if(!s->id || s->id>EFS_MAX_NODES || !(o.ledger.member_mask&(1u<<(s->id-1))))return EFS_ERR_INVAL;
+    uint8_t query[EFS_PACK_OBJECT_MAX_BYTES+2];query[0]=(uint8_t)o.ledger.publication_group;
+    query[1]=EFS_MD_REQ_PACK_GC_VIEW;memcpy(query+2,request+1,length-1);
+    struct efs_msg_raft_mkfs_reply authority;
+    server_raft_host_submit(query,length+1,&authority);
+    if(authority.rc)return authority.rc;
+    uint32_t phase=(uint32_t)authority.salt,fences=(uint32_t)(authority.salt>>32);
+    if(phase!=EFS_PACK_RECLAIMING && phase!=EFS_PACK_RETIRED)return EFS_ERR_BUSY;
+    if(request[0] && fences!=o.ledger.member_mask)return EFS_ERR_BUSY;
+    rc=server_fence_packed_object(s,1,o.ledger.segment_id,o.ledger.segment_generation);
+    if(rc || !request[0])return rc;
+    for(uint32_t fi=0;fi<EFS_NUM_FRAGMENTS;fi++)if(o.nodes[fi]==s->id) {
+        rc=server_delete_packed_fragment(s,1,o.ledger.segment_id,o.ledger.segment_generation,
+            fi,o.ledger.geometry/2,o.checksums[fi]);if(rc)return rc;
+    }
+    /* A captured non-placement member never admitted this object's PUT;
+     * its durable exact fence proves no late PUT can create a fragment. */
+    return EFS_OK;
+}
