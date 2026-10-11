@@ -586,5 +586,83 @@ static void session_owned_completion(int cold)
  }else efs_kv_mem_free(kv);
 }
 
+static void completion_batch(int cold,int owned,int reverse,int wide)
+{
+ char dir[]="/tmp/efs-batch-completion-XXXXXX";if(cold)assert(mkdtemp(dir));
+ struct efs_kv *kv=cold?efs_kv_lsm_open(dir,NULL):efs_kv_mem_create();assert(kv);
+ efs_ino_t ino;uint64_t gen;fixture(kv,&ino,&gen);
+ if(wide)assert(efs_meta_apply_activate_lanes(kv,ino,UINT64_MAX)==EFS_OK);
+ struct efs_meta_append_plan *plan=malloc(sizeof(*plan));assert(plan);
+ struct efs_opid_req q=identity(1,0);struct efs_txid tx={{231}};
+ uint64_t offsets[EFS_META_APPEND_COMPLETE_MAX];
+ for(unsigned i=0;i<EFS_META_APPEND_COMPLETE_MAX;i++) {
+  q.id.seq=i+1;q.ack=i;
+  assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,plan)==EFS_OK);
+  offsets[i]=plan->offset;tx.bytes[1]=i+1;
+  assert(efs_meta_execute_append(plan,&tx,&ops,kv)==EFS_OK);
+ }
+ uint32_t open,shard=efs_kv_inode_shard(ino);uint64_t watermark,frontier;
+ tx.bytes[1]=30;
+ assert(efs_meta_finish_append_batch(kv,ino,offsets,0,EFS_META_APPEND_COMPLETED,&tx,&ops,kv)==EFS_ERR_INVAL);
+ assert(efs_meta_finish_append_batch(kv,ino,offsets,EFS_META_APPEND_COMPLETE_MAX+1,EFS_META_APPEND_COMPLETED,&tx,&ops,kv)==EFS_ERR_INVAL);
+ /* Failed collection after a valid first range must leave ALL rows untouched. */
+ uint64_t bad[2]={offsets[0],999999};
+ assert(efs_meta_finish_append_batch(kv,ino,bad,2,EFS_META_APPEND_COMPLETED,&tx,&ops,kv)==EFS_ERR_NOT_FOUND);
+ assert(efs_meta_apply_append_state(kv,ino,&watermark,&frontier,&open)==EFS_OK && open==EFS_META_APPEND_COMPLETE_MAX && frontier==200);
+ if(owned) {
+  assert(efs_meta_finish_append_batch_owned(kv,ino,offsets,EFS_META_APPEND_COMPLETE_MAX,EFS_META_APPEND_COMPLETED,&q.id,&tx,&ops,kv)==EFS_ERR_BUSY);
+  assert(efs_session_create(kv,q.id.client_uuid,1)==EFS_OK);
+  assert(efs_session_register(kv,q.id.client_uuid,1,shard)==EFS_OK);
+  assert(efs_session_establish(kv,shard,q.id.client_uuid,1)==EFS_OK);
+ }
+ /* Reverse order exercises a scan whose backend rows are OPEN but whose
+  * captured overlay contains DONE ranges. Final EOF must include all eight. */
+ for(unsigned i=0;reverse && i<EFS_META_APPEND_COMPLETE_MAX/2;i++) {
+  uint64_t a=offsets[i];offsets[i]=offsets[EFS_META_APPEND_COMPLETE_MAX-1-i];
+  offsets[EFS_META_APPEND_COMPLETE_MAX-1-i]=a;
+ }
+ const struct efs_meta_append_ops lost={owner_prepare,lost_decision,resolve};
+ int rc=owned?efs_meta_finish_append_batch_owned(kv,ino,offsets,EFS_META_APPEND_COMPLETE_MAX,EFS_META_APPEND_COMPLETED,&q.id,&tx,&lost,kv):
+              efs_meta_finish_append_batch(kv,ino,offsets,EFS_META_APPEND_COMPLETE_MAX,EFS_META_APPEND_COMPLETED,&tx,&lost,kv);
+ assert(rc==EFS_ERR_IO);
+ if(cold){efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(dir,NULL);assert(kv);}
+ if(owned)assert(efs_session_fence_local(kv,shard,q.id.client_uuid,2)==EFS_ERR_BUSY);
+ assert(resolve(kv,&tx,&last_parts,EFS_TXN_COMMIT)==EFS_OK);
+ assert(efs_meta_apply_append_state(kv,ino,&watermark,&frontier,&open)==EFS_OK && !open && !watermark);
+ struct efs_meta_stat st;assert(efs_meta_apply_getattr(kv,ino,decision,kv,&st)==EFS_OK && st.size==200+8*EFS_META_APPEND_COMPLETE_MAX);
+ tx.bytes[1]=31;
+ assert(efs_meta_finish_append_batch(kv,ino,offsets,EFS_META_APPEND_COMPLETE_MAX,EFS_META_APPEND_COMPLETED,&tx,&ops,kv)==EFS_OK);
+ if(owned) {
+  assert(efs_session_fence_local(kv,shard,q.id.client_uuid,2)==EFS_OK);
+  assert(efs_meta_finish_append_batch_owned(kv,ino,offsets,EFS_META_APPEND_COMPLETE_MAX,EFS_META_APPEND_COMPLETED,&q.id,&tx,&ops,kv)==EFS_ERR_STALE);
+ }
+ free(plan);
+ if(cold) {
+  efs_kv_lsm_close(kv);DIR *d=opendir(dir);assert(d);struct dirent *e;
+  while((e=readdir(d))){if(e->d_name[0]=='.')continue;char path[512];snprintf(path,sizeof(path),"%s/%s",dir,e->d_name);assert(!unlink(path));}
+  closedir(d);assert(!rmdir(dir));
+ }else efs_kv_mem_free(kv);
+}
+static void completion_batch_gaps(void)
+{
+ struct efs_kv *kv=efs_kv_mem_create();assert(kv);efs_ino_t ino;uint64_t gen;
+ fixture(kv,&ino,&gen);struct efs_meta_append_plan *plan=malloc(sizeof(*plan));assert(plan);
+ struct efs_txid tx={{241}};uint64_t even[4],odd[4];
+ for(unsigned i=0;i<8;i++) {
+  struct efs_opid_req q=identity(i+1,i);
+  assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,plan)==EFS_OK);
+  if(i&1)odd[i/2]=plan->offset;else even[i/2]=plan->offset;
+  tx.bytes[1]=i+1;assert(efs_meta_execute_append(plan,&tx,&ops,kv)==EFS_OK);
+ }
+ tx.bytes[1]=20;
+ assert(efs_meta_finish_append_batch(kv,ino,odd,4,EFS_META_APPEND_COMPLETED,&tx,&ops,kv)==EFS_OK);
+ uint64_t watermark,frontier;uint32_t open;
+ assert(efs_meta_apply_append_state(kv,ino,&watermark,&frontier,&open)==EFS_OK && open==4 && frontier==200 && watermark==264);
+ tx.bytes[1]=21;
+ assert(efs_meta_finish_append_batch(kv,ino,even,4,EFS_META_APPEND_COMPLETED,&tx,&ops,kv)==EFS_OK);
+ assert(efs_meta_apply_append_state(kv,ino,&watermark,&frontier,&open)==EFS_OK && !open && !watermark);
+ struct efs_meta_stat st;assert(efs_meta_apply_getattr(kv,ino,decision,kv,&st)==EFS_OK && st.size==264);
+ free(plan);efs_kv_mem_free(kv);
+}
 int main(void)
-{for(unsigned v=0;v<3;v++){receipt_capture_race(v,0);receipt_capture_race(v,1);}session_owned_completion(0);session_owned_completion(1);retired_append_receipts(0);retired_append_receipts(1);session_owned_append(0);session_owned_append(1);fenced_completion();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}
+{completion_batch_gaps();for(int cold=0;cold<2;cold++)for(int owned=0;owned<2;owned++)for(int reverse=0;reverse<2;reverse++)completion_batch(cold,owned,reverse,0);for(int cold=0;cold<2;cold++)completion_batch(cold,1,1,1);for(unsigned v=0;v<3;v++){receipt_capture_race(v,0);receipt_capture_race(v,1);}session_owned_completion(0);session_owned_completion(1);retired_append_receipts(0);retired_append_receipts(1);session_owned_append(0);session_owned_append(1);fenced_completion();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}

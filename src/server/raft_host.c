@@ -11907,7 +11907,7 @@ static const struct efs_meta_append_ops host_append_ops={
  * REPORT completion uses the same ordered guards; pruning stays synchronous. */
 struct host_append_reserve_ctx {
     struct host_resize_ctx base;
-    struct host_idx_ref refs[EFS_META_LANES+5];
+    struct host_idx_ref refs[EFS_META_LANES+5+EFS_META_APPEND_COMPLETE_MAX];
     int nrefs,leading;
 };
 static int host_append_reserve_prepare(void *user,const struct efs_txid *t,
@@ -15230,16 +15230,26 @@ static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
             /* Freeze owner (when present) and inode before pipelining the
              * exact cursor/reservation/lane images. The shared callback checks
              * every applied verdict before committing the transaction. */
-            struct host_append_reserve_ctx batch={.base={h,hint},
-                                                   .leading=session?2:1};
-            fill_txid(h,&t);
-            rc = session ?
-                efs_meta_finish_append_owned(h->kv, ino, offs[i], EFS_META_APPEND_COMPLETED,
-                                             session, &t, &host_append_reserve_ops, &batch) :
-                efs_meta_finish_append(h->kv, ino, offs[i], EFS_META_APPEND_COMPLETED,
-                                       &t, &host_append_reserve_ops, &batch);
+            uint32_t count=1;
+            while(count<EFS_META_APPEND_COMPLETE_MAX && i+count<n &&
+                  offs[i+count]+lens[i+count]<=sz)++count;
+            for(;;) {
+                struct host_append_reserve_ctx batch={.base={h,hint},
+                                                       .leading=session?2:1};
+                fill_txid(h,&t);
+                rc = session ?
+                    efs_meta_finish_append_batch_owned(h->kv, ino, offs+i, count,
+                        EFS_META_APPEND_COMPLETED, session, &t, &host_append_reserve_ops, &batch) :
+                    efs_meta_finish_append_batch(h->kv, ino, offs+i, count,
+                        EFS_META_APPEND_COMPLETED, &t, &host_append_reserve_ops, &batch);
+                /* An unusual active-lane distribution can exhaust the unchanged
+                 * per-shard image bound. Recapture a smaller batch; never raise
+                 * that bound or discard a guard to make it fit. */
+                if(rc!=EFS_ERR_INVAL || count==1)break;
+                count=(count+1)/2;
+            }
             if(rc!=EFS_OK)return rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
-            did++;
+            did+=count;i+=count-1;
         }
         if (!did && i==n)
             return EFS_OK;

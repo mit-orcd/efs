@@ -146,6 +146,9 @@ struct efs_meta_append_ops {
     int (*decide)(void *, const struct efs_txid *, const struct efs_txn_parts *, int);
     int (*resolve)(void *, const struct efs_txid *, const struct efs_txn_parts *, int);
 };
+/* Bound collection. The caller retains the existing per-shard image limit
+ * and shrinks a batch if its active-lane distribution needs more guards. */
+#define EFS_META_APPEND_COMPLETE_MAX 8u
 int efs_meta_capture_append(struct efs_kv *kv, efs_ino_t ino, uint64_t len,
                              const struct efs_opid_req *q,
                              efs_txn_coord_fn coord, void *ctx,
@@ -172,6 +175,12 @@ int efs_meta_finish_append(struct efs_kv *kv, efs_ino_t ino, uint64_t offset,
 int efs_meta_finish_append_owned(struct efs_kv *, efs_ino_t, uint64_t offset,
     int outcome, const struct efs_opid *, const struct efs_txid *,
     const struct efs_meta_append_ops *, void *ctx);
+int efs_meta_finish_append_batch(struct efs_kv *, efs_ino_t,
+    const uint64_t *offsets, uint32_t count, int outcome, const struct efs_txid *,
+    const struct efs_meta_append_ops *, void *ctx);
+int efs_meta_finish_append_batch_owned(struct efs_kv *, efs_ino_t,
+    const uint64_t *offsets, uint32_t count, int outcome, const struct efs_opid *,
+    const struct efs_txid *, const struct efs_meta_append_ops *, void *ctx);
 
 /* Internal recording adapter: reads only, emits bounded replacement images
  * to a collector. Materialized KV mutation requires coordinated PREPARE. */
