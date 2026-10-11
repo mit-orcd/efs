@@ -2,7 +2,8 @@
 """NUC-only continuation: named build, operator gates, W96 recovery and W97 controls."""
 import hashlib,json,os,signal,socket,subprocess,time
 from pathlib import Path
-base=Path('/data1/efs/devel-nuc-20261010');src=base/'src';out=base/'closure';out.mkdir(exist_ok=False)
+base=Path('/data1/efs/devel-nuc-20261010');src=base/'src';out=base/'closure';out.mkdir(exist_ok=True)
+assert not (out/'build.log').exists(),'completed/active stages must not be overwritten'
 env=dict(os.environ,EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_TRANSPORT='tcp',EFS_MD_RAFT_N='4',EFS_RAFT_FLOW='1',EFS_RAFT_FLOW_EARLY_RETIRE='0',EFS_RAFT_BATCH_OVERLAP='0',EFS_RAFT_BATCH_NOOP='0',EFS_RAFT_GROUP_DRAIN='0',EFS_RAFT_APPLIED_INTERVAL_MS='10',EFS_BATCH_OBS='0')
 def wait(fn,limit,label):
     until=time.monotonic()+limit
@@ -47,6 +48,7 @@ try:
     for drive,root in [('nvme',Path('/home/efs/devel-nuc-w96-20261010')),('sata',base/'w96-data')]:
         for index,mode in enumerate(('grow','ring','ring','grow')):
             assert not os.path.ismount('/data1/efs/mnt')
+            assert subprocess.run(['pgrep','-x','efsd'],stdout=subprocess.DEVNULL).returncode==1,'retained daemon would contaminate raw control'
             cell=f'w97-{drive}-{index}-{mode}'
             run(cell,['python3',src/'tests/measure/nuc_durable_io.py',root/cell,out/cell,'--mode',mode,'--seconds','480'],timeout=650)
     (out/'run-exit.txt').write_text('0\n')
