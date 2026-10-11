@@ -170,6 +170,20 @@ try:
         print('bounded display, streaming export, pinned generation and permissions PASS',flush=True)
 
 
+        if os.environ.get('EFS_QUERY_EXTRAS')=='1':
+            results=work/'posix-extras.tsv'
+            with (work/'posix-extras.log').open('w') as output:
+                result=subprocess.run([sys.executable,str(source/'tests/posix/posix_extras.py'),
+                                       str(mounts[0]),'--jobs','4','--timeout-s','30',
+                                       '--results',str(results)],env=env,stdout=output,
+                                      stderr=subprocess.STDOUT,timeout=180)
+            assert result.returncode==0,(work/'posix-extras.log').read_text()
+            verdicts=dict(line.split('\t',2)[:2] for line in results.read_text().splitlines()
+                          if line and not line.startswith('#'))
+            for name in ('virt_stats_readable','virt_find_query','virt_find_not_a_real_dir'):
+                assert verdicts.get(name)=='PASS',(name,verdicts)
+            print('optional POSIX suite: enabled .efs stats/find/source contracts PASS; mmap verdict retained',flush=True)
+
         if os.environ.get('EFS_QUERY_POSIX')=='1':
             suites=[('posix',[str(source/'tests/posix/posix_suite.py'),str(mounts[0]),'--results',str(work/'posix.tsv')]),
                     ('peer',[str(source/'tests/posix/posix_2client.py'),'--local',*map(str,mounts),'--results',str(work/'peer.tsv')])]
