@@ -3573,13 +3573,24 @@ static int append_publish_burst(efs_ino_t ino)
     pthread_mutex_unlock(&g_open_mu);
     if(!publish)return EFS_OK;
     int rc=efs_append_flush_report(NULL,ino);
+    uint64_t completed_ms=stats_now_ms();
     pthread_mutex_lock(&g_open_mu);
     for(struct efs_open_ref *r=g_open_refs;r;r=r->next) {
         if(r->ino!=ino)continue;
         r->append_publishing=0;
         /* BUSY backoff caps at 64 ms. Leave a 100 ms admission window
          * after durable publication so a competing client can retry. */
-        if(rc==EFS_OK)r->append_handoff_ms=stats_now_ms()+100;
+        if(rc==EFS_OK) {
+            /* Age measures unpublished ownership, not time spent completing
+             * the previous publication. A slow REPORT must not consume the
+             * next burst's entire age budget before its first write. */
+            r->append_burst_ms=completed_ms;
+            r->append_handoff_ms=completed_ms+100;
+        } else {
+            /* The next write has not been accepted. Retry the outstanding
+             * publication before opening a fresh burst after a failed drain. */
+            r->append_burst=32;
+        }
         break;
     }
     pthread_mutex_unlock(&g_open_mu);
