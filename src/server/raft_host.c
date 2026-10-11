@@ -10765,10 +10765,34 @@ static int host_namespace_session_admit(struct efs_raft_host *h,uint32_t shard,
     uint8_t cmd[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_CREATE};
     memcpy(cmd+2,q->id.client_uuid,16);wr32be(cmd+18,q->id.session_epoch);wr32be(cmd+22,shard);
     uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(q->id.client_uuid));
-    rc=host_namespace_session_command(h,owner,cmd,HOST_SESS_CREATE_LEN,hint);
+    /* CREATE is a no-op for an existing session, but still used to pay a
+     * durable log round on every newly touched namespace shard. Consult
+     * fresh owner authority; only absence needs CREATE. Never infer ACTIVE
+     * from a missing local floor or cache the owner across requests. */
+    uint8_t query[HOST_SESS_HDR_LEN+4];
+    memcpy(query,cmd,HOST_SESS_HDR_LEN);query[1]=HOST_SESS_GET;wr32be(query+18,shard);
+    uint64_t session=0;
+    if(host_hosts(h,owner))rc=host_session_get(h,query,sizeof(query),owner,hint,&session);
+    else {
+        struct efs_msg_raft_mkfs_reply reply={0};
+        rc=host_remote_cmd(h,owner,query,sizeof(query),&reply,-1);
+        if(reply.leader_hint>=0)*hint=reply.leader_hint;
+        if(rc==EFS_OK)session=reply.salt;
+    }
+    int registered=0;
+    if(rc==EFS_ERR_NOT_FOUND) {
+        rc=host_namespace_session_command(h,owner,cmd,HOST_SESS_CREATE_LEN,hint);
+    } else if(rc==EFS_OK) {
+        uint32_t epoch=(uint32_t)session;
+        uint8_t state=(uint8_t)(session>>32);
+        if(epoch!=q->id.session_epoch)rc=EFS_ERR_STALE;
+        else if(state==EFS_SESSION_FENCING)rc=EFS_ERR_BUSY;
+        else if(state!=EFS_SESSION_ACTIVE)rc=EFS_ERR_PROTO;
+        else registered=(session&(1ull<<40))!=0;
+    }
     if(rc!=EFS_OK)return rc;
     cmd[1]=EFS_MD_SESS_REGISTER;
-    rc=host_namespace_session_command(h,owner,cmd,sizeof(cmd),hint);
+    if(!registered)rc=host_namespace_session_command(h,owner,cmd,sizeof(cmd),hint);
     if(rc!=EFS_OK)return rc;
     cmd[1]=EFS_MD_SESS_ESTABLISH;
     rc=host_session_establish_admit(h,cmd,sizeof(cmd),group,hint);
@@ -12374,6 +12398,9 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
     int hint = -1;
     int rc, i, np = 0;
     int stage = 0, stamp_lane = 0;
+    int prof=read_prof_on();
+    uint64_t started=prof?now_us_():0,session_us=0,prep_us=0,wait_us=0,commit_us=0;
+    uint64_t phase=0;
 
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
@@ -12447,7 +12474,9 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
         dsh = 0;
     if (rc == EFS_OK) {
         struct efs_opid_reply rep;
+        phase=prof?now_us_():0;
         int admitted=host_namespace_session_admit(h,dsh,q,&hint);
+        if(prof)session_us=now_us_()-phase;
         int hit=admitted==EFS_OK?host_opid_replay(h,dsh,q,&rep):admitted;
 
         if (hit < 0) {
@@ -12484,9 +12513,12 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
                 rc = pack_create_cmd(mkcmd, &mklen, parent, mode, name, &at2, 0,
                                      next, prow.layout, q, 0);
         }
-        if (rc == EFS_OK)
+        if (rc == EFS_OK) {
+            phase=prof?now_us_():0;
             rc = host_propose_wait(h, efs_raft_shard_group(psh), mkcmd, mklen,
                                    &hint);
+            if(prof)commit_us=now_us_()-phase;
+        }
         goto mkdir_done;
     }
     if (rc == EFS_OK) {
@@ -12562,6 +12594,7 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
         stage = 9;
         fill_txid(h, &t);
         struct host_prepare_cohort cohort;
+        phase=prof?now_us_():0;
         host_prepare_cohort_begin(&cohort,h);
         np = 0;
         for (i = 0; i < parts.n && rc == EFS_OK; i++) {
@@ -12609,14 +12642,18 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
             }
         }
         rc=host_prepare_cohort_end(&cohort,rc,&hint);
+        if(prof) {prep_us=now_us_()-phase;phase=now_us_();}
         if (rc == EFS_OK)
             rc = host_wait_refs(h, prefs, np, &hint);
+        if(prof)wait_us=now_us_()-phase;
         if (rc != EFS_OK)
             (void)host_drop_parts(h, &t, &parts, &hint);
         else {
             stage = 10;
             coord = efs_txn_coordinator(&t, &parts);
+            phase=prof?now_us_():0;
             rc = host_txn_commit(h, &t, &parts, coord, &hint);
+            if(prof)commit_us=now_us_()-phase;
         }
     }
 mkdir_done:
@@ -12633,6 +12670,18 @@ mkdir_done:
                 "hint=%d psh=%u csh=%u dsh=%u stage=%d ino=%llu\n",
                 (unsigned long long)parent, name, rc, hint, psh,
                 csh, dsh, stage, (unsigned long long)ino);
+    if(prof) {
+        static uint64_t last;
+        uint64_t now=now_us_(),old=__atomic_load_n(&last,__ATOMIC_RELAXED);
+        if(now-old>=1000000ull && __atomic_compare_exchange_n(&last,&old,now,0,
+            __ATOMIC_RELAXED,__ATOMIC_RELAXED))
+            fprintf(stderr,"namespace-prof: mkdir rc=%d parent=%llu psh=%u csh=%u dsh=%u "
+                "total_us=%llu session_us=%llu prep_us=%llu wait_us=%llu commit_us=%llu\n",
+                rc,(unsigned long long)parent,psh,csh,dsh,
+                (unsigned long long)(now-started),(unsigned long long)session_us,
+                (unsigned long long)prep_us,(unsigned long long)wait_us,
+                (unsigned long long)commit_us);
+    }
     set_inode_rc(out, rc, hint);
     if (rc == EFS_OK) {
         stat_to_inode(&st, &out->inode);

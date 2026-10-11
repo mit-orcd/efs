@@ -534,3 +534,23 @@ namespace fencing, transaction resolution, follower redirection, metadata
 retry-budget and shared-log coverage gates pass on the Mac Linux seed. The
 unchanged live deep pair still failed 0/2 (33.1 seconds, normal cleanup).
 This routing correction is not sufficient for native acceptance.
+
+New-shard namespace admission now reads fresh session-owner authority before
+logging CREATE: existing ACTIVE sessions skip the no-op CREATE, and an already
+registered participant skips repeated REGISTER. Absence still creates and
+registers; owner read errors, stale epochs and fencing never admit a write.
+ESTABLISH retains its fresh global check, durable local floor and final local
+acceptance. Local/remote owner, missing/error/fenced/revoked-state, registration
+and final-check failure cases pass, as do the Linux session admission,
+namespace cold-WAL/fencing, transaction and cohort gates. The full build is
+clean. Opt-in EFS_READ_PROF now samples monotonic MKDIR phases at most once per
+second per process; production defaults emit none.
+
+The normally cleaned 60-level diagnostic with this candidate shows sampled
+cross-group MKDIRs spending 70–130 ms on session admission and 116–150 ms on
+transaction commit/resolution, versus 16–40 ms on prepare submission (one
+74 ms outlier). Cleanup takes 11.70 seconds. Resolution currently proposes
+ordinary per-participant entries separately, each paying a log durability
+barrier. This is the next measured lead; no native pass is claimed. Slowing
+markers to the existing 1,000 ms setting alone also failed the unchanged deep
+pair (0/2, 31.4 seconds), so cadence alone is insufficient.
