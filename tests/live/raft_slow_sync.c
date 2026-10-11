@@ -26,7 +26,8 @@ static void delay_log(int fd)
     unsigned node=0;
     for(unsigned i=1;i<=4;i++) {
         char suffix[40];snprintf(suffix,sizeof(suffix),"/n%u/mdraft/log/raft.log",i);
-        if(strstr(path,suffix)) {node=i;break;}
+        size_t length=strlen(path),tail=strlen(suffix);
+        if(length>=tail && !strcmp(path+length-tail,suffix)) {node=i;break;}
     }
     if(!node) {errno=saved;return;}
     int selected=0,marker_fd=open(marker,O_RDONLY);

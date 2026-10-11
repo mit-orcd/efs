@@ -707,21 +707,26 @@ try:
         if a.replication_pressure:
             def pressure_phases():
                 began=time.monotonic();slow_node=None
-                def snapshot(stage):
+                def snapshot(stage,transition_us=None):
                     rows=[run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+i}'],capture_output=True,text=True,timeout=10).stdout for i in range(4)]
                     with (work/'replication-pressure.jsonl').open('a') as out:
-                        out.write(json.dumps(dict(stage=stage,seconds=time.monotonic()-began,mono_us=int(time.monotonic()*1000000),nodes=rows,slow_node=slow_node))+'\n')
+                        out.write(json.dumps(dict(stage=stage,seconds=time.monotonic()-began,mono_us=int(time.monotonic()*1000000),transition_mono_us=transition_us,nodes=rows,slow_node=slow_node))+'\n')
                     return rows
                 try:
-                    rows=snapshot('before')
+                    snapshot('before')
+                    if pressure_done.wait(30):return
+                    rows=snapshot('pre-slow')
                     leaders={i for i,row in enumerate(rows) if 'role=LEADER' in row}
-                    candidates=[i for i in (2,3,0,1) if i not in leaders and 'hosted=1' in rows[i]]
+                    candidates=[i for i in (2,1,3,0) if i not in leaders and 'hosted=1' in rows[i]]
                     assert candidates,rows
-                    slow_node=candidates[0]+1
-                    if pressure_done.wait(30):return
-                    (work/'raft-slow-armed').write_text(str(slow_node)+'\n');snapshot('slow')
-                    if pressure_done.wait(30):return
-                    (work/'raft-slow-armed').unlink();snapshot('healed')
+                    # Prefer a follower hosting both groups, using current
+                    # roles at arming time rather than an assumed node ID.
+                    slow_node=max(candidates,key=lambda i:rows[i].count('hosted=1'))+1
+                    (work/'raft-slow-armed').write_text(str(slow_node)+'\n')
+                    armed_at=time.monotonic();snapshot('slow',int(armed_at*1000000))
+                    if pressure_done.wait(max(0,30-(time.monotonic()-armed_at))):return
+                    (work/'raft-slow-armed').unlink()
+                    snapshot('healed',int(time.monotonic()*1000000))
                     while not pressure_done.wait(30):snapshot('recovery')
                 except BaseException as error:pressure_errors.append(error)
                 finally:(work/'raft-slow-armed').unlink(missing_ok=True)

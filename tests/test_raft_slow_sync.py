@@ -21,6 +21,9 @@ for node,armed in [(2,True),(3,False),(3,True)]:
   began=time.monotonic();os.fsync(f.fileno());os.fdatasync(f.fileno())
   elapsed=time.monotonic()-began;rows.append({'node':node,'armed':armed,'elapsed':elapsed})
   if node==3 and armed:assert elapsed>=0.19
+marker.write_text('3\n')
+with p.with_suffix('.log.tmp').open('wb') as f:
+ f.write(b'not the active log');f.flush();os.fsync(f.fileno())
 marker.unlink()
 with p.open('rb') as f:os.fsync(f.fileno())
 bad=os.open(p,os.O_RDONLY);os.close(bad)
