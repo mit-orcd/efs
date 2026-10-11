@@ -56,6 +56,9 @@ try:
             (cell/'identity.json').write_text(json.dumps(dict(pid=bench.pid,tids=tids,cmdline=(proc/'cmdline').read_bytes().decode().split('\0')),indent=2))
             events='xfs:xfs_log_force,xfs:xlog_iclog_force,xfs:xlog_iclog_sync,syscalls:sys_enter_fdatasync,syscalls:sys_enter_pwrite64,syscalls:sys_enter_ftruncate'
             run(['perf','stat','-x',',','-e',events,'-t',tids,'--','sleep','20'],cell/'tracepoints.txt',40)
+            # Log I/O can run in XFS workers outside these writer TIDs. This
+            # separate aggregate includes other host XFS work; no path tracing.
+            run(['perf','stat','-x',',','-a','-e','xfs:xfs_log_force,xfs:xlog_iclog_force,xfs:xlog_iclog_sync','--','sleep','20'],cell/'host-xfs-tracepoints.txt',40)
             run(['perf','record','-F','99','-g','-p',str(bench.pid),'-o',cell/'cycles.data','--','sleep','15'],cell/'cycles-record.txt',35)
             run(['perf','report','--stdio','--no-children','--percent-limit','1','-i',cell/'cycles.data'],cell/'cycles-report.txt',40)
             run(['timeout','--signal=INT','10','strace','-f','-c','-p',str(bench.pid)],cell/'strace-summary.txt',30)
