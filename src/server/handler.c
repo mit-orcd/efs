@@ -5,6 +5,7 @@
 #include "efs/checksum.h"
 #include "efs/store.h"
 #include "efs/put_upload.h"
+#include "efs/packed_upload.h"
 #include "efs/opid.h"
 #include "efs/version.h"
 #include "efs/storage_capacity.h"
@@ -398,6 +399,26 @@ send_reply:
                 server_export_put(g_server, ex);
             }
             break;
+        }
+        case EFS_MSG_PUT_PACKED: {
+            uint64_t start = efs_iostats_now_us(); uint8_t reply[4];
+            int rc = server_packed_upload(g_server, payload, payload_len);
+            efs_put_upload_wr32(reply, (uint32_t)rc);
+            efs_conn_send_msg(conn, EFS_MSG_PUT_PACKED_REPLY, reply, sizeof(reply));
+            efs_iostats_add(EFS_IOSTAT_PUT, rc ? 0 : payload_len, efs_iostats_now_us() - start, rc != EFS_OK);
+            break;
+        }
+        case EFS_MSG_GET_PACKED: {
+            uint64_t start = efs_iostats_now_us();
+            uint8_t *reply = malloc(EFS_PACKED_GET_REPLY + EFS_SEGMENT_MAX_SIZE / 2); uint32_t len = 0;
+            int rc = reply ? server_packed_get(g_server, payload, payload_len, reply,
+                EFS_PACKED_GET_REPLY + EFS_SEGMENT_MAX_SIZE / 2, &len) : EFS_ERR_NOMEM;
+            if (rc) { uint8_t error[EFS_PACKED_GET_REPLY] = {0}; efs_put_upload_wr32(error, (uint32_t)rc);
+                efs_conn_send_msg(conn, EFS_MSG_GET_PACKED_REPLY, error, sizeof(error)); }
+            else efs_conn_send_msg(conn, EFS_MSG_GET_PACKED_REPLY, reply, len);
+            int result = rc ? rc : (int32_t)efs_put_upload_rd32(reply);
+            free(reply); efs_iostats_add(EFS_IOSTAT_GET, result ? 0 : len - EFS_PACKED_GET_REPLY,
+                efs_iostats_now_us() - start, result != EFS_OK); break;
         }
         case EFS_MSG_PUT_TICKETED: {
             uint64_t start=efs_iostats_now_us();
@@ -1045,7 +1066,8 @@ send_reply:
             efs_conn_send_msg(conn, EFS_MSG_INODE_WRITER_VIEW_REPLY, &r, sizeof(r));
             break;
         }
-        case EFS_MSG_INODE_GETCHUNKS: {
+        case EFS_MSG_INODE_GETCHUNKS:
+        case EFS_MSG_GETCHUNKS_PACKED: {
             struct efs_msg_inode_getchunks_reply r;
             memset(&r, 0, sizeof(r));
             r.status = EFS_INODE_RPC_ERROR;
@@ -1054,7 +1076,12 @@ send_reply:
                 struct efs_msg_inode_getchunks *req = payload;
                 server_raft_host_getchunks(req->export_id, req->ino, req->start, req->max, req->generation, &r);
             }
-            efs_conn_send_msg(conn, EFS_MSG_INODE_GETCHUNKS_REPLY, &r,
+            if (type == EFS_MSG_INODE_GETCHUNKS) {
+                for (uint32_t i = 0; i < r.count; i++) if (r.recs[i].publish_flags & EFS_CHUNK_REC_F_PACKED_BASE) {
+                    r.status = EFS_INODE_RPC_ERROR; r.count = 0; break;
+                }
+            }
+            efs_conn_send_msg(conn, type == EFS_MSG_GETCHUNKS_PACKED ? EFS_MSG_GETCHUNKS_PACKED_REPLY : EFS_MSG_INODE_GETCHUNKS_REPLY, &r,
                               sizeof(r));
             break;
         }

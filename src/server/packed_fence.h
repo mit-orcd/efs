@@ -1,4 +1,5 @@
-/* Included only by store.c. No production RPC selects these W95 objects.
+/* Included only by store.c. Typed packed RPCs use these W95 objects; mounted
+ * packed writers remain gated.
  * Generation-specific certificates remain until an authoritative admission
  * floor excludes every old PUT. They never share inode death-page identity. */
 static pthread_rwlock_t packed_gc_locks[FRAG_LOCKS];
@@ -86,4 +87,72 @@ int server_write_packed_fragment(struct efsd_server *s,efs_export_id_t eid,
     rc=dead ? (dead>0 ? EFS_ERR_STALE : dead) :
         write_packed_fragment_unfenced(s,eid,id,gen,fi,data,len,sum);
     pthread_rwlock_unlock(mu);return rc;
+}
+
+/* Internal GC entry point: the caller must already prove every captured
+ * member's durable fence ACK in authoritative shared-object metadata. A local
+ * certificate is necessary, but does not manufacture that distributed proof. */
+int server_delete_packed_fragment(struct efsd_server *s, efs_export_id_t eid,
+    uint64_t id, uint64_t gen, uint32_t fi, uint32_t len,
+    const uint8_t expected_sum[EFS_HASH_SIZE])
+{
+#ifdef EFS_BENCH_BUILD
+    (void)s; (void)eid; (void)id; (void)gen; (void)fi; (void)len; (void)expected_sum;
+    return EFS_ERR_INVAL;
+#else
+    char fence[8192]; uint8_t certificate[64];
+    if (!s || s->storage_engine || fi >= EFS_NUM_FRAGMENTS || !expected_sum ||
+        !packed_fragment_length_valid(len)) return EFS_ERR_INVAL;
+    int rc = packed_fence_path(s, eid, id, gen, fence, sizeof(fence));
+    if (rc != EFS_OK) return rc;
+    packed_fence_bytes(eid, id, gen, certificate);
+    int dead = packed_fence_read(fence, certificate);
+    if (dead != 1) return dead < 0 ? dead : EFS_ERR_BUSY;
+    /* Visible certificate bytes alone are insufficient after an uncertain
+     * fence write. Re-establish file/ancestor durability before unlink. */
+    rc = server_fence_packed_object(s, eid, id, gen);
+    if (rc != EFS_OK) return rc;
+    pthread_rwlock_t *mu = packed_gc_lock(eid, id, gen);
+    pthread_rwlock_wrlock(mu);
+    uint8_t *data = NULL, actual[EFS_HASH_SIZE]; uint32_t capacity = len;
+    if (posix_memalign((void **)&data, 4096, len)) { rc = EFS_ERR_NOMEM; goto done; }
+    rc = server_read_packed_fragment(s, eid, id, gen, fi, len, data, &capacity, actual);
+    if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND) goto done;
+    int present = rc == EFS_OK;
+    if (present && memcmp(actual, expected_sum, EFS_HASH_SIZE)) { rc = EFS_ERR_CHECKSUM; goto done; }
+    uint32_t roots = s->storage_path_count ? s->storage_path_count : 1;
+    for (uint32_t root = 0; root < roots; root++) {
+        char path[8192]; struct stat st;
+        rc = server_packed_fragment_path(s, root, eid, id, gen, fi, path, sizeof(path));
+        if (rc != EFS_OK) goto done;
+        if (lstat(path, &st)) {
+            if (errno != ENOENT) { rc = EFS_ERR_IO; goto done; }
+        } else {
+            if (!present || !S_ISREG(st.st_mode) ||
+                (st.st_size != (off_t)len + EFS_HASH_SIZE && st.st_size != (off_t)len + 4096)) {
+                rc = EFS_ERR_IO; goto done;
+            }
+            if (gc_unlink_file(s, path)) { rc = EFS_ERR_IO; goto done; }
+            __atomic_fetch_add(&s->gc_removed_fragments, 1, __ATOMIC_RELAXED);
+            __atomic_fetch_add(&s->gc_removed_file_bytes, (uint64_t)st.st_size, __ATOMIC_RELAXED);
+            __atomic_fetch_add(&s->gc_removed_payload_bytes, len, __ATOMIC_RELAXED);
+            __atomic_store_n(&s->gc_last_delete_us, gc_clock_us(), __ATOMIC_RELAXED);
+            /* Account exactly the actual unlink, even if its subsequent
+             * directory barrier fails. An absent retry never subtracts twice;
+             * cold inventory accounts any crash-reappearing object again. */
+            pthread_mutex_lock(&s->lock);
+            struct efs_node *local = server_local_node(s);
+            if (local) local->used = local->used >= len ? local->used - len : 0;
+            pthread_mutex_unlock(&s->lock);
+            server_usage_mark_dirty(s);
+        }
+        rc = fragment_parent_sync(s, path);
+        if (rc != EFS_OK) goto done;
+    }
+    rc = EFS_OK;
+done:
+    free(data); pthread_rwlock_unlock(mu);
+    if (rc != EFS_OK) __atomic_fetch_add(&s->gc_delete_errors, 1, __ATOMIC_RELAXED);
+    return rc;
+#endif
 }

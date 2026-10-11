@@ -12,6 +12,7 @@
 #include "efs/query_filters.h"
 #include "efs/publication.h"
 #include "efs/put_ticket.h"
+#include "efs/pack_admission.h"
 #include "efs/meta_cmd.h"
 #include "efs/dir_layout.h"
 #include "efs/dir_spread.h"
@@ -120,6 +121,8 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
 #define HOST_PUBLICATION_LEN (HOST_PUBLISH_LEN + 28u)
 #define HOST_PUBLICATION_TICKET_LEN (HOST_PUBLICATION_LEN + 36u)
 #define HOST_PUB_F_TICKETED 4
+#define HOST_PUB_F_PACKED 8
+#define HOST_PUBLICATION_PACK_LEN (HOST_PUBLICATION_LEN + EFS_PACK_REF_BYTES)
 #define HOST_PUB_TAIL_TRIES  4 /* cross-group truncate tail CAS retries */
 #define HOST_ACTIVATE_LANE_LEN 10 /* tag + ino:8 + lane:1 */
 #define HOST_ACTIVATE_MASK_LEN 17 /* tag + ino:8 + mask:8 */
@@ -2259,14 +2262,19 @@ static int apply_lock_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 
 /* Same encoding as sim apply_publish_cmd (plus the host FileID/lane_local
  * tail). clen may be N * HOST_PUBLISH_LEN — one Raft entry, many pubs. */
-static int host_publication_command_valid(const uint8_t *cmd,uint32_t len)
+static int host_publication_command_valid(const uint8_t *cmd, uint32_t len)
 {
-    if (!cmd || (len!=HOST_PUBLICATION_LEN && len!=HOST_PUBLICATION_TICKET_LEN) ||
-        (cmd[0]!=EFS_MD_CMD_PUBLICATION && cmd[0]!=EFS_MD_CMD_PUBLICATION_ADMIT &&
-         cmd[0]!=EFS_MD_CMD_PUBLICATION_RETIRE)) return 0;
-    uint8_t flags=cmd[HOST_PUBLISH_LEN-1];
-    return !(flags & ~(HOST_PUB_F_LANE_LOCAL|HOST_PUB_F_FRESH_OBJECT|HOST_PUB_F_TICKETED)) &&
-        !!(flags & HOST_PUB_F_TICKETED)==(len==HOST_PUBLICATION_TICKET_LEN) &&
+    if (!cmd || (len != HOST_PUBLICATION_LEN && len != HOST_PUBLICATION_TICKET_LEN && len != HOST_PUBLICATION_PACK_LEN) ||
+        (cmd[0] != EFS_MD_CMD_PUBLICATION && cmd[0] != EFS_MD_CMD_PUBLICATION_ADMIT &&
+         cmd[0] != EFS_MD_CMD_PUBLICATION_RETIRE)) return 0;
+    uint8_t flags = cmd[HOST_PUBLISH_LEN - 1];
+    if (flags & ~(HOST_PUB_F_LANE_LOCAL | HOST_PUB_F_FRESH_OBJECT | HOST_PUB_F_TICKETED | HOST_PUB_F_PACKED)) return 0;
+    if (flags & HOST_PUB_F_PACKED) {
+        struct efs_pack_ref ref;
+        return len == HOST_PUBLICATION_PACK_LEN && !(flags & (HOST_PUB_F_TICKETED | HOST_PUB_F_LANE_LOCAL)) &&
+            (flags & HOST_PUB_F_FRESH_OBJECT) && !efs_pack_ref_decode(cmd + HOST_PUBLICATION_LEN, EFS_PACK_REF_BYTES, &ref);
+    }
+    return len != HOST_PUBLICATION_PACK_LEN && !!(flags & HOST_PUB_F_TICKETED) == (len == HOST_PUBLICATION_TICKET_LEN) &&
         (!(flags & HOST_PUB_F_TICKETED) || (flags & HOST_PUB_F_FRESH_OBJECT));
 }
 
@@ -2307,6 +2315,8 @@ static void unpack_publication(const uint8_t *cmd, struct efs_meta_pub *p,
         memcpy(p->publication_id.client_uuid,cmd+HOST_PUBLISH_LEN,EFS_OPID_UUID_LEN);
         p->publication_id.session_epoch=rd32be(cmd+HOST_PUBLISH_LEN+16);
         p->publication_id.seq=rd64be(cmd+HOST_PUBLISH_LEN+20);
+        if (q[16] & HOST_PUB_F_PACKED)
+            (void)efs_pack_ref_decode(cmd + HOST_PUBLICATION_LEN, EFS_PACK_REF_BYTES, &p->ch.packed);
         if (q[16] & HOST_PUB_F_TICKETED) {
             p->ticketed=1;
             memcpy(p->put_id.client_uuid,cmd+HOST_PUBLICATION_LEN,EFS_OPID_UUID_LEN);
@@ -2619,7 +2629,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_APPEND_RES ||
            cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_PUBLISH ||
            cmd[0] == EFS_MD_CMD_REPORT_PUBLISH ||
-           cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
+           cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_UPLOAD_RETIRE || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
            cmd[0] == EFS_MD_CMD_XATTR || cmd[0] == EFS_MD_CMD_SALT ||
            cmd[0] == EFS_MD_CMD_LOCK ||
            cmd[0] == EFS_MD_CMD_UNLINK || cmd[0] == EFS_MD_CMD_SETATTR ||
@@ -2653,7 +2663,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
-         cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
+         cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_UPLOAD_RETIRE || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
          cmd[0] == EFS_MD_CMD_REPORT_PUBLISH || cmd[0] == EFS_MD_CMD_ACTIVATE_LANE ||
          cmd[0] == EFS_MD_CMD_PUBLISH || cmd[0] == EFS_MD_CMD_PUBLICATION ||
          cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE ||
@@ -3015,6 +3025,13 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
     if (cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT) {
         if (!host_publication_command_valid(cmd,clen)) return EFS_ERR_PROTO;
         return apply_one_publish(h,cmd,index,term,group);
+    }
+    if (cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_UPLOAD_RETIRE) {
+        struct efs_pack_object object; struct efs_pack_ref refs[EFS_PACK_MAX_RECORDS]; uint32_t count;
+        int rc = efs_pack_upload_decode(cmd + 1, clen - 1, &object, refs, EFS_PACK_MAX_RECORDS, &count);
+        if (rc) return rc;
+        if (group != object.ledger.publication_group) return EFS_ERR_INVAL;
+        return cmd[0] == EFS_MD_CMD_PACK_UPLOAD_RETIRE ? efs_pack_upload_retire(h->kv, &object) : efs_pack_admit(h->kv, &object, refs, count);
     }
     if(cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT || cmd[0]==EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED) {
         struct efs_put_ticket ticket;
@@ -4844,8 +4861,8 @@ static void host_fwd_getchunks(struct efs_raft_host *h, efs_export_id_t export_i
         rid = host_pick_peer(h, groups, ng, skip);
         if (rid < 0)
             return;
-        if (host_inode_rpc_peer(h, rid, EFS_MSG_INODE_GETCHUNKS, &req,
-                                sizeof(req), EFS_MSG_INODE_GETCHUNKS_REPLY,
+        if (host_inode_rpc_peer(h, rid, EFS_MSG_GETCHUNKS_PACKED, &req,
+                                sizeof(req), EFS_MSG_GETCHUNKS_PACKED_REPLY,
                                 out, sizeof(*out)) != 0) {
             skip = rid;
             out->status = EFS_INODE_RPC_NOT_PRIMARY;
@@ -9755,6 +9772,44 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
        (clen!=46 || !rd64be(cmd+1) ||
         group!=efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd+1))))) {
         out->rc=EFS_ERR_INVAL;return;
+    }
+    if (clen && (cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_REQ_PACK_STATUS || cmd[0] == EFS_MD_CMD_PACK_UPLOAD_RETIRE)) {
+        struct efs_pack_object object, current; struct efs_pack_ref refs[EFS_PACK_MAX_RECORDS]; uint32_t count;
+        rc = efs_pack_upload_decode(cmd + 1, clen - 1, &object, refs, EFS_PACK_MAX_RECORDS, &count);
+        if (rc || group != object.ledger.publication_group) { out->rc = rc ? rc : EFS_ERR_INVAL; return; }
+        if (cmd[0] == EFS_MD_CMD_PACK_ADMIT && object.ledger.member_mask != ((1u << h->n) - 1u)) {
+            out->rc = EFS_ERR_INVAL; return;
+        }
+        if (!host_hosts(h, group)) {
+            rc = host_remote_cmd(h, group, cmd, clen, out, -1);
+            if (rc) out->rc = rc;
+            return;
+        }
+        uint32_t shard = group == EFS_RAFT_GROUP_SHARD ? 1 : 2;
+        uint8_t admission[HOST_SESS_REG_LEN] = {EFS_MD_CMD_SESSION, EFS_MD_SESS_ESTABLISH};
+        memcpy(admission + 2, object.ledger.owner.client_uuid, 16);
+        wr32be(admission + 18, object.ledger.owner.session_epoch); wr32be(admission + 22, shard);
+        rc = host_session_establish_admit(h, admission, sizeof(admission), group, &hint);
+        if (rc) { out->rc = rc; out->leader_hint = hint; return; }
+        if (cmd[0] != EFS_MD_REQ_PACK_STATUS) rc = host_propose_wait_idx(h, group, cmd, clen, &hint, &idx);
+        if (rc == EFS_OK || rc == EFS_ERR_BUSY || rc == EFS_ERR_STALE) {
+            int proof = host_read_index(h, group, &hint);
+            if (!proof) proof = efs_session_accept(h->kv, shard, object.ledger.owner.client_uuid, object.ledger.owner.session_epoch);
+            if (!proof && cmd[0] == EFS_MD_CMD_PACK_UPLOAD_RETIRE) {
+                int retired = 0; proof = efs_pack_upload_is_retired(h->kv, &object, &retired);
+                if (!proof && !retired) proof = EFS_ERR_BUSY;
+                if (!proof) { out->rc = EFS_OK; out->salt = EFS_PACK_UPLOAD_RETIRED;
+                    out->index = idx; out->leader_hint = hint; return; }
+            }
+            if (!proof) proof = efs_pack_admission_get(h->kv, &object, &current);
+            if (!proof && current.ledger.phase != EFS_PACK_ACTIVE) proof = EFS_ERR_STALE;
+            for (uint32_t i = 0; !proof && i < current.ledger.count; i++)
+                if (current.ledger.state[i] > EFS_PACK_LIVE) proof = EFS_ERR_STALE;
+            if (!proof) { rc = EFS_OK; salt = EFS_PACK_ACTIVE; }
+            else if (rc == EFS_OK || proof != EFS_ERR_NOT_FOUND) rc = proof;
+        }
+        out->rc = rc; out->salt = rc == EFS_OK ? salt : 0; out->index = idx; out->leader_hint = hint;
+        return;
     }
     if(clen && (cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT || cmd[0]==EFS_MD_REQ_PUT_TICKET_STATUS ||
                cmd[0]==EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED)) {
@@ -15932,7 +15987,7 @@ static int host_publication_committed(struct efs_raft_host *h, uint8_t group,
     uint64_t applied=efs_raft_applied(r),top=v.read_index;
     rc=EFS_ERR_BUSY;
     for (unsigned n=0;store && top>applied && n<64;n++,top--) {
-        uint8_t cmd[HOST_PUBLICATION_TICKET_LEN],got_digest[EFS_HASH_SIZE];
+        uint8_t cmd[HOST_PUBLICATION_PACK_LEN],got_digest[EFS_HASH_SIZE];
         uint32_t len=sizeof(cmd);uint64_t entry_term=0;
         int grc=store->get(store,top,&entry_term,cmd,&len);
         if ((grc==EFS_ERR_INVAL && len>sizeof(cmd)) || grc==EFS_ERR_NOT_FOUND) continue;
@@ -15986,7 +16041,7 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
          * must have a replicated terminal result, and retries use that result. */
         p.now=now_ns();p.durable_result=1;
         p.lane_local=group!=efs_raft_shard_group(efs_kv_inode_shard(p.ino));
-        uint8_t cmd[HOST_PUBLICATION_TICKET_LEN];uint32_t len=0;
+        uint8_t cmd[HOST_PUBLICATION_PACK_LEN];uint32_t len=0;
         rc=pack_publish_cmd(cmd,&len,&p);
         if(rc==EFS_OK) {
             cmd[0]=query_only==2?EFS_MD_CMD_PUBLICATION_RETIRE:EFS_MD_CMD_PUBLICATION;
@@ -15999,6 +16054,10 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
                 wr32be(cmd+len+16,p.put_id.session_epoch);wr64be(cmd+len+20,p.put_id.seq);
                 wr32be(cmd+len+28,p.put_fragment_len);wr32be(cmd+len+32,p.put_member_mask);
                 len+=36;
+            }
+            if (p.coding_profile_id == EFS_META_PROFILE_PACK_K2F1) {
+                cmd[HOST_PUBLISH_LEN - 1] |= HOST_PUB_F_PACKED;
+                rc = efs_pack_ref_encode(&p.ch.packed, cmd + len); len += EFS_PACK_REF_BYTES;
             }
             if(!query_only && rc==EFS_OK) {
                 /* Pending is issued only after replicated admission is visible
@@ -16327,6 +16386,11 @@ void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32
                    sizeof(out->recs[out->count].nodes));
             memcpy(out->recs[out->count].checksums, ch.checksums,
                    sizeof(out->recs[out->count].checksums));
+            if (ch.coding_profile_id == EFS_META_PROFILE_PACK_K2F1) {
+                out->recs[out->count].publish_flags = EFS_CHUNK_REC_F_PACKED_BASE;
+                out->recs[out->count].packed = ch.packed;
+                out->recs[out->count].file_generation = ch.packed.inode_generation;
+            }
             out->recs[out->count].base_gen = ch.generation;
             out->recs[out->count].chunk_generation = ch.generation;
             out->recs[out->count].delta_off = 0;

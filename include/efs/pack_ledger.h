@@ -3,8 +3,8 @@
 #include "efs/packed_segment.h"
 #include "efs/opid.h"
 
-/* Staged W95 shared-object lifetime planner. No RPC or mounted writer selects
- * this format yet. Serialized Raft apply must verify upload/session authority,
+/* W95 shared-object lifetime planner. Private Raft/RPC gates select this
+ * format; the mounted writer remains gated pending cache ownership and GC. Serialized Raft apply must verify upload/session authority,
  * durable receipts and mapping CAS before planning publication; retirement
  * requires the exact current mapping. Apply all changed mappings, receipts
  * and this ledger in ONE atomic KV batch. Load/modify each ledger once per

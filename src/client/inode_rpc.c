@@ -1743,7 +1743,7 @@ int efs_client_rpc_getchunks_fileid(efs_export_id_t export_id, efs_ino_t ino,
         if (target)
             nid = target;
         unsigned long long t1 = prof ? rpc_prof_now_us() : 0;
-        if (!conn || efs_conn_send_msg(conn, EFS_MSG_INODE_GETCHUNKS, &req,
+        if (!conn || efs_conn_send_msg(conn, EFS_MSG_GETCHUNKS_PACKED, &req,
                                       sizeof(req)) != 0) {
             if (conn) efs_client_conn_drop(nid, conn);
             /* This immutable read is safe to repeat after endpoint loss.
@@ -1777,7 +1777,7 @@ int efs_client_rpc_getchunks_fileid(efs_export_id_t export_id, efs_ino_t ino,
             return EFS_ERR_BUSY;
         }
         rpc_prof_add(EFS_MSG_INODE_GETCHUNKS, t1 - t0, t2 - t1, t3 - t2, 0);
-        if (rtype != EFS_MSG_INODE_GETCHUNKS_REPLY ||
+        if (rtype != EFS_MSG_GETCHUNKS_PACKED_REPLY ||
             plen != sizeof(struct efs_msg_inode_getchunks_reply)) {
             free(payload);
             return EFS_ERR_PROTO;

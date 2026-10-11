@@ -217,6 +217,8 @@ static void apply_chunk_recs(efs_ino_t lock_ino, const struct efs_chunk_rec *rec
                                           recs[i].chunk_index,
                                           recs[i].deltas, recs[i].delta_base_n,
                                           recs[i].delta_base_seq);
+        (void)efs_export_set_chunk_packed(&g_client.export, recs[i].ino,
+                                         recs[i].chunk_index, &recs[i].packed);
         (void)efs_export_set_chunk_view(&g_client.export, recs[i].ino,
                                         recs[i].chunk_index, &recs[i].read_view);
         efs_rdcache_invalidate(recs[i].ino, recs[i].chunk_index);

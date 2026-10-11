@@ -1983,15 +1983,20 @@ W95/P4.1 production tiny-payload packing is first, followed by ORCD W109/W97,
 W108, W110 and remaining W99/W42/W106 gates. The fcstor007 `tiny-files` screen
 is the requested benchmark. Preserve the original acceptance oracles; the
 user explicitly permits erasing ORCD test data if needed for packing rollout. [Implementation and measured storage checkpoint](../status/orcd-tiny-packing-20261011.md).
-Codec, packed files storage, shared-lifetime planning, typed upload fences and
-a staged persistent minimum-reader barrier are implemented with private gates.
-Staged authoritative packed references and same-group mapping/ledger planning
-now cover ordinary-delta preservation and atomic packed-to-ordinary promotion
-with durable receipt replay. Unsupported packed retirement paths fail BUSY;
-new packed publication, GETCHUNKS and mounted coalescing are still gated.
-The lower-layer packing gate is not mounted publication/GC acceptance. Next
-connect typed upload/session admission, same-group durable mapping/receipt
-batches and GETCHUNKS/cold reads; then client coalescing and shared-object GC.
+Packed admission/session validation, actual packed PUT/GET, initial Raft
+publication and durable receipts, versioned GETCHUNKS/client reads, snapshot
+capability barriers and atomic reference retirement now pass private Linux
+and four-server ORCD gates. Bounded immutable cohorts pass deadline/sync/capacity
+and retry gates. Actual FUSE reads packed mappings and fsyncs mixed ordinary
+files; mounted promotion/grow/fsync, truncate, unlink and hard-link survival
+pass, including exact bytes after a cold client/all-server restart. Retired
+upload permits and receipts survive leader loss and cold restart.
+The 20-minute randomized storage soak passes 299,520 cohorts. [Integration evidence](../../results/measure/20261011-orcd-packed-integration).
+Next connect mounted writer snapshot/cache/close/fsync ownership to the cohort
+scheduler, implement distributed shared GC and abandoned-cohort cancellation,
+and finish mixed fault/recovery and matched throughput acceptance. Private
+port 19832 is separate from the live RDMA runtime. No mounted writer selects
+packing yet; lower-layer gates do not close W95/P4.1.
 The live runtime is now `c52a4643` (`devel-orcd`), merged from all current
 branches and deployed to four servers/seven clients with native RDMA/direct I/O.
 Full Linux units and preserved file samples pass. Loaded 30-second POSIX gates
@@ -6623,22 +6628,21 @@ open latency as a measured saving.
 
 ### W95 · Tiny-file data persistence and packing principles
 
-**Oct 11 ORCD implementation:** bounded segment codec and immutable packed-body
-format pass full Linux units. A separate files-backend packed namespace passes
-private cold/retry/quota/GC-isolation gates and a matched physical control:
-36,864 versus 3,342,336 allocated fragment bytes for sixteen 512-byte payloads
-(90.6667× reduction). Mounted publication, shared-object GC and throughput
-acceptance remain open; no packing is activated. Shared-lifetime planning now passes full Linux units including abrupt
-WAL exits and cold compaction: mappings and ledger commit together, neighbors
-retain the body, terminal references cannot revive, and every captured member
-must fence uploads before deletion. Actual Raft/session/RPC integration remains
-open; this staged planner grants no upload or publication authority.
-Authoritative packed base references, mixed delta decoding and checksummed
-placement/ledger records now have private cold-store gates. The real publication
-apply preserves packed references on ordinary delta writes and retires them
-atomically with promotion and durable receipts. Unsupported packed retirement
-still fails BUSY; new packed publication, wire reads and coalescing remain gated.
-[Metadata integration checkpoint](../status/orcd-tiny-packing-20261011.md#authoritative-reference-and-publication-checkpoint--oct-11).
+**Oct 11 ORCD implementation:** bounded segment codec/files storage, immutable
+Raft upload admission, typed packed PUT/GET, initial durable publication,
+versioned authoritative reads and shared-reference retirement now pass private
+Linux and four-server ORCD gates. Retired permits retain LIVE objects and fence
+old admission behind ordered floors; receipts and exact reads survive leader
+loss and cold restart. Actual FUSE reads packed mappings alongside ordinary
+fsync writes. Bounded cohorts cover deadline/singleton sync, capacity, captured
+snapshot copies and immutable retries. The 20-minute randomized physical soak
+passes 299,520 cohorts. Sixteen 512-byte records use 36,864 versus 3,342,336
+allocated fragment bytes in the earlier matched physical control (90.6667×
+reduction). This does not establish mounted throughput or total metadata/NAND
+amplification. Mounted writer ownership/scheduling, distributed shared GC and
+abandoned-PENDING cancellation, compatibility rollout and matched acceptance
+remain open. Production packing remains inactive.
+[Integration checkpoint and remaining activation gates](../status/orcd-tiny-packing-20261011.md#admission-distributed-reads-and-coalescing-checkpoint--oct-11).
 
 **Oct 11 ORCD priority:** production logical-payload packing is the first item on
 `devel-orcd`. Replace per-file full-stripe padding with bounded immutable packed

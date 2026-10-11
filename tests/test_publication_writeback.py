@@ -16,6 +16,14 @@ void efs_hash(const void *src,size_t n,uint8_t out[EFS_HASH_SIZE]) {
  const uint8_t *p=src;memset(out,0,EFS_HASH_SIZE);
  for(size_t i=0;i<n;i++)out[i%EFS_HASH_SIZE]=(uint8_t)(out[i%EFS_HASH_SIZE]*33u^p[i]);
 }
+/* Packed record encoding uses the real canonical codec; this legacy-only
+ * ownership harness does not create segment bodies. */
+int efs_segment_geometry(size_t n, size_t *out) { (void)n; (void)out; return EFS_ERR_INVAL; }
+#define put packed_put
+#define get packed_get
+#include "packed_segment.c"
+#undef put
+#undef get
 #include "publication.c"
 #include "publication_ack.c"
 #include "publication_writeback.c"
