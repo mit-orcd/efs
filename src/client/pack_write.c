@@ -260,7 +260,11 @@ int efs_client_pack_write(efs_ino_t ino,uint64_t off,uint32_t len,const uint8_t 
             if(!p){pthread_mutex_unlock(&pack_mu);return EFS_ERR_NOMEM;}
             memset(p,0,sizeof(*p));efs_pack_cohort_init(&p->cohort,gi?2:0,PACK_WRITERS,PACK_DELAY_NS);pack_groups[gi]=p;
         }
-        if(p->busy || p->cohort.sealed || p->cohort.count==PACK_WRITERS) {
+        size_t next_bytes=EFS_PACK_HEADER_BYTES+EFS_HASH_SIZE+
+            (size_t)(p->cohort.count+1)*EFS_PACK_RECORD_BYTES+
+            p->cohort.payload_bytes+len;
+        if(p->busy || p->cohort.sealed || p->cohort.count==PACK_WRITERS ||
+           next_bytes>EFS_SEGMENT_MAX_SIZE) {
             pthread_mutex_unlock(&pack_mu);rc=pack_flush_group(gi,1);
             if(rc!=EFS_OK && rc!=EFS_ERR_BUSY)return rc;
             if(pack_pause())return EFS_ERR_BUSY;

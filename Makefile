@@ -495,6 +495,7 @@ test: all
 	python3 tests/test_packed_read_budget.py
 	python3 tests/test_packed_gc.py
 	python3 tests/test_mounted_pack_retry.py
+	python3 tests/test_packed_writer_view_reuse.py
 	python3 tests/test_mounted_pack_admission.py
 	python3 tests/test_mounted_pack_capability.py
 	./tests/test_pack_mapping

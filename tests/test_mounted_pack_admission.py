@@ -58,6 +58,12 @@ int main(void){
  memset(bytes,99,sizeof(bytes));assert(pack_groups[0]->cohort.records[0].data[0]==59);
  pack_groups[0]->busy=1;
  assert(efs_client_pack_write(101,0,512,bytes)==EFS_ERR_BUSY&&pack_groups[0]->cohort.count==1&&abort_calls==1);
+ /* Fifteen maximum payloads fit, but the sixteenth exceeds the immutable
+  * image bound. Flush/wait before cache admission, preserving the old cohort. */
+ pack_groups[0]->busy=0;pack_groups[0]->cohort.count=15;
+ pack_groups[0]->cohort.payload_bytes=15*EFS_PACK_MAX_PAYLOAD;
+ assert(efs_client_pack_write(101,0,EFS_PACK_MAX_PAYLOAD,bytes)==EFS_ERR_BUSY);
+ assert(pack_groups[0]->cohort.count==15&&abort_calls==1&&size_notes==1);
  puts("mounted pack admission: default geometry, CREATE eligibility, real data exclusion, capability refusal, budget-before-accept and immutable retained bytes PASS");
 }
 '''

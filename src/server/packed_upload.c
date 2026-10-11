@@ -26,10 +26,12 @@ int server_packed_upload(struct efsd_server *s, const uint8_t *body, uint32_t by
     struct efs_msg_raft_mkfs_reply authority; server_raft_host_submit(query, len + 2, &authority); free(query);
     if (authority.rc) return authority.rc;
     if (authority.salt != EFS_PACK_ACTIVE) return EFS_ERR_STALE;
+    uint8_t covered = 0;
     for (uint32_t i = 0; i < count; i++) {
         if (efs_ino_is_meta_table(refs[i].ino)) return EFS_ERR_INVAL;
         struct efs_msg_inode_writer_view req = {refs[i].ino, refs[i].inode_generation, 0, 0};
-        struct efs_msg_inode_writer_view_reply reply; server_raft_host_writer_view(&req, &reply);
+        struct efs_msg_inode_writer_view_reply reply;
+        server_raft_host_writer_view_reuse(&req, &reply, &covered);
         if (reply.status == EFS_INODE_RPC_NOT_PRIMARY) return EFS_ERR_NOT_PRIMARY;
         if (reply.status == EFS_INODE_RPC_BUSY) return EFS_ERR_BUSY;
         if (reply.status == EFS_INODE_RPC_STALE || reply.status == EFS_INODE_RPC_NOT_FOUND) return EFS_ERR_STALE;

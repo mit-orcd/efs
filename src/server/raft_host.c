@@ -16612,8 +16612,9 @@ void server_raft_host_lane_writer_view(const struct efs_msg_lane_writer_view *re
     }
 }
 
-void server_raft_host_writer_view(const struct efs_msg_inode_writer_view *req,
-                                   struct efs_msg_inode_writer_view_reply *out)
+void server_raft_host_writer_view_reuse(const struct efs_msg_inode_writer_view *req,
+                                   struct efs_msg_inode_writer_view_reply *out,
+                                   uint8_t *covered)
 {
     struct efs_raft_host *h = g_host;
     struct efs_meta_writer_view view;
@@ -16644,9 +16645,17 @@ void server_raft_host_writer_view(const struct efs_msg_inode_writer_view *req,
         }
         return;
     }
-    rc = host_read_index(h, groups[0], &hint);
-    if (rc == EFS_OK && ng == 2)
-        rc = host_read_index(h, groups[1], &hint);
+    /* This mask belongs to one inbound request. Every record still reads its
+     * current FileID/epoch; only successful local group barriers are reused.
+     * Forwarded views cannot establish coverage on this host. */
+    rc = EFS_OK;
+    for (int i = 0; i < ng && rc == EFS_OK; i++) {
+        uint8_t bit = (uint8_t)(1u << groups[i]);
+        if (!(*covered & bit)) {
+            rc = host_read_index(h, groups[i], &hint);
+            if (rc == EFS_OK) *covered |= bit;
+        }
+    }
     uint64_t gen = req->generation;
     if (rc == EFS_OK && !gen) {
         struct efs_meta_row row;
@@ -16667,6 +16676,13 @@ void server_raft_host_writer_view(const struct efs_msg_inode_writer_view *req,
         out->oldest_complete_epoch = view.oldest_complete_epoch;
         out->history = view.history;
     }
+}
+
+void server_raft_host_writer_view(const struct efs_msg_inode_writer_view *req,
+                                   struct efs_msg_inode_writer_view_reply *out)
+{
+    uint8_t covered = 0;
+    server_raft_host_writer_view_reuse(req, out, &covered);
 }
 
 void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32_t start, uint32_t max, uint64_t generation,

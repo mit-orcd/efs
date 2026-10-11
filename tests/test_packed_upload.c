@@ -18,8 +18,8 @@ void server_raft_host_submit(const uint8_t *p, uint32_t bytes, struct efs_msg_ra
     memset(out, 0, sizeof(*out)); out->rc = authority_rc; out->salt = phase;
     if (race_fence) assert(!server_put_session_fence(&server, expected.ledger.owner.client_uuid, 8));
 }
-void server_raft_host_writer_view(const struct efs_msg_inode_writer_view *q, struct efs_msg_inode_writer_view_reply *r)
-{ memset(r, 0, sizeof(*r)); r->ino = q->ino; r->generation = q->generation; r->authority_epoch = epoch; r->oldest_complete_epoch = epoch; }
+void server_raft_host_writer_view_reuse(const struct efs_msg_inode_writer_view *q, struct efs_msg_inode_writer_view_reply *r,uint8_t *covered)
+{ assert(*covered == (q->ino==101?0:1));*covered=1;memset(r, 0, sizeof(*r)); r->ino = q->ino; r->generation = q->generation; r->authority_epoch = epoch; r->oldest_complete_epoch = epoch; }
 static int cleanup(const char *p, const struct stat *s, int t, struct FTW *f)
 { (void)s; (void)t; (void)f; return remove(p); }
 int main(void)
