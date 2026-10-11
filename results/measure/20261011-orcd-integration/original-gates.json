@@ -1,0 +1,119 @@
+[
+  {
+    "mode": "posix",
+    "name": "fcstor007",
+    "rc": "1",
+    "summary": "# summary pass=218 fail=2 skip=1 notrun=0 total=221 dur=63.8",
+    "complete": true,
+    "failures": [
+      "link_of_symlink_follow\tFAIL\tfollow result is regular: got True, want False",
+      "link_of_symlink_dangling\tFAIL\texpected errno (2,) but call succeeded"
+    ]
+  },
+  {
+    "mode": "posix",
+    "name": "fcstor008",
+    "rc": "1",
+    "summary": "# summary pass=218 fail=2 skip=1 notrun=0 total=221 dur=65.3",
+    "complete": true,
+    "failures": [
+      "link_of_symlink_follow\tFAIL\tfollow result is regular: got True, want False",
+      "link_of_symlink_dangling\tFAIL\texpected errno (2,) but call succeeded"
+    ]
+  },
+  {
+    "mode": "posix",
+    "name": "fcstor009",
+    "rc": "1",
+    "summary": "# summary pass=218 fail=2 skip=1 notrun=0 total=221 dur=68.9",
+    "complete": true,
+    "failures": [
+      "link_of_symlink_follow\tFAIL\tfollow result is regular: got True, want False",
+      "link_of_symlink_dangling\tFAIL\texpected errno (2,) but call succeeded"
+    ]
+  },
+  {
+    "mode": "posix",
+    "name": "fcstor010",
+    "rc": "1",
+    "summary": "# summary pass=218 fail=2 skip=1 notrun=0 total=221 dur=65.3",
+    "complete": true,
+    "failures": [
+      "link_of_symlink_follow\tFAIL\tfollow result is regular: got True, want False",
+      "link_of_symlink_dangling\tFAIL\texpected errno (2,) but call succeeded"
+    ]
+  },
+  {
+    "mode": "posix",
+    "name": "fcstor011",
+    "rc": "1",
+    "summary": "# summary pass=218 fail=2 skip=1 notrun=0 total=221 dur=64.3",
+    "complete": true,
+    "failures": [
+      "link_of_symlink_follow\tFAIL\tfollow result is regular: got True, want False",
+      "link_of_symlink_dangling\tFAIL\texpected errno (2,) but call succeeded"
+    ]
+  },
+  {
+    "mode": "posix",
+    "name": "fcstor012",
+    "rc": "1",
+    "summary": "# summary pass=218 fail=2 skip=1 notrun=0 total=221 dur=65.9",
+    "complete": true,
+    "failures": [
+      "link_of_symlink_follow\tFAIL\tfollow result is regular: got True, want False",
+      "link_of_symlink_dangling\tFAIL\texpected errno (2,) but call succeeded"
+    ]
+  },
+  {
+    "mode": "posix",
+    "name": "fcstor013",
+    "rc": "1",
+    "summary": "# summary pass=218 fail=2 skip=1 notrun=0 total=221 dur=59.2",
+    "complete": true,
+    "failures": [
+      "link_of_symlink_follow\tFAIL\tfollow result is regular: got True, want False",
+      "link_of_symlink_dangling\tFAIL\texpected errno (2,) but call succeeded"
+    ]
+  },
+  {
+    "mode": "peer",
+    "name": "fcstor007-fcstor008",
+    "rc": "1",
+    "summary": "# summary pass=66 fail=1 skip=0 total=67 dur=137.4",
+    "complete": true,
+    "failures": [
+      "peer_symlink_hardlinks\tFAIL\texec a step 0 rc=1 out='RESULT\\tFAIL\\tdangling follow unexpectedly succeeded\\n' err=''"
+    ]
+  },
+  {
+    "mode": "peer",
+    "name": "fcstor009-fcstor010",
+    "rc": "1",
+    "summary": "# summary pass=66 fail=1 skip=0 total=67 dur=136.9",
+    "complete": true,
+    "failures": [
+      "peer_symlink_hardlinks\tFAIL\texec a step 0 rc=1 out='RESULT\\tFAIL\\tdangling follow unexpectedly succeeded\\n' err=''"
+    ]
+  },
+  {
+    "mode": "peer",
+    "name": "fcstor011-fcstor012",
+    "rc": "1",
+    "summary": "# summary pass=66 fail=1 skip=0 total=67 dur=135.8",
+    "complete": true,
+    "failures": [
+      "peer_symlink_hardlinks\tFAIL\texec a step 0 rc=1 out='RESULT\\tFAIL\\tdangling follow unexpectedly succeeded\\n' err=''"
+    ]
+  },
+  {
+    "mode": "peer",
+    "name": "fcstor013-fcstor007",
+    "rc": "1",
+    "summary": "# summary pass=66 fail=1 skip=0 total=67 dur=126.7",
+    "complete": true,
+    "failures": [
+      "peer_symlink_hardlinks\tFAIL\texec a step 0 rc=1 out='RESULT\\tFAIL\\tdangling follow unexpectedly succeeded\\n' err=''"
+    ]
+  }
+]

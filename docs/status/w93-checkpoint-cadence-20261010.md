@@ -131,7 +131,7 @@ refused marker attempt before asserting its contract. The service remains idle
 and running on its own stores/mounts during these private fixtures.
 
 The longer cadence fails a required append gate and is not adopted. Raw evidence directory:
-[20261010-w93-checkpoint-hour](../../results/measure/20261010-w93-checkpoint-hour/).
+[20261010-w93-checkpoint-hour](../../results/measure/20261010-w93-checkpoint-hour).
 
 ## First completed control
 

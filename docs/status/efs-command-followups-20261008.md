@@ -3,7 +3,7 @@
 Branch `devel-find-stats`; clean NUC candidate
 `ecabac6ff587-commands-d2573704`. The independent `/Users/mike/git/efs`
 checkout is untouched. Source patch/build identity and raw fixture evidence:
-[results](../../results/measure/20261008-efs-followups/).
+[results](../../results/measure/20261008-efs-followups).
 
 Latest: [server startup disablement and catch-up](efs-command-policy-20261008.md).
 The [Oct 10 durable single-export policy candidate](efs-query-persistent-policy-20261010.md) supersedes the historical remote-policy gap below; scale and platform acceptance remain distinct.

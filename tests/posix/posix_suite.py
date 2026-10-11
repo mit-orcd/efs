@@ -143,6 +143,20 @@ def wr(path, data):
         f.write(data)
 
 
+def link_follow(source, destination):
+    """Request linkat(AT_SYMLINK_FOLLOW), including on Linux CPython.
+
+    Without dir_fd, CPython can dispatch to link(), whose Linux semantics
+    do not follow the source symlink even when follow_symlinks=True.
+    """
+    fd = os.open(os.path.dirname(source) or ".", os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.link(os.path.basename(source), destination, src_dir_fd=fd,
+                follow_symlinks=True)
+    finally:
+        os.close(fd)
+
+
 def rd(path):
     with open(path, "rb") as f:
         return f.read()
@@ -3654,7 +3668,7 @@ def rename_dir_same_parent(d):
 
 @test
 def link_of_symlink(d):
-    """Linux link() does not follow: both names are the same symlink inode."""
+    """Explicit no-follow links both names to the same symlink inode."""
     wr(os.path.join(d, "t"), b"data")
     os.symlink("t", os.path.join(d, "l"))
     os.link(os.path.join(d, "l"), os.path.join(d, "h"),
@@ -3666,6 +3680,39 @@ def link_of_symlink(d):
     eq(os.lstat(os.path.join(d, "l")).st_nlink, 2, "symlink nlink")
     eq(os.readlink(os.path.join(d, "h")), "t", "other name readlink")
     eq(rd(os.path.join(d, "h")), b"data", "follow via new name")
+
+
+@test
+def link_of_symlink_follow(d):
+    """Explicit follow hard-links the target without changing the symlink."""
+    target, source, link = (os.path.join(d, n) for n in ("t", "l", "h"))
+    wr(target, b"target data")
+    os.symlink("t", source)
+    link_follow(source, link)
+    eq(os.path.islink(link), False, "follow result is regular")
+    eq(os.stat(target).st_ino, os.stat(link).st_ino, "target inode")
+    eq(os.stat(target).st_nlink, 2, "target link count")
+    eq(os.lstat(source).st_nlink, 1, "source symlink remains singly linked")
+    eq(os.readlink(source), "t", "source target unchanged")
+    os.unlink(target)
+    eq(rd(link), b"target data", "linked target survives original unlink")
+    eq(os.stat(link).st_nlink, 1, "remaining target link count")
+
+
+@test
+def link_of_symlink_dangling(d):
+    """No-follow links dangling symlinks; follow fails without a new name."""
+    source, link, absent = (os.path.join(d, n) for n in ("l", "h", "follow"))
+    os.symlink("missing", source)
+    os.link(source, link, follow_symlinks=False)
+    eq(os.lstat(source).st_ino, os.lstat(link).st_ino, "dangling symlink inode")
+    eq(os.lstat(link).st_nlink, 2, "dangling link count")
+    eq(os.readlink(link), "missing", "dangling link text")
+    expect_err(errno.ENOENT, link_follow, source, absent)
+    eq(os.path.lexists(absent), False, "failed follow creates no entry")
+    os.unlink(source)
+    eq(os.lstat(link).st_nlink, 1, "remaining symlink link count")
+    eq(os.readlink(link), "missing", "remaining dangling link text")
 
 
 @test

@@ -5457,6 +5457,24 @@ static int host_txn_coord(void *user, const struct efs_txid *t,
     return efs_txn_decision_get(h->kv, coord_shard, t, dec);
 }
 
+/* A partially resolved namespace transaction may be coordinated by a group
+ * outside this replica's placement. Preserve uncertainty while recording the
+ * exact routing need; genuine hosted ReadIndex/storage errors stay errors. */
+struct host_txn_read_context {
+    struct efs_raft_host *host;
+    int unhosted_coordinator;
+};
+static int host_txn_read_coord(void *user, const struct efs_txid *t,
+                                uint32_t shard, int *decision)
+{
+    struct host_txn_read_context *ctx=user;
+    if (!host_hosts(ctx->host,efs_raft_shard_group(shard))) {
+        ctx->unhosted_coordinator=1;
+        return EFS_ERR_IO;
+    }
+    return host_txn_coord(ctx->host,t,shard,decision);
+}
+
 static void stat_to_inode(const struct efs_meta_stat *st, struct efs_inode *ino)
 {
     memset(ino, 0, sizeof(*ino));
@@ -5618,7 +5636,10 @@ static int host_read_inode_lanes(struct efs_raft_host *h, efs_ino_t ino,
     rc = host_read_index(h, ig, leader_hint);
     if (rc != EFS_OK)
         return rc;
-    rc = efs_meta_apply_get_inode_tx(h->kv, ino, host_txn_coord, h, &row);
+    struct host_txn_read_context txn={.host=h};
+    rc = efs_meta_apply_get_inode_tx(h->kv, ino, host_txn_read_coord, &txn, &row);
+    if (rc != EFS_OK && txn.unhosted_coordinator)
+        return EFS_ERR_NOT_PRIMARY;
     if (rc != EFS_OK)
         return rc;
     bits = S_ISDIR(row.mode) && row.layout != EFS_META_LAYOUT_LOCAL
@@ -10013,6 +10034,7 @@ int server_raft_host_active(void)
 void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)
 {
     struct efs_raft_host *h = g_host;
+    struct host_txn_read_context txn={.host=h};
     struct efs_meta_stat st;
     int hint = -1;
     int rc;
@@ -10052,7 +10074,12 @@ void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)
     if (prof)
         p1 = now_us_();
     if (rc == EFS_OK)
-        rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
+        rc = efs_meta_apply_getattr(h->kv, ino, host_txn_read_coord, &txn, &st);
+    if (rc != EFS_OK && txn.unhosted_coordinator) {
+        uint8_t need[2];host_need_both(need);
+        host_fwd_getattr(h,ino,out,need,2);
+        return;
+    }
     set_inode_rc(out, rc, hint);
     if (rc == EFS_OK)
         stat_to_inode(&st, &out->inode);
@@ -10499,6 +10526,7 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
                              struct efs_msg_inode_reply *out)
 {
     struct efs_raft_host *h = g_host;
+    struct host_txn_read_context txn={.host=h};
     struct efs_meta_row prow;
     struct efs_meta_dentry dent;
     struct efs_meta_stat st;
@@ -10550,7 +10578,12 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
         }
     }
     if (rc == EFS_OK)
-        rc = efs_meta_apply_lookup_tx(h->kv, parent, name, host_txn_coord, h, &dent);
+        rc = efs_meta_apply_lookup_tx(h->kv, parent, name, host_txn_read_coord, &txn, &dent);
+    if (rc != EFS_OK && txn.unhosted_coordinator) {
+        uint8_t need[2];host_need_both(need);
+        host_fwd_lookup(h,parent,name,out,need,2);
+        return;
+    }
     if (prof)
         p2 = now_us_();
     if (rc == EFS_OK) {
@@ -10593,7 +10626,12 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
     if (prof)
         p3 = now_us_();
     if (rc == EFS_OK)
-        rc = efs_meta_apply_getattr(h->kv, dent.ino, host_txn_coord, h, &st);
+        rc = efs_meta_apply_getattr(h->kv, dent.ino, host_txn_read_coord, &txn, &st);
+    if (rc != EFS_OK && txn.unhosted_coordinator) {
+        uint8_t need[2];host_need_both(need);
+        host_fwd_lookup(h,parent,name,out,need,2);
+        return;
+    }
     if (found_dentry && rc == EFS_ERR_NOT_FOUND)
         rc = EFS_ERR_BUSY; /* retry the complete name lookup across replacement */
     set_inode_rc(out, rc, hint);

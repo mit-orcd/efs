@@ -1,0 +1,233 @@
+{
+  "fcstor003": {
+    "rows": [
+      {
+        "pid": 1210405,
+        "comm": "efsd",
+        "args": "/tmp/efs/efsd --node-id 1 --addr 172.16.223.57 --port 17432 --storage /data1/01/efs-orcd-test-erbmi1,/data1/02/efs-orcd-test-erbmi1,/data1/03/efs-orcd-test-erbmi1,/data1/04/efs-orcd-test-erbmi1,/data1/05/efs-orcd-test-erbmi1,/data1/06/efs-orcd-test-erbmi1 --direct-io ",
+        "env": {
+          "EFS_TRANSPORT": "rdma",
+          "EFS_RDMA_DEV": "mlx5_2",
+          "EFS_COMMANDS_SERVER": "1"
+        },
+        "verbs": [
+          "/dev/infiniband/uverbs0",
+          "/dev/infiniband/uverbs2"
+        ]
+      }
+    ],
+    "mounted": false,
+    "revision": "52bc8edb3d1a46196239b1139090eeb54d9645c3",
+    "management_revision": ""
+  },
+  "fcstor004": {
+    "rows": [
+      {
+        "pid": 1100031,
+        "comm": "efsd",
+        "args": "/tmp/efs/efsd --node-id 2 --addr 172.16.223.58 --port 17432 --storage /data1/01/efs-orcd-test-erbmi1,/data1/02/efs-orcd-test-erbmi1,/data1/03/efs-orcd-test-erbmi1,/data1/04/efs-orcd-test-erbmi1,/data1/05/efs-orcd-test-erbmi1,/data1/06/efs-orcd-test-erbmi1 --direct-io --join 172.16.223.57:17432 ",
+        "env": {
+          "EFS_TRANSPORT": "rdma",
+          "EFS_RDMA_DEV": "mlx5_2",
+          "EFS_COMMANDS_SERVER": "1"
+        },
+        "verbs": [
+          "/dev/infiniband/uverbs0",
+          "/dev/infiniband/uverbs2"
+        ]
+      }
+    ],
+    "mounted": false,
+    "revision": "52bc8edb3d1a46196239b1139090eeb54d9645c3",
+    "management_revision": ""
+  },
+  "fcstor005": {
+    "rows": [
+      {
+        "pid": 1104454,
+        "comm": "efsd",
+        "args": "/tmp/efs/efsd --node-id 3 --addr 172.16.223.59 --port 17432 --storage /data1/01/efs-orcd-test-erbmi1,/data1/02/efs-orcd-test-erbmi1,/data1/03/efs-orcd-test-erbmi1,/data1/04/efs-orcd-test-erbmi1,/data1/05/efs-orcd-test-erbmi1,/data1/06/efs-orcd-test-erbmi1 --direct-io --join 172.16.223.57:17432 ",
+        "env": {
+          "EFS_TRANSPORT": "rdma",
+          "EFS_RDMA_DEV": "mlx5_2",
+          "EFS_COMMANDS_SERVER": "1"
+        },
+        "verbs": [
+          "/dev/infiniband/uverbs0",
+          "/dev/infiniband/uverbs2"
+        ]
+      }
+    ],
+    "mounted": false,
+    "revision": "52bc8edb3d1a46196239b1139090eeb54d9645c3",
+    "management_revision": ""
+  },
+  "fcstor006": {
+    "rows": [
+      {
+        "pid": 898451,
+        "comm": "efsd",
+        "args": "/tmp/efs/efsd --node-id 4 --addr 172.16.223.60 --port 17432 --storage /data1/01/efs-orcd-test-erbmi1,/data1/02/efs-orcd-test-erbmi1,/data1/03/efs-orcd-test-erbmi1,/data1/04/efs-orcd-test-erbmi1,/data1/05/efs-orcd-test-erbmi1,/data1/06/efs-orcd-test-erbmi1 --direct-io --join 172.16.223.57:17432 ",
+        "env": {
+          "EFS_TRANSPORT": "rdma",
+          "EFS_RDMA_DEV": "mlx5_2",
+          "EFS_COMMANDS_SERVER": "1"
+        },
+        "verbs": [
+          "/dev/infiniband/uverbs0",
+          "/dev/infiniband/uverbs2"
+        ]
+      }
+    ],
+    "mounted": false,
+    "revision": "52bc8edb3d1a46196239b1139090eeb54d9645c3",
+    "management_revision": ""
+  },
+  "fcstor007": {
+    "rows": [
+      {
+        "pid": 1373996,
+        "comm": "efs-fuse",
+        "args": "./efs-fuse 172.16.223.57:17432 fs /tmp/efs-mount ",
+        "env": {
+          "EFS_TRANSPORT": "rdma",
+          "EFS_COMMANDS": "1",
+          "EFS_RDMA_DEV": "mlx5_2"
+        },
+        "verbs": [
+          "/dev/infiniband/uverbs0",
+          "/dev/infiniband/uverbs2"
+        ]
+      }
+    ],
+    "mounted": true,
+    "revision": "52bc8edb3d1a46196239b1139090eeb54d9645c3",
+    "management_revision": ""
+  },
+  "fcstor008": {
+    "rows": [
+      {
+        "pid": 2430678,
+        "comm": "efs-fuse",
+        "args": "./efs-fuse 172.16.223.57:17432 fs /tmp/efs-mount ",
+        "env": {
+          "EFS_TRANSPORT": "rdma",
+          "EFS_COMMANDS": "1",
+          "EFS_RDMA_DEV": "mlx5_2"
+        },
+        "verbs": [
+          "/dev/infiniband/uverbs0",
+          "/dev/infiniband/uverbs2"
+        ]
+      }
+    ],
+    "mounted": true,
+    "revision": "52bc8edb3d1a46196239b1139090eeb54d9645c3",
+    "management_revision": ""
+  },
+  "fcstor009": {
+    "rows": [
+      {
+        "pid": 2251970,
+        "comm": "efs-fuse",
+        "args": "./efs-fuse 172.16.223.57:17432 fs /tmp/efs-mount ",
+        "env": {
+          "EFS_TRANSPORT": "rdma",
+          "EFS_COMMANDS": "1",
+          "EFS_RDMA_DEV": "mlx5_2"
+        },
+        "verbs": [
+          "/dev/infiniband/uverbs0",
+          "/dev/infiniband/uverbs2"
+        ]
+      }
+    ],
+    "mounted": true,
+    "revision": "52bc8edb3d1a46196239b1139090eeb54d9645c3",
+    "management_revision": ""
+  },
+  "fcstor010": {
+    "rows": [
+      {
+        "pid": 1976907,
+        "comm": "efs-fuse",
+        "args": "./efs-fuse 172.16.223.57:17432 fs /tmp/efs-mount ",
+        "env": {
+          "EFS_TRANSPORT": "rdma",
+          "EFS_COMMANDS": "1",
+          "EFS_RDMA_DEV": "mlx5_2"
+        },
+        "verbs": [
+          "/dev/infiniband/uverbs0",
+          "/dev/infiniband/uverbs2"
+        ]
+      }
+    ],
+    "mounted": true,
+    "revision": "52bc8edb3d1a46196239b1139090eeb54d9645c3",
+    "management_revision": ""
+  },
+  "fcstor011": {
+    "rows": [
+      {
+        "pid": 2208462,
+        "comm": "efs-fuse",
+        "args": "./efs-fuse 172.16.223.57:17432 fs /tmp/efs-mount ",
+        "env": {
+          "EFS_TRANSPORT": "rdma",
+          "EFS_COMMANDS": "1",
+          "EFS_RDMA_DEV": "mlx5_2"
+        },
+        "verbs": [
+          "/dev/infiniband/uverbs0",
+          "/dev/infiniband/uverbs2"
+        ]
+      }
+    ],
+    "mounted": true,
+    "revision": "52bc8edb3d1a46196239b1139090eeb54d9645c3",
+    "management_revision": ""
+  },
+  "fcstor012": {
+    "rows": [
+      {
+        "pid": 2386248,
+        "comm": "efs-fuse",
+        "args": "./efs-fuse 172.16.223.57:17432 fs /tmp/efs-mount ",
+        "env": {
+          "EFS_TRANSPORT": "rdma",
+          "EFS_COMMANDS": "1",
+          "EFS_RDMA_DEV": "mlx5_2"
+        },
+        "verbs": [
+          "/dev/infiniband/uverbs0",
+          "/dev/infiniband/uverbs2"
+        ]
+      }
+    ],
+    "mounted": true,
+    "revision": "52bc8edb3d1a46196239b1139090eeb54d9645c3",
+    "management_revision": ""
+  },
+  "fcstor013": {
+    "rows": [
+      {
+        "pid": 2285009,
+        "comm": "efs-fuse",
+        "args": "./efs-fuse 172.16.223.57:17432 fs /tmp/efs-mount ",
+        "env": {
+          "EFS_TRANSPORT": "rdma",
+          "EFS_COMMANDS": "1",
+          "EFS_RDMA_DEV": "mlx5_2"
+        },
+        "verbs": [
+          "/dev/infiniband/uverbs0",
+          "/dev/infiniband/uverbs2"
+        ]
+      }
+    ],
+    "mounted": true,
+    "revision": "52bc8edb3d1a46196239b1139090eeb54d9645c3",
+    "management_revision": ""
+  }
+}

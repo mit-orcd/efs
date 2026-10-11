@@ -363,7 +363,7 @@ non-applied response; ambiguous transport failures still return immediately.
 Deterministic no-hint/exhaustion/transport tests and full Linux regressions pass.
 Further exact-code live and CREATE apply-failure repeats are in progress.
 
-[Wire evidence](../../results/measure/20261008-w93-w96-review/w94-guarded-wire/).
+[Wire evidence](../../results/measure/20261008-w93-w96-review/w94-guarded-wire).
 
 Remaining W94 activation dependencies are real runtime mount sessions, atomic
 pending ownership on every namespace transaction path, bounded retention and

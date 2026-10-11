@@ -112,8 +112,16 @@ with open_query(query) as held:
     old = held.read()
     os.chmod(other, 0)
     try:
-        denied = command(root, 'stats', '--json', expected=1)
-        assert not denied.stdout, denied
+        # Search permission denies opening the script itself. Python reports
+        # this as exit 2 before command.main() can return its query-error 1.
+        denied = command(root, 'stats', '--json', expected=2)
+        assert not denied.stdout and b'Permission denied' in denied.stderr, denied
+        try:
+            os.open(root / '.efs/stats', os.O_RDONLY)
+        except OSError as error:
+            assert error.errno == errno.EACCES, error
+        else:
+            raise AssertionError('revoked directory still allowed a fresh script open')
         held.seek(0)
         assert held.read() == old
     finally:

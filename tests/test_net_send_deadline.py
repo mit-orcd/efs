@@ -28,6 +28,7 @@ code=r'''
 static uint64_t now_ms(void){struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000+t.tv_nsec/1000000;}
 static int tcp_pair(int f[2]) {
  int l=socket(AF_INET,SOCK_STREAM,0);assert(l>=0);struct sockaddr_in a={.sin_family=AF_INET,.sin_addr.s_addr=htonl(INADDR_LOOPBACK)};
+ int receive_window=4096;assert(!setsockopt(l,SOL_SOCKET,SO_RCVBUF,&receive_window,sizeof(receive_window)));
  assert(!bind(l,(void *)&a,sizeof(a))&&!listen(l,1));socklen_t n=sizeof(a);assert(!getsockname(l,(void *)&a,&n));
  f[0]=socket(AF_INET,SOCK_STREAM,0);assert(f[0]>=0&&!connect(f[0],(void *)&a,n));f[1]=accept(l,NULL,NULL);close(l);return f[1]<0?-1:0;
 }

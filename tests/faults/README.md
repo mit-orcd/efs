@@ -30,10 +30,13 @@ Build on an fcstor, in `/tmp/efs`, after rsync. Do not run `make` in
 ```bash
 cd /tmp/efs && make tests/faults/fault_sim efsd efs-fuse efs-mgmt
 bash tests/faults/run_faults.sh /tmp/efs-fault-out
-EFS_FAULT_BIN=/tmp/efs bash tests/faults/run_faults.sh /tmp/efs-fault-out --integrate
+EFS_FAULT_BIN=/tmp/efs bash tests/faults/run_faults.sh /tmp/efs-fault-direct --integrate --mode direct
+EFS_FAULT_BIN=/tmp/efs bash tests/faults/run_faults.sh /tmp/efs-fault-buffered --integrate --mode buffered
 ```
 
-`--integrate` starts servers. Without it, the integration rows are
+`--integrate` starts servers. `--mode direct|buffered` explicitly selects the
+private daemon storage mode and records it in replay metadata; buffered remains
+the default. Without it, the integration rows are
 `not_run`. The harness self-test always runs. It checks that cleanup
 kills only processes the suite started.
 

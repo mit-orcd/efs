@@ -65,7 +65,7 @@ writes leave dirty/fence counters unchanged and re-enable works from a full
 source without counter history. Existing command, POSIX and peer gates run first.
 
 Clean candidate identity and raw evidence:
-[policy results](../../results/measure/20261008-efs-policy/).
+[policy results](../../results/measure/20261008-efs-policy).
 The original 400 GiB, platform/gateway and persistent remote per-export policy
 acceptance remain separate open work; this change implements startup disablement.
 

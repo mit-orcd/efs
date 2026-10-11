@@ -2106,6 +2106,16 @@ next rollout. No cluster rollout or artifact cleanup in this follow-up.
 
 ## W42 · df / efs-mgmt status report the 3-node capacity model on any node count (queue row 2a)
 
+**October 11 ORCD correction:** unlimited stores formerly reported zero capacity
+and skipped files-engine usage accounting. STATUS now carries deduplicated
+filesystem capacity/free bytes, shared by FUSE and management; the portal accepts
+TiB. Native-RDMA unlimited-store and guarded-session reclamation gates pass.
+See [capacity and test evidence](../status/orcd-capacity-tests-20261011.md).
+Live ORCD deployment confirms nonzero matching capacity, preservation of the
+100 GiB file samples, 1526 live POSIX passes and 264 peer passes. Other W42
+protection-debt/repair gates remain open.
+
+
 **Gate follow-up (Oct 7):** NUC full-node gate: one member limited to 64 KiB, 32 MiB write, cold remount bytes, physical deletion and restart all pass. This does not prove three-fragment protection debt/repair or the named 19810 capacity gate. See [gate ledger](../status/gate-30-rounds-20261007.md).
 
 **Current state, reviewed Oct 7.** Both FUSE statfs and management status
@@ -2120,7 +2130,7 @@ third fragment. Trace and validate protection debt/repair before closing W42.
 [Evidence and limits](../archive/queue-review-20261007-round2.md).
 
 
-**W42 · `df` / `efs-mgmt status` report the 3-node capacity model on any node count** (Oct 1 2026, user). **IN TREE Oct 2:** `efs_capacity_logical` (placement.c, binary search on the Σ min(cᵢ, M) ≥ 3M bound), used by `efs_fuse_statfs` (total = quotas, avail = room, used = total − avail) and `efs-mgmt status`; `test_placement` covers 3 equal / 4 equal / 100/100/1000 → 200 / 6 equal / < 3 nodes → 0. Still to do: verify on 19810 (`df` vs `4 × 36T × 2/3`) and the one-QUOTA-member PUT question
+**W42 · `df` / `efs-mgmt status` report the 3-node capacity model on any node count** (Oct 1 2026, user). **IN TREE Oct 2:** `efs_capacity_logical` (placement.c, binary search on the Σ min(cᵢ, M) ≥ 3M bound), used by `efs_fuse_statfs` (filesystem capacity and available bytes, optionally quota-bounded; used = total − avail) and `efs-mgmt status`; `test_placement` covers 3 equal / 4 equal / 100/100/1000 → 200 / 6 equal / < 3 nodes → 0. Still to do: verify on 19810 (`df` vs `4 × 36T × 2/3`) and the one-QUOTA-member PUT question
 
 **Follow-up steps.** mechanical: replace `total_logical = 2 × min_quota` (`efs_fuse_statfs`, `efs_fuse.c:3108–3120`) and `usable_cap = 2 × min_quota` / `usable_free = 2 × min_free` (`efs_mgmt.c:129–185`) with the 3-of-N placement bound: the largest `M` (chunks) with `Σ_i min(c_i, M) ≥ 3M`, `c_i` = node `i`'s quota (or free) in 64 KiB fragments, times 128 KiB; count only up nodes with a quota, as today. Reduces to `2 × min` on three nodes and to `Σ × 2/3` on N equal nodes. Also make `f_blocks` and the used figure come from the same model (statfs today derives used from `Σ phys × 2/3` and total from `2 × min`, so on four nodes used can exceed total and `avail` clamps to 0 while writes still succeed). Unit test with 3 equal, 4 equal, 3 unequal (100/100/1000 → 200, not 800). Then verify on 19810 (`df` vs `efs-mgmt status` vs `4 × 36T × 2/3`)
 
@@ -2699,6 +2709,15 @@ signals (63–215 ms); handlers still drain before teardown.
 
 ## W66 · Metadata leadership distribution and routing (queue row meta-scale)
 
+**Oct 10 AMD routing repair:** a prepared namespace transaction can require a
+coordinator group outside a serving replica's placement. A per-read context
+now redirects only that explicit condition during LOOKUP/GETATTR instead of
+returning EIO before the competing MKDIR; genuine hosted authority/storage
+errors remain errors. Direct and buffered TCP each pass 64 competing MKDIR
+races, exact cold directory recovery and reclamation; the combined candidate's
+full native suite passes. Default placement/quorum and W66/D36 protection
+obligations remain unchanged. [Checkpoint](../status/amd-non-rdma-20261010.md#w66--unresolved-namespace-coordinator-routing).
+
 **Class:** scalability enhancement / metadata protection protocol. **Status:** open; indexed Oct 7, 2026.
 
 **D36 (Oct 9):** topology work must satisfy the user-required four-node,
@@ -2820,7 +2839,7 @@ See [next-five ledger](../status/next-five-gates-20261007.md).
 
 **Evidence/current state:** Existing queue row 0j now has a W identity. Mutation serial/invalidation code exists; historical dates do not establish current targeted rollout acceptance.
 
-**Home:** [current detail](../backlog/work-items.md#0j--the-clients-50-ms-lookup-memo-returns-pre-mutation-stats-queue-row-0j).
+**Home:** [current detail](work-items.md#0j--the-clients-50-ms-lookup-memo-returns-pre-mutation-stats-queue-row-0j).
 
 **Gate:** Follow the original 0j POSIX/Spark du and stale-reply concurrency gates; record the build and current result.
 
@@ -3668,7 +3687,7 @@ old-binary reproductions and crash/recovery tests. This does not establish
 a stalled Raft follower memory/lag bound. See the
 [round ledger](../status/three-package-gates-20261007.md).
 
-**Class/state:** verification correctness; raw-evidence/source confirmation Oct 7, round 6. `tests/measure/w23_stalled_compactor.sh:sampler` inserts `${ko}` as one tab field even though it contains four space-separated KV values. Rows have nine fields under a twelve-field header; the peak reducer assumes twelve, shifting L0/RSS/lag/pump/error columns. The retained Oct 5 SUMMARY falsely reports n_l0 zero and assigns RSS values to l0_bytes. Its “stall never bit” interpretation is withdrawn.
+**Class/state:** closed verification defect (Oct 10 AMD round); raw-evidence/source confirmation Oct 7, round 6. `tests/measure/w23_stalled_compactor.sh:sampler` inserts `${ko}` as one tab field even though it contains four space-separated KV values. Rows have nine fields under a twelve-field header; the peak reducer assumes twelve, shifting L0/RSS/lag/pump/error columns. The retained Oct 5 SUMMARY falsely reports n_l0 zero and assigns RSS values to l0_bytes. Its “stall never bit” interpretation is withdrawn.
 
 **Evidence:** [original samples](../../results/measure/20261005-040810-w23-stalled-compactor/samples.tsv), [node3 log](../../results/measure/20261005-040810-w23-stalled-compactor/s3.log), [corrected expansion](../archive/round6-w23-samples-corrected.tsv) and [recomputed peaks](../archive/round6-w23-peaks-corrected.txt). Node3 logs L0=22 / 3,367,253 bytes during the 04:08:29–04:08:56 park; corrected samples confirm these peaks. Node1 peaks at 4 / 105,281, node2 at 13 / 1,366,435. Recorded RSS peaks are 30,316 / 25,936 / 25,624 KiB. These are samples, not guaranteed continuous maxima. All sample lag peaks are zero; the 27-second RSS-threshold run does not prove a follower pressure bound.
 
@@ -3681,9 +3700,17 @@ and counter resets; driver shell syntax passes.
 
 **Oct 8 decision:** D30 now approves bounded pre-proposal admission and replica-aware pacing, with bounded client queues and recovery/cleanup reserves. Committed work must remain durable; a slow follower must not indefinitely stop a healthy quorum. [Contract and gates](decision-contracts.md#d30--bounded-admission-and-replica-pacing).
 
-**Remaining gate:** implement that policy, rerun W23 under meaningful cap pressure and compare samples
-with raw logs. This format repair does not establish a follower pressure bound;
-the original record and withdrawn interpretation remain retained.
+**Closure (Oct 10 EDT / Oct 11 UTC):** the fresh AMD fault-enabled TCP
+fixture reaches the unchanged 1 GiB follower cap after 2240 acknowledged 1 MiB
+writes, preserves healthy-quorum progress, recovers with InstallSnapshot and
+checks exact cold values on three replicas plus the FUSE payload oracle.
+All 276 TSV observations match every raw JSON field. The driver now requires
+this comparison before PASS; focused regressions reject shifted values, lost
+rows and fabricated availability. [Current evidence](../status/amd-non-rdma-20261010.md#w89).
+The Oct 8 policy implementation and this fresh pressure gate satisfy W89's
+measurement-correctness acceptance. D30/W23 production activation, universal
+memory/lag bounds and sustained permanent-stall throughput remain open.
+The original record and withdrawn interpretation remain retained.
 
 **Forbidden:** accepting shifted/missing fields as zero, claiming no effect or a bound from the old summary, or silently replacing original evidence.
 
@@ -4152,7 +4179,7 @@ calls totaling 7.394 s (mean 7.22 ms). This is one thread's measured syscall
 elapsed time, not a cluster-wide CPU percentage or a per-created-file ratio.
 The trace includes replication/catch-up/background work. See the
 [raw trace](../../results/measure/20261008-nuc-tiny-create/round-7/after/follower-sync.txt)
-and [separate profiles](../../results/measure/20261008-nuc-tiny-create/round-7/after/).
+and [separate profiles](../../results/measure/20261008-nuc-tiny-create/round-7/after).
 
 **Disposition:** The remaining sustained NUC/per-group/read-tail/cold/fault gates are completed in the linked final report. Retain batching, cursor and ACK regressions. W53 end-to-end close tails, W94 CREATE/lease adoption and W97 pressure handling remain separate; process-crash acceptance does not establish hardware power-loss or distributed-RDMA guarantees.
 
@@ -4222,7 +4249,7 @@ open latency as a measured saving.
 
 ## W95 · Tiny-file data persistence and packing principles
 
-**Implementation update (Oct 8):** Independent tiny geometry, durable cohort latency, retained/cold/process-crash experiments and production churn are tested. An independent indexed-packing protocol and any production-format decision remain open.
+**Implementation update (Oct 8):** Independent tiny geometry, durable cohort latency, retained/cold/process-crash experiments and production churn are tested. The independent indexed-packing protocol and model are implemented and gated; the P4.1 production-format decision remains open.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
 **Pre-merge devel review (`cde67dca`, Oct 8):** extend the existing independent
@@ -4234,7 +4261,7 @@ Measure every record's time to its durable batch completion; current per-op
 latency includes the barrier only on the boundary operation. Mixed churn and
 cold-recovery experiments remain required. [Review](../status/tiny-file-performance-plan-20261008.md#review-against-devel-oct-8).
 
-**Class/status:** Storage performance experiment; partial implementation. Tiny logical/physical geometry, durable cohort timing, retained/cold/crash principles and production churn are tested. Independent indexed packing and any production layout selection remain P4.1 work; no migration is activated.
+**Class/status:** Storage performance experiment; partial implementation. Tiny logical/physical geometry, durable cohort timing, retained/cold/crash principles and production churn are tested. Independent indexed packing now passes bounded publication/recovery/GC faults and sustained AMD churn. Production layout selection remains P4.1 work; no migration is activated.
 
 **Evidence:** round-7 generator close averaged 77.8 ms; n3 fragment syncs
 averaged 22.4 ms (356 calls in its separate trace). The default chunk is
@@ -4243,7 +4270,7 @@ The client profile concentrates sampled CPU in flush/report and fragment
 transfer. Separate traces cannot be divided to infer an exact fragment count
 or write-amplification ratio per file. Measure that explicitly.
 
-**Remaining action:** Extend the independent model with an indexed packing candidate only when its publication/recovery semantics are specified, and compare sustained churn at equal durability. Current fixed-geometry seal crash tests are not a production packed index. Port only a demonstrated principle; retain existing stores and require explicit P4.1 compatibility/migration decisions before a layout change.
+**Remaining action:** Review the implemented immutable-body/checksummed-manifest candidate and the retained 24 AMD sustained-churn samples (184320 operations), including durability, index overhead and reclamation. Its process-crash/fault-tested independent model is not a production packed index. [Implemented model and limits](../status/w95-indexed-model-20261008.md). Port only a demonstrated principle; retain existing stores and require explicit P4.1 compatibility/migration decisions before a layout change.
 
 **Governing contracts/related work:** W71 durable PUT, W73 synchronous writes,
 W75 integrity, W86 ownership/GC fencing and W77 publication. P4.1 owns the
@@ -4789,3 +4816,54 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 **Remaining action:** Run relevant current-code software RDMA gates on AMD and hardware IB/RDMA gates on `orcd-test`, retaining actual transport/device, code/build, topology and per-suite verdict evidence. Intel RDMA enablement or NIC/package changes are not part of this task.
 
 **Gate:** Actual cross-host RDMA connection/device evidence plus unchanged POSIX, peer, direct-I/O, persistence and fault gates on the designated environment. Report AMD software and `orcd-test` hardware verdicts separately; neither TCP nor software-only results close hardware-specific obligations.
+
+
+<a id="w109"></a>
+
+## W109 · ORCD metadata/query contention under load
+
+**Class/state:** liveness/performance investigation; open.
+**Assigned cluster:** `orcd-test` — native IB/RDMA, direct I/O.
+
+C profiles show substantial query rebuild work (42.96% inclusive on fcstor005);
+fcstor004 logs 15 apply waits of 21.668–50.117 ms. Earlier full-load gates retain
+namespace EBUSY and deep-directory/virtual-query timeouts. A causal connection
+is not yet established. Correlate lookup/writeback timing, Raft authority/apply
+queues, storage durability and query refresh before selecting a repair.
+
+**Gate:** repeat unchanged-limit full native and peer gates under representative
+load with no FAIL/NOTRUN, complete/correct query results and cold preserved
+bytes. Related W66/W92/W23/D30 remain independently open. See
+[evidence and closure plan](../status/orcd-communication-20261011.md).
+
+**Investigation update (Oct 11):** sustained deltas exceed the 1,024-change
+incremental budget while each publication refolds over a million rows. Full
+fallback is the strongest repair hypothesis; compaction overlap and GC BUSY
+semantics need separate attribution. See the
+[findings, hypotheses and discriminating tests](../status/orcd-communication-hypotheses-20261011.md).
+
+<a id="w110"></a>
+
+## W110 · ORCD communication-loss diagnosis across EFS, IB and TCP
+
+**Class/state:** transport observability/validation investigation; open.
+**Assigned cluster:** `orcd-test` — native hardware IB/RDMA and TCP side-channel.
+
+Observed two EFS TCP retransmissions without resets/hard network errors, and
+zero growth in selected IB error counters across eleven hosts. These samples
+cannot provide an exact lost-RPC rate or exclude intermittent stalls; historical
+IB totals and host-wide retransmissions are not EFS failure attribution.
+Large frames intentionally use TCP even when RDMA is enabled.
+
+**Remaining action/gate:** correlate request identity/outcome and retry timing
+with endpoint/QP, TCP and IB evidence during a reproduced stall; validate
+ambiguous-request recovery and acknowledged cold bytes with existing fault/
+persistence gates. Use a private TCP comparison if needed; retain W106 broader
+acceptance. Do not confuse EAGAIN, empty polls or retransmission with permanent
+message loss. See [capture and plan](../status/orcd-communication-20261011.md).
+
+**Investigation update (Oct 11):** loss-probe/DSACK counter deltas support a
+duplicate-probe hypothesis rather than demonstrated permanent RPC loss. The
+five-second software send guard qualifies the hardware RNR retry concern.
+Per-flow causality and deadline/recovery gates remain open; see the
+[evidence and test hypotheses](../status/orcd-communication-hypotheses-20261011.md).

@@ -26,6 +26,7 @@ from raft_tail import commands as raft_commands
 import time
 
 p = argparse.ArgumentParser(description=__doc__)
+p.add_argument('--peer-mkdir-race-only',action='store_true',help='64 competing peer mkdir races in an isolated cluster, then cold namespace verification')
 p.add_argument('--peer-open-contention-only',action='store_true',help='twenty concurrent append/OPEN races, full peer POSIX, exact cold bytes and physical cleanup only')
 p.add_argument('--append-truncate-only',action='store_true',help='run eight peer append/truncate races, a concurrent append handoff check, cold-remount repeats and physical cleanup only')
 p.add_argument('--mount-sync',action='store_true',help='run only mount-wide sync acceptance: ordinary writes, peer-before-close, cold bytes and deletion')
@@ -42,7 +43,7 @@ p.add_argument('--continue-posix-failure','--continue-regression-failure',dest='
 p.add_argument('--tiny-mixed',action='store_true',help='bounded large-writer overlap with 512 tiny CREATE/close operations, cold exact bytes and physical deletion')
 p.add_argument('--tiny-mixed-only',action='store_true',help='run only the mixed-load cold-read/reclamation gate; implies --tiny-mixed')
 p.add_argument('--tiny-mixed-files',type=int,default=512,help='8..8192 tiny files, divisible by eight; use 4096 for longer mixed-load timing')
-p.add_argument('--fixture-quota',choices=('1G','4G','16G'),help='explicit per-daemon private quota; default preserves each gate existing quota')
+p.add_argument('--fixture-quota',choices=('0','1G','4G','16G'),help='explicit per-daemon private quota; default preserves each gate existing quota')
 p.add_argument('--session-append',action='store_true',help='bounded revoked-session append holes, cold half-completion and exact epoch resume')
 p.add_argument('--session-cleanup',action='store_true',help='staged bounded lease/lock cleanup, global barrier, exact replay and cold physical reclaim')
 p.add_argument('--deferred-close',action='store_true',help='staged identified close, 64 cross-group OPEN appends, crash/resume, exact holes and bounded retirement')
@@ -248,6 +249,8 @@ def start(prefer_single_host=False):
         root.mkdir(exist_ok=True)
         log=open(work/f'n{i+1}.log','ab');handles.append(log)
         cmd=[a.server_binary or source/'efsd','--node-id',str(i+1),'--addr','127.0.0.1','--port',str(a.port+i),'--storage',root,'--quota',a.fixture_quota or ('16G' if (a.ior_binary or a.gc_bulk_gib) else ('4G' if a.compactor_pressure else '1G')),'--'+('direct-io' if a.mode=='direct' else 'no-direct-io')]
+        if a.fixture_quota == '0':
+            quota_arg = cmd.index('--quota');del cmd[quota_arg:quota_arg+2]
         if a.storage_roots==2:
             first=root/'storage0';second=root/'storage1'
             first.mkdir(exist_ok=True);second.mkdir(exist_ok=True)
@@ -306,6 +309,10 @@ def mount_client():
         if subprocess.run(['mountpoint','-q',str(mount)]).returncode:return False
         return subprocess.run(['timeout','2','stat',str(mount)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0
     wait(ready,'client serving',40)
+    if a.fixture_quota == '0':
+        capacity = os.statvfs(mount)
+        assert capacity.f_blocks > 0 and capacity.f_bavail > 0, capacity
+        print('unlimited-quota filesystem capacity/free bytes PASS',flush=True)
     if a.mount_sync:
         options=subprocess.check_output(['findmnt','-rn','-o','OPTIONS','--target',str(mount)],text=True).strip().split(',')
         assert 'sync' in options,('mount sync flag absent',options)
@@ -431,6 +438,25 @@ try:
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.peer_mkdir_race_only:
+        peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
+        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+        wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'peer mounted',40)
+        transport_proof([peer])
+        for iteration in range(8):
+            run(['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,
+                 '--parent',f'mkdir-race-{iteration:02d}','--filter','peer_mkdir_exclusive_race','--keep',
+                 '--results',work/f'mkdir-race-{iteration:02d}.tsv'],timeout=180)
+        run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
+        unmount();stop();start();mount_client()
+        for iteration in range(8):
+            parent=mount/f'mkdir-race-{iteration:02d}/peer_mkdir_exclusive_race'
+            for trial in range(8):assert (parent/f'raced-{trial}').is_dir()
+            shutil.rmtree(mount/f'mkdir-race-{iteration:02d}')
+        wait(drained,'peer mkdir physical reclamation',180)
+        (work/'peer-mkdir-race.json').write_text(json.dumps({'races':64,'cold_directories':64},indent=2))
+        print('64 competing peer MKDIR races, exact verdicts and cold directories PASS',flush=True)
+        raise SystemExit(0)
     if a.peer_open_contention_only:
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
         peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
@@ -2250,10 +2276,13 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
     peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
     peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
     wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'peer mounted',40)
-    transport_proof([peer])
     fold=mount/'peer-fold';f1=os.open(fold,os.O_CREAT|os.O_EXCL|os.O_RDWR,0o600)
     os.write(f1,b'\0'*(128*1024));os.fsync(f1)
     f2=os.open(peer_mount/'peer-fold',os.O_RDWR)
+    # Mount registration can precede the first verbs connection. Establish
+    # actual peer I/O before checking that RDMA was used, never accept TCP.
+    assert os.pread(f2,16,0)==bytes(16)
+    transport_proof([peer])
     model=bytearray(128*1024)
     fold_states=[]
     if a.fold_audit:fold_states.append(chunk_state(os.fstat(f1).st_ino))

@@ -299,7 +299,7 @@ static uint32_t features_ttl_ms(void)
 
 /* Query each seed node for the export's current feature mask. Returns 1 and
  * sets *out on a definitive reply, 0 if no node answered. */
-static int features_poll(uint32_t *out)
+static int features_poll_wire(uint32_t *out)
 {
     char name[EFS_MAX_NAME];
     pthread_mutex_lock(&g_client.lock);
@@ -340,6 +340,20 @@ static int features_poll(uint32_t *out)
         }
     }
     return 0;
+}
+
+/* Feature discovery is advisory; the query RPC still checks durable policy.
+ * A slow seed must not spend a socket's 30-second timeout just to learn an
+ * optional capability. Preserve the caller's tighter budget and restore it. */
+static int features_poll(uint32_t *out)
+{
+    uint64_t previous=efs_client_rpc_deadline_ms();
+    uint64_t end=stats_now_ms()+1000;
+    if (previous && previous<end) end=previous;
+    efs_client_rpc_set_deadline_ms(end);
+    int ok=features_poll_wire(out);
+    efs_client_rpc_set_deadline_ms(previous);
+    return ok;
 }
 
 /* Current feature mask; refreshed over the wire at most once per TTL. */
@@ -1011,6 +1025,7 @@ static int __attribute__((unused)) find_run_query(efs_ino_t dir_ino,
 #define EFS_FIND_RES_N 16
 static struct {
     int valid;
+    efs_node_id_t owner;
     efs_ino_t dir_ino;
     char term[EFS_MAX_NAME]; /* raw pattern, e.g. "*report*" */
     uint64_t ms;
@@ -1054,6 +1069,15 @@ static int find_query_ensure(efs_ino_t dir_ino, const char *query_path,
     pthread_mutex_lock(&g_find_work_mu);
     if (g_find_work>=2) { pthread_mutex_unlock(&g_find_work_mu);return -EBUSY; }
     g_find_work++;pthread_mutex_unlock(&g_find_work_mu);
+    /* LOOKUP, GETATTR and OPEN reauthorize the same first-page request.
+     * Keep its publisher stable so those callbacks cannot retain duplicate
+     * sessions on two hosts and close only the last returned token. */
+    efs_node_id_t owner=0;
+    pthread_mutex_lock(&g_find_res_mu);
+    for (int i=0;i<EFS_FIND_RES_N;i++) if (g_find_res[i].valid &&
+        find_res_caller(i) && g_find_res[i].dir_ino==dir_ino &&
+        !strcmp(g_find_res[i].term,pattern)) { owner=g_find_res[i].owner;break; }
+    pthread_mutex_unlock(&g_find_res_mu);
     char *text = NULL;
     int len = 0;size_t allocated=0;
     struct efs_msg_query_snapshot_reply reply;
@@ -1062,7 +1086,7 @@ static int find_query_ensure(efs_ino_t dir_ino, const char *query_path,
     uint64_t command_deadline=stats_now_ms()+8000;
     if (!previous_deadline || command_deadline<previous_deadline)
         efs_client_rpc_set_deadline_ms(command_deadline);
-    if (!qrc) qrc=efs_client_rpc_query_snapshot_v4(&command,&reply,&text);
+    if (!qrc) qrc=efs_client_rpc_query_snapshot_v4_at(&command,owner,&reply,&text);
     efs_client_rpc_set_deadline_ms(previous_deadline);
     if (!qrc) { len=(int)reply.text_len;allocated=(size_t)len+1; }
     if (qrc != 0) {
@@ -1102,6 +1126,7 @@ static int find_query_ensure(efs_ino_t dir_ino, const char *query_path,
         free(g_find_res[evict].text);g_find_res[evict].text=NULL;g_find_res[evict].valid=0;
     }
     g_find_res[slot].valid = 1;
+    g_find_res[slot].owner=reply.primary_id;
     g_find_res[slot].dir_ino = dir_ino;
     strncpy(g_find_res[slot].term, pattern, EFS_MAX_NAME - 1);
     g_find_res[slot].term[EFS_MAX_NAME - 1] = '\0';
@@ -4308,6 +4333,11 @@ static int efs_fuse_rmdir_at(fuse_ino_t parent_ino, const char *name)
 /* Refresh node used/quota from STATUS at most every 5 s (df callers). The
  * discovery-time values otherwise never move, and a df that never moves
  * looks like a quota bug. Best-effort: failures keep the last values. */
+static struct {
+    efs_node_id_t id;
+    uint64_t capacity, available, valid;
+} statfs_capacity[EFS_MAX_NODES];
+
 static void statfs_refresh_usage(void)
 {
     static uint64_t last_ms;
@@ -4340,15 +4370,19 @@ static void statfs_refresh_usage(void)
         if (efs_conn_send_msg(conn, EFS_MSG_STATUS, NULL, 0) == 0 &&
             efs_conn_recv_msg(conn, &type, &payload, &plen) == 0 &&
             type == EFS_MSG_STATUS_REPLY &&
-            plen >= sizeof(struct efs_msg_status_reply)) {
+            plen >= 24) {
             struct efs_msg_status_reply r;
-            memcpy(&r, payload, sizeof(r));
+            memset(&r, 0, sizeof(r));
+            memcpy(&r, payload, plen < sizeof(r) ? plen : sizeof(r));
             pthread_mutex_lock(&g_client.lock);
             for (uint32_t j = 0; j < g_client.node_count; j++)
                 if (g_client.nodes[j].id == nid) {
                     g_client.nodes[j].used = r.used;
-                    if (r.quota)
-                        g_client.nodes[j].quota = r.quota;
+                    g_client.nodes[j].quota = r.quota;
+                    statfs_capacity[j].id = nid;
+                    statfs_capacity[j].capacity = r.capacity_bytes;
+                    statfs_capacity[j].available = r.available_bytes;
+                    statfs_capacity[j].valid = r.capacity_valid;
                     break;
                 }
             pthread_mutex_unlock(&g_client.lock);
@@ -4368,21 +4402,8 @@ static int efs_fuse_statfs(const char *path, struct statvfs *stbuf)
     statfs_refresh_usage();
     pthread_mutex_lock(&g_client.lock);
 
-    /* Report physical truth: sum server-reported per-node disk usage and
-     * divide out the 2+1 amplification. node.used is refreshed at
-     * discovery; slightly stale is still truthful. There is deliberately
-     * NO fallback that sums the staging table's size fields: post
-     * client-cache Part A the table is a bounded cache, so a scan is both
-     * O(cache) on a statfs hot path and wrong (evicted rows are invisible).
-     * No servers reported yet => used reads 0, which is truthful. */
-    /* W42: capacity and free space come from ONE model,
-     * efs_capacity_logical (3-of-N fragment placement): total = what the
-     * quotas can hold, avail = what the remaining per-node room can
-     * hold, used = total − avail. The old `2 × min quota` was exact only
-     * for three nodes; on four 200 GiB nodes it reported 400 GiB where
-     * 533 fit. A node with no quota contributes nothing to total (its
-     * capacity is unknown), so total is 0 until every node has one —
-     * same rule as `efs-mgmt status`. */
+    /* Use distinct-node placement over server filesystem capacity and available
+     * bytes, bounded by configured quotas. Older servers fall back to quotas. */
     uint64_t quota[EFS_MAX_NODES], room[EFS_MAX_NODES];
     uint32_t nn = g_client.node_count, all_quota = 1;
     if (nn > EFS_MAX_NODES)
@@ -4391,8 +4412,12 @@ static int efs_fuse_statfs(const char *path, struct statvfs *stbuf)
         uint64_t q = g_client.nodes[i].quota, u = g_client.nodes[i].used;
         quota[i] = q;
         room[i] = q > u ? q - u : 0;
-        if (q == 0)
+        if (statfs_capacity[i].valid && statfs_capacity[i].id == g_client.nodes[i].id) {
+            quota[i] = statfs_capacity[i].capacity;
+            room[i] = statfs_capacity[i].available;
+        } else if (q == 0) {
             all_quota = 0;
+        }
     }
     uint64_t total_logical = all_quota ? efs_capacity_logical(quota, nn) : 0;
     uint64_t avail = all_quota ? efs_capacity_logical(room, nn) : 0;

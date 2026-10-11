@@ -112,6 +112,20 @@ def wr(path, data):
         f.write(data)
 
 
+def link_follow(source, destination):
+    """Request linkat(AT_SYMLINK_FOLLOW), including on Linux CPython.
+
+    Without dir_fd, CPython can dispatch to link(), whose Linux semantics
+    do not follow the source symlink even when follow_symlinks=True.
+    """
+    fd = os.open(os.path.dirname(source) or ".", os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.link(os.path.basename(source), destination, src_dir_fd=fd,
+                follow_symlinks=True)
+    finally:
+        os.close(fd)
+
+
 def rd(path):
     with open(path, "rb") as f:
         return f.read()
@@ -581,6 +595,49 @@ def peer_symlink_visible():
         eq(rd(l), b"tgt", "B follow")
 
     return [("a", a), ("b", b)]
+
+
+@test
+def peer_symlink_hardlinks():
+    """Peer sees explicit follow/no-follow and dangling-link lifetime."""
+    def a1(d):
+        wr(os.path.join(d, "t"), b"target bytes")
+        os.symlink("t", os.path.join(d, "l"))
+        os.link(os.path.join(d, "l"), os.path.join(d, "nofollow"), follow_symlinks=False)
+        link_follow(os.path.join(d, "l"), os.path.join(d, "follow"))
+        os.symlink("missing", os.path.join(d, "dangling"))
+        os.link(os.path.join(d, "dangling"), os.path.join(d, "dangling2"), follow_symlinks=False)
+        try:
+            link_follow(os.path.join(d, "dangling"), os.path.join(d, "absent"))
+        except OSError as error:
+            eq(error.errno, errno.ENOENT, "dangling follow errno")
+        else:
+            raise Fail("dangling follow unexpectedly succeeded")
+
+    def b1(d):
+        eq(os.lstat(os.path.join(d, "l")).st_ino, os.lstat(os.path.join(d, "nofollow")).st_ino, "peer symlink inode")
+        eq(os.lstat(os.path.join(d, "nofollow")).st_nlink, 2, "peer symlink nlink")
+        eq(os.readlink(os.path.join(d, "nofollow")), "t", "peer symlink text")
+        eq(os.path.islink(os.path.join(d, "follow")), False, "peer follow type")
+        eq(os.stat(os.path.join(d, "follow")).st_ino, os.stat(os.path.join(d, "t")).st_ino, "peer target inode")
+        eq(rd(os.path.join(d, "follow")), b"target bytes", "peer follow bytes")
+        eq(os.lstat(os.path.join(d, "dangling")).st_ino, os.lstat(os.path.join(d, "dangling2")).st_ino, "peer dangling inode")
+        eq(os.lstat(os.path.join(d, "dangling2")).st_nlink, 2, "peer dangling nlink")
+        eq(os.path.lexists(os.path.join(d, "absent")), False, "peer failed follow absent")
+
+    def a2(d):
+        for name in ("l", "t", "dangling"):
+            os.unlink(os.path.join(d, name))
+
+    def b2(d):
+        eq(os.lstat(os.path.join(d, "nofollow")).st_nlink, 1, "peer remaining symlink")
+        eq(os.readlink(os.path.join(d, "nofollow")), "t", "peer remaining text")
+        eq(os.stat(os.path.join(d, "follow")).st_nlink, 1, "peer remaining target")
+        eq(rd(os.path.join(d, "follow")), b"target bytes", "peer remaining bytes")
+        eq(os.lstat(os.path.join(d, "dangling2")).st_nlink, 1, "peer remaining dangling")
+        eq(os.readlink(os.path.join(d, "dangling2")), "missing", "peer dangling text")
+
+    return [("a", a1), ("b", b1), ("a", a2), ("b", b2)]
 
 
 @test
