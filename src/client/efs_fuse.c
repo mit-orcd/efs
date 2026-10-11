@@ -1011,6 +1011,7 @@ static int __attribute__((unused)) find_run_query(efs_ino_t dir_ino,
 #define EFS_FIND_RES_N 16
 static struct {
     int valid;
+    efs_node_id_t owner;
     efs_ino_t dir_ino;
     char term[EFS_MAX_NAME]; /* raw pattern, e.g. "*report*" */
     uint64_t ms;
@@ -1054,6 +1055,15 @@ static int find_query_ensure(efs_ino_t dir_ino, const char *query_path,
     pthread_mutex_lock(&g_find_work_mu);
     if (g_find_work>=2) { pthread_mutex_unlock(&g_find_work_mu);return -EBUSY; }
     g_find_work++;pthread_mutex_unlock(&g_find_work_mu);
+    /* LOOKUP, GETATTR and OPEN reauthorize the same first-page request.
+     * Keep its publisher stable so those callbacks cannot retain duplicate
+     * sessions on two hosts and close only the last returned token. */
+    efs_node_id_t owner=0;
+    pthread_mutex_lock(&g_find_res_mu);
+    for (int i=0;i<EFS_FIND_RES_N;i++) if (g_find_res[i].valid &&
+        find_res_caller(i) && g_find_res[i].dir_ino==dir_ino &&
+        !strcmp(g_find_res[i].term,pattern)) { owner=g_find_res[i].owner;break; }
+    pthread_mutex_unlock(&g_find_res_mu);
     char *text = NULL;
     int len = 0;size_t allocated=0;
     struct efs_msg_query_snapshot_reply reply;
@@ -1062,7 +1072,7 @@ static int find_query_ensure(efs_ino_t dir_ino, const char *query_path,
     uint64_t command_deadline=stats_now_ms()+8000;
     if (!previous_deadline || command_deadline<previous_deadline)
         efs_client_rpc_set_deadline_ms(command_deadline);
-    if (!qrc) qrc=efs_client_rpc_query_snapshot_v4(&command,&reply,&text);
+    if (!qrc) qrc=efs_client_rpc_query_snapshot_v4_at(&command,owner,&reply,&text);
     efs_client_rpc_set_deadline_ms(previous_deadline);
     if (!qrc) { len=(int)reply.text_len;allocated=(size_t)len+1; }
     if (qrc != 0) {
@@ -1102,6 +1112,7 @@ static int find_query_ensure(efs_ino_t dir_ino, const char *query_path,
         free(g_find_res[evict].text);g_find_res[evict].text=NULL;g_find_res[evict].valid=0;
     }
     g_find_res[slot].valid = 1;
+    g_find_res[slot].owner=reply.primary_id;
     g_find_res[slot].dir_ino = dir_ino;
     strncpy(g_find_res[slot].term, pattern, EFS_MAX_NAME - 1);
     g_find_res[slot].term[EFS_MAX_NAME - 1] = '\0';

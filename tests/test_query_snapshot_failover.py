@@ -52,12 +52,14 @@ int main(void){
  struct efs_msg_query_snapshot_v4 q={0};q.base.version=EFS_QUERY_PAGE_VERSION;q.base.max_output=16;
  struct efs_msg_query_snapshot_reply r;char*text=NULL;
  for(unsigned x=2;x<=4;x++){
-  reset(x);assert(query_snapshot_rpc(&q.base,sizeof(q),&r,&text)==EFS_OK);assert(text && !strcmp(text,"{}"));free(text);
+  reset(x);assert(query_snapshot_rpc(&q.base,sizeof(q),&r,&text,0)==EFS_OK);assert(text && !strcmp(text,"{}"));free(text);
   if(x==2)assert(calls[2]==1 && calls[3]==1);
   else assert(calls[3]==1 && calls[2]==2);
  }
- q.token=(uint64_t)3<<56;reset(5);assert(query_snapshot_rpc(&q.base,sizeof(q),&r,&text)==EFS_ERR_NET);assert(calls[3]==1 && calls[2]==0 && !text);
- reset(6);assert(query_snapshot_rpc(&q.base,sizeof(q),&r,&text)==EFS_ERR_BUSY);assert(calls[3]==1 && calls[2]==0 && !text);
+ reset(0);assert(query_snapshot_rpc(&q.base,sizeof(q),&r,&text,3)==EFS_OK);assert(calls[3]==1 && calls[2]==0 && r.primary_id==3);free(text);
+ reset(5);assert(query_snapshot_rpc(&q.base,sizeof(q),&r,&text,3)==EFS_OK);assert(calls[3]==1 && calls[2]==1 && r.primary_id==2);free(text);
+ q.token=(uint64_t)3<<56;reset(5);assert(query_snapshot_rpc(&q.base,sizeof(q),&r,&text,0)==EFS_ERR_NET);assert(calls[3]==1 && calls[2]==0 && !text);
+ reset(6);assert(query_snapshot_rpc(&q.base,sizeof(q),&r,&text,0)==EFS_ERR_BUSY);assert(calls[3]==1 && calls[2]==0 && !text);
  puts("query routing: alternate before excluded pool, failed hints cleared, pinned pages never rerouted PASS");
 }
 '''

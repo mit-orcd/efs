@@ -2331,16 +2331,15 @@ int efs_client_rpc_xattr(efs_export_id_t export_id, efs_ino_t ino, uint8_t op,
 }
 
 static int query_snapshot_rpc(const struct efs_msg_query_snapshot *req,uint32_t req_len,
-                                struct efs_msg_query_snapshot_reply *reply,char **text)
+                                struct efs_msg_query_snapshot_reply *reply,char **text,efs_node_id_t preferred)
 {
     if (!req || !reply || !text) return EFS_ERR_INVAL;
     *text=NULL;memset(reply,0,sizeof(*reply));
-    efs_node_id_t target=0,skip=0;
+    efs_node_id_t target=preferred,skip=0,pinned=0;
     if (req->version==EFS_QUERY_PAGE_VERSION) {
         uint64_t token=((const struct efs_msg_query_snapshot_v4 *)req)->token;
-        if (token) target=(efs_node_id_t)(token>>56);
+        if (token) target=pinned=(efs_node_id_t)(token>>56);
     }
-    efs_node_id_t pinned=target;
     int last=EFS_ERR_BUSY;
     for (unsigned attempt=0;attempt<16;attempt++) {
         if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
@@ -2368,6 +2367,9 @@ static int query_snapshot_rpc(const struct efs_msg_query_snapshot *req,uint32_t 
                 }
                 last=reply->status;
                 if (!last) {
+                    /* Local routing metadata: repeated unpinned FUSE callbacks
+                     * must return to the publisher that created this page. */
+                    reply->primary_id=nid;
                     *text=malloc((size_t)reply->text_len+1);
                     if (!*text) { free(payload);return EFS_ERR_NOMEM; }
                     if (memchr((uint8_t *)payload+sizeof(*reply),0,reply->text_len)) {
@@ -2392,14 +2394,14 @@ int efs_client_rpc_query_snapshot(const struct efs_msg_query_snapshot *req,
                                     struct efs_msg_query_snapshot_reply *reply,char **text)
 {
     if (req && req->version==EFS_QUERY_FILTER_VERSION) return EFS_ERR_INVAL;
-    return query_snapshot_rpc(req,sizeof(*req),reply,text);
+    return query_snapshot_rpc(req,sizeof(*req),reply,text,0);
 }
 int efs_client_rpc_query_snapshot_v3(const struct efs_msg_query_snapshot_v3 *req,
                                     struct efs_msg_query_snapshot_reply *reply,char **text)
 {
     if (!req) return EFS_ERR_INVAL;
     return query_snapshot_rpc(&req->base,req->base.version==EFS_QUERY_FILTER_VERSION ?
-                              sizeof(*req) : sizeof(req->base),reply,text);
+                              sizeof(*req) : sizeof(req->base),reply,text,0);
 }
 
 int efs_client_rpc_query_snapshot_v4(const struct efs_msg_query_snapshot_v4 *req,
@@ -2407,5 +2409,15 @@ int efs_client_rpc_query_snapshot_v4(const struct efs_msg_query_snapshot_v4 *req
 {
     if (!req) return EFS_ERR_INVAL;
     return query_snapshot_rpc(&req->base,req->base.version==EFS_QUERY_PAGE_VERSION ? sizeof(*req) :
-        req->base.version==EFS_QUERY_FILTER_VERSION ? sizeof(struct efs_msg_query_snapshot_v3) : sizeof(req->base),reply,text);
+        req->base.version==EFS_QUERY_FILTER_VERSION ? sizeof(struct efs_msg_query_snapshot_v3) : sizeof(req->base),reply,text,0);
+}
+
+/* Preferred owner is a recoverable first-page hint; token ownership remains strict. */
+int efs_client_rpc_query_snapshot_v4_at(const struct efs_msg_query_snapshot_v4 *req,
+                                       efs_node_id_t preferred,
+                                       struct efs_msg_query_snapshot_reply *reply,char **text)
+{
+    if (!req || preferred>EFS_MAX_NODES) return EFS_ERR_INVAL;
+    return query_snapshot_rpc(&req->base,req->base.version==EFS_QUERY_PAGE_VERSION ? sizeof(*req) :
+        req->base.version==EFS_QUERY_FILTER_VERSION ? sizeof(struct efs_msg_query_snapshot_v3) : sizeof(req->base),reply,text,preferred);
 }
