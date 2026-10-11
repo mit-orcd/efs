@@ -8,7 +8,7 @@ out=Path('/data1/efs/amd-gc-fragments-20261011/deployment');out.mkdir(parents=Tr
 env=os.environ|{'EFS_TRANSPORT':'tcp','EFS_COMMANDS':'0','EFS_COMMANDS_SERVER':'0'}
 env.pop('EFS_GC_BACKLOG_IDLE_MS',None)
 def run(args,**kwargs):return subprocess.run([str(v) for v in args],check=True,env=env,**kwargs)
-assert '7ae151c8' in run([src/'efsd','--version'],capture_output=True,text=True).stdout
+assert os.environ['EFS_AMD_BUILD_ID'] in run([src/'efsd','--version'],capture_output=True,text=True).stdout
 for name in ['efsd','efs-fuse','efs-mgmt','libefs.a']:
  shutil.copy2(installed/name,out/(name+'.previous'))
 for mount in ['/data1/efs/mnt','/data1/efs/mnt2']:

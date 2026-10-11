@@ -106,8 +106,9 @@ format/compatibility decisions, already assigned to ORCD; no packing is enabled.
 
 `EFS_GC_BACKLOG_IDLE_MS=100` is an experimental scheduling candidate; unset
 remains the existing 1,000-ms idle. Strict startup validation accepts only
-100..1000 milliseconds. A shorter idle is used only after a leader's capped
-reap scan and observed physical deletion progress during that pass. Idle,
+100..1000 milliseconds. The initial candidate uses a shorter idle only after a leader's capped
+reap scan and observed physical deletion progress during that pass. The
+fragment-backlog follow-up below extends that scheduling signal. Idle,
 wholly blocked work and counter reset retain 1-second backoff. Partially blocked
 work can accelerate when other deletions succeed; live offline-member gates
 must preserve all-member retention. All group scan,

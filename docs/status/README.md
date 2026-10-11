@@ -212,7 +212,7 @@ subsequently closes through the final recovery and sustained acceptance above.
 [W94/W97 AMD sustained mixed-load follow-up](amd-sustained-20261011.md) retains
 an unpaced private-quota failure, successful quiescent GC progress and an
 intentionally interrupted 300-second bounded baseline. Progress-conditioned GC scheduling
-passes native/direct functional gates but fails the direct 180-second drain deadline; extra quiescent recovery empties all four stores. A fragment-budget backlog follow-up is under validation; W94/W97 remain open. The same note
+passes native/direct functional gates but fails the direct 180-second drain deadline; extra quiescent recovery empties all four stores. A fragment-budget backlog follow-up (`85fb3a4b`) is under validation; W94/W97 remain open. The same note
 records the completed W95 retained experiment review and its format limits.
 
 ## Storage pressure policy
