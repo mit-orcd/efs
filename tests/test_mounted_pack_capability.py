@@ -30,6 +30,12 @@ int main(void){
  now+=PACK_CAPABILITY_NS;legacy=0;mixed=1;g_client.node_count=4;
  assert(!pack_capabilities(&members)&&probes==31&&!pack_capability_batch);
  now+=PACK_CAPABILITY_NS;mixed=0;assert(!pack_capabilities(&members)&&probes==35&&pack_capability_batch);
+ /* Recovery from a batch NET timeout must bypass a stale positive cache. */
+ unsigned before=probes;assert(!pack_batch_peer_unsupported()&&probes==before+4&&pack_capability_batch);
+ network_fail=1;pack_capability_batch=0;
+ assert(!pack_batch_peer_unsupported()&&!pack_capability_members); /* failed probe is uncertainty */
+ network_fail=0;legacy=1;assert(pack_batch_peer_unsupported()&&!pack_capability_batch);
+ legacy=0;assert(!pack_batch_peer_unsupported()&&pack_capability_batch);
  puts("mounted pack compatibility: exact roster, bounded positive cache, expiry/backward clock, mixed-version/network refusal and no negative caching PASS");
 }
 '''

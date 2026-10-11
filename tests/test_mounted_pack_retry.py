@@ -4,7 +4,8 @@ from pathlib import Path
 import os, shlex, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/client/pack_write.c').read_text()
-code=s[:s.index('static uint64_t pack_now(')]+r'''
+# This fixture extracts scalar/admission/fanout bodies, not the batch probe.
+code=s[:s.index('static uint64_t pack_now(')].replace('static int pack_batch_peer_unsupported(void);\n','')+r'''
 #include <assert.h>
 #include <stdio.h>
 #include <errno.h>
