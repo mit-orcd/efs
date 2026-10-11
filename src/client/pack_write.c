@@ -336,18 +336,20 @@ int efs_client_pack_write(efs_ino_t ino,uint64_t off,uint32_t len,const uint8_t 
     if(found || inode.size || !S_ISREG(inode.mode) || efs_dcache_ino_pinned(ino))return EFS_ERR_NOT_FOUND;
     int rc=pack_start();if(rc)return rc;
     uint32_t members;rc=pack_capabilities(&members);if(rc)return rc;
-    struct efs_msg_inode_writer_view_reply authority;
-    rc=efs_client_rpc_writer_view(ino,0,0,&authority);if(rc)return rc;
+    /* GETCHUNKS already reads current inode authority and returns its exact
+     * FileID. Use that same fresh observation to prove an absent base instead
+     * of making a separate generation-discovery WRITER_VIEW round trip. */
+    struct efs_chunk_rec base_rec;uint32_t count=1;uint64_t gen=0;
+    rc=efs_client_rpc_getchunks_fileid(g_client.export_id,ino,0,0,&base_rec,&count,&gen);if(rc)return rc;
+    if(!gen)return EFS_ERR_PROTO;
+    if(count)return EFS_ERR_NOT_FOUND;
     struct efs_msg_lane_writer_view_reply view;
-    rc=efs_client_rpc_lane_writer_view(ino,authority.generation,0,EFS_MIN_CHUNK_SIZE,&view);
-    if(rc==EFS_ERR_NOT_FOUND)rc=efs_client_rpc_lane_bootstrap(g_client.export_id,ino,authority.generation,0,EFS_MIN_CHUNK_SIZE,&view);
+    rc=efs_client_rpc_lane_writer_view(ino,gen,0,EFS_MIN_CHUNK_SIZE,&view);
+    if(rc==EFS_ERR_NOT_FOUND)rc=efs_client_rpc_lane_bootstrap(g_client.export_id,ino,gen,0,EFS_MIN_CHUNK_SIZE,&view);
     if(rc)return rc;
     /* A size-zero inode after truncate is not a fresh lane. Its fence and
      * retained cache identity require the ordinary reconstruction path. */
     if(view.view.authority_epoch || view.view.history.count)return EFS_ERR_NOT_FOUND;
-    struct efs_chunk_rec base_rec;uint32_t count=1;uint64_t gen=0;
-    rc=efs_client_rpc_getchunks_fileid(g_client.export_id,ino,authority.generation,0,&base_rec,&count,&gen);if(rc)return rc;
-    if(count)return EFS_ERR_NOT_FOUND;
     struct efs_opid identity;rc=efs_client_publication_id(1,&identity);if(rc)return rc;
     rc=efs_client_rpc_publication_session(efs_kv_lane_shard(ino,0),&identity);if(rc)return rc;
     unsigned gi=efs_raft_shard_group(efs_kv_lane_shard(ino,0))==0?0:1;
@@ -385,19 +387,19 @@ int efs_client_pack_write(efs_ino_t ino,uint64_t off,uint32_t len,const uint8_t 
          * cache operation, including private-candidate failure cleanup. */
         p->busy=1;pack_ack_credits++;
         pthread_mutex_unlock(&pack_mu);
-        rc=efs_client_publication_admit_write(&w->acks,ino,authority.generation,0,&view,0,data,len);
+        rc=efs_client_publication_admit_write(&w->acks,ino,gen,0,&view,0,data,len);
         struct efs_msg_inode_getchunks_reply *base=NULL;
         if(!rc) {
             base=efs_buf_metadata_alloc(sizeof(*base));if(!base)rc=EFS_ERR_NOMEM;
             else {memset(base,0,sizeof(*base));base->ino=ino;base->generation=gen;
-                rc=efs_dcache_snapshot_publication(ino,authority.generation,0,&view,base,&w->plan,p->snapshot,EFS_MIN_CHUNK_SIZE);}
+                rc=efs_dcache_snapshot_publication(ino,gen,0,&view,base,&w->plan,p->snapshot,EFS_MIN_CHUNK_SIZE);}
         }
         if(base)efs_buf_metadata_free(base,sizeof(*base));
         if(!rc) {
             w->object=efs_meta_candidate_gen(identity.client_uuid,identity.session_epoch,w->plan.cache_sequence,0,0);w->len=len;
-            rc=efs_dcache_begin_publication(ino,authority.generation,0,&w->plan,w->object);
+            rc=efs_dcache_begin_publication(ino,gen,0,&w->plan,w->object);
             if(!rc) {
-                struct efs_pack_record record={ino,authority.generation,w->plan.publish_epoch,w->object,len,p->snapshot};
+                struct efs_pack_record record={ino,gen,w->plan.publish_epoch,w->object,len,p->snapshot};
                 pthread_mutex_lock(&pack_mu);
                 rc=efs_pack_cohort_offer(&p->cohort,&record,w->plan.cache_sequence,pack_now());
                 pthread_mutex_unlock(&pack_mu);
@@ -406,7 +408,7 @@ int efs_client_pack_write(efs_ino_t ino,uint64_t off,uint32_t len,const uint8_t 
         if(rc) {
             /* Pre-accept failure: no PUT/admission send and no application
              * success. The private candidate alone may be abandoned. */
-            if(w->acks)(void)efs_dcache_abort_pack_admission(ino,authority.generation);
+            if(w->acks)(void)efs_dcache_abort_pack_admission(ino,gen);
             if(w->acks)(void)efs_client_publication_ack_free(w->acks);
             memset(w,0,sizeof(*w));
             pthread_mutex_lock(&pack_mu);p->busy=0;pack_ack_credits--;pthread_mutex_unlock(&pack_mu);return rc;
