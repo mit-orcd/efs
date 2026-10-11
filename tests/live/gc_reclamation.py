@@ -40,6 +40,7 @@ p.add_argument('--posix', action='store_true')
 p.add_argument('--posix-jobs', type=int, default=4, help='parallel POSIX cases (default: 4); each case retains its own concurrent writers')
 p.add_argument('--storage-session-fence-fault',action='store_true',help='private certificate fsync EIO: revocation must remain incomplete, then recover and survive cold restart; requires --guarded-leases')
 p.add_argument('--continue-posix-failure','--continue-regression-failure',dest='continue_posix_failure',action='store_true',help='retain POSIX/peer failure, run independent later gates, then exit unsuccessfully')
+p.add_argument('--tiny-sustained-seconds',type=int,default=0,help='1..1800 seconds of bounded tiny/large churn; cold exact survivors and physical reclaim, then exit')
 p.add_argument('--tiny-mixed',action='store_true',help='bounded large-writer overlap with 512 tiny CREATE/close operations, cold exact bytes and physical deletion')
 p.add_argument('--tiny-create-only',action='store_true',help='finite eight-worker tiny CREATE/write/close benchmark with exact cold bytes and physical reclaim, without large writers')
 p.add_argument('--tiny-mixed-only',action='store_true',help='run only the mixed-load cold-read/reclamation gate; implies --tiny-mixed')
@@ -118,6 +119,7 @@ p.add_argument('--idle-seconds',type=int,default=0,help='measure live-table idle
 p.add_argument('--full-node',action='store_true',help='one node quota exhausted while three fragment targets remain writable')
 p.add_argument('--port', type=int, default=20190)
 a = p.parse_args()
+if not 0 <= a.tiny_sustained_seconds <= 1800:p.error('--tiny-sustained-seconds must be 0..1800')
 if a.append_burst_only and not a.append_burst:p.error('--append-burst-only requires --append-burst')
 if a.append_burst and not 100<=a.append_burst<=20000:p.error('--append-burst must be 100..20000')
 if a.posix_jobs < 1:
@@ -689,6 +691,19 @@ try:
         evidence=reject_replies(mount,work,source,a.port,env)
         (work/'fuse-reply-failure.json').write_text(json.dumps(evidence,indent=2))
         print('rejected CREATE/OPEN replies release handles and reclaim server inodes PASS',flush=True)
+    if a.tiny_sustained_seconds:
+        from tiny_sustained import exercise as sustained,verify_and_delete as verify_sustained
+        record=sustained(mount,[client.pid,*[proc.pid for proc in servers]],
+                         a.tiny_sustained_seconds,work/'tiny-sustained.json')
+        unmount();stop(crash=True);start();mount_client()
+        verify_sustained(mount,record['generations'])
+        wait(lambda:drained() and all(not any(path.is_file() for path in
+             (root/'data/exports/1').glob('**/*')) for root in data_roots),
+             'sustained cold bytes and physical deletion drained',180)
+        record.update(cold_verified=True,physical_inventory_empty=True)
+        (work/'tiny-sustained.json').write_text(json.dumps(record,indent=2))
+        print('sustained tiny/large warm generations, cold bytes and physical reclamation PASS',flush=True)
+        raise SystemExit(0)
     if a.tiny_churn:
         from tiny_churn import exercise as churn,verify_and_delete as verify_churn
         record=churn(mount)
