@@ -87,7 +87,7 @@ are not relaxed and production capacity behavior is unchanged.
 | `2669064e-nuc` six-cold-mutation/full suites | Fail at first mkdir: missing owner refusal stalls apply; preserved |
 | `108afa3e-nuc` native suite | Pass |
 | `108afa3e-nuc` full direct | Pass: POSIX 216/216, peer 67/67, six cold first mutations, selected sync/append/recovery/GC gates |
-| `108afa3e-nuc` buffered full suite | POSIX 216/216, no skips; peer/final recovery gates continuing |
+| `108afa3e-nuc` full buffered | Pass: POSIX 216/216, peer 67/67, six cold first mutations, selected sync/append/recovery/GC gates |
 | Matched REPORT controls and exact 20,000-record gates | Waiting for corrected full-suite acceptance |
 
 Raw evidence is retained under

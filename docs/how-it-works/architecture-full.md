@@ -1490,8 +1490,9 @@ in the ORCD queue after the packing priority.
 
 [Current two-hour integration and repair ledger](../status/devel-nuc-integration-20261011.md)
 records the captured all-branch merge, W72 fresh-mount admission fixes, a bounded
-W52 prepare-pipeline experiment and their retained failures. Corrected full
-native/direct/buffered suites and matched append controls are in progress.
+W52 prepare-pipeline experiment and their retained failures. Corrected native
+and both full live modes pass (POSIX216/216, peer67/67 per mode). Matched
+append and drive observations are in progress.
 
 ### NUC closure session — October 10–11
 
@@ -5286,7 +5287,8 @@ masking the real missing-owner verdict, causing a false ENOENT on the first
 cold-mount mutation. Preserve REGISTER/ESTABLISH apply verdicts and advance Raft
 for business refusals while retrying IO/NOMEM. Actual-dispatcher and apply-policy
 regressions fail on their respective old sources. Six cold-mount first-mutation
-and full direct/buffered acceptance are in progress; the intermediate failed
+paths pass in each mode; full direct/buffered each pass POSIX216/216 and
+peer67/67 plus the selected sync/append/cold/fault/GC gates. Intermediate failed
 fixtures are retained. This does not close production publication integration.
 [Integration ledger](../status/devel-nuc-integration-20261011.md).
 

@@ -2935,7 +2935,8 @@ masking the real missing-owner verdict, causing a false ENOENT on the first
 cold-mount mutation. Preserve REGISTER/ESTABLISH apply verdicts and advance Raft
 for business refusals while retrying IO/NOMEM. Actual-dispatcher and apply-policy
 regressions fail on their respective old sources. Six cold-mount first-mutation
-and full direct/buffered acceptance are in progress; the intermediate failed
+paths pass in each mode; full direct/buffered each pass POSIX216/216 and
+peer67/67 plus the selected sync/append/cold/fault/GC gates. Intermediate failed
 fixtures are retained. This does not close production publication integration.
 [Integration ledger](../status/devel-nuc-integration-20261011.md).
 
