@@ -325,6 +325,8 @@ test: all
 	python3 tests/test_create_admission_wait.py
 	python3 tests/test_lookup_replacement.py
 	python3 tests/test_readindex_operation.py
+	python3 tests/test_readindex_pair.py
+	python3 tests/test_lookup_group_plan.py
 	python3 tests/test_lookup_path_authority.py
 	python3 tests/test_read_control_host.py
 	python3 tests/test_prepare_cohort.py

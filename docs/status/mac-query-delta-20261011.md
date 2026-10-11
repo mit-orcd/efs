@@ -640,3 +640,20 @@ checkpoint/retirement/control gates pass. Native deep pair still fails 0/2
 in the preceding candidate run; these are consecutive diagnostic runs, not
 a paired performance proof or native acceptance. Evidence: `native-checkpoint-
 duplicate-deep.txt`, `checkpoint-duplicate-sample-efs1.json`.
+
+Known locally led group reads now overlap their independent fresh rounds.
+Both admissions precede either send; pending earlier rounds remain ineligible.
+Different leaders retain scalar routing. MKDIR overlaps known parent/child
+groups; LOOKUP uses unfenced bytes only as scheduling hints and rereads every
+reply row after authority, fencing newly discovered groups. Stale speculative
+route/timeout failures fall back to authoritative discovery; storage failures
+remain errors. Pre-send admission, pending/current rounds, stepdown/routing,
+overflow, hint corruption, independent-RPC and original replacement/transaction
+authority gates pass on Mac Linux. Native deep pair remains 0/2 (37.6 seconds,
+normal cleanup). A separate bounded strace -k directory diagnostic completed
+and cleaned normally; its timing is not acceptance evidence. It proves 28
+KV fdatasync stacks through handler-side host_apply, both after proposer log
+sync and cohort release. One shown KV sync costs 12.4 ms while the handler
+holds h->mu. These callbacks currently bypass the pump's KV sync hold.
+`results/mac-readindex-resume/kv-apply-stacks.txt` records the evidence.
+Separating the synced-log watermark from pump-owned apply is the next fix.

@@ -13,13 +13,16 @@ code=r'''
 struct efs_raft_host {int running;struct efs_kv *kv;};
 static struct efs_raft_host h={1,0},*g_host=&h;
 static struct {uint64_t lk_fwd,lk_total,lk_ri_parent,lk_kv,lk_lanes,lk_getattr;} g_read_prof;
-static int missing_name,missing_inode,forward,read_error,pending_phase,coord_error,forwarded_lookups;
+static int missing_name,missing_inode,forward,read_error,pending_phase,coord_error,forwarded_lookups,pair_error,plan_other;
 static int read_prof_on(void){return 0;}
 static uint64_t now_us_(void){return 0;}
 static void read_prof_add(uint64_t*p,uint64_t n){*p+=n;}
 static void read_prof_tick(void){}
 static int host_hosts(struct efs_raft_host*p,uint8_t g){(void)p;return !forward||g==efs_raft_shard_group(efs_kv_inode_shard(1));}
 static int host_read_index(struct efs_raft_host*p,uint8_t g,int*i){(void)p;(void)g;(void)i;return read_error;}
+static uint8_t host_lookup_plan_group(struct efs_raft_host*p,efs_ino_t i,const char*n,uint8_t pg){(void)p;(void)i;(void)n;return plan_other?(pg==0?2:0):pg;}
+static int host_read_index_pair(struct efs_raft_host*p,uint8_t first,uint8_t second,int*i){if(first!=second && pair_error)return pair_error;int rc=host_read_index(p,first,i);return !rc && first!=second?host_read_index(p,second,i):rc;}
+
 static void host_fwd_lookup(struct efs_raft_host*p,efs_ino_t i,const char*n,struct efs_msg_inode_reply*r,const uint8_t*g,int c){(void)p;(void)g;(void)c;forwarded_lookups++;r->status=EFS_INODE_RPC_OK;r->inode.ino=2;r->inode.parent=i;strcpy(r->inode.name,n);}
 static void host_fwd_getattr(struct efs_raft_host*p,efs_ino_t i,struct efs_msg_inode_reply*r,const uint8_t*g,int c){(void)p;(void)g;(void)c;r->status=missing_inode?EFS_INODE_RPC_NOT_FOUND:EFS_INODE_RPC_OK;r->inode.ino=i;}
 static int host_txn_coord(void*u,const struct efs_txid*t,uint32_t sh,int*d){(void)t;if(!host_hosts(u,efs_raft_shard_group(sh)))return EFS_ERR_IO;*d=EFS_TXN_COMMIT;return coord_error;}
@@ -43,6 +46,11 @@ int main(void){struct efs_msg_inode_reply r;
   int old=forwarded_lookups;server_raft_host_lookup(1,"pending",&r);
   assert(r.status==EFS_INODE_RPC_OK&&r.inode.ino==2&&forwarded_lookups==old+1);
  }
+ forward=0;pending_phase=0;plan_other=1;pair_error=EFS_ERR_BUSY;
+ server_raft_host_lookup(1,"stale-hint",&r);assert(r.status==EFS_INODE_RPC_OK);
+ pair_error=EFS_ERR_NOT_PRIMARY;server_raft_host_lookup(1,"stale-hint",&r);assert(r.status==EFS_INODE_RPC_OK);
+ pair_error=EFS_ERR_IO;server_raft_host_lookup(1,"hint-io",&r);assert(r.status==EFS_INODE_RPC_ERROR);
+ plan_other=pair_error=0;
  forward=0;pending_phase=1;coord_error=EFS_ERR_IO;
  int old=forwarded_lookups;server_raft_host_lookup(1,"corrupt",&r);
  assert(r.status==EFS_INODE_RPC_ERROR&&forwarded_lookups==old);

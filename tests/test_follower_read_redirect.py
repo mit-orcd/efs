@@ -3,7 +3,7 @@
 from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text()
-a=s.index('static int host_follower_read_result(');b=s.index('static int host_read_index(',a)
+a=s.index('static int host_follower_read_result(');b=s.index('\n}',a)+2
 code='#include "efs/common.h"\n#include <assert.h>\n#include <stdio.h>\n'+s[a:b]+r'''
 int main(void){
  int hint=-1;

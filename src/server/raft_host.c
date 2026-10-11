@@ -3768,8 +3768,10 @@ static int host_follower_read_result(int rc,int self,int peers,int remote_hint,
     return rc;
 }
 
-static int host_read_index(struct efs_raft_host *h, uint8_t group,
-                           int *leader_hint)
+struct host_read_admission {uint64_t want,round,term;};
+
+static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
+                           int *leader_hint,const struct host_read_admission *admission)
 {
     struct timespec end;
     struct host_view v;
@@ -3784,7 +3786,8 @@ static int host_read_index(struct efs_raft_host *h, uint8_t group,
     host_view_get(h, group, &v);
     if (!v.has)
         return EFS_ERR_NOT_PRIMARY;
-    want = v.commit;
+    want = admission ? admission->want : v.commit;
+    if (admission) {round=admission->round;admitted_term=admission->term;}
     for (;;) {
         int rc;
 
@@ -3888,6 +3891,48 @@ static int host_read_index(struct efs_raft_host *h, uint8_t group,
         pthread_mutex_unlock(&h->cv_mu);
         host_view_get(h, group, &v);
     }
+}
+
+static int host_read_index(struct efs_raft_host *h,uint8_t group,int *hint)
+{
+    return host_read_index_admitted(h,group,hint,NULL);
+}
+
+/* Overlap two independent hosted-leader read rounds. Both admissions are
+ * captured before either probe is sent. A pending older round cannot cover
+ * either admission; the existing waiter starts its next round as needed.
+ * Different leaders/unhosted groups keep the ordinary scalar routing. */
+static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
+                                uint8_t second,int *hint)
+{
+    if(first==second)return host_read_index(h,first,hint);
+    struct efs_raft *r[2];struct host_read_admission admission[2];
+    uint8_t groups[2]={first,second};int rc=EFS_OK;
+    pthread_mutex_lock(&h->mu);
+    for(unsigned i=0;i<2;i++) {
+        r[i]=group_raft(h,groups[i]);
+        if(!r[i] || efs_raft_role(r[i])!=EFS_RAFT_LEADER) {
+            pthread_mutex_unlock(&h->mu);
+            rc=host_read_index(h,first,hint);
+            return rc==EFS_OK ? host_read_index(h,second,hint) : rc;
+        }
+        uint64_t previous=efs_raft_read_round(r[i]);
+        if(previous==UINT64_MAX) {
+            pthread_mutex_unlock(&h->mu);return EFS_ERR_BUSY;
+        }
+        admission[i]=(struct host_read_admission){efs_raft_commit(r[i]),
+                                                  previous+1,efs_raft_term(r[i])};
+    }
+    for(unsigned i=0;i<2;i++) {
+        if(!efs_raft_read_pending(r[i]))rc=efs_raft_read_begin(r[i]);
+        host_publish_group(h,groups[i]);
+        if(rc!=EFS_OK)break;
+    }
+    pthread_mutex_unlock(&h->mu);
+    host_pump_kick(h);
+    if(rc!=EFS_OK)return rc;
+    rc=host_read_index_admitted(h,first,hint,&admission[0]);
+    return rc==EFS_OK ? host_read_index_admitted(h,second,hint,&admission[1]) : rc;
 }
 
 static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
@@ -10707,6 +10752,27 @@ void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
     }
 }
 
+/* Unfenced local bytes are scheduling hints only. Stale/missing/corrupt
+ * hints fall back to the parent group; all reply bytes are read again after
+ * fresh authority, and newly discovered groups still obtain their own fence. */
+static uint8_t host_lookup_plan_group(struct efs_raft_host *h,efs_ino_t parent,
+                                     const char *name,uint8_t pg)
+{
+    struct efs_meta_row row;struct efs_meta_dentry dent;
+    uint8_t key[EFS_KV_KEY_MAX],value[EFS_META_DENT_BYTES];
+    uint32_t kl=0,vl=sizeof(value);
+    if(efs_meta_apply_get_inode(h->kv,parent,&row)!=EFS_OK ||
+       (row.layout!=EFS_META_LAYOUT_LOCAL && row.layout!=EFS_META_LAYOUT_HASHED &&
+        row.layout!=EFS_META_LAYOUT_SPLITTING))return pg;
+    uint32_t shard=efs_kv_dentry_shard(parent,name,row.layout);
+    uint8_t dg=efs_raft_shard_group(shard);
+    if(dg!=pg)return dg;
+    if(efs_kv_key_dentry(shard,parent,name,key,&kl)!=EFS_OK ||
+       efs_kv_get(h->kv,key,kl,value,&vl)!=EFS_OK ||
+       efs_meta_unpack_dentry(value,vl,&dent)!=EFS_OK || !dent.ino)return pg;
+    return efs_raft_shard_group(efs_kv_inode_shard(dent.ino));
+}
+
 void server_raft_host_lookup(efs_ino_t parent, const char *name,
                              struct efs_msg_inode_reply *out)
 {
@@ -10740,8 +10806,16 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
         host_fwd_lookup(h, parent, name, out, need, 2);
         return;
     }
-    rc = host_read_index(h, pg, &hint);
-    uint8_t covered = rc == EFS_OK ? (uint8_t)(1u << pg) : 0;
+    uint8_t planned=host_lookup_plan_group(h,parent,name,pg);
+    if(!host_hosts(h,planned))planned=pg;
+    rc = host_read_index_pair(h,pg,planned,&hint);
+    /* A stale hint cannot make an unrelated group's route/timeout a new
+     * name dependency. Recheck only the parent, then discover actual groups
+     * from authoritative rows. Storage/protocol failures remain failures. */
+    if(planned!=pg && (rc==EFS_ERR_NOT_PRIMARY || rc==EFS_ERR_BUSY)) {
+        planned=pg;rc=host_read_index(h,pg,&hint);
+    }
+    uint8_t covered = rc == EFS_OK ? (uint8_t)((1u << pg)|(1u << planned)) : 0;
     if (prof)
         p1 = now_us_();
     if (rc == EFS_OK)
@@ -10750,7 +10824,7 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
         uint32_t hsh = efs_kv_dentry_shard(parent, name, EFS_META_LAYOUT_HASHED);
         uint8_t hg = efs_raft_shard_group(hsh);
         int hh = -1;
-        if (hg != pg) {
+        if (!(covered&(1u<<hg))) {
             if (!host_hosts(h, hg)) {
                 uint8_t need[2];
                 need[0] = pg;
@@ -12571,10 +12645,9 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
     }
     if (rc == EFS_OK) {
         stage = 3;
-        rc = host_read_index(h, efs_raft_shard_group(psh), &hint);
+        rc = host_read_index_pair(h,efs_raft_shard_group(psh),
+                                  efs_raft_shard_group(csh),&hint);
     }
-    if (rc == EFS_OK && efs_raft_shard_group(csh) != efs_raft_shard_group(psh))
-        rc = host_read_index(h, efs_raft_shard_group(csh), &hint);
     if (rc == EFS_OK) {
         stage = 4;
         rc = efs_meta_apply_get_inode(h->kv, parent, &prow);
