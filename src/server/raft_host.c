@@ -10762,6 +10762,20 @@ static int host_opid_replay(struct efs_raft_host *h, uint32_t shard,
     if (!q)
         return 0;
     hit = efs_meta_apply_opid_probe(h->kv, shard, &q->id, rep);
+    if (!hit && efs_opid_req_valid(q) && q->id.session_epoch) {
+        /* A transaction can expose its committed dentry before its receipt
+         * reduction is materialized. A raw miss is not permission to run
+         * that identity again while its receipt key is still pending. */
+        uint8_t key[EFS_KV_KEY_MAX];
+        uint32_t bytes = 0;
+        int rc = efs_kv_key_opid(shard, q->id.client_uuid, q->id.session_epoch,
+                                key, &bytes);
+        if (rc == EFS_OK) rc = efs_txn_key_busy(h->kv, key, bytes);
+        if (rc != EFS_OK) return rc;
+        /* RESOLVE writes the receipt and removes its reduction atomically.
+         * Re-probe after the free-key check to cover concurrent RESOLVE. */
+        hit = efs_meta_apply_opid_probe(h->kv, shard, &q->id, rep);
+    }
     if (hit > 0)
         __atomic_fetch_add(&h->obs_opid_replay, 1, __ATOMIC_RELAXED);
     return hit;
