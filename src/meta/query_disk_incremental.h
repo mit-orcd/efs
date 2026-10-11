@@ -44,9 +44,17 @@ static int dirty_add(struct efs_query_disk *d,struct incremental *s,efs_ino_t in
 {
     unsigned at=dir_lower(s,ino);
     if(at<s->count && s->dirs[at].node.row.ino==ino)return EFS_OK;
-    if(s->count==DIRTY_MAX)return INCREMENTAL_FULL;
+    if(s->count==DIRTY_MAX){
+        fprintf(stderr,"query-disk: incremental fallback=dirty-directory-budget count=%u limit=%u ino=%llu\n",
+                s->count,DIRTY_MAX,(unsigned long long)ino);
+        return INCREMENTAL_FULL;
+    }
     struct dirty_dir dir={0};int rc=locate(d,ino,&dir.node,&dir.at);
-    if(rc==EFS_ERR_NOT_FOUND)return INCREMENTAL_FULL;
+    if(rc==EFS_ERR_NOT_FOUND){
+        fprintf(stderr,"query-disk: incremental fallback=missing-directory ino=%llu count=%u\n",
+                (unsigned long long)ino,s->count);
+        return INCREMENTAL_FULL;
+    }
     if(rc)return rc;
     if(!S_ISDIR(dir.node.row.mode))return EFS_ERR_PROTO;
     memmove(s->dirs+at+1,s->dirs+at,(s->count-at)*sizeof(*s->dirs));
