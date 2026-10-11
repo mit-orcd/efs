@@ -507,3 +507,8 @@ the exact 1,024-ID cliff, removes it with a bounded candidate journal, and
 optimizes inode diff scans. Mac buffered/TCP deployment and unit gates passed.
 Installed-namespace bootstrap and broader live gates retain their own verdicts;
 no ORCD acceptance or W109 closure is implied.
+
+[Latest ORCD branch integration and rollout](orcd-merged-rollout-20261011.md):
+all current development branches merged and `c52a4643` deployed to eleven hosts.
+Full Linux units and retained file samples pass; loaded POSIX/query gates remain
+failed, and the fresh tiny-file benchmark is running.

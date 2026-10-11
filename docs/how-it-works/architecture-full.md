@@ -1983,6 +1983,11 @@ optimizes inode diff scans. Mac buffered/TCP deployment and unit gates passed.
 Installed-namespace bootstrap and broader live gates retain their own verdicts;
 no ORCD acceptance or W109 closure is implied.
 
+[Latest ORCD branch integration and rollout](../status/orcd-merged-rollout-20261011.md):
+all current development branches merged and `c52a4643` deployed to eleven hosts.
+Full Linux units and retained file samples pass; loaded POSIX/query gates remain
+failed, and the fresh tiny-file benchmark is running.
+
 
 ## Appendix 2 — In flight — the current handoff block
 
@@ -1999,7 +2004,14 @@ a staged persistent minimum-reader barrier are implemented with private gates.
 The lower-layer packing gate is not mounted publication/GC acceptance. Next
 connect typed upload/session admission, same-group durable mapping/receipt
 batches and GETCHUNKS/cold reads; then client coalescing and shared-object GC.
-The live runtime remains `52bc8edb`; do not infer activation from unit gates.
+The live runtime is now `c52a4643` (`devel-orcd`), merged from all current
+branches and deployed to four servers/seven clients with native RDMA/direct I/O.
+Full Linux units and preserved file samples pass. Loaded 30-second POSIX gates
+remain failed (1,475 pass, 23 fail, 7 skip, 42 NOTRUN), and virtual listings
+cannot close W108 while query RPCs fail. The fresh 512-byte benchmark is running
+in `/tmp/efs-mount/tiny-files-merged-c52a464391a6`; the original screen run was
+interrupted cleanly at 9,514,331 files. [Rollout and evidence](../status/orcd-merged-rollout-20261011.md).
+Do not infer mounted packing activation from lower-layer unit gates.
 The bounded query pause was restored to policy mask 3, version 2. The
 older package instructions below are historical context for this assignment.
 

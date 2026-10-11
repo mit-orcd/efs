@@ -1,0 +1,39 @@
+{
+  "fcstor007": [
+    "dir_deep_nesting\tFAIL\ttimeout after 30s",
+    "names_crazy_dirs\tFAIL\ttimeout after 30s",
+    "dir_deep_nesting_beyond_64\tFAIL\ttimeout after 30s",
+    "virt_stats_readable\tFAIL\tCalledProcessError: Command '['/usr/bin/python3', '/tmp/efs-mount/posix-fcstor007-merged-c52a464391a6-30s-v1pvb92d/virt_stats_readable/.efs/stats', '--json']' returned non-zero exit status 1.",
+    "virt_find_query\tFAIL\ttimeout after 30s"
+  ],
+  "fcstor008": [
+    "dir_deep_nesting\tFAIL\ttimeout after 30s",
+    "virt_stats_readable\tFAIL\ttimeout after 30s; worker group still alive",
+    "virt_find_query\tFAIL\tworker killed by signal 15"
+  ],
+  "fcstor009": [
+    "dir_deep_nesting\tFAIL\ttimeout after 30s",
+    "virt_stats_readable\tFAIL\ttimeout after 30s; worker group still alive",
+    "virt_find_query\tFAIL\tworker group still alive after virt_stats_readable"
+  ],
+  "fcstor010": [
+    "dir_deep_nesting\tFAIL\ttimeout after 30s",
+    "virt_stats_readable\tFAIL\ttimeout after 30s; worker group still alive",
+    "virt_find_query\tFAIL\tworker group still alive after virt_stats_readable"
+  ],
+  "fcstor011": [
+    "dir_deep_nesting\tFAIL\ttimeout after 30s",
+    "virt_stats_readable\tFAIL\ttimeout after 30s; worker group still alive",
+    "virt_find_query\tFAIL\tworker group still alive after virt_stats_readable"
+  ],
+  "fcstor012": [
+    "dir_deep_nesting\tFAIL\ttimeout after 30s",
+    "virt_stats_readable\tFAIL\ttimeout after 30s; worker group still alive",
+    "virt_find_query\tFAIL\tworker group still alive after virt_stats_readable"
+  ],
+  "fcstor013": [
+    "dir_deep_nesting\tFAIL\ttimeout after 30s",
+    "virt_stats_readable\tFAIL\ttimeout after 30s; worker group still alive",
+    "virt_find_query\tFAIL\tworker group still alive after virt_stats_readable"
+  ]
+}

@@ -1,0 +1,124 @@
+pass peer_mkdir_visible              
+slow-step peer_mkdir_exclusive_race ab 0 3.43s
+slow-step peer_mkdir_exclusive_race a 1 2.74s
+pass peer_mkdir_exclusive_race       
+pass peer_create_visible             
+pass peer_write_read                 
+slow-step peer_listdir_siblings b 1 2.13s
+pass peer_listdir_siblings           
+slow-step peer_shared_creat a 0 2.44s
+pass peer_shared_creat               
+pass peer_open_existing              
+pass peer_creat_excl_eexist          
+pass peer_stat_size                  
+pass peer_rename_visible             
+pass peer_mkdir_then_create          
+slow-step peer_shared_pwrite ab 1 6.67s
+slow-step peer_shared_pwrite a 2 7.72s
+pass peer_shared_pwrite              
+pass peer_unlink_gone                
+pass peer_chmod_visible              
+pass peer_utimens_visible            
+pass peer_dir_mtime_bump_visible     
+pass peer_truncate_visible           
+pass peer_hardlink_visible           
+slow-step peer_symlink_visible a 0 2.26s
+pass peer_symlink_visible            
+slow-step peer_symlink_hardlinks a 0 2.42s
+pass peer_symlink_hardlinks          
+pass peer_negative_dentry            
+pass peer_fsync_then_read            
+slow-step peer_mkdir_rmdir_recreate a 0 2.28s
+pass peer_mkdir_rmdir_recreate       
+slow-step peer_oappend a 2 2.49s
+pass peer_oappend                    
+slow-step peer_rename_over a 0 2.89s
+pass peer_rename_over                
+slow-step peer_flock_exclusive a 0 9.32s
+slow-step peer_flock_exclusive a 2 3.13s
+pass peer_flock_exclusive            
+slow-step peer_unlink_while_b_has_fd b 1 2.13s
+slow-step peer_unlink_while_b_has_fd b 3 2.56s
+pass peer_unlink_while_b_has_fd      
+slow-step peer_rmdir_gone b 1 2.30s
+pass peer_rmdir_gone                 
+pass peer_nlink_after_link           
+pass peer_hardlink_write             
+pass peer_cached_directory_rename    
+pass peer_rename_dir                 
+pass peer_o_trunc_visible            
+pass peer_unlink_recreate            
+pass peer_lstat_symlink_size         
+pass peer_listdir_after_unlink       
+pass peer_chmod_via_hardlink         
+pass peer_sparse_size                
+pass peer_overlap_pwrite_same_range  
+pass peer_overlap_pwrite_partial     
+slow-step peer_overlap_pwrite_chunk_straddle ab 1 2.11s
+pass peer_overlap_pwrite_chunk_straddle
+slow-step peer_concurrent_append ab 1 15.08s
+FAIL peer_concurrent_append           exec ab-b step 1 rc=1 out='' err=' -o BatchMode=yes -o ConnectTimeout=8 -o LogLevel=ERROR erbmi1@fcstor009 \\\'python3 \\\'"\\\'"\\\'/tmp/efs/tests/posix/posix_2client.py\\\'"\\\'"\\\' --exec \\\'"\\\'"\\\'peer_concurrent_append\\\'"\\\'"\\\' 1 \\\'"\\\'"\\\'/tmp/efs-mount/posix2-merged-c52a464391a6/peer_concurrent_append\\\'"\\\'"\\\' b\\\'\']\' timed out after 15 seconds\n'
+slow-step peer_append_while_truncate ab 1 4.08s
+pass peer_append_while_truncate      
+slow-step peer_disjoint_extend ab 1 2.24s
+pass peer_disjoint_extend            
+pass peer_disjoint_extend_reverse_completion
+slow-step peer_extend_and_truncate a 0 2.14s
+slow-step peer_extend_and_truncate ab 1 2.25s
+pass peer_extend_and_truncate        
+slow-step peer_stat_during_extend ab 1 2.42s
+pass peer_stat_during_extend         
+slow-step peer_trunc_then_pwrite_old_fd a 1 2.46s
+slow-step peer_trunc_then_pwrite_old_fd a 3 2.13s
+pass peer_trunc_then_pwrite_old_fd   
+slow-step peer_trunc_zero_then_high_pwrite a 1 2.52s
+pass peer_trunc_zero_then_high_pwrite
+slow-step peer_pwrite_then_peer_truncate a 0 2.22s
+pass peer_pwrite_then_peer_truncate  
+slow-step peer_rename_same_src_two_dst ab 1 2.10s
+slow-step peer_rename_same_src_two_dst a 2 2.03s
+pass peer_rename_same_src_two_dst    
+pass peer_rename_vs_unlink_src       
+slow-step peer_rename_vs_unlink_dst ab 1 2.12s
+slow-step peer_rename_vs_unlink_dst a 2 2.08s
+pass peer_rename_vs_unlink_dst       
+slow-step peer_rename_across_dirs_chase a 0 2.15s
+slow-step peer_rename_across_dirs_chase ab 1 2.28s
+slow-step peer_rename_across_dirs_chase a 2 2.62s
+pass peer_rename_across_dirs_chase   
+slow-step peer_creat_excl_race ab 0 2.12s
+slow-step peer_creat_excl_race a 1 2.11s
+pass peer_creat_excl_race            
+slow-step peer_create_unlink_stat_churn ab 0 5.35s
+pass peer_create_unlink_stat_churn   
+pass peer_negative_after_unlink      
+pass peer_rename_negative            
+slow-step peer_unlink_recreate_stale_ino a 0 2.00s
+slow-step peer_unlink_recreate_stale_ino b 3 3.39s
+pass peer_unlink_recreate_stale_ino  
+slow-step peer_open_unlink_nlink a 1 2.62s
+slow-step peer_open_unlink_nlink a 3 2.35s
+pass peer_open_unlink_nlink          
+slow-step peer_open_rename_fd a 0 2.06s
+slow-step peer_open_rename_fd a 1 2.55s
+slow-step peer_open_rename_fd b 2 2.07s
+slow-step peer_open_rename_fd a 3 2.58s
+pass peer_open_rename_fd             
+slow-step peer_unlink_recreate_old_fd a 0 2.04s
+slow-step peer_unlink_recreate_old_fd a 1 2.71s
+slow-step peer_unlink_recreate_old_fd a 3 2.15s
+pass peer_unlink_recreate_old_fd     
+slow-step peer_concurrent_hardlink a 2 2.34s
+pass peer_concurrent_hardlink        
+slow-step peer_concurrent_unlink_hardlinks ab 1 2.42s
+pass peer_concurrent_unlink_hardlinks
+slow-step peer_fcntl_range_conflict a 0 2.53s
+slow-step peer_fcntl_range_conflict a 2 2.23s
+pass peer_fcntl_range_conflict       
+slow-step peer_fcntl_range_adjacent a 0 2.46s
+slow-step peer_fcntl_range_adjacent a 2 2.05s
+pass peer_fcntl_range_adjacent       
+pass peer_mtime_no_regress           
+============================================================
+POSIX 2-client: 66/67 pass, 1 fail  (381.8s)
+wrote results/measure/20261011-orcd-merged-rollout/peer.tsv

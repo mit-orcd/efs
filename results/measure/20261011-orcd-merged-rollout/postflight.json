@@ -1,0 +1,42 @@
+{
+  "retained-file": {
+    "path": "/tmp/efs-mount/001/dat01",
+    "size": 107374182400,
+    "uid": 246111,
+    "gid": 246111,
+    "mode": 33188,
+    "samples": [
+      [
+        0,
+        "0f0ede5f284b1b6bc37f738240ab1242f4bc2bcc01964562e31537da1b0bc07e"
+      ],
+      [
+        65536,
+        "6138a25640c5be435061a821af66fe71738c2430828fa432bea3aa82510485a4"
+      ],
+      [
+        53687091200,
+        "0f0ede5f284b1b6bc37f738240ab1242f4bc2bcc01964562e31537da1b0bc07e"
+      ],
+      [
+        107374116864,
+        "8593ff387887abee8f6b464b804465ca53337457537c2fe508f68e1fc60a6c35"
+      ]
+    ]
+  },
+  "commands-policy 172.16.223.57:17432 get": "commands-policy rc=0 version=2 mask=3 leader_hint=1",
+  "status 172.16.223.57:17432": "Cluster nodes (4):\n  node 1: 172.16.223.57:17432  up  used=494.50 GiB  quota=29.32 TiB (1.6%)  storage(6):\n      /data1/01/efs-orcd-test-erbmi1\n      /data1/02/efs-orcd-test-erbmi1\n      /data1/03/efs-orcd-test-erbmi1\n      /data1/04/efs-orcd-test-erbmi1\n      /data1/05/efs-orcd-test-erbmi1\n      /data1/06/efs-orcd-test-erbmi1\n  node 2: 172.16.223.58:17432  up  used=494.51 GiB  quota=29.31 TiB (1.6%)  storage(6):\n      /data1/01/efs-orcd-test-erbmi1\n      /data1/02/efs-orcd-test-erbmi1\n      /data1/03/efs-orcd-test-erbmi1\n      /data1/04/efs-orcd-test-erbmi1\n      /data1/05/efs-orcd-test-erbmi1\n      /data1/06/efs-orcd-test-erbmi1\n  node 3: 172.16.223.59:17432  up  used=494.54 GiB  quota=29.31 TiB (1.6%)  storage(6):\n      /data1/01/efs-orcd-test-erbmi1\n      /data1/02/efs-orcd-test-erbmi1\n      /data1/03/efs-orcd-test-erbmi1\n      /data1/04/efs-orcd-test-erbmi1\n      /data1/05/efs-orcd-test-erbmi1\n      /data1/06/efs-orcd-test-erbmi1\n  node 4: 172.16.223.60:17432  up  used=494.50 GiB  quota=29.32 TiB (1.6%)  storage(6):\n      /data1/01/efs-orcd-test-erbmi1\n      /data1/02/efs-orcd-test-erbmi1\n      /data1/03/efs-orcd-test-erbmi1\n      /data1/04/efs-orcd-test-erbmi1\n      /data1/05/efs-orcd-test-erbmi1\n      /data1/06/efs-orcd-test-erbmi1\nUsable (2+1 logical): used=1.29 TiB  free=76.88 TiB  capacity=78.17 TiB (1.6%; filesystem capacity)\nUsable bytes: used=1415944863744 free=84535354087840 capacity=85951298951584\nCluster state: OK (4 up, 0 down)\nVersions: efsd c52a464391a6 (branch devel-orcd) \u2014 4/4 identical\nNode 172.16.223.57:17432 state: active\nHeal:\n  node 1: idle\n  node 2: idle\n  node 3: idle\n  node 4: idle",
+  "fcstor003": "version 172.16.223.57:17432 efsd c52a464391a6 (branch devel-orcd, built 2026-10-11T12:43:40Z on fcstor003)",
+  "fcstor004": "version 172.16.223.58:17432 efsd c52a464391a6 (branch devel-orcd, built 2026-10-11T12:43:40Z on fcstor004)",
+  "fcstor005": "version 172.16.223.59:17432 efsd c52a464391a6 (branch devel-orcd, built 2026-10-11T12:43:40Z on fcstor005)",
+  "fcstor006": "version 172.16.223.60:17432 efsd c52a464391a6 (branch devel-orcd, built 2026-10-11T12:43:52Z on fcstor006)",
+  "names": {
+    "error": "fcstor007: \n"
+  },
+  "numeric": {
+    "error": "fcstor007: \n"
+  },
+  "json": {
+    "error": "fcstor007: efs command: [Errno 16] Device or resource busy: '/tmp/efs-mount/.efs/.query/v3.AgMAAwAAAAAAAAAAAAAAAAAAAAAYd2I1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'\n"
+  }
+}
