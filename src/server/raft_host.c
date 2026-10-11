@@ -7375,6 +7375,9 @@ static int orphan_scan_cb(void *user, const uint8_t *key, uint32_t kl,
     scan->ino[scan->count] = ino; scan->gen[scan->count++] = gen;
     return 0;
 }
+static int host_append_close_batched(struct efs_raft_host *,efs_ino_t,uint64_t,
+    const uint8_t[EFS_CLOSE_STEP_VALUE],const struct efs_txid *,int *,unsigned *);
+
 static int host_close_append_step(struct efs_raft_host *h,efs_ino_t ino,
     const uint8_t identity[EFS_CLOSE_STEP_VALUE]);
 static int host_session_append_step(struct efs_raft_host *,const uint8_t *,uint32_t,
@@ -12100,13 +12103,13 @@ static int host_close_append_step(struct efs_raft_host *h,efs_ino_t ino,
     rc=efs_meta_apply_append_open(h->kv,ino,&offset,&length,&n);
     if(rc==EFS_ERR_NOT_FOUND)return EFS_OK; /* REAP_BATCH owns dead-file rows */
     if(rc!=EFS_OK)return rc;
-    struct host_resize_ctx ctx={h,&hint};struct efs_txid tx;fill_txid(h,&tx);
+    struct efs_txid tx;fill_txid(h,&tx);
     if(n) {
-        rc=efs_meta_finish_append_close(h->kv,ino,offset,identity,&tx,&host_append_ops,&ctx);
+        rc=host_append_close_batched(h,ino,offset,identity,&tx,&hint,NULL);
         return rc==EFS_OK?EFS_ERR_BUSY:rc; /* another pass checks completion */
     }
     unsigned removed=0;
-    rc=efs_meta_prune_append_close(h->kv,ino,identity,&tx,&host_append_ops,&ctx,&removed);
+    rc=host_append_close_batched(h,ino,0,identity,&tx,&hint,&removed);
     return rc==EFS_OK && removed?EFS_ERR_BUSY:rc;
 }
 
@@ -12208,6 +12211,36 @@ static int host_append_prune_batched(struct efs_raft_host *h,efs_ino_t ino,
     int rc=efs_meta_prune_append(h->kv,ino,t,&ops,&c,removed);
     if(host_command_capture==&c.cohort)
         (void)host_command_cohort_end(&c.cohort,EFS_ERR_BUSY,hint);
+    return rc;
+}
+
+/* CLOSE_STEP ownership must actually settle before finish_execute checks
+ * leases. Only the later independent exact images may share a bounded cohort. */
+struct host_append_close_batch { struct host_append_batch batch;int first; };
+static int host_append_close_prepare(void *user,const struct efs_txid *t,
+    const struct efs_txn_parts *parts,const struct efs_meta_append_image *im)
+{
+    struct host_append_close_batch *c=user;
+    if(!c->first)return host_append_batch_prepare(&c->batch,t,parts,im);
+    c->first=0;
+    (void)host_command_cohort_end(&c->batch.cohort,EFS_ERR_BUSY,c->batch.base.hint);
+    int rc=im->klen==11 && im->key[2]==EFS_KV_KIND_CLOSE_STEP ?
+        host_append_prepare(&c->batch.base,t,parts,im):EFS_ERR_INVAL;
+    host_command_cohort_begin(&c->batch.cohort,c->batch.base.host);
+    return rc;
+}
+static int host_append_close_batched(struct efs_raft_host *h,efs_ino_t ino,uint64_t offset,
+    const uint8_t identity[EFS_CLOSE_STEP_VALUE],const struct efs_txid *t,int *hint,unsigned *removed)
+{
+    if(host_command_capture)return EFS_ERR_BUSY;
+    struct host_append_close_batch c={.batch={.base={h,hint}},.first=1};
+    const struct efs_meta_append_ops ops={host_append_close_prepare,
+        host_append_batch_decide,host_append_batch_resolve};
+    host_command_cohort_begin(&c.batch.cohort,h);
+    int rc=removed?efs_meta_prune_append_close(h->kv,ino,identity,t,&ops,&c,removed):
+        efs_meta_finish_append_close(h->kv,ino,offset,identity,t,&ops,&c);
+    if(host_command_capture==&c.batch.cohort)
+        (void)host_command_cohort_end(&c.batch.cohort,EFS_ERR_BUSY,hint);
     return rc;
 }
 

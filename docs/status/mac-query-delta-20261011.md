@@ -863,3 +863,30 @@ Preflight also scans the immutable source for a backlink under any other
 parent before returning IO. Such a backlink, including an inconclusive stale
 layout copy during a cross-group rename cut, falls back to the original
 builder. The bounded-scratch test covers this alternate-parent case.
+
+Installed 967e2e84's five unchanged native cases finish 3/5: append passes
+(26.0 s including cleanup), names_crazy_dirs passes (15.9 s), and dir_many_files
+passes (66.0 s). Mtime (20 s) and concurrent creates (20 s, 24.6 s including
+cleanup) still time out. Live retries now return inconclusive BUSY in 4–32 ms
+instead of rebuilding scratch files, following the initial 27-second failed
+build. This does not repair the retained directory or prove query freshness.
+Evidence: native-orphan-five.txt; orphan-five-sample.json.
+
+The next candidate preserves the synchronous CLOSE_STEP preparation before
+checking leases, then batches only the later independent exact-image PREPs.
+Every deferred verdict still settles before COMMIT. Reopen and first-PREP
+failure abort before later submissions; later storage/verdict failure aborts;
+ambiguous COMMIT stays pending. Normal close/prune and crash-recovery paths
+use the same helper. Local ASAN/UBSAN and Mac Linux cohort tests pass; existing
+real-KV close race assertions verify reopened ownership blocks cleanup. The
+first full regression attempt failed the wrapper's private /tmp store startup
+because quota estimation refused unsafe headroom. Retrying on the owned
+/data1 test directory; no installed data is discarded or gate assertion changed.
+
+The candidate's private four-daemon Mac buffered/TCP deferred-close gate
+passes: a crash with 64 OPEN cross-group appends resumes exact holes/frontier,
+retires all reservations/markers, preserves reopened bytes and rejects an old
+close identity. The complete accompanying physical GC/hardlink/open-unlink
+checks also finish successfully and drain private stores normally.
+Evidence: close-cohort-cold-wire.txt. This models daemon crashes, not hardware
+power loss. Local sanitizers pass: close-cohort-local-sanitize.txt.
