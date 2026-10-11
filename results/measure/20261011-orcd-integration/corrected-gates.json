@@ -1,0 +1,124 @@
+[
+  {
+    "mode": "posix",
+    "name": "fcstor007",
+    "rc": "1",
+    "summary": "# summary pass=217 fail=3 skip=1 notrun=0 total=221 dur=118.9",
+    "complete": true,
+    "failures": [
+      "dir_deep_nesting\tFAIL\ttimeout after 30s",
+      "perm_unlink_mode_000_file\tFAIL\tOSError: [Errno 16] Device or resource busy: '/tmp/efs-mount/posix-fcstor007-linkat-gates-20261011-fcstor007-k_yrmm2v/perm_unlink_mode_000_file'",
+      "dir_deep_nesting_beyond_64\tFAIL\ttimeout after 30s"
+    ]
+  },
+  {
+    "mode": "posix",
+    "name": "fcstor008",
+    "rc": "1",
+    "summary": "# summary pass=210 fail=3 skip=1 notrun=7 total=221 dur=71.4",
+    "complete": false,
+    "failures": [
+      "dir_deep_nesting_beyond_64\tFAIL\ttimeout after 30s",
+      "virt_stats_readable\tFAIL\ttimeout after 30s; worker group still alive",
+      "virt_find_query\tFAIL\tworker group still alive after virt_stats_readable"
+    ]
+  },
+  {
+    "mode": "posix",
+    "name": "fcstor009",
+    "rc": "1",
+    "summary": "# summary pass=207 fail=6 skip=1 notrun=7 total=221 dur=79.0",
+    "complete": false,
+    "failures": [
+      "dir_many_files\tFAIL\tOSError: [Errno 16] Device or resource busy: '/tmp/efs-mount/posix-fcstor009-linkat-gates-20261011-fcstor009-k4ykariy/dir_many_files/f0115'",
+      "names_crazy_dirs\tFAIL\tOSError: [Errno 16] Device or resource busy: '/tmp/efs-mount/posix-fcstor009-linkat-gates-20261011-fcstor009-k4ykariy/names_crazy_dirs/with space/inner'",
+      "dir_deep_nesting_beyond_64\tFAIL\tOSError: [Errno 16] Device or resource busy: '/tmp/efs-mount/posix-fcstor009-linkat-gates-20261011-fcstor009-k4ykariy/dir_deep_nesting_beyond_64/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d'",
+      "err_rmdir_nonempty\tFAIL\twrong errno: got 16 (Device or resource busy), want one of (39,)",
+      "virt_stats_readable\tFAIL\ttimeout after 30s; worker group still alive",
+      "virt_find_query\tFAIL\tworker killed by signal 15"
+    ]
+  },
+  {
+    "mode": "posix",
+    "name": "fcstor010",
+    "rc": "1",
+    "summary": "# summary pass=215 fail=5 skip=1 notrun=0 total=221 dur=88.7",
+    "complete": true,
+    "failures": [
+      "dir_many_files\tFAIL\tOSError: [Errno 16] Device or resource busy: '/tmp/efs-mount/posix-fcstor010-linkat-gates-20261011-fcstor010-9bayhtld/dir_many_files/f0019'",
+      "perm_ftruncate_after_chmod\tFAIL\tOSError: [Errno 16] Device or resource busy: '/tmp/efs-mount/posix-fcstor010-linkat-gates-20261011-fcstor010-9bayhtld/perm_ftruncate_after_chmod'",
+      "names_crazy_dirs\tFAIL\tOSError: [Errno 16] Device or resource busy: '/tmp/efs-mount/posix-fcstor010-linkat-gates-20261011-fcstor010-9bayhtld/names_crazy_dirs/brack[et]'",
+      "dir_deep_nesting_beyond_64\tFAIL\tOSError: [Errno 16] Device or resource busy: '/tmp/efs-mount/posix-fcstor010-linkat-gates-20261011-fcstor010-9bayhtld/dir_deep_nesting_beyond_64/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d'",
+      "statfs_sane\tFAIL\tOSError: [Errno 16] Device or resource busy: '/tmp/efs-mount/posix-fcstor010-linkat-gates-20261011-fcstor010-9bayhtld/statfs_sane'"
+    ]
+  },
+  {
+    "mode": "posix",
+    "name": "fcstor011",
+    "rc": "1",
+    "summary": "# summary pass=210 fail=3 skip=1 notrun=7 total=221 dur=79.0",
+    "complete": false,
+    "failures": [
+      "dir_deep_nesting_beyond_64\tFAIL\ttimeout after 30s",
+      "virt_stats_readable\tFAIL\ttimeout after 30s; worker group still alive",
+      "virt_find_query\tFAIL\tworker group still alive after virt_stats_readable"
+    ]
+  },
+  {
+    "mode": "posix",
+    "name": "fcstor012",
+    "rc": "1",
+    "summary": "# summary pass=215 fail=5 skip=1 notrun=0 total=221 dur=87.4",
+    "complete": true,
+    "failures": [
+      "dir_deep_nesting\tFAIL\tOSError: [Errno 16] Device or resource busy: 'd50'",
+      "dir_many_files\tFAIL\tOSError: [Errno 16] Device or resource busy: '/tmp/efs-mount/posix-fcstor012-linkat-gates-20261011-fcstor012-7oj2mk3k/dir_many_files/f0237'",
+      "perm_dir_readonly_mutate\tFAIL\tOSError: [Errno 16] Device or resource busy: '/tmp/efs-mount/posix-fcstor012-linkat-gates-20261011-fcstor012-7oj2mk3k/perm_dir_readonly_mutate/sub'",
+      "perm_dir_no_r_list\tFAIL\tOSError: [Errno 16] Device or resource busy: '/tmp/efs-mount/posix-fcstor012-linkat-gates-20261011-fcstor012-7oj2mk3k/perm_dir_no_r_list/sub'",
+      "dir_deep_nesting_beyond_64\tFAIL\ttimeout after 30s"
+    ]
+  },
+  {
+    "mode": "posix",
+    "name": "fcstor013",
+    "rc": "1",
+    "summary": "# summary pass=211 fail=2 skip=1 notrun=7 total=221 dur=73.9",
+    "complete": false,
+    "failures": [
+      "virt_stats_readable\tFAIL\ttimeout after 30s; worker group still alive",
+      "virt_find_query\tFAIL\tworker group still alive after virt_stats_readable"
+    ]
+  },
+  {
+    "mode": "peer",
+    "name": "fcstor007-fcstor008",
+    "rc": "0",
+    "summary": "# summary pass=67 fail=0 skip=0 total=67 dur=170.0",
+    "complete": true,
+    "failures": []
+  },
+  {
+    "mode": "peer",
+    "name": "fcstor009-fcstor010",
+    "rc": "0",
+    "summary": "# summary pass=67 fail=0 skip=0 total=67 dur=150.2",
+    "complete": true,
+    "failures": []
+  },
+  {
+    "mode": "peer",
+    "name": "fcstor011-fcstor012",
+    "rc": "0",
+    "summary": "# summary pass=67 fail=0 skip=0 total=67 dur=150.3",
+    "complete": true,
+    "failures": []
+  },
+  {
+    "mode": "peer",
+    "name": "fcstor013-fcstor007",
+    "rc": "0",
+    "summary": "# summary pass=67 fail=0 skip=0 total=67 dur=128.9",
+    "complete": true,
+    "failures": []
+  }
+]
