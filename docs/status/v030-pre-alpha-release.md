@@ -411,5 +411,6 @@ ORCD submitted `bbe8b475` for bounded transaction-cut recapture (at most four
 complete fresh attempts within the existing deadline) and avoiding duplicate
 first-page barriers. Query owner investigates coherent-cut/builder starvation;
 these efforts are coordinated. Original30s case budgets and all authority,
-import and transaction fences remain required. Integration/qualification of
-the next query candidate is pending.
+import and transaction fences remain required. The implementation is integrated in `be8169d4`; production-function
+recapture/page regressions pass normally and under ASan/UBSan. Full merged
+AMD qualification and same quiet pressure gates are next.
