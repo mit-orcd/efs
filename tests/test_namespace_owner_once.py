@@ -3,7 +3,11 @@
 from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=Path(os.environ.get('EFS_NAMESPACE_OWNER_SOURCE',root/'src/server/raft_host.c')).read_text()
+# Only the reviewed same-request namespace callers opt in. REPORT and LINK
+# retain their independent admission read. The full live partition suites
+# validate these callers against real stale authority.
+assert s.count('host_namespace_session_admit_after_group(h,dsh,q,0,') == 5
 a=s.index('static int host_namespace_session_prepare_owner(')
 b=s.index('/* REPORT can first-touch',a)
 code=r'''
@@ -73,6 +77,21 @@ int main(void) {
  reset();read_error=EFS_ERR_BUSY;assert(host_namespace_session_admit_with_owner(&h,5,&q,1,&hint)==EFS_ERR_BUSY);assert(!creates&&!registers&&!establishes&&!accepts);
  reset();local_error=EFS_ERR_IO;assert(host_namespace_session_admit_with_owner(&h,5,&q,1,&hint)==EFS_ERR_IO);assert(!creates&&!registers&&!establishes&&!accepts);
  reset();owner_error=EFS_ERR_IO;assert(host_namespace_session_admit(&h,5,&q,&hint)==EFS_ERR_IO);assert(creates==1&&!registers&&!establishes&&!accepts);
+ /* Same-request CREATE proof skips only the matching initial group read. */
+ reset();floors[5]=1;
+ assert(!host_namespace_session_admit_after_group(&h,5,&q,0,2,&hint));
+ assert(reads==0&&accepts==1&&!creates&&!registers&&!establishes);
+ reset();floors[5]=1;fenced=1;
+ assert(host_namespace_session_admit_after_group(&h,5,&q,0,2,&hint)==EFS_ERR_STALE);
+ assert(reads==0&&accepts==1&&!creates&&!registers&&!establishes);
+ reset();assert(!host_namespace_session_admit_after_group(&h,5,&q,0,2,&hint));
+ assert(reads==1&&creates==1&&registers==1&&establishes==1&&admit_checks==1&&accepts==1);
+ reset();read_error=EFS_ERR_BUSY;
+ assert(host_namespace_session_admit_after_group(&h,5,&q,0,0,&hint)==EFS_ERR_BUSY);
+ assert(reads==1&&!accepts&&!creates&&!registers&&!establishes);
+ reset();floors[5]=1;local_error=EFS_ERR_IO;
+ assert(host_namespace_session_admit_after_group(&h,5,&q,0,2,&hint)==EFS_ERR_IO);
+ assert(!reads&&!accepts&&!creates&&!registers&&!establishes);
  reset();q.ack=1;assert(host_namespace_session_admit_with_owner(&h,5,&q,1,&hint)==EFS_ERR_INVAL);assert(!reads&&!creates&&!registers);
  puts("shared session owner: one CREATE, per-shard fresh reads/REGISTER/ESTABLISH/floor checks, fencing and hard-error refusal PASS");
 }
