@@ -397,9 +397,31 @@ int main(void) {
     assert(efs_dcache_finish_publication(777,7,0,77,sequence,EFS_OK,&packed_put)==EFS_ERR_BUSY);
     assert(!efs_dcache_publication_request(777,7,0,77,sequence,999,&request));
     assert(!memcmp(&request,&immutable_pack_request,sizeof(request)));
+    /* Exactly rejected packed publication releases its old token, while the
+     * accepted body, sparse ownership and cache charge remain for rebase. */
+    outcome=(struct efs_msg_publication_reply){.state=EFS_PUBLICATION_REJECTED,.verdict=EFS_ERR_STALE};
+    memcpy(outcome.digest,packed_entry->writer->publication.result_digest,EFS_HASH_SIZE);
+    int packed_consumed=0;outcome.digest[0]^=1;
+    assert(efs_dcache_consume_publication(777,7,0,77,sequence,&outcome,&packed_consumed)==EFS_ERR_STALE&&!packed_consumed);
+    assert(packed_entry->writer->has_publication&&packed_entry->dirty&&packed_entry->pin_held);
+    outcome.digest[0]^=1;
+    assert(efs_dcache_consume_publication(777,7,0,77,sequence,&outcome,&packed_consumed)==EFS_ERR_STALE&&packed_consumed);
+    assert(!packed_entry->writer->has_publication&&packed_entry->dirty&&packed_entry->pin_held&&
+        packed_entry->writer->ranges.bytes.count&&!memcmp(packed_entry->data,patch,4));
+    assert(!efs_dcache_snapshot_publication(777,7,0,&cached_view,packed_base,
+        &packed_plan,packed_image,sizeof(packed_image))&&!memcmp(packed_image,patch,4));
+    sequence=packed_plan.cache_sequence;
+    struct efs_chunk_rec rebased_put={.ino=777,.chunk_generation=78,
+        .publish_flags=EFS_CHUNK_REC_F_FRESH_OBJECT};
+    memcpy(rebased_put.nodes,good_pack_put.nodes,sizeof(rebased_put.nodes));
+    assert(!efs_dcache_begin_publication(777,7,0,&packed_plan,78));
+    assert(!efs_dcache_finish_publication(777,7,0,78,sequence,EFS_OK,&rebased_put));
+    assert(!efs_dcache_publication_request(777,7,0,78,sequence,4,&request));
+    assert(!(request.rec.publish_flags&EFS_CHUNK_REC_F_PACKED_BASE));
+    assert(memcmp(&request.id,&immutable_pack_request.id,sizeof(request.id)));
     outcome=(struct efs_msg_publication_reply){.state=EFS_PUBLICATION_COMMITTED};
     memcpy(outcome.digest,packed_entry->writer->publication.result_digest,EFS_HASH_SIZE);
-    assert(!efs_dcache_publication_result(777,7,0,77,sequence,&outcome));
+    assert(!efs_dcache_publication_result(777,7,0,78,sequence,&outcome));
     assert(!packed_entry->dirty && !packed_entry->pin_held && !packed_entry->data);
     free(packed_base);dcache_drop_locked(777,0,0);assert(!g_metadata && !g_live);
     /* Fresh typed admission reserves exact sparse ownership; gaps never become

@@ -40,7 +40,7 @@ struct pack_context {
     uint8_t publication_stacks[PACK_PUBLISH_WORKERS-1][PACK_PUBLISH_STACK_BYTES+PACK_PUBLISH_STACK_ALIGN];
     uint32_t members,put_mask;
     uint64_t retry_after;
-    int busy,last_error,built;
+    int busy,last_error,built,stack_busy;
 };
 /* Only immutable authority/ACK state survives completed publication. Body
  * buffers can serve the next cohort while this bounded slot retains cleanup. */
@@ -110,25 +110,72 @@ static int pack_command(struct pack_context *p,uint8_t tag)
     return pack_command_wire(p->cohort.group,&p->object,p->cohort.refs,
         p->cohort.count,p->wire,sizeof(p->wire),tag);
 }
+/* Publication and independent receipt retirement lease the same already
+ * charged stacks. Never run either set of helpers during another lease. */
+struct pack_parallel_run {
+    void *context;
+    int (*record)(void *,uint32_t);
+    uint32_t next,count;
+    uint64_t deadline;
+    int results[PACK_WRITERS];
+};
+static void *pack_parallel_worker(void *arg)
+{
+    struct pack_parallel_run *run=arg;
+    uint64_t previous=efs_client_rpc_deadline_ms();
+    efs_client_rpc_set_deadline_ms(run->deadline);
+    for(;;) {
+        uint32_t i=__atomic_fetch_add(&run->next,1,__ATOMIC_RELAXED);
+        if(i>=run->count)break;
+        run->results[i]=run->record(run->context,i);
+    }
+    efs_client_rpc_set_deadline_ms(previous);return NULL;
+}
+static int pack_parallel(struct pack_context *p,uint32_t count,
+    int (*record)(void *,uint32_t),void *context)
+{
+    if(!p || !record || count>PACK_WRITERS)return EFS_ERR_INVAL;
+    struct pack_parallel_run run={.context=context,.record=record,.count=count,
+        .deadline=efs_client_rpc_deadline_ms()};
+    pthread_t threads[PACK_PUBLISH_WORKERS-1];unsigned started=0;
+    for(unsigned i=0;i<PACK_PUBLISH_WORKERS-1 && i+1<count;i++) {
+        pthread_attr_t attr;if(pthread_attr_init(&attr))break;
+        uintptr_t stack=((uintptr_t)p->publication_stacks[i]+PACK_PUBLISH_STACK_ALIGN-1)&~(uintptr_t)(PACK_PUBLISH_STACK_ALIGN-1);
+        int rc=pthread_attr_setstack(&attr,(void *)stack,PACK_PUBLISH_STACK_BYTES);
+        if(!rc)rc=pthread_create(&threads[started],&attr,pack_parallel_worker,&run);
+        pthread_attr_destroy(&attr);if(rc)break;
+        started++;
+    }
+    (void)pack_parallel_worker(&run);
+    for(unsigned i=0;i<started;i++)pthread_join(threads[i],NULL);
+    for(uint32_t i=0;i<count;i++)if(run.results[i])return run.results[i];
+    return EFS_OK;
+}
+static int pack_retire_one(void *context,uint32_t i)
+{
+    struct pack_retirement *r=context;if(!r->acks[i])return EFS_OK;
+    int rc=efs_client_publication_retire(r->acks[i]);if(rc)return rc;
+    rc=efs_client_publication_ack_free(r->acks[i]);if(rc)return rc;
+    r->acks[i]=NULL;
+    pthread_mutex_lock(&pack_mu);pack_ack_credits--;pthread_mutex_unlock(&pack_mu);
+    return EFS_OK;
+}
 static int pack_retire_group(unsigned gi)
 {
     pthread_mutex_lock(&pack_mu);
     struct pack_retirement *r=pack_retirements[gi];
     if(!r || !r->active){pthread_mutex_unlock(&pack_mu);return EFS_OK;}
-    if(r->busy){pthread_mutex_unlock(&pack_mu);return EFS_ERR_BUSY;}
-    r->busy=1;pthread_mutex_unlock(&pack_mu);
-    int rc=EFS_OK;
-    for(uint32_t i=0;i<r->count;i++) {
-        if(!r->acks[i])continue;
-        rc=efs_client_publication_retire(r->acks[i]);if(rc)break;
-        rc=efs_client_publication_ack_free(r->acks[i]);if(rc)break;
-        r->acks[i]=NULL;
-        pthread_mutex_lock(&pack_mu);pack_ack_credits--;pthread_mutex_unlock(&pack_mu);
-    }
+    struct pack_context *p=pack_groups[gi];
+    if(!p){pthread_mutex_unlock(&pack_mu);return EFS_ERR_PROTO;}
+    if(r->busy || p->busy || p->stack_busy){pthread_mutex_unlock(&pack_mu);return EFS_ERR_BUSY;}
+    r->busy=1;p->stack_busy=1;pthread_mutex_unlock(&pack_mu);
+    /* Each ACK belongs to a different file stream. Preserve ordered retirement
+     * within every queue; upload authority advances only after all succeed. */
+    int rc=pack_parallel(p,r->count,pack_retire_one,r);
     if(!rc)rc=pack_command_wire(r->group,&r->object,r->refs,r->count,
         r->wire,sizeof(r->wire),EFS_MD_CMD_PACK_UPLOAD_RETIRE);
     pthread_mutex_lock(&pack_mu);
-    r->last_error=rc;r->busy=0;if(!rc)r->active=0;
+    r->last_error=rc;r->busy=0;p->stack_busy=0;if(!rc)r->active=0;
     pthread_mutex_unlock(&pack_mu);return rc;
 }
 static int pack_capabilities(uint32_t *members)
@@ -206,44 +253,10 @@ static int pack_publish_record(struct pack_context *p,uint32_t i)
     __atomic_store_n(&w->done,1,__ATOMIC_RELEASE);
     return EFS_OK;
 }
-struct pack_publish_run {
-    struct pack_context *context;
-    uint32_t next;
-    uint64_t deadline;
-    int results[PACK_WRITERS];
-};
-static void *pack_publish_worker(void *arg)
-{
-    struct pack_publish_run *run=arg;
-    uint64_t previous=efs_client_rpc_deadline_ms();
-    efs_client_rpc_set_deadline_ms(run->deadline);
-    for(;;) {
-        uint32_t i=__atomic_fetch_add(&run->next,1,__ATOMIC_RELAXED);
-        if(i>=run->context->cohort.count)break;
-        run->results[i]=pack_publish_record(run->context,i);
-    }
-    efs_client_rpc_set_deadline_ms(previous);
-    return NULL;
-}
+static int pack_publish_one(void *context,uint32_t i)
+{return pack_publish_record(context,i);}
 static int pack_publish_cohort(struct pack_context *p)
-{
-    struct pack_publish_run run={.context=p,.deadline=efs_client_rpc_deadline_ms()};
-    pthread_t threads[PACK_PUBLISH_WORKERS-1];unsigned started=0;
-    for(unsigned i=0;i<PACK_PUBLISH_WORKERS-1 && i+1<p->cohort.count;i++) {
-        pthread_attr_t attr;
-        if(pthread_attr_init(&attr))break;
-        uintptr_t stack=((uintptr_t)p->publication_stacks[i]+PACK_PUBLISH_STACK_ALIGN-1)&~(uintptr_t)(PACK_PUBLISH_STACK_ALIGN-1);
-        int rc=pthread_attr_setstack(&attr,(void *)stack,PACK_PUBLISH_STACK_BYTES);
-        if(!rc)rc=pthread_create(&threads[started],&attr,pack_publish_worker,&run);
-        pthread_attr_destroy(&attr);
-        if(rc)break; /* The calling thread covers all unassigned records. */
-        started++;
-    }
-    (void)pack_publish_worker(&run);
-    for(unsigned i=0;i<started;i++)pthread_join(threads[i],NULL);
-    for(uint32_t i=0;i<p->cohort.count;i++)if(run.results[i])return run.results[i];
-    return EFS_OK;
-}
+{return pack_parallel(p,p->cohort.count,pack_publish_one,p);}
 static int pack_progress(struct pack_context *p)
 {
     int rc=EFS_OK;
@@ -288,7 +301,7 @@ static int pack_flush_group(unsigned gi,int force)
     pthread_mutex_lock(&pack_mu);
     struct pack_context *p=pack_groups[gi];
     if(!p || !p->cohort.count){pthread_mutex_unlock(&pack_mu);return EFS_OK;}
-    if(p->busy){pthread_mutex_unlock(&pack_mu);return EFS_ERR_BUSY;}
+    if(p->busy || p->stack_busy){pthread_mutex_unlock(&pack_mu);return EFS_ERR_BUSY;}
     uint64_t now=pack_now();
     if(!force && (now<p->retry_after || !efs_pack_cohort_due(&p->cohort,now,0))) {
         pthread_mutex_unlock(&pack_mu);return EFS_OK;
