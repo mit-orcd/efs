@@ -8,7 +8,7 @@ code=s[:s.index('static uint64_t pack_now(')]+r'''
 #include <stdio.h>
 #include "efs/publication_ack.h"
 struct efs_client g_client={.idx_mu=PTHREAD_MUTEX_INITIALIZER};
-static int pinned,cap_error,admit_error,alloc_fail,abort_calls,free_calls,size_notes;
+static int pinned,cap_error,admit_error,alloc_fail,abort_calls,free_calls,size_notes,owner_session_error;
 static int allocations;static uint64_t inode_size;
 static uint64_t pack_now(void){return 100;}
 static int pack_start(void){return 0;}
@@ -23,7 +23,7 @@ int efs_client_rpc_lane_bootstrap(efs_export_id_t eid,efs_ino_t ino,uint64_t g,u
 int efs_client_rpc_getchunks_fileid(efs_export_id_t eid,efs_ino_t ino,uint64_t g,uint32_t ci,struct efs_chunk_rec *r,uint32_t *n,uint64_t *resolved){(void)r;assert(eid==1&&ino==101&&g==3&&!ci);*n=0;*resolved=3;return 0;}
 int efs_client_publication_id(uint64_t seq,struct efs_opid *id){*id=(struct efs_opid){.client_uuid={19},.session_epoch=7,.seq=seq};return 0;}
 int efs_client_put_id(struct efs_opid *id){return efs_client_publication_id(17,id);}
-int efs_client_rpc_publication_session(uint32_t shard,const struct efs_opid *id){assert(shard&&id->session_epoch==7);return 0;}
+int efs_client_rpc_publication_session(uint32_t shard,const struct efs_opid *id){assert(shard&&id->session_epoch==7);assert(!pthread_mutex_trylock(&pack_mu));pthread_mutex_unlock(&pack_mu);if(id->seq==17){assert(pack_groups[0]->busy);if(owner_session_error){owner_session_error=0;return EFS_ERR_NET;}}return 0;}
 void *efs_buf_metadata_alloc(size_t n){allocations++;if(alloc_fail==allocations)return NULL;return calloc(1,n);}
 void efs_buf_metadata_free(void *p,size_t n){assert(n);free(p);}
 int efs_client_publication_admit_write(struct efs_publication_ack_queue **q,efs_ino_t ino,uint64_t g,uint32_t ci,const struct efs_msg_lane_writer_view_reply *v,uint32_t off,const uint8_t *b,uint32_t n){(void)v;assert(ino==101&&g==3&&!ci&&!off&&b&&n==512);if(admit_error)return admit_error;*q=(struct efs_publication_ack_queue *)(uintptr_t)1;return 0;}
@@ -31,7 +31,7 @@ int efs_dcache_snapshot_publication(efs_ino_t ino,uint64_t g,uint32_t ci,const s
 int efs_dcache_begin_publication(efs_ino_t ino,uint64_t g,uint32_t ci,const struct efs_writer_plan *p,uint64_t obj){assert(ino==101&&g==3&&!ci&&p->cache_sequence&&obj);return 0;}
 int efs_dcache_abort_pack_admission(efs_ino_t ino,uint64_t g){assert(ino==101&&g==3);abort_calls++;return 0;}
 int efs_client_publication_ack_free(struct efs_publication_ack_queue *q){assert(q);free_calls++;return 0;}
-void efs_dcache_note_packed_size(efs_ino_t ino,uint64_t n){assert(ino==101&&n==512);size_notes++;}
+void efs_dcache_note_packed_size(efs_ino_t ino,uint64_t n){assert(ino==101&&n==512);assert(!pthread_mutex_trylock(&pack_mu));assert(pack_groups[0]->busy&&pack_groups[0]->cohort.count==1);pthread_mutex_unlock(&pack_mu);size_notes++;}
 int efs_client_pack_enabled(void){return 1;}
 '''+s[s.index('int efs_client_pack_write('):s.index('static int pack_flush_run(')]+r'''
 int main(void){
@@ -44,7 +44,8 @@ int main(void){
  pinned=1;assert(efs_client_pack_write(101,0,512,bytes)==EFS_ERR_NOT_FOUND&&!allocations);pinned=0;
  cap_error=EFS_ERR_PROTO;assert(efs_client_pack_write(101,0,512,bytes)==EFS_ERR_PROTO&&!allocations);cap_error=0;
  alloc_fail=1;assert(efs_client_pack_write(101,0,512,bytes)==EFS_ERR_NOMEM&&!pack_groups[0]&&!abort_calls&&!size_notes);
- alloc_fail=0;admit_error=EFS_ERR_BUSY;
+ alloc_fail=0;owner_session_error=1;assert(efs_client_pack_write(101,0,512,bytes)==EFS_ERR_NET&&!pack_groups[0]->cohort.count&&!pack_groups[0]->busy&&!abort_calls&&!size_notes);
+ admit_error=EFS_ERR_BUSY;
  assert(efs_client_pack_write(101,0,512,bytes)==EFS_ERR_BUSY && pack_groups[0] && !pack_groups[0]->cohort.count && !abort_calls&&!free_calls);admit_error=0;
  alloc_fail=allocations+1;
  assert(efs_client_pack_write(101,0,512,bytes)==EFS_ERR_NOMEM && !pack_groups[0]->cohort.count && abort_calls==1&&free_calls==1&&!size_notes);

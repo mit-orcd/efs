@@ -265,7 +265,12 @@ int efs_client_pack_write(efs_ino_t ino,uint64_t off,uint32_t len,const uint8_t 
         }
         if(!p->cohort.count) {
             p->members=members;rc=efs_client_put_id(&p->cohort.owner);
-            if(!rc)rc=efs_client_rpc_publication_session(gi?2:1,&p->cohort.owner);
+            if(rc){pthread_mutex_unlock(&pack_mu);return rc;}
+            p->busy=1;
+            pthread_mutex_unlock(&pack_mu);
+            rc=efs_client_rpc_publication_session(gi?2:1,&p->cohort.owner);
+            pthread_mutex_lock(&pack_mu);
+            p->busy=0;
             if(rc){pthread_mutex_unlock(&pack_mu);return rc;}
         }
         struct pack_writer *w=&p->writers[p->cohort.count];
@@ -290,7 +295,13 @@ int efs_client_pack_write(efs_ino_t ino,uint64_t off,uint32_t len,const uint8_t 
             if(w->acks)(void)efs_client_publication_ack_free(w->acks);
             memset(w,0,sizeof(*w));pthread_mutex_unlock(&pack_mu);return rc;
         }
-        efs_dcache_note_packed_size(ino,len);pthread_mutex_unlock(&pack_mu);return EFS_OK;
+        /* Do not invert the directory/index locks with the scheduler lock.
+         * The accepted snapshot stays reserved until its local size is visible. */
+        p->busy=1;
+        pthread_mutex_unlock(&pack_mu);
+        efs_dcache_note_packed_size(ino,len);
+        pthread_mutex_lock(&pack_mu);p->busy=0;pthread_mutex_unlock(&pack_mu);
+        return EFS_OK;
     }
 }
 static int pack_flush_run(efs_ino_t ino)
