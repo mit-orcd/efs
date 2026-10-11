@@ -1,0 +1,18 @@
+{
+  "source": "cfa103dc",
+  "pids": [
+    "1336253",
+    "1336290",
+    "1336328",
+    "1336369",
+    "1336443",
+    "1336464",
+    "1336617",
+    "1336634",
+    "1336650",
+    "1336666",
+    "1336682"
+  ],
+  "suites": 7,
+  "scope": "instrumented direct seven clients jobs16, no acceptance claim"
+}

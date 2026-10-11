@@ -84,8 +84,8 @@ not sufficient. Retain the independent packing model and RAM query oracle.
 
 ORCD packing uses command/request tags45–51. NUC's undeployed tag45 collision
 was corrected to APPEND_CATCHUP52 in `ba73f304`; tag45 native results are historical
-and cannot certify52. Mac is reserving53 for its undeployed single-shard append
-experiment; do not use that number elsewhere. Run the actual canonical-header
+and cannot certify52. Mac single-shard APPEND now uses53 in the merged candidate; do not reuse that
+number elsewhere. Acceptance and rollout remain separately gated. Run the actual canonical-header
 namespace gate on every merged revision. All voting servers must understand new
 commands before admission; preserve native client/server layout compatibility
 and document cold replay/rollback restrictions before rollout.
@@ -370,3 +370,46 @@ normal/fault native, sanitizer and quiet seven-client/jobs16 direct/buffered
 qualification on AMD. No timeout budget, authority predicate or durability
 barrier has been relaxed. ORCD reports its own `b579bee2` full native pass,
 which does not substitute for this release qualification.
+
+### Merged native qualification: cfa103dc
+
+Frozen `cfa103dc` passes full AMD Linux `make all test` in normal and
+`EFS_FAULTS=1` builds plus eight ASan/UBSan gates, including the actual
+read-only authority NET fallback caller. All 1,325 source/linked-evidence
+inputs verify unchanged after qualification. Exact versions and normal/fault
+binary hashes are retained with [native gates and logs](../../results/measure/20261011-v030-merged-native/cfa103dc/acceptance-summary.json).
+
+The earlier `9c65c893` attempt failed the real-storage test's obsolete NET
+expectation. `cfa103dc` corrects that assertion and expands real buffered/direct
+coverage: NET tries fresh legacy admission, a legacy NET propagates without
+FileID checks or writes, and stale phase/epoch refuse. Both complete suites
+then pass. Independent review disposition `ba33c3f1` reports no additional
+concrete authority/batch finding in its bounded source/control-flow review.
+
+The same quiet seven-client/jobs16 direct/buffered gate ran after all
+qualification passes and failed both modes. This native result does not certify mounted packing
+or the unfinished NUC/Intel owner gates; no release promotion or push.
+
+AMD `cfa103dc` quiet jobs16: every client in both modes reports
+209 PASS/4 FAIL/1 SKIP/7 NOTRUN (44.3–45.8s). Directory deep nesting times out,
+many-files is killed, stats times out with a live worker and find is blocked
+after stats. Extra-client stop refuses the busy mount; later cold bytes and
+physical GC are NOTRUN. Fixture cleanup and normal mount restoration pass.
+[Fourteen exact client records and phase limits](../../results/measure/20261011-v030-seven-packing/cfa103dc/acceptance-summary.json).
+ORCD's independent directory improvement is therefore not reproduced on AMD.
+
+A separate diagnostic captures all four daemons and seven FUSE processes for
+35s with userspace cpu-clock, frame-pointer unwinding at49Hz, no extra runtime
+observation logging: 500 samples, zero lost. Caller stacks now resolve Raft
+apply, transaction resolution, KV batch and memmove; many captured threads
+wait in futex/socket paths. This bounded CPU sample does not establish the
+wall-time blocker or justify removing durability barriers.
+[Profile and thread waits](../../results/measure/20261011-v030-packing-profile/cfa103dc/perf-inclusive.txt).
+Normal mounts are restored after this diagnostic as well.
+
+ORCD submitted `bbe8b475` for bounded transaction-cut recapture (at most four
+complete fresh attempts within the existing deadline) and avoiding duplicate
+first-page barriers. Query owner investigates coherent-cut/builder starvation;
+these efforts are coordinated. Original30s case budgets and all authority,
+import and transaction fences remain required. Integration/qualification of
+the next query candidate is pending.
