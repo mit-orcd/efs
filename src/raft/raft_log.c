@@ -314,21 +314,39 @@ int raft_log_defer_end(struct efs_raft_disk *d)
 
 /* --- replay ---------------------------------------------------------- */
 
-static int read_all(int fd, uint8_t *p, size_t n, uint64_t off)
+/* Replay is sequential. A bounded window avoids two tiny preads per record
+ * while keeping CRC, framing and record ordering identical. Read failures
+ * remain distinct from a short crash tail and must never truncate the log. */
+#define RAFT_REPLAY_WINDOW (64u * 1024u)
+struct replay_reader {
+    int fd;
+    uint64_t base;
+    size_t len;
+    uint8_t data[RAFT_REPLAY_WINDOW];
+};
+
+static int replay_read(struct replay_reader *r, uint8_t *p, size_t n,
+                       uint64_t off)
 {
     while (n) {
-        ssize_t r = pread(fd, p, n, (off_t)off);
-
-        if (r == 0)
-            return EFS_ERR_NOT_FOUND; /* short: torn tail */
-        if (r < 0) {
-            if (errno == EINTR)
-                continue;
-            return EFS_ERR_IO;
+        if (off < r->base || off - r->base >= r->len) {
+            ssize_t got;
+            do { got = pread(r->fd, r->data, sizeof(r->data), (off_t)off); }
+            while (got < 0 && errno == EINTR);
+            if (got < 0)
+                return EFS_ERR_IO;
+            if (!got)
+                return EFS_ERR_NOT_FOUND;
+            r->base = off;
+            r->len = (size_t)got;
         }
-        p += r;
-        n -= (size_t)r;
-        off += (uint64_t)r;
+        size_t pos = (size_t)(off - r->base);
+        size_t take = r->len - pos;
+        if (take > n) take = n;
+        memcpy(p, r->data + pos, take);
+        p += take;
+        n -= take;
+        off += take;
     }
     return EFS_OK;
 }
@@ -418,6 +436,7 @@ static int finish_replay(struct efs_raft_disk *d, uint64_t good)
 
 int raft_log_replay(struct efs_raft_disk *d)
 {
+    struct replay_reader reader = {.fd = d->fd};
     uint8_t hdr[RAFT_DISK_HDR_LEN];
     uint8_t *buf = NULL;
     uint64_t off = RAFT_DISK_HDR_LEN;
@@ -436,16 +455,20 @@ int raft_log_replay(struct efs_raft_disk *d)
     }
     if (d->bytes < RAFT_DISK_HDR_LEN)
         return EFS_ERR_PROTO;
-    if (read_all(d->fd, hdr, sizeof(hdr), 0) != EFS_OK)
-        return EFS_ERR_PROTO;
+    rc = replay_read(&reader, hdr, sizeof(hdr), 0);
+    if (rc != EFS_OK)
+        return rc == EFS_ERR_NOT_FOUND ? EFS_ERR_PROTO : rc;
     if (get_u32(hdr) != RAFT_DISK_MAGIC || get_u32(hdr + 4) != RAFT_DISK_VERSION)
         return EFS_ERR_PROTO;
     while (off + 8 <= d->bytes) {
         uint8_t fr[8];
         uint32_t crc, paylen;
 
-        if (read_all(d->fd, fr, sizeof(fr), off) != EFS_OK)
+        rc = replay_read(&reader, fr, sizeof(fr), off);
+        if (rc != EFS_OK) {
+            if (rc != EFS_ERR_NOT_FOUND) { free(buf); return rc; }
             break;
+        }
         crc = get_u32(fr);
         paylen = get_u32(fr + 4);
         if (paylen == 0 || paylen > RAFT_REC_MAX)
@@ -462,8 +485,11 @@ int raft_log_replay(struct efs_raft_disk *d)
             buf = nb;
             cap = paylen;
         }
-        if (read_all(d->fd, buf, paylen, off + 8) != EFS_OK)
+        rc = replay_read(&reader, buf, paylen, off + 8);
+        if (rc != EFS_OK) {
+            if (rc != EFS_ERR_NOT_FOUND) { free(buf); return rc; }
             break;
+        }
         if (efs_crc32(buf, paylen) != crc)
             break;
         rc = replay_one(d, buf, paylen);

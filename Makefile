@@ -414,6 +414,7 @@ test: all
 	./tests/test_kv_snapshot_tail
 	./tests/test_kv_seg_index
 	./tests/test_raft_store
+	python3 tests/test_raft_replay_reads.py
 	./tests/test_mtime_barrier
 	./tests/test_publication_session
 	./tests/test_publication_ack
