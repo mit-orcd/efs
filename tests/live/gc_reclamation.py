@@ -219,6 +219,22 @@ def run(args, **kwargs):
 def status_available():
     return status(3)
 
+def session_admission(args, busy, timeout=60):
+    """Retry one unchanged administrative admission only on explicit BUSY."""
+    deadline=time.monotonic()+timeout
+    while True:
+        remaining=deadline-time.monotonic()
+        if remaining<=0:raise subprocess.TimeoutExpired(args,timeout)
+        result=subprocess.run(list(map(str,args)),env=env,capture_output=True,
+                              text=True,timeout=remaining)
+        if result.stdout:print(result.stdout,flush=True)
+        if result.stderr:print(result.stderr,flush=True)
+        if result.returncode==0:return result
+        if not re.search(r'\brc='+str(busy)+r'\b',result.stdout):
+            raise subprocess.CalledProcessError(result.returncode,args,
+                                                result.stdout,result.stderr)
+        time.sleep(min(.05,max(0,deadline-time.monotonic())))
+
 def status(count=4):
     results=[]
     for i in range(count):
@@ -841,7 +857,7 @@ try:
         attr=run([helper,str(a.port),str(ino)],capture_output=True,text=True).stdout
         shard=int(re.search(r'shard=(\d+)',attr).group(1))
         for operation in ('register','establish'):
-            run([source/'efs-mgmt','raft-session',f'127.0.0.1:{a.port}',operation,uuid,str(shard),'1'])
+            session_admission([source/'efs-mgmt','raft-session',f'127.0.0.1:{a.port}',operation,uuid,str(shard),'1'],busy)
         edge(6,5,1);path.unlink()
         run([source/'efs-mgmt','raft-session',f'127.0.0.1:{a.port}','fence',uuid])
         edge(7,6,1,expected=stale)
