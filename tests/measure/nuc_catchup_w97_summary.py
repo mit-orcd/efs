@@ -88,9 +88,9 @@ for tag in tags:
             row=trace.setdefault(category,dict(calls=0,sum_seconds=0,paths={}))
             row['calls']+=1;row['sum_seconds']+=float(elapsed);row['paths'][path]=row['paths'].get(path,0)+1
         for row in trace.values():row['mean_ms']=1000*row['sum_seconds']/row['calls']
-    cells.append(dict(cell=tag,accepted=accepted,windows=ranges,physical=physical,path_sync_sample=trace,path_sync_limits='Ten instrumented seconds near 450s. Only complete successful path-resolved syscall lines; unfinished/resumed/error lines excluded, so this is not a total syscall count or a timed throughput comparison.'))
+    cells.append(dict(cell=tag,accepted=accepted,windows=ranges,physical=physical,path_sync_sample=trace,path_sync_limits='Ten instrumented seconds near 450s. Only complete successful path-resolved syscall lines; unfinished/resumed/error lines excluded, so this is not a total syscall count or a timed throughput comparison. Ancestor path names alone do not identify the originating code path.'))
 
-complete=len(cells)==8 and all(r['accepted'] for r in cells) and all((a.root/n).exists() and (a.root/n).read_text().strip()=='0' for n in ('tests-exit.txt','restore-exit.txt'))
+complete=len(cells)==8 and all(r['accepted'] for r in cells) and all((a.root/n).exists() and (a.root/n).read_text().strip()=='0' for n in ('tests-exit.txt','restore-exit.txt','run-exit.txt')) and not (a.root/'failure.txt').exists()
 effect={}
 for medium in ('sata','nvme'):
  variants={v:[c for c in cells if c['cell'].startswith(medium+'-') and c['cell'].endswith('-'+v) and c['accepted'] and set(c['windows'])=={'first','last'}] for v in ('base','root')}
