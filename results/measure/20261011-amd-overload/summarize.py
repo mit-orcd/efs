@@ -46,7 +46,7 @@ for phase in ['live','long']:
      gc_drain_s=r.get('gc_drain_wall_s'),post_pressure_cold_write=r.get('post_pressure_cold_write_verified'),
      full_window_closes_s=sum(w['counts']['close'] for w in windows)/r['requested_seconds'] if load_pass else None,
      sampled_cpu_cores=cpu,peak_sampled_rss_kib=max(sum(v['rss_kib'] for v in s['processes'].values()) for s in samples),
-     peak_sampled_node_charged_bytes=usage,last_approximately_150s_worker_progress=progress,
+     peak_sampled_node_charged_bytes=usage,last_observed_worker_progress=progress,worker_progress_interval_s=[earlier['seconds'],last['seconds']] if progress else None,
      evidence=str(p.relative_to(b))))
 report={'cells':rows,'limits':['independent roots/salts: not matched throughput A/B','logical-quota experiment, not W99 filesystem/capacity-domain policy','sampled usage is not an all-instant physical-space bound','four daemons on one physical AMD host','CPU includes four daemons/FUSE, excludes workload driver','large oracle uses constant bodies and acknowledged fsync prefixes, not newest-generation discrimination']}
 (b/'summary.json').write_text(json.dumps(report,indent=2)+'\n')
