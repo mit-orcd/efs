@@ -1507,6 +1507,11 @@ unimplemented; unavailable/refusal tests are not lifecycle acceptance.
 
 ### Release correctness review
 
+[Deferred rollup budget](../status/rollup-budget-20261011.md) charges retained queue capacity
+and admits replacement growth against the existing staging target, falling back to
+eager rollups under pressure. Focused accounting/boundary regressions pass; this
+does not change the cache's pinned-work over-target policy.
+
 [Rollup allocation-failure fix](../status/rollup-allocation-failure-20261011.md) records the
 reproduced dangling-owner failure, ownership-safe queue growth and focused sanitizer
 gates. Full merged/Linux acceptance and separate queue-accounting/recorder findings
