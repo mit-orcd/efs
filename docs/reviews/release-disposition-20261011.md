@@ -14,6 +14,10 @@ These are committed snapshots, not the branches' later tips or their worktree ch
 
 Archive SHA-256: `3c2758887fe5ea82a40c5b6a031da05dc3aab6c549ceeeaae12c484f9b2d485d`.
 
+## Follow-up correctness checkpoint
+
+The [rollup allocation-failure fix](../status/rollup-allocation-failure-20261011.md) implements the focused ownership repair after this report checkpoint and records before/after sanitizer evidence. The S1 allocator blocker below is addressed by that implementation, subject to full merged/Linux acceptance; queue accounting and recorder shutdown remain open.
+
 ## Release correctness and compatibility gates
 
 | Finding | Release disposition | Focused acceptance |

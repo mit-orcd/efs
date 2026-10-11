@@ -1605,16 +1605,32 @@ static int pending_rollup_note(struct efs_export *ex, efs_ino_t ino,
         }
     }
     if (ex->pending_rollup_count >= ex->pending_rollup_cap) {
+        if (ex->pending_rollup_cap > UINT64_MAX / 2)
+            return -1;
         uint64_t ncap = ex->pending_rollup_cap ? ex->pending_rollup_cap * 2 : 64;
-        efs_ino_t *ninos = realloc(ex->pending_rollup_inos, ncap * sizeof(*ninos));
-        int64_t *ndeltas = realloc(ex->pending_rollup_deltas, ncap * sizeof(*ndeltas));
-        uint8_t *ntouch = realloc(ex->pending_rollup_touch, ncap * sizeof(*ntouch));
+        if (ncap > SIZE_MAX / sizeof(efs_ino_t) ||
+            ncap > SIZE_MAX / sizeof(int64_t))
+            return -1;
+        /* Keep all owners intact until every replacement exists. Independent
+         * reallocs can move/free an owner before another allocation fails. */
+        efs_ino_t *ninos = malloc(ncap * sizeof(*ninos));
+        int64_t *ndeltas = malloc(ncap * sizeof(*ndeltas));
+        uint8_t *ntouch = malloc(ncap * sizeof(*ntouch));
         if (!ninos || !ndeltas || !ntouch) {
             free(ninos);
             free(ndeltas);
             free(ntouch);
             return -1;
         }
+        if (ex->pending_rollup_count) {
+            size_t count = (size_t)ex->pending_rollup_count;
+            memcpy(ninos, ex->pending_rollup_inos, count * sizeof(*ninos));
+            memcpy(ndeltas, ex->pending_rollup_deltas, count * sizeof(*ndeltas));
+            memcpy(ntouch, ex->pending_rollup_touch, count * sizeof(*ntouch));
+        }
+        free(ex->pending_rollup_inos);
+        free(ex->pending_rollup_deltas);
+        free(ex->pending_rollup_touch);
         ex->pending_rollup_inos = ninos;
         ex->pending_rollup_deltas = ndeltas;
         ex->pending_rollup_touch = ntouch;

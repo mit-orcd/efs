@@ -1505,6 +1505,14 @@ refers to settled registered asks, not to every remaining implementation detail.
 long listings, dates, sorting and server-side predicates. Expiry remains
 unimplemented; unavailable/refusal tests are not lifecycle acceptance.
 
+### Release correctness review
+
+[Rollup allocation-failure fix](../status/rollup-allocation-failure-20261011.md) records the
+reproduced dangling-owner failure, ownership-safe queue growth and focused sanitizer
+gates. Full merged/Linux acceptance and separate queue-accounting/recorder findings
+remain open. [Review release disposition](../reviews/release-disposition-20261011.md)
+protects active packed/query consumers from broad cleanup.
+
 ### Tiny-file performance follow-up
 
 [W97 matched three-node SSD tests](../status/w97-three-drive-20261010.md): NVMe
