@@ -6,6 +6,12 @@ p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('root',type=Path)
 p.add_argument('--partial',action='store_true')
 a=p.parse_args();cases=[];missing=[]
+source_controls=json.loads((a.root/'source-controls.json').read_text())
+assert source_controls['matching_server_rpc'] is True
+for path in ('src/server/raft_host.c','src/client/inode_rpc.c'):
+    assert source_controls['source_hashes']['separate'][path]==source_controls['source_hashes']['combined'][path]
+for variant,digest in source_controls['expected_fuse_hashes'].items():
+    assert source_controls['source_hashes'][variant]['src/client/efs_fuse.c']==digest
 inventories={entry['case']:entry for entry in json.loads((a.root/'physical-inventory-proof.json').read_text())}
 for repeat in range(1,5):
     for mode in ('direct','buffered'):
