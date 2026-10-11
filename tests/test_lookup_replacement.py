@@ -20,17 +20,17 @@ static void read_prof_add(uint64_t*p,uint64_t n){*p+=n;}
 static void read_prof_tick(void){}
 static int host_hosts(struct efs_raft_host*p,uint8_t g){(void)p;return !forward||g==efs_raft_shard_group(efs_kv_inode_shard(1));}
 static int host_read_index(struct efs_raft_host*p,uint8_t g,int*i){(void)p;(void)g;(void)i;return read_error;}
-static void host_fwd_lookup(struct efs_raft_host*p,efs_ino_t i,const char*n,struct efs_msg_inode_reply*r,const uint8_t*g,int c){(void)p;(void)g;(void)c;forwarded_lookups++;r->status=EFS_INODE_RPC_OK;r->inode.ino=2;r->inode.parent=i;strcpy(r->inode.name,n);}
+static void host_fwd_lookup(struct efs_raft_host*p,efs_ino_t i,const char*n,struct efs_msg_inode_reply*r,const uint8_t*g,int c){(void)p;assert(c==2&&g[0]==EFS_RAFT_GROUP_SHARD&&g[1]==EFS_RAFT_GROUP_SHARD2);forwarded_lookups++;r->status=EFS_INODE_RPC_OK;r->inode.ino=2;r->inode.parent=i;strcpy(r->inode.name,n);}
 static void host_fwd_getattr(struct efs_raft_host*p,efs_ino_t i,struct efs_msg_inode_reply*r,const uint8_t*g,int c){(void)p;(void)g;(void)c;r->status=missing_inode?EFS_INODE_RPC_NOT_FOUND:EFS_INODE_RPC_OK;r->inode.ino=i;}
 static int host_txn_coord(void*u,const struct efs_txid*t,uint32_t sh,int*d){(void)t;if(!host_hosts(u,efs_raft_shard_group(sh)))return EFS_ERR_IO;*d=EFS_TXN_COMMIT;return coord_error;}
 int efs_meta_apply_get_inode(struct efs_kv*k,efs_ino_t i,struct efs_meta_row*r){(void)k;(void)i;memset(r,0,sizeof(*r));r->layout=EFS_META_LAYOUT_LOCAL;return 0;}
 int efs_meta_apply_lookup_tx(struct efs_kv*k,efs_ino_t i,const char*n,efs_txn_coord_fn f,void*u,struct efs_meta_dentry*r){(void)k;(void)i;(void)n;r->ino=pending_phase==2?3:2;if(pending_phase==1){struct efs_txid t={{0}};int d;int rc=f(u,&t,2,&d);if(rc)return rc;}return missing_name?EFS_ERR_NOT_FOUND:0;}
 static int host_read_inode_lanes(struct efs_raft_host*p,efs_ino_t i,int*h){(void)p;(void)i;(void)h;return missing_inode?EFS_ERR_NOT_FOUND:0;}
-static void host_need_both(uint8_t g[2]){g[0]=0;g[1]=1;}
+
 int efs_meta_apply_getattr(struct efs_kv*k,efs_ino_t i,efs_txn_coord_fn f,void*u,struct efs_meta_stat*r){(void)k;memset(r,0,sizeof(*r));r->ino=i;if(pending_phase==2){struct efs_txid t={{0}};int d;return f(u,&t,2,&d);}return 0;}
 static void set_inode_rc(struct efs_msg_inode_reply*r,int rc,int h){(void)h;r->status=rc==0?EFS_INODE_RPC_OK:rc==EFS_ERR_BUSY?EFS_INODE_RPC_BUSY:rc==EFS_ERR_NOT_FOUND?EFS_INODE_RPC_NOT_FOUND:EFS_INODE_RPC_ERROR;}
 static void stat_to_inode(const struct efs_meta_stat*s,struct efs_inode*i){i->ino=s->ino;}
-'''.replace('int efs_meta_apply_get_inode(',s[s.index('struct host_txn_read_context {'):s.index('static void stat_to_inode(')]+'int efs_meta_apply_get_inode(',1)+s[a:b]+r'''
+'''.replace('int efs_meta_apply_get_inode(',s[s.index('static void host_need_both('):s.index('\n}',s.index('static void host_need_both('))+2]+s[s.index('struct host_txn_read_context {'):s.index('static void stat_to_inode(')]+'int efs_meta_apply_get_inode(',1)+s[a:b]+r'''
 int main(void){struct efs_msg_inode_reply r;
  for(forward=0;forward<2;forward++){
   missing_name=0;missing_inode=1;server_raft_host_lookup(1,"replacement",&r);assert(r.status==EFS_INODE_RPC_BUSY);
@@ -50,6 +50,6 @@ int main(void){struct efs_msg_inode_reply r;
 '''
 with tempfile.TemporaryDirectory(prefix='efs-lookup-replacement-') as d:
  p=Path(d)/'test.c';p.write_text(code)
- subprocess.run(['cc','-O2','-Wall','-Wextra','-Werror','-D_GNU_SOURCE','-I'+str(root/'include'),str(p),str(root/'libefs.a'),'-pthread','-lm','-ldl','-o',str(p.with_suffix(''))],check=True)
+ subprocess.run(['cc','-O2','-Wall','-Wextra','-Werror','-D_GNU_SOURCE','-I'+str(root/'include'),str(p),str(root/'src/kv/kv_key.c'),'-pthread','-lm','-ldl','-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=10)
 print('LOOKUP replacement: missing captured inode retryable locally and forwarded; true absence and IO preserved PASS')
