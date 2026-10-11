@@ -20,7 +20,8 @@ static int checked_create(pthread_t *t,const pthread_attr_t *attr,void *(*fn)(vo
  assert(bytes==PACK_PUBLISH_STACK_BYTES&&(uintptr_t)stack%PACK_PUBLISH_STACK_ALIGN==0);
  assert((uintptr_t)stack>=(uintptr_t)context.publication_stacks&&
         (uintptr_t)stack+bytes<=(uintptr_t)(context.publication_stacks+PACK_PUBLISH_WORKERS-1));
- if(fail_create)return EAGAIN;return pthread_create(t,attr,fn,arg);
+ if(fail_create)return EAGAIN;
+ return pthread_create(t,attr,fn,arg);
 }
 #define pthread_create checked_create
 static int pack_publish_record(struct pack_context *p,uint32_t i){
