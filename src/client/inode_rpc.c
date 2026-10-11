@@ -485,39 +485,23 @@ static struct efs_conn *raft_dual_voter_conn(efs_node_id_t *nid_out,
     int n = (int)g_client.node_count;
     uint32_t dual = raft_group_voters(EFS_RAFT_GROUP_SHARD, n) &
                     raft_group_voters(EFS_RAFT_GROUP_SHARD2, n);
-    struct efs_conn *held = NULL;
-    efs_node_id_t held_id = 0;
 
-    for (int rid = 0; rid < n && rid < EFS_RAFT_MAX_PEERS; rid++) {
-        if (!(dual & (1u << rid)))
-            continue;
-        efs_node_id_t id = (efs_node_id_t)(rid + 1);
-        if (efs_client_node_is_down(id))
-            continue;
-        struct efs_conn *conn = efs_client_conn_get(id);
-        if (!conn)
-            continue;
-        /* A report that just got BUSY from this node tries the other
-         * dual-host. Both host every group; the first one (fcstor004)
-         * was the only target, and a follower that has fallen behind
-         * turns every ReadIndex into BUSY while its peer is caught up. */
-        if (skip && id == skip) {
-            if (!held) {
-                held = conn;
-                held_id = id;
-            } else {
-                efs_client_conn_release(id, conn);
+    /* Try the excluded peer only after the other dual hosts. Checking out
+     * its socket first can consume the whole RPC deadline on a failed peer
+     * or a full pool before the healthy alternative is even attempted. */
+    for (unsigned pass = 0; pass < 2; pass++) {
+        for (int rid = 0; rid < n && rid < EFS_RAFT_MAX_PEERS; rid++) {
+            efs_node_id_t id = (efs_node_id_t)(rid + 1);
+            if (!(dual & (1u << rid)) ||
+                (pass == 0 ? id == skip : !skip || id != skip) ||
+                efs_client_node_is_down(id))
+                continue;
+            struct efs_conn *conn = efs_client_conn_get(id);
+            if (conn) {
+                *nid_out = id;
+                return conn;
             }
-            continue;
         }
-        if (held)
-            efs_client_conn_release(held_id, held);
-        *nid_out = id;
-        return conn;
-    }
-    if (held) {
-        *nid_out = held_id;
-        return held;
     }
     return raft_voter_conn(EFS_ROOT_INO, nid_out);
 }
@@ -2362,12 +2346,18 @@ static int query_snapshot_rpc(const struct efs_msg_query_snapshot *req,uint32_t 
         if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
         efs_node_id_t nid=target;
         struct efs_conn *conn=target ? efs_client_conn_get(target) : raft_dual_voter_conn(&nid,skip);
-        if (!conn) last=EFS_ERR_NET;
+        if (!conn) {
+            last=EFS_ERR_NET;
+            if (pinned) return last;
+            skip=nid;target=0;
+        }
         else {
             uint8_t type=0;void *payload=NULL;uint32_t len=0;
             if (efs_conn_send_msg(conn,EFS_MSG_QUERY_SNAPSHOT,req,req_len) ||
                 efs_conn_recv_msg(conn,&type,&payload,&len)) {
                 efs_client_conn_drop(nid,conn);free(payload);last=EFS_ERR_NET;
+                if (pinned) return last;
+                skip=nid;target=0;
             } else {
                 efs_client_conn_release(nid,conn);
                 if (type!=EFS_MSG_QUERY_SNAPSHOT_REPLY || len<sizeof(*reply)) { free(payload);return EFS_ERR_PROTO; }

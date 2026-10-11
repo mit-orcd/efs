@@ -87,6 +87,8 @@ for number in range(args.start,args.end+1):
     record['elapsed_seconds']=time.monotonic()-start
     path.write_text(json.dumps(record,indent=2)+'\n')
     print(f"ROUND {number:02} exit={record['exit_code']} seconds={record['elapsed_seconds']:.1f}",flush=True)
+    if 'cleanup_incomplete_pid' in record:
+        raise SystemExit(124)  # Never overlap another round with an unretired fixture.
     if record['exit_code']:
         failed=True
         if not args.keep_going:raise SystemExit(record['exit_code'])

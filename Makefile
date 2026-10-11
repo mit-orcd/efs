@@ -418,6 +418,7 @@ test: all
 	python3 tests/test_txn_apply_retry.py
 	python3 tests/test_publication_persistence.py
 	python3 tests/test_follower_read_redirect.py
+	python3 tests/test_query_snapshot_failover.py
 	python3 tests/test_txn_parts_bounds.py
 	python3 tests/test_prepare_bounds.py
 	python3 tests/test_raft_tail.py
