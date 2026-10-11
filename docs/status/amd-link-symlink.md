@@ -1,6 +1,6 @@
 # AMD POSIX link of symlink failure
 
-Status: closed AMD test mismatch. Explicit no-follow correction and historical full four-mode reruns already passed. New follow/dangling/unlink-count and peer cases now pass native storage and AMD direct/buffered TCP at `8cb41c929ca0`. No production hard-link behavior changed. The unrelated buffered peer MKDIR EIO is retained separately; no full buffered acceptance is claimed for this new round. See [current checkpoint](amd-non-rdma-20261010.md) and [historical release acceptance](v020-amd-release.md).
+Status: closed AMD test mismatch. Explicit no-follow correction and historical full four-mode reruns already passed. New follow/dangling/unlink-count and peer cases now pass native storage and AMD direct/buffered TCP at `8cb41c929ca0`. No production hard-link behavior changed. The baseline buffered peer MKDIR EIO is retained separately as a pre-fix result; the later W66 routing repair and combined candidate pass full buffered acceptance. See [current checkpoint](amd-non-rdma-20261010.md) and [historical release acceptance](v020-amd-release.md).
 
 ## Finding
 
@@ -17,7 +17,7 @@ linkat(AT_FDCWD, source, AT_FDCWD, destination, AT_SYMLINK_FOLLOW)
 Following the target is the requested behavior. The test then incorrectly
 requires the destination to be a symlink and reports a filesystem failure.
 The preceding buffered and direct full runs each recorded 215 passes, this
-one failure and one skip. The current deployed build is
+one failure and one skip. The deployed build at that original probe was
 `cd0cc4c589fa-dirty`; all four AMD daemons run `--direct-io`.
 
 ## Controlled evidence
@@ -89,3 +89,7 @@ all new peer symlink assertions pass in both I/O modes. Direct peer passes
 [buffered peer](../../results/measure/20261010-amd-three-hour/evidence/gc-buffered-3uzt77vo/posix2.tsv).
 The earlier NUC/Python comparison is optional portability evidence; it is not
 claimed by this AMD-only round. Raw libc syscall coverage remains optional.
+
+The later W66 routing repair and combined candidate pass all 67 peer cases in
+both TCP I/O modes; see the [current checkpoint](amd-non-rdma-20261010.md#acceptance-checkpoint).
+The earlier 66/67 result remains pre-fix evidence.

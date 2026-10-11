@@ -151,13 +151,17 @@ This review did not rerun those tests or establish release/restart acceptance. T
 
 ## Contract/evidence review
 
-W23's first completed measurement exists; its zero-L0 interpretation is
-invalid due to W89's TSV field shift. Corrected samples show follower L0=22,
-but the pressure bound remains unproven. Current production apply defers flushing instead of waiting at the
-L0 threshold; its log line alone is not a pump-stall measurement. The follower
-memory/lag bound still needs a valid preconditioned run. W87 needs the full
-traced buffered append outcome and retained failing evidence. See the
+W23's historical first measurement had an invalid zero-L0 interpretation due
+to W89's TSV field shift. **Oct 10/11 update:** W89's measurement defect is
+closed by strict raw/TSV identity checks and a fresh AMD real 1 GiB follower-cap,
+quorum/recovery and cold-value gate (276 complete observations). The malformed
+Oct 5 evidence and withdrawn interpretation remain retained. D30/W23's
+production memory/lag and sustained-stall bounds remain open; measurement
+closure does not activate that policy. See the
+[current AMD checkpoint](amd-non-rdma-20261010.md#w89) and historical
 [round-6 ledger](../archive/contract-review-20261007-round6.md).
+W87 still needs its original broad-load failure investigated rather than
+being inferred closed from clean repeats.
 
 **W88 — D1 legacy span replay:** isolated metadata reproduction shows a
 folded identity can be evicted and its old retry reintroduced over a later

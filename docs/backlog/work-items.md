@@ -2651,8 +2651,6 @@ See [the package evidence](../status/amd-functional-gates-20261008.md).
 **Forbidden:** Treating host-local cache state or clean concurrent repeats as durable failover proof.
 
 
-<a id="w65"></a>
-
 **Oct 8 AMD hardening:** host-local replay now compares all UUID bytes and the
 session epoch, rejects a changed reservation length, and requires fresh inode/lane
 authority before answering a cached offset. Metadata refuses overflow without
@@ -2660,6 +2658,8 @@ advancing the append cursor. Production-helper regression tests and AMD
 direct-I/O/TCP full units, POSIX 216/0/1 skip, peer 64/64 and durability 26/26
 in both phases pass. The cache is still volatile: leader-change/restart receipts,
 bounded retirement and the original W87 broad-load acceptance remain open.
+
+<a id="w65"></a>
 
 ## W65 · Daemon exceeds graceful shutdown wait (queue row 0u)
 
