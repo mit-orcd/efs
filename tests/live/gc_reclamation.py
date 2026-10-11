@@ -2589,7 +2589,16 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
         print('POSIX deletes advance GC passes and physical removal counters PASS',flush=True)
     if a.append_burst:
         import append_burst
+        # POSIX/peer cleanup above retires its client. The append gate must
+        # verify real peer bytes, rather than reading an empty mount directory.
+        if not os.path.ismount(peer_mount):
+            peer_log=open(work/'append-burst-peer-fuse.log','ab');handles.append(peer_log)
+            peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+            wait(lambda:os.path.ismount(peer_mount),'append burst peer mounted',40)
         burst_path,burst_report=append_burst.run(mount,peer_mount,a.append_burst,work)
+        # Retire both clients normally before cold daemon recovery.
+        run([source/'scripts/client.sh','stop',peer_mount])
+        if peer is not None:peer.wait(timeout=15);peer=None
         unmount();stop();start();mount_client()
         cold_hash=append_burst.verify(burst_path,a.append_burst)
         assert cold_hash==burst_report['warm_primary_sha256']
