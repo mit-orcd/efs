@@ -59,14 +59,20 @@ SEED="127.0.0.1:$PORT"
 STORAGE="$WORK/storage"
 MNT="$WORK/mnt"
 EXPORT="vgtest"
+MODE=${EFS_VG_MODE:-buffered}
+case "$MODE" in direct) IO_FLAG=--direct-io;; buffered) IO_FLAG=--no-direct-io;; *) echo 'invalid EFS_VG_MODE' >&2; exit 2;; esac
+OWN_PIDS=()
 VG="valgrind --leak-check=full --show-leak-kinds=definite,indirect,possible"
 # Current unit suite (the old-engine tests were deleted in step 11 inc 2).
 # test_lock is included for coverage: its 6 pre-existing getlk failures are
 # functional, not leaks, and this gate only parses valgrind logs.
-UNIT_TESTS="test_kv test_kv_lsm test_raft test_raft_store test_meta_apply \
-            test_txn test_session test_sim test_wire test_data \
-            test_erasure test_placement test_lock test_stage_evict \
-            test_conn_fd"
+UNIT_TESTS=$(python3 - "$HERE/Makefile" <<'PY_UNITS'
+from pathlib import Path
+import sys
+line=next(line for line in Path(sys.argv[1]).read_text().splitlines() if line.startswith('TEST_BINS ='))
+print(' '.join(Path(p).name for p in line.split('=',1)[1].split()))
+PY_UNITS
+)
 
 # RDMA phase needs an RDMA-capable local IP (loopback has no ibdev, so the
 # upgrade would silently fall back to TCP and exercise nothing). Auto-detect
@@ -114,12 +120,24 @@ suspicious_possibly_lost() { # logfile
     ' "$1"
 }
 
+# A truncated/failed memcheck invocation is never a clean memory verdict.
+vg_complete() {
+    grep -q 'ERROR SUMMARY:' "$1" || return 1
+    grep -q 'no leaks are possible' "$1" && return 0
+    grep -q 'LEAK SUMMARY:' "$1" &&
+    grep -qE 'definitely lost: *[0-9,]+ bytes' "$1" &&
+    grep -qE 'indirectly lost: *[0-9,]+ bytes' "$1"
+}
+
 # gate one valgrind log; $1=log $2=label
 gate() {
     local log=$1 label=$2
     if [ ! -s "$log" ]; then
         fail "$label: no valgrind log at $log (did it run?)"
         return
+    fi
+    if ! vg_complete "$log"; then
+        fail "$label: incomplete valgrind report"; return
     fi
     local def ind uninit invalid susp
     def=$(vg_bytes "$log" "definitely")
@@ -148,6 +166,9 @@ gate_leaks() { # logfile label
         fail "$label: no valgrind log at $log (did it run?)"
         return
     fi
+    if ! vg_complete "$log"; then
+        fail "$label: incomplete valgrind report"; return
+    fi
     local def ind susp
     def=$(vg_bytes "$log" "definitely")
     ind=$(vg_bytes "$log" "indirectly")
@@ -164,13 +185,34 @@ gate_leaks() { # logfile label
 # private workdir (storage / mount paths). Match by exact comm
 # (efsd / efs-fuse / memcheck-amd64-) so we never self-match this script's
 # own ssh command line, and never touch the live cluster.
-kill_ours() { # signal (TERM or 9)
-    local sig=${1:-9} p
-    for p in $(pgrep -x efsd; pgrep -x efs-fuse; pgrep -x memcheck-amd64-); do
-        if tr '\0' ' ' <"/proc/$p/cmdline" 2>/dev/null | grep -q "$WORK"; then
-            kill -"$sig" "$p" 2>/dev/null
-        fi
-    done
+record_ours() {
+    local child=$1
+    OWN_PIDS+=("$child:$(python3 - "$child" <<'PY_STAMP'
+from pathlib import Path
+import sys
+print(Path('/proc/'+sys.argv[1]+'/stat').read_text().split(') ',1)[1].split()[19])
+PY_STAMP
+)")
+}
+kill_ours() { # Exact task-owned PID, start identity and storage/mount argument.
+    python3 - "$WORK" "${1:-9}" "${OWN_PIDS[@]}" <<'PY_KILL'
+import os,signal,sys
+from pathlib import Path
+work=Path(sys.argv[1]);sig=int(sys.argv[2]) if sys.argv[2].isdigit() else getattr(signal,'SIG'+sys.argv[2])
+paths={str(work/'mnt'),*(str(work/'storage'/('s'+str(i))) for i in range(1,4))}
+for identity in sys.argv[3:]:
+    pid,stamp=identity.split(':');proc=Path('/proc')/pid
+    try:
+        fd=os.pidfd_open(int(pid))
+    except ProcessLookupError:continue
+    try:
+        fields=(proc/'stat').read_text().split(') ',1)[1].split()
+        argv=(proc/'cmdline').read_bytes().decode().split(chr(0))
+        if fields[19]!=stamp or proc.stat().st_uid!=os.getuid() or not paths.intersection(argv):continue
+        signal.pidfd_send_signal(fd,sig)
+    except (FileNotFoundError,ProcessLookupError):pass
+    finally:os.close(fd)
+PY_KILL
 }
 
 # Start a 3-node raft group on $ADDR ports $PORT..$PORT+2 with node 1 under
@@ -192,8 +234,9 @@ start_group_vg_server() {
         out="$WORK-group$id.out"
         EFS_MD_RAFT_N=3 EFS_TRANSPORT=$xport setsid ./efsd --node-id "$id" \
             --addr "$ADDR" --port "$port" --storage "$STORAGE/s$id" \
-            --quota 1G --writers 0 --no-direct-io $join \
+            --quota 1G --writers 0 "$IO_FLAG" $join \
             >"$out" 2>&1 </dev/null &
+        record_ours "$!"
         for i in $(seq 1 40); do
             grep -q listening "$out" 2>/dev/null && break; sleep 0.5
         done
@@ -203,8 +246,13 @@ start_group_vg_server() {
     # valgrind'd node 1 joins last; do not wait for it (slow under memcheck)
     EFS_MD_RAFT_N=3 EFS_TRANSPORT=$xport $VG --log-file="$WORK-group1.vg" \
         ./efsd --node-id 1 --addr "$ADDR" --port "$PORT" \
-        --storage "$STORAGE/s1" --quota 1G --writers 0 --no-direct-io \
+        --storage "$STORAGE/s1" --quota 1G --writers 0 "$IO_FLAG" \
         --join "$ADDR:$((PORT + 1))" >"$WORK-group1.out" 2>&1 &
+    record_ours "$!"
+    for i in $(seq 1 240); do
+        grep -q listening "$WORK-group1.out" 2>/dev/null && break; sleep 0.5
+    done
+    grep -q listening "$WORK-group1.out" || { fail 'valgrind follower never listened'; exit 2; }
 }
 
 # Start a plain 3-node group with node 1 as seed (used by the fuse phases).
@@ -218,8 +266,9 @@ start_group_plain() {
         out="$WORK-group$id.out"
         EFS_MD_RAFT_N=3 EFS_TRANSPORT=tcp setsid ./efsd --node-id "$id" \
             --addr "$ADDR" --port "$port" --storage "$STORAGE/s$id" \
-            --quota 1G --writers 0 --no-direct-io $join \
+            --quota 1G --writers 0 "$IO_FLAG" $join \
             >"$out" 2>&1 </dev/null &
+        record_ours "$!"
         for i in $(seq 1 40); do
             grep -q listening "$out" 2>/dev/null && break; sleep 0.5
         done
@@ -230,14 +279,26 @@ start_group_plain() {
 
 cleanup() {
     kill_ours 9
-    fusermount3 -uz "$MNT" 2>/dev/null
-    # logs live at "$WORK"-*.vg (siblings of the $WORK dir) — remove both.
-    rm -rf "$WORK" "$WORK"-*.vg "$WORK"-*.out
+    fusermount3 -u "$MNT" 2>/dev/null || true
+    # Preserve both passing and failing logs and scratch stores for review.
 }
-trap cleanup EXIT
-
 cd "$HERE" || exit 2
-command -v valgrind >/dev/null || { echo "[leaks] valgrind not installed — ask user: yum install valgrind -y"; exit 2; }
+command -v valgrind >/dev/null || { echo '[leaks] valgrind not installed' >&2; exit 2; }
+[ "$(id -u)" -ne 0 ] || { echo '[leaks] run as the non-root EFS account' >&2; exit 2; }
+WORK=$(python3 - "$WORK" <<'PY_WORK'
+from pathlib import Path
+import sys
+print(Path(sys.argv[1]).resolve())
+PY_WORK
+)
+[ ! -e "$WORK" ] || { echo '[leaks] work directory must be new; refusing reuse' >&2; exit 2; }
+for evidence in "$WORK"-*.vg "$WORK"-*.out; do
+    [ ! -e "$evidence" ] || { echo '[leaks] refusing to replace existing evidence' >&2; exit 2; }
+done
+STORAGE="$WORK/storage";MNT="$WORK/mnt"
+mkdir -p "$WORK"
+trap cleanup EXIT
+note "mode=$MODE transport=${EFS_TRANSPORT:-auto}; evidence retained at $WORK"
 
 note "building (after any rsync --delete) ..."
 # Unit-test make targets carry the tests/ prefix (tests/test_meta_v6, ...).
@@ -249,7 +310,9 @@ make -s efsd efs-fuse efs-mgmt efs-bench \
 note "phase 1: unit tests under valgrind"
 for t in $UNIT_TESTS; do
     log="$WORK-unit-$t.vg"
-    $VG --log-file="$log" "./tests/$t" >/dev/null 2>&1
+    timeout --signal=TERM --kill-after=10 300 $VG --log-file="$log" "./tests/$t" >"$WORK-unit-$t.out" 2>&1
+    rc=$?
+    [ "$rc" = 0 ] || fail "unit/$t: process exit $rc"
     gate "$log" "unit/$t"
 done
 
@@ -285,6 +348,7 @@ mkdir -p "$MNT"
 # pre-fork bootstrap table into the log).
 EFS_TRANSPORT=tcp $VG --log-file="$WORK-fuse.vg" ./efs-fuse "$SEED" "$EXPORT" "$MNT" -f \
     >"$WORK-fuse.out" 2>&1 &
+record_ours "$!"
 for i in $(seq 1 60); do grep -q "efs-fuse $MNT " /proc/mounts 2>/dev/null && break; sleep 0.5; done
 grep -q "efs-fuse $MNT " /proc/mounts || { echo "[leaks] fuse mount failed"; cat "$WORK-fuse.out"; exit 2; }
 
@@ -311,7 +375,9 @@ gate "$WORK-fuse.vg" "efs-fuse"
 # is eager on connect (node_cache.c). Mount + metadata + a chunked write
 # exercise QP/MR/arena on BOTH sides including PUT/GET. Gated on leaks only
 # (ibverbs uninit false-positives — see gate_leaks).
-if [ -z "$RDMA_IP" ]; then
+if [ "${EFS_TRANSPORT:-auto}" = tcp ]; then
+    note "phase 4: RDMA SKIP — explicit TCP selection"
+elif [ -z "$RDMA_IP" ]; then
     note "phase 4: SKIP — no 172.16.223.x RDMA IP found (set EFS_VG_RDMA_IP)"
 else
     note "phase 4: efsd + efs-fuse over RDMA ($RDMA_IP)"
@@ -329,6 +395,7 @@ else
     EFS_TRANSPORT=rdma $VG --log-file="$WORK-fuse-rdma.vg" \
         ./efs-fuse "$RDMA_IP:$((PORT + 1))" "$EXPORT" "$MNT" -f \
         >"$WORK-fuse-rdma.out" 2>&1 &
+    record_ours "$!"
     for i in $(seq 1 60); do grep -q "efs-fuse $MNT " /proc/mounts 2>/dev/null && break; sleep 0.5; done
     if ! grep -q "efs-fuse $MNT " /proc/mounts; then
         note "phase 4: fuse mount failed (RDMA may be unavailable) — skipping"
@@ -367,5 +434,5 @@ if [ "$fails" -eq 0 ]; then
 fi
 note "$fails gate failure(s) — logs under $WORK-*.vg (kept on failure)"
 trap - EXIT   # keep logs for inspection
-kill_ours 9; fusermount3 -uz "$MNT" 2>/dev/null
+kill_ours 9; fusermount3 -u "$MNT" 2>/dev/null
 exit 1

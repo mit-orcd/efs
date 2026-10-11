@@ -422,6 +422,7 @@ test: all
 	python3 tests/test_query_callback_affinity.py
 	python3 tests/test_feature_poll_deadline.py
 	python3 tests/test_query_loaded_oracle.py
+	python3 tests/test_valgrind_verdict.py
 	python3 tests/test_txn_parts_bounds.py
 	python3 tests/test_prepare_bounds.py
 	python3 tests/test_raft_tail.py
