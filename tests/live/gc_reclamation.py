@@ -697,15 +697,21 @@ try:
         from tiny_sustained import exercise as sustained,verify_and_delete as verify_sustained
         record=sustained(mount,[client.pid,*[proc.pid for proc in servers]],
                          a.tiny_sustained_seconds,work/'tiny-sustained.json',a.tiny_sustained_large_mib_s)
+        cold_start=time.monotonic()
         unmount();stop(crash=True);start();mount_client()
         verify_sustained(mount,record['generations'])
-        record.update(cold_verified=True,physical_inventory_empty=False)
+        record.update(cold_verified=True,physical_inventory_empty=False,
+                      cold_recovery_wall_s=time.monotonic()-cold_start)
         (work/'tiny-sustained.json').write_text(json.dumps(record,indent=2))
-        wait(lambda:drained() and all(not any(path.is_file() for path in
-             (root/'data/exports/1').glob('**/*')) for root in data_roots),
-             'sustained cold bytes and physical deletion drained',180)
-        record.update(cold_verified=True,physical_inventory_empty=True)
-        (work/'tiny-sustained.json').write_text(json.dumps(record,indent=2))
+        drain_start=time.monotonic()
+        try:
+            wait(lambda:drained() and all(not any(path.is_file() for path in
+                 (root/'data/exports/1').glob('**/*')) for root in data_roots),
+                 'sustained cold bytes and physical deletion drained',180)
+            record['physical_inventory_empty']=True
+        finally:
+            record.update(gc_drain_wall_s=time.monotonic()-drain_start,gc_drain_deadline_s=180)
+            (work/'tiny-sustained.json').write_text(json.dumps(record,indent=2))
         print('sustained tiny/large warm generations, cold bytes and physical reclamation PASS',flush=True)
         raise SystemExit(0)
     if a.tiny_churn:
