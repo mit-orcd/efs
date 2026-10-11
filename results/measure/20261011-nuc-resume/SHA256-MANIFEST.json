@@ -39,6 +39,26 @@
     "bytes": 55216,
     "sha256": "f1f63c6c5d7bb3e4027977a36bc462a1c42d368af11bd551e70e69dc916ee8f7"
   },
+  "first-live-attempt/full-direct-exit.txt": {
+    "bytes": 2,
+    "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+  },
+  "first-live-attempt/full-direct.log": {
+    "bytes": 19056,
+    "sha256": "769db00cd63365b4580265a1386edc8d7480252e44c564aa0fb737d2bc2e5aa4"
+  },
+  "fixture-original-manifest.json": {
+    "bytes": 3599,
+    "sha256": "60b686d8481f7894696df9658c1f7e7df22367945db828e16c9ac44389434f58"
+  },
+  "fixture-source-fixed.py": {
+    "bytes": 187139,
+    "sha256": "34ece55fda69fcdb0a957e4d55d0c3d2e5d20a0efb7e1a7ee5d251eb68f0160d"
+  },
+  "fixture-source-original.py": {
+    "bytes": 186419,
+    "sha256": "fb7aa47ee786b7e06818af5a9f93c508b3d0dfe257da8f5cf34f539cbaa21807"
+  },
   "installed-images.json": {
     "bytes": 988,
     "sha256": "d4ec948b8db8199ef22314a7c998179eba8eef06e7552154c15e775c81c42522"
@@ -408,8 +428,8 @@
     "sha256": "4580bbf7d1483ecf8ba3de0f1ca051a76592b817acc69722292c37826c12318f"
   },
   "meta-placement/summary.json": {
-    "bytes": 24068,
-    "sha256": "de9b1a401dde96540e3e9ff56f2b454e5ae5b0a71367b3a12ab74a14a42ae86f"
+    "bytes": 25832,
+    "sha256": "61b4f62dd40006cf2814389c5918cb3bba414c8ba6f55ff987c70e1e9434e88c"
   },
   "meta-placement/tests-exit.txt": {
     "bytes": 2,

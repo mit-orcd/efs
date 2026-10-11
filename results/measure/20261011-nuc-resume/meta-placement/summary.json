@@ -28,6 +28,9 @@
                 "sync": 4602,
                 "sync_error": 0,
                 "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
                 "flow_busy": 0
               },
               "hist": {
@@ -57,6 +60,9 @@
                 "sync": 4906,
                 "sync_error": 0,
                 "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
                 "flow_busy": 0
               },
               "hist": {
@@ -86,6 +92,9 @@
                 "sync": 4904,
                 "sync_error": 0,
                 "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
                 "flow_busy": 0
               },
               "hist": {
@@ -132,6 +141,9 @@
                 "sync": 1321,
                 "sync_error": 0,
                 "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
                 "flow_busy": 0
               },
               "hist": {
@@ -161,6 +173,9 @@
                 "sync": 1630,
                 "sync_error": 0,
                 "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
                 "flow_busy": 0
               },
               "hist": {
@@ -190,6 +205,9 @@
                 "sync": 1633,
                 "sync_error": 0,
                 "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
                 "flow_busy": 0
               },
               "hist": {
@@ -288,6 +306,9 @@
                 "sync": 30270,
                 "sync_error": 0,
                 "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
                 "flow_busy": 4
               },
               "hist": {
@@ -317,6 +338,9 @@
                 "sync": 31421,
                 "sync_error": 0,
                 "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
                 "flow_busy": 5
               },
               "hist": {
@@ -346,6 +370,9 @@
                 "sync": 31075,
                 "sync_error": 0,
                 "inbox_drop": 9,
+                "drop_data": 6,
+                "drop_empty": 3,
+                "drop_other": 0,
                 "flow_busy": 0
               },
               "hist": {
@@ -392,6 +419,9 @@
                 "sync": 11022,
                 "sync_error": 0,
                 "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
                 "flow_busy": 5
               },
               "hist": {
@@ -421,6 +451,9 @@
                 "sync": 11523,
                 "sync_error": 0,
                 "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
                 "flow_busy": 4
               },
               "hist": {
@@ -450,6 +483,9 @@
                 "sync": 11322,
                 "sync_error": 0,
                 "inbox_drop": 9,
+                "drop_data": 5,
+                "drop_empty": 4,
+                "drop_other": 0,
                 "flow_busy": 0
               },
               "hist": {
@@ -548,6 +584,9 @@
                 "sync": 4480,
                 "sync_error": 0,
                 "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
                 "flow_busy": 0
               },
               "hist": {
@@ -577,6 +616,9 @@
                 "sync": 4809,
                 "sync_error": 0,
                 "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
                 "flow_busy": 0
               },
               "hist": {
@@ -606,6 +648,9 @@
                 "sync": 4805,
                 "sync_error": 0,
                 "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
                 "flow_busy": 0
               },
               "hist": {
@@ -652,6 +697,9 @@
                 "sync": 1291,
                 "sync_error": 0,
                 "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
                 "flow_busy": 0
               },
               "hist": {
@@ -681,6 +729,9 @@
                 "sync": 1664,
                 "sync_error": 0,
                 "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
                 "flow_busy": 0
               },
               "hist": {
@@ -710,6 +761,9 @@
                 "sync": 1664,
                 "sync_error": 0,
                 "inbox_drop": 0,
+                "drop_data": 0,
+                "drop_empty": 0,
+                "drop_other": 0,
                 "flow_busy": 0
               },
               "hist": {
