@@ -84,8 +84,10 @@ for _ in range(40):
     result=subprocess.run([sys.executable,str(peer/fixture/'.efs/stats'),'--json'],
                           check=True,stdout=subprocess.PIPE,timeout=12)
     parsed=json.loads(result.stdout)
-    if parsed['stats']['tree_files']==expected:
-        assert parsed['stats']['tree_bytes']==expected*256,parsed
+    # A published cut can include the last CREATE before its size update.
+    # Counts and logical bytes must converge together before the payload oracle.
+    if (parsed['stats']['tree_files']==expected and
+            parsed['stats']['tree_bytes']==expected*256):
         break
     time.sleep(.25)
 else:

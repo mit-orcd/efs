@@ -172,7 +172,7 @@ regression evidence for the prior candidate, not acceptance of W93–W96.
 
 - [Before group comparison](../../results/measure/20261008-nuc-tiny-create/round-7/group-comparison-before.json)
   and [after](../../results/measure/20261008-nuc-tiny-create/round-7/group-comparison-after.json).
-- [Separate perf/strace files](../../results/measure/20261008-nuc-tiny-create/round-7/after/)
+- [Separate perf/strace files](../../results/measure/20261008-nuc-tiny-create/round-7/after)
   and [sync summary](../../results/measure/20261008-nuc-tiny-create/round-7/sync-summary.json).
 - [Storage principle probe](../../results/measure/20261008-nuc-tiny-create/round-7/log-space-probe-r7.json).
 - [Build identities](../../results/measure/20261008-nuc-tiny-create/round-7/identity.txt),

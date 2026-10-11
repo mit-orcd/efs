@@ -125,7 +125,7 @@ unit target passes. Production process-ownership safeguards were unchanged.
 
 ## Evidence and remaining scope
 
-[Raw evidence](../../results/measure/20261009-nuc-w73-w64/) contains manifests,
+[Raw evidence](../../results/measure/20261009-nuc-w73-w64) contains manifests,
 source/binary hashes, commands, runner logs, verdict JSON, POSIX/peer tables,
 decoded deadlock records and bounded excerpts. Full daemon/FUSE logs and private
 stores remain on NUC. Console suite wall times include cleanup; summed TSV

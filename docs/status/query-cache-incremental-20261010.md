@@ -7,7 +7,7 @@ Final code deployed as `d83f3f06`; native/live/cold verification passes.
 
 All 15 local branch tips captured at task start are included, with new merges from
 `devel`, W66 and persistence-pressure. Other agents' checkouts are untouched.
-[Captured branch boundary and ancestor proof](../../results/measure/20261010-w92-incremental/)
+[Captured branch boundary and ancestor proof](../../results/measure/20261010-w92-incremental)
 record the integration boundary; later commits elsewhere are not implicitly included.
 
 `10febf8b` reuses immutable derived partitions and folds attributes when inode
@@ -115,5 +115,5 @@ capacity control and billion-file scale/fault acceptance. Cold restart is a proc
 restart test, not a hardware power-loss claim. No pushes, wipes, container changes,
 D25 or authoritative checkpoint-cadence activation were performed.
 
-[Raw logs, drivers, exact variants and summaries](../../results/measure/20261010-w92-incremental/)
+[Raw logs, drivers, exact variants and summaries](../../results/measure/20261010-w92-incremental)
 · [Status index](README.md) · [W92](../backlog/work-items.md#w92).

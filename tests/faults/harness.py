@@ -258,7 +258,7 @@ def transport_of(pid, log_path):
 
 
 class Server(object):
-    def __init__(self, node_id, port, storage, join, binary):
+    def __init__(self, node_id, port, storage, join, binary, mode="buffered"):
         assert_safe_port(port)
         assert_safe_storage(storage)
         self.node_id = node_id
@@ -266,6 +266,9 @@ class Server(object):
         self.storage = storage
         self.join = join
         self.binary = binary
+        if mode not in ("direct", "buffered"):
+            raise ValueError("invalid storage I/O mode")
+        self.mode = mode
         self.proc = None
         self.log_path = os.path.join(storage, "efsd.log")
 
@@ -274,6 +277,7 @@ class Server(object):
             self.binary, "--node-id", str(self.node_id),
             "--addr", "127.0.0.1", "--port", str(self.port),
             "--storage", self.storage, "--quota", "1G",
+            "--direct-io" if self.mode == "direct" else "--no-direct-io",
         ]
         if self.join:
             args += ["--join", self.join]
@@ -313,9 +317,10 @@ def kill_owned_one(proc):
 
 
 class Cluster(object):
-    def __init__(self, work, binary_dir):
+    def __init__(self, work, binary_dir, mode="buffered"):
         self.work = work
         self.binary_dir = binary_dir
+        self.mode = mode
         self.servers = []
         self.mounts = []  # (path, proc, log)
         self.journal = None
@@ -342,7 +347,7 @@ class Cluster(object):
         for i, port in enumerate(ports):
             storage = os.path.join(self.work, "s%d" % (i + 1))
             join = None if i == 0 else seed
-            srv = Server(i + 1, port, storage, join, self.efsd())
+            srv = Server(i + 1, port, storage, join, self.efsd(), self.mode)
             srv.start()
             self.servers.append(srv)
         self.journal = Journal(os.path.join(self.work, "journal.jsonl"))
@@ -816,10 +821,10 @@ def case_repair_gap():
                "rebuild fragments it lost")]
 
 
-def integrate(work, binary_dir, seed):
+def integrate(work, binary_dir, seed, mode="buffered"):
     signal.signal(signal.SIGTERM, _on_signal)
     signal.signal(signal.SIGINT, _on_signal)
-    cluster = Cluster(work, binary_dir)
+    cluster = Cluster(work, binary_dir, mode)
     results = []
     try:
         cluster.start()
@@ -910,6 +915,11 @@ def suite_exit(rows):
 
 def self_test():
     fails = []
+    for mode, flag in (("direct", "--direct-io"), ("buffered", "--no-direct-io")):
+        server = Server(1, 25000, "/tmp/efs-fault-mode-test", None, "/tmp/efsd", mode)
+        argv = server.argv()
+        if flag not in argv or ("--no-direct-io" if mode == "direct" else "--direct-io") in argv:
+            fails.append("explicit integration I/O mode " + mode)
     data_a = pattern(7, "a", 64)
     data_b = pattern(7, "b", 64)
     if data_a == data_b or 0 in data_a:
@@ -989,6 +999,8 @@ def main(argv):
     parser.add_argument("--out", default="")
     parser.add_argument("--integrate", action="store_true",
                         help="start a private 4-server TCP cluster")
+    parser.add_argument("--mode", choices=("direct", "buffered"), default="buffered",
+                        help="private integration daemon storage mode (default: buffered)")
     parser.add_argument("--seed", type=int, default=101)
     args = parser.parse_args(argv)
     if args.self_test:
@@ -1005,8 +1017,9 @@ def main(argv):
             "seed": args.seed,
             "transport": "tcp",
             "integrate": args.integrate,
-            "replay": "bash tests/faults/run_faults.sh %s%s" % (
-                args.out, " --integrate" if args.integrate else ""),
+            "mode": args.mode,
+            "replay": "bash tests/faults/run_faults.sh %s --mode %s%s" % (
+                args.out, args.mode, " --integrate" if args.integrate else ""),
             "live_cluster": "not used; ports 19810 and 19820 are refused",
             "repair": "gap",
         }
@@ -1015,7 +1028,7 @@ def main(argv):
         rows.extend(run_sim(sim_bin, fp))
         if args.integrate:
             part = integrate(os.path.join(args.out, "cluster"),
-                             os.environ.get("EFS_FAULT_BIN", ROOT), args.seed)
+                             os.environ.get("EFS_FAULT_BIN", ROOT), args.seed, args.mode)
             for item in part:
                 fp.write(json.dumps(item, sort_keys=True) + "\n")
                 fp.flush()

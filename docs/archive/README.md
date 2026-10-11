@@ -130,3 +130,12 @@ an item is open or closed; reconcile its evidence before changing status.
 - [Corrected W23 sample expansion](round6-w23-samples-corrected.tsv) and
   [recomputed peaks](round6-w23-peaks-corrected.txt) — W89 evidence; original
   result files and their withdrawn interpretation remain preserved.
+
+
+## Status checkpoints archived Oct 11, 2026
+
+Superseded deployment and integration checkpoints retain their raw evidence and remaining obligations. Current execution state belongs in the status index.
+
+- [find-stats-checkpoint-20261008](status-20261011/find-stats-checkpoint-20261008.md)
+- [find-stats-merge-20261008](status-20261011/find-stats-merge-20261008.md)
+- [devel-integration-20261009](status-20261011/devel-integration-20261009.md)

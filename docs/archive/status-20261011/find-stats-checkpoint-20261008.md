@@ -1,5 +1,6 @@
 # W92 find/stats continuation checkpoint — Oct 8, 01:53 EDT
 
+**Archived Oct 11, 2026:** historical checkpoint. Build IDs, process IDs and running-job descriptions below are dated evidence, not current operating instructions. Current work and decisions remain in [the status index](../../status/README.md).
 This work is **in progress, not accepted**. Server catalog publication and
 versioned query RPC/FUSE consumers are now implemented and pass private NUC
 fixtures (latest section below). The production NUC still runs e9f974b4e148:

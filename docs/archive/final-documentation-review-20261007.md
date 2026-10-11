@@ -56,22 +56,22 @@ blanket acceptance of a changed release.
 ## Previous running-page reconciliation, retained intact
 
 
-The [round-2 evidence ledger](../archive/queue-review-20261007-round2.md)
+The [round-2 evidence ledger](queue-review-20261007-round2.md)
 records code/evidence checks and acceptance limits. W36 and directory-time
 row 0m are archived as accepted on their recorded builds; a new rollout must
 repeat the release gates. W42 has four-node capacity evidence but retains its
 protection/reroute question. W52 approval has not been mistaken for implementation.
 
-The [round-4 operator review](../archive/operator-review-20261007-round4.md)
+The [round-4 operator review](operator-review-20261007-round4.md)
 records W78–W81 and current command/counter limits; dated runbooks and
 capability wording remain archived with their evidence.
 
-The [round-5 protocol review](../archive/protocol-review-20261007-round5.md)
+The [round-5 protocol review](protocol-review-20261007-round5.md)
 records W82–W85, isolated failing reproductions, simulator/host coverage
 differences and refreshed primary-source comparisons. These findings await
 triage and do not establish a new implementation order.
 
-The [round-6 contract/evidence review](../archive/contract-review-20261007-round6.md)
+The [round-6 contract/evidence review](contract-review-20261007-round6.md)
 reconciles the committed GC checkpoint, indexes W86–W89 and D31, and corrects
 W23's completed measurement and current backpressure meaning. It creates no
 new design approval or production acceptance.
