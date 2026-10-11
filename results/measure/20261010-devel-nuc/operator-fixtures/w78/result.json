@@ -1,0 +1,81 @@
+{
+  "cases": [
+    {
+      "case": "invalid",
+      "daemon_pid": 3658130,
+      "unrelated_pid": 3658119,
+      "stamp": {
+        "start": "13619830",
+        "boot": "db7bd810-c31a-47d2-965f-dadfc5fe2c75",
+        "exe": "/data1/efs/devel-nuc-20261010/src/efsd",
+        "args": [
+          "./efsd",
+          "--node-id",
+          "102243",
+          "--addr",
+          "127.0.0.1",
+          "--port",
+          "36707",
+          "--storage",
+          "/tmp/efs-wrapper-start-70q3qjlj/invalid",
+          "--node-id",
+          "1",
+          "--direct-io"
+        ]
+      },
+      "port": 36707
+    },
+    {
+      "case": "unrelated",
+      "daemon_pid": 3658325,
+      "unrelated_pid": 3658119,
+      "stamp": {
+        "start": "13619954",
+        "boot": "db7bd810-c31a-47d2-965f-dadfc5fe2c75",
+        "exe": "/data1/efs/devel-nuc-20261010/src/efsd",
+        "args": [
+          "./efsd",
+          "--node-id",
+          "123247",
+          "--addr",
+          "127.0.0.1",
+          "--port",
+          "57711",
+          "--storage",
+          "/tmp/efs-wrapper-start-70q3qjlj/unrelated",
+          "--node-id",
+          "1",
+          "--direct-io"
+        ]
+      },
+      "port": 57711
+    },
+    {
+      "case": "dead",
+      "daemon_pid": 3658354,
+      "unrelated_pid": 3658119,
+      "stamp": {
+        "start": "13620076",
+        "boot": "db7bd810-c31a-47d2-965f-dadfc5fe2c75",
+        "exe": "/data1/efs/devel-nuc-20261010/src/efsd",
+        "args": [
+          "./efsd",
+          "--node-id",
+          "100269",
+          "--addr",
+          "127.0.0.1",
+          "--port",
+          "34733",
+          "--storage",
+          "/tmp/efs-wrapper-start-70q3qjlj/dead",
+          "--node-id",
+          "1",
+          "--direct-io"
+        ]
+      },
+      "port": 34733
+    }
+  ],
+  "binary_sha256": "bedecaaff550c3c33d6d4733c2b69e84c2a99252382ad892a6524bb775147a67",
+  "passed": true
+}

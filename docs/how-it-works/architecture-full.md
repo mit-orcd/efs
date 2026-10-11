@@ -1486,6 +1486,21 @@ in the ORCD queue after the packing priority.
 [Decisions](#appendix-3--decisions--taken-and-pending-register-d1d31) · [Work-item details](#appendix-4--work-items--long-form-text-for-the-open-w-items-and-the-queue-rows) ·
 [Operations](../operations/operations.md) · [Archive](../archive/README.md)
 
+### NUC closure session — October 10–11
+
+[Current NUC acceptance](../status/devel-nuc-closure-20261010.md) closes W70, W78, W79
+and W80 for their named operator-correctness scopes, plus W96's isolated
+allocation and software recovery acceptance. Full native, actual stale
+PID startup/stop, both mkfs aliases' consumed-reply recovery and explicit
+retired-query outcomes pass. W96's sixteen drive comparisons, exact retained
+replay, ASan/UBSan and Valgrind pass. Both full live modes pass POSIX214/214,
+peer66/66, cold/fault/GC and actual follower WAL-fsync refusal recovery.
+W97's clean allocation, separate XFS profiles and written-ring controls all
+finish: NVMe latency rises even on written extents; W97 remains open. The
+three-hour session restores four regular daemons and both mounts, verifies
+installed/live hashes and16 existing payload samples. New-binary installation
+remains approval-blocked; the original installed build is retained.
+
 ### Governing node-count contract — D36
 
 [User-ratified D36](../status/node-count-protection-20261009.md): three nodes minimum,
@@ -1551,8 +1566,8 @@ acceptance are recorded separately from implementation.
 
 [W93–W96: NUC profiling evidence and next experiments](../status/tiny-file-performance-plan-20261008.md)
 register broader Raft group commit, atomic CREATE/open lease, tiny-file data
-persistence/packing, and KV WAL preallocation. W93 is now closed by the final acceptance above; W94–W96 retain their
-separate remaining implementation/acceptance obligations. W95 refines existing P4.1,
+persistence/packing, and KV WAL preallocation. W93 is closed by its final acceptance, and W96 closes after the Oct11 isolated
+NUC gate above. W94/W95 retain separate implementation/acceptance obligations. W95 refines existing P4.1,
 so the earlier grouped count below is retained as a dated baseline rather than
 recomputed by blindly adding four. W90–W92 keep their existing scopes.
 
@@ -1812,9 +1827,9 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | scratch-expiry | **W90** · scratch-file expiry metadata and safe lifecycle | feature | design accepted D33; opt-in fixed deadlines and safe lifecycle; implementation/gates open | [work item](#w90) · [design](../status/scratch-expiry-interface.md) |
 | virtual-commands | **W91** · directory-local virtual `.efs/` command interface | usability feature | design accepted D34; `.efs/` commands and bounded query paths; implementation/compatibility gates remain | [work item](#w91) · [design](../status/scratch-expiry-interface.md) |
 | tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | partial — independent indexed packing, publication/GC fault and 24-sample AMD churn gates pass; P4.1 production-format and migration decision remain | [work item](#w95) |
-| tiny-kv | **W96** · bounded KV WAL preallocation | performance experiment | partial — recovery/reservation/fault and final guard cold gates pass; isolated NUC acceptance owed | [work item](#w96) |
+| tiny-kv | **W96** · bounded KV WAL preallocation | performance experiment | Closed Oct11: isolated SATA/NVMe repeated matrix, exact replay/reset/reservation, full native/POSIX/peer/fault/cold and WAL sanitizer gates pass; conditional benefit and SATA tails retained | [closure](../status/devel-nuc-closure-20261010.md) |
 | decisions | **D28** client-death loss policy · **D29** durable publication receipts · **D30** bounded admission/pacing | accepted design | accepted Oct 8: salvage deferred; D29/W88 implementation first, then D30/W23/W89; implementation and acceptance remain open | [contracts and gates](#d28d30--accepted-oct-8-2026) |
-| op1 | **W70** · shrink-quota falsely reports background migration | operator observability bug | truthful running-quota reporting implemented; NUC accepted/refused shrink and unchanged-byte gates pass; no migration or persistence claim | [work item](#w70) |
+| op1 | **W70** · shrink-quota falsely reports background migration | operator observability bug | Closed Oct11: current NUC direct/buffered × one/two-root accepted/refused reductions, truthful running quota and exact retained bytes pass; no migration/persistence claim | [closure](../status/devel-nuc-closure-20261010.md) |
 
 #### Source findings awaiting triage
 
@@ -1830,9 +1845,9 @@ positions do not assign an execution order or override the active handoff.
 | spec5 | **W75** · fragment integrity trust / missing checksum fallback | integrity correctness | missing/corrupt evidence fails closed; captured metadata digest and PUT validation gates pass on NUC; identity-bound format remains open | [evidence and gate](#w75) |
 | spec6 | **W76** · opid table exhaustion sends unprotected namespace retries | conditional correctness | Closed: bounded identity admission refuses saturation safely; Oct9 reserves receipt capacity with16 unacknowledged positions (512 tracker slots); all four lost-reply mutations replay across leader death/restart with one effect | [evidence and gate](#w76) |
 | spec7 | **W77** · atomic multi-chunk public publication/observation | integration gap | per-group REPORT/per-chunk publication; request-wide decision/read-validation gate unestablished | [evidence and gate](#w77) |
-| op2 | **W78** · server wrapper trusts PID-file process identity | conditional operator correctness | identity-checked pidfd daemon/recorder retirement implemented; NUC ownership fixtures pass; daemon shutdown remains W65 | [evidence and gate](#w78) |
-| op3 | **W79** · mkfs help/name argument disagrees with single-export handler | operator observability | legacy label explicitly reported as ignored; extra arguments rejected; NUC repeated mkfs preserves salt/namespace | [evidence and gate](#w79) |
-| op4 | **W80** · efs-query reports retired zero-filled statistics as totals | operator observability | unsupported status and CLI nonzero exit replace invented zero totals; NUC RPC/CLI gates pass; actual totals remain unimplemented | [evidence and gate](#w80) |
+| op2 | **W78** · server wrapper trusts PID-file process identity | conditional operator correctness | Closed Oct11: actual NUC startup/stop retains unrelated processes; absent/dead/invalid/wrong-storage/stale-start and recorder ownership gates pass; shutdown remains W65 | [closure](../status/devel-nuc-closure-20261010.md) |
+| op3 | **W79** · mkfs help/name argument disagrees with single-export handler | operator observability | Closed Oct11: aliases/help/argument refusals, ignored label, consumed successful replies and explicit retry preserve namespace/salt in both NUC I/O modes | [closure](../status/devel-nuc-closure-20261010.md) |
+| op4 | **W80** · efs-query reports retired zero-filled statistics as totals | operator observability | Closed Oct11 for retired endpoint: nonempty namespace normal/raw, help, legacy and malformed replies pass; mounted stats/scale remain W92 | [closure](../status/devel-nuc-closure-20261010.md) |
 | scale1 | **W81** · automatic directory spreading lacks a pressure trigger | scalability feature gap | size trigger/migrator exist; pressure policy remains unspecified and unwired | [evidence and gate](#w81) |
 | proto1 | **W82** · stale completed ReadIndex authority survives leader isolation | read correctness | Closed: stale LOOKUP/GETATTR/session/publication/transaction views and configuration partition gates pass; coordinator callback refuses untrusted absence | [evidence and gate](#w82) |
 | proto2 | **W83** · transaction decision records lack safe retirement | metadata lifecycle gap | resolve/drop remove participant records; no decision acknowledgement/GC path found | [evidence and gate](#w83) |
@@ -2099,9 +2114,12 @@ measurement work and decisions. This handoff adds no deployment authorization.
 
 ### Operator review findings
 
-[W78–W80](#source-findings-awaiting-triage) record conditional stale
-PID-file signaling, misleading mkfs name syntax and zero-filled `efs-query`
-statistics. These are source findings with gates, not a new execution order.
+[W78–W80](../status/devel-nuc-closure-20261010.md) close on Oct11 current-code NUC
+operator acceptance: actual stale-PID startup/stop, both mkfs aliases and
+consumed-reply retry, and explicit retired-query refusal without false totals.
+W70's running-quota reporting and W96's isolated allocation/recovery gates also
+close in that report. W97 remains open; neither raw drive controls nor these
+operator gates establish sustained EFS throughput or a hardware ceiling.
 Use the corrected operations guide; query zeros are not GC completion evidence.
 W81 separately records the missing automatic directory pressure trigger; its
 size-based admission/migrator exists and the pressure policy still needs review.
@@ -5176,10 +5194,13 @@ See [next-five ledger](../status/next-five-gates-20261007.md).
 
 ### W70 · shrink-quota falsely reports background migration (queue row op1)
 
-**Class:** operator observability bug. **Status:** open, found during the
-Oct 7 documentation review. Documentation corrected; source behavior unchanged.
+**Class:** operator observability bug. **Status:** closed Oct 11 for truthful
+running-quota reporting. Current-code NUC direct/buffered × one/two-root
+acceptance passes accepted/refused reductions, unchanged quota on refusal and
+exact retained bytes. No migration or restart-persistent quota is claimed.
+[Closure evidence](../status/devel-nuc-closure-20261010.md).
 
-**Evidence:** `src/server/handler.c` handles SHRINK_QUOTA by subtracting the
+**Historical Oct 7 evidence:** `src/server/handler.c` handles SHRINK_QUOTA by subtracting the
 requested amount from the running node quota, refusing a result below usage.
 It starts no migration worker, but returns the legacy IN_PROGRESS status.
 `cmd_shrink_quota()` in `src/mgmt/efs_mgmt.c` then prints "background migration
@@ -5525,8 +5546,14 @@ FUSE request boundaries; closing from healthy non-racing POSIX tests.
 
 ### W78 · Server wrapper trusts stale PID-file ownership (queue row op2)
 
-**Class/state:** conditional operator correctness; open, source-reviewed Oct 7.
-**Evidence:** `scripts/server.sh:kill_from_pidfile` reads the stored PID and
+**Class/state:** conditional operator correctness; closed Oct 11 on the
+supported Linux identity-safe wrapper gate. Current-code NUC fixtures cover
+absent/dead/invalid/unrelated/wrong-storage/stale-start records, matching daemon
+and recorder retirement, and actual starts with stale records. Unrelated owned
+fixture processes survive both start and stop. Timeouts retain processes;
+daemon-internal shutdown remains W65.
+[Closure evidence](../status/devel-nuc-closure-20261010.md).
+**Historical Oct 7 evidence:** `scripts/server.sh:kill_from_pidfile` reads the stored PID and
 passes it to `kill_pid_graceful`. That helper checks only `kill -0`, sends
 SIGTERM, then SIGKILL after about three seconds. Startup and path-based stop
 both use this cleanup. No executable, start-time or storage/port identity is
@@ -5572,8 +5599,14 @@ No cleanup test may operate on an operator's real storage/processes.
 
 ### W79 · mkfs CLI advertises a name it silently ignores (queue row op3)
 
-**Class/state:** operator observability bug; open, source-reviewed Oct 7.
-**Evidence:** `src/mgmt/efs_mgmt.c` general help advertises
+**Class/state:** operator observability bug; closed Oct 11. Both aliases'
+current help, missing/malformed/excess arguments, ignored labels and repeated
+initialization pass on NUC direct/buffered private clusters. A relay consumes
+each alias's actual successful reply without delivering it; the CLI reports
+failure, and an explicit retry preserves the authoritative namespace and salt.
+This is single-export idempotency, not named-export creation or a reset.
+[Closure evidence](../status/devel-nuc-closure-20261010.md).
+**Historical Oct 7 evidence:** `src/mgmt/efs_mgmt.c` general help advertises
 `mkfs <node:port> <export-name>`, but `cmd_raft_mkfs` only parses `argv[0]`
 and ignores extra arguments. Both mkfs aliases use that handler. Metadata
 `efs_meta_apply_mkfs` returns OK for an existing root; the host reads back the
@@ -5587,7 +5620,8 @@ contract and optional ignored legacy label, explicitly explain the label on
 invocation, and reject more than one extra argument before contacting a server.
 NUC real-daemon tests repeatedly initialize through both aliases, preserve the
 committed salt and an existing dentry, and verify excess arguments are refused.
-Uncertain-reply initialization and retired FUSE hints remain additional coverage.
+Uncertain-reply initialization was additional coverage at that checkpoint;
+the Oct 11 gate above completes it. Retired FUSE hints are addressed below.
 
 FUSE now reports non-default legacy labels as ignored and uses the canonical
 single-export name. Mount failure guidance refers to Raft status/root health and
@@ -5605,8 +5639,14 @@ retry. This work does not authorize multi-export design or destructive reset.
 
 ### W80 · efs-query presents retired placeholder statistics as real totals (queue row op4)
 
-**Class/state:** operator observability bug / missing query integration; open,
-source-reviewed Oct 7. `src/server/handler.c:EFS_MSG_QUERY_STATS` explicitly
+**Class/state:** operator observability bug; closed Oct 11 for the explicitly
+retired QUERY_STATS endpoint. NUC nonempty authoritative namespaces and stored
+fragment fixtures reject false totals in normal/raw output; help names the
+retirement, and unsupported/legacy/malformed reply fixtures pass. Mounted
+server-owned snapshot features and their remaining scale acceptance stay W92;
+this closure does not claim implementation of legacy per-user totals.
+[Closure evidence](../status/devel-nuc-closure-20261010.md).
+**Historical Oct 7 review:** `src/server/handler.c:EFS_MSG_QUERY_STATS` explicitly
 notes that the whole-table query was retired, zeroes a reply and sends it.
 `src/query/efs_query.c` accepts that reply and prints total files/bytes and
 users as an ordinary successful result (also under `--raw`). The command
@@ -6632,7 +6672,21 @@ equivalent protocol, or deploy a layout by wiping the preserved test stores.
 
 ### W96 · Bounded preallocation for the KV write-ahead log
 
-**Implementation update (Oct 8):** EOF-tail repair, detectable interior-damage refusal, sticky failures and bounded reservation are tested. The final guard passes full Linux/live cold/POSIX/peer/GC gates. Quiet NUC two-device performance acceptance remains open while an unrelated million-file generator runs.
+**Closed Oct 11 — isolated NUC acceptance:** sixteen production-WAL 90-second
+ABBA cells on SATA/NVMe, with one/sixteen-item records, all pass exact ordered
+CRC/key/payload replay and bounded reservation/reset checks. Reserved throughput
+improves 17.7–184.0% across the four shapes; SATA single-record p99 increases
+225/226→277/274 µs, so this is a conditional allocation improvement, not an
+unconditional latency win. Full Linux/native and direct/buffered TCP live gates
+pass: each POSIX214/214 and peer66/66, sync-write failure retention, append
+replay/leader death, dirty-stop/shutdown recovery, physical GC and repeated
+cold WAL-tail repair. Actual follower KV fsync failure refuses periodic/shutdown
+checkpoint publication and cold replays the durable Raft tail with exact bytes.
+WAL ASan/UBSan and normal-binary Valgrind pass. Hardware power loss and W97's
+sustained drive slowdown remain separate.
+[Acceptance and limits](../status/devel-nuc-closure-20261010.md).
+
+**Historical implementation update (Oct 8):** EOF-tail repair, detectable interior-damage refusal, sticky failures and bounded reservation are tested. The final guard passes full Linux/live cold/POSIX/peer/GC gates. Quiet NUC two-device performance acceptance remains open while an unrelated million-file generator runs.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
 **Pre-merge devel review (`cde67dca`, Oct 8): recovery correctness comes first.** Neither
@@ -6646,7 +6700,7 @@ consequences still need testing. Existing WAL group commit/holds must be
 preserved. [Reproducer](../../results/measure/20261008-w93-w96-review/README.md)
 and [review](../status/tiny-file-performance-plan-20261008.md#review-against-devel-oct-8).
 
-**Class/status:** Metadata storage performance; implemented with final gates pending. EOF-tail repair, detectable interior-damage refusal, sticky failures and bounded logical-EOF reservation are tested. Final guard live cold/POSIX/peer gates pass; isolated NUC two-device performance acceptance remains open.
+**Class/status:** Metadata storage performance; closed Oct11 after isolated two-device and full software recovery acceptance. Historical implementation and acceptance notes below describe the earlier outstanding gates.
 
 **Evidence:** the loaded n3 KV WAL sync mean was 12.1 ms before round 7 and
 14.6 ms afterward; the latter contains only 13 calls and different queue
@@ -6656,7 +6710,7 @@ versus 3.9 ms with preallocation. That motivates a KV-specific experiment,
 not a KV throughput claim. See the
 [probe](../../results/measure/20261008-nuc-tiny-create/round-7/log-space-probe-r7.json).
 
-**Remaining action:** Final recovery guard full live cold/POSIX/peer gates pass. Repeat the NUC two-device A/B performance gate when unrelated workload is absent; current QD8 samples are mixed. Preserve bounded reservations, fallback, logical EOF, covered durability and compaction/reset correctness rather than asserting an unconditional allocation win.
+**Disposition:** The isolated repeated two-device gate is now complete. Retain bounded reservations, fallback, logical EOF, covered durability and compaction/reset regressions. The conditional benefit and SATA tail tradeoff are recorded above; earlier QD8 samples are not the closure evidence.
 
 **Governing contracts/related work:** W23/W89 compaction/pressure and D30
 resource bounds; the round-7 Raft candidate is supporting evidence only. This
@@ -6676,6 +6730,26 @@ or present the Raft improvement as measured KV acceptance.
 <a id="w97"></a>
 
 ### W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
+
+**Oct11 NUC isolated follow-up:** two eight-minute growing-file repeats outside
+EFS reproduce aggregate430/428→188/186 durable64KiB writes/s, per-writer mean
+sync~6.9→~16ms. Preallocated-ring repeats finish near438ops/s, with materially
+different initial windows and tails. Allocation/overwrite behaviour matters,
+but XFS versus drive/cache attribution is not yet isolated. All eight allocation cells, four separate XFS/perf/strace profiles and four
+fully written-ring cells finish with exact reopen checks. Written NVMe repeats
+also decline1373/1356→450/439ops/s, while block write/flush elapsed averages
+increase~3×; written SATA stays near7100ops/s. This excludes allocation as the
+whole cause but does not isolate drive firmware from the block queue.
+W97 remains open; no drive settings or production defaults change.
+[Evidence and limitations](../status/devel-nuc-closure-20261010.md).
+
+**XFS mechanism observed:** separate writer-TID counts show roughly two log-force
+calls per fdatasync on growing files on both devices; warmed rings show zero.
+Host-wide counters closely match growth and remain small for rings. This is
+metadata-journal work, not a count of drive flushes. Stable raw SATA controls
+do not repair the earlier sustained EFS SATA slowdown; NVMe cache/firmware
+attribution remains unproven. W95 must specify safe packing/reuse semantics
+before a production layout port. Current durability barriers are retained.
 
 **Oct 11 Intel resume follow-up:** A large-directory inventory could cycle indefinitely because READDIR discarded a source-only continuation when its name was empty. The actual callback now preserves that source; old-source regressions fail and both native Intel regressions pass. The deployed wire probe reaches EOF with 92,557 entries in 1.580 seconds, and full FUSE enumeration returns the same count in 1.183 seconds. This repairs enumeration termination, not sustained write latency; W97 remains open. [Cursor repair and limits](../status/intel-readdir-source-cursor-20261011.md).
 

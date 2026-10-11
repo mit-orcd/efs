@@ -1,0 +1,44 @@
+2026-10-11T04:36:59.209Z storage-engine=files direct_io=on
+2026-10-11T04:36:59.210Z heartbeat: enabled (2000 ms interval)
+2026-10-11T04:36:59.211Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T04:36:59.211Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-11T04:36:59.212Z raft-host: up raft_id=0 n=4 boot=16134818259706257 salt=10688792580215098217 g0=hosted g2=off
+2026-10-11T04:36:59.212Z efsd 3df19310-nuc (branch devel-nuc, built 2026-10-11T04:12:28Z on nuc), build=3df1931032b8-nuc: node 1 listening on 127.0.0.1:26590, storage=/data1/efs/gc-direct-sizlm2yi/n1 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-11T04:37:01.210Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=990 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T04:37:04.314Z raft-host: gc-pass ms=70 orphan=0 reap=0 frag=0 spread=0 recover=70 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:37:05.391Z raft-host: gc-pass ms=70 orphan=0 reap=0 frag=0 spread=0 recover=70 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:37:06.466Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:37:06.509Z raft-host: applied session index=3 kind=1 shard=0 ino=0
+2026-10-11T04:37:06.509Z raft-host: applied session index=4 kind=2 shard=1 ino=0
+2026-10-11T04:37:06.509Z raft-host: applied session index=5 kind=7 shard=1 ino=0
+2026-10-11T04:37:06.515Z store: put O_DIRECT bounce copy (buf align=880 len=65536)
+2026-10-11T04:37:06.519Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=1070 p50_us=1070 max_us=1070 wdisk ops=1 bytes=65536 errors=0 avg_us=951 p50_us=951 max_us=951
+2026-10-11T04:37:06.531Z raft-host: applied session index=9 kind=1 shard=0 ino=0
+2026-10-11T04:37:06.531Z raft-host: applied session index=10 kind=2 shard=868 ino=0
+2026-10-11T04:37:07.548Z raft-host: gc-pass ms=74 orphan=5 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=8 emit=8 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:37:08.240Z storage-engine=files direct_io=on
+2026-10-11T04:37:08.240Z Loaded 4 persisted cluster node(s) from /data1/efs/gc-direct-sizlm2yi/n1/meta/cluster_nodes.bin
+2026-10-11T04:37:08.240Z   persisted node 1: 127.0.0.1:26590
+2026-10-11T04:37:08.240Z   persisted node 2: 127.0.0.1:26591
+2026-10-11T04:37:08.240Z   persisted node 4: 127.0.0.1:26593
+2026-10-11T04:37:08.240Z   persisted node 3: 127.0.0.1:26592
+2026-10-11T04:37:08.240Z Trying to rejoin via persisted peer 127.0.0.1:26591 (node 2)...
+2026-10-11T04:37:08.240Z Cannot connect to peer 127.0.0.1:26591
+2026-10-11T04:37:08.240Z Failed to rejoin via 127.0.0.1:26591
+2026-10-11T04:37:08.241Z Trying to rejoin via persisted peer 127.0.0.1:26593 (node 4)...
+2026-10-11T04:37:08.241Z Cannot connect to peer 127.0.0.1:26593
+2026-10-11T04:37:08.241Z Failed to rejoin via 127.0.0.1:26593
+2026-10-11T04:37:08.241Z Trying to rejoin via persisted peer 127.0.0.1:26592 (node 3)...
+2026-10-11T04:37:08.241Z Cannot connect to peer 127.0.0.1:26592
+2026-10-11T04:37:08.241Z Failed to rejoin via 127.0.0.1:26592
+2026-10-11T04:37:08.241Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T04:37:08.241Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T04:37:08.241Z heartbeat: enabled (2000 ms interval)
+2026-10-11T04:37:08.244Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T04:37:08.244Z kv-obs: mt_bytes=10888 l0_bytes=0 l0=0 l1=0
+2026-10-11T04:37:08.244Z raft-host: up raft_id=0 n=4 boot=16134818259706258 salt=15968218167475194727 g0=hosted g2=off
+2026-10-11T04:37:08.244Z efsd 3df19310-nuc (branch devel-nuc, built 2026-10-11T04:12:28Z on nuc), build=3df1931032b8-nuc: node 1 listening on 127.0.0.1:26590, storage=/data1/efs/gc-direct-sizlm2yi/n1 (1 paths, stripe=none), used=589824, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-11T04:37:10.241Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=989 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T04:37:13.248Z kv-obs: mt_bytes=10852 l0_bytes=0 l0=0 l1=0
+2026-10-11T04:37:15.534Z raft-host: applied session index=80 kind=7 shard=1 ino=0
+2026-10-11T04:37:15.557Z iostats: get ops=1 bytes=65536 errors=0 avg_us=944 p50_us=944 max_us=944 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0

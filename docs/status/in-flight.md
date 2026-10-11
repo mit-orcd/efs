@@ -145,9 +145,12 @@ measurement work and decisions. This handoff adds no deployment authorization.
 
 ## Operator review findings
 
-[W78–W80](README.md#source-findings-awaiting-triage) record conditional stale
-PID-file signaling, misleading mkfs name syntax and zero-filled `efs-query`
-statistics. These are source findings with gates, not a new execution order.
+[W78–W80](devel-nuc-closure-20261010.md) close on Oct11 current-code NUC
+operator acceptance: actual stale-PID startup/stop, both mkfs aliases and
+consumed-reply retry, and explicit retired-query refusal without false totals.
+W70's running-quota reporting and W96's isolated allocation/recovery gates also
+close in that report. W97 remains open; neither raw drive controls nor these
+operator gates establish sustained EFS throughput or a hardware ceiling.
 Use the corrected operations guide; query zeros are not GC completion evidence.
 W81 separately records the missing automatic directory pressure trigger; its
 size-based admission/migrator exists and the pressure policy still needs review.

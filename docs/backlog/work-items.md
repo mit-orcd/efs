@@ -2850,10 +2850,13 @@ See [next-five ledger](../status/next-five-gates-20261007.md).
 
 ## W70 · shrink-quota falsely reports background migration (queue row op1)
 
-**Class:** operator observability bug. **Status:** open, found during the
-Oct 7 documentation review. Documentation corrected; source behavior unchanged.
+**Class:** operator observability bug. **Status:** closed Oct 11 for truthful
+running-quota reporting. Current-code NUC direct/buffered × one/two-root
+acceptance passes accepted/refused reductions, unchanged quota on refusal and
+exact retained bytes. No migration or restart-persistent quota is claimed.
+[Closure evidence](../status/devel-nuc-closure-20261010.md).
 
-**Evidence:** `src/server/handler.c` handles SHRINK_QUOTA by subtracting the
+**Historical Oct 7 evidence:** `src/server/handler.c` handles SHRINK_QUOTA by subtracting the
 requested amount from the running node quota, refusing a result below usage.
 It starts no migration worker, but returns the legacy IN_PROGRESS status.
 `cmd_shrink_quota()` in `src/mgmt/efs_mgmt.c` then prints "background migration
@@ -3199,8 +3202,14 @@ FUSE request boundaries; closing from healthy non-racing POSIX tests.
 
 ## W78 · Server wrapper trusts stale PID-file ownership (queue row op2)
 
-**Class/state:** conditional operator correctness; open, source-reviewed Oct 7.
-**Evidence:** `scripts/server.sh:kill_from_pidfile` reads the stored PID and
+**Class/state:** conditional operator correctness; closed Oct 11 on the
+supported Linux identity-safe wrapper gate. Current-code NUC fixtures cover
+absent/dead/invalid/unrelated/wrong-storage/stale-start records, matching daemon
+and recorder retirement, and actual starts with stale records. Unrelated owned
+fixture processes survive both start and stop. Timeouts retain processes;
+daemon-internal shutdown remains W65.
+[Closure evidence](../status/devel-nuc-closure-20261010.md).
+**Historical Oct 7 evidence:** `scripts/server.sh:kill_from_pidfile` reads the stored PID and
 passes it to `kill_pid_graceful`. That helper checks only `kill -0`, sends
 SIGTERM, then SIGKILL after about three seconds. Startup and path-based stop
 both use this cleanup. No executable, start-time or storage/port identity is
@@ -3246,8 +3255,14 @@ No cleanup test may operate on an operator's real storage/processes.
 
 ## W79 · mkfs CLI advertises a name it silently ignores (queue row op3)
 
-**Class/state:** operator observability bug; open, source-reviewed Oct 7.
-**Evidence:** `src/mgmt/efs_mgmt.c` general help advertises
+**Class/state:** operator observability bug; closed Oct 11. Both aliases'
+current help, missing/malformed/excess arguments, ignored labels and repeated
+initialization pass on NUC direct/buffered private clusters. A relay consumes
+each alias's actual successful reply without delivering it; the CLI reports
+failure, and an explicit retry preserves the authoritative namespace and salt.
+This is single-export idempotency, not named-export creation or a reset.
+[Closure evidence](../status/devel-nuc-closure-20261010.md).
+**Historical Oct 7 evidence:** `src/mgmt/efs_mgmt.c` general help advertises
 `mkfs <node:port> <export-name>`, but `cmd_raft_mkfs` only parses `argv[0]`
 and ignores extra arguments. Both mkfs aliases use that handler. Metadata
 `efs_meta_apply_mkfs` returns OK for an existing root; the host reads back the
@@ -3261,7 +3276,8 @@ contract and optional ignored legacy label, explicitly explain the label on
 invocation, and reject more than one extra argument before contacting a server.
 NUC real-daemon tests repeatedly initialize through both aliases, preserve the
 committed salt and an existing dentry, and verify excess arguments are refused.
-Uncertain-reply initialization and retired FUSE hints remain additional coverage.
+Uncertain-reply initialization was additional coverage at that checkpoint;
+the Oct 11 gate above completes it. Retired FUSE hints are addressed below.
 
 FUSE now reports non-default legacy labels as ignored and uses the canonical
 single-export name. Mount failure guidance refers to Raft status/root health and
@@ -3279,8 +3295,14 @@ retry. This work does not authorize multi-export design or destructive reset.
 
 ## W80 · efs-query presents retired placeholder statistics as real totals (queue row op4)
 
-**Class/state:** operator observability bug / missing query integration; open,
-source-reviewed Oct 7. `src/server/handler.c:EFS_MSG_QUERY_STATS` explicitly
+**Class/state:** operator observability bug; closed Oct 11 for the explicitly
+retired QUERY_STATS endpoint. NUC nonempty authoritative namespaces and stored
+fragment fixtures reject false totals in normal/raw output; help names the
+retirement, and unsupported/legacy/malformed reply fixtures pass. Mounted
+server-owned snapshot features and their remaining scale acceptance stay W92;
+this closure does not claim implementation of legacy per-user totals.
+[Closure evidence](../status/devel-nuc-closure-20261010.md).
+**Historical Oct 7 review:** `src/server/handler.c:EFS_MSG_QUERY_STATS` explicitly
 notes that the whole-table query was retired, zeroes a reply and sends it.
 `src/query/efs_query.c` accepts that reply and prints total files/bytes and
 users as an ordinary successful result (also under `--raw`). The command
@@ -4306,7 +4328,21 @@ equivalent protocol, or deploy a layout by wiping the preserved test stores.
 
 ## W96 · Bounded preallocation for the KV write-ahead log
 
-**Implementation update (Oct 8):** EOF-tail repair, detectable interior-damage refusal, sticky failures and bounded reservation are tested. The final guard passes full Linux/live cold/POSIX/peer/GC gates. Quiet NUC two-device performance acceptance remains open while an unrelated million-file generator runs.
+**Closed Oct 11 — isolated NUC acceptance:** sixteen production-WAL 90-second
+ABBA cells on SATA/NVMe, with one/sixteen-item records, all pass exact ordered
+CRC/key/payload replay and bounded reservation/reset checks. Reserved throughput
+improves 17.7–184.0% across the four shapes; SATA single-record p99 increases
+225/226→277/274 µs, so this is a conditional allocation improvement, not an
+unconditional latency win. Full Linux/native and direct/buffered TCP live gates
+pass: each POSIX214/214 and peer66/66, sync-write failure retention, append
+replay/leader death, dirty-stop/shutdown recovery, physical GC and repeated
+cold WAL-tail repair. Actual follower KV fsync failure refuses periodic/shutdown
+checkpoint publication and cold replays the durable Raft tail with exact bytes.
+WAL ASan/UBSan and normal-binary Valgrind pass. Hardware power loss and W97's
+sustained drive slowdown remain separate.
+[Acceptance and limits](../status/devel-nuc-closure-20261010.md).
+
+**Historical implementation update (Oct 8):** EOF-tail repair, detectable interior-damage refusal, sticky failures and bounded reservation are tested. The final guard passes full Linux/live cold/POSIX/peer/GC gates. Quiet NUC two-device performance acceptance remains open while an unrelated million-file generator runs.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
 **Pre-merge devel review (`cde67dca`, Oct 8): recovery correctness comes first.** Neither
@@ -4320,7 +4356,7 @@ consequences still need testing. Existing WAL group commit/holds must be
 preserved. [Reproducer](../../results/measure/20261008-w93-w96-review/README.md)
 and [review](../status/tiny-file-performance-plan-20261008.md#review-against-devel-oct-8).
 
-**Class/status:** Metadata storage performance; implemented with final gates pending. EOF-tail repair, detectable interior-damage refusal, sticky failures and bounded logical-EOF reservation are tested. Final guard live cold/POSIX/peer gates pass; isolated NUC two-device performance acceptance remains open.
+**Class/status:** Metadata storage performance; closed Oct11 after isolated two-device and full software recovery acceptance. Historical implementation and acceptance notes below describe the earlier outstanding gates.
 
 **Evidence:** the loaded n3 KV WAL sync mean was 12.1 ms before round 7 and
 14.6 ms afterward; the latter contains only 13 calls and different queue
@@ -4330,7 +4366,7 @@ versus 3.9 ms with preallocation. That motivates a KV-specific experiment,
 not a KV throughput claim. See the
 [probe](../../results/measure/20261008-nuc-tiny-create/round-7/log-space-probe-r7.json).
 
-**Remaining action:** Final recovery guard full live cold/POSIX/peer gates pass. Repeat the NUC two-device A/B performance gate when unrelated workload is absent; current QD8 samples are mixed. Preserve bounded reservations, fallback, logical EOF, covered durability and compaction/reset correctness rather than asserting an unconditional allocation win.
+**Disposition:** The isolated repeated two-device gate is now complete. Retain bounded reservations, fallback, logical EOF, covered durability and compaction/reset regressions. The conditional benefit and SATA tail tradeoff are recorded above; earlier QD8 samples are not the closure evidence.
 
 **Governing contracts/related work:** W23/W89 compaction/pressure and D30
 resource bounds; the round-7 Raft candidate is supporting evidence only. This
@@ -4350,6 +4386,26 @@ or present the Raft improvement as measured KV acceptance.
 <a id="w97"></a>
 
 ## W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
+
+**Oct11 NUC isolated follow-up:** two eight-minute growing-file repeats outside
+EFS reproduce aggregate430/428→188/186 durable64KiB writes/s, per-writer mean
+sync~6.9→~16ms. Preallocated-ring repeats finish near438ops/s, with materially
+different initial windows and tails. Allocation/overwrite behaviour matters,
+but XFS versus drive/cache attribution is not yet isolated. All eight allocation cells, four separate XFS/perf/strace profiles and four
+fully written-ring cells finish with exact reopen checks. Written NVMe repeats
+also decline1373/1356→450/439ops/s, while block write/flush elapsed averages
+increase~3×; written SATA stays near7100ops/s. This excludes allocation as the
+whole cause but does not isolate drive firmware from the block queue.
+W97 remains open; no drive settings or production defaults change.
+[Evidence and limitations](../status/devel-nuc-closure-20261010.md).
+
+**XFS mechanism observed:** separate writer-TID counts show roughly two log-force
+calls per fdatasync on growing files on both devices; warmed rings show zero.
+Host-wide counters closely match growth and remain small for rings. This is
+metadata-journal work, not a count of drive flushes. Stable raw SATA controls
+do not repair the earlier sustained EFS SATA slowdown; NVMe cache/firmware
+attribution remains unproven. W95 must specify safe packing/reuse semantics
+before a production layout port. Current durability barriers are retained.
 
 **Oct 11 Intel resume follow-up:** A large-directory inventory could cycle indefinitely because READDIR discarded a source-only continuation when its name was empty. The actual callback now preserves that source; old-source regressions fail and both native Intel regressions pass. The deployed wire probe reaches EOF with 92,557 entries in 1.580 seconds, and full FUSE enumeration returns the same count in 1.183 seconds. This repairs enumeration termination, not sustained write latency; W97 remains open. [Cursor repair and limits](../status/intel-readdir-source-cursor-20261011.md).
 

@@ -1,0 +1,4 @@
+Stale daemon identity for PID 3658120; process retained
+/data1/efs/devel-nuc-20261010/src/scripts/server.sh: line 215: /tmp/efs-wrapper-start-70q3qjlj/dead/log/efsd.log: No such file or directory
+efsd started (PID 3658354); logs: /tmp/efs-wrapper-start-70q3qjlj/dead/log/efsd.log
+Stop with: /data1/efs/devel-nuc-20261010/src/scripts/server.sh stop /tmp/efs-wrapper-start-70q3qjlj/dead   # or: /data1/efs/devel-nuc-20261010/src/scripts/server.sh stop 127.0.0.1:34733

@@ -1,0 +1,175 @@
+2026-10-11T04:20:04.091Z storage-engine=files direct_io=off
+2026-10-11T04:20:04.094Z heartbeat: enabled (2000 ms interval)
+2026-10-11T04:20:04.108Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T04:20:04.108Z raft-host: up raft_id=0 n=3 boot=15637409188119110 salt=3412298123077909719 g0=hosted g2=hosted
+2026-10-11T04:20:04.108Z efsd 3df19310-nuc (branch devel-nuc, built 2026-10-11T04:12:28Z on nuc), build=3df1931032b8-nuc: node 1 listening on 127.0.0.1:21340, storage=/tmp/efs-read-freshness-8d3xtvnw/n0 (1 paths, stripe=none), used=0, quota=0, direct_io=off, writers=4 shared
+2026-10-11T04:20:04.108Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-11T04:20:05.191Z raft-host: applied session index=9 kind=1 shard=0 ino=0
+2026-10-11T04:20:05.882Z raft-host: apply-sleep us=39043 group=0 idx=17 applied=16
+2026-10-11T04:20:05.902Z raft-host: applied session index=19 kind=3 shard=0 ino=0
+2026-10-11T04:20:05.913Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:06.015Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:06.095Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=980 passes=2 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T04:20:06.117Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:06.219Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:06.321Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:06.423Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:06.526Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:06.629Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:06.733Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:06.836Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:06.938Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:07.040Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:07.143Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:07.243Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:07.344Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:07.445Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:07.546Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:07.647Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:07.749Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:07.851Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:07.952Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:08.054Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:08.156Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:08.259Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:08.361Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:08.464Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:08.566Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:08.669Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:08.771Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:08.874Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:08.977Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:09.079Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:09.109Z kv-obs: mt_bytes=2822 l0_bytes=0 l0=0 l1=0
+2026-10-11T04:20:09.181Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:09.205Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=200 segs=0 keys=5 emit=0 tomb=5 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:09.284Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:09.386Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:09.489Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:09.591Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:09.694Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:09.794Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:09.895Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:09.996Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:10.097Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:10.098Z heartbeat: node 2 (127.0.0.1:21341) unresponsive — marked down for 30s
+2026-10-11T04:20:10.199Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:10.280Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=200 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:10.300Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:10.402Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:10.504Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:10.606Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:10.708Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:10.811Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:10.913Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:11.016Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:11.118Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:11.221Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:11.322Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:11.355Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=200 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:11.424Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:11.527Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:11.629Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:11.732Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:11.835Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:11.938Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:12.040Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:12.142Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:12.243Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:12.344Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:12.429Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=200 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:12.445Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:12.546Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:12.648Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:12.751Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:12.854Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:12.956Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:13.059Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:13.161Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:13.264Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:13.366Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:13.468Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:13.503Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=200 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:13.570Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:13.672Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:13.774Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:13.876Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:13.979Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:14.081Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:14.183Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:14.286Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:14.388Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:14.491Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:14.577Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=200 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:14.594Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:14.697Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:14.798Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:14.899Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:15.000Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:15.101Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:15.201Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:15.303Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:15.405Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:15.508Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:15.610Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:15.651Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=200 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:15.712Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:15.814Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:15.917Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:16.019Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:16.122Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:16.223Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:16.324Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:16.425Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:16.527Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:16.628Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:16.724Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=200 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:16.730Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:16.831Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:16.932Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:17.034Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:17.136Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:17.238Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:17.338Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:17.439Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:17.540Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:17.641Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:17.742Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:17.797Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=200 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:17.845Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:17.948Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:18.050Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:18.153Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:18.254Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:18.357Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:18.459Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:18.561Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:18.663Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:18.766Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:18.868Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:18.873Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=200 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:18.970Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:19.073Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:19.176Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:19.278Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:19.381Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:19.484Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:19.586Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:19.689Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:19.792Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:19.893Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:19.947Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=200 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:19.994Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:20.095Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:20.196Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:20.298Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:20.400Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:20.503Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:20.605Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:20.707Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:20.810Z storage-fence: member=2 floor=2 check=0 transport unavailable
+2026-10-11T04:20:21.020Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=200 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:22.096Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=200 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:22.103Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=7 passes=18 sampled=3 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T04:20:23.169Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=200 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:20:23.808Z raft-host: applied session index=20 kind=3 shard=0 ino=0
