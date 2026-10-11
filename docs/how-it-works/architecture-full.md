@@ -4694,6 +4694,14 @@ the quick ones).** Each row is a queue item; the W number is binding.
 
 ### W52 · a REPORT after thousands of O_APPEND writes answers after > 30 s (plan row 15)
 
+**Oct 11 client feedback fix:** `f52cd2dd` starts append burst age after
+successful publication. Previously a flush exceeding one second immediately
+expired its successor and collapsed batching toward one write per REPORT.
+Failed drains now retry before new admission. The actual-function regression
+passes and fails under the old timing behavior. No RPC budget or durability
+barrier is widened. Full Linux/live/exact long-gate acceptance remains pending;
+the earlier candidate's corrected direct fixture times out and is not installed.
+
 **Oct 11 continuation:** `4afc063c` shares one guarded completion transaction
 across up to eight reservations, shrinking to the unchanged per-shard image
 bound when needed. Actual transaction/cold recovery/session-fencing/gap and
