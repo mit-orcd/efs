@@ -86,18 +86,26 @@ except BaseException:
  (out/'failure.txt').write_text(traceback.format_exc());raise
 finally:
  if stopped:
-  assert not any(os.path.ismount('/data1/efs/'+m) for m in ('mnt','mnt2')),'private mounts still active; retain failure, refuse unsafe restore'
-  normal=dict(env,EFS_CLUSTER='nuc',EFS_DIRECT_IO='1')
-  with (out/'restore.log').open('w') as log:
-   rc=subprocess.run(['bash','/data1/efs/w97-latest-20261010/start-preserved.sh'],env=normal,stdout=log,stderr=subprocess.STDOUT,timeout=300).returncode
-  assert rc==0
-  wait(lambda:all(port(p) for p in range(17432,17436)),180,'restored listeners')
-  assert all(os.path.ismount('/data1/efs/'+m) for m in ('mnt','mnt2'))
-  if args.variant=='root-scope':
-   # Restore the accepted append engine and verify every payload checked at
-   # its cold gate. This fixture never installs the root candidate.
-   assert all(hashlib.sha256((Path('/data1/efs/src')/n).read_bytes()).hexdigest()==v['sha256'] for n,v in accepted.items())
-   checked=json.loads((base/'clock-cold/after.json').read_text())['payloads']
-   for row in checked:assert hashlib.sha256(Path(row['path']).read_bytes()).hexdigest()==row['sha256']
-   (out/'restored-preserved-payloads.json').write_text(json.dumps(checked,indent=2))
-  (out/'restore-exit.txt').write_text('0\n')
+  try:
+   assert not any(os.path.ismount('/data1/efs/'+m) for m in ('mnt','mnt2')),'private mounts still active; retain failure, refuse unsafe restore'
+   normal=dict(env,EFS_CLUSTER='nuc',EFS_DIRECT_IO='1')
+   with (out/'restore.log').open('w') as log:
+    rc=subprocess.run(['bash','/data1/efs/w97-latest-20261010/start-preserved.sh'],env=normal,stdout=log,stderr=subprocess.STDOUT,timeout=360).returncode
+   assert rc==0
+   wait(lambda:all(port(p) for p in range(17432,17436)),180,'restored listeners')
+   assert all(os.path.ismount('/data1/efs/'+m) for m in ('mnt','mnt2'))
+   if args.variant=='root-scope':
+    # Restore the accepted append engine and verify every payload checked at
+    # its cold gate. This fixture never installs the root candidate.
+    assert all(hashlib.sha256((Path('/data1/efs/src')/n).read_bytes()).hexdigest()==v['sha256'] for n,v in accepted.items())
+    checked=json.loads((base/'clock-cold/after.json').read_text())['payloads']
+    for row in checked:assert hashlib.sha256(Path(row['path']).read_bytes()).hexdigest()==row['sha256']
+    (out/'restored-preserved-payloads.json').write_text(json.dumps(checked,indent=2))
+   (out/'restore-exit.txt').write_text('0\n')
+  except BaseException:
+   failure=traceback.format_exc()
+   (out/'restore-failure.txt').write_text(failure)
+   if not (out/'failure.txt').exists():(out/'failure.txt').write_text(failure)
+   (out/'restore-exit.txt').write_text('1\n')
+   (out/'run-exit.txt').write_text('1\n')
+   raise
