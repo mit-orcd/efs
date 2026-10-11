@@ -72,3 +72,6 @@ with tempfile.TemporaryDirectory(prefix='efs-owner-') as work:
     finally:
         for proc in (unrelated,daemon):
             if proc.poll() is None:proc.terminate();proc.wait(5)
+# Real launch coverage lives outside TemporaryDirectory so a failed retirement
+# preserves its owned stores/logs rather than removing a live daemon's root.
+subprocess.run(['python3',str(root/'tests/live/server_wrapper_start.py')],check=True,timeout=360)
