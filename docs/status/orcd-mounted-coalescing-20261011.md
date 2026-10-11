@@ -795,3 +795,50 @@ tag53 arm while preserving all catch-up charge and routing assertions. The
 real-header host pressure gate explicitly checks atomic plan plus predicate
 image charging. Both pass locally. This is fixture reconciliation, not reduced
 production accounting or a larger admission limit.
+
+## Exact merged ORCD checkpoint and query follow-up
+
+`b579bee22371` passed uninterrupted Linux `make all` and `make test`; all
+710 tracked source/header/test/build inputs matched the committed snapshot.
+All eleven canonical deployment builds passed. Runtime checks proved the
+installed revision, non-root UID 246111, native RDMA, packing enabled on seven
+clients, and direct I/O on four servers.
+
+The quiet seven-client full POSIX run retained the original jobs=16 and
+30-second budgets. Six clients reported 218 pass / 2 fail / 1 expected skip;
+one reported 211 pass / 2 fail / 1 skip / 7 cancelled cases. The remaining
+failures were `virt_stats_readable` and `virt_find_query`. Deep nesting passed.
+The separate seven-client query-only run passed all three cases on every
+client in 0.6–1.0 seconds. Instrumented full-load captures are diagnostic
+evidence, not acceptance: both publishers had zero in-flight query replies
+and no occupied page slots, while the FUSE query callers retried BUSY.
+Publication logs show transaction-cut collisions followed by an eight-second
+disk build. This supports investigation of catalog freshness starvation;
+it does not prove a single cause or close W109.
+
+The retained mounted shared object passed partial unlink and cold survivor
+inode/SHA-256 checks. After its last references were removed with member 4
+offline, all three physical fragments remained while members 1–3 recorded
+exact durable `EFSDEAD1` fences. Restoring member 4 completed all four fences
+and removed all three fragments within the unchanged 180-second gate. All
+24 active storage roots were scanned. Cold zero-fragment verification remains
+pending, and other live objects in this namespace are not claimed reclaimed.
+Raw proofs are under `results/measure/20261011-orcd-coalescing-rollout/`, with
+the retained fixture identified by `e5a385530223` and execution by `b579bee2`.
+
+The next candidate includes the reviewed read-only authority NET fallback
+from `cfa103dc`: independent fresh legacy admission, every FileID/epoch, and
+the durable local guard remain mandatory. Query capture now retries at most
+four cuts only when the transaction revision changed across the post-cut
+barriers, releasing each failed pin and repeating all fences within the
+existing build deadline. Hosted leader barriers may overlap through the
+existing pair helper; other placements retain its scalar fallback. Fresh
+first-page capture supplies its authority barriers once; retained pages still
+perform fresh barriers and authorization on every delivery. Actual production
+function regressions and local ASan/UBSan pass. Full Linux and mounted gates
+for this next candidate remain pending.
+
+The merged Mac atomic APPEND selection writes durable tag 53. Stores that
+contain this tag require a tag-53-capable metadata reader; this all-node
+upgrade does not establish compatibility with an older binary rollback.
+Packing tags 45–51 and catch-up tag 52 retain their existing meanings.
