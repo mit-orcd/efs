@@ -1,0 +1,135 @@
+{
+  "source_revision": "ae26ab6b",
+  "utc": "2026-10-11T19:30:55.412020+00:00",
+  "scope": "Four repaired retained-CREATE preflights only; complete ordinary-source qualification pending.",
+  "hosts": {
+    "intel1_efs": {
+      "direct": {
+        "gate": {
+          "name": "direct-prefault-create-live-retry",
+          "exit": 0,
+          "seconds": 65.51
+        },
+        "fixture": "/data1/efs/gc-direct-bffgn31l",
+        "create_retry": {
+          "stages": [
+            [
+              "0",
+              "1",
+              "4097"
+            ],
+            [
+              "1",
+              "1",
+              "4097"
+            ],
+            [
+              "2",
+              "1",
+              "4097"
+            ]
+          ],
+          "original_durable_inode": 4097,
+          "cold_bytes": true,
+          "genuine_exclusive_conflict": true
+        },
+        "cold_bytes_and_reclamation": "PASS"
+      },
+      "buffered": {
+        "gate": {
+          "name": "buffered-prefault-create-live-retry",
+          "exit": 0,
+          "seconds": 65.46
+        },
+        "fixture": "/data1/efs/gc-buffered-wz3vp276",
+        "create_retry": {
+          "stages": [
+            [
+              "0",
+              "1",
+              "4097"
+            ],
+            [
+              "1",
+              "1",
+              "4097"
+            ],
+            [
+              "2",
+              "1",
+              "4097"
+            ]
+          ],
+          "original_durable_inode": 4097,
+          "cold_bytes": true,
+          "genuine_exclusive_conflict": true
+        },
+        "cold_bytes_and_reclamation": "PASS"
+      }
+    },
+    "intel2_efs": {
+      "direct": {
+        "gate": {
+          "name": "direct-prefault-create-live-retry",
+          "exit": 0,
+          "seconds": 67.27
+        },
+        "fixture": "/data1/efs/gc-direct-p0tkftit",
+        "create_retry": {
+          "stages": [
+            [
+              "0",
+              "1",
+              "4097"
+            ],
+            [
+              "1",
+              "1",
+              "4097"
+            ],
+            [
+              "2",
+              "1",
+              "4097"
+            ]
+          ],
+          "original_durable_inode": 4097,
+          "cold_bytes": true,
+          "genuine_exclusive_conflict": true
+        },
+        "cold_bytes_and_reclamation": "PASS"
+      },
+      "buffered": {
+        "gate": {
+          "name": "buffered-prefault-create-live-retry",
+          "exit": 0,
+          "seconds": 66.37
+        },
+        "fixture": "/data1/efs/gc-buffered-j80timg9",
+        "create_retry": {
+          "stages": [
+            [
+              "0",
+              "1",
+              "4097"
+            ],
+            [
+              "1",
+              "1",
+              "4097"
+            ],
+            [
+              "2",
+              "1",
+              "4097"
+            ]
+          ],
+          "original_durable_inode": 4097,
+          "cold_bytes": true,
+          "genuine_exclusive_conflict": true
+        },
+        "cold_bytes_and_reclamation": "PASS"
+      }
+    }
+  }
+}

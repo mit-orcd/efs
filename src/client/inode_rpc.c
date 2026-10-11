@@ -521,32 +521,69 @@ static int rpc_writer_retry_pause(unsigned attempt);
 
 #if EFS_FAULTS
 /* Test-only: consume a committed CREATE reply, then hide a replay as BUSY.
- * The third reply must use exactly the same request bytes and durable inode. */
+ * Retained FUSE CREATE uses separate framing and may switch submit/probe or
+ * advance its ACK. Its creation arguments, identity and durable result must
+ * stay identical; an unresolved probe is never a committed reply. */
 static int rpc_fault_create_reply(uint8_t type, const void *req, uint32_t len,
                                   uint8_t rtype, void *payload, uint32_t plen)
 {
     static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
     static unsigned stage;
-    static uint8_t original[sizeof(struct efs_msg_inode_create)+EFS_OPID_WIRE_LEN];
+    static struct efs_msg_inode_create original;
+    static struct efs_opid identity;
     static efs_ino_t ino;
+    static uint64_t generation;
+    static uint32_t shard;
+    static int original_retained;
     const char *marker = getenv("EFS_FAULT_CREATE_RETRY_FILE");
-    if (!marker || access(marker,F_OK) || type != EFS_MSG_INODE_CREATE ||
-        len != sizeof(original) || rtype != EFS_MSG_INODE_CREATE_REPLY ||
-        plen != sizeof(struct efs_msg_inode_reply)) return 0;
-    const struct efs_msg_inode_create *create = req;
-    struct efs_msg_inode_reply *reply = payload;
+    if (!marker || access(marker,F_OK)) return 0;
+    const struct efs_msg_inode_create *create;
+    struct efs_msg_inode_reply *reply;
+    struct efs_msg_create_retained_reply *retained_reply = NULL;
+    struct efs_opid_req q;
+    if (type == EFS_MSG_CREATE_RETAINED &&
+        len == sizeof(struct efs_msg_create_retained) &&
+        rtype == EFS_MSG_CREATE_RETAINED_REPLY &&
+        plen == sizeof(struct efs_msg_create_retained_reply)) {
+        const struct efs_msg_create_retained *r = req;
+        retained_reply = payload;
+        if (!retained_reply->known || !retained_reply->routed ||
+            !retained_reply->generation) return 0;
+        create = &r->create; q = r->q; reply = &retained_reply->rpc;
+    } else if (type == EFS_MSG_INODE_CREATE &&
+               len == sizeof(*create)+EFS_OPID_WIRE_LEN &&
+               rtype == EFS_MSG_INODE_CREATE_REPLY &&
+               plen == sizeof(*reply)) {
+        create = req; reply = payload;
+        efs_opid_req_unpack(&q,(const uint8_t *)req+sizeof(*create));
+    } else return 0;
     if (strcmp(create->name,"w58-live-retry") || reply->status != EFS_INODE_RPC_OK)
         return 0;
     pthread_mutex_lock(&mu);
     if (stage >= 3) { pthread_mutex_unlock(&mu); return 0; }
-    if (!stage) { memcpy(original,req,len); ino=reply->inode.ino; }
-    if (memcmp(original,req,len) || ino != reply->inode.ino) abort();
-    struct efs_opid_req q;
-    efs_opid_req_unpack(&q,(const uint8_t *)req+sizeof(*create));
+    if (!stage) {
+        original = *create; identity = q.id; ino = reply->inode.ino;
+        original_retained = retained_reply != NULL;
+        if (retained_reply) {
+            generation = retained_reply->generation; shard = retained_reply->shard;
+        }
+    }
+    if (memcmp(&original,create,sizeof(original)) ||
+        identity.seq != q.id.seq || identity.session_epoch != q.id.session_epoch ||
+        memcmp(identity.client_uuid,q.id.client_uuid,EFS_OPID_UUID_LEN) ||
+        ino != reply->inode.ino || original_retained != (retained_reply != NULL) ||
+        (retained_reply && (generation != retained_reply->generation ||
+                            shard != retained_reply->shard))) abort();
     fprintf(stderr,"test-create-retry: stage=%u seq=%llu ino=%llu identical=1\n",
             stage,(unsigned long long)q.id.seq,(unsigned long long)ino);
     unsigned current=stage++;
-    if (current == 1) reply->status=EFS_INODE_RPC_BUSY;
+    if (current == 1) {
+        reply->status=EFS_INODE_RPC_BUSY;
+        if (retained_reply) {
+            retained_reply->known=0; retained_reply->generation=0;
+            memset(&reply->inode,0,sizeof(reply->inode));
+        }
+    }
     pthread_mutex_unlock(&mu);
     return current == 0 ? -1 : 0;
 }

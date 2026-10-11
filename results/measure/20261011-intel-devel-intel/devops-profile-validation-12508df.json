@@ -1,0 +1,176 @@
+{
+  "source_revision": "12508df70da5f661647d036828f03b9ae9e58e93",
+  "source_sha256": {
+    "bakeoff.sh": "00bbfe31837896f4185867f0d09983c236dffc347421429c0773aa0f085b116f",
+    "clusters/amd.env": "a85d5eae1b2f7f4b30068fbf39399cd3d311a6da415d025e34128c42e725bbda",
+    "clusters/intel.env": "3c14696d417f9f9d40ab7ede627034d71b044c339f17880e295d6d6eb5f40eff",
+    "clusters/nuc.env": "e766c289266e961be8a06789af492c07cab90dbb82d411f7a934d61d133ba22b",
+    "deploy-and-restart.sh": "327d0acdf0c1b9c7d070a307b9a35da48e7827966651e665d1fa1934f90fc0fa",
+    "deploy.sh": "acd9992acd92630b49323f96fa73824bb3283871a5173538b8c010b5fd8304fc",
+    "env.sh": "8d9279fe21d24e0781db6c8be8dd2892205fd475a0ba99101ed66825f39b7f67",
+    "gc.sh": "86c2d7b1241e025643cb20d9e8958a244c215b7f85e2dc0ba0fddf62af49011c",
+    "gen-codebase-map.sh": "d48dd4feca1fd1a2075d6ec2db713d98e8d3c3c17b3f39cb253b66ca2edc304f",
+    "hermes-round.sh": "18191e455167c029b89275b91a53fee3432787539c861574bbfe27f0e68d4ff5",
+    "hermes-round.txt": "5b866cf98e934b6aef03881bbca515a03b68fd4c1733e62b778c56179e2be255",
+    "intel-smoke2.py": "d0f513bd5d46b4988596242f3d612bc35e325eff0764076058a260dff0405cd5",
+    "portal.sh": "585dbd22bb8f8f4d6bfdae8cc971cd182ec9865b1f77636f47ac915ba3b6f6b2",
+    "score-rounds.sh": "754a181d5da4e97f1d849e27c40f447b951fd242241c5a324699f76e1b7840d4",
+    "smoke-persist.sh": "33f8cfbcb08bb8c0740f115255c488304904f6264224845f2c0b13aacfafda56",
+    "smoke.sh": "37cdad4b21ce85e521b4726eee1c5ad6e00b7d16f5bce923e793d635acc7801b",
+    "smoke2.sh": "d0ff6e8fc75ec6d439483bda74d1adf580109c1ecef646a59149d2cf5b0aa075",
+    "start.sh": "a3e1b5c3fb850ea38ad00f57298e101cde0fd1a67b1f23a0622e4ad690358fae",
+    "status.sh": "bcd924a6d1dbeb399629bb225ae628b713b1e6a391d1cce7987c6990dc6e1535",
+    "stop.sh": "b175bdcb5deb8822fb20950d57df650f2bbe6239d37a4a328a8f6447309e1836",
+    "test_daemon_ownership.py": "907a1441124c98446425d296e3212120b245d8edd17a9cd07aa41c0eb7a8b661",
+    "test_efs_identity.py": "3f97d3a4437f937053906410931c3fa3edc013123616ad768124642d560f25b8",
+    "test_gc_driver.py": "2698fe5116e955d7afd0276a27f5785d0cf049350c4305c2e82957c4c34b3e98",
+    "test_start_mode.py": "5321815202fd822e7bf0e327e673260279df9ee0d2a4ce650658aa2eb2838ef9"
+  },
+  "utc": "2026-10-11T18:27:47.162657+00:00",
+  "driver": {
+    "utc": "2026-10-11T18:26:06.869996+00:00",
+    "scope": "Actual script driver paths, recording SSH only; no network, daemon or service mutation",
+    "rows": [
+      {
+        "case": "intel-actual-default-dispatch",
+        "exit": 0,
+        "ssh_calls": 7
+      },
+      {
+        "case": "nuc-actual-default-dispatch",
+        "exit": 0,
+        "ssh_calls": 1
+      },
+      {
+        "case": "amd-actual-default-dispatch",
+        "exit": 0,
+        "ssh_calls": 1
+      },
+      {
+        "case": "smoke-job-forwarding-4",
+        "exit": 0
+      },
+      {
+        "case": "smoke-job-forwarding-7",
+        "exit": 0
+      },
+      {
+        "case": "smoke-job-forwarding-4; echo unsafe",
+        "exit": 0
+      },
+      {
+        "case": "explicit-overrides",
+        "exit": 0
+      }
+    ]
+  },
+  "negative": {
+    "exit": 1,
+    "assertion": "actual old dispatcher drops jobs value",
+    "actual_remote_args": [
+      "EFS_CLUSTER=intel",
+      "EFS_DIRECT_IO=1",
+      "/data1/efs/devops/smoke.sh",
+      "concurrent_"
+    ]
+  },
+  "hosts": {
+    "intel1_efs": {
+      "rows": [
+        {
+          "name": "test_gc_driver",
+          "exit": 0
+        },
+        {
+          "name": "test_efs_identity",
+          "exit": 0
+        },
+        {
+          "name": "test_start_mode",
+          "exit": 0
+        },
+        {
+          "name": "test_daemon_ownership",
+          "exit": 0
+        }
+      ],
+      "source_sha256": {
+        "bakeoff.sh": "00bbfe31837896f4185867f0d09983c236dffc347421429c0773aa0f085b116f",
+        "clusters/amd.env": "a85d5eae1b2f7f4b30068fbf39399cd3d311a6da415d025e34128c42e725bbda",
+        "clusters/intel.env": "3c14696d417f9f9d40ab7ede627034d71b044c339f17880e295d6d6eb5f40eff",
+        "clusters/nuc.env": "e766c289266e961be8a06789af492c07cab90dbb82d411f7a934d61d133ba22b",
+        "deploy-and-restart.sh": "327d0acdf0c1b9c7d070a307b9a35da48e7827966651e665d1fa1934f90fc0fa",
+        "deploy.sh": "acd9992acd92630b49323f96fa73824bb3283871a5173538b8c010b5fd8304fc",
+        "env.sh": "8d9279fe21d24e0781db6c8be8dd2892205fd475a0ba99101ed66825f39b7f67",
+        "gc.sh": "86c2d7b1241e025643cb20d9e8958a244c215b7f85e2dc0ba0fddf62af49011c",
+        "gen-codebase-map.sh": "d48dd4feca1fd1a2075d6ec2db713d98e8d3c3c17b3f39cb253b66ca2edc304f",
+        "hermes-round.sh": "18191e455167c029b89275b91a53fee3432787539c861574bbfe27f0e68d4ff5",
+        "hermes-round.txt": "5b866cf98e934b6aef03881bbca515a03b68fd4c1733e62b778c56179e2be255",
+        "intel-smoke2.py": "d0f513bd5d46b4988596242f3d612bc35e325eff0764076058a260dff0405cd5",
+        "portal.sh": "585dbd22bb8f8f4d6bfdae8cc971cd182ec9865b1f77636f47ac915ba3b6f6b2",
+        "score-rounds.sh": "754a181d5da4e97f1d849e27c40f447b951fd242241c5a324699f76e1b7840d4",
+        "smoke-persist.sh": "33f8cfbcb08bb8c0740f115255c488304904f6264224845f2c0b13aacfafda56",
+        "smoke.sh": "37cdad4b21ce85e521b4726eee1c5ad6e00b7d16f5bce923e793d635acc7801b",
+        "smoke2.sh": "d0ff6e8fc75ec6d439483bda74d1adf580109c1ecef646a59149d2cf5b0aa075",
+        "start.sh": "a3e1b5c3fb850ea38ad00f57298e101cde0fd1a67b1f23a0622e4ad690358fae",
+        "status.sh": "bcd924a6d1dbeb399629bb225ae628b713b1e6a391d1cce7987c6990dc6e1535",
+        "stop.sh": "b175bdcb5deb8822fb20950d57df650f2bbe6239d37a4a328a8f6447309e1836",
+        "test_daemon_ownership.py": "907a1441124c98446425d296e3212120b245d8edd17a9cd07aa41c0eb7a8b661",
+        "test_efs_identity.py": "3f97d3a4437f937053906410931c3fa3edc013123616ad768124642d560f25b8",
+        "test_gc_driver.py": "2698fe5116e955d7afd0276a27f5785d0cf049350c4305c2e82957c4c34b3e98",
+        "test_start_mode.py": "5321815202fd822e7bf0e327e673260279df9ee0d2a4ce650658aa2eb2838ef9"
+      }
+    },
+    "intel2_efs": {
+      "rows": [
+        {
+          "name": "test_gc_driver",
+          "exit": 0
+        },
+        {
+          "name": "test_efs_identity",
+          "exit": 0
+        },
+        {
+          "name": "test_start_mode",
+          "exit": 0
+        },
+        {
+          "name": "test_daemon_ownership",
+          "exit": 0
+        }
+      ],
+      "source_sha256": {
+        "bakeoff.sh": "00bbfe31837896f4185867f0d09983c236dffc347421429c0773aa0f085b116f",
+        "clusters/amd.env": "a85d5eae1b2f7f4b30068fbf39399cd3d311a6da415d025e34128c42e725bbda",
+        "clusters/intel.env": "3c14696d417f9f9d40ab7ede627034d71b044c339f17880e295d6d6eb5f40eff",
+        "clusters/nuc.env": "e766c289266e961be8a06789af492c07cab90dbb82d411f7a934d61d133ba22b",
+        "deploy-and-restart.sh": "327d0acdf0c1b9c7d070a307b9a35da48e7827966651e665d1fa1934f90fc0fa",
+        "deploy.sh": "acd9992acd92630b49323f96fa73824bb3283871a5173538b8c010b5fd8304fc",
+        "env.sh": "8d9279fe21d24e0781db6c8be8dd2892205fd475a0ba99101ed66825f39b7f67",
+        "gc.sh": "86c2d7b1241e025643cb20d9e8958a244c215b7f85e2dc0ba0fddf62af49011c",
+        "gen-codebase-map.sh": "d48dd4feca1fd1a2075d6ec2db713d98e8d3c3c17b3f39cb253b66ca2edc304f",
+        "hermes-round.sh": "18191e455167c029b89275b91a53fee3432787539c861574bbfe27f0e68d4ff5",
+        "hermes-round.txt": "5b866cf98e934b6aef03881bbca515a03b68fd4c1733e62b778c56179e2be255",
+        "intel-smoke2.py": "d0f513bd5d46b4988596242f3d612bc35e325eff0764076058a260dff0405cd5",
+        "portal.sh": "585dbd22bb8f8f4d6bfdae8cc971cd182ec9865b1f77636f47ac915ba3b6f6b2",
+        "score-rounds.sh": "754a181d5da4e97f1d849e27c40f447b951fd242241c5a324699f76e1b7840d4",
+        "smoke-persist.sh": "33f8cfbcb08bb8c0740f115255c488304904f6264224845f2c0b13aacfafda56",
+        "smoke.sh": "37cdad4b21ce85e521b4726eee1c5ad6e00b7d16f5bce923e793d635acc7801b",
+        "smoke2.sh": "d0ff6e8fc75ec6d439483bda74d1adf580109c1ecef646a59149d2cf5b0aa075",
+        "start.sh": "a3e1b5c3fb850ea38ad00f57298e101cde0fd1a67b1f23a0622e4ad690358fae",
+        "status.sh": "bcd924a6d1dbeb399629bb225ae628b713b1e6a391d1cce7987c6990dc6e1535",
+        "stop.sh": "b175bdcb5deb8822fb20950d57df650f2bbe6239d37a4a328a8f6447309e1836",
+        "test_daemon_ownership.py": "907a1441124c98446425d296e3212120b245d8edd17a9cd07aa41c0eb7a8b661",
+        "test_efs_identity.py": "3f97d3a4437f937053906410931c3fa3edc013123616ad768124642d560f25b8",
+        "test_gc_driver.py": "2698fe5116e955d7afd0276a27f5785d0cf049350c4305c2e82957c4c34b3e98",
+        "test_start_mode.py": "5321815202fd822e7bf0e327e673260279df9ee0d2a4ce650658aa2eb2838ef9"
+      }
+    }
+  },
+  "explicit_empty_negative": {
+    "exit": 1,
+    "prior_revision": "085efef",
+    "scope": "Actual prior Intel configuration silently replaced invalid explicit empty interval; new production-script regression refuses it before SSH."
+  }
+}

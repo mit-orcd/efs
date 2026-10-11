@@ -1287,8 +1287,9 @@ static int sess_cleanup_bounded(const char *host, uint16_t port,
          * that definite rejection, with the same UUID/epoch/shard and the
          * original invocation deadline (also bounding socket waits). */
         if (rc == EFS_ERR_NOT_PRIMARY ||
-            (rc == EFS_ERR_BUSY && !appends && !reply->index && !reply->term &&
-             reply->salt == EFS_MD_SESSION_CLEANUP_RETRY_SALT)) {
+            (rc == EFS_ERR_BUSY && !reply->index && !reply->term &&
+             reply->salt == (appends ? EFS_MD_SESSION_APPEND_RETRY_SALT :
+                                      EFS_MD_SESSION_CLEANUP_RETRY_SALT))) {
             usleep(50000);
             continue;
         }
