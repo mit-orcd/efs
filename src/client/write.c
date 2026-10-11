@@ -5537,7 +5537,7 @@ static void span_of(efs_ino_t ino, uint32_t ci, uint64_t bg, uint8_t nrange,
 static int dcache_steal_dirty_budgeted(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
                               uint32_t *len_out, uint64_t *bg_out,
                               uint64_t *seq_out, uint32_t *doff,
-                              uint32_t *dlen, int *drop_body,
+                              uint32_t *dlen,
                               struct efs_chunk_entry *obs_out,
                               int *have_obs_out)
 {
@@ -5556,8 +5556,6 @@ static int dcache_steal_dirty_budgeted(efs_ino_t ino, uint32_t ci, uint8_t **cop
         *doff = 0;
     if (dlen)
         *dlen = 0;
-    if (drop_body)
-        *drop_body = 0;
     if (have_obs_out)
         *have_obs_out = 0;
     pthread_mutex_lock(io);
@@ -5683,14 +5681,14 @@ static int dcache_steal_dirty_budgeted(efs_ino_t ino, uint32_t ci, uint8_t **cop
 static int dcache_steal_dirty(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
                               uint32_t *len_out, uint64_t *bg_out,
                               uint64_t *seq_out, uint32_t *doff,
-                              uint32_t *dlen, int *drop_body,
+                              uint32_t *dlen,
                               struct efs_chunk_entry *obs_out,
                               int *have_obs_out)
 {
     int rc;
     efs_buf_drain_enter();
     rc = dcache_steal_dirty_budgeted(ino, ci, copy_out, len_out, bg_out,
-                                      seq_out, doff, dlen, drop_body,
+                                      seq_out, doff, dlen,
                                       obs_out, have_obs_out);
     efs_buf_drain_leave();
     return rc;
@@ -5699,55 +5697,38 @@ static int dcache_steal_dirty(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
 /* After a pipelined dcache_put_now: keep published bytes as have_base=1
  * (same as flush_slot_inner — dropping the slot made concurrent_appends
  * read zeros). Re-dirty on PUT failure. */
-static int dcache_flush_keep(efs_ino_t ino, uint32_t ci, uint8_t *copy,
-                             uint32_t len, int put_ok, uint64_t seq,
-                             int drop_body)
+static void dcache_flush_keep(efs_ino_t ino, uint32_t ci, uint8_t *copy,
+                              uint32_t len, int put_ok, uint64_t seq)
 {
     uint32_t s = dcache_slot(ino, ci);
     pthread_mutex_t *mu = dcache_mu(s);
     struct dcache_ent *e;
 
     pthread_mutex_lock(mu);
-    e = drop_body ? dcache_find_meta(s, ino, ci) : dcache_find(s, ino, ci);
+    e = dcache_find(s, ino, ci);
     if (!put_ok) {
-        if (drop_body && e && !e->data) {
-            e->data = copy;
-            e->len = len;
-            dcache_set_dirty(e, s);
-            e->have_base = 1;
-            e->nrange = 0;
-            e->base_gen = EFS_CHUNK_BASE_UNCOND;
-            dcache_pin_add(e);
-            dcache_note_dirty_bytes((int64_t)len);
-            DTRACE(e, "keep-putfail-restore");
-            pthread_mutex_unlock(mu);
-            return 1;
-        }
         if (e && e->ino == ino && e->ci == ci && e->data && !e->dirty) {
             dcache_set_dirty(e, s);
             dcache_note_dirty_bytes((int64_t)len);
             DTRACE(e, "keep-putfail");
         }
         pthread_mutex_unlock(mu);
-        return 0;
+        return;
     }
-    /* Every current snapshot keeps its local body through REPORT. The
-     * legacy drop_body path below still restores ownership on PUT failure. */
-    if (!drop_body && e && e->ino == ino && e->ci == ci)
+    /* Every snapshot keeps its local body through REPORT. */
+    if (e && e->ino == ino && e->ci == ci)
         dcache_install_image(e, copy, len, seq);
     /* PUT is not publication: retain the row pin while the immutable
      * object still needs REPORT. Otherwise an evictor can remove its
      * recovery metadata after the dirty snapshot detaches its marks.
      * dcache_note_committed releases the pin after the matching ACK. */
     pthread_mutex_unlock(mu);
-    return 0;
 }
 
 struct flush_pipe {
     struct chunk_put_job jobs[EFS_WRITE_PIPELINE];
     uint8_t *copies[EFS_WRITE_PIPELINE];
     uint32_t lens[EFS_WRITE_PIPELINE];
-    uint8_t drop[EFS_WRITE_PIPELINE];
     uint32_t n;
     int rc;
 };
@@ -5767,10 +5748,9 @@ static int flush_pipe_drain(struct flush_pipe *p)
     for (i = 0; i < p->n; i++) {
         int pok = (p->jobs[i].rc == EFS_OK);
 
-        if (!dcache_flush_keep(p->jobs[i].ino, p->jobs[i].ci, p->copies[i],
-                               p->lens[i], pok, p->jobs[i].flush_seq,
-                               p->drop[i]))
-            efs_buf_free(p->copies[i], p->lens[i]);
+        dcache_flush_keep(p->jobs[i].ino, p->jobs[i].ci, p->copies[i],
+                          p->lens[i], pok, p->jobs[i].flush_seq);
+        efs_buf_free(p->copies[i], p->lens[i]);
         p->copies[i] = NULL;
         put_win_close(p->jobs[i].ino);
         if (!pok && p->rc == EFS_OK)
@@ -5783,7 +5763,7 @@ static int flush_pipe_drain(struct flush_pipe *p)
 static int flush_pipe_add(struct flush_pipe *p, efs_ino_t ino, uint32_t ci,
                           uint8_t *copy, uint32_t len, uint64_t bg,
                           uint64_t seq, uint32_t doff, uint32_t dlen,
-                          int drop_body, const struct efs_chunk_entry *obs)
+                          const struct efs_chunk_entry *obs)
 {
     struct chunk_put_job *j;
 
@@ -5793,8 +5773,7 @@ static int flush_pipe_add(struct flush_pipe *p, efs_ino_t ino, uint32_t ci,
         if (drc != EFS_OK) {
             /* This snapshot already cleared dirty state before the pipe
              * drained. Restore retry eligibility even with a retained body. */
-            if (dcache_flush_keep(ino, ci, copy, len, 0, seq, drop_body))
-                copy = NULL;
+            dcache_flush_keep(ino, ci, copy, len, 0, seq);
             efs_buf_free(copy, len);
             put_win_close(ino);
             p->rc = drc;
@@ -5818,7 +5797,6 @@ static int flush_pipe_add(struct flush_pipe *p, efs_ino_t ino, uint32_t ci,
     j->rc = EFS_ERR_IO;
     p->copies[p->n] = copy;
     p->lens[p->n] = len;
-    p->drop[p->n] = drop_body ? 1 : 0;
     p->n++;
     return EFS_OK;
 }
@@ -6178,18 +6156,16 @@ static int dcache_flush_ino_pass(efs_ino_t ino)
         uint32_t len = 0;
         uint64_t bg = 0, seq = 0;
         uint32_t doff = 0, dlen = 0;
-        int drop_body = 0;
         struct efs_chunk_entry obs;
         int have_obs = 0;
         int st = dcache_steal_dirty(ino, ci, &copy, &len, &bg, &seq, &doff,
-                                    &dlen, &drop_body, &obs, &have_obs);
+                                    &dlen, &obs, &have_obs);
 
         if (st < 0)
             pipe.rc = st;
         else if (st > 0 &&
                  flush_pipe_add(&pipe, ino, ci, copy, len, bg, seq, doff,
-                                dlen, drop_body,
-                                have_obs ? &obs : NULL) != EFS_OK)
+                                dlen, have_obs ? &obs : NULL) != EFS_OK)
             break;
     }
     (void)flush_pipe_drain(&pipe);
@@ -6810,7 +6786,6 @@ static void *dcache_reclaim_main(void *arg)
                 uint32_t len = 0;
                 uint64_t bg = 0, seq = 0;
                 uint32_t doff = 0, dlen = 0;
-                int drop_body = 0;
                 struct efs_chunk_entry obs;
                 int have_obs = 0;
                 int st;
@@ -6853,7 +6828,7 @@ static void *dcache_reclaim_main(void *arg)
                                            __ATOMIC_RELAXED);
                 }
                 st = dcache_steal_dirty(pino, pci, &copy, &len, &bg, &seq,
-                                        &doff, &dlen, &drop_body, &obs,
+                                        &doff, &dlen, &obs,
                                         &have_obs);
                 if (st <= 0) {
                     uint32_t s = dcache_slot(pino, pci);
@@ -6872,8 +6847,7 @@ static void *dcache_reclaim_main(void *arg)
                 }
                 npopped++;
                 if (flush_pipe_add(&pipe, pino, pci, copy, len, bg, seq, doff,
-                                   dlen, drop_body,
-                                   have_obs ? &obs : NULL) != EFS_OK)
+                                   dlen, have_obs ? &obs : NULL) != EFS_OK)
                     break;
             }
             (void)flush_pipe_drain(&pipe);

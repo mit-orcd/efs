@@ -194,7 +194,7 @@ int main(void) {
     struct dcache_init full={.full=1};
     assert(!dcache_store_owned(1,0,p,EFS_CHUNK_SIZE,&full));
     e=entry(0);e->dirty=0;e->on_dirty=0;e->object_gen=12;e->object_seq=20;
-    assert(!dcache_flush_keep(1,0,p,EFS_CHUNK_SIZE,1,20,0));
+    dcache_flush_keep(1,0,p,EFS_CHUNK_SIZE,1,20);
     assert(e->data==p&&e->data[0]==77&&e->pin_held&&dcache_keep_on_drop(e));
     e->stalled=1;
     dcache_drop_locked(1,0,0);assert(e->data==p); /* even explicit cache drop */
@@ -208,12 +208,16 @@ int main(void) {
     assert(efs_writer_state_free(e->writer)==EFS_OK);e->writer=NULL;
     assert(dcache_note_committed(1,0,12,12,20));
     assert(!e->data&&!g_live);
-    /* Failed full-image PUT restores the stolen body without a new charge. */
+    /* Failed PUT re-dirties the retained body; caller frees its snapshot. */
     p=efs_buf_alloc(EFS_CHUNK_SIZE); assert(p); p[0]=44;
     assert(!dcache_store_owned(1,0,p,EFS_CHUNK_SIZE,&in));
-    e=entry(0);e->data=NULL;e->len=0;e->dirty=0;e->on_dirty=0;
-    assert(dcache_flush_keep(1,0,p,EFS_CHUNK_SIZE,0,7,1)==1);
+    e=entry(0);e->dirty=0;e->on_dirty=0;dirty_bytes-=EFS_CHUNK_SIZE;
+    uint8_t *failed_copy=efs_buf_alloc(EFS_CHUNK_SIZE);assert(failed_copy);
+    memcpy(failed_copy,p,EFS_CHUNK_SIZE);
+    dcache_flush_keep(1,0,failed_copy,EFS_CHUNK_SIZE,0,7);
     assert(e->data==p && e->dirty && e->data[0]==44);
+    assert(g_live==2*EFS_CHUNK_SIZE);
+    efs_buf_free(failed_copy,EFS_CHUNK_SIZE);
     assert(g_live==EFS_CHUNK_SIZE);
     dcache_drop_locked(1,0,0);
     assert(!g_live);
@@ -230,7 +234,7 @@ int main(void) {
         incoming->dirty=0;incoming->on_dirty=0;dirty_bytes-=EFS_CHUNK_SIZE;
         uint8_t *snapshot=efs_buf_alloc(EFS_CHUNK_SIZE);assert(snapshot);
         memcpy(snapshot,body,EFS_CHUNK_SIZE);
-        int rc=flush_pipe_add(&failed_pipe,1,ci,snapshot,EFS_CHUNK_SIZE,0,7,0,0,0,NULL);
+        int rc=flush_pipe_add(&failed_pipe,1,ci,snapshot,EFS_CHUNK_SIZE,0,7,0,0,NULL);
         assert(rc==(j==EFS_WRITE_PIPELINE?EFS_ERR_IO:EFS_OK));
     }
     assert(failed_pipe.n==0 && pipe_windows_closed==EFS_WRITE_PIPELINE+1);

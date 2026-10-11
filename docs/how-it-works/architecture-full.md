@@ -1507,6 +1507,10 @@ unimplemented; unavailable/refusal tests are not lifecycle acceptance.
 
 ### Release correctness review
 
+[Retained-body flush simplification](../status/flush-retained-body-mode-20261011.md) removes
+the unselectable stolen-body mode after the pipeline correctness fix. Cache/fence/
+pressure gates pass; ownership through exact REPORT ACK is preserved.
+
 [Full flush-pipeline failure](../status/flush-pipe-failure-20261011.md) reproduces and fixes
 a clean incoming snapshot losing dirty retry eligibility after the full pipe fails.
 Actual cache/pipe fault-injection and sanitizer gates pass; mounted acceptance
