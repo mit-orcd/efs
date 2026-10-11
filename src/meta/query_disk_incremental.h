@@ -90,11 +90,16 @@ static int incremental_nodes(struct efs_query_disk *d,struct efs_query_disk *old
             /* Both streams are inode-sorted. A forward merge preserves the
              * old stat/link without a binary lookup for every unchanged row. */
             while(old_at<old->part[shard].inodes){
+                if(cancelled(d)){rc=EFS_ERR_BUSY;break;}
                 rc=node_at(old,shard,old_at,&before,0);if(rc)break;
                 if(before.row.ino>=encoded){found=before.row.ino==encoded;break;}
+                /* This old-only ID precedes the next candidate ID. Record
+                 * removal now, avoiding a second scan of both streams. */
+                rc=changed_add(d,s,before.row.ino);if(rc)break;
                 old_at++;
             }
             if(rc)break;
+            if(found)old_at++;
             /* Own-shard lane/PVER/DSEQ changes can affect getattr even if the
              * inode row is identical. Re-fold unless all stat inputs are proved row-only. */
             fold=1;
@@ -120,6 +125,11 @@ static int incremental_nodes(struct efs_query_disk *d,struct efs_query_disk *old
         if(!rc && !same){batch[used++]=n;
             if(used==NODE_BATCH || i+1==d->part[shard].inodes){rc=io_at(fd,batch,used*sizeof(*batch),(i+1-used)*sizeof(*batch),1);used=0;}
         }
+    }
+    while(!rc && !same && old_at<old->part[shard].inodes){
+        if(cancelled(d)){rc=EFS_ERR_BUSY;break;}
+        struct disk_node removed;rc=node_at(old,shard,old_at++,&removed,0);
+        if(!rc)rc=changed_add(d,s,removed.row.ino);
     }
     if(fd>=0)close(fd);
     return rc;
@@ -208,19 +218,7 @@ static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old
     for(uint32_t shard=0;shard<SHARDS && !rc;shard++)rc=incremental_nodes(d,old,&s,shard);
     for(uint32_t shard=0;shard<SHARDS && !rc;shard++){
         if(d->part[shard].revision==old->part[shard].revision)continue;
-        /* Removed inode IDs still invalidate hard-link parents in old edges. */
-        uint64_t candidate_at=0;
-        for(uint64_t i=0;i<old->part[shard].inodes && !rc;i++){
-            if(cancelled(d)){rc=EFS_ERR_BUSY;break;}
-            struct disk_node n,now;rc=node_at(old,shard,i,&n,0);if(rc)break;
-            int found=0;
-            while(candidate_at<d->part[shard].inodes){
-                rc=node_at(d,shard,candidate_at,&now,0);if(rc)break;
-                if(now.row.ino>=n.row.ino){found=now.row.ino==n.row.ino;break;}
-                candidate_at++;
-            }
-            if(!rc && !found)rc=changed_add(d,&s,n.row.ino);
-        }
+        /* Old-only IDs were journaled during the inode-stream merge. */
         if(!rc)rc=changed_dentries(d,old,&s,shard);
     }
     if(!rc)rc=changed_flush(&s);
