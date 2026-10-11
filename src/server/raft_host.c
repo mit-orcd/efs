@@ -8370,7 +8370,7 @@ static uint64_t query_mono_ms(void)
     clock_gettime(CLOCK_MONOTONIC,&ts);
     return (uint64_t)ts.tv_sec*1000+(uint64_t)ts.tv_nsec/1000000;
 }
-/* One retained export generation per host, bounded by the catalog cap.
+/* Retained export generations remain bounded by aggregate disk admission.
  * Fresh per-page permissions still apply. Idle expiry also runs without RPCs. */
 static pthread_once_t query_export_once=PTHREAD_ONCE_INIT;
 static uint64_t query_export_max_ms=3600000;
@@ -8384,25 +8384,89 @@ static int query_export_expired(uint64_t now,uint64_t touched,uint64_t born)
     pthread_once(&query_export_once,query_export_configure);
     return efs_query_export_expired(now,touched,born,query_export_max_ms);
 }
+/* Bounded independent streams. The directory mutex protects admission/lifetime,
+ * never quorum waits or scans. Busy slots cannot expire or be reused. Catalog
+ * references share immutable generations; disk admission still enforces the
+ * aggregate retained-generation budget. */
+#define HOST_QUERY_PAGE_SESSIONS 16
 static pthread_mutex_t query_page_mu=PTHREAD_MUTEX_INITIALIZER;
-static struct {
+static pthread_cond_t query_page_cv=PTHREAD_COND_INITIALIZER;
+static struct query_page_session {
     uint64_t token,touched,born;
+    int busy;
     struct efs_msg_query_snapshot_v4 request;
     struct efs_server_query_view view;
     int refresh_error;
-} query_page_session;
-static void query_page_clear(void)
+} query_page_sessions[HOST_QUERY_PAGE_SESSIONS];
+static uint64_t query_page_serial;
+static void query_page_clear(struct query_page_session *session)
 {
-    efs_query_catalog_free(query_page_session.view.catalog);
-    memset(&query_page_session,0,sizeof(query_page_session));
+    efs_query_catalog_free(session->view.catalog);
+    memset(session,0,sizeof(*session));
 }
 static void query_page_sweep(int force)
 {
     if (force) pthread_mutex_lock(&query_page_mu);
     else if (pthread_mutex_trylock(&query_page_mu)) return;
+    if (force) {
+        int busy;
+        do {
+            busy=0;
+            for (unsigned i=0;i<HOST_QUERY_PAGE_SESSIONS;i++) busy|=query_page_sessions[i].busy;
+            if (busy) pthread_cond_wait(&query_page_cv,&query_page_mu);
+        } while (busy);
+    }
     uint64_t now=query_mono_ms();
-    if (force || (query_page_session.token &&
-        query_export_expired(now,query_page_session.touched,query_page_session.born))) query_page_clear();
+    for (unsigned i=0;i<HOST_QUERY_PAGE_SESSIONS;i++) {
+        struct query_page_session *session=&query_page_sessions[i];
+        if (!session->busy && session->token &&
+            (force || query_export_expired(now,session->touched,session->born))) query_page_clear(session);
+    }
+    pthread_mutex_unlock(&query_page_mu);
+}
+/* Return an exclusively reserved stream, including repeated first-page opens
+ * for the same immutable virtual inode. Tokens are never shared across callers. */
+static int query_page_acquire(const struct efs_msg_query_snapshot_v4 *req,
+                              struct query_page_session **out,int *created)
+{
+    struct efs_msg_query_snapshot_v4 identity=*req;
+    identity.token=identity.cursor=0;identity.limit=0;
+    *out=NULL;*created=0;
+    uint64_t now=query_mono_ms();
+    pthread_mutex_lock(&query_page_mu);
+    struct query_page_session *empty=NULL,*session=NULL;
+    for (unsigned i=0;i<HOST_QUERY_PAGE_SESSIONS;i++) {
+        struct query_page_session *p=&query_page_sessions[i];
+        if (!p->busy && p->token && query_export_expired(now,p->touched,p->born)) query_page_clear(p);
+        if (!p->token) { if (!empty) empty=p;continue; }
+        if (req->token ? p->token==req->token : !memcmp(&identity,&p->request,sizeof(identity))) { session=p;break; }
+    }
+    int rc=EFS_OK;
+    if (!session && req->token) rc=EFS_ERR_STALE;
+    else if (session && memcmp(&identity,&session->request,sizeof(identity))) rc=EFS_ERR_ACCES;
+    else if (session && session->busy) rc=EFS_ERR_BUSY;
+    else if (!session && !empty) rc=EFS_ERR_BUSY;
+    else {
+        if (!session) {
+            session=empty;*created=1;session->request=identity;
+            /* Counter prevents collisions even when requests share a clock tick. */
+            if (!query_page_serial) query_page_serial=(now_ns()^g_host->boot_id)&UINT64_C(0x00ffffffffffffff);
+            session->token=((uint64_t)(g_host->raft_id+1)<<56)|
+                ((++query_page_serial)&UINT64_C(0x00ffffffffffffff));
+            session->born=now;
+        }
+        session->busy=1;session->touched=now;*out=session;
+    }
+    pthread_mutex_unlock(&query_page_mu);
+    return rc;
+}
+static void query_page_release(struct query_page_session *session,int clear)
+{
+    if (!session) return;
+    pthread_mutex_lock(&query_page_mu);
+    if (clear) query_page_clear(session);
+    else { session->touched=query_mono_ms();session->busy=0; }
+    pthread_cond_broadcast(&query_page_cv);
     pthread_mutex_unlock(&query_page_mu);
 }
 static int host_query_cancel(void *ctx)
@@ -8699,7 +8763,7 @@ struct query_auth {
 struct query_request {
     struct efs_raft_host *h;
     const struct efs_msg_query_snapshot_v4 *page;
-    uint64_t cursor;
+    uint64_t cursor,page_token;
     uint32_t emitted;
     int more_confirmed;
     const struct efs_msg_query_snapshot *req;
@@ -8929,7 +8993,7 @@ static int query_consume(void *ctx,const struct efs_server_query_view *view,int 
                     char tail[256];
                     int more=q->cursor!=(UINT64_C(4096)<<32);
                     int n=snprintf(tail,sizeof(tail),"],\"truncated\":%s,\"page\":{\"token\":\"%llu\",\"cursor\":\"%llu\",\"more\":%s,\"more_confirmed\":%s}}",
-                        more ? "true" : "false",(unsigned long long)query_page_session.token,
+                        more ? "true" : "false",(unsigned long long)q->page_token,
                         (unsigned long long)q->cursor,more ? "true" : "false",q->more_confirmed ? "true" : "false");
                     rc=n<0 || (size_t)n>=sizeof(tail) ? EFS_ERR_OVERFLOW : query_append(q,tail,(size_t)n);
                 }
@@ -9044,8 +9108,8 @@ int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,con
 
 static int query_page_capture(void *ctx,const struct efs_server_query_view *view,int error)
 {
-    (void)ctx;
-    query_page_session.view=*view;query_page_session.refresh_error=error;
+    struct query_page_session *session=ctx;
+    session->view=*view;session->refresh_error=error;
     efs_query_catalog_retain(view->catalog);
     return EFS_OK;
 }
@@ -9064,35 +9128,20 @@ int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void
         (!req->base.term[0] && req->base.match!=EFS_NAME_PREFIX && req->base.match!=EFS_NAME_CONTAINS)) return EFS_ERR_INVAL;
     int policy_rc=host_query_policy_operation(req->base.operation);
     if(policy_rc && req->limit)return policy_rc;
-    if (pthread_mutex_trylock(&query_page_mu)) return EFS_ERR_BUSY;
-    int rc=EFS_OK,created=0;
-    uint64_t now=query_mono_ms();
-    if (query_page_session.token && query_export_expired(now,query_page_session.touched,query_page_session.born)) query_page_clear();
-    struct efs_msg_query_snapshot_v4 identity=*req;
-    identity.token=identity.cursor=0;identity.limit=0;
-    if (req->token) {
-        if (req->token!=query_page_session.token) rc=EFS_ERR_STALE;
-        else if (memcmp(&identity,&query_page_session.request,sizeof(identity))) rc=EFS_ERR_ACCES;
-    } else if (query_page_session.token && memcmp(&identity,&query_page_session.request,sizeof(identity))) rc=EFS_ERR_BUSY;
+    int created=0;
+    struct query_page_session *session=NULL;
+    int rc=query_page_acquire(req,&session,&created);
     uint16_t primary=0;
-    if (!rc && !req->token && !query_page_session.token) {
-        rc=server_raft_host_query_read(query_page_capture,NULL,&primary);
-        if (!rc) {
-            created=1;query_page_session.request=identity;
-            query_page_session.token=((uint64_t)(g_host->raft_id+1)<<56)|
-                ((now_ns()^g_host->boot_id)&UINT64_C(0x00ffffffffffffff));
-            query_page_session.born=now;
-        }
-    }
+    if (!rc && created) rc=server_raft_host_query_read(query_page_capture,session,&primary);
     /* Even continuations need current quorum/ReadIndex before fresh checks. */
-    if (!rc && query_page_session.token && req->limit) {
+    if (!rc && session->token && req->limit) {
         for (int i=0;i<HOST_NGROUPS && !rc;i++) { int hint=-1;rc=host_read_index(g_host,g_host->g[i].group,&hint); }
         pthread_mutex_lock(&g_host->mu);
         if (!rc && !host_query_capable(g_host)) rc=EFS_ERR_BUSY;
         pthread_mutex_unlock(&g_host->mu);
     }
     uint64_t bytes=sizeof(struct query_allocation)+sizeof(struct efs_msg_query_snapshot_reply)+req->base.max_output;
-    /* Serialized pages share the existing reply budget with old protocol RPCs. */
+    /* Independent pages share the existing reply budget with old protocol RPCs. */
     struct query_allocation *a=NULL;
     int admitted=__atomic_add_fetch(&query_requests,1,__ATOMIC_RELAXED)<=8;
     int reserved=0;
@@ -9108,26 +9157,23 @@ int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void
     }
     if (!a) {
         __atomic_sub_fetch(&query_requests,1,__ATOMIC_RELAXED);
-        if (created) query_page_clear();
-        pthread_mutex_unlock(&query_page_mu);return EFS_ERR_BUSY;
+        query_page_release(session,created);return EFS_ERR_BUSY;
     }
     a->bytes=bytes;
     struct efs_msg_query_snapshot_reply *reply=(void *)(a+1);
     reply->version=EFS_QUERY_PAGE_VERSION;reply->primary_id=primary;
-    if (!rc && !req->limit) query_page_clear();
-    else if (!rc) {
-        query_page_session.touched=now;
-        struct query_request q={.h=g_host,.req=&req->base,.filters=&req->filters,.page=req,
+    if (!rc && req->limit) {
+        struct query_request q={.h=g_host,.req=&req->base,.filters=&req->filters,.page=req,.page_token=session->token,
             .reply=reply,.text=(char *)(reply+1),.deadline=query_mono_ms()+5000};
         q.auth=calloc(HOST_QUERY_AUTH_N,sizeof(*q.auth));
-        rc=q.auth ? query_consume(&q,&query_page_session.view,query_page_session.refresh_error) : EFS_ERR_NOMEM;
+        rc=q.auth ? query_consume(&q,&session->view,session->refresh_error) : EFS_ERR_NOMEM;
         free(q.auth);
         if(!rc)rc=host_query_policy_operation(req->base.operation);
-        if (rc && created) query_page_clear();
+
     }
     reply->status=rc;if (rc) reply->text_len=0;
     *out=reply;*len=sizeof(*reply)+reply->text_len;
-    pthread_mutex_unlock(&query_page_mu);
+    query_page_release(session,(created && rc) || (!rc && !req->limit));
     return EFS_OK;
 }
 
