@@ -1,0 +1,19 @@
+2026-10-11T13:14:24.864Z storage-engine=files direct_io=on
+2026-10-11T13:14:24.864Z Loaded 4 persisted cluster node(s) from /data1/efs/devel-nuc-20261011/namespace-first-unlink/n3/meta/cluster_nodes.bin
+2026-10-11T13:14:24.864Z   persisted node 1: 127.0.0.1:26590
+2026-10-11T13:14:24.864Z   persisted node 2: 127.0.0.1:26591
+2026-10-11T13:14:24.864Z   persisted node 3: 127.0.0.1:26592
+2026-10-11T13:14:24.864Z   persisted node 4: 127.0.0.1:26593
+2026-10-11T13:14:24.865Z Storage quota: explicit 1.00 GiB (safe maximum 133.72 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T13:14:24.867Z Joined cluster with 4 nodes
+2026-10-11T13:14:24.868Z heartbeat: enabled (2000 ms interval)
+2026-10-11T13:14:24.891Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T13:14:24.891Z raft-host: up raft_id=2 n=4 boot=9940928239731135 salt=888537770659131519 g0=hosted g2=hosted
+2026-10-11T13:14:24.891Z efsd c3118143-nuc (branch devel-nuc, built 2026-10-11T12:59:13Z on nuc), build=c3118143-nuc: node 3 listening on 127.0.0.1:26592, storage=/data1/efs/devel-nuc-20261011/namespace-first-unlink/n3 (1 paths, stripe=none), used=3538944, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-11T13:14:24.891Z kv-obs: mt_bytes=193320 l0_bytes=0 l0=0 l1=0
+2026-10-11T13:14:26.868Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=970 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T13:14:30.794Z raft-host: applied session index=1615 kind=2 shard=1 ino=0
+2026-10-11T13:14:30.797Z raft-host: applied session index=1616 kind=1 shard=0 ino=0
+2026-10-11T13:14:30.798Z raft-host: applied session index=1617 kind=2 shard=1 ino=0
+2026-10-11T13:14:30.798Z raft-host: applied session index=3117 kind=7 shard=1 ino=0
+2026-10-11T13:14:30.828Z iostats: get ops=4 bytes=262144 errors=0 avg_us=11336 p50_us=11925 max_us=12074 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
