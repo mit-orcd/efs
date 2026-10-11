@@ -415,6 +415,12 @@ def drained():
     samples=[group for node in status() for group in node[2:] if group.get('sampled')]
     return {g['group'] for g in samples}=={0,2} and all(g['pending_estimate']==0 and g['reap_seen']==0 and g['orphan_seen']==0 for g in samples)
 
+def physically_drained(inodes):
+    # gc-status samples are estimates and may still show the preceding
+    # zero snapshot immediately after bulk unlink. Do not let that snapshot
+    # certify deletion of the fixture's actual immutable fragments.
+    return drained() and all(not files(ino) for ino in inodes)
+
 def chunk_state(ino, allow_absent=False):
     # Query all reachable replicas until a current authoritative reply exists.
     # BUSY/NOTPRIMARY are not a missing chunk or a zero-filled image.
@@ -1325,8 +1331,9 @@ os.close(fd)
                 'recovery_seconds':time.monotonic()-recovery,
                 'pressure_observed':any(s['kv'] and s['kv'][2]>0 for s in samples)}
         (work/'compactor-pressure.json').write_text(json.dumps(result,indent=2))
+        pressure_inodes=[path.stat().st_ino for path in paths+warm_paths]
         for path in paths+warm_paths:path.unlink()
-        wait(drained,'bulk compactor-pressure deletions drained before fault fixture',600)
+        wait(lambda:physically_drained(pressure_inodes),'bulk compactor-pressure deletions drained before fault fixture',600)
         print('finite compactor-pressure outcome '+json.dumps(result),flush=True)
     if a.memo:
         mutations=0
