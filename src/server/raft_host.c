@@ -10012,11 +10012,18 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         if (cmd[0] == EFS_MD_CMD_PACK_ADMIT && object.ledger.member_mask != ((1u << h->n) - 1u)) {
             out->rc = EFS_ERR_INVAL; return;
         }
+        /* Storage PUT checks status locally on every placement member. Keep
+         * follower ReadIndex and unhosted status forwarding for those checks. */
+        if (cmd[0]==EFS_MD_REQ_PACK_STATUS && !host_hosts(h,group)) {
+            rc=host_remote_cmd(h,group,cmd,clen,out,-1);
+            if (rc) out->rc=rc;
+            return;
+        }
         /* Like policy/session commands, packed lifecycle RPCs must not form
          * nested follower forwarding chains. The caller retries the leader;
          * only that leader performs fresh owner admission and proposal. */
         struct host_view view;host_view_get(h,group,&view);
-        if (!view.has || view.role!=EFS_RAFT_LEADER) {
+        if (cmd[0]!=EFS_MD_REQ_PACK_STATUS && (!view.has || view.role!=EFS_RAFT_LEADER)) {
             out->rc=EFS_ERR_NOT_PRIMARY;
             out->leader_hint=view.has ? view.leader : host_pick_peer(h,&group,1,-1);
             return;

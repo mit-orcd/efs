@@ -3,7 +3,7 @@
 from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text();a=s.index('        /* Like policy/session commands, packed lifecycle RPCs');b=s.index('        uint32_t shard = group ==',a)
+s=(root/'src/server/raft_host.c').read_text();a=s.index('        /* Storage PUT checks status locally');b=s.index('        uint32_t shard = group ==',a)
 code=r'''
 #include "efs/protocol.h"
 #include "efs/raft.h"
@@ -12,20 +12,24 @@ code=r'''
 struct host_view {int has,role,leader;};
 static struct host_view current;
 struct efs_raft_host {int unused;};
-static int admissions;
+static int admissions,forwards,hosted=1;
+static int host_hosts(struct efs_raft_host *h,uint8_t group){(void)h;(void)group;return hosted;}
+static int host_remote_cmd(struct efs_raft_host *h,uint8_t group,const uint8_t *cmd,uint32_t clen,struct efs_msg_raft_mkfs_reply *out,int skip){(void)h;(void)group;assert(*cmd==EFS_MD_REQ_PACK_STATUS&&clen==1&&skip==-1);forwards++;out->rc=0;return 0;}
 static void host_view_get(struct efs_raft_host *h,uint8_t group,struct host_view *out){(void)h;assert(group==0||group==2);*out=current;}
 static int host_pick_peer(struct efs_raft_host *h,const uint8_t *group,int count,int skip){(void)h;assert((*group==0||*group==2)&&count==1&&skip==-1);return 2;}
-static void route(struct efs_raft_host *h,uint8_t group,struct efs_msg_raft_mkfs_reply *out){
+static void route(struct efs_raft_host *h,uint8_t group,struct efs_msg_raft_mkfs_reply *out,uint8_t tag){const uint8_t *cmd=&tag;uint32_t clen=1;int rc;
 ''' +s[a:b]+r'''
  admissions++;out->rc=0;
 }
 int main(void){struct efs_raft_host h={0};struct efs_msg_raft_mkfs_reply r;
- current=(struct host_view){1,EFS_RAFT_FOLLOWER,1};route(&h,0,&r);assert(r.rc==EFS_ERR_NOT_PRIMARY&&r.leader_hint==1&&!admissions);
- current=(struct host_view){1,EFS_RAFT_CANDIDATE,-1};route(&h,2,&r);assert(r.rc==EFS_ERR_NOT_PRIMARY&&r.leader_hint==-1&&!admissions);
- current=(struct host_view){0,0,-1};route(&h,2,&r);assert(r.rc==EFS_ERR_NOT_PRIMARY&&r.leader_hint==2&&!admissions);
- current=(struct host_view){1,EFS_RAFT_LEADER,1};route(&h,0,&r);assert(!r.rc&&admissions==1);
- current.role=EFS_RAFT_FOLLOWER;current.leader=2;route(&h,0,&r);assert(r.rc==EFS_ERR_NOT_PRIMARY&&r.leader_hint==2&&admissions==1);
- puts("packed lifecycle: follower/unhosted/election hints without admission or forwarding; leader-only admission and role-change redirect PASS");}
+ current=(struct host_view){1,EFS_RAFT_FOLLOWER,1};route(&h,0,&r,EFS_MD_CMD_PACK_ADMIT);assert(r.rc==EFS_ERR_NOT_PRIMARY&&r.leader_hint==1&&!admissions);
+ current=(struct host_view){1,EFS_RAFT_CANDIDATE,-1};route(&h,2,&r,EFS_MD_CMD_PACK_UPLOAD_RETIRE);assert(r.rc==EFS_ERR_NOT_PRIMARY&&r.leader_hint==-1&&!admissions);
+ current=(struct host_view){0,0,-1};route(&h,2,&r,EFS_MD_CMD_PACK_UPLOAD_RETIRE);assert(r.rc==EFS_ERR_NOT_PRIMARY&&r.leader_hint==2&&!admissions);
+ current=(struct host_view){1,EFS_RAFT_LEADER,1};route(&h,0,&r,EFS_MD_CMD_PACK_ADMIT);assert(!r.rc&&admissions==1);
+ current.role=EFS_RAFT_FOLLOWER;current.leader=2;route(&h,0,&r,EFS_MD_CMD_PACK_ADMIT);assert(r.rc==EFS_ERR_NOT_PRIMARY&&r.leader_hint==2&&admissions==1);
+ current=(struct host_view){1,EFS_RAFT_FOLLOWER,1};route(&h,0,&r,EFS_MD_REQ_PACK_STATUS);assert(!r.rc&&admissions==2&&!forwards);
+ hosted=0;current.has=0;route(&h,2,&r,EFS_MD_REQ_PACK_STATUS);assert(!r.rc&&admissions==2&&forwards==1);
+ puts("packed lifecycle: follower/unhosted/election hints without admission or forwarding; leader-only mutation admission, role-change redirect, and storage follower/unhosted status resolution PASS");}
 '''
 with tempfile.TemporaryDirectory(prefix='efs-pack-route-') as td:
  p=Path(td)/'t.c';p.write_text(code);exe=p.with_suffix('')
