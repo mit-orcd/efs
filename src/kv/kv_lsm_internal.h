@@ -221,6 +221,7 @@ struct kv_lsm {
     uint32_t l1_cap;
     uint64_t next_seq;
     uint32_t required_reader; /* monotonic, versioned authoritative MANIFEST */
+    uint32_t durable_reader; /* barriers proven in this process, never inferred */
     pthread_mutex_t mu;
     pthread_rwlock_t writers; /* ordinary batches share; staged apply excludes */
     pthread_cond_t cv;

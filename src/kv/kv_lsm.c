@@ -1362,6 +1362,11 @@ int efs_kv_lsm_require_reader(struct efs_kv *kv,uint32_t required)
     int owned=apply_scope.owner==l;
     if(!owned)pthread_rwlock_wrlock(&l->writers);
     pthread_mutex_lock(&l->mu);
+    if((l->durable_reader & required)==required) {
+        pthread_mutex_unlock(&l->mu);
+        if(!owned)pthread_rwlock_unlock(&l->writers);
+        return EFS_OK;
+    }
     while(l->compact_busy)pthread_cond_wait(&l->cv,&l->mu);
     l->required_reader|=required;
     /* Never roll back in-memory requirements on failure: rename may already
@@ -1375,6 +1380,7 @@ int efs_kv_lsm_require_reader(struct efs_kv *kv,uint32_t required)
             int cr=close(fd);if(sr<0 || cr<0)rc=EFS_ERR_IO;
         }
     }
+    if(!rc)l->durable_reader=l->required_reader;
     pthread_mutex_unlock(&l->mu);
     if(!owned)pthread_rwlock_unlock(&l->writers);
     return rc;

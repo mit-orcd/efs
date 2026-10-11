@@ -28,6 +28,10 @@ int main(void)
     struct efs_opid owner={.client_uuid={13},.session_epoch=17,.seq=19};size_t geometry;
     assert(!efs_pack_build(23,29,2,records,16,image,EFS_SEGMENT_MAX_SIZE,&geometry,refs));
     assert(!efs_pack_ledger_init(image,geometry,refs,16,&owner,15,&ledger));
+    saved=ledger;struct efs_pack_ref swapped=refs[0];refs[0]=refs[1];refs[1]=swapped;
+    assert(efs_pack_ledger_init(image,geometry,refs,16,&owner,15,&ledger)==EFS_ERR_INVAL);
+    assert(!memcmp(&ledger,&saved,sizeof(saved)));
+    swapped=refs[0];refs[0]=refs[1];refs[1]=swapped;
     roundtrip();
     /* No collection while even one prospective publication is unresolved. */
     assert(efs_pack_ledger_reclaim_begin(&ledger)==EFS_ERR_BUSY);

@@ -274,3 +274,21 @@ recovery and unknown-format refusal. A probe linked to the actual pre-barrier
 library successfully reopens the same store.
 [Fault/recovery gate](../../results/measure/20261011-orcd-tiny-packing/linux-reader-gate-dev.txt)
 and [actual legacy-reader proof](../../results/measure/20261011-orcd-tiny-packing/linux-legacy-reader-proof.txt).
+
+The minimum-reader snapshot `b8d35eaa2c08` passes complete Linux `make test`
+on fcstor006, with zero build warnings. A subsequent focused refinement accepts
+only canonical body-offset order for ledger initialization and reuses reader
+barriers proven successfully in the current process. Failed/uncertain barriers
+and reopened stores cannot infer that proof from a visible marker; they repeat
+the checked barriers. This avoids per-pack manifest sync after a successful
+activation barrier. Local ASan/UBSan and focused Linux ledger, reader-guard and
+cold-KV recovery tests pass.
+[Focused gate](../../results/measure/20261011-orcd-tiny-packing/linux-reader-confirmed-dev.txt).
+
+At the final observational checkpoint, 05:50:12 UTC, the same fcstor007 Python
+PID 1381139 was still running: 1,881,198 / 10,000,000 files, 4,918.5 seconds,
+382 files/s cumulative. Query policy read back mask 3, version 2.
+[Live checkpoint](../../results/measure/20261011-orcd-tiny-packing/live-checkpoint.txt).
+Mounted writes still use legacy fragments. Production admission/session and
+receipt checks, versioned mapping/GETCHUNKS reads, bounded client coalescing,
+shared reclamation and matched ORCD throughput acceptance remain necessary.

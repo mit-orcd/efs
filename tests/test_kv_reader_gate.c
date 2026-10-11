@@ -53,6 +53,9 @@ int main(void)
     header(dir,line);assert(sscanf(line,"KVLSM1 %llu",&seq)==0);
     file_syncs=directory_syncs=0;assert(!efs_kv_lsm_require_reader(kv,1));
     assert(file_syncs && directory_syncs>=2);
+    unsigned proven_files=file_syncs,proven_dirs=directory_syncs;
+    assert(!efs_kv_lsm_require_reader(kv,1));
+    assert(file_syncs==proven_files && directory_syncs==proven_dirs);
     /* A serialized apply owner can persist the capability barrier even if
      * its later metadata batch aborts. No deadlock on the writer gate. */
     assert(!efs_kv_lsm_apply_begin(kv));assert(!efs_kv_lsm_require_reader(kv,1));

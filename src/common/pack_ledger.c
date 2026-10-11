@@ -49,6 +49,7 @@ int efs_pack_ledger_init(const uint8_t *image,size_t geometry,
         const uint8_t *bytes;uint32_t len;uint8_t wire[EFS_PACK_REF_BYTES];
         if(efs_pack_read(image,geometry,&refs[i],&bytes,&len)!=EFS_OK ||
            efs_pack_ref_encode(&refs[i],wire)!=EFS_OK)return EFS_ERR_INVAL;
+        if(i && refs[i].offset<=refs[i-1].offset)return EFS_ERR_INVAL;
         for(unsigned j=0;j<i;j++)if(refs[i].ino==refs[j].ino)return EFS_ERR_INVAL;
         efs_hash(wire,sizeof(wire),s.reference_digest[i]);s.state[i]=EFS_PACK_PENDING;
     }

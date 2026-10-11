@@ -31,6 +31,7 @@ struct efs_pack_ledger {
     uint8_t reference_digest[EFS_PACK_MAX_RECORDS][EFS_HASH_SIZE];
     uint8_t state[EFS_PACK_MAX_RECORDS];
 };
+/* References must cover the body's records in canonical offset order. */
 int efs_pack_ledger_init(const uint8_t *image, size_t geometry,
     const struct efs_pack_ref *, uint32_t count, const struct efs_opid *,
     uint32_t captured_members, struct efs_pack_ledger *);
