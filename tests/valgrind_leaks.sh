@@ -64,8 +64,7 @@ case "$MODE" in direct) IO_FLAG=--direct-io;; buffered) IO_FLAG=--no-direct-io;;
 OWN_PIDS=()
 VG="valgrind --error-exitcode=99 --errors-for-leak-kinds=definite,indirect --leak-check=full --show-leak-kinds=definite,indirect,possible"
 # Current unit suite (the old-engine tests were deleted in step 11 inc 2).
-# test_lock is included for coverage: its 6 pre-existing getlk failures are
-# functional, not leaks, and this gate only parses valgrind logs.
+# Every unit process exit is gated as well as its complete memory report.
 UNIT_TESTS=$(python3 - "$HERE/Makefile" <<'PY_UNITS'
 from pathlib import Path
 import sys
@@ -87,12 +86,8 @@ fail() { echo "[leaks] FAIL: $*"; fails=$((fails + 1)); }
 # numeric field out of a "definitely lost: 0 bytes in 0 blocks" line.
 # A fully-clean run prints "All heap blocks were freed -- no leaks are
 # possible" and OMITS the LEAK SUMMARY entirely -> treat as 0.
-vg_bytes() { # logfile kind
-    grep -q "no leaks are possible" "$1" 2>/dev/null && { echo 0; return; }
-    local n
-    n=$(grep -E "$2 lost:" "$1" 2>/dev/null | tail -1 \
-        | sed -E 's/.*: *([0-9,]+) bytes.*/\1/' | tr -d ',')
-    echo "${n:-0}"
+vg_bytes() { # logfile kind; include every forked process, not just the parent
+    awk -v kind="$2" '$0 ~ kind " lost:" {gsub(/,/, "", $0); sub(/.*lost: */, "", $0); total += $1} END {printf "%.0f\n", total}' "$1"
 }
 vg_count() { # logfile regex
     # grep -c exits 1 on zero matches; do NOT "|| echo 0" (double-prints).
