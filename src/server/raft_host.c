@@ -2052,6 +2052,26 @@ static int host_unpack_session_cleanup(const uint8_t *cmd,uint32_t clen,
     return EFS_OK;
 }
 
+/* A REGISTER's applied result can carry its exact ACTIVE epoch and shard.
+ * This is request-local, index/term-matched evidence, not an owner cache.
+ * FENCING idempotent REGISTER success must never mint this admission proof. */
+static uint64_t host_session_register_active_proof(uint32_t epoch,uint32_t shard)
+{
+    return (1ull<<63) | ((uint64_t)shard<<32) | epoch;
+}
+static int host_session_register_apply(struct efs_raft_host *h,
+    const uint8_t *uuid,uint32_t epoch,uint32_t shard)
+{
+    h->apply_extra=0;
+    int rc=efs_session_register(h->kv,uuid,epoch,shard);
+    struct efs_session_rec owner;
+    if(rc==EFS_OK && efs_session_get(h->kv,uuid,&owner)==EFS_OK &&
+       owner.state==EFS_SESSION_ACTIVE && owner.epoch==epoch &&
+       efs_session_bit_get(owner.touched,shard))
+        h->apply_extra=host_session_register_active_proof(epoch,shard);
+    return rc;
+}
+
 static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                              uint32_t clen, uint64_t index)
 {
@@ -2077,7 +2097,7 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
             return EFS_OK;
         epoch = rd32be(cmd + 18);
         shard = rd32be(cmd + 22);
-        rc = efs_session_register(h->kv, uuid, epoch, shard);
+        rc = host_session_register_apply(h, uuid, epoch, shard);
         break;
     case EFS_MD_SESS_ESTABLISH:
         if (clen < HOST_SESS_REG_LEN)
@@ -2200,7 +2220,9 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                 rc,(unsigned long long)index,(unsigned long long)ino);
         return rc;
     }
-    /* A blocked local fence is not a completed revocation barrier. Preserve
+    /* REGISTER must expose missing-owner and fenced-owner verdicts so its
+     * caller can bootstrap only a genuinely absent owner.
+     * A blocked local fence is not a completed revocation barrier. Preserve
      * its business verdict in the apply ring so the coordinator cannot ACK it. */
     /* First-touch namespace admission bootstraps only after REGISTER's
      * authoritative NOT_FOUND. Turning that verdict into OK skips CREATE
@@ -10830,6 +10852,16 @@ static int host_namespace_session_command(struct efs_raft_host *h,uint8_t group,
     if(reply.leader_hint>=0)*hint=reply.leader_hint;
     return rc;
 }
+static int host_namespace_session_register(struct efs_raft_host *h,uint8_t group,
+    const uint8_t *cmd,uint32_t bytes,int *hint,uint64_t *active_proof)
+{
+    *active_proof=0;
+    /* Hosted replicas retrieve this command's own apply-ring extra. Older
+     * or unhosted owners provide no proof and retain the fresh owner query. */
+    if(host_hosts(h,group))
+        return host_propose_wait_ex(h,group,cmd,bytes,hint,active_proof);
+    return host_namespace_session_command(h,group,cmd,bytes,hint);
+}
 static int host_namespace_session_prepare_owner(struct efs_raft_host *h,
     const struct efs_opid_req *q,int *hint)
 {
@@ -10861,18 +10893,25 @@ static int host_namespace_session_admit_after_group(struct efs_raft_host *h,
     uint8_t cmd[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_REGISTER};
     memcpy(cmd+2,q->id.client_uuid,16);wr32be(cmd+18,q->id.session_epoch);wr32be(cmd+22,shard);
     uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(q->id.client_uuid));
-    /* REGISTER itself proves the current owner's epoch/state and durably
-     * includes this participant. Existing owners need no idempotent CREATE.
+    /* REGISTER durably includes this participant; ACTIVE admission also
+     * needs its exact apply proof or the independent fresh owner query. Existing owners need no idempotent CREATE.
      * Only the authoritative missing-record verdict can bootstrap an owner;
      * neither refusal nor an uncertain I/O result grants that permission. */
-    rc=host_namespace_session_command(h,owner,cmd,sizeof(cmd),hint);
+    uint64_t active_proof=0;
+    rc=host_namespace_session_register(h,owner,cmd,sizeof(cmd),hint,&active_proof);
     if(rc==EFS_ERR_NOT_FOUND && !owner_prepared) {
         rc=host_namespace_session_prepare_owner(h,q,hint);
-        if(rc==EFS_OK)rc=host_namespace_session_command(h,owner,cmd,sizeof(cmd),hint);
+        if(rc==EFS_OK)rc=host_namespace_session_register(h,owner,cmd,sizeof(cmd),hint,&active_proof);
     }
     if(rc!=EFS_OK)return rc;
     cmd[1]=EFS_MD_SESS_ESTABLISH;
-    rc=host_session_establish_admit(h,cmd,sizeof(cmd),group,hint);
+    /* REGISTER atomically proved ACTIVE + this participant at its own apply
+     * point. A later BEGIN includes the registered shard in its frozen set;
+     * FENCE_LOC writes a monotonic floor even when ESTABLISH has not arrived.
+     * Delayed old-epoch establishment/mutation therefore remains rejected.
+     * No proof (including an idempotent FENCING REGISTER) keeps the old query. */
+    if(active_proof!=host_session_register_active_proof(q->id.session_epoch,shard))
+        rc=host_session_establish_admit(h,cmd,sizeof(cmd),group,hint);
     if(rc==EFS_OK)rc=host_namespace_session_command(h,group,cmd,sizeof(cmd),hint);
     if(rc==EFS_OK)rc=host_read_index(h,group,hint);
     if(rc==EFS_OK)rc=efs_session_accept(h->kv,shard,q->id.client_uuid,q->id.session_epoch);

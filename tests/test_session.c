@@ -42,6 +42,8 @@ static void test_register_and_fence(void)
 
     uuid_of(u, 1);
     CHECK(kv != NULL, "kv");
+    CHECK(efs_session_register(kv, u, 1, 1) == EFS_ERR_NOT_FOUND,
+          "register missing owner before create");
     CHECK(efs_session_create(kv, u, 1) == EFS_OK, "create");
     CHECK(efs_session_create(kv, u, 1) == EFS_OK, "create idemp");
     CHECK(efs_session_register(kv, u, 1, 1) == EFS_OK, "reg 1");
@@ -69,6 +71,24 @@ static void test_register_and_fence(void)
     CHECK(efs_session_establish(kv, 1, u, 2) == EFS_OK, "est 2");
     CHECK(efs_session_accept(kv, 1, u, 2) == EFS_OK, "accept 2");
     CHECK(efs_session_barrier_done(kv, u, 1) == EFS_OK, "barrier");
+    efs_kv_mem_free(kv);
+}
+
+static void test_registered_before_establish_fence(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();uint8_t uuid[16]={0x73};
+    CHECK(kv!=NULL,"first-touch fence KV");if(!kv)return;
+    CHECK(efs_session_create(kv,uuid,1)==EFS_OK,"first-touch owner ACTIVE");
+    CHECK(efs_session_register(kv,uuid,1,7)==EFS_OK,"participant registered before BEGIN");
+    CHECK(efs_session_begin_fence(kv,uuid)==EFS_OK,"BEGIN captures registered participant");
+    CHECK(efs_session_register(kv,uuid,1,7)==EFS_OK,"FENCING old-bit success is only idempotent");
+    CHECK(efs_session_accept(kv,7,uuid,1)==EFS_ERR_BUSY,"floor is not yet established");
+    CHECK(efs_session_fence_local(kv,7,uuid,2)==EFS_OK,"fence creates absent rejection floor");
+    CHECK(efs_session_establish(kv,7,uuid,1)==EFS_ERR_STALE,"late old ESTABLISH cannot cross floor");
+    CHECK(efs_session_accept(kv,7,uuid,1)==EFS_ERR_STALE,"late mutation stays refused");
+    CHECK(efs_session_ack_fence(kv,uuid,7)==EFS_OK,"captured participant ACK");
+    CHECK(efs_session_finish_fence(kv,uuid)==EFS_OK,"barrier finishes after participant fence");
+    CHECK(efs_session_establish(kv,7,uuid,1)==EFS_ERR_STALE,"completed barrier cannot resurrect old floor");
     efs_kv_mem_free(kv);
 }
 
@@ -1211,6 +1231,7 @@ int main(void)
     test_pending_cold_edges();
     test_pending_create_ownership();
     test_register_and_fence();
+    test_registered_before_establish_fence();
     test_i19_lease();
     test_unlink_no_lease();
     test_fence_drops_opid();

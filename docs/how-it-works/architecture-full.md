@@ -1944,13 +1944,13 @@ Spark performance measurement still owed. Grouped open counts are now
 
 ### Intel follow-ups — W100–W106 (indexed Oct 11, 2026)
 
-Current [devel-intel acceptance ledger](../status/intel-deployment-acceptance-20261011.md) retains failures alongside reruns. [Captured evidence](../../results/measure/20261011-intel-devel-intel/acceptance-in-progress.json) remains explicitly in progress until the complete host/mode matrix terminates.
+Current [devel-intel acceptance ledger](../status/intel-deployment-acceptance-20261011.md) retains failures alongside reruns. Frozen `f9e77c9f` repairs REGISTER apply-verdict propagation and is undergoing complete TCP/direct and TCP/buffered acceptance on both Intel hosts. [Earlier captured evidence](../../results/measure/20261011-intel-devel-intel/acceptance-in-progress.json) is a historical checkpoint; it does not establish current-source acceptance. The ledger links exact-source failures, native proof and the historical simulator NOTRUN correction.
 
 This index adds traceable IDs to the Intel acceptance follow-ups; it does not change the existing queue order or accepted design decisions. Existing sustained tiny-file performance remains W97, protection/repair W74/W66, durability W71/W73 and capacity W99.
 
 | ID | Task | Recorded state |
 | --- | --- | --- |
-| [W100](#w100) | Intel concurrent POSIX timeouts and mixed-workload EIO | Correctness/performance investigation; open. |
+| [W100](#w100) | Intel concurrent POSIX timeouts and mixed-workload EIO | Correctness/performance investigation; open. REGISTER verdict repair passes real pending-CREATE recovery; ACTIVE-proof optimization passes native/sanitizers; live concurrent acceptance pending. |
 | [W101](#w101) | Complete and verify the Intel two-million-file workload | Operational acceptance; in progress. |
 | [W102](#w102) | Complete Intel2 private peer and GC acceptance | Validation follow-up; in progress, aggregate acceptance remains open. |
 | [W103](#w103) | Investigate intermittent Intel persistence and stats timeouts | Liveness/performance investigation; open. |
@@ -6831,7 +6831,7 @@ do not repair the earlier sustained EFS SATA slowdown; NVMe cache/firmware
 attribution remains unproven. W95 must specify safe packing/reuse semantics
 before a production layout port. Current durability barriers are retained.
 
-**Oct 11 Intel resume follow-up:** A large-directory inventory could cycle indefinitely because READDIR discarded a source-only continuation when its name was empty. The actual callback now preserves that source; old-source regressions fail and both native Intel regressions pass. The deployed wire probe reaches EOF with 92,557 entries in 1.580 seconds, and full FUSE enumeration returns the same count in 1.183 seconds. This repairs enumeration termination, not sustained write latency; W97 remains open. [Cursor repair and limits](../status/intel-readdir-source-cursor-20261011.md).
+**Oct 11 Intel resume follow-up:** A large-directory inventory could cycle indefinitely because READDIR discarded a source-only continuation when its name was empty. The actual callback now preserves that source; old-source regressions fail and both native Intel regressions pass. The deployed wire probe reaches EOF with 92,557 entries in 1.580 seconds, and full FUSE enumeration returns the same count in 1.183 seconds. This repairs enumeration termination, not sustained write latency; W97 remains open. [Cursor repair and limits](../archive/status-20261011/intel-readdir-source-cursor-20261011.md).
 
 **Oct 10 matched three-node drive test:** same frozen `6b8f05acb484` engine,
 20 minutes per drive, true three-voter groups, preserved regular cluster stopped.
