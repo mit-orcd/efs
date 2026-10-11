@@ -4,6 +4,7 @@ import argparse,json
 from pathlib import Path
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('root',type=Path)
+p.add_argument('--drive',choices=('nvme','sata','both'),default='both')
 a=p.parse_args();cells=[]
 def disk(raw,name):
     for line in raw.splitlines():
@@ -11,6 +12,7 @@ def disk(raw,name):
         if parts[2]==name:return list(map(int,parts[3:]))
     raise ValueError('device absent: '+name)
 for drive,device in [('nvme','nvme0n1'),('sata','sda')]:
+    if a.drive!='both' and drive!=a.drive:continue
     for index,mode in enumerate(('grow','ring','ring','grow')):
         name=f'w97-{drive}-{index}-{mode}';folder=a.root/name
         final=json.loads((folder/'final.json').read_text())
@@ -41,5 +43,6 @@ for drive,device in [('nvme','nvme0n1'),('sata','sda')]:
         row['last_first_ratio']=row['last_window_operations_s']/row['first_window_operations_s']
         cells.append(row)
 result=dict(cells=cells,limits='Eight-minute file controls; final complete 30-second window, not final partial window. Physical counters include other host I/O. No hardware ceiling or NAND-cache inference.')
-(a.root/'allocation-summary.json').write_text(json.dumps(result,indent=2)+'\n')
+target='allocation-summary.json' if a.drive=='both' else f'allocation-summary-{a.drive}.json'
+(a.root/target).write_text(json.dumps(result,indent=2)+'\n')
 for r in cells:print(r['name'],round(r['mean_operations_s'],2),round(r['first_window_operations_s'],2),round(r['last_window_operations_s'],2),round(r['last_first_ratio'],3))

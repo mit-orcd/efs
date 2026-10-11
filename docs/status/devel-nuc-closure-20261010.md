@@ -148,3 +148,44 @@ Exact POSIX TSVs, engine SHA/version manifests, sync/replay/GC/fault JSONs and
 logs are in `full-fixtures/{direct,buffered,wal-failure}` under the raw evidence.
 Bulk payloads remain in the preserved private remote fixture roots printed in
 the stage logs; they are not copied into Git.
+
+## W97 partial allocation controls — NVMe completed
+
+Four uninstrumented eight-minute NVMe cells finish with exit0 and exact
+reopened-file verification. Three independent writers each synchronously
+persist64KiB per operation. Rates below sum all three writers; first/last
+windows are complete30s windows, not the final partial window.
+
+| Order / mode | Whole-run ops/s | First window ops/s | Last window ops/s | First → last per-writer mean sync |
+| --- | ---: | ---: | ---: | --- |
+| 0 growing | 230.74 | 430.29 | 188.26 | ~6.87 → ~15.82ms |
+| 1 ring | 404.08 | 188.23 | 438.00 | ~15.83 → ~6.73ms |
+| 2 ring | 573.37 | 506.57 | 438.59 | ~5.83 → ~6.72ms |
+| 3 growing | 229.63 | 427.70 | 185.54 | ~6.91 → ~16.06ms |
+
+Both growing repeats decline similarly with no EFS process running. Explicit
+truncate/reset time is only0.43–0.53s summed across writers per480s cell; this
+does not explain the decline by itself. Ring cells finish faster after their
+initial conversion pass, but differ materially in early windows. Their p99s
+also differ (~18ms versus~10ms). Growing p99 is~21.4–21.6ms. The Python controls
+consume25–39 CPU-seconds over480s, not a saturated CPU core. Physical-device
+write/flush averages are separately recorded; they include other host I/O and
+are not fdatasync latency or per-call barrier counts.
+
+This establishes a lower-layer reproduction and a useful allocation/overwrite
+contrast. It does not isolate XFS journal force from device firmware/cache,
+prove a hardware ceiling, or close W97. SATA repeats, separate instrumented
+profiles and fully written-ring controls are still running/queued. The original
+ABBA program stays frozen on NUC; the written-ring variant is a separate file.
+
+The written-ring follow-up prepares and fsyncs all256MiB per writer outside
+timing, using distinct initial counters. Timed writes alter those counters,
+and every current block is checked after reopen, including any unchanged
+prepared tail. Order is NVMe/SATA/SATA/NVMe; each timed cell is eight minutes.
+
+Regular-service installation is prepared with exact accepted-binary hashes,
+old source/binary backup, clean drain, four listeners/two mounts and preserved
+payload checks on both mounts. Automatic approval review refuses execution:
+it interprets this request as testing authorization rather than explicit
+authorization to replace installed binaries. The user's approval is pending;
+no installation has run. Private validation remains authorized and continues.

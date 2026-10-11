@@ -1,0 +1,137 @@
+{
+  "cells": [
+    {
+      "name": "w97-nvme-0-grow",
+      "drive": "nvme",
+      "mode": "grow",
+      "mean_operations_s": 230.74483206648802,
+      "first_window_operations_s": 430.28909979045727,
+      "last_window_operations_s": 188.26271620264777,
+      "first_window_sync_ms": [
+        6.86782528989547,
+        6.870699639851198,
+        6.86961149302974
+      ],
+      "last_window_sync_ms": [
+        15.824002143919277,
+        15.836338200956938,
+        15.809742544827587
+      ],
+      "writer_p99_us": [
+        21361,
+        21388,
+        21402
+      ],
+      "cpu_user_seconds": 8.4,
+      "cpu_system_seconds": 16.91,
+      "allocated_bytes": 10944512,
+      "rotations": 27,
+      "rotation_seconds": 0.527587217,
+      "physical_write_requests": 295272,
+      "physical_write_mean_ms": 2.5191111923920997,
+      "physical_flush_requests": 109956,
+      "physical_flush_mean_ms": 2.5532940448906833,
+      "last_first_ratio": 0.43752611045533846
+    },
+    {
+      "name": "w97-nvme-1-ring",
+      "drive": "nvme",
+      "mode": "ring",
+      "mean_operations_s": 404.08377397676855,
+      "first_window_operations_s": 188.23016786589665,
+      "last_window_operations_s": 438.0010791053864,
+      "first_window_sync_ms": [
+        15.83498791498406,
+        15.836789561636555,
+        15.81465247983015
+      ],
+      "last_window_sync_ms": [
+        6.7053010589440145,
+        6.712443504215083,
+        6.759837994266055
+      ],
+      "writer_p99_us": [
+        17904,
+        18099,
+        17758
+      ],
+      "cpu_user_seconds": 10.940000000000001,
+      "cpu_system_seconds": 21.33,
+      "allocated_bytes": 805306368,
+      "rotations": 0,
+      "rotation_seconds": 0.0,
+      "physical_write_requests": 398113,
+      "physical_write_mean_ms": 3.291274085498338,
+      "physical_flush_requests": 194059,
+      "physical_flush_mean_ms": 3.596014614112203,
+      "last_first_ratio": 2.3269441029104185
+    },
+    {
+      "name": "w97-nvme-2-ring",
+      "drive": "nvme",
+      "mode": "ring",
+      "mean_operations_s": 573.3683405410388,
+      "first_window_operations_s": 506.57382846615604,
+      "last_window_operations_s": 438.59357564045297,
+      "first_window_sync_ms": [
+        5.835960208852005,
+        5.858296895102122,
+        5.797759419513152
+      ],
+      "last_window_sync_ms": [
+        6.736966150628572,
+        6.704398519572144,
+        6.71370575261959
+      ],
+      "writer_p99_us": [
+        10090,
+        10153,
+        10101
+      ],
+      "cpu_user_seconds": 13.14,
+      "cpu_system_seconds": 25.64,
+      "allocated_bytes": 805306368,
+      "rotations": 0,
+      "rotation_seconds": 0.0,
+      "physical_write_requests": 560989,
+      "physical_write_mean_ms": 2.4007654339033384,
+      "physical_flush_requests": 275314,
+      "physical_flush_mean_ms": 2.6856571042518724,
+      "last_first_ratio": 0.8658038591698687
+    },
+    {
+      "name": "w97-nvme-3-grow",
+      "drive": "nvme",
+      "mode": "grow",
+      "mean_operations_s": 229.63307276250833,
+      "first_window_operations_s": 427.6954934951013,
+      "last_window_operations_s": 185.53716930465717,
+      "first_window_sync_ms": [
+        6.9131869006545115,
+        6.910058938551401,
+        6.916590186155285
+      ],
+      "last_window_sync_ms": [
+        16.05556911637931,
+        16.053313230064656,
+        16.06049088032345
+      ],
+      "writer_p99_us": [
+        21584,
+        21475,
+        21600
+      ],
+      "cpu_user_seconds": 8.58,
+      "cpu_system_seconds": 17.6,
+      "allocated_bytes": 781320192,
+      "rotations": 24,
+      "rotation_seconds": 0.43218659600000003,
+      "physical_write_requests": 295875,
+      "physical_write_mean_ms": 2.508626953950148,
+      "physical_flush_requests": 110352,
+      "physical_flush_mean_ms": 2.498287298825576,
+      "last_first_ratio": 0.4338066968825386
+    }
+  ],
+  "limits": "Eight-minute file controls; final complete 30-second window, not final partial window. Physical counters include other host I/O. No hardware ceiling or NAND-cache inference."
+}
