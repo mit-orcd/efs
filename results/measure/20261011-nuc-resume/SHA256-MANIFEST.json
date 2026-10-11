@@ -287,6 +287,10 @@
     "bytes": 85,
     "sha256": "055358bf55870bcabee6e3fca58dcc74656d5924f4ec52a33d10a711c30b9cb7"
   },
+  "clock-direct-live/append-publication-summary.json": {
+    "bytes": 832,
+    "sha256": "43f5f756a01587dcc5d5e3dfec46f77df8ab86fbb350fd4d322b930ee5d9500c"
+  },
   "clock-direct-live/append-replay-acknowledged-next.log": {
     "bytes": 915,
     "sha256": "59ea46234f4071886697d50b9b519c966b81919317dc6960256de12c6f8a415a"
