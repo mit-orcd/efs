@@ -112,6 +112,20 @@ def wr(path, data):
         f.write(data)
 
 
+def link_follow(source, destination):
+    """Request linkat(AT_SYMLINK_FOLLOW), including on Linux CPython.
+
+    Without dir_fd, CPython can dispatch to link(), whose Linux semantics
+    do not follow the source symlink even when follow_symlinks=True.
+    """
+    fd = os.open(os.path.dirname(source) or ".", os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.link(os.path.basename(source), destination, src_dir_fd=fd,
+                follow_symlinks=True)
+    finally:
+        os.close(fd)
+
+
 def rd(path):
     with open(path, "rb") as f:
         return f.read()
@@ -590,11 +604,11 @@ def peer_symlink_hardlinks():
         wr(os.path.join(d, "t"), b"target bytes")
         os.symlink("t", os.path.join(d, "l"))
         os.link(os.path.join(d, "l"), os.path.join(d, "nofollow"), follow_symlinks=False)
-        os.link(os.path.join(d, "l"), os.path.join(d, "follow"), follow_symlinks=True)
+        link_follow(os.path.join(d, "l"), os.path.join(d, "follow"))
         os.symlink("missing", os.path.join(d, "dangling"))
         os.link(os.path.join(d, "dangling"), os.path.join(d, "dangling2"), follow_symlinks=False)
         try:
-            os.link(os.path.join(d, "dangling"), os.path.join(d, "absent"), follow_symlinks=True)
+            link_follow(os.path.join(d, "dangling"), os.path.join(d, "absent"))
         except OSError as error:
             eq(error.errno, errno.ENOENT, "dangling follow errno")
         else:

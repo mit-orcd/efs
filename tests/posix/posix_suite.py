@@ -143,6 +143,20 @@ def wr(path, data):
         f.write(data)
 
 
+def link_follow(source, destination):
+    """Request linkat(AT_SYMLINK_FOLLOW), including on Linux CPython.
+
+    Without dir_fd, CPython can dispatch to link(), whose Linux semantics
+    do not follow the source symlink even when follow_symlinks=True.
+    """
+    fd = os.open(os.path.dirname(source) or ".", os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.link(os.path.basename(source), destination, src_dir_fd=fd,
+                follow_symlinks=True)
+    finally:
+        os.close(fd)
+
+
 def rd(path):
     with open(path, "rb") as f:
         return f.read()
@@ -3674,7 +3688,7 @@ def link_of_symlink_follow(d):
     target, source, link = (os.path.join(d, n) for n in ("t", "l", "h"))
     wr(target, b"target data")
     os.symlink("t", source)
-    os.link(source, link, follow_symlinks=True)
+    link_follow(source, link)
     eq(os.path.islink(link), False, "follow result is regular")
     eq(os.stat(target).st_ino, os.stat(link).st_ino, "target inode")
     eq(os.stat(target).st_nlink, 2, "target link count")
@@ -3694,7 +3708,7 @@ def link_of_symlink_dangling(d):
     eq(os.lstat(source).st_ino, os.lstat(link).st_ino, "dangling symlink inode")
     eq(os.lstat(link).st_nlink, 2, "dangling link count")
     eq(os.readlink(link), "missing", "dangling link text")
-    expect_err(errno.ENOENT, os.link, source, absent, follow_symlinks=True)
+    expect_err(errno.ENOENT, link_follow, source, absent)
     eq(os.path.lexists(absent), False, "failed follow creates no entry")
     os.unlink(source)
     eq(os.lstat(link).st_nlink, 1, "remaining symlink link count")
