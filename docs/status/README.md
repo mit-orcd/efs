@@ -68,7 +68,10 @@ unimplemented; unavailable/refusal tests are not lifecycle acceptance.
 [AMD W94/W97 lifecycle and replication-feedback acceptance](amd-feedback-integration-20261011.md)
 is in progress: actual Linux async and two-mode full lifecycle/POSIX/cold gates
 with feedback on, followed by pressure/recovery and repeated comparisons.
-Normal stores and the completed AMD admission closure are retained.
+Slow-lane control/read-probe starvation is reproduced and repaired (`4ff779d0`);
+actual CREATE-owner allocation and slow-follower barrier regressions pass. Live
+acceptance of the corrected scheduler is pending. Normal stores and the completed
+AMD admission closure are retained.
 
 **Scope split — Oct 11:** [W111](w111-nuc-persistence-investigation-20261011.md)
 now owns the NUC durable-write slowdown investigation. **AMD unpaced

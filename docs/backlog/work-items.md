@@ -4263,6 +4263,12 @@ current open-description lifecycle safely supports it.
 
 **Oct 9 update:** Retained FUSE CREATE/adoption, sequenced OPEN/CLOSE, reply rejection cleanup and authoritative terminal revocation recovery are implemented; AMD direct/TCP cold replay, exact lease edges and POSIX/GC gates pass. [Current checkpoint](../status/dependency-package-20261009.md).
 
+**Oct 11 AMD continuation:** An actual FUSE bookkeeping ENOMEM regression
+confirms no OPEN/adoption edge or pending-token handoff on failed owner
+allocation. Current feedback-enabled two-mode lifecycle and real combined
+reply-loss/negative/certificate-fsync gates are in progress; this is not full
+W94 closure. [Current ledger](../status/amd-feedback-integration-20261011.md).
+
 **Remaining action:** Complete REPORT/data-plane session integration and measure the eliminated HOLD round; retain the specific adoption/last-close/unlink and throughput gates below. Server atomicity, CREATE reply reuse and rejected-reply cleanup are prerequisites already implemented; merely enabling the flag is unsafe.
 
 **Governing contracts/related work:** W72 session/fencing, W58/W76 namespace retry identity and W69 coherence. CREATE reply reuse is merged (`e6926d85`); it removes a redundant read but does not implement safe lease adoption. Preserve synchronous close semantics.
@@ -4416,6 +4422,15 @@ not an additional AMD acceptance condition. W97 remains open only for the
 independent receiver-feedback/queue-pressure acceptance below; W94 production
 data-plane integration and W99 capacity-domain policy are separate. Historical
 observations below retain their original dates and failures.
+
+**Oct 11 sender fairness repair:** A slow one-slot pressured sender can select
+due data forever ahead of critical replies/votes and fresh-read probes. Actual
+helper regression fails on the original source; `4ff779d0` rotates bounded turns
+across critical, both group probes and data, preserving lane FIFO and consensus
+ACK authority. Local scheduler and Linux normal/fault async gates pass; live
+two-mode/fault/pressure comparisons are in progress. No default feedback
+promotion or W97 closure is claimed.
+[Acceptance ledger](../status/amd-feedback-integration-20261011.md).
 
 **Oct 11 AMD mixed-load follow-up:** eight rotating tiny workers plus four
 unpaced 16-MiB overwrite-ring writers reach the explicit 4-GiB-per-node quota
