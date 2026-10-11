@@ -73,6 +73,7 @@ cpu_before=os.times()
 with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
     futures=[pool.submit(worker,n) for n in range(3)]
     gate.wait(timeout=120)
+    (a.output/'ready.json').write_text(json.dumps(dict(pid=os.getpid(),monotonic=time.monotonic(),mode=a.mode,seconds=a.seconds)))
     with (a.output/'host.jsonl').open('w') as out:
         while any(not f.done() for f in futures):
             out.write(json.dumps(dict(monotonic=time.monotonic(),utc=time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),diskstats=Path('/proc/diskstats').read_text(),host_stat=Path('/proc/stat').read_text(),process_stat=Path('/proc/self/stat').read_text(),process_io=Path('/proc/self/io').read_text(),meminfo=Path('/proc/meminfo').read_text()))+'\n');out.flush()
