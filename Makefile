@@ -340,6 +340,7 @@ test: all
 	python3 tests/test_session_admission.py
 	python3 tests/test_close_effects.py
 	python3 tests/test_session_cleanup_cli.py
+	python3 tests/test_session_fence_finish.py
 	python3 tests/test_publication_host.py
 	python3 tests/test_txn_read_authority.py
 	python3 tests/test_publication_rpc.py
