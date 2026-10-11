@@ -42,6 +42,8 @@ static void test_register_and_fence(void)
 
     uuid_of(u, 1);
     CHECK(kv != NULL, "kv");
+    CHECK(efs_session_register(kv, u, 1, 1) == EFS_ERR_NOT_FOUND,
+          "register missing owner before create");
     CHECK(efs_session_create(kv, u, 1) == EFS_OK, "create");
     CHECK(efs_session_create(kv, u, 1) == EFS_OK, "create idemp");
     CHECK(efs_session_register(kv, u, 1, 1) == EFS_OK, "reg 1");

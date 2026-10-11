@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Actual shared-owner admission preserves every participant authority check."""
 from pathlib import Path
-import os,shlex,subprocess,tempfile
+import os,re,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 s=Path(os.environ.get('EFS_NAMESPACE_OWNER_SOURCE',root/'src/server/raft_host.c')).read_text()
 # Only the reviewed same-request namespace callers opt in. REPORT and LINK
@@ -10,6 +10,16 @@ s=Path(os.environ.get('EFS_NAMESPACE_OWNER_SOURCE',root/'src/server/raft_host.c'
 assert s.count('host_namespace_session_admit_after_group(h,dsh,q,0,') == 5
 a=s.index('static int host_namespace_session_prepare_owner(')
 b=s.index('/* REPORT can first-touch',a)
+session=s[s.index('static int apply_session_cmd('):]
+session=session[session.index('    if (required_failure)'):session.index('/* Same encoding as sim_lock_apply.')].rstrip()
+# Include both production return policies: metadata business verdicts must
+# reach admission, while Raft advances rejected commands without hiding rc.
+outer=s[s.index('static int host_apply(void *app'):]
+outer=outer[outer.index('    ret = (cmd[0]'):outer.index('    /* Finish the atomic apply scope')]
+policies=session+outer
+constants=sorted(set(re.findall(r'\b(?:EFS_MD_\w+|HOST_\w+)\b',policies))-
+                 {'EFS_MD_CMD_SESSION','EFS_MD_SESS_CREATE','EFS_MD_SESS_REGISTER','EFS_MD_SESS_ESTABLISH','HOST_SESS_CREATE_LEN','HOST_SESS_REG_LEN'})
+macros='\n'.join('#define '+name+' '+str(100+i) for i,name in enumerate(constants))+'\n'
 code=r'''
 #include <stdint.h>
 #include <string.h>
@@ -19,6 +29,8 @@ code=r'''
 #define EFS_ERR_INVAL -1
 #define EFS_ERR_NOT_FOUND -4
 #define EFS_ERR_IO -6
+#define EFS_ERR_NOMEM -7
+#define EFS_ERR_PROTO -8
 #define EFS_ERR_BUSY -13
 #define EFS_ERR_STALE -14
 #define EFS_SESSION_BITS 64
@@ -45,11 +57,24 @@ static int host_read_index(struct efs_raft_host *h,uint8_t group,int *hint) {(vo
 static int efs_kv_key_sess_local(uint32_t shard,const uint8_t *uuid,uint8_t *key,uint32_t *length) {assert(uuid[0]==19);key[0]=shard;*length=1;return 0;}
 static int efs_kv_get(void *kv,const uint8_t *key,uint32_t length,uint8_t *value,uint32_t *size) {(void)kv;(void)value;assert(length==1&&*size==8);return local_error?local_error:floors[key[0]]?0:EFS_ERR_NOT_FOUND;}
 static int efs_session_accept(void *kv,uint32_t shard,const uint8_t *uuid,uint32_t epoch) {(void)kv;assert(uuid[0]==19&&epoch==3);accepts++;return fenced?EFS_ERR_STALE:floors[shard]?0:EFS_ERR_BUSY;}
+''' +macros+r'''
+static int session_verdict(const uint8_t *cmd,int rc) {
+ int required_failure=0;uint64_t index=41,ino=0;uint32_t shard=0;
+''' +session+r'''
+static int apply_verdict(const uint8_t *cmd,int rc,uint32_t clen) {int ret;
+''' +outer+r'''
+ return ret;
+}
+static int command_verdict(const uint8_t *cmd,int rc,uint32_t clen) {
+ int verdict=session_verdict(cmd,rc);
+ assert(apply_verdict(cmd,verdict,clen)==((verdict==EFS_ERR_IO||verdict==EFS_ERR_NOMEM)?verdict:EFS_OK));
+ return verdict;
+}
 static int host_namespace_session_command(struct efs_raft_host *h,uint8_t group,const uint8_t *cmd,uint32_t length,int *hint) {
  (void)h;*hint=1;assert(cmd[0]==EFS_MD_CMD_SESSION&&cmd[2]==19&&rd32(cmd+18)==3);
  if(cmd[1]==EFS_MD_SESS_CREATE) {assert(group==0&&length==22);creates++;if(owner_error)return owner_error;owner_exists=1;return 0;}
  assert(length==26);uint32_t shard=rd32(cmd+22);assert(shard<64);
- if(cmd[1]==EFS_MD_SESS_REGISTER) {assert(group==0);registers++;if(register_error)return register_error;if(!owner_exists)return EFS_ERR_NOT_FOUND;if(fenced)return EFS_ERR_STALE;registered[shard]=1;return 0;}
+ if(cmd[1]==EFS_MD_SESS_REGISTER) {assert(group==0);registers++;int rc=register_error?register_error:!owner_exists?EFS_ERR_NOT_FOUND:fenced?EFS_ERR_STALE:EFS_OK;if(!rc)registered[shard]=1;return command_verdict(cmd,rc,length);}
  assert(cmd[1]==EFS_MD_SESS_ESTABLISH&&group==efs_raft_shard_group(shard)&&registered[shard]);
  establishes++;floors[shard]=1;return 0;
 }
@@ -64,8 +89,8 @@ int main(void) {
  struct efs_raft_host h={0};struct efs_opid_req q={.id={.client_uuid={19},.session_epoch=3,.seq=1}};int hint=-1;
  reset();owner_exists=1;assert(!host_namespace_session_admit(&h,5,&q,&hint));
  assert(!creates&&registers==1&&establishes==1&&admit_checks==1&&reads==2&&accepts==1);
- for(int i=0;i<3;i++) {
-  const int refusals[]={EFS_ERR_BUSY,EFS_ERR_STALE,EFS_ERR_IO};
+ for(int i=0;i<5;i++) {
+  const int refusals[]={EFS_ERR_BUSY,EFS_ERR_STALE,EFS_ERR_IO,EFS_ERR_NOMEM,EFS_ERR_INVAL};
   reset();owner_exists=1;register_error=refusals[i];
   assert(host_namespace_session_admit(&h,5,&q,&hint)==refusals[i]);
   assert(!creates&&registers==1&&!establishes&&!admit_checks&&!accepts);
