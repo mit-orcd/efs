@@ -453,6 +453,7 @@ test: all
 	python3 tests/test_namespace_owner_once.py
 	python3 tests/test_gc_backlog_idle.py
 	python3 tests/test_gc_fragment_backlog.py
+	python3 tests/test_gc_inode_fanout.py
 	python3 tests/test_session_register_verdict.py
 	python3 tests/test_namespace_session_apply.py
 	python3 tests/test_gc_session_admission.py

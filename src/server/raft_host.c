@@ -6978,6 +6978,8 @@ out:
 static int host_gc_inode_nodes(struct efs_raft_host *h, efs_ino_t ino, uint64_t gen)
 {
     struct efs_node nodes[EFS_MAX_NODES];
+    struct efs_conn *pending[EFS_MAX_NODES] = {0};
+    int status[EFS_MAX_NODES];
     uint32_t count;
     pthread_mutex_lock(&h->s->lock);
     count = h->s->node_count;
@@ -6989,43 +6991,55 @@ static int host_gc_inode_nodes(struct efs_raft_host *h, efs_ino_t ino, uint64_t 
             return EFS_ERR_BUSY;
         present |= 1u << (nodes[i].id - 1);
     }
-    /* A restart can form a quorum before its final storage member rejoins.
-     * Missing membership/address is not proof that its orphan files are gone. */
+    /* Missing membership/address never proves an orphan is gone. */
     int result = present == ((1u << h->n) - 1u) ? EFS_OK : EFS_ERR_BUSY;
+    /* Pipeline independent storage fences before waiting for disk durability.
+     * Connections stay exclusively borrowed until their reply is consumed.
+     * Every member must still finish; BUSY/errors retain the durable REAP. */
     for (uint32_t i = 0; i < count; i++) {
-        int rc = EFS_ERR_IO;
+        status[i] = EFS_ERR_IO;
         if (nodes[i].id == h->s->id)
-            rc = server_gc_inode(h->s, 1, ino, gen);
-        else {
-            struct efs_conn *pc = server_peer_conn_get(nodes[i].addr, nodes[i].port);
-            if (pc) {
-                if (pc->kind == EFS_CONN_TCP) {
-                    efs_set_recv_timeout(pc->fd, HOST_SEND_IO_MS);
-                    efs_set_send_timeout(pc->fd, HOST_SEND_IO_MS);
-                }
-                struct efs_msg_gc_inode req = {
-                    .export_id = 1, .ino = ino, .generation = gen};
-                uint8_t type;
-                void *reply = NULL;
-                uint32_t len = 0;
-                if (!efs_conn_send_msg(pc, EFS_MSG_GC_INODE, &req, sizeof(req)) &&
-                    !efs_conn_recv_msg(pc, &type, &reply, &len) &&
-                    type == EFS_MSG_GC_INODE_REPLY &&
-                    len == sizeof(struct efs_msg_gc_inode_reply))
-                    rc = ((struct efs_msg_gc_inode_reply *)reply)->rc;
-                free(reply);
-                if (rc == EFS_OK || rc == EFS_ERR_BUSY) {
-                    if (pc->kind == EFS_CONN_TCP) {
-                        efs_set_recv_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
-                        efs_set_send_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
-                    }
-                    server_peer_conn_release(nodes[i].addr, nodes[i].port, pc);
-                } else
-                    server_peer_conn_drop(nodes[i].addr, nodes[i].port, pc);
-            }
+            continue;
+        struct efs_conn *pc = server_peer_conn_get(nodes[i].addr, nodes[i].port);
+        if (!pc)
+            continue;
+        if (pc->kind == EFS_CONN_TCP) {
+            efs_set_recv_timeout(pc->fd, HOST_SEND_IO_MS);
+            efs_set_send_timeout(pc->fd, HOST_SEND_IO_MS);
         }
-        if (rc != EFS_OK)
-            result = rc;
+        struct efs_msg_gc_inode req = {
+            .export_id = 1, .ino = ino, .generation = gen};
+        if (efs_conn_send_msg(pc, EFS_MSG_GC_INODE, &req, sizeof(req))) {
+            server_peer_conn_drop(nodes[i].addr, nodes[i].port, pc);
+            continue;
+        }
+        pending[i] = pc;
+    }
+    for (uint32_t i = 0; i < count; i++)
+        if (nodes[i].id == h->s->id)
+            status[i] = server_gc_inode(h->s, 1, ino, gen);
+    for (uint32_t i = 0; i < count; i++) {
+        struct efs_conn *pc = pending[i];
+        if (pc) {
+            uint8_t type;
+            void *reply = NULL;
+            uint32_t len = 0;
+            if (!efs_conn_recv_msg(pc, &type, &reply, &len) &&
+                type == EFS_MSG_GC_INODE_REPLY &&
+                len == sizeof(struct efs_msg_gc_inode_reply))
+                status[i] = ((struct efs_msg_gc_inode_reply *)reply)->rc;
+            free(reply);
+            if (status[i] == EFS_OK || status[i] == EFS_ERR_BUSY) {
+                if (pc->kind == EFS_CONN_TCP) {
+                    efs_set_recv_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
+                    efs_set_send_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
+                }
+                server_peer_conn_release(nodes[i].addr, nodes[i].port, pc);
+            } else
+                server_peer_conn_drop(nodes[i].addr, nodes[i].port, pc);
+        }
+        if (status[i] != EFS_OK)
+            result = status[i];
     }
     return result;
 }

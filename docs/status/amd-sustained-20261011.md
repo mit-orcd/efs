@@ -165,3 +165,16 @@ ACK progress in the backlog signal. Physical deletion progress is still required
 by the idle policy; blocked/idle scans keep their backoff. Default scheduling,
 per-group budgets, authority and durable ACK ordering remain unchanged. This
 candidate is under normal/fault and direct/buffered live validation, not closed.
+
+## All-member inode-fence fanout candidate
+
+Post-load stage timings on the fragment-backlog build show a roughly 221-ms
+reap pass with about 188–192 ms in inode fencing for a 32-marker batch. The
+leader sends and waits for each storage member serially. The next candidate
+sends independent remote requests first, installs the local fence, and drains
+every borrowed connection before returning. Every expected member must still
+report success; absent members, BUSY, lost replies, malformed responses and
+local persistence failures retain the durable REAP record. Storage inventory
+and durable death-fence implementations are unchanged. The actual-source
+regression checks request ordering and failure cleanup; full native/live
+acceptance is pending. This does not enable RDMA or change GC authority.
