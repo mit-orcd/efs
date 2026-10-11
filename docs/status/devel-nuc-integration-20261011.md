@@ -85,10 +85,41 @@ are not relaxed and production capacity behavior is unchanged.
 | `fb7ca893-nuc` native suite | Capacity test statvfs race; preserved |
 | `2669064e-nuc` native suite | Pass |
 | `2669064e-nuc` six-cold-mutation/full suites | Fail at first mkdir: missing owner refusal stalls apply; preserved |
-| `108afa3e-nuc` native and full suites | Running |
+| `108afa3e-nuc` native suite | Pass |
+| `108afa3e-nuc` full direct | Pass: POSIX 216/216, peer 67/67, six cold first mutations, selected sync/append/recovery/GC gates |
+| `108afa3e-nuc` buffered full suite | Running |
 | Matched REPORT controls and exact 20,000-record gates | Waiting for corrected full-suite acceptance |
 
 Raw evidence is retained under
 [the session evidence directory](../../results/measure/20261011-devel-nuc/).
 Failed runs are evidence, not acceptance. Further results and final restored
 runtime checks will be added before this session finishes.
+
+## W97: physical request discrimination (queued)
+
+Read-only kernel policy context: SATA `sda` reports write-through, no FUA,
+`mq-deadline`; NVMe `nvme0n1` reports write-back, FUA, scheduler `none`,
+firmware `2B2QEXE7`, default NVMe power-state latency parameter 100000 µs.
+These are observed Linux settings, not verified firmware persistence promises,
+and no device policy is changed. In particular, zero SATA flush counters alone
+are not evidence of omitted application durability.
+
+Four separate 240-second three-writer written-ring controls are queued in
+NVMe/SATA/SATA/NVMe order, after append comparisons restore the regular service.
+Each prepares and persists all extents before timing, then verifies all current
+blocks after reopen. Physical issue/completion trace windows near the beginning
+and end distinguish request flags and completion latency from whole fdatasync
+latency. No EFS daemon runs during these controls. Instrumentation can affect
+timing; this is not another untraced throughput acceptance matrix or a NAND-only
+latency measurement. Ambiguous sector/length pairs and unmatched trace edges
+are counted rather than silently treated as exact request identities.
+
+## W87: added loaded two-mount gate (queued)
+
+The new optional loaded gate combines persistent and per-record-close APPEND
+descriptions from both mounts with physical GC of 128 files. Each round expects
+800 unique records with no omissions/duplicates, equal peer bytes, exact byte
+order after a full cold restart, and empty physical/quota state after cleanup.
+The harness supports 1–20 rounds; this bounded session queues one per storage
+mode only if enough time remains. This does not identify the original W87 cause
+or replace the requirement for repeated broader-load acceptance.
