@@ -87,12 +87,13 @@ int main(void) {
     lookup_rc = EFS_OK;
     assert(fuse_create_errno(EFS_ERR_EXIST,1,"exists") == -EEXIST);
     lookup_rc = EFS_ERR_BUSY;
-    assert(fuse_create_errno(EFS_ERR_EXIST,1,"exists") == -EBUSY);
+    assert(fuse_create_errno(EFS_ERR_EXIST,1,"exists") == -EEXIST);
     lookup_rc = EFS_ERR_NOT_FOUND;
-    assert(fuse_create_errno(EFS_ERR_EXIST,1,"exists") == -EIO);
+    assert(fuse_create_errno(EFS_ERR_EXIST,1,"exists") == -EEXIST);
+    assert(lookups == 0);
     assert(fuse_create_errno(EFS_ERR_IO,1,"failed") == -EIO);
     assert(fuse_create_errno(EFS_ERR_NOT_FOUND,1,"failed") == -ENOENT);
-    puts("request-local create errors: concurrent BUSY/quota/success and lookup errors PASS");
+    puts("request-local create errors: concurrent BUSY/quota/success and authoritative EXIST retained without lookup PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-create-errors-') as directory:

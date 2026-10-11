@@ -4069,16 +4069,16 @@ static int fuse_unlink_errno(int urc)
 
 static int fuse_create_errno(int create_rc, efs_ino_t parent, const char *name)
 {
+    (void)parent;
+    (void)name;
     if (create_rc == EFS_ERR_QUOTA)
         return -ENOSPC;
-    if (create_rc != EFS_ERR_EXIST)
-        return fuse_stat_errno(create_rc == EFS_OK ? EFS_ERR_IO : create_rc);
-    /* An EXIST reply is EEXIST only when the existing name is visible.
-     * Preserve lookup failures, including BUSY, rather than flattening to EIO. */
-    int found = efs_client_rpc_lookup(g_client.export_id, parent, name, NULL);
-    if (found == EFS_OK)
+    /* The authoritative refusal belongs to this request's linearization
+     * point. Later LOOKUP can race with unlink/rename or lose authority;
+     * neither may replace a proven EXIST verdict with IO or BUSY. */
+    if (create_rc == EFS_ERR_EXIST)
         return -EEXIST;
-    return fuse_stat_errno(found == EFS_ERR_NOT_FOUND ? EFS_ERR_IO : found);
+    return fuse_stat_errno(create_rc == EFS_OK ? EFS_ERR_IO : create_rc);
 }
 
 /* Wait only before an identity is allocated. Retained requests always resume
