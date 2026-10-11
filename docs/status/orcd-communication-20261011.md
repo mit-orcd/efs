@@ -77,3 +77,16 @@ Bulk profiles, three perf report shapes, traces and raw snapshots remain under
 `~/orcd/scratch/efs/orcd-test/communication-20261011T045504Z/HOST/`.
 The local full report and copies are under
 `/Users/mike/Documents/Codex/2026-10-05/how-x20/reports/communication-20261011T045504Z/`.
+
+## Bounded query-refresh intervention
+
+A subsequent 05:31:28–05:33:58 UTC diagnostic on the unchanged `52bc8edb`
+runtime left the same fcstor007 benchmark running. Thirty-second enabled
+windows measured 409.51 and 405.84 files/s; two disabled-query windows measured
+438.79 and 442.86 files/s. Commands policy mask 3 was temporarily changed to 0
+and restored automatically to mask 3, version 2, with a final authoritative
+read. Mean rate during the pause was about 8.13% higher. This is one short
+sequence with screen-progress quantization, not repeated matched acceptance
+or request-latency attribution. It supports query contention as a contributor,
+while leaving most observed overhead unexplained. W109 remains open.
+[Counts, timestamps and restoration](../../results/measure/20261011-orcd-query-ab/README.md).

@@ -208,3 +208,24 @@ suite on fcstor006, with zero compiler warnings. The [audit](../../results/measu
 records Linux 5.14.0-687.39.1.el9_8, private roots on local XFS `/dev/md0`,
 source identity and unchanged live runtime `52bc8edb`. No mounted tiny-file
 packing is activated yet.
+
+The shared-object lifetime planner now binds each record's canonical reference
+and the immutable body to a captured owner/session and member mask. Pending
+records retain the body; publication makes a record live; release/cancellation
+are terminal and cannot be undone by publication replay. Collection requires
+no pending or live records, then durable fence ACKs from every captured member
+before any deletion ACK, including a fourth member that may hold a stale PUT.
+Its versioned big-endian ledger has a checksum and bounded size (maximum
+17,056 bytes for 512 records; 688 bytes for sixteen). Unknown/malformed states
+fail closed. No production RPC or Raft handler selects it yet.
+
+This is an internal transition planner, not an authority oracle: real apply
+must verify the session, PUT receipts and mapping CAS, and commit mapping,
+publication receipt and shared ledger together. Release requires the exact
+current mapping; cancellation requires authoritative revocation. Several
+updates to one shared object must modify a single loaded ledger in a batch
+to prevent lost references. Local ASan/UBSan tests cover neighbor retention,
+terminal replay, all-member fence/delete ordering, canonical corruption and
+an atomic KV batch failure that leaves both mapping and ledger unchanged.
+The rebuilt W108 candidate `757b0a56d2ed` also passes full Linux `make test`;
+live mounts remain unchanged pending the production integration gates.
