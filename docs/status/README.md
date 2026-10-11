@@ -440,7 +440,7 @@ This index adds traceable IDs to the Intel acceptance follow-ups; it does not ch
 
 | ID | Task | Recorded state |
 | --- | --- | --- |
-| [W100](../backlog/work-items.md#w100) | Intel concurrent POSIX timeouts and mixed-workload EIO | Correctness/performance investigation; open. REGISTER verdict repair passes real pending-CREATE recovery; ACTIVE-proof optimization passes native/sanitizers; live concurrent acceptance pending. |
+| [W100](../backlog/work-items.md#w100) | Intel concurrent POSIX timeouts and mixed-workload EIO | Correctness/performance investigation; open. Current bounded-config private main checks pass on both hosts, including four 214/214 concurrent cores; independent/fault and production acceptance pending. |
 | [W101](../backlog/work-items.md#w101) | Complete and verify the Intel two-million-file workload | Operational acceptance; in progress. |
 | [W102](../backlog/work-items.md#w102) | Complete Intel2 private peer and GC acceptance | Validation follow-up; in progress, aggregate acceptance remains open. |
 | [W103](../backlog/work-items.md#w103) | Investigate intermittent Intel persistence and stats timeouts | Liveness/performance investigation; open. |
