@@ -2590,7 +2590,7 @@ static int efs_fuse_read_ino(fuse_ino_t ino, char *buf, size_t size, off_t offse
     int rc = efs_client_read(file, (uint64_t)offset, size, buf, &got);
     if (rc != 0) {
         efs_fuse_log_err("read", rc, file, (uint64_t)offset, size, NULL);
-        return -EIO;
+        return efs_rc_to_errno(rc);
     }
     return (int)got;
 }
