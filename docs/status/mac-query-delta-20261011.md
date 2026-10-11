@@ -433,3 +433,68 @@ could immediately launch another full rebuild. Failure backoff now starts at
 completion. Successful start-to-start coalescing, pending-age reporting and
 all authority/durability gates remain unchanged. Scheduler boundary checks
 pass; installed validation of this separate change is pending.
+
+The isolated 100 ms checkpoint run still failed: **138/216 PASS, 15 FAIL,
+63 NOTRUN**, 224.5 seconds. A diagnostic run temporarily disabling query
+publication reached **203/216 PASS, 13 FAIL, 0 NOTRUN**, 550.4 seconds; directory,
+append and repeated-write deadlines still failed. Query contention contributes
+but does not explain the entire failure. The policy was restored to mask 3,
+version 2 before the next normal drain; this disabled-policy run is not an
+acceptance gate. Evidence is outside the repository in
+`/Users/mike/Documents/Codex/2026-10-05/how-x20/results/mac-readindex-resume/`.
+
+Operation-local authority reuse now avoids reissuing a successful parent/name
+shard ReadIndex while resolving the same LOOKUP's inode and lanes. SETATTR and
+UTIMENS likewise reuse their own fenced inode group after successful mutation
+settlement. Other newly observed lane/directory groups remain freshly fenced;
+transaction uncertainty, leader routing and missing-inode retries are preserved.
+No authority mask survives an RPC. The operation helper and captured-inode
+replacement tests pass on the Mac Linux seed; Raft, query scheduler, transaction
+read authority, follower redirects, readdir cursors, checkpoint intervals and
+retirement gates also pass. The local standalone helper passes; the linked
+replacement test needs the Linux-built libefs.a, absent in the macOS checkout.
+The unchanged native suite is running with features restored and the existing
+bounded 1,000 ms checkpoint setting; no default was changed. Full native
+acceptance remains pending.
+
+The operation-local native run with 1,000 ms checkpoints completed cleanly:
+**203/216 PASS, 13 FAIL, 0 SKIP, 0 NOTRUN**, 622.0 seconds including cleanup.
+All failures are the directory/name/concurrent append/repeated-write deadlines
+listed in `native-covered-1000ms.txt`; it is not native acceptance.
+
+A follow-up separates pure fresh read control from the pump's off-lock
+durability tail. It only answers an empty probe from the known same-term,
+same-boot leader when its matched prefix and commit are already applied, in a
+stable configuration. Successful current-round replies can contribute read
+authority before normal queued replication bookkeeping. A trylock and empty
+inbox prerequisite preserve serialization and pending message order. New
+boots, terms, log bytes, uncertain prefixes, unapplied work, storage failures
+and joint configurations retain ordinary processing. No WAL/checkpoint barrier
+is removed. Opt-in batch counters record handled requests and early replies.
+The full Raft tests, including fresh rounds, parked apply and pending joint
+configuration, pass locally with address/undefined-behavior sanitizers. Host
+queue-order/trylock tests and admission fallback tests pass locally; Linux
+full-unit and native validation are pending. The next live cycle restores the
+original 10 ms checkpoint default, to isolate this fix from tuning.
+
+The complete Linux `make test` passed for the read-control candidate with the
+Mac service normally drained, including asynchronous sender/admission, durable
+Raft disk, crash recovery, query corruption/fault and host checkpoint gates.
+The candidate was shipped to all three storage nodes and the gateway. No
+benchmark source or harness was changed. Installed native validation follows.
+
+Pure read control is confirmed active by per-process counters on all three
+Mac replicas, but the default-cadence native deep-directory probe still failed
+both original 20-second deadlines (0/2, clean completion in 32.6 seconds).
+No full-suite acceptance is inferred. Another demonstrated amplification is
+batched LOOKUP_PATH: alternating ancestors repeatedly fenced already-covered
+name groups within one RPC. It now carries its own successful group fences
+through the bounded ancestor walk, explicitly fencing a newly encountered child
+inode group before reading it. Final lane/directory validation records all
+additional successful fences. Each independent RPC starts with an empty mask.
+The existing 64-component protocol bound and client fallback are unchanged.
+A production-handler regression walks 64 alternating-group ancestors with two
+fresh fences, verifies permission ancestors, repeats with independent fences,
+and checks missing groups, IO errors, absence and the existing depth boundary.
+It and the operation/LOOKUP/transaction/control/sender/architecture gates pass
+on the Mac Linux seed. Native deep-directory retesting is pending.

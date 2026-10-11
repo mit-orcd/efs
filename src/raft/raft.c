@@ -2452,6 +2452,50 @@ int efs_raft_read_begin(struct efs_raft *r)
     return broadcast_ae(r);
 }
 
+/* Service an already-applied, stable-leader read probe without walking the
+ * replication/apply path. Caller holds the normal Raft serialization lock.
+ * Boot changes, configuration transitions, unknown leaders and any unproven
+ * log/apply work remain on recv. No storage mutation or replication progress
+ * is performed here. A reply may contribute only to the current read round;
+ * it must still pass recv later for ordinary replication bookkeeping. */
+int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *in)
+{
+    uint64_t term=0;
+    if (!r || !in || r->storage_failed || r->recv_replies ||
+        in->to!=r->id || in->group!=r->group ||
+        in->from<0 || in->from>=EFS_RAFT_MAX_PEERS || in->from==r->id ||
+        !r->peer_boot[in->from] ||
+        (in->boot_id?in->boot_id:1)!=r->peer_boot[in->from] ||
+        in->term!=r->current_term || in->nentries || !in->last_log_index ||
+        !is_voter(r,in->from) || !is_voter(r,r->id) ||
+        r->log_new || r->app_new || r->log_old!=r->app_old)
+        return 0;
+    if (in->type==EFS_RAFT_MSG_AE_REQ) {
+        if (r->role!=EFS_RAFT_FOLLOWER || r->leader!=in->from ||
+            in->leader_commit>r->last_applied || in->prev_index>r->last_applied ||
+            log_term(r,in->prev_index,&term)!=EFS_OK || term!=in->prev_term)
+            return 0;
+        struct efs_raft_msg reply={0};
+        reply.type=EFS_RAFT_MSG_AE_REP;reply.to=in->from;
+        reply.success=1;reply.vote_granted=in->vote_granted;
+        reply.match_index=in->prev_index;reply.last_log_index=in->last_log_index;
+        reset_election(r);
+        /* Send failure falls back to normal receive; duplicate read ACKs
+         * cannot form an extra vote or grant another round's authority. */
+        return send_msg(r,&reply)==EFS_OK ? 1 : 0;
+    }
+    if (in->type!=EFS_RAFT_MSG_AE_REP || r->role!=EFS_RAFT_LEADER ||
+        !in->success || r->read_in_flight!=1 ||
+        in->last_log_index!=r->read_round ||
+        r->read_cfg_old!=r->log_old || r->read_cfg_new!=r->log_new)
+        return 0;
+    r->read_acks|=1u<<in->from;
+    if (r->last_applied>=r->read_index && quorum_ok(r,r->read_acks) &&
+        log_term(r,r->commit_index,&term)==EFS_OK && term==r->current_term)
+        r->read_in_flight=2;
+    return 2; /* Caller must also queue this reply for normal recv. */
+}
+
 int efs_raft_read_ready(const struct efs_raft *r)
 {
     if (!r)

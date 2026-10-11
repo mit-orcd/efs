@@ -3,7 +3,7 @@
 from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text();a=s.index('static int host_read_inode_lanes_after_group(');b=s.index('\n/* Stable per-group order',a)
+s=(root/'src/server/raft_host.c').read_text();a=s.index('static int host_read_inode_lanes_reuse(');b=s.index('\n/* Stable per-group order',a)
 code=r'''
 #include <stdint.h>
 #include <sys/stat.h>
@@ -34,15 +34,15 @@ static int host_pick_peer(struct efs_raft_host *h,uint8_t *need,int n,int skip){
 ''' + s[a:b] + r'''
 static void reset(void){reads[0]=reads[2]=inode_reads=unhosted=0;read_error=inode_error=coordinator_unhosted=0;row=(struct efs_meta_row){.mode=S_IFDIR,.layout=1,.used_shards=15};}
 int main(void){struct efs_raft_host h={0};int hint;
- reset();hint=1;assert(!host_read_inode_lanes_after_group(&h,1,&hint,0));assert(!reads[0]&&reads[2]==1&&inode_reads==1);
- reset();hint=1;row.used_shards=1;assert(!host_read_inode_lanes_after_group(&h,1,&hint,0));assert(!reads[0]&&!reads[2]&&inode_reads==1&&hint==1);
- reset();assert(!host_read_inode_lanes_after_group(&h,2,&hint,0));assert(reads[2]==1&&reads[0]==1&&inode_reads==1);
+ reset();hint=1;assert(!host_read_inode_lanes_covered(&h,1,&hint,1));assert(!reads[0]&&reads[2]==1&&inode_reads==1);
+ reset();hint=1;row.used_shards=1;assert(!host_read_inode_lanes_covered(&h,1,&hint,1));assert(!reads[0]&&!reads[2]&&inode_reads==1&&hint==1);
+ reset();assert(!host_read_inode_lanes_covered(&h,2,&hint,1));assert(reads[2]==1&&!reads[0]&&inode_reads==1);
  reset();assert(!host_read_inode_lanes(&h,1,&hint));assert(reads[0]==1&&reads[2]==1);
- reset();inode_error=EFS_ERR_BUSY;assert(host_read_inode_lanes_after_group(&h,1,&hint,0)==EFS_ERR_BUSY);assert(inode_reads==1&&!reads[0]&&!reads[2]);
- reset();inode_error=EFS_ERR_IO;coordinator_unhosted=1;assert(host_read_inode_lanes_after_group(&h,1,&hint,0)==EFS_ERR_NOT_PRIMARY);assert(inode_reads==1&&!reads[0]&&!reads[2]);
- reset();read_error=EFS_ERR_IO;assert(host_read_inode_lanes_after_group(&h,1,&hint,0)==EFS_ERR_IO);assert(reads[2]==1);
- reset();unhosted=1u<<2;assert(host_read_inode_lanes_after_group(&h,1,&hint,0)==EFS_ERR_NOT_PRIMARY);assert(hint==4&&!reads[2]);
- reset();row.mode=S_IFREG;row.active_lanes=2;assert(!host_read_inode_lanes_after_group(&h,1,&hint,0));assert(reads[2]==1);
+ reset();inode_error=EFS_ERR_BUSY;assert(host_read_inode_lanes_covered(&h,1,&hint,1)==EFS_ERR_BUSY);assert(inode_reads==1&&!reads[0]&&!reads[2]);
+ reset();inode_error=EFS_ERR_IO;coordinator_unhosted=1;assert(host_read_inode_lanes_covered(&h,1,&hint,1)==EFS_ERR_NOT_PRIMARY);assert(inode_reads==1&&!reads[0]&&!reads[2]);
+ reset();read_error=EFS_ERR_IO;assert(host_read_inode_lanes_covered(&h,1,&hint,1)==EFS_ERR_IO);assert(reads[2]==1);
+ reset();unhosted=1u<<2;assert(host_read_inode_lanes_covered(&h,1,&hint,1)==EFS_ERR_NOT_PRIMARY);assert(hint==4&&!reads[2]);
+ reset();row.mode=S_IFREG;row.active_lanes=2;assert(!host_read_inode_lanes_covered(&h,1,&hint,1));assert(reads[2]==1);
  puts("LOOKUP fresh quorum reuse: same-request same-group only; pending transactions, other groups, absent hosts and hard errors preserved PASS");
 }
 '''

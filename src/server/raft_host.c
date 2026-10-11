@@ -5674,8 +5674,11 @@ static int host_row_lanes_hosted(struct efs_raft_host *h, efs_ino_t ino,
     return 1;
 }
 
-static int host_read_inode_lanes_after_group(struct efs_raft_host *h, efs_ino_t ino,
-                                 int *leader_hint, int covered_group)
+/* covered belongs to this operation only: successful earlier ReadIndexes
+ * already linearize reads of that group after this request arrived. Never
+ * retain this mask across RPCs or use it for a group not actually fenced. */
+static int host_read_inode_lanes_reuse(struct efs_raft_host *h, efs_ino_t ino,
+                                 int *leader_hint, uint8_t *covered)
 {
     struct efs_meta_row row;
     uint32_t ish;
@@ -5686,15 +5689,9 @@ static int host_read_inode_lanes_after_group(struct efs_raft_host *h, efs_ino_t 
 
     ish = efs_kv_inode_shard(ino);
     ig = efs_raft_shard_group(ish);
-    /* LOOKUP already established a fresh ReadIndex for its parent group.
-     * Reuse that proof only within this request when the child is on that
-     * same group. Transaction-aware inode reads still resolve pending state,
-     * and every other lane group still gets its own fresh ReadIndex. */
-    if (ig != covered_group) {
-        rc = host_read_index(h, ig, leader_hint);
-        if (rc != EFS_OK)
-            return rc;
-    }
+    rc = (*covered & (1u << ig)) ? EFS_OK : host_read_index(h, ig, leader_hint);
+    if (rc != EFS_OK)
+        return rc;
     struct host_txn_read_context txn={.host=h};
     rc = efs_meta_apply_get_inode_tx(h->kv, ino, host_txn_read_coord, &txn, &row);
     if (rc != EFS_OK && txn.unhosted_coordinator)
@@ -5711,7 +5708,7 @@ static int host_read_inode_lanes_after_group(struct efs_raft_host *h, efs_ino_t 
      * this loop issued it 32 times for one stat (Sep 30, du/find on
      * fstor007: 5–7 ms per stat of a >10 MiB file, 0.2 ms for a small
      * one). The read index is a property of the group, not the lane. */
-    uint8_t seen = (uint8_t)(1u << ig);
+    uint8_t seen = (uint8_t)(*covered | (1u << ig));
     for (i = 0; i < EFS_META_LANES; i++) {
         uint32_t lsh;
         uint8_t lg;
@@ -5741,13 +5738,20 @@ static int host_read_inode_lanes_after_group(struct efs_raft_host *h, efs_ino_t 
             return rc;
         }
     }
+    *covered = seen;
     return EFS_OK;
 }
+static int host_read_inode_lanes_covered(struct efs_raft_host *h, efs_ino_t ino,
+                                 int *leader_hint, uint8_t covered)
+{
+    return host_read_inode_lanes_reuse(h,ino,leader_hint,&covered);
+}
+
 
 static int host_read_inode_lanes(struct efs_raft_host *h, efs_ino_t ino,
                                  int *leader_hint)
 {
-    return host_read_inode_lanes_after_group(h, ino, leader_hint, -1);
+    return host_read_inode_lanes_covered(h,ino,leader_hint,0);
 }
 
 /* Stable per-group order, bounded chunks, and global control fences. Only
@@ -9443,6 +9447,35 @@ void server_raft_host_stop(void)
     free(h);
 }
 
+/* The pump's off-lock durability tail need not park an independent fresh
+ * read probe. Try the existing mutex only; never wait or invert inbox order.
+ * Pending inbox work and all state-changing frames retain normal processing. */
+static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n)
+{
+    struct efs_raft_msg msg;
+    int handled=0;
+    if (n!=EFS_WIRE_RAFT_HDR_LEN ||
+        (p[0]!=EFS_RAFT_MSG_AE_REQ && p[0]!=EFS_RAFT_MSG_AE_REP) ||
+        efs_wire_raft_decode(p,n,&msg,NULL,0)!=EFS_OK ||
+        pthread_mutex_trylock(&h->mu)!=0)
+        return 0;
+    pthread_mutex_lock(&h->inbox_mu);
+    int pending=h->inbox_n;
+    pthread_mutex_unlock(&h->inbox_mu);
+    if (!pending) {
+        struct efs_raft *r=group_raft(h,msg.group);
+        handled=efs_raft_read_control(r,&msg);
+        if (handled==1) BO_COUNT(BO_READ_CONTROL_REQUEST);
+        if (handled==2) BO_COUNT(BO_READ_CONTROL_REPLY);
+        if (handled==2) {
+            host_publish_group(h,msg.group);
+            host_waiters_wake(h);
+        }
+    }
+    pthread_mutex_unlock(&h->mu);
+    return handled==1;
+}
+
 int server_raft_host_inbox(const uint8_t *payload, uint32_t plen,
                            struct efs_raft_flow_reply *feedback)
 {
@@ -9455,6 +9488,11 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen,
     if (!h->flow_enabled) feedback->status=3;
     if (!payload || plen < EFS_WIRE_RAFT_HDR_LEN) return EFS_ERR_PROTO;
     if (plen > HOST_FRAME_MAX) return EFS_ERR_INVAL;
+    if (host_read_control(h,payload,plen)) {
+        feedback->status=h->flow_enabled ? EFS_RAFT_FLOW_OK : 3;
+        /* No queued work consumes admission credits. */
+        return EFS_OK;
+    }
     if (h->flow_enabled) {
         if (!efs_raft_flow_frame(payload,plen) ||
             efs_raft_flow_rd32(payload+8)!=(unsigned)h->raft_id) return EFS_ERR_PROTO;
@@ -10760,6 +10798,7 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
         return;
     }
     rc = host_read_index(h, pg, &hint);
+    uint8_t covered = rc == EFS_OK ? (uint8_t)(1u << pg) : 0;
     if (prof)
         p1 = now_us_();
     if (rc == EFS_OK)
@@ -10779,6 +10818,8 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
             rc = host_read_index(h, hg, &hh);
             if (rc != EFS_OK)
                 hint = hh;
+            else
+                covered |= (uint8_t)(1u << hg);
         }
     }
     if (rc == EFS_OK)
@@ -10816,7 +10857,7 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
             }
             return;
         }
-        rc = host_read_inode_lanes_after_group(h, dent.ino, &hint, pg);
+        rc = host_read_inode_lanes_covered(h, dent.ino, &hint, covered);
         if (rc == EFS_ERR_NOT_PRIMARY) {
             uint8_t need[2];
 
@@ -13733,7 +13774,7 @@ static void host_utimens(efs_ino_t ino, uint32_t mask, uint64_t mtime,
         rc = host_wait_settled(h, g, idx, term, &hint);
 collect:
     if (rc == EFS_OK)
-        rc = host_read_inode_lanes(h, ino, &hint);
+        rc = host_read_inode_lanes_covered(h, ino, &hint, (uint8_t)(1u << g));
     if (rc == EFS_OK)
         rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
     set_inode_rc(out, rc, hint);
@@ -14097,7 +14138,7 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
     if (rc == EFS_OK)
         rc = host_wait_settled(h, g, idx, term, &hint);
     if (rc == EFS_OK)
-        rc = host_read_inode_lanes(h, ino, &hint);
+        rc = host_read_inode_lanes_covered(h, ino, &hint, (uint8_t)(1u << g));
     if (rc == EFS_OK)
         rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
     set_inode_rc(out, rc, hint);
@@ -16718,6 +16759,7 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
     const char *p;
     uint32_t nh = 0;
     char last_name[EFS_MAX_NAME];
+    uint8_t covered = 0; /* Request-local group authority, including ancestors. */
     int hint = -1;
     int rc;
 
@@ -16742,7 +16784,7 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
             return;
         }
     }
-    rc = host_read_inode_lanes(h, cur, &hint);
+    rc = host_read_inode_lanes_reuse(h, cur, &hint, &covered);
     if (rc == EFS_ERR_NOT_PRIMARY) {
         uint8_t need[2];
 
@@ -16802,8 +16844,10 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
             host_fwd_lookup_path(h, start, path, out, need, nn);
             return;
         }
-        if (dg != pg)
+        if (!(covered & (1u << dg))) {
             rc = host_read_index(h, dg, &hint);
+            if (rc == EFS_OK) covered |= (uint8_t)(1u << dg);
+        }
         if (rc == EFS_OK)
             rc = efs_meta_apply_lookup_tx(h->kv, cur, name, host_txn_coord, h, &dent);
         if (rc == EFS_OK) {
@@ -16816,6 +16860,10 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
                     need[nn++] = cg;
                 host_fwd_lookup_path(h, start, path, out, need, nn);
                 return;
+            }
+            if (!(covered & (1u << cg))) {
+                rc = host_read_index(h, cg, &hint);
+                if (rc == EFS_OK) covered |= (uint8_t)(1u << cg);
             }
         }
         if (rc == EFS_OK)
@@ -16835,7 +16883,7 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
         rc = EFS_ERR_INVAL;
     if (rc == EFS_OK && nh > 0) {
         out->ancestor_count = nh > 1 ? nh - 1 : 0;
-        rc = host_read_inode_lanes(h, cur, &hint);
+        rc = host_read_inode_lanes_reuse(h, cur, &hint, &covered);
         if (rc == EFS_ERR_NOT_PRIMARY) {
             uint8_t need[2];
 
