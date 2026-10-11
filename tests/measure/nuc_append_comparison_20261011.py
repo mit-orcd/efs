@@ -39,6 +39,21 @@ try:
  common=[src/'tests/live/gc_reclamation.py','--transport','tcp','--port','26590','--mount','/data1/efs/mnt','--peer-mount','/data1/efs/mnt2','--root','/data1/efs','--root','/home/efs']
  codes={}
  for count,variants in ((400,('control','candidate','candidate','control')),(20000,('control','candidate'))):
+  if count==20000:
+   estimates=[]
+   for name in codes:
+    lines=(out/(name+'.log')).read_text().splitlines()
+    fixture=next(Path(line.split(': ',1)[1]) for line in lines if line.startswith('Evidence directory: '))
+    report=json.loads((fixture/'append-burst.json').read_text())
+    estimates.append((report['write_seconds']+report['final_fsync_seconds'])*50)
+   # Reserve 35 minutes for already queued drive observations, bounded loaded
+   # smoke, restoration and final evidence. Never start a knowingly overlong run.
+   import datetime
+   cutoff=datetime.datetime(2026,10,11,14,21,tzinfo=datetime.timezone.utc).timestamp()
+   estimated_pair_seconds=2*max(estimates)+120
+   if time.time()+estimated_pair_seconds>cutoff:
+    (out/'20000-NOTRUN.json').write_text(json.dumps(dict(reason='400-record estimate exceeds remaining two-hour session budget after reserved cleanup/tests',estimated_pair_seconds=estimated_pair_seconds,estimate_basis=estimates),indent=2))
+    break
   for iteration,variant in enumerate(variants):
    name=f'append-{count}-{iteration}-{variant}'
    codes[name]=run(name,['python3',*common,'--mode','buffered','--append-burst-only','--append-burst',str(count),'--server-binary',base/variant/'efsd'],1200)

@@ -63,7 +63,7 @@ This is a partial optimization, not the agreed single-proposal batching of all
 caught-up reservations. W52 remains open regardless of the timing result.
 A matched control keeps both admission fixes and replaces only the REPORT
 completion loop with its original synchronous body. Private buffered 400-record
-ABBA and 20,000-record control/candidate tests require unique 4 KiB records,
+ABBA and budget-permitting 20,000-record control/candidate tests require unique 4 KiB records,
 zero final fsync result, exact peer and cold bytes, and physical/quota cleanup.
 Client REPORT timeouts are unchanged. Warm write timing excludes final close
 and subsequent verification; final fsync is recorded separately.
@@ -87,7 +87,7 @@ are not relaxed and production capacity behavior is unchanged.
 | `2669064e-nuc` six-cold-mutation/full suites | Fail at first mkdir: missing owner refusal stalls apply; preserved |
 | `108afa3e-nuc` native suite | Pass |
 | `108afa3e-nuc` full direct | Pass: POSIX 216/216, peer 67/67, six cold first mutations, selected sync/append/recovery/GC gates |
-| `108afa3e-nuc` buffered full suite | Running |
+| `108afa3e-nuc` buffered full suite | POSIX 216/216, no skips; peer/final recovery gates continuing |
 | Matched REPORT controls and exact 20,000-record gates | Waiting for corrected full-suite acceptance |
 
 Raw evidence is retained under
