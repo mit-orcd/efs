@@ -10144,11 +10144,6 @@ static int host_append_session_admit_covered(struct efs_raft_host *h,efs_ino_t i
     return rc;
 }
 
-static int host_append_session_admit(struct efs_raft_host *h,efs_ino_t ino,
-    const struct efs_opid_req *q,int *hint,int *registered)
-{
-    return host_append_session_admit_covered(h,ino,q,hint,registered,0);
-}
 
 static int host_pack_session_cleanup(struct efs_raft_host *h,const uint8_t *cmd,
     uint32_t clen,uint8_t group,int *hint,uint8_t *packed,uint32_t *size)
@@ -11588,11 +11583,6 @@ static int host_report_session_admit(struct efs_raft_host *h,
     return work.rc;
 }
 
-static int host_namespace_session_admit(struct efs_raft_host *h,uint32_t shard,
-    const struct efs_opid_req *q,int *hint)
-{
-    return host_namespace_session_admit_covered(h,shard,q,hint,0);
-}
 
 /* I16 leader-side probe: the op's window lives on `shard` (the dentry
  * shard of the named entry), which this host must hold. 1 = replay, reply
@@ -12669,6 +12659,7 @@ static int host_close_append_step(struct efs_raft_host *h,efs_ino_t ino,
         rc=host_append_close_batched(h,ino,offset,identity,&tx,&hint,NULL);
         return rc==EFS_OK?EFS_ERR_BUSY:rc; /* another pass checks completion */
     }
+    struct host_resize_ctx ctx={h,&hint};
     rc=efs_meta_retire_append_barriers(h->kv,ino,NULL,&tx,&host_append_ops,&ctx);
     if(rc!=EFS_OK)return rc;
     fill_txid(h,&tx);
@@ -12795,6 +12786,7 @@ static int host_append_transaction(struct efs_raft_host *h,efs_ino_t ino,uint64_
     if(rc!=EFS_OK)return rc;
     if(closed_watermark && !remaining_open) {
         fill_txid(h,&t);
+        struct host_resize_ctx ctx={h,hint};
         rc=efs_meta_retire_append_barriers(h->kv,ino,&q->id,&t,&host_append_ops,&ctx);
         if(rc!=EFS_OK)return rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
     }
