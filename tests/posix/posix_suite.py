@@ -4658,8 +4658,16 @@ def _self_test():
         if not os.path.exists(path):
             return []
         alive = []
+        snapshot = _process_snapshot(1.0)
         for tok in open(path).read().split():
             pid = int(tok)
+            running = _running_in_group(pid, snapshot)
+            if running is not None:
+                if running:
+                    alive.append(pid)
+                continue
+            # A failed process-table read must still conservatively report
+            # an existing group. A zombie-only group cannot mutate the tree.
             try:
                 os.kill(pid, 0)
             except OSError as e:
@@ -4888,6 +4896,19 @@ def _self_test():
             fails.append("synthetic cleanup did not reap and probe exactly "
                          "the fake groups (reap=%s alive=%s)" %
                          (reaped, alive_checks))
+
+        # Cancellation may return before init collects orphaned zombies.
+        # Keep the oracle about running groups, including live descendants
+        # of a departed leader, rather than kill(pid, 0)'s zombie visibility.
+        oracle_pids = os.path.join(td, "oracle-groups.pids")
+        with open(oracle_pids, "w") as f:
+            f.write("101 102 103 104\n")
+        _ps_hook = lambda timeout: b"101 101 Z\n202 102 S\n203 103 D\n"
+        try:
+            expect(_pids_alive(oracle_pids) == [102, 103],
+                   "group oracle must retain sleeping/blocked descendants and exclude zombies")
+        finally:
+            _ps_hook = None
 
         def _cancel_n(n):
             pidfile = os.path.join(td, "scale-%d.pids" % n)
