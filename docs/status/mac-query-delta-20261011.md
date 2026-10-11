@@ -940,3 +940,29 @@ concurrent append records and physical deletion drain. The handoff takes
 correctness evidence, not native timing acceptance. All owned fixtures drain
 and unmount normally. Evidence: append-burst-full-unit.txt and
 append-burst-cold-wire.txt. Installed rollout/native timing gates follow.
+
+Installed 0b45f6cf fails both unchanged native 20-second cases (mtime 20.2 s,
+concurrent CREATE 24.9 s including cleanup). RPC counters show append receive
+time averaging about 85 ms, down from the prior diagnostic's roughly 160 ms;
+this still does not establish native acceptance. No background fixtures or
+builds ran during those cases. Evidence: native-append-burst-two.txt and
+append-burst-two-rpc.txt.
+
+The next candidate pairs fresh authority for append reservation/completion/
+close using the existing two-group admission helper. Both groups must be
+hosted; different leaders retain scalar fresh reads, and pending old rounds
+cannot satisfy a newly admitted read. Reservation reuses only its just-
+completed request-local group boundary for the session owner lookup, still
+reading current epoch/state and enforcing the local acceptance floor. Other
+admission callers retain their independent fresh owner boundary. Production
+helper tests pass for hosted routing refusal, fresh paired rounds, fencing,
+stale local floors, default independent calls and uncovered owner groups.
+Mac Linux targeted and private cold/peer gates follow.
+
+Paired append authority passes the Mac Linux targeted quorum/owner/fencing/
+transaction recovery gates and local ASAN/UBSAN owner admission. Its unchanged
+private four-daemon buffered/TCP cold/peer gate passes all eight races, all
+800 handoff records in 135.6 seconds, and physical deletion drain. Prior
+iteration's handoff took 232.6 seconds; these private runs demonstrate
+correctness, not isolated native performance acceptance. Evidence:
+append-authority-unit.txt and append-authority-cold-wire.txt.

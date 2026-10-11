@@ -33,12 +33,19 @@ static int host_read_index_admitted(struct efs_raft_host*h,uint8_t g,int*hint,co
  assert(h->core[0].pending && h->core[2].pending);waits++;return wait_error;
 }
 ''' + s[a:b]+r'''
+static void host_need_both(uint8_t groups[2]){groups[0]=0;groups[1]=2;}
+static int host_hosts(struct efs_raft_host*h,uint8_t g){return h->absent!=g+1;}
+static int host_pick_peer(struct efs_raft_host*h,const uint8_t*g,unsigned n,int avoid){(void)h;assert(g[0]==0 && g[1]==2 && n==2 && avoid==-1);return 7;}
+''' + s[s.index('static int host_append_authority('):s.index('\n}',s.index('static int host_append_authority('))+2]+r'''
 static void reset(struct efs_raft_host*h){
  h->absent=0;h->core[0]=(struct efs_raft){.role=2,.round=7,.term=11,.commit=40};
  h->core[2]=(struct efs_raft){.role=2,.round=17,.term=21,.commit=90};
  expected[0]=7;expected[2]=17;begun=waits=scalar=kicks=published=wait_error=0;
 }
 int main(void){struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER};int hint=-1;
+ reset(&h);h.absent=3;
+ assert(host_append_authority(&h,&hint)==EFS_ERR_NOT_PRIMARY && hint==7 && !begun && !scalar);
+ reset(&h);assert(!host_append_authority(&h,&hint) && begun==2 && waits==2);
  reset(&h);assert(!host_read_index_pair(&h,0,2,&hint));assert(begun==2 && waits==2 && kicks==1 && published==2 && !scalar);
  expected[0]=h.core[0].round;expected[2]=h.core[2].round;
  h.core[0].pending=h.core[2].pending=0;

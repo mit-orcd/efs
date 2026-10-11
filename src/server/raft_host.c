@@ -9868,15 +9868,15 @@ static int host_session_cleanup_admit(struct efs_raft_host *h,
 
 /* Legacy unregistered append identities remain compatible. Once a session is
  * registered, absence/error is never authority to bypass its global/local floor. */
-static int host_append_session_admit(struct efs_raft_host *h,efs_ino_t ino,
-    const struct efs_opid_req *q,int *hint,int *registered)
+static int host_append_session_admit_covered(struct efs_raft_host *h,efs_ino_t ino,
+    const struct efs_opid_req *q,int *hint,int *registered,uint8_t covered)
 {
     uint32_t shard=efs_kv_inode_shard(ino);uint8_t query[HOST_SESS_HDR_LEN+4]={EFS_MD_CMD_SESSION,HOST_SESS_GET};
     memcpy(query+2,q->id.client_uuid,16);wr32be(query+18,shard);
     uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(q->id.client_uuid));
     uint64_t salt=0;int rc;
     *registered=0;
-    if(host_hosts(h,owner))rc=host_session_get(h,query,sizeof(query),owner,hint,&salt);
+    if(host_hosts(h,owner))rc=host_session_get_covered(h,query,sizeof(query),owner,hint,&salt,covered);
     else {
         struct efs_msg_raft_mkfs_reply reply={0};
         rc=host_remote_cmd(h,owner,query,sizeof(query),&reply,-1);salt=reply.salt;
@@ -9893,6 +9893,12 @@ static int host_append_session_admit(struct efs_raft_host *h,efs_ino_t ino,
     rc=efs_session_accept(h->kv,shard,q->id.client_uuid,q->id.session_epoch);
     if(rc==EFS_OK)*registered=1;
     return rc;
+}
+
+static int host_append_session_admit(struct efs_raft_host *h,efs_ino_t ino,
+    const struct efs_opid_req *q,int *hint,int *registered)
+{
+    return host_append_session_admit_covered(h,ino,q,hint,registered,0);
 }
 
 static int host_pack_session_cleanup(struct efs_raft_host *h,const uint8_t *cmd,
@@ -12050,10 +12056,10 @@ static int host_append_authority(struct efs_raft_host *h,int *hint)
         if(!host_hosts(h,groups[i])) {
             *hint=host_pick_peer(h,groups,2,-1);return EFS_ERR_NOT_PRIMARY;
         }
-        int rc=host_read_index(h,groups[i],hint);
-        if(rc!=EFS_OK)return rc;
     }
-    return EFS_OK;
+    /* Both admissions precede either probe when this host leads both groups.
+     * Different leaders keep the scalar path and its fresh authority checks. */
+    return host_read_index_pair(h,groups[0],groups[1],hint);
 }
 static int host_session_append_step(struct efs_raft_host *h,const uint8_t *cmd,
     uint32_t clen,uint8_t group,int *hint,uint64_t *empty)
@@ -12249,7 +12255,12 @@ static int host_append_transaction(struct efs_raft_host *h,efs_ino_t ino,uint64_
 {
     struct efs_txid t;
     int registered=0,rc=host_append_authority(h,hint);
-    if(rc==EFS_OK)rc=host_append_session_admit(h,ino,q,hint,&registered);
+    /* Authority was established for both groups in this RPC, before any
+     * mutation. Reuse only that request-local boundary for the owner read;
+     * always reread its current epoch/state and local acceptance floor. */
+    uint8_t groups[2];host_need_both(groups);
+    uint8_t covered=(uint8_t)((1u<<groups[0])|(1u<<groups[1]));
+    if(rc==EFS_OK)rc=host_append_session_admit_covered(h,ino,q,hint,&registered,covered);
     if(rc!=EFS_OK)return rc;
     /* Replayed reservations do not need cleanup or a new transaction. */
     rc=efs_meta_append_result(h->kv,ino,len,q,offset);
