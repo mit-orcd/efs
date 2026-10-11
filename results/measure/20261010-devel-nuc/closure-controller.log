@@ -15,3 +15,9 @@ END w79-direct 0
 START w79-buffered 2026-10-11T04:20:03Z
 END w79-buffered 0
 START full-direct 2026-10-11T04:20:24Z
+END full-direct 0
+START full-buffered 2026-10-11T04:30:08Z
+END full-buffered 0
+START w96-wal-failure 2026-10-11T04:36:58Z
+END w96-wal-failure 0
+START w97-nvme-0-grow 2026-10-11T04:37:16Z

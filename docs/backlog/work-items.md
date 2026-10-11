@@ -4270,6 +4270,20 @@ equivalent protocol, or deploy a layout by wiping the preserved test stores.
 
 ## W96 · Bounded preallocation for the KV write-ahead log
 
+**Closed Oct 11 — isolated NUC acceptance:** sixteen production-WAL 90-second
+ABBA cells on SATA/NVMe, with one/sixteen-item records, all pass exact ordered
+CRC/key/payload replay and bounded reservation/reset checks. Reserved throughput
+improves 17.7–184.0% across the four shapes; SATA single-record p99 increases
+225/226→277/274 µs, so this is a conditional allocation improvement, not an
+unconditional latency win. Full Linux/native and direct/buffered TCP live gates
+pass: each POSIX214/214 and peer66/66, sync-write failure retention, append
+replay/leader death, dirty-stop/shutdown recovery, physical GC and repeated
+cold WAL-tail repair. Actual follower KV fsync failure refuses periodic/shutdown
+checkpoint publication and cold replays the durable Raft tail with exact bytes.
+WAL ASan/UBSan and normal-binary Valgrind pass. Hardware power loss and W97's
+sustained drive slowdown remain separate.
+[Acceptance and limits](../status/devel-nuc-closure-20261010.md).
+
 **Implementation update (Oct 8):** EOF-tail repair, detectable interior-damage refusal, sticky failures and bounded reservation are tested. The final guard passes full Linux/live cold/POSIX/peer/GC gates. Quiet NUC two-device performance acceptance remains open while an unrelated million-file generator runs.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
@@ -4284,7 +4298,7 @@ consequences still need testing. Existing WAL group commit/holds must be
 preserved. [Reproducer](../../results/measure/20261008-w93-w96-review/README.md)
 and [review](../status/tiny-file-performance-plan-20261008.md#review-against-devel-oct-8).
 
-**Class/status:** Metadata storage performance; implemented with final gates pending. EOF-tail repair, detectable interior-damage refusal, sticky failures and bounded logical-EOF reservation are tested. Final guard live cold/POSIX/peer gates pass; isolated NUC two-device performance acceptance remains open.
+**Class/status:** Metadata storage performance; closed Oct11 after isolated two-device and full software recovery acceptance. Historical implementation and acceptance notes below describe the earlier outstanding gates.
 
 **Evidence:** the loaded n3 KV WAL sync mean was 12.1 ms before round 7 and
 14.6 ms afterward; the latter contains only 13 calls and different queue
@@ -4294,7 +4308,7 @@ versus 3.9 ms with preallocation. That motivates a KV-specific experiment,
 not a KV throughput claim. See the
 [probe](../../results/measure/20261008-nuc-tiny-create/round-7/log-space-probe-r7.json).
 
-**Remaining action:** Final recovery guard full live cold/POSIX/peer gates pass. Repeat the NUC two-device A/B performance gate when unrelated workload is absent; current QD8 samples are mixed. Preserve bounded reservations, fallback, logical EOF, covered durability and compaction/reset correctness rather than asserting an unconditional allocation win.
+**Disposition:** The isolated repeated two-device gate is now complete. Retain bounded reservations, fallback, logical EOF, covered durability and compaction/reset regressions. The conditional benefit and SATA tail tradeoff are recorded above; earlier QD8 samples are not the closure evidence.
 
 **Governing contracts/related work:** W23/W89 compaction/pressure and D30
 resource bounds; the round-7 Raft candidate is supporting evidence only. This

@@ -7,11 +7,13 @@
 ## NUC closure session — October 10–11
 
 [Current NUC acceptance](devel-nuc-closure-20261010.md) closes W70, W78, W79
-and W80 for their named operator-correctness scopes. Full native, actual stale
+and W80 for their named operator-correctness scopes, plus W96's isolated
+allocation and software recovery acceptance. Full native, actual stale
 PID startup/stop, both mkfs aliases' consumed-reply recovery and explicit
 retired-query outcomes pass. W96's sixteen drive comparisons, exact retained
-replay, ASan/UBSan and Valgrind pass; its final live gates are still running.
-W97 allocation controls remain in the session queue. This entry describes
+replay, ASan/UBSan and Valgrind pass. Both full live modes pass POSIX214/214,
+peer66/66, cold/fault/GC and actual follower WAL-fsync refusal recovery.
+W97 allocation controls are running. This entry describes
 the active private validation, not a completed regular-service deployment.
 
 ## Governing node-count contract — D36

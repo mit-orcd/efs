@@ -23,12 +23,12 @@ forced dirty discard, main merge, push or tag is requested.
 
 | Item | Selected remaining scope | Session state |
 | --- | --- | --- |
-| W96 | Production KV WAL reservation on/off, both physical drives, repeated ABBA batch distributions, bounded allocation, reset/reopen and exact replay; full native/POSIX/peer/fault/cold gates | Running; no closure yet |
+| W96 | Production KV WAL reservation on/off, both physical drives, repeated ABBA batch distributions, bounded allocation, reset/reopen and exact replay; full native/POSIX/peer/fault/cold gates | Closed Oct11; repeated isolated measurements and full software recovery gates pass |
 | W78 | Absent/dead/invalid/unrelated/wrong-storage/stale-start PID and owned daemon/recorder retirement | Closed Oct11; current native and real NUC startup/stop gates pass |
 | W79 | Both aliases and help, real consumed successful mkfs replies, uncertain-outcome retry preserves namespace/salt, explicit extra-argument refusal | Closed Oct11; direct/buffered private gates pass |
 | W70 | Accepted/refused quota reductions, unchanged bytes and no fictitious migration | Closed Oct11; direct/buffered × one/two-root current-code gates pass |
 | W80 | Retired QUERY_STATS gives nonzero unavailable response with no false totals in normal/raw output; current help and legacy/malformed reply tests | Closed Oct11 for retired endpoint; current-code nonempty namespace, fragment, help and reply gates pass |
-| W97 | Three-writer durable file controls outside EFS; growing/reset files versus preallocated rings, reversed repeats, barrier distributions, disk/CPU counters and exact reopened blocks | Prepared; later stage queued |
+| W97 | Three-writer durable file controls outside EFS; growing/reset files versus preallocated rings, reversed repeats, barrier distributions, disk/CPU counters and exact reopened blocks | Running eight-minute ABBA cells; no closure yet |
 
 W73/W64 retain production-session/platform obligations. W53 explicitly requires
 investigation followed by the user's keep/revert decision. W54/W38's physical
@@ -62,7 +62,7 @@ host contention and process CPU rather than assuming zero software overhead.
 ## Terminal evidence
 
 The overall session is not complete. The completed operator verdicts below
-close only their named scopes. W96 final live gates and W97 controls remain
+close only their named scopes. W96 final live gates pass; W97 controls remain
 in progress.
 
 Named NUC engine build: `3df1931032b8-nuc`, branch `devel-nuc`; production
@@ -126,3 +126,25 @@ native run passed. No check or failure was suppressed.
 source/binary provenance, operator fixtures, dropped reply frames, all W96
 windows and exact replay manifests, native/sanitizer output and the initial
 failed copy. Final live/pressure/restoration verdicts will be added here.
+
+## W96 final software acceptance
+
+Both full live modes exit0. Each reports core POSIX214/214, no skip/notrun,
+and peer66/66. Direct core takes82.3s, peer273.6s; buffered core88.5s,
+peer94.2s. The direct peer mutation phase was briefly observed with an eight-second
+strace; these gate times are correctness evidence, not clean performance A/B.
+Both modes pass positive sync-write and failed-publication recovery, append
+lost-reply/leader-death/exact cold bytes, dirty-stop and active shutdown,
+physical GC, second cold restart after malformed WAL-tail repair, empty physical
+inventory and zero quota. Full native includes KV/Raft and compaction regressions.
+
+The separate actual follower KV-fsync refusal gate exits0: periodic and shutdown
+checkpoint refusal, cold replay of the uncheckpointed durable Raft tail and exact
+bytes/nlink pass. WAL ASan/UBSan and Valgrind evidence above remain scoped to the
+WAL harness. W96 closes for the documented software gate, without a hardware
+power-loss or sustained tiny-file throughput claim.
+
+Exact POSIX TSVs, engine SHA/version manifests, sync/replay/GC/fault JSONs and
+logs are in `full-fixtures/{direct,buffered,wal-failure}` under the raw evidence.
+Bulk payloads remain in the preserved private remote fixture roots printed in
+the stage logs; they are not copied into Git.
