@@ -1482,7 +1482,8 @@ all agent improvements are being integrated on `release-v0.3.0-pre-alpha`;
 Mac authority/APPEND reconciliation and review pipeline/bounds/recorder fixes
 are included, together with bounded packed receipt retirement. Completed AMD
 feedback comparisons remain opt-in and do not close global W97. Full merged
-AMD qualification is running; packing timeouts remain
+AMD normal/fault native qualification passes at `d1197381`; mounted packing
+qualification is running. Packing timeouts remain
 a release blocker. Small-file packing and code-review correctness have priority. Branch checkpoints
 are not final release acceptance. Shared devel/main and pushes remain unchanged
 until a frozen merged candidate passes its recorded gates.

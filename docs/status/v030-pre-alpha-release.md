@@ -168,3 +168,15 @@ AMD native tests and serialized direct/buffered packed mounted gates are
 running. Input hashes cover929 build/test/documentation files, with no
 synchronization mismatches. NUC reports both tag52 native builds pass on
 `ba73f304`; new-tag live/cold/20k acceptance remains pending.
+
+## Full merged native verdict
+
+Frozen `d11973815676657e53039615634a9ac4b14c927c` passes `make -j8 all test`
+in both normal and EFS_FAULTS=1 builds on AMD. Both native exit markers and
+the controlling build exit are0. All929 hashed build/test/documentation inputs
+match the frozen source. [Native logs, source verification and binary identities](../../results/measure/20261011-v030-merged-native/d1197381/acceptance-summary.json)
+retain the exact artifact identity. Normal binaries identify as
+`d1197381-release-normal`; fault artifacts are separate. Mounted direct and
+buffered packing, final sanitizer and later parser checkpoint acceptance are
+still pending. This native pass does not close ORCD's quiet concurrent
+directory/query timeouts or certify a tagged release.
