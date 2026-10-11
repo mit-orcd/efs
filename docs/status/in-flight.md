@@ -7,10 +7,14 @@
 tests and coordinated deployment on ORCD until resolved. Work on `devel-orcd`;
 W95/P4.1 production tiny-payload packing is first, followed by ORCD W109/W97,
 W108, W110 and remaining W99/W42/W106 gates. The fcstor007 `tiny-files` screen
-is the requested benchmark. Preserve current files and original acceptance
-oracles. [Implementation and measured storage checkpoint](orcd-tiny-packing-20261011.md).
+is the requested benchmark. Preserve the original acceptance oracles; the
+user explicitly permits erasing ORCD test data if needed for packing rollout. [Implementation and measured storage checkpoint](orcd-tiny-packing-20261011.md).
 Codec, packed files storage, shared-lifetime planning, typed upload fences and
 a staged persistent minimum-reader barrier are implemented with private gates.
+Staged authoritative packed references and same-group mapping/ledger planning
+now cover ordinary-delta preservation and atomic packed-to-ordinary promotion
+with durable receipt replay. Unsupported packed retirement paths fail BUSY;
+new packed publication, GETCHUNKS and mounted coalescing are still gated.
 The lower-layer packing gate is not mounted publication/GC acceptance. Next
 connect typed upload/session admission, same-group durable mapping/receipt
 batches and GETCHUNKS/cold reads; then client coalescing and shared-object GC.

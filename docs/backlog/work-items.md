@@ -4273,6 +4273,12 @@ WAL exits and cold compaction: mappings and ledger commit together, neighbors
 retain the body, terminal references cannot revive, and every captured member
 must fence uploads before deletion. Actual Raft/session/RPC integration remains
 open; this staged planner grants no upload or publication authority.
+Authoritative packed base references, mixed delta decoding and checksummed
+placement/ledger records now have private cold-store gates. The real publication
+apply preserves packed references on ordinary delta writes and retires them
+atomically with promotion and durable receipts. Unsupported packed retirement
+still fails BUSY; new packed publication, wire reads and coalescing remain gated.
+[Metadata integration checkpoint](../status/orcd-tiny-packing-20261011.md#authoritative-reference-and-publication-checkpoint--oct-11).
 
 **Oct 11 ORCD priority:** production logical-payload packing is the first item on
 `devel-orcd`. Replace per-file full-stripe padding with bounded immutable packed

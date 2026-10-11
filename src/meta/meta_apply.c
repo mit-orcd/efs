@@ -5,6 +5,7 @@
 #include "efs/kv_key.h"
 #include "efs/session.h"
 #include "efs/put_ticket.h"
+#include "efs/pack_mapping.h"
 #include "efs/checksum.h"
 #include "efs/publication.h"
 #include "efs/dir_layout.h"
@@ -27,7 +28,7 @@
  * the short value again and the list is gone. */
 #define DELTA_REC 140
 #define DELTA_HDR 4
-#define CHUNK_VAL_MAX (CHUNK_VAL + DELTA_HDR + \
+#define CHUNK_VAL_MAX (CHUNK_VAL + EFS_PACK_REF_BYTES + DELTA_HDR + \
                        EFS_CHUNK_DELTA_MAX * DELTA_REC)
 
 /* All ordinary metadata mutations honor prepared EXCL images. REDUCEs
@@ -44,6 +45,7 @@ static int meta_write_check(struct efs_kv *kv, const uint8_t *key, uint32_t kl)
     case EFS_KV_KIND_LANE:
     case EFS_KV_KIND_CONTENT_FENCE:
     case EFS_KV_KIND_LANE_AUTHORITY:
+    case EFS_KV_KIND_PACK_OBJECT:
         return efs_txn_key_exclusive(kv, key, kl);
     case EFS_KV_KIND_CHUNK:
         if (kl != 24)
@@ -3496,6 +3498,12 @@ int efs_meta_apply_orphan_reclaim(struct efs_kv *kv, efs_ino_t ino, uint64_t gen
 }
 
 
+static uint32_t chunk_header_size(const uint8_t *p, uint32_t n)
+{
+    if (!p || n < CHUNK_VAL) return CHUNK_VAL;
+    return CHUNK_VAL + (rd32(p + 8) == EFS_META_PROFILE_PACK_K2F1 ? EFS_PACK_REF_BYTES : 0);
+}
+
 static void pack_chunk(uint8_t *p, const struct efs_meta_chunk *ch)
 {
     int i;
@@ -3507,6 +3515,8 @@ static void pack_chunk(uint8_t *p, const struct efs_meta_chunk *ch)
         be32(p + CHUNK_HDR + (uint32_t)i * 4u, ch->nodes[i]);
     memcpy(p + CHUNK_HDR + 4 * EFS_NUM_FRAGMENTS, ch->checksums,
            EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
+    if (ch->coding_profile_id == EFS_META_PROFILE_PACK_K2F1)
+        (void)efs_pack_ref_encode(&ch->packed, p + CHUNK_VAL);
 }
 
 static int unpack_chunk(const uint8_t *p, uint32_t n, struct efs_meta_chunk *ch)
@@ -3523,7 +3533,36 @@ static int unpack_chunk(const uint8_t *p, uint32_t n, struct efs_meta_chunk *ch)
         ch->nodes[i] = rd32(p + CHUNK_HDR + (uint32_t)i * 4u);
     memcpy(ch->checksums, p + CHUNK_HDR + 4 * EFS_NUM_FRAGMENTS,
            EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
+    if (ch->coding_profile_id == EFS_META_PROFILE_PACK_K2F1) {
+        uint32_t hdr = CHUNK_VAL + EFS_PACK_REF_BYTES;
+        if (n < hdr ||
+            efs_pack_ref_decode(p + CHUNK_VAL, EFS_PACK_REF_BYTES, &ch->packed) != EFS_OK ||
+            ch->generation != ch->packed.record_generation ||
+            ch->content_epoch != ch->packed.content_epoch)
+            return EFS_ERR_PROTO;
+        /* A damaged extension/trailer must never masquerade as a base-only
+         * image. Legacy values retain their existing compatibility rules. */
+        if (n != hdr) {
+            if (n < hdr + DELTA_HDR || p[hdr + 2] || p[hdr + 3])
+                return EFS_ERR_PROTO;
+            uint32_t count = rd16(p + hdr);
+            if (!count || count > EFS_CHUNK_DELTA_MAX ||
+                n != hdr + DELTA_HDR + count * DELTA_REC)
+                return EFS_ERR_PROTO;
+        }
+    }
     return EFS_OK;
+}
+
+static int chunk_identity_ok(const struct efs_meta_chunk *ch, efs_ino_t ino,
+                             uint64_t inode_gen, uint32_t ci)
+{
+    if (ch->coding_profile_id != EFS_META_PROFILE_PACK_K2F1)
+        return EFS_OK;
+    const struct efs_pack_ref *r = &ch->packed;
+    return ci == 0 && r->ino == ino && r->inode_generation == inode_gen &&
+        r->publication_group == efs_raft_shard_group(efs_kv_lane_shard(ino, 0))
+        ? EFS_OK : EFS_ERR_PROTO;
 }
 
 /* Delta record: off:4 len:4 gen:8 epoch:8 seq:8 nodes:12 cks:96 = 140. */
@@ -3562,14 +3601,14 @@ static int unpack_delta_rec(const uint8_t *p, struct efs_meta_delta *d)
 /* 0 when the value is a bare chunk image or the trailer is short. */
 static uint32_t trailer_n(const uint8_t *v, uint32_t n)
 {
-    uint32_t c;
+    uint32_t c, hdr = chunk_header_size(v, n);
 
-    if (!v || n < CHUNK_VAL + DELTA_HDR)
+    if (!v || n < hdr + DELTA_HDR)
         return 0;
-    c = ((uint32_t)v[CHUNK_VAL] << 8) | v[CHUNK_VAL + 1];
+    c = ((uint32_t)v[hdr] << 8) | v[hdr + 1];
     if (c > EFS_CHUNK_DELTA_MAX)
         return 0;
-    if (n < CHUNK_VAL + DELTA_HDR + c * DELTA_REC)
+    if (n < hdr + DELTA_HDR + c * DELTA_REC)
         return 0;
     return c;
 }
@@ -3579,7 +3618,7 @@ static int trailer_at(const uint8_t *v, uint32_t n, uint32_t i,
 {
     if (i >= trailer_n(v, n))
         return EFS_ERR_INVAL;
-    return unpack_delta_rec(v + CHUNK_VAL + DELTA_HDR + i * DELTA_REC, d);
+    return unpack_delta_rec(v + chunk_header_size(v, n) + DELTA_HDR + i * DELTA_REC, d);
 }
 
 static int ranges_overlap(uint32_t a, uint32_t al, uint32_t b, uint32_t bl)
@@ -3595,19 +3634,20 @@ static uint32_t pack_chunk_value(uint8_t *dst, const struct efs_meta_chunk *ch,
                                  const struct efs_meta_delta *deltas,
                                  uint32_t n)
 {
-    uint32_t i;
+    uint32_t i, hdr = CHUNK_VAL +
+        (ch->coding_profile_id == EFS_META_PROFILE_PACK_K2F1 ? EFS_PACK_REF_BYTES : 0);
 
     pack_chunk(dst, ch);
     if (n == 0)
-        return CHUNK_VAL;
-    dst[CHUNK_VAL] = (uint8_t)(n >> 8);
-    dst[CHUNK_VAL + 1] = (uint8_t)n;
-    dst[CHUNK_VAL + 2] = 0;
-    dst[CHUNK_VAL + 3] = 0;
+        return hdr;
+    dst[hdr] = (uint8_t)(n >> 8);
+    dst[hdr + 1] = (uint8_t)n;
+    dst[hdr + 2] = 0;
+    dst[hdr + 3] = 0;
     for (i = 0; i < n; i++)
-        pack_delta_rec(dst + CHUNK_VAL + DELTA_HDR + i * DELTA_REC,
+        pack_delta_rec(dst + hdr + DELTA_HDR + i * DELTA_REC,
                        &deltas[i]);
-    return CHUNK_VAL + DELTA_HDR + n * DELTA_REC;
+    return hdr + DELTA_HDR + n * DELTA_REC;
 }
 
 /* True when a new publication carries the exact fragment set of the row it
@@ -3618,6 +3658,14 @@ static uint32_t pack_chunk_value(uint8_t *dst, const struct efs_meta_chunk *ch,
 static int chunk_aliases(const struct efs_meta_chunk *a,
                          const struct efs_meta_chunk *b)
 {
+    if (a->coding_profile_id == EFS_META_PROFILE_PACK_K2F1 ||
+        b->coding_profile_id == EFS_META_PROFILE_PACK_K2F1) {
+        uint8_t ar[EFS_PACK_REF_BYTES], br[EFS_PACK_REF_BYTES];
+        if (a->coding_profile_id != b->coding_profile_id ||
+            efs_pack_ref_encode(&a->packed, ar) != EFS_OK ||
+            efs_pack_ref_encode(&b->packed, br) != EFS_OK ||
+            memcmp(ar, br, sizeof(ar))) return 0;
+    }
     return memcmp(a->nodes, b->nodes, sizeof(a->nodes)) == 0 &&
            memcmp(a->checksums, b->checksums, sizeof(a->checksums)) == 0;
 }
@@ -3762,6 +3810,10 @@ static int gc_queue(struct efs_kv_item *it, uint32_t *n, uint32_t cap,
     uint32_t kg = 0, anch;
     int rc;
 
+    /* Shared objects require ledger retirement, never per-inode GC. Fail
+     * closed until the atomic mapping/ledger adapter is installed. */
+    if (dead->coding_profile_id == EFS_META_PROFILE_PACK_K2F1)
+        return EFS_ERR_BUSY;
     if (*n >= cap)
         return EFS_ERR_NOMEM;
     anch = efs_kv_anchor_shard(efs_kv_lane_shard(ino, lane));
@@ -4060,7 +4112,7 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
     uint64_t committed = 0;
     uint64_t inode_gen, mtime_gen, row_base_size = 0, row_active = 0;
     struct lane_rec ln;
-    struct efs_kv_item it[6 + EFS_CHUNK_DELTA_MAX];
+    struct efs_kv_item it[8 + EFS_CHUNK_DELTA_MAX];
     uint32_t n = 0;
     uint32_t ch_wlen = CHUNK_VAL;
     uint32_t nd_old = 0;
@@ -4161,6 +4213,7 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
     /* A delta's candidate names the span object, not the base image, so
      * matching the base generation is not a replay of this publish. */
     if (!p->delta_len && committed == p->candidate_gen) {
+        if (got.coding_profile_id != p->coding_profile_id) return EFS_ERR_PROTO;
         if (!p->durable_result) return EFS_OK;
         /* A new identical write has its own identity and still updates time.
          * Missing evidence for an older CAS must not fabricate its success. */
@@ -4376,6 +4429,7 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
      * aliases the old fragment set (truncate tail stub), in which case the
      * fragments are shared with the live row and nothing is dead. */
     if (!appending && committed != 0 &&
+        got.coding_profile_id != EFS_META_PROFILE_PACK_K2F1 &&
         got.generation != stored.generation &&
         (p->fresh_object || !chunk_aliases(&stored, &got))) {
         rc = gc_queue(it, &n, (uint32_t)(sizeof(it) / sizeof(it[0])),
@@ -4422,6 +4476,24 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
         n++;
     }
     if (receipt) it[n++] = *receipt;
+    if (got.coding_profile_id == EFS_META_PROFILE_PACK_K2F1 ||
+        stored.coding_profile_id == EFS_META_PROFILE_PACK_K2F1) {
+        /* The old image is already held by this CAS: no additional mapping
+         * lookup or work on the legacy hot path. Ledger and receipt share
+         * the exact batch that replaces/preserves this packed reference. */
+        struct efs_pack_mapping_change change = {p->ino, inode_gen,
+            p->chunk_index, had_row ? &got : NULL, &stored};
+        struct efs_pack_mapping_plan plan = {0};
+        rc = efs_pack_mapping_plan(kv, &change, 1, &plan);
+        if (rc != EFS_OK) return rc;
+        if (n + plan.count > sizeof(it) / sizeof(it[0])) {
+            efs_pack_mapping_plan_free(&plan); return EFS_ERR_NOMEM;
+        }
+        memcpy(it + n, plan.items, plan.count * sizeof(it[0]));
+        rc = meta_write_batch(kv, it, n + plan.count);
+        efs_pack_mapping_plan_free(&plan);
+        return rc;
+    }
     return meta_write_batch(kv, it, n);
 }
 
@@ -5680,13 +5752,13 @@ struct sweep_scan {
 static int chunk_gc_slots(const uint8_t *val, uint32_t vlen,
                            const struct efs_meta_chunk *dead, uint32_t *slots)
 {
-    uint32_t nd = 0;
-    if (vlen != CHUNK_VAL) {
-        if (vlen < CHUNK_VAL + DELTA_HDR)
+    uint32_t nd = 0, hdr = chunk_header_size(val, vlen);
+    if (vlen != hdr) {
+        if (vlen < hdr + DELTA_HDR)
             return EFS_ERR_PROTO;
-        nd = ((uint32_t)val[CHUNK_VAL] << 8) | val[CHUNK_VAL + 1];
+        nd = ((uint32_t)val[hdr] << 8) | val[hdr + 1];
         if (nd > EFS_CHUNK_DELTA_MAX ||
-            vlen < CHUNK_VAL + DELTA_HDR + nd * DELTA_REC)
+            vlen < hdr + DELTA_HDR + nd * DELTA_REC)
             return EFS_ERR_PROTO;
     }
     *slots = 1u + (dead->generation != 0);
@@ -6736,7 +6808,7 @@ static int truncate_publish_tail(struct efs_kv *kv, struct efs_meta_row *row,
     it[*n].key = k_ch;
     it[*n].klen = kc;
     it[*n].val = v_ch;
-    it[*n].vlen = CHUNK_VAL;
+    it[*n].vlen = pack_chunk_value(v_ch, &stored, NULL, 0);
     (*n)++;
     /* The straddling tail is CAS-published inside the truncate txn; the
      * generation it replaces is dead from this commit on (L7) — unless the
@@ -6817,7 +6889,7 @@ static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
     uint8_t k_ln[EFS_META_LANES][EFS_KV_KEY_MAX];
     uint8_t v_ln[EFS_META_LANES][LANE_VAL];
     struct lane_authority_fence overlay[EFS_META_LANES];
-    uint8_t k_tail[EFS_KV_KEY_MAX], v_tail[CHUNK_VAL];
+    uint8_t k_tail[EFS_KV_KEY_MAX], v_tail[CHUNK_VAL + EFS_PACK_REF_BYTES];
     uint32_t ki = 0, n = 0, i, tail_ci = 0;
     uint64_t new_epoch;
     uint8_t has_tail = 0;
@@ -8181,6 +8253,8 @@ int efs_meta_apply_chunk_holds(struct efs_kv *kv, efs_ino_t ino,
     rc = unpack_chunk(val, vlen, &ch);
     if (rc != EFS_OK)
         return rc;
+    rc = chunk_identity_ok(&ch, ino, inode_gen, chunk_index);
+    if (rc != EFS_OK) return rc;
     if (committed)
         *committed = ch.generation;
     if (gen == 0)
@@ -8230,6 +8304,10 @@ int efs_meta_apply_get_chunk_deltas(struct efs_kv *kv, efs_ino_t ino,
     rc = kv_get_copy(kv, key, klen, val, sizeof(val), &vlen);
     if (rc != EFS_OK)
         return rc;
+    struct efs_meta_chunk base;
+    rc = unpack_chunk(val, vlen, &base);
+    if (rc == EFS_OK) rc = chunk_identity_ok(&base, ino, row.generation, chunk_index);
+    if (rc != EFS_OK) return rc;
     nd = trailer_n(val, vlen);
     wr = nd < cap ? nd : cap;
     for (i = 0; i < wr; i++) {
@@ -8274,7 +8352,8 @@ int efs_meta_apply_get_chunk(struct efs_kv *kv, efs_ino_t ino, uint32_t chunk_in
     rc = kv_get_copy(kv, key, klen, val, sizeof(val), &vlen);
     if (rc != EFS_OK)
         return rc;
-    return unpack_chunk(val, vlen, out);
+    rc = unpack_chunk(val, vlen, out);
+    return rc == EFS_OK ? chunk_identity_ok(out, ino, row.generation, chunk_index) : rc;
 }
 
 /* One KV get for the image and the span trailer, keyed by a row the
@@ -8307,6 +8386,7 @@ int efs_meta_apply_get_chunk_row(struct efs_kv *kv, efs_ino_t ino,
     if (rc != EFS_OK)
         return rc;
     rc = unpack_chunk(val, vlen, out);
+    if (rc == EFS_OK) rc = chunk_identity_ok(out, ino, inode_gen, chunk_index);
     if (rc != EFS_OK)
         return rc;
     nd = trailer_n(val, vlen);
@@ -8431,7 +8511,7 @@ int efs_meta_apply_sweep_chunk(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
     struct efs_kv_item items[CAP] = {0};
     uint8_t gk[CAP][EFS_KV_KEY_MAX], gv[CAP][EFS_META_GC_VAL];
     uint8_t ck[EFS_KV_KEY_MAX], lk[EFS_KV_KEY_MAX], lv[LANE_VAL];
-    uint8_t expected[CHUNK_VAL_MAX], actual[CHUNK_VAL_MAX], value[CHUNK_VAL];
+    uint8_t expected[CHUNK_VAL_MAX], actual[CHUNK_VAL_MAX], value[CHUNK_VAL + EFS_PACK_REF_BYTES];
     uint32_t ckl = 0, lkl = 0, lvl = sizeof(lv), n = 0, en, an;
     uint8_t authority = (uint8_t)(ci % EFS_META_LANES);
     int rc;
@@ -8478,8 +8558,8 @@ int efs_meta_apply_sweep_chunk(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
         --lane.present;
     pack_lane(lv, &lane);
     if (replacement) {
-        pack_chunk(value, replacement);
-        items[n++] = (struct efs_kv_item){EFS_KV_PUT, ck, ckl, value, sizeof(value)};
+        uint32_t length = pack_chunk_value(value, replacement, NULL, 0);
+        items[n++] = (struct efs_kv_item){EFS_KV_PUT, ck, ckl, value, length};
     } else {
         items[n++] = (struct efs_kv_item){EFS_KV_DEL, ck, ckl, NULL, 0};
     }

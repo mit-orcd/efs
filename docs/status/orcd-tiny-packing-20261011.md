@@ -292,3 +292,55 @@ PID 1381139 was still running: 1,881,198 / 10,000,000 files, 4,918.5 seconds,
 Mounted writes still use legacy fragments. Production admission/session and
 receipt checks, versioned mapping/GETCHUNKS reads, bounded client coalescing,
 shared reclamation and matched ORCD throughput acceptance remain necessary.
+
+## Authoritative reference and publication checkpoint · Oct 11
+
+The staged profile `PACK_K2F1` extends the ordinary 128-byte base metadata image
+with one canonical 96-byte packed reference. Ordinary delta records follow that
+extension, rather than overwriting it. Metadata reads bind the reference to the
+row's inode, inode generation, chunk zero and owning publication group, and
+reject mismatched record generations/epochs, truncated references and malformed
+trailers. Legacy base images retain their existing encoding. Private marked LSM
+stores retain the packed reference and mixed delta list through compaction and
+cold reopen; no new wire format or mounted writer is activated by this change.
+
+`PACK_OBJECT` (kind 36) reserves a group-anchor key for an immutable segment
+identity. Its checksummed `EFSPMAP1` value binds placement and fragment checksums
+to the existing shared lifetime ledger. A bounded mapping planner loads each
+shared object once per cohort, checks transaction exclusion and local upload
+owner epoch for new references, and returns ledger changes to commit in the
+same batch as mappings and durable receipts. It does not establish admission,
+prove durable PUT or grant permission to publish a new packed object.
+
+The existing publication apply now uses that planner when an authoritative
+packed base is present: ordinary deltas preserve its LIVE reference, and
+promotion to an ordinary full chunk retires the exact old reference atomically
+with the new mapping and durable publication receipt. Legacy publications take
+the existing path without additional ledger/mapping lookups. Lost-ACK retries
+return the stored receipt without restoring released ownership. Unsupported
+packed retirement paths still fail BUSY instead of putting shared fragments
+into the ordinary per-inode GC queue. Those paths must be connected before
+activation; this guard is not completed shared-object GC.
+
+Private ORCD tests cover actual chunk metadata keys, mixed deltas, corrupt image
+refusal, multiple members sharing one ledger, failed atomic batches, prepared
+ledger exclusion, retained neighbors, terminal-reference replay rejection,
+actual publication promotion/receipt replay, abrupt WAL exit and cold
+compaction. The complete Linux `make test` suite passes on fcstor006, and the
+successful development build has zero compiler warnings.
+[Development overlay gate and source manifest](../../results/measure/20261011-orcd-packed-metadata/).
+This is a metadata integration checkpoint, not distributed packed PUT/GET,
+mounted coalescing, physical reclamation or throughput acceptance.
+
+Containers and logical packing compose at separate layers:
+`logical files → packed segment → erasure-coded fragments → container extents`.
+Existing fragment containers retain padding inside their input fragments. Packed
+fragments are initially supported by the files backend only; the staged storage
+helper explicitly rejects containers. Container support must preserve immutable
+segment identity, typed upload fences and shared-reference retirement, and
+reclaim extents only after the segment's captured-member fence/delete protocol.
+It needs separate backend durability, recovery, allocation and survivor tests.
+
+The user now explicitly permits erasing ORCD test data if needed for this work.
+No stores were erased for these private gates. This authorization does not
+extend to unrelated clusters or change their retention requirements.

@@ -11,6 +11,7 @@
 #define EFS_KV_SHARD_BITS 12
 #define EFS_KV_SHARD_MASK 0xFFFu
 #define EFS_KV_KEY_MAX    320
+#define EFS_KV_KIND_PACK_OBJECT 36 /* group anchor / shared object identity */
 #define EFS_KV_KIND_QUERY_POLICY 35 /* root export: version:8, mask:4 */
 #define EFS_KV_KIND_CLOSE_STEP 34 /* staged replay-identified bounded close obligation */
 #define EFS_KV_KIND_CLOSE_CLEANUP 33 /* durable deferred final-close effects */
