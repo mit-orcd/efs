@@ -5,6 +5,8 @@ import subprocess,tempfile,os,sys,signal
 root=Path(__file__).resolve().parents[1];s=(root/'tests/valgrind_leaks.sh').read_text()
 a=s.index('fails=0');b=s.index('# Kill OUR daemons',a);gates=s[a:b]
 reports=[('',False),('==1== Command: crashed\n',False),('==1== LEAK SUMMARY:\n==1== ERROR SUMMARY: 0 errors\n',False),('==1== All heap blocks were freed -- no leaks are possible\n==1== ERROR SUMMARY: 0 errors\n',True),('==1== LEAK SUMMARY:\n==1== definitely lost: 0 bytes in 0 blocks\n==1== indirectly lost: 0 bytes in 0 blocks\n==1== ERROR SUMMARY: 0 errors\n',True),('==1== LEAK SUMMARY:\n==1== definitely lost: 32 bytes in 1 blocks\n==1== indirectly lost: 0 bytes in 0 blocks\n==1== ERROR SUMMARY: 1 errors\n',False)]
+# A leaking fork followed by a clean parent must still fail.
+reports.append(('==2== LEAK SUMMARY:\n==2== definitely lost: 64 bytes in 1 blocks\n==2== indirectly lost: 8 bytes in 1 blocks\n==2== ERROR SUMMARY: 1 errors\n==1== LEAK SUMMARY:\n==1== definitely lost: 0 bytes in 0 blocks\n==1== indirectly lost: 0 bytes in 0 blocks\n==1== ERROR SUMMARY: 0 errors\n',False))
 with tempfile.TemporaryDirectory(prefix='efs-vg-verdict-') as td:
  p=Path(td)/'gate.sh';p.write_text(gates+'\ngate "$1" fixture\n[ "$fails" = 0 ]\n')
  for text,good in reports:
