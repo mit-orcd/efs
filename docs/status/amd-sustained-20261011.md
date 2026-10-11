@@ -106,8 +106,9 @@ format/compatibility decisions, already assigned to ORCD; no packing is enabled.
 
 `EFS_GC_BACKLOG_IDLE_MS=100` is an experimental scheduling candidate; unset
 remains the existing 1,000-ms idle. Strict startup validation accepts only
-100..1000 milliseconds. A shorter idle is used only after a leader's capped
-reap scan and observed physical deletion progress during that pass. Idle,
+100..1000 milliseconds. The initial candidate uses a shorter idle only after a leader's capped
+reap scan and observed physical deletion progress during that pass. The
+fragment-backlog follow-up below extends that scheduling signal. Idle,
 wholly blocked work and counter reset retain 1-second backoff. Partially blocked
 work can accelerate when other deletions succeed; live offline-member gates
 must preserve all-member retention. All group scan,
@@ -164,3 +165,42 @@ ACK progress in the backlog signal. Physical deletion progress is still required
 by the idle policy; blocked/idle scans keep their backoff. Default scheduling,
 per-group budgets, authority and durable ACK ordering remain unchanged. This
 candidate is under normal/fault and direct/buffered live validation, not closed.
+
+## All-member inode-fence fanout candidate
+
+Post-load stage timings on the fragment-backlog build show a roughly 221-ms
+reap pass with about 188–192 ms in inode fencing for a 32-marker batch. The
+leader sends and waits for each storage member serially. The next candidate
+sends independent remote requests first, installs the local fence, and drains
+every borrowed connection before returning. Every expected member must still
+report success; absent members, BUSY, lost replies, malformed responses and
+local persistence failures retain the durable REAP record. Storage inventory
+and durable death-fence implementations are unchanged. The actual-source
+regression checks request ordering and failure cleanup; full native/live
+acceptance is pending. This does not enable RDMA or change GC authority.
+
+## Fragment scheduling build `85fb3a4b` verdict
+
+Full normal/fault native gates pass. The normal build is deployed to the four
+installed AMD direct/TCP nodes, retaining their stores and default GC idle;
+both commands-off clients remount successfully. The private opt-in direct
+functional gate passes 216 core/67 peer tests, guarded leases, missing-member
+retention and cold/physical recovery.
+
+| 180-second paced mode | Warm-verified tiny generations | Full-window closes/s | Exact cold survivors | Empty inventory by 180-second drain deadline |
+|---|---:|---:|---|---|
+| Direct | 26,944 | 147.43 | Pass | **Fail** |
+| Buffered | 20,224 | 111.66 | Pass | Pass |
+
+Both runs use eight tiny workers/four overwrite rings and the same explicit
+4-GiB/node quota and 2-MiB/s/large-writer offered rate. Independent roots and
+placement make these acceptance observations, not a matched performance A/B.
+Both installed mounts restore successfully. The conditional ten-minute run
+is not started because direct failed; fanout validation follows without
+overlapping load or compilation. W94/W97 remain open.
+[Retained verdicts](../../results/measure/20261011-amd-sustained/evidence/fragments/live/round.exit).
+
+Rejected setup/build attempts are retained alongside accepted gates: an aborted
+incorrect build label, a stale generated-doc upload, missing linked evidence,
+and the first candidate's missing C return. None was deployed; `85fb3a4b`
+corrects the return and passes the actual-source regression/full gates.
