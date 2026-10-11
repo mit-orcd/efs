@@ -87,3 +87,34 @@ AMD; it is not a live network-race or distributed-failover claim.
 Full direct feedback-enabled lifecycle/POSIX/peer, cold bytes and physical GC
 passes. Buffered and the subsequent real fault/pressure matrix are running;
 normal service feedback remains disabled pending the final verdicts.
+
+## W94 — CREATE/adoption closed by user-scoped decision
+
+The user explicitly closes W94 for CREATE/adoption and retains broader
+flush/PUT-ticket integration under W72/W86/W88. No D25 activation, default
+ticketed PUT adoption or full I23 publication claim follows from this split.
+
+Full corrected normal/fault native passes; both TCP storage modes pass
+216/216 POSIX and 67/67 peer tests, with zero failures/skips. Both real fault
+matrices pass combined adoption reply loss and negative verdicts, original
+token cleanup, cold name reuse, identical CREATE/APPEND retries, guarded
+REPORT/session fences, certificate-persistence refusal/resume, sync/PUT faults
+and physical GC. Actual-helper allocation and competing-OPEN tests pass.
+The [previous throughput and applied lease proof](amd-non-rdma-20261010.md#w94--combined-first-descriptor-adoption-candidate)
+and [unpaced sustained/cold/physical acceptance](amd-overload-admission-20261011.md)
+remain the measured performance and sustained-service evidence. This closure
+does not turn the synthetic W97 slow-follower trials into a new W94 A/B.
+
+[Current full functional logs](../../results/measure/20261011-amd-feedback/evidence/functional/direct/run.log),
+[buffered functional logs](../../results/measure/20261011-amd-feedback/evidence/functional/buffered/run.log)
+and both-mode fault results are retained under the same evidence root. Native
+loopback/software-crash tests do not certify independent hardware failures.
+
+W97 remains open while feedback comparisons finish. The first feedback-off
+pilot reaches 256 queued frames and 75,556 refusals, then passes both-group
+frozen-cut catch-up, cold bytes, 53.43-s physical drain and a new post-pressure
+cold write. Its slow window was extended by monitoring latency, so the pilot
+pair is excluded from paired performance acceptance. Fixed exposure timing and
+a replacement off/on pair provide three comparable direct pairs (2, 3, 4).
+The first enabled observation exercises actual BUSY/probe feedback, with fewer
+refusals; no sustained improvement or global W97 closure is claimed yet.

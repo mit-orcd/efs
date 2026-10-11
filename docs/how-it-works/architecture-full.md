@@ -1540,6 +1540,10 @@ unimplemented; unavailable/refusal tests are not lifecycle acceptance.
 
 ### Tiny-file performance follow-up
 
+**W94 CREATE/adoption closed Oct 11**, by the user's explicit scope decision:
+[accepted lifecycle, fault and performance evidence](../status/amd-feedback-integration-20261011.md#w94--createadoption-closed-by-user-scoped-decision).
+Broader flush/PUT-ticket integration remains W72/W86/W88; no activation is implied.
+
 [AMD W94/W97 lifecycle and replication-feedback acceptance](../status/amd-feedback-integration-20261011.md)
 is in progress: actual Linux async and two-mode full lifecycle/POSIX/cold gates
 with feedback on, followed by pressure/recovery and repeated comparisons.
@@ -1715,13 +1719,13 @@ post-pressure cold writes); full admission-enabled 216/67 functional gates pass,
 and exact-artifact retained-service deployment/two-client audit pass. The bounded
 AMD overload/admission gate is **closed**. NUC persistence attribution is
 [W111](../status/w111-nuc-persistence-investigation-20261011.md); it is not an AMD
-acceptance requirement. W94 integration, W97 receiver feedback and W99
+acceptance requirement. W72/W86/W88 integration, W97 receiver feedback and W99
 capacity-domain policy remain independent open scopes.
 
 [W94/W97 AMD sustained mixed-load follow-up](../status/amd-sustained-20261011.md) retains
 an unpaced private-quota failure, successful quiescent GC progress and an
 intentionally interrupted 300-second bounded baseline. Progress-conditioned GC scheduling
-passes native/direct functional gates but fails the direct 180-second drain deadline; extra quiescent recovery empties all four stores. The deployed fragment-budget build (`85fb3a4b`) passes native/direct functional and buffered sustained gates; direct sustained cold bytes pass but its drain deadline fails. All-member inode-fence fanout (`e9ea8ca1`) passes full native/direct functional and both 180-second paced cold/physical gates; both ten-minute cold-byte gates pass but drain deadlines fail; the 20-ms follow-up passes native/direct functional gates and both ten-minute cold/physical gates (79.23/77.94-s drains); canonical service restoration passes; the later [unpaced acceptance](../status/amd-overload-admission-20261011.md) closes the AMD overload/admission gate. W94 integration and W97 receiver feedback remain separate. The same note
+passes native/direct functional gates but fails the direct 180-second drain deadline; extra quiescent recovery empties all four stores. The deployed fragment-budget build (`85fb3a4b`) passes native/direct functional and buffered sustained gates; direct sustained cold bytes pass but its drain deadline fails. All-member inode-fence fanout (`e9ea8ca1`) passes full native/direct functional and both 180-second paced cold/physical gates; both ten-minute cold-byte gates pass but drain deadlines fail; the 20-ms follow-up passes native/direct functional gates and both ten-minute cold/physical gates (79.23/77.94-s drains); canonical service restoration passes; the later [unpaced acceptance](../status/amd-overload-admission-20261011.md) closes the AMD overload/admission gate. W94 CREATE/adoption is now closed; W72/W86/W88 integration and W97 receiver feedback remain separate. The same note
 records the completed W95 retained experiment review and its format limits.
 
 ### Storage pressure policy
@@ -1870,7 +1874,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | P4.1–P4.4 | fragment on-disk layout (**wipe**), W40 FUSE write copy, RDMA zero-copy receive, 9-client scaling | performance | deferred until P3's numbers | [full text](#p4--deferred-until-p3s-numbers-long-one-is-a-wipe) |
 | meta-scale | **W66** · metadata leadership distribution and topology-independent routing | scalability | open — Oct 10 AMD unhosted namespace-coordinator read routing repaired and direct/buffered 128-race cold gates pass ([checkpoint](../status/amd-non-rdma-20261010.md#w66--unresolved-namespace-coordinator-routing)); four-voter host/engine, persistence/failover and staged leadership distribution pass; prolonged preferred-peer loss has no read errors/term churn; default two-group topology unchanged; D36 commit authority/recovery choice, routing/migration and scale remain | [evidence, phases and gates](../status/metadata-scaling.md) |
 | tiny-raft | **W93** · broader durable Raft group commit | performance | closed Oct 10 — AMD + repeated NUC batching, read-tail, atomic recovery, fault and cold gates pass; tuning opt-in | [acceptance](../status/w93-atomic-apply-20261010.md) |
-| tiny-create | **W94** · atomic CREATE plus open lease | performance / lifecycle | partial — retained FUSE CREATE/adoption, sequenced lease edges and cleanup AMD gated; REPORT session fences AMD gated; combined first adoption passes native and both TCP POSIX/cold matrices; committed lease entries fall from three to two per created/closed file; four-repeat finite TCP A/B gains +18.7% direct/+23.3% buffered; targeted direct reply-loss/negative/crash gates pass; legacy guarded-lease fixture corrected to start with ordinary unleased CREATE, avoiding mounted adoption cleanup markers; final captured candidate `90a47313` passes full normal/fault native and direct/buffered TCP matrices, including six cold first-mutation namespace and APPEND/sync fault gates; applied-bound proof corrected and lease counts revalidated ([follow-up](../status/amd-integration-20261011.md)); unpaced AMD mixed load hits private quota while GC falls behind; all-member GC fence fanout passes native/direct functional and short direct/buffered cold/physical gates; 100-ms ten-minute drains fail; opt-in 20-ms candidate passes both ten-minute cold/physical gates; normal service restoration passes ([gate](../status/amd-sustained-20261011.md)); full data-plane integration remains open ([checkpoint](../status/amd-non-rdma-20261010.md#w94--combined-first-descriptor-adoption-candidate)) | [work item](#w94) |
+| tiny-create | **W94** · atomic CREATE plus open lease | performance / lifecycle | **Closed Oct 11: CREATE/adoption scope approved by user.** Measured lease/throughput savings, actual allocation/competing-OPEN barriers, both-mode full native/live/fault/cold and sustained admission acceptance pass. Broader production flush/PUT-ticket integration remains W72/W86/W88; no D25 activation | [closure](../status/amd-feedback-integration-20261011.md#w94--createadoption-closed-by-user-scoped-decision) · [work item](#w94) |
 | scratch-expiry | **W90** · scratch-file expiry metadata and safe lifecycle | feature | design accepted D33; opt-in fixed deadlines and safe lifecycle; implementation/gates open | [work item](#w90) · [design](../status/scratch-expiry-interface.md) |
 | virtual-commands | **W91** · directory-local virtual `.efs/` command interface | usability feature | design accepted D34; `.efs/` commands and bounded query paths; implementation/compatibility gates remain | [work item](#w91) · [design](../status/scratch-expiry-interface.md) |
 | tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | partial — independent indexed packing, publication/GC fault and 24-sample AMD churn gates pass; retained raw-field/index-cost review completed ([review](../status/amd-sustained-20261011.md#w95-retained-amd-experiment-review-completed)); P4.1 production-format and migration decision remain | [work item](#w95) |
@@ -6637,7 +6641,23 @@ existing preallocation experiment closes this item.
 **Historical implementation update (Oct 8):** Atomic server CREATE/lease and rejected-reply cleanup pass full Linux/live gates. Staged one-key pending ownership, atomic pending CREATE, replay-pressure/retirement refusal and cold ownership edges are tested; production adoption and guarded HOLD/runtime-session integration remain open.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
-**Class/status:** Client/server metadata performance; partial implementation. Atomic server ownership, retained client adoption/lease edges and rejected-descriptor cleanup are AMD tested. Full session/data-plane integration and the measured performance acceptance gate remain open.
+**Class/status:** Client/server metadata performance; **closed Oct 11 for atomic
+CREATE/adoption**, by the user's explicit scope decision. Broader production
+flush/PUT-ticket integration stays open under W72/W86/W88; it is not silently
+activated or claimed complete by this closure.
+
+**Closure evidence:** The earlier CRC/applied-bound lease proof eliminates one
+independent lease consensus round (three→two entries per created/closed file);
+four-repeat finite TCP A/B records +18.7% direct/+23.3% buffered median paired
+gain. Unpaced admission, all-worker progress, acknowledged cold bytes, physical
+drain and post-pressure cold writes pass in both modes. Current corrected
+feedback binaries pass full normal/fault native, direct/buffered 216/216 POSIX
+and 67/67 peer suites, guarded lease/REPORT/session fences, real combined reply
+loss/negative cleanup, CREATE retry/name reuse, certificate-persistence refusal,
+APPEND/sync recovery and physical GC. Actual-helper ENOMEM and deterministic
+CREATE-adoption/competing-OPEN barriers prove no token handoff on allocation
+failure, one lease for two descriptors, and exact last-close release.
+[Closure and preserved limits](../status/amd-feedback-integration-20261011.md#w94--createadoption-closed-by-user-scoped-decision).
 
 **Oct 10/11 AMD candidate:** the first retained FUSE CREATE adopts its pending
 ownership with one existing guarded OPEN|CLEAR_PENDING edge. Existing normal
@@ -6675,13 +6695,16 @@ current open-description lifecycle safely supports it.
 
 **Oct 9 update:** Retained FUSE CREATE/adoption, sequenced OPEN/CLOSE, reply rejection cleanup and authoritative terminal revocation recovery are implemented; AMD direct/TCP cold replay, exact lease edges and POSIX/GC gates pass. [Current checkpoint](../status/dependency-package-20261009.md).
 
-**Oct 11 AMD continuation:** An actual FUSE bookkeeping ENOMEM regression
+**Earlier Oct 11 AMD continuation (superseded by closure above):** An actual FUSE bookkeeping ENOMEM regression
 confirms no OPEN/adoption edge or pending-token handoff on failed owner
 allocation. Current feedback-enabled two-mode lifecycle and real combined
 reply-loss/negative/certificate-fsync gates are in progress; this is not full
 W94 closure. [Current ledger](../status/amd-feedback-integration-20261011.md).
 
-**Remaining action:** Complete REPORT/data-plane session integration and measure the eliminated HOLD round; retain the specific adoption/last-close/unlink and throughput gates below. Server atomicity, CREATE reply reuse and rejected-reply cleanup are prerequisites already implemented; merely enabling the flag is unsafe.
+**Remaining related work:** W72 owns complete production session integration,
+W86 the default durable PUT-ticket lifecycle and W88 typed publication/replay
+adoption. Retain the CREATE/adoption/last-close/unlink and throughput gates below
+as regressions. The completed W94 scope does not enable D25 or close those items.
 
 **Governing contracts/related work:** W72 session/fencing, W58/W76 namespace retry identity and W69 coherence. CREATE reply reuse is merged (`e6926d85`); it removes a redundant read but does not implement safe lease adoption. Preserve synchronous close semantics.
 

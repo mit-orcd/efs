@@ -4225,7 +4225,23 @@ existing preallocation experiment closes this item.
 **Historical implementation update (Oct 8):** Atomic server CREATE/lease and rejected-reply cleanup pass full Linux/live gates. Staged one-key pending ownership, atomic pending CREATE, replay-pressure/retirement refusal and cold ownership edges are tested; production adoption and guarded HOLD/runtime-session integration remain open.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
-**Class/status:** Client/server metadata performance; partial implementation. Atomic server ownership, retained client adoption/lease edges and rejected-descriptor cleanup are AMD tested. Full session/data-plane integration and the measured performance acceptance gate remain open.
+**Class/status:** Client/server metadata performance; **closed Oct 11 for atomic
+CREATE/adoption**, by the user's explicit scope decision. Broader production
+flush/PUT-ticket integration stays open under W72/W86/W88; it is not silently
+activated or claimed complete by this closure.
+
+**Closure evidence:** The earlier CRC/applied-bound lease proof eliminates one
+independent lease consensus round (three→two entries per created/closed file);
+four-repeat finite TCP A/B records +18.7% direct/+23.3% buffered median paired
+gain. Unpaced admission, all-worker progress, acknowledged cold bytes, physical
+drain and post-pressure cold writes pass in both modes. Current corrected
+feedback binaries pass full normal/fault native, direct/buffered 216/216 POSIX
+and 67/67 peer suites, guarded lease/REPORT/session fences, real combined reply
+loss/negative cleanup, CREATE retry/name reuse, certificate-persistence refusal,
+APPEND/sync recovery and physical GC. Actual-helper ENOMEM and deterministic
+CREATE-adoption/competing-OPEN barriers prove no token handoff on allocation
+failure, one lease for two descriptors, and exact last-close release.
+[Closure and preserved limits](../status/amd-feedback-integration-20261011.md#w94--createadoption-closed-by-user-scoped-decision).
 
 **Oct 10/11 AMD candidate:** the first retained FUSE CREATE adopts its pending
 ownership with one existing guarded OPEN|CLEAR_PENDING edge. Existing normal
@@ -4263,13 +4279,16 @@ current open-description lifecycle safely supports it.
 
 **Oct 9 update:** Retained FUSE CREATE/adoption, sequenced OPEN/CLOSE, reply rejection cleanup and authoritative terminal revocation recovery are implemented; AMD direct/TCP cold replay, exact lease edges and POSIX/GC gates pass. [Current checkpoint](../status/dependency-package-20261009.md).
 
-**Oct 11 AMD continuation:** An actual FUSE bookkeeping ENOMEM regression
+**Earlier Oct 11 AMD continuation (superseded by closure above):** An actual FUSE bookkeeping ENOMEM regression
 confirms no OPEN/adoption edge or pending-token handoff on failed owner
 allocation. Current feedback-enabled two-mode lifecycle and real combined
 reply-loss/negative/certificate-fsync gates are in progress; this is not full
 W94 closure. [Current ledger](../status/amd-feedback-integration-20261011.md).
 
-**Remaining action:** Complete REPORT/data-plane session integration and measure the eliminated HOLD round; retain the specific adoption/last-close/unlink and throughput gates below. Server atomicity, CREATE reply reuse and rejected-reply cleanup are prerequisites already implemented; merely enabling the flag is unsafe.
+**Remaining related work:** W72 owns complete production session integration,
+W86 the default durable PUT-ticket lifecycle and W88 typed publication/replay
+adoption. Retain the CREATE/adoption/last-close/unlink and throughput gates below
+as regressions. The completed W94 scope does not enable D25 or close those items.
 
 **Governing contracts/related work:** W72 session/fencing, W58/W76 namespace retry identity and W69 coherence. CREATE reply reuse is merged (`e6926d85`); it removes a redundant read but does not implement safe lease adoption. Preserve synchronous close semantics.
 
