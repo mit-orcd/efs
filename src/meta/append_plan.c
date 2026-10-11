@@ -88,7 +88,7 @@ static int finish_record(struct finish_capture *c,const uint8_t *key,uint32_t n,
             return EFS_ERR_BUSY; /* source moved while collecting */
         *slot=i;return EFS_OK;
     }
-    if(c->count>=EFS_META_LANES+5)return EFS_ERR_OVERFLOW;
+    if(c->count>=2*(EFS_META_LANES+5))return EFS_ERR_OVERFLOW;
     if(c->count==c->capacity) {
         uint32_t cap=c->capacity?c->capacity*2:16;
         if(cap>EFS_META_LANES+5)cap=EFS_META_LANES+5;
@@ -509,4 +509,153 @@ int efs_meta_retire_append_session(struct efs_kv *kv,uint32_t shard,
     if(rc==EFS_OK)rc=finish_execute(&c,tx,ops,ctx);
     if(rc==EFS_OK)*progress=removed?removed:1;
     finish_free(&c);return rc;
+}
+
+/* Single-participant reservation: exact leader images, one serialized apply
+ * batch. It never computes a replica-local EOF or spans metadata authorities. */
+static uint32_t append_atomic_u32(const uint8_t *p)
+{uint32_t n=0;for(unsigned i=0;i<4;i++)n=n<<8|p[i];return n;}
+static uint64_t append_atomic_u64(const uint8_t *p)
+{uint64_t n=0;for(unsigned i=0;i<8;i++)n=n<<8|p[i];return n;}
+static void append_atomic_put(uint8_t *p,uint64_t n,unsigned bytes)
+{for(unsigned i=0;i<bytes;i++)p[i]=(uint8_t)(n>>(8*(bytes-i-1)));}
+static int append_atomic_shape(const struct efs_meta_append_plan *p)
+{
+    if(!p || p->count<4 || p->count>EFS_META_LANES+4 || p->parts.n!=1 ||
+       p->parts.shard[0]>EFS_KV_SHARD_MASK)return EFS_ERR_INVAL;
+    for(unsigned i=0;i<p->count;i++) {
+        const struct efs_meta_append_image *im=&p->images[i];
+        if(im->klen<3 || im->klen>UINT8_MAX || im->klen>EFS_KV_KEY_MAX || im->op!=EFS_TXN_PUT ||
+           (((uint32_t)im->key[0]<<8)|im->key[1])!=p->parts.shard[0] ||
+           (im->expected_len!=EFS_TXN_ABSENT && im->expected_len>EFS_OPID_VAL_MAX) ||
+           !im->new_len || im->new_len>EFS_OPID_VAL_MAX)return EFS_ERR_INVAL;
+    }
+    return EFS_OK;
+}
+int efs_meta_append_atomic_encode(const struct efs_meta_append_plan *p,
+    const struct efs_opid_req *q,uint8_t *out,uint32_t cap,uint32_t *length)
+{
+    if(!q || !efs_opid_req_valid(q) || !q->id.session_epoch || q->ack>=q->id.seq ||
+       !out || !length || append_atomic_shape(p)!=EFS_OK)return EFS_ERR_INVAL;
+    uint32_t need=45;
+    for(unsigned i=0;i<p->count;i++) {
+        const struct efs_meta_append_image *im=&p->images[i];
+        need+=9+im->klen+im->new_len+(im->expected_len==EFS_TXN_ABSENT?0:im->expected_len);
+    }
+    *length=need;if(cap<need)return EFS_ERR_INVAL;
+    memcpy(out,q->id.client_uuid,16);append_atomic_put(out+16,q->id.session_epoch,4);
+    append_atomic_put(out+20,q->id.seq,8);append_atomic_put(out+28,q->ack,8);
+    append_atomic_put(out+36,p->offset,8);out[44]=(uint8_t)p->count;
+    uint32_t at=45;
+    for(unsigned i=0;i<p->count;i++) {
+        const struct efs_meta_append_image *im=&p->images[i];
+        out[at++]=(uint8_t)im->klen;append_atomic_put(out+at,im->expected_len,4);at+=4;
+        append_atomic_put(out+at,im->new_len,4);at+=4;
+        memcpy(out+at,im->key,im->klen);at+=im->klen;
+        if(im->expected_len!=EFS_TXN_ABSENT){memcpy(out+at,im->expected,im->expected_len);at+=im->expected_len;}
+        memcpy(out+at,im->value,im->new_len);at+=im->new_len;
+    }
+    return EFS_OK;
+}
+int efs_meta_append_atomic_decode(const uint8_t *in,uint32_t length,
+    struct efs_meta_append_plan *p,struct efs_opid_req *q)
+{
+    if(!in || !p || !q || length<45 || length>EFS_META_APPEND_ATOMIC_MAX)return EFS_ERR_INVAL;
+    memset(p,0,sizeof(*p));memset(q,0,sizeof(*q));
+    memcpy(q->id.client_uuid,in,16);q->id.session_epoch=append_atomic_u32(in+16);
+    q->id.seq=append_atomic_u64(in+20);q->ack=append_atomic_u64(in+28);
+    p->offset=append_atomic_u64(in+36);p->count=in[44];
+    if(!efs_opid_req_valid(q) || !q->id.session_epoch || q->ack>=q->id.seq ||
+       p->count<4 || p->count>EFS_META_LANES+4)return EFS_ERR_INVAL;
+    uint32_t at=45;
+    for(unsigned i=0;i<p->count;i++) {
+        struct efs_meta_append_image *im=&p->images[i];
+        if(length-at<9)return EFS_ERR_INVAL;
+        im->klen=in[at++];im->expected_len=append_atomic_u32(in+at);at+=4;
+        im->new_len=append_atomic_u32(in+at);at+=4;im->op=EFS_TXN_PUT;
+        if(im->klen<3 || im->klen>EFS_KV_KEY_MAX || !im->new_len || im->new_len>EFS_OPID_VAL_MAX ||
+           (im->expected_len!=EFS_TXN_ABSENT && im->expected_len>EFS_OPID_VAL_MAX))return EFS_ERR_INVAL;
+        uint32_t old=im->expected_len==EFS_TXN_ABSENT?0:im->expected_len;
+        if(im->klen+old+im->new_len>length-at)return EFS_ERR_INVAL;
+        memcpy(im->key,in+at,im->klen);at+=im->klen;
+        if(old){memcpy(im->expected,in+at,old);at+=old;}
+        memcpy(im->value,in+at,im->new_len);at+=im->new_len;
+    }
+    p->parts.n=1;p->parts.shard[0]=((uint32_t)p->images[0].key[0]<<8)|p->images[0].key[1];
+    return at==length?append_atomic_shape(p):EFS_ERR_INVAL;
+}
+struct append_atomic_context {
+    struct efs_kv *kv;uint32_t shard,count;int replay;
+    struct efs_kv_item items[2*(EFS_META_LANES+5)];
+    uint8_t versions[EFS_META_LANES+5][8],version_keys[EFS_META_LANES+5][EFS_KV_KEY_MAX];
+};
+static int append_atomic_prepare(void *user,const struct efs_txid *tx,
+    const struct efs_txn_parts *parts,const struct efs_meta_append_image *im)
+{
+    struct append_atomic_context *c=user;uint8_t current[EFS_OPID_VAL_MAX];uint32_t n=sizeof(current);
+    (void)tx;
+    if(parts->n!=1 || parts->shard[0]!=c->shard || im->klen<3 ||
+       (((uint32_t)im->key[0]<<8)|im->key[1])!=c->shard || c->count>=2*(EFS_META_LANES+5))
+        return EFS_ERR_INVAL;
+    if(c->replay)return EFS_OK;
+    int rc=efs_txn_key_busy(c->kv,im->key,im->klen);
+    if(rc!=EFS_OK)return rc;
+    rc=efs_txn_key_guarded(c->kv,im->key,im->klen);
+    if(rc!=EFS_OK)return rc;
+    rc=efs_kv_get(c->kv,im->key,im->klen,current,&n);
+    if(im->expected_len==EFS_TXN_ABSENT) {
+        if(rc!=EFS_ERR_NOT_FOUND)return rc==EFS_OK || rc==EFS_ERR_INVAL?EFS_ERR_STALE:rc;
+    } else {
+        if(rc==EFS_ERR_NOT_FOUND || rc==EFS_ERR_INVAL)return EFS_ERR_STALE;
+        if(rc!=EFS_OK)return rc;
+        if(n!=im->expected_len || memcmp(current,im->expected,n))return EFS_ERR_STALE;
+    }
+    /* Preserve transaction predicate versions in the same physical batch.
+     * A later GUARD observed before this entry must fail after it applies. */
+    unsigned slot=c->count/2;uint32_t key_length=0;uint64_t version=0;
+    rc=efs_txn_ver_get(c->kv,im->key,im->klen,&version);
+    if(rc!=EFS_OK)return rc;
+    if(version==UINT64_MAX)return EFS_ERR_OVERFLOW;
+    rc=efs_kv_key_ver(im->key,im->klen,c->version_keys[slot],&key_length);
+    if(rc!=EFS_OK)return rc;
+    append_atomic_put(c->versions[slot],version+1,8);
+    c->items[c->count++]=(struct efs_kv_item){EFS_KV_PUT,im->key,im->klen,im->value,im->new_len};
+    c->items[c->count++]=(struct efs_kv_item){EFS_KV_PUT,c->version_keys[slot],key_length,c->versions[slot],8};
+    return EFS_OK;
+}
+static int append_atomic_decide(void *user,const struct efs_txid *tx,
+    const struct efs_txn_parts *parts,int decision)
+{(void)user;(void)tx;(void)parts;(void)decision;return EFS_OK;}
+static int append_atomic_resolve(void *user,const struct efs_txid *tx,
+    const struct efs_txn_parts *parts,int decision)
+{
+    struct append_atomic_context *c=user;(void)tx;(void)parts;
+    if(decision!=EFS_TXN_COMMIT || c->replay)return EFS_OK;
+    return efs_kv_batch(c->kv,c->items,c->count);
+}
+int efs_meta_apply_append_atomic(struct efs_kv *kv,const struct efs_meta_append_plan *p,
+    const struct efs_opid_req *q)
+{
+    if(!kv || !q || append_atomic_shape(p)!=EFS_OK || p->images[3].new_len!=48)
+        return EFS_ERR_INVAL;
+    const struct efs_meta_append_image *reservation=&p->images[3],*receipt=&p->images[2];
+    if(memcmp(reservation->value+16,q->id.client_uuid,16) ||
+       append_atomic_u32(reservation->value+32)!=q->id.session_epoch ||
+       append_atomic_u64(reservation->value+36)!=q->id.seq)return EFS_ERR_INVAL;
+    uint64_t length=append_atomic_u64(reservation->value+8),off=0;
+    uint8_t folded[EFS_OPID_VAL_MAX];uint32_t folded_len=sizeof(folded);
+    struct efs_opid_reply reply={.rc=EFS_OK,.ino=length,.extra=p->offset};
+    int rc=efs_opid_fold(receipt->expected,
+        receipt->expected_len==EFS_TXN_ABSENT?0:receipt->expected_len,
+        q->id.client_uuid,q->id.session_epoch,q,&reply,folded,&folded_len);
+    if(rc!=EFS_OK)return rc;
+    if(folded_len!=receipt->new_len || memcmp(folded,receipt->value,folded_len))return EFS_ERR_INVAL;
+    rc=efs_meta_append_result(kv,
+        append_atomic_u64(p->images[0].key+3),length,q,&off);
+    if(rc!=EFS_OK && rc!=EFS_ERR_NOT_FOUND)return rc;
+    if(rc==EFS_OK && off!=p->offset)return EFS_ERR_INVAL;
+    struct append_atomic_context c={.kv=kv,.shard=p->parts.shard[0],.replay=rc==EFS_OK};
+    struct efs_txid tx={{0}};
+    const struct efs_meta_append_ops ops={append_atomic_prepare,append_atomic_decide,append_atomic_resolve};
+    return efs_meta_execute_append_owned(kv,p,q,&tx,&ops,&c);
 }

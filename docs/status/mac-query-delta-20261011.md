@@ -993,3 +993,62 @@ open-unlink, injected deletion failure/retry, cold fold reads, physically
 empty inventory, zero quota and late-PUT fences all pass; owned fixtures
 drain normally (exit 0). Evidence: create-authority-build-unit.txt and
 create-authority-cold-wire.txt. Native timing acceptance follows rollout.
+
+Installed b2c01fa0 still exceeds the unchanged native concurrent CREATE limit
+(25.0 seconds including cleanup). Evidence: native-create-authority.txt.
+The next append candidate uses a single atomic entry only for a registered
+reservation whose complete exact-image plan belongs to one participant shard.
+The leader-selected EOF/receipt and inode/lane/cursor images are preserved;
+replicas check canonical folding, current local epoch/floor, shared/exclusive
+transaction ownership and every expected value before one KV batch. Existing
+cross-shard transactions remain unchanged. Real memory/cold LSM tests pass
+for malformed/truncated wire, guards/conflicts, injected memory-KV batch EIO
+with no partial effect, exact replay after completion/cold cuts and revocation.
+Host tests cover wrong-group refusal, error/offset propagation and local-only
+submission across leadership change. Mac full/cold peer gates remain pending.
+
+Tag 53 is reserved for APPEND_ATOMIC: release integration already uses
+45–51 for packing and reports 52 assigned to another append endpoint. The
+first private unit build used tentative tag 45; it was never deployed or
+logged on installed stores. All subsequent wire gates must use tag 53. This
+adds a log command, so all daemons need support before use and downgrade
+cannot replay it; existing row/store layouts do not change. Evidence:
+atomic-append-build-unit.txt.
+
+Atomic reservation candidate full Mac Linux unit suite passes (exit 0).
+The first private peer gate passes repeats 0–3, then fails repeat 4 after
+cold restart with append EIO/repeated BUSY retries (exit 1). Both client
+mounts and all owned daemons stop normally. Installed service stays on
+b2c01fa0; candidate is not accepted or deployed. Failure evidence remains
+in atomic-append-cold-wire.txt and atomic-append-failure-*.txt; a private
+diagnostic rerun is investigating the stalled stage.
+
+Diagnostic cold rerun initially passed eight races and 800-record handoff
+(66.1 seconds), but a version-sidecar rerun reproduced the failure at race
+6. Private logs prove repeated NOT_PRIMARY (-15), hint 0, on the dual-group
+coordinator while FUSE retries report no usable hint. A single-group leader
+forwards the whole operation back to that coordinator, whose local-only
+atomic proposal redirects again. Atomic eligibility now requires that the
+coordinator itself leads the one participant group with multiple voters;
+follower coordinators retain ordinary forwarded cohorts. Role-change
+submission still returns an exact refusal. Regression covers follower,
+single-voter, unregistered, empty and multiple-participant plans. Version
+sidecars now advance atomically with each input image, and delayed pre-entry
+guards fail STALE; exact replay does not advance versions. Mac wire gates
+for the corrected candidate are running; it remains undeployed. Evidence:
+atomic-append-diag-wire.txt, atomic-append-version-wire.txt and
+atomic-append-version-diagnostics.txt. Temporary diagnostic logging has
+been removed from the source.
+
+Corrected atomic routing private gate passes all eight peer append/truncate
+races (10.5–26.8 seconds), cold restart after four, exact 800-record
+concurrent append handoff (67.9 seconds), physically drained deletion and
+normal client/daemon stop (exit 0). Actual Mac Linux append transaction
+and host/cohort/documentation gates pass. Final complete unit suite is
+running before commit/deployment. Evidence: atomic-append-routing-fixed-wire.txt.
+The earlier failed runs are retained and have not been reclassified.
+
+Final corrected append candidate complete Mac Linux unit suite passes
+(exit 0), including architecture 5/5, after the cold peer wire gate.
+Atomic reservation code is ready for qualified normal Mac rollout; native
+216 acceptance remains open. Evidence: atomic-append-routing-full-unit.txt.

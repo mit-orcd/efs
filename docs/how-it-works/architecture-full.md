@@ -8506,6 +8506,22 @@ writes share an inode.
   a monotone allocation cursor derived from observed EOF, never an
   independent counter.
 
+  A registered reservation whose inode, cursor, receipt, reservation and all
+  active lane images belong to one participant shard may use
+  `APPEND_ATOMIC` (command 53). The leader sends the exact captured images;
+  This requires local leadership of that shard with multiple voters; follower
+  coordinators retain forwarded PREPARE/DECIDE/RESOLVE to avoid redirect loops.
+  Replicas validate their canonical receipt fold, established session floor,
+  pending intents/shared guards and every old image before one atomic KV batch.
+  No replica chooses its own EOF. Conflicts install nothing; storage failures
+  retry the entry. Exact replay returns the original reservation without a
+  new effect. Each input key’s transaction predicate version advances in
+  the same batch, matching ordinary EXCL commit semantics; delayed pre-entry
+  guards fail and exact replay advances neither images nor versions.
+  Multi-shard reservations retain coordinated PREPARE/DECIDE/RESOLVE.
+  All daemons must understand this command before it is admitted; older binaries
+  cannot replay its entries. It does not change existing stored row formats.
+
   **Validating EOF once is not enough — the barrier must outlive the
   reservation.** POSIX couples EOF determination and the append write into
   one atomic step, so no intervening modification may fall between them.
