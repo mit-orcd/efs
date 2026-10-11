@@ -9,6 +9,8 @@ def function(name):
 start=s.index('static int host_append_prepare_ref(')
 end=s.index('static int host_append_authority(',start)
 helpers=s[start:end]
+ca=s.index('#define HOST_CMD_COHORT_MAX');cb=s.index('/* DECIDE COMMIT at the coordinator',ca)
+cohort=s[ca:cb]
 if os.environ.get('EFS_APPEND_BATCH_SYNC')=='1':
  a=helpers.index('static int host_append_reserve_prepare(');b=helpers.index('\n}',a)+2
  helpers=helpers[:a]+'''static int host_append_reserve_prepare(void *user,const struct efs_txid *t,
@@ -43,7 +45,11 @@ code=r'''
 struct efs_txid {uint64_t id;};
 struct efs_txn_parts {unsigned n;};
 struct host_idx_ref {uint8_t group;uint64_t idx,term;};
-struct efs_raft_host {pthread_mutex_t mu;void *kv;};
+struct efs_raft {int role;unsigned voters;};
+struct efs_raft_disk {unsigned depth;};
+#define EFS_RAFT_LEADER 1
+#define EFS_ERR_NOT_PRIMARY -10
+struct efs_raft_host {pthread_mutex_t mu;void *kv;struct efs_raft_disk *disk;struct efs_raft r[3];};
 struct host_resize_ctx {struct efs_raft_host *host;int *hint;};
 struct efs_meta_append_image {uint8_t key[64];uint32_t klen,expected_len,new_len;int op;uint8_t expected[1024],value[1024];};
 struct efs_meta_append_ops {
@@ -84,7 +90,15 @@ static int host_resize_decide(void *user,const struct efs_txid *t,const struct e
 static int host_resize_resolve(void *user,const struct efs_txid *t,const struct efs_txn_parts *p,int d) {
  struct host_resize_ctx *ctx=user;assert(ctx->host&&ctx->hint&&t->id==19&&p->n==2);resolutions++;last_resolve=d;return resolve_error;
 }
-'''+function('host_prep_raw')+'\n'+function('host_wait_refs')+'\n'+helpers+r'''
+
+static struct efs_raft *group_raft(struct efs_raft_host *h,uint8_t group){return &h->r[group];}
+static int efs_raft_role(const struct efs_raft *r){return r->role;}
+static unsigned efs_raft_voters(const struct efs_raft *r){return r->voters;}
+static unsigned efs_raft_disk_sync_depth(struct efs_raft_disk *d){return d->depth;}
+static int efs_raft_disk_sync_hold(struct efs_raft_disk *d){d->depth++;return 0;}
+static int host_report_release(struct efs_raft_host *h,int held){assert(held&&h->disk->depth==1);h->disk->depth--;return 0;}
+static int host_propose_mode(struct efs_raft_host *h,uint8_t group,const uint8_t *cmd,uint32_t n,uint64_t *idx,uint64_t *term,int *hint,int local){assert(local);return host_propose(h,group,cmd,n,idx,term,hint);}
+'''+cohort+'\n'+function('host_prep_raw')+'\n'+function('host_wait_refs')+'\n'+helpers+r'''
 
 typedef uint64_t efs_ino_t;
 struct efs_opid {int owner;};
@@ -136,7 +150,8 @@ static int efs_meta_finish_append_batch_owned(void *kv,efs_ino_t ino,const uint6
  return rc;
 }
 ''' + function('host_resolve_caught_up') + r'''
-static struct efs_raft_host host={.mu=PTHREAD_MUTEX_INITIALIZER};
+static struct efs_raft_disk disk;
+static struct efs_raft_host host={.mu=PTHREAD_MUTEX_INITIALIZER,.disk=&disk,.r={{.role=EFS_RAFT_LEADER,.voters=7},{0},{.role=EFS_RAFT_LEADER,.voters=7}}};
 static struct efs_txid tx={19};static struct efs_txn_parts parts={2};static int hint;
 static struct efs_meta_append_image image={.klen=4,.expected_len=1,.new_len=1,.op=3};
 static void reset(struct host_append_reserve_ctx *c,int leading) {
@@ -154,6 +169,12 @@ static void ready(struct host_append_reserve_ctx *c,int leading) {
 }
 int main(void) {
  struct host_append_reserve_ctx c;
+ reset(&c,0);struct host_command_cohort captured;
+ host_command_cohort_begin(&captured,&host);
+ for(unsigned i=0;i<4;i++){image.key[1]=i%2;assert(!host_append_reserve_ops.prepare(&c,&tx,&parts,&image));}
+ assert(c.nrefs==4&&!proposals&&!checks&&!decisions);
+ assert(!host_command_cohort_end(&captured,0,&hint)&&proposals==4&&!disk.depth);
+ assert(!host_append_reserve_ops.decide(&c,&tx,&parts,EFS_TXN_COMMIT)&&checks==4&&waits==2&&last_decision==EFS_TXN_COMMIT);
  assert(host_append_ops.prepare==host_append_prepare && host_append_ops.decide==host_resize_decide);
  for(int leading=1;leading<=2;leading++) {
   ready(&c,leading);assert(!host_append_reserve_ops.decide(&c,&tx,&parts,EFS_TXN_COMMIT));
