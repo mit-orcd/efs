@@ -4177,6 +4177,16 @@ existing preallocation experiment closes this item.
 
 **Class/status:** Client/server metadata performance; partial implementation. Atomic server ownership, retained client adoption/lease edges and rejected-descriptor cleanup are AMD tested. Full session/data-plane integration and the measured performance acceptance gate remain open.
 
+**Oct 10/11 AMD candidate:** the first retained FUSE CREATE adopts its pending
+ownership with one existing guarded OPEN|CLEAR_PENDING edge. Existing normal
+descriptors still use CLEAR_PENDING alone; ambiguous combined requests remain
+retained before compensating CLOSE. Full native and both TCP POSIX/peer, sync,
+replay and cold-GC matrices pass. CRC-validated applied Raft logs for 64 files
+per build prove three versus two creation/close lease entries per file. The
+four-repeat throughput and additional fault matrix are running; this is a
+partial implementation checkpoint, not full W94 closure.
+[Evidence and limits](../status/amd-non-rdma-20261010.md#w94--combined-first-descriptor-adoption-candidate).
+
 **Historical pre-merge devel review (`cde67dca`, Oct 8):** the flags-0/separate-HOLD observation
 still applies. CREATE reply reuse is also absent from devel. The existing
 hold flag is atomic only on the ordinary CREATE-command path: first-use

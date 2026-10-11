@@ -24,14 +24,16 @@ static uint64_t stats_now_ms(void);
 #include "client_internal.h"
 #include "efs/session.h"
 struct efs_client g_client;
+struct fuse_file_info {int flags;};
+static int efs_fuse_release_ino(efs_ino_t ino,struct fuse_file_info *fi);
 static int open_rc,close_rc,adopt_rc,opens,closes,adopts,server_hold,revocation,adopt_begin_busy,adopt_resume_busy,adopt_known_busy,pressure_sleep,adopt_begins;
 int efs_client_rpc_getchunks_fileid(efs_export_id_t ex,efs_ino_t ino,uint64_t gen,uint32_t start,struct efs_chunk_rec *recs,uint32_t *count,uint64_t *out) {
  (void)ex;(void)gen;(void)start;(void)recs;(void)count;assert(ino==42);*out=99;return EFS_OK;
 }
 int efs_client_lease_begin(struct efs_client_lease_request *r,efs_ino_t ino,uint64_t gen,unsigned flags,uint64_t token) {
  assert(!r->active&&ino==42&&gen==99);
- assert((flags==EFS_LEASE_EDGE_CLEAR_PENDING&&token==3)||(!token&&flags!=EFS_LEASE_EDGE_CLEAR_PENDING));
- if(flags==EFS_LEASE_EDGE_CLEAR_PENDING){adopt_begins++;if(adopt_begin_busy){adopt_begin_busy--;pressure_sleep=1;return EFS_ERR_BUSY;}}
+ assert(((flags&EFS_LEASE_EDGE_CLEAR_PENDING)&&token==3)||(!token&&flags!=EFS_LEASE_EDGE_CLEAR_PENDING));
+ if(flags&EFS_LEASE_EDGE_CLEAR_PENDING){adopt_begins++;if(adopt_begin_busy){adopt_begin_busy--;pressure_sleep=1;return EFS_ERR_BUSY;}}
  *r=(struct efs_client_lease_request){.ino=ino,.generation=gen,.pending_token=token,.flags=flags,.active=1};r->q.id.seq=55;return EFS_OK;
 }
 int efs_client_lease_resume(struct efs_client_lease_request *r,int probe) {
@@ -39,7 +41,7 @@ int efs_client_lease_resume(struct efs_client_lease_request *r,int probe) {
  assert(!pthread_mutex_trylock(&g_open_mu));pthread_mutex_unlock(&g_open_mu);
  if(r->complete)return r->result;
  int rc;
- if(r->flags&EFS_LEASE_EDGE_OPEN){if(!r->attempted)opens++;server_hold=1;rc=open_rc;}
+ if(r->flags&EFS_LEASE_EDGE_OPEN){if(!r->attempted)opens++;server_hold=1;rc=open_rc;if(r->flags&EFS_LEASE_EDGE_CLEAR_PENDING){adopts++;assert(r->pending_token==3);}}
  else if(r->flags==EFS_LEASE_EDGE_CLEAR_PENDING){adopts++;assert(r->q.id.seq==55 && r->pending_token==3);rc=adopt_rc;
   if(adopt_resume_busy){adopt_resume_busy--;pressure_sleep=1;rc=EFS_ERR_BUSY;}
   if(adopt_known_busy){r->complete=1;r->result=EFS_ERR_BUSY;return EFS_ERR_BUSY;}}
@@ -61,7 +63,7 @@ static int fixture_sleep(unsigned us){
 }
 #define usleep fixture_sleep
 '''
-for name in ('efs_open_note','efs_open_set_leased','efs_close_note','efs_open_release_pending','efs_open_drain_pending','wb_lock_budget','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid','efs_open_acquire','efs_open_adopt'):
+for name in ('efs_open_note','efs_open_set_leased','efs_close_note','efs_open_release_pending','efs_open_drain_pending','wb_lock_budget','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid_mode','efs_open_acquire_fileid','efs_open_acquire','efs_open_adopt','efs_open_acquire_created'):
  source+='\n'+function(name)
 w=s.index('/* A lost last-close reply must not pin')
 x=s.index('/* Client-cache design Part A, pin rule 2:',w)
@@ -74,6 +76,9 @@ static uint64_t stats_now_ms(void){struct timespec t;clock_gettime(CLOCK_MONOTON
 int efs_client_rpc_past_deadline(void){return mock_deadline && stats_now_ms()>=mock_deadline;}
 '''+s[w:x]
 source+=r'''
+static int efs_fuse_release_ino(efs_ino_t ino,struct fuse_file_info *fi){
+ (void)fi;int leased=0;if(efs_close_note(ino,&leased))return efs_open_release_pending(ino);return EFS_OK;
+}
 int main(void) {
  assert(!efs_open_acquire(42));assert(!efs_open_acquire(42));assert(opens==1);
  int leased=0;assert(!efs_close_note(42,&leased));assert(!leased);
@@ -129,6 +134,34 @@ int main(void) {
  assert(efs_close_note(42,&leased));
  assert(efs_open_release_pending(42)==EFS_ERR_BUSY && g_open_refs);
  g_open_refs->adoption.result=EFS_OK;assert(!efs_open_release_pending(42) && !g_open_refs);
+ /* One combined edge is enough for a first retained CREATE. */
+ int wire_before=opens,adopt_before=adopts;handed_off=0;
+ assert(!efs_open_acquire_created(42,99,3,&handed_off)&&handed_off);
+ assert(opens==wire_before+1 && adopts==adopt_before+1 && g_open_refs->n==1);
+ assert(!g_open_refs->adoption.active && g_open_refs->leased);
+ /* Existing normal ownership receives only CLEAR, preserving its descriptor. */
+ wire_before=opens;adopt_before=adopts;
+ assert(!efs_open_acquire_created(42,99,3,&handed_off)&&handed_off);
+ assert(opens==wire_before && adopts==adopt_before+1 && g_open_refs->n==2);
+ assert(!efs_close_note(42,&leased));assert(efs_close_note(42,&leased));
+ assert(!efs_open_release_pending(42)&&!g_open_refs&&!server_hold);
+ /* Lost combined ACK retains its exact identity; reopen cannot pass it. */
+ open_rc=EFS_ERR_NET;wire_before=opens;int old_adopt_begins=adopt_begins;
+ assert(efs_open_acquire_created(42,99,3,&handed_off)==EFS_ERR_NET&&handed_off);
+ assert(g_open_refs&&!g_open_refs->n&&g_open_refs->adoption.active);
+ assert(g_open_refs->adoption.flags==(EFS_LEASE_EDGE_OPEN|EFS_LEASE_EDGE_CLEAR_PENDING));
+ assert(efs_open_acquire(42)==EFS_ERR_NET && opens==wire_before+1 && adopt_begins==old_adopt_begins+1);
+ open_rc=0;assert(!efs_open_release_pending(42)&&!g_open_refs&&!server_hold);
+ /* Admission refusal allocates no edge; retry releases the stripe. */
+ adopt_begin_busy=2;wire_before=opens;old_adopt_begins=adopt_begins;
+ assert(!efs_open_acquire_created(42,99,3,&handed_off)&&handed_off);
+ assert(opens==wire_before+1&&adopt_begins==old_adopt_begins+3&&!pressure_sleep);
+ assert(efs_close_note(42,&leased));assert(!efs_open_release_pending(42));
+ mock_deadline=stats_now_ms()-1;handed_off=1;
+ assert(efs_open_acquire_created(42,99,3,&handed_off)==EFS_ERR_BUSY&&!handed_off&&!g_open_refs);
+ assert(mock_deadline && mock_deadline<stats_now_ms());mock_deadline=0;
+ assert(efs_open_acquire_created(42,0,3,&handed_off)==EFS_ERR_INVAL);
+ assert(efs_open_acquire_created(42,99,0,&handed_off)==EFS_ERR_INVAL);
  puts("FUSE ambiguous OPEN/CLOSE: retained ownership, reopen barrier and clean-stop retry PASS");
 }
 '''

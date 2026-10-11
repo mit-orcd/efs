@@ -501,6 +501,28 @@ static void test_guarded_pending_and_fence(void)
     q=guarded_request(uuid,1,0);q.id.session_epoch=2;
     CHECK(efs_lease_guarded_edge(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_OK,"new epoch has independent sequence identity");
     efs_kv_mem_free(kv);
+    kv=efs_kv_mem_create();CHECK(kv!=NULL,"combined adoption KV");if(!kv)return;
+    guarded_session_init(kv,uuid);
+    create=guarded_request(uuid,1,0);ino=0;
+    CHECK(efs_meta_apply_create_file_log_pending(kv,&g_at,EFS_ROOT_INO,S_IFREG|0600,"combined-adoption",0,-1,&create,uuid,1,&ino)==EFS_OK,"combined adoption starts pending");
+    q=guarded_request(uuid,2,1);
+    unsigned combined=EFS_LEASE_EDGE_OPEN|EFS_LEASE_EDGE_CLEAR_PENDING;
+    const struct efs_kv_ops *combined_original=kv->ops;
+    struct efs_kv_ops combined_ops=*combined_original;
+    guarded_batch_original=combined_ops.batch;combined_ops.batch=guarded_batch_fault;kv->ops=&combined_ops;
+    guarded_batch_fail=1;
+    CHECK(efs_lease_guarded_edge(kv,ino,1,&q,combined,1)==EFS_ERR_IO && efs_lease_any(kv,ino,1)==1,"failed combined batch retains pending ownership");
+    int combined_verdict=999;
+    CHECK(efs_lease_guarded_probe(kv,ino,1,&q,combined,1,&combined_verdict)==0,"failed combined batch publishes no success receipt");
+    guarded_batch_fail=0;
+    CHECK(efs_lease_guarded_edge(kv,ino,1,&q,combined,1)==EFS_OK && efs_lease_any(kv,ino,1)==1,"atomic combined edge adopts normal ownership");
+    CHECK(efs_lease_guarded_probe(kv,ino,1,&q,combined,1,&combined_verdict)==1 && combined_verdict==EFS_OK,"lost combined reply has exact durable verdict");
+    CHECK(efs_lease_guarded_edge(kv,ino,1,&q,combined,1)==EFS_OK,"identical combined retry survives cleared pending token");
+    CHECK(efs_lease_guarded_edge(kv,ino,1,&q,combined,2)==EFS_ERR_PROTO,"changed combined pending token cannot replay success");
+    q.id.seq=3;q.ack=2;
+    CHECK(efs_lease_guarded_edge(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK && efs_lease_any(kv,ino,1)==0,"combined adoption leaves no pending hold after final CLOSE");
+    kv->ops=combined_original;
+    efs_kv_mem_free(kv);
 }
 static void test_guarded_retire_missing_authority(void)
 {

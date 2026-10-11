@@ -52,8 +52,7 @@ static int efs_file_open(struct fuse_file_info *fi,efs_ino_t ino){(void)fi;(void
 static void efs_file_close(struct fuse_file_info *fi){(void)fi;}
 static void fuse_fi_direct_io(struct fuse_file_info *fi){(void)fi;}
 static int efs_open_acquire_fileid(efs_ino_t ino,uint64_t gen){(void)ino;(void)gen;return EFS_OK;}
-static int efs_open_adopt(efs_ino_t ino,uint64_t gen,uint64_t token,int *handoff){(void)ino;(void)gen;(void)token;*handoff=1;return EFS_OK;}
-static int efs_fuse_release_ino(efs_ino_t ino,struct fuse_file_info *fi){(void)ino;(void)fi;return 0;}
+static int efs_open_acquire_created(efs_ino_t ino,uint64_t gen,uint64_t token,int *handoff){(void)ino;(void)gen;(void)token;*handoff=1;return EFS_OK;}
 static int efs_client_create_result(efs_ino_t p,const char *name,mode_t mode,uid_t uid,gid_t gid,int flags,efs_ino_t *out){(void)p;(void)name;(void)flags;capture(mode,uid,gid);if(create_rc)return create_rc;*out=42;return EFS_OK;}
 static int efs_client_write(efs_ino_t ino,uint64_t off,size_t n,const void *data){(void)ino;(void)off;(void)n;(void)data;return EFS_OK;}
 static int efs_client_report_dirty_ino(efs_ino_t ino,int all){(void)ino;(void)all;return EFS_OK;}
