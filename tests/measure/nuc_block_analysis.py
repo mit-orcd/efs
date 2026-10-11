@@ -20,11 +20,16 @@ def analyze(path):
      counters['ambiguous_issues']+=1;item[3]=True
      for active in pending[key]:active[3]=True
     pending[key].append(item)
-   elif not pending[key]:counters['unmatched_completions']+=1
    else:
-    began,issued_flags,sectors,ambiguous=pending[key].popleft()
+    # An error completion invalidates the window even when its issue lies
+    # outside the trace boundary. Count it before attempting edge pairing.
     error=re.search(r'\[(-?\d+)\]\s*$',line)
-    if error and int(error[1]):errors+=1;continue
+    failed=bool(error and int(error[1]))
+    if failed:errors+=1
+    if not pending[key]:
+     counters['unmatched_completions']+=1;continue
+    began,issued_flags,sectors,ambiguous=pending[key].popleft()
+    if failed:continue
     if ambiguous:counters['ambiguous_completions']+=1;continue
     if stamp<began:counters['negative_pairs']+=1;continue
     values[issued_flags].append((stamp-began)*1000)
@@ -37,6 +42,8 @@ def analyze(path):
    p99_ms=latencies[min(n-1,int(.99*n))],max_ms=latencies[-1])
  return dict(path=str(path),counters=dict(counters),error_completions=errors,lost_record_lines=lost,
   event_span_s=max(duration)-min(duration) if duration else 0,by_issued_rwbs=stats,
+  unambiguous_pairs=sum(len(v) for v in values.values()),
+  unambiguous_pairs_per_issue=sum(len(v) for v in values.values())/counters['issue'] if counters['issue'] else 0,
   usable_for_latency=bool(stats) and lost==0 and errors==0 and counters['negative_pairs']==0,
   limits='Physical issue-to-completion, not submission queue latency or NAND-only time. Sector/length FIFO pairs omit overlapping indistinguishable keys; unmatched edges and partial completions are reported. Trace windows are instrumented controls, not untraced speed acceptance.')
 def main():
