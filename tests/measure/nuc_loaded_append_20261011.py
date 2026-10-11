@@ -13,7 +13,11 @@ def wait(fn,seconds,label):
 def run(name,args,seconds=1800):
  print('START',name,time.strftime('%FT%TZ',time.gmtime()),flush=True)
  with (out/(name+'.log')).open('w') as log:
-  rc=subprocess.run(list(map(str,args)),cwd=src,env=env,stdout=log,stderr=subprocess.STDOUT,timeout=seconds).returncode
+  proc=subprocess.Popen(list(map(str,args)),cwd=src,env=env,stdout=log,stderr=subprocess.STDOUT)
+  try:rc=proc.wait(timeout=seconds)
+  except subprocess.TimeoutExpired:
+   (out/(name+'-timeout.txt')).write_text('Deadline exceeded; request Python fixture cleanup, retain failed gate.\n')
+   proc.terminate();rc=proc.wait(timeout=120)
  (out/(name+'-exit.txt')).write_text(str(rc)+'\n');print('END',name,rc,flush=True);return rc
 def port(p):
  try:
@@ -40,7 +44,12 @@ try:
  common=[src/'tests/live/gc_reclamation.py','--transport','tcp','--port','26590','--mount','/data1/efs/mnt','--peer-mount','/data1/efs/mnt2','--root','/data1/efs','--root','/home/efs']
  codes={}
  for mode in ('buffered','direct'):
-  codes['loaded-'+mode]=run('loaded-'+mode,['python3',*common,'--mode',mode,'--append-loaded-only','--append-loaded-rounds','1'],900)
+  remaining=1791730579-time.time() # user two-hour deadline: 14:56:19 UTC
+  if remaining<12*60:
+   (out/(mode+'-NOTRUN.json')).write_text(json.dumps(dict(reason='reserve time for preserved-store restoration, final native suite and evidence',remaining_seconds=remaining)))
+   codes['loaded-'+mode]='NOTRUN';break
+  seconds=min(600,int(remaining-8*60))
+  codes['loaded-'+mode]=run('loaded-'+mode,['python3',*common,'--mode',mode,'--append-loaded-only','--append-loaded-rounds','1'],seconds)
  (out/'verdicts.json').write_text(json.dumps(codes,indent=2));assert all(rc==0 for rc in codes.values()),codes
  (out/'run-exit.txt').write_text('0\n')
 except BaseException:
