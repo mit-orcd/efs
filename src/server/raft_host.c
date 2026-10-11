@@ -10728,14 +10728,18 @@ static int host_namespace_session_admit_after_group(struct efs_raft_host *h,
     if(rc==EFS_OK)rc=efs_kv_get(h->kv,key,kl,value,&vl);
     if(rc==EFS_OK)return efs_session_accept(h->kv,shard,q->id.client_uuid,q->id.session_epoch);
     if(rc!=EFS_ERR_NOT_FOUND)return rc;
-    if(!owner_prepared) {
-        rc=host_namespace_session_prepare_owner(h,q,hint);
-        if(rc!=EFS_OK)return rc;
-    }
     uint8_t cmd[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_REGISTER};
     memcpy(cmd+2,q->id.client_uuid,16);wr32be(cmd+18,q->id.session_epoch);wr32be(cmd+22,shard);
     uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(q->id.client_uuid));
+    /* REGISTER itself proves the current owner's epoch/state and durably
+     * includes this participant. Existing owners need no idempotent CREATE.
+     * Only the authoritative missing-record verdict can bootstrap an owner;
+     * neither refusal nor an uncertain I/O result grants that permission. */
     rc=host_namespace_session_command(h,owner,cmd,sizeof(cmd),hint);
+    if(rc==EFS_ERR_NOT_FOUND && !owner_prepared) {
+        rc=host_namespace_session_prepare_owner(h,q,hint);
+        if(rc==EFS_OK)rc=host_namespace_session_command(h,owner,cmd,sizeof(cmd),hint);
+    }
     if(rc!=EFS_OK)return rc;
     cmd[1]=EFS_MD_SESS_ESTABLISH;
     rc=host_session_establish_admit(h,cmd,sizeof(cmd),group,hint);
