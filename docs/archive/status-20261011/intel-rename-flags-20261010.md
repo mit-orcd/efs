@@ -1,5 +1,6 @@
 # Intel rename flag refusal — October 10, 2026
 
+**Archived Oct 11, 2026:** historical repair evidence. Native production-function regressions and the named rename, xattr and setgid POSIX cases pass in the current Intel runs. Broader Intel acceptance remains open in the [current deployment ledger](../../status/intel-deployment-acceptance-20261011.md); archiving this note does not close its remaining timeouts.
 A disposable probe on Intel2's deployed `d88899f3` mount created two files
 with distinct payloads, then requested `renameat2(..., RENAME_EXCHANGE)`.
 The call returned success, the source name disappeared, and the destination

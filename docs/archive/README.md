@@ -150,3 +150,12 @@ Superseded deployment and integration checkpoints retain their raw evidence and 
 - [query-cache-three-rounds-20261009](status-20261011/query-cache-three-rounds-20261009.md)
 - [query-cache-merged-three-rounds-20261009](status-20261011/query-cache-merged-three-rounds-20261009.md)
 - [query-cache-next-three-rounds-20261010](status-20261011/query-cache-next-three-rounds-20261010.md)
+
+
+## Intel repair notes archived Oct 11, 2026 (current acceptance remains open)
+
+Superseded deployment and integration checkpoints retain their raw evidence and remaining obligations. Current execution state belongs in the status index.
+
+- [intel-rename-flags-20261010](status-20261011/intel-rename-flags-20261010.md)
+- [intel-xattr-names-20261010](status-20261011/intel-xattr-names-20261010.md)
+- [intel-posix-inheritance-20261010](status-20261011/intel-posix-inheritance-20261010.md)
