@@ -129,3 +129,10 @@ both direct and buffered modes with cold survivors and physical drain. The
 shorter candidate load does not satisfy the originally planned ten-minute
 or full sustained W94/W97 obligations; neither workload rate nor quota is
 changed between the bounded baseline and candidate. Default idle is unchanged.
+
+The retained bounded baseline observed 300 seconds: 52,464 completed closes in
+ten full 30-second windows (174.88/s), with final per-node charged usage
+3,084,189,696/2,759,720,960/3,084,713,984/2,760,179,712 bytes. It stopped by
+cooperative SIGINT, exit 130, and restoration exit 0. This is an intentional
+diagnostic stop, not a storage failure or cold-byte acceptance result.
+[Interval/final-status evidence](../../results/measure/20261011-amd-sustained/evidence/baseline/baseline-stop.json).

@@ -1686,7 +1686,7 @@ subsequently closes through the final recovery and sustained acceptance above.
 
 [W94/W97 AMD sustained mixed-load follow-up](../status/amd-sustained-20261011.md) retains
 an unpaced private-quota failure, successful quiescent GC progress and an
-intentionally interrupted bounded baseline. Progress-conditioned GC scheduling
+intentionally interrupted 300-second bounded baseline. Progress-conditioned GC scheduling
 is opt-in and under native/live validation; W94/W97 remain open. The same note
 records the completed W95 retained experiment review and its format limits.
 
