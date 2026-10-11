@@ -23,6 +23,16 @@ int main(void)
     for(unsigned i=0;i<files;i++){
         char name[32];snprintf(name,sizeof(name),"file-%04u",i);
         CHECK(!efs_meta_apply_create_file(kv,&attrs,dir,S_IFREG|0644,name,&ids[i]));
+        if(getenv("EFS_QUERY_DELTA_LANES")){
+            struct efs_meta_row row;uint8_t key[EFS_KV_KEY_MAX],value[EFS_META_INO_BYTES],lane[EFS_META_LANE_BYTES]={0};uint32_t kn;
+            CHECK(!efs_meta_apply_get_inode(kv,ids[i],&row));row.active_lanes=1;
+            CHECK(!efs_kv_key_inode(efs_kv_inode_shard(ids[i]),ids[i],key,&kn));
+            CHECK(!efs_meta_pack_inode(&row,value,sizeof(value)));CHECK(!efs_kv_put(kv,key,kn,value,sizeof(value)));
+            /* Canonical committed lane: EOF 8192, seq 1, one allocated chunk. */
+            lane[6]=32;lane[31]=1;lane[63]=1;
+            CHECK(!efs_kv_key_lane(efs_kv_lane_shard(ids[i],0),ids[i],row.generation,0,key,&kn));
+            CHECK(!efs_kv_put(kv,key,kn,lane,sizeof(lane)));
+        }
     }
     struct efs_kv_lsm_snapshot *source=NULL;
     struct efs_query_catalog *old=NULL,*next=NULL,*oracle=NULL;
@@ -57,6 +67,29 @@ int main(void)
         }
         efs_query_catalog_free(oracle);oracle=NULL;efs_query_catalog_free(old);old=next;next=NULL;
         efs_kv_lsm_snapshot_release(source);source=NULL;
+    }
+    if(old && getenv("EFS_QUERY_DELTA_LANES")){
+        for(unsigned phase=0;phase<2;phase++){
+            efs_ino_t target=ids[files-1-phase];struct efs_meta_row row;
+            uint8_t key[EFS_KV_KEY_MAX],lane[EFS_META_LANE_BYTES]={0};uint32_t kn;
+            CHECK(!efs_meta_apply_get_inode(kv,target,&row));
+            CHECK(!efs_kv_key_lane(efs_kv_lane_shard(target,0),target,row.generation,0,key,&kn));
+            if(!phase){lane[6]=64;lane[14]=1;lane[15]=44;lane[31]=2;lane[63]=2;CHECK(!efs_kv_put(kv,key,kn,lane,sizeof(lane)));}
+            else CHECK(!efs_kv_del(kv,key,kn));
+            CHECK(!efs_kv_lsm_snapshot_pin(kv,16<<20,&source));
+            CHECK(!efs_query_catalog_build_disk(cache,source,old,4<<20,NULL,NULL,&next));
+            CHECK(!efs_query_catalog_build(source,NULL,256<<20,NULL,NULL,&oracle));
+            if(next && oracle){
+                struct efs_meta_stat a,b;struct efs_query_rollup x,y;
+                CHECK(!efs_query_catalog_inode(next,target,NULL,&a));CHECK(!efs_query_catalog_inode(oracle,target,NULL,&b));CHECK(!memcmp(&a,&b,sizeof(a)));
+                CHECK(a.size==(phase?0:16384) && a.alloc==(phase?0:2));
+                if(!getenv("EFS_QUERY_DELTA_BASELINE"))CHECK(efs_query_catalog_refolded(next)==1);
+                CHECK(!efs_query_catalog_stats(next,dir,&x));CHECK(!efs_query_catalog_stats(oracle,dir,&y));CHECK(!memcmp(&x,&y,sizeof(x)));
+                printf("lane-only=%s refolded=%u size=%llu alloc=%llu\n",phase?"absent":"changed",efs_query_catalog_refolded(next),(unsigned long long)a.size,(unsigned long long)a.alloc);
+            }
+            efs_query_catalog_free(oracle);oracle=NULL;efs_query_catalog_free(old);old=next;next=NULL;
+            efs_kv_lsm_snapshot_release(source);source=NULL;
+        }
     }
     /* Deleted old IDs and inserted candidate IDs must invalidate parents
      * without assuming that the two sorted inode streams align by ordinal. */

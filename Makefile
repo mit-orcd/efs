@@ -395,6 +395,7 @@ test: all
 	./tests/test_query_catalog
 	./tests/test_query_disk
 	./tests/test_query_delta
+	EFS_QUERY_DELTA_LANES=1 ./tests/test_query_delta
 	./tests/test_query_disk_io
 	./tests/test_query_refresh
 	./tests/test_name_index

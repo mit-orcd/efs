@@ -61,6 +61,47 @@ static int inputs_changed(const struct efs_query_disk *d,const struct efs_query_
     }
     return 0;
 }
+/* Whole-partition revisions are conservative invalidation hints. For regular
+ * files, getattr reads the canonical inode, active lane records and append
+ * cursor. Pending transaction/guard/reduction rows were excluded when the raw
+ * snapshot was built. Prove those exact inputs unchanged before reusing stat;
+ * compare PVER conservatively as well for publication-view evolution. */
+static int stat_value_same(struct efs_query_disk *d,struct efs_query_disk *old,
+                          const uint8_t *key,uint32_t length,int *same)
+{
+    uint32_t shard=((uint32_t)key[0]<<8)|key[1];
+    if(d->part[shard].revision==old->part[shard].revision){*same=1;return EFS_OK;}
+    uint8_t a[VALUE_MAX],b[VALUE_MAX];uint32_t an=sizeof(a),bn=sizeof(b);
+    int ar=raw_get(d,key,length,a,&an),br=raw_get(old,key,length,b,&bn);
+    if(ar && ar!=EFS_ERR_NOT_FOUND)return ar;
+    if(br && br!=EFS_ERR_NOT_FOUND)return br;
+    /* An absent active lane is not evidence for stat reuse. */
+    *same=ar==br && ((ar==EFS_ERR_NOT_FOUND && key[2]!=EFS_KV_KIND_LANE) ||
+                    (!ar && an==bn && !memcmp(a,b,an)));
+    return EFS_OK;
+}
+static int file_stat_same(struct efs_query_disk *d,struct efs_query_disk *old,
+                          const struct efs_meta_row *row,int *same)
+{
+    uint8_t key[EFS_KV_KEY_MAX];uint32_t length;int rc=EFS_OK;
+    *same=1;
+    uint64_t lanes=row->active_lanes;
+    while(lanes && !rc && *same){
+        if(cancelled(d))return EFS_ERR_BUSY;
+        unsigned lane=(unsigned)__builtin_ctzll(lanes);lanes&=lanes-1;
+        rc=efs_kv_key_lane(efs_kv_lane_shard(row->ino,(uint8_t)lane),row->ino,row->generation,(uint8_t)lane,key,&length);
+        if(!rc)rc=stat_value_same(d,old,key,length,same);
+    }
+    if(!rc && *same){
+        rc=efs_kv_key_append_cur(efs_kv_inode_shard(row->ino),row->ino,row->generation,key,&length);
+        if(!rc)rc=stat_value_same(d,old,key,length,same);
+    }
+    if(!rc && *same){
+        rc=efs_kv_key_pver(efs_kv_inode_shard(row->ino),row->ino,key,&length);
+        if(!rc)rc=stat_value_same(d,old,key,length,same);
+    }
+    return rc;
+}
 static int incremental_nodes(struct efs_query_disk *d,struct efs_query_disk *old,struct incremental *s,uint32_t shard)
 {
     int same=d->part[shard].revision==old->part[shard].revision;
@@ -118,6 +159,10 @@ static int incremental_nodes(struct efs_query_disk *d,struct efs_query_disk *old
             }
         }
         if(!rc && !same)d->part[shard].dependencies|=dependency_bits(&n.row);
+        if(!rc && fold && found && S_ISREG(n.row.mode) && !memcmp(&n.row,&before.row,sizeof(n.row))){
+            int unchanged=0;rc=file_stat_same(d,old,&n.row,&unchanged);
+            if(!rc && unchanged)fold=0;
+        }
         if(!rc && fold){rc=efs_meta_apply_getattr(&d->kv,n.row.ino,refuse_coord,NULL,&n.stat);if(!rc && d->refolded<UINT32_MAX)d->refolded++;}
         int changed=!found || memcmp(&n.row,&before.row,sizeof(n.row)) || memcmp(&n.stat,&before.stat,sizeof(n.stat));
         if(!rc && changed)rc=changed_add(d,s,n.row.ino);
