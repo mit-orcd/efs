@@ -16159,10 +16159,12 @@ void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
      * position. The scan is name-ordered, so this is stable and complete —
      * an ino filter would skip entries (name order != ino order). */
     memset(&cur, 0, sizeof(cur));
-    if (after_name && after_name[0]) {
-        cur.src = after_src;
+    /* A completed source can advance src and clear name exactly when a
+     * page fills. That source-only cookie is valid; resetting it to zero
+     * repeats earlier sources and can prevent a large listing reaching EOF. */
+    cur.src = after_src;
+    if (after_name && after_name[0])
         strncpy(cur.name, after_name, EFS_MAX_NAME - 1);
-    }
     while (rc == EFS_OK && !cur.done && out->count < max_ents) {
         got = 0;
         /* Never scan past what fits in the reply: the cursor advances to
