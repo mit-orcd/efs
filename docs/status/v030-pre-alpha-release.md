@@ -324,3 +324,23 @@ raw perf data remains on AMD. An unchanged-code quiet receiver-feedback-ON
 jobs16 comparison is running; its direct gate also fails. Defaults, original
 case deadlines, authority checks and durable barriers remain unchanged.
 The independent review of the batch remains pending; release promotion is blocked.
+
+### Reviewed old-peer downgrade stall repair
+
+[Packed batch review](../reviews/packed-batch-20261011/README.md), pinned to
+`e5a38553`, reproduces an availability defect: an active cohort retains batch
+mode after an older peer ignores the unsupported opcode, causing repeated NET
+retries. Immutable ownership was retained; no false durable verdict was found.
+The release now applies the supplied production fix and actual-function
+regression: after NET, a fresh successful scalar-only capability probe enables
+exact scalar replay for publication and retirement. Failed probes and all-modern
+peers retain the original batch request/ownership. Focused normal and ASan/UBSan
+gates pass; a new full merged qualification is still required. This correction
+is separate from the reproduced modern-peer jobs16 timeout and does not close it.
+
+The quiet feedback-ON jobs16 direct run also fails. Buffered's final physical
+wait fails with legitimate retained namespace: stopped metadata copies show
+5,168 ACTIVE objects, 6,978 LIVE references and 12,557 linked inode rows, zero
+RECLAIMING objects and zero PENDING references. Deleting these live packs would
+be wrong. This is not a recurrence of the repaired RECLAIMING backlog; the
+failed high-pressure test left linked files. Normal mounts are restored.

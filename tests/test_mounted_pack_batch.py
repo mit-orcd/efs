@@ -4,7 +4,9 @@ from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/client/pack_write.c').read_text()
 def fn(name):
- a=s.index('static '+name);return s[a:s.index('\n}',a)+2]
+ a=s.index('static '+name)
+ if s.index(';',a)<s.index('{',a):a=s.index('static '+name,a+1)
+ return s[a:s.index('\n}',a)+2]
 code=s[:s.index('static uint64_t pack_now(')]+r'''
 #include <assert.h>
 #include <stdio.h>
@@ -12,6 +14,8 @@ code=s[:s.index('static uint64_t pack_now(')]+r'''
 static struct efs_publication_ack_queue queues[PACK_WRITERS];
 static struct efs_chunk_rec bound[PACK_WRITERS];
 static int owned[PACK_WRITERS],lost,partial,retire_partial,unsupported;
+static int probe_result=EFS_ERR_NET,probe_batch=1;
+static int pack_capabilities(uint32_t *members){*members=7;pack_capability_batch=probe_batch;return probe_result;}
 static unsigned calls,consumes,binds,freed;static uint32_t last_count;
 static struct efs_msg_publication initial[PACK_WRITERS];
 static unsigned slot(efs_ino_t ino){for(unsigned i=0;i<PACK_WRITERS;i++)if(bound[i].ino==ino)return i;assert(0);return 0;}
@@ -44,7 +48,7 @@ int efs_client_rpc_publication_batch(const struct efs_msg_publication_batch *b,s
  }
  return lost?EFS_ERR_NET:0;
 }
-'''+fn('int pack_batch_status(')+'\n'+fn('int pack_retire_batch(')+'\n'+fn('void pack_publish_batch(')+r'''
+'''+fn('int pack_batch_peer_unsupported(')+'\n'+fn('int pack_batch_status(')+'\n'+fn('int pack_retire_batch(')+'\n'+fn('void pack_publish_batch(')+r'''
 int main(void)
 {
  static struct pack_context p;static struct pack_retirement r;
@@ -73,12 +77,27 @@ int main(void)
  /* Definitive unsupported transport enables exact scalar replay, without
   * pretending a terminal outcome or changing byte/ACK ownership. */
  memset(initial,0,sizeof(initial));memset(queues,0,sizeof(queues));
- p.writers[0].put_bound=1;p.cohort.count=1;p.writers[0].plan.cache_sequence=99;owned[0]=1;p.batch=1;unsupported=1;
+ p.writers[0].put_bound=1;p.cohort.count=1;p.writers[0].plan.cache_sequence=99;owned[0]=1;p.batch=1;unsupported=0;lost=1;
+ /* A successful all-modern probe preserves batch ownership after a lost reply. */
+ probe_result=0;probe_batch=1;pack_publish_batch(&p);
+ assert(p.batch&&owned[0]&&queues[0].count==1&&!queues[0].entries[0].consumed_state);
+ /* Only a fresh successful scalar-only probe permits immutable fallback. */
+ probe_result=0;probe_batch=0;pack_capability_batch=0;
+ pack_publish_batch(&p);
+ assert(!p.batch&&owned[0]&&queues[0].count==1&&!queues[0].entries[0].consumed_state);
+ struct efs_msg_publication_reply rejected={.state=EFS_PUBLICATION_REJECTED,.verdict=EFS_ERR_STALE};
+ memcpy(rejected.digest,queues[0].entries[0].digest,32);
+ assert(!efs_publication_ack_consumed(&queues[0],99,&rejected));
+ r.batch=1;r.count=1;r.acks[0]=&queues[0];
+ assert(pack_retire_batch(&r)==EFS_ERR_PROTO&&!r.batch&&r.acks[0]&&owned[0]);
+ puts("FIX PASS: fresh scalar-only capability enables publication and retirement fallback without releasing ownership");
+ p.batch=1;memset(queues,0,sizeof(queues));
+ lost=0;unsupported=1;
  pack_publish_batch(&p);assert(!p.batch&&owned[0]&&queues[0].count==1&&!queues[0].entries[0].consumed_state);
  puts("mounted batch: 16 exact intents, no rebind after lost reply, independent rejection/BUSY retention, once-only consumption, oldest ACK retry/partial credits, scalar fallback and retained rejected bytes PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-mounted-batch-') as d:
  p=Path(d)/'test.c';p.write_text(code);exe=p.with_suffix('')
- subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-Wno-unused-variable','-pthread','-I'+str(root/'include'),'-I'+str(root/'src/client'),str(p),str(root/'libefs.a'),'-lm','-o',str(exe)],check=True)
+ subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-Wno-unused-variable','-pthread','-I'+str(root/'include'),'-I'+str(root/'src/client'),str(p),*[str(root/f) for f in ['src/kv/kv_key.c','src/common/publication.c','src/common/publication_ack.c','src/common/packed_segment.c','src/common/checksum.c','src/common/common.c','src/data/erasure.c','deps/blake3/blake3.c','deps/blake3/blake3_dispatch.c','deps/blake3/blake3_portable.c']],'-I'+str(root/'deps/blake3'),'-DBLAKE3_NO_SSE2','-DBLAKE3_NO_SSE41','-DBLAKE3_NO_AVX2','-DBLAKE3_NO_AVX512','-DBLAKE3_USE_NEON=0',*shlex.split(os.environ.get('WRITER_RPC_TEST_CFLAGS','')),'-lm','-o',str(exe)],check=True)
  subprocess.run([str(exe)],check=True)

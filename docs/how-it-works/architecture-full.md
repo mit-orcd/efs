@@ -2124,6 +2124,11 @@ records both-mode POSIX/cold-byte passes and the physical reclamation timeout.
 The bounded scheduler fix has focused regression coverage; merged live acceptance
 is pending. W95 remains open. Nothing is tagged or pushed.
 
+Release correctness update: the indexed [packed batch review](../reviews/packed-batch-20261011/README.md)
+finds an old-peer downgrade stall. Its focused production fix and ownership
+regression are applied with normal/sanitizer passes; latest full qualification
+is pending. Modern-peer jobs16 packing timeout remains separate and open.
+
 
 ## Appendix 2 — In flight — the current handoff block
 
