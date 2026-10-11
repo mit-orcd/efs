@@ -4504,3 +4504,92 @@ remains separate implementation work.
 **Gate:** constrained-capacity tests for every topology, shared writers, byte/
 inode/quota pressure, cold restart, acknowledged-data integrity and recovery.
 See [policy and pending details](../status/storage-pressure-read-only-20261009.md).
+
+
+## Intel follow-ups indexed Oct 11, 2026
+
+These IDs track the previously unnumbered Intel follow-ups. They do not duplicate W97, W74/W66, W71/W73 or W99, and do not approve new feature scope or settle pending policy choices. Evidence baseline: [Intel deployment acceptance](../status/intel-deployment-acceptance-20261011.md).
+
+<a id="w100"></a>
+
+## W100 · Intel2 repeated-write POSIX timeout
+
+**Class/state:** Correctness/performance investigation; open.
+
+**Evidence/current state:** The deployed Intel build passes 213/214 private core cases on two unchanged attempts. `mtime_monotonic_many_writes` exceeds the original 30-second limit while the production tiny-file writer is active. Production core passes 214/214. Harness overlap is not necessary for the private failure; its cause remains unproved.
+
+**Remaining action:** Capture per-operation write/close/stat timing and server persistence/queue evidence, isolate the cause, and implement a causal repair. W52/W53/W97 are related investigations, not established diagnoses.
+
+**Gate:** Repeat the unchanged private case and full core suite under the concurrent production workload, retaining the 30-second limit, exact payload checks and original failure evidence.
+
+<a id="w101"></a>
+
+## W101 · Complete and verify the Intel two-million-file workload
+
+**Class/state:** Operational acceptance; in progress.
+
+**Evidence/current state:** Intel1 completed exactly 1,000,000 total files with exit 0. At 2026-10-11T02:45:11Z, Intel2 reported 551,734/1,000,000 total files and an active writer. This is a dated observation, not a live status guarantee.
+
+**Remaining action:** Let the existing locked Intel2 resume job reach its total target, check terminal status and strict inventory, and verify preserved payload samples. Do not create another million on Intel1 or discard existing files.
+
+**Gate:** Both jobs terminate successfully at 1,000,000 total files per host; strict inventories and immutable sample size/SHA256 checks pass. Counts alone do not establish payload integrity.
+
+<a id="w102"></a>
+
+## W102 · Complete Intel2 private peer and GC acceptance
+
+**Class/state:** Validation follow-up; blocked by W100 in the full harness.
+
+**Evidence/current state:** Both Intel2 private attempts stop after the 213/214 core verdict; later peer and post-POSIX GC gates are NOTRUN. Production wired peer passes 66/66, but does not substitute for these private gates.
+
+**Remaining action:** Exercise independent remaining gates while preserving the failing aggregate verdict if needed; after W100 is repaired, repeat the entire unchanged private harness. Retain code/build identity and individual verdicts.
+
+**Gate:** Full Intel2 private core, peer, reclamation, quota, cold restart and fencing gates pass without skipping or masking the W100 failure.
+
+<a id="w103"></a>
+
+## W103 · Investigate intermittent Intel persistence and stats timeouts
+
+**Class/state:** Liveness/performance investigation; open.
+
+**Evidence/current state:** Intel1 initially timed out at the 60-second many-files persistence preparation limit and the 30-second virt_stats_readable limit. Unchanged repeats passed. The stats repeat used an available older snapshot with a BUSY refresh warning; no causal repair or universal freshness guarantee is established.
+
+**Remaining action:** Correlate storage, queue and query refresh timings; obtain bounded reproducible evidence and fix any demonstrated cause. Persistence relates to W53/W97; command snapshot semantics remain W91/W92.
+
+**Gate:** Repeated unchanged-limit cold persistence and command tests under representative load, retaining original failures and reporting snapshot age/refresh errors honestly.
+
+<a id="w104"></a>
+
+## W104 · Decide and gate writable shared mmap support
+
+**Class/state:** Feature scope/design follow-up; deferred, currently unsupported by specification.
+
+**Evidence/current state:** The POSIX extras suite intentionally skips writable shared mmap. This is not a newly established regression, and assigning this number does not authorize changing the current support contract.
+
+**Remaining action:** Record whether writable shared mmap is required. If selected, specify dirty-page publication, synchronization, peer coherence, error propagation and durability before implementation; otherwise document the explicit deferred support boundary.
+
+**Gate:** For implemented support, real shared mappings pass publication, concurrent peer, synchronization and cold-byte tests. Until then retain the explicit unsupported skip.
+
+<a id="w105"></a>
+
+## W105 · Stable NFS file handles across EFS client restarts
+
+**Class/state:** Gateway acceptance/correctness investigation; open.
+
+**Evidence/current state:** The product-gap record retains an Oct 5 macOS NFS cached-entry rename EIO after gateway restart while other operations remained usable. The mechanism is unproved; broader NFS evidence does not close restart/file-handle acceptance.
+
+**Remaining action:** Trace kernel export/decode, inode generation and gateway lifetime; reproduce and repair the demonstrated restart behavior. Preserve existing payloads and separate native FUSE from NFS verdicts.
+
+**Gate:** Named macOS and Linux NFS clients retain cached handles across a cold EFS gateway restart, with stat/read/readdir/create/rename and exact preserved-byte checks.
+
+<a id="w106"></a>
+
+## W106 · Intel RDMA feasibility and transport acceptance
+
+**Class/state:** Optional transport investigation; hardware/software prerequisite blocked.
+
+**Evidence/current state:** Both Intel wired links report 5000 Mb/s using RTL8126/r8169. No hardware RDMA device is exposed, and installed kernels have neither rdma_rxe nor siw modules. TCP is the validated deployment transport; link speed alone does not establish RoCE support.
+
+**Remaining action:** Determine supported NIC/driver hardware capabilities and software RDMA kernel availability. Present concrete hardware/package changes before choosing an RDMA deployment; distinguish software RXE/SIW from hardware RoCE.
+
+**Gate:** If enabled, actual cross-host RDMA device/connection evidence plus unchanged POSIX, peer, direct-I/O, persistence and fault gates. Until then report TCP acceptance only.
