@@ -1,0 +1,6 @@
+{
+  "live": 42115,
+  "install": 42116,
+  "profile": 42117,
+  "limits": "Original failure retained; buffered acceptance inherited only after exact fixture/image checks. Long append controller remains waiting, never interrupted."
+}

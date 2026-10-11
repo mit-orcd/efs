@@ -167,6 +167,66 @@
     "bytes": 801,
     "sha256": "b5da57db36e4ee7404f9f322e2cf939e4845c2dd833f0fd74e4c4a69ffe490d2"
   },
+  "direct-slow-profile/after.json": {
+    "bytes": 4858,
+    "sha256": "1f918ac02f7178a3d2418fc34025ba169399fe5be18a0c331efde9251b7f8d9c"
+  },
+  "direct-slow-profile/before.json": {
+    "bytes": 4858,
+    "sha256": "48c933700aec2b2528b0f2c00745e9ea54b4b2a31ae82d4e84d187e20c83e6f8"
+  },
+  "direct-slow-profile/callers.txt": {
+    "bytes": 152907,
+    "sha256": "cfd2423352c457feb5b8511917cda0aafea71a33cd34b6397cc44d33e6c685b6"
+  },
+  "direct-slow-profile/flat.txt": {
+    "bytes": 2929,
+    "sha256": "c79731fa66d30e495243974250240e527eb501f517730a10ec540b0654b29dd6"
+  },
+  "direct-slow-profile/limits.txt": {
+    "bytes": 102,
+    "sha256": "72fb2ca152efb6b0236dfad1081e8b8d7e91bdc5dbb846e7d7abc6d26b2831ce"
+  },
+  "direct-slow-profile/perf-record-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "direct-slow-profile/perf-record.log": {
+    "bytes": 167,
+    "sha256": "3a364268bfd91b01accd069aac9b21baa50848f4e38e7c2872b1af78c8e777a9"
+  },
+  "direct-slow-profile/perf.data": {
+    "bytes": 347096,
+    "sha256": "e143e7290682027dc1d3cbccd9c3d23d2ab0fc62276a42ae17513e8d89b5757a"
+  },
+  "direct-slow-profile/strace-exit.txt": {
+    "bytes": 4,
+    "sha256": "ca2ebdf97d7469496b1f4b78958f9dc8447efdcb623953fee7b6996b762f6fff"
+  },
+  "direct-slow-profile/strace.txt": {
+    "bytes": 8008,
+    "sha256": "44497ab2bfb79342e63ef31cd83ccf48abd7b4a70caaa3b9629394a57414c109"
+  },
+  "direct-slow-profile/summary.json": {
+    "bytes": 641,
+    "sha256": "7aa0638068ce6a278408742e3cd73ba4258f54d40e8a0072a7f9e5bd4858949d"
+  },
+  "first-live-attempt/binaries.json": {
+    "bytes": 588,
+    "sha256": "aaa7ea4dca6f746b93548a7376018c00723152f3517ca5b3691a2cfc813daeb4"
+  },
+  "first-live-attempt/failure.txt": {
+    "bytes": 398,
+    "sha256": "adafa5f2ce1db9c8e5334014813a7add9a3f9e64dfe5b98ad2d5a826e1928862"
+  },
+  "first-live-attempt/full-buffered-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "first-live-attempt/full-buffered.log": {
+    "bytes": 20081,
+    "sha256": "fb9c54a2bfba736d0652866fd966af36a3ed1448827d82cd1e127701c255992b"
+  },
   "first-live-attempt/full-direct-exit.txt": {
     "bytes": 2,
     "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
@@ -175,9 +235,45 @@
     "bytes": 19056,
     "sha256": "769db00cd63365b4580265a1386edc8d7480252e44c564aa0fb737d2bc2e5aa4"
   },
+  "first-live-attempt/mnt-stop-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "first-live-attempt/mnt-stop.log": {
+    "bytes": 106,
+    "sha256": "157263d292c2bc82819bc88b841a188943ff1cee90a3343a9495ad7a8bcf1a08"
+  },
+  "first-live-attempt/mnt2-stop-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "first-live-attempt/mnt2-stop.log": {
+    "bytes": 109,
+    "sha256": "4bb0b457827d9f9ce4911ec773dd7996cf13b1f7f48a5b4bc8ab83b1f4e4722a"
+  },
+  "first-live-attempt/restore-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "first-live-attempt/restore.log": {
+    "bytes": 13744,
+    "sha256": "09359839cde27ed22f603ce21069bca43c263cfabdd5dc2c916915f834301491"
+  },
+  "first-live-attempt/verdicts.json": {
+    "bytes": 44,
+    "sha256": "4ed778ef88d52107887b0875ff53a50cdb9c7824e41f228410563f9599b8500a"
+  },
   "fixture-original-manifest.json": {
     "bytes": 3599,
     "sha256": "60b686d8481f7894696df9658c1f7e7df22367945db828e16c9ac44389434f58"
+  },
+  "fixture-retry/queued.json": {
+    "bytes": 229,
+    "sha256": "aeb834ba15a88b7de5975e8020018f7a791f38131449d323ffadf5ba7ebc87cf"
+  },
+  "fixture-retry/run-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
   },
   "fixture-source-fixed.py": {
     "bytes": 187139,
