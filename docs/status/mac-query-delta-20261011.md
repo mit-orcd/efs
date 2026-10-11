@@ -311,3 +311,47 @@ The failure is preserved; benchmark code/deadlines remain untouched. This isolat
 installed-service interference collectively, not query-versus-GC causality.
 The committed optimization is now being deployed to Mac, buffered/TCP; installed
 native and peer gates are repeated separately. The retained orphan remains open.
+
+### Installed writeback result and remaining foreground lead
+
+With `a39edfa2` deployed, failed initial-build indexing measured 28,487 / 29,288
+ms before the native workload and 34,067–51,231 ms during native/peer activity,
+versus the prior 251,658–265,382 ms observations. Exact-stat folding remains
+roughly 0.3–0.5 seconds in most samples. These are repeated phase observations
+on retained, changing data, not matched end-to-end healthy publications: orphan
+directory 4091 still prevents publication. No metadata repair was guessed.
+
+The unchanged native suite after the writeback repair is **137/216 PASS,
+16 FAIL, 63 NOTRUN**, 240.9 seconds. Its local-filesystem baseline is 216/216
+PASS in 10.2 seconds. This is essentially unchanged from the prior 137/216,
+244.4-second run. The query indexing improvement does not close foreground
+liveness. The independent full peer rerun is pending.
+
+Read profiling at 14:19:28 UTC reports 9,075 leader ReadIndex calls averaging
+41,797 microseconds; lookup's parent ReadIndex averages 44,240 microseconds,
+versus 15 microseconds for the local KV lookup. Lookup's lane authority work
+adds 25,314 microseconds on average. Later cumulative averages depend on the
+workload mix and must not be treated as paired latency samples.
+
+The pump publishes/wakes satisfied views before its off-lock durability tail,
+but remains the sole pump during WAL release and applied-checkpoint syncing.
+An incoming heartbeat reply therefore may await that tail before the next
+inbox drain. This is a code-supported hypothesis for remaining ReadIndex waits,
+not proven timing causality. The next discriminating gate should correlate
+request admission, outbound probe, reply enqueue/drain and view publication
+with existing KV-release/applied-persistence phase timings. Delay each barrier
+independently in a private preserved-byte fixture before proposing any pump
+split. Keep the KV-before-checkpoint ordering, bounded replay tail and all
+acknowledged-byte recovery gates. Raising native deadlines would hide the issue.
+
+A 186–188-second whole-host Mac TCP window during the peer run records:
+
+| VM | Sent segments | Retransmitted segments | Failed connects / resets / input errors |
+| --- | ---: | ---: | --- |
+| efs1 | 413,524 | 0 | 0 / 0 / 0 |
+| efs2 | 148,951 | 2 | 0 / 0 / 0 |
+| efs3 | 143,487 | 0 | 0 / 0 / 0 |
+| efsgw | 201,124 | 2 | 0 / 0 / 0 |
+
+SSH is included. These counters do not identify lost EFS RPCs or rule out
+intermittent stalls. Mac buffered/TCP results do not close ORCD IB/RDMA gates.
