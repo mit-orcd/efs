@@ -65,6 +65,12 @@ static int fixture_sleep(unsigned us){
  return usleep(us);
 }
 #define usleep fixture_sleep
+static unsigned fail_open_alloc;
+static void *fixture_calloc(size_t n,size_t size) {
+ if(fail_open_alloc){fail_open_alloc=0;return NULL;}
+ return calloc(n,size);
+}
+#define calloc fixture_calloc
 '''
 for name in ('efs_open_note','efs_open_set_leased','efs_close_note','efs_open_release_pending','efs_open_drain_pending','wb_lock_budget','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid_mode','efs_open_acquire_fileid','efs_open_acquire','efs_open_adopt','efs_open_acquire_created'):
  source+='\n'+function(name)
@@ -83,6 +89,12 @@ static int efs_fuse_release_ino(efs_ino_t ino,struct fuse_file_info *fi){
  (void)fi;int leased=0;if(efs_close_note(ino,&leased))return efs_open_release_pending(ino);return EFS_OK;
 }
 int main(void) {
+ /* Failed local open-owner allocation must transfer no pending CREATE token
+  * and allocate no OPEN/adoption edge; the caller retains exact cleanup. */
+ int handed_alloc=1;fail_open_alloc=1;
+ assert(efs_open_acquire_created(42,99,3,&handed_alloc)==EFS_ERR_NOMEM);
+ assert(!handed_alloc && !g_open_refs && !server_hold && !opens && !adopts);
+ assert(!mock_deadline && !fail_open_alloc);
  assert(!efs_open_acquire(42));assert(!efs_open_acquire(42));assert(opens==1);
  int leased=0;assert(!efs_close_note(42,&leased));assert(!leased);
  assert(efs_close_note(42,&leased)&&leased);

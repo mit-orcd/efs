@@ -39,3 +39,32 @@ gates on the corrected build are next; no normal service promotion yet.
 
 The first live invocation refused setup because the harness requires two root
 arguments; no workload ran. Its exit/log is retained separately.
+
+## Focused lifecycle and pressure instrumentation
+
+A new actual FUSE-bookkeeping allocation regression confirms local ENOMEM
+allocates no OPEN/adoption edge and transfers no pending CREATE token. It
+passes locally and on AMD; the original caller retains exact cleanup ownership.
+This is a regression addition, not a newly found lease bug.
+
+The private pressure fixture selects an actual nonleader member, then adds
+100 ms before its real Raft log fsync/fdatasync during a nominal 30-second
+window. It always performs the real barrier and preserves errors. The Linux
+interposer gate passes selected-path/marker handling, real bytes, EBADF and
+healing. After the delay is removed, every hosted peer must catch up to frozen
+leader commit cuts for both groups before cold restart. Stage snapshots retain
+actual elapsed times and chosen member; no hardware/device conclusion follows.
+
+Queued acceptance is serialized: full direct/buffered lifecycle suites, then
+real combined-adoption reply-loss/negative and certificate-persistence faults
+in both modes, followed by three alternating direct feedback-off/on pairs,
+a buffered enabled pressure cell and an observation-disabled direct cell.
+Each pressure cell retains per-worker progress, cold bytes, physical cleanup
+and a fresh post-pressure cold write. Independent roots/placements remain a
+performance confounder; actual receiver pressure must be present before any
+feedback acceptance claim.
+
+The first fault-native invocation passed its code tests but failed documentation
+checks because the source snapshot omitted the new status leaf/generated
+updates. Those files are synchronized and the corrected gate is rerunning;
+the original failure log is retained, not counted as a pass.

@@ -403,6 +403,7 @@ test: all
 	python3 tests/test_host_pressure.py
 	python3 tests/test_host_outbox.py
 	python3 tests/test_host_flow.py
+	python3 tests/test_raft_slow_sync.py
 	python3 tests/test_host_inbox.py
 	python3 tests/test_host_checkpoint.py
 	python3 tests/test_host_retire.py

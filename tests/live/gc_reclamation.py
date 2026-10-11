@@ -42,6 +42,7 @@ p.add_argument('--storage-session-fence-fault',action='store_true',help='private
 p.add_argument('--continue-posix-failure','--continue-regression-failure',dest='continue_posix_failure',action='store_true',help='retain POSIX/peer failure, run independent later gates, then exit unsuccessfully')
 p.add_argument('--tiny-sustained-large-mib-s',type=float,default=0,help='0=unpaced; otherwise 0..64 MiB/s per large writer in sustained gate')
 p.add_argument('--tiny-overload',action='store_true',help='retain refused-I/O verdicts and cold-check acknowledged bytes in sustained gate')
+p.add_argument('--replication-pressure',action='store_true',help='test-only 100-ms follower log-sync delay during seconds 30..60 of sustained load, then real peer catch-up')
 p.add_argument('--tiny-sustained-seconds',type=int,default=0,help='1..1800 seconds of bounded tiny/large churn; cold exact survivors and physical reclaim, then exit')
 p.add_argument('--tiny-mixed',action='store_true',help='bounded large-writer overlap with 512 tiny CREATE/close operations, cold exact bytes and physical deletion')
 p.add_argument('--tiny-create-only',action='store_true',help='finite eight-worker tiny CREATE/write/close benchmark with exact cold bytes and physical reclaim, without large writers')
@@ -176,6 +177,12 @@ for path in sorted(inputs):
                       for name in ('efsd','efs-fuse','efs-mgmt')},
 },indent=2))
 env = dict(os.environ, EFS_MD_RAFT_N='4', EFS_TRANSPORT=a.transport)
+if a.replication_pressure:
+    assert a.tiny_sustained_seconds>=120, 'pressure requires a sustained recovery window'
+    assert not (a.storage_session_fence_fault or a.put_barrier_fault or a.kv_wal_persistence_only or a.compactor_pressure)
+    run_preload=work/'raft-slow-sync.so'
+    subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-shared','-fPIC',source/'tests/live/raft_slow_sync.c','-ldl','-o',run_preload],check=True)
+    env.update(LD_PRELOAD=str(run_preload),EFS_TEST_RAFT_SLOW_FILE=str(work/'raft-slow-armed'))
 if a.storage_session_fence_fault:
     assert a.guarded_leases and not (a.put_barrier_fault or a.kv_wal_persistence_only or a.compactor_pressure), 'certificate fault must own its preload'
     subprocess.run(['cc','-Wall','-Wextra','-Werror','-shared','-fPIC',source/'tests/live/storage_session_fence_fault.c','-ldl','-o',work/'put-session-fault.so'],check=True)
@@ -696,8 +703,62 @@ try:
         print('rejected CREATE/OPEN replies release handles and reclaim server inodes PASS',flush=True)
     if a.tiny_sustained_seconds:
         from tiny_sustained import exercise as sustained,verify_and_delete as verify_sustained
-        record=sustained(mount,[client.pid,*[proc.pid for proc in servers]],
-                         a.tiny_sustained_seconds,work/'tiny-sustained.json',a.tiny_sustained_large_mib_s,a.tiny_overload)
+        pressure_done=threading.Event();pressure_errors=[];pressure_thread=None
+        if a.replication_pressure:
+            def pressure_phases():
+                began=time.monotonic();slow_node=None
+                def snapshot(stage):
+                    rows=[run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+i}'],capture_output=True,text=True,timeout=10).stdout for i in range(4)]
+                    with (work/'replication-pressure.jsonl').open('a') as out:
+                        out.write(json.dumps(dict(stage=stage,seconds=time.monotonic()-began,nodes=rows,slow_node=slow_node))+'\n')
+                    return rows
+                try:
+                    rows=snapshot('before')
+                    leaders={i for i,row in enumerate(rows) if 'role=LEADER' in row}
+                    candidates=[i for i in (2,3,0,1) if i not in leaders and 'hosted=1' in rows[i]]
+                    assert candidates,rows
+                    slow_node=candidates[0]+1
+                    if pressure_done.wait(30):return
+                    (work/'raft-slow-armed').write_text(str(slow_node)+'\n');snapshot('slow')
+                    if pressure_done.wait(30):return
+                    (work/'raft-slow-armed').unlink();snapshot('healed')
+                    while not pressure_done.wait(30):snapshot('recovery')
+                except BaseException as error:pressure_errors.append(error)
+                finally:(work/'raft-slow-armed').unlink(missing_ok=True)
+            pressure_thread=threading.Thread(target=pressure_phases)
+            pressure_thread.start()
+        try:
+            record=sustained(mount,[client.pid,*[proc.pid for proc in servers]],
+                             a.tiny_sustained_seconds,work/'tiny-sustained.json',a.tiny_sustained_large_mib_s,a.tiny_overload)
+        finally:
+            pressure_done.set()
+            if pressure_thread:pressure_thread.join(timeout=45)
+        if a.replication_pressure:
+            assert not pressure_thread.is_alive() and not pressure_errors,pressure_errors
+            # Freeze the actual leader cuts after acknowledged workload settles;
+            # each hosted follower must reach those cuts before cold restart.
+            def views():
+                return [run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+i}'],capture_output=True,text=True,timeout=10).stdout for i in range(4)]
+            before=views();cuts={}
+            for row in before:
+                for group,commit in re.findall(r'group (\d+) hosted=1 .*?commit=(\d+)',row):
+                    group=int(group);cuts[group]=max(cuts.get(group,0),int(commit))
+            assert set(cuts)=={0,2},cuts
+            caught=[]
+            def catchup():
+                rows=views();found={0:0,2:0}
+                for row in rows:
+                    for group,applied in re.findall(r'group (\d+) hosted=1 .*?applied=(\d+)',row):
+                        group=int(group);found[group]+=1
+                        if int(applied)<cuts[group]:return False
+                if min(found.values())<3:return False
+                caught[:]=rows;return True
+            wait(catchup,'both-group frozen leader cuts caught up after slow follower healed',90)
+            (work/'replication-catchup.json').write_text(json.dumps(dict(cuts=cuts,before=before,after=caught),indent=2))
+            slow_logs='\n'.join((work/f'n{i+1}.log').read_text() for i in range(4))
+            assert 'slow-raft-sync armed' in slow_logs and 'slow-raft-sync healed' in slow_logs
+            record['replication_catchup_verified']=True
+
         cold_start=time.monotonic()
         unmount();stop(crash=True);start();mount_client()
         if a.tiny_overload:
