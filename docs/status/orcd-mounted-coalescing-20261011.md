@@ -768,3 +768,11 @@ extractor that included the newly adjacent reservation adapter without its
 ordered guard dependencies. The pruning/close cohort extractor now excludes
 that unrelated wrapper; its original fault assertions remain and pass locally.
 That interrupted suite remains failed evidence, not full native acceptance.
+
+
+The next native run passed atomic APPEND cold replay and the actual ordered
+PREPARE fault checks, then failed their structural location assertion because
+the general adapter is now behind the atomic selector. The assertion now
+follows that wrapper and verifies both selection and unchanged ordered guard
+configuration. This test-only correction passes locally; a complete native
+rerun is still required and this interrupted run is retained as failed.
