@@ -20,6 +20,7 @@ if os.environ.get('EFS_APPEND_BATCH_SYNC')=='1':
 }'''+helpers[b:]
 code=r'''
 #include <stdint.h>
+#define EFS_META_APPEND_COMPLETE_MAX 8u
 #include <stddef.h>
 #include <string.h>
 #include <assert.h>
@@ -91,6 +92,7 @@ struct efs_opid {int owner;};
 #define EFS_META_APPEND_COMPLETED 0
 static unsigned report_done,report_authority,report_reads;
 static int report_error;
+static unsigned report_batch_max=8,report_refusals;
 static int efs_meta_apply_append_open(void *kv,efs_ino_t ino,uint64_t *offs,uint64_t *lens,uint32_t *n) {
  (void)kv;assert(ino==11&&*n==64);report_reads++;
  *n=report_done==2?0:2-report_done;
@@ -119,13 +121,19 @@ static int report_finish(void *kv,efs_ino_t ino,uint64_t offset,int outcome,
  if(!rc)report_done++;
  return rc;
 }
-static int efs_meta_finish_append(void *kv,efs_ino_t ino,uint64_t off,int outcome,
+static int efs_meta_finish_append_batch(void *kv,efs_ino_t ino,const uint64_t *offsets,uint32_t count,int outcome,
  const struct efs_txid *t,const struct efs_meta_append_ops *ops,void *ctx) {
- return report_finish(kv,ino,off,outcome,NULL,t,ops,ctx);
+ if(count>report_batch_max){report_refusals++;return EFS_ERR_INVAL;}
+ int rc=report_finish(kv,ino,offsets[0],outcome,NULL,t,ops,ctx);
+ if(!rc)report_done+=count-1;
+ return rc;
 }
-static int efs_meta_finish_append_owned(void *kv,efs_ino_t ino,uint64_t off,int outcome,
+static int efs_meta_finish_append_batch_owned(void *kv,efs_ino_t ino,const uint64_t *offsets,uint32_t count,int outcome,
  const struct efs_opid *id,const struct efs_txid *t,const struct efs_meta_append_ops *ops,void *ctx) {
- return report_finish(kv,ino,off,outcome,id,t,ops,ctx);
+ if(count>report_batch_max){report_refusals++;return EFS_ERR_INVAL;}
+ int rc=report_finish(kv,ino,offsets[0],outcome,id,t,ops,ctx);
+ if(!rc)report_done+=count-1;
+ return rc;
 }
 ''' + function('host_resolve_caught_up') + r'''
 static struct efs_raft_host host={.mu=PTHREAD_MUTEX_INITIALIZER};
@@ -177,7 +185,14 @@ int main(void) {
   reset(&c,0);report_done=report_authority=report_reads=report_error=0;
   assert(!host_resolve_caught_up(&host,11,16,owned?&id:NULL,&hint));
   assert(report_done==2&&report_authority==1&&report_reads==3);
-  assert(syncs==(unsigned)(owned?4:2)&&proposals==8&&checks==8&&decisions==2&&resolutions==2);
+  assert(syncs==(unsigned)(owned?2:1)&&proposals==4&&checks==4&&decisions==1&&resolutions==1);
+  reset(&c,0);report_done=report_authority=report_reads=report_refusals=report_error=0;report_batch_max=1;
+  assert(!host_resolve_caught_up(&host,11,16,owned?&id:NULL,&hint));
+  assert(report_done==2&&report_refusals==1&&decisions==2&&resolutions==2);
+  report_batch_max=8;
+  reset(&c,0);report_done=report_authority=report_reads=report_error=0;
+  assert(!host_resolve_caught_up(&host,11,8,owned?&id:NULL,&hint));
+  assert(report_done==1&&decisions==1&&resolutions==1);
   reset(&c,0);report_done=report_authority=report_reads=0;report_error=EFS_ERR_STALE;
   assert(host_resolve_caught_up(&host,11,16,owned?&id:NULL,&hint)==EFS_ERR_BUSY);
   assert(!report_done&&report_authority==1&&last_decision==EFS_TXN_ABORT&&last_resolve==EFS_TXN_ABORT);
