@@ -7781,7 +7781,7 @@ static int host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
     uint32_t plen = 0;
     uint64_t t0 = now_us_();
     int64_t pend;
-    int nack = 0, scans = 0, recs = 0, ack_progress = 0;
+    int nack = 0, scans = 0, recs = 0, ack_progress = 0, budget_capped = 0;
     int i;
 
     int prc, src;
@@ -7870,9 +7870,11 @@ static int host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
             /* Room for one whole record's acks, so a record is never
              * split across two entries (the apply folds a record's
              * fragments within one batch). */
-            if (nack + EFS_NUM_FRAGMENTS > GC_ACK_MAX &&
-                host_gc_ack_flush(h, group, acks, &nack) != EFS_OK)
-                goto out;
+            if (nack + EFS_NUM_FRAGMENTS > GC_ACK_MAX) {
+                if (host_gc_ack_flush(h, group, acks, &nack) != EFS_OK)
+                    goto out;
+                ack_progress = 1;
+            }
             host_gc_record(h, ex, c.keys[i], c.vals[i], acks, &nack);
             recs++;
         }
@@ -7886,9 +7888,12 @@ static int host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
          * applies; a rescan from the cursor starts after them. Stop
          * when the scan was not full, the budget is spent, or the
          * host is going down; otherwise yield the KV lock and rescan. */
-        if (!c.full || !h->gc_running || !h->running ||
-            now_us_() - t0 > GC_FRAG_BUDGET_US)
+        if (!c.full || !h->gc_running || !h->running)
             break;
+        if (now_us_() - t0 > GC_FRAG_BUDGET_US) {
+            budget_capped = 1;
+            break;
+        }
         usleep(GC_FRAG_YIELD_US);
     }
 out:
@@ -7900,6 +7905,10 @@ out:
         fprintf(stderr, "raft-host: gc-frag group=%u scans=%d records=%d ms=%llu\n",
                 group, scans, recs,
                 (unsigned long long)((now_us_() - t0) / 1000));
+    /* Only a successful, progressing pass stopped by its work budget can
+     * request shorter opt-in idle. Errors, exhausted scans and shutdown keep
+     * the default backoff even if they also consumed time. */
+    return ack_progress && budget_capped && pend > 0;
 }
 
 static void host_dir_spread_pass(struct efs_raft_host *h);
