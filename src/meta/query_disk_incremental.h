@@ -71,6 +71,11 @@ static int stat_value_same(struct efs_query_disk *d,struct efs_query_disk *old,
 {
     uint32_t shard=((uint32_t)key[0]<<8)|key[1];
     if(d->part[shard].revision==old->part[shard].revision){*same=1;return EFS_OK;}
+    int kind=kind_at(key[2]);
+    if(kind>=0 && d->part[shard].begin[kind]==d->part[shard].end[kind] &&
+       old->part[shard].begin[kind]==old->part[shard].end[kind]){
+        *same=key[2]!=EFS_KV_KIND_LANE;return EFS_OK;
+    }
     uint8_t a[VALUE_MAX],b[VALUE_MAX];uint32_t an=sizeof(a),bn=sizeof(b);
     int ar=raw_get(d,key,length,a,&an),br=raw_get(old,key,length,b,&bn);
     if(ar && ar!=EFS_ERR_NOT_FOUND)return ar;
