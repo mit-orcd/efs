@@ -7,6 +7,14 @@
  * The caller separately applies the captured D25 masks and ordinary deltas. */
 typedef int (*efs_packed_fetch_fn)(void *, efs_node_id_t, uint64_t id, uint64_t generation,
     uint32_t fragment_index, uint32_t geometry, uint8_t *out, uint32_t capacity);
+/* Zero means invalid reference. The scratch variant never allocates: callers
+ * charge this capacity to their memory budget before issuing any fetch and
+ * retain exclusive ownership until it returns. Scratch and output are disjoint. */
+size_t efs_packed_read_scratch_size(const struct efs_pack_ref *);
+int efs_packed_read_base_scratch(const struct efs_pack_ref *, const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
+    const uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE], efs_packed_fetch_fn, void *,
+    uint8_t *, uint32_t logical_size, void *scratch, size_t capacity);
+/* Convenience wrapper for standalone tools; mounted reads use charged scratch. */
 int efs_packed_read_base(const struct efs_pack_ref *, const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
     const uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE], efs_packed_fetch_fn, void *, uint8_t *, uint32_t logical_size);
 #endif

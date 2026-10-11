@@ -23,15 +23,26 @@ int main(void)
     for (unsigned i = 0; i < 16; i++) records[i] = (struct efs_pack_record){101 + i * 2, 7, 0, 23 + i, 512, payload};
     size_t geometry; assert(!efs_pack_build(41, 43, 0, records, 16, image, sizeof(image), &geometry, refs));
     expected_id = 41; expected_gen = 43; uint8_t *storage = malloc(geometry * 3 / 2); assert(storage);
+    size_t scratch_size = efs_packed_read_scratch_size(refs);
+    assert(scratch_size == geometry * 5 / 2);
+    uint8_t *scratch = malloc(scratch_size); assert(scratch);
+    memset(output, 0x5a, sizeof(output)); memcpy(saved, output, sizeof(output)); calls = 0;
     uint8_t sums[3][32]; const efs_node_id_t nodes[3] = {1, 2, 3};
     for (unsigned i = 0; i < 3; i++) fragments[i] = storage + geometry / 2 * i;
     assert(!efs_encode_segment(image, geometry, geometry, fragments));
     for (unsigned i = 0; i < 3; i++) efs_hash(fragments[i], geometry / 2, sums[i]);
+    assert(efs_packed_read_base_scratch(refs, nodes, sums, fetch, NULL, output,
+        sizeof(output), scratch, scratch_size - 1) == EFS_ERR_NOMEM);
+    assert(!calls && !memcmp(output, saved, sizeof(output)));
+    assert(efs_packed_read_base_scratch(refs, nodes, sums, fetch, NULL, scratch,
+        sizeof(output), scratch, scratch_size) == EFS_ERR_INVAL);
+    assert(!calls);
     for (int failed = -1; failed < 3; failed++) {
         missing = failed; corrupt = -1;
         for (unsigned i = 0; i < 16; i++) {
             memset(output, 0xa5, sizeof(output)); calls = 0;
-            assert(!efs_packed_read_base(refs + i, nodes, sums, fetch, NULL, output, sizeof(output)));
+            assert(!efs_packed_read_base_scratch(refs + i, nodes, sums, fetch, NULL,
+                output, sizeof(output), scratch, scratch_size));
             assert(!memcmp(output, payload, 512));
             for (unsigned j = 512; j < sizeof(output); j++) assert(!output[j]);
             assert(calls >= 2 && calls <= 3);
@@ -56,5 +67,5 @@ int main(void)
     rec.publish_flags = 0; assert(efs_chunk_rec_view_valid(&rec) == EFS_ERR_PROTO);
     struct efs_chunk_entry ce = {.generation = 23, .packed = refs[0]}; uint64_t key = efs_chunk_read_key(&ce);
     ce.packed.segment_generation++; assert(key != efs_chunk_read_key(&ce));
-    free(storage); puts("packed reader: every degraded pair, checksum fallback, immutable identity, zero fill, deadline, unchanged failure output and cache identity PASS");
+    free(scratch); free(storage); puts("packed reader: borrowed scratch, pre-fetch capacity refusal, every degraded pair, checksum fallback, immutable identity, zero fill, deadline, unchanged failure output and cache identity PASS");
 }

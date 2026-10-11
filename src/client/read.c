@@ -392,7 +392,15 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
 
     if (have_ce && ce.packed.segment_id) {
         if (chunk_index || ce.packed.ino != ino || ce.packed.record_generation != ce.generation) return EFS_ERR_PROTO;
-        return efs_packed_read_base(&ce.packed, ce.fragment_nodes, ce.checksums, packed_fetch, NULL, chunk_out, chunk_size);
+        size_t needed = efs_packed_read_scratch_size(&ce.packed);
+        if (!needed) return EFS_ERR_PROTO;
+        if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
+        void *scratch = efs_buf_alloc(needed);
+        if (!scratch) return EFS_ERR_BUSY;
+        int rc = efs_packed_read_base_scratch(&ce.packed, ce.fragment_nodes, ce.checksums,
+            packed_fetch, NULL, chunk_out, chunk_size, scratch, needed);
+        efs_buf_free(scratch, needed);
+        return rc;
     }
 
     int order[EFS_NUM_FRAGMENTS] = {0, 1, 2};
