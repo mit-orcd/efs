@@ -277,6 +277,11 @@ int efs_client_pack_write(efs_ino_t ino,uint64_t off,uint32_t len,const uint8_t 
             if(rc){pthread_mutex_unlock(&pack_mu);return rc;}
         }
         struct pack_writer *w=&p->writers[p->cohort.count];
+        /* Cache admission accounts presence under the directory/index locks.
+         * Reserve this context, then release the scheduler lock before any
+         * cache operation, including private-candidate failure cleanup. */
+        p->busy=1;
+        pthread_mutex_unlock(&pack_mu);
         rc=efs_client_publication_admit_write(&w->acks,ino,authority.generation,0,&view,0,data,len);
         struct efs_msg_inode_getchunks_reply *base=NULL;
         if(!rc) {
@@ -287,21 +292,23 @@ int efs_client_pack_write(efs_ino_t ino,uint64_t off,uint32_t len,const uint8_t 
         if(base)efs_buf_metadata_free(base,sizeof(*base));
         if(!rc) {
             w->object=efs_meta_candidate_gen(identity.client_uuid,identity.session_epoch,w->plan.cache_sequence,0,0);w->len=len;
-            struct efs_pack_record record={ino,authority.generation,w->plan.publish_epoch,w->object,len,p->snapshot};
             rc=efs_dcache_begin_publication(ino,authority.generation,0,&w->plan,w->object);
-            if(!rc)rc=efs_pack_cohort_offer(&p->cohort,&record,w->plan.cache_sequence,pack_now());
+            if(!rc) {
+                struct efs_pack_record record={ino,authority.generation,w->plan.publish_epoch,w->object,len,p->snapshot};
+                pthread_mutex_lock(&pack_mu);
+                rc=efs_pack_cohort_offer(&p->cohort,&record,w->plan.cache_sequence,pack_now());
+                pthread_mutex_unlock(&pack_mu);
+            }
         }
         if(rc) {
             /* Pre-accept failure: no PUT/admission send and no application
              * success. The private candidate alone may be abandoned. */
             if(w->acks)(void)efs_dcache_abort_pack_admission(ino,authority.generation);
             if(w->acks)(void)efs_client_publication_ack_free(w->acks);
-            memset(w,0,sizeof(*w));pthread_mutex_unlock(&pack_mu);return rc;
+            memset(w,0,sizeof(*w));
+            pthread_mutex_lock(&pack_mu);p->busy=0;pthread_mutex_unlock(&pack_mu);return rc;
         }
-        /* Do not invert the directory/index locks with the scheduler lock.
-         * The accepted snapshot stays reserved until its local size is visible. */
-        p->busy=1;
-        pthread_mutex_unlock(&pack_mu);
+        /* The accepted snapshot stays reserved until its size is visible. */
         efs_dcache_note_packed_size(ino,len);
         pthread_mutex_lock(&pack_mu);p->busy=0;pthread_mutex_unlock(&pack_mu);
         return EFS_OK;
