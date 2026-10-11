@@ -1,0 +1,8 @@
+{"category": "applied", "count": 71, "mean_ms": 22.391676056338028, "median_ms": 19.89, "p95_ms": 35.628, "max_ms": 136.387, "summed_ms": 1589.809, "errors": 0}
+{"category": "gc-data", "count": 164, "mean_ms": 21.393841463414635, "median_ms": 25.947499999999998, "p95_ms": 45.528, "max_ms": 58.708999999999996, "summed_ms": 3508.5899999999983, "errors": 0}
+{"category": "gc-death", "count": 97, "mean_ms": 29.000979381443297, "median_ms": 29.069000000000003, "p95_ms": 75.574, "max_ms": 201.58, "summed_ms": 2813.0950000000003, "errors": 0}
+{"category": "other", "count": 33, "mean_ms": 0.04139393939393939, "median_ms": 0.024, "p95_ms": 0.060000000000000005, "max_ms": 0.45399999999999996, "summed_ms": 1.3660000000000003, "errors": 0}
+{"category": "query-raw-index", "count": 330, "mean_ms": 30.111572727272726, "median_ms": 27.747500000000002, "p95_ms": 49.413, "max_ms": 197.52, "summed_ms": 9936.818999999998, "errors": 0}
+{"category": "raft-log", "count": 71, "mean_ms": 18.60149295774648, "median_ms": 16.414, "p95_ms": 29.197, "max_ms": 45.539, "summed_ms": 1320.7059999999994, "errors": 0}
+{"category": "wal", "count": 71, "mean_ms": 18.060028169014085, "median_ms": 16.764000000000003, "p95_ms": 33.061, "max_ms": 46.181, "summed_ms": 1282.2620000000002, "errors": 0}
+{"unmatched_duration": 0, "unfinished_at_end": 2}

@@ -1,0 +1,66 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 58  of event 'task-clock:ppp'
+# Event count (approx.): 585858580
+#
+# Overhead  Command  Symbol                                     
+# ........  .......  ...........................................
+#
+     6.90%  efsd     [.] kv_seg_snapshot_excludes
+     3.45%  efsd     [k] __arch_copy_to_user
+     3.45%  efsd     [k] __pi_clear_page
+     3.45%  efsd     [k] cleanup_module
+     3.45%  efsd     [.] host_pump
+     3.45%  efsd     [k] lookup_nulls_elem_raw
+     1.72%  efsd     [k] __d_lookup
+     1.72%  efsd     [k] __d_lookup_rcu
+     1.72%  efsd     [k] __d_move
+     1.72%  efsd     [.] __memcpy_generic
+     1.72%  efsd     [.] __memset_zva64
+     1.72%  efsd     [.] __printf_buffer
+     1.72%  efsd     [.] __syscall_cancel_arch
+     1.72%  efsd     [k] __tcp_transmit_skb
+     1.72%  efsd     [k] _copy_to_iter
+     1.72%  efsd     [k] _raw_spin_unlock_irq
+     1.72%  efsd     [k] copy_from_kernel_nofault
+     1.72%  efsd     [k] dev_hard_start_xmit
+     1.72%  efsd     [.] disk_last
+     1.72%  efsd     [k] do_csum
+     1.72%  efsd     [k] ebitmap_destroy
+     1.72%  efsd     [.] efs_query_disk_build
+     1.72%  efsd     [k] el0_svc
+     1.72%  efsd     [k] eventfd_poll
+     1.72%  efsd     [k] folio_alloc_noprof
+     1.72%  efsd     [.] host_sender
+     1.72%  efsd     [k] hrtimer_active
+     1.72%  efsd     [k] krealloc_node_align_noprof
+     1.72%  efsd     [.] kv_seg_iter_next
+     1.72%  efsd     [.] kv_wal_append
+     1.72%  efsd     [.] memcmp
+     1.72%  efsd     [.] merge_scan
+     1.72%  efsd     [k] node_page_state
+     1.72%  efsd     [k] security_inode_permission
+     1.72%  efsd     [k] set_user_sigmask
+     1.72%  efsd     [k] sk_forced_mem_schedule
+     1.72%  efsd     [k] uaccess_ttbr0_enable.isra.0
+     1.72%  efsd     [k] vp_notify
+     1.72%  efsd     [k] xfs_dir2_leaf_hdr_to_disk
+     1.72%  efsd     [k] xfs_dir3_leaf_log_header
+     1.72%  efsd     [k] xfs_dir_lookup
+     1.72%  efsd     [k] xfs_growfs_data
+     1.72%  efsd     [k] xfs_ialloc_ag_alloc
+     1.72%  efsd     [k] xfs_qm_dqget_cache_lookup
+     1.72%  efsd     [k] xfs_reflink_find_shared
+     1.72%  efsd     [k] xfs_rtmount_init
+     1.72%  efsd     [k] xfs_sb_to_disk
+     1.72%  efsd     [k] xlog_cil_alloc_shadow_bufs.isra.0
+     1.72%  efsd     [.] 0x000000000000050c
+     1.72%  efsd     [k] 0x000000000009f844
+
+
+#
+# (Tip: Skip collecting build-id when recording: perf record -B)
+#

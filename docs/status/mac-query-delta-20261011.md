@@ -268,3 +268,46 @@ and normally drained the secondary mount; no forced discard or killed client.
 This is two independent FUSE mounts on one gateway against three Mac storage VMs,
 not two physical client hosts. It does not turn the native deadline failures into
 passes. A separate syscall/profile capture follows this correctness run.
+
+
+### Raw-cache writeback repair (`a39edfa2`)
+
+Separate syscall capture after peer teardown measured 330 query raw/index fsyncs
+with mean 30.112 ms and median 27.748 ms. GC data/death-fence syncing is also
+substantial (164 / 97 calls); Raft log, WAL and applied-checkpoint syncing remain.
+These barriers protect durable ACKs and were not removed. The 30-second CPU
+profile has only 58 task-clock samples, insufficient to rank CPU hot paths;
+flat, thread and caller reports are retained.
+
+A matched 128-file probe checks every byte after its timing interval. Merely
+holding 16 writing descriptors before fsync showed no improvement and that
+candidate was discarded. Initiating asynchronous Linux writeback for the bounded
+batch, then fsyncing **every original writing handle**, shows:
+
+| Sample | Sequential fsync (ms) | Writeback hint + checked fsyncs (ms) |
+| --- | ---: | ---: |
+| 1 | 4,008.6 | 885.6 |
+| 2 | 4,463.3 | 884.4 |
+| 3 | 3,912.3 | 735.1 |
+
+`a39edfa2` adds that ordering to the actual query disk builder. A fixed 16-handle
+queue is charged to working admission; the existing 32-entry read FD cache stays
+bounded. Unsupported hints fall back to the same fsync barriers. Hint I/O errors,
+fsync errors and cancellation abort the candidate and close all writing handles.
+No durable generation is published before checked writer barriers, digests,
+manifest and directory sync. Disk format and authoritative metadata are unchanged.
+
+Mac production-builder gates exercise 64 historical inactive-lane partitions,
+reach exactly 16 retained writing handles, and leave none open on success/failure.
+Fallback, cancellation, hint EIO, every persisted-file fsync failure, partial
+ENOSPC, retained checkpoint, cold restore, 6,000/60,000-file exact RAM oracles,
+lane-only changes/removal and dirty-directory boundary gates pass.
+
+The first broader unit run hit the unmodified benchmark direct/split/punch
+30-second deadline under installed-service I/O. The same four-case test passed
+in 4.750 seconds after clean service stop, and the **complete unchanged `make
+test` then passed** with data-disk fixtures and service interference removed.
+The failure is preserved; benchmark code/deadlines remain untouched. This isolates
+installed-service interference collectively, not query-versus-GC causality.
+The committed optimization is now being deployed to Mac, buffered/TCP; installed
+native and peer gates are repeated separately. The retained orphan remains open.
