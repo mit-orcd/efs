@@ -1,0 +1,23 @@
+Evidence directory: /data1/efs/amd-gc-fanout-20261011/live/gc-buffered-5b5hkobx
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=10502435895511760748
+client serving PASS
+sustained seconds=0.0 counts={}
+sustained seconds=30.0 counts={'0': {'open': 4610, 'close': 4610, 'delete': 4245}}
+sustained seconds=60.0 counts={'0': {'open': 4610, 'close': 4610, 'delete': 4245}, '1': {'open': 4091, 'close': 4083, 'delete': 4331}, '2': {'open': 1, 'close': 2, 'delete': 0}}
+sustained seconds=90.0 counts={'0': {'open': 4610, 'close': 4610, 'delete': 4245}, '1': {'open': 4091, 'close': 4083, 'delete': 4331}, '2': {'open': 4105, 'close': 4106, 'delete': 4032}, '3': {'open': 0, 'close': 1, 'delete': 0}}
+sustained seconds=120.0 counts={'0': {'open': 4610, 'close': 4610, 'delete': 4245}, '1': {'open': 4091, 'close': 4083, 'delete': 4331}, '2': {'open': 4105, 'close': 4106, 'delete': 4032}, '3': {'open': 4148, 'close': 4148, 'delete': 3968}, '4': {'open': 1, 'close': 1, 'delete': 0}}
+sustained seconds=150.0 counts={'0': {'open': 4610, 'close': 4610, 'delete': 4245}, '1': {'open': 4091, 'close': 4083, 'delete': 4331}, '2': {'open': 4105, 'close': 4106, 'delete': 4032}, '3': {'open': 4148, 'close': 4148, 'delete': 3968}, '4': {'open': 4134, 'close': 4135, 'delete': 4096}, '5': {'open': 1, 'close': 1, 'delete': 0}}
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 979932 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+sustained cold bytes and physical deletion drained PASS
+sustained tiny/large warm generations, cold bytes and physical reclamation PASS

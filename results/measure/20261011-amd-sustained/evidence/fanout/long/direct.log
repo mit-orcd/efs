@@ -1,0 +1,10 @@
+Evidence directory: /data1/efs/amd-gc-fanout-20261011/long/gc-direct-hxv34nk9
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=2 index=2 salt=2680213966579019827
+client serving PASS
+sustained seconds=0.0 counts={}
+sustained seconds=30.0 counts={'0': {'open': 4423, 'close': 4415, 'delete': 4352}, '1': {'open': 1, 'close': 1, 'delete': 0}}
+sustained seconds=60.0 counts={'0': {'open': 4423, 'close': 4415, 'delete': 4352}, '1': {'open': 4073, 'close': 4076, 'delete': 3840}, '2': {'open': 1, 'close': 1, 'delete': 0}}

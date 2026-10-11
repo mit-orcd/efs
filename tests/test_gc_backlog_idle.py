@@ -17,10 +17,10 @@ code='''#include "efs/common.h"
 int main(void) {
  unsigned ms;
  assert(host_gc_backlog_config(NULL,&ms)==EFS_OK && ms==1000);
- const char *invalid[]={"", "0", "99", "1001", "-100", "+100", " 100", "100x", "999999999999999999999999"};
+ const char *invalid[]={"", "0", "19", "1001", "-100", "+100", " 100", "100x", "999999999999999999999999"};
  for(unsigned i=0;i<sizeof(invalid)/sizeof(*invalid);i++)
   assert(host_gc_backlog_config(invalid[i],&ms)==EFS_ERR_INVAL);
- for(unsigned configured=100;configured<=1000;configured+=100) {
+ for(unsigned configured=20;configured<=1000;configured+=20) {
   char value[16];snprintf(value,sizeof(value),"%u",configured);
   assert(host_gc_backlog_config(value,&ms)==EFS_OK && ms==configured);
   assert(host_gc_backlog_idle(ms,0,1,2)==1000);

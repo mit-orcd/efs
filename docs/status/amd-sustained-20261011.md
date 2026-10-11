@@ -204,3 +204,54 @@ Rejected setup/build attempts are retained alongside accepted gates: an aborted
 incorrect build label, a stale generated-doc upload, missing linked evidence,
 and the first candidate's missing C return. None was deployed; `85fb3a4b`
 corrects the return and passes the actual-source regression/full gates.
+
+## Fanout build `e9ea8ca1` — short gates accepted
+
+Both complete native modes pass; the normal build is deployed on the retained
+installed stores. Direct functional acceptance passes 216 core/67 peer tests,
+including offline-member ledger retention, guarded recovery and late-PUT fences.
+Both private 180-second paced workloads pass exact cold bytes and physical
+reclamation within the unchanged deadline.
+
+| Build / mode | Warm-verified generations | Full-window closes/s | Mean window close p99 (ms) | Physical drain |
+|---|---:|---:|---:|---|
+| Fragment scheduling / direct | 26,944 | 147.43 | 156.83 | Fail at 180-s deadline |
+| Fragment scheduling / buffered | 20,224 | 111.66 | 319.04 | Pass; elapsed not captured |
+| Fanout / direct | 25,280 | 137.86 | 181.32 | Pass, 87.69 s |
+| Fanout / buffered | 25,152 | 139.36 | 174.03 | Pass, 92.57 s |
+
+Each passed cold check covers 512 tiny survivors and four 16-MiB large files.
+These are independent acceptance cells, not matched A/B: the direct observed
+throughput/tail is worse and buffered better, so no universal throughput gain
+is claimed. Post-load sampled fencing passes fall from about 188–192 ms to
+93–104 ms; batch and placement context still matter. The aggregate sampled
+four-daemon/FUSE CPU is about 0.93 cores and peak aggregate RSS about 309–315
+MiB on the two fanout loads; workload-driver CPU is excluded.
+[Reconciled raw-field summary](../../results/measure/20261011-amd-sustained/followup-summary.json) /
+[reproduction](../../results/measure/20261011-amd-sustained/summarize-followup.py).
+
+The conditional ten-minute direct/buffered tests are now running, each retaining
+the same rate, quota, survivor oracle and 180-second drain deadline. No complete
+sustained-service or unpaced-overload acceptance is claimed yet. Installed
+service keeps the default idle; private acceptance uses explicit 100 ms.
+[Exclusive AMD queue](../../results/measure/20261011-amd-sustained/fanout-queue.sh)
+may restart the four installed daemons while retaining stores;
+[long runner](../../results/measure/20261011-amd-sustained/fanout-long.sh) borrows
+and restores the two mounts. W94/W97 remain open; W95 production work stays ORCD.
+
+## Ten-minute direct failure and 20-ms-yield follow-up
+
+Fanout's 600-second direct workload completes 65,664 warm-verified generations
+and exact cold survivors, but physical drain times out after 180.20 seconds.
+The longer backlog therefore remains an open gate, despite both short passes.
+Buffered is still running. The opt-in parser now admits 20..1000 ms, matching
+the existing 20-ms snapshot/shutdown slice. The next private candidate uses
+20 ms only for capped, progressing GC; empty/blocked scans retain 1 second.
+Default scheduling and all work/ACK/authority budgets remain unchanged.
+This needs full native/direct functional and both 600-second cold/physical
+gates, with latency/CPU review; it is not unpaced-overload admission or closure.
+
+The 20-ms follow-up also times the existing warm tiny reads, without adding
+I/O. Every generation must still byte-verify before retirement. Read-window
+quantiles are new instrumentation; older cells have no comparable read-tail
+field, so they cannot establish a matched read-latency gain.

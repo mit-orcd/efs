@@ -8171,7 +8171,7 @@ static int host_gc_backlog_config(const char *value, unsigned *ms)
     char *end;
     errno = 0;
     unsigned long n = strtoul(value, &end, 10);
-    if (errno || *end || n < 100 || n > GC_LOOP_MS) return EFS_ERR_INVAL;
+    if (errno || *end || n < 20 || n > GC_LOOP_MS) return EFS_ERR_INVAL;
     *ms = (unsigned)n;
     return EFS_OK;
 }
@@ -8180,7 +8180,7 @@ static unsigned host_gc_backlog_idle(unsigned configured, int capped,
                                      uint64_t removed_before, uint64_t removed_after)
 {
     /* No acceleration for idle scans, blocked/offline deletion or counter
-     * reset. Keep all per-group work/ACK budgets and a >=100ms fair yield. */
+     * reset. Keep all per-group work/ACK budgets and a >=20ms fair yield. */
     return capped && removed_after > removed_before ? configured : GC_LOOP_MS;
 }
 
@@ -9116,7 +9116,7 @@ int server_raft_host_start(struct efsd_server *s)
     }
     unsigned gc_backlog_idle_ms;
     if (host_gc_backlog_config(getenv("EFS_GC_BACKLOG_IDLE_MS"), &gc_backlog_idle_ms) != EFS_OK) {
-        fprintf(stderr, "raft-host: EFS_GC_BACKLOG_IDLE_MS must be 100..1000\n");
+        fprintf(stderr, "raft-host: EFS_GC_BACKLOG_IDLE_MS must be 20..1000\n");
         return EFS_ERR_INVAL;
     }
     int query_enabled=!commands || !strcmp(commands,"1");
