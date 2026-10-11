@@ -284,6 +284,7 @@ test-wb-runtime:
 	python3 tests/test_report_session_apply.py
 	python3 tests/test_report_activation.py
 	python3 tests/test_report_log_coverage.py
+	python3 tests/test_host_durable_dispatch.py
 
 test-wb-recovery:
 	@set -e; wb_test=$$(mktemp /tmp/efs-test-wb-recovery.XXXXXX); \
@@ -322,6 +323,7 @@ test: all
 	$(MAKE) tests/test_put_upload_client
 	./tests/test_put_upload_client
 	python3 tests/test_applied_interval.py
+	python3 tests/test_cursor_checkpoint.py
 	./tests/test_store_containers
 	python3 tests/test_lookup_errno.py
 	python3 tests/test_storage_capacity.py
@@ -341,15 +343,21 @@ test: all
 	python3 tests/test_virtual_export_handles.py
 	python3 tests/test_fuse_open_reply.py
 	python3 tests/test_fuse_lease_retention.py
+	python3 tests/test_inode_lock_stripes.py
 	python3 tests/test_create_admission_wait.py
 	python3 tests/test_lookup_replacement.py
 	python3 tests/test_lookup_read_group.py
 	python3 tests/test_readindex_operation.py
+	python3 tests/test_readindex_pair.py
+	python3 tests/test_lookup_group_plan.py
 	python3 tests/test_lookup_path_authority.py
 	python3 tests/test_read_control_host.py
 	python3 tests/test_prepare_cohort.py
+	python3 tests/test_append_cohort.py
 	python3 tests/test_namespace_leader_route.py
 	python3 tests/test_namespace_admission_rounds.py
+	python3 tests/test_session_combined_group.py
+	python3 tests/test_namespace_authority.py
 	python3 tests/test_w23_samples.py
 	python3 tests/test_read_verify.py
 	python3 tests/test_opid_admission.py
@@ -371,6 +379,7 @@ test: all
 	python3 tests/test_put_ticket_owner.py
 	python3 tests/test_put_identity.py
 	python3 tests/test_create_request.py
+	python3 tests/test_retained_create_authority.py
 	python3 tests/test_pending_create_cleanup.py
 	python3 tests/test_mount_identity_rpc.py
 	python3 tests/test_pending_create_command.py
@@ -421,6 +430,7 @@ test: all
 	python3 tests/test_raft_slow_sync.py
 	python3 tests/test_host_inbox.py
 	python3 tests/test_host_checkpoint.py
+	python3 tests/test_checkpoint_worker.py
 	python3 tests/test_host_retire.py
 	python3 tests/test_recv_overlap.py
 	./tests/test_kv_lsm
@@ -455,6 +465,7 @@ test: all
 	./tests/test_meta_apply
 	./tests/test_lane_bootstrap_recovery
 	./tests/test_raft
+	EFS_TEST_EARLY_READ_ACK=1 ./tests/test_raft
 	./tests/test_sim
 	./tests/test_txn
 	./tests/test_txn_resolve_faults
@@ -570,6 +581,7 @@ test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	python3 tests/test_fuse_workers.py
 	python3 tests/test_fuse_open_reply.py
 	python3 tests/test_fuse_lease_retention.py
+	python3 tests/test_inode_lock_stripes.py
 	python3 tests/test_create_admission_wait.py
 	./tests/test_reply_buffers
 	./tests/test_reply_buffers key-failure

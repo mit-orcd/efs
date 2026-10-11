@@ -126,6 +126,20 @@
 #define EFS_ERR_NODATA     -21 /* ENODATA: xattr name is not set */
 
 typedef uint64_t efs_ino_t;
+
+/* Inode low bits encode its shard, not per-file identity. Lock tables must
+ * mix the allocation counter too or an entire local directory serializes.
+ * This mapping is process-local and never changes a stored/wire inode. */
+static inline uint32_t efs_ino_lock_slot(efs_ino_t ino, uint32_t slots)
+{
+    ino ^= ino >> 33;
+    ino *= UINT64_C(0xff51afd7ed558ccd);
+    ino ^= ino >> 33;
+    ino *= UINT64_C(0xc4ceb9fe1a85ec53);
+    ino ^= ino >> 33;
+    return (uint32_t)(ino % slots); /* slots is a positive lock-table size */
+}
+
 typedef uint32_t efs_export_id_t;
 typedef uint32_t efs_node_id_t;
 

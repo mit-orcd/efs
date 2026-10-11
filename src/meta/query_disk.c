@@ -7,6 +7,7 @@
  */
 #include "query_disk.h"
 #include "query_build_time.h"
+#include "efs/txn.h"
 #include "blake3.h"
 #include <dirent.h>
 #include <errno.h>
@@ -77,6 +78,7 @@ struct efs_query_disk {
     uint64_t watermark[4],lineage[2];
     struct efs_kv kv;
     int (*stop)(void *);void *stop_ctx;
+    struct efs_query_build_failure *failure;
 };
 static int cancelled(const struct efs_query_disk *d) { return d->stop && d->stop(d->stop_ctx); }
 static int kind_at(uint8_t kind) { for(int i=0;i<KINDS;i++)if(kinds[i]==kind)return i;return -1; }
@@ -861,6 +863,7 @@ static int folds_build(struct efs_query_disk *d)
         struct disk_node n;rc=node_at(d,shard,i,&n,0);if(rc)break;
         if(!S_ISDIR(n.row.mode))continue;
         if(n.row.nlink && n.row.ino!=EFS_ROOT_INO && !n.link.parent){
+            if(d->failure)d->failure->directory=n.row.ino;
             fprintf(stderr,"query-disk: unlinked directory ino=%llu parent=%llu nlink=%u\n",
                 (unsigned long long)n.row.ino,(unsigned long long)n.row.parent,n.row.nlink);
             rc=EFS_ERR_IO;break;
@@ -897,10 +900,79 @@ static int file_digest(int fd,uint8_t out[32])
     }
     blake3_hasher_finalize(&h,out,32);return EFS_OK;
 }
+static int source_get(void *ctx,const uint8_t *key,uint32_t kl,uint8_t *value,uint32_t *vl)
+{ return efs_kv_lsm_snapshot_get(ctx,key,kl,value,vl); }
+static int source_prefix(void *ctx,const uint8_t *p,uint32_t pn,
+    int (*cb)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *user)
+{ return efs_kv_lsm_snapshot_scan(ctx,p,pn,NULL,0,cb,user); }
+static int source_from(void *ctx,const uint8_t *p,uint32_t pn,const uint8_t *key,uint32_t kl,
+    int (*cb)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *user)
+{ return efs_kv_lsm_snapshot_scan(ctx,p,pn,key,kl,cb,user); }
+static const struct efs_kv_ops source_ops={.get=source_get,.scan_prefix=source_prefix,.scan_from=source_from};
+
+struct backlink_probe { efs_ino_t ino;int (*stop)(void *);void *ctx;int found; };
+static int backlink_probe_row(void *ctx,const uint8_t *key,uint32_t kl,const uint8_t *value,uint32_t vl)
+{
+    struct backlink_probe *p=ctx;
+    if(p->stop && p->stop(p->ctx))return EFS_ERR_BUSY;
+    if(kl<3 || key[2]!=EFS_KV_KIND_DENTRY)return EFS_OK;
+    struct efs_meta_dentry entry;int rc=efs_meta_unpack_dentry(value,vl,&entry);
+    if(rc)return rc;
+    if(entry.ino==p->ino){p->found=1;return EFS_ERR_EXIST;}
+    return EFS_OK;
+}
+
+/* A retained failed directory can otherwise trigger thousands of scratch
+ * fsyncs before the builder rediscovers the same missing backlink. Revalidate
+ * its current identity/parent on the new immutable source and scan the actual
+ * authoritative layout. Prepared ownership is inconclusive, never absence.
+ * One bounded page array; wide parents fall back to the original full build. */
+static int orphan_preflight(struct efs_kv_lsm_snapshot *source,
+    struct efs_query_build_failure *failure,int (*stop)(void *),void *ctx)
+{
+    if(!failure || !failure->directory)return EFS_OK;
+    if(stop && stop(ctx))return EFS_ERR_BUSY;
+    struct efs_kv kv={&source_ops,source};struct efs_meta_row row,parent;
+    int rc=efs_meta_apply_get_inode(&kv,failure->directory,&row);
+    if(rc==EFS_ERR_NOT_FOUND){failure->directory=0;return EFS_OK;}
+    if(rc)return rc;
+    if(!S_ISDIR(row.mode) || !row.nlink || row.ino==EFS_ROOT_INO){failure->directory=0;return EFS_OK;}
+    rc=efs_meta_apply_get_inode(&kv,row.parent,&parent);
+    if(rc==EFS_ERR_NOT_FOUND || (rc==EFS_OK && !S_ISDIR(parent.mode))){failure->directory=0;return EFS_OK;}
+    if(rc)return rc;
+    efs_ino_t ids[2]={row.ino,parent.ino};
+    for(unsigned i=0;i<2;i++){
+        uint8_t key[EFS_KV_KEY_MAX];uint32_t kl;
+        rc=efs_kv_key_inode(efs_kv_inode_shard(ids[i]),ids[i],key,&kl);
+        if(!rc)rc=efs_txn_key_exclusive(&kv,key,kl);
+        if(!rc)rc=efs_txn_key_guarded(&kv,key,kl);
+        if(rc)return rc;
+    }
+    struct efs_meta_dir_cursor cursor={0};struct efs_meta_dir_ent entries[64];
+    for(unsigned page=0;page<64 && !cursor.done;page++){
+        if(stop && stop(ctx))return EFS_ERR_BUSY;
+        uint32_t count=0;rc=efs_meta_apply_readdir(&kv,row.parent,&cursor,entries,64,&count);
+        if(rc)return rc;
+        for(uint32_t i=0;i<count;i++)if(entries[i].d.ino==row.ino){failure->directory=0;return EFS_OK;}
+    }
+    if(!cursor.done){failure->directory=0;return EFS_OK;}
+    /* A local snapshot can cut across a cross-group rename. An edge under
+     * another parent (even a stale layout copy) makes this hint inconclusive.
+     * Scan with bounded merge scratch, never construct derived files. */
+    struct backlink_probe probe={row.ino,stop,ctx,0};
+    rc=efs_kv_lsm_snapshot_scan(source,NULL,0,NULL,0,backlink_probe_row,&probe);
+    if(probe.found){failure->directory=0;return EFS_OK;}
+    if(rc)return rc;
+    fprintf(stderr,"query-disk: unlinked directory preflight ino=%llu parent=%llu nlink=%u\n",
+        (unsigned long long)row.ino,(unsigned long long)row.parent,row.nlink);
+    return EFS_ERR_IO;
+}
+
 /* Private bounded incremental builder; no public/disk ABI change. */
 #include "query_disk_incremental.h"
-int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
-    const struct efs_query_disk *old,uint64_t max_bytes,int (*stop)(void *),void *ctx,struct efs_query_build_times *times,struct efs_query_disk **out)
+int efs_query_disk_build_checked(const char *root,struct efs_kv_lsm_snapshot *source,
+    const struct efs_query_disk *old,uint64_t max_bytes,int (*stop)(void *),void *ctx,struct efs_query_build_times *times,
+    struct efs_query_build_failure *failure,struct efs_query_disk **out)
 {
     if(out)*out=NULL;
     if(times)memset(times,0,sizeof(*times));
@@ -908,13 +980,15 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
     uint64_t working=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX+NODE_BATCH*sizeof(struct disk_node)+sizeof(struct fold_parent)+sizeof(struct incremental)+sizeof(struct raw_sync_batch)+64*sizeof(struct efs_meta_dir_ent)+65536+2*RAW_RECORD_MAX;
     if(!root || !source || !out)return EFS_ERR_INVAL;
     if(max_bytes<working)return EFS_ERR_NOMEM;
+    int preflight=orphan_preflight(source,failure,stop,ctx);
+    if(preflight){if(times)times->index_ns=query_build_elapsed(phase_start);return preflight;}
     if(mkdir(root,0700) && errno!=EEXIST)return EFS_ERR_IO;
     struct efs_query_disk *d=calloc(1,sizeof(*d));if(!d)return EFS_ERR_NOMEM;
     pthread_once(&reserve_once,configure_reserve);
     d->budget_fd=-1;d->disk_limit=generation_limit;
     d->disk_bytes=sizeof(d->part)+12*sizeof(uint64_t);
     if(d->disk_bytes>d->disk_limit){free(d);return EFS_ERR_QUOTA;}
-    d->bytes=working;d->limit=max_bytes;d->stop=stop;d->stop_ctx=ctx;
+    d->bytes=working;d->limit=max_bytes;d->stop=stop;d->stop_ctx=ctx;d->failure=failure;
     d->kv=(struct efs_kv){.ops=&raw_ops,.ctx=d};pthread_mutex_init(&d->mutex,NULL);
     for(int i=0;i<FD_CACHE;i++)d->fds[i].fd=-1;
     int admitted=root_budget_acquire(d,root);
@@ -1027,8 +1101,12 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
     }
     close(d->budget_fd);d->budget_fd=-1;
     if(times)times->persist_ns=query_build_elapsed(phase_start);
-    d->stop=NULL;d->stop_ctx=NULL;*out=d;return EFS_OK;
+    d->stop=NULL;d->stop_ctx=NULL;d->failure=NULL;if(failure)failure->directory=0;*out=d;return EFS_OK;
 }
+int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
+    const struct efs_query_disk *old,uint64_t max_bytes,int (*stop)(void *),void *ctx,
+    struct efs_query_build_times *times,struct efs_query_disk **out)
+{ return efs_query_disk_build_checked(root,source,old,max_bytes,stop,ctx,times,NULL,out); }
 uint64_t efs_query_disk_bytes(const struct efs_query_disk *d){return d?d->bytes:0;}
 uint32_t efs_query_disk_rebuilt(const struct efs_query_disk *d){return d?d->rebuilt:0;}
 uint32_t efs_query_disk_refolded(const struct efs_query_disk *d){return d?d->refolded:0;}

@@ -4,6 +4,9 @@
 struct efs_query_disk;
 int efs_query_disk_build(const char *,struct efs_kv_lsm_snapshot *,
     const struct efs_query_disk *,uint64_t,int (*)(void *),void *,struct efs_query_build_times *,struct efs_query_disk **);
+int efs_query_disk_build_checked(const char *,struct efs_kv_lsm_snapshot *,
+    const struct efs_query_disk *,uint64_t,int (*)(void *),void *,struct efs_query_build_times *,
+    struct efs_query_build_failure *,struct efs_query_disk **);
 void efs_query_disk_free(struct efs_query_disk *);
 uint64_t efs_query_disk_bytes(const struct efs_query_disk *);
 uint32_t efs_query_disk_refolded(const struct efs_query_disk *);

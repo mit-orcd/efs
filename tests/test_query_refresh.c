@@ -20,6 +20,29 @@ int main(void)
     assert(!efs_query_refresh_due(50001,0,50000,0,1,1,256,2000));
     assert(!efs_query_refresh_due(51999,0,50000,0,1,1,256,2000));
     assert(efs_query_refresh_due(52000,0,50000,0,1,1,256,2000));
+    assert(!efs_query_refresh_failures(5,EFS_ERR_IO,EFS_OK));
+    assert(efs_query_refresh_failures(5,EFS_ERR_IO,EFS_ERR_BUSY)==1);
+    assert(efs_query_refresh_failures(5,EFS_ERR_BUSY,EFS_ERR_BUSY)==1);
+    assert(efs_query_refresh_failures(5,EFS_ERR_IO,EFS_ERR_NOT_PRIMARY)==1);
+    assert(efs_query_refresh_failures(5,EFS_ERR_STALE,EFS_ERR_STALE)==1);
+    assert(efs_query_refresh_failures(5,EFS_ERR_IO,EFS_ERR_PROTO)==1);
+    assert(efs_query_refresh_failures(1,EFS_ERR_IO,EFS_ERR_IO)==2);
+    assert(efs_query_refresh_failures(5,EFS_ERR_IO,EFS_ERR_IO)==5);
+    assert(efs_query_refresh_failures(1000,EFS_ERR_IO,EFS_ERR_IO)==5);
+    assert(efs_query_refresh_retry(1,2000)==2000);
+    assert(efs_query_refresh_retry(2,2000)==4000);
+    assert(efs_query_refresh_retry(3,2000)==8000);
+    assert(efs_query_refresh_retry(4,2000)==16000);
+    assert(efs_query_refresh_retry(5,2000)==30000);
+    assert(efs_query_refresh_retry(1000,2000)==30000);
+    assert(efs_query_refresh_retry(1000,UINT64_MAX)==UINT64_MAX);
+    assert(!efs_query_refresh_retry(1000,0));
+    assert(!efs_query_refresh_due(53999,0,50000,0,1,2,256,2000));
+    assert(efs_query_refresh_due(54000,0,50000,0,1,2,256,2000));
+    assert(!efs_query_refresh_due(79999,0,50000,10000,1,5,256,2000));
+    assert(efs_query_refresh_due(80000,0,50000,10000,1,5,256,2000));
+    /* Success resets retry scheduling, while pending age remains overdue. */
+    assert(efs_query_refresh_due(52000,1000,50000,10000,0,0,256,2000));
     /* A slow completed build has already used the interval; no added delay. */
     assert(efs_query_refresh_due(5000,1001,1000,256,0,0,256,2000));
     int valid;

@@ -114,6 +114,7 @@ p.add_argument('--rename-cache', action='store_true', help='root rename evicts t
 p.add_argument('--mixed-reads', action='store_true', help='tiny demand reads while sequential prefetch uses a bounded cache')
 p.add_argument('--ecrawl-binary',type=Path,help='run the actual ecrawl dense/sparse classification gate; requires --allocation')
 p.add_argument('--allocation', action='store_true', help='cold non-writing client allocation reports for dense and sparse files')
+p.add_argument('--namespace-session-only',action='store_true',help='wire namespace admission, revocation, first-touch refusal and cold stale replay only')
 p.add_argument('--applied-checkpoint-replay-only',action='store_true',help='retain follower applied markers, crash private fixture and verify durable metadata replay')
 p.add_argument('--kv-wal-persistence-only',action='store_true',help='refuse follower KV WAL fsync; preserve periodic/shutdown checkpoints and cold replay')
 p.add_argument('--transaction-fault-seed',action='store_true',help='prefer the client seed as fault follower for authority redirect validation')
@@ -614,6 +615,28 @@ try:
         shutil.rmtree(mount/'open-contention')
         wait(drained,'peer OPEN contention physical reclamation',180)
         print('twenty concurrent append/OPEN races, full peer POSIX and exact cold bytes PASS',flush=True)
+        raise SystemExit(0)
+    if a.namespace_session_only:
+        helper=work/'client-namespace-session';root=mount/'namespace-session';root.mkdir()
+        untouched=mount/'namespace-untouched';untouched.mkdir();parent=root.stat().st_ino
+        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),
+             source/'tests/live/client_namespace_session.c',source/'libefs.a',
+             '-pthread','-lm','-ldl','-libverbs','-o',helper])
+        packets=work/'namespace-packets.bin'
+        output=run([helper,str(a.port),str(parent),source/'efs-mgmt',packets,
+                    str(untouched.stat().st_ino)],capture_output=True,text=True,timeout=180)
+        (work/'namespace-session-wire.txt').write_text(output.stdout+output.stderr)
+        assert set(x.name for x in root.iterdir())=={'a','still-empty'}
+        assert not any(untouched.iterdir())
+        unmount();stop(crash=True);start();mount_client()
+        output=run([helper,str(a.port),str(parent),source/'efs-mgmt','cold',packets],
+                   capture_output=True,text=True,timeout=180)
+        (work/'namespace-session-cold.txt').write_text(output.stdout+output.stderr)
+        assert set(x.name for x in root.iterdir())=={'a','still-empty'}
+        assert not any(untouched.iterdir())
+        shutil.rmtree(root);untouched.rmdir()
+        wait(drained,'namespace session deletion queues drained',180)
+        print('namespace wire admission/revocation, first-touch refusal and seven cold stale receipts PASS',flush=True)
         raise SystemExit(0)
     if a.applied_checkpoint_replay_only:
         from applied_checkpoint_replay import exercise

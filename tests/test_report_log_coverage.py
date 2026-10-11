@@ -18,12 +18,14 @@ code=r'''
 #include <pthread.h>
 struct efs_raft_disk {int unused;};struct efs_raft {int unused;};
 struct efs_raft_host {struct efs_raft_disk *disk;pthread_mutex_t mu;};
-static uint64_t covered,synced=1000,last_marked;static unsigned marks,releases,kicks,broadcasts;static int release_rc,durable_rc;
+static uint64_t covered,synced=1000,last_marked;static unsigned marks,releases,kicks,broadcasts,applies;static int release_rc,durable_rc;
 static uint64_t efs_raft_disk_synced_bytes(struct efs_raft_disk*d){assert(d);return synced;}
 static uint64_t efs_raft_disk_covered_index(struct efs_raft_disk*d,uint32_t g,uint64_t end){assert(d && g==2 && end==synced);return covered;}
-static int efs_raft_durable(struct efs_raft*r,uint64_t i){assert(r);marks++;last_marked=i;return durable_rc;}
+static int efs_raft_durable(struct efs_raft*r,uint64_t i){assert(r);marks++;applies++;last_marked=i;return durable_rc;}
+static int efs_raft_note_durable(struct efs_raft*r,uint64_t i){assert(r);marks++;last_marked=i;return durable_rc;}
+
 static int efs_raft_disk_sync_release_wait(struct efs_raft_disk*d){assert(d);releases++;return release_rc;}
-static void host_durable_synced(struct efs_raft_host*h){assert(h);broadcasts++;}
+static void host_note_durable_synced(struct efs_raft_host*h){assert(h);broadcasts++;}
 static void host_pump_kick(struct efs_raft_host*h){assert(h);kicks++;}
 ''' +fn('host_mark_durable_covered')+fn('host_report_release')+r'''
 int main(void){struct efs_raft_disk disk={0};struct efs_raft raft={0};struct efs_raft_host h={.disk=&disk,.mu=PTHREAD_MUTEX_INITIALIZER};
@@ -33,6 +35,8 @@ int main(void){struct efs_raft_disk disk={0};struct efs_raft raft={0};struct efs
  release_rc=EFS_ERR_IO;assert(host_report_release(&h,1)==EFS_ERR_IO && releases==1 && !broadcasts && !kicks);
  release_rc=EFS_OK;assert(!host_report_release(&h,1) && releases==2 && broadcasts==1 && kicks==1);
  assert(!host_report_release(&h,0) && releases==2 && broadcasts==2 && kicks==2);
+ assert(!applies); /* Disk-backed handler paths only note; no apply callback. */
+ h.disk=NULL;durable_rc=0;assert(!host_mark_durable_covered(&h,2,&raft,99) && applies==1 && last_marked==99);
  pthread_mutex_destroy(&h.mu);return 0;}
 '''
 with tempfile.TemporaryDirectory(prefix='efs-report-log-') as d:

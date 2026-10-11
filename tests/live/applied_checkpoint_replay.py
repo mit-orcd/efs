@@ -3,6 +3,7 @@ import hashlib,json,os,re,time,subprocess
 from pathlib import Path
 
 def exercise(args,work,roots,mount,run,start,stop,mount_client,unmount,wait,drained):
+    cursor_mode=os.environ.get('EFS_TEST_CURSOR_CHECKPOINT')=='1'
     target=2;mgmt=Path(__file__).resolve().parents[2]/'efs-mgmt'
     identities=[]
     pattern='^'+re.escape(str(args.server_binary or mgmt.with_name('efsd')))+r' .*--port ('+'|'.join(str(args.port+i) for i in range(4))+r')( |$)'
@@ -43,14 +44,25 @@ def exercise(args,work,roots,mount,run,start,stop,mount_client,unmount,wait,drai
             for g,(c,a) in states(node).items():leaders[g]=max(c,leaders.get(g,0))
         return bool(follower) and all(a>=leaders[g] for g,(c,a) in follower.items())
     wait(caught,'checkpoint follower applied all retained-tail mutations',90)
-    wait(lambda:'test-applied-marker: retaining checkpoint' in (work/'n3.log').read_text(),
-         'actual applied-marker write refused after candidate cadence',30)
+    if not cursor_mode:
+        wait(lambda:'test-applied-marker: retaining checkpoint' in (work/'n3.log').read_text(),
+             'actual applied-marker write refused after candidate cadence',30)
     assert checkpoints()==baseline,'marker advanced despite injected write failure'
     before=states(target);old={g:int.from_bytes(baseline[k:k+8],'big') for g,k in ((0,0),(2,16))}
     assert any(a>old[g] for g,(c,a) in before.items()),'no uncheckpointed tail established'
-    assert 'test-applied-marker: retaining checkpoint' in (work/'n3.log').read_text()
+    if not cursor_mode:assert 'test-applied-marker: retaining checkpoint' in (work/'n3.log').read_text()
     unmount();assert checkpoints()==baseline
     stop(crash=True) # Private fixture only: do not force a final marker.
+    cursor_proof=None
+    if cursor_mode:
+        source=mgmt.parent;reader=work/'applied-checkpoint-cursor-read'
+        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),
+             source/'tests/live/applied_checkpoint_read.c',source/'libefs.a',
+             '-pthread','-lm','-ldl','-libverbs','-o',reader])
+        cold=run([reader,roots[target]/'mdraft/kv','--cursor'],capture_output=True,text=True).stdout
+        (work/'applied-checkpoint-cold-cursor.txt').write_text(cold)
+        cursor_proof={int(g):int(i) for g,i in (line.split() for line in cold.splitlines())}
+        assert any(cursor_proof[g]>old[g] for g in old),'no durable cursor beyond retained marker'
     gate.unlink();start();mount_client()
     wait(lambda:all(c==a for c,a in states(target).values()),'cold checkpoint follower replay',90)
     for i,body in expected.items():
@@ -78,7 +90,8 @@ def exercise(args,work,roots,mount,run,start,stop,mount_client,unmount,wait,drai
     for p in root.iterdir():p.unlink()
     root.rmdir();wait(drained,'checkpoint replay deletion queues drained',180)
     (work/'applied-checkpoint-replay.json').write_text(json.dumps(dict(
-        follower_node=3,marker_write_EIO=True,old_markers=old,before_crash=before,
+        follower_node=3,marker_write_EIO=not cursor_mode,cursor_checkpoint=cursor_mode,
+        cold_cursor=cursor_proof,old_markers=old,before_crash=before,
         replayed=manifest,cold_exact_payloads=True,rename_link_mode_truncate_delete=True,
         follower_offline_cold_KV=True,private_cluster_SIGKILL=True,physical_power_loss=False),indent=2))
     print('retained applied-marker tail: cold rename/link/mode/truncate/delete and exact payload replay PASS',flush=True)

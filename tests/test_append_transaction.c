@@ -792,5 +792,48 @@ static void caught_up(unsigned count,int cold)
   closedir(d);assert(!rmdir(directory));
  }else efs_kv_mem_free(kv);
 }
+static void bounded_completed_bursts(int cold)
+{
+ char dir[]="/tmp/efs-append-bursts-XXXXXX";
+ struct efs_kv *kv;
+ if(cold){assert(mkdtemp(dir));kv=efs_kv_lsm_open(dir,NULL);}else kv=efs_kv_mem_create();
+ assert(kv);efs_ino_t ino;uint64_t gen;fixture(kv,&ino,&gen);
+ struct efs_meta_append_plan *plan=malloc(sizeof(*plan));assert(plan);
+ struct efs_txid tx={{0}};struct efs_opid_req q;uint64_t off;
+ for(unsigned seq=1;seq<=8;seq++){
+  assert(!efs_meta_append_prune_due(kv,ino));q=identity(seq,seq-1);
+  assert(!efs_meta_capture_append(kv,ino,8,&q,decision,kv,plan));
+  assert(plan->offset==200+8*(seq-1));tx.bytes[0]=seq;tx.bytes[1]=1;
+  assert(!efs_meta_execute_append(plan,&tx,&ops,kv));
+  tx.bytes[1]=2;assert(!efs_meta_finish_append(kv,ino,plan->offset,EFS_META_APPEND_COMPLETED,&tx,&ops,kv));
+  if(cold){efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(dir,NULL);assert(kv);}
+  assert(efs_meta_append_prune_pending(kv,ino)==1);
+  assert(efs_meta_append_prune_due(kv,ino)==(seq==8));
+  assert(!efs_meta_append_result(kv,ino,8,&q,&off) && off==200+8*(seq-1));
+ }
+ q=identity(9,8);assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,plan)==EFS_ERR_BUSY);
+ unsigned removed=0;tx.bytes[0]=30;tx.bytes[1]=0;
+ assert(!efs_meta_prune_append(kv,ino,&tx,&ops,kv,&removed) && removed==8);
+ assert(!efs_meta_capture_append(kv,ino,8,&q,decision,kv,plan) && plan->offset==264);
+ tx.bytes[0]=31;assert(!efs_meta_execute_append(plan,&tx,&ops,kv));
+ tx.bytes[1]=1;assert(!efs_meta_finish_append(kv,ino,264,EFS_META_APPEND_COMPLETED,&tx,&ops,kv));
+ assert(!efs_meta_append_prune_due(kv,ino));
+ struct efs_meta_truncate truncate={.expect_gen=gen,.size=0,.lane_mask=UINT64_MAX};
+ assert(!efs_meta_apply_truncate(kv,ino,400,&truncate));
+ if(cold){efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(dir,NULL);assert(kv);}
+ assert(efs_meta_append_prune_due(kv,ino)==1);
+ q=identity(10,9);assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,plan)==EFS_ERR_BUSY);
+ tx.bytes[0]=32;assert(!efs_meta_prune_append(kv,ino,&tx,&ops,kv,&removed) && removed==1);
+ assert(!efs_meta_capture_append(kv,ino,8,&q,decision,kv,plan) && plan->offset==0);
+ free(plan);
+ if(cold){
+  efs_kv_lsm_close(kv);DIR *d=opendir(dir);assert(d);struct dirent *e;
+  while((e=readdir(d))){if(e->d_name[0]=='.')continue;char path[512];snprintf(path,sizeof(path),"%s/%s",dir,e->d_name);assert(!unlink(path));}
+  closedir(d);assert(!rmdir(dir));
+ }else efs_kv_mem_free(kv);
+ puts("bounded append bursts: eight DONE records, canonical replay, cold cuts, page retirement and truncate/reset cleanup PASS");
+}
+
+
 int main(void)
 {caught_up(20000,0);caught_up(20000,1);caught_up(EFS_META_APPEND_CATCHUP_MAX,1);completion_batch_gaps();for(int cold=0;cold<2;cold++)for(int owned=0;owned<2;owned++)for(int reverse=0;reverse<2;reverse++)completion_batch(cold,owned,reverse,0);for(int cold=0;cold<2;cold++)completion_batch(cold,1,1,1);for(unsigned v=0;v<3;v++){receipt_capture_race(v,0);receipt_capture_race(v,1);}session_owned_completion(0);session_owned_completion(1);retired_append_receipts(0);retired_append_receipts(1);session_owned_append(0);session_owned_append(1);fenced_completion();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}

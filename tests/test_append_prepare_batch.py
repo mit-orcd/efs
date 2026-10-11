@@ -162,4 +162,4 @@ with tempfile.TemporaryDirectory(prefix='efs-append-prepares-') as td:
 a=s.index('static int host_append_transaction(');b=s.index('\n}',a);body=s[a:b]
 assert body.count('&host_append_reserve_ops,&batch')==2
 assert '.leading=registered?2:1' in body
-assert '&host_append_ops,&ctx,&removed' in body
+assert 'host_append_prune_batched(h,ino,&t,hint,&removed)' in body

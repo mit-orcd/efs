@@ -9045,6 +9045,15 @@ writes share an inode.
   installed on its active lanes — the same bounded inode fence truncate uses
   (≤65 authorities), taken once when the reservation set becomes non-empty
   and released once when it drains, **per append burst, not per append**.
+  Once the set drains, completion folds its frontier into inode `base_size`
+  and removes the cursor. New-burst admission may retain fewer than eight
+  completed reservation rows wholly below that captured inode floor. The
+  next full page is retired in a bounded transaction before admission;
+  records beyond the floor after shrink/reset still require immediate cleanup.
+  An OPEN cursor retains its frontier dependencies. Exact inode/cursor guards
+  reject concurrent completion or truncate races, and the independent durable
+  receipt window and rejection floor continue to protect replay.
+
   Its rule at a lane leader is narrow, and it is a rule about EOF only:
 
   ```text
@@ -9689,6 +9698,13 @@ S receives a mutation naming (client_uuid, E), and has no local record:
     session authority Raft-commits the bitmap bit
     -> only then may S cache "E is authoritative" and proceed
 ```
+
+If the session authority and S share one Raft group, one committed command
+may atomically record the bitmap bit and S's established epoch. Apply must
+recheck the current ACTIVE epoch, preserve the rejection floor and respect
+prepared key ownership. A preceding FENCING entry rejects this admission; a
+following FENCING entry sees the committed participant. Different Raft groups
+retain registration before establishment; missing rows never imply authority.
 
 This is **once per (session, shard)**, not per request: a client that works
 against 200 shards pays 200 registrations over the life of its mount. The

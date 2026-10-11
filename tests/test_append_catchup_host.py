@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Actual host functions: one completion proposal, applied verdict before reply."""
-import os, shlex, subprocess, tempfile
+import os, re, shlex, subprocess, tempfile
 from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 source = (root / 'src/server/raft_host.c').read_text()
@@ -123,6 +123,10 @@ int main(void){
  puts("append catchup host: one completion proposal for 20k, strict route/wire, failed verdicts, partial REPORT and interrupted retirement retry PASS");
 }
 '''
+# The combined namespace admission charge uses the real session row size.
+value=re.search(r'^#define\s+EFS_SESSION_VAL\s+(\d+)',(root/'include/efs/session.h').read_text(),re.M)
+assert value
+code='#define EFS_SESSION_VAL '+value.group(1)+'\n'+code
 with tempfile.TemporaryDirectory(prefix='efs-catchup-host-') as directory:
     path = Path(directory) / 'test.c'
     path.write_text(code)

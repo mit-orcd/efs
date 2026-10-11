@@ -18,8 +18,10 @@ code=r'''
 #define BO_COUNT(key) ((void)0)
 #define HOST_APPLIED_PERSIST_US 10000ull
 #define HOST_APPLIED_MAX_TAIL 1024ull
-struct group {int hosted;void*r;uint64_t applied_saved,applied_saved_us;int applied_fd;uint8_t group;};
+struct group {int hosted;void*r;uint64_t applied_saved,applied_saved_us;int applied_fd;uint8_t group;uint64_t cursor_durable;};
 struct efs_raft_host {struct group g[2];uint64_t applied_persist_us;};
+struct host_view {int has;};
+static void host_view_get(struct efs_raft_host *h,uint8_t group,struct host_view *v){v->has=h->g[group>>1].hosted && h->g[group>>1].r!=NULL;}
 static int writes,syncs,fail_open,fail_write,fail_sync,closes;
 static uint8_t record[16];
 #define O_RDWR 2
@@ -38,7 +40,7 @@ int main(void){
  for(unsigned i=0;i<sizeof(bad)/sizeof(*bad);i++)assert(host_applied_interval(bad[i],&us)==EFS_ERR_INVAL);
  assert(host_applied_interval("1000",&us)==EFS_OK&&us==1000000);
  assert(host_applied_interval("100",&us)==EFS_OK&&us==100000);
- struct efs_raft_host h={0};h.applied_persist_us=us;h.g[0]=(struct group){1,&h,10,100000,3,0};
+ struct efs_raft_host h={0};h.applied_persist_us=us;h.g[0]=(struct group){1,&h,10,100000,3,0,0};
  assert(persist_applied(&h,0,11,150000,0)==EFS_OK&&!writes);
  assert(persist_applied(&h,0,12,200000,0)==EFS_OK&&writes==1&&syncs==1);
  assert(h.g[0].applied_saved==12&&h.g[0].applied_saved_us==200000);
@@ -60,6 +62,18 @@ int main(void){
  /* A backward clock does not suppress a changed checkpoint. */
  assert(persist_applied(&h,0,1038,1,0)==EFS_OK&&writes==before+1);
  h.g[1].hosted=0;assert(persist_applied(&h,1,42,900000,1)==EFS_OK&&writes==before+1);
+ /* Only a successfully flushed cursor can replace an external marker.
+  * Config/no-op entries beyond it retain the original force/error behavior. */
+ before=writes;h.g[0].cursor_durable=2000;
+ assert(persist_applied(&h,0,2000,900000,1)==EFS_OK && writes==before);
+ assert(h.g[0].applied_saved==2000 && h.g[0].applied_saved_us==900000);
+ assert(persist_applied(&h,0,2001,900001,1)==EFS_OK && writes==before+1);
+ fail_sync=1;assert(persist_applied(&h,0,2002,1000000,1)==EFS_ERR_IO);
+ assert(h.g[0].applied_saved==2001);fail_sync=0;
+ /* Do not use a newer proof to silently suppress a backwards checkpoint. */
+ before=writes;h.g[0].cursor_durable=3000;
+ assert(persist_applied(&h,0,1999,1100000,1)==EFS_OK && writes==before+1);
+
  return 0;
 }
 '''
