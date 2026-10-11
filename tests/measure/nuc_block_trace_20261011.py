@@ -45,7 +45,9 @@ try:
    for phase,delay in (('early',5),('late',205)):
     wait(lambda:time.monotonic()-origin>=delay,250,'trace window')
     assert bench.poll() is None,'writer ended before trace window'
-    device=271581184 if drive=='nvme' else 8388608
+    physical='nvme0n1' if drive=='nvme' else 'sda'
+    major,minor=map(int,Path('/sys/block',physical,'dev').read_text().strip().split(':'))
+    device=(major<<20)|minor
     command=['perf','record','-a','-e','block:block_rq_issue','--filter',f'dev == {device}','-e','block:block_rq_complete','--filter',f'dev == {device}','-o',str(cell/(phase+'.data')),'--','sleep','20']
     with (cell/(phase+'-record.log')).open('w') as trace:
      rc=subprocess.run(command,stdout=trace,stderr=subprocess.STDOUT,timeout=45).returncode

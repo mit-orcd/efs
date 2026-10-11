@@ -65,6 +65,8 @@ p.add_argument('--sync-writes',action='store_true',help='O_SYNC/O_DSYNC publicat
 p.add_argument('--append-sync-boundary',action='store_true',help='append/fsync across lane groups, peer visibility and cold crash bytes')
 p.add_argument('--append-replay-race', action='store_true', help='32 identical concurrent APPEND RPCs allocate once')
 p.add_argument('--fresh-namespace',action='store_true',help='six first-mutation namespace operations on fresh cold mounts with no prior file OPEN')
+p.add_argument('--append-loaded-only',action='store_true',help='only repeated two-mount mixed-lifetime append during GC, exact cold records and cleanup')
+p.add_argument('--append-loaded-rounds',type=int,default=20,help='1..20 loaded append rounds (default: 20)')
 p.add_argument('--append-burst-only',action='store_true',help='only exact APPEND burst, peer/cold bytes and physical cleanup')
 p.add_argument('--append-burst',type=int,default=0,help='100..20000 unique 4-KiB O_APPEND writes, final fsync, exact peer/cold blocks')
 p.add_argument('--append-audit', action='store_true', help='mixed append descriptions during physical GC, then exact cold records')
@@ -118,6 +120,7 @@ p.add_argument('--idle-seconds',type=int,default=0,help='measure live-table idle
 p.add_argument('--full-node',action='store_true',help='one node quota exhausted while three fragment targets remain writable')
 p.add_argument('--port', type=int, default=20190)
 a = p.parse_args()
+if not 1<=a.append_loaded_rounds<=20:p.error('--append-loaded-rounds must be 1..20')
 if a.append_burst_only and not a.append_burst:p.error('--append-burst-only requires --append-burst')
 if a.append_burst and not 100<=a.append_burst<=20000:p.error('--append-burst must be 100..20000')
 if a.posix_jobs < 1:
@@ -497,6 +500,22 @@ try:
             (work/'fresh-namespace.json').write_text(json.dumps(checks,indent=2))
         shutil.rmtree(fresh);wait(drained,'fresh namespace cold first-mutation physical cleanup',180)
         print('six cold mounts first CREATE/MKDIR/UNLINK/RMDIR/RENAME/LINK without prior OPEN PASS',flush=True)
+    if a.append_loaded_only:
+        import append_loaded
+        peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
+        def loaded_peer_start():
+            global peer
+            peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+            wait(lambda:os.path.ismount(peer_mount),'loaded append peer mounted',40)
+        def loaded_peer_stop():
+            global peer
+            run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
+        loaded_peer_start()
+        append_loaded.run(mount,peer_mount,work,a.append_loaded_rounds,totals,status,drained,wait,unmount,stop,start,mount_client,loaded_peer_stop,loaded_peer_start)
+        wait(lambda:all(not [x for x in (root/'data/exports/1').glob('**/*') if x.is_file()] for root in data_roots),'loaded append physical cleanup',180)
+        wait(lambda:totals(status())['data_usage_bytes']==0,'loaded append quota zero',180)
+        print('loaded append exact warm/peer/cold records and zero quota PASS',flush=True)
+        raise SystemExit(0)
     if a.append_burst_only:
         import append_burst
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
