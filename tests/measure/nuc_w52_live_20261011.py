@@ -4,7 +4,7 @@ import argparse,hashlib,json,os,re,signal,socket,subprocess,time,traceback
 from pathlib import Path
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--resume-buffered',type=Path,help='Retain an already accepted buffered gate only when its exact images and fixture match.')
-parser.add_argument('--variant',choices=('batch','clock'),default='batch')
+parser.add_argument('--variant',choices=('batch','clock','root-scope'),default='batch')
 args=parser.parse_args()
 assert not args.resume_buffered or args.variant=='batch'
 base=Path('/data1/efs/devel-nuc-20261011');src=base/(args.variant+'-src');out=base/(args.variant+'-live');out.mkdir(exist_ok=False)
@@ -31,17 +31,25 @@ def port(p):
 stopped=False
 try:
  native=base/(args.variant+'-build')
- placement=base/('data-placement' if args.variant=='clock' else 'meta-placement')
+ placement=base/('clock-cold' if args.variant=='root-scope' else 'data-placement' if args.variant=='clock' else 'meta-placement')
  def placed():
   assert not (placement/'failure.txt').exists(),'placement failed; do not stop regular service'
   assert not (native/'failure.txt').exists(),'native failed; do not stop regular service'
-  return (placement/'restore-exit.txt').exists()
+  return (placement/('run-exit.txt' if args.variant=='root-scope' else 'restore-exit.txt')).exists()
  wait(placed,7200,'placement restoration')
  def built():
   assert not (native/'failure.txt').exists(),'native failed; do not stop regular service'
   return (native/'run-exit.txt').exists()
  wait(built,7200,'native suite')
  assert (native/'run-exit.txt').read_text().strip()=='0','native failed; do not stop regular service'
+ if args.variant=='root-scope':
+  assert (placement/'run-exit.txt').read_text().strip()=='0'
+  expected=json.loads((native/'provenance.json').read_text())['core_sha256']
+  core={str(p.relative_to(src)):hashlib.sha256(p.read_bytes()).hexdigest() for folder in ('src','include') for p in (src/folder).rglob('*') if p.suffix in ('.c','.h')}
+  core['Makefile']=hashlib.sha256((src/'Makefile').read_bytes()).hexdigest()
+  assert core==expected,'root candidate changed after native gate'
+  accepted=json.loads((base/'clock-install/images.json').read_text())
+  assert all(hashlib.sha256((Path('/data1/efs/src')/n).read_bytes()).hexdigest()==v['sha256'] for n,v in accepted.items())
  images={n:dict(sha256=hashlib.sha256((src/n).read_bytes()).hexdigest(),version=subprocess.check_output([str(src/n),'--version'],text=True)) for n in ('efsd','efs-fuse','efs-mgmt')}
  (out/'binaries.json').write_text(json.dumps(images,indent=2))
  codes={}
@@ -85,4 +93,11 @@ finally:
   assert rc==0
   wait(lambda:all(port(p) for p in range(17432,17436)),180,'restored listeners')
   assert all(os.path.ismount('/data1/efs/'+m) for m in ('mnt','mnt2'))
+  if args.variant=='root-scope':
+   # Restore the accepted append engine and verify every payload checked at
+   # its cold gate. This fixture never installs the root candidate.
+   assert all(hashlib.sha256((Path('/data1/efs/src')/n).read_bytes()).hexdigest()==v['sha256'] for n,v in accepted.items())
+   checked=json.loads((base/'clock-cold/after.json').read_text())['payloads']
+   for row in checked:assert hashlib.sha256(Path(row['path']).read_bytes()).hexdigest()==row['sha256']
+   (out/'restored-preserved-payloads.json').write_text(json.dumps(checked,indent=2))
   (out/'restore-exit.txt').write_text('0\n')
