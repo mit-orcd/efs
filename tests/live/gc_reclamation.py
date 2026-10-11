@@ -73,6 +73,7 @@ p.add_argument('--sync-write-fault',action='store_true',help='actual O_SYNC/O_DS
 p.add_argument('--sync-writes',action='store_true',help='O_SYNC/O_DSYNC publication before write replies, including queued append across lane groups')
 p.add_argument('--append-sync-boundary',action='store_true',help='append/fsync across lane groups, peer visibility and cold crash bytes')
 p.add_argument('--append-replay-race', action='store_true', help='32 identical concurrent APPEND RPCs allocate once')
+p.add_argument('--efs-commands-only',action='store_true',help='enabled two-mount command/options gates with dedicated-tree physical cleanup')
 p.add_argument('--fresh-namespace',action='store_true',help='six first-mutation namespace operations on fresh cold mounts with no prior file OPEN')
 p.add_argument('--append-loaded-only',action='store_true',help='only repeated two-mount mixed-lifetime append during GC, exact cold records and cleanup')
 p.add_argument('--append-loaded-rounds',type=int,default=20,help='1..20 loaded append rounds (default: 20)')
@@ -183,6 +184,7 @@ for path in sorted(inputs):
                       for name in ('efsd','efs-fuse','efs-mgmt')},
 },indent=2))
 env = dict(os.environ, EFS_MD_RAFT_N='4', EFS_TRANSPORT=a.transport)
+if a.efs_commands_only:env.update(EFS_COMMANDS='1',EFS_COMMANDS_SERVER='1',EFS_QUERY_TEST_PORT=str(a.port))
 if a.storage_session_fence_fault:
     assert a.guarded_leases and not (a.put_barrier_fault or a.kv_wal_persistence_only or a.compactor_pressure), 'certificate fault must own its preload'
     subprocess.run(['cc','-Wall','-Wextra','-Werror','-shared','-fPIC',source/'tests/live/storage_session_fence_fault.c','-ldl','-o',work/'put-session-fault.so'],check=True)
@@ -478,6 +480,21 @@ try:
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.efs_commands_only:
+        peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
+        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+        wait(lambda:os.path.ismount(peer_mount),'enabled command peer mounted',40)
+        before={p.name for p in mount.iterdir()}
+        for script in ('efs_commands.py','efs_command_options.py'):
+            run(['python3',source/'tests/live'/script,mount,peer_mount],timeout=180)
+        created={p.name for p in mount.iterdir()}-before
+        assert created and all(n.startswith('efs-command-gates-') or n=='efs-options-gates' for n in created),created
+        for name in created:shutil.rmtree(mount/name)
+        wait(drained,'enabled command trees GC drained',180)
+        wait(lambda:totals(status())['data_usage_bytes']==0,'enabled command tree quota zero',180)
+        wait(lambda:all(not [x for x in (root/'data/exports/1').glob('**/*') if x.is_file()] for root in data_roots),'enabled command physical cleanup',180)
+        print('enabled two-mount command/options, permissions, immutable output and physical cleanup PASS',flush=True)
+        raise SystemExit(0)
     if a.fresh_namespace:
         fresh=mount/'fresh-namespace';fresh.mkdir()
         for name in ('unlink','rename','link'):
