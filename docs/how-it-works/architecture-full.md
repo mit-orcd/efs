@@ -6793,8 +6793,11 @@ or present the Raft improvement as measured KV acceptance.
 preserved NUC stores. A five-minute measured create/write/close run again
 declines ~172 → 57 files/s; NVMe host request/flush elapsed means rise roughly
 1.3 → 3.7 ms while SATA write-request means stay near 0.13–0.16 ms. A frozen-code
-NVMe-data matrix varying only Raft/KV placement is running. No matrix result,
-production placement change or hardware ceiling is claimed yet.
+NVMe-data matrix varying only Raft/KV placement completed all three timed/cold
+cells: NVMe 9,763 files, SATA 74,183 files, repeated NVMe 9,971 files in ten minutes.
+SATA metadata keeps Raft sync near 0.1 ms, but throughput still declines as NVMe
+data-write latency rises. Regular-service restoration and previous-payload checks passed.
+No production placement change or hardware ceiling is claimed.
 [Continuation ledger](../status/nuc-w52-w97-resume-20261011.md).
 
 **Oct 11 repeated physical-trace follow-up:** all four 240-second written-ring

@@ -4,6 +4,6 @@ Installed engine: 108afa3e-nuc. Staged W52 core: 4afc063c; later 64-lane test-on
 
 `resume/` retains the completed five-minute eight-worker create/write/close run, phase windows, physical counters, early/late perf text and syscall summaries. Binary perf recordings remain on NUC. This is instrumented workload evidence with sampled warm peer verification, not a cold or power-loss gate.
 
-Focused staged W52 native transaction/recovery and actual host-loop outputs are retained here; the original GCC test-only warning is retained beside its corrected pass. Full new-build and live acceptance remain pending. Metadata-placement raw evidence is added after the matrix and restoration complete.
+Focused staged W52 native transaction/recovery and actual host-loop outputs are retained here; the original GCC test-only warning is retained beside its corrected pass. Full new-build and live acceptance remain pending. `meta-placement/` retains all three completed ten-minute placement cells, 64 cold samples per cell, sync counters, Raft observations, physical counter samples, catch-up and successful regular-service restoration. The summary preserves measurement limits.
 
 Remote root: /data1/efs/devel-nuc-20261011. See docs/status/nuc-w52-w97-resume-20261011.md for scope and checkpoints.
