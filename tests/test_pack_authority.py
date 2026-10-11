@@ -21,7 +21,8 @@ struct efs_raft_host {int running,raft_id,n;struct fake_server *s;struct efs_kv 
 static struct efs_raft_host *g_host;
 struct efs_conn {int x;};static struct efs_conn conn;
 static int hosted=1,reads,views,read_rc,local_rc,admit_rc,bad_view,phase=EFS_PACK_ACTIVE;
-static int sends,drops,releases,corrupt,lost,state_bad;
+static int sends,drops,releases,corrupt,lost,state_bad,cap_unsupported;
+static uint8_t sent_type;
 static uint64_t salt=(1ull<<40)|((uint64_t)EFS_SESSION_ACTIVE<<32)|7;
 static struct efs_pack_object object;
 static uint8_t sent[32];static uint32_t sent_bytes;
@@ -40,9 +41,13 @@ static struct efs_conn *server_peer_conn_get(const char *a,uint16_t p){assert(!s
 static void server_peer_conn_drop(const char *a,uint16_t p,struct efs_conn *c){(void)a;(void)p;assert(c==&conn);drops++;}
 static void server_peer_conn_release(const char *a,uint16_t p,struct efs_conn *c){(void)a;(void)p;assert(c==&conn);releases++;}
 int efs_conn_send_msg(struct efs_conn *c,uint8_t type,const void *p,uint32_t n)
-{assert(c==&conn && type==EFS_MSG_PACK_AUTHORITY && n==4);memcpy(sent,p,n);sent_bytes=n;sends++;return 0;}
+{assert(c==&conn && n==4);sent_type=type;sends++;
+ if(type==EFS_MSG_PACK_CAPABILITIES){assert(efs_put_upload_rd32(p)==3);return 0;}
+ assert(type==EFS_MSG_PACK_AUTHORITY);memcpy(sent,p,n);sent_bytes=n;return 0;}
 int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **p,uint32_t *n)
-{assert(c==&conn);if(lost)return EFS_ERR_NET;struct efs_msg_pack_authority_reply r={.version=1,.group=0,.count=sent[2]};efs_hash(sent,sent_bytes,r.digest);
+{assert(c==&conn);if(lost)return EFS_ERR_NET;
+ if(sent_type==EFS_MSG_PACK_CAPABILITIES){*type=EFS_MSG_PACK_CAPABILITIES_REPLY;*n=4;*p=calloc(1,4);efs_put_upload_wr32(*p,cap_unsupported?0:3);return 0;}
+ struct efs_msg_pack_authority_reply r={.version=1,.group=0,.count=sent[2]};efs_hash(sent,sent_bytes,r.digest);
  if(corrupt==1)r.version++;if(corrupt==2)r.group=2;if(corrupt==3)r.count++;if(corrupt==4)r.digest[0]^=1;
  *type=corrupt==5?0:EFS_MSG_PACK_AUTHORITY_REPLY;*n=sizeof(r)+(corrupt==6?1:0)-(corrupt==7?1:0);*p=calloc(1,sizeof(r)+1);memcpy(*p,&r,sizeof(r));return 0;}
 static int host_read_index(struct efs_raft_host *h,uint8_t g,int *hint)
@@ -72,9 +77,11 @@ int main(void){struct fake_server server={0};struct efs_raft_host h={.running=1,
  phase=EFS_PACK_RECLAIMING;assert(run(q)==EFS_ERR_STALE && !views);phase=EFS_PACK_ACTIVE;
  state_bad=1;assert(run(q)==EFS_ERR_STALE && views==15);state_bad=0;
  for(bad_view=1;bad_view<=4;bad_view++){int rc=run(q);assert(views==16 && rc==(bad_view==1 || bad_view==4?EFS_ERR_STALE:bad_view==2?EFS_ERR_PROTO:EFS_ERR_BUSY));}bad_view=0;
- hosted=0;assert(!run(q) && !reads && !views && sends==1 && releases==1);
+ hosted=0;assert(!run(q) && !reads && !views && sends==2 && releases==1);
  for(corrupt=1;corrupt<=7;corrupt++){assert(run(q)==EFS_ERR_PROTO && !reads && !views);}corrupt=0;
  lost=1;assert(run(q)==EFS_ERR_NET && drops==8);lost=0;
+ cap_unsupported=1;int before=sends;assert(run(q)==EFS_ERR_PROTO && sends==before+1 && !reads && !views);
+ cap_unsupported=0;
  q[2]=17;assert(run(q)==EFS_ERR_INVAL);q[2]=16;q[1]=2;assert(run(q)==EFS_ERR_INVAL);
  puts("pack authority: one fresh dual-group proof, all16 exact FileIDs/epochs, session/reclamation refusal, strict whole-cohort forwarding PASS");}
 '''

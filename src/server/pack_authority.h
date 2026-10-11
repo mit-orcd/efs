@@ -9,6 +9,19 @@ static int host_pack_authority_peer(struct efs_raft_host *h,int rid,
     if(rid<0 || rid==h->raft_id || peer_addr(h,rid,addr,sizeof(addr),&port))return EFS_ERR_NET;
     struct efs_conn *conn=server_peer_conn_get(addr,port);if(!conn)return EFS_ERR_NET;
     uint8_t type=0;void *raw=NULL;uint32_t len=0;
+    /* Old packed peers ignore unknown opcodes. Probe the existing service
+     * before sending 143; compatibility never substitutes for authority. */
+    uint8_t capability[4];efs_put_upload_wr32(capability,3);
+    if(efs_conn_send_msg(conn,EFS_MSG_PACK_CAPABILITIES,capability,sizeof(capability)) ||
+       efs_conn_recv_msg(conn,&type,&raw,&len)) {
+        free(raw);server_peer_conn_drop(addr,port,conn);return EFS_ERR_NET;
+    }
+    int supported=type==EFS_MSG_PACK_CAPABILITIES_REPLY && len==4 &&
+                  efs_put_upload_rd32(raw)==3;
+    free(raw);raw=NULL;
+    if(!supported) {
+        server_peer_conn_drop(addr,port,conn);return EFS_ERR_PROTO;
+    }
     if(efs_conn_send_msg(conn,EFS_MSG_PACK_AUTHORITY,request,bytes) ||
        efs_conn_recv_msg(conn,&type,&raw,&len)) {
         free(raw);server_peer_conn_drop(addr,port,conn);return EFS_ERR_NET;

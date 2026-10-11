@@ -755,3 +755,16 @@ authority helper now uses the merged request-local session coverage mask API;
 the earlier intermediate native link failure is retained and is not a pass.
 Local focused authority, atomic APPEND, CREATE credentials, OPEN deadline and
 lease retention gates pass. Full exact merged native qualification is next.
+
+
+The new authority RPC is preceded by an existing PACK_CAPABILITIES request for
+level 3. New servers answer 3 only to that request; existing client level-2 and
+legacy empty probes retain their responses. Old packed peers answer unsupported
+without receiving opcode 143, allowing fresh legacy authority fallback. Focused
+tests prove no new opcode is sent to such a peer and do not cache authority.
+
+The first fully merged native run compiled successfully, then exposed a test
+extractor that included the newly adjacent reservation adapter without its
+ordered guard dependencies. The pruning/close cohort extractor now excludes
+that unrelated wrapper; its original fault assertions remain and pass locally.
+That interrupted suite remains failed evidence, not full native acceptance.
