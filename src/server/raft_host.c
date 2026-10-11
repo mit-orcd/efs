@@ -4112,7 +4112,7 @@ static int host_pressure_admit(void *app, const struct efs_raft_entry *entries,
  * only read-your-writes (a committed index is unique). */
 static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
                         const uint8_t *cmd, uint32_t clen, uint64_t *idx,
-                        uint64_t *term, int *leader_hint)
+                        uint64_t *term, int *leader_hint, int local_only)
 {
     struct efs_raft *r;
     int rc;
@@ -4145,6 +4145,12 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
         lid = efs_raft_leader(r);
         if (leader_hint)
             *leader_hint = lid;
+        if (local_only && solo) {
+            pthread_mutex_unlock(&h->mu);
+            propose_q_sub();
+            if (quiet) (void)efs_raft_disk_sync_release(h->disk);
+            return EFS_ERR_NOT_PRIMARY;
+        }
         if (efs_raft_role(r) == EFS_RAFT_LEADER && solo && quiet) {
             /* One voter commits inside propose. Drop the hold first so
              * that commit's append fsyncs before it returns. */
@@ -4244,6 +4250,7 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
     propose_q_sub();
     if (quiet)
         (void)efs_raft_disk_sync_release(h->disk);
+    if (local_only) return EFS_ERR_NOT_PRIMARY;
     /* Not the leader: forward to it. host_remote_cmd is a blocking peer
      * RPC; no host lock is held across it. The command is already fully
      * formed and the Raft log + apply-side validation order it against
@@ -4377,19 +4384,26 @@ static int host_wait_settled(struct efs_raft_host *h, uint8_t group,
     return rc;
 }
 
-static int host_propose(struct efs_raft_host *h, uint8_t group,
+static int host_propose_mode(struct efs_raft_host *h, uint8_t group,
                         const uint8_t *cmd, uint32_t clen, uint64_t *idx,
-                        uint64_t *term, int *leader_hint)
+                        uint64_t *term, int *leader_hint, int local_only)
 {
-    if (!h->pressure_enabled) return host_propose_impl(h,group,cmd,clen,idx,term,leader_hint);
+    if (!h->pressure_enabled) return host_propose_impl(h,group,cmd,clen,idx,term,leader_hint,local_only);
     struct efs_admission_ticket ticket={0};
     int rc = efs_admission_try(&h->proposal_queue,(uint64_t)clen+4096,
                                host_pressure_recovery(cmd,clen),&ticket);
     if (rc != EFS_OK) return rc;
-    rc=host_propose_impl(h,group,cmd,clen,idx,term,leader_hint);
+    rc=host_propose_impl(h,group,cmd,clen,idx,term,leader_hint,local_only);
     (void)efs_admission_release(&ticket);
     return rc;
 }
+static int host_propose(struct efs_raft_host *h, uint8_t group,
+                        const uint8_t *cmd, uint32_t clen, uint64_t *idx,
+                        uint64_t *term, int *leader_hint)
+{
+    return host_propose_mode(h,group,cmd,clen,idx,term,leader_hint,0);
+}
+
 
 static int host_propose_wait_idx_impl(struct efs_raft_host *h, uint8_t group,
                                  const uint8_t *cmd, uint32_t clen, int *hint,
@@ -4398,7 +4412,7 @@ static int host_propose_wait_idx_impl(struct efs_raft_host *h, uint8_t group,
     uint64_t idx = 0, term = 0;
     int rc;
 
-    rc = host_propose_impl(h, group, cmd, clen, &idx, &term, hint);
+    rc = host_propose_impl(h, group, cmd, clen, &idx, &term, hint, 0);
     if (rc != EFS_OK)
         return rc;
     if (idx_out)
@@ -4442,7 +4456,7 @@ static int host_propose_wait_ex_impl(struct efs_raft_host *h, uint8_t group,
     uint64_t idx = 0, term = 0;
     int rc, erc;
 
-    rc = host_propose_impl(h, group, cmd, clen, &idx, &term, hint);
+    rc = host_propose_impl(h, group, cmd, clen, &idx, &term, hint, 0);
     if (rc != EFS_OK)
         return rc;
     rc = host_wait_applied(h, group, idx, hint);
@@ -11300,6 +11314,90 @@ static int host_prep(struct efs_raft_host *h, uint32_t shard, int kind,
     return host_propose_wait(h, efs_raft_shard_group(shard), cmd, n, hint);
 }
 
+/* Async namespace prepares used to defer only the apply wait: each still
+ * released its own log hold. Bound collection to eight ordinary PREP entries,
+ * preserving order and each exact (index,term) verdict. Only contiguous,
+ * locally led, nonsolo segments share a durability barrier. A role change
+ * fails local-only submission; it cannot forward while the log is held. */
+#define HOST_PREP_COHORT_MAX 8
+struct host_prepare_cohort {
+    struct efs_raft_host *host;
+    unsigned n;
+    struct {
+        struct host_idx_ref *ref;
+        uint32_t bytes;
+        uint8_t cmd[EFS_TXN_PREPARE_MAX];
+    } item[HOST_PREP_COHORT_MAX];
+};
+static __thread struct host_prepare_cohort *host_prepare_capture;
+static int host_report_release(struct efs_raft_host *h, int held);
+
+static int host_prepare_cohort_flush(struct host_prepare_cohort *c,int *hint)
+{
+    unsigned i=0;
+    int rc=EFS_OK;
+    while (i<c->n && rc==EFS_OK) {
+        uint8_t group=c->item[i].ref->group;
+        unsigned end=i+1;
+        while (end<c->n && c->item[end].ref->group==group) end++;
+        int local=0,held=0;
+        pthread_mutex_lock(&c->host->mu);
+        struct efs_raft *r=group_raft(c->host,group);
+        if (r && efs_raft_role(r)==EFS_RAFT_LEADER) {
+            uint32_t voters=efs_raft_voters(r);
+            local=voters && (voters&(voters-1));
+        }
+        pthread_mutex_unlock(&c->host->mu);
+        if (local && c->host->disk && end-i>1 &&
+            efs_raft_disk_sync_depth(c->host->disk)==0 &&
+            efs_raft_disk_sync_hold(c->host->disk)==EFS_OK)
+            held=1;
+        for (;i<end && rc==EFS_OK;i++) {
+            struct host_idx_ref *ref=c->item[i].ref;
+            rc=host_propose_mode(c->host,ref->group,c->item[i].cmd,
+                c->item[i].bytes,&ref->idx,&ref->term,hint,held);
+        }
+        /* Close on every error as well as success. Failed persistence must
+         * override an earlier admission/role error, never become a verdict. */
+        int sync_rc=held ? host_report_release(c->host,held) : EFS_OK;
+        if (sync_rc!=EFS_OK) rc=sync_rc;
+    }
+    c->n=0;
+    return rc;
+}
+
+static int host_prepare_cohort_add(struct efs_raft_host *h,
+    struct host_idx_ref *ref,const uint8_t *cmd,uint32_t bytes,int *hint)
+{
+    struct host_prepare_cohort *c=host_prepare_capture;
+    if (!c || c->host!=h) return host_propose(h,ref->group,cmd,bytes,
+                                            &ref->idx,&ref->term,hint);
+    if (bytes>sizeof(c->item[0].cmd)) return EFS_ERR_INVAL;
+    if (c->n==HOST_PREP_COHORT_MAX) {
+        int rc=host_prepare_cohort_flush(c,hint);
+        if (rc!=EFS_OK) return rc;
+    }
+    c->item[c->n].ref=ref;c->item[c->n].bytes=bytes;
+    memcpy(c->item[c->n].cmd,cmd,bytes);c->n++;
+    return EFS_OK;
+}
+
+static void host_prepare_cohort_begin(struct host_prepare_cohort *c,
+                                        struct efs_raft_host *h)
+{
+    memset(c,0,sizeof(*c));c->host=h;host_prepare_capture=c;
+}
+
+static int host_prepare_cohort_end(struct host_prepare_cohort *c,int prior,
+                                     int *hint)
+{
+    host_prepare_capture=NULL;
+    /* A packing/capture failure leaves no accepted promise for remaining
+     * buffered commands. Already flushed PREPs retain normal abort cleanup. */
+    if (prior!=EFS_OK) {c->n=0;return prior;}
+    return host_prepare_cohort_flush(c,hint);
+}
+
 static int host_prep_async(struct efs_raft_host *h, uint32_t shard, int kind,
                            const struct efs_txid *t, const struct efs_txn_parts *p,
                            const uint8_t *key, uint32_t klen, uint64_t expected,
@@ -11316,8 +11414,7 @@ static int host_prep_async(struct efs_raft_host *h, uint32_t shard, int kind,
     if (n > sizeof(cmd))
         return EFS_ERR_INVAL;
     ref->group = efs_raft_shard_group(shard);
-    return host_propose(h, ref->group, cmd, n, &ref->idx, &ref->term,
-                        hint);
+    return host_prepare_cohort_add(h,ref,cmd,n,hint);
 }
 
 /* Commutative parts (§7.2). `ref` NULL = propose and wait (host_prep
@@ -11340,8 +11437,7 @@ static int host_prep_raw(struct efs_raft_host *h, uint32_t shard, int kind,
     if (!ref)
         return host_propose_wait(h, efs_raft_shard_group(shard), cmd, n, hint);
     ref->group = efs_raft_shard_group(shard);
-    return host_propose(h, ref->group, cmd, n, &ref->idx, &ref->term,
-                        hint);
+    return host_prepare_cohort_add(h,ref,cmd,n,hint);
 }
 
 /* Namespace rows can change through unversioned log applies. Compare their
@@ -12445,6 +12541,8 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
             goto mkdir_done;
         stage = 9;
         fill_txid(h, &t);
+        struct host_prepare_cohort cohort;
+        host_prepare_cohort_begin(&cohort,h);
         np = 0;
         for (i = 0; i < parts.n && rc == EFS_OK; i++) {
             uint32_t sh = parts.shard[i];
@@ -12490,6 +12588,7 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
                     np++;
             }
         }
+        rc=host_prepare_cohort_end(&cohort,rc,&hint);
         if (rc == EFS_OK)
             rc = host_wait_refs(h, prefs, np, &hint);
         if (rc != EFS_OK)
@@ -12771,6 +12870,8 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
         if (rc != EFS_OK)
             goto rmdir_done;
         fill_txid(h, &t);
+        struct host_prepare_cohort cohort;
+        host_prepare_cohort_begin(&cohort,h);
         npref = 0;
         for (i = 0; i < parts.n && rc == EFS_OK; i++) {
             uint32_t sh = parts.shard[i];
@@ -12847,6 +12948,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
                     npref++;
             }
         }
+        rc=host_prepare_cohort_end(&cohort,rc,&hint);
         if (rc == EFS_OK)
             rc = host_wait_refs(h, prefs, npref, &hint);
         if (rc != EFS_OK)

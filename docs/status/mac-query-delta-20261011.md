@@ -498,3 +498,29 @@ fresh fences, verifies permission ancestors, repeats with independent fences,
 and checks missing groups, IO errors, absence and the existing depth boundary.
 It and the operation/LOOKUP/transaction/control/sender/architecture gates pass
 on the Mac Linux seed. Native deep-directory retesting is pending.
+
+The batched path-authority fix also passed its Linux gates, but the unchanged
+native deep-directory pair still failed (0/2, 33.4 seconds). A separate,
+normally cleaned 60-level mkdir diagnostic with client RPC profiling showed
+that this low-level FUSE path issued no LOOKUP_PATH calls. Its 2,158 LOOKUPs
+spent 2.497 seconds receiving replies, whereas 61 creates spent 18.002 seconds
+(~295 ms each). The path fix therefore does not establish a native-suite
+latency improvement. Durable namespace writes are the remaining measured lead.
+
+A bounded prepare collector now groups at most eight ordinary PREP entries,
+preserving order and every exact index/term verdict. Only contiguous locally
+led nonsolo groups share the existing checked log fsync barrier. Packing
+failures discard unsubmitted commands, leadership changes fail locally instead
+of forwarding inside a hold, and persistence failure overrides admission
+failure. Every hold closes before remote calls or apply waits; COMMIT still
+requires all original PREP verdicts. MKDIR and RMDIR use the collector. There is
+no new transaction opcode or relaxed durability rule. Unit cases exercise the
+bound, ordering, individual identities, role/fsync errors, remote boundaries
+and preexisting shared holds. The initial full Linux gate stopped because the
+REPORT coverage fixture mistook a forward declaration for a function body;
+fixing its definition extraction preserved its durability assertions. The
+remaining full-unit recipes, including Raft, transaction/session, persistence,
+query and client drain gates, then passed. Live acceptance is pending.
+The prepare-cohort live deep-directory pair also completed normally with 0/2
+PASS (two unchanged 20-second deadline failures, 33.4 seconds including
+cleanup). It is not acceptance and no native improvement is established yet.
