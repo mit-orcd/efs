@@ -5,7 +5,9 @@
 [Release checkpoint, priorities and acceptance ledger](v030-pre-alpha-release.md):
 all agent improvements are being integrated on `release-v0.3.0-pre-alpha`;
 Mac authority/APPEND reconciliation and review pipeline/bounds/recorder fixes
-are included. Full merged AMD qualification is running; packing timeouts remain
+are included, together with bounded packed receipt retirement. Completed AMD
+feedback comparisons remain opt-in and do not close global W97. Full merged
+AMD qualification is running; packing timeouts remain
 a release blocker. Small-file packing and code-review correctness have priority. Branch checkpoints
 are not final release acceptance. Shared devel/main and pushes remain unchanged
 until a frozen merged candidate passes its recorded gates.

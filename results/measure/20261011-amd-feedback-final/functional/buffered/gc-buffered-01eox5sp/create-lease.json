@@ -1,0 +1,18 @@
+[
+  {
+    "parent": 3040,
+    "owner": 95214250,
+    "ino": 7136,
+    "name": "lease-1",
+    "hashed_shard": 2615,
+    "hashed": false
+  },
+  {
+    "parent": 1776,
+    "owner": 95214251,
+    "ino": 3111,
+    "name": "lease-1",
+    "hashed_shard": 3111,
+    "hashed": true
+  }
+]

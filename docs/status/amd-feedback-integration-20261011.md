@@ -119,3 +119,30 @@ pair is excluded from paired performance acceptance. Fixed exposure timing and
 a replacement off/on pair provide three comparable direct pairs (2, 3, 4).
 The first enabled observation exercises actual BUSY/probe feedback, with fewer
 refusals; no sustained improvement or global W97 closure is claimed yet.
+
+## Completed comparisons retained by release integration
+
+All pressure cells and both normal-mount restoration markers exit0. The pilot
+pair1 remains excluded; replacement direct pairs2/3/4 all verify progress by
+every tiny/large worker, actual delayed follower recovery, cold acknowledged
+bytes, physical empty inventory and a fresh post-pressure cold write. These
+results describe the previous AMD feedback build, not the merged release
+candidate. [Compact raw JSON, identities and derived comparison](../../results/measure/20261011-amd-feedback-final/comparison-summary.json)
+retain exact source-tree and binary hashes per fixture.
+
+| Direct TCP, median of three comparable cells | Feedback off | Feedback on |
+| --- | ---: | ---: |
+| Tiny closed files/s (actual complete load wall time) | 30.97 | 34.48 |
+| Concurrent large writes MiB/s (same wall time) | 95.23 | 103.32 |
+| Maximum 30-second-window close p99, ms | 1864.06 | 1758.23 |
+| Physical GC drain, seconds | 65.92 | 72.25 |
+| Sampled aggregate CPU cores | 1.65 | 1.86 |
+| Sampled peak aggregate RSS, MiB | 355.28 | 377.86 |
+
+The median throughput gains are 11.3% tiny and 8.5% large, but pair4 is weaker
+and its GC drain worsens. Window p99 values are not a pooled latency percentile.
+CPU/RSS samples cover about150seconds, not the complete load. Independent
+placements/salts and a synthetic delay on one physical host limit causal and
+hardware conclusions. Buffered enabled and unobserved enabled controls pass
+independently; they do not establish a buffered paired speedup. Receiver
+feedback remains opt-in and global W97 is not closed by these comparisons.

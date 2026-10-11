@@ -27,7 +27,7 @@ integrated explicitly; moving branch tips are not test identities.
 | Owner / branch | Submitted checkpoint | Integration state | Acceptance limits |
 | --- | --- | --- | --- |
 | AMD / devel-amd | `19f7efb3` | merged in `eff8d05a` | W94 CREATE/adoption closed; normal/fault native and both-mode full lifecycle pass. W97 repeated pressure comparisons continue; feedback stays opt-in. |
-| ORCD / devel-orcd | code `79551691`, evidence `8d07b45a` | base merged in `ea5f5dc4`; exact-rejection repair in `8a7fd9be` | Full native and packed private lifecycle evidence; mounted concurrent POSIX times out. Pinned-stats, cold/shared-GC pass on ORCD; concurrent retest still times out. Later parallel-retirement candidate remains unaccepted. |
+| ORCD / devel-orcd | code `79551691`, evidence `8d07b45a` | base merged in `ea5f5dc4`; exact-rejection repair in `8a7fd9be` | Full native and packed private lifecycle evidence; mounted concurrent POSIX times out. Pinned-stats, cold/shared-GC pass on ORCD; concurrent retest still times out. Bounded receipt-retirement `627d48ba` merged in `d1197381`; mounted acceptance remains pending. |
 | Intel / devel-intel | `5f03ec76` plus fixture corrections through `5abf8e7b` (C source `3d69edb4`) | base merged in `22056d9b`; corrected fixtures integrated | Both-host native and complete direct/buffered private fixtures pass; supplemental fault matrix, remaining canonical/cold gates and retained-data deployment still pending. Production remains `7bde5f43`. |
 | Review / devel-code-review | reports `1b0c6b7c`, fixes through `3ac828cd` | base merged in `5e381545`; further repairs in `9260d8a1` and `9acea823` | Reproduced use-after-free fixed; focused merged regression passes. Capacity accounting, recorder reap and incoming-chunk re-dirty fixes included; private find/flush/walker cleanup included. Full merged/Linux/live acceptance required. |
 | NUC / devel-nuc | revised `ba73f304` | merged in `5cbe0ce4` | APPEND_CATCHUP tag52; focused merged gates pass. New-tag native rebuild, live/fault/cold/20k and measured W97 acceptance pending. Production remains `f52cd2dd-nuc`; preserved writer must finish before restart. |
@@ -158,3 +158,13 @@ requires physical packed fragments, verifies peer/cold bytes through overwrite,
 growth/truncate/unlink, runs core/extras and peer POSIX, and requires physical
 packed reclamation. It preserves failed POSIX verdicts while collecting the
 independent cold/GC checks. Its live verdict remains pending.
+
+The merged native `bdee0d1c` run reached the late namespace-owner regression
+but failed obsolete REGISTER-proof shortcut expectations. `f1d25b3e` retains
+exact production proof-emitter error/fencing coverage and expands the actual
+fresh-admission helper tests across command refusals, floor errors and fencing.
+ORCD `627d48ba` is included in frozen candidate `d1197381`; full normal/fault
+AMD native tests and serialized direct/buffered packed mounted gates are
+running. Input hashes cover929 build/test/documentation files, with no
+synchronization mismatches. NUC reports both tag52 native builds pass on
+`ba73f304`; new-tag live/cold/20k acceptance remains pending.
