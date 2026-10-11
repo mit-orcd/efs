@@ -716,3 +716,14 @@ averages 600 ms (24 calls). Different runs/partial timed-out workloads are
 diagnostic only, not paired performance or correctness acceptance. REPORT's
 append completion still prepares images individually and is the next lead.
 Evidence: append-cohort-unit.txt and native-append-cohort.txt.
+
+Normal append completion and pruning now use the same bounded captured-image
+PREP collector. Registered completion retains the exact local session guard;
+last-close cleanup keeps its synchronous first PREP before checking leases.
+No-op/capture-error exits clear TLS, and failures retain the same pre-decision
+ABORT/ambiguous COMMIT handling. Extended sanitizer and Mac Linux completion,
+prune, owned-session, transaction recovery and receipt gates pass. Live native
+multiprocess append still misses its original budget: 0/1, 31.4 seconds with
+normal cleanup. Partial RPC diagnostics show reserve 170 ms (65 calls) and
+REPORT 408 ms (22 calls); not a paired throughput comparison or acceptance.
+Evidence: append-completion-unit.txt and native-append-completion.txt.

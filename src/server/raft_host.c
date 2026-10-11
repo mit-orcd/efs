@@ -12094,10 +12094,43 @@ static int host_append_execute_batched(struct efs_raft_host *h,
     return rc;
 }
 
+/* Normal completion/pruning use immutable captured images just like reserve.
+ * Last-close cleanup deliberately keeps its synchronous first PREP: it checks
+ * outstanding leases only after that obligation is actually installed. */
+static int host_append_complete_batched(struct efs_raft_host *h,efs_ino_t ino,
+    uint64_t offset,const struct efs_opid *session,const struct efs_txid *t,int *hint)
+{
+    if(host_command_capture)return EFS_ERR_BUSY;
+    struct host_append_batch c={.base={h,hint}};
+    const struct efs_meta_append_ops ops={host_append_batch_prepare,
+        host_append_batch_decide,host_append_batch_resolve};
+    host_command_cohort_begin(&c.cohort,h);
+    int rc=session?efs_meta_finish_append_owned(h->kv,ino,offset,
+                     EFS_META_APPEND_COMPLETED,session,t,&ops,&c):
+                   efs_meta_finish_append(h->kv,ino,offset,
+                     EFS_META_APPEND_COMPLETED,t,&ops,&c);
+    if(host_command_capture==&c.cohort)
+        (void)host_command_cohort_end(&c.cohort,EFS_ERR_BUSY,hint);
+    return rc;
+}
+static int host_append_prune_batched(struct efs_raft_host *h,efs_ino_t ino,
+    const struct efs_txid *t,int *hint,unsigned *removed)
+{
+    if(host_command_capture)return EFS_ERR_BUSY;
+    struct host_append_batch c={.base={h,hint}};
+    const struct efs_meta_append_ops ops={host_append_batch_prepare,
+        host_append_batch_decide,host_append_batch_resolve};
+    host_command_cohort_begin(&c.cohort,h);
+    int rc=efs_meta_prune_append(h->kv,ino,t,&ops,&c,removed);
+    if(host_command_capture==&c.cohort)
+        (void)host_command_cohort_end(&c.cohort,EFS_ERR_BUSY,hint);
+    return rc;
+}
+
 static int host_append_transaction(struct efs_raft_host *h,efs_ino_t ino,uint64_t len,
                                     const struct efs_opid_req *q,uint64_t *offset,int *hint)
 {
-    struct host_resize_ctx ctx={h,hint};struct efs_txid t;
+    struct efs_txid t;
     int registered=0,rc=host_append_authority(h,hint);
     if(rc==EFS_OK)rc=host_append_session_admit(h,ino,q,hint,&registered);
     if(rc!=EFS_OK)return rc;
@@ -12110,7 +12143,7 @@ static int host_append_transaction(struct efs_raft_host *h,efs_ino_t ino,uint64_
         rc=efs_meta_append_prune_pending(h->kv,ino);
         if(rc<=0)break;
         unsigned removed;fill_txid(h,&t);
-        rc=efs_meta_prune_append(h->kv,ino,&t,&host_append_ops,&ctx,&removed);
+        rc=host_append_prune_batched(h,ino,&t,hint,&removed);
         if(rc!=EFS_OK)return rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
         if(page==31)return EFS_ERR_BUSY;
     }
@@ -15319,7 +15352,7 @@ static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
 {
     uint64_t offs[64], lens[64];
     uint32_t n = 64, i;
-    struct host_resize_ctx ctx={h,hint};struct efs_txid t;
+    struct efs_txid t;
     int rc,authoritative=0;
 
     /* append_open caps at 64. A 400-record O_APPEND burst is 400 OPEN
@@ -15347,11 +15380,7 @@ static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
                 break;
             }
             fill_txid(h,&t);
-            rc = session ?
-                efs_meta_finish_append_owned(h->kv, ino, offs[i], EFS_META_APPEND_COMPLETED,
-                                             session, &t, &host_append_ops, &ctx) :
-                efs_meta_finish_append(h->kv, ino, offs[i], EFS_META_APPEND_COMPLETED,
-                                       &t, &host_append_ops, &ctx);
+            rc=host_append_complete_batched(h,ino,offs[i],session,&t,hint);
             if(rc!=EFS_OK)return rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
             did++;
         }

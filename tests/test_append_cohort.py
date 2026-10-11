@@ -45,6 +45,13 @@ int efs_meta_execute_append(const struct efs_meta_append_plan *p,const struct ef
  for(unsigned i=0;i<p->count;i++){im.key[1]=(uint8_t)i;int rc=ops->prepare(ctx,t,&p->parts,&im);if(rc){int aborted=ops->decide(ctx,t,&p->parts,EFS_TXN_ABORT);if(aborted)return aborted;(void)ops->resolve(ctx,t,&p->parts,EFS_TXN_ABORT);return rc;}}
  if(!p->count)return 0;int rc=ops->decide(ctx,t,&p->parts,EFS_TXN_COMMIT);return rc?rc:ops->resolve(ctx,t,&p->parts,EFS_TXN_COMMIT);}
 int efs_meta_execute_append_owned(struct efs_kv*k,const struct efs_meta_append_plan*p,const struct efs_opid_req*q,const struct efs_txid*t,const struct efs_meta_append_ops*ops,void*ctx){(void)k;(void)q;return efs_meta_execute_append(p,t,ops,ctx);}
+static unsigned owned_completions,pruned;
+int efs_meta_finish_append(struct efs_kv*k,efs_ino_t ino,uint64_t off,int outcome,const struct efs_txid*t,const struct efs_meta_append_ops*ops,void*ctx){
+ (void)k;assert(ino==42 && off==8 && outcome==EFS_META_APPEND_COMPLETED);struct efs_meta_append_plan p={.count=11};return efs_meta_execute_append(&p,t,ops,ctx);}
+int efs_meta_finish_append_owned(struct efs_kv*k,efs_ino_t ino,uint64_t off,int outcome,const struct efs_opid*id,const struct efs_txid*t,const struct efs_meta_append_ops*ops,void*ctx){
+ assert(id && id->session_epoch==7);owned_completions++;return efs_meta_finish_append(k,ino,off,outcome,t,ops,ctx);}
+int efs_meta_prune_append(struct efs_kv*k,efs_ino_t ino,const struct efs_txid*t,const struct efs_meta_append_ops*ops,void*ctx,unsigned*removed){
+ (void)k;assert(ino==42);pruned++;struct efs_meta_append_plan p={.count=10};int rc=efs_meta_execute_append(&p,t,ops,ctx);*removed=rc?0:8;return rc;}
 '''+s[c:d]+r'''
 static void reset(void){submitted=holds=waited=commits=aborts=resolves=prepared=0;sync_rc=wait_rc=commit_rc=abort_rc=pack_rc=execute_rc=0;}
 int main(void){struct efs_raft_disk disk={0};struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.disk=&disk,.r={.role=EFS_RAFT_LEADER}};
@@ -64,6 +71,14 @@ int main(void){struct efs_raft_disk disk={0};struct efs_raft_host h={.mu=PTHREAD
  assert(host_append_execute_batched(&h,&p,&q,&t,1,&hint)==EFS_ERR_OVERFLOW && !commits && aborts==1 && !host_command_capture);
  reset();p.count=0;assert(!host_append_execute_batched(&h,&p,&q,&t,0,&hint) && !host_command_capture && !submitted && !commits);
  execute_rc=EFS_ERR_INVAL;assert(host_append_execute_batched(&h,&p,&q,&t,0,&hint)==EFS_ERR_INVAL && !host_command_capture);
+ struct efs_opid id={.session_epoch=7};unsigned removed;
+ reset();assert(!host_append_complete_batched(&h,42,8,&id,&t,&hint) && owned_completions==1 && submitted==11 && waited && commits==1);
+ reset();assert(!host_append_complete_batched(&h,42,8,NULL,&t,&hint) && owned_completions==1 && submitted==11);
+ reset();assert(!host_append_prune_batched(&h,42,&t,&hint,&removed) && removed==8 && pruned==1 && submitted==10 && commits==1);
+ reset();wait_rc=EFS_ERR_STALE;assert(host_append_complete_batched(&h,42,8,&id,&t,&hint)==EFS_ERR_STALE && !commits && aborts==1);
+ reset();sync_rc=EFS_ERR_IO;assert(host_append_prune_batched(&h,42,&t,&hint,&removed)==EFS_ERR_IO && !removed && !commits && aborts==1);
+ reset();execute_rc=EFS_ERR_INVAL;assert(host_append_complete_batched(&h,42,8,&id,&t,&hint)==EFS_ERR_INVAL && !host_command_capture);
+ assert(host_append_prune_batched(&h,42,&t,&hint,&removed)==EFS_ERR_INVAL && !host_command_capture);
  struct host_command_cohort other;host_command_cohort_begin(&other,&h);
  assert(host_append_execute_batched(&h,&p,&q,&t,0,&hint)==EFS_ERR_BUSY && host_command_capture==&other);host_command_cohort_end(&other,EFS_ERR_BUSY,&hint);
  puts("append cohort: captured identities, bounded batches, verdict-before-COMMIT, pre-decision ABORT, ambiguous COMMIT and TLS cleanup PASS");}
