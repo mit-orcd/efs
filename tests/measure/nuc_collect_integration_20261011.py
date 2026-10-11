@@ -3,7 +3,7 @@
 import gzip,hashlib,json,re,shutil
 from pathlib import Path
 base=Path('/data1/efs/devel-nuc-20261011');out=base/'evidence-v3';out.mkdir(exist_ok=True)
-folders=('build','candidate-build','fixed-build','fixed-live','fixed-v2-build','fixed-v2-live','fixed-v3-build','fixed-v3-live','control-build','control-v3-build','append-comparison','append-comparison-v3','block-traces','loaded-append-v2','loaded-append-notrun-plan20','focused','drive-policy','long-control-profile','block-traces-prebudget-plan','append-comparison-v3-prebudget-plan','loaded-append-v2-prebudget-plan','final-native','offline-append-fanout')
+folders=('build','candidate-build','fixed-build','fixed-live','fixed-v2-build','fixed-v2-live','fixed-v3-build','fixed-v3-live','control-build','control-v3-build','append-comparison','append-comparison-v3','block-traces','loaded-append-v2','loaded-append-notrun-plan20','focused','drive-policy','long-control-profile','block-traces-prebudget-plan','append-comparison-v3-prebudget-plan','loaded-append-v2-prebudget-plan','final-native','offline-append-fanout','commands-live')
 fixtures={}
 def copy(source,dest):
  dest.parent.mkdir(parents=True,exist_ok=True)
