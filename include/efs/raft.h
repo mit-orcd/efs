@@ -314,6 +314,10 @@ int efs_raft_transfer(struct efs_raft *r, int target);
 /* ReadIndex: leader records commitIndex, waits for a majority heartbeat
  * in the current term, then applied >= that index. No clock leases. */
 int efs_raft_read_begin(struct efs_raft *r);
+/* Same serialization as recv. Pure stable read control only: 0 fallback,
+ * 1 request handled, 2 reply noted (still requires normal recv bookkeeping).
+ * Caller must preserve pending inbox order; never bypass deferred log writes. */
+int efs_raft_read_control(struct efs_raft *r, const struct efs_raft_msg *msg);
 int efs_raft_read_ready(const struct efs_raft *r);
 /* Inspection of the most recently begun round, not authority for a new
  * request. Callers must admit before starting their eligible round. */

@@ -456,3 +456,29 @@ replacement test needs the Linux-built libefs.a, absent in the macOS checkout.
 The unchanged native suite is running with features restored and the existing
 bounded 1,000 ms checkpoint setting; no default was changed. Full native
 acceptance remains pending.
+
+The operation-local native run with 1,000 ms checkpoints completed cleanly:
+**203/216 PASS, 13 FAIL, 0 SKIP, 0 NOTRUN**, 622.0 seconds including cleanup.
+All failures are the directory/name/concurrent append/repeated-write deadlines
+listed in `native-covered-1000ms.txt`; it is not native acceptance.
+
+A follow-up separates pure fresh read control from the pump's off-lock
+durability tail. It only answers an empty probe from the known same-term,
+same-boot leader when its matched prefix and commit are already applied, in a
+stable configuration. Successful current-round replies can contribute read
+authority before normal queued replication bookkeeping. A trylock and empty
+inbox prerequisite preserve serialization and pending message order. New
+boots, terms, log bytes, uncertain prefixes, unapplied work, storage failures
+and joint configurations retain ordinary processing. No WAL/checkpoint barrier
+is removed. Opt-in batch counters record handled requests and early replies.
+The full Raft tests, including fresh rounds, parked apply and pending joint
+configuration, pass locally with address/undefined-behavior sanitizers. Host
+queue-order/trylock tests and admission fallback tests pass locally; Linux
+full-unit and native validation are pending. The next live cycle restores the
+original 10 ms checkpoint default, to isolate this fix from tuning.
+
+The complete Linux `make test` passed for the read-control candidate with the
+Mac service normally drained, including asynchronous sender/admission, durable
+Raft disk, crash recovery, query corruption/fault and host checkpoint gates.
+The candidate was shipped to all three storage nodes and the gateway. No
+benchmark source or harness was changed. Installed native validation follows.

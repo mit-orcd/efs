@@ -325,6 +325,7 @@ test: all
 	python3 tests/test_create_admission_wait.py
 	python3 tests/test_lookup_replacement.py
 	python3 tests/test_readindex_operation.py
+	python3 tests/test_read_control_host.py
 	python3 tests/test_w23_samples.py
 	python3 tests/test_read_verify.py
 	python3 tests/test_opid_admission.py

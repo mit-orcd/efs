@@ -9315,6 +9315,35 @@ void server_raft_host_stop(void)
     free(h);
 }
 
+/* The pump's off-lock durability tail need not park an independent fresh
+ * read probe. Try the existing mutex only; never wait or invert inbox order.
+ * Pending inbox work and all state-changing frames retain normal processing. */
+static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n)
+{
+    struct efs_raft_msg msg;
+    int handled=0;
+    if (n!=EFS_WIRE_RAFT_HDR_LEN ||
+        (p[0]!=EFS_RAFT_MSG_AE_REQ && p[0]!=EFS_RAFT_MSG_AE_REP) ||
+        efs_wire_raft_decode(p,n,&msg,NULL,0)!=EFS_OK ||
+        pthread_mutex_trylock(&h->mu)!=0)
+        return 0;
+    pthread_mutex_lock(&h->inbox_mu);
+    int pending=h->inbox_n;
+    pthread_mutex_unlock(&h->inbox_mu);
+    if (!pending) {
+        struct efs_raft *r=group_raft(h,msg.group);
+        handled=efs_raft_read_control(r,&msg);
+        if (handled==1) BO_COUNT(BO_READ_CONTROL_REQUEST);
+        if (handled==2) BO_COUNT(BO_READ_CONTROL_REPLY);
+        if (handled==2) {
+            host_publish_group(h,msg.group);
+            host_waiters_wake(h);
+        }
+    }
+    pthread_mutex_unlock(&h->mu);
+    return handled==1;
+}
+
 int server_raft_host_inbox(const uint8_t *payload, uint32_t plen,
                            struct efs_raft_flow_reply *feedback)
 {
@@ -9327,6 +9356,11 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen,
     if (!h->flow_enabled) feedback->status=3;
     if (!payload || plen < EFS_WIRE_RAFT_HDR_LEN) return EFS_ERR_PROTO;
     if (plen > HOST_FRAME_MAX) return EFS_ERR_INVAL;
+    if (host_read_control(h,payload,plen)) {
+        feedback->status=h->flow_enabled ? EFS_RAFT_FLOW_OK : 3;
+        /* No queued work consumes admission credits. */
+        return EFS_OK;
+    }
     if (h->flow_enabled) {
         if (!efs_raft_flow_frame(payload,plen) ||
             efs_raft_flow_rd32(payload+8)!=(unsigned)h->raft_id) return EFS_ERR_PROTO;
