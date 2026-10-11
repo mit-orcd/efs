@@ -890,3 +890,18 @@ close identity. The complete accompanying physical GC/hardlink/open-unlink
 checks also finish successfully and drain private stores normally.
 Evidence: close-cohort-cold-wire.txt. This models daemon crashes, not hardware
 power loss. Local sanitizers pass: close-cohort-local-sanitize.txt.
+
+Last-close candidate 98baa960 passes the complete Mac Linux make test with
+private temporary stores on data1, including architecture 5/5. Evidence:
+close-cohort-full-unit-data1.txt. Native rollout awaits the next client fix.
+
+Distinct local-directory file inodes advance by 4096 and keep the same low
+12 shard bits. FUSE's 64-slot OPEN/CLOSE, writeback and append/flush mutex
+tables indexed only those low bits, serializing unrelated same-shard files.
+The next candidate mixes the full inode for all three process-local tables;
+stored/wire identities and lock count remain unchanged. WB initialization
+also uses pthread_once instead of an unsynchronized ready flag. Production
+mutex tests cover 256 same-shard inodes across 241 shards, concurrent first
+initialization, 16,000 same-inode increments, same-file exclusion and distinct
+file progress while another stripe is held. Local ASAN/UBSAN passes. Existing
+lease ownership/retention tests pass locally; Mac Linux full gate is pending.

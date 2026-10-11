@@ -1972,7 +1972,7 @@ static void open_edge_init(void)
 static pthread_mutex_t *open_edge_mu(efs_ino_t ino)
 {
     pthread_once(&g_open_edge_once, open_edge_init);
-    return &g_open_edge_mu[ino % OPEN_EDGE_SHARDS];
+    return &g_open_edge_mu[efs_ino_lock_slot(ino, OPEN_EDGE_SHARDS)];
 }
 
 /* Inodes this client has actually locked. Last close otherwise sent
@@ -2673,21 +2673,16 @@ struct efs_wb_job {
  * across inodes while serializing within one. */
 #define EFS_WB_INO_STRIPES 64
 static pthread_mutex_t g_wb_ino_mu[EFS_WB_INO_STRIPES];
-static int g_wb_ino_mu_ready;
-static pthread_mutex_t g_wb_ino_init_mu = PTHREAD_MUTEX_INITIALIZER;
-
+static pthread_once_t g_wb_ino_once = PTHREAD_ONCE_INIT;
+static void wb_ino_init(void)
+{
+    for (int i = 0; i < EFS_WB_INO_STRIPES; i++)
+        pthread_mutex_init(&g_wb_ino_mu[i], NULL);
+}
 static pthread_mutex_t *efs_wb_ino_lock(efs_ino_t ino)
 {
-    if (!g_wb_ino_mu_ready) {
-        pthread_mutex_lock(&g_wb_ino_init_mu);
-        if (!g_wb_ino_mu_ready) {
-            for (int i = 0; i < EFS_WB_INO_STRIPES; i++)
-                pthread_mutex_init(&g_wb_ino_mu[i], NULL);
-            __atomic_store_n(&g_wb_ino_mu_ready, 1, __ATOMIC_RELEASE);
-        }
-        pthread_mutex_unlock(&g_wb_ino_init_mu);
-    }
-    return &g_wb_ino_mu[(uint64_t)ino % EFS_WB_INO_STRIPES];
+    pthread_once(&g_wb_ino_once, wb_ino_init);
+    return &g_wb_ino_mu[efs_ino_lock_slot(ino, EFS_WB_INO_STRIPES)];
 }
 
 static struct {
@@ -3208,7 +3203,7 @@ static void append_mu_init(void)
 static pthread_mutex_t *append_mu(efs_ino_t ino)
 {
     pthread_once(&g_append_mu_once, append_mu_init);
-    return &g_append_mu[(uint32_t)ino % APPEND_MU_N];
+    return &g_append_mu[efs_ino_lock_slot(ino, APPEND_MU_N)];
 }
 
 /* Close: flush and the REPORT that publishes it are one critical
