@@ -45,6 +45,7 @@ p.add_argument('--transport', choices=('tcp', 'rdma'), default='tcp',
 p.add_argument('--root', action='append', default=[])
 p.add_argument('--mount', type=Path, help='existing empty, unmounted path allowed by host FUSE policy')
 p.add_argument('--peer-mount', type=Path, help='existing empty, unmounted second policy-allowed mount')
+p.add_argument('--packing-clients',type=int,choices=(2,7),default=2,help='two or seven mounted clients for the isolated packing gate')
 p.add_argument('--mounted-packing-only', action='store_true', help='opt-in mounted tiny coalescing, mixed mutation, peer/cold hashes, POSIX and physical packed reclamation')
 p.add_argument('--posix', action='store_true')
 p.add_argument('--posix-jobs', type=int, default=4, help='parallel POSIX cases (default: 4); each case retains its own concurrent writers')
@@ -531,10 +532,32 @@ try:
         (tree/'tiny-2').unlink();del expected['tiny-2']
         for name,body in expected.items():assert (peer_mount/'mounted-pack'/name).read_bytes()==body,name
         failures=[]
+        if a.posix and a.packing_clients==7:
+            mounts=[mount,peer_mount]
+            for i in range(2,a.packing_clients):
+                target=work/('pack-client-'+str(i));target.mkdir()
+                log=open(work/('pack-client-'+str(i)+'.log'),'ab');handles.append(log)
+                proc=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(target),'-f'],env=env,stdout=log,stderr=log)
+                extra_clients.append((proc,target));mounts.append(target)
+                wait(lambda:os.path.ismount(target),'packing extra client '+str(i)+' mounted',40)
+            def concurrent_posix(item):
+                i,target=item
+                command=['python3',source/'tests/posix/posix_suite.py',target,'--suite','all','--jobs',str(a.posix_jobs),'--timeout-s','30',
+                         '--tag','pack-'+str(i),'--results',work/('posix-client-'+str(i)+'.tsv')]
+                with (work/('posix-client-'+str(i)+'.log')).open('wb') as output:
+                    result=subprocess.run(list(map(str,command)),env=env,stdout=output,stderr=subprocess.STDOUT,timeout=600)
+                print('packing concurrent POSIX client '+str(i)+' exit='+str(result.returncode),flush=True)
+                return {'gate':'posix-client-'+str(i),'returncode':result.returncode}
+            with concurrent.futures.ThreadPoolExecutor(max_workers=a.packing_clients) as pool:
+                failures.extend(r for r in pool.map(concurrent_posix,enumerate(mounts)) if r['returncode'])
+            for proc,target in extra_clients:
+                run([source/'scripts/client.sh','stop',target]);proc.wait(timeout=15)
+            extra_clients.clear()
         if a.posix:
             for label,command in (
                 ('posix',['python3',source/'tests/posix/posix_suite.py',mount,'--suite','all','--jobs',str(a.posix_jobs),'--timeout-s','30','--results',work/'posix.tsv']),
                 ('peer',['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,'--parent','pack-posix-peer','--results',work/'posix2.tsv'])):
+                if label=='posix' and a.packing_clients==7:continue
                 result=subprocess.run(list(map(str,command)),env=env,timeout=600)
                 if result.returncode:failures.append({'gate':label,'returncode':result.returncode})
         run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
@@ -548,7 +571,7 @@ try:
         wait(lambda:not packed_files(),'mounted packed physical fragments reclaimed',180)
         wait(drained,'mounted packing metadata queues drained',180)
         report={'cold_verified':True,'physical_packed_empty':True,'failures':failures,
-                'source_sha256':digest.hexdigest(),'mode':a.mode,'transport':a.transport}
+                'source_sha256':digest.hexdigest(),'clients':a.packing_clients,'mode':a.mode,'transport':a.transport}
         (work/'mounted-packing.json').write_text(json.dumps(report,indent=2))
         assert not failures,failures
         print('mounted packing '+a.mode+' PASS',flush=True)
