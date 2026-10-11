@@ -1,0 +1,93 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+Warning:
+Processed 55619 events and lost 34 chunks!
+
+Check IO/CPU overload!
+
+#
+# Total Lost Samples: 1603
+#
+# Samples: 41K of event 'cpu/cycles/P'
+# Event count (approx.): 116917698213
+#
+# Overhead  Command      Shared Object       Symbol                                         IPC   [IPC Coverage]
+# ........  ...........  ..................  .............................................  ....................
+#
+     6.36%  efsd         libc.so.6           [.] __memmove_avx512_unaligned_erms            -      -            
+     1.80%  efsd         efsd                [.] kv_mtab_pos                                -      -            
+     1.70%  efsd         [kernel.kallsyms]   [k] entry_SYSCALL_64                           -      -            
+     1.68%  efsd         libc.so.6           [.] __memset_avx512_unaligned_erms             -      -            
+     1.60%  efsd         libc.so.6           [.] __memcmp_evex_movbe                        -      -            
+     1.57%  efsd         [kernel.kallsyms]   [k] select_task_rq_fair                        -      -            
+     1.40%  efsd         efsd                [.] merge_scan                                 -      -            
+     1.34%  efsd         [vdso]              [.] 0x0000000000000a06                         -      -            
+     1.30%  efsd         [kernel.kallsyms]   [k] restore_fpregs_from_fpstate                -      -            
+            |          
+             --1.18%--switch_fpu_return
+                       |          
+                        --1.09%--arch_exit_to_user_mode_prepare.isra.0
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+
+     1.23%  efsd         [kernel.kallsyms]   [k] native_queued_spin_lock_slowpath           -      -            
+            |          
+             --1.13%--native_queued_spin_lock_slowpath
+                       |          
+                        --0.64%--_raw_spin_lock
+
+     1.23%  efsd         efsd                [.] efs_crc32                                  -      -            
+     1.21%  efsd         [kernel.kallsyms]   [k] futex_wake_mark                            -      -            
+            |          
+             --0.92%--__futex_unqueue
+                       |          
+                        --0.92%--futex_wake_mark
+                                  futex_wake
+                                  do_futex
+                                  __x64_sys_futex
+                                  x64_sys_call
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+
+     1.05%  efsd         efsd                [.] blake3_compress_in_place_avx512            -      -            
+     1.00%  efsd         libc.so.6           [.] pthread_mutex_unlock@@GLIBC_2.2.5          -      -            
+     0.85%  efsd         [kernel.kallsyms]   [k] perf_pmu_nop_void                          -      -            
+     0.83%  efsd         [kernel.kallsyms]   [k] __update_load_avg_cfs_rq                   -      -            
+     0.77%  efsd         [kernel.kallsyms]   [k] dequeue_entity                             -      -            
+     0.76%  efsd         efsd                [.] lookup                                     -      -            
+     0.75%  efsd         [kernel.kallsyms]   [k] native_read_msr                            -      -            
+            |
+            ---perf_ibs_stop
+               perf_ibs_del
+               event_sched_out
+               group_sched_out
+               __pmu_ctx_sched_out
+               ctx_sched_out
+               perf_event_context_sched_out
+               __perf_event_task_sched_out
+               prepare_task_switch
+               __schedule
+               schedule
+
+     0.67%  efsd         [kernel.kallsyms]   [k] __sched_balance_update_blocked_averages    -      -            
+     0.61%  efsd         [kernel.kallsyms]   [k] entry_SYSRETQ_unsafe_stack                 -      -            
+     0.61%  efsd         [kernel.kallsyms]   [k] _raw_spin_lock                             -      -            
+     0.60%  efsd         [kernel.kallsyms]   [k] syscall_return_via_sysret                  -      -            
+     0.60%  efsd         libc.so.6           [.] pthread_cond_signal@@GLIBC_2.3.2           -      -            
+     0.59%  efsd         [kernel.kallsyms]   [k] do_syscall_64                              -      -            
+     0.59%  efsd         libc.so.6           [.] pthread_mutex_lock@@GLIBC_2.2.5            -      -            
+     0.58%  efsd         [kernel.kallsyms]   [k] __update_load_avg_se                       -      -            
+     0.57%  efsd         [kernel.kallsyms]   [k] psi_group_change                           -      -            
+     0.57%  efsd         [kernel.kallsyms]   [k] read_tsc                                   -      -            
+     0.57%  efsd         [kernel.kallsyms]   [k] dequeue_task_fair                          -      -            
+     0.54%  efsd         [kernel.kallsyms]   [k] try_to_wake_up                             -      -            
+     0.53%  efsd         [kernel.kallsyms]   [k] __raw_spin_lock_irqsave                    -      -            
+     0.53%  efsd         [kernel.kallsyms]   [k] native_sched_clock                         -      -            
+     0.52%  efsd         efsd                [.] kv_seg_iter_next                           -      -            
+     0.52%  efsd         libc.so.6           [.] __syscall_cancel                           -      -            
+     0.50%  efsd         libc.so.6           [.] _int_malloc                                -      -            
+
+
+#
+# (Cannot load tips.txt file, please install perf!)
+#

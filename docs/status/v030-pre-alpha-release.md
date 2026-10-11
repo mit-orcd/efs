@@ -290,3 +290,37 @@ jobs16 or prove throughput improvement. The newer batch-integrated `f0bb0208`
 is separately staged with all source and linked documentation inputs verified;
 full merged normal/fault/sanitizer qualification is running, followed serially
 by direct/buffered seven-client jobs16 acceptance. Nothing is tagged or pushed.
+
+Protocol coordination also reserves transport IDs143/144 for ORCD's proposed
+read-only packed upload authority envelope; verified free and all owners
+notified. No envelope code is integrated or accepted. Current per-file authority,
+fresh group barriers and durable local storage/session/object guards remain
+mandatory. This reservation is independent of durable metadata command tags.
+
+### Latest batch-integrated qualification and jobs16 blocker
+
+`f0bb0208` passes full merged normal/fault Linux `all test` plus seven ASan/UBSan
+gates: client memory, rollup allocation, rollup budget, address parser,
+publication batch RPC, mounted packed batch ownership and packed GC budget.
+Post-native verification confirms all 1,305 staged source/linked-evidence inputs
+remain unchanged. [Exact native gates](../../results/measure/20261011-v030-merged-native/f0bb0208/acceptance-summary.json).
+
+The original higher-pressure seven-client/jobs16 gate reproduces the ORCD
+failure on AMD. All direct clients are 209 PASS/4 FAIL/1 SKIP/7 NOTRUN in
+44.5-45.5 seconds; private extra-client stop refuses live-worker mounts, so the
+later cold/GC gate is NOTRUN. Buffered has six failing clients and one passing
+client, but completes exact cold bytes, physical packed reclamation and queue
+drain before rejecting the client failures. Normal mount restoration passes.
+[Raw failed gates, individual cases and phase scope](../../results/measure/20261011-v030-seven-packing/f0bb0208/acceptance-summary.json).
+This is the open packing timeout blocker, distinct from the repaired jobs4
+physical GC backlog. It cannot be closed by native passes or lower pressure.
+
+A separate 35-second process-only diagnostic samples all four private daemons
+and seven FUSE clients. 41,174 samples, 1,603 lost (roughly 4%), limit precise
+comparisons; CPU samples show copying/KV work, synchronization and networking,
+not a proven wall-time cause. Reports and identities are retained in
+[diagnostic evidence](../../results/measure/20261011-v030-packing-profile/f0bb0208/capture-identities.json);
+raw perf data remains on AMD. An unchanged-code quiet receiver-feedback-ON
+jobs16 comparison is running; its direct gate also fails. Defaults, original
+case deadlines, authority checks and durable barriers remain unchanged.
+The independent review of the batch remains pending; release promotion is blocked.

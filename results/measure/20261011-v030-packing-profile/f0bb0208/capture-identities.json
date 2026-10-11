@@ -1,0 +1,18 @@
+{
+  "source": "f0bb0208",
+  "pids": [
+    "1285272",
+    "1285309",
+    "1285347",
+    "1285396",
+    "1285459",
+    "1285480",
+    "1285627",
+    "1285643",
+    "1285659",
+    "1285675",
+    "1285691"
+  ],
+  "suites": 7,
+  "scope": "instrumented direct seven clients jobs16, no acceptance claim"
+}

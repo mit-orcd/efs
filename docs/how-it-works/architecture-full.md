@@ -1490,7 +1490,10 @@ and cold-byte checks pass both modes, but physical packed GC exceeds 180s.
 Scheduler repair `6146f264` and typed FUSE read-error repair pass complete merged
 normal/fault native, sanitizers and both-mode seven-client/jobs4 acceptance at
 `bbb84e41`, including zero remaining packed-object rows and restored mounts.
-The newer batch-integrated `f0bb0208` is under full merged qualification.
+The newer batch-integrated `f0bb0208` passes full merged normal/fault native and
+seven sanitizer gates, but reproduces the jobs16 packing timeout in both modes.
+Individual failed cases, phase limits and the bounded profile are indexed in the
+release ledger; repaired jobs4 GC is separate from this open blocker.
 Bounded transport batching is integrated, with its merged qualification pending.
 ORCD packing timeouts remain
 a release blocker. Small-file packing and code-review correctness have priority. Branch checkpoints

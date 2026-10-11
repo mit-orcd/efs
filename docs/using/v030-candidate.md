@@ -63,7 +63,8 @@ Seven-client AMD direct and buffered runs at the production-identical
 accepted on AMD at `bbb84e41`: complete merged normal/fault native and sanitizer
 gates pass, and seven-client/jobs4 physical GC passes within the unchanged
 deadline in both I/O modes. The newer batch-integrated `f0bb0208` has separate
-full merged and seven-client/jobs16 qualification in progress.
+full merged normal/fault native and seven sanitizer passes. Seven-client/jobs16
+packing still fails in both modes, matching the ORCD blocker.
 
 Four loopback daemons on one AMD host are functional evidence, not proof of
 independent hardware failure resilience. Current fixed2+1 data and three-voter

@@ -1,0 +1,21 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+Warning:
+Processed 55619 events and lost 34 chunks!
+
+Check IO/CPU overload!
+
+#
+# Total Lost Samples: 1603
+#
+# Samples: 41K of event 'cpu/cycles/P'
+# Event count (approx.): 116917698213
+#
+# Overhead  Command  Symbol  IPC   [IPC Coverage]
+# ........  .......  ......  ....................
+#
+
+
+#
+# (Cannot load tips.txt file, please install perf!)
+#
