@@ -1,0 +1,1 @@
+objects=3435 active=3435 reclaiming=0 retired=0 pending=0 live=4648 released=1080 cancelled=0 inodes=8375 linked=8375 orphan=0 lease=1571 streams=0

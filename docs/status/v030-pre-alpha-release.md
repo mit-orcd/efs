@@ -232,8 +232,8 @@ acknowledged cold hashes pass. Both fail physical packed reclamation's original
 180-second deadline; normal mounts are restored successfully. This is a release
 blocker, separate from ORCD directory/query timeouts, which AMD did not reproduce.
 
-Offline copies of stopped direct metadata contain 425 and 1,479 packed objects
-on the two metadata groups, all RECLAIMING, with zero LIVE/PENDING references,
+Offline copies of stopped direct metadata contain 425 and 1,479 packed-object
+rows on n1 and n2, all RECLAIMING, with zero LIVE/PENDING references,
 zero orphan rows and zero upload-stream rows. No original stores were opened
 for mutation by this diagnostic. The packed pass omitted its full-page and
 elapsed-budget signal from the GC backlog scheduler. The candidate now includes
@@ -340,7 +340,10 @@ is separate from the reproduced modern-peer jobs16 timeout and does not close it
 
 The quiet feedback-ON jobs16 direct run also fails. Buffered's final physical
 wait fails with legitimate retained namespace: stopped metadata copies show
-5,168 ACTIVE objects, 6,978 LIVE references and 12,557 linked inode rows, zero
-RECLAIMING objects and zero PENDING references. Deleting these live packs would
+n1 has 1,733 ACTIVE object rows, 2,330 LIVE reference rows and 4,182 linked
+inode rows; n2 has 3,435 ACTIVE object rows, 4,648 LIVE reference rows and
+8,375 linked inode rows. Both have zero RECLAIMING/PENDING rows. Replica
+samples overlap (n2 hosts both groups); summing them is not a unique-object
+or logical-file count. Deleting these live packs would
 be wrong. This is not a recurrence of the repaired RECLAIMING backlog; the
 failed high-pressure test left linked files. Normal mounts are restored.
