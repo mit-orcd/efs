@@ -1,5 +1,12 @@
 # Project status — current work and index
 
+Production tiny-file packing is the first ORCD priority on `devel-orcd`: see
+[W95/P4.1 plan and allocation baseline](orcd-tiny-packing-20261011.md). The
+408× calculation is for 512-byte payloads in separate full-sized fragments;
+production packing and measured savings remain open.
+[W108 owner-name rendering](w108-owner-name-display-20261011.md) is retained
+in the ORCD queue after the packing priority.
+
 [Architecture](../how-it-works/architecture.md) · [Current handoff](in-flight.md) ·
 [Decisions](decisions.md) · [Work-item details](../backlog/work-items.md) ·
 [Operations](../operations/operations.md) · [Archive](../archive/README.md)
