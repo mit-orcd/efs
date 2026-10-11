@@ -79,6 +79,18 @@ int efs_publication_ack_next(const struct efs_publication_ack_queue *q,
     *out=e->request;
     return EFS_OK;
 }
+int efs_publication_ack_rejected(const struct efs_publication_ack_queue *q,
+    uint64_t sequence,int *verdict)
+{
+    if(!q || !sequence || !verdict)return EFS_ERR_INVAL;
+    for(uint32_t i=0;i<q->count;i++) {
+        const struct efs_publication_ack_entry *e=&q->entries[(q->head+i)%EFS_META_PUBLICATION_MAX_RECEIPTS];
+        if(e->request.id.seq!=sequence)continue;
+        if(e->consumed_state!=EFS_PUBLICATION_REJECTED)return EFS_ERR_BUSY;
+        *verdict=e->consumed_verdict;return EFS_OK;
+    }
+    return EFS_ERR_NOT_FOUND;
+}
 int efs_publication_ack_complete(struct efs_publication_ack_queue *q,
     uint64_t sequence, const struct efs_msg_publication_reply *reply)
 {

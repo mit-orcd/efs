@@ -13,6 +13,7 @@ struct efs_client g_client;
 static unsigned sends[3],publications[2],loads[2],retirements[2],released;
 static unsigned commands,upload_retired;
 static int admit_fail,put_fail,publication_fail,load_fail,retire_fail,upload_fail;
+static int terminal_reject,rejection_proven;static struct efs_publication_ack_queue queues[2];
 static uint32_t current_fi;static uint8_t digest[EFS_HASH_SIZE];static int have_digest;
 static uint64_t pack_now(void){return 1000000000;}
 static __thread uint64_t deadline;
@@ -51,7 +52,10 @@ int efs_dcache_finish_publication(efs_ino_t ino,uint64_t g,uint32_t ci,uint64_t 
  assert(sends[0] && sends[1]>=2 && sends[2]);return 0;
 }
 int efs_client_publication_writeback(struct efs_publication_ack_queue *q,efs_ino_t ino,uint64_t g,uint32_t ci,uint64_t obj,uint64_t seq,uint64_t size){
- (void)q;assert(g==3&&!ci&&obj&&seq&&size==512);unsigned i=ino==101?0:1;publications[i]++;
+ assert(g==3&&!ci&&obj&&seq&&size==512);unsigned i=ino==101?0:1;publications[i]++;
+ if(terminal_reject){assert(q==&queues[i]);q->count=1;q->entries[0].request.id.seq=seq;
+  q->entries[0].consumed_state=rejection_proven?EFS_PUBLICATION_REJECTED:0;
+  q->entries[0].consumed_verdict=EFS_ERR_STALE;return EFS_ERR_STALE;}
  if(i==1 && publication_fail){publication_fail=0;return EFS_ERR_NET;}return 0;
 }
 int efs_client_pull_chunks_range(efs_ino_t ino,uint32_t a,uint32_t b){
@@ -60,7 +64,7 @@ int efs_client_pull_chunks_range(efs_ino_t ino,uint32_t a,uint32_t b){
 }
 void efs_dcache_drop(efs_ino_t ino,uint32_t ci){assert((ino==101||ino==103)&&!ci);}
 int efs_client_publication_retire(struct efs_publication_ack_queue *q){
- unsigned i=(unsigned)(uintptr_t)q-1;assert(i<2);retirements[i]++;
+ unsigned i=q==&queues[0]?0:1;assert(q==&queues[i]);retirements[i]++;
  if(i==1&&retire_fail){retire_fail=0;return EFS_ERR_NET;}return 0;
 }
 int efs_client_publication_ack_free(struct efs_publication_ack_queue *q){assert(q);__atomic_fetch_add(&released,1,__ATOMIC_RELAXED);return 0;}
@@ -76,7 +80,7 @@ int main(void){
   assert(!efs_pack_cohort_offer(&p.cohort,&r,1+i,pack_now()));
   p.writers[i].plan=(struct efs_writer_plan){.ino=r.ino,.generation=3,.cache_sequence=1+i};
   p.writers[i].object=r.record_generation;p.writers[i].len=512;
-  p.writers[i].acks=(struct efs_publication_ack_queue *)(uintptr_t)(i+1);
+  p.writers[i].acks=&queues[i];
  }
  static struct pack_retirement retirement;pack_groups[0]=&p;pack_retirements[0]=&retirement;pack_ack_credits=2;
  assert(!pack_flush_group(0,0)&&!commands); /* partial cohort waits only its bound */
@@ -100,6 +104,15 @@ int main(void){
  assert(sends[0]==1&&sends[1]==2&&sends[2]==1); /* no re-PUT after publication */
  assert(publications[0]==1&&publications[1]==2 && loads[0]==1&&loads[1]==2);
  assert(retirements[0]==1&&retirements[1]==2);
+ /* A transport/session STALE without exact consumed evidence retains packing.
+  * A proven terminal rejection hands off only to the still-owned ordinary
+  * dirty cache; it never loads/drops data or discards the rejected ACK. */
+ memset(p.writers,0,sizeof(p.writers));p.writers[0].plan=(struct efs_writer_plan){.ino=101,.generation=3,.cache_sequence=91};
+ p.writers[0].object=23;p.writers[0].len=512;p.writers[0].put_bound=1;p.writers[0].acks=&queues[0];
+ terminal_reject=1;unsigned before_loads=loads[0];
+ assert(pack_publish_record(&p,0)==EFS_ERR_STALE&&!p.writers[0].done);
+ rejection_proven=1;assert(!pack_publish_record(&p,0)&&p.writers[0].done);
+ assert(!p.writers[0].published&&!p.writers[0].loaded&&loads[0]==before_loads&&p.writers[0].acks==&queues[0]);
  puts("mounted pack retry: bounded partial cohort, immutable lost-ACK retry, per-record receipt/load retention, bounded deferred retirement and no re-PUT after publication PASS");
 }
 '''
