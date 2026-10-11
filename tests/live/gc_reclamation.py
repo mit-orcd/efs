@@ -716,6 +716,21 @@ try:
         finally:
             record.update(gc_drain_wall_s=time.monotonic()-drain_start,gc_drain_deadline_s=180)
             (work/'tiny-sustained.json').write_text(json.dumps(record,indent=2))
+        if a.tiny_overload:
+            # Pressure must recover without an operator clearing a sticky state.
+            recovery = mount/'overload-recovery'
+            body = hashlib.sha256(b'overload-recovered').digest()*1024
+            with recovery.open('wb') as stream:
+                assert stream.write(body)==len(body)
+                stream.flush();os.fsync(stream.fileno())
+            unmount();stop(crash=True);start();mount_client()
+            assert recovery.read_bytes()==body
+            recovery.unlink()
+            wait(lambda:drained() and all(not any(path.is_file() for path in
+                 (root/'data/exports/1').glob('**/*')) for root in data_roots),
+                 'post-pressure cold write and physical deletion drained',180)
+            record['post_pressure_cold_write_verified']=True
+            (work/'tiny-sustained.json').write_text(json.dumps(record,indent=2))
         print(('overload acknowledged-byte recovery and physical reclamation PASS; refused I/O remains in verdict' if a.tiny_overload else 'sustained tiny/large warm generations, cold bytes and physical reclamation PASS'),flush=True)
         raise SystemExit(0)
     if a.tiny_churn:

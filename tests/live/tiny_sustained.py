@@ -27,6 +27,7 @@ def exercise(mount, pids, seconds, evidence, large_mib_s=0, capture_overload=Fal
     stop = threading.Event()
     samples = {}
     acknowledged = {}
+    tiny_closed = [0] * 8
     large_synced = [0] * 4
     errors = []
     lock = threading.Lock()
@@ -55,7 +56,9 @@ def exercise(mount, pids, seconds, evidence, large_mib_s=0, capture_overload=Fal
                     before = time.monotonic_ns(); os.close(fd)
                     measure('close', (time.monotonic_ns()-before)/1000)
                 if capture_overload:
-                    with lock: acknowledged[path.name] = [worker, generation]
+                    with lock:
+                        acknowledged[path.name] = [worker, generation]
+                        tiny_closed[worker] += 1
             # Every acknowledged generation is byte-checked before retirement.
             for slot in range(slots):
                 path = folder / f'tiny-{worker}-{slot}'
@@ -117,7 +120,9 @@ def exercise(mount, pids, seconds, evidence, large_mib_s=0, capture_overload=Fal
                         if not capture_overload: raise future.exception()
                         stop.set()
                 if stop.is_set(): break
-                process_samples.append({'seconds': time.monotonic()-start, 'processes': process_snapshot()})
+                process_samples.append({'seconds': time.monotonic()-start, 'processes': process_snapshot(),
+                                        'tiny_closed_by_worker':list(tiny_closed),
+                                        'large_synced_writes_by_worker':list(large_synced)})
                 with lock:
                     counts = {str(k): {n: len(v) for n,v in s.items()} for k,s in samples.items()}
                 record = {'elapsed_s': time.monotonic()-start, 'window_counts': counts,
