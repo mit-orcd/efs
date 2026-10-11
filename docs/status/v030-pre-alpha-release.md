@@ -27,11 +27,11 @@ integrated explicitly; moving branch tips are not test identities.
 | Owner / branch | Submitted checkpoint | Integration state | Acceptance limits |
 | --- | --- | --- | --- |
 | AMD / devel-amd | `19f7efb3` | merged in `eff8d05a` | W94 CREATE/adoption closed; normal/fault native and both-mode full lifecycle pass. W97 repeated pressure comparisons continue; feedback stays opt-in. |
-| ORCD / devel-orcd | code `a48076c4`, evidence `8d07b45a` | code merged in `ea5f5dc4`; deployed evidence integrated | Full native and packed private lifecycle evidence; mounted concurrent POSIX times out. New pinned-stats gate, retest and matched performance/allocation acceptance pending. |
-| Intel / devel-intel | `5f03ec76` (tested C source `3d69edb4`) | merged in `22056d9b` | Both-host native and complete direct/buffered private fixtures pass; supplemental fault matrix, remaining canonical/cold gates and retained-data deployment still pending. Production remains `7bde5f43`. |
-| Review / devel-code-review | reports `1b0c6b7c`, allocator fix `a8b2de20` | merged in `5e381545` | Reproduced use-after-free fixed; focused merged regression passes. Capacity accounting/admission and profiling stop-after-reap fixes pending; full merged/Linux/live acceptance required. |
+| ORCD / devel-orcd | code `79551691`, evidence `8d07b45a` | base merged in `ea5f5dc4`; exact-rejection repair in `8a7fd9be` | Full native and packed private lifecycle evidence; mounted concurrent POSIX times out. Pinned-stats, cold/shared-GC pass on ORCD; concurrent retest still times out. Later parallel-retirement candidate remains unaccepted. |
+| Intel / devel-intel | `5f03ec76` plus fixture corrections through `5abf8e7b` (C source `3d69edb4`) | base merged in `22056d9b`; corrected fixtures integrated | Both-host native and complete direct/buffered private fixtures pass; supplemental fault matrix, remaining canonical/cold gates and retained-data deployment still pending. Production remains `7bde5f43`. |
+| Review / devel-code-review | reports `1b0c6b7c`, fixes through `3ac828cd` | base merged in `5e381545`; further repairs in `9260d8a1` and `9acea823` | Reproduced use-after-free fixed; focused merged regression passes. Capacity accounting, recorder reap and incoming-chunk re-dirty fixes included; private find/flush/walker cleanup included. Full merged/Linux/live acceptance required. |
 | NUC / devel-nuc | revised `ba73f304` | merged in `5cbe0ce4` | APPEND_CATCHUP tag52; focused merged gates pass. New-tag native rebuild, live/fault/cold/20k and measured W97 acceptance pending. Production remains `f52cd2dd-nuc`; preserved writer must finish before restart. |
-| Mac / devel-mac | `b2c01fa0` | pending semantic conflict review; attempted merge aborted without losing branch work | Request-local authority masks and combined registration overlap newer NUC/Intel admission and APPEND completion. Preserve both contracts, then rerun gates. Concurrent CREATE timing still open. |
+| Mac / devel-mac | `b2c01fa0` | reconciled in `93bb30de`; complete-server compile corrections in `29b33f80` | Request-local authority masks and combined registration retained alongside ordered NUC/Intel reservation guards, tag52 completion and Mac prune/close cohorts. Tag53 experiment excluded. Owner review and merged gates pending. Concurrent CREATE timing still open. |
 
 Submitted checkpoints are implementation inputs, not release certification.
 Some are already contained by another branch; Git ancestry and source diffs
@@ -136,3 +136,25 @@ because the fresh local worktree has no built libefs.a; retain that setup
 failure and rerun after the Linux build. It establishes no production defect
 or pass. The [detached ancestry audit](../../results/measure/20261011-v030-release-integration/detached-ancestry.json)
 records exact worktree commits and tracked-change counts.
+
+## AMD merged qualification — October 11
+
+The initial `9acea823` fault build caught a duplicated namespace wrapper and
+two missing APPEND cleanup contexts. `29b33f80` repairs complete-server
+compilation; focused authority/ordered PREPARE tests pass. Its full suite then
+caught missing LOOKUP test dependencies for speculative pair reads. `063bc8c4`
+updates that regression, including stale hint and BUSY fallback assertions.
+The next full run reached report-pressure and found a stale session-proof
+helper extraction. The regression now covers the actual request-local bitmap
+helper, foreign-group fresh reads and mutable epoch/state; combined
+REGISTER_ESTABLISH business/storage verdict coverage is also included. These
+are retained failed gate verdicts, not release acceptance.
+
+AMD builds use isolated `/data1/efs/release-v030-20261011`; normal stores and
+installed binaries remain intact. Preceding W97 comparisons and service
+restoration exited0 before release builds began. A new private
+`--mounted-packing-only --posix` gate explicitly enables packing and commands,
+requires physical packed fragments, verifies peer/cold bytes through overwrite,
+growth/truncate/unlink, runs core/extras and peer POSIX, and requires physical
+packed reclamation. It preserves failed POSIX verdicts while collecting the
+independent cold/GC checks. Its live verdict remains pending.

@@ -45,6 +45,7 @@ p.add_argument('--transport', choices=('tcp', 'rdma'), default='tcp',
 p.add_argument('--root', action='append', default=[])
 p.add_argument('--mount', type=Path, help='existing empty, unmounted path allowed by host FUSE policy')
 p.add_argument('--peer-mount', type=Path, help='existing empty, unmounted second policy-allowed mount')
+p.add_argument('--mounted-packing-only', action='store_true', help='opt-in mounted tiny coalescing, mixed mutation, peer/cold hashes, POSIX and physical packed reclamation')
 p.add_argument('--posix', action='store_true')
 p.add_argument('--posix-jobs', type=int, default=4, help='parallel POSIX cases (default: 4); each case retains its own concurrent writers')
 p.add_argument('--storage-session-fence-fault',action='store_true',help='private certificate fsync EIO: revocation must remain incomplete, then recover and survive cold restart; requires --guarded-leases')
@@ -197,6 +198,7 @@ if a.replication_pressure:
     run_preload=work/'raft-slow-sync.so'
     subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-shared','-fPIC',source/'tests/live/raft_slow_sync.c','-ldl','-o',run_preload],check=True)
     env.update(LD_PRELOAD=str(run_preload),EFS_TEST_RAFT_SLOW_FILE=str(work/'raft-slow-armed'))
+if a.mounted_packing_only:env.update(EFS_PACKED_WRITES='1',EFS_COMMANDS='1',EFS_COMMANDS_SERVER='1')
 if a.efs_commands_only:env.update(EFS_COMMANDS='1',EFS_COMMANDS_SERVER='1',EFS_QUERY_TEST_PORT=str(a.port))
 if a.storage_session_fence_fault:
     assert a.guarded_leases and not (a.put_barrier_fault or a.kv_wal_persistence_only or a.compactor_pressure), 'certificate fault must own its preload'
@@ -499,6 +501,58 @@ try:
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.mounted_packing_only:
+        peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
+        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+        wait(lambda:os.path.ismount(peer_mount),'packing peer mounted',40)
+        tree=mount/'mounted-pack';tree.mkdir()
+        expected={}
+        def tiny_file(i):
+            name='tiny-'+str(i);body=hashlib.sha256(name.encode()).digest()*16
+            with (tree/name).open('xb',buffering=0) as fd:
+                assert fd.write(body)==len(body);os.fsync(fd.fileno())
+            return name,body
+        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+            expected=dict(pool.map(tiny_file,range(64)))
+        def packed_files():
+            return [x for root in data_roots for x in (root/'data/packs-v1/1').rglob('*') if x.is_file() and not x.name.endswith('.sum')]
+        packed=packed_files();assert packed,'opt-in mounted writes produced no physical packed fragments'
+        (work/'mounted-pack-before.json').write_text(json.dumps({'files':len(expected),'logical_bytes':sum(map(len,expected.values())),
+            'physical_files':len(packed),'physical_bytes':sum(x.stat().st_size for x in packed)},indent=2))
+        for name,body in expected.items():assert (peer_mount/'mounted-pack'/name).read_bytes()==body,name
+        # Transition real packed bases through ordinary overwrite, growth and
+        # truncate; unrelated neighbors must retain their exact bytes.
+        path=tree/'tiny-0';body=b'ordinary-growth:'+(bytes(range(256))*1024)
+        with path.open('r+b',buffering=0) as fd:assert fd.write(body)==len(body);os.fsync(fd.fileno())
+        expected['tiny-0']=body
+        path=tree/'tiny-1'
+        with path.open('r+b',buffering=0) as fd:fd.truncate(19);os.fsync(fd.fileno())
+        expected['tiny-1']=expected['tiny-1'][:19]
+        (tree/'tiny-2').unlink();del expected['tiny-2']
+        for name,body in expected.items():assert (peer_mount/'mounted-pack'/name).read_bytes()==body,name
+        failures=[]
+        if a.posix:
+            for label,command in (
+                ('posix',['python3',source/'tests/posix/posix_suite.py',mount,'--suite','all','--jobs',str(a.posix_jobs),'--timeout-s','30','--results',work/'posix.tsv']),
+                ('peer',['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,'--parent','pack-posix-peer','--results',work/'posix2.tsv'])):
+                result=subprocess.run(list(map(str,command)),env=env,timeout=600)
+                if result.returncode:failures.append({'gate':label,'returncode':result.returncode})
+        run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
+        unmount();stop(crash=True);start();mount_client()
+        for name,body in expected.items():assert (mount/'mounted-pack'/name).read_bytes()==body,name
+        assert not (mount/'mounted-pack'/'tiny-2').exists()
+        print('mounted packed/ordinary mutations and acknowledged cold hashes PASS',flush=True)
+        shutil.rmtree(mount/'mounted-pack')
+        # Only this isolated fixture owns these objects. Last-reference GC
+        # must delete physical objects as well as retire metadata queues.
+        wait(lambda:not packed_files(),'mounted packed physical fragments reclaimed',180)
+        wait(drained,'mounted packing metadata queues drained',180)
+        report={'cold_verified':True,'physical_packed_empty':True,'failures':failures,
+                'source_sha256':digest.hexdigest(),'mode':a.mode,'transport':a.transport}
+        (work/'mounted-packing.json').write_text(json.dumps(report,indent=2))
+        assert not failures,failures
+        print('mounted packing '+a.mode+' PASS',flush=True)
+        raise SystemExit(0)
     if a.efs_commands_only:
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
         peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
