@@ -9,7 +9,7 @@ def analyze(path):
  opener=gzip.open if str(path).endswith('.gz') else open
  with opener(path,'rt') as source:
   for line in source:
-   if 'LOST' in line:lost+=1
+   if re.search(r'\b(?:PERF_RECORD_LOST|lost\s+\d+\s+(?:events|chunks))\b',line,re.I):lost+=1
    m=row.search(line)
    if not m:continue
    stamp,kind,major,minor,flags,sector,length=m.groups();stamp=float(stamp)
@@ -37,6 +37,7 @@ def analyze(path):
    p99_ms=latencies[min(n-1,int(.99*n))],max_ms=latencies[-1])
  return dict(path=str(path),counters=dict(counters),error_completions=errors,lost_record_lines=lost,
   event_span_s=max(duration)-min(duration) if duration else 0,by_issued_rwbs=stats,
+  usable_for_latency=bool(stats) and lost==0 and errors==0 and counters['negative_pairs']==0,
   limits='Physical issue-to-completion, not submission queue latency or NAND-only time. Sector/length FIFO pairs omit overlapping indistinguishable keys; unmatched edges and partial completions are reported. Trace windows are instrumented controls, not untraced speed acceptance.')
 def main():
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('root',type=Path);a=p.parse_args()
