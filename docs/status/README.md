@@ -70,8 +70,8 @@ unimplemented; unavailable/refusal tests are not lifecycle acceptance.
 Broader flush/PUT-ticket integration remains W72/W86/W88; no activation is implied.
 
 [AMD W94/W97 lifecycle and replication-feedback acceptance](amd-feedback-integration-20261011.md)
-is in progress: actual Linux async and two-mode full lifecycle/POSIX/cold gates
-with feedback on, followed by pressure/recovery and repeated comparisons.
+records passed actual Linux async and two-mode full lifecycle/POSIX/fault/cold
+gates with feedback on; pressure/recovery and repeated comparisons are running.
 Slow-lane control/read-probe starvation is reproduced and repaired (`4ff779d0`);
 actual CREATE-owner allocation, deterministic adoption/competing-OPEN and
 slow-follower barrier regressions pass. Corrected full native/fault and direct

@@ -1545,8 +1545,8 @@ unimplemented; unavailable/refusal tests are not lifecycle acceptance.
 Broader flush/PUT-ticket integration remains W72/W86/W88; no activation is implied.
 
 [AMD W94/W97 lifecycle and replication-feedback acceptance](../status/amd-feedback-integration-20261011.md)
-is in progress: actual Linux async and two-mode full lifecycle/POSIX/cold gates
-with feedback on, followed by pressure/recovery and repeated comparisons.
+records passed actual Linux async and two-mode full lifecycle/POSIX/fault/cold
+gates with feedback on; pressure/recovery and repeated comparisons are running.
 Slow-lane control/read-probe starvation is reproduced and repaired (`4ff779d0`);
 actual CREATE-owner allocation, deterministic adoption/competing-OPEN and
 slow-follower barrier regressions pass. Corrected full native/fault and direct
@@ -6896,8 +6896,9 @@ gates pass without refusals, with 58.09/53.98-s physical drain and post-pressure
 cold writes; full admission-enabled 216/67 functional compatibility and
 exact-artifact retained-service deployment/two-client audit pass. The bounded AMD
 unpaced admission gate is closed. AMD-only admission/20-ms idle defaults are
-explicit, with commands disabled and all normal stores retained. W94 integration,
-W97 receiver-feedback and W99 capacity-domain policy remain open independently;
+explicit, with commands disabled and all normal stores retained. W94
+CREATE/adoption is closed; broader W72/W86/W88 integration, W97
+receiver-feedback and W99 capacity-domain policy remain open independently;
 NUC persistence attribution is [W111](#w111).
 [Indexed follow-up](../status/amd-overload-admission-20261011.md).
 

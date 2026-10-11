@@ -1,14 +1,15 @@
 # W94/W97 AMD lifecycle and replication-feedback acceptance
 
-Status: in progress on `devel-amd`; normal AMD stores are retained. This starts
+Status: W94 CREATE/adoption closed; W97 acceptance in progress on `devel-amd`.
+Normal AMD stores are retained. This starts
 from admission closure `31337fee` and documentation scope split `70538988`.
 No W111 NUC work, RDMA, D25 activation, production packing or pushes.
 
-W94 already has measured combined CREATE adoption savings, sequenced lease
-edges, cold/reply-loss/negative verdicts and sustained AMD admission acceptance.
-Review remaining lifecycle gates against the current REPORT/session code;
-full production flush/PUT-ticket adoption remains independently staged. Do not
-close the whole work item by silently activating that staged data plane.
+W94 CREATE/adoption closes with measured savings, sequenced lease edges,
+cold/reply-loss/negative verdicts and sustained AMD admission acceptance,
+plus current REPORT/session and allocation/concurrency regressions. The user
+explicitly retains full production flush/PUT-ticket integration under
+W72/W86/W88; that staged data plane remains inactive.
 
 W97's receiver-feedback candidate is opt-in (`EFS_RAFT_FLOW=1`). Exercise the
 actual Linux async helpers and full direct/buffered TCP lifecycle/POSIX/peer,
@@ -66,7 +67,7 @@ feedback acceptance claim.
 
 The first fault-native invocation passed its code tests but failed documentation
 checks because the source snapshot omitted the new status leaf/generated
-updates. Those files are synchronized and the corrected gate is rerunning;
+updates. Those files were synchronized and the corrected gate passed;
 the original failure log is retained, not counted as a pass.
 
 ## Corrected native and deterministic race gates passed
@@ -84,9 +85,9 @@ then own descriptors under one lease; the first close retains ownership and
 the last close releases it once. The actual helper test passes locally and on
 AMD; it is not a live network-race or distributed-failover claim.
 
-Full direct feedback-enabled lifecycle/POSIX/peer, cold bytes and physical GC
-passes. Buffered and the subsequent real fault/pressure matrix are running;
-normal service feedback remains disabled pending the final verdicts.
+Full direct and buffered feedback-enabled lifecycle/POSIX/peer, cold bytes,
+physical GC and subsequent real fault matrices pass. Pressure comparisons
+are running; normal service feedback remains disabled pending final verdicts.
 
 ## W94 — CREATE/adoption closed by user-scoped decision
 
