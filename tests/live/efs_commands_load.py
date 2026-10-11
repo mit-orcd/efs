@@ -95,14 +95,28 @@ else:
 print(f'loaded publication PASS files={expected} logical_bytes={expected*256}',flush=True)
 
 converge=time.monotonic()-converge_start
-for worker,count in enumerate(counts):
+def verify_payload_folder(folder, worker, count):
     expected_hash=hashlib.sha256(bytes([worker])*256).digest()
     for index in range(count):
-        payload=(peer/fixture/str(worker)/str(index)).read_bytes()
+        payload=(folder/str(index)).read_bytes()
         assert len(payload)==256 and hashlib.sha256(payload).digest()==expected_hash,(worker,index)
+    return count
+
+
+def verify_payloads(peer, fixture, counts):
+    # Every file remains in the oracle. Four readers bound descriptor and RPC
+    # pressure while avoiding a serial round trip for each tiny file.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        tasks=[pool.submit(verify_payload_folder,peer/fixture/str(worker),worker,count)
+               for worker,count in enumerate(counts)]
+        return sum(task.result() for task in tasks)
+
+
+verified=verify_payloads(peer,fixture,counts)
+assert verified==expected,(verified,expected)
 values=sorted(value for worker in latencies for value in worker)
 def percentile(p):return values[min(len(values)-1,int((len(values)-1)*p))]
 print('writer latency and exact payload oracle '+json.dumps(dict(
     fixture=fixture,files=expected,create_p50_ms=statistics.median(values),
     create_p95_ms=percentile(.95),create_p99_ms=percentile(.99),
-    converge_seconds=converge,payloads_verified=expected),sort_keys=True),flush=True)
+    converge_seconds=converge,payloads_verified=verified),sort_keys=True),flush=True)
