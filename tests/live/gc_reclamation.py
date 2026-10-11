@@ -2150,8 +2150,8 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
         # original 145-ancestor refusal and both coordinator-death oracles.
         used={mount.stat().st_ino & 0xfff}
         if a.namespace_max_fault:
-            status=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port}'],capture_output=True,text=True).stdout
-            match=re.search(r'root=1 salt=(\d+)',status);assert match,status
+            placement_status=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port}'],capture_output=True,text=True).stdout
+            match=re.search(r'root=1 salt=(\d+)',placement_status);assert match,placement_status
             mkdir_salt=int(match.group(1))
         def selected_directory(parent,prefix,fresh):
             result=run([attrs_helper,'choose',str(parent.stat().st_ino),str(mkdir_salt),prefix,'fresh' if fresh else 'member'],input=' '.join(map(str,sorted(used))),capture_output=True,text=True).stdout.split()
