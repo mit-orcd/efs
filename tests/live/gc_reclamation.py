@@ -64,6 +64,7 @@ p.add_argument('--sync-write-fault',action='store_true',help='actual O_SYNC/O_DS
 p.add_argument('--sync-writes',action='store_true',help='O_SYNC/O_DSYNC publication before write replies, including queued append across lane groups')
 p.add_argument('--append-sync-boundary',action='store_true',help='append/fsync across lane groups, peer visibility and cold crash bytes')
 p.add_argument('--append-replay-race', action='store_true', help='32 identical concurrent APPEND RPCs allocate once')
+p.add_argument('--fresh-namespace',action='store_true',help='six first-mutation namespace operations on fresh cold mounts with no prior file OPEN')
 p.add_argument('--append-burst',type=int,default=0,help='100..20000 unique 4-KiB O_APPEND writes, final fsync, exact peer/cold blocks')
 p.add_argument('--append-audit', action='store_true', help='mixed append descriptions during physical GC, then exact cold records')
 p.add_argument('--integrity', action='store_true')
@@ -463,6 +464,37 @@ try:
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.fresh_namespace:
+        fresh=mount/'fresh-namespace';fresh.mkdir()
+        for name in ('unlink','rename','link'):
+            with (fresh/name).open('xb',buffering=0) as fd:
+                assert fd.write(b'fresh-owner:'+name.encode())==12+len(name)
+                os.fsync(fd.fileno())
+        (fresh/'rmdir').mkdir()
+        checks=[]
+        for action in ('unlink','rename','rmdir','mkdir','create','link'):
+            unmount();stop();start();mount_client()
+            # Read-only stat/LOOKUP can precede the mutation. A file OPEN
+            # must not silently bootstrap the global session in this gate.
+            target=fresh/action
+            started=time.monotonic()
+            if action=='unlink':target.unlink();assert not target.exists()
+            elif action=='rename':
+                target.rename(fresh/'renamed')
+                assert (fresh/'renamed').read_bytes()==b'fresh-owner:rename'
+            elif action=='rmdir':target.rmdir();assert not target.exists()
+            elif action=='mkdir':target.mkdir();assert target.is_dir()
+            elif action=='create':
+                with target.open('xb',buffering=0) as fd:
+                    assert fd.write(b'new-owner')==9;os.fsync(fd.fileno())
+                assert target.read_bytes()==b'new-owner'
+            else:
+                os.link(target,fresh/'linked');assert target.stat().st_nlink==2
+                assert (fresh/'linked').read_bytes()==b'fresh-owner:link'
+            checks.append(dict(first_mutation=action,elapsed_s=time.monotonic()-started,passed=True))
+            (work/'fresh-namespace.json').write_text(json.dumps(checks,indent=2))
+        shutil.rmtree(fresh);wait(drained,'fresh namespace cold first-mutation physical cleanup',180)
+        print('six cold mounts first CREATE/MKDIR/UNLINK/RMDIR/RENAME/LINK without prior OPEN PASS',flush=True)
     if a.peer_mkdir_race_only:
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
         peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
