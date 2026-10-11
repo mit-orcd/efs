@@ -2,6 +2,11 @@
 """Read-only final restored runtime and prior preserved-payload checks."""
 import hashlib,json,os,socket,subprocess,time
 from pathlib import Path
+def runtime_kind(proc, installed):
+ # Wrappers may use relative argv[0]; the mapped executable is authority.
+ image=Path(os.readlink(proc/'exe'))
+ return image.name if image in (installed/'efsd',installed/'efs-fuse') else None
+
 base=Path('/data1/efs/devel-nuc-20261011');deadline=time.monotonic()+7200
 while True:
  loaded=base/'loaded-append-v2'
@@ -21,12 +26,12 @@ for proc in Path('/proc').iterdir():
  if not proc.name.isdigit():continue
  try:
   cmd=proc.joinpath('cmdline').read_bytes().split(b'\0')
-  if cmd and cmd[0].decode() in (str(installed/'efsd'),str(installed/'efs-fuse')):
-   kind=Path(cmd[0].decode()).name
+  kind=runtime_kind(proc,installed)
+  if kind:
    digest=hashlib.sha256(proc.joinpath('exe').read_bytes()).hexdigest()
    assert digest==images[kind]['sha256']
    processes.append(dict(pid=int(proc.name),kind=kind,cmdline=[v.decode() for v in cmd if v],sha256=digest))
- except (FileNotFoundError,ProcessLookupError):continue
+ except (FileNotFoundError,ProcessLookupError,PermissionError):continue
 assert sum(r['kind']=='efsd' for r in processes)==4
 assert sum(r['kind']=='efs-fuse' for r in processes)==2
 for port in range(17432,17436):
