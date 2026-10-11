@@ -406,3 +406,30 @@ Remaining blockers: retained orphan directory 4091 prevents query publication;
 native ReadIndex/durability latency still causes deadline failures; the dirty-
 directory fallback bound remains. Mac evidence does not close ORCD hardware
 IB/RDMA or representative million-row liveness gates.
+
+### Resumed Mac ReadIndex/durability investigation
+
+Work resumed at the user's request, on a persistent `devel-mac` checkout under
+`/Users/mike/Documents/Codex/2026-10-05/how-x20/work/devel-mac`. Mac VMs are
+owned foreground Tart sessions; detached launcher children stopped when their
+exec session ended. The clean deployment full unit gate passed before service
+startup. Installed stores were preserved, using buffered/TCP and 10G quotas.
+
+The default checkpoint cadence reproduces **138/216 PASS, 15 FAIL, 63 NOTRUN**
+in 249.9 seconds; the unchanged local baseline is 216/216 in 9.7 seconds.
+The seed's 135-second counter window records 20,672 pump cycles: KV release
+averages 2,341 microseconds across all cycles (including empty cycles), and
+applied-marker persistence averages 1,717 microseconds. Aggregate sequential
+pump time is about 48.4 / 35.5 seconds respectively. ReadIndex's cumulative
+leader average is 41,164 microseconds. This motivates the existing bounded
+100 ms checkpoint experiment, without altering WAL barriers or the 1,024-entry
+replay-tail cap; its native gate is pending. No timing conclusion is inferred
+from zero-work cycles alone. Captures now exclude old process incarnations in
+the append-only log; earlier pre-run read-profile entries may be historical.
+
+A demonstrated scheduling bug was also repaired: a failed query build's retry
+interval was anchored to its start, so a build lasting longer than two seconds
+could immediately launch another full rebuild. Failure backoff now starts at
+completion. Successful start-to-start coalescing, pending-age reporting and
+all authority/durability gates remain unchanged. Scheduler boundary checks
+pass; installed validation of this separate change is pending.
