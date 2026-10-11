@@ -1,0 +1,27 @@
+[
+  {
+    "action": "stat",
+    "result": {
+      "size": 9437184,
+      "ino": 81921
+    }
+  },
+  {
+    "action": "unlink",
+    "errno": 2,
+    "error": "[Errno 2] No such file or directory: '/data1/efs/mnt/sentinel'"
+  },
+  {
+    "action": "read",
+    "result": {
+      "sha256": "7dfadec8819e0284f3efe29e2a44a9558fca4c715034f753bbbc74f41cd71824"
+    }
+  },
+  {
+    "action": "stat-after",
+    "result": {
+      "size": 9437184,
+      "ino": 81921
+    }
+  }
+]

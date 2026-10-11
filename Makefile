@@ -262,6 +262,7 @@ test-stop-control:
 	python3 tests/test_client_stop.py
 	python3 tests/test_client_ready.py
 	python3 tests/test_stop_dirty_drain.py
+	python3 tests/test_fixture_interrupt.py
 	python3 tests/test_client_processes.py
 
 test-wb-runtime:
@@ -293,6 +294,7 @@ test-client-stop:
 	python3 tests/test_client_stop.py
 	python3 tests/test_client_ready.py
 	python3 tests/test_stop_dirty_drain.py
+	python3 tests/test_fixture_interrupt.py
 	python3 tests/test_client_processes.py
 
 all: $(LIB) efsd efs-fuse efs-bench efs-mgmt efs-query tests

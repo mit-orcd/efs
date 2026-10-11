@@ -63,7 +63,7 @@ This is a partial optimization, not the agreed single-proposal batching of all
 caught-up reservations. W52 remains open regardless of the timing result.
 A matched control keeps both admission fixes and replaces only the REPORT
 completion loop with its original synchronous body. Private buffered 400-record
-ABBA and 20,000-record control/candidate tests require unique 4 KiB records,
+ABBA and budget-permitting 20,000-record control/candidate tests require unique 4 KiB records,
 zero final fsync result, exact peer and cold bytes, and physical/quota cleanup.
 Client REPORT timeouts are unchanged. Warm write timing excludes final close
 and subsequent verification; final fsync is recorded separately.
@@ -76,7 +76,7 @@ inventory remains tested; duplicate-root and two-root quota comparisons use one
 fixed 100 GiB/60 GiB available snapshot with exact expected quotas. Assertions
 are not relaxed and production capacity behavior is unchanged.
 
-## Validation ledger (in progress)
+## Validation ledger (drive and loaded gates in progress)
 
 | Build / run | Result |
 | --- | --- |
@@ -85,10 +85,90 @@ are not relaxed and production capacity behavior is unchanged.
 | `fb7ca893-nuc` native suite | Capacity test statvfs race; preserved |
 | `2669064e-nuc` native suite | Pass |
 | `2669064e-nuc` six-cold-mutation/full suites | Fail at first mkdir: missing owner refusal stalls apply; preserved |
-| `108afa3e-nuc` native and full suites | Running |
-| Matched REPORT controls and exact 20,000-record gates | Waiting for corrected full-suite acceptance |
+| `108afa3e-nuc` native suite | Pass |
+| `108afa3e-nuc` full direct | Pass: POSIX 216/216, peer 67/67, six cold first mutations, selected sync/append/recovery/GC gates |
+| `108afa3e-nuc` full buffered | Pass: POSIX 216/216, peer 67/67, six cold first mutations, selected sync/append/recovery/GC gates |
+| Matched REPORT 400-record ABBA controls | All four pass exact fsync/peer/cold/reclamation; no sustained write gain established |
+| Exact 20,000-record gates | Both stopped through normal client drain after slowdown; incomplete, not acceptance |
 
 Raw evidence is retained under
 [the session evidence directory](../../results/measure/20261011-devel-nuc/).
 Failed runs are evidence, not acceptance. Further results and final restored
 runtime checks will be added before this session finishes.
+
+## W97: physical request discrimination (in progress)
+
+Read-only kernel policy context: SATA `sda` reports write-through, no FUA,
+`mq-deadline`; NVMe `nvme0n1` reports write-back, FUA, scheduler `none`,
+firmware `2B2QEXE7`, default NVMe power-state latency parameter 100000 µs.
+These are observed Linux settings, not verified firmware persistence promises,
+and no device policy is changed. In particular, zero SATA flush counters alone
+are not evidence of omitted application durability.
+
+Four separate 240-second three-writer written-ring controls run in
+NVMe/SATA/SATA/NVMe order, after append comparisons restore the regular service.
+Each prepares and persists all extents before timing, then verifies all current
+blocks after reopen. Physical issue/completion trace windows near the beginning
+and end distinguish request flags and completion latency from whole fdatasync
+latency. No EFS daemon runs during these controls. Instrumentation can affect
+timing; this is not another untraced throughput acceptance matrix or a NAND-only
+latency measurement. Ambiguous sector/length pairs and unmatched trace edges
+are counted rather than silently treated as exact request identities.
+
+## W87: added loaded two-mount gate (queued)
+
+The new optional loaded gate combines persistent and per-record-close APPEND
+descriptions from both mounts with physical GC of 128 files. Each round expects
+800 unique records with no omissions/duplicates, equal peer bytes, exact byte
+order after a full cold restart, and empty physical/quota state after cleanup.
+The harness supports 1–20 rounds; this bounded session queues one per storage
+mode only if enough time remains. This does not identify the original W87 cause
+or replace the requirement for repeated broader-load acceptance.
+
+## Long-control slowdown and controlled stop
+
+All four 400-record buffered ABBA cells pass exact fsync/peer/cold/reclamation
+gates. Write seconds are 7.851 / 7.546 / 8.084 / 7.970 (control / candidate /
+candidate / control); final fsync seconds are .080 / .060 / .057 / .076.
+The write-time spread does not establish a sustained speed gain.
+
+The 20,000-record control declines from 858 records in 30 seconds to about
+2 records/s after five minutes. The candidate also declines: 860 in the first
+30 seconds, then 1194 / 1466 / 1700 / 1897 / 2050 / 2192 / 2343 / 2483 at
+roughly 30-second intervals. Its late rate is about 5 records/s. Both were
+stopped rather than spending the rest of this bounded session on an incomplete
+gate. CPU stays low; node 2 repeatedly waits tens of milliseconds for group 2
+application. A separate 30-second CPU record (1122 samples, no loss) and
+15-second wall-time strace are retained. The wall summary adds all 24 threads,
+so its 272-second total is not elapsed benchmark time: recvfrom 40.5%, futex
+38.2%, poll 10.0%, nanosleep 9.9%, fdatasync 0.59%. This does not establish a
+hardware ceiling. The long control was profiled; it is not an untraced matched
+throughput acceptance result.
+
+SIGINT to the Python driver was ignored because the background shell passed
+that disposition through exec. Future fixture code explicitly restores an
+interrupt handler and gives SIGTERM a Python cleanup path. Both actual runs
+were stopped through the owned client's normal `--stop` quiesce/drain control
+(exit 0, no force-discard). New writes and close then receive BUSY; each driver
+exits 1 and retains its incomplete store and diagnostic. No full 20k acceptance
+or matched 20k throughput comparison is claimed. W52 remains open.
+
+## Test and measurement safeguards
+
+`0355432a` restores SIGINT handling inherited as ignored from a background shell
+and routes SIGTERM through Python cleanup for future private fixtures. The
+actual handler extraction regression passes locally and on NUC, and fails on
+the old ignored-SIGINT source. This does not retroactively change the interrupted
+20k runs, which used normal client quiesce instead.
+
+`ab4ae8c8` rejects an errored physical completion even when its matching issue
+lies outside the trace window. Reducer regressions cover exact 2 ms pairing,
+ambiguous overlapping keys, sample loss, unmatched error completions and partial
+completion edges. Reports include the fraction of issues with unambiguous
+paired completions: selected-pair distributions are not the whole device's
+latency distribution. Perf data remains on NUC with exact checksums; text is
+compressed into the checked-in evidence.
+
+The candidate engine's C/H sources still match this branch after the later
+harness-only commits. The later Makefile difference adds only the fixture
+interrupt regression to two test targets; compile/link flags are unchanged.

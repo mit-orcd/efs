@@ -15,8 +15,9 @@ in the ORCD queue after the packing priority.
 
 [Current two-hour integration and repair ledger](devel-nuc-integration-20261011.md)
 records the captured all-branch merge, W72 fresh-mount admission fixes, a bounded
-W52 prepare-pipeline experiment and their retained failures. Corrected full
-native/direct/buffered suites and matched append controls are in progress.
+W52 prepare-pipeline experiment and their retained failures. Corrected native
+and both full live modes pass (POSIX216/216, peer67/67 per mode). Matched
+append and drive observations are in progress.
 
 ## NUC closure session — October 10–11
 

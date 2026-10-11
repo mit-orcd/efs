@@ -2340,7 +2340,9 @@ the quick ones).** Each row is a queue item; the W number is binding.
 PREPARE operations share the existing bounded pipeline after owner/inode guards.
 Every applied verdict is checked before COMMIT; refusal cleanup remains durable.
 The actual-loop regression fails on the old synchronous loop. Matched controls
-and the exact 20,000-record peer/cold/fsync gate are pending. The accepted
+pass all four 400-record ABBA peer/cold/fsync cells, with no sustained write
+gain established. Both 20,000-record runs decline and are cleanly stopped as
+incomplete. The exact long gate remains open. The accepted
 single-proposal completion of all caught-up reservations remains open; this
 smaller pipeline is not that implementation.
 [Integration ledger](../status/devel-nuc-integration-20261011.md).
@@ -2935,7 +2937,8 @@ masking the real missing-owner verdict, causing a false ENOENT on the first
 cold-mount mutation. Preserve REGISTER/ESTABLISH apply verdicts and advance Raft
 for business refusals while retrying IO/NOMEM. Actual-dispatcher and apply-policy
 regressions fail on their respective old sources. Six cold-mount first-mutation
-and full direct/buffered acceptance are in progress; the intermediate failed
+paths pass in each mode; full direct/buffered each pass POSIX216/216 and
+peer67/67 plus the selected sync/append/cold/fault/GC gates. Intermediate failed
 fixtures are retained. This does not close production publication integration.
 [Integration ledger](../status/devel-nuc-integration-20261011.md).
 

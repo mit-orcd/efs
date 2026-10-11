@@ -1,0 +1,7 @@
+test: /tmp/efs-append-prepares-j0rdrjyp/test.c:218: report_finish: Assertion `ops==&host_append_reserve_ops&&!c->nrefs&&c->leading==(owner?2:1)' failed.
+Traceback (most recent call last):
+  File "/data1/efs/devel-nuc-20261011/src/tests/test_report_append_old_source.py", line 192, in <module>
+    subprocess.run([str(binary)],check=True,timeout=30)
+  File "/usr/lib64/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/tmp/efs-append-prepares-j0rdrjyp/test']' died with <Signals.SIGABRT: 6>.
