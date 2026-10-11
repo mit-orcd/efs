@@ -439,3 +439,61 @@ measure/batch same-group publication without weakening per-file CAS/receipts.
 Otherwise data padding savings may coexist with increased metadata latency.
 Sweep 1–5 ms cohort deadlines against actual close arrivals rather than assuming
 sixteen workers always produce a full sixteen-record cohort.
+
+## Next implementation checkpoint
+
+Connect the cohort primitive to the existing retained writer/publication state,
+rather than introducing a second completion contract. Only eligible fresh,
+whole-file snapshots at chunk zero and at most 4,096 bytes enter a cohort;
+existing files, append, oversized writes and unsupported backends use the
+ordinary path. Allocate the cohort's storage and publication ownership before
+accepting its bytes. A group-local scheduler seals on capacity, deadline or an
+explicit close/fsync/O_SYNC/shutdown request, including a singleton. Keep each
+captured FileID, epoch, writer snapshot sequence and publication identity pinned
+while admission, PUT or publication is uncertain. Retry the same body and IDs;
+consume only the exact durable per-record verdict, and retire upload permits in
+order after all records have terminal states. A failed cohort must not silently
+fall back with replacement identities after any ambiguous PUT/publication.
+
+Give the packed decoder a caller-supplied scratch buffer allocated through the
+existing bounded client body pool. Its maximum scratch is three fragments plus
+one reconstructed body, or 2.5 times segment geometry. This avoids an uncharged
+per-read malloc escaping the aggregate budget. Test pressure refusal before
+fetch, unchanged output, released scratch on every outcome and preservation of
+accepted writer bytes/cache pins. Coalescer copies and wire/EC staging must also
+be included in that aggregate budget.
+
+Implement shared GC as a durable coordinator over the existing ledger phases.
+Only RECLAIMING objects with no LIVE or PENDING slots may start deletion.
+Obtain actual durable generation-specific fence ACKs from every captured member,
+replicate those ACKs, then delete exact placement/checksum/geometry identities
+and replicate actual durable delete/absence ACKs. A missing member is not an
+ACK. Retire the object only after all required proofs and the ordered upload
+floor are durable. For abandoned PENDING cohorts, prove completed authoritative
+session revocation and each local rejection floor before cancellation; elapsed
+time or transport loss cannot supply that proof. Replay the same captured
+membership and identities after coordinator crashes or leadership changes.
+
+Keep mounted writes disabled until peer capability/native ABI rollout and the
+scheduler/GC correctness gates pass. Then deploy matching committed binaries to
+all four servers and seven clients, run mixed packed/ordinary POSIX and peer
+fault gates, and use fresh benchmark siblings for alternating baseline/candidate
+runs. Measure cohort occupancy and deadline distribution, fragment bytes/count,
+metadata/WAL writes and p50/p95/p99 durable close latency as well as files/s.
+Packing can reduce fragment padding while CREATE, per-record ReadIndex or
+publication coordination still limits throughput; those costs need separate
+attribution and same-group batching.
+
+
+The concrete writer entry points are `efs_dcache_begin_publication`,
+`efs_dcache_publication_request_ticketed`, `efs_dcache_consume_publication` and
+`efs_dcache_flush_ino` in `src/client/write.c`. Select packed versus ordinary
+publication before `result_bound` freezes the token's identity/size/digest.
+Patching a previously admitted ordinary request into a packed request would
+change its immutable intent and must fail. Build a dedicated packed request
+from the same captured snapshot and its sealed reference, then reuse the
+existing exact receipt-consumption path. Release dcache shard locks before
+waiting for cohort flush/network progress; otherwise blocked close callers
+can prevent other writers from filling the cohort. Later writes remain owned
+in the existing post-publication state until the first packed receipt resolves,
+then promote through the ordinary path as required.

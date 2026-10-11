@@ -46,6 +46,9 @@ node IDs 1–4, their 172.16.223.57–60 addresses, port 19832, quota 1G,
 `--writers 0 --direct-io`, and join seed 172.16.223.57:19832. The private
 FUSE mount `/tmp/efs-packed-mount-20261011` was drained and unmounted after
 cold verification. The servers remain available for the next integration step.
+[Final process and listening-port check](final-runtime.txt) verifies the private
+servers run as erbmi1 and the separate live port remains available on all four
+nodes.
 
 The physical ratios exclude metadata/WAL/directory writes, obsolete ordinary
 objects and NAND amplification. The soak is a storage correctness gate, not a
