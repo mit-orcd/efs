@@ -421,6 +421,10 @@ test: all
 	python3 tests/test_query_snapshot_failover.py
 	python3 tests/test_query_callback_affinity.py
 	python3 tests/test_feature_poll_deadline.py
+	python3 tests/test_feature_discovery_status.py
+	python3 tests/test_close_inspector_scope.py
+	python3 tests/test_store_tls.py
+	python3 tests/test_report_session_admission.py
 	python3 tests/test_query_loaded_oracle.py
 	python3 tests/test_valgrind_verdict.py
 	python3 tests/test_txn_parts_bounds.py

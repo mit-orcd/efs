@@ -600,8 +600,10 @@ try:
         run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/close_step.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',inspector])
         time.sleep(12)
         unmount();stop()
-        retired=[run([inspector,'inspect',root/'mdraft/kv',str(inos[0])],capture_output=True,text=True).stdout for root in roots]
-        assert all('markers=0 ' in text and 'locks=0' in text for text in retired),retired
+        # Earlier phases have unrelated close obligations. Inspect every owned
+        # inode on every stopped replica; global backlog remains diagnostic.
+        retired=[run([inspector,'inspect',root/'mdraft/kv',str(ino)],capture_output=True,text=True).stdout for root in roots for ino in inos]
+        assert all(text.startswith('markers=0 reservations=0 ') and 'open=0 ' in text and 'locks=0 ' in text and 'receipts=0 ' in text for text in retired),retired
         records.append({'stage':'offline-close-obligations-retired','result':retired})
         start();mount_client()
         (work/'session-cleanup.json').write_text(json.dumps({'inos':inos,'records':records},indent=2))
