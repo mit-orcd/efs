@@ -5,15 +5,25 @@ CC = gcc
 # unwinding under --perf. Both are cheap at -O3.
 # Always tune for the build host (compile on the same arch you run on).
 # Build id: nodes refuse to cluster across different builds (see HELLO gate).
+# Deployment passes an already-verified source identity. Do not rescan its
+# filtered remote checkout (including large result artifacts) in that case.
+ifndef EFS_GIT_ID
 EFS_GIT_ID := $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
 ifneq ($(shell git status --porcelain 2>/dev/null | head -1),)
 EFS_GIT_ID := $(EFS_GIT_ID)-dirty
 endif
+endif
 # Human-facing version string (efs/version.h --version, startup logs, the
 # VERSION wire op). Informational only; EFS_BUILD_ID above stays the gate.
+ifndef EFS_GIT_DESCRIBE
 EFS_GIT_DESCRIBE := $(shell git describe --tags --always --dirty 2>/dev/null || echo unknown)
+endif
+ifndef EFS_GIT_BRANCH
 EFS_GIT_BRANCH   := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
+endif
+ifndef EFS_BUILD_TIME
 EFS_BUILD_TIME   := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+endif
 CFLAGS = -O3 -g -fno-omit-frame-pointer -march=native -mtune=native \
          -std=c99 -Wall -Wextra -D_GNU_SOURCE \
          -Wno-stringop-truncation -Wno-format-truncation \
