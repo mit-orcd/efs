@@ -104,3 +104,21 @@ The deployment completed in 25.30 seconds and startup/mount checks in 216.45 sec
 Intel1's direct private run reaches the second guarded-lease session admission, then receives explicit `EFS_ERR_BUSY` from ESTABLISH. It stops before the later POSIX tier; those cases are NOTRUN in that attempt. Commit `e9c395c7` retries the unchanged administrative request only on explicit BUSY within the original 60-second command budget. Hard errors, stale epochs and expiration still fail. Regression tests pass locally and on both Intel hosts. Full private reruns in both modes are queued after the current owned fixtures finish. The original failed aggregate remains recorded. All six real query gates passed on both hosts and modes, including exact count/byte convergence and every payload check using the bounded readers; the unnecessary idle query-repeat queues were retired.
 
 Three additional dated Intel repair notes (rename flag refusal, empty xattr names and creation inheritance) are archived after their named current POSIX contracts pass. [Named contract evidence](../../../results/measure/20261011-intel-devel-intel/intel-repair-contracts-7bde5f43.json) retains per-mode rows; these passes do not close the remaining full-suite failures.
+
+
+## Retained diagnostic/reboot checkpoint before resumed acceptance
+
+This snapshot describes its observation time. Resumed runs and configuration selection are recorded in the active acceptance ledger.
+
+## Historical candidate observations
+
+[Retained candidate history](../archive/status-20261011/intel-candidate-history-20261011.md) preserves the original failures, partial coverage, retry/inventory observations and cold recovery limits. These observations do not replace current production or final-candidate verdicts.
+
+
+The comparison harness initially read a daemon environment before exec and pre-created the query output directory. Both failed attempts are retained separately; corrected diagnostics read configuration after listening/exec and let the unchanged query script create its output. No test budget or workload is relaxed. Complete candidate acceptance remains pending.
+
+## Host reboot interruption — 16:12 UTC
+
+Both Intel hosts rebooted shortly before this checkpoint. Production daemons, mounted clients and the waiting/current private runners exited. The installed production source remains `7bde5f43`; its four daemons were relaunched with the existing TCP/direct, 400 GiB configuration. The restore completes at 16:14 UTC: all four daemons are ready, both opposite-host mounts are present, `.efs` is enabled and installed/live binary identity and four 400 GiB quotas pass. [Production recovery evidence](../../results/measure/20261011-intel-devel-intel/host-reboot-production-recovery.json) also verifies exact preserved sizes and SHA256 for 256 tiny-file samples per host. No candidate production rollout occurred.
+
+The diagnostic retained Intel1 eight completed rows (seven aggregate passes and one observer-only failure after the underlying query passed), and Intel2 six completed passing rows. Intel2 buffered third cohort passed cold reclamation but its query and fourth row lack terminal results; the corrected Intel1 observer rerun also lacks a terminal result. These host-interrupted attempts are not passes. The complete 110/30/84/2 matrix still awaits configuration selection and launch/resume.
