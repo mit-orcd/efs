@@ -4261,7 +4261,7 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
 }
 
 static int efs_fuse_mkdir_at(fuse_ino_t parent_ino, const char *name, mode_t mode,
-                             efs_ino_t *out_ino)
+                             efs_ino_t *out_ino, struct efs_inode *created)
 {
     struct efs_inode parent;
     int rc;
@@ -4282,8 +4282,8 @@ static int efs_fuse_mkdir_at(fuse_ino_t parent_ino, const char *name, mode_t mod
     gid_t gid;
     efs_create_credentials(&parent, &create_mode, &uid, &gid);
     efs_ino_t ino = 0;
-    int mk = efs_client_create_result(parent.ino, name, create_mode,
-                                      uid, gid, 0, &ino);
+    int mk = efs_client_create_result_inode(parent.ino, name, create_mode,
+                                      uid, gid, 0, &ino, created);
     /* A directory seen after refusal may belong to a competing creator.
      * Only the original RPC's proven success can satisfy this mkdir call. */
     if (mk != EFS_OK)
@@ -5755,6 +5755,7 @@ static void ll_mkdir_run(fuse_req_t req, fuse_ino_t parent, const char *name,
 {
     efs_ino_t new_ino = 0;
     struct fuse_entry_param e;
+    struct efs_inode created = {0};
     int rc;
     lookup_memo_mutation_begin();
     t_req = req;
@@ -5762,10 +5763,17 @@ static void ll_mkdir_run(fuse_req_t req, fuse_ino_t parent, const char *name,
     uint64_t deadline = stats_now_ms() + 30000;
     if (previous && previous < deadline) deadline = previous;
     efs_client_rpc_set_deadline_ms(deadline);
-    rc = efs_fuse_mkdir_at(parent, name, mode, &new_ino);
-    if (rc == 0)
-        rc = lookup_fill_committed((fuse_ino_t)new_ino, &e, "mkdir",
-                                   parent, name);
+    rc = efs_fuse_mkdir_at(parent, name, mode, &new_ino, &created);
+    if (rc == 0) {
+        /* CREATE already returned the authoritative committed row. As for
+         * regular CREATE, reply that exact identity and attributes rather
+         * than starting another GETATTR after success. Zero cache timeouts
+         * still require fresh authorization/attributes on later operations. */
+        if (created.ino != new_ino || !efs_mode_is_dir(created.mode))
+            rc = -EIO;
+        else
+            fill_entry_row((fuse_ino_t)new_ino, &e, &created);
+    }
     efs_client_rpc_set_deadline_ms(previous);
     lookup_memo_mutation_end();
     t_req = NULL;

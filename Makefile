@@ -441,6 +441,8 @@ test: all
 	python3 tests/test_report_session_admission.py
 	python3 tests/test_namespace_owner_once.py
 	python3 tests/test_gc_session_admission.py
+	python3 tests/test_partition_fence_verdict.py
+	python3 tests/test_mkdir_committed_reply.py
 	python3 tests/test_namespace_receipt_pending.py
 	python3 tests/test_query_loaded_oracle.py
 	python3 tests/test_valgrind_verdict.py
