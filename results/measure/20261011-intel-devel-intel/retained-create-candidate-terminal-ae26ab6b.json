@@ -1,0 +1,1475 @@
+{
+  "source_revision": "ae26ab6b",
+  "replacement_code_revision": "3d69edb4",
+  "utc": "2026-10-11T20:23:24.728704+00:00",
+  "accepted": false,
+  "deployed": false,
+  "scope": "Four 214/214 cores and both full-mode fixtures per host passed. Actual Intel2 APPEND cleanup failed; remaining gates NOTRUN on this obsolete source. All mandatory gates rerun on repaired source; no prior failures waived.",
+  "hosts": {
+    "intel1_efs": {
+      "main": {
+        "rows": [
+          {
+            "name": "prefault-build",
+            "exit": 0,
+            "seconds": 10.88
+          },
+          {
+            "name": "prefault-regression",
+            "exit": 0,
+            "seconds": 0.62
+          },
+          {
+            "name": "direct-prefault-create-live-retry",
+            "exit": 0,
+            "seconds": 65.51
+          },
+          {
+            "name": "buffered-prefault-create-live-retry",
+            "exit": 0,
+            "seconds": 65.46
+          },
+          {
+            "name": "build",
+            "exit": 0,
+            "seconds": 10.78
+          },
+          {
+            "name": "make-test",
+            "exit": 0,
+            "seconds": 135.43
+          },
+          {
+            "name": "standalone-test_alloc_value_guard",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_append_flush_budget",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_append_host_authority",
+            "exit": 0,
+            "seconds": 0.62
+          },
+          {
+            "name": "standalone-test_append_reserve_budget",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_append_sequence",
+            "exit": 0,
+            "seconds": 1.92
+          },
+          {
+            "name": "standalone-test_append_session_admission",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_append_session_host",
+            "exit": 0,
+            "seconds": 0.12
+          },
+          {
+            "name": "standalone-test_client_processes",
+            "exit": 0,
+            "seconds": 22.6
+          },
+          {
+            "name": "standalone-test_client_ready",
+            "exit": 0,
+            "seconds": 0.32
+          },
+          {
+            "name": "standalone-test_client_stop",
+            "exit": 0,
+            "seconds": 0.32
+          },
+          {
+            "name": "standalone-test_cluster_stop",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_commands_load_payloads",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_conn_checkout_budget",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_connect_deadline",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_create_errors",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_create_retry_ack",
+            "exit": 0,
+            "seconds": 1.22
+          },
+          {
+            "name": "standalone-test_create_retry_identity",
+            "exit": 0,
+            "seconds": 0.12
+          },
+          {
+            "name": "standalone-test_fence_read",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_fold_observation",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_fuse_workers",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_gate_rounds_cancel",
+            "exit": 0,
+            "seconds": 0.47
+          },
+          {
+            "name": "standalone-test_gc_verdict",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_get_pair_budget",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_get_pool_budget",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_get_pool_startup",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_getchunks_budget",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_inode_writer_view_budget",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_kv_wal_faults",
+            "exit": 0,
+            "seconds": 0.57
+          },
+          {
+            "name": "standalone-test_lane_bootstrap_host",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_lane_bootstrap_rpc",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_lane_writer_host",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_lane_writer_view_rpc",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_live_ticket_retry",
+            "exit": 0,
+            "seconds": 0.26
+          },
+          {
+            "name": "standalone-test_load_merge_race",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_lookup_memo",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_metadata_retry_budget",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_net_receive_deadline",
+            "exit": 0,
+            "seconds": 0.31
+          },
+          {
+            "name": "standalone-test_net_send_deadline",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_open_busy",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_open_lease",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_pull_deadline",
+            "exit": 0,
+            "seconds": 0.06
+          },
+          {
+            "name": "standalone-test_pull_group_boundary",
+            "exit": 0,
+            "seconds": 0.06
+          },
+          {
+            "name": "standalone-test_put_hint",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_put_pool_budget",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_put_reply_deadline",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_put_retry_budget",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_put_tcp_frame",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_put_window_deadline",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_query_unavailable",
+            "exit": 0,
+            "seconds": 0.06
+          },
+          {
+            "name": "standalone-test_rdma_reply_budget",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_read_ahead_boundary",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_readdir_reply_boundary",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_replay_fan_budget",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_report_activation",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_report_forward",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_report_frame_boundary",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_report_log_coverage",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_report_orphan",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_report_pressure",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_report_retry_budget",
+            "exit": 0,
+            "seconds": 0.06
+          },
+          {
+            "name": "standalone-test_report_session_apply",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_resolver_deadline",
+            "exit": 0,
+            "seconds": 0.42
+          },
+          {
+            "name": "standalone-test_session_read_proof",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_span_selection",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_stale_recovery",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_stop_dirty_drain",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_truncate_admission",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_truncate_prefix",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_unlink_verdict",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_wb_drain_budget",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_wb_fault",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_wb_runtime",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_wb_worker_budget",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_write_budget",
+            "exit": 0,
+            "seconds": 0.06
+          },
+          {
+            "name": "standalone-test_write_queue",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_writer_admission_rpc",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_writer_deadline",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_writer_fence_merge",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_writer_view_rpc",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "test_namespace_owner_once",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "test_report_session_admission",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "test_gc_session_admission",
+            "exit": 0,
+            "seconds": 0.06
+          },
+          {
+            "name": "test_partition_fence_verdict",
+            "exit": 0,
+            "seconds": 0.03
+          },
+          {
+            "name": "test_mkdir_committed_reply",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "test_session_read_proof",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "test_append_session_host",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "test_append_prepare_batch",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "direct-full-private-gc",
+            "exit": 0,
+            "seconds": 512.47
+          },
+          {
+            "name": "buffered-full-private-gc",
+            "exit": 0,
+            "seconds": null,
+            "recorded_by": "Actual owned child wait status after complete cleanup; paused original parent retired after failed supplemental APPEND gate."
+          }
+        ],
+        "retirement": {
+          "replacement": "append-cleanup-fix-pending",
+          "status": "SUPERSEDED_NOTRUN_REMAINDER",
+          "owned_pid": 1119824,
+          "actual_completed_child_exit": 0,
+          "active_fixture_children": [],
+          "reason": "Actual Intel2 session APPEND cleanup failure retained. Four full-mode fixtures passed; remaining normal gates required on repaired source. Independent supplemental diagnostics continue."
+        },
+        "selected_configuration": {
+          "source_revision": "ae26ab6b",
+          "profile": "bundle1000",
+          "environment": {
+            "EFS_RAFT_APPLIED_INTERVAL_MS": "1000",
+            "EFS_RAFT_BATCH_OVERLAP": "1",
+            "EFS_RAFT_BATCH_NOOP": "1"
+          },
+          "utc": "2026-10-11T19:24:08.877244+00:00",
+          "scope": "Fresh full qualification of repaired CREATE fault instrumentation; no preceding failed or missing test waived."
+        }
+      },
+      "supplemental": {
+        "rows": [
+          {
+            "name": "fault-build",
+            "exit": 0
+          },
+          {
+            "name": "fault-native",
+            "exit": 0
+          },
+          {
+            "name": "direct-create-live-retry",
+            "flags": [
+              "--create-live-retry"
+            ],
+            "exit": 0,
+            "seconds": 74.43,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-create-negative-replay",
+            "flags": [
+              "--create-negative-replay"
+            ],
+            "exit": 0,
+            "seconds": 66.77,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-unique-create",
+            "flags": [
+              "--unique-create"
+            ],
+            "exit": 0,
+            "seconds": 130.13,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-create-lease",
+            "flags": [
+              "--create-lease"
+            ],
+            "exit": 0,
+            "seconds": 69.18,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-fuse-reply-failure",
+            "flags": [
+              "--fuse-reply-failure"
+            ],
+            "exit": 0,
+            "seconds": 62.05,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-typed-writeback",
+            "flags": [
+              "--typed-writeback"
+            ],
+            "exit": 0,
+            "seconds": 87.31,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-deferred-close",
+            "flags": [
+              "--deferred-close"
+            ],
+            "exit": 0,
+            "seconds": 163.99,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-session-append",
+            "flags": [
+              "--session-append"
+            ],
+            "exit": 0,
+            "seconds": 87.01,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-sync-writes",
+            "flags": [
+              "--sync-writes",
+              "--append-sync-boundary"
+            ],
+            "exit": 0,
+            "seconds": 79.25,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-append-replay",
+            "flags": [
+              "--append-replay-race",
+              "--append-audit"
+            ],
+            "exit": 0,
+            "seconds": 169.16,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-namespace-cycles",
+            "flags": [
+              "--namespace",
+              "--namespace-cycles"
+            ],
+            "exit": 0,
+            "seconds": 79.49,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-namespace-max",
+            "flags": [
+              "--namespace-max"
+            ],
+            "exit": 0,
+            "seconds": 190.7,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-wal-tail-recovery",
+            "flags": [
+              "--wal-tail-recovery"
+            ],
+            "exit": 0,
+            "seconds": 77.04,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-dirty-stop-recovery",
+            "flags": [
+              "--stop-dirty-recovery"
+            ],
+            "exit": 0,
+            "seconds": 98.23,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-shutdown-mutations",
+            "flags": [
+              "--shutdown-mutations"
+            ],
+            "exit": 0,
+            "seconds": 248.53,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-opid-restart",
+            "exit": 0,
+            "flags": [
+              "--opid",
+              "--opid-restart"
+            ],
+            "seconds": null,
+            "cleanup_incomplete": false,
+            "actual_owned_child_exit": 0,
+            "recorded_by": "superseding source boundary"
+          }
+        ],
+        "retirement": {
+          "owned_pid": 1324425,
+          "status": "SUPERSEDED_NOTRUN_REMAINDER",
+          "replacement": "3d69edb4-full-qualification",
+          "actual_completed_gate": "direct-opid-restart",
+          "actual_owned_child_exit": 0,
+          "active_fixture_children": [],
+          "reason": "Earlier candidate has a retained real APPEND cleanup failure. All remaining implemented gates will run on repaired source; old unrun rows are NOTRUN and never contribute to acceptance."
+        },
+        "selected_configuration": {
+          "source_revision": "ae26ab6b",
+          "profile": "bundle1000",
+          "environment": {
+            "EFS_RAFT_APPLIED_INTERVAL_MS": "1000",
+            "EFS_RAFT_BATCH_OVERLAP": "1",
+            "EFS_RAFT_BATCH_NOOP": "1"
+          },
+          "utc": "2026-10-11T19:24:08.877244+00:00",
+          "scope": "Fresh full qualification of repaired CREATE fault instrumentation; no preceding failed or missing test waived."
+        }
+      },
+      "publication": {
+        "rows": [],
+        "retirement": {
+          "owned_pid": 1120099,
+          "status": "SUPERSEDED_NOTRUN_REMAINDER",
+          "replacement": "3d69edb4-full-qualification",
+          "actual_completed_gate": null,
+          "actual_owned_child_exit": null,
+          "active_fixture_children": [],
+          "reason": "Earlier candidate has a retained real APPEND cleanup failure. All remaining implemented gates will run on repaired source; old unrun rows are NOTRUN and never contribute to acceptance."
+        },
+        "selected_configuration": null
+      }
+    },
+    "intel2_efs": {
+      "main": {
+        "rows": [
+          {
+            "name": "prefault-build",
+            "exit": 0,
+            "seconds": 10.99
+          },
+          {
+            "name": "prefault-regression",
+            "exit": 0,
+            "seconds": 0.67
+          },
+          {
+            "name": "direct-prefault-create-live-retry",
+            "exit": 0,
+            "seconds": 67.27
+          },
+          {
+            "name": "buffered-prefault-create-live-retry",
+            "exit": 0,
+            "seconds": 66.37
+          },
+          {
+            "name": "build",
+            "exit": 0,
+            "seconds": 10.94
+          },
+          {
+            "name": "make-test",
+            "exit": 0,
+            "seconds": 136.43
+          },
+          {
+            "name": "standalone-test_alloc_value_guard",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_append_flush_budget",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_append_host_authority",
+            "exit": 0,
+            "seconds": 0.62
+          },
+          {
+            "name": "standalone-test_append_reserve_budget",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_append_sequence",
+            "exit": 0,
+            "seconds": 1.97
+          },
+          {
+            "name": "standalone-test_append_session_admission",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_append_session_host",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_client_processes",
+            "exit": 0,
+            "seconds": 22.57
+          },
+          {
+            "name": "standalone-test_client_ready",
+            "exit": 0,
+            "seconds": 0.32
+          },
+          {
+            "name": "standalone-test_client_stop",
+            "exit": 0,
+            "seconds": 0.32
+          },
+          {
+            "name": "standalone-test_cluster_stop",
+            "exit": 0,
+            "seconds": 0.21
+          },
+          {
+            "name": "standalone-test_commands_load_payloads",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_conn_checkout_budget",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_connect_deadline",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_create_errors",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_create_retry_ack",
+            "exit": 0,
+            "seconds": 1.22
+          },
+          {
+            "name": "standalone-test_create_retry_identity",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_fence_read",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_fold_observation",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_fuse_workers",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_gate_rounds_cancel",
+            "exit": 0,
+            "seconds": 0.47
+          },
+          {
+            "name": "standalone-test_gc_verdict",
+            "exit": 0,
+            "seconds": 0.12
+          },
+          {
+            "name": "standalone-test_get_pair_budget",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_get_pool_budget",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_get_pool_startup",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_getchunks_budget",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_inode_writer_view_budget",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_kv_wal_faults",
+            "exit": 0,
+            "seconds": 0.52
+          },
+          {
+            "name": "standalone-test_lane_bootstrap_host",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_lane_bootstrap_rpc",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_lane_writer_host",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_lane_writer_view_rpc",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_live_ticket_retry",
+            "exit": 0,
+            "seconds": 0.26
+          },
+          {
+            "name": "standalone-test_load_merge_race",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_lookup_memo",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_metadata_retry_budget",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_net_receive_deadline",
+            "exit": 0,
+            "seconds": 0.31
+          },
+          {
+            "name": "standalone-test_net_send_deadline",
+            "exit": 0,
+            "seconds": 0.21
+          },
+          {
+            "name": "standalone-test_open_busy",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_open_lease",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_pull_deadline",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_pull_group_boundary",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_put_hint",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_put_pool_budget",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_put_reply_deadline",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_put_retry_budget",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_put_tcp_frame",
+            "exit": 0,
+            "seconds": 0.06
+          },
+          {
+            "name": "standalone-test_put_window_deadline",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_query_unavailable",
+            "exit": 0,
+            "seconds": 0.06
+          },
+          {
+            "name": "standalone-test_rdma_reply_budget",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_read_ahead_boundary",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_readdir_reply_boundary",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_replay_fan_budget",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_report_activation",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_report_forward",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_report_frame_boundary",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_report_log_coverage",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_report_orphan",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_report_pressure",
+            "exit": 0,
+            "seconds": 0.21
+          },
+          {
+            "name": "standalone-test_report_retry_budget",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_report_session_apply",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_resolver_deadline",
+            "exit": 0,
+            "seconds": 0.42
+          },
+          {
+            "name": "standalone-test_session_read_proof",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_span_selection",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_stale_recovery",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_stop_dirty_drain",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_truncate_admission",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_truncate_prefix",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_unlink_verdict",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_wb_drain_budget",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_wb_fault",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_wb_runtime",
+            "exit": 0,
+            "seconds": 0.21
+          },
+          {
+            "name": "standalone-test_wb_worker_budget",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_write_budget",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_write_queue",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_writer_admission_rpc",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_writer_deadline",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "standalone-test_writer_fence_merge",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "standalone-test_writer_view_rpc",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "test_namespace_owner_once",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "test_report_session_admission",
+            "exit": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "test_gc_session_admission",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "test_partition_fence_verdict",
+            "exit": 0,
+            "seconds": 0.06
+          },
+          {
+            "name": "test_mkdir_committed_reply",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "test_session_read_proof",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "test_append_session_host",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "test_append_prepare_batch",
+            "exit": 0,
+            "seconds": 0.11
+          },
+          {
+            "name": "direct-full-private-gc",
+            "exit": 0,
+            "seconds": 532.41
+          },
+          {
+            "name": "buffered-full-private-gc",
+            "exit": 0,
+            "seconds": null,
+            "recorded_by": "Actual owned child wait status after complete cleanup; paused original parent retired after failed supplemental APPEND gate."
+          }
+        ],
+        "retirement": {
+          "replacement": "append-cleanup-fix-pending",
+          "status": "SUPERSEDED_NOTRUN_REMAINDER",
+          "owned_pid": 1233377,
+          "actual_completed_child_exit": 0,
+          "active_fixture_children": [],
+          "reason": "Actual Intel2 session APPEND cleanup failure retained. Four full-mode fixtures passed; remaining normal gates required on repaired source. Independent supplemental diagnostics continue."
+        },
+        "selected_configuration": {
+          "source_revision": "ae26ab6b",
+          "profile": "bundle1000",
+          "environment": {
+            "EFS_RAFT_APPLIED_INTERVAL_MS": "1000",
+            "EFS_RAFT_BATCH_OVERLAP": "1",
+            "EFS_RAFT_BATCH_NOOP": "1"
+          },
+          "utc": "2026-10-11T19:24:08.877244+00:00",
+          "scope": "Fresh full qualification of repaired CREATE fault instrumentation; no preceding failed or missing test waived."
+        }
+      },
+      "supplemental": {
+        "rows": [
+          {
+            "name": "fault-build",
+            "exit": 0
+          },
+          {
+            "name": "fault-native",
+            "exit": 0
+          },
+          {
+            "name": "direct-create-live-retry",
+            "flags": [
+              "--create-live-retry"
+            ],
+            "exit": 0,
+            "seconds": 65.37,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-create-negative-replay",
+            "flags": [
+              "--create-negative-replay"
+            ],
+            "exit": 0,
+            "seconds": 56.7,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-unique-create",
+            "flags": [
+              "--unique-create"
+            ],
+            "exit": 0,
+            "seconds": 129.48,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-create-lease",
+            "flags": [
+              "--create-lease"
+            ],
+            "exit": 0,
+            "seconds": 71.88,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-fuse-reply-failure",
+            "flags": [
+              "--fuse-reply-failure"
+            ],
+            "exit": 0,
+            "seconds": 60.5,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-typed-writeback",
+            "flags": [
+              "--typed-writeback"
+            ],
+            "exit": 0,
+            "seconds": 86.72,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-deferred-close",
+            "flags": [
+              "--deferred-close"
+            ],
+            "exit": 0,
+            "seconds": 156.1,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-session-append",
+            "flags": [
+              "--session-append"
+            ],
+            "exit": 1,
+            "seconds": 17.76,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-sync-writes",
+            "flags": [
+              "--sync-writes",
+              "--append-sync-boundary"
+            ],
+            "exit": 0,
+            "seconds": 78.34,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-append-replay",
+            "flags": [
+              "--append-replay-race",
+              "--append-audit"
+            ],
+            "exit": 0,
+            "seconds": 167.81,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-namespace-cycles",
+            "flags": [
+              "--namespace",
+              "--namespace-cycles"
+            ],
+            "exit": 0,
+            "seconds": 78.04,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-namespace-max",
+            "flags": [
+              "--namespace-max"
+            ],
+            "exit": 0,
+            "seconds": 197.22,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-wal-tail-recovery",
+            "flags": [
+              "--wal-tail-recovery"
+            ],
+            "exit": 0,
+            "seconds": 84.41,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-dirty-stop-recovery",
+            "flags": [
+              "--stop-dirty-recovery"
+            ],
+            "exit": 0,
+            "seconds": 102.1,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-shutdown-mutations",
+            "flags": [
+              "--shutdown-mutations"
+            ],
+            "exit": 0,
+            "seconds": 70.42,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-opid-restart",
+            "flags": [
+              "--opid",
+              "--opid-restart"
+            ],
+            "exit": 0,
+            "seconds": 254.04,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-opid-failover",
+            "flags": [
+              "--opid",
+              "--opid-failover"
+            ],
+            "exit": 0,
+            "seconds": 71.32,
+            "cleanup_incomplete": false
+          },
+          {
+            "name": "direct-applied-checkpoint",
+            "exit": 0,
+            "flags": [
+              "--applied-checkpoint-replay-only"
+            ],
+            "seconds": null,
+            "cleanup_incomplete": false,
+            "actual_owned_child_exit": 0,
+            "recorded_by": "superseding source boundary"
+          }
+        ],
+        "retirement": {
+          "owned_pid": 1437739,
+          "status": "SUPERSEDED_NOTRUN_REMAINDER",
+          "replacement": "3d69edb4-full-qualification",
+          "actual_completed_gate": "direct-applied-checkpoint",
+          "actual_owned_child_exit": 0,
+          "active_fixture_children": [],
+          "reason": "Earlier candidate has a retained real APPEND cleanup failure. All remaining implemented gates will run on repaired source; old unrun rows are NOTRUN and never contribute to acceptance."
+        },
+        "selected_configuration": {
+          "source_revision": "ae26ab6b",
+          "profile": "bundle1000",
+          "environment": {
+            "EFS_RAFT_APPLIED_INTERVAL_MS": "1000",
+            "EFS_RAFT_BATCH_OVERLAP": "1",
+            "EFS_RAFT_BATCH_NOOP": "1"
+          },
+          "utc": "2026-10-11T19:24:08.877244+00:00",
+          "scope": "Fresh full qualification of repaired CREATE fault instrumentation; no preceding failed or missing test waived."
+        }
+      },
+      "publication": {
+        "rows": [],
+        "retirement": {
+          "owned_pid": 1233637,
+          "status": "SUPERSEDED_NOTRUN_REMAINDER",
+          "replacement": "3d69edb4-full-qualification",
+          "actual_completed_gate": null,
+          "actual_owned_child_exit": null,
+          "active_fixture_children": [],
+          "reason": "Earlier candidate has a retained real APPEND cleanup failure. All remaining implemented gates will run on repaired source; old unrun rows are NOTRUN and never contribute to acceptance."
+        },
+        "selected_configuration": null
+      }
+    }
+  },
+  "four_core_checkpoint": {
+    "source_revision": "ae26ab6b",
+    "scope": "Fresh four POSIX cores only; full remaining peer/fault/independent/production acceptance still required.",
+    "hosts": {
+      "intel1_efs": {
+        "direct": {
+          "fixture": "/data1/efs/gc-direct-shqei9e_",
+          "cases": 214,
+          "PASS": 214,
+          "FAIL": 0,
+          "SKIP": 0,
+          "NOTRUN": 0,
+          "summary": [
+            "# summary pass=214 fail=0 skip=0 notrun=0 total=214 dur=77.6"
+          ]
+        },
+        "buffered": {
+          "fixture": "/data1/efs/gc-buffered-joh800a9",
+          "cases": 214,
+          "PASS": 214,
+          "FAIL": 0,
+          "SKIP": 0,
+          "NOTRUN": 0,
+          "summary": [
+            "# summary pass=214 fail=0 skip=0 notrun=0 total=214 dur=70.3"
+          ]
+        }
+      },
+      "intel2_efs": {
+        "direct": {
+          "fixture": "/data1/efs/gc-direct-e64e74us",
+          "cases": 214,
+          "PASS": 214,
+          "FAIL": 0,
+          "SKIP": 0,
+          "NOTRUN": 0,
+          "summary": [
+            "# summary pass=214 fail=0 skip=0 notrun=0 total=214 dur=74.5"
+          ]
+        },
+        "buffered": {
+          "fixture": "/data1/efs/gc-buffered-pmlmc49e",
+          "cases": 214,
+          "PASS": 214,
+          "FAIL": 0,
+          "SKIP": 0,
+          "NOTRUN": 0,
+          "summary": [
+            "# summary pass=214 fail=0 skip=0 notrun=0 total=214 dur=70.7"
+          ]
+        }
+      }
+    }
+  }
+}
