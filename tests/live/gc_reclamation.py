@@ -25,6 +25,15 @@ import tempfile
 from raft_tail import commands as raft_commands
 import time
 
+# Background shells can exec Python with SIGINT ignored. Restore a catchable
+# interrupt so private fixture shutdown still runs its finally cleanup.
+signal.signal(signal.SIGINT, signal.default_int_handler)
+
+def interrupt_fixture(signum, frame):
+    raise KeyboardInterrupt('private fixture interrupted by signal '+str(signum))
+
+signal.signal(signal.SIGTERM, interrupt_fixture)
+
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--peer-mkdir-race-only',action='store_true',help='64 competing peer mkdir races in an isolated cluster, then cold namespace verification')
 p.add_argument('--peer-open-contention-only',action='store_true',help='twenty concurrent append/OPEN races, full peer POSIX, exact cold bytes and physical cleanup only')
