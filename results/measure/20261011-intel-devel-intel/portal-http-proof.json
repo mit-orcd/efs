@@ -1,0 +1,99 @@
+{
+  "utc": "2026-10-11T12:36:27.974046+00:00",
+  "portal_source_sha256": "51e626cecf579618b724f06cd42b6e68f9dd3ebe2fb5803696ef7ca8f22d9060",
+  "config_sha256": "639d2833d9f9525f14daea4afa8da76e5ad4890abe8b899752f93f3bc8d3971e",
+  "scope": "Actual one poll cycle, ephemeral HTTP /api/cluster and / response. No running portal replaced. Real daemon/client probes alongside production and private tests.",
+  "hosts": [
+    {
+      "name": "intel1",
+      "up": true,
+      "load": "4.82 4.29 4.97",
+      "mem_total_mb": 15405,
+      "mem_used_mb": 9569,
+      "ncpu": 8
+    },
+    {
+      "name": "intel2",
+      "up": true,
+      "load": "4.02 4.80 5.44",
+      "mem_total_mb": 15411,
+      "mem_used_mb": 7833,
+      "ncpu": 8
+    }
+  ],
+  "nodes": {
+    "n1": {
+      "efsd": 1602115,
+      "efsfuse": null,
+      "modes": {
+        "server": {
+          "io": "direct",
+          "transport": "TCP",
+          "transport_hint": "TCP selected by the running process."
+        }
+      },
+      "vm": "up"
+    },
+    "n2": {
+      "efsd": 1602122,
+      "efsfuse": null,
+      "modes": {
+        "server": {
+          "io": "direct",
+          "transport": "TCP",
+          "transport_hint": "TCP selected by the running process."
+        }
+      },
+      "vm": "up"
+    },
+    "n3": {
+      "efsd": 1091919,
+      "efsfuse": null,
+      "modes": {
+        "server": {
+          "io": "direct",
+          "transport": "TCP",
+          "transport_hint": "TCP selected by the running process."
+        }
+      },
+      "vm": "up"
+    },
+    "n4": {
+      "efsd": 1091926,
+      "efsfuse": null,
+      "modes": {
+        "server": {
+          "io": "direct",
+          "transport": "TCP",
+          "transport_hint": "TCP selected by the running process."
+        }
+      },
+      "vm": "up"
+    },
+    "intel1-mnt": {
+      "efsd": null,
+      "efsfuse": 1603779,
+      "modes": {
+        "client": {
+          "transport": "TCP",
+          "transport_hint": "TCP selected by the running process."
+        }
+      },
+      "vm": "up"
+    },
+    "intel2-mnt": {
+      "efsd": null,
+      "efsfuse": 1093307,
+      "modes": {
+        "client": {
+          "transport": "TCP",
+          "transport_hint": "TCP selected by the running process."
+        }
+      },
+      "vm": "up"
+    }
+  },
+  "host_loop_present": true,
+  "cluster_revision": "386c7101fc30478c86ade4cb4b86e196d5120fcd",
+  "recorder_note": "Initial recorder named intel.conf; actual config is intel.env. Recording path corrected; no portal implementation change."
+}
