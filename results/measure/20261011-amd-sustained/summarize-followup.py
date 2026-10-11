@@ -4,7 +4,7 @@ import json,statistics
 from pathlib import Path
 root=Path(__file__).resolve().parent
 rows=[]
-for build,phase in [('fragments','live'),('fanout','live'),('fanout','long')]:
+for build,phase in [('fragments','live'),('fanout','live'),('fanout','long'),('yield20','live')]:
  base=root/'evidence'/build/phase
  for mode in ['direct','buffered']:
   verdict=base/f'{mode}.exit'
@@ -17,6 +17,7 @@ for build,phase in [('fragments','live'),('fanout','live'),('fanout','long')]:
     'physical_inventory_empty':False,'evidence':str(p.relative_to(root))})
    continue
   assert r['created']==r['warm_verified']
+  if all('read' in w for w in r['windows']): assert sum(w['counts']['read'] for w in r['windows'])==r['warm_verified']
   n=r['requested_seconds']//30;windows=[w for w in r['windows'] if w['window']<n];assert len(windows)==n
   rc=int(verdict.read_text());assert rc or (r.get('cold_verified') and r.get('physical_inventory_empty'))
   samples=r['process_samples'];first,last=samples[0],samples[-1]
@@ -27,6 +28,7 @@ for build,phase in [('fragments','live'),('fanout','live'),('fanout','long')]:
    'cold_recovery_wall_s':r.get('cold_recovery_wall_s'),'gc_drain_wall_s':r.get('gc_drain_wall_s'),
    'full_window_closes_s':sum(w['counts']['close'] for w in windows)/r['requested_seconds'],
    'mean_window_close_p99_us':statistics.mean(w['close']['p99_us'] for w in windows),
+   'mean_window_read_p99_us':statistics.mean(w['read']['p99_us'] for w in windows) if all('read' in w for w in windows) else None,
    'sampled_five_process_cpu_cores':cpu,'peak_sampled_aggregate_rss_kib':max(sum(v['rss_kib'] for v in s['processes'].values()) for s in samples),
    'evidence':str(p.relative_to(root))})
 report={'not_matched_ab':True,'limits':['independent roots and placement','one physical AMD host/four daemons','CPU covers four daemons and FUSE, excludes workload driver','unpaced quota failure not repaired by paced acceptance','no RDMA or hardware power-loss claim'], 'cells':rows}

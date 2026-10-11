@@ -5,12 +5,12 @@ from pathlib import Path
 src=Path('/data1/efs/devel-amd-gc-yield20-20261011')
 installed=Path('/data1/efs/src')
 out=Path('/data1/efs/amd-gc-yield20-20261011/deployment');out.mkdir(parents=True,exist_ok=True)
-env=os.environ|{'EFS_TRANSPORT':'tcp','EFS_COMMANDS':'0','EFS_COMMANDS_SERVER':'0'}
+env=os.environ|{'EFS_TRANSPORT':'tcp','EFS_COMMANDS':'0','EFS_COMMANDS_SERVER':'0','EFS_MD_RAFT_N':'4'}
 env.pop('EFS_GC_BACKLOG_IDLE_MS',None)
 def run(args,**kwargs):return subprocess.run([str(v) for v in args],check=True,env=env,**kwargs)
 assert os.environ['EFS_AMD_BUILD_ID'] in run([src/'efsd','--version'],capture_output=True,text=True).stdout
 for name in ['efsd','efs-fuse','efs-mgmt','libefs.a']:
- shutil.copy2(installed/name,out/(name+'.previous'))
+ if not (out/(name+'.previous')).exists():shutil.copy2(installed/name,out/(name+'.previous'))
 for mount in ['/data1/efs/mnt','/data1/efs/mnt2']:
  run([installed/'scripts/client.sh','stop',mount])
 for port in range(17432,17436):
@@ -22,10 +22,14 @@ for i in range(4):
  root=Path(f'/data1/efs/n{i+1}');assert root.is_dir()
  cmd=[str(installed/'efsd'),'--node-id',str(i+1),'--addr','127.0.0.1','--port',str(17432+i),'--storage',str(root),'--quota','37.5G','--direct-io']
  if i:cmd+=['--join','127.0.0.1:17432']
- with (out/f'node-{i+1}.log').open('ab') as log:
+ logs=Path('/data1/efs/logs');logs.mkdir(exist_ok=True)
+ canonical=logs/f'efsd-n{i+1}.log'
+ with canonical.open('ab') as log:
   p=subprocess.Popen(cmd,stdout=log,stderr=log,env=env,start_new_session=True)
  time.sleep(1);assert p.poll() is None
- records.append({'pid':p.pid,'argv':cmd})
+ records.append({'pid':p.pid,'argv':cmd,'canonical_log':str(canonical)})
+ (logs/f'efsd-n{i+1}.pid').write_text(str(p.pid)+'\n')
+ run(['python3',installed/'scripts/server_processes.py','record',logs/f'efsd-n{i+1}.pid',root])
  (root/'log/efsd.pid').write_text(str(p.pid)+'\n')
  run(['python3',installed/'scripts/server_processes.py','record',root/'log/efsd.pid',root])
 time.sleep(5)
