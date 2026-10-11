@@ -1,0 +1,2 @@
+raft-host: applied session index=1 kind=1 shard=1 ino=42
+REGISTER apply: missing-owner/refusal verdicts remain audible, business results advance Raft, storage failures retry PASS

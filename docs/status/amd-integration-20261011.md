@@ -39,3 +39,29 @@ RDMA, D25 activation and pushes remain outside this work.
 W94 remains partial until the complete two-mode fault matrix, sustained-service
 acceptance and full session/data-plane integration pass. W66's broader scaling
 and D36 choices are unchanged.
+
+## W72 REGISTER verdict mismatch — reproduced and repaired
+
+Both merged normal and fault-enabled full native suites pass. The first live
+direct/TCP run passes retained CREATE retry, combined reply loss and negative
+cleanup, then fails ordinary CREATE negative-replay at its first CREATE.
+The installed mounts restore successfully. That failed run is preserved.
+
+The imported REGISTER-first namespace optimization only bootstraps after an
+authoritative `NOT_FOUND`. Actual `apply_session_cmd` masked REGISTER's missing
+owner and refusal verdicts as success. Admission then skipped owner creation
+and could not establish the participant. Its mocked command test returned
+`NOT_FOUND` directly, so the full native suite missed this mismatch.
+
+REGISTER now preserves its actual business result in the apply ring. The Raft
+apply layer advances committed missing/BUSY/STALE/INVAL outcomes so a later
+CREATE/REGISTER or recovery operation can progress. IO/NOMEM still retain the
+failed apply and retry. The actual-source regression fails on `df63bbfa`'s
+masked result and passes after repair; existing namespace owner tests pass.
+This preserves missing-only bootstrap and refuses stale/uncertain admission;
+it does not activate production ticket integration.
+[Before](../../results/measure/20261011-amd-integration/register-verdict-before.log) /
+[after](../../results/measure/20261011-amd-integration/register-verdict-after.log).
+
+Final full native reruns and live validation of this repair remain pending.
+W72 and W94 remain partially open.
