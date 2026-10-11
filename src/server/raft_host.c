@@ -8831,9 +8831,11 @@ static int host_query_capable(struct efs_raft_host *h)
     pthread_mutex_unlock(&h->snap_mu);
     return clean;
 }
-static int host_query_source(struct efs_raft_host *h,struct efs_kv_lsm_snapshot **source,
-                              struct efs_server_query_view *view,uint64_t *revisions,uint64_t *import_generation)
+static int host_query_source_once(struct efs_raft_host *h,struct efs_kv_lsm_snapshot **source,
+                              struct efs_server_query_view *view,uint64_t *revisions,uint64_t *import_generation,
+                              int *transaction_changed)
 {
+    *transaction_changed=0;
     *source=NULL;memset(view,0,sizeof(*view));
     pthread_mutex_lock(&h->mu);
     int rc=host_query_capable(h) ? EFS_OK : EFS_ERR_NOT_PRIMARY;
@@ -8861,10 +8863,7 @@ static int host_query_source(struct efs_raft_host *h,struct efs_kv_lsm_snapshot 
      * A prepare/resolve/decision after capture changes this fence; pending
      * records already in the image independently refuse catalog construction.
      * Import transitions remain excluded by host_query_capable. */
-    for (int i=0;i<HOST_NGROUPS && !rc;i++) {
-        int hint=-1;
-        rc=host_read_index(h,h->g[i].group,&hint);
-    }
+    if(!rc) { int hint=-1;rc=host_read_index_pair(h,h->g[0].group,h->g[1].group,&hint); }
     pthread_mutex_lock(&h->mu);
     if (!rc && !host_query_capable(h)) rc=EFS_ERR_NOT_PRIMARY;
     pthread_mutex_lock(&h->snap_mu);
@@ -8872,10 +8871,24 @@ static int host_query_source(struct efs_raft_host *h,struct efs_kv_lsm_snapshot 
         if (import_generation[i]!=h->g[i].import_gen) rc=EFS_ERR_BUSY;
     pthread_mutex_unlock(&h->snap_mu);
     if (!rc) rc=efs_kv_lsm_transaction_revision(h->kv,&transaction_after);
-    if (!rc && transaction_before!=transaction_after) rc=EFS_ERR_BUSY;
+    if (!rc && transaction_before!=transaction_after) { *transaction_changed=1;rc=EFS_ERR_BUSY; }
     pthread_mutex_unlock(&h->mu);
     if (rc) { efs_kv_lsm_snapshot_release(*source);*source=NULL; }
     return rc;
+}
+/* Namespace mutation can invalidate a cut during its post-capture barriers.
+ * Recapture promptly instead of waiting a full refresh interval for each
+ * collision. Each attempt owns a new pin and repeats every authority/import
+ * and transaction fence. The existing build deadline and four-cut bound
+ * prevent a busy namespace from monopolizing the background worker. */
+static int host_query_source(struct efs_raft_host *h,struct efs_kv_lsm_snapshot **source,
+                              struct efs_server_query_view *view,uint64_t *revisions,uint64_t *import_generation)
+{
+    for(unsigned attempt=0;;attempt++) {
+        int changed=0;
+        int rc=host_query_source_once(h,source,view,revisions,import_generation,&changed);
+        if(!changed || attempt==3 || query_mono_ms()>=h->query_deadline_ms)return rc;
+    }
 }
 /* Disk builders stream bounded scratch independently of foreground RPC
  * deadlines. Cancellation still observes shutdown at every record. A fresh
@@ -9073,10 +9086,8 @@ int server_raft_host_query_read(int (*consume)(void *,const struct efs_server_qu
         if (primary_id && peer>=0) *primary_id=(uint16_t)(peer+1);
         return EFS_ERR_NOT_PRIMARY;
     }
-    for (int i=0;i<HOST_NGROUPS;i++) {
-        int hint=-1,rc=host_read_index(h,both[i],&hint);
-        if (rc) return rc;
-    }
+    int hint=-1,barrier_rc=host_read_index_pair(h,both[0],both[1],&hint);
+    if(barrier_rc)return barrier_rc;
     pthread_mutex_lock(&h->mu);
     capable=host_query_capable(h);
     pthread_mutex_unlock(&h->mu);
@@ -9487,8 +9498,8 @@ int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void
     uint16_t primary=0;
     if (!rc && created) rc=server_raft_host_query_read(query_page_capture,session,&primary);
     /* Even continuations need current quorum/ReadIndex before fresh checks. */
-    if (!rc && session->token && req->limit) {
-        for (int i=0;i<HOST_NGROUPS && !rc;i++) { int hint=-1;rc=host_read_index(g_host,g_host->g[i].group,&hint); }
+    if (!rc && !created && session->token && req->limit) {
+        int hint=-1;rc=host_read_index_pair(g_host,g_host->g[0].group,g_host->g[1].group,&hint);
         pthread_mutex_lock(&g_host->mu);
         if (!rc && !host_query_capable(g_host)) rc=EFS_ERR_BUSY;
         pthread_mutex_unlock(&g_host->mu);

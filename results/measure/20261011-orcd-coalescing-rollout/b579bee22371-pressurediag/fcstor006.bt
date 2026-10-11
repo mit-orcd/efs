@@ -1,0 +1,784 @@
+[New LWP 1630372]
+[New LWP 1630371]
+[New LWP 1630370]
+[New LWP 1630369]
+[New LWP 1630368]
+[New LWP 1630367]
+[New LWP 1630366]
+[New LWP 1630365]
+[New LWP 1630358]
+[New LWP 1630357]
+[New LWP 1630327]
+[New LWP 1630326]
+[New LWP 1630291]
+[New LWP 1630288]
+[New LWP 1630287]
+[New LWP 1630286]
+[New LWP 1630285]
+[New LWP 1630284]
+[New LWP 1630283]
+[New LWP 1630282]
+[New LWP 1630281]
+[New LWP 1630280]
+[New LWP 1630279]
+[New LWP 1630278]
+[New LWP 1630277]
+[New LWP 1630276]
+[New LWP 1630275]
+[New LWP 1630274]
+[New LWP 1630273]
+[New LWP 1630272]
+[New LWP 1630271]
+[New LWP 1630270]
+[New LWP 1630269]
+[New LWP 1630268]
+[New LWP 1630267]
+[New LWP 1630124]
+[New LWP 1630123]
+[New LWP 1630122]
+[New LWP 1630121]
+[New LWP 1630120]
+[New LWP 1630119]
+[New LWP 1630118]
+[New LWP 1629030]
+[New LWP 1629029]
+[New LWP 1629028]
+[New LWP 1629027]
+[New LWP 1629022]
+[New LWP 1629016]
+[New LWP 1629015]
+[New LWP 1629014]
+[New LWP 1628997]
+[New LWP 1628984]
+[New LWP 1628379]
+[New LWP 1628378]
+[New LWP 1628377]
+[New LWP 1628376]
+[New LWP 1628375]
+[New LWP 1628374]
+[New LWP 1628373]
+[New LWP 1628372]
+[New LWP 1628371]
+[New LWP 1628370]
+[New LWP 1628369]
+[New LWP 1628368]
+[New LWP 1628367]
+[New LWP 1628366]
+[New LWP 1628365]
+[New LWP 1628364]
+[New LWP 1628363]
+[New LWP 1628362]
+[New LWP 1628361]
+[New LWP 1628360]
+[New LWP 1628359]
+[New LWP 1628358]
+[New LWP 1628357]
+[New LWP 1628356]
+[New LWP 1628355]
+[New LWP 1628354]
+[New LWP 1628353]
+[New LWP 1628352]
+[New LWP 1628351]
+[New LWP 1628350]
+[New LWP 1628349]
+[New LWP 1628348]
+[New LWP 1628347]
+[New LWP 1628346]
+[New LWP 1628345]
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib64/libthread_db.so.1".
+0x00007f7b6910359f in poll () from /lib64/libc.so.6
+$1 = 0
+$2 = {{token = 0, touched = 0, born = 0, busy = 0, request = {base = {version = 0, operation = 0, root = 0, uid = 0, gid = 0, ngroups = 0, match = 0, max_output = 0, visit_budget = 0, groups = {0 <repeats 128 times>}, term = '\000' <repeats 255 times>}, filters = {flags = 0, kind = 0, min_size = 0, max_size = 0, after_ns = 0, before_ns = 0}, token = 0, cursor = 0, limit = 0, nonce = 0}, view = {catalog = 0x0, boot_id = 0, source_ns = 0, built_ns = 0, generation = 0, applied = {0, 0}, terms = {0, 0}, pin_ms = 0, build_ms = 0, pending_changes = 0, pending_since_ms = 0, lag_sample_ms = 0, lag_sample_ns = 0}, refresh_error = 0} <repeats 16 times>}
+
+Thread 88 (Thread 0x7f7b68779640 (LWP 1628345) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x00000000004e6267 in recv_poller (arg=0x905838 <g_devs+152>) at src/common/rdma.c:903
+#2  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#3  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 87 (Thread 0x7f7b67c7e640 (LWP 1628346) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000041e6bb in writer_thread (arg=<optimized out>) at src/server/writer.c:249
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 86 (Thread 0x7f7b67b7d640 (LWP 1628347) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000041e6bb in writer_thread (arg=<optimized out>) at src/server/writer.c:249
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 85 (Thread 0x7f7b67a7c640 (LWP 1628348) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000041e6bb in writer_thread (arg=<optimized out>) at src/server/writer.c:249
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 84 (Thread 0x7f7b6797b640 (LWP 1628349) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000041e6bb in writer_thread (arg=<optimized out>) at src/server/writer.c:249
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 83 (Thread 0x7f7b6787a640 (LWP 1628350) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000041e6bb in writer_thread (arg=<optimized out>) at src/server/writer.c:249
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 82 (Thread 0x7f7b67779640 (LWP 1628351) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000041e6bb in writer_thread (arg=<optimized out>) at src/server/writer.c:249
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 81 (Thread 0x7f7b67678640 (LWP 1628352) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000041e6bb in writer_thread (arg=<optimized out>) at src/server/writer.c:249
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 80 (Thread 0x7f7b67577640 (LWP 1628353) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000041e6bb in writer_thread (arg=<optimized out>) at src/server/writer.c:249
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 79 (Thread 0x7f7b67476640 (LWP 1628354) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000041e6bb in writer_thread (arg=<optimized out>) at src/server/writer.c:249
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 78 (Thread 0x7f7b67375640 (LWP 1628355) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000041e6bb in writer_thread (arg=<optimized out>) at src/server/writer.c:249
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 77 (Thread 0x7f7b67274640 (LWP 1628356) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000041e6bb in writer_thread (arg=<optimized out>) at src/server/writer.c:249
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 76 (Thread 0x7f7b67173640 (LWP 1628357) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000041e6bb in writer_thread (arg=<optimized out>) at src/server/writer.c:249
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 75 (Thread 0x7f7b67072640 (LWP 1628358) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000041e6bb in writer_thread (arg=<optimized out>) at src/server/writer.c:249
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 74 (Thread 0x7f7b66f71640 (LWP 1628359) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000041e6bb in writer_thread (arg=<optimized out>) at src/server/writer.c:249
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 73 (Thread 0x7f7b66e70640 (LWP 1628360) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000041e6bb in writer_thread (arg=<optimized out>) at src/server/writer.c:249
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 72 (Thread 0x7f7b66d6f640 (LWP 1628361) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000041e6bb in writer_thread (arg=<optimized out>) at src/server/writer.c:249
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 71 (Thread 0x7f7b66c6e640 (LWP 1628362) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000041e6bb in writer_thread (arg=<optimized out>) at src/server/writer.c:249
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 70 (Thread 0x7f7b66b6d640 (LWP 1628363) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000041e6bb in writer_thread (arg=<optimized out>) at src/server/writer.c:249
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 69 (Thread 0x7f7b66a6c640 (LWP 1628364) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000041e6bb in writer_thread (arg=<optimized out>) at src/server/writer.c:249
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 68 (Thread 0x7f7b6696b640 (LWP 1628365) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000041e6bb in writer_thread (arg=<optimized out>) at src/server/writer.c:249
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 67 (Thread 0x7f7b6686a640 (LWP 1628366) "efsd"):
+#0  0x00007f7b690d5c65 in clock_nanosleep@GLIBC_2.2.5 () from /lib64/libc.so.6
+#1  0x00007f7b690da717 in nanosleep () from /lib64/libc.so.6
+#2  0x00007f7b691066b9 in usleep () from /lib64/libc.so.6
+#3  0x000000000041cbbb in heartbeat_thread (arg=0x7fffedfaaf00) at src/server/cluster.c:276
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 66 (Thread 0x7f7b665ac640 (LWP 1628367) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000047a1da in compactor_main (arg=0x1ee7060) at src/kv/kv_compact.c:986
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 65 (Thread 0x7f7b655aa640 (LWP 1628368) "efsd"):
+#0  0x00007f7b691060eb in fdatasync () from /lib64/libc.so.6
+#1  0x00000000004e25d2 in log_sync_locked (honor_hold=<optimized out>, d=0x1eff5f0) at src/raft/raft_log.c:187
+#2  log_sync_locked (d=0x1eff5f0, honor_hold=<optimized out>) at src/raft/raft_log.c:132
+#3  0x00000000004e2f9c in raft_log_defer_end (d=0x1eff5f0) at src/raft/raft_log.c:309
+#4  0x00000000004da7ee in recv_batch_finish (r=r@entry=0x55057d0, prior=prior@entry=0) at src/raft/raft.c:1988
+#5  0x00000000004ddc7a in efs_raft_recv_batch (r=r@entry=0x55057d0, msgs=msgs@entry=0x7f7b6559b280, n=n@entry=1) at src/raft/raft.c:2083
+#6  0x000000000042749a in drain_inbox (h=h@entry=0x7f7b66667010, done_n=done_n@entry=0x7f7b655a7a7c, done_bytes=done_bytes@entry=0x7f7b655a7a80) at src/server/raft_host.c:6092
+#7  0x000000000042b942 in host_pump (arg=0x7f7b66667010) at src/server/raft_host.c:6715
+#8  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#9  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 64 (Thread 0x7f7b654a9640 (LWP 1628369) "efsd"):
+#0  0x00007f7b690d5c65 in clock_nanosleep@GLIBC_2.2.5 () from /lib64/libc.so.6
+#1  0x00007f7b690da717 in nanosleep () from /lib64/libc.so.6
+#2  0x00007f7b691066b9 in usleep () from /lib64/libc.so.6
+#3  0x0000000000437c6b in host_query_thread (ctx=0x7f7b66667010) at src/server/raft_host.c:8937
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 63 (Thread 0x7f7b653a8640 (LWP 1628370) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x0000000000424dfc in host_checkpoint_work (arg=0x7f7b655a7ab0) at src/server/raft_host.c:6553
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 62 (Thread 0x7f7b652a7640 (LWP 1628371) "efsd"):
+#0  0x00007f7b690d5c65 in clock_nanosleep@GLIBC_2.2.5 () from /lib64/libc.so.6
+#1  0x00007f7b690da717 in nanosleep () from /lib64/libc.so.6
+#2  0x00007f7b691066b9 in usleep () from /lib64/libc.so.6
+#3  0x000000000043affc in host_gc_thread (arg=0x7f7b66667010) at src/server/raft_host.c:8682
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 61 (Thread 0x7f7b651a6640 (LWP 1628372) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000043675b in host_fin_thread (arg=0x7f7b66667010) at src/server/raft_host.c:7758
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 60 (Thread 0x7f7b650a5640 (LWP 1628373) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7b54000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 59 (Thread 0x7f7b64caa640 (LWP 1628374) "efsd"):
+#0  0x00007f7b6908867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f7b6908ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x0000000000429424 in host_sender (arg=0x7f7b66701170) at src/server/raft_host.c:840
+#3  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 58 (Thread 0x7f7b6482d640 (LWP 1628375) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7b4c000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 57 (Thread 0x7f7b64432640 (LWP 1628376) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7b40000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 56 (Thread 0x7f7b5ebfe640 (LWP 1628377) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7b44000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 55 (Thread 0x7f7b5df15640 (LWP 1628378) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7b38000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 54 (Thread 0x7f7b5db1a640 (LWP 1628379) "efsd"):
+#0  0x00007f7b6910602b in fsync () from /lib64/libc.so.6
+#1  0x000000000040a5ad in gc_sync_directory (s=s@entry=0x7fffedfaaf00, fd=fd@entry=47) at src/server/store.c:529
+#2  0x000000000040a71a in fragment_parent_sync (s=s@entry=0x7fffedfaaf00, path=path@entry=0x7f7b5daf9b20 "/data1/01/efs-orcd-test-erbmi1/meta/gc-dead/1/3892.0") at src/server/store.c:615
+#3  0x0000000000412372 in inode_death_set (ino=94004, eid=1, s=0x7fffedfaaf00) at src/server/store.c:874
+#4  server_gc_inode (s=0x7fffedfaaf00, eid=1, ino=94004, generation=<optimized out>) at src/server/store.c:1009
+#5  0x000000000041b94d in server_handle_conn (conn=<optimized out>) at src/server/handler.c:541
+#6  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#7  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#8  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 53 (Thread 0x7f7b5d425640 (LWP 1628984) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7b30000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 52 (Thread 0x7f7b5d02a640 (LWP 1628997) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7b34000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 51 (Thread 0x7f7b5cc2f640 (LWP 1629014) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7b28000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 50 (Thread 0x7f7b5cb2e640 (LWP 1629015) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7b2c000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 49 (Thread 0x7f7b5ca2d640 (LWP 1629016) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7b20000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 48 (Thread 0x7f7b27fff640 (LWP 1629022) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7b1c000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 47 (Thread 0x7f7b27c04640 (LWP 1629027) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x00000000004e9f9d in efs_rdma_recv_wait (rc=0x7f7b3400a350, timeout_ms=<optimized out>) at src/common/rdma.c:1846
+#2  0x000000000046d8f2 in conn_rdma_frame (c=0x7f7b3400a2e0, type=0x7f7b27bd06f4 "\214", payload=payload@entry=0x7f7b27bd0678, payload_len=payload_len@entry=0x7f7b27bd0674) at src/common/protocol.c:434
+#3  0x000000000046e8bc in efs_conn_recv_msg (c=c@entry=0x7f7b3400a2e0, type=type@entry=0x7f7b27bd06f4 "\214", payload=payload@entry=0x7f7b27bd0720, payload_len=payload_len@entry=0x7f7b27bd06f8) at src/common/protocol.c:481
+#4  0x0000000000463651 in host_pack_authority_peer (out=0x7f7b27bd9600, bytes=467, request=0x7f7b14013010 "\001\002EFSUPLD1", rid=1, h=0x7f7b66667010) at src/server/pack_authority.h:26
+#5  server_raft_host_pack_authority (request=request@entry=0x7f7b14013010 "\001\002EFSUPLD1", bytes=bytes@entry=467, out=out@entry=0x7f7b27bd9600) at src/server/pack_authority.h:57
+#6  0x0000000000407140 in server_packed_upload (s=0x7fffedfaaf00, body=body@entry=0x7f7b2784dfb0 "", bytes=bytes@entry=4573) at src/server/packed_upload.c:29
+#7  0x000000000041abf0 in server_handle_conn (conn=<optimized out>) at src/server/handler.c:422
+#8  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#9  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#10 0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 46 (Thread 0x7f7b27809640 (LWP 1629028) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x00000000004e9f9d in efs_rdma_recv_wait (rc=0x7f7b3c00a010, timeout_ms=<optimized out>) at src/common/rdma.c:1846
+#2  0x000000000046d8f2 in conn_rdma_frame (c=0x7f7b3c001cc0, type=0x7f7b277d56f4 "\214", payload=payload@entry=0x7f7b277d5678, payload_len=payload_len@entry=0x7f7b277d5674) at src/common/protocol.c:434
+#3  0x000000000046e8bc in efs_conn_recv_msg (c=c@entry=0x7f7b3c001cc0, type=type@entry=0x7f7b277d56f4 "\214", payload=payload@entry=0x7f7b277d5720, payload_len=payload_len@entry=0x7f7b277d56f8) at src/common/protocol.c:481
+#4  0x0000000000463651 in host_pack_authority_peer (out=0x7f7b277de600, bytes=467, request=0x7f7b1800a0f0 "\001\002EFSUPLD1", rid=1, h=0x7f7b66667010) at src/server/pack_authority.h:26
+#5  server_raft_host_pack_authority (request=request@entry=0x7f7b1800a0f0 "\001\002EFSUPLD1", bytes=bytes@entry=467, out=out@entry=0x7f7b277de600) at src/server/pack_authority.h:57
+#6  0x0000000000407140 in server_packed_upload (s=0x7fffedfaaf00, body=body@entry=0x7f7b2743cfb0 "", bytes=bytes@entry=4573) at src/server/packed_upload.c:29
+#7  0x000000000041abf0 in server_handle_conn (conn=<optimized out>) at src/server/handler.c:422
+#8  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#9  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#10 0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 45 (Thread 0x7f7b2740e640 (LWP 1629029) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7b0c000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 44 (Thread 0x7f7b2730d640 (LWP 1629030) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7b10000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 43 (Thread 0x7f7b2691e640 (LWP 1630118) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7af4000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 42 (Thread 0x7f7b26229640 (LWP 1630119) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7ad4000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 41 (Thread 0x7f7b25b34640 (LWP 1630120) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7aac000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 40 (Thread 0x7f7b25739640 (LWP 1630121) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7ab0000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 39 (Thread 0x7f7b2533e640 (LWP 1630122) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7aa4000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 38 (Thread 0x7f7b24f43640 (LWP 1630123) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7aa8000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 37 (Thread 0x7f7b24b48640 (LWP 1630124) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a9c000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 36 (Thread 0x7f7b243d2640 (LWP 1630267) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7aa0000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 35 (Thread 0x7f7b242d1640 (LWP 1630268) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a94000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 34 (Thread 0x7f7b241d0640 (LWP 1630269) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a8c000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 33 (Thread 0x7f7a9b711640 (LWP 1630270) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a84000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 32 (Thread 0x7f7a9b610640 (LWP 1630271) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a88000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 31 (Thread 0x7f7a9af1b640 (LWP 1630272) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a7c000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 30 (Thread 0x7f7a9ae1a640 (LWP 1630273) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a80000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 29 (Thread 0x7f7a9aa1f640 (LWP 1630274) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a74000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 28 (Thread 0x7f7a9a624640 (LWP 1630275) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a78000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 27 (Thread 0x7f7a99f2f640 (LWP 1630276) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a6c000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 26 (Thread 0x7f7a99e2e640 (LWP 1630277) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a70000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 25 (Thread 0x7f7a99739640 (LWP 1630278) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a64000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 24 (Thread 0x7f7a99638640 (LWP 1630279) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a68000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 23 (Thread 0x7f7a9923d640 (LWP 1630280) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a5c000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 22 (Thread 0x7f7a98b48640 (LWP 1630281) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a60000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 21 (Thread 0x7f7a98a47640 (LWP 1630282) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a54000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 20 (Thread 0x7f7a9864c640 (LWP 1630283) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a58000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 19 (Thread 0x7f7a98251640 (LWP 1630284) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a4c000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 18 (Thread 0x7f7a98150640 (LWP 1630285) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a44000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 17 (Thread 0x7f7a53711640 (LWP 1630286) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a48000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 16 (Thread 0x7f7a53610640 (LWP 1630287) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a3c000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 15 (Thread 0x7f7a53215640 (LWP 1630288) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a40000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 14 (Thread 0x7f7b5ffff640 (LWP 1630291) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a34000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 13 (Thread 0x7f7b5fc04640 (LWP 1630326) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a38000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 12 (Thread 0x7f7b5fb03640 (LWP 1630327) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a2c000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 11 (Thread 0x7f7b5f40e640 (LWP 1630357) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a30000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 10 (Thread 0x7f7b5f013640 (LWP 1630358) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a24000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 9 (Thread 0x7f7a5031f640 (LWP 1630365) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a28000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 8 (Thread 0x7f7a5021e640 (LWP 1630366) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a1c000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 7 (Thread 0x7f7a5011d640 (LWP 1630367) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a18000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 6 (Thread 0x7f7a23711640 (LWP 1630368) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a10000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 5 (Thread 0x7f7a23610640 (LWP 1630369) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a14000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 4 (Thread 0x7f7a22f1b640 (LWP 1630370) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a08000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 3 (Thread 0x7f7a22e1a640 (LWP 1630371) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a0c000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 2 (Thread 0x7f7a22a1f640 (LWP 1630372) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x000000000046e246 in efs_conn_wait_request (c=c@entry=0x7f7a00000b60) at src/common/protocol.c:351
+#2  0x000000000041919f in server_handle_conn (conn=<optimized out>) at src/server/handler.c:98
+#3  0x0000000000408f1b in conn_thread (arg=<optimized out>) at src/server/efsd.c:302
+#4  0x00007f7b6908b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f7b691108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 1 (Thread 0x7f7b6929b800 (LWP 1628341) "efsd"):
+#0  0x00007f7b6910359f in poll () from /lib64/libc.so.6
+#1  0x00000000004063af in main (argc=<optimized out>, argv=<optimized out>) at src/server/efsd.c:644
+[Inferior 1 (process 1628341) detached]
