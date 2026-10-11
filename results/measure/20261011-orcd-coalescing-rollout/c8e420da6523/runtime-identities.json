@@ -1,0 +1,211 @@
+{
+  "fcstor003": {
+    "hostname": "fcstor003",
+    "revision": "c8e420da65236b5f9f58f3aea8ba1fe000a731a2",
+    "processes": [
+      {
+        "pid": 1570357,
+        "comm": "efsd",
+        "uid": 246111,
+        "args": "/tmp/efs/efsd --node-id 1 --addr 172.16.223.57 --port 17432 --storage /data1/01/efs-orcd-test-erbmi1,/data1/02/efs-orcd-test-erbmi1,/data1/03/efs-orcd-test-erbmi1,/data1/04/efs-orcd-test-erbmi1,/data1/05/efs-orcd-test-erbmi1,/data1/06/efs-orcd-test-erbmi1 --direct-io ",
+        "exe": "/tmp/efs/efsd",
+        "exe_sha256": "46d7a454d35e5742c475c9a51fa999f0b05346b5f6d509e2646213af8297d499",
+        "installed_inode_matches": true,
+        "transport": "rdma",
+        "rdma_dev": "mlx5_2",
+        "gc_idle": null,
+        "packed_writes": "1"
+      }
+    ]
+  },
+  "fcstor004": {
+    "hostname": "fcstor004",
+    "revision": "c8e420da65236b5f9f58f3aea8ba1fe000a731a2",
+    "processes": [
+      {
+        "pid": 1435327,
+        "comm": "efsd",
+        "uid": 246111,
+        "args": "/tmp/efs/efsd --node-id 2 --addr 172.16.223.58 --port 17432 --storage /data1/01/efs-orcd-test-erbmi1,/data1/02/efs-orcd-test-erbmi1,/data1/03/efs-orcd-test-erbmi1,/data1/04/efs-orcd-test-erbmi1,/data1/05/efs-orcd-test-erbmi1,/data1/06/efs-orcd-test-erbmi1 --direct-io --join 172.16.223.57:17432 ",
+        "exe": "/tmp/efs/efsd",
+        "exe_sha256": "46d7a454d35e5742c475c9a51fa999f0b05346b5f6d509e2646213af8297d499",
+        "installed_inode_matches": true,
+        "transport": "rdma",
+        "rdma_dev": "mlx5_2",
+        "gc_idle": null,
+        "packed_writes": "1"
+      }
+    ]
+  },
+  "fcstor005": {
+    "hostname": "fcstor005",
+    "revision": "c8e420da65236b5f9f58f3aea8ba1fe000a731a2",
+    "processes": [
+      {
+        "pid": 1435592,
+        "comm": "efsd",
+        "uid": 246111,
+        "args": "/tmp/efs/efsd --node-id 3 --addr 172.16.223.59 --port 17432 --storage /data1/01/efs-orcd-test-erbmi1,/data1/02/efs-orcd-test-erbmi1,/data1/03/efs-orcd-test-erbmi1,/data1/04/efs-orcd-test-erbmi1,/data1/05/efs-orcd-test-erbmi1,/data1/06/efs-orcd-test-erbmi1 --direct-io --join 172.16.223.57:17432 ",
+        "exe": "/tmp/efs/efsd",
+        "exe_sha256": "46d7a454d35e5742c475c9a51fa999f0b05346b5f6d509e2646213af8297d499",
+        "installed_inode_matches": true,
+        "transport": "rdma",
+        "rdma_dev": "mlx5_2",
+        "gc_idle": null,
+        "packed_writes": "1"
+      }
+    ]
+  },
+  "fcstor006": {
+    "hostname": "fcstor006",
+    "revision": "c8e420da65236b5f9f58f3aea8ba1fe000a731a2",
+    "processes": [
+      {
+        "pid": 1459627,
+        "comm": "efsd",
+        "uid": 246111,
+        "args": "/tmp/efs/efsd --node-id 4 --addr 172.16.223.60 --port 17432 --storage /data1/01/efs-orcd-test-erbmi1,/data1/02/efs-orcd-test-erbmi1,/data1/03/efs-orcd-test-erbmi1,/data1/04/efs-orcd-test-erbmi1,/data1/05/efs-orcd-test-erbmi1,/data1/06/efs-orcd-test-erbmi1 --direct-io --join 172.16.223.57:17432 ",
+        "exe": "/tmp/efs/efsd",
+        "exe_sha256": "7b5ab8c91cefefd77738457c5437a87287ecfb569bc9ae8883ff1ced0f727335",
+        "installed_inode_matches": true,
+        "transport": "rdma",
+        "rdma_dev": "mlx5_2",
+        "gc_idle": null,
+        "packed_writes": "1"
+      }
+    ]
+  },
+  "fcstor007": {
+    "hostname": "fcstor007",
+    "revision": "c8e420da65236b5f9f58f3aea8ba1fe000a731a2",
+    "processes": [
+      {
+        "pid": 1673533,
+        "comm": "efs-fuse",
+        "uid": 246111,
+        "args": "./efs-fuse 172.16.223.57:17432 fs /tmp/efs-mount ",
+        "exe": "/tmp/efs/efs-fuse",
+        "exe_sha256": "100c3931063a22705fe2ca10f7bc5f504a4019fb180ff910fb286d5b3340d1ec",
+        "installed_inode_matches": true,
+        "transport": "rdma",
+        "rdma_dev": "mlx5_2",
+        "gc_idle": null,
+        "packed_writes": "1"
+      }
+    ]
+  },
+  "fcstor008": {
+    "hostname": "fcstor008",
+    "revision": "c8e420da65236b5f9f58f3aea8ba1fe000a731a2",
+    "processes": [
+      {
+        "pid": 2679106,
+        "comm": "efs-fuse",
+        "uid": 246111,
+        "args": "./efs-fuse 172.16.223.57:17432 fs /tmp/efs-mount ",
+        "exe": "/tmp/efs/efs-fuse",
+        "exe_sha256": "100c3931063a22705fe2ca10f7bc5f504a4019fb180ff910fb286d5b3340d1ec",
+        "installed_inode_matches": true,
+        "transport": "rdma",
+        "rdma_dev": "mlx5_2",
+        "gc_idle": null,
+        "packed_writes": "1"
+      }
+    ]
+  },
+  "fcstor009": {
+    "hostname": "fcstor009",
+    "revision": "c8e420da65236b5f9f58f3aea8ba1fe000a731a2",
+    "processes": [
+      {
+        "pid": 2522282,
+        "comm": "efs-fuse",
+        "uid": 246111,
+        "args": "./efs-fuse 172.16.223.57:17432 fs /tmp/efs-mount ",
+        "exe": "/tmp/efs/efs-fuse",
+        "exe_sha256": "231238b5945a75971eed03736adafc66146f8fc2cf014534bccfe2eefbbd8030",
+        "installed_inode_matches": true,
+        "transport": "rdma",
+        "rdma_dev": "mlx5_2",
+        "gc_idle": null,
+        "packed_writes": "1"
+      }
+    ]
+  },
+  "fcstor010": {
+    "hostname": "fcstor010",
+    "revision": "c8e420da65236b5f9f58f3aea8ba1fe000a731a2",
+    "processes": [
+      {
+        "pid": 2224917,
+        "comm": "efs-fuse",
+        "uid": 246111,
+        "args": "./efs-fuse 172.16.223.57:17432 fs /tmp/efs-mount ",
+        "exe": "/tmp/efs/efs-fuse",
+        "exe_sha256": "231238b5945a75971eed03736adafc66146f8fc2cf014534bccfe2eefbbd8030",
+        "installed_inode_matches": true,
+        "transport": "rdma",
+        "rdma_dev": "mlx5_2",
+        "gc_idle": null,
+        "packed_writes": "1"
+      }
+    ]
+  },
+  "fcstor011": {
+    "hostname": "fcstor011",
+    "revision": "c8e420da65236b5f9f58f3aea8ba1fe000a731a2",
+    "processes": [
+      {
+        "pid": 2460690,
+        "comm": "efs-fuse",
+        "uid": 246111,
+        "args": "./efs-fuse 172.16.223.57:17432 fs /tmp/efs-mount ",
+        "exe": "/tmp/efs/efs-fuse",
+        "exe_sha256": "24885c9d277005fec35668eae3f58f58ef2c4ce8137fc4a49aed4a0ca9e4a73f",
+        "installed_inode_matches": true,
+        "transport": "rdma",
+        "rdma_dev": "mlx5_2",
+        "gc_idle": null,
+        "packed_writes": "1"
+      }
+    ]
+  },
+  "fcstor012": {
+    "hostname": "fcstor012",
+    "revision": "c8e420da65236b5f9f58f3aea8ba1fe000a731a2",
+    "processes": [
+      {
+        "pid": 2634351,
+        "comm": "efs-fuse",
+        "uid": 246111,
+        "args": "./efs-fuse 172.16.223.57:17432 fs /tmp/efs-mount ",
+        "exe": "/tmp/efs/efs-fuse",
+        "exe_sha256": "d3010e28a25dd082d349d7452dce0f87c515aac03efa581cf7f1dc92220ce13e",
+        "installed_inode_matches": true,
+        "transport": "rdma",
+        "rdma_dev": "mlx5_2",
+        "gc_idle": null,
+        "packed_writes": "1"
+      }
+    ]
+  },
+  "fcstor013": {
+    "hostname": "fcstor013",
+    "revision": "c8e420da65236b5f9f58f3aea8ba1fe000a731a2",
+    "processes": [
+      {
+        "pid": 2536855,
+        "comm": "efs-fuse",
+        "uid": 246111,
+        "args": "./efs-fuse 172.16.223.57:17432 fs /tmp/efs-mount ",
+        "exe": "/tmp/efs/efs-fuse",
+        "exe_sha256": "e464dd2fbdcd7e7d047a4444701750776c096716fdede650b33fa8c34c4bda22",
+        "installed_inode_matches": true,
+        "transport": "rdma",
+        "rdma_dev": "mlx5_2",
+        "gc_idle": null,
+        "packed_writes": "1"
+      }
+    ]
+  }
+}

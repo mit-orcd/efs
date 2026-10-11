@@ -1,0 +1,14 @@
+parallel 5 tests jobs=16 (serial 0 after)
+pass virt_find_not_a_real_dir        
+SKIP mmap_write_read                  mmap unsupported: [Errno 19] No such device
+pass mmap_private_not_visible        
+Results as of just now; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 6179001489501246:15; no refresh error recorded; expiry unavailable.
+pass virt_stats_readable             
+Showing 1 results; no more results. Total matches were not counted.
+Results as of 4 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 6176252831205431:15; no refresh error recorded; expiry unavailable.
+pass virt_find_query                 
+============================================================
+POSIX suite: 4/5 pass, 0 fail, 1 skip, 0 notrun  (6.7s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/integration-c8e420da6523-extras/fcstor009/all.tsv

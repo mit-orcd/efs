@@ -1,0 +1,3 @@
+Unmounting /tmp/efs-mount
+Not mounted: /tmp/efs-mount (cleared any stale FUSE handle)
+clean drain succeeded

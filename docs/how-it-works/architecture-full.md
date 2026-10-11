@@ -1477,8 +1477,11 @@ this document is the invariant they are measured against.
 
 Production tiny-file packing is the first ORCD priority on `devel-orcd`: see
 [W95/P4.1 plan and allocation baseline](../status/orcd-tiny-packing-20261011.md). The
-408× calculation is for 512-byte payloads in separate full-sized fragments;
-production packing and measured savings remain open.
+408× calculation is for 512-byte payloads in separate full-sized fragments.
+[Mounted coalescing and shared lifetime rollout](../status/orcd-mounted-coalescing-20261011.md)
+records native RDMA packing, exact cold reads, and automatic shared-fragment GC
+with an offline captured member. Concurrent packed/query acceptance and matched
+physical savings remain open.
 [ORCD integration and retained writer checkpoint](../status/orcd-branch-integration-20261011.md)
 records the latest captured branch batch, bounded packed-read scratch and exact
 packed publication retries. Loaded query capacity/refold failures remain open;
@@ -2004,6 +2007,15 @@ Full Linux units and retained file samples pass; loaded POSIX/query gates remain
 failed, and the fresh tiny-file benchmark is running.
 
 - [NUC W52/W97 deployed continuation](../status/nuc-w52-w97-resume-20261011.md): preserved-store rollout, repeated phase/storage latency measurements, staged bounded completion transactions and pending placement controls.
+
+### ORCD mounted packing continuation
+
+[Mounted coalescer and shared-fragment lifetime coordinator](../status/orcd-mounted-coalescing-20261011.md)
+records mounted native RDMA/direct-I/O coalescing, bounded lost-ACK ownership,
+cold survivor checks and offline-member/rejoin physical reclamation. The current
+full Linux/staged-build gates pass, but concurrent mounted POSIX acceptance still
+fails on timeouts and matched performance/allocation comparisons remain pending.
+Packing is not yet release accepted.
 
 
 ## Appendix 2 — In flight — the current handoff block

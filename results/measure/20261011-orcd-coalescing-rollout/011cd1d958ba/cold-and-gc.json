@@ -1,0 +1,16 @@
+{
+  "runtime": "011cd1d958ba",
+  "fixture": "f7ad6b26ed28",
+  "cold_verify": {
+    "pass": 27,
+    "fail": 0,
+    "seconds": 3.0
+  },
+  "retired_shared_object_physical_fragments": {
+    "fcstor003": 0,
+    "fcstor004": 0,
+    "fcstor005": 0,
+    "fcstor006": 0
+  },
+  "source": "successful deployment chain tool output"
+}

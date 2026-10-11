@@ -1,0 +1,1067 @@
+[New LWP 1663744]
+[New LWP 1663743]
+[New LWP 1663742]
+[New LWP 1663741]
+[New LWP 1663740]
+[New LWP 1663739]
+[New LWP 1663738]
+[New LWP 1663737]
+[New LWP 1663736]
+[New LWP 1663735]
+[New LWP 1663734]
+[New LWP 1663733]
+[New LWP 1663732]
+[New LWP 1663731]
+[New LWP 1663730]
+[New LWP 1663729]
+[New LWP 1663728]
+[New LWP 1663727]
+[New LWP 1663726]
+[New LWP 1663725]
+[New LWP 1663724]
+[New LWP 1663723]
+[New LWP 1663722]
+[New LWP 1663721]
+[New LWP 1663720]
+[New LWP 1663719]
+[New LWP 1663718]
+[New LWP 1663717]
+[New LWP 1663716]
+[New LWP 1663715]
+[New LWP 1663714]
+[New LWP 1663713]
+[New LWP 1663710]
+[New LWP 1663709]
+[New LWP 1663708]
+[New LWP 1663707]
+[New LWP 1663706]
+[New LWP 1663705]
+[New LWP 1663704]
+[New LWP 1663703]
+[New LWP 1663702]
+[New LWP 1663701]
+[New LWP 1663700]
+[New LWP 1663699]
+[New LWP 1663698]
+[New LWP 1663697]
+[New LWP 1663696]
+[New LWP 1663695]
+[New LWP 1663694]
+[New LWP 1663693]
+[New LWP 1663692]
+[New LWP 1663691]
+[New LWP 1663690]
+[New LWP 1663689]
+[New LWP 1663688]
+[New LWP 1663687]
+[New LWP 1663686]
+[New LWP 1663685]
+[New LWP 1663684]
+[New LWP 1663683]
+[New LWP 1663682]
+[New LWP 1663681]
+[New LWP 1663680]
+[New LWP 1663679]
+[New LWP 1663678]
+[New LWP 1663677]
+[New LWP 1663676]
+[New LWP 1663675]
+[New LWP 1663674]
+[New LWP 1663673]
+[New LWP 1663672]
+[New LWP 1663671]
+[New LWP 1663670]
+[New LWP 1663669]
+[New LWP 1663668]
+[New LWP 1663667]
+[New LWP 1663666]
+[New LWP 1663665]
+[New LWP 1663664]
+[New LWP 1663663]
+[New LWP 1663662]
+[New LWP 1663661]
+[New LWP 1663660]
+[New LWP 1663659]
+[New LWP 1663658]
+[New LWP 1663657]
+[New LWP 1663656]
+[New LWP 1663655]
+[New LWP 1663654]
+[New LWP 1663653]
+[New LWP 1663652]
+[New LWP 1663651]
+[New LWP 1663650]
+[New LWP 1663649]
+[New LWP 1663648]
+[New LWP 1663647]
+[New LWP 1663646]
+[New LWP 1663645]
+[New LWP 1663644]
+[New LWP 1663643]
+[New LWP 1663642]
+[New LWP 1663641]
+[New LWP 1663640]
+[New LWP 1663639]
+[New LWP 1663638]
+[New LWP 1663637]
+[New LWP 1663636]
+[New LWP 1663635]
+[New LWP 1663634]
+[New LWP 1663633]
+[New LWP 1663632]
+[New LWP 1663631]
+[New LWP 1663625]
+[New LWP 1663624]
+[New LWP 1663623]
+[New LWP 1663622]
+[New LWP 1663621]
+[New LWP 1663620]
+[New LWP 1663619]
+[New LWP 1663618]
+[New LWP 1663617]
+[New LWP 1663415]
+[New LWP 1663412]
+[New LWP 1663411]
+[New LWP 1663410]
+[New LWP 1663409]
+[New LWP 1663408]
+[New LWP 1663406]
+[New LWP 1663405]
+[New LWP 1663404]
+[New LWP 1663403]
+[New LWP 1663402]
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib64/libthread_db.so.1".
+0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+
+Thread 133 (Thread 0x7f79ad1ff640 (LWP 1663402) "efs-fuse"):
+#0  0x00007f79ad30359f in poll () from /lib64/libc.so.6
+#1  0x000000000040bb61 in efs_stop_server (unused=<optimized out>) at src/client/stop_control.h:182
+#2  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#3  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 132 (Thread 0x7f79ac9fe640 (LWP 1663403) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004086ef in ll_inval_thread (arg=<optimized out>) at src/client/efs_fuse.c:859
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 131 (Thread 0x7f79ac1fd640 (LWP 1663404) "efs-fuse"):
+#0  0x00007f79ad2ff58c in read () from /lib64/libc.so.6
+#1  0x00007f79ad5b8fc4 in fuse_session_receive_buf_int (se=0x3567eb0, buf=buf@entry=0x3568678, ch=0x0) at ../lib/fuse_lowlevel.c:2979
+#2  0x00007f79ad5b37f0 in fuse_do_work (data=0x3568660) at ../lib/fuse_loop_mt.c:137
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 130 (Thread 0x7f79ab8fa640 (LWP 1663405) "efs-fuse"):
+#0  0x00007f79ad2ff58c in read () from /lib64/libc.so.6
+#1  0x00007f79ad5b8fc4 in fuse_session_receive_buf_int (se=0x3567eb0, buf=buf@entry=0x7f79a4000b78, ch=0x0) at ../lib/fuse_lowlevel.c:2979
+#2  0x00007f79ad5b37f0 in fuse_do_work (data=0x7f79a4000b60) at ../lib/fuse_loop_mt.c:137
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 129 (Thread 0x7f79ab0f9640 (LWP 1663406) "efs-fuse"):
+#0  0x00007f79ad2d5c65 in clock_nanosleep@GLIBC_2.2.5 () from /lib64/libc.so.6
+#1  0x00007f79ad2da717 in nanosleep () from /lib64/libc.so.6
+#2  0x00007f79ad3066b9 in usleep () from /lib64/libc.so.6
+#3  0x000000000040f202 in efs_open_retry_worker (unused=<optimized out>) at src/client/efs_fuse.c:2485
+#4  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 128 (Thread 0x7f79aa8f8640 (LWP 1663408) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x0000000000465aaf in meta_flush_main (arg=<optimized out>) at src/client/write.c:2135
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 127 (Thread 0x7f79aa0f7640 (LWP 1663409) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x0000000000465aaf in meta_flush_main (arg=<optimized out>) at src/client/write.c:2135
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 126 (Thread 0x7f79a98f6640 (LWP 1663410) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x0000000000465aaf in meta_flush_main (arg=<optimized out>) at src/client/write.c:2135
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 125 (Thread 0x7f79a90f5640 (LWP 1663411) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x0000000000465aaf in meta_flush_main (arg=<optimized out>) at src/client/write.c:2135
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 124 (Thread 0x7f79a88f4640 (LWP 1663412) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ae4f in pthread_cond_timedwait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000047ea46 in stage_evict_main (arg=<optimized out>) at src/client/stage_evict.c:630
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 123 (Thread 0x7f79a36b9640 (LWP 1663415) "efs-fuse"):
+#0  0x00007f79ad30359f in poll () from /lib64/libc.so.6
+#1  0x0000000000432557 in recv_poller (arg=0x5a5758 <g_devs+152>) at src/common/rdma.c:903
+#2  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#3  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 122 (Thread 0x7f79a2bbe640 (LWP 1663617) "efs-fuse"):
+#0  0x00007f79ad2ff58c in read () from /lib64/libc.so.6
+#1  0x00007f79ad5b8fc4 in fuse_session_receive_buf_int (se=0x3567eb0, buf=buf@entry=0x7f799c000b98, ch=0x0) at ../lib/fuse_lowlevel.c:2979
+#2  0x00007f79ad5b37f0 in fuse_do_work (data=0x7f799c000b80) at ../lib/fuse_loop_mt.c:137
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 121 (Thread 0x7f79a22bb640 (LWP 1663618) "efs-fuse"):
+#0  0x00007f79ad2ff58c in read () from /lib64/libc.so.6
+#1  0x00007f79ad5b8fc4 in fuse_session_receive_buf_int (se=0x3567eb0, buf=buf@entry=0x7f7998000b78, ch=0x0) at ../lib/fuse_lowlevel.c:2979
+#2  0x00007f79ad5b37f0 in fuse_do_work (data=0x7f7998000b60) at ../lib/fuse_loop_mt.c:137
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 120 (Thread 0x7f79a13c4640 (LWP 1663619) "efs-fuse"):
+#0  0x00007f79ad2ff58c in read () from /lib64/libc.so.6
+#1  0x00007f79ad5b8fc4 in fuse_session_receive_buf_int (se=0x3567eb0, buf=buf@entry=0x7f79a401a5b8, ch=0x0) at ../lib/fuse_lowlevel.c:2979
+#2  0x00007f79ad5b37f0 in fuse_do_work (data=0x7f79a401a5a0) at ../lib/fuse_loop_mt.c:137
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 119 (Thread 0x7f7997fff640 (LWP 1663620) "efs-fuse"):
+#0  0x00007f79ad2ff58c in read () from /lib64/libc.so.6
+#1  0x00007f79ad5b8fc4 in fuse_session_receive_buf_int (se=0x3567eb0, buf=buf@entry=0x7f799800a588, ch=0x0) at ../lib/fuse_lowlevel.c:2979
+#2  0x00007f79ad5b37f0 in fuse_do_work (data=0x7f799800a570) at ../lib/fuse_loop_mt.c:137
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 118 (Thread 0x7f79977fe640 (LWP 1663621) "efs-fuse"):
+#0  0x00007f79ad2ff58c in read () from /lib64/libc.so.6
+#1  0x00007f79ad5b8fc4 in fuse_session_receive_buf_int (se=0x3567eb0, buf=buf@entry=0x7f799800ef68, ch=0x0) at ../lib/fuse_lowlevel.c:2979
+#2  0x00007f79ad5b37f0 in fuse_do_work (data=0x7f799800ef50) at ../lib/fuse_loop_mt.c:137
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 117 (Thread 0x7f7996ffd640 (LWP 1663622) "efs-fuse"):
+#0  0x00007f79ad2ff58c in read () from /lib64/libc.so.6
+#1  0x00007f79ad5b8fc4 in fuse_session_receive_buf_int (se=0x3567eb0, buf=buf@entry=0x7f79a401ece8, ch=0x0) at ../lib/fuse_lowlevel.c:2979
+#2  0x00007f79ad5b37f0 in fuse_do_work (data=0x7f79a401ecd0) at ../lib/fuse_loop_mt.c:137
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 116 (Thread 0x7f79967fc640 (LWP 1663623) "efs-fuse"):
+#0  0x00007f79ad2ff58c in read () from /lib64/libc.so.6
+#1  0x00007f79ad5b8fc4 in fuse_session_receive_buf_int (se=0x3567eb0, buf=buf@entry=0x7f799802d158, ch=0x0) at ../lib/fuse_lowlevel.c:2979
+#2  0x00007f79ad5b37f0 in fuse_do_work (data=0x7f799802d140) at ../lib/fuse_loop_mt.c:137
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 115 (Thread 0x7f7995d01640 (LWP 1663624) "efs-fuse"):
+#0  0x00007f79ad2ff58c in read () from /lib64/libc.so.6
+#1  0x00007f79ad5b8fc4 in fuse_session_receive_buf_int (se=0x3567eb0, buf=buf@entry=0x7f7998031748, ch=0x0) at ../lib/fuse_lowlevel.c:2979
+#2  0x00007f79ad5b37f0 in fuse_do_work (data=0x7f7998031730) at ../lib/fuse_loop_mt.c:137
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 114 (Thread 0x7f7994816640 (LWP 1663625) "efs-fuse"):
+#0  0x00007f79ad2d5c65 in clock_nanosleep@GLIBC_2.2.5 () from /lib64/libc.so.6
+#1  0x00007f79ad2da717 in nanosleep () from /lib64/libc.so.6
+#2  0x00007f79ad3066b9 in usleep () from /lib64/libc.so.6
+#3  0x00000000004744fa in pack_worker (unused=<optimized out>) at src/client/pack_write.c:213
+#4  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#5  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 113 (Thread 0x7f798f670640 (LWP 1663631) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004692a1 in dcache_reclaim_main (arg=<optimized out>) at src/client/write.c:6753
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 112 (Thread 0x7f798ee6f640 (LWP 1663632) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004692a1 in dcache_reclaim_main (arg=<optimized out>) at src/client/write.c:6753
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 111 (Thread 0x7f798e66e640 (LWP 1663633) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004692a1 in dcache_reclaim_main (arg=<optimized out>) at src/client/write.c:6753
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 110 (Thread 0x7f798de6d640 (LWP 1663634) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004692a1 in dcache_reclaim_main (arg=<optimized out>) at src/client/write.c:6753
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 109 (Thread 0x7f798d66c640 (LWP 1663635) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004692a1 in dcache_reclaim_main (arg=<optimized out>) at src/client/write.c:6753
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 108 (Thread 0x7f798ce6b640 (LWP 1663636) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004692a1 in dcache_reclaim_main (arg=<optimized out>) at src/client/write.c:6753
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 107 (Thread 0x7f798c66a640 (LWP 1663637) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004692a1 in dcache_reclaim_main (arg=<optimized out>) at src/client/write.c:6753
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 106 (Thread 0x7f798be69640 (LWP 1663638) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004692a1 in dcache_reclaim_main (arg=<optimized out>) at src/client/write.c:6753
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 105 (Thread 0x7f798b668640 (LWP 1663639) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004692a1 in dcache_reclaim_main (arg=<optimized out>) at src/client/write.c:6753
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 104 (Thread 0x7f798ae67640 (LWP 1663640) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004692a1 in dcache_reclaim_main (arg=<optimized out>) at src/client/write.c:6753
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 103 (Thread 0x7f798a666640 (LWP 1663641) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004692a1 in dcache_reclaim_main (arg=<optimized out>) at src/client/write.c:6753
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 102 (Thread 0x7f7989e65640 (LWP 1663642) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004692a1 in dcache_reclaim_main (arg=<optimized out>) at src/client/write.c:6753
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 101 (Thread 0x7f7989664640 (LWP 1663643) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004692a1 in dcache_reclaim_main (arg=<optimized out>) at src/client/write.c:6753
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 100 (Thread 0x7f7988e63640 (LWP 1663644) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004692a1 in dcache_reclaim_main (arg=<optimized out>) at src/client/write.c:6753
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 99 (Thread 0x7f7988662640 (LWP 1663645) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004692a1 in dcache_reclaim_main (arg=<optimized out>) at src/client/write.c:6753
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 98 (Thread 0x7f7987e61640 (LWP 1663646) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004692a1 in dcache_reclaim_main (arg=<optimized out>) at src/client/write.c:6753
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 97 (Thread 0x7f7987660640 (LWP 1663647) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 96 (Thread 0x7f7986e5f640 (LWP 1663648) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 95 (Thread 0x7f798665e640 (LWP 1663649) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 94 (Thread 0x7f7985e5d640 (LWP 1663650) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 93 (Thread 0x7f798565c640 (LWP 1663651) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 92 (Thread 0x7f7984e5b640 (LWP 1663652) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 91 (Thread 0x7f798465a640 (LWP 1663653) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 90 (Thread 0x7f7983e59640 (LWP 1663654) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 89 (Thread 0x7f7983658640 (LWP 1663655) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 88 (Thread 0x7f7982e57640 (LWP 1663656) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 87 (Thread 0x7f7982656640 (LWP 1663657) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 86 (Thread 0x7f7981e55640 (LWP 1663658) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 85 (Thread 0x7f7981654640 (LWP 1663659) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 84 (Thread 0x7f7980e53640 (LWP 1663660) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 83 (Thread 0x7f7980652640 (LWP 1663661) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 82 (Thread 0x7f797fe51640 (LWP 1663662) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 81 (Thread 0x7f797f650640 (LWP 1663663) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 80 (Thread 0x7f797ee4f640 (LWP 1663664) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 79 (Thread 0x7f797e64e640 (LWP 1663665) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 78 (Thread 0x7f797de4d640 (LWP 1663666) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 77 (Thread 0x7f797d64c640 (LWP 1663667) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 76 (Thread 0x7f797ce4b640 (LWP 1663668) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 75 (Thread 0x7f797c64a640 (LWP 1663669) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 74 (Thread 0x7f797be49640 (LWP 1663670) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 73 (Thread 0x7f797b648640 (LWP 1663671) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 72 (Thread 0x7f797ae47640 (LWP 1663672) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 71 (Thread 0x7f797a646640 (LWP 1663673) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 70 (Thread 0x7f7979e45640 (LWP 1663674) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 69 (Thread 0x7f7979644640 (LWP 1663675) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 68 (Thread 0x7f7978e43640 (LWP 1663676) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 67 (Thread 0x7f7978642640 (LWP 1663677) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 66 (Thread 0x7f7977e41640 (LWP 1663678) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 65 (Thread 0x7f7977640640 (LWP 1663679) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 64 (Thread 0x7f7976e3f640 (LWP 1663680) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 63 (Thread 0x7f797663e640 (LWP 1663681) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 62 (Thread 0x7f7975e3d640 (LWP 1663682) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 61 (Thread 0x7f797563c640 (LWP 1663683) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 60 (Thread 0x7f7974e3b640 (LWP 1663684) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 59 (Thread 0x7f797463a640 (LWP 1663685) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 58 (Thread 0x7f7973e39640 (LWP 1663686) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 57 (Thread 0x7f7973638640 (LWP 1663687) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 56 (Thread 0x7f7972e37640 (LWP 1663688) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 55 (Thread 0x7f7972636640 (LWP 1663689) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 54 (Thread 0x7f7971e35640 (LWP 1663690) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 53 (Thread 0x7f7971634640 (LWP 1663691) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 52 (Thread 0x7f7970e33640 (LWP 1663692) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 51 (Thread 0x7f7970632640 (LWP 1663693) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 50 (Thread 0x7f796fe31640 (LWP 1663694) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 49 (Thread 0x7f796f630640 (LWP 1663695) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 48 (Thread 0x7f796ee2f640 (LWP 1663696) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 47 (Thread 0x7f796e62e640 (LWP 1663697) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 46 (Thread 0x7f796de2d640 (LWP 1663698) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 45 (Thread 0x7f796d62c640 (LWP 1663699) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 44 (Thread 0x7f796ce2b640 (LWP 1663700) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 43 (Thread 0x7f796c62a640 (LWP 1663701) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 42 (Thread 0x7f796be29640 (LWP 1663702) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 41 (Thread 0x7f796b628640 (LWP 1663703) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 40 (Thread 0x7f796ae27640 (LWP 1663704) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 39 (Thread 0x7f796a626640 (LWP 1663705) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 38 (Thread 0x7f7969e25640 (LWP 1663706) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 37 (Thread 0x7f7969624640 (LWP 1663707) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 36 (Thread 0x7f7968e23640 (LWP 1663708) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 35 (Thread 0x7f7968622640 (LWP 1663709) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 34 (Thread 0x7f7967e21640 (LWP 1663710) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x000000000045591b in get_pool_thread (arg=<optimized out>) at src/client/read.c:1410
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 33 (Thread 0x7f7967620640 (LWP 1663713) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 32 (Thread 0x7f7966e1f640 (LWP 1663714) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 31 (Thread 0x7f796661e640 (LWP 1663715) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 30 (Thread 0x7f7965e1d640 (LWP 1663716) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 29 (Thread 0x7f796561c640 (LWP 1663717) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 28 (Thread 0x7f7964e1b640 (LWP 1663718) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 27 (Thread 0x7f796461a640 (LWP 1663719) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 26 (Thread 0x7f7963e19640 (LWP 1663720) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 25 (Thread 0x7f7963618640 (LWP 1663721) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 24 (Thread 0x7f7962e17640 (LWP 1663722) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 23 (Thread 0x7f7962616640 (LWP 1663723) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 22 (Thread 0x7f7961e15640 (LWP 1663724) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 21 (Thread 0x7f7961614640 (LWP 1663725) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 20 (Thread 0x7f7960e13640 (LWP 1663726) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 19 (Thread 0x7f7960612640 (LWP 1663727) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 18 (Thread 0x7f795fe11640 (LWP 1663728) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 17 (Thread 0x7f795f610640 (LWP 1663729) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 16 (Thread 0x7f795ee0f640 (LWP 1663730) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 15 (Thread 0x7f795e60e640 (LWP 1663731) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 14 (Thread 0x7f795de0d640 (LWP 1663732) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 13 (Thread 0x7f795d60c640 (LWP 1663733) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 12 (Thread 0x7f795ce0b640 (LWP 1663734) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 11 (Thread 0x7f795c60a640 (LWP 1663735) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 10 (Thread 0x7f795be09640 (LWP 1663736) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 9 (Thread 0x7f795b608640 (LWP 1663737) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 8 (Thread 0x7f795ae07640 (LWP 1663738) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 7 (Thread 0x7f795a606640 (LWP 1663739) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 6 (Thread 0x7f7959e05640 (LWP 1663740) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 5 (Thread 0x7f7959604640 (LWP 1663741) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 4 (Thread 0x7f7958e03640 (LWP 1663742) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 3 (Thread 0x7f7958602640 (LWP 1663743) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 2 (Thread 0x7f7957e01640 (LWP 1663744) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad28ac62 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libc.so.6
+#2  0x00000000004696bb in put_pool_thread (arg=<optimized out>) at src/client/write.c:7010
+#3  0x00007f79ad28b699 in start_thread () from /lib64/libc.so.6
+#4  0x00007f79ad3108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 1 (Thread 0x7f79ad4bba00 (LWP 1663400) "efs-fuse"):
+#0  0x00007f79ad28867a in __futex_abstimed_wait_common () from /lib64/libc.so.6
+#1  0x00007f79ad2937d8 in __new_sem_wait_slow64.constprop.0 () from /lib64/libc.so.6
+#2  0x00007f79ad5b3b38 in fuse_session_loop_mt_312 (se=0x3567eb0, config=0x35683e0) at ../lib/fuse_loop_mt.c:366
+#3  0x0000000000406bb3 in efs_fuse_main_mt (argv=0x7ffc651defd0, argc=<optimized out>) at src/client/efs_fuse.c:7976
+#4  main (argc=<optimized out>, argv=<optimized out>) at src/client/efs_fuse.c:7838
+[Inferior 1 (process 1663400) detached]
