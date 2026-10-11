@@ -368,8 +368,12 @@ try:
             # LOAD/POSIX gates may leave thousands of paths. Use the normal
             # bounded command output cap for this namespace-wide oracle;
             # 64 KiB deliberately remains in the small explicit-limit gates.
+            if os.environ.get('EFS_QUERY_VIRTUAL')=='1' and os.getuid()!=1000:
+                denied,body=query(base+node-1,request(version=2,max_output=16<<20,
+                                                     operation=1,match=1,term=b''))
+                assert denied.status==-16 and not body,('outsider read protected tree',denied.status,body)
             reply,text=query(base+node-1,request(version=2,max_output=16<<20,operation=1,
-                                              match=1,term=b''))
+                                              uid=os.getuid(),gid=os.getgid(),match=1,term=b''))
             assert reply.status==0,(reply.status,text)
             paths={bytes.fromhex(e['path_hex']) for e in json.loads(text)['entries']}
             assert b'while-disabled/renamed' in paths and b'while-disabled/sub/new' in paths,paths
