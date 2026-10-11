@@ -1475,6 +1475,17 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+Production tiny-file packing is the first ORCD priority on `devel-orcd`: see
+[W95/P4.1 plan and allocation baseline](../status/orcd-tiny-packing-20261011.md). The
+408× calculation is for 512-byte payloads in separate full-sized fragments;
+production packing and measured savings remain open.
+[W108 owner-name rendering](../status/w108-owner-name-display-20261011.md) is retained
+in the ORCD queue after the packing priority.
+
+[Architecture](#architecture) · [Current handoff](#appendix-2--in-flight--the-current-handoff-block) ·
+[Decisions](#appendix-3--decisions--taken-and-pending-register-d1d31) · [Work-item details](#appendix-4--work-items--long-form-text-for-the-open-w-items-and-the-queue-rows) ·
+[Operations](../operations/operations.md) · [Archive](../archive/README.md)
+
 ### Governing node-count contract — D36
 
 [User-ratified D36](../status/node-count-protection-20261009.md): three nodes minimum,
@@ -4829,7 +4840,7 @@ cluster wipe or data migration. Other P4 rows remain conditional.
 
 | row | item | taken only if | what |
 | --- | --- | --- | --- |
-| P4.1 | plan row I — fragment on-disk layout (W34 residual) | `efs-bench --bench` shows the server PUT path (create + O_DIRECT write per 64 KiB fragment, 16 K/s per server at the cluster wall) is the wall | fewer path components / larger containers per fragment; **wipe**; design row first |
+| P4.1 | plan row I — fragment on-disk layout (W34 residual) | `efs-bench --bench` shows the server PUT path (create + O_DIRECT write per 64 KiB fragment, 16 K/s per server at the cluster wall) is the wall | fewer path components / larger containers per fragment; production tiny-payload packing under W95; versioned mixed-format rollout, no required wipe; design row first |
 | P4.2 | plan row J — **W40** FUSE write copy | `efs-fuse --bench` shows `write` ≫ dd (the kernel FUSE path is the wall) | own `/dev/fuse` receive loop into pool buffers; W15 step 5 (`FUSE_CAP_SPLICE_READ`, kernel prerequisite done Sep 29) rides with it |
 | P4.3 | plan row K — RDMA zero-copy receive | `efs-fuse --bench` shows `put` ≈ `write` ≈ dd with RTT the whole wall and reads in-flight bound | per-request posted receives into chunk buffers; transport change, design row first |
 | P4.4 | 9-client scaling | after P1/P2 | `dd_wall.sh` 1/4/9 and `fio_honest_matrix.sh`; if 9 clients still share one ceiling (Sep 28: 2.5–2.8 GB/s = 6 % of 44 GB/s), the shared point is on the servers — P3's `efs-bench --bench` meta line vs data line says which |
@@ -6516,6 +6527,12 @@ open latency as a measured saving.
 
 ### W95 · Tiny-file data persistence and packing principles
 
+**Oct 11 ORCD priority:** production logical-payload packing is the first item on
+`devel-orcd`. Replace per-file full-stripe padding with bounded immutable packed
+segments and versioned publication/GC mappings. Existing independent packing and
+server fragment containers do not implement this. [Plan, geometry targets and
+ORCD work order](../status/orcd-tiny-packing-20261011.md).
+
 **Implementation update (Oct 8):** Independent tiny geometry, durable cohort latency, retained/cold/process-crash experiments and production churn are tested. The independent indexed-packing protocol and model are implemented and gated; the P4.1 production-format decision remains open.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
@@ -7050,6 +7067,19 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 
 **Gate:** Actual cross-host RDMA connection/device evidence plus unchanged POSIX, peer, direct-I/O, persistence and fault gates on the designated environment. Report AMD software and `orcd-test` hardware verdicts separately; neither TCP nor software-only results close hardware-specific obligations.
 
+<a id="w108"></a>
+
+### W108 · Resolve owner names in directory-local long listings
+
+**Class/state:** Command usability; open.
+
+`.efs/ls -l` and shared find rendering currently hard-code numeric UID:GID
+formatting, so ORCD UID 246111 appears as a number rather than `erbmi1`.
+Resolve human-readable names on the executing client, retain numeric fallback
+and explicit numeric mode, and keep stored/JSON IDs unchanged. Gate known and
+unknown mappings, safe output, repeated NSS lookup caching, and the rebuilt
+ORCD virtual command. Assigned follow-up to efs-coding 1 - orcd after current
+work, later October 11. See the [cause and plan](../status/w108-owner-name-display-20261011.md).
 
 <a id="w109"></a>
 
