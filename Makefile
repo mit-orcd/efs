@@ -201,6 +201,7 @@ test-report-pressure:
 	python3 tests/test_append_session_host.py
 	python3 tests/test_session_read_proof.py
 	python3 tests/test_pack_authority.py
+	python3 tests/test_pack_authority_net_fallback.py
 	python3 tests/test_append_host_authority.py
 	python3 tests/test_report_orphan.py
 

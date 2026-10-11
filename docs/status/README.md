@@ -19,7 +19,10 @@ The newer batch-integrated `f0bb0208` passes full merged normal/fault native and
 seven sanitizer gates, but reproduces the jobs16 packing timeout in both modes.
 Individual failed cases, phase limits and the bounded profile are indexed in the
 release ledger; repaired jobs4 GC is separate from this open blocker.
-Bounded transport batching is integrated, with its merged qualification pending.
+Bounded transport batching, whole-cohort authority143/144 and Mac tag53/CREATE
+adoption/routing are integrated; full merged AMD qualification is pending.
+Independent authority review NET fallback is implemented with normal and
+ASan/UBSan actual-caller regressions; semantic refusals and fresh guards remain.
 ORCD packing timeouts remain
 a release blocker. Small-file packing and code-review correctness have priority. Branch checkpoints
 are not final release acceptance. Shared devel/main and pushes remain unchanged

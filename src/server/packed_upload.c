@@ -33,7 +33,9 @@ int server_packed_upload(struct efsd_server *s, const uint8_t *body, uint32_t by
                reply.count!=count || memcmp(digest,reply.digest,sizeof(digest)))rc=EFS_ERR_PROTO;
             else checked=1;
         } else rc=reply.rc;
-        if(rc && rc!=EFS_ERR_PROTO){free(query);return rc;}
+        /* Missing read-only replies convey no authority. Fresh legacy
+         * admission and FileID checks may still independently authorize. */
+        if(rc && rc!=EFS_ERR_PROTO && rc!=EFS_ERR_NET){free(query);return rc;}
     }
     if(!checked) {
         query[0] = object.ledger.publication_group; query[1] = EFS_MD_REQ_PACK_STATUS;

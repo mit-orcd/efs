@@ -33,7 +33,7 @@ integrated explicitly; moving branch tips are not test identities.
 | Intel / devel-intel | `5f03ec76` plus fixture corrections through `5abf8e7b` (C source `3d69edb4`) | base merged in `22056d9b`; corrected fixtures integrated | Both-host native and complete direct/buffered private fixtures pass; supplemental fault matrix, remaining canonical/cold gates and retained-data deployment still pending. Production remains `7bde5f43`. |
 | Review / devel-code-review | reports `1b0c6b7c`, fixes through `3ac828cd` | base merged in `5e381545`; further repairs in `9260d8a1` and `9acea823` | Reproduced use-after-free fixed; focused merged regression passes. Capacity accounting, recorder reap and incoming-chunk re-dirty fixes included; private find/flush/walker cleanup included. Full merged/Linux/live acceptance required. |
 | NUC / devel-nuc | revised `ba73f304` | merged in `5cbe0ce4` | APPEND_CATCHUP tag52; focused merged gates pass. New-tag native rebuild, live/fault/cold/20k and measured W97 acceptance pending. Production remains `f52cd2dd-nuc`; preserved writer must finish before restart. |
-| Mac / devel-mac | `b2c01fa0` | reconciled in `93bb30de`; complete-server compile corrections in `29b33f80` | Request-local authority masks and combined registration retained alongside ordered NUC/Intel reservation guards, tag52 completion and Mac prune/close cohorts. Tag53 experiment excluded. Owner review and merged gates pending. Concurrent CREATE timing still open. |
+| Mac / devel-mac | `b2c01fa0` | reconciled in `93bb30de`; complete-server compile corrections in `29b33f80` | Request-local authority masks and combined registration retained alongside ordered NUC/Intel reservation guards, tag52 completion and Mac prune/close cohorts. Single-shard durable tag53 is now integrated from `a6885603`, with CREATE adoption and coverage-aware routing (`f842cd37`, `0f869394`); full merged acceptance pending. Owner review and merged gates pending. Concurrent CREATE timing still open. |
 
 Submitted checkpoints are implementation inputs, not release certification.
 Some are already contained by another branch; Git ancestry and source diffs
@@ -293,9 +293,7 @@ by direct/buffered seven-client jobs16 acceptance. Nothing is tagged or pushed.
 
 Protocol coordination also reserves transport IDs143/144 for ORCD's proposed
 read-only packed upload authority envelope; verified free and all owners
-notified. No envelope code is integrated or accepted. Current per-file authority,
-fresh group barriers and durable local storage/session/object guards remain
-mandatory. This reservation is independent of durable metadata command tags.
+notified. The submitted implementation is now integrated through `b579bee2`, including level3 capability preflight. Acceptance is pending. A successful exact whole-cohort proof replaces repeated per-file checks; fresh group barriers and durable local storage/session/object guards remain mandatory. This reservation is independent of durable metadata command tags.
 
 ### Latest batch-integrated qualification and jobs16 blocker
 
@@ -347,3 +345,28 @@ samples overlap (n2 hosts both groups); summing them is not a unique-object
 or logical-file count. Deleting these live packs would
 be wrong. This is not a recurrence of the repaired RECLAIMING backlog; the
 failed high-pressure test left linked files. Normal mounts are restored.
+
+### Authority and Mac reconciliation: latest merged candidate
+
+The release branch now includes submitted `b579bee2`: whole-cohort read-only
+upload authority (transport143/144), level3 compatibility preflight, Mac
+single-shard APPEND tag53, CREATE adoption and coverage-aware leader routing.
+General cross-shard APPEND retains ordered session/inode guards and tag52
+completion. All voters must understand tag53 before admitting those commands;
+an older binary is not a safe rollback after durable new commands.
+
+Independent review [6307ca63](../reviews/packed-authority-20261011/README.md)
+identified a missing read-only reply unnecessarily blocking fresh legacy
+validation. The production caller now falls back on NET as well as PROTO;
+semantic BUSY/STALE verdicts still refuse, and fallback requires fresh exact
+ACTIVE admission, every FileID/content epoch and the durable local session
+guard. The actual-caller regression passes normally and with ASan/UBSan and
+is part of the full native gate. This is a compatibility fix, not evidence
+that modern packing overload is resolved.
+
+The earlier `66c237c8` full native attempt failed in an extracted retry fixture;
+`1c6cc5b6` corrects its dependency mock. The final merged source requires new
+normal/fault native, sanitizer and quiet seven-client/jobs16 direct/buffered
+qualification on AMD. No timeout budget, authority predicate or durability
+barrier has been relaxed. ORCD reports its own `b579bee2` full native pass,
+which does not substitute for this release qualification.
