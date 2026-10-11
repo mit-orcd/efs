@@ -403,6 +403,10 @@
     "bytes": 806,
     "sha256": "f75733e93bc20a924d04552158b4f5606af6ec7bf5cd3bbd453337baf59bf9e5"
   },
+  "meta-placement/device-identification.json": {
+    "bytes": 631,
+    "sha256": "1c8f72d68fb6664214ce8f2e5c2abf1153f13b57dbece504e7a3103fa3a627a3"
+  },
   "meta-placement/efs-fuse-mnt.log": {
     "bytes": 6984,
     "sha256": "84948d6f673625ee8a566e292fa55f28eeb2b93890dc41c115d166f579d3af23"
