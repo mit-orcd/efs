@@ -52,7 +52,9 @@ int main(void)
     assert(!efs_pack_ledger_init(image,geometry,refs,16,&owner,15,&ledger));
     pid_t pid=fork();assert(pid>=0);
     if(!pid) {
-        struct efs_kv *kv=efs_kv_lsm_open(dir,NULL);assert(kv);save(kv,&ledger,NULL,0);
+        struct efs_kv *kv=efs_kv_lsm_open(dir,NULL);assert(kv);
+        assert(!efs_kv_lsm_require_reader(kv,EFS_KV_READER_PACK_V1));
+        save(kv,&ledger,NULL,0);
         struct efs_kv_item items[17];uint8_t values[16][EFS_PACK_REF_BYTES],receipt[]={1};
         for(unsigned i=0;i<16;i++) {
             assert(!efs_pack_ledger_publish(&ledger,&refs[i]));

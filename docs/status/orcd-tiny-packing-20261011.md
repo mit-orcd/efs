@@ -255,3 +255,22 @@ files are removed. Fencing does not delete existing reader bytes, does not
 poison a different export/new generation, and corruption refuses both PUT and
 fence ACK. The earlier 90.6667× allocation control still passes.
 [Private typed-fence gate](../../results/measure/20261011-orcd-tiny-packing/linux-packed-fences-dev.txt).
+
+The staged minimum-reader barrier persists a monotonic capability in the
+authoritative KV MANIFEST before format-dependent metadata can be published.
+Unmarked stores retain `KVLSM1`; marked stores use `KVLSM2` with the required
+capability. Existing segment/WAL data stays intact. Flush/compaction retain the
+requirement; switching off future packed writes cannot clear it. The marker
+API checks file and directory barriers on retries and can run under serialized
+apply ownership, even if the subsequent metadata batch aborts. Unknown flags,
+versions, malformed headers and wrapped numeric capabilities refuse KV open.
+No current mounted writer calls it; all owning nodes and snapshot/import paths
+still need the barrier before production publication, plus live build/feature
+negotiation. This is not an automatic migration or a completed rollback gate.
+
+Private ORCD tests pass persistence failures, retries, aborted apply, cold
+recovery and unknown-format refusal. A probe linked to the actual pre-barrier
+`5a5caee9ceb1` library refuses a private marked store (exit 77); the updated
+library successfully reopens the same store.
+[Fault/recovery gate](../../results/measure/20261011-orcd-tiny-packing/linux-reader-gate-dev.txt)
+and [actual legacy-reader proof](../../results/measure/20261011-orcd-tiny-packing/linux-legacy-reader-proof.txt).

@@ -291,7 +291,10 @@ int kv_manifest_write(struct kv_lsm *l)
     f = fopen(tmp, "wb");
     if (!f)
         return EFS_ERR_IO;
-    if (fprintf(f, "KVLSM1 %llu\n", (unsigned long long)l->next_seq) < 0)
+    int header=l->required_reader ?
+        fprintf(f,"KVLSM2 %llu %u\n",(unsigned long long)l->next_seq,l->required_reader) :
+        fprintf(f,"KVLSM1 %llu\n",(unsigned long long)l->next_seq);
+    if (header < 0)
         goto fail;
     for (i = 0; i < l->n_l0; i++)
         if (fprintf(f, "0 %llu\n", (unsigned long long)l->l0[i].seq) < 0)
@@ -301,7 +304,9 @@ int kv_manifest_write(struct kv_lsm *l)
             goto fail;
     if (fflush(f) != 0 || fsync(fileno(f)) != 0)
         goto fail;
-    fclose(f);
+    if(fclose(f)!=0) {
+        unlink(tmp);return EFS_ERR_IO;
+    }
     (void)query_checkpoint_write(l,tmp);
     if (rename(tmp, path) != 0) {
         unlink(tmp);
@@ -430,11 +435,22 @@ static int manifest_load(struct kv_lsm *l)
     f = fopen(path, "rb");
     if (!f)
         return EFS_OK;
-    if (!fgets(line, sizeof(line), f) || sscanf(line, "KVLSM1 %llu", &ns) != 1) {
+    unsigned requirements=0;char extra;
+    if (!fgets(line, sizeof(line), f)) {
         fclose(f);
         return EFS_ERR_PROTO;
     }
+    if(sscanf(line,"KVLSM1 %llu %c",&ns,&extra)!=1) {
+        if(sscanf(line,"KVLSM2 %llu %u %c",&ns,&requirements,&extra)!=2 ||
+           !requirements || (requirements & ~EFS_KV_READER_PACK_V1)) {
+            fclose(f);return EFS_ERR_PROTO;
+        }
+        char canonical[128];
+        snprintf(canonical,sizeof(canonical),"KVLSM2 %llu %u\n",ns,requirements);
+        if(strcmp(line,canonical)){fclose(f);return EFS_ERR_PROTO;}
+    }
     l->next_seq = ns;
+    l->required_reader=requirements;
     while (fgets(line, sizeof(line), f)) {
         int level;
         unsigned long long seq;
@@ -1334,6 +1350,34 @@ int efs_kv_lsm_stats(struct efs_kv *kv, struct efs_kv_lsm_stats *out)
     out->n_l1 = l->n_l1;
     pthread_mutex_unlock(&l->mu);
     return EFS_OK;
+}
+
+int efs_kv_lsm_require_reader(struct efs_kv *kv,uint32_t required)
+{
+    if(!kv || kv->ops!=&lsm_ops || !kv->ctx || !required ||
+       (required & ~EFS_KV_READER_PACK_V1))return EFS_ERR_INVAL;
+    struct kv_lsm *l=kv->ctx;
+    /* The serialized apply owner already holds writers exclusively. This
+     * barrier is deliberately durable even when its later KV batch aborts. */
+    int owned=apply_scope.owner==l;
+    if(!owned)pthread_rwlock_wrlock(&l->writers);
+    pthread_mutex_lock(&l->mu);
+    while(l->compact_busy)pthread_cond_wait(&l->cv,&l->mu);
+    l->required_reader|=required;
+    /* Never roll back in-memory requirements on failure: rename may already
+     * have succeeded. Retrying must re-establish, not infer, durability. */
+    int rc=kv_manifest_write(l);
+    if(!rc) {
+        int fd;do{fd=open(l->dir,O_RDONLY|O_DIRECTORY|O_CLOEXEC);}while(fd<0 && errno==EINTR);
+        if(fd<0)rc=EFS_ERR_IO;
+        else {
+            int sr;do{sr=fsync(fd);}while(sr<0 && errno==EINTR);
+            int cr=close(fd);if(sr<0 || cr<0)rc=EFS_ERR_IO;
+        }
+    }
+    pthread_mutex_unlock(&l->mu);
+    if(!owned)pthread_rwlock_unlock(&l->writers);
+    return rc;
 }
 
 int efs_kv_lsm_pressure(struct efs_kv *kv, struct efs_kv_lsm_pressure *out)
