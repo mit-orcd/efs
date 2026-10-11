@@ -363,6 +363,150 @@
     "bytes": 806,
     "sha256": "a77d114d99d0a956f5b1ce32881001b40d5d4e0821486752755782640ba02f97"
   },
+  "data-placement/1-nvme/GO": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "data-placement/1-nvme/catch-up.json": {
+    "bytes": 1242,
+    "sha256": "a9ab893c373b55dee1d2fd5c663211a1ce7359d7fc3ccd01b2e2a78726aac2d3"
+  },
+  "data-placement/1-nvme/cold-verification.json": {
+    "bytes": 4704,
+    "sha256": "2d8c65ea1d55d601fd2ed56f91d0d0ae784c7a9c9726f3465aca758888628f59"
+  },
+  "data-placement/1-nvme/complete.json": {
+    "bytes": 184,
+    "sha256": "3f15762679fd97660fbcb5805000c2a3cc2b8c443393855df239baf828940e41"
+  },
+  "data-placement/1-nvme/fuse-cold.log": {
+    "bytes": 237,
+    "sha256": "15d88686424a044ad04866ecb5f2f53920a9eba03ff07c64597a406eb121eaba"
+  },
+  "data-placement/1-nvme/fuse.log": {
+    "bytes": 237,
+    "sha256": "15d88686424a044ad04866ecb5f2f53920a9eba03ff07c64597a406eb121eaba"
+  },
+  "data-placement/1-nvme/late-profile/callers.txt": {
+    "bytes": 723033,
+    "sha256": "0d2821b1461539414e12fe3b5ae51242076cb4e04940f33d4cd4c0f1ea8839c4"
+  },
+  "data-placement/1-nvme/late-profile/flat.txt": {
+    "bytes": 11881,
+    "sha256": "a9ffd63001c0709a33b8e58856f3c5e42c7384382991ad2c17567551b9e9a287"
+  },
+  "data-placement/1-nvme/late-profile/perf-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "data-placement/1-nvme/late-profile/perf.data": {
+    "bytes": 802132,
+    "sha256": "abfcf0fdc3292a6564d49a1f4f6313759525d5b9c9d2f9c24fb4eb0ff136d245"
+  },
+  "data-placement/1-nvme/late-profile/perf.log": {
+    "bytes": 183,
+    "sha256": "125e4cbc8312cf8c2e5653db5cee731aa8bf1bbd60de27742982580ba48f42fa"
+  },
+  "data-placement/1-nvme/late-profile/strace-exit.txt": {
+    "bytes": 4,
+    "sha256": "ca2ebdf97d7469496b1f4b78958f9dc8447efdcb623953fee7b6996b762f6fff"
+  },
+  "data-placement/1-nvme/late-profile/strace.log": {
+    "bytes": 4885,
+    "sha256": "0062e46c1bb1ef2382b81d82c78fb1af9a76e32958ab7678cb24f3a8cb0d6b38"
+  },
+  "data-placement/1-nvme/late-profile/window.json": {
+    "bytes": 464,
+    "sha256": "9a3ccb217d7a47d4eacb49b9602d189d2ce971de04957202b869f6e9185fab9d"
+  },
+  "data-placement/1-nvme/load-final.json": {
+    "bytes": 7741,
+    "sha256": "1daafc21d49a5a32e93c95a98049a8914dc93d90eb3e05db2615f7d3a9f5f11f"
+  },
+  "data-placement/1-nvme/load-start.json": {
+    "bytes": 54,
+    "sha256": "f2d4e7127ef739f6ccb4df118495351950d96dff9343b1b9c650812e236b3386"
+  },
+  "data-placement/1-nvme/loader.log": {
+    "bytes": 4724,
+    "sha256": "6de5420afa0859ad5e279af659de376e9620cf7373201dd0c1214a2ba4386b1f"
+  },
+  "data-placement/1-nvme/mkfs.log": {
+    "bytes": 62,
+    "sha256": "c7394b524693733ce72949c5556e875470d67fde7339b9fee82e91b571802205"
+  },
+  "data-placement/1-nvme/n1-cold.log": {
+    "bytes": 18595,
+    "sha256": "093d92fa2fff3e80e22a7ff319ec98caa00b2db92f8a3b0e49d47b2c3a291fd0"
+  },
+  "data-placement/1-nvme/n1-observations.jsonl": {
+    "bytes": 1134391,
+    "sha256": "28ded3216c9b74d59d32b5dd1cc2f1a34b9621fb50adb2aabc78d736431a2354"
+  },
+  "data-placement/1-nvme/n1-sync.csv": {
+    "bytes": 162,
+    "sha256": "73d54a5b0b308965a7dc7e8ccadf247ec66951a4c2548108da0597fc6c7cbe9e"
+  },
+  "data-placement/1-nvme/n1.log.gz": {
+    "bytes": 120897,
+    "sha256": "1479644f5c4c5de1cd064b1aae7ac040c3df574449d4d9eae01c4884e7b655e3"
+  },
+  "data-placement/1-nvme/n2-cold.log": {
+    "bytes": 16440,
+    "sha256": "829f2287bf6c48656d136be89f26fb47de87472c12759d7db7eb57943e88e8a1"
+  },
+  "data-placement/1-nvme/n2-observations.jsonl": {
+    "bytes": 1127802,
+    "sha256": "bf606839535d54d0c4abd8e08755677d7a634a8856467b888d3418a63499ca0f"
+  },
+  "data-placement/1-nvme/n2-sync.csv": {
+    "bytes": 162,
+    "sha256": "53babd80c9937516b19b4eb46f277a9c3b7f05fd16c2a48a4281b429a8410b96"
+  },
+  "data-placement/1-nvme/n2.log.gz": {
+    "bytes": 105009,
+    "sha256": "b216ad61178d067f15c779a03315147b4794b372bcd6478d49ef31b4f2b190d3"
+  },
+  "data-placement/1-nvme/n3-cold.log": {
+    "bytes": 16454,
+    "sha256": "7fad31f015fa770806f0dc1398bc7f231dd616ebaa1a905716113a1891fa9136"
+  },
+  "data-placement/1-nvme/n3-observations.jsonl": {
+    "bytes": 1127582,
+    "sha256": "13cc0b300c8c71b62eb1ed97172e3af00e1d8fff7d1e7f11e3154e2e8a719a9f"
+  },
+  "data-placement/1-nvme/n3-sync.csv": {
+    "bytes": 162,
+    "sha256": "ba5ad41add4927709646d3ec93147791fbc74de4c11e93811dce594361d7cf19"
+  },
+  "data-placement/1-nvme/n3.log.gz": {
+    "bytes": 105083,
+    "sha256": "7fb8f450c8c68e7c11e56d7b121980d01d3e1757cc0b2d3f674dd3fe89feb1f4"
+  },
+  "data-placement/1-nvme/placement.json": {
+    "bytes": 555763,
+    "sha256": "3f7d8f8b4d1fc147ef9eb3b53845d0cc3fb0a7f570f138c26aba893587affab6"
+  },
+  "data-placement/1-nvme/progress.jsonl": {
+    "bytes": 98739,
+    "sha256": "1f9b6b60a5bfcddc29d49a497ec89ab6908165dc187380c1c2074c59a225561e"
+  },
+  "data-placement/1-nvme/ready.json": {
+    "bytes": 21,
+    "sha256": "b2a145ca9bbe7837cfc413b005352cc1685aeb3c29319eb697b4afb3691234cd"
+  },
+  "data-placement/1-nvme/samples.jsonl": {
+    "bytes": 1782346,
+    "sha256": "2aa884dffb2fa8ff646275f4f12d250c970e58545190c2ac0ebeef660da5431c"
+  },
+  "data-placement/1-nvme/storage-placement.json": {
+    "bytes": 500,
+    "sha256": "81a7dffafcbda38d55bbe901ad47a3d8896835a8133c179376b2deec6d42696f"
+  },
+  "data-placement/1-nvme/sync-control.json": {
+    "bytes": 806,
+    "sha256": "034ef2ee561532a4a7fc4bb922f34d7021bb2b2e2c14576e5e73a11cd19f3f73"
+  },
   "data-placement/identity.json": {
     "bytes": 1167,
     "sha256": "fea39392d621f9536991c9f21a2532a7a5a1670e4384b03251c90b3d89356ce9"

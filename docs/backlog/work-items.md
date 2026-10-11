@@ -4439,6 +4439,18 @@ or present the Raft improvement as measured KV acceptance.
 
 ## W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
 
+**Oct 11 controlled data placement:** with the same accepted engine and SATA
+metadata, the first SATA-data cell passes 212,648 files and 64 cold samples;
+throughput falls 567 → 283 files/s and SATA write-request elapsed rises
+0.211 → 0.489 ms. The NVMe-data cell passes 71,248 files and 64 cold samples;
+throughput falls 250 → 102 files/s, while SATA Raft sync falls slightly and
+NVMe write/flush elapsed rises. The final SATA repeat/restoration is pending.
+The files-engine root-barrier candidate `19cbb11f` reuses the existing startup
+ancestry seal, retaining file, descendant-directory and root syncs and full
+fallback for uninitialized roots. Focused Linux/full acceptance and measured
+benefit remain pending; it is not part of the frozen append-timer candidate.
+[Current placement and source ledger](../status/nuc-w52-w97-resume-20261011.md).
+
 **Oct 11 deployed continuation:** the validated merged engine is installed on
 preserved NUC stores. A five-minute measured create/write/close run again
 declines ~172 → 57 files/s; NVMe host request/flush elapsed means rise roughly

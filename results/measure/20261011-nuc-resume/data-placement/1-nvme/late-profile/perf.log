@@ -1,0 +1,2 @@
+[ perf record: Woken up 1 times to write data ]
+[ perf record: Captured and wrote 0.748 MB /data1/efs/devel-nuc-20261011/data-placement/1-nvme/late-profile/perf.data (4074 samples) ]
