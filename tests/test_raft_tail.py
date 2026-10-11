@@ -6,7 +6,7 @@ import tempfile
 import zlib
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parent/'live'))
-from raft_tail import commands
+from raft_tail import commands,applied_index
 
 def record(kind,group,payload):
     body=struct.pack('>BI',kind,group)+payload
@@ -18,6 +18,22 @@ with tempfile.TemporaryDirectory(prefix='efs-tail-test-') as d:
     p=Path(d)/'raft.log';header=struct.pack('>II',0x52464c31,1)
     p.write_bytes(header+entry(0,1,1,b'A')+entry(0,2,1,b'B')+entry(2,1,2,b'C'))
     assert commands(p,{0:1,2:1})=={(0,1):(1,b'A'),(2,1):(2,b'C')}
+    marker=Path(d)/'applied.0'
+    for index in (0,1,2,(1<<64)-1):
+        marker.write_bytes(struct.pack('>Q',index))
+        assert applied_index(marker)==index
+        marker.write_bytes(struct.pack('>QQ',index,index^((1<<64)-1)))
+        assert applied_index(marker)==index
+    marker.write_bytes(struct.pack('>QQ',1,(1<<64)-2))
+    assert commands(p,{0:applied_index(marker)})=={(0,1):(1,b'A')}
+    # The former whole-record integer admits B beyond the applied index.
+    assert commands(p,{0:int.from_bytes(marker.read_bytes(),'big')})=={
+        (0,1):(1,b'A'),(0,2):(1,b'B')}
+    for bad in (b'',bytes(7),bytes(9),bytes(15),bytes(17),struct.pack('>QQ',1,0)):
+        marker.write_bytes(bad)
+        try:applied_index(marker)
+        except ValueError:pass
+        else:raise AssertionError('invalid applied checkpoint accepted')
     with p.open('ab') as out:
         out.write(record(3,0,struct.pack('>Q',2)))
         out.write(entry(0,2,3,b'D'))
@@ -33,4 +49,4 @@ with tempfile.TemporaryDirectory(prefix='efs-tail-test-') as d:
     try:commands(p,{0:1})
     except ValueError:pass
     else:raise AssertionError('nonzero garbage after padding was accepted')
-print('Raft tail: CRC, committed bounds, groups, replacement and torn append PASS')
+print('Raft tail: CRC, legacy/current applied checkpoints, corrupt-marker refusal, committed bounds, groups, replacement and torn append PASS')

@@ -8,10 +8,15 @@ p.add_argument('--fixture',type=Path,required=True)
 p.add_argument('--ino',type=int,required=True)
 p.add_argument('--output',type=Path,required=True)
 a=p.parse_args();sys.path.insert(0,str(a.source/'tests/live'))
-from raft_tail import commands
+from raft_tail import commands,applied_index
 manifest=json.loads((a.fixture/'manifest.json').read_text())
-node=Path(manifest['roots'][1])/'mdraft'
-bounds={g:int.from_bytes((node/f'applied.{g}').read_bytes(),'big') for g in (0,2)}
+# Failed fixtures may be renamed as a whole to preserve them for a rerun.
+# n2 belongs to this first fixture directory; retain the original manifest
+# identity check without silently following its now-stale absolute parent.
+recorded=Path(manifest['roots'][1])
+assert recorded.name=='n2' and recorded.parent.name==a.fixture.name
+node=a.fixture/'n2/mdraft'
+bounds={g:applied_index(node/f'applied.{g}') for g in (0,2)}
 edges=[]
 for (group,index),(term,cmd) in commands(node/'log/raft.log',bounds).items():
     if len(cmd)==66 and cmd[0]==9 and cmd[1] in (12,16) and int.from_bytes(cmd[38:46],'big')==a.ino:
