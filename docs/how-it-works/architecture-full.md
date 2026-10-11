@@ -1769,7 +1769,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | virtual-io | **W91/W92 · `.efs/` commands — server snapshots and safe reads** | correctness / performance / access control | in progress — disk index, bounded incremental catch-up, aggregate quota and replicated policy landed; named native/live/cold and Linux NFSv4.0 gates pass; actual 2^32/400 GiB gates and named virtual-export fix rollout remain open; Mac/Linux NFS candidate oracles pass | [closure](../status/query-cache-closure-20261010.md) · [persistent policy](../status/efs-query-persistent-policy-20261010.md) |
 | gc-obs | **W63** · GC backlog, reclaimed bytes and retry progress are missing | observability enhancement | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w63) |
 | 0e | **W38** · ior-hard fold tombstone without the span's bytes | correctness | code present; dated Oct 5 checkpoint — replay preserves live spans; folds require byte observations; deterministic regression + ASan/UBSan pass; traced real IOR-hard + independent cold hardscan pass (108000 records, bad=0, short=0); nine physical hosts remain; AMD software-RXE fold/GC gate passes, hardware RDMA remains | [full text](#w38--ior-hard-fold-tombstone-without-the-spans-bytes-queue-row-0e) |
-| 2a | **W42** · `df` / `efs-mgmt status` report the 3-node capacity model on any node count | correctness | capacity helper is used by both clients; NUC four-node status/df record 500 GiB for 4 × 187.5 GiB quotas; NUC limited-member write/cold-read/reclaim gate passes; protection debt/repair and named 19810 capacity acceptance remain open | [full text](#w42--df--efs-mgmt-status-report-the-3-node-capacity-model-on-any-node-count-queue-row-2a) |
+| 2a | **W42** · `df` / `efs-mgmt status` report the 3-node capacity model on any node count | correctness | capacity helper is used by both clients; NUC four-node status/df record 500 GiB for 4 × 187.5 GiB quotas; NUC limited-member write/cold-read/reclaim gate passes; [ORCD unlimited-capacity correction](../status/orcd-capacity-tests-20261011.md) passes private native-RDMA GC gates; protection debt/repair and named 19810 capacity acceptance remain open | [full text](#w42--df--efs-mgmt-status-report-the-3-node-capacity-model-on-any-node-count-queue-row-2a) |
 | 0b | **W27** · REPORT identity from the staging table | correctness | closed: owned-PUT predicate shared by both builders; nonzero unowned observations rejected; 2048-file cold copy/trace and GC/restart pass | [full text](#w27--report-identity-from-the-staging-table-queue-row-0b) |
 | 0g | **W43** · large truncate is refused; logical truncate = **D25** (decided) | correctness | explicit failure is implemented; `3a1b4a52` makes oversized legacy truncate fail atomically; D25 metadata/read/resize foundations exist, but FUSE publication, live-file sweep and public activation remain open | [full text](#w43--truncateo_trunc-of-a-file-with--32-chunks-in-a-lane-is-a-silent-no-op-queue-row-0g) · [D25](#appendix-3--decisions--taken-and-pending-register-d1d31) |
 | 0a | STALE replay that never converges; remedy = **D27** (decided) | correctness | runtime foundations present; strict timing, fault/recovery/contention and RSS gates remain in handoff | [full text](#0a--stale-replay-that-never-converges-queue-row-0a) · [D27](#appendix-3--decisions--taken-and-pending-register-d1d31) |
@@ -1892,6 +1892,25 @@ after targeted NUC acceptance; W69 correctness passes, with its unidentified
 Spark performance measurement still owed. Grouped open counts are now
 15 unfinished, 11 awaiting gates, three decisions and 18 future features:
 **47 open packages**. Earlier tables remain dated baselines.
+
+
+### Intel follow-ups — W100–W106 (indexed Oct 11, 2026)
+
+This index adds traceable IDs to the Intel acceptance follow-ups; it does not change the existing queue order or accepted design decisions. Existing sustained tiny-file performance remains W97, protection/repair W74/W66, durability W71/W73 and capacity W99.
+
+| ID | Task | Recorded state |
+| --- | --- | --- |
+| [W100](#w100) | Intel2 repeated-write POSIX timeout | Correctness/performance investigation; open. |
+| [W101](#w101) | Complete and verify the Intel two-million-file workload | Operational acceptance; in progress. |
+| [W102](#w102) | Complete Intel2 private peer and GC acceptance | Validation follow-up; blocked by W100 in the full harness. |
+| [W103](#w103) | Investigate intermittent Intel persistence and stats timeouts | Liveness/performance investigation; open. |
+| [W104](#w104) | Decide and gate writable shared mmap support | Feature scope/design follow-up; deferred, currently unsupported by specification. |
+| [W105](#w105) | Stable NFS file handles across EFS client restarts | Gateway acceptance/correctness investigation; open. |
+| [W106](#w106) | RDMA acceptance: AMD software / orcd-test hardware IB/RDMA | Open validation; test placement decided. |
+
+Pending choices retain their existing homes: W99 cache-only pressure escalation and numeric thresholds; W54 additional live-reference GC guard; W66/W74 metadata mechanism under accepted D36. W104 separately records the deferred shared-mmap scope choice. No new D number or policy acceptance is implied.
+
+**RDMA test placement — user instruction, Oct 11, 2026:** All RDMA work is tested on AMD using software RDMA, or on `orcd-test` using hardware IB/RDMA, according to the claim being validated. Keep software and hardware verdicts separate. Intel continues to provide TCP acceptance. This applies to all RDMA gates, including older W-item hardware obligations.
 
 
 ## Appendix 2 — In flight — the current handoff block
@@ -2231,6 +2250,17 @@ W84 sizing and W91 command/script clarifications.
 Accepted policy does not establish deployment acceptance. Numeric W81 settings,
 query encoding and other implementation details must satisfy the linked gates;
 configured expiry TTL is an operator choice, not a selected global default.
+
+
+### RDMA test placement — accepted user instruction Oct 11, 2026
+
+All RDMA work is tested either on the AMD cluster with software RDMA or on
+`orcd-test` with hardware InfiniBand/RDMA. Hardware claims require the hardware
+environment; software results remain separately scoped. Intel is the TCP
+acceptance deployment, and its RDMA prerequisites do not block this work.
+This selects test environments, not a new storage/protection contract or an
+acceptance verdict. Track current-code transport validation under
+[W106](#w106) and preserve each related work item's gates.
 
 
 ## Appendix 4 — Work items — long-form text for the open W items and the queue rows
@@ -4343,6 +4373,14 @@ next rollout. No cluster rollout or artifact cleanup in this follow-up.
 
 ### W42 · df / efs-mgmt status report the 3-node capacity model on any node count (queue row 2a)
 
+**October 11 ORCD correction:** unlimited stores formerly reported zero capacity
+and skipped files-engine usage accounting. STATUS now carries deduplicated
+filesystem capacity/free bytes, shared by FUSE and management; the portal accepts
+TiB. Native-RDMA unlimited-store and guarded-session reclamation gates pass.
+See [capacity and test evidence](../status/orcd-capacity-tests-20261011.md).
+Live deployment confirmation is tracked there; the other W42 gates remain open.
+
+
 **Gate follow-up (Oct 7):** NUC full-node gate: one member limited to 64 KiB, 32 MiB write, cold remount bytes, physical deletion and restart all pass. This does not prove three-fragment protection debt/repair or the named 19810 capacity gate. See [gate ledger](../status/gate-30-rounds-20261007.md).
 
 **Current state, reviewed Oct 7.** Both FUSE statfs and management status
@@ -4357,7 +4395,7 @@ third fragment. Trace and validate protection debt/repair before closing W42.
 [Evidence and limits](../archive/queue-review-20261007-round2.md).
 
 
-**W42 · `df` / `efs-mgmt status` report the 3-node capacity model on any node count** (Oct 1 2026, user). **IN TREE Oct 2:** `efs_capacity_logical` (placement.c, binary search on the Σ min(cᵢ, M) ≥ 3M bound), used by `efs_fuse_statfs` (total = quotas, avail = room, used = total − avail) and `efs-mgmt status`; `test_placement` covers 3 equal / 4 equal / 100/100/1000 → 200 / 6 equal / < 3 nodes → 0. Still to do: verify on 19810 (`df` vs `4 × 36T × 2/3`) and the one-QUOTA-member PUT question
+**W42 · `df` / `efs-mgmt status` report the 3-node capacity model on any node count** (Oct 1 2026, user). **IN TREE Oct 2:** `efs_capacity_logical` (placement.c, binary search on the Σ min(cᵢ, M) ≥ 3M bound), used by `efs_fuse_statfs` (filesystem capacity and available bytes, optionally quota-bounded; used = total − avail) and `efs-mgmt status`; `test_placement` covers 3 equal / 4 equal / 100/100/1000 → 200 / 6 equal / < 3 nodes → 0. Still to do: verify on 19810 (`df` vs `4 × 36T × 2/3`) and the one-QUOTA-member PUT question
 
 **Follow-up steps.** mechanical: replace `total_logical = 2 × min_quota` (`efs_fuse_statfs`, `efs_fuse.c:3108–3120`) and `usable_cap = 2 × min_quota` / `usable_free = 2 × min_free` (`efs_mgmt.c:129–185`) with the 3-of-N placement bound: the largest `M` (chunks) with `Σ_i min(c_i, M) ≥ 3M`, `c_i` = node `i`'s quota (or free) in 64 KiB fragments, times 128 KiB; count only up nodes with a quota, as today. Reduces to `2 × min` on three nodes and to `Σ × 2/3` on N equal nodes. Also make `f_blocks` and the used figure come from the same model (statfs today derives used from `Σ phys × 2/3` and total from `2 × min`, so on four nodes used can exceed total and `avail` clamps to 0 while writes still succeed). Unit test with 3 equal, 4 equal, 3 unequal (100/100/1000 → 200, not 800). Then verify on 19810 (`df` vs `efs-mgmt status` vs `4 × 36T × 2/3`)
 
@@ -5042,6 +5080,8 @@ also pass, and normal binaries exclude fault strings. See the
 <a id="w69"></a>
 
 ### W69 · Lookup memo returns pre-mutation stats (queue row 0j)
+
+**Oct 10 Intel directory-binding follow-up:** A creator's cached directory name survived a peer rename: both old and new paths appeared to exist while readdir listed only the new name. Ordinary LOOKUP now obtains authoritative name binding before adopting any inode, including directories. The production lookup fixture and a primed two-host peer case retain failing old-build controls; actual-function checks pass on both Intel Linux hosts. [Repair and limits](../status/intel-peer-directory-cache-20261010.md). This does not close the broader original stale-reply/partition gate.
 
 **Targeted correctness acceptance (Oct 7):** a fault-build real LOOKUP reply
 is held across local fchmod, then released; later stat returns the new mode
@@ -6390,6 +6430,8 @@ or present the Raft improvement as measured KV acceptance.
 
 ### W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
 
+**Oct 11 Intel resume follow-up:** A large-directory inventory could cycle indefinitely because READDIR discarded a source-only continuation when its name was empty. The actual callback now preserves that source; old-source regressions fail and both native Intel regressions pass. The deployed wire probe reaches EOF with 92,557 entries in 1.580 seconds, and full FUSE enumeration returns the same count in 1.183 seconds. This repairs enumeration termination, not sustained write latency; W97 remains open. [Cursor repair and limits](../status/intel-readdir-source-cursor-20261011.md).
+
 **Oct 10 matched three-node drive test:** same frozen `6b8f05acb484` engine,
 20 minutes per drive, true three-voter groups, preserved regular cluster stopped.
 NVMe first/final rates 31.83/10.80 files/s and pooled server Raft sync
@@ -6737,6 +6779,97 @@ remains separate implementation work.
 **Gate:** constrained-capacity tests for every topology, shared writers, byte/
 inode/quota pressure, cold restart, acknowledged-data integrity and recovery.
 See [policy and pending details](../status/storage-pressure-read-only-20261009.md).
+
+
+### Intel follow-ups indexed Oct 11, 2026
+
+These IDs track the previously unnumbered Intel follow-ups. They do not duplicate W97, W74/W66, W71/W73 or W99, and do not approve new feature scope or settle pending policy choices. Evidence baseline: [Intel deployment acceptance](../status/intel-deployment-acceptance-20261011.md).
+
+<a id="w100"></a>
+
+### W100 · Intel2 repeated-write POSIX timeout
+
+**Class/state:** Correctness/performance investigation; open.
+
+**Evidence/current state:** The deployed Intel build passes 213/214 private core cases on two unchanged attempts. `mtime_monotonic_many_writes` exceeds the original 30-second limit while the production tiny-file writer is active. Production core passes 214/214. Harness overlap is not necessary for the private failure; its cause remains unproved.
+
+**Remaining action:** Capture per-operation write/close/stat timing and server persistence/queue evidence, isolate the cause, and implement a causal repair. W52/W53/W97 are related investigations, not established diagnoses.
+
+**Gate:** Repeat the unchanged private case and full core suite under the concurrent production workload, retaining the 30-second limit, exact payload checks and original failure evidence.
+
+<a id="w101"></a>
+
+### W101 · Complete and verify the Intel two-million-file workload
+
+**Class/state:** Operational acceptance; in progress.
+
+**Evidence/current state:** Intel1 completed exactly 1,000,000 total files with exit 0. At 2026-10-11T02:45:11Z, Intel2 reported 551,734/1,000,000 total files and an active writer. This is a dated observation, not a live status guarantee.
+
+**Remaining action:** Let the existing locked Intel2 resume job reach its total target, check terminal status and strict inventory, and verify preserved payload samples. Do not create another million on Intel1 or discard existing files.
+
+**Gate:** Both jobs terminate successfully at 1,000,000 total files per host; strict inventories and immutable sample size/SHA256 checks pass. Counts alone do not establish payload integrity.
+
+<a id="w102"></a>
+
+### W102 · Complete Intel2 private peer and GC acceptance
+
+**Class/state:** Validation follow-up; blocked by W100 in the full harness.
+
+**Evidence/current state:** Both Intel2 private attempts stop after the 213/214 core verdict; later peer and post-POSIX GC gates are NOTRUN. Production wired peer passes 66/66, but does not substitute for these private gates.
+
+**Remaining action:** Exercise independent remaining gates while preserving the failing aggregate verdict if needed; after W100 is repaired, repeat the entire unchanged private harness. Retain code/build identity and individual verdicts.
+
+**Gate:** Full Intel2 private core, peer, reclamation, quota, cold restart and fencing gates pass without skipping or masking the W100 failure.
+
+<a id="w103"></a>
+
+### W103 · Investigate intermittent Intel persistence and stats timeouts
+
+**Class/state:** Liveness/performance investigation; open.
+
+**Evidence/current state:** Intel1 initially timed out at the 60-second many-files persistence preparation limit and the 30-second virt_stats_readable limit. Unchanged repeats passed. The stats repeat used an available older snapshot with a BUSY refresh warning; no causal repair or universal freshness guarantee is established.
+
+**Remaining action:** Correlate storage, queue and query refresh timings; obtain bounded reproducible evidence and fix any demonstrated cause. Persistence relates to W53/W97; command snapshot semantics remain W91/W92.
+
+**Gate:** Repeated unchanged-limit cold persistence and command tests under representative load, retaining original failures and reporting snapshot age/refresh errors honestly.
+
+<a id="w104"></a>
+
+### W104 · Decide and gate writable shared mmap support
+
+**Class/state:** Feature scope/design follow-up; deferred, currently unsupported by specification.
+
+**Evidence/current state:** The POSIX extras suite intentionally skips writable shared mmap. This is not a newly established regression, and assigning this number does not authorize changing the current support contract.
+
+**Remaining action:** Record whether writable shared mmap is required. If selected, specify dirty-page publication, synchronization, peer coherence, error propagation and durability before implementation; otherwise document the explicit deferred support boundary.
+
+**Gate:** For implemented support, real shared mappings pass publication, concurrent peer, synchronization and cold-byte tests. Until then retain the explicit unsupported skip.
+
+<a id="w105"></a>
+
+### W105 · Stable NFS file handles across EFS client restarts
+
+**Class/state:** Gateway acceptance/correctness investigation; open.
+
+**Evidence/current state:** The product-gap record retains an Oct 5 macOS NFS cached-entry rename EIO after gateway restart while other operations remained usable. The mechanism is unproved; broader NFS evidence does not close restart/file-handle acceptance.
+
+**Remaining action:** Trace kernel export/decode, inode generation and gateway lifetime; reproduce and repair the demonstrated restart behavior. Preserve existing payloads and separate native FUSE from NFS verdicts.
+
+**Gate:** Named macOS and Linux NFS clients retain cached handles across a cold EFS gateway restart, with stat/read/readdir/create/rename and exact preserved-byte checks.
+
+<a id="w106"></a>
+
+### W106 · RDMA acceptance on AMD software RDMA and orcd-test hardware IB/RDMA
+
+**Class/state:** Transport validation; open. Test placement decided by the user Oct 11, 2026.
+
+**Governing test policy:** All RDMA work is tested on the AMD cluster using software RDMA, or on `orcd-test` using hardware InfiniBand/RDMA. Select the environment appropriate to the claim; software acceptance does not establish hardware acceptance. This policy applies to RDMA gates throughout the backlog, not just W106.
+
+**Evidence/current state:** AMD software-RXE functional evidence already exists; current-code distributed and hardware acceptance must retain their own named gates. Intel remains the TCP acceptance deployment. Its 5 Gb/s links and absence of exposed RDMA devices/software modules do not block RDMA testing on the designated environments.
+
+**Remaining action:** Run relevant current-code software RDMA gates on AMD and hardware IB/RDMA gates on `orcd-test`, retaining actual transport/device, code/build, topology and per-suite verdict evidence. Intel RDMA enablement or NIC/package changes are not part of this task.
+
+**Gate:** Actual cross-host RDMA connection/device evidence plus unchanged POSIX, peer, direct-I/O, persistence and fault gates on the designated environment. Report AMD software and `orcd-test` hardware verdicts separately; neither TCP nor software-only results close hardware-specific obligations.
 
 
 ## Appendix 5 — Naming
