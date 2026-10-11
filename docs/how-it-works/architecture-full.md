@@ -1830,7 +1830,7 @@ positions do not assign an execution order or override the active handoff.
 | gc-own | **W86** · durable PUT ticket integration | feature / safe reclamation | metadata ledger, budgeted retained admission and ticket-bound durable publication receipts implemented (`22c8c1f9`, `70daa5a4`); AMD same/cross-group lost replies, leader death, cold replay, collision and revocation pass; default PUT/flush, storage fences and all-member abandoned collection remain staged | [evidence and gate](#w86) · [D31](#d31--recorded-abandoned-upload-policy) |
 | append-load | **W87** · buffered concurrent append loses records under load | correctness investigation | failure recorded in private GC fixture; isolated repeats pass; full traced acceptance owed | [evidence and gate](#w87) |
 | replay-span | **W88** · folded span retry resurrects after bounded history eviction | publication/retry correctness | partial — actual cross-group typed cache/host replay preserves peer bytes and cold mappings on AMD direct/TCP; production flush/ticket integration and full replay gates remain open | [evidence and gate](#w88) · [Oct9 checkpoint](../status/dependency-package-20261009.md#retained-typed-publication-writeback--staged-amd-gated) |
-| measure-fields | **W89** · W23 TSV field packing shifts derived metrics | verification correctness | TSV schema/reduction repaired; NUC regressions pass; new pressure run and valid bound remain owed | [evidence and gate](#w89) |
+| measure-fields | **W89** · W23 TSV field packing shifts derived metrics | verification correctness | Closed measurement defect: explicit schema and raw-field identity regressions pass; fresh AMD real-cap/quorum/recovery/cold-value gate passes (276 observations); D30/W23 bounds remain open | [closure and limits](../status/amd-non-rdma-20261010.md#w89) |
 
 The [specification/public-path review](../status/spec-implementation.md) separates accepted
 contracts from current capabilities (W71–W77). These findings add no deployment
@@ -5922,7 +5922,7 @@ old-binary reproductions and crash/recovery tests. This does not establish
 a stalled Raft follower memory/lag bound. See the
 [round ledger](../status/three-package-gates-20261007.md).
 
-**Class/state:** verification correctness; raw-evidence/source confirmation Oct 7, round 6. `tests/measure/w23_stalled_compactor.sh:sampler` inserts `${ko}` as one tab field even though it contains four space-separated KV values. Rows have nine fields under a twelve-field header; the peak reducer assumes twelve, shifting L0/RSS/lag/pump/error columns. The retained Oct 5 SUMMARY falsely reports n_l0 zero and assigns RSS values to l0_bytes. Its “stall never bit” interpretation is withdrawn.
+**Class/state:** closed verification defect (Oct 10 AMD round); raw-evidence/source confirmation Oct 7, round 6. `tests/measure/w23_stalled_compactor.sh:sampler` inserts `${ko}` as one tab field even though it contains four space-separated KV values. Rows have nine fields under a twelve-field header; the peak reducer assumes twelve, shifting L0/RSS/lag/pump/error columns. The retained Oct 5 SUMMARY falsely reports n_l0 zero and assigns RSS values to l0_bytes. Its “stall never bit” interpretation is withdrawn.
 
 **Evidence:** [original samples](../../results/measure/20261005-040810-w23-stalled-compactor/samples.tsv), [node3 log](../../results/measure/20261005-040810-w23-stalled-compactor/s3.log), [corrected expansion](../archive/round6-w23-samples-corrected.tsv) and [recomputed peaks](../archive/round6-w23-peaks-corrected.txt). Node3 logs L0=22 / 3,367,253 bytes during the 04:08:29–04:08:56 park; corrected samples confirm these peaks. Node1 peaks at 4 / 105,281, node2 at 13 / 1,366,435. Recorded RSS peaks are 30,316 / 25,936 / 25,624 KiB. These are samples, not guaranteed continuous maxima. All sample lag peaks are zero; the 27-second RSS-threshold run does not prove a follower pressure bound.
 
@@ -5935,9 +5935,17 @@ and counter resets; driver shell syntax passes.
 
 **Oct 8 decision:** D30 now approves bounded pre-proposal admission and replica-aware pacing, with bounded client queues and recovery/cleanup reserves. Committed work must remain durable; a slow follower must not indefinitely stop a healthy quorum. [Contract and gates](../backlog/decision-contracts.md#d30--bounded-admission-and-replica-pacing).
 
-**Remaining gate:** implement that policy, rerun W23 under meaningful cap pressure and compare samples
-with raw logs. This format repair does not establish a follower pressure bound;
-the original record and withdrawn interpretation remain retained.
+**Closure (Oct 10 EDT / Oct 11 UTC):** the fresh AMD fault-enabled TCP
+fixture reaches the unchanged 1 GiB follower cap after 2240 acknowledged 1 MiB
+writes, preserves healthy-quorum progress, recovers with InstallSnapshot and
+checks exact cold values on three replicas plus the FUSE payload oracle.
+All 276 TSV observations match every raw JSON field. The driver now requires
+this comparison before PASS; focused regressions reject shifted values, lost
+rows and fabricated availability. [Current evidence](../status/amd-non-rdma-20261010.md#w89).
+The Oct 8 policy implementation and this fresh pressure gate satisfy W89's
+measurement-correctness acceptance. D30/W23 production activation, universal
+memory/lag bounds and sustained permanent-stall throughput remain open.
+The original record and withdrawn interpretation remain retained.
 
 **Forbidden:** accepting shifted/missing fields as zero, claiming no effect or a bound from the old summary, or silently replacing original evidence.
 
