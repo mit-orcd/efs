@@ -2709,6 +2709,15 @@ signals (63–215 ms); handlers still drain before teardown.
 
 ## W66 · Metadata leadership distribution and routing (queue row meta-scale)
 
+**Oct 10 AMD routing repair:** a prepared namespace transaction can require a
+coordinator group outside a serving replica's placement. A per-read context
+now redirects only that explicit condition during LOOKUP/GETATTR instead of
+returning EIO before the competing MKDIR; genuine hosted authority/storage
+errors remain errors. Direct and buffered TCP each pass 64 competing MKDIR
+races, exact cold directory recovery and reclamation; the combined candidate's
+full native suite passes. Default placement/quorum and W66/D36 protection
+obligations remain unchanged. [Checkpoint](../status/amd-non-rdma-20261010.md#w66--unresolved-namespace-coordinator-routing).
+
 **Class:** scalability enhancement / metadata protection protocol. **Status:** open; indexed Oct 7, 2026.
 
 **D36 (Oct 9):** topology work must satisfy the user-required four-node,
@@ -3656,7 +3665,7 @@ old-binary reproductions and crash/recovery tests. This does not establish
 a stalled Raft follower memory/lag bound. See the
 [round ledger](../status/three-package-gates-20261007.md).
 
-**Class/state:** verification correctness; raw-evidence/source confirmation Oct 7, round 6. `tests/measure/w23_stalled_compactor.sh:sampler` inserts `${ko}` as one tab field even though it contains four space-separated KV values. Rows have nine fields under a twelve-field header; the peak reducer assumes twelve, shifting L0/RSS/lag/pump/error columns. The retained Oct 5 SUMMARY falsely reports n_l0 zero and assigns RSS values to l0_bytes. Its “stall never bit” interpretation is withdrawn.
+**Class/state:** closed verification defect (Oct 10 AMD round); raw-evidence/source confirmation Oct 7, round 6. `tests/measure/w23_stalled_compactor.sh:sampler` inserts `${ko}` as one tab field even though it contains four space-separated KV values. Rows have nine fields under a twelve-field header; the peak reducer assumes twelve, shifting L0/RSS/lag/pump/error columns. The retained Oct 5 SUMMARY falsely reports n_l0 zero and assigns RSS values to l0_bytes. Its “stall never bit” interpretation is withdrawn.
 
 **Evidence:** [original samples](../../results/measure/20261005-040810-w23-stalled-compactor/samples.tsv), [node3 log](../../results/measure/20261005-040810-w23-stalled-compactor/s3.log), [corrected expansion](../archive/round6-w23-samples-corrected.tsv) and [recomputed peaks](../archive/round6-w23-peaks-corrected.txt). Node3 logs L0=22 / 3,367,253 bytes during the 04:08:29–04:08:56 park; corrected samples confirm these peaks. Node1 peaks at 4 / 105,281, node2 at 13 / 1,366,435. Recorded RSS peaks are 30,316 / 25,936 / 25,624 KiB. These are samples, not guaranteed continuous maxima. All sample lag peaks are zero; the 27-second RSS-threshold run does not prove a follower pressure bound.
 
@@ -3669,9 +3678,17 @@ and counter resets; driver shell syntax passes.
 
 **Oct 8 decision:** D30 now approves bounded pre-proposal admission and replica-aware pacing, with bounded client queues and recovery/cleanup reserves. Committed work must remain durable; a slow follower must not indefinitely stop a healthy quorum. [Contract and gates](decision-contracts.md#d30--bounded-admission-and-replica-pacing).
 
-**Remaining gate:** implement that policy, rerun W23 under meaningful cap pressure and compare samples
-with raw logs. This format repair does not establish a follower pressure bound;
-the original record and withdrawn interpretation remain retained.
+**Closure (Oct 10 EDT / Oct 11 UTC):** the fresh AMD fault-enabled TCP
+fixture reaches the unchanged 1 GiB follower cap after 2240 acknowledged 1 MiB
+writes, preserves healthy-quorum progress, recovers with InstallSnapshot and
+checks exact cold values on three replicas plus the FUSE payload oracle.
+All 276 TSV observations match every raw JSON field. The driver now requires
+this comparison before PASS; focused regressions reject shifted values, lost
+rows and fabricated availability. [Current evidence](../status/amd-non-rdma-20261010.md#w89).
+The Oct 8 policy implementation and this fresh pressure gate satisfy W89's
+measurement-correctness acceptance. D30/W23 production activation, universal
+memory/lag bounds and sustained permanent-stall throughput remain open.
+The original record and withdrawn interpretation remain retained.
 
 **Forbidden:** accepting shifted/missing fields as zero, claiming no effect or a bound from the old summary, or silently replacing original evidence.
 
@@ -4210,7 +4227,7 @@ open latency as a measured saving.
 
 ## W95 · Tiny-file data persistence and packing principles
 
-**Implementation update (Oct 8):** Independent tiny geometry, durable cohort latency, retained/cold/process-crash experiments and production churn are tested. An independent indexed-packing protocol and any production-format decision remain open.
+**Implementation update (Oct 8):** Independent tiny geometry, durable cohort latency, retained/cold/process-crash experiments and production churn are tested. The independent indexed-packing protocol and model are implemented and gated; the P4.1 production-format decision remains open.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
 **Pre-merge devel review (`cde67dca`, Oct 8):** extend the existing independent
@@ -4222,7 +4239,7 @@ Measure every record's time to its durable batch completion; current per-op
 latency includes the barrier only on the boundary operation. Mixed churn and
 cold-recovery experiments remain required. [Review](../status/tiny-file-performance-plan-20261008.md#review-against-devel-oct-8).
 
-**Class/status:** Storage performance experiment; partial implementation. Tiny logical/physical geometry, durable cohort timing, retained/cold/crash principles and production churn are tested. Independent indexed packing and any production layout selection remain P4.1 work; no migration is activated.
+**Class/status:** Storage performance experiment; partial implementation. Tiny logical/physical geometry, durable cohort timing, retained/cold/crash principles and production churn are tested. Independent indexed packing now passes bounded publication/recovery/GC faults and sustained AMD churn. Production layout selection remains P4.1 work; no migration is activated.
 
 **Evidence:** round-7 generator close averaged 77.8 ms; n3 fragment syncs
 averaged 22.4 ms (356 calls in its separate trace). The default chunk is
@@ -4231,7 +4248,7 @@ The client profile concentrates sampled CPU in flush/report and fragment
 transfer. Separate traces cannot be divided to infer an exact fragment count
 or write-amplification ratio per file. Measure that explicitly.
 
-**Remaining action:** Extend the independent model with an indexed packing candidate only when its publication/recovery semantics are specified, and compare sustained churn at equal durability. Current fixed-geometry seal crash tests are not a production packed index. Port only a demonstrated principle; retain existing stores and require explicit P4.1 compatibility/migration decisions before a layout change.
+**Remaining action:** Review the implemented immutable-body/checksummed-manifest candidate and the retained 24 AMD sustained-churn samples (184320 operations), including durability, index overhead and reclamation. Its process-crash/fault-tested independent model is not a production packed index. [Implemented model and limits](../status/w95-indexed-model-20261008.md). Port only a demonstrated principle; retain existing stores and require explicit P4.1 compatibility/migration decisions before a layout change.
 
 **Governing contracts/related work:** W71 durable PUT, W73 synchronous writes,
 W75 integrity, W86 ownership/GC fencing and W77 publication. P4.1 owns the

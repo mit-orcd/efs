@@ -1,6 +1,6 @@
 # AMD POSIX link of symlink failure
 
-Status: corrected no-follow test merged from devel-roce-rdma; all four AMD I/O/transport full POSIX and peer reruns pass. Production hard-link behavior was not changed. Additional follow/dangling cases and comparable NUC Python/syscall evidence below remain useful test follow-ups. See [release acceptance](v020-amd-release.md).
+Status: closed AMD test mismatch. Explicit no-follow correction and historical full four-mode reruns already passed. New follow/dangling/unlink-count and peer cases now pass native storage and AMD direct/buffered TCP at `8cb41c929ca0`. No production hard-link behavior changed. The unrelated buffered peer MKDIR EIO is retained separately; no full buffered acceptance is claimed for this new round. See [current checkpoint](amd-non-rdma-20261010.md) and [historical release acceptance](v020-amd-release.md).
 
 ## Finding
 
@@ -45,7 +45,7 @@ source-path symlink traversal. The kernel resolves the source according to
 the link/linkat flags before handing the inode to FUSE. Do not change EFS to
 second-guess or reverse that resolution.
 
-## Required fix
+## Original requested follow-ups (historical)
 
 1. Change this test's invocation to
    `os.link(source, destination, follow_symlinks=False)`. Keep its inode,
@@ -61,7 +61,7 @@ second-guess or reverse that resolution.
    a separate Linux-specific case with an explicit syscall/libc invocation.
    Avoid inferring its semantics from Python's default `os.link` call.
 
-## Acceptance before closure
+## Original acceptance plan (historical)
 
 Run the corrected focused test on native storage and AMD EFS, then both full
 POSIX suites after a fresh client restart. Require 216 passed, zero failed,
@@ -73,3 +73,19 @@ before using historical clean NUC results as a comparable gate.
 
 Most recent pre-fix AMD direct runs: full POSIX 18.4 seconds, 215/1/1;
 two-client 7.5 seconds, 64/64. Buffered runs showed the same test failure.
+
+## Oct 10 follow-up completion
+
+`link_of_symlink_follow` and `link_of_symlink_dangling` now check explicit
+Python flags, inode identity, remaining bytes/link text and link counts after
+unlink. `peer_symlink_hardlinks` checks the same effects through a second live
+client. Native focused cases pass; both AMD TCP core suites pass 216/216 and
+all new peer symlink assertions pass in both I/O modes. Direct peer passes
+67/67; buffered peer passes 66/67 with the independent MKDIR failure.
+
+[Direct core](../../results/measure/20261010-amd-three-hour/evidence/gc-direct-5tg7dw4n/posix.tsv),
+[direct peer](../../results/measure/20261010-amd-three-hour/evidence/gc-direct-5tg7dw4n/posix2.tsv),
+[buffered core](../../results/measure/20261010-amd-three-hour/evidence/gc-buffered-3uzt77vo/posix.tsv),
+[buffered peer](../../results/measure/20261010-amd-three-hour/evidence/gc-buffered-3uzt77vo/posix2.tsv).
+The earlier NUC/Python comparison is optional portability evidence; it is not
+claimed by this AMD-only round. Raw libc syscall coverage remains optional.

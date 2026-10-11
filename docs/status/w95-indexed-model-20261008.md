@@ -1,6 +1,6 @@
 # W95 independent indexed-packing experiment
 
-This specifies an experimental model for the existing storage-principles work.
+This records the implemented experimental model and its accepted finite gates for the existing storage-principles work.
 It selects no production format, changes no EFS store and grants no permission
 to wipe existing stores. Existing file/container measurements remain baselines;
 performance comparisons must use equal durability and account for index writes.

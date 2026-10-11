@@ -26,6 +26,7 @@ from raft_tail import commands as raft_commands
 import time
 
 p = argparse.ArgumentParser(description=__doc__)
+p.add_argument('--peer-mkdir-race-only',action='store_true',help='64 competing peer mkdir races in an isolated cluster, then cold namespace verification')
 p.add_argument('--peer-open-contention-only',action='store_true',help='twenty concurrent append/OPEN races, full peer POSIX, exact cold bytes and physical cleanup only')
 p.add_argument('--append-truncate-only',action='store_true',help='run eight peer append/truncate races, a concurrent append handoff check, cold-remount repeats and physical cleanup only')
 p.add_argument('--mount-sync',action='store_true',help='run only mount-wide sync acceptance: ordinary writes, peer-before-close, cold bytes and deletion')
@@ -437,6 +438,25 @@ try:
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.peer_mkdir_race_only:
+        peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
+        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+        wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'peer mounted',40)
+        transport_proof([peer])
+        for iteration in range(8):
+            run(['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,
+                 '--parent',f'mkdir-race-{iteration:02d}','--filter','peer_mkdir_exclusive_race','--keep',
+                 '--results',work/f'mkdir-race-{iteration:02d}.tsv'],timeout=180)
+        run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
+        unmount();stop();start();mount_client()
+        for iteration in range(8):
+            parent=mount/f'mkdir-race-{iteration:02d}/peer_mkdir_exclusive_race'
+            for trial in range(8):assert (parent/f'raced-{trial}').is_dir()
+            shutil.rmtree(mount/f'mkdir-race-{iteration:02d}')
+        wait(drained,'peer mkdir physical reclamation',180)
+        (work/'peer-mkdir-race.json').write_text(json.dumps({'races':64,'cold_directories':64},indent=2))
+        print('64 competing peer MKDIR races, exact verdicts and cold directories PASS',flush=True)
+        raise SystemExit(0)
     if a.peer_open_contention_only:
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
         peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)

@@ -1,0 +1,129 @@
+2026-10-11T04:05:04.067Z efs-fuse 8cb41c929ca0-coordinator-route (branch devel-amd, built 2026-10-11T04:04:26Z on amd-395), build=8cb41c929ca0-coordinator-route: starting export=default mount=/data1/efs/mnt2
+2026-10-11T04:05:04.067Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T04:05:04.068Z   node id=1 127.0.0.1:24190
+2026-10-11T04:05:04.068Z   node id=2 127.0.0.1:24191
+2026-10-11T04:05:04.068Z   node id=3 127.0.0.1:24192
+2026-10-11T04:05:04.068Z   node id=4 127.0.0.1:24193
+2026-10-11T04:05:04.068Z fetching metadata...
+2026-10-11T04:05:04.068Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T04:05:04.068Z export id=1 name=default
+2026-10-11T04:05:04.068Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T04:05:04.070Z efs-fuse: workers max=10 idle=10
+2026-10-11T04:05:04.072Z fuse serving
+2026-10-11T04:05:04.323Z RPC-PROF calls=1 checkout_us=163 send_us=28 recv_us=678 busy_us=0 busy_n=0 checkout_wait_n=1 lookup=0/0us getattr=1/678us create=0/0us setattr=0/0us readdir=0/0us unlink=0/0us append=0/0us report=0/0us getchunks=0/0us lookup_path=0/0us
+2026-10-11T04:05:04.580Z lookup-trace: parent=2801 name=raced-0 rc=-3
+2026-10-11T04:05:04.635Z opid-mkdir: parent=2801 name=raced-0 seq=5 transport_rc=0 status=2
+2026-10-11T04:05:04.635Z mkdir-trace: create parent=2801 name=raced-0 rc=-4
+2026-10-11T04:05:04.644Z lookup-trace: parent=2801 name=raced-1 rc=-3
+2026-10-11T04:05:04.644Z opid-mkdir: parent=2801 name=raced-1 seq=14 transport_rc=0 status=0
+2026-10-11T04:05:04.656Z lookup-trace: parent=2801 name=raced-2 rc=-3
+2026-10-11T04:05:04.661Z opid-mkdir: parent=2801 name=raced-2 seq=23 transport_rc=0 status=0
+2026-10-11T04:05:04.719Z lookup-trace: parent=2801 name=raced-3 rc=-3
+2026-10-11T04:05:04.720Z opid-mkdir: parent=2801 name=raced-3 seq=32 transport_rc=0 status=2
+2026-10-11T04:05:04.720Z mkdir-trace: create parent=2801 name=raced-3 rc=-4
+2026-10-11T04:05:04.733Z lookup-trace: parent=2801 name=raced-4 rc=-3
+2026-10-11T04:05:04.737Z opid-mkdir: parent=2801 name=raced-4 seq=41 transport_rc=0 status=0
+2026-10-11T04:05:04.809Z lookup-trace: parent=2801 name=raced-6 rc=-3
+2026-10-11T04:05:04.814Z opid-mkdir: parent=2801 name=raced-6 seq=58 transport_rc=0 status=0
+2026-10-11T04:05:04.877Z lookup-trace: parent=2801 name=raced-7 rc=-3
+2026-10-11T04:05:04.878Z opid-mkdir: parent=2801 name=raced-7 seq=67 transport_rc=0 status=0
+2026-10-11T04:05:05.143Z lookup-trace: parent=251 name=raced-0 rc=-3
+2026-10-11T04:05:05.144Z opid-mkdir: parent=251 name=raced-0 seq=76 transport_rc=0 status=2
+2026-10-11T04:05:05.144Z mkdir-trace: create parent=251 name=raced-0 rc=-4
+2026-10-11T04:05:05.233Z lookup-trace: parent=251 name=raced-6 rc=-3
+2026-10-11T04:05:05.235Z opid-mkdir: parent=251 name=raced-6 seq=125 transport_rc=0 status=2
+2026-10-11T04:05:05.235Z mkdir-trace: create parent=251 name=raced-6 rc=-4
+2026-10-11T04:05:05.248Z lookup-trace: parent=251 name=raced-7 rc=-3
+2026-10-11T04:05:05.249Z opid-mkdir: parent=251 name=raced-7 seq=134 transport_rc=0 status=0
+2026-10-11T04:05:05.587Z lookup-trace: parent=4053 name=raced-0 rc=-3
+2026-10-11T04:05:05.587Z opid-mkdir: parent=4053 name=raced-0 seq=143 transport_rc=0 status=2
+2026-10-11T04:05:05.587Z mkdir-trace: create parent=4053 name=raced-0 rc=-4
+2026-10-11T04:05:05.602Z lookup-trace: parent=4053 name=raced-1 rc=-3
+2026-10-11T04:05:05.603Z opid-mkdir: parent=4053 name=raced-1 seq=152 transport_rc=0 status=2
+2026-10-11T04:05:05.603Z mkdir-trace: create parent=4053 name=raced-1 rc=-4
+2026-10-11T04:05:05.618Z lookup-trace: parent=4053 name=raced-2 rc=-3
+2026-10-11T04:05:05.618Z opid-mkdir: parent=4053 name=raced-2 seq=161 transport_rc=0 status=0
+2026-10-11T04:05:05.631Z lookup-trace: parent=4053 name=raced-3 rc=-3
+2026-10-11T04:05:05.636Z opid-mkdir: parent=4053 name=raced-3 seq=170 transport_rc=0 status=0
+2026-10-11T04:05:05.653Z lookup-trace: parent=4053 name=raced-4 rc=-3
+2026-10-11T04:05:05.653Z opid-mkdir: parent=4053 name=raced-4 seq=179 transport_rc=0 status=0
+2026-10-11T04:05:05.669Z lookup-trace: parent=4053 name=raced-5 rc=-3
+2026-10-11T04:05:05.670Z opid-mkdir: parent=4053 name=raced-5 seq=188 transport_rc=0 status=2
+2026-10-11T04:05:05.670Z mkdir-trace: create parent=4053 name=raced-5 rc=-4
+2026-10-11T04:05:05.684Z lookup-trace: parent=4053 name=raced-6 rc=-3
+2026-10-11T04:05:05.685Z opid-mkdir: parent=4053 name=raced-6 seq=197 transport_rc=0 status=0
+2026-10-11T04:05:05.697Z lookup-trace: parent=4053 name=raced-7 rc=-3
+2026-10-11T04:05:05.702Z opid-mkdir: parent=4053 name=raced-7 seq=206 transport_rc=0 status=0
+2026-10-11T04:05:06.099Z lookup-trace: parent=2326 name=raced-1 rc=-3
+2026-10-11T04:05:06.155Z opid-mkdir: parent=2326 name=raced-1 seq=223 transport_rc=0 status=2
+2026-10-11T04:05:06.155Z mkdir-trace: create parent=2326 name=raced-1 rc=-4
+2026-10-11T04:05:06.195Z lookup-trace: parent=2326 name=raced-4 rc=-3
+2026-10-11T04:05:06.195Z opid-mkdir: parent=2326 name=raced-4 seq=248 transport_rc=0 status=0
+2026-10-11T04:05:06.214Z lookup-trace: parent=2326 name=raced-5 rc=-3
+2026-10-11T04:05:06.270Z opid-mkdir: parent=2326 name=raced-5 seq=257 transport_rc=0 status=2
+2026-10-11T04:05:06.270Z mkdir-trace: create parent=2326 name=raced-5 rc=-4
+2026-10-11T04:05:06.279Z lookup-trace: parent=2326 name=raced-6 rc=-3
+2026-10-11T04:05:06.280Z opid-mkdir: parent=2326 name=raced-6 seq=266 transport_rc=0 status=2
+2026-10-11T04:05:06.280Z mkdir-trace: create parent=2326 name=raced-6 rc=-4
+2026-10-11T04:05:06.292Z lookup-trace: parent=2326 name=raced-7 rc=-3
+2026-10-11T04:05:06.349Z RPC-PROF calls=833 checkout_us=871 send_us=4398 recv_us=307653 busy_us=200384 busy_n=4 checkout_wait_n=1 lookup=474/129052us getattr=81/12039us create=26/57430us setattr=0/0us readdir=0/0us unlink=0/0us append=0/0us report=63/31433us getchunks=63/8082us lookup_path=0/0us
+2026-10-11T04:05:06.350Z opid-mkdir: parent=2326 name=raced-7 seq=275 transport_rc=0 status=2
+2026-10-11T04:05:06.350Z mkdir-trace: create parent=2326 name=raced-7 rc=-4
+2026-10-11T04:05:06.694Z lookup-trace: parent=1212 name=raced-2 rc=-3
+2026-10-11T04:05:06.699Z opid-mkdir: parent=1212 name=raced-2 seq=300 transport_rc=0 status=0
+2026-10-11T04:05:06.795Z lookup-trace: parent=1212 name=raced-5 rc=-3
+2026-10-11T04:05:06.795Z opid-mkdir: parent=1212 name=raced-5 seq=325 transport_rc=0 status=0
+2026-10-11T04:05:06.812Z lookup-trace: parent=1212 name=raced-6 rc=-3
+2026-10-11T04:05:06.813Z opid-mkdir: parent=1212 name=raced-6 seq=334 transport_rc=0 status=2
+2026-10-11T04:05:06.813Z mkdir-trace: create parent=1212 name=raced-6 rc=-4
+2026-10-11T04:05:06.827Z lookup-trace: parent=1212 name=raced-7 rc=-3
+2026-10-11T04:05:06.827Z opid-mkdir: parent=1212 name=raced-7 seq=343 transport_rc=0 status=2
+2026-10-11T04:05:06.827Z mkdir-trace: create parent=1212 name=raced-7 rc=-4
+2026-10-11T04:05:07.195Z lookup-trace: parent=3342 name=raced-0 rc=-3
+2026-10-11T04:05:07.195Z opid-mkdir: parent=3342 name=raced-0 seq=352 transport_rc=0 status=0
+2026-10-11T04:05:07.228Z lookup-trace: parent=3342 name=raced-2 rc=-3
+2026-10-11T04:05:07.229Z opid-mkdir: parent=3342 name=raced-2 seq=369 transport_rc=0 status=0
+2026-10-11T04:05:07.244Z lookup-trace: parent=3342 name=raced-3 rc=-3
+2026-10-11T04:05:07.302Z opid-mkdir: parent=3342 name=raced-3 seq=378 transport_rc=0 status=2
+2026-10-11T04:05:07.302Z mkdir-trace: create parent=3342 name=raced-3 rc=-4
+2026-10-11T04:05:07.312Z lookup-trace: parent=3342 name=raced-4 rc=-3
+2026-10-11T04:05:07.313Z opid-mkdir: parent=3342 name=raced-4 seq=387 transport_rc=0 status=0
+2026-10-11T04:05:07.326Z lookup-trace: parent=3342 name=raced-5 rc=-3
+2026-10-11T04:05:07.332Z opid-mkdir: parent=3342 name=raced-5 seq=396 transport_rc=0 status=0
+2026-10-11T04:05:07.392Z lookup-trace: parent=3342 name=raced-6 rc=-3
+2026-10-11T04:05:07.392Z opid-mkdir: parent=3342 name=raced-6 seq=405 transport_rc=0 status=2
+2026-10-11T04:05:07.393Z mkdir-trace: create parent=3342 name=raced-6 rc=-4
+2026-10-11T04:05:07.406Z lookup-trace: parent=3342 name=raced-7 rc=-3
+2026-10-11T04:05:07.465Z opid-mkdir: parent=3342 name=raced-7 seq=414 transport_rc=0 status=2
+2026-10-11T04:05:07.465Z mkdir-trace: create parent=3342 name=raced-7 rc=-4
+2026-10-11T04:05:07.840Z lookup-trace: parent=5147 name=raced-0 rc=-3
+2026-10-11T04:05:07.846Z opid-mkdir: parent=5147 name=raced-0 seq=423 transport_rc=0 status=0
+2026-10-11T04:05:07.923Z lookup-trace: parent=5147 name=raced-2 rc=-3
+2026-10-11T04:05:07.978Z opid-mkdir: parent=5147 name=raced-2 seq=440 transport_rc=0 status=2
+2026-10-11T04:05:07.978Z mkdir-trace: create parent=5147 name=raced-2 rc=-4
+2026-10-11T04:05:07.987Z lookup-trace: parent=5147 name=raced-3 rc=-3
+2026-10-11T04:05:07.988Z opid-mkdir: parent=5147 name=raced-3 seq=449 transport_rc=0 status=0
+2026-10-11T04:05:07.999Z lookup-trace: parent=5147 name=raced-4 rc=-3
+2026-10-11T04:05:08.006Z opid-mkdir: parent=5147 name=raced-4 seq=458 transport_rc=0 status=0
+2026-10-11T04:05:08.022Z lookup-trace: parent=5147 name=raced-5 rc=-3
+2026-10-11T04:05:08.023Z opid-mkdir: parent=5147 name=raced-5 seq=467 transport_rc=0 status=2
+2026-10-11T04:05:08.023Z mkdir-trace: create parent=5147 name=raced-5 rc=-4
+2026-10-11T04:05:08.036Z lookup-trace: parent=5147 name=raced-6 rc=-3
+2026-10-11T04:05:08.091Z opid-mkdir: parent=5147 name=raced-6 seq=476 transport_rc=0 status=2
+2026-10-11T04:05:08.091Z mkdir-trace: create parent=5147 name=raced-6 rc=-4
+2026-10-11T04:05:08.101Z lookup-trace: parent=5147 name=raced-7 rc=-3
+2026-10-11T04:05:08.101Z opid-mkdir: parent=5147 name=raced-7 seq=485 transport_rc=0 status=2
+2026-10-11T04:05:08.101Z mkdir-trace: create parent=5147 name=raced-7 rc=-4
+2026-10-11T04:05:08.401Z RPC-PROF calls=1495 checkout_us=1316 send_us=8989 recv_us=563779 busy_us=400869 busy_n=8 checkout_wait_n=1 lookup=856/231426us getattr=142/19897us create=49/113166us setattr=0/0us readdir=0/0us unlink=0/0us append=0/0us report=112/54562us getchunks=112/13891us lookup_path=0/0us
+2026-10-11T04:05:08.426Z lookup-trace: parent=2507 name=raced-1 rc=-3
+2026-10-11T04:05:08.481Z opid-mkdir: parent=2507 name=raced-1 seq=502 transport_rc=0 status=2
+2026-10-11T04:05:08.481Z mkdir-trace: create parent=2507 name=raced-1 rc=-4
+2026-10-11T04:05:08.491Z lookup-trace: parent=2507 name=raced-2 rc=-3
+2026-10-11T04:05:08.492Z opid-mkdir: parent=2507 name=raced-2 seq=511 transport_rc=0 status=2
+2026-10-11T04:05:08.492Z mkdir-trace: create parent=2507 name=raced-2 rc=-4
+2026-10-11T04:05:08.505Z lookup-trace: parent=2507 name=raced-3 rc=-3
+2026-10-11T04:05:08.510Z opid-mkdir: parent=2507 name=raced-3 seq=520 transport_rc=0 status=0
+2026-10-11T04:05:08.585Z lookup-trace: parent=2507 name=raced-5 rc=-3
+2026-10-11T04:05:08.589Z opid-mkdir: parent=2507 name=raced-5 seq=537 transport_rc=0 status=0
+2026-10-11T04:05:08.617Z lookup-trace: parent=2507 name=raced-7 rc=-3
+2026-10-11T04:05:08.622Z opid-mkdir: parent=2507 name=raced-7 seq=554 transport_rc=0 status=0

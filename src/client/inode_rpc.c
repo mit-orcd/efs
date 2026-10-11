@@ -870,6 +870,10 @@ int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
                  : rpc_send_recv_owner(parent, EFS_MSG_INODE_CREATE, buf,
                                        slen, EFS_MSG_INODE_CREATE_REPLY,
                                        &r, sizeof(r));
+    if (getenv("EFS_OPID_TRACE") && S_ISDIR(mode))
+        fprintf(stderr,"opid-mkdir: parent=%llu name=%s seq=%llu transport_rc=%d status=%u\n",
+            (unsigned long long)parent,name?name:"",(unsigned long long)q.id.seq,
+            rc,rc==EFS_OK?r.status:255u);
     opid_end(slot);
     if (rc != EFS_OK)
         return rc;

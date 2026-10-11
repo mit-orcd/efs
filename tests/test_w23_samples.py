@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import importlib.util
 import io
+import json
 from pathlib import Path
 import unittest
 
@@ -9,6 +10,34 @@ samples = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(samples)
 
 class Samples(unittest.TestCase):
+    def test_raw_proof_rejects_valid_but_shifted_metrics(self):
+        record = dict(ts=1.25, node=2, kv=dict(mt_bytes=11, l0_bytes=22, l0=33, l1=44),
+                      rss_kb=55, replication_lag=66, timing=dict(pump_hold_max=77),
+                      pressure=dict(recv_rejected=99), groups=[dict(role='FOLLOWER')])
+        row = ['1.25','2','11','22','33','44','55','66','77','NA','99','FOLLOWER']
+        def check(rows, records):
+            return samples.raw_proof(io.StringIO('\t'.join(samples.HEADER)+'\n'+
+                                                '\n'.join('\t'.join(r) for r in rows)+'\n'),
+                                     io.StringIO(''.join(json.dumps(r)+'\n' for r in records)))
+        self.assertIn('1 TSV observations', check([row], [record]))
+        shifted = row.copy()
+        shifted[3], shifted[6] = shifted[6], shifted[3]
+        samples.validate(shifted)  # Numeric shape alone incorrectly permits this.
+        for rows, records in (([shifted],[record]), ([row,row],[record]),
+                              ([row],[record,record])):
+            with self.assertRaises(ValueError):
+                check(rows, records)
+        guessed = row.copy()
+        guessed[9] = '0'
+        with self.assertRaises(ValueError):
+            check([guessed], [record])
+        # An unavailable raw observation is excluded, never turned into zeros.
+        self.assertIn('1 TSV observations', check([row], [dict(record, kv=None), record]))
+        with self.assertRaises(ValueError):
+            check([], [dict(record, kv=None)])
+        with self.assertRaises(ValueError):
+            check([row], [dict(record, rss_kb=True)])
+
     def test_distinct_metrics_roundtrip(self):
         row = samples.row('01:02:03', '2', '11 22 33 44', '55', '66', '77', '88', '99', 'FOLLOWER,')
         self.assertEqual(len(row), 12)
