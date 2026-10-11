@@ -2342,8 +2342,9 @@ separate guarded lane-barrier retirement transaction before replying. No
 per-reservation completion loop remains. The existing atomic scope bounds the
 admitted backlog at 32,766; concurrent growth refuses before mutation for
 recapture. Actual-KV 20k/maximum-count, atomic-scope rollback, session/fencing,
-partial publication and cold/lost-COMMIT regressions pass on NUC. Full native,
-direct/buffered live, deployed 20k and cold gates remain pending. All voters must
+partial publication and cold/lost-COMMIT regressions pass on NUC. The full native
+suites pass for both matched W52-only and W52-plus-W97 builds. Direct/buffered
+live, deployed 20k and cold gates remain pending. All voters must
 support the new log command; no timeout or durability guarantee is relaxed.
 [Implementation and acceptance ledger](../status/nuc-w52-w97-resume-20261011.md).
 
