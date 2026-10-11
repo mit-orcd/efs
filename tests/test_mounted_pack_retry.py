@@ -84,6 +84,10 @@ int efs_client_publication_retire(struct efs_publication_ack_queue *q){
  if(i==1&&retire_fail){retire_fail=0;return EFS_ERR_NET;}return 0;
 }
 int efs_client_publication_ack_free(struct efs_publication_ack_queue *q){assert(q);__atomic_fetch_add(&released,1,__ATOMIC_RELAXED);return 0;}
+/* Scalar retry/stack gates remain independent of negotiated batch support. */
+int efs_client_rpc_publication_batch(const struct efs_msg_publication_batch *q,struct efs_msg_publication_batch_reply *r){(void)q;(void)r;assert(0);return EFS_ERR_PROTO;}
+int efs_dcache_publication_request(efs_ino_t i,uint64_t g,uint32_t c,uint64_t o,uint64_t s,uint64_t z,struct efs_msg_publication *r){(void)i;(void)g;(void)c;(void)o;(void)s;(void)z;(void)r;assert(0);return EFS_ERR_PROTO;}
+int efs_dcache_consume_publication(efs_ino_t i,uint64_t g,uint32_t c,uint64_t o,uint64_t s,const struct efs_msg_publication_reply *r,int *used){(void)i;(void)g;(void)c;(void)o;(void)s;(void)r;(void)used;assert(0);return EFS_ERR_PROTO;}
 '''+s[s.index('struct pack_parallel_run {'):s.index('static int pack_capabilities(')].replace('pthread_create(', 'fault_create(')+s[s.index('static int pack_publish_record('):s.index('static void *pack_worker(')]+r'''
 int main(void){
  static struct pack_context p;g_client.node_count=4;

@@ -402,7 +402,8 @@ send_reply:
         }
         case EFS_MSG_PACK_CAPABILITIES: {
             uint8_t reply[4];efs_put_upload_wr32(reply,
-                !payload_len && !g_server->storage_engine && server_raft_host_active()?1:0);
+                !g_server->storage_engine && server_raft_host_active()?
+                (!payload_len?1:payload_len==4 && efs_put_upload_rd32(payload)==2?2:0):0);
             efs_conn_send_msg(conn,EFS_MSG_PACK_CAPABILITIES_REPLY,reply,sizeof(reply));break;
         }
         case EFS_MSG_GC_PACKED: {
@@ -1037,6 +1038,19 @@ send_reply:
             }
             efs_conn_send_msg(conn, EFS_MSG_INODE_READDIR_REPLY, &r,
                               sizeof(r));
+            break;
+        }
+        case EFS_MSG_PUBLICATION_BATCH: {
+            struct efs_msg_publication_batch_reply r={0};
+            r.rpc.status=EFS_INODE_RPC_INVAL;
+            if(server_raft_host_active() && payload_len>=offsetof(struct efs_msg_publication_batch,records)) {
+                const struct efs_msg_publication_batch *b=payload;
+                if(b->count && b->count<=EFS_PUBLICATION_BATCH_MAX &&
+                   payload_len==efs_publication_batch_bytes(b->count))
+                    server_raft_host_publication_batch(b,&r);
+            }
+            efs_conn_send_msg(conn,EFS_MSG_PUBLICATION_BATCH_REPLY,&r,
+                (uint32_t)efs_publication_batch_reply_bytes(r.count));
             break;
         }
         case EFS_MSG_PUBLICATION:

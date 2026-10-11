@@ -16590,6 +16590,95 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
     }
 }
 
+/* Bounded transport cohort; every item is still an ordinary durable command.
+ * A partial proposal, CAS rejection or lost reply is resolved by the exact
+ * receipt, never by the cohort's applied index alone. */
+void server_raft_host_publication_batch(const struct efs_msg_publication_batch *req,
+                                      struct efs_msg_publication_batch_reply *out)
+{
+    struct efs_raft_host *h=g_host;
+    struct efs_meta_pub pubs[EFS_PUBLICATION_BATCH_MAX];
+    struct host_idx_ref refs[EFS_PUBLICATION_BATCH_MAX];
+    int hint=-1,rc,nrefs=0;
+    memset(out,0,sizeof(*out));out->rpc.status=EFS_INODE_RPC_INVAL;
+    if(!h || !h->running || !req || req->version!=EFS_PUBLICATION_BATCH_VERSION ||
+       (req->mode!=0 && req->mode!=2) || (req->group!=0 && req->group!=2) ||
+       !req->count || req->count>EFS_PUBLICATION_BATCH_MAX)return;
+    for(uint32_t i=0;i<req->count;i++) {
+        if(efs_publication_from_request(&req->records[i],&pubs[i]) ||
+           pubs[i].coding_profile_id!=EFS_META_PROFILE_PACK_K2F1 || pubs[i].chunk_index ||
+           efs_raft_shard_group(efs_kv_lane_shard(pubs[i].ino,0))!=req->group)return;
+        for(uint32_t j=0;j<i;j++)if(pubs[i].ino==pubs[j].ino)return;
+        if(efs_publication_digest(&pubs[i],out->records[i].digest))return;
+    }
+    out->version=req->version;out->mode=req->mode;out->group=req->group;out->count=req->count;
+    if(!host_hosts(h,req->group) || !host_is_leader(h,req->group)) {
+        hint=host_leader_hint(h,req->group);
+        if(hint<0)hint=host_pick_peer(h,(const uint8_t[]){req->group},1,-1);
+        set_inode_rc(&out->rpc,EFS_ERR_NOT_PRIMARY,hint);return;
+    }
+    rc=host_read_index(h,req->group,&hint);
+    if(rc){set_inode_rc(&out->rpc,rc,hint);return;}
+    struct host_command_cohort cohort;
+    host_command_cohort_begin(&cohort,h);
+    for(uint32_t i=0;i<req->count && rc==EFS_OK;i++) {
+        struct efs_meta_pub *p=&pubs[i];int verdict=0;
+        uint32_t shard=efs_kv_lane_shard(p->ino,0);
+        int one=efs_session_accept(h->kv,shard,req->records[i].id.client_uuid,
+                                  req->records[i].id.session_epoch);
+        if(one)continue;
+        one=efs_meta_publication_result(h->kv,p,&verdict);
+        int propose=(!req->mode && (one==EFS_ERR_NOT_FOUND ||
+            (!one && verdict==EFS_META_PUBLICATION_PENDING))) ||
+            (req->mode==2 && !one && verdict!=EFS_META_PUBLICATION_RETIRED);
+        if(!propose)continue; /* Final authoritative lookup below reports every item. */
+        p->now=now_ns();p->durable_result=1;
+        p->lane_local=req->group!=efs_raft_shard_group(efs_kv_inode_shard(p->ino));
+        uint8_t cmd[HOST_PUBLICATION_PACK_LEN];uint32_t len=0;
+        rc=pack_publish_cmd(cmd,&len,p);
+        if(rc)break;
+        cmd[0]=req->mode==2?EFS_MD_CMD_PUBLICATION_RETIRE:EFS_MD_CMD_PUBLICATION;
+        memcpy(cmd+len,p->publication_id.client_uuid,EFS_OPID_UUID_LEN);
+        wr32be(cmd+len+16,p->publication_id.session_epoch);wr64be(cmd+len+20,p->publication_id.seq);len+=28;
+        if(p->ticketed) {
+            cmd[HOST_PUBLISH_LEN-1]|=HOST_PUB_F_TICKETED;
+            memcpy(cmd+len,p->put_id.client_uuid,EFS_OPID_UUID_LEN);
+            wr32be(cmd+len+16,p->put_id.session_epoch);wr64be(cmd+len+20,p->put_id.seq);
+            wr32be(cmd+len+28,p->put_fragment_len);wr32be(cmd+len+32,p->put_member_mask);len+=36;
+        }
+        cmd[HOST_PUBLISH_LEN-1]|=HOST_PUB_F_PACKED;
+        rc=efs_pack_ref_encode(&p->ch.packed,cmd+len);len+=EFS_PACK_REF_BYTES;
+        if(rc)break;
+        refs[nrefs]=(struct host_idx_ref){.group=req->group};
+        rc=host_command_cohort_add(h,&refs[nrefs++],cmd,len,&hint);
+    }
+    rc=host_command_cohort_end(&cohort,rc,&hint);
+    if(!rc)rc=host_wait_refs(h,refs,nrefs,&hint);
+    /* Only retryable apply uncertainty can be resolved by durable receipts.
+     * Failed persistence never supplies an acceptance proof. */
+    if(rc && rc!=EFS_ERR_STALE && rc!=EFS_ERR_BUSY) {
+        set_inode_rc(&out->rpc,rc,hint);return;
+    }
+    rc=host_read_index(h,req->group,&hint);
+    if(rc){set_inode_rc(&out->rpc,rc,hint);return;}
+    set_inode_rc(&out->rpc,EFS_OK,hint);
+    for(uint32_t i=0;i<req->count;i++) {
+        struct efs_msg_publication_reply *r=&out->records[i];int verdict=0;
+        struct efs_publication_locator locator={0};
+        rc=efs_session_accept(h->kv,efs_kv_lane_shard(pubs[i].ino,0),
+            req->records[i].id.client_uuid,req->records[i].id.session_epoch);
+        if(!rc)rc=efs_meta_publication_receipt(h->kv,&pubs[i],&verdict,&locator);
+        if(!rc && req->mode==2 && verdict!=EFS_META_PUBLICATION_RETIRED)rc=EFS_ERR_BUSY;
+        set_inode_rc(&r->rpc,rc,hint);
+        if(rc)continue;
+        r->receipt_group=locator.group;r->receipt_index=locator.index;r->receipt_term=locator.term;
+        r->verdict=verdict;
+        r->state=verdict==EFS_META_PUBLICATION_PENDING?EFS_PUBLICATION_PENDING:
+            verdict==EFS_META_PUBLICATION_RETIRED?EFS_PUBLICATION_RETIRED:
+            verdict==EFS_OK?EFS_PUBLICATION_COMMITTED:EFS_PUBLICATION_REJECTED;
+    }
+}
+
 void server_raft_host_lane_bootstrap_rpc(const struct efs_msg_lane_bootstrap *req,
                                           struct efs_msg_lane_writer_view_reply *out)
 {

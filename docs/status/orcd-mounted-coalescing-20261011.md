@@ -644,3 +644,33 @@ and cold checks. It does not reinterpret ambiguous requests or already discarded
 receipt proofs; producer fencing remains necessary for unrelated abandoned
 pending objects. Full native and deployment validation of this follow-up remains
 required.
+
+## Bounded publication and retirement RPC batches
+
+The older-rejection retirement fix `8eb35446e940` passes full native Linux
+`make all`/`make test`; all 660 tracked build/gate sources match that committed
+snapshot. Its live mounted validation remains pending.
+
+The next candidate reduces per-file control-plane overhead after shared-fragment
+PUT. A transport batch carries at most 16 exact packed publication or retirement
+requests in one metadata group. Each record remains its existing durable command
+and independent receipt; the server shares bounded log barriers and authoritative
+reads, then retrieves every exact durable outcome. The client validates the entire
+reply before consuming any record. Missing results, changed digests, invalid
+locators and malformed terminal states cannot release cache or ACK ownership.
+Canonical mapping pulls remain required after successful publication.
+
+Version-2 capability negotiation enables batching only when every storage member
+supports it. Old empty capability requests still work; a new client retries the
+legacy probe and uses scalar requests on mixed-version clusters. A definitive
+unsupported batch permits scalar replay of the same immutable requests. Lost
+replies and retryable uncertainty retain those requests and accepted bytes.
+Batch request/reply storage is included in the precharged nonmoving contexts;
+the 32-queue receipt bound and four-worker stack bound remain unchanged.
+
+Focused Linux build, existing scalar/admission/worker gates, new 16-record RPC
+fault validation and scheduler ownership gates pass. These include lost replies,
+partial rejection/BUSY results, once-only cache consumption, oldest receipt retry,
+partial cleanup credits and rejected bytes retained for ordinary rebase. Full
+native and live seven-client deployment gates are pending. This is a pressure
+reduction candidate, not evidence that the directory/query timeouts are resolved.

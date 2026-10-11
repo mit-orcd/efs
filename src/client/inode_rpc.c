@@ -1582,6 +1582,79 @@ int efs_client_rpc_publication(const struct efs_msg_publication *request, int qu
     return EFS_ERR_BUSY;
 }
 
+int efs_client_rpc_publication_batch(const struct efs_msg_publication_batch *req,
+                                     struct efs_msg_publication_batch_reply *out)
+{
+    uint8_t digests[EFS_PUBLICATION_BATCH_MAX][EFS_HASH_SIZE];
+    if(!req || !out)return EFS_ERR_INVAL;
+    memset(out,0,sizeof(*out));
+    if(req->version!=EFS_PUBLICATION_BATCH_VERSION || !req->count ||
+       req->count>EFS_PUBLICATION_BATCH_MAX || (req->mode!=0 && req->mode!=2) ||
+       (req->group!=0 && req->group!=2))return EFS_ERR_INVAL;
+    for(uint32_t i=0;i<req->count;i++) {
+        struct efs_meta_pub p;
+        if(efs_publication_from_request(&req->records[i],&p) || p.chunk_index ||
+           p.coding_profile_id!=EFS_META_PROFILE_PACK_K2F1 ||
+           efs_raft_shard_group(efs_kv_lane_shard(p.ino,0))!=req->group ||
+           efs_publication_digest(&p,digests[i]))return EFS_ERR_INVAL;
+        for(uint32_t j=0;j<i;j++)if(req->records[j].rec.ino==p.ino)return EFS_ERR_INVAL;
+    }
+    uint32_t shard=efs_kv_lane_shard(req->records[0].rec.ino,0);
+    efs_node_id_t target=0;
+    for(unsigned attempt=0;attempt<8;attempt++) {
+        if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
+        efs_node_id_t nid=target;
+        struct efs_conn *conn=target?efs_client_conn_get(target):rpc_owner_conn_shard(shard,&nid);
+        if(!conn)return EFS_ERR_NET;
+        if(efs_conn_send_msg(conn,EFS_MSG_PUBLICATION_BATCH,req,(uint32_t)efs_publication_batch_bytes(req->count))) {
+            efs_client_conn_drop(nid,conn);return EFS_ERR_NET;
+        }
+        uint8_t type=0;uint32_t len=0;void *payload=NULL;
+        if(efs_conn_recv_msg(conn,&type,&payload,&len)) {
+            free(payload);efs_client_conn_drop(nid,conn);return EFS_ERR_NET;
+        }
+        efs_client_conn_release(nid,conn);
+        if(type!=EFS_MSG_PUBLICATION_BATCH_REPLY || len<offsetof(struct efs_msg_publication_batch_reply,records)) {
+            free(payload);return EFS_ERR_PROTO;
+        }
+        struct efs_msg_publication_batch_reply reply={0};
+        if(len>sizeof(reply)){free(payload);return EFS_ERR_PROTO;}
+        memcpy(&reply,payload,len);free(payload);
+        if(reply.rpc.status==EFS_INODE_RPC_NOT_PRIMARY && reply.rpc.primary_id && reply.rpc.primary_id!=nid) {
+            target=reply.rpc.primary_id;continue;
+        }
+        if(reply.rpc.status==EFS_INODE_RPC_BUSY || reply.rpc.status==EFS_INODE_RPC_NOT_PRIMARY) {
+            if(rpc_writer_retry_pause(attempt))return EFS_ERR_BUSY;
+            continue;
+        }
+        int rc=rpc_status_to_efs(reply.rpc.status);if(rc)return rc;
+        if(reply.version!=req->version || reply.mode!=req->mode || reply.group!=req->group ||
+           reply.count!=req->count || len!=efs_publication_batch_reply_bytes(req->count))return EFS_ERR_PROTO;
+        /* Validate the ENTIRE frame before exposing any record to the cache.
+         * An error item is explicit uncertainty, not an omitted success. */
+        for(uint32_t i=0;i<req->count;i++) {
+            const struct efs_msg_publication_reply *r=&reply.records[i];
+            if(memcmp(digests[i],r->digest,EFS_HASH_SIZE))return EFS_ERR_PROTO;
+            if(r->rpc.status!=EFS_INODE_RPC_OK) {
+                if(r->state || r->receipt_index || r->receipt_term || r->receipt_group)return EFS_ERR_PROTO;
+                continue;
+            }
+            if((r->receipt_index && (!r->receipt_term || r->receipt_group!=req->group)) ||
+               (!r->receipt_index && (r->receipt_term || r->receipt_group)) ||
+               (r->state!=EFS_PUBLICATION_COMMITTED && r->state!=EFS_PUBLICATION_REJECTED &&
+                r->state!=EFS_PUBLICATION_RETIRED && r->state!=EFS_PUBLICATION_PENDING) ||
+               (r->state==EFS_PUBLICATION_COMMITTED && r->verdict!=EFS_OK) ||
+               (r->state==EFS_PUBLICATION_REJECTED && r->verdict!=EFS_ERR_STALE && r->verdict!=EFS_ERR_INVAL) ||
+               (r->state==EFS_PUBLICATION_PENDING && r->verdict!=EFS_META_PUBLICATION_PENDING) ||
+               (r->state==EFS_PUBLICATION_RETIRED && r->verdict!=EFS_META_PUBLICATION_RETIRED) ||
+               (req->mode==2 && r->state!=EFS_PUBLICATION_RETIRED))return EFS_ERR_PROTO;
+        }
+        if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
+        *out=reply;return EFS_OK;
+    }
+    return EFS_ERR_BUSY;
+}
+
 int efs_client_rpc_lane_writer_view(efs_ino_t ino, uint64_t gen, uint32_t ci, uint32_t cs,
                                 struct efs_msg_lane_writer_view_reply *out)
 {
