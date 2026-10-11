@@ -2831,10 +2831,13 @@ See [next-five ledger](../status/next-five-gates-20261007.md).
 
 ## W70 · shrink-quota falsely reports background migration (queue row op1)
 
-**Class:** operator observability bug. **Status:** open, found during the
-Oct 7 documentation review. Documentation corrected; source behavior unchanged.
+**Class:** operator observability bug. **Status:** closed Oct 11 for truthful
+running-quota reporting. Current-code NUC direct/buffered × one/two-root
+acceptance passes accepted/refused reductions, unchanged quota on refusal and
+exact retained bytes. No migration or restart-persistent quota is claimed.
+[Closure evidence](../status/devel-nuc-closure-20261010.md).
 
-**Evidence:** `src/server/handler.c` handles SHRINK_QUOTA by subtracting the
+**Historical Oct 7 evidence:** `src/server/handler.c` handles SHRINK_QUOTA by subtracting the
 requested amount from the running node quota, refusing a result below usage.
 It starts no migration worker, but returns the legacy IN_PROGRESS status.
 `cmd_shrink_quota()` in `src/mgmt/efs_mgmt.c` then prints "background migration
@@ -3180,8 +3183,14 @@ FUSE request boundaries; closing from healthy non-racing POSIX tests.
 
 ## W78 · Server wrapper trusts stale PID-file ownership (queue row op2)
 
-**Class/state:** conditional operator correctness; open, source-reviewed Oct 7.
-**Evidence:** `scripts/server.sh:kill_from_pidfile` reads the stored PID and
+**Class/state:** conditional operator correctness; closed Oct 11 on the
+supported Linux identity-safe wrapper gate. Current-code NUC fixtures cover
+absent/dead/invalid/unrelated/wrong-storage/stale-start records, matching daemon
+and recorder retirement, and actual starts with stale records. Unrelated owned
+fixture processes survive both start and stop. Timeouts retain processes;
+daemon-internal shutdown remains W65.
+[Closure evidence](../status/devel-nuc-closure-20261010.md).
+**Historical Oct 7 evidence:** `scripts/server.sh:kill_from_pidfile` reads the stored PID and
 passes it to `kill_pid_graceful`. That helper checks only `kill -0`, sends
 SIGTERM, then SIGKILL after about three seconds. Startup and path-based stop
 both use this cleanup. No executable, start-time or storage/port identity is
@@ -3227,8 +3236,14 @@ No cleanup test may operate on an operator's real storage/processes.
 
 ## W79 · mkfs CLI advertises a name it silently ignores (queue row op3)
 
-**Class/state:** operator observability bug; open, source-reviewed Oct 7.
-**Evidence:** `src/mgmt/efs_mgmt.c` general help advertises
+**Class/state:** operator observability bug; closed Oct 11. Both aliases'
+current help, missing/malformed/excess arguments, ignored labels and repeated
+initialization pass on NUC direct/buffered private clusters. A relay consumes
+each alias's actual successful reply without delivering it; the CLI reports
+failure, and an explicit retry preserves the authoritative namespace and salt.
+This is single-export idempotency, not named-export creation or a reset.
+[Closure evidence](../status/devel-nuc-closure-20261010.md).
+**Historical Oct 7 evidence:** `src/mgmt/efs_mgmt.c` general help advertises
 `mkfs <node:port> <export-name>`, but `cmd_raft_mkfs` only parses `argv[0]`
 and ignores extra arguments. Both mkfs aliases use that handler. Metadata
 `efs_meta_apply_mkfs` returns OK for an existing root; the host reads back the
@@ -3242,7 +3257,8 @@ contract and optional ignored legacy label, explicitly explain the label on
 invocation, and reject more than one extra argument before contacting a server.
 NUC real-daemon tests repeatedly initialize through both aliases, preserve the
 committed salt and an existing dentry, and verify excess arguments are refused.
-Uncertain-reply initialization and retired FUSE hints remain additional coverage.
+Uncertain-reply initialization was additional coverage at that checkpoint;
+the Oct 11 gate above completes it. Retired FUSE hints are addressed below.
 
 FUSE now reports non-default legacy labels as ignored and uses the canonical
 single-export name. Mount failure guidance refers to Raft status/root health and
@@ -3260,8 +3276,14 @@ retry. This work does not authorize multi-export design or destructive reset.
 
 ## W80 · efs-query presents retired placeholder statistics as real totals (queue row op4)
 
-**Class/state:** operator observability bug / missing query integration; open,
-source-reviewed Oct 7. `src/server/handler.c:EFS_MSG_QUERY_STATS` explicitly
+**Class/state:** operator observability bug; closed Oct 11 for the explicitly
+retired QUERY_STATS endpoint. NUC nonempty authoritative namespaces and stored
+fragment fixtures reject false totals in normal/raw output; help names the
+retirement, and unsupported/legacy/malformed reply fixtures pass. Mounted
+server-owned snapshot features and their remaining scale acceptance stay W92;
+this closure does not claim implementation of legacy per-user totals.
+[Closure evidence](../status/devel-nuc-closure-20261010.md).
+**Historical Oct 7 review:** `src/server/handler.c:EFS_MSG_QUERY_STATS` explicitly
 notes that the whole-table query was retired, zeroes a reply and sends it.
 `src/query/efs_query.c` accepts that reply and prints total files/bytes and
 users as an ordinary successful result (also under `--raw`). The command

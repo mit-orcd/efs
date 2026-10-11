@@ -1475,6 +1475,16 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+### NUC closure session — October 10–11
+
+[Current NUC acceptance](../status/devel-nuc-closure-20261010.md) closes W70, W78, W79
+and W80 for their named operator-correctness scopes. Full native, actual stale
+PID startup/stop, both mkfs aliases' consumed-reply recovery and explicit
+retired-query outcomes pass. W96's sixteen drive comparisons, exact retained
+replay, ASan/UBSan and Valgrind pass; its final live gates are still running.
+W97 allocation controls remain in the session queue. This entry describes
+the active private validation, not a completed regular-service deployment.
+
 ### Governing node-count contract — D36
 
 [User-ratified D36](../status/node-count-protection-20261009.md): three nodes minimum,
@@ -1803,7 +1813,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | partial — tiny/durable/cold/crash/churn gates pass; indexed packing and P4.1 decision remain | [work item](#w95) |
 | tiny-kv | **W96** · bounded KV WAL preallocation | performance experiment | partial — recovery/reservation/fault and final guard cold gates pass; isolated NUC acceptance owed | [work item](#w96) |
 | decisions | **D28** client-death loss policy · **D29** durable publication receipts · **D30** bounded admission/pacing | accepted design | accepted Oct 8: salvage deferred; D29/W88 implementation first, then D30/W23/W89; implementation and acceptance remain open | [contracts and gates](#d28d30--accepted-oct-8-2026) |
-| op1 | **W70** · shrink-quota falsely reports background migration | operator observability bug | truthful running-quota reporting implemented; NUC accepted/refused shrink and unchanged-byte gates pass; no migration or persistence claim | [work item](#w70) |
+| op1 | **W70** · shrink-quota falsely reports background migration | operator observability bug | Closed Oct11: current NUC direct/buffered × one/two-root accepted/refused reductions, truthful running quota and exact retained bytes pass; no migration/persistence claim | [closure](../status/devel-nuc-closure-20261010.md) |
 
 #### Source findings awaiting triage
 
@@ -1819,9 +1829,9 @@ positions do not assign an execution order or override the active handoff.
 | spec5 | **W75** · fragment integrity trust / missing checksum fallback | integrity correctness | missing/corrupt evidence fails closed; captured metadata digest and PUT validation gates pass on NUC; identity-bound format remains open | [evidence and gate](#w75) |
 | spec6 | **W76** · opid table exhaustion sends unprotected namespace retries | conditional correctness | Closed: bounded identity admission refuses saturation safely; Oct9 reserves receipt capacity with16 unacknowledged positions (512 tracker slots); all four lost-reply mutations replay across leader death/restart with one effect | [evidence and gate](#w76) |
 | spec7 | **W77** · atomic multi-chunk public publication/observation | integration gap | per-group REPORT/per-chunk publication; request-wide decision/read-validation gate unestablished | [evidence and gate](#w77) |
-| op2 | **W78** · server wrapper trusts PID-file process identity | conditional operator correctness | identity-checked pidfd daemon/recorder retirement implemented; NUC ownership fixtures pass; daemon shutdown remains W65 | [evidence and gate](#w78) |
-| op3 | **W79** · mkfs help/name argument disagrees with single-export handler | operator observability | legacy label explicitly reported as ignored; extra arguments rejected; NUC repeated mkfs preserves salt/namespace | [evidence and gate](#w79) |
-| op4 | **W80** · efs-query reports retired zero-filled statistics as totals | operator observability | unsupported status and CLI nonzero exit replace invented zero totals; NUC RPC/CLI gates pass; actual totals remain unimplemented | [evidence and gate](#w80) |
+| op2 | **W78** · server wrapper trusts PID-file process identity | conditional operator correctness | Closed Oct11: actual NUC startup/stop retains unrelated processes; absent/dead/invalid/wrong-storage/stale-start and recorder ownership gates pass; shutdown remains W65 | [closure](../status/devel-nuc-closure-20261010.md) |
+| op3 | **W79** · mkfs help/name argument disagrees with single-export handler | operator observability | Closed Oct11: aliases/help/argument refusals, ignored label, consumed successful replies and explicit retry preserve namespace/salt in both NUC I/O modes | [closure](../status/devel-nuc-closure-20261010.md) |
+| op4 | **W80** · efs-query reports retired zero-filled statistics as totals | operator observability | Closed Oct11 for retired endpoint: nonempty namespace normal/raw, help, legacy and malformed replies pass; mounted stats/scale remain W92 | [closure](../status/devel-nuc-closure-20261010.md) |
 | scale1 | **W81** · automatic directory spreading lacks a pressure trigger | scalability feature gap | size trigger/migrator exist; pressure policy remains unspecified and unwired | [evidence and gate](#w81) |
 | proto1 | **W82** · stale completed ReadIndex authority survives leader isolation | read correctness | Closed: stale LOOKUP/GETATTR/session/publication/transaction views and configuration partition gates pass; coordinator callback refuses untrusted absence | [evidence and gate](#w82) |
 | proto2 | **W83** · transaction decision records lack safe retirement | metadata lifecycle gap | resolve/drop remove participant records; no decision acknowledgement/GC path found | [evidence and gate](#w83) |
@@ -5107,10 +5117,13 @@ See [next-five ledger](../status/next-five-gates-20261007.md).
 
 ### W70 · shrink-quota falsely reports background migration (queue row op1)
 
-**Class:** operator observability bug. **Status:** open, found during the
-Oct 7 documentation review. Documentation corrected; source behavior unchanged.
+**Class:** operator observability bug. **Status:** closed Oct 11 for truthful
+running-quota reporting. Current-code NUC direct/buffered × one/two-root
+acceptance passes accepted/refused reductions, unchanged quota on refusal and
+exact retained bytes. No migration or restart-persistent quota is claimed.
+[Closure evidence](../status/devel-nuc-closure-20261010.md).
 
-**Evidence:** `src/server/handler.c` handles SHRINK_QUOTA by subtracting the
+**Historical Oct 7 evidence:** `src/server/handler.c` handles SHRINK_QUOTA by subtracting the
 requested amount from the running node quota, refusing a result below usage.
 It starts no migration worker, but returns the legacy IN_PROGRESS status.
 `cmd_shrink_quota()` in `src/mgmt/efs_mgmt.c` then prints "background migration
@@ -5456,8 +5469,14 @@ FUSE request boundaries; closing from healthy non-racing POSIX tests.
 
 ### W78 · Server wrapper trusts stale PID-file ownership (queue row op2)
 
-**Class/state:** conditional operator correctness; open, source-reviewed Oct 7.
-**Evidence:** `scripts/server.sh:kill_from_pidfile` reads the stored PID and
+**Class/state:** conditional operator correctness; closed Oct 11 on the
+supported Linux identity-safe wrapper gate. Current-code NUC fixtures cover
+absent/dead/invalid/unrelated/wrong-storage/stale-start records, matching daemon
+and recorder retirement, and actual starts with stale records. Unrelated owned
+fixture processes survive both start and stop. Timeouts retain processes;
+daemon-internal shutdown remains W65.
+[Closure evidence](../status/devel-nuc-closure-20261010.md).
+**Historical Oct 7 evidence:** `scripts/server.sh:kill_from_pidfile` reads the stored PID and
 passes it to `kill_pid_graceful`. That helper checks only `kill -0`, sends
 SIGTERM, then SIGKILL after about three seconds. Startup and path-based stop
 both use this cleanup. No executable, start-time or storage/port identity is
@@ -5503,8 +5522,14 @@ No cleanup test may operate on an operator's real storage/processes.
 
 ### W79 · mkfs CLI advertises a name it silently ignores (queue row op3)
 
-**Class/state:** operator observability bug; open, source-reviewed Oct 7.
-**Evidence:** `src/mgmt/efs_mgmt.c` general help advertises
+**Class/state:** operator observability bug; closed Oct 11. Both aliases'
+current help, missing/malformed/excess arguments, ignored labels and repeated
+initialization pass on NUC direct/buffered private clusters. A relay consumes
+each alias's actual successful reply without delivering it; the CLI reports
+failure, and an explicit retry preserves the authoritative namespace and salt.
+This is single-export idempotency, not named-export creation or a reset.
+[Closure evidence](../status/devel-nuc-closure-20261010.md).
+**Historical Oct 7 evidence:** `src/mgmt/efs_mgmt.c` general help advertises
 `mkfs <node:port> <export-name>`, but `cmd_raft_mkfs` only parses `argv[0]`
 and ignores extra arguments. Both mkfs aliases use that handler. Metadata
 `efs_meta_apply_mkfs` returns OK for an existing root; the host reads back the
@@ -5518,7 +5543,8 @@ contract and optional ignored legacy label, explicitly explain the label on
 invocation, and reject more than one extra argument before contacting a server.
 NUC real-daemon tests repeatedly initialize through both aliases, preserve the
 committed salt and an existing dentry, and verify excess arguments are refused.
-Uncertain-reply initialization and retired FUSE hints remain additional coverage.
+Uncertain-reply initialization was additional coverage at that checkpoint;
+the Oct 11 gate above completes it. Retired FUSE hints are addressed below.
 
 FUSE now reports non-default legacy labels as ignored and uses the canonical
 single-export name. Mount failure guidance refers to Raft status/root health and
@@ -5536,8 +5562,14 @@ retry. This work does not authorize multi-export design or destructive reset.
 
 ### W80 · efs-query presents retired placeholder statistics as real totals (queue row op4)
 
-**Class/state:** operator observability bug / missing query integration; open,
-source-reviewed Oct 7. `src/server/handler.c:EFS_MSG_QUERY_STATS` explicitly
+**Class/state:** operator observability bug; closed Oct 11 for the explicitly
+retired QUERY_STATS endpoint. NUC nonempty authoritative namespaces and stored
+fragment fixtures reject false totals in normal/raw output; help names the
+retirement, and unsupported/legacy/malformed reply fixtures pass. Mounted
+server-owned snapshot features and their remaining scale acceptance stay W92;
+this closure does not claim implementation of legacy per-user totals.
+[Closure evidence](../status/devel-nuc-closure-20261010.md).
+**Historical Oct 7 review:** `src/server/handler.c:EFS_MSG_QUERY_STATS` explicitly
 notes that the whole-table query was retired, zeroes a reply and sends it.
 `src/query/efs_query.c` accepts that reply and prints total files/bytes and
 users as an ordinary successful result (also under `--raw`). The command

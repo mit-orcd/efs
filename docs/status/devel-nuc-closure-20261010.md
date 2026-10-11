@@ -24,10 +24,10 @@ forced dirty discard, main merge, push or tag is requested.
 | Item | Selected remaining scope | Session state |
 | --- | --- | --- |
 | W96 | Production KV WAL reservation on/off, both physical drives, repeated ABBA batch distributions, bounded allocation, reset/reopen and exact replay; full native/POSIX/peer/fault/cold gates | Running; no closure yet |
-| W78 | Absent/dead/invalid/unrelated/wrong-storage/stale-start PID and owned daemon/recorder retirement | Missing absent/dead cases added; current-code NUC run queued |
-| W79 | Both aliases and help, real consumed successful mkfs replies, uncertain-outcome retry preserves namespace/salt, explicit extra-argument refusal | Missing reply-loss gate added; direct/buffered NUC runs queued |
-| W70 | Accepted/refused quota reductions, unchanged bytes and no fictitious migration | Current-code direct/buffered × one/two-root repeat queued |
-| W80 | Retired QUERY_STATS gives nonzero unavailable response with no false totals in normal/raw output; current help and legacy/malformed reply tests | Current-code nonempty direct/buffered × one/two-root repeat queued |
+| W78 | Absent/dead/invalid/unrelated/wrong-storage/stale-start PID and owned daemon/recorder retirement | Closed Oct11; current native and real NUC startup/stop gates pass |
+| W79 | Both aliases and help, real consumed successful mkfs replies, uncertain-outcome retry preserves namespace/salt, explicit extra-argument refusal | Closed Oct11; direct/buffered private gates pass |
+| W70 | Accepted/refused quota reductions, unchanged bytes and no fictitious migration | Closed Oct11; direct/buffered × one/two-root current-code gates pass |
+| W80 | Retired QUERY_STATS gives nonzero unavailable response with no false totals in normal/raw output; current help and legacy/malformed reply tests | Closed Oct11 for retired endpoint; current-code nonempty namespace, fragment, help and reply gates pass |
 | W97 | Three-writer durable file controls outside EFS; growing/reset files versus preallocated rings, reversed repeats, barrier distributions, disk/CPU counters and exact reopened blocks | Prepared; later stage queued |
 
 W73/W64 retain production-session/platform obligations. W53 explicitly requires
@@ -50,7 +50,8 @@ metadata batch-distribution model. Sync percentiles have 1 microsecond bins
 with a 1-second overflow bin and a separately retained exact maximum.
 
 The W97 control uses three independent 64 KiB writers, each with a 256 MiB
-file. Growing mode truncates and durably resets at the boundary; ring mode
+file and a SHAKE-derived full-length body with an eight-byte counter. Growing
+mode truncates and durably resets at the boundary; ring mode
 preallocates before timing and overwrites slots. It measures allocation/rotation
 costs; it neither implements an alternative EFS storage engine nor establishes
 NAND-cache occupancy. Full current files are reopened and checked exactly,
@@ -60,5 +61,68 @@ host contention and process CPU rather than assuming zero software overhead.
 
 ## Terminal evidence
 
-Not complete. Populate verdicts and links from retained raw files after all
-selected runs, including failures, restoration and the exact code/build IDs.
+The overall session is not complete. The completed operator verdicts below
+close only their named scopes. W96 final live gates and W97 controls remain
+in progress.
+
+Named NUC engine build: `3df1931032b8-nuc`, branch `devel-nuc`; production
+C/header/Makefile code is unchanged from the captured devel tip. The copied
+source and gate overlay are verified by SHA256. Subsequent changes add tests
+and documentation; the raw W97 body overlay is `927eaa3c`, without an engine
+change. The full Linux native suite passes with its five documentation checks.
+
+* W70: all four direct/buffered × one/two-root cases observe the new running
+  quota, refuse a below-usage reduction without another quota change, and
+  retain exact fragment bytes. These are volatile quota semantics.
+* W78: unit ownership cases include absent/dead/invalid records, another live
+  process, wrong storage and stale start identity. Actual wrapper launches with
+  invalid/unrelated/dead records retain the unrelated process, record the real
+  new daemon identity and retire it gracefully. Recorder tests retain unrelated
+  and wrong-output processes and stop the matching recorder with SIGINT.
+* W79: direct and buffered three-node private fixtures test both alias helps,
+  missing/malformed/excess arguments, compatibility notices and unchanged salt
+  and namespace. Four real successful replies are consumed by a relay with
+  zero bytes delivered; each CLI fails explicitly, and an explicit retry
+  succeeds without resetting the export. Exact exchanges are retained.
+* W80: normal/raw queries on both nonempty authoritative namespaces and four
+  stored-fragment fixtures produce no totals and return unavailable exit 2.
+  Help explicitly names retirement. Separate unsupported/legacy/malformed
+  reply fixtures pass; malformed replies exit 1. This does not activate or
+  close W92's mounted snapshot/scale features.
+
+W96's sixteen 90-second ABBA cells and independent read-only, exact ordered
+key/CRC/payload checks all pass. Both shapes cross reservation/reset boundaries
+within the matrix. NVMe single-record controls do not reach the 8 MiB reset
+boundary in 90 seconds; the candidate and larger shape do. Reserved slack
+stays below 1 MiB. These are conditional WAL results:
+
+| Volume / items per record | Control records/s | Reserved records/s | Gain | Mean sync control → reserved |
+| --- | ---: | ---: | ---: | ---: |
+| SATA / 1 | 5725.89 | 10460.37 | +82.69% | 0.172 → 0.093 ms |
+| SATA / 16 | 4819.16 | 5670.87 | +17.67% | 0.193 → 0.162 ms |
+| NVMe / 1 | 292.41 | 830.57 | +184.05% | 3.382 → 1.177 ms |
+| NVMe / 16 | 282.97 | 391.05 | +38.19% | 3.467 → 2.492 ms |
+
+Means combine equal-duration repeats; sync means pool actual call counts,
+including recovery barriers. SATA's one-item p99 increases from 225/226 to
+277/274 microseconds, despite lower p50/p95 and higher throughput. Larger SATA
+records have slightly higher p50 and overlapping p99 (247/250 vs270/250).
+NVMe p99 improves in both shapes. Maxima and all individual cells are retained;
+this is not an unconditional percentile win or an end-to-end CREATE result.
+
+NUC ASan/UBSan instruments the production WAL, checksum and portable hash code
+in the real short-write/ENOSPC/sync-failure/reopen/reservation/tail test. It
+passes with leak/error halting. Valgrind runs the separately verified normal,
+non-ASan WAL binary: zero errors and zero live heap blocks at exit. These do
+not claim full-server sanitizer or physical power-loss acceptance.
+
+The initial native attempt stopped at missing documentation evidence links
+because results had been excluded from the source copy. Preserve its exit 2
+and subsequent NOTRUN stages in `native-incomplete-copy`; actual linked
+evidence was then copied, all five doc checks passed, and the unchanged full
+native run passed. No check or failure was suppressed.
+
+[Raw evidence](../../results/measure/20261010-devel-nuc/) retains controllers,
+source/binary provenance, operator fixtures, dropped reply frames, all W96
+windows and exact replay manifests, native/sanitizer output and the initial
+failed copy. Final live/pressure/restoration verdicts will be added here.

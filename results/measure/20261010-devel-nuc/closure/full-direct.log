@@ -1,0 +1,65 @@
+Evidence directory: /data1/efs/gc-direct-hg_k975n
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=18200560390869487499
+client serving PASS
+sync peer mounted PASS
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 3667877 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 3667857 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+synchronous write physical deletion drained PASS
+O_SYNC/O_DSYNC small/queued/append before close and cold crash bytes PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 3668674 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 3669407 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 3671467 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+identical append RPC physical deletion drained PASS
+durable append lost replies, 32 identical RPCs, ACK retirement and exact cold bytes PASS
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 3672473 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+synchronous failed-write recovery physically reclaimed PASS
+O_SYNC/O_DSYNC offline callback failure retains exact bytes for fsync and cold recovery PASS

@@ -1,0 +1,130 @@
+[
+  {
+    "cell": "nvme-batch1-0-control",
+    "exact_records": 26270,
+    "exact_items": 26270,
+    "bytes": 4124390,
+    "sha256": "4fa91bfe5413be33080c0c22ee27c8a600febd09dbef3645a37e5ef3c9d4ed42",
+    "read_only": true
+  },
+  {
+    "cell": "nvme-batch1-1-reserve",
+    "exact_records": 21395,
+    "exact_items": 21395,
+    "bytes": 3359015,
+    "sha256": "21a5a07518546051c6bfd9041895b76b9bf6b71a164db35a7b3a54ac01ca3b84",
+    "read_only": true
+  },
+  {
+    "cell": "nvme-batch1-2-reserve",
+    "exact_records": 21249,
+    "exact_items": 21249,
+    "bytes": 3336093,
+    "sha256": "2c1d2ab1026bd2bbb0941c5816df38892f9bc39f05618c08c251166febfbc536",
+    "read_only": true
+  },
+  {
+    "cell": "nvme-batch1-3-control",
+    "exact_records": 26367,
+    "exact_items": 26367,
+    "bytes": 4139619,
+    "sha256": "c204276fd1d6379dbf2350856dd6e26a3afddca2a5e0d2f8fe31b0acd10787b3",
+    "read_only": true
+  },
+  {
+    "cell": "nvme-batch16-0-control",
+    "exact_records": 182,
+    "exact_items": 2912,
+    "bytes": 424424,
+    "sha256": "a055493513b3dc537e78496b163a69002dd015d93054c0399cc56840b827e6c5",
+    "read_only": true
+  },
+  {
+    "cell": "nvme-batch16-1-reserve",
+    "exact_records": 2721,
+    "exact_items": 43536,
+    "bytes": 6345372,
+    "sha256": "e9975d5e7a2b5ace2082156bcf1936607d281acfd3fa68b7cd087a799dd5515f",
+    "read_only": true
+  },
+  {
+    "cell": "nvme-batch16-2-reserve",
+    "exact_records": 2906,
+    "exact_items": 46496,
+    "bytes": 6776792,
+    "sha256": "92b78eb6c99021c02f0fa6a49934490ee675be60e95a0a1f4bd3a37f8af00308",
+    "read_only": true
+  },
+  {
+    "cell": "nvme-batch16-3-control",
+    "exact_records": 384,
+    "exact_items": 6144,
+    "bytes": 895488,
+    "sha256": "60edeada707988d36d91a88de144f6bde93c190d80c965d8d6f55d3c6754cc83",
+    "read_only": true
+  },
+  {
+    "cell": "sata-batch1-0-control",
+    "exact_records": 34299,
+    "exact_items": 34299,
+    "bytes": 5384943,
+    "sha256": "3be6dafa31ee88bf4bbfbe5bbc82078c5cb9cc1fba099c84366ca46411b9cdd8",
+    "read_only": true
+  },
+  {
+    "cell": "sata-batch1-1-reserve",
+    "exact_records": 21872,
+    "exact_items": 21872,
+    "bytes": 3433904,
+    "sha256": "31bd3a85be1fd1c2a9f1daf68f5640e108235b15e880e2298b2e85811492e95c",
+    "read_only": true
+  },
+  {
+    "cell": "sata-batch1-2-reserve",
+    "exact_records": 44343,
+    "exact_items": 44343,
+    "bytes": 6961851,
+    "sha256": "bffba9fc35a7ef6648b111f75b3da246cc305237f38fe1a2968b1a6fa04731a1",
+    "read_only": true
+  },
+  {
+    "cell": "sata-batch1-3-control",
+    "exact_records": 34606,
+    "exact_items": 34606,
+    "bytes": 5433142,
+    "sha256": "cb26dc0601bb4ec0ce9fb7f1b4c2e1e9edc937bfd61af66ae5c96e3aeb6a62cc",
+    "read_only": true
+  },
+  {
+    "cell": "sata-batch16-0-control",
+    "exact_records": 1991,
+    "exact_items": 31856,
+    "bytes": 4643012,
+    "sha256": "555f425ba648dbc2e3ea9e8e139d06113d0e5afc28d50ec9235c0baf59d29213",
+    "read_only": true
+  },
+  {
+    "cell": "sata-batch16-1-reserve",
+    "exact_records": 597,
+    "exact_items": 9552,
+    "bytes": 1392204,
+    "sha256": "af666f8fedb035d1120b5fca6e1b84a989cef5cc5f35ffdf27100e2ce08cbfea",
+    "read_only": true
+  },
+  {
+    "cell": "sata-batch16-2-reserve",
+    "exact_records": 1928,
+    "exact_items": 30848,
+    "bytes": 4496096,
+    "sha256": "a6bda3a0bbb6006d7c8a323b7e4fe477526efa7a611d1fa803af3eac684d24fa",
+    "read_only": true
+  },
+  {
+    "cell": "sata-batch16-3-control",
+    "exact_records": 1941,
+    "exact_items": 31056,
+    "bytes": 4526412,
+    "sha256": "636e675ca392dd77153712e9852ab489b4e2488aece640533723bf165dab7594",
+    "read_only": true
+  }
+]

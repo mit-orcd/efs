@@ -4,6 +4,16 @@
 [Decisions](decisions.md) · [Work-item details](../backlog/work-items.md) ·
 [Operations](../operations/operations.md) · [Archive](../archive/README.md)
 
+## NUC closure session — October 10–11
+
+[Current NUC acceptance](devel-nuc-closure-20261010.md) closes W70, W78, W79
+and W80 for their named operator-correctness scopes. Full native, actual stale
+PID startup/stop, both mkfs aliases' consumed-reply recovery and explicit
+retired-query outcomes pass. W96's sixteen drive comparisons, exact retained
+replay, ASan/UBSan and Valgrind pass; its final live gates are still running.
+W97 allocation controls remain in the session queue. This entry describes
+the active private validation, not a completed regular-service deployment.
+
 ## Governing node-count contract — D36
 
 [User-ratified D36](node-count-protection-20261009.md): three nodes minimum,
@@ -332,7 +342,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | partial — tiny/durable/cold/crash/churn gates pass; indexed packing and P4.1 decision remain | [work item](../backlog/work-items.md#w95) |
 | tiny-kv | **W96** · bounded KV WAL preallocation | performance experiment | partial — recovery/reservation/fault and final guard cold gates pass; isolated NUC acceptance owed | [work item](../backlog/work-items.md#w96) |
 | decisions | **D28** client-death loss policy · **D29** durable publication receipts · **D30** bounded admission/pacing | accepted design | accepted Oct 8: salvage deferred; D29/W88 implementation first, then D30/W23/W89; implementation and acceptance remain open | [contracts and gates](decisions.md#d28d30--accepted-oct-8-2026) |
-| op1 | **W70** · shrink-quota falsely reports background migration | operator observability bug | truthful running-quota reporting implemented; NUC accepted/refused shrink and unchanged-byte gates pass; no migration or persistence claim | [work item](../backlog/work-items.md#w70) |
+| op1 | **W70** · shrink-quota falsely reports background migration | operator observability bug | Closed Oct11: current NUC direct/buffered × one/two-root accepted/refused reductions, truthful running quota and exact retained bytes pass; no migration/persistence claim | [closure](devel-nuc-closure-20261010.md) |
 
 ### Source findings awaiting triage
 
@@ -348,9 +358,9 @@ positions do not assign an execution order or override the active handoff.
 | spec5 | **W75** · fragment integrity trust / missing checksum fallback | integrity correctness | missing/corrupt evidence fails closed; captured metadata digest and PUT validation gates pass on NUC; identity-bound format remains open | [evidence and gate](../backlog/work-items.md#w75) |
 | spec6 | **W76** · opid table exhaustion sends unprotected namespace retries | conditional correctness | Closed: bounded identity admission refuses saturation safely; Oct9 reserves receipt capacity with16 unacknowledged positions (512 tracker slots); all four lost-reply mutations replay across leader death/restart with one effect | [evidence and gate](../backlog/work-items.md#w76) |
 | spec7 | **W77** · atomic multi-chunk public publication/observation | integration gap | per-group REPORT/per-chunk publication; request-wide decision/read-validation gate unestablished | [evidence and gate](../backlog/work-items.md#w77) |
-| op2 | **W78** · server wrapper trusts PID-file process identity | conditional operator correctness | identity-checked pidfd daemon/recorder retirement implemented; NUC ownership fixtures pass; daemon shutdown remains W65 | [evidence and gate](../backlog/work-items.md#w78) |
-| op3 | **W79** · mkfs help/name argument disagrees with single-export handler | operator observability | legacy label explicitly reported as ignored; extra arguments rejected; NUC repeated mkfs preserves salt/namespace | [evidence and gate](../backlog/work-items.md#w79) |
-| op4 | **W80** · efs-query reports retired zero-filled statistics as totals | operator observability | unsupported status and CLI nonzero exit replace invented zero totals; NUC RPC/CLI gates pass; actual totals remain unimplemented | [evidence and gate](../backlog/work-items.md#w80) |
+| op2 | **W78** · server wrapper trusts PID-file process identity | conditional operator correctness | Closed Oct11: actual NUC startup/stop retains unrelated processes; absent/dead/invalid/wrong-storage/stale-start and recorder ownership gates pass; shutdown remains W65 | [closure](devel-nuc-closure-20261010.md) |
+| op3 | **W79** · mkfs help/name argument disagrees with single-export handler | operator observability | Closed Oct11: aliases/help/argument refusals, ignored label, consumed successful replies and explicit retry preserve namespace/salt in both NUC I/O modes | [closure](devel-nuc-closure-20261010.md) |
+| op4 | **W80** · efs-query reports retired zero-filled statistics as totals | operator observability | Closed Oct11 for retired endpoint: nonempty namespace normal/raw, help, legacy and malformed replies pass; mounted stats/scale remain W92 | [closure](devel-nuc-closure-20261010.md) |
 | scale1 | **W81** · automatic directory spreading lacks a pressure trigger | scalability feature gap | size trigger/migrator exist; pressure policy remains unspecified and unwired | [evidence and gate](../backlog/work-items.md#w81) |
 | proto1 | **W82** · stale completed ReadIndex authority survives leader isolation | read correctness | Closed: stale LOOKUP/GETATTR/session/publication/transaction views and configuration partition gates pass; coordinator callback refuses untrusted absence | [evidence and gate](../backlog/work-items.md#w82) |
 | proto2 | **W83** · transaction decision records lack safe retirement | metadata lifecycle gap | resolve/drop remove participant records; no decision acknowledgement/GC path found | [evidence and gate](../backlog/work-items.md#w83) |
