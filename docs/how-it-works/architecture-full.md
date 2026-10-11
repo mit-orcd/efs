@@ -4699,7 +4699,11 @@ successful publication. Previously a flush exceeding one second immediately
 expired its successor and collapsed batching toward one write per REPORT.
 Failed drains now retry before new admission. The actual-function regression
 passes and fails under the old timing behavior. No RPC budget or durability
-barrier is widened. Full Linux/live/exact long-gate acceptance remains pending;
+barrier is widened. The complete Linux native suite passes after retained
+documentation-fixture failures are repaired without changing the core. The
+full direct live suite passes, including POSIX 216/216, peer 67/67, 2,000 exact
+4 KiB records in 169.046 seconds, final fsync and cold bytes. Buffered live,
+installation and the exact preserved-store 20k/cold gates remain pending;
 the earlier candidate's corrected direct fixture times out and is not installed.
 
 **Oct 11 continuation:** `4afc063c` shares one guarded completion transaction
@@ -6802,11 +6806,15 @@ metadata, the first SATA-data cell passes 212,648 files and 64 cold samples;
 throughput falls 567 → 283 files/s and SATA write-request elapsed rises
 0.211 → 0.489 ms. The NVMe-data cell passes 71,248 files and 64 cold samples;
 throughput falls 250 → 102 files/s, while SATA Raft sync falls slightly and
-NVMe write/flush elapsed rises. The final SATA repeat/restoration is pending.
-The files-engine root-barrier candidate `19cbb11f` reuses the existing startup
+NVMe write/flush elapsed rises. The SATA repeat passes 169,387 files and 64
+cold samples, declining 538 → 271 files/s. A retained quota-only cold retry
+uses 60 GiB instead of the now-unsafe 80 GiB; all timed data is unchanged.
+The full matrix and preserved-service restoration pass.
+The files-engine root-barrier candidate `19cbb11f` plus caller fix `766814c8` reuses the existing startup
 ancestry seal, retaining file, descendant-directory and root syncs and full
-fallback for uninitialized roots. Focused Linux/full acceptance and measured
-benefit remain pending; it is not part of the frozen append-timer candidate.
+fallback for uninitialized roots. The actual production Linux regression
+passes and the old scope fails its new assertion. Full native/live acceptance
+and measured benefit remain pending; it is not part of the frozen append-timer candidate.
 [Current placement and source ledger](../status/nuc-w52-w97-resume-20261011.md).
 
 **Oct 11 deployed continuation:** the validated merged engine is installed on
