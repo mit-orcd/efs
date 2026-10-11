@@ -73,7 +73,23 @@ for tag in tags:
     disk_hosts=[dict(monotonic=r['seconds'],diskstats=r['diskstats']) for r in samples]
     physical={dev:windows(disk_hosts,dev,end) for dev in ('sda','nvme0n1')} if duration>=600 else {}
     accepted=json.loads((root/'complete.json').read_text()) if (root/'complete.json').exists() else None
-    cells.append(dict(cell=tag,accepted=accepted,windows=ranges,physical=physical))
+    trace={}
+    tracefile=root/'late-profile/strace.log'
+    if accepted and tracefile.exists():
+        dataroot=Path(accepted['storage'])
+        ancestors={str(v) for v in dataroot.parents}|{str(dataroot)}
+        # Node storage roots are children of the cell data parent; the parent
+        # and everything above it are outside the initialized node root.
+        for line in tracefile.read_text(errors='replace').splitlines():
+            m=re.search(r'(f(?:data)?sync)\(\d+<([^>]+)>\)\s*=\s*0\s*<([0-9.]+)>',line)
+            if not m:continue
+            syscall,path,elapsed=m.groups()
+            category='above_initialized_data_root' if path in ancestors else ('data_descendant_or_root' if path.startswith(str(dataroot)+'/') else 'other_path')
+            row=trace.setdefault(category,dict(calls=0,sum_seconds=0,paths={}))
+            row['calls']+=1;row['sum_seconds']+=float(elapsed);row['paths'][path]=row['paths'].get(path,0)+1
+        for row in trace.values():row['mean_ms']=1000*row['sum_seconds']/row['calls']
+    cells.append(dict(cell=tag,accepted=accepted,windows=ranges,physical=physical,path_sync_sample=trace,path_sync_limits='Ten instrumented seconds near 450s. Only complete successful path-resolved syscall lines; unfinished/resumed/error lines excluded, so this is not a total syscall count or a timed throughput comparison.'))
+
 complete=len(cells)==8 and all(r['accepted'] for r in cells) and all((a.root/n).exists() and (a.root/n).read_text().strip()=='0' for n in ('tests-exit.txt','restore-exit.txt'))
 effect={}
 for medium in ('sata','nvme'):
