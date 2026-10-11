@@ -521,6 +521,7 @@ test: all
 	./tests/test_packed_reader
 	python3 tests/test_packed_read_budget.py
 	python3 tests/test_packed_gc.py
+	python3 tests/test_packed_gc_budget.py
 	python3 tests/test_mounted_pack_retry.py
 	python3 tests/test_mounted_pack_parallel.py
 	python3 tests/test_pack_lifecycle_routing.py

@@ -215,3 +215,29 @@ header; all other owners notified. No new wire handlers are integrated yet.
 Durable metadata tags45-51/52/53 are separate. Any future batch must preserve
 capability fallback, exact per-record verdicts, retry identities and durable
 receipt/GC/fresh-authority checks.
+
+## AMD seven-client packed GC backlog (Oct 11)
+
+Frozen `f1c322e1` passes full Linux normal and fault-native suites and four
+ASan/UBSan gates (client memory, rollup allocation, rollup budget, address parser).
+The seven-client fixture initially encountered an AppArmor mount-path refusal;
+`39b4297b` uses permitted private `/tmp` mounts. Its 205 production/build inputs
+and normal binaries are identical to the qualified candidate.
+
+Both direct and buffered seven-client runs complete all primary POSIX cases:
+220 PASS, zero FAIL, one unsupported mmap SKIP per client. Peer checks and exact
+acknowledged cold hashes pass. Both fail physical packed reclamation's original
+180-second deadline; normal mounts are restored successfully. This is a release
+blocker, separate from ORCD directory/query timeouts, which AMD did not reproduce.
+
+Offline copies of stopped direct metadata contain 425 and 1,479 packed objects
+on the two metadata groups, all RECLAIMING, with zero LIVE/PENDING references,
+zero orphan rows and zero upload-stream rows. No original stores were opened
+for mutation by this diagnostic. The packed pass omitted its full-page and
+elapsed-budget signal from the GC backlog scheduler. The candidate now includes
+that signal; the existing acceleration still requires actual local physical
+deletion progress, with bounded work and normal backoff for blocked/fence-only
+passes. Focused extracted-production scheduler regressions pass. Full merged
+native and unchanged mounted deadline verification of this fix remain pending.
+W95/P4.1 production acceptance remains open; these results do not certify other
+hosts, multi-host timings or engine/container configurations.

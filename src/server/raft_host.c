@@ -8553,7 +8553,7 @@ static void *host_gc_thread(void *arg)
             host_gc_close_step_pass(h, h->g[g].group, anchor);
             host_gc_close_pass(h, h->g[g].group, anchor);
             host_gc_orphan_pass(h, h->g[g].group, anchor);
-            host_gc_pack_pass(h,h->g[g].group,anchor);
+            backlog_capped |= host_gc_pack_pass(h,h->g[g].group,anchor);
             t_orphan += now_us_() - ta;
             ta = now_us_();
             host_gc_reap_pass(h, h->g[g].group, anchor, &reap_times);
