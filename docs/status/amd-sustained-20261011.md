@@ -238,3 +238,15 @@ service keeps the default idle; private acceptance uses explicit 100 ms.
 may restart the four installed daemons while retaining stores;
 [long runner](../../results/measure/20261011-amd-sustained/fanout-long.sh) borrows
 and restores the two mounts. W94/W97 remain open; W95 production work stays ORCD.
+
+## Ten-minute direct failure and 20-ms-yield follow-up
+
+Fanout's 600-second direct workload completes 65,664 warm-verified generations
+and exact cold survivors, but physical drain times out after 180.20 seconds.
+The longer backlog therefore remains an open gate, despite both short passes.
+Buffered is still running. The opt-in parser now admits 20..1000 ms, matching
+the existing 20-ms snapshot/shutdown slice. The next private candidate uses
+20 ms only for capped, progressing GC; empty/blocked scans retain 1 second.
+Default scheduling and all work/ACK/authority budgets remain unchanged.
+This needs full native/direct functional and both 600-second cold/physical
+gates, with latency/CPU review; it is not unpaced-overload admission or closure.

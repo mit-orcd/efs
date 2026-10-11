@@ -212,7 +212,7 @@ subsequently closes through the final recovery and sustained acceptance above.
 [W94/W97 AMD sustained mixed-load follow-up](amd-sustained-20261011.md) retains
 an unpaced private-quota failure, successful quiescent GC progress and an
 intentionally interrupted 300-second bounded baseline. Progress-conditioned GC scheduling
-passes native/direct functional gates but fails the direct 180-second drain deadline; extra quiescent recovery empties all four stores. The deployed fragment-budget build (`85fb3a4b`) passes native/direct functional and buffered sustained gates; direct sustained cold bytes pass but its drain deadline fails. All-member inode-fence fanout (`e9ea8ca1`) passes full native/direct functional and both 180-second paced cold/physical gates; ten-minute gates are running; W94/W97 remain open. The same note
+passes native/direct functional gates but fails the direct 180-second drain deadline; extra quiescent recovery empties all four stores. The deployed fragment-budget build (`85fb3a4b`) passes native/direct functional and buffered sustained gates; direct sustained cold bytes pass but its drain deadline fails. All-member inode-fence fanout (`e9ea8ca1`) passes full native/direct functional and both 180-second paced cold/physical gates; ten-minute direct cold bytes pass but drain fails; buffered is running, and a 20-ms progress-yield follow-up is staged; W94/W97 remain open. The same note
 records the completed W95 retained experiment review and its format limits.
 
 ## Storage pressure policy
