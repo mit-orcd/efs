@@ -20,12 +20,19 @@ int main(void)
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t dir;
     unsigned files=6000;const char *n=getenv("EFS_QUERY_DELTA_FILES");
     if(n){unsigned long value=strtoul(n,NULL,10);if(value<6000 || value>100000)return 2;files=(unsigned)value;}
+    unsigned parents=0;efs_ino_t parent_ids[512];
+    const char *p=getenv("EFS_QUERY_DELTA_PARENTS");
+    if(p){unsigned long value=strtoul(p,NULL,10);if(value<1 || value>512)return 2;parents=(unsigned)value;}
     efs_ino_t *ids=calloc(files,sizeof(*ids));CHECK(ids);if(!ids){efs_kv_lsm_close(kv);return 1;}
     CHECK(!efs_meta_apply_init(kv,100));
     CHECK(!efs_meta_apply_mkdir(kv,&attrs,EFS_ROOT_INO,S_IFDIR|0755,"delta",&dir));
+    for(unsigned i=0;i<parents;i++){
+        char name[32];snprintf(name,sizeof(name),"parent-%04u",i);
+        CHECK(!efs_meta_apply_mkdir(kv,&attrs,dir,S_IFDIR|0755,name,&parent_ids[i]));
+    }
     for(unsigned i=0;i<files;i++){
         char name[32];snprintf(name,sizeof(name),"file-%04u",i);
-        CHECK(!efs_meta_apply_create_file(kv,&attrs,dir,S_IFREG|0644,name,&ids[i]));
+        CHECK(!efs_meta_apply_create_file(kv,&attrs,parents?parent_ids[i%parents]:dir,S_IFREG|0644,name,&ids[i]));
         if(getenv("EFS_QUERY_DELTA_LANES")){
             struct efs_meta_row row;uint8_t key[EFS_KV_KEY_MAX],value[EFS_META_INO_BYTES],lane[EFS_META_LANE_BYTES]={0};uint32_t kn;
             CHECK(!efs_meta_apply_get_inode(kv,ids[i],&row));row.active_lanes=1;
@@ -67,6 +74,9 @@ int main(void)
             struct efs_query_rollup a,b;
             CHECK(!efs_query_catalog_stats(next,dir,&a));CHECK(!efs_query_catalog_stats(oracle,dir,&b));CHECK(!memcmp(&a,&b,sizeof(a)));
             CHECK(!efs_query_catalog_stats(next,EFS_ROOT_INO,&a));CHECK(!efs_query_catalog_stats(oracle,EFS_ROOT_INO,&b));CHECK(!memcmp(&a,&b,sizeof(a)));
+            for(unsigned i=0;i<parents;i++){
+                CHECK(!efs_query_catalog_stats(next,parent_ids[i],&a));CHECK(!efs_query_catalog_stats(oracle,parent_ids[i],&b));CHECK(!memcmp(&a,&b,sizeof(a)));
+            }
         }
         efs_query_catalog_free(oracle);oracle=NULL;efs_query_catalog_free(old);old=next;next=NULL;
         efs_kv_lsm_snapshot_release(source);source=NULL;
@@ -101,7 +111,7 @@ int main(void)
             char name[32];
             if(!phase){efs_ino_t added;snprintf(name,sizeof(name),"added-%04u",i);
                 CHECK(!efs_meta_apply_create_file(kv,&attrs,dir,S_IFREG|0644,name,&added));}
-            else {snprintf(name,sizeof(name),"file-%04u",i);CHECK(!efs_meta_apply_unlink(kv,dir,name,200));}
+            else {snprintf(name,sizeof(name),"file-%04u",i);CHECK(!efs_meta_apply_unlink(kv,parents?parent_ids[i%parents]:dir,name,200));}
         }
         CHECK(!efs_kv_lsm_snapshot_pin(kv,16<<20,&source));
         CHECK(!efs_query_catalog_build_disk(cache,source,old,4<<20,NULL,NULL,&next));
@@ -143,7 +153,7 @@ int main(void)
             CHECK(!efs_query_catalog_build(source,NULL,256<<20,NULL,NULL,&oracle));
             if(next && oracle){
                 unsigned refolded=efs_query_catalog_refolded(next);
-                CHECK(refolded==(round?files+1027:count));
+                CHECK(refolded==(round?files+parents+1027:count));
                 for(unsigned i=0;i<1025;i++){
                     struct efs_meta_stat a,b;struct efs_query_rollup x,y;
                     CHECK(!efs_query_catalog_inode(next,dirs[i],NULL,&a));CHECK(!efs_query_catalog_inode(oracle,dirs[i],NULL,&b));CHECK(!memcmp(&a,&b,sizeof(a)));

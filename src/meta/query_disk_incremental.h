@@ -214,25 +214,34 @@ static int changed_dentries(struct efs_query_disk *d,struct efs_query_disk *old,
     }
     return rc;
 }
-/* Each parent-shard index is sorted by child inode. At most 4096 bounded
- * seeks discover aliases, with no scan of unrelated namespace names. */
-static int aliases_dirty(struct efs_query_disk *d,struct incremental *s,efs_ino_t ino)
+/* Process one fixed changed-ID batch per parent shard. Keeping the alias
+ * index hot avoids reopening every shard for every changed inode when the
+ * namespace spans more shards than the bounded FD cache. Search/placement
+ * semantics and complete hard-link coverage stay unchanged. */
+static int aliases_dirty_batch(struct efs_query_disk *d,struct incremental *s,
+                               const efs_ino_t *changed,unsigned count)
 {
     for(uint32_t shard=0;shard<SHARDS;shard++){
         if(cancelled(d))return EFS_ERR_BUSY;
-        uint64_t lo=0,hi=d->part[shard].names;struct disk_alias alias;int rc=EFS_OK;
-        while(lo<hi){uint64_t mid=lo+(hi-lo)/2;
-            rc=disk_io(d,shard,'a',&alias,sizeof(alias),mid*sizeof(alias),0);if(rc)return rc;
-            if(alias.child<ino)lo=mid+1;else hi=mid;}
-        for(;lo<d->part[shard].names;lo++){
-            rc=disk_io(d,shard,'a',&alias,sizeof(alias),lo*sizeof(alias),0);if(rc)return rc;
-            if(alias.child!=ino)break;
-            if(alias.ordinal>=d->part[shard].names)return EFS_ERR_PROTO;
-            rc=dirty_add(d,s,alias.parent);if(rc)return rc;
+        if(!d->part[shard].names)continue;
+        for(unsigned i=0;i<count;i++){
+            if(cancelled(d))return EFS_ERR_BUSY;
+            efs_ino_t ino=changed[i];
+            uint64_t lo=0,hi=d->part[shard].names;struct disk_alias alias;int rc=EFS_OK;
+            while(lo<hi){uint64_t mid=lo+(hi-lo)/2;
+                rc=disk_io(d,shard,'a',&alias,sizeof(alias),mid*sizeof(alias),0);if(rc)return rc;
+                if(alias.child<ino)lo=mid+1;else hi=mid;}
+            for(;lo<d->part[shard].names;lo++){
+                rc=disk_io(d,shard,'a',&alias,sizeof(alias),lo*sizeof(alias),0);if(rc)return rc;
+                if(alias.child!=ino)break;
+                if(alias.ordinal>=d->part[shard].names)return EFS_ERR_PROTO;
+                rc=dirty_add(d,s,alias.parent);if(rc)return rc;
+            }
         }
     }
     return EFS_OK;
 }
+
 struct parent_fold { struct efs_query_disk *disk;struct incremental *state;uint32_t shard; };
 static int parent_fold_entry(void *user,const uint8_t *key,uint32_t kn,const uint8_t *value,uint32_t vn)
 {
@@ -292,8 +301,8 @@ static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old
             if(lookup && lookup!=EFS_ERR_NOT_FOUND){rc=lookup;break;}
             if(!lookup && S_ISDIR(node.row.mode))rc=dirty_add(d,&s,node.row.ino);
             /* Old edges for removed/renamed IDs already dirtied their parents. */
-            if(!rc)rc=aliases_dirty(d,&s,s.changed[i]);
         }
+        if(!rc)rc=aliases_dirty_batch(d,&s,s.changed,n);
         at+=n;
     }
     /* Sorted insertion can move the current entry: process an explicit done
