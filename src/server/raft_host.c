@@ -223,7 +223,8 @@ struct host_group {
     uint32_t voters;
     uint32_t desired; /* operator target; actual follows via joint (I18) */
     uint64_t applied_saved;
-    uint64_t applied_saved_us; /* checkpoint owner: last applied-file write */
+    uint64_t applied_saved_us; /* checkpoint owner: last recovery-prefix save */
+    uint64_t cursor_durable;   /* atomic: validated KV cursor after a successful barrier */
     int applied_fd;            /* checkpoint owner: applied.<g>, held open; -1 */
     /* Snapshot file for this group. The pump pins a view and the GC
      * thread writes snap-<group>-<incl>.kvx. part_* is the follower's
@@ -5938,22 +5939,11 @@ static void applied_path(struct efs_raft_host *h, uint8_t group,
     snprintf(path, cap, "%s/applied.%u", h->mdraft, group);
 }
 
-/* Pump thread only, h->mu NOT required: idx was read under h->mu after
- * this cycle's applies and the KV WAL fsync has already run, so the
- * saved index never passes the KV's durable point. `force` skips the
- * throttle (shutdown). Three fsyncs per pump cycle (WAL + one applied
- * file per group) ran under h->mu at ~290 cycles/s: persist_max ~1 ms
- * of every ~3 ms cycle with proposers queued on the lock. The saved
- * index is only a restart lower bound; apply is idempotent for the
- * replayed tail, so writing it every 10 ms is the same guarantee.
- *
- * The record is 16 bytes: idx, then ~idx. It is pwritten in place at
- * offset 0 of a file the pump keeps open, then fdatasync'd. The
- * open + write + fsync + close + rename of a tmp file per write was
- * 5 329 openat / 4 376 rename / 8 943 fsync on the pump thread in one
- * 120 s posix window (Sep 29). A record whose second word is not the
- * complement of the first is torn and reads as 0 (replay from the log
- * floor, which apply tolerates). */
+/* The validated KV cursor is atomic with applied effects. Once the pump's
+ * KV barrier covers that cursor, another applied.N fsync buys no recovery
+ * guarantee. Entries without a cursor (no-op/config/legacy) retain the bounded
+ * complement-record fallback. The worker consumes only the published durable
+ * floor; it must never inspect a newer, unflushed in-memory cursor. */
 #define HOST_APPLIED_PERSIST_US 10000ull
 #define HOST_APPLIED_MAX_TAIL 1024ull
 
@@ -5974,6 +5964,28 @@ static int host_applied_interval(const char *value, uint64_t *us)
     return EFS_OK;
 }
 
+/* Capture under h->mu, before releasing this cycle's KV hold. A corrupt,
+ * absent or ahead-of-core cursor supplies no optimization proof. Snapshot
+ * imports may advance the core without writing a local cursor, so those
+ * prefixes continue through the ordinary marker path. */
+static uint64_t host_capture_cursor(struct efs_raft_host *h,int gi,uint64_t applied)
+{
+    if(!applied)return 0;
+    uint8_t key[7],value[16];uint32_t length=sizeof(value);
+    host_kv_cursor(h->g[gi].group,0,key,value);
+    int rc=efs_kv_get(h->kv,key,sizeof(key),value,&length);
+    if(rc!=EFS_OK || length!=sizeof(value) || rd64be(value+8)!=~rd64be(value))return 0;
+    uint64_t cursor=rd64be(value);
+    return cursor<=applied?cursor:0;
+}
+
+static void host_publish_cursor(struct efs_raft_host *h,const uint64_t *cursor,int kv_rc)
+{
+    if(kv_rc!=EFS_OK)return;
+    for(int i=0;i<HOST_NGROUPS;i++)
+        __atomic_store_n(&h->g[i].cursor_durable,cursor[i],__ATOMIC_RELEASE);
+}
+
 static int persist_applied(struct efs_raft_host *h, int gi, uint64_t idx,
                            uint64_t now, int force)
 {
@@ -5989,6 +6001,14 @@ static int persist_applied(struct efs_raft_host *h, int gi, uint64_t idx,
     if(!view.has)return EFS_OK;
     if (idx == h->g[gi].applied_saved)
         return EFS_OK;
+    if (idx>=h->g[gi].applied_saved &&
+        idx<=__atomic_load_n(&h->g[gi].cursor_durable,__ATOMIC_ACQUIRE)) {
+        /* This is the same durable recovery prefix load_applied restores.
+         * No timer/tail bypass is granted to entries beyond that proof. */
+        h->g[gi].applied_saved=idx;
+        h->g[gi].applied_saved_us=now;
+        return EFS_OK;
+    }
     uint64_t interval=h->applied_persist_us ? h->applied_persist_us : HOST_APPLIED_PERSIST_US;
     /* The entry cap bounds the deliberately deferred replay tail. Timer
      * cadence is best effort while I/O is blocked; no extra queue is kept. */
@@ -6459,7 +6479,7 @@ static void *host_pump(void *arg)
         struct pollfd pfd;
         uint64_t sink;
         uint64_t c0 = 0;
-        uint64_t applied_now[HOST_NGROUPS];
+        uint64_t applied_now[HOST_NGROUPS],cursor_now[HOST_NGROUPS];
         unsigned done_n=0;
         uint64_t done_bytes=0;
         int i;
@@ -6561,6 +6581,8 @@ static void *host_pump(void *arg)
             if (h->g[i].r)
                 h->g[i].voters = efs_raft_voters(h->g[i].r);
         }
+        for(i=0;i<HOST_NGROUPS;i++)
+            cursor_now[i]=host_capture_cursor(h,i,applied_now[i]);
         /* Applies above may have advanced commit/applied/read state:
          * publish the lock-free view, then wake the waiters
          * (host_wait_applied / host_read_index) that view satisfies.
@@ -6602,6 +6624,7 @@ static void *host_pump(void *arg)
             c0 = now_us_();
         if (batch_obs) phase_us = efs_batch_obs_now_us();
         int kv_rc = efs_kv_lsm_sync_release(h->kv);
+        host_publish_cursor(h,cursor_now,kv_rc);
         if (kv_rc != EFS_OK && !checkpoint_failed)
             fprintf(stderr, "raft-host: kv wal fsync failed at pump release\n");
         if (batch_obs) {
@@ -6859,6 +6882,7 @@ static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
     h->g[gi].snap_fd = -1;
     h->g[gi].part_fd = -1;
     h->g[gi].applied_fd = -1;
+    __atomic_store_n(&h->g[gi].cursor_durable,0,__ATOMIC_RELEASE);
     h->g[gi].snap_exporting = 0;
     h->g[gi].snap_ready = 0;
     h->g[gi].r = NULL;

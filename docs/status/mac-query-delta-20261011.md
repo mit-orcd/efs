@@ -773,4 +773,29 @@ nonce for fresh quorum authority. Host queue-preservation/source gates pass;
 the complete core suite also passes ASAN/UBSAN and Mac Linux with every ACK
 noted before its retained normal recv, including loss/fencing and configuration
 scenarios. Make test runs both modes. Evidence: pending-quorum-unit.txt.
-Live native acceptance on this candidate is pending.
+Live native deep-directory acceptance remains 0/2 at the original 20-second
+budgets (60.7 seconds including normal cleanup). Multiprocess append remains
+0/1 at its original 30-second budget (30.8 seconds). Fresh LOOKUP averages
+450 us over 6,777 sampled calls, but write admission/transaction durability
+still dominates. These are diagnostic samples, not closed native gates.
+Evidence: native-pending-quorum-deep.txt, pending-quorum-deep-sample.json
+and native-pending-quorum-append.txt.
+
+The next candidate reuses a validated atomic KV recovery cursor instead of
+fdatasyncing an applied.N file for the same already durable prefix. The pump
+captures the cursor under its apply lock and publishes only that captured
+floor after a successful KV barrier. The worker never reads a newer memory
+cursor as durability proof. No-op/configuration/legacy prefixes beyond the
+proof retain complement-record checkpoints, cadence, replay-tail cap, error
+retry and forced shutdown handling. Unit/sanitizer tests cover failed barriers,
+later writes, malformed/absent/ahead cursors and fallback marker failures.
+Mac Linux KV EIO/recovery fault gate passes: failed KV release/shutdown cannot
+advance markers and retained Raft restores the acknowledged inode after modeled
+loss of the unsynced KV tail. This is injected failure/process recovery, not
+physical power-loss proof. Cold-cursor recovery passes on a unique four-daemon Mac Linux buffered/TCP
+fixture: markers stay unchanged, the stopped follower has a validated newer
+KV cursor, and restart preserves exact payloads, inode/link counts, rename,
+mode, truncate and deletion. Deletion queues drain normally. Native acceptance
+is still pending.
+Evidence: cursor-checkpoint-unit-fault.txt, cursor-checkpoint-private-recovery.txt
+and cursor-checkpoint-cold-replay.txt.

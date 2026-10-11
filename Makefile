@@ -304,6 +304,7 @@ test: all
 	$(MAKE) tests/test_put_upload_client
 	./tests/test_put_upload_client
 	python3 tests/test_applied_interval.py
+	python3 tests/test_cursor_checkpoint.py
 	./tests/test_store_containers
 	python3 tests/test_lookup_errno.py
 	python3 tests/test_storage_capacity.py
