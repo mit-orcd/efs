@@ -518,3 +518,19 @@ retries after a lost result using the same packed reference and digest. Exact
 matching durable completion releases the body. This is another integration
 checkpoint, not mounted coalescer activation: the group scheduler, upload-permit
 ownership and distributed shared-object GC remain required.
+
+
+The matching `fd83b30d` private cold gate passes sixteen authoritative mappings,
+durable receipts and zero-filled packed RPC reads. A separate fresh FUSE mount
+passes 28 exact packed reads, the preserved promoted/grown record, a zero-length
+truncate, unlinked records and ordinary mixed data. The private mount and four
+servers then stop cleanly. See [integration evidence](orcd-branch-integration-20261011.md).
+These fixtures validate the decoder/lifecycle path; the normal mounted write
+benchmark still selects the ordinary format.
+
+Final integrated rollout `fd83b30d`: the fresh ordinary baseline completed
+10,000 fixed 512-byte files in 21.0 seconds (476 files/s, 16 workers).
+Sampling inode 942415 and its exact three placement files confirms 208,896
+allocated bytes, still **408×** payload. This is evidence that ordinary mounted
+writes have not activated packing, even though the private packed cold-read
+and publication gates pass. See the [integration evidence](orcd-branch-integration-20261011.md).

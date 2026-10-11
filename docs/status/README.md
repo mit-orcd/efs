@@ -4,6 +4,10 @@ Production tiny-file packing is the first ORCD priority on `devel-orcd`: see
 [W95/P4.1 plan and allocation baseline](orcd-tiny-packing-20261011.md). The
 408× calculation is for 512-byte payloads in separate full-sized fragments;
 production packing and measured savings remain open.
+[ORCD integration and retained writer checkpoint](orcd-branch-integration-20261011.md)
+records the latest captured branch batch, bounded packed-read scratch and exact
+packed publication retries. Loaded query capacity/refold failures remain open;
+fresh-namespace regression results are reported separately.
 [W108 owner-name rendering](w108-owner-name-display-20261011.md) is retained
 in the ORCD queue after the packing priority.
 

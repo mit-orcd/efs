@@ -1,0 +1,7 @@
+# posix-suite host=fcstor011 mnt=/tmp/efs-mount 2026-10-11T16:43:52Z
+# suite=extras
+# select	virt_stats_readable
+test	result	detail
+virt_stats_readable	FAIL	CalledProcessError: Command '['/usr/bin/python3', '/tmp/efs-mount/posix-fcstor011-quiet-stats-bdqwq_dg/virt_stats_readable/.efs/stats', '--json']' returned non-zero exit status 1.
+# summary pass=0 fail=1 skip=0 notrun=0 total=1 dur=0.2
+# complete

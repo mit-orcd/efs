@@ -1,0 +1,55 @@
+{
+  "starting_revision": "4534b3be233c04e50fe27a0f6212419dd0e523dd",
+  "merged_revision": "fff54430",
+  "deployment_candidate": "fd83b30d7e4ac10e4fd10cfd93c3401fb7bf08b5",
+  "captured_branches": {
+    "devel": "48a2719d19fb5a6b0464935c70a967a1f1a86236",
+    "devel-amd": "d62a7a4f8ade6620777f1ec81687f5a2dd83046f",
+    "devel-code-review": "48a2719d19fb5a6b0464935c70a967a1f1a86236",
+    "devel-intel": "5f5fb14de702b6401e075862252cf8e75c02836d",
+    "devel-mac": "f0e33ad48ac20ca417425a2d8f05f12ba173e29e",
+    "devel-nuc": "60824bc07163ae6d2b4aadfaa7fe63e4746bea34",
+    "devel-orcd": "82039f14a51cc4e95e67f8be70806a3423ebd05e",
+    "fix-orcd-capacity-15975da0": "60f3628238d3a2fd69be0ce7a329540256234b7e",
+    "main": "53be1da7f19045f406a05f4f78f6cf44f5c92212"
+  },
+  "missing_tips": [],
+  "fetch": "origin fetched; no new remote commits",
+  "conflicts": [
+    "generated architecture regenerated",
+    "REGISTER/ESTABLISH admission business verdicts retained",
+    "stress-control validation bounds combined",
+    "latest AMD GC merge retains explicit successful budget-stop condition and broader fragment-pass gate; adds inode-fanout gate; generated architecture regenerated"
+  ],
+  "final_captured_branches": {
+    "devel": "48a2719d19fb5a6b0464935c70a967a1f1a86236",
+    "devel-amd": "85fb3a4be29464e01a5dc8e252e64fa7445b7977",
+    "devel-code-review": "48a2719d19fb5a6b0464935c70a967a1f1a86236",
+    "devel-intel": "486db2235d21944b74cb6640c93a61bded2a8205",
+    "devel-mac": "f0e33ad48ac20ca417425a2d8f05f12ba173e29e",
+    "devel-nuc": "4114c6569a594c4e998eb3b8befa3a8ef6111f10",
+    "devel-orcd": "66be74b73384b0a5136b65b510a8e8e20515465b",
+    "fix-orcd-capacity-15975da0": "60f3628238d3a2fd69be0ce7a329540256234b7e",
+    "main": "53be1da7f19045f406a05f4f78f6cf44f5c92212"
+  },
+  "followup_commits": [
+    "95901182",
+    "7ae151c8",
+    "486db223",
+    "00fd458a",
+    "4114c656"
+  ],
+  "integration_repairs": [
+    "namespace apply harness includes exact REGISTER helper",
+    "clean build includes cohort test binary",
+    "fragment GC returns a defined successful budget-stop verdict"
+  ],
+  "last_integration_batch": {
+    "devel-amd": "c7948d59605ae5fb27ee6c783bfdae754ec728bb",
+    "devel-intel": "b7b8170fb407101230724aab875de4a8fec6b271",
+    "devel-mac": "d8869a4e28b70e1cb6d54ae0dfd539a9508a4833",
+    "devel-nuc": "efe21c17a2f07f9b03a9c049c4bd3aafba2860ad"
+  },
+  "newly_reachable_commits": 104,
+  "new_non_merge_commits": 83
+}

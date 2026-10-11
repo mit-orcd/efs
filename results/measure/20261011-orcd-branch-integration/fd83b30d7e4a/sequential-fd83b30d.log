@@ -1,0 +1,28 @@
+fcstor007 pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 220/221 pass, 0 fail, 1 skip, 0 notrun  (14.6s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/integration-fd83b30d7e4a/sequential/fcstor007/all.tsv
+fcstor008 pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 220/221 pass, 0 fail, 1 skip, 0 notrun  (15.6s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/integration-fd83b30d7e4a/sequential/fcstor008/all.tsv
+fcstor009 pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 220/221 pass, 0 fail, 1 skip, 0 notrun  (14.8s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/integration-fd83b30d7e4a/sequential/fcstor009/all.tsv
+fcstor010 pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 220/221 pass, 0 fail, 1 skip, 0 notrun  (15.7s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/integration-fd83b30d7e4a/sequential/fcstor010/all.tsv
+fcstor011 pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 220/221 pass, 0 fail, 1 skip, 0 notrun  (15.0s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/integration-fd83b30d7e4a/sequential/fcstor011/all.tsv
+fcstor012 pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 220/221 pass, 0 fail, 1 skip, 0 notrun  (16.1s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/integration-fd83b30d7e4a/sequential/fcstor012/all.tsv
+fcstor013 pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 220/221 pass, 0 fail, 1 skip, 0 notrun  (15.0s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/integration-fd83b30d7e4a/sequential/fcstor013/all.tsv
