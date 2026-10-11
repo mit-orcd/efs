@@ -6,6 +6,14 @@ Current production build is `7bde5f43` on `devel-intel`; the branch also contain
 
 Two daemons per physical Intel host use TCP, with 400 GiB quota per daemon. Each host has one `/data1/efs/mnt` client seeded from the opposite host. `.efs` is enabled. Acceptance exercises both direct and buffered storage I/O, concurrent POSIX and peer operations, query publication/policy/failover/load gates, session and guarded-lease cleanup, cold payload recovery, real Valgrind daemon/client tests, sanitizer regressions and all independent live rounds. RDMA acceptance belongs on AMD software RDMA or `orcd-test` hardware IB/RDMA.
 
+## Current review
+
+The proposed REPORT owner preparation change builds and passes the complete native target and three session/admission regressions on both Intel hosts. It issues one durable owner CREATE per REPORT batch while retaining each shard's fresh read, REGISTER, authoritative ESTABLISH and floor validation. The old actual helper fails the new one-CREATE negative control. Live mixed/worker/session/guard and sequential checks remain pending before deployment. An initial native failure referenced a missing immutable evidence file; complete-input rechecks pass (Intel1 144.56 s, Intel2 139.87 s).
+
+Production 7bde5f43 has completed both modes and returned to direct I/O. In each mode and on each host, core is 213/214 (100-level directory deadline failure), extras are 2 PASS / 2 FAIL / 1 unsupported mmap SKIP, and the wired peer suite is 66/66 PASS. Each of the four cold persistence runs passes 27/27. Final runtime identity and 256 immutable size/SHA256 samples per host pass. Intel1 has completed exactly 1,000,000 files; Intel2 is actively creating files in the existing tree, with 641,458 observed at 08:58 UTC.
+
+Intel1's 27 independent gates are terminal: 25 PASS, two FAIL (buffered sequential physical reclamation deadline and W82 partition storage fence returning hard IO while retaining FENCING). Intel2's matrix remains active; its direct sequential test records REPORT fsync EIO. The admission follow-on runs at the original limits. Idle obsolete supplemental queues were retired without interrupting any fixture, retaining NOTRUN records; their remaining scenarios require the final candidate.
+
 ## Repairs on this branch
 
 - Preserve failed pooled-query routing decisions and exact first-page publisher ownership.
@@ -23,7 +31,7 @@ Two daemons per physical Intel host use TCP, with 400 GiB quota per daemon. Each
 - Batch sequential Raft replay into bounded 64 KiB windows; hard read errors refuse recovery without truncating the durable log.
 - Make memory verdicts require complete unit, client and daemon evidence; deliberate crash-child leak lifetimes remain explicitly excluded rather than claimed leak-free.
 
-## Acceptance remains open
+## Historical candidate observations (not current verdicts)
 
 Original failures are retained alongside reruns. Concurrent mixed-workload `fsync` EIO and timeout observations remain under investigation. Earlier production core and extras timeout verdicts do not become passes because later isolated commands succeed. Writable shared mmap remains an explicit unsupported skip. Repair/protection faults retain the W66/W74 gap under D36.
 
@@ -62,10 +70,13 @@ The deployment completed in 25.30 seconds and startup/mount checks in 216.45 sec
 | Additional standalone scripts | 78/78 PASS | 78/78 PASS |
 | Six query/.efs gates, direct | PASS, 68.77 s | PASS, 68.66 s |
 | Six query/.efs gates, buffered | PASS, 57.78 s | PASS, 220.55 s |
-| Full private direct | FAIL before POSIX; rerun queued | Running |
-| Full private buffered | FAIL, core 213/214 and peer 66/66 PASS | Queued |
-| Valgrind, independent gates, faults | Queued | Queued |
-| Production concurrent/persistence, both modes | Queued | Queued |
+| Full private direct | FAIL before POSIX; admission follow-on active | FAIL, core 213/214, peer 66/66 PASS |
+| Full private buffered | FAIL, core 213/214 and peer 66/66 PASS | FAIL, core 213/214 and peer 66/66 PASS |
+| Valgrind, both modes | PASS | PASS |
+| Independent live gates | 25/27 PASS, two FAIL | Active |
+| Repair/protection faults | 19 PASS / 2 GAP per mode | Pending |
+| Production concurrent core, both modes | 213/214, FAIL | 213/214, FAIL |
+| Cold persistence, both modes | 27/27 PASS | 27/27 PASS |
 
 Intel1's direct private run reaches the second guarded-lease session admission, then receives explicit `EFS_ERR_BUSY` from ESTABLISH. It stops before the later POSIX tier; those cases are NOTRUN in that attempt. Commit `e9c395c7` retries the unchanged administrative request only on explicit BUSY within the original 60-second command budget. Hard errors, stale epochs and expiration still fail. Regression tests pass locally and on both Intel hosts. Full private reruns in both modes are queued after the current owned fixtures finish. The original failed aggregate remains recorded. All six real query gates passed on both hosts and modes, including exact count/byte convergence and every payload check using the bounded readers; the unnecessary idle query-repeat queues were retired.
 

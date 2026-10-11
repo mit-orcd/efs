@@ -10683,8 +10683,18 @@ static int host_namespace_session_command(struct efs_raft_host *h,uint8_t group,
     if(reply.leader_hint>=0)*hint=reply.leader_hint;
     return rc;
 }
-static int host_namespace_session_admit(struct efs_raft_host *h,uint32_t shard,
+static int host_namespace_session_prepare_owner(struct efs_raft_host *h,
     const struct efs_opid_req *q,int *hint)
+{
+    if(!q || !efs_opid_req_valid(q) || !q->id.session_epoch)return EFS_OK;
+    if(q->ack>=q->id.seq)return EFS_ERR_INVAL;
+    uint8_t cmd[HOST_SESS_CREATE_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_CREATE};
+    memcpy(cmd+2,q->id.client_uuid,16);wr32be(cmd+18,q->id.session_epoch);
+    uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(q->id.client_uuid));
+    return host_namespace_session_command(h,owner,cmd,sizeof(cmd),hint);
+}
+static int host_namespace_session_admit_with_owner(struct efs_raft_host *h,
+    uint32_t shard,const struct efs_opid_req *q,int owner_prepared,int *hint)
 {
     if(!q || !efs_opid_req_valid(q) || !q->id.session_epoch)return EFS_OK;
     if(q->ack>=q->id.seq || shard>=EFS_SESSION_BITS)return EFS_ERR_INVAL;
@@ -10695,12 +10705,13 @@ static int host_namespace_session_admit(struct efs_raft_host *h,uint32_t shard,
     if(rc==EFS_OK)rc=efs_kv_get(h->kv,key,kl,value,&vl);
     if(rc==EFS_OK)return efs_session_accept(h->kv,shard,q->id.client_uuid,q->id.session_epoch);
     if(rc!=EFS_ERR_NOT_FOUND)return rc;
-    uint8_t cmd[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_CREATE};
+    if(!owner_prepared) {
+        rc=host_namespace_session_prepare_owner(h,q,hint);
+        if(rc!=EFS_OK)return rc;
+    }
+    uint8_t cmd[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_REGISTER};
     memcpy(cmd+2,q->id.client_uuid,16);wr32be(cmd+18,q->id.session_epoch);wr32be(cmd+22,shard);
     uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(q->id.client_uuid));
-    rc=host_namespace_session_command(h,owner,cmd,HOST_SESS_CREATE_LEN,hint);
-    if(rc!=EFS_OK)return rc;
-    cmd[1]=EFS_MD_SESS_REGISTER;
     rc=host_namespace_session_command(h,owner,cmd,sizeof(cmd),hint);
     if(rc!=EFS_OK)return rc;
     cmd[1]=EFS_MD_SESS_ESTABLISH;
@@ -10709,6 +10720,11 @@ static int host_namespace_session_admit(struct efs_raft_host *h,uint32_t shard,
     if(rc==EFS_OK)rc=host_read_index(h,group,hint);
     if(rc==EFS_OK)rc=efs_session_accept(h->kv,shard,q->id.client_uuid,q->id.session_epoch);
     return rc;
+}
+static int host_namespace_session_admit(struct efs_raft_host *h,uint32_t shard,
+    const struct efs_opid_req *q,int *hint)
+{
+    return host_namespace_session_admit_with_owner(h,shard,q,0,hint);
 }
 
 /* REPORT can first-touch dozens of lane shards. Preserve each admission's
@@ -10722,6 +10738,7 @@ struct host_report_session_work {
     uint32_t shards[EFS_SESSION_BITS];
     unsigned count;
     unsigned next;
+    int ready;
     int rc;
     int hint;
 };
@@ -10729,12 +10746,13 @@ static pthread_mutex_t host_report_session_parallel = PTHREAD_MUTEX_INITIALIZER;
 static void *host_report_session_worker(void *value)
 {
     struct host_report_session_work *work = value;
+    while (!__atomic_load_n(&work->ready, __ATOMIC_ACQUIRE)) usleep(1000);
     while (!__atomic_load_n(&work->rc, __ATOMIC_ACQUIRE)) {
         unsigned index = __atomic_fetch_add(&work->next, 1u, __ATOMIC_RELAXED);
         if (index >= work->count) break;
         int hint = -1;
-        int rc = host_namespace_session_admit(work->host, work->shards[index],
-                                              work->request, &hint);
+        int rc = host_namespace_session_admit_with_owner(work->host,
+            work->shards[index], work->request, 1, &hint);
         if (rc) {
             int expected = EFS_OK;
             if (__atomic_compare_exchange_n(&work->rc, &expected, rc, 0,
@@ -10788,6 +10806,21 @@ static int host_report_session_admit(struct efs_raft_host *h,
         pthread_mutex_unlock(&host_report_session_parallel);
         return EFS_ERR_BUSY;
     }
+    /* CREATE is idempotent global preparation, not shard admission. One
+     * batch needs one durable owner record, rather than dozens of no-op
+     * Raft CREATE entries. Every participant still performs its original
+     * REGISTER, authoritative ESTABLISH check and local floor validation.
+     * Credits and workers are secured first, preserving zero effects on
+     * contention or complete worker-creation failure. */
+    if (work.count) {
+        int owner_hint = -1;
+        int rc = host_namespace_session_prepare_owner(h, &request, &owner_hint);
+        if (rc) {
+            work.hint = owner_hint;
+            __atomic_store_n(&work.rc, rc, __ATOMIC_RELEASE);
+        }
+    }
+    __atomic_store_n(&work.ready, 1, __ATOMIC_RELEASE);
     host_report_session_worker(&work);
     for (unsigned i = 0; i < started; ++i) pthread_join(threads[i], NULL);
     if (parallel) pthread_mutex_unlock(&host_report_session_parallel);
