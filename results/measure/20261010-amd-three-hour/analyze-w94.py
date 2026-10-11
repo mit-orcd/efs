@@ -15,6 +15,9 @@ for path in ('src/server/raft_host.c','src/client/inode_rpc.c'):
     assert source_controls['source_hashes']['separate'][path]==source_controls['source_hashes']['combined'][path]
 for variant,digest in source_controls['expected_fuse_hashes'].items():
     assert source_controls['source_hashes'][variant]['src/client/efs_fuse.c']==digest
+compiler=json.loads((a.root/'compiler-controls.json').read_text())
+assert compiler['separate']['non_identity_arguments']==compiler['combined']['non_identity_arguments']
+for row in compiler.values():assert row['fault_define'] in ([],['-DEFS_FAULTS=0'])
 inventories={entry['case']:entry for entry in json.loads((a.root/'physical-inventory-proof.json').read_text())}
 for repeat in range(1,5):
     for mode in ('direct','buffered'):

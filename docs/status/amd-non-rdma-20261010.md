@@ -90,12 +90,11 @@ Memcheck stopped at an unsupported AVX-512 instruction; that attempt is not a
 passed server Valgrind gate. The portable actual-source ownership test supplies
 the successful Memcheck result.
 
-**Planned A/B:** both builds include the coordinator-routing repair. Compare
-separate versus combined lease adoption with eight workers, 8192 deterministic
-512-byte files, equal synchronous-close semantics and fresh private stores.
-Run four alternating repeats for direct and buffered TCP; retain open/close
-latency distributions, wall throughput and exact cold bytes/reclamation for
-every case. A small case checks committed lease identities and flags directly in the
+**Completed A/B:** both builds include the coordinator-routing repair. Four
+alternating repeats per TCP I/O mode compare separate and combined adoption,
+eight workers and 8192 deterministic 512-byte files per case, equal synchronous
+close semantics and fresh private stores. All 16 cases pass exact cold bytes
+and physical reclamation (131072 files). A small case checks committed lease identities and flags directly in the
 CRC-validated Raft log, bounded by each group’s persisted applied index. These
 are finite creation workloads, not a universal sustained-service throughput
 bound. W94's full integration and outstanding lifecycle gates remain open.
@@ -116,11 +115,24 @@ return before the ordinary server log message, so text logs alone cannot prove
 this reduction. [Decoded committed identities and applied bounds](../../results/measure/20261010-amd-three-hour/lease-consensus-proof.json).
 
 The early-exit tiny fixture now requires actual physical absence alongside
-sampled-zero GC counters. Independent stopped-store inspection verifies the
-completed controls and first four long cases. A bounded untimed profile shows
+sampled-zero GC counters. Independent stopped-store inspection verifies all 16 completed long cases
+and both controls, including absent object and checksum files. A bounded untimed profile shows
 background Raft/GC work while the client waits idle; this reclamation phase is
-excluded from creation throughput. The first matched pair is provisional;
-three additional alternating repeats per mode remain.
+excluded from creation throughput.
+| TCP mode | Separate files/s median (min–max) | Combined files/s median (min–max) | Median paired gain | Open p99 ms separate → combined | Close p99 ms separate → combined |
+| --- | --- | --- | --- | --- | --- |
+| Direct | 280.0 (277.2–282.3) | 330.8 (323.9–343.6) | +18.7% | 15.98 → 7.12 | 110.57 → 102.95 |
+| Buffered | 274.6 (270.8–278.3) | 337.1 (333.6–340.4) | +23.3% | 14.19 → 9.31 | 113.71 → 96.16 |
+
+Latency values are medians of per-case percentiles, not pooled percentiles.
+Throughput CV is 0.65%/2.35% for direct separate/combined and 1.06%/0.72% for
+buffered separate/combined. Maximum sampled single-process RSS is 42848/43132
+KiB direct and 42892/43148 KiB buffered; these are not whole-host bounds.
+All production C/header sources outside FUSE adoption and non-identity compiler
+flags match; fault injection is disabled in the performance builds. Every
+variant keeps its executable hashes unchanged across repeats. This finite
+creation gate does not establish sustained-service performance.
+[Complete observations and verification](../../results/measure/20261010-amd-three-hour/evidence/w94-ab/comparison.json).
 
 Additional live gates are queued for the fault-only consumed combined-adoption
 reply loss (failed descriptor cleanup, original inode reclamation, name reuse

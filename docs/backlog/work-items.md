@@ -4183,8 +4183,10 @@ descriptors still use CLEAR_PENDING alone; ambiguous combined requests remain
 retained before compensating CLOSE. Full native and both TCP POSIX/peer, sync,
 replay and cold-GC matrices pass. CRC-validated applied Raft logs for 64 files
 per build prove three versus two creation/close lease entries per file. The
-four-repeat throughput and additional fault matrix are running; this is a
-partial implementation checkpoint, not full W94 closure.
+four-repeat finite TCP A/B passes (+18.7% direct/+23.3% buffered median paired
+gain), with exact cold bytes and empty physical inventories in all 16 cases.
+Additional fault gates are running; sustained-service and full integration
+remain open, so this is not full W94 closure.
 [Evidence and limits](../status/amd-non-rdma-20261010.md#w94--combined-first-descriptor-adoption-candidate).
 
 **Historical pre-merge devel review (`cde67dca`, Oct 8):** the flags-0/separate-HOLD observation

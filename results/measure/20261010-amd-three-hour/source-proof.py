@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import hashlib,json,subprocess
+import hashlib,json,subprocess,shlex
 root=Path('/data1/efs/amd-round-20261010/w94-ab')
 sources={'separate':Path('/data1/efs/devel-amd'),'combined':Path('/data1/efs/devel-amd-adopt')}
 expected={'separate': 'f729a565ce68e315744b47baf4a4f778a2f0a5452c7908484ee6429dd9c0b76d', 'combined': '62f1896d4abbd3c69bfaac8f202de50023157f99da2e6283d37883a26b959d0e'}
@@ -17,3 +17,16 @@ assert diff.returncode==1,diff.stderr
 (root/'adoption-source.patch').write_text(diff.stdout)
 (root/'source-controls.json').write_text(json.dumps(dict(source_hashes=proof,expected_fuse_hashes=expected,matching_server_rpc=True,production_source_hashes=full,production_source_differences=differences),indent=2)+'\n')
 print('frozen source comparison: identical server/RPC; exact expected separate/combined FUSE revisions PASS')
+
+compiler={}
+for variant,name in (("separate","ab-baseline-build.log"),("combined","adopt-build.log")):
+    p=root.parent/name
+    line=next(line for line in p.read_text().splitlines() if "src/client/efs_fuse.o src/client/efs_fuse.c" in line)
+    args=shlex.split(line)
+    fault=[arg for arg in args if arg.startswith("-DEFS_FAULTS")]
+    assert not fault or fault==["-DEFS_FAULTS=0"],fault
+    flags=[arg for arg in args if not arg.startswith(("-DEFS_BUILD_ID=","-DEFS_VERSION=","-DEFS_GIT_BRANCH=","-DEFS_BUILD_TIME="))]
+    compiler[variant]=dict(build_log=name,build_log_sha256=hashlib.sha256(p.read_bytes()).hexdigest(),fuse_compile=line,non_identity_arguments=flags,fault_define=fault,preprocessor_faults_value=0)
+assert compiler["separate"]["non_identity_arguments"]==compiler["combined"]["non_identity_arguments"]
+(root/"compiler-controls.json").write_text(json.dumps(compiler,indent=2)+"\n")
+print("matched production compiler flags and disabled fault injection PASS")

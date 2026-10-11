@@ -17,8 +17,9 @@ The user gives exclusive AMD access and requests quick closures first.
 - W94 combined first-descriptor adoption: focused/native, sanitizer/Memcheck,
   both TCP full POSIX/peer, synchronous writes, replay and physical-GC gates
   pass. Applied CRC-validated Raft logs show three versus two creation/close
-  lease commands per file in 64-file controls. Repeated performance and
-  additional fault gates are being completed.
+  lease commands per file in 64-file controls. All 16 finite A/B cases pass: median paired gains +18.7% direct and
+  +23.3% buffered, 131072 exact cold files and independent empty inventories.
+  Additional fault gates are being completed.
 
 The [status checkpoint](../../../docs/status/amd-non-rdma-20261010.md) records
 exact scopes and limitations. The earlier buffered MKDIR failure and unsupported

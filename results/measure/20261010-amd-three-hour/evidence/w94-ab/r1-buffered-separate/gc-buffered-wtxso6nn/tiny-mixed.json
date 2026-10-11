@@ -1,0 +1,30 @@
+{
+  "parent_ino": 517,
+  "tiny_files": 8192,
+  "tiny_bytes": 512,
+  "large_files": 0,
+  "large_live_bytes_each": 16777216,
+  "large_written_bytes": [],
+  "wall_s": 29.43855879397597,
+  "open": {
+    "p50_us": 6963.807,
+    "p95_us": 19782.481,
+    "p99_us": 23973.369,
+    "max_us": 131080.167
+  },
+  "close": {
+    "p50_us": 12290.033,
+    "p95_us": 61288.852,
+    "p99_us": 96557.198,
+    "max_us": 256015.932
+  },
+  "peak_rss_kib": {
+    "1993366": 42752,
+    "1992883": 28300,
+    "1993034": 23304,
+    "1993077": 23600,
+    "1993122": 10384
+  },
+  "rss_samples": 586,
+  "cold_verification_workers": 8
+}

@@ -1,0 +1,24 @@
+2026-10-11T05:27:53.670Z efs-fuse 93e8af7e-adopt-route (branch devel-amd, built 2026-10-11T04:05:28Z on amd-395), build=93e8af7e-adopt-route: starting export=default mount=/data1/efs/mnt
+2026-10-11T05:27:53.670Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T05:27:53.670Z   node id=1 127.0.0.1:24190
+2026-10-11T05:27:53.670Z   node id=2 127.0.0.1:24191
+2026-10-11T05:27:53.670Z   node id=3 127.0.0.1:24192
+2026-10-11T05:27:53.670Z   node id=4 127.0.0.1:24193
+2026-10-11T05:27:53.670Z fetching metadata...
+2026-10-11T05:27:53.671Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T05:27:53.671Z export id=1 name=default
+2026-10-11T05:27:53.671Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T05:27:53.672Z efs-fuse: workers max=10 idle=10
+2026-10-11T05:27:53.674Z fuse serving
+2026-10-11T05:28:23.279Z efs-fuse 93e8af7e-adopt-route (branch devel-amd, built 2026-10-11T04:05:28Z on amd-395), build=93e8af7e-adopt-route: starting export=default mount=/data1/efs/mnt
+2026-10-11T05:28:23.280Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T05:28:23.280Z   node id=1 127.0.0.1:24190
+2026-10-11T05:28:23.280Z   node id=2 127.0.0.1:24191
+2026-10-11T05:28:23.280Z   node id=3 127.0.0.1:24192
+2026-10-11T05:28:23.280Z   node id=4 127.0.0.1:24193
+2026-10-11T05:28:23.280Z fetching metadata...
+2026-10-11T05:28:23.280Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T05:28:23.280Z export id=1 name=default
+2026-10-11T05:28:23.280Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T05:28:23.284Z efs-fuse: workers max=10 idle=10
+2026-10-11T05:28:23.286Z fuse serving

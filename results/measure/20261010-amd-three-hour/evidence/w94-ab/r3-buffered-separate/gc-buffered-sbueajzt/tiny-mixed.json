@@ -1,0 +1,32 @@
+{
+  "parent_ino": 2199,
+  "tiny_files": 8192,
+  "tiny_bytes": 512,
+  "large_files": 0,
+  "large_live_bytes_each": 16777216,
+  "large_written_bytes": [],
+  "wall_s": 30.021790268016048,
+  "open": {
+    "p50_us": 4361.868,
+    "p95_us": 14846.767,
+    "p99_us": 18834.873,
+    "max_us": 128335.689
+  },
+  "close": {
+    "p50_us": 14732.822,
+    "p95_us": 68000.05,
+    "p99_us": 108727.038,
+    "max_us": 284031.76
+  },
+  "peak_rss_kib": {
+    "2297354": 42892,
+    "2296980": 28676,
+    "2297029": 23088,
+    "2297065": 23496,
+    "2297102": 10432
+  },
+  "rss_samples": 597,
+  "cold_verification_workers": 8,
+  "cold_verified": true,
+  "physical_inventory_empty": true
+}
