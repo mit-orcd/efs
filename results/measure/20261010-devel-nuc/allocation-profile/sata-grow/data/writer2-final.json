@@ -1,0 +1,17 @@
+{
+  "writer": 2,
+  "count": 321093,
+  "seconds": 180.00015993299894,
+  "operations_s": 1783.8484150209629,
+  "sync_mean_ms": 0.5395562860977973,
+  "sync_p50_us": 526,
+  "sync_p95_us": 646,
+  "sync_p99_us": 829,
+  "histogram_overflow_ge100ms": 0,
+  "sync_max_ms": 22.436123,
+  "rotations": 78,
+  "rotation_seconds": 0.240220067,
+  "reopened_exact_blocks": 1605,
+  "logical_bytes": 105185280,
+  "allocated_bytes": 105185280
+}

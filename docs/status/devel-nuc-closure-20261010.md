@@ -221,3 +221,53 @@ settings, APST, cache, filesystem mount options and durability calls are unchang
 an overwrite benefit here; they are not a compatible production WAL/container
 format. Earlier three-node EFS SATA runs also slowed, so stable raw SATA cells
 do not establish that EFS's SATA slowdown is repaired. W97 remains open.
+
+## Separate XFS/perf/strace investigation
+
+Four instrumented180s controls finish with exact reopened-file checks. They
+are separate from the eight clean480s cells. After90s warmup, each collects20s
+of writer-TID tracepoint counts, a separate20s host XFS count,15s of CPU cycles,
+then a bounded10s strace. All perf count/record/report steps exit0. The strace
+timeout exits124 intentionally after SIGINT detaches the tracer.
+
+| Case | fdatasync calls in writer count | XFS log-force calls | XFS iclog-sync events |
+| --- | ---: | ---: | ---: |
+| NVMe growing | 3711 | 7422 | 2474 |
+| NVMe ring | 9253 | 0 | 0 |
+| SATA growing | 106377 | 212758 | 79762 |
+| SATA ring | 138616 | 0 | 0 |
+
+Growing files invoke roughly two XFS log forces per fdatasync; warmed rings
+invoke none in these windows. These are kernel event invocations, not a count
+of distinct drive flushes or per-call serialized barriers. Separate host-wide
+counts are close to writer counts for growth and tiny for rings (6 and15
+log-force calls), limiting unrelated-XFS-work attribution. Fixed-file reuse
+removes this metadata work in the principle test; current file growth still
+needs its durability guarantees.
+
+The15s CPU records contain93/165/370/299 samples, no loss, respectively NVMe
+grow/ring and SATA grow/ring. Copying/Python evaluation appear in all; XFS
+journal CRC work is prominent in SATA growth. The low NVMe sample counts and
+CPU-only nature of cycles profiling prohibit a precise blocked-time attribution
+or a software/hardware ceiling claim.
+
+The executed controller's strace-c summaries use default accounting, not
+explicit wall-time accounting. Supplementary strace-c-w samples are retained
+for SATA after the original tracer detaches: across three writers,10s captures
+accumulate27.07/28.15s fdatasync wall time for growing/ring, versus0.54/0.69s
+pwrite. The host-sampling thread's8.2s sleep is separate. NVMe supplementary
+wall traces are explicitly NOTRUN because their exact processes have exited;
+their harness monotonic per-sync timing remains available. Never interpret
+the original strace-c numbers as syscall wall latency.
+
+The prepared future profiler verifies the last slot's actual counter rather
+than a potentially stale30s progress window, and requests wall-time strace
+directly. The active controller passes its original warmup checks; no profiling
+failure is hidden or manufactured. Exact executed source is retained separately
+as `profile-controller-executed.py`; later harness changes are not production
+code or a claim they ran in the completed profiles.
+
+These observations strengthen W95's case for an independently specified,
+durable packing/reuse experiment. They do not permit skipping file/parent
+barriers, replacing checksums/ownership/publication, migrating installed stores
+or calling W97 fixed. Fully written-ring controls are the final follow-up.
