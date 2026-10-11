@@ -18,7 +18,7 @@ void efs_batch_obs_count(enum efs_batch_counter k){(void)k;}
 struct efs_raft_host {pthread_mutex_t mu,inbox_mu;int inbox_n;};
 static int result,calls,published,woken,decode_fail;
 int efs_wire_raft_decode(const uint8_t *p,uint32_t n,struct efs_raft_msg *m,uint8_t *b,uint32_t z) {
- (void)p;(void)n;(void)b;(void)z;m->group=0;return decode_fail?EFS_ERR_PROTO:EFS_OK;
+ (void)n;(void)b;(void)z;m->group=0;m->type=p[0];return decode_fail?EFS_ERR_PROTO:EFS_OK;
 }
 static struct efs_raft *group_raft(struct efs_raft_host *h,uint8_t g){(void)h;(void)g;return NULL;}
 int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *m){(void)r;(void)m;calls++;return result;}
@@ -39,7 +39,9 @@ int main(void) {
  p[0]=EFS_RAFT_MSG_AE_REP;result=2;
  assert(!host_read_control(&h,p,sizeof(p)) && calls==2 && published==1 && woken==1);
  /* A noted reply still returns fallback so normal recv owns progress. */
- result=0;assert(!host_read_control(&h,p,sizeof(p)) && calls==3 && published==1);
+ result=1;assert(host_read_control(&h,p,sizeof(p)) && calls==3 && published==2 && woken==2);
+ /* Fully accounted probe replies leave no pending bookkeeping. */
+ result=0;assert(!host_read_control(&h,p,sizeof(p)) && calls==4 && published==2);
  assert(!pthread_mutex_trylock(&h.mu));pthread_mutex_unlock(&h.mu);
  assert(!pthread_mutex_trylock(&h.inbox_mu));pthread_mutex_unlock(&h.inbox_mu);
  pthread_mutex_destroy(&h.mu);pthread_mutex_destroy(&h.inbox_mu);

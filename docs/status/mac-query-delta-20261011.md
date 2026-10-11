@@ -612,3 +612,19 @@ paired improvement or native pass is claimed. LOOKUP measurements show 2,891
 calls averaging 5.59 ms: queued already-accounted read replies may hold later
 fresh rounds behind the durability tail. This requires a conservative exact-
 prefix control-path test, preserving replication bookkeeping whenever needed.
+
+Read control now fully consumes an already-accounted successful empty ACK
+only at the exact committed/applied full-log prefix, with matching recorded
+peer match/next state. An ordinary ACK also requires no outstanding entry
+batch; a probe preserves that batch. Boot, term, group, voter/config and inbox
+ordering checks remain mandatory. Late rounds update peer liveness but never
+current read authority; progress-bearing ACKs retain normal recv bookkeeping.
+Sequential fresh/old-round, outstanding suffix, parked apply, failure and
+configuration tests pass under ASAN/UBSAN and on the Mac Linux seed, together
+with Raft disk, transaction, resolve, cohort and checkpoint regression gates.
+Both the initial probe-only and ordinary-empty-ACK candidates still fail the
+unchanged native deep pair (0/2, normal cleanup; evidence `native-accounted-
+control-deep.txt` and `native-accounted-heartbeat-deep.txt`). The latest
+LOOKUP average remains 5.45 ms. This is no native speedup proof. Log fsync
+averages 19.35 ms; wire RTT averages 0.36–0.38 ms. Duplicate applied-marker
+dispatch still waits behind an accepted same-prefix job and is the next lead.

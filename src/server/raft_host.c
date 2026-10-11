@@ -9445,9 +9445,9 @@ static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n
     if (!pending) {
         struct efs_raft *r=group_raft(h,msg.group);
         handled=efs_raft_read_control(r,&msg);
-        if (handled==1) BO_COUNT(BO_READ_CONTROL_REQUEST);
-        if (handled==2) BO_COUNT(BO_READ_CONTROL_REPLY);
-        if (handled==2) {
+        if (handled && msg.type==EFS_RAFT_MSG_AE_REQ) BO_COUNT(BO_READ_CONTROL_REQUEST);
+        if (handled && msg.type==EFS_RAFT_MSG_AE_REP) BO_COUNT(BO_READ_CONTROL_REPLY);
+        if (handled && msg.type==EFS_RAFT_MSG_AE_REP) {
             host_publish_group(h,msg.group);
             host_waiters_wake(h);
         }

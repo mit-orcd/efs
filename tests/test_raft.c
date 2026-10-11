@@ -541,7 +541,8 @@ static void test_readindex_control(void)
     reply.from=follower;reply.to=leader;reply.term=efs_raft_term(n.r[leader]);
     reply.boot_id=1;reply.success=1;reply.match_index=index;
     reply.last_log_index=efs_raft_read_round(n.r[leader])-1;
-    CHECK(!efs_raft_read_control(n.r[leader],&reply),"old round is not read authority");
+    CHECK(!efs_raft_read_control(n.r[leader],&reply) && !efs_raft_read_ready(n.r[leader]),
+          "uncorrelated zero-context heartbeat stays on pump without authority");
     reply.last_log_index++;
     reply.success=0;
     CHECK(!efs_raft_read_control(n.r[leader],&reply),"failed/pressure ACK is not authority");
@@ -553,14 +554,41 @@ static void test_readindex_control(void)
     CHECK(!efs_raft_read_control(n.r[leader],&reply),"different group cannot grant authority");
     reply.group=0;
     uint64_t commit=efs_raft_commit(n.r[leader]);applied=app[leader].n;
-    CHECK(efs_raft_read_control(n.r[leader],&reply)==2,"current reply noted before bookkeeping");
+    CHECK(efs_raft_read_control(n.r[leader],&reply)==1,"current accounted heartbeat fully handled");
     CHECK(efs_raft_read_ready(n.r[leader]),"fresh quorum unblocks applied read");
     CHECK(efs_raft_commit(n.r[leader])==commit && app[leader].n==applied,
           "early read ACK neither advances replication commit nor applies");
     CHECK(efs_raft_recv(n.r[leader],&reply)==EFS_OK,"normal reply bookkeeping retained");
     CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"next request begins independent round");
-    CHECK(!efs_raft_read_control(n.r[leader],&reply) && !efs_raft_read_ready(n.r[leader]),
-          "prior completed round cannot authorize next request");
+    CHECK(efs_raft_read_control(n.r[leader],&reply)==1 && !efs_raft_read_ready(n.r[leader]),
+          "prior accounted completed round cannot authorize next request");
+    /* Fully accounted probes can be consumed without queuing old round
+     * bookkeeping; each new independent request still needs its own ACK. */
+    reply.vote_granted=1;
+    CHECK(efs_raft_read_control(n.r[leader],&reply)==1 && !efs_raft_read_ready(n.r[leader]),
+          "old accounted probe consumed without authorizing new round");
+    reply.last_log_index=efs_raft_read_round(n.r[leader]);
+    CHECK(efs_raft_read_control(n.r[leader],&reply)==1 && efs_raft_read_ready(n.r[leader]),
+          "current accounted probe supplies fresh authority without inbox work");
+    for(int round=0;round<10;round++) {
+        CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"sequential fresh control read");
+        CHECK(efs_raft_read_control(n.r[leader],&reply)==1 && !efs_raft_read_ready(n.r[leader]),
+              "previous sequential probe never supplies fresh authority");
+        reply.last_log_index=efs_raft_read_round(n.r[leader]);
+        CHECK(efs_raft_read_control(n.r[leader],&reply)==1 && efs_raft_read_ready(n.r[leader]),
+              "sequential exact prefix needs no deferred bookkeeping");
+        CHECK(efs_raft_commit(n.r[leader])==commit && app[leader].n==applied,
+              "consumed control ACK never commits or applies");
+    }
+    /* Even a probe must retain normal bookkeeping when a local suffix can
+     * advance replication or commit. Hold replies so the suffix stays live. */
+    CHECK(efs_raft_propose(n.r[leader],&cmd,1,&index)==EFS_OK,"control uncommitted suffix");
+    CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"fresh read during outstanding suffix");
+    reply.last_log_index=efs_raft_read_round(n.r[leader]);
+    CHECK(efs_raft_read_control(n.r[leader],&reply)==2,
+          "uncommitted suffix retains normal reply bookkeeping");
+    CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"another suffix round");
+    CHECK(!efs_raft_read_control(n.r[leader],&reply),"old suffix probe stays on pump");
     n.hold_ae_replies=0;elect(&n,4);
     /* Installing an uncommitted joint configuration disables this path,
      * even before the committed configuration switches. */

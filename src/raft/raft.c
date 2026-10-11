@@ -2456,8 +2456,8 @@ int efs_raft_read_begin(struct efs_raft *r)
  * replication/apply path. Caller holds the normal Raft serialization lock.
  * Boot changes, configuration transitions, unknown leaders and any unproven
  * log/apply work remain on recv. No storage mutation or replication progress
- * is performed here. A reply may contribute only to the current read round;
- * it must still pass recv later for ordinary replication bookkeeping. */
+ * is performed here. Only exact already-accounted probe replies may be fully
+ * consumed. Replies needing replication bookkeeping still pass through recv. */
 int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *in)
 {
     uint64_t term=0;
@@ -2484,16 +2484,36 @@ int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *in)
          * cannot form an extra vote or grant another round's authority. */
         return send_msg(r,&reply)==EFS_OK ? 1 : 0;
     }
-    if (in->type!=EFS_RAFT_MSG_AE_REP || r->role!=EFS_RAFT_LEADER ||
-        !in->success || r->read_in_flight!=1 ||
-        in->last_log_index!=r->read_round ||
-        r->read_cfg_old!=r->log_old || r->read_cfg_new!=r->log_new)
+    if (in->type!=EFS_RAFT_MSG_AE_REP || r->role!=EFS_RAFT_LEADER || !in->success)
         return 0;
-    r->read_acks|=1u<<in->from;
-    if (r->last_applied>=r->read_index && quorum_ok(r,r->read_acks) &&
-        log_term(r,r->commit_index,&term)==EFS_OK && term==r->current_term)
-        r->read_in_flight=2;
-    return 2; /* Caller must also queue this reply for normal recv. */
+    uint64_t last=0,last_term=0;
+    /* A probe preserves outstanding entry-batch bookkeeping; an ordinary
+     * ACK can be consumed only when there is no entry batch to clear. At an exact
+     * already-applied full prefix, normal recv would neither advance match,
+     * send catch-up entries, commit nor apply. Account peer liveness here so
+     * a late completed-round ACK need not obstruct the next fresh round.
+     * A different prefix or any outstanding local suffix stays on recv. */
+    int accounted=(in->vote_granted || !r->ae_inflight[in->from]) &&
+        in->match_index==r->commit_index &&
+        r->last_applied==r->commit_index &&
+        r->match_index[r->id]==r->commit_index &&
+        r->match_index[in->from]==in->match_index &&
+        r->next_index[in->from]==in->match_index+1 &&
+        last_log(r,&last,&last_term)==EFS_OK && last==r->commit_index;
+    int current=r->read_in_flight==1 && in->last_log_index==r->read_round &&
+        r->read_cfg_old==r->log_old && r->read_cfg_new==r->log_new;
+    if (!accounted && !current)return 0;
+    if (accounted) {
+        r->peer_ack_bits|=1u<<in->from;
+        r->peer_ack_tick[in->from]=r->ticks;
+    }
+    if (current) {
+        r->read_acks|=1u<<in->from;
+        if (r->last_applied>=r->read_index && quorum_ok(r,r->read_acks) &&
+            log_term(r,r->commit_index,&term)==EFS_OK && term==r->current_term)
+            r->read_in_flight=2;
+    }
+    return accounted ? 1 : 2; /* Progress-bearing replies still need recv. */
 }
 
 int efs_raft_read_ready(const struct efs_raft *r)
