@@ -1,0 +1,18 @@
+{
+  "records": 400,
+  "record_bytes": 4096,
+  "exact_bytes": 1638400,
+  "write_seconds": 8.08358365498134,
+  "final_fsync_seconds": 0.05681152798933908,
+  "final_fsync_returned_zero": true,
+  "write_latency_s": {
+    "50": 0.014169286005198956,
+    "95": 0.031001977011328563,
+    "99": 0.21023250400321558,
+    "100": 0.22540208499412984
+  },
+  "windows": [],
+  "warm_primary_sha256": "943b4012211faf733c50c177894e3a4b37fb1e1e089f26f191b965604fb3e054",
+  "warm_peer_sha256": "943b4012211faf733c50c177894e3a4b37fb1e1e089f26f191b965604fb3e054",
+  "cold_sha256": "943b4012211faf733c50c177894e3a4b37fb1e1e089f26f191b965604fb3e054"
+}

@@ -1,0 +1,3 @@
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 2370283 for /data1/efs/mnt
+Unmounted /data1/efs/mnt

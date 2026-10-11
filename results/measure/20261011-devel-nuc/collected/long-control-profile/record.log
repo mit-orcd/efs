@@ -1,0 +1,2 @@
+[ perf record: Woken up 1 times to write data ]
+[ perf record: Captured and wrote 0.278 MB /data1/efs/devel-nuc-20261011/long-control-profile/cycles.data (1122 samples) ]

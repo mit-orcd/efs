@@ -1,0 +1,14 @@
+{
+  "efsd": {
+    "sha256": "443bf85f90df11900031a73ca55ef323a9428c4d9249a2014ff14995ec072c9e",
+    "version": "efsd 2669064e-nuc (branch devel-nuc, built 2026-10-11T13:18:42Z on nuc)\n"
+  },
+  "efs-fuse": {
+    "sha256": "7f5193e061761ca9c803f0cd0afbcd56bbb242d0bf1e8f85837c97d7c0577eb0",
+    "version": "efs-fuse 2669064e-nuc (branch devel-nuc, built 2026-10-11T13:18:42Z on nuc)\n"
+  },
+  "efs-mgmt": {
+    "sha256": "0e244b0d66331e1199d82cc06d316a92a21cdf6e2790f8fcf555c6db37ebfe5a",
+    "version": "efs-mgmt 2669064e-nuc (branch devel-nuc, built 2026-10-11T13:18:42Z on nuc)\n"
+  }
+}

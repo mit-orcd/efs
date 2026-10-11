@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/data1/efs/devel-nuc-20261011/nuc-append-comparison-budget.py", line 62, in <module>
+    assert all(rc==0 for rc in codes.values()),codes
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'append-400-0-control': 0, 'append-400-1-candidate': 0, 'append-400-2-candidate': 0, 'append-400-3-control': 0, 'append-20000-0-control': 1, 'append-20000-1-candidate': 1}

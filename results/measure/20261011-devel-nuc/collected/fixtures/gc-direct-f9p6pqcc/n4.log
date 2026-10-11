@@ -1,0 +1,35 @@
+2026-10-11T14:26:20.992Z storage-engine=files direct_io=on
+2026-10-11T14:26:20.993Z Storage quota: explicit 1.00 GiB (safe maximum 293.05 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T14:26:20.998Z Joined cluster with 4 nodes
+2026-10-11T14:26:21.003Z heartbeat: enabled (2000 ms interval)
+2026-10-11T14:26:21.022Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T14:26:21.022Z raft-host: up raft_id=3 n=4 boot=11323159919125744 salt=4456983239111149741 g0=off g2=hosted
+2026-10-11T14:26:21.022Z efsd 108afa3e-nuc (branch devel-nuc, built 2026-10-11T13:24:25Z on nuc), build=108afa3e-nuc: node 4 listening on 127.0.0.1:26593, storage=/home/efs/gc-direct-1wwsgq1f/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-11T14:26:21.022Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-11T14:26:23.004Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=977 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T14:26:24.787Z raft-host: applied session index=3 kind=1 shard=0 ino=0
+2026-10-11T14:26:24.811Z raft-host: applied session index=8 kind=1 shard=0 ino=0
+2026-10-11T14:26:25.141Z store: put O_DIRECT bounce copy (buf align=3120 len=65536)
+2026-10-11T14:26:25.146Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=5762 p50_us=5762 max_us=5762 wdisk ops=1 bytes=65536 errors=0 avg_us=5662 p50_us=5662 max_us=5662
+2026-10-11T14:26:26.022Z kv-obs: mt_bytes=50940 l0_bytes=0 l0=0 l1=0
+2026-10-11T14:26:27.667Z raft-host: applied session index=539 kind=1 shard=0 ino=0
+2026-10-11T14:26:30.148Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=96 bytes=6291456 errors=0 avg_us=5095 p50_us=4043 max_us=10815 wdisk ops=96 bytes=6291456 errors=0 avg_us=5032 p50_us=3990 max_us=10751
+2026-10-11T14:26:31.023Z kv-obs: mt_bytes=105845 l0_bytes=0 l0=0 l1=0
+2026-10-11T14:26:35.149Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=96 bytes=6291456 errors=0 avg_us=5095 p50_us=4043 max_us=10815 wdisk ops=96 bytes=6291456 errors=0 avg_us=5032 p50_us=3990 max_us=10751
+2026-10-11T14:26:36.026Z kv-obs: mt_bytes=94061 l0_bytes=0 l0=0 l1=0
+2026-10-11T14:26:39.007Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=918 passes=18 sampled=0 pending=0,0 reap=0,0 removed=75 file_bytes=5222400 payload_bytes=4915200 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T14:26:40.598Z storage-engine=files direct_io=on
+2026-10-11T14:26:40.599Z Loaded 4 persisted cluster node(s) from /home/efs/gc-direct-1wwsgq1f/n4/meta/cluster_nodes.bin
+2026-10-11T14:26:40.599Z   persisted node 1: 127.0.0.1:26590
+2026-10-11T14:26:40.599Z   persisted node 2: 127.0.0.1:26591
+2026-10-11T14:26:40.599Z   persisted node 3: 127.0.0.1:26592
+2026-10-11T14:26:40.599Z   persisted node 4: 127.0.0.1:26593
+2026-10-11T14:26:40.600Z Storage quota: explicit 1.00 GiB (safe maximum 293.05 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T14:26:40.621Z Joined cluster with 4 nodes
+2026-10-11T14:26:40.625Z heartbeat: enabled (2000 ms interval)
+2026-10-11T14:26:40.638Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T14:26:40.638Z raft-host: up raft_id=3 n=4 boot=11325479691287160 salt=4906555361948246722 g0=off g2=hosted
+2026-10-11T14:26:40.638Z efsd 108afa3e-nuc (branch devel-nuc, built 2026-10-11T13:24:25Z on nuc), build=108afa3e-nuc: node 4 listening on 127.0.0.1:26593, storage=/home/efs/gc-direct-1wwsgq1f/n4 (1 paths, stripe=none), used=655360, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-11T14:26:40.638Z kv-obs: mt_bytes=86553 l0_bytes=0 l0=0 l1=0
+2026-10-11T14:26:41.209Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T14:26:42.625Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=981 passes=2 sampled=0 pending=0,0 reap=0,0 removed=10 file_bytes=696320 payload_bytes=655360 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0

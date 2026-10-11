@@ -1,0 +1,7 @@
+{
+  "candidate_engine_commit": "108afa3e",
+  "compared_core_files": 175,
+  "core_c_h_differences": [],
+  "later_makefile_difference": "two test-only fixture-interrupt invocations; production compile/link flags unchanged",
+  "makefile_diff": "diff --git a/Makefile b/Makefile\nindex cfcb92e4..f9785c60 100644\n--- a/Makefile\n+++ b/Makefile\n@@ -262,6 +262,7 @@ test-stop-control:\n \tpython3 tests/test_client_stop.py\n \tpython3 tests/test_client_ready.py\n \tpython3 tests/test_stop_dirty_drain.py\n+\tpython3 tests/test_fixture_interrupt.py\n \tpython3 tests/test_client_processes.py\n \n test-wb-runtime:\n@@ -293,6 +294,7 @@ test-client-stop:\n \tpython3 tests/test_client_stop.py\n \tpython3 tests/test_client_ready.py\n \tpython3 tests/test_stop_dirty_drain.py\n+\tpython3 tests/test_fixture_interrupt.py\n \tpython3 tests/test_client_processes.py\n \n all: $(LIB) efsd efs-fuse efs-bench efs-mgmt efs-query tests\n"
+}

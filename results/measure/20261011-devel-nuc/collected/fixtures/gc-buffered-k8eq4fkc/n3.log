@@ -1,0 +1,29 @@
+2026-10-11T14:32:39.356Z storage-engine=files direct_io=off
+2026-10-11T14:32:39.356Z Storage quota: explicit 1.00 GiB (safe maximum 293.04 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T14:32:39.361Z Joined cluster with 3 nodes
+2026-10-11T14:32:39.365Z heartbeat: enabled (2000 ms interval)
+2026-10-11T14:32:39.378Z raft-host: up raft_id=2 n=4 boot=11461165524031204 salt=9422126235875527534 g0=hosted g2=hosted
+2026-10-11T14:32:39.378Z efsd 108afa3e-nuc (branch devel-nuc, built 2026-10-11T13:24:25Z on nuc), build=108afa3e-nuc: node 3 listening on 127.0.0.1:26592, storage=/home/efs/gc-buffered-42s5nzfs/n3 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-11T14:32:39.378Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-11T14:32:39.669Z query-restore: rc=-3 backend=disk
+2026-10-11T14:32:39.683Z query-publish: generation=1 g0=0 g2=0 rebuilt=4096 refolded=0 edge_reused=0 bytes=3858400 pin_ms=0 build_ms=203 root_rc=-3 files=0 dirs=0 logical=0
+2026-10-11T14:32:41.365Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=980 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T14:32:43.442Z raft-host: applied session index=4 kind=1 shard=0 ino=0
+2026-10-11T14:32:43.492Z raft-host: applied session index=17 kind=1 shard=0 ino=0
+2026-10-11T14:32:43.505Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=3831 p50_us=3831 max_us=3831 wdisk ops=1 bytes=65536 errors=0 avg_us=3730 p50_us=3730 max_us=3730
+2026-10-11T14:32:43.565Z raft-host: applied session index=19 kind=1 shard=0 ino=0
+2026-10-11T14:32:44.383Z kv-obs: mt_bytes=10509 l0_bytes=0 l0=0 l1=0
+2026-10-11T14:32:44.969Z query-publish: generation=2 g0=26 g2=38 rebuilt=4 refolded=9 edge_reused=0 bytes=3858400 pin_ms=0 build_ms=78 root_rc=0 files=6 dirs=2 logical=16
+2026-10-11T14:32:45.467Z raft-host: applied session index=39 kind=1 shard=0 ino=0
+2026-10-11T14:32:47.619Z query-publish: generation=3 g0=26 g2=46 rebuilt=1 refolded=2 edge_reused=0 bytes=3858400 pin_ms=0 build_ms=46 root_rc=0 files=7 dirs=2 logical=19
+2026-10-11T14:32:48.199Z raft-host: applied session index=69 kind=1 shard=0 ino=0
+2026-10-11T14:32:48.506Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=3831 p50_us=3831 max_us=3831 wdisk ops=1 bytes=65536 errors=0 avg_us=3730 p50_us=3730 max_us=3730
+2026-10-11T14:32:48.702Z raft-host: applied session index=44 kind=1 shard=0 ino=0
+2026-10-11T14:32:48.779Z raft-host: applied session index=46 kind=1 shard=0 ino=0
+2026-10-11T14:32:49.384Z kv-obs: mt_bytes=35627 l0_bytes=0 l0=0 l1=0
+2026-10-11T14:32:50.155Z query-publish: generation=4 g0=47 g2=185 rebuilt=6 refolded=23 edge_reused=0 bytes=3858400 pin_ms=0 build_ms=133 root_rc=0 files=24 dirs=5 logical=2225
+2026-10-11T14:32:51.476Z raft-host: applied session index=193 kind=1 shard=0 ino=0
+2026-10-11T14:32:53.506Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=15 bytes=983040 errors=0 avg_us=5156 p50_us=4114 max_us=10585 wdisk ops=15 bytes=983040 errors=0 avg_us=5086 p50_us=4040 max_us=10458
+2026-10-11T14:32:53.509Z query-publish: generation=5 g0=47 g2=200 rebuilt=1 refolded=2 edge_reused=0 bytes=3858400 pin_ms=0 build_ms=50 root_rc=0 files=24 dirs=5 logical=2233
+2026-10-11T14:32:54.384Z kv-obs: mt_bytes=33719 l0_bytes=0 l0=0 l1=0
+2026-10-11T14:32:55.783Z query-publish: generation=6 g0=73 g2=286 rebuilt=6 refolded=1 edge_reused=0 bytes=3858400 pin_ms=0 build_ms=71 root_rc=0 files=0 dirs=0 logical=0

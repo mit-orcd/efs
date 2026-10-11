@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/data1/efs/devel-nuc-20261011/candidate-live.py", line 25, in <module>
+    assert (base/'live/run-exit.txt').exists(),'baseline live gate failed; inspect before candidate continuation'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: baseline live gate failed; inspect before candidate continuation

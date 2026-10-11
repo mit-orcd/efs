@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/data1/efs/devel-nuc-20261011/nuc-fixed-live.py", line 26, in <module>
+    assert (base/'fixed-build/native-exit.txt').read_text().strip()=='0','native failed; do not stop regular service'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: native failed; do not stop regular service
