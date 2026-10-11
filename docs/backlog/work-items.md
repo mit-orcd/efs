@@ -4429,6 +4429,14 @@ Independent cells do not prove a general throughput improvement, and this
 does not resolve the unpaced quota/admission finding or historical NUC cause.
 [Verdicts and raw summary](../status/amd-sustained-20261011.md#fanout-build-e9ea8ca1--short-gates-accepted).
 
+**Oct 11 AMD unpaced admission:** current 20-ms unpaced baseline still hits
+ENOSPC. An opt-in data-quota/actual-GC-progress BUSY candidate passes full
+normal/fault native and both 180-second unpaced cold/physical gates without
+refusals. The admission-off control reproduces ENOSPC but now passes an
+acknowledged-byte cold recovery oracle. Ten-minute fairness/recovery
+gates are running; no W97 closure or W99 capacity-domain policy is claimed.
+[Indexed follow-up](../status/amd-overload-admission-20261011.md).
+
 **Oct11 NUC isolated follow-up:** two eight-minute growing-file repeats outside
 EFS reproduce aggregate430/428→188/186 durable64KiB writes/s, per-writer mean
 sync~6.9→~16ms. Preallocated-ring repeats finish near438ops/s, with materially

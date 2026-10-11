@@ -51,3 +51,52 @@ Three initial cells use fresh 4-GiB stores: candidate code with admission off
 180 seconds. Thirty-second GC/charged-usage samples and admission diagnostics
 are retained. These independent salts/placements are functional comparisons,
 not matched throughput A/B. Longer runs are conditional on actual verdicts.
+
+## Initial control and direct-admission verdicts
+
+Full normal/fault native suites pass. The exact production candidate is
+committed as `d9db68e7` plus the final hard-failure cleanup preservation in
+that commit; the recovery harness is `704b9700`, and expanded mixed-reply tests
+are `fc826030`. Snapshot binaries carry the explicit experiment build label
+`54e33e82-admission-normal`; selected source SHA256s and binary hashes are
+retained, so this label is not misrepresented as the final source commit.
+
+Admission-off control refuses four large-worker operations with ENOSPC after
+122.21 seconds (requested 180), with 7,808 successful tiny closes. Cold recovery
+verifies 512 retained acknowledged tiny files and 64 MiB of acknowledged large
+fsync prefixes; all physical fragments drain in 65.13 seconds. Harness exit zero
+means recovery/cleanup passed, while the retained refusal list means sustained
+service failed.
+
+Admission-on direct completes the requested 180 seconds without I/O refusals
+(196.78 seconds including final generation settlement), with 5,312 successful
+tiny closes. The same cold-byte checks pass, and physical reclamation drains
+in 63.61 seconds. Diagnostics show BUSY admission near 3.865 GB (3.60 GiB)
+(90% of the 4-GiB logical quota) on all four nodes; tiny completions continue.
+This establishes the initial functional cell, not a throughput improvement or
+a fixed physical-space bound under every persistence failure. Buffered also completes its 180-second request without refusals (202.18 seconds
+including settlement), with 5,888 closes, the same cold-byte oracle and full
+physical drain in 67.40 seconds. Both initial on-cells pass.
+
+Conditional 600-second direct/buffered cells add per-worker tiny-close and
+large-fsync progress samples, and a fresh acknowledged write plus another cold
+restart after pressure cleanup. The installed service still uses the prior
+normal binary and default-disabled admission. W94/W97 are not closed.
+
+The conditional ten-minute unpaced gates are now running. All eight tiny and
+four large writers have recorded progress in the initial direct samples;
+final fairness, cold recovery and post-pressure write gates are not yet claimed.
+The oracle corruption regression passes on AMD: retained refusal information
+cannot waive corrupt acknowledged tiny bytes or large fsync-prefix bytes, and
+unknown fixture files are not retired before all acknowledged checks pass.
+
+[Reconciled cell summary](../../results/measure/20261011-amd-overload/summary.json)
+keeps the sustained-load and cold/reclamation verdicts separate. The initial
+control/direct-on/buffered-on sampled peak charged usage is 4.134/3.865/3.865
+GB on the most occupied node. Thirty-second samples can miss the terminal
+quota peak; the control refusal proves it reached hard quota. Sampled aggregate
+four-daemon/FUSE CPU is 2.43/1.20/1.43 cores; workload-driver CPU is excluded.
+These observed rates are not matched throughput/efficiency claims.
+Full functional compatibility with admission enabled is queued only after both
+long cells pass the no-refusal, last-period worker progress, cold/physical and
+post-pressure cold-write checks.
