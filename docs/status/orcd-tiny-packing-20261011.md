@@ -455,13 +455,15 @@ consume only the exact durable per-record verdict, and retire upload permits in
 order after all records have terminal states. A failed cohort must not silently
 fall back with replacement identities after any ambiguous PUT/publication.
 
-Give the packed decoder a caller-supplied scratch buffer allocated through the
-existing bounded client body pool. Its maximum scratch is three fragments plus
-one reconstructed body, or 2.5 times segment geometry. This avoids an uncharged
-per-read malloc escaping the aggregate budget. Test pressure refusal before
-fetch, unchanged output, released scratch on every outcome and preservation of
-accepted writer bytes/cache pins. Coalescer copies and wire/EC staging must also
-be included in that aggregate budget.
+The packed decoder now accepts caller-supplied scratch, and mounted reads
+allocate it through the existing bounded client body pool. Its maximum scratch
+is three fragments plus one reconstructed body, or 2.5 times segment geometry.
+The mounted-branch budget gate exercises real pool exhaustion: it refuses before
+fetch, leaves output and retained body charges unchanged, honors the deadline,
+and releases scratch on both failed and successful reads. The decoder gate also
+rejects undersized or overlapping scratch. Standalone tools retain an allocating
+convenience wrapper. Coalescer copies and wire/EC staging still need inclusion in
+that aggregate budget; this change does not activate mounted packing.
 
 Implement shared GC as a durable coordinator over the existing ledger phases.
 Only RECLAIMING objects with no LIVE or PENDING slots may start deletion.

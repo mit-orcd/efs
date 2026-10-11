@@ -482,6 +482,7 @@ test: all
 	./tests/test_packed_publication
 	./tests/test_pack_cohort
 	./tests/test_packed_reader
+	python3 tests/test_packed_read_budget.py
 	./tests/test_pack_mapping
 	./tests/test_packed_store
 	./tests/test_pack_ledger
