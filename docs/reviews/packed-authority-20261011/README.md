@@ -40,3 +40,9 @@ EFS_REVIEW_SNAPSHOT="$snapshot" WRITER_RPC_TEST_CFLAGS='-fsanitize=address,undef
 ```
 
 No deployments, pushes, other-cluster changes, optional refactors, or ID reuse occurred.
+
+## Integrated candidate follow-up
+
+Reviewed merged `9c65c893` after `d5b36640` incorporated the read-only NET fallback. The upload caller matches the reviewed safety boundary: NET/PROTO trigger independently fresh legacy checks; semantic BUSY/STALE do not. The newer authority peer now probes the established capability opcode with version 3 before sending 143, rejecting absent/older/malformed capability replies without inferring positive authority. Handler responses preserve version 1/2 negotiation for existing packing and batch clients. Durable session and exact-object fence implementations have no diff from the reviewed 856 source.
+
+From a clean archive of 9c65c893, production `test_pack_authority.py`, `test_pack_authority_net_fallback.py` and `test_publication_batch_rpc.py` each passed normally and under ASan/UBSan. No additional concrete finding emerged in these reviewed changes. This is a bounded source/control-flow disposition, not approval of full mounted release behavior. The Linux native/full storage and seven-client/jobs16 qualification remain independently required; no remote or mounted result was produced here.
