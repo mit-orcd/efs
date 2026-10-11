@@ -1,0 +1,11 @@
+2026-10-11T03:41:52.604Z efs-fuse (no git metadata, branch unknown, built 2026-10-11T03:41:15Z on amd-395), build=unknown: starting export=default mount=/data1/efs/amd-round-20261010/gc-direct-rezhv4wy/mnt
+2026-10-11T03:41:52.605Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T03:41:52.605Z   node id=1 127.0.0.1:24190
+2026-10-11T03:41:52.605Z   node id=2 127.0.0.1:24191
+2026-10-11T03:41:52.605Z   node id=3 127.0.0.1:24192
+2026-10-11T03:41:52.605Z   node id=4 127.0.0.1:24193
+2026-10-11T03:41:52.605Z fetching metadata...
+2026-10-11T03:41:52.605Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T03:41:52.605Z export id=1 name=default
+2026-10-11T03:41:52.605Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+fusermount3: mount failed: Permission denied

@@ -1783,7 +1783,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | 0s | **W62** · sweep/truncate batch boundaries lose delta GC records | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w62) |
 | 0t | **W64** · durable append reservation replay across leader changes | correctness / recovery | partial — durable replay, coordinated cross-group EOF/completion and bounded cleanup pass AMD direct/TCP replay, POSIX/peer, sync-write and cold-byte gates; production sessions and broader failover acceptance remain open ([ledger](../status/replay-readiness-20261008.md)) | [work item](#w64) |
 | 0u | **W65** · daemon exceeds graceful shutdown wait | liveness investigation | closed for supported TCP: six active-fsynced-write leader stops (three direct/three buffered) recover every acknowledged file cold; RDMA deferred | [work item](#w65) |
-| posix-link | **AMD `link_of_symlink` — Python request/test mismatch** | test correctness | Closed AMD test mismatch: corrected no-follow historical matrix passes; new explicit follow/dangling/core and peer cases pass native and AMD direct/buffered TCP; unrelated buffered MKDIR failure retained | [evidence and fix](../status/amd-link-symlink.md) |
+| posix-link | **AMD `link_of_symlink` — Python request/test mismatch** | test correctness | Closed AMD test mismatch: corrected no-follow historical matrix passes; new explicit follow/dangling/core and peer cases pass native and AMD direct/buffered TCP; pre-fix buffered MKDIR failure retained; later repaired by W66 | [evidence and fix](../status/amd-link-symlink.md) |
 | virtual-io | **W91/W92 · `.efs/` commands — server snapshots and safe reads** | correctness / performance / access control | in progress — disk index, bounded incremental catch-up, aggregate quota and replicated policy landed; named native/live/cold and Linux NFSv4.0 gates pass; actual 2^32/400 GiB gates and named virtual-export fix rollout remain open; Mac/Linux NFS candidate oracles pass | [closure](../status/query-cache-closure-20261010.md) · [persistent policy](../status/efs-query-persistent-policy-20261010.md) |
 | gc-obs | **W63** · GC backlog, reclaimed bytes and retry progress are missing | observability enhancement | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w63) |
 | 0e | **W38** · ior-hard fold tombstone without the span's bytes | correctness | code present; dated Oct 5 checkpoint — replay preserves live spans; folds require byte observations; deterministic regression + ASan/UBSan pass; traced real IOR-hard + independent cold hardscan pass (108000 records, bad=0, short=0); nine physical hosts remain; AMD software-RXE fold/GC gate passes, hardware RDMA remains | [full text](#w38--ior-hard-fold-tombstone-without-the-spans-bytes-queue-row-0e) |
@@ -1808,7 +1808,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | P4.1–P4.4 | fragment on-disk layout (**wipe**), W40 FUSE write copy, RDMA zero-copy receive, 9-client scaling | performance | deferred until P3's numbers | [full text](#p4--deferred-until-p3s-numbers-long-one-is-a-wipe) |
 | meta-scale | **W66** · metadata leadership distribution and topology-independent routing | scalability | open — Oct 10 AMD unhosted namespace-coordinator read routing repaired and direct/buffered 128-race cold gates pass ([checkpoint](../status/amd-non-rdma-20261010.md#w66--unresolved-namespace-coordinator-routing)); four-voter host/engine, persistence/failover and staged leadership distribution pass; prolonged preferred-peer loss has no read errors/term churn; default two-group topology unchanged; D36 commit authority/recovery choice, routing/migration and scale remain | [evidence, phases and gates](../status/metadata-scaling.md) |
 | tiny-raft | **W93** · broader durable Raft group commit | performance | closed Oct 10 — AMD + repeated NUC batching, read-tail, atomic recovery, fault and cold gates pass; tuning opt-in | [acceptance](../status/w93-atomic-apply-20261010.md) |
-| tiny-create | **W94** · atomic CREATE plus open lease | performance / lifecycle | partial — retained FUSE CREATE/adoption, sequenced lease edges and cleanup AMD gated; REPORT session fences AMD gated; data-plane/per-publication integration and measured consensus/throughput gate remain open | [work item](#w94) |
+| tiny-create | **W94** · atomic CREATE plus open lease | performance / lifecycle | partial — retained FUSE CREATE/adoption, sequenced lease edges and cleanup AMD gated; REPORT session fences AMD gated; combined first adoption passes native and both TCP POSIX/cold matrices; committed lease entries fall from three to two per created/closed file; four-repeat finite TCP A/B gains +18.7% direct/+23.3% buffered; targeted direct reply-loss/negative/crash gates pass; full two-mode fault matrix blocked by later legacy guarded-lease PREPARE timeout; sustained-service acceptance and full data-plane integration remain open ([checkpoint](../status/amd-non-rdma-20261010.md#w94--combined-first-descriptor-adoption-candidate)) | [work item](#w94) |
 | scratch-expiry | **W90** · scratch-file expiry metadata and safe lifecycle | feature | design accepted D33; opt-in fixed deadlines and safe lifecycle; implementation/gates open | [work item](#w90) · [design](../status/scratch-expiry-interface.md) |
 | virtual-commands | **W91** · directory-local virtual `.efs/` command interface | usability feature | design accepted D34; `.efs/` commands and bounded query paths; implementation/compatibility gates remain | [work item](#w91) · [design](../status/scratch-expiry-interface.md) |
 | tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | partial — independent indexed packing, publication/GC fault and 24-sample AMD churn gates pass; P4.1 production-format and migration decision remain | [work item](#w95) |
@@ -2118,13 +2118,17 @@ This review did not rerun those tests or establish release/restart acceptance. T
 
 ### Contract/evidence review
 
-W23's first completed measurement exists; its zero-L0 interpretation is
-invalid due to W89's TSV field shift. Corrected samples show follower L0=22,
-but the pressure bound remains unproven. Current production apply defers flushing instead of waiting at the
-L0 threshold; its log line alone is not a pump-stall measurement. The follower
-memory/lag bound still needs a valid preconditioned run. W87 needs the full
-traced buffered append outcome and retained failing evidence. See the
+W23's historical first measurement had an invalid zero-L0 interpretation due
+to W89's TSV field shift. **Oct 10/11 update:** W89's measurement defect is
+closed by strict raw/TSV identity checks and a fresh AMD real 1 GiB follower-cap,
+quorum/recovery and cold-value gate (276 complete observations). The malformed
+Oct 5 evidence and withdrawn interpretation remain retained. D30/W23's
+production memory/lag and sustained-stall bounds remain open; measurement
+closure does not activate that policy. See the
+[current AMD checkpoint](../status/amd-non-rdma-20261010.md#w89) and historical
 [round-6 ledger](../archive/contract-review-20261007-round6.md).
+W87 still needs its original broad-load failure investigated rather than
+being inferred closed from clean repeats.
 
 **W88 — D1 legacy span replay:** isolated metadata reproduction shows a
 folded identity can be evicted and its old retry reintroduced over a later
@@ -4981,8 +4985,6 @@ See [the package evidence](../status/amd-functional-gates-20261008.md).
 **Forbidden:** Treating host-local cache state or clean concurrent repeats as durable failover proof.
 
 
-<a id="w65"></a>
-
 **Oct 8 AMD hardening:** host-local replay now compares all UUID bytes and the
 session epoch, rejects a changed reservation length, and requires fresh inode/lane
 authority before answering a cached offset. Metadata refuses overflow without
@@ -4990,6 +4992,8 @@ advancing the append cursor. Production-helper regression tests and AMD
 direct-I/O/TCP full units, POSIX 216/0/1 skip, peer 64/64 and durability 26/26
 in both phases pass. The cache is still volatile: leader-change/restart receipts,
 bounded retirement and the original W87 broad-load acceptance remain open.
+
+<a id="w65"></a>
 
 ### W65 · Daemon exceeds graceful shutdown wait (queue row 0u)
 
@@ -6506,6 +6510,20 @@ existing preallocation experiment closes this item.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
 **Class/status:** Client/server metadata performance; partial implementation. Atomic server ownership, retained client adoption/lease edges and rejected-descriptor cleanup are AMD tested. Full session/data-plane integration and the measured performance acceptance gate remain open.
+
+**Oct 10/11 AMD candidate:** the first retained FUSE CREATE adopts its pending
+ownership with one existing guarded OPEN|CLEAR_PENDING edge. Existing normal
+descriptors still use CLEAR_PENDING alone; ambiguous combined requests remain
+retained before compensating CLOSE. Full native and both TCP POSIX/peer, sync,
+replay and cold-GC matrices pass. CRC-validated applied Raft logs for 64 files
+per build prove three versus two creation/close lease entries per file. The
+four-repeat finite TCP A/B passes (+18.7% direct/+23.3% buffered median paired
+gain), with exact cold bytes and empty physical inventories in all 16 cases.
+Targeted direct/TCP combined reply-loss, negative verdict and LOCAL/HASHED
+crash gates pass. A subsequent legacy guarded-lease PREPARE timeout blocks
+the complete live run and buffered follow-up. Sustained-service and full
+integration remain open, so this is not full W94 closure.
+[Evidence and limits](../status/amd-non-rdma-20261010.md#w94--combined-first-descriptor-adoption-candidate).
 
 **Historical pre-merge devel review (`cde67dca`, Oct 8):** the flags-0/separate-HOLD observation
 still applies. CREATE reply reuse is also absent from devel. The existing

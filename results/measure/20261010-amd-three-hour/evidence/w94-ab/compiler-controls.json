@@ -1,0 +1,60 @@
+{
+  "separate": {
+    "build_log": "ab-baseline-build.log",
+    "build_log_sha256": "093be04d98ca63e81f90b6419b786be74e116fbd65aa48cdf59a7e415433bace",
+    "fuse_compile": "gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='\"92fd2d62-separate-lease\"' -DEFS_VERSION='\"92fd2d62-separate-lease\"' -DEFS_GIT_BRANCH='\"devel-amd\"' -DEFS_BUILD_TIME='\"2026-10-11T04:11:40Z\"'  -I/usr/include/fuse3 -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/efs_fuse.o src/client/efs_fuse.c",
+    "non_identity_arguments": [
+      "gcc",
+      "-O3",
+      "-g",
+      "-fno-omit-frame-pointer",
+      "-march=native",
+      "-mtune=native",
+      "-std=c99",
+      "-Wall",
+      "-Wextra",
+      "-D_GNU_SOURCE",
+      "-Wno-stringop-truncation",
+      "-Wno-format-truncation",
+      "-I/usr/include/fuse3",
+      "-Iinclude",
+      "-Isrc/common",
+      "-Ideps/blake3",
+      "-c",
+      "-o",
+      "src/client/efs_fuse.o",
+      "src/client/efs_fuse.c"
+    ],
+    "fault_define": [],
+    "preprocessor_faults_value": 0
+  },
+  "combined": {
+    "build_log": "adopt-build.log",
+    "build_log_sha256": "2717c0bf5688cd97f4a7c85885ba3c2314a92f3dd0c57e8efe7af3b5182a3af9",
+    "fuse_compile": "gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='\"93e8af7e-adopt-route\"' -DEFS_VERSION='\"93e8af7e-adopt-route\"' -DEFS_GIT_BRANCH='\"devel-amd\"' -DEFS_BUILD_TIME='\"2026-10-11T04:05:28Z\"'  -I/usr/include/fuse3 -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/efs_fuse.o src/client/efs_fuse.c",
+    "non_identity_arguments": [
+      "gcc",
+      "-O3",
+      "-g",
+      "-fno-omit-frame-pointer",
+      "-march=native",
+      "-mtune=native",
+      "-std=c99",
+      "-Wall",
+      "-Wextra",
+      "-D_GNU_SOURCE",
+      "-Wno-stringop-truncation",
+      "-Wno-format-truncation",
+      "-I/usr/include/fuse3",
+      "-Iinclude",
+      "-Isrc/common",
+      "-Ideps/blake3",
+      "-c",
+      "-o",
+      "src/client/efs_fuse.o",
+      "src/client/efs_fuse.c"
+    ],
+    "fault_define": [],
+    "preprocessor_faults_value": 0
+  }
+}

@@ -2661,8 +2661,6 @@ See [the package evidence](../status/amd-functional-gates-20261008.md).
 **Forbidden:** Treating host-local cache state or clean concurrent repeats as durable failover proof.
 
 
-<a id="w65"></a>
-
 **Oct 8 AMD hardening:** host-local replay now compares all UUID bytes and the
 session epoch, rejects a changed reservation length, and requires fresh inode/lane
 authority before answering a cached offset. Metadata refuses overflow without
@@ -2670,6 +2668,8 @@ advancing the append cursor. Production-helper regression tests and AMD
 direct-I/O/TCP full units, POSIX 216/0/1 skip, peer 64/64 and durability 26/26
 in both phases pass. The cache is still volatile: leader-change/restart receipts,
 bounded retirement and the original W87 broad-load acceptance remain open.
+
+<a id="w65"></a>
 
 ## W65 · Daemon exceeds graceful shutdown wait (queue row 0u)
 
@@ -4186,6 +4186,20 @@ existing preallocation experiment closes this item.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
 **Class/status:** Client/server metadata performance; partial implementation. Atomic server ownership, retained client adoption/lease edges and rejected-descriptor cleanup are AMD tested. Full session/data-plane integration and the measured performance acceptance gate remain open.
+
+**Oct 10/11 AMD candidate:** the first retained FUSE CREATE adopts its pending
+ownership with one existing guarded OPEN|CLEAR_PENDING edge. Existing normal
+descriptors still use CLEAR_PENDING alone; ambiguous combined requests remain
+retained before compensating CLOSE. Full native and both TCP POSIX/peer, sync,
+replay and cold-GC matrices pass. CRC-validated applied Raft logs for 64 files
+per build prove three versus two creation/close lease entries per file. The
+four-repeat finite TCP A/B passes (+18.7% direct/+23.3% buffered median paired
+gain), with exact cold bytes and empty physical inventories in all 16 cases.
+Targeted direct/TCP combined reply-loss, negative verdict and LOCAL/HASHED
+crash gates pass. A subsequent legacy guarded-lease PREPARE timeout blocks
+the complete live run and buffered follow-up. Sustained-service and full
+integration remain open, so this is not full W94 closure.
+[Evidence and limits](../status/amd-non-rdma-20261010.md#w94--combined-first-descriptor-adoption-candidate).
 
 **Historical pre-merge devel review (`cde67dca`, Oct 8):** the flags-0/separate-HOLD observation
 still applies. CREATE reply reuse is also absent from devel. The existing

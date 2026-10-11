@@ -1,0 +1,178 @@
+2026-10-11T05:57:25.646Z efs-fuse 9c7c7a28-retained-combined-fault (branch devel-amd, built 2026-10-11T05:56:07Z on amd-395), build=9c7c7a28-retained-combined-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T05:57:25.646Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T05:57:25.646Z   node id=1 127.0.0.1:24190
+2026-10-11T05:57:25.646Z   node id=2 127.0.0.1:24191
+2026-10-11T05:57:25.646Z   node id=3 127.0.0.1:24192
+2026-10-11T05:57:25.646Z   node id=4 127.0.0.1:24193
+2026-10-11T05:57:25.646Z fetching metadata...
+2026-10-11T05:57:25.647Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T05:57:25.647Z export id=1 name=default
+2026-10-11T05:57:25.647Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T05:57:25.649Z efs-fuse: workers max=10 idle=10
+2026-10-11T05:57:25.651Z fuse serving
+2026-10-11T05:57:25.907Z test-create-retry: stage=0 seq=1 ino=4097 identical=1 retained=1
+2026-10-11T05:57:25.908Z test-create-retry: stage=1 seq=1 ino=4097 identical=1 retained=1
+2026-10-11T05:57:25.908Z test-create-retry: stage=2 seq=1 ino=4097 identical=1 retained=1
+2026-10-11T05:57:30.168Z efs-fuse 9c7c7a28-retained-combined-fault (branch devel-amd, built 2026-10-11T05:56:07Z on amd-395), build=9c7c7a28-retained-combined-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T05:57:30.169Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T05:57:30.169Z   node id=1 127.0.0.1:24190
+2026-10-11T05:57:30.169Z   node id=2 127.0.0.1:24191
+2026-10-11T05:57:30.169Z   node id=3 127.0.0.1:24192
+2026-10-11T05:57:30.169Z   node id=4 127.0.0.1:24193
+2026-10-11T05:57:30.169Z fetching metadata...
+2026-10-11T05:57:30.169Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T05:57:30.169Z export id=1 name=default
+2026-10-11T05:57:30.169Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T05:57:30.171Z efs-fuse: workers max=10 idle=10
+2026-10-11T05:57:30.173Z fuse serving
+2026-10-11T05:57:30.447Z test-create-adopt-reply-loss seq=5 ino=8193 known=1 hidden=1
+2026-10-11T05:57:30.448Z opid-lease: unresolved seq=5 ino=8193 flags=5 rc=-6
+2026-10-11T05:57:34.812Z efs-fuse 9c7c7a28-retained-combined-fault (branch devel-amd, built 2026-10-11T05:56:07Z on amd-395), build=9c7c7a28-retained-combined-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T05:57:34.813Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T05:57:34.813Z   node id=1 127.0.0.1:24190
+2026-10-11T05:57:34.813Z   node id=2 127.0.0.1:24191
+2026-10-11T05:57:34.813Z   node id=3 127.0.0.1:24192
+2026-10-11T05:57:34.813Z   node id=4 127.0.0.1:24193
+2026-10-11T05:57:34.813Z fetching metadata...
+2026-10-11T05:57:34.813Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T05:57:34.813Z export id=1 name=default
+2026-10-11T05:57:34.813Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T05:57:34.816Z efs-fuse: workers max=10 idle=10
+2026-10-11T05:57:34.817Z fuse serving
+2026-10-11T05:57:36.087Z test-create-adopt-negative-request ino=16385 generation=2 original=1
+2026-10-11T05:57:36.088Z opid-lease: unresolved seq=5 ino=16385 flags=5 rc=-14
+2026-10-11T05:57:36.088Z opid-create-adopt: rejected seq=5 ino=16385 rc=-14 terminal=1
+2026-10-11T05:57:40.451Z efs-fuse 9c7c7a28-retained-combined-fault (branch devel-amd, built 2026-10-11T05:56:07Z on amd-395), build=9c7c7a28-retained-combined-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T05:57:40.451Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T05:57:40.451Z   node id=1 127.0.0.1:24190
+2026-10-11T05:57:40.451Z   node id=2 127.0.0.1:24191
+2026-10-11T05:57:40.451Z   node id=3 127.0.0.1:24192
+2026-10-11T05:57:40.451Z   node id=4 127.0.0.1:24193
+2026-10-11T05:57:40.451Z fetching metadata...
+2026-10-11T05:57:40.451Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T05:57:40.451Z export id=1 name=default
+2026-10-11T05:57:40.451Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T05:57:40.454Z efs-fuse: workers max=10 idle=10
+2026-10-11T05:57:40.455Z fuse serving
+2026-10-11T05:57:46.047Z efs-fuse 9c7c7a28-retained-combined-fault (branch devel-amd, built 2026-10-11T05:56:07Z on amd-395), build=9c7c7a28-retained-combined-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T05:57:46.048Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T05:57:46.048Z   node id=1 127.0.0.1:24190
+2026-10-11T05:57:46.048Z   node id=2 127.0.0.1:24191
+2026-10-11T05:57:46.048Z   node id=3 127.0.0.1:24192
+2026-10-11T05:57:46.048Z   node id=4 127.0.0.1:24193
+2026-10-11T05:57:46.048Z fetching metadata...
+2026-10-11T05:57:46.048Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T05:57:46.048Z export id=1 name=default
+2026-10-11T05:57:46.048Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T05:57:46.050Z efs-fuse: workers max=10 idle=10
+2026-10-11T05:57:46.051Z fuse serving
+2026-10-11T05:57:46.321Z opid-mkdir: parent=1 name=w58-unique-create seq=1 transport_rc=0 status=0
+2026-10-11T05:57:46.329Z opid-mkdir: parent=525 name=0 seq=2 transport_rc=0 status=0
+2026-10-11T05:57:46.329Z opid-mkdir: parent=525 name=1 seq=3 transport_rc=0 status=0
+2026-10-11T05:57:46.330Z opid-mkdir: parent=525 name=3 seq=4 transport_rc=0 status=0
+2026-10-11T05:57:46.333Z opid-mkdir: parent=525 name=5 seq=7 transport_rc=0 status=0
+2026-10-11T05:57:46.345Z opid-mkdir: parent=525 name=4 seq=9 transport_rc=0 status=0
+2026-10-11T05:57:46.352Z opid-mkdir: parent=525 name=2 seq=15 transport_rc=0 status=0
+2026-10-11T05:57:46.363Z opid-mkdir: parent=525 name=6 seq=21 transport_rc=0 status=0
+2026-10-11T05:57:46.364Z opid-mkdir: parent=525 name=7 seq=31 transport_rc=0 status=0
+2026-10-11T05:57:46.366Z opid-mkdir: parent=525 name=9 seq=34 transport_rc=0 status=0
+2026-10-11T05:57:46.384Z opid-mkdir: parent=525 name=8 seq=37 transport_rc=0 status=0
+2026-10-11T05:57:46.388Z opid-mkdir: parent=525 name=10 seq=55 transport_rc=0 status=0
+2026-10-11T05:57:46.406Z opid-mkdir: parent=525 name=11 seq=58 transport_rc=0 status=0
+2026-10-11T05:57:46.408Z opid-mkdir: parent=525 name=12 seq=75 transport_rc=0 status=0
+2026-10-11T05:57:46.424Z opid-mkdir: parent=525 name=15 seq=79 transport_rc=0 status=0
+2026-10-11T05:57:46.440Z opid-mkdir: parent=525 name=13 seq=96 transport_rc=0 status=0
+2026-10-11T05:57:46.445Z opid-mkdir: parent=525 name=14 seq=116 transport_rc=0 status=0
+2026-10-11T05:57:52.954Z efs-fuse 9c7c7a28-retained-combined-fault (branch devel-amd, built 2026-10-11T05:56:07Z on amd-395), build=9c7c7a28-retained-combined-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T05:57:52.955Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T05:57:52.955Z   node id=1 127.0.0.1:24190
+2026-10-11T05:57:52.955Z   node id=2 127.0.0.1:24191
+2026-10-11T05:57:52.955Z   node id=3 127.0.0.1:24192
+2026-10-11T05:57:52.955Z   node id=4 127.0.0.1:24193
+2026-10-11T05:57:52.955Z fetching metadata...
+2026-10-11T05:57:52.955Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T05:57:52.955Z export id=1 name=default
+2026-10-11T05:57:52.955Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T05:57:52.957Z efs-fuse: workers max=10 idle=10
+2026-10-11T05:57:52.959Z fuse serving
+2026-10-11T05:58:23.761Z opid-mkdir: parent=1 name=pending-create-wire seq=3102 transport_rc=0 status=0
+2026-10-11T05:58:28.022Z efs-fuse 9c7c7a28-retained-combined-fault (branch devel-amd, built 2026-10-11T05:56:07Z on amd-395), build=9c7c7a28-retained-combined-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T05:58:28.023Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T05:58:28.023Z   node id=1 127.0.0.1:24190
+2026-10-11T05:58:28.023Z   node id=2 127.0.0.1:24191
+2026-10-11T05:58:28.023Z   node id=3 127.0.0.1:24192
+2026-10-11T05:58:28.023Z   node id=4 127.0.0.1:24193
+2026-10-11T05:58:28.023Z fetching metadata...
+2026-10-11T05:58:28.023Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T05:58:28.023Z export id=1 name=default
+2026-10-11T05:58:28.023Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T05:58:28.025Z efs-fuse: workers max=10 idle=10
+2026-10-11T05:58:28.026Z fuse serving
+2026-10-11T05:58:28.305Z opid-mkdir: parent=1 name=pending-create-hashed seq=3 transport_rc=0 status=0
+2026-10-11T05:58:32.672Z efs-fuse 9c7c7a28-retained-combined-fault (branch devel-amd, built 2026-10-11T05:56:07Z on amd-395), build=9c7c7a28-retained-combined-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T05:58:32.672Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T05:58:32.672Z   node id=1 127.0.0.1:24190
+2026-10-11T05:58:32.672Z   node id=2 127.0.0.1:24191
+2026-10-11T05:58:32.672Z   node id=3 127.0.0.1:24192
+2026-10-11T05:58:32.672Z   node id=4 127.0.0.1:24193
+2026-10-11T05:58:32.672Z fetching metadata...
+2026-10-11T05:58:32.672Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T05:58:32.672Z export id=1 name=default
+2026-10-11T05:58:32.672Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T05:58:32.675Z efs-fuse: workers max=10 idle=10
+2026-10-11T05:58:32.676Z fuse serving
+2026-10-11T05:58:32.961Z opid-mkdir: parent=1 name=pending-create-wire seq=3 transport_rc=0 status=0
+2026-10-11T05:58:37.534Z efs-fuse 9c7c7a28-retained-combined-fault (branch devel-amd, built 2026-10-11T05:56:07Z on amd-395), build=9c7c7a28-retained-combined-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T05:58:37.534Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T05:58:37.534Z   node id=1 127.0.0.1:24190
+2026-10-11T05:58:37.534Z   node id=2 127.0.0.1:24191
+2026-10-11T05:58:37.534Z   node id=3 127.0.0.1:24192
+2026-10-11T05:58:37.534Z   node id=4 127.0.0.1:24193
+2026-10-11T05:58:37.534Z fetching metadata...
+2026-10-11T05:58:37.535Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T05:58:37.535Z export id=1 name=default
+2026-10-11T05:58:37.535Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T05:58:37.537Z efs-fuse: workers max=10 idle=10
+2026-10-11T05:58:37.539Z fuse serving
+2026-10-11T05:58:37.824Z opid-mkdir: parent=1 name=pending-create-hashed seq=3 transport_rc=0 status=0
+2026-10-11T05:58:42.193Z efs-fuse 9c7c7a28-retained-combined-fault (branch devel-amd, built 2026-10-11T05:56:07Z on amd-395), build=9c7c7a28-retained-combined-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T05:58:42.193Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T05:58:42.193Z   node id=1 127.0.0.1:24190
+2026-10-11T05:58:42.193Z   node id=2 127.0.0.1:24191
+2026-10-11T05:58:42.193Z   node id=3 127.0.0.1:24192
+2026-10-11T05:58:42.193Z   node id=4 127.0.0.1:24193
+2026-10-11T05:58:42.193Z fetching metadata...
+2026-10-11T05:58:42.194Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T05:58:42.194Z export id=1 name=default
+2026-10-11T05:58:42.194Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T05:58:42.196Z efs-fuse: workers max=10 idle=10
+2026-10-11T05:58:42.198Z fuse serving
+2026-10-11T05:58:42.542Z opid-mkdir: parent=1 name=retained-create-request seq=3 transport_rc=0 status=0
+2026-10-11T05:58:44.700Z opid-mkdir: parent=1 name=report-many-inodes seq=14 transport_rc=0 status=0
+2026-10-11T05:58:49.371Z efs-fuse 9c7c7a28-retained-combined-fault (branch devel-amd, built 2026-10-11T05:56:07Z on amd-395), build=9c7c7a28-retained-combined-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T05:58:49.371Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T05:58:49.371Z   node id=1 127.0.0.1:24190
+2026-10-11T05:58:49.371Z   node id=2 127.0.0.1:24191
+2026-10-11T05:58:49.371Z   node id=3 127.0.0.1:24192
+2026-10-11T05:58:49.371Z   node id=4 127.0.0.1:24193
+2026-10-11T05:58:49.371Z fetching metadata...
+2026-10-11T05:58:49.371Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T05:58:49.371Z export id=1 name=default
+2026-10-11T05:58:49.371Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T05:58:49.373Z efs-fuse: workers max=10 idle=10
+2026-10-11T05:58:49.375Z fuse serving
+2026-10-11T05:58:49.647Z efs: read hole ino=6887 ci=0 holes=1
+2026-10-11T05:58:57.759Z opid-mkdir: parent=1 name=namespace-session-fence seq=122 transport_rc=0 status=0
+2026-10-11T05:58:57.882Z opid-mkdir: parent=1 name=namespace-first-touch seq=123 transport_rc=0 status=0
+2026-10-11T05:59:02.745Z efs-fuse 9c7c7a28-retained-combined-fault (branch devel-amd, built 2026-10-11T05:56:07Z on amd-395), build=9c7c7a28-retained-combined-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T05:59:02.746Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T05:59:02.746Z   node id=1 127.0.0.1:24190
+2026-10-11T05:59:02.746Z   node id=2 127.0.0.1:24191
+2026-10-11T05:59:02.746Z   node id=3 127.0.0.1:24192
+2026-10-11T05:59:02.746Z   node id=4 127.0.0.1:24193
+2026-10-11T05:59:02.746Z fetching metadata...
+2026-10-11T05:59:02.746Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T05:59:02.746Z export id=1 name=default
+2026-10-11T05:59:02.746Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T05:59:02.749Z efs-fuse: workers max=10 idle=10
+2026-10-11T05:59:02.750Z fuse serving

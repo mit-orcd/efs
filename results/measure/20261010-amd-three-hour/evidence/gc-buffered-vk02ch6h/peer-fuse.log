@@ -1,0 +1,38 @@
+2026-10-11T04:03:15.829Z efs-fuse 8cb41c929ca0-coordinator-trace (branch devel-amd, built 2026-10-11T04:03:03Z on amd-395), build=8cb41c929ca0-coordinator-trace: starting export=default mount=/data1/efs/mnt2
+2026-10-11T04:03:15.829Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T04:03:15.829Z   node id=1 127.0.0.1:24190
+2026-10-11T04:03:15.829Z   node id=2 127.0.0.1:24191
+2026-10-11T04:03:15.829Z   node id=3 127.0.0.1:24192
+2026-10-11T04:03:15.829Z   node id=4 127.0.0.1:24193
+2026-10-11T04:03:15.829Z fetching metadata...
+2026-10-11T04:03:15.829Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T04:03:15.829Z export id=1 name=default
+2026-10-11T04:03:15.829Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T04:03:15.832Z efs-fuse: workers max=10 idle=10
+2026-10-11T04:03:15.833Z fuse serving
+2026-10-11T04:03:16.083Z RPC-PROF calls=1 checkout_us=162 send_us=27 recv_us=679 busy_us=0 busy_n=0 checkout_wait_n=1 lookup=0/0us getattr=1/679us create=0/0us setattr=0/0us readdir=0/0us unlink=0/0us append=0/0us report=0/0us getchunks=0/0us lookup_path=0/0us
+2026-10-11T04:03:16.364Z lookup-trace: parent=3080 name=raced-0 rc=-3
+2026-10-11T04:03:16.365Z opid-mkdir: parent=3080 name=raced-0 seq=5 transport_rc=0 status=0
+2026-10-11T04:03:16.378Z lookup-trace: parent=3080 name=raced-1 rc=-3
+2026-10-11T04:03:16.382Z opid-mkdir: parent=3080 name=raced-1 seq=14 transport_rc=0 status=0
+2026-10-11T04:03:16.394Z lookup-trace: parent=3080 name=raced-2 rc=-3
+2026-10-11T04:03:16.395Z opid-mkdir: parent=3080 name=raced-2 seq=23 transport_rc=0 status=0
+2026-10-11T04:03:16.409Z lookup-trace: parent=3080 name=raced-3 rc=-3
+2026-10-11T04:03:16.414Z opid-mkdir: parent=3080 name=raced-3 seq=32 transport_rc=0 status=0
+2026-10-11T04:03:16.428Z lookup-trace: parent=3080 name=raced-4 rc=-3
+2026-10-11T04:03:16.429Z opid-mkdir: parent=3080 name=raced-4 seq=41 transport_rc=0 status=0
+2026-10-11T04:03:16.444Z lookup-trace: parent=3080 name=raced-5 rc=-3
+2026-10-11T04:03:16.450Z opid-mkdir: parent=3080 name=raced-5 seq=50 transport_rc=0 status=0
+2026-10-11T04:03:16.513Z lookup-trace: parent=3080 name=raced-6 rc=-3
+2026-10-11T04:03:16.513Z opid-mkdir: parent=3080 name=raced-6 seq=59 transport_rc=0 status=0
+2026-10-11T04:03:16.527Z lookup-trace: parent=3080 name=raced-7 rc=-3
+2026-10-11T04:03:16.585Z opid-mkdir: parent=3080 name=raced-7 seq=68 transport_rc=0 status=2
+2026-10-11T04:03:16.585Z mkdir-trace: create parent=3080 name=raced-7 rc=-4
+2026-10-11T04:03:16.928Z lookup-trace: parent=3541 name=raced-0 rc=-3
+2026-10-11T04:03:16.929Z opid-mkdir: parent=3541 name=raced-0 seq=77 transport_rc=0 status=2
+2026-10-11T04:03:16.929Z mkdir-trace: create parent=3541 name=raced-0 rc=-4
+2026-10-11T04:03:16.943Z lookup-trace: parent=3541 name=raced-1 rc=-3
+2026-10-11T04:03:16.944Z opid-mkdir: parent=3541 name=raced-1 seq=86 transport_rc=0 status=2
+2026-10-11T04:03:16.944Z mkdir-trace: create parent=3541 name=raced-1 rc=-4
+2026-10-11T04:03:16.959Z lookup-trace: parent=3541 name=raced-2 rc=-1
+2026-10-11T04:03:47.122Z RPC-PROF calls=291 checkout_us=388 send_us=1481 recv_us=121407 busy_us=50378 busy_n=1 checkout_wait_n=1 lookup=162/46236us getattr=33/6839us create=11/28439us setattr=0/0us readdir=0/0us unlink=0/0us append=0/0us report=22/11878us getchunks=21/2462us lookup_path=0/0us

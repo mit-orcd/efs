@@ -1,0 +1,39 @@
+2026-10-11T04:15:00.333Z efs-fuse 93e8af7e-adopt-route (branch devel-amd, built 2026-10-11T04:05:28Z on amd-395), build=93e8af7e-adopt-route: starting export=default mount=/data1/efs/mnt2
+2026-10-11T04:15:00.333Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T04:15:00.333Z   node id=1 127.0.0.1:24190
+2026-10-11T04:15:00.333Z   node id=2 127.0.0.1:24191
+2026-10-11T04:15:00.333Z   node id=3 127.0.0.1:24192
+2026-10-11T04:15:00.333Z   node id=4 127.0.0.1:24193
+2026-10-11T04:15:00.333Z fetching metadata...
+2026-10-11T04:15:00.334Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T04:15:00.334Z export id=1 name=default
+2026-10-11T04:15:00.334Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T04:15:00.336Z efs-fuse: workers max=10 idle=10
+2026-10-11T04:15:00.338Z fuse serving
+2026-10-11T04:15:00.612Z release ino=4097 begin
+2026-10-11T04:15:00.613Z release ino=4097 rc=0
+2026-10-11T04:15:00.680Z release ino=8193 begin
+2026-10-11T04:15:00.680Z release ino=8193 rc=0
+2026-10-11T04:15:00.716Z release ino=12289 begin
+2026-10-11T04:15:00.717Z release ino=12289 rc=0
+2026-10-11T04:15:00.834Z release ino=16385 begin
+2026-10-11T04:15:00.834Z release ino=16385 rc=0
+2026-10-11T04:15:00.854Z dcache ino=20481 ci=5 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=1 r=
+2026-10-11T04:15:00.857Z dcache ino=20481 ci=5 put-record obj=f012c7f8d6c4c8f4 seq=1 | dirty=0 hb=1 bg=ffffffffffffffff obj=f012c7f8d6c4c8f4 oseq=1 sseq=1 r=
+2026-10-11T04:15:00.857Z dcache ino=20481 ci=5 install len=131072 seq=1 | dirty=0 hb=1 bg=ffffffffffffffff obj=f012c7f8d6c4c8f4 oseq=1 sseq=1 r=
+2026-10-11T04:15:00.860Z report ino=20481 ci=5 only=20481 sync=1 rc=0
+2026-10-11T04:15:00.860Z report-irec ino=20481 size=786432 only=20481 sync=1 rc=0
+2026-10-11T04:15:00.860Z release ino=20481 begin
+2026-10-11T04:15:00.860Z release ino=20481 rc=0
+2026-10-11T04:15:00.875Z efs: read hole ino=20481 ci=4 holes=1
+2026-10-11T04:15:00.875Z release ino=20481 begin
+2026-10-11T04:15:00.876Z release ino=20481 rc=0
+2026-10-11T04:15:00.888Z dcache ino=24577 ci=6 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=2 r=
+2026-10-11T04:15:00.889Z dcache ino=24577 ci=6 put-record obj=1205a2d9cef60be0 seq=2 | dirty=0 hb=1 bg=ffffffffffffffff obj=1205a2d9cef60be0 oseq=2 sseq=2 r=
+2026-10-11T04:15:00.889Z dcache ino=24577 ci=6 install len=131072 seq=2 | dirty=0 hb=1 bg=ffffffffffffffff obj=1205a2d9cef60be0 oseq=2 sseq=2 r=
+2026-10-11T04:15:00.891Z report ino=24577 ci=6 only=24577 sync=1 rc=0
+2026-10-11T04:15:00.891Z report-irec ino=24577 size=917504 only=24577 sync=1 rc=0
+2026-10-11T04:15:00.891Z release ino=24577 begin
+2026-10-11T04:15:00.892Z release ino=24577 rc=0
+2026-10-11T04:15:00.911Z release ino=24577 begin
+2026-10-11T04:15:00.911Z release ino=24577 rc=0
