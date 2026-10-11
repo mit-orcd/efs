@@ -2,6 +2,8 @@
 """Strict W23 TSV serialization/reduction. Missing observations remain NA."""
 import argparse
 import csv
+import itertools
+import json
 import sys
 
 HEADER = ['ts', 'node', 'mt_bytes', 'l0_bytes', 'n_l0', 'n_l1', 'rss_kb',
@@ -83,9 +85,49 @@ def cap_proof(stream):
         raise ValueError('no follower observed at the unchanged production 1 GiB L0 cap')
     return 'production-cap follower observation confirmed; memory/lag/recovery bounds remain separate gates'
 
+def raw_proof(tsv, raw):
+    """Compare every emitted field with its original JSON observation.
+
+    Structural validity alone cannot catch twelve numeric fields reordered by
+    a sampler. Preserve unknown counters as NA; do not infer them from a peak.
+    """
+    reader = csv.reader(tsv, delimiter='\t')
+    if next(reader, None) != HEADER:
+        raise ValueError('unexpected TSV header')
+
+    def expected_rows():
+        for line, text in enumerate(raw, 1):
+            try:
+                r = json.loads(text)
+                kv, pressure = r['kv'], r['pressure']
+                if kv is None or pressure is None:
+                    continue  # These observations are not emitted by the driver.
+                values = [r['ts'], r['node'], kv['mt_bytes'], kv['l0_bytes'],
+                          kv['l0'], kv['l1'], r['rss_kb'], r['replication_lag'],
+                          (r['timing'] or {}).get('pump_hold_max', 'NA'),
+                          'NA', pressure['recv_rejected'],
+                          ','.join(g['role'] for g in r['groups'])]
+                yield validate([str(value) for value in values])
+            except (KeyError, TypeError, json.JSONDecodeError, ValueError) as error:
+                raise ValueError(f'raw line {line}: {error}') from error
+
+    count = 0
+    for line, (actual, expected) in enumerate(
+            itertools.zip_longest(reader, expected_rows()), 2):
+        if actual is None or expected is None:
+            raise ValueError(f'line {line}: raw/TSV observation count differs')
+        validate(actual)
+        for field, value, original in zip(HEADER, actual, expected):
+            if value != original:
+                raise ValueError(f'line {line}: {field}={value!r}, raw={original!r}')
+        count += 1
+    if count == 0:
+        raise ValueError('no complete raw observations')
+    return f'{count} TSV observations match every raw JSON field; unavailable counters remain NA'
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['row', 'peaks', 'cap-proof'])
+    parser.add_argument('command', choices=['row', 'peaks', 'cap-proof', 'raw-proof'])
     parser.add_argument('values', nargs='*')
     args = parser.parse_args()
     try:
@@ -93,6 +135,11 @@ if __name__ == '__main__':
             if len(args.values) != 9:
                 raise ValueError('row requires timestamp, node, KV observation and six values')
             print('\t'.join(row(*args.values)))
+        elif args.command == 'raw-proof':
+            if len(args.values) != 2:
+                raise ValueError('raw-proof requires TSV and JSONL files')
+            with open(args.values[0]) as tsv, open(args.values[1]) as raw:
+                print(raw_proof(tsv, raw))
         else:
             if len(args.values) != 1:
                 raise ValueError('reduction requires one TSV file')

@@ -181,6 +181,7 @@ try:
                              (r['timing'] or {}).get('pump_hold_max','NA'),'NA',q['recv_rejected'],
                              ','.join(g['role'] for g in r['groups'])])
     subprocess.run(['python3',str(source/'tests/measure/w23_samples.py'),'cap-proof',str(work/'samples.tsv')],check=True)
+    subprocess.run(['python3',str(source/'tests/measure/w23_samples.py'),'raw-proof',str(work/'samples.tsv'),str(work/'samples.jsonl')],check=True)
     (work/'PASS').write_text(f'{seq} acknowledged 1 MiB writes; real 1 GiB follower L0 cap; healthy quorum; InstallSnapshot recovery; three cold exact-value oracles; FUSE oracle={bool(a.mount)}\n')
     print((work/'PASS').read_text(),flush=True)
 finally:
