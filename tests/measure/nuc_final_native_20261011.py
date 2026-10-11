@@ -18,7 +18,7 @@ try:
  paths.append(src/'Makefile')
  (out/'source-sha256.json').write_text(json.dumps({str(p.relative_to(src)):hashlib.sha256(p.read_bytes()).hexdigest() for p in paths},indent=2)+'\n')
  command=['make','-j4','test','EFS_GIT_ID='+revision+'-nuc','EFS_GIT_DESCRIBE='+revision+'-nuc','EFS_GIT_BRANCH=devel-nuc']
- (out/'scope.json').write_text(json.dumps(dict(revision=revision,engine_core='108afa3e',command=command,scope='Separate source copy, current tracked test/docs/Makefile overlay. No installed source or cluster store changes. Live acceptance remains on the identical core built as108afa3e-nuc.'),indent=2))
+ (out/'scope.json').write_text(json.dumps(dict(revision=revision,engine_core='108afa3e',command=command,scope='Separate source copy, current tracked test/docs/Makefile overlay. No installed source or cluster store changes. Live acceptance remains on the identical core built as 108afa3e-nuc.'),indent=2))
  with (out/'clean.log').open('w') as log:subprocess.run(['make','clean'],cwd=src,stdout=log,stderr=subprocess.STDOUT,check=True)
  with (out/'native.log').open('w') as log:
   proc=subprocess.Popen(command,cwd=src,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
