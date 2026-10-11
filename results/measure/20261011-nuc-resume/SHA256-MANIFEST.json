@@ -458,5 +458,17 @@
   "target-wide-exit.txt": {
     "bytes": 2,
     "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "w52-baseline-2000/append-burst-progress.json": {
+    "bytes": 78,
+    "sha256": "5178e3644b26b38401ae26791be5a71dd0005d4850f500c316e3d081bda8d1cf"
+  },
+  "w52-baseline-2000/append-burst.json": {
+    "bytes": 1237,
+    "sha256": "09c0284aecd70c458c417437e5abffc2226736bc7e1df7d2b010010f8bdacb5f"
+  },
+  "w52-baseline-2000/run-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
   }
 }
