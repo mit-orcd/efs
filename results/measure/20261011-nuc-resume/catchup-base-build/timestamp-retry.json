@@ -1,0 +1,19 @@
+{
+  "before": {
+    "src/server/store.c": {
+      "sha256": "ed43832a3f8e03c19ddb4d2aee6bd3cdbd47b4a124bb29f9355667e1dbf77274",
+      "mtime": 0.0
+    },
+    "src/server/packed_fence.h": {
+      "sha256": "2be060b131268760db82dfd0604d581aa7b0aa25ab2c80d3afc3a6f30a6a63e4",
+      "mtime": 0.0
+    },
+    "tests/test_store_durability.c": {
+      "sha256": "ba8e5ac193e766e3eaf547d4752e5a09ca515e57089616deb2eecea3ba02a3a0",
+      "mtime": 0.0
+    }
+  },
+  "corrected_mtime": 1791753363,
+  "source_bytes_unchanged": true,
+  "scope": "Three baseline overlay source-file mtimes only; rerun full native, no skipped tests."
+}
