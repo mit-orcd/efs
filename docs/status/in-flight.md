@@ -3,6 +3,15 @@
 [Status index](README.md) · [Decisions](decisions.md) ·
 [Architecture](../how-it-works/architecture.md)
 
+**Current ORCD assignment — Oct 11:** user authorizes source transfer, builds,
+tests and coordinated deployment on ORCD until resolved. Work on `devel-orcd`;
+W95/P4.1 production tiny-payload packing is first, followed by ORCD W109/W97,
+W108, W110 and remaining W99/W42/W106 gates. The fcstor007 `tiny-files` screen
+is the requested benchmark. Preserve current files and original acceptance
+oracles. [Implementation and measured storage checkpoint](orcd-tiny-packing-20261011.md).
+The lower-layer packing gate is not mounted publication/GC acceptance. The
+older package instructions below are historical context for this assignment.
+
 Reviewed Oct 8, 2026. Historical rollout facts are in the
 [30-round ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md);
 previous handoff text is [archived](../archive/handoff-20261007.md).

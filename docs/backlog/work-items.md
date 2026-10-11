@@ -4227,6 +4227,13 @@ open latency as a measured saving.
 
 ## W95 · Tiny-file data persistence and packing principles
 
+**Oct 11 ORCD implementation:** bounded segment codec and immutable packed-body
+format pass full Linux units. A separate files-backend packed namespace passes
+private cold/retry/quota/GC-isolation gates and a matched physical control:
+36,864 versus 3,342,336 allocated fragment bytes for sixteen 512-byte payloads
+(90.6667× reduction). Mounted publication, shared-object GC and throughput
+acceptance remain open; no packing is activated.
+
 **Oct 11 ORCD priority:** production logical-payload packing is the first item on
 `devel-orcd`. Replace per-file full-stripe padding with bounded immutable packed
 segments and versioned publication/GC mappings. Existing independent packing and

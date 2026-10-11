@@ -1,6 +1,6 @@
 # W108 · Resolve owner names in directory-local long listings
 
-**Status:** open — command presentation gap; assigned follow-up to efs-coding 1 - orcd after its current work, later tonight (October 11, 2026).
+**Status:** open — command presentation gap; now in the `devel-orcd` queue after the first-priority packing work, under the user's explicit ORCD ownership authorization (October 11, 2026).
 
 ## Report and cause
 

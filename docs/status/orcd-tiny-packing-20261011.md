@@ -132,9 +132,9 @@ requires unchanged POSIX/peer/cold-recovery and hardware RDMA gates.
 | Order | Items | Remaining work |
 | --- | --- | --- |
 | 1 | W95 / P4.1 | Physical baseline, production packed representation and all publication/recovery/GC gates above |
-| 2 | W97; W66 / W23 / D30 | Separate CREATE/admission/compaction costs; investigate ORCD EBUSY, deep-directory/query timeouts and lane-sweep errors; repeat original full-suite deadlines |
+| 2 | W109 / W97; W66 / W23 / D30 | Separate CREATE/admission/compaction costs; investigate ORCD EBUSY, deep-directory/query timeouts and lane-sweep errors; repeat original full-suite deadlines |
 | 3 | W108 | Resolve owner names in `.efs/ls -l` and `.efs/find -l`, numeric option, cache/fallback, rebuilt-client/live gates |
-| 4 | W99 / W42; W106 | Remaining runtime shared-domain capacity and designated hardware RDMA fault/scale gates |
+| 4 | W110; W99 / W42; W106 | Remaining runtime shared-domain capacity and designated hardware RDMA fault/scale gates |
 
 This is a work order, not a claim that every historic mention of ORCD is a new
 assignment or that any item is closed. Coordinate ownership and live deployment
@@ -179,3 +179,30 @@ and structures, reference mismatches and atomic rejection on capacity failure.
 Durable Raft publication/ownership, real GETCHUNKS/client selection, upload
 receipts, shared-object GC and matched A/B remain open. Codec/format unit gates
 must not be described as production packing or a throughput gain.
+
+The committed format/codec snapshot `72b1a88fbf09` passes complete Linux
+`make test` on fcstor006 after regenerating derived architecture documents.
+The initial generated-document failure is retained in the remote unit log;
+[successful full-suite tail](../../results/measure/20261011-orcd-tiny-packing/full-linux-unit.txt).
+
+The next storage step adds a distinct `data/packs-v1/` namespace and explicit
+fragment geometry to the files backend. The ordinary direct writer forces
+export-sized fragments; the new helper does not. It writes immutable objects
+with exclusive creation, verifies digests, atomically reserves payload quota,
+retains uncertain charges and re-establishes file/ancestor durability on retries.
+It refuses container-backend and benchmark-build writes initially. No production
+RPC selects this helper. Individual-inode GC does not traverse this namespace;
+future shared-object retirement needs its own authoritative upload fences.
+
+A private development-overlay gate on fcstor006 exercises the actual storage
+entry points with sixteen 512-byte payloads. Both buffered and direct modes
+allocate **36,864 bytes** for the packed fragments, versus **3,342,336 bytes**
+for sixteen separate legacy files: **90.6667 times less fragment allocation**.
+The gate verifies cold retained records through every missing-fragment choice,
+immutable retries after rerouting, file and directory sync failures, quota
+limits, restart accounting, duplicate-root rejection and inode-GC isolation.
+[Private storage gate](../../results/measure/20261011-orcd-tiny-packing/linux-packed-store-dev.txt).
+This uses private local `/tmp` roots on one ORCD host, not distributed hardware
+RDMA, the data-volume benchmark, or end-to-end files/s acceptance. Full-suite
+acceptance of this additional storage step remains separate from the earlier
+committed format/codec suite. No mounted tiny-file packing is activated yet.

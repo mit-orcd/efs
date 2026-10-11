@@ -1950,6 +1950,15 @@ W95 packing and W106 broader hardware acceptance remain separate work.
 
 *Source: `status/in-flight.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**Current ORCD assignment — Oct 11:** user authorizes source transfer, builds,
+tests and coordinated deployment on ORCD until resolved. Work on `devel-orcd`;
+W95/P4.1 production tiny-payload packing is first, followed by ORCD W109/W97,
+W108, W110 and remaining W99/W42/W106 gates. The fcstor007 `tiny-files` screen
+is the requested benchmark. Preserve current files and original acceptance
+oracles. [Implementation and measured storage checkpoint](../status/orcd-tiny-packing-20261011.md).
+The lower-layer packing gate is not mounted publication/GC acceptance. The
+older package instructions below are historical context for this assignment.
+
 Reviewed Oct 8, 2026. Historical rollout facts are in the
 [30-round ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md);
 previous handoff text is [archived](../archive/handoff-20261007.md).
@@ -6526,6 +6535,13 @@ open latency as a measured saving.
 <a id="w95"></a>
 
 ### W95 · Tiny-file data persistence and packing principles
+
+**Oct 11 ORCD implementation:** bounded segment codec and immutable packed-body
+format pass full Linux units. A separate files-backend packed namespace passes
+private cold/retry/quota/GC-isolation gates and a matched physical control:
+36,864 versus 3,342,336 allocated fragment bytes for sixteen 512-byte payloads
+(90.6667× reduction). Mounted publication, shared-object GC and throughput
+acceptance remain open; no packing is activated.
 
 **Oct 11 ORCD priority:** production logical-payload packing is the first item on
 `devel-orcd`. Replace per-file full-stripe padding with bounded immutable packed

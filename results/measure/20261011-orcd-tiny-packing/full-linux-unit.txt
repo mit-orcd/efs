@@ -1,0 +1,31 @@
+python3 tests/test_namespace_bounds.py
+raft-host: namespace-capacity phase=ancestry used=144 limit=144 rc=-22: operation exceeds supported transaction envelope
+raft-host: namespace-capacity phase=participants used=144 limit=144 rc=-22: operation exceeds supported transaction envelope
+raft-host: namespace-capacity phase=participants used=144 limit=144 rc=-22: operation exceeds supported transaction envelope
+namespace: 65/144 same-shard guards, 145 OVERFLOW, deep observed cycle INVAL, ReadIndex IO, participant boundary PASS
+python3 tests/test_rename_budget.py
+rename budget: nested BUSY bounded, tighter/expired caller deadline preserved, transient success PASS
+./tests/test_namespace_session
+namespace session: fenced replay/effects refused; concurrent shared guards block revocation through commit/abort and delayed prepare; cold WAL guards/floors PASS
+./tests/test_session
+test_session: OK
+./tests/test_erasure
+test_erasure: OK
+./tests/test_small_segment
+small segment geometry: all 2-of-3 recovery, padding, bounds and legacy isolation PASS
+./tests/test_packed_segment
+PACK_GEOMETRY records=1 payload=512 geometry=8192 fragment_bytes=24576 ratio=48.000000
+PACK_GEOMETRY records=16 payload=8192 geometry=16384 fragment_bytes=36864 ratio=4.500000
+PACK_GEOMETRY records=64 payload=32768 geometry=40960 fragment_bytes=73728 ratio=2.250000
+PACK_GEOMETRY records=128 payload=65536 geometry=81920 fragment_bytes=135168 ratio=2.062500
+PACK_GEOMETRY records=200 payload=102400 geometry=122880 fragment_bytes=196608 ratio=1.920000
+packed object identity, EC recovery, corruption, bounds and atomic rejection PASS
+./tests/test_placement
+test_placement: OK
+./tests/test_lock
+test_lock: OK
+./tests/test_stage_evict
+test_stage_evict: OK
+./tests/test_conn_fd
+test_conn_fd: OK
+UNIT_LOG=/home/erbmi1/orcd/scratch/efs/orcd-test/fcstor006/unit-w95-72b1a88fbf09.log RC=0

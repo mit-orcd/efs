@@ -469,4 +469,17 @@ void server_load_nodes(struct efsd_server *s);
 /* Try to rejoin the cluster using any persisted peer. Returns 0 on success. */
 int server_rejoin_cluster(struct efsd_server *s);
 
+/* Staged W95 files-backend objects; no RPC selects these until upload
+ * authority/shared lifetime integration is complete. Explicit geometry. */
+int server_packed_fragment_path(struct efsd_server *, uint32_t root, efs_export_id_t,
+                                uint64_t id, uint64_t generation, uint32_t fi,
+                                char *, size_t);
+int server_write_packed_fragment(struct efsd_server *, efs_export_id_t,
+                                 uint64_t id, uint64_t generation, uint32_t fi,
+                                 const uint8_t *, uint32_t fragment_len, const uint8_t sum[EFS_HASH_SIZE]);
+int server_read_packed_fragment(struct efsd_server *, efs_export_id_t,
+                                uint64_t id, uint64_t generation, uint32_t fi,
+                                uint32_t fragment_len, uint8_t *, uint32_t *capacity,
+                                uint8_t sum[EFS_HASH_SIZE]);
+
 #endif

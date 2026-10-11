@@ -2293,3 +2293,147 @@ int server_rejoin_cluster(struct efsd_server *s)
     fprintf(stderr, "Could not rejoin any of the %u persisted peer(s)\n", node_count - 1);
     return -1;
 }
+
+/* W95 staged packed-object storage. Separate names prevent ordinary per-inode
+ * cleanup from removing neighbors in a pack. Files backend only initially;
+ * activation/upload authority and shared-object reclamation are still owed. */
+int server_packed_fragment_path(struct efsd_server *s, uint32_t root,
+                                efs_export_id_t export_id, uint64_t id,
+                                uint64_t generation, uint32_t fi,
+                                char *path, size_t capacity)
+{
+    if (!s || !export_id || !id || !generation || fi >= EFS_NUM_FRAGMENTS ||
+        !path || root >= (s->storage_path_count ? s->storage_path_count : 1))
+        return EFS_ERR_INVAL;
+    char seg[EFS_INO_PATH_SEGS][5];
+    efs_ino_path_segments(id, seg);
+    const char *base = s->storage_path_count ? s->storage_paths[root] : s->storage_path;
+    int n = snprintf(path, capacity, "%s/data/packs-v1/%u/%s/%s/%s/%s/%s/%llu/%u",
+                     base, export_id, seg[4], seg[3], seg[2], seg[1], seg[0],
+                     (unsigned long long)generation, fi);
+    return n < 0 || (size_t)n >= capacity ? EFS_ERR_OVERFLOW : EFS_OK;
+}
+static int packed_fragment_length_valid(uint32_t len)
+{
+    return len >= 4096 && len <= EFS_MIN_CHUNK_SIZE / 2 && len % 4096 == 0;
+}
+/* Caller owns the object lifetime. These data-plane helpers grant no publish
+ * permission and must only be exposed behind an authoritative upload ticket. */
+int server_read_packed_fragment(struct efsd_server *s, efs_export_id_t eid,
+                                uint64_t id, uint64_t generation, uint32_t fi,
+                                uint32_t fragment_len, uint8_t *data,
+                                uint32_t *capacity, uint8_t sum[EFS_HASH_SIZE])
+{
+    if (!s || s->storage_engine || !data || !capacity || !sum ||
+        !packed_fragment_length_valid(fragment_len) || *capacity < fragment_len)
+        return EFS_ERR_INVAL;
+    *capacity = 0;
+    uint32_t roots = s->storage_path_count ? s->storage_path_count : 1;
+    unsigned found = 0;
+    char selected[8192];
+    for (uint32_t root = 0; root < roots; root++) {
+        char path[8192]; struct stat st;
+        int rc = server_packed_fragment_path(s, root, eid, id, generation, fi, path, sizeof(path));
+        if (rc != EFS_OK) return rc;
+        if (lstat(path, &st)) {
+            if (errno == ENOENT) continue;
+            return EFS_ERR_IO;
+        }
+        if (!S_ISREG(st.st_mode) ||
+            (st.st_size != (off_t)fragment_len + EFS_HASH_SIZE &&
+             st.st_size != (off_t)fragment_len + 4096)) return EFS_ERR_IO;
+        if (++found > 1) return EFS_ERR_IO;
+        strcpy(selected, path);
+    }
+    if (!found) return EFS_ERR_NOT_FOUND;
+    uint32_t got = 0; int present = 0;
+    int rc = read_file_bytes(selected, data, fragment_len, &got, s->direct_io, sum, &present);
+    if (rc != EFS_OK) return rc;
+    if (got != fragment_len || !present) return EFS_ERR_IO;
+    uint8_t actual[EFS_HASH_SIZE]; efs_hash(data, fragment_len, actual);
+    if (memcmp(actual, sum, EFS_HASH_SIZE)) return EFS_ERR_CHECKSUM;
+    *capacity = got;
+    return EFS_OK;
+}
+int server_write_packed_fragment(struct efsd_server *s, efs_export_id_t eid,
+                                 uint64_t id, uint64_t generation, uint32_t fi,
+                                 const uint8_t *data, uint32_t fragment_len,
+                                 const uint8_t sum[EFS_HASH_SIZE])
+{
+#ifdef EFS_BENCH_BUILD
+    (void)s; (void)eid; (void)id; (void)generation; (void)fi;
+    (void)data; (void)fragment_len; (void)sum;
+    return EFS_ERR_INVAL;
+#else
+    if (!s || s->storage_engine || !data || !sum ||
+        !packed_fragment_length_valid(fragment_len)) return EFS_ERR_INVAL;
+    uint32_t root = write_root_index(s, 0);
+    struct shard_io_arg arg;
+    memset(&arg, 0, sizeof(arg));
+    int rc = server_packed_fragment_path(s, root, eid, id, generation, fi, arg.path, sizeof(arg.path));
+    if (rc != EFS_OK) return rc;
+    uint8_t actual[EFS_HASH_SIZE]; efs_hash(data, fragment_len, actual);
+    if (memcmp(actual, sum, EFS_HASH_SIZE)) return EFS_ERR_CHECKSUM;
+    pthread_mutex_t *mu = fragment_mutex(eid, id, 0, fi);
+    pthread_mutex_lock(mu);
+    uint8_t *existing = malloc(fragment_len);
+    if (!existing) { pthread_mutex_unlock(mu); return EFS_ERR_NOMEM; }
+    uint32_t capacity = fragment_len; uint8_t oldsum[EFS_HASH_SIZE];
+    rc = server_read_packed_fragment(s,eid,id,generation,fi,fragment_len,existing,&capacity,oldsum);
+    if (rc != EFS_ERR_NOT_FOUND) {
+        if (rc == EFS_OK && (memcmp(oldsum,sum,EFS_HASH_SIZE) || memcmp(existing,data,fragment_len)))
+            rc = EFS_ERR_STALE;
+        if (rc == EFS_OK) {
+            /* A prior attempt may have written valid bytes and failed its
+             * barrier. Byte equality alone is never a durable PUT receipt. */
+            uint32_t roots = s->storage_path_count ? s->storage_path_count : 1;
+            int synced = 0;
+            for (uint32_t i = 0; i < roots; i++) {
+                char path[8192];
+                rc = server_packed_fragment_path(s,i,eid,id,generation,fi,path,sizeof(path));
+                if (rc != EFS_OK) break;
+                int fd;
+                do { fd = open(path,O_RDONLY|O_CLOEXEC|O_NOFOLLOW); } while(fd < 0 && errno == EINTR);
+                if (fd < 0) {
+                    if (errno == ENOENT) continue;
+                    rc = EFS_ERR_IO; break;
+                }
+                int sr; do { sr = fsync(fd); } while (sr < 0 && errno == EINTR);
+                int cr = close(fd);
+                rc = sr < 0 || cr < 0 ? EFS_ERR_IO : sync_fragment_parents(path);
+                synced = rc == EFS_OK;
+                break;
+            }
+            if (rc == EFS_OK && !synced) rc = EFS_ERR_NOT_FOUND;
+        }
+        free(existing); pthread_mutex_unlock(mu); return rc;
+    }
+    free(existing);
+    pthread_mutex_lock(&s->lock);
+    struct efs_node *local = server_local_node(s);
+    if (!local || local->used > UINT64_MAX - fragment_len ||
+        (s->quota && (local->used > s->quota || fragment_len > s->quota - local->used))) {
+        pthread_mutex_unlock(&s->lock); pthread_mutex_unlock(mu);
+        return local ? EFS_ERR_QUOTA : EFS_ERR_INVAL;
+    }
+    local->used += fragment_len; /* reserve atomically across concurrent objects */
+    pthread_mutex_unlock(&s->lock);
+    arg.s=s; arg.buf=(uint8_t *)data; arg.len=fragment_len;
+    arg.is_write=1; arg.direct=s->direct_io; arg.excl=1; arg.sum=sum;
+    shard_io_thread(&arg);
+    rc=arg.result;
+    /* Retain charges for uncertain/partial objects. Only proven absence permits
+     * rollback. Recovery re-inventories the separate packed namespace. */
+    if (rc != EFS_OK) {
+        struct stat st;
+        if (lstat(arg.path,&st) < 0 && errno == ENOENT) {
+            pthread_mutex_lock(&s->lock); local=server_local_node(s);
+            if (local) local->used -= fragment_len;
+            pthread_mutex_unlock(&s->lock);
+        }
+    }
+    server_usage_mark_dirty(s);
+    pthread_mutex_unlock(mu);
+    return rc;
+#endif
+}
