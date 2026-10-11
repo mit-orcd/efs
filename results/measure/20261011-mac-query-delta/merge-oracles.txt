@@ -1,0 +1,26 @@
+cluster: mac
+files=6000 delta=1023 refolded=1023 rebuilt=1 stats_ms=19.052
+files=6000 delta=1024 refolded=1024 rebuilt=1 stats_ms=19.840
+files=6000 delta=1025 refolded=1025 rebuilt=1 stats_ms=23.984
+files=6000 delta=4096 refolded=4096 rebuilt=1 stats_ms=54.452
+phase=create refolded=2049 tree_files=8048
+phase=delete refolded=1 tree_files=6000
+query large delta: PASS
+kv-compact: start l0=4 inputs=3 range=258 l0only=0
+kv-compact: end bytes=9023374 ms=9 l0=1 l1=1 rc=0
+files=60000 delta=1023 refolded=1023 rebuilt=1 stats_ms=92.979
+files=60000 delta=1024 refolded=1024 rebuilt=1 stats_ms=85.004
+files=60000 delta=1025 refolded=1025 rebuilt=1 stats_ms=92.139
+files=60000 delta=4096 refolded=4096 rebuilt=1 stats_ms=165.949
+phase=create refolded=2049 tree_files=62048
+phase=delete refolded=1 tree_files=60000
+query large delta: PASS
+query-disk: unlinked directory ino=36864004096 parent=1 nlink=2
+query disk: RAM oracle, external sort, bounded metadata, retained snapshot, rename and cancellation PASS
+query-disk: nodes shard=1 previous=28673 rc=-1
+query-disk: raw shard=1 rc=-1 errno=5
+query-disk: raw shard=1 rc=-1 errno=5
+merge names: rows=6098 reads=10 writes=9
+merge aliases: rows=6098 reads=10 writes=9
+raw batch: records=10000 writes=16
+query disk I/O: windows, lookup, packed records, partial ENOSPC, FD reuse and fsync refusal PASS

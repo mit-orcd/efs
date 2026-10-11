@@ -1,0 +1,5 @@
+delta=1023 refolded=1023 rebuilt=1 stats_ms=22.494
+delta=1024 refolded=1024 rebuilt=1 stats_ms=21.220
+delta=1025 refolded=6002 rebuilt=1 stats_ms=15.814
+delta=4096 refolded=6002 rebuilt=1 stats_ms=14.870
+query large delta: PASS

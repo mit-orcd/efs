@@ -15,6 +15,7 @@ static int fault_clone(int fd,unsigned long request,int source)
 static int partial_write;
 static unsigned write_calls;
 static unsigned read_calls;
+static unsigned alias_opens;
 static unsigned raw_syncs,index_syncs,sync_faults;
 static char fail_sync_kind,fail_write_kind;
 static unsigned write_faults,fail_derived_after;
@@ -31,6 +32,7 @@ static int tracked_open(const char *path,int flags,...)
             const char *name=strrchr(path,'/');if(name && !strcmp(name+1,"manifest"))kind='m';
         }
         descriptor_kind[fd]=kind;
+        if(kind=='a')alias_opens++;
     }
     return fd;
 }
@@ -189,8 +191,45 @@ static void merge_test(void)
     }
     free(d);CHECK(!rmdir(root));
 }
+static void alias_batch_test(void)
+{
+    char root[]="/tmp/efs-query-alias-batch-XXXXXX";CHECK(mkdtemp(root));
+    struct efs_query_disk *d=calloc(1,sizeof(*d));CHECK(d);if(!d)return;
+    d->budget_fd=-1;d->disk_limit=UINT64_MAX;strcpy(d->path,root);
+    pthread_mutex_init(&d->mutex,NULL);
+    for(unsigned i=0;i<FD_CACHE;i++)d->fds[i].fd=-1;
+    const unsigned shards=FD_CACHE*2;
+    struct disk_alias alias={UINT64_MAX,EFS_ROOT_INO,0};
+    for(unsigned i=0;i<shards;i++){
+        d->part[i].names=1;int fd=make_file(d,i,'a');CHECK(fd>=0);
+        if(fd>=0){CHECK(!io_at(fd,&alias,sizeof(alias),0,1));close(fd);}
+    }
+    struct incremental state={.changes_fd=-1};efs_ino_t ids[CHANGE_BATCH];
+    for(unsigned i=0;i<CHANGE_BATCH;i++)ids[i]=100+i;
+    alias_opens=read_calls=0;
+    CHECK(!aliases_dirty_batch(d,&state,ids,CHANGE_BATCH));
+    unsigned batch_opens=alias_opens,batch_reads=read_calls;
+    CHECK(batch_opens==shards && batch_reads==2*shards && !state.count);
+    close_cache(d);alias_opens=read_calls=0;
+    /* Equivalent original traversal exhausts the FD cache between IDs. */
+    for(unsigned i=0;i<CHANGE_BATCH;i++)CHECK(!aliases_dirty_batch(d,&state,ids+i,1));
+    CHECK(alias_opens==shards*CHANGE_BATCH && read_calls==2*alias_opens);
+    printf("alias batch: shards=%u ids=%u opens=%u->%u reads=%u->%u\n",shards,CHANGE_BATCH,alias_opens,batch_opens,read_calls,batch_reads);
+    close_cache(d);d->stop=cancel_budget;alias_opens=0;
+    CHECK(aliases_dirty_batch(d,&state,ids,CHANGE_BATCH)==EFS_ERR_BUSY && !alias_opens);
+    d->stop=NULL;char path[EFS_MAX_PATH];
+    CHECK(!filename(d,FD_CACHE/2,'a',path,sizeof(path)));
+    CHECK(!truncate(path,sizeof(alias)-1));
+    CHECK(aliases_dirty_batch(d,&state,ids,CHANGE_BATCH)==EFS_ERR_IO);
+    close_cache(d);
+    for(unsigned i=0;i<shards;i++){
+        CHECK(!filename(d,i,'a',path,sizeof(path)));CHECK(!unlink(path));
+    }
+    pthread_mutex_destroy(&d->mutex);free(d);CHECK(!rmdir(root));
+}
 int main(void)
 {
+    alias_batch_test();
     rebuild_cache_test();
     {
         struct efs_query_rollup r={.tree_files=UINT64_MAX-1,.tree_dirs=7,.tree_bytes=9};

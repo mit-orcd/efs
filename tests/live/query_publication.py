@@ -47,6 +47,14 @@ for base in range(24800,25000,4):
 else:
     raise RuntimeError('no free fixture port range')
 print(f'fixture={work} ports={base}-{base+3} mode={args.mode} transport=tcp',flush=True)
+def stop_mount(mount):
+    if not os.path.ismount(mount):return
+    # Drain while our servers are still alive. Foreground FUSE below keeps
+    # Popen attached to the actual client, so wait proves teardown completed.
+    with (work/'client-stop.log').open('a') as output:
+        subprocess.run(['bash',str(source/'scripts/client.sh'),'stop',str(mount)],
+                       cwd=source,env=env,stdout=output,stderr=subprocess.STDOUT,
+                       check=True,timeout=90)
 def run(*args):
     return subprocess.run([str(source/'efs-mgmt'),*map(str,args)],env=env,text=True,
                           stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=8)
@@ -150,9 +158,16 @@ try:
             mount=mount_paths[index-1].resolve();mount.mkdir(exist_ok=True);mounts.append(mount)
             log=(work/f'fuse{index}.log').open('w');logs.append(log)
             fuse_procs.append(subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{base}',
-                                                'w92-private',str(mount)],env=env,stdout=log,stderr=log))
+                                                'w92-private',str(mount),'-f'],env=env,stdout=log,stderr=log))
             wait_for(lambda:os.path.ismount(mount),20)
         env['EFS_QUERY_TEST_PORT']=str(base+1)
+        if os.environ.get('EFS_QUERY_LARGE_DELTA')=='1':
+            with (work/'large-delta-gates.log').open('w') as output:
+                result=subprocess.run([sys.executable,str(source/'tests/live/query_large_delta.py'),
+                                       *map(str,mounts),'--files',os.environ.get('EFS_QUERY_LARGE_DELTA_FILES','1025'),*(['--metadata-only'] if os.environ.get('EFS_QUERY_LARGE_DELTA_MODE','metadata')=='metadata' else [])],env=env,stdout=output,stderr=subprocess.STDOUT,timeout=300)
+            assert result.returncode==0,(work/'large-delta-gates.log').read_text()
+            print('FUSE/query mutation and independent peer oracle gates PASS',flush=True)
+
         with (work/'virtual-gates.log').open('w') as output:
             result=subprocess.run([sys.executable,str(source/'tests/live/efs_commands.py'),
                                    *map(str,mounts)],env=env,stdout=output,stderr=subprocess.STDOUT,timeout=240)
@@ -243,7 +258,7 @@ try:
             noexec=work/'noexec';noexec.mkdir();mounts.append(noexec)
             log=(work/'noexec.log').open('w');logs.append(log)
             proc=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{base}',
-                                   'w92-private',str(noexec),'-o','noexec'],env=env,stdout=log,stderr=log)
+                                   'w92-private',str(noexec),'-f','-o','noexec'],env=env,stdout=log,stderr=log)
             fuse_procs.append(proc)
             wait_for(lambda:os.path.ismount(noexec),20)
             try:
@@ -262,7 +277,7 @@ try:
             log=(work/'disabled.log').open('w');logs.append(log)
             off_env=dict(env,EFS_COMMANDS='0')
             proc=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{base}',
-                                   'w92-private',str(disabled)],env=off_env,stdout=log,stderr=log)
+                                   'w92-private',str(disabled),'-f'],env=off_env,stdout=log,stderr=log)
             fuse_procs.append(proc)
             wait_for(lambda:os.path.ismount(disabled),20)
             assert not os.path.lexists(disabled/'.efs'),'disabled mount exposed synthetic commands'
@@ -290,7 +305,7 @@ try:
                     time.sleep(.1)
             held_bytes=held_stream.read();held_size=os.fstat(held_stream.fileno()).st_size
         else:
-            for mount in mounts:subprocess.run(['fusermount3','-u',str(mount)],check=True,timeout=10)
+            for mount in mounts:stop_mount(mount)
             for proc in fuse_procs:proc.wait(10);assert proc.returncode==0,proc.returncode
             fuse_procs.clear();mounts.clear()
     for proc in procs:proc.terminate()
@@ -316,7 +331,7 @@ try:
         offmount=work/'server-off';offmount.mkdir();mounts.append(offmount)
         log=(work/'server-off-fuse.log').open('w');logs.append(log)
         proc=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{base}',
-                               'w92-private',str(offmount)],env=env,stdout=log,stderr=log)
+                               'w92-private',str(offmount),'-f'],env=env,stdout=log,stderr=log)
         fuse_procs.append(proc)
         wait_for(lambda:os.path.ismount(offmount),20)
         assert not os.path.lexists(offmount/'.efs'),'server opt-out did not hide client commands'
@@ -338,7 +353,7 @@ try:
             total_dirs+=len(dirs);total_files+=len(files)
             total_bytes+=sum(os.lstat(Path(directory)/name).st_size for name in files)
         expected_root=f'root_rc=0 files={total_files} dirs={total_dirs} logical={total_bytes}'
-        for mount in mounts:subprocess.run(['fusermount3','-u',str(mount)],check=True,timeout=10)
+        for mount in mounts:stop_mount(mount)
         for proc in fuse_procs:proc.wait(10);assert proc.returncode==0
         fuse_procs.clear();mounts.clear()
         for node in range(1,5):
@@ -396,12 +411,14 @@ try:
 
 finally:
     if held_stream:held_stream.close()
-    for mount in mounts:
-        subprocess.run(['fusermount3','-u',str(mount)],timeout=10,check=False)
+    # If clean drain is refused, retain the private clients AND servers for
+    # recovery instead of killing a client with unresolved writes.
+    for mount in mounts:stop_mount(mount)
     for proc in fuse_procs:
         if proc.poll() is None:proc.terminate()
         try:proc.wait(10)
-        except subprocess.TimeoutExpired:proc.kill();proc.wait()
+        except subprocess.TimeoutExpired:
+            raise AssertionError('fixture client still draining; servers retained')
     for proc in procs:
         if proc.poll() is None:proc.terminate()
     for proc in procs:

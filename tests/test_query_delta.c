@@ -6,8 +6,11 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <ftw.h>
 static int failures;
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"FAIL %d: %s\n",__LINE__,#x);failures++;}}while(0)
+static int clean_fixture(const char *path,const struct stat *st,int kind,struct FTW *walk)
+{(void)st;(void)kind;(void)walk;return remove(path);}
 int main(void)
 {
     char store[]="/tmp/efs-query-delta-kv-XXXXXX",cache[]="/tmp/efs-query-delta-cache-XXXXXX";
@@ -17,12 +20,19 @@ int main(void)
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t dir;
     unsigned files=6000;const char *n=getenv("EFS_QUERY_DELTA_FILES");
     if(n){unsigned long value=strtoul(n,NULL,10);if(value<6000 || value>100000)return 2;files=(unsigned)value;}
+    unsigned parents=0;efs_ino_t parent_ids[512];
+    const char *p=getenv("EFS_QUERY_DELTA_PARENTS");
+    if(p){unsigned long value=strtoul(p,NULL,10);if(value<1 || value>512)return 2;parents=(unsigned)value;}
     efs_ino_t *ids=calloc(files,sizeof(*ids));CHECK(ids);if(!ids){efs_kv_lsm_close(kv);return 1;}
     CHECK(!efs_meta_apply_init(kv,100));
     CHECK(!efs_meta_apply_mkdir(kv,&attrs,EFS_ROOT_INO,S_IFDIR|0755,"delta",&dir));
+    for(unsigned i=0;i<parents;i++){
+        char name[32];snprintf(name,sizeof(name),"parent-%04u",i);
+        CHECK(!efs_meta_apply_mkdir(kv,&attrs,dir,S_IFDIR|0755,name,&parent_ids[i]));
+    }
     for(unsigned i=0;i<files;i++){
         char name[32];snprintf(name,sizeof(name),"file-%04u",i);
-        CHECK(!efs_meta_apply_create_file(kv,&attrs,dir,S_IFREG|0644,name,&ids[i]));
+        CHECK(!efs_meta_apply_create_file(kv,&attrs,parents?parent_ids[i%parents]:dir,S_IFREG|0644,name,&ids[i]));
         if(getenv("EFS_QUERY_DELTA_LANES")){
             struct efs_meta_row row;uint8_t key[EFS_KV_KEY_MAX],value[EFS_META_INO_BYTES],lane[EFS_META_LANE_BYTES]={0};uint32_t kn;
             CHECK(!efs_meta_apply_get_inode(kv,ids[i],&row));row.active_lanes=1;
@@ -64,6 +74,9 @@ int main(void)
             struct efs_query_rollup a,b;
             CHECK(!efs_query_catalog_stats(next,dir,&a));CHECK(!efs_query_catalog_stats(oracle,dir,&b));CHECK(!memcmp(&a,&b,sizeof(a)));
             CHECK(!efs_query_catalog_stats(next,EFS_ROOT_INO,&a));CHECK(!efs_query_catalog_stats(oracle,EFS_ROOT_INO,&b));CHECK(!memcmp(&a,&b,sizeof(a)));
+            for(unsigned i=0;i<parents;i++){
+                CHECK(!efs_query_catalog_stats(next,parent_ids[i],&a));CHECK(!efs_query_catalog_stats(oracle,parent_ids[i],&b));CHECK(!memcmp(&a,&b,sizeof(a)));
+            }
         }
         efs_query_catalog_free(oracle);oracle=NULL;efs_query_catalog_free(old);old=next;next=NULL;
         efs_kv_lsm_snapshot_release(source);source=NULL;
@@ -98,7 +111,7 @@ int main(void)
             char name[32];
             if(!phase){efs_ino_t added;snprintf(name,sizeof(name),"added-%04u",i);
                 CHECK(!efs_meta_apply_create_file(kv,&attrs,dir,S_IFREG|0644,name,&added));}
-            else {snprintf(name,sizeof(name),"file-%04u",i);CHECK(!efs_meta_apply_unlink(kv,dir,name,200));}
+            else {snprintf(name,sizeof(name),"file-%04u",i);CHECK(!efs_meta_apply_unlink(kv,parents?parent_ids[i%parents]:dir,name,200));}
         }
         CHECK(!efs_kv_lsm_snapshot_pin(kv,16<<20,&source));
         CHECK(!efs_query_catalog_build_disk(cache,source,old,4<<20,NULL,NULL,&next));
@@ -113,6 +126,51 @@ int main(void)
         efs_query_catalog_free(oracle);oracle=NULL;efs_query_catalog_free(old);old=next;next=NULL;
         efs_kv_lsm_snapshot_release(source);source=NULL;
     }
+    if(old && getenv("EFS_QUERY_DELTA_DIRS")){
+        /* Distinct changed directories need their common root as well.
+         * Preserve the documented resource fallback and prove its result
+         * still agrees with the full RAM oracle on both sides of the bound. */
+        efs_ino_t dirs[1025];
+        for(unsigned i=0;i<1025;i++){
+            char name[32];snprintf(name,sizeof(name),"dir-%04u",i);
+            CHECK(!efs_meta_apply_mkdir(kv,&attrs,EFS_ROOT_INO,S_IFDIR|0755,name,&dirs[i]));
+        }
+        CHECK(!efs_kv_lsm_snapshot_pin(kv,16<<20,&source));
+        CHECK(!efs_query_catalog_build_disk(cache,source,old,4<<20,NULL,NULL,&next));
+        efs_kv_lsm_snapshot_release(source);source=NULL;
+        efs_query_catalog_free(old);old=next;next=NULL;
+        for(unsigned round=0;old && round<3;round++){
+            unsigned count=1023+round;
+            for(unsigned i=0;i<count;i++){
+                struct efs_meta_row row;uint8_t key[EFS_KV_KEY_MAX],value[EFS_META_INO_BYTES];uint32_t kn;
+                CHECK(!efs_meta_apply_get_inode(kv,dirs[i],&row));row.base_ctime=300+round;
+                CHECK(!efs_kv_key_inode(efs_kv_inode_shard(dirs[i]),dirs[i],key,&kn));
+                CHECK(!efs_meta_pack_inode(&row,value,sizeof(value)));
+                CHECK(!efs_kv_put(kv,key,kn,value,sizeof(value)));
+            }
+            CHECK(!efs_kv_lsm_snapshot_pin(kv,16<<20,&source));
+            CHECK(!efs_query_catalog_build_disk(cache,source,old,4<<20,NULL,NULL,&next));
+            CHECK(!efs_query_catalog_build(source,NULL,256<<20,NULL,NULL,&oracle));
+            if(next && oracle){
+                unsigned refolded=efs_query_catalog_refolded(next);
+                CHECK(refolded==(round?files+parents+1027:count));
+                for(unsigned i=0;i<1025;i++){
+                    struct efs_meta_stat a,b;struct efs_query_rollup x,y;
+                    CHECK(!efs_query_catalog_inode(next,dirs[i],NULL,&a));CHECK(!efs_query_catalog_inode(oracle,dirs[i],NULL,&b));CHECK(!memcmp(&a,&b,sizeof(a)));
+                    CHECK(!efs_query_catalog_stats(next,dirs[i],&x));CHECK(!efs_query_catalog_stats(oracle,dirs[i],&y));CHECK(!memcmp(&x,&y,sizeof(x)));
+                }
+                struct efs_query_rollup a,b;
+                CHECK(!efs_query_catalog_stats(next,EFS_ROOT_INO,&a));CHECK(!efs_query_catalog_stats(oracle,EFS_ROOT_INO,&b));CHECK(!memcmp(&a,&b,sizeof(a)));
+                printf("dirty-directory delta=%u closure=%u refolded=%u fallback=%s\n",count,count+1,refolded,round?"budget":"none");
+            }
+            efs_query_catalog_free(oracle);oracle=NULL;efs_query_catalog_free(old);old=next;next=NULL;
+            efs_kv_lsm_snapshot_release(source);source=NULL;
+        }
+    }
     efs_query_catalog_free(old);efs_kv_lsm_close(kv);free(ids);
+    /* Keep failing fixtures for diagnosis, but successful repeated oracles
+     * must not consume the seed's tmpfs indefinitely. These are our mkdtemp
+     * roots; physical traversal never follows a symlink outside them. */
+    if(!failures){CHECK(!nftw(cache,clean_fixture,16,FTW_DEPTH|FTW_PHYS));CHECK(!nftw(store,clean_fixture,16,FTW_DEPTH|FTW_PHYS));}
     printf("query large delta: %s\n",failures?"FAIL":"PASS");return failures?1:0;
 }

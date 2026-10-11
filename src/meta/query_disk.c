@@ -972,7 +972,17 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
         if(!rc && (dir<0 || fsync(dir)))rc=EFS_ERR_IO;
         if(dir>=0)close(dir);
     }
-    if(rc){efs_query_disk_free(d);return rc;}
+    if(rc){
+        if(times){
+            times->persist_ns=query_build_elapsed(phase_start);
+            fprintf(stderr,"query-disk: build-failed rc=%d initial=%d index_ms=%llu stats_ms=%llu persist_ms=%llu rebuilt=%u refolded=%u rows=%llu\n",
+                rc,old==NULL,(unsigned long long)(times->index_ns/1000000),
+                (unsigned long long)(times->stats_ns/1000000),
+                (unsigned long long)(times->persist_ns/1000000),d->rebuilt,d->refolded,
+                (unsigned long long)d->count);
+        }
+        efs_query_disk_free(d);return rc;
+    }
     close(d->budget_fd);d->budget_fd=-1;
     if(times)times->persist_ns=query_build_elapsed(phase_start);
     d->stop=NULL;d->stop_ctx=NULL;*out=d;return EFS_OK;

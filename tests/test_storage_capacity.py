@@ -4,15 +4,25 @@ import pathlib, subprocess, tempfile
 root=pathlib.Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory() as d:
     src=pathlib.Path(d)/'test.c'
-    src.write_text(r'''#include <sys/statvfs.h>
+    src.write_text(r'''#include <sys/stat.h>
+#include <sys/statvfs.h>
+#include <stdint.h>
 #include <string.h>
-static int frozen_capacity;
-static struct statvfs fixed_capacity;
-static int test_statvfs(const char *path,struct statvfs *out) {
- if (!frozen_capacity) return statvfs(path,out);
- *out=fixed_capacity;return 0;
+/* Physical inventory remains a real-filesystem check. Quota grouping gets
+ * controlled headroom: /tmp can legitimately have less than the 1 GiB reserve. */
+static int mock;
+static int capacity_stat(const char *path,struct stat *out){
+ if(!mock)return stat(path,out);
+ memset(out,0,sizeof(*out));out->st_dev=strstr(path,"other-device")?8:7;return 0;
 }
-#define statvfs(path,out) test_statvfs(path,out)
+static int capacity_statvfs(const char *path,struct statvfs *out){
+ if(!mock)return statvfs(path,out);
+ memset(out,0,sizeof(*out));out->f_frsize=4096;
+ out->f_blocks=(UINT64_C(100)<<30)/4096;
+ out->f_bavail=((uint64_t)(mock==2?20:strstr(path,"other-device")?40:60)<<30)/4096;return 0;
+}
+#define stat(path,out) capacity_stat(path,out)
+#define statvfs(path,out) capacity_statvfs(path,out)
 #include "efs/storage_capacity.h"
 #include <assert.h>
 #include <stdio.h>
@@ -34,14 +44,22 @@ int main(int argc,char **argv){
  /* Compare identical inventory inputs. Live free space may change between
   * calls while another test/service writes; that is not deduplication failure.
   * The earlier capacity calls still exercise the real filesystem inventory. */
- fixed_capacity.f_frsize=4096;fixed_capacity.f_blocks=100*g/4096;
- fixed_capacity.f_bavail=60*g/4096;frozen_capacity=1;
  uint64_t usage[2]={0,0}, q1,q2;
- assert(!efs_storage_safe_quota(roots,usage,1,&q1));
- assert(!efs_storage_safe_quota(roots,usage,2,&q2)&&q1==q2&&q1==35*g);
+ mock=1;
+ assert(!efs_storage_safe_quota(roots,usage,1,&q1)&&q1==35*g);
+ assert(!efs_storage_safe_quota(roots,usage,2,&q2)&&q1==q2);
  usage[0]=g;usage[1]=2*g;
- assert(!efs_storage_safe_quota(roots,usage,2,&q2)&&q2==38*g);usage[0]=usage[1]=0;
- usage[1]=UINT64_MAX;assert(efs_storage_safe_quota(roots,usage,2,&q2));frozen_capacity=0;
+ assert(!efs_storage_safe_quota(roots,usage,2,&q2)&&q2==38*g);
+ usage[0]=usage[1]=10*g;
+ assert(!efs_storage_safe_quota(roots,usage,2,&q2)&&q2==55*g);
+ usage[0]=usage[1]=0;strcpy(roots[1],"/capacity-other-device");
+ assert(!efs_storage_safe_quota(roots,usage,2,&q2)&&q2==q1+35*g/2);
+ strcpy(roots[1],roots[0]);mock=2;
+ assert(efs_storage_safe_quota(roots,usage,1,&q1));
+ assert(efs_storage_safe_quota(roots,usage,2,&q2));
+ mock=1;
+ usage[1]=UINT64_MAX;assert(efs_storage_safe_quota(roots,usage,2,&q2));
+ mock=0;
  assert(!efs_storage_capacity(roots,2,1024,1000,&c2,&a2));assert(c2==1024&&a2<=24);
  assert(!efs_storage_capacity(roots,2,1024,2048,&c2,&a2));assert(a2==0);
  strcpy(roots[1],"/path-that-does-not-exist-efs-capacity");
