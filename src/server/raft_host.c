@@ -10713,7 +10713,8 @@ static int host_namespace_session_admit(struct efs_raft_host *h,uint32_t shard,
 
 /* REPORT can first-touch dozens of lane shards. Preserve each admission's
  * durable REGISTER/ESTABLISH proof while overlapping its quorum waits. At most
- * three additional threads exist process-wide; other requests use their caller.
+ * three additional threads exist process-wide. Contended multi-shard batches
+ * return retryable BUSY instead of serializing dozens of quorum admissions.
  * No worker or stack-owned request survives the join, including partial error. */
 struct host_report_session_work {
     struct efs_raft_host *host;
@@ -10770,12 +10771,22 @@ static int host_report_session_admit(struct efs_raft_host *h,
     }
     pthread_t threads[3];
     unsigned started = 0;
-    int parallel = work.count > 1 &&
-                   pthread_mutex_trylock(&host_report_session_parallel) == 0;
+    int parallel = 0;
+    if (work.count > 1) {
+        if (pthread_mutex_trylock(&host_report_session_parallel) != 0)
+            return EFS_ERR_BUSY;
+        parallel = 1;
+    }
     if (parallel) {
         for (; started < 3; ++started)
             if (pthread_create(&threads[started], NULL,
                                host_report_session_worker, &work) != 0) break;
+    }
+    /* No admission has started if all worker creation failed. Keep the
+     * bounded client retry rather than falling back to a long serial batch. */
+    if (parallel && !started) {
+        pthread_mutex_unlock(&host_report_session_parallel);
+        return EFS_ERR_BUSY;
     }
     host_report_session_worker(&work);
     for (unsigned i = 0; i < started; ++i) pthread_join(threads[i], NULL);

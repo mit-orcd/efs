@@ -52,20 +52,27 @@ static void reset(void) {memset(calls,0,sizeof(calls));active=max_active=create_
 int main(void) {
  struct efs_raft_host h={0};struct efs_opid session={.client_uuid={17},.session_epoch=2};int hint=-1;
  struct efs_chunk_rec recs[16];for(unsigned i=0;i<16;i++)recs[i]=(struct efs_chunk_rec){1,i};
- for(unsigned allowed=0;allowed<=3;allowed++) {
+ for(unsigned allowed=1;allowed<=3;allowed++) {
   reset();fail_after=allowed;expected_parallel=allowed+1;assert(!host_report_session_admit(&h,recs,16,&session,&hint));
   assert(!active && max_active==allowed+1);
   for(unsigned shard=1;shard<10;shard++)assert(calls[shard]==1);
  }
+ reset();fail_after=0;
+ assert(host_report_session_admit(&h,recs,16,&session,&hint)==EFS_ERR_BUSY);
+ assert(!active && !max_active);for(unsigned shard=1;shard<10;shard++)assert(!calls[shard]);
  reset();assert(!pthread_mutex_lock(&host_report_session_parallel));
+ assert(host_report_session_admit(&h,recs,16,&session,&hint)==EFS_ERR_BUSY);
+ assert(!pthread_mutex_unlock(&host_report_session_parallel));assert(!max_active && !create_calls && !active);
+ for(unsigned shard=1;shard<10;shard++)assert(!calls[shard]);
+ /* Once credits are free, the exact same batch admits every participant. */
  assert(!host_report_session_admit(&h,recs,16,&session,&hint));
- assert(!pthread_mutex_unlock(&host_report_session_parallel));assert(max_active==1 && !create_calls && !active);
+ for(unsigned shard=1;shard<10;shard++)assert(calls[shard]==1);
  reset();existing=1;assert(!host_report_session_admit(&h,recs,16,&session,&hint));assert(!active && !create_calls);
  reset();refusal=EFS_ERR_STALE;assert(host_report_session_admit(&h,recs,16,&session,&hint)==EFS_ERR_STALE);assert(!active && !create_calls);
  reset();fail_shard=1;hint=-1;assert(host_report_session_admit(&h,recs,16,&session,&hint)==EFS_ERR_STALE);
  assert(hint==3 && !active && max_active<=4);for(unsigned i=0;i<64;i++)assert(calls[i]<=1);
  reset();recs[0].ino=999;assert(host_report_session_admit(&h,recs,16,&session,&hint)==EFS_ERR_INVAL);assert(!active && !create_calls);
- puts("REPORT sessions: exact dedup, bounded four-way admission, serial/create-failure fallback, fencing and joined error ownership PASS");
+ puts("REPORT sessions: exact dedup, bounded four-way admission, retryable contention/create-failure backpressure, fencing and joined error ownership PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-report-session-') as td:
