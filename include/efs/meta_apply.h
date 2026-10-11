@@ -173,6 +173,16 @@ int efs_meta_execute_append_owned(struct efs_kv *, const struct efs_meta_append_
     const struct efs_opid_req *, const struct efs_txid *,
     const struct efs_meta_append_ops *, void *ctx);
 
+/* Bounded single-participant exact-image reservation. Caller serializes
+ * participant apply; storage/conflict failure changes no rows. */
+#define EFS_META_APPEND_ATOMIC_MAX (45u+(EFS_META_LANES+4u)*(9u+EFS_KV_KEY_MAX+2u*EFS_OPID_VAL_MAX))
+int efs_meta_append_atomic_encode(const struct efs_meta_append_plan *,
+    const struct efs_opid_req *,uint8_t *,uint32_t,uint32_t *);
+int efs_meta_append_atomic_decode(const uint8_t *,uint32_t,
+    struct efs_meta_append_plan *,struct efs_opid_req *);
+int efs_meta_apply_append_atomic(struct efs_kv *,const struct efs_meta_append_plan *,
+    const struct efs_opid_req *);
+
 /* Capture the existing completion state machine without writing the KV,
  * then commit its exact images across all affected lane authorities. Caller
  * supplies fresh authoritative views and the normal transaction transport. */

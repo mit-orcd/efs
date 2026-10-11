@@ -1868,6 +1868,20 @@ static int apply_gc_ack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 /* Same layout as sim apply_append_rsv_cmd, big-endian. A zero UUID/seq
  * is the stand-in (no op-id window). A session suffix fills uuid+epoch
  * so LEASE_DROP can FENCED_HOLE that reservation (10.5c-35d). */
+static int apply_append_atomic_cmd(struct efs_raft_host *h,const uint8_t *cmd,
+    uint32_t clen,uint8_t group)
+{
+    if(clen<2)return EFS_ERR_INVAL;
+    struct efs_meta_append_plan *p=malloc(sizeof(*p));
+    if(!p)return EFS_ERR_NOMEM;
+    struct efs_opid_req q;
+    int rc=efs_meta_append_atomic_decode(cmd+1,clen-1,p,&q);
+    if(rc==EFS_OK && efs_raft_shard_group(p->parts.shard[0])!=group)rc=EFS_ERR_INVAL;
+    if(rc==EFS_OK)rc=efs_meta_apply_append_atomic(h->kv,p,&q);
+    h->apply_extra=rc==EFS_OK?p->offset:0;
+    free(p);return rc;
+}
+
 static int apply_append_rsv_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                                 uint32_t clen, uint64_t index)
 {
@@ -2692,7 +2706,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
      * never a reason to re-apply the same index. */
     ret = (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
            cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP ||
-           cmd[0] == EFS_MD_CMD_RMDIR || cmd[0] == EFS_MD_CMD_APPEND_RSV ||
+           cmd[0] == EFS_MD_CMD_RMDIR || cmd[0] == EFS_MD_CMD_APPEND_ATOMIC || cmd[0] == EFS_MD_CMD_APPEND_RSV ||
            cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_APPEND_CATCHUP ||
            cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_PUBLISH ||
            cmd[0] == EFS_MD_CMD_REPORT_PUBLISH ||
@@ -2738,6 +2752,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
          cmd[0] == EFS_MD_CMD_PUBLISH || cmd[0] == EFS_MD_CMD_PUBLICATION ||
          cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE ||
          (cmd[0] == EFS_MD_CMD_APPEND_RSV && clen == HOST_APPEND_RSV_LEN) ||
+         cmd[0] == EFS_MD_CMD_APPEND_ATOMIC ||
          (cmd[0] == EFS_MD_CMD_LOCK && clen >= HOST_LOCK_LEN)) &&
         (rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM))
         ret = rc;
@@ -3154,6 +3169,8 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return apply_activate_lane_cmd(h, cmd, clen, index, group);
     if (cmd[0] == EFS_MD_CMD_LANE_FENCE)
         return apply_lane_fence_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_APPEND_ATOMIC)
+        return apply_append_atomic_cmd(h,cmd,clen,group);
     if (cmd[0] == EFS_MD_CMD_APPEND_RSV)
         return apply_append_rsv_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_APPEND_RES)
@@ -3488,6 +3505,31 @@ static int host_pick_peer(struct efs_raft_host *h, const uint8_t *groups, int ng
             return rid;
     }
     return -1;
+}
+
+/* Prefer the operation's leader only if its committed voting membership
+ * covers every required group. Otherwise a single-group leader would bounce
+ * the whole operation back to a dual-host coordinator. Routing is not an
+ * authority proof: the receiver still establishes fresh views and guards. */
+static int host_leader_cover_pick(struct efs_raft_host *h,uint8_t group,
+    const uint8_t *need,int count)
+{
+    if(!need || count<1 || count>HOST_NGROUPS)return -1;
+    int peer=-1;
+    pthread_mutex_lock(&h->mu);
+    struct efs_raft *r=group_raft(h,group);
+    int leader=r?efs_raft_leader(r):-1;
+    if(leader>=0 && leader<h->n && leader!=h->raft_id) {
+        peer=leader;
+        for(int i=0;i<count;i++) {
+            struct host_group *g=group_slot(h,need[i]);
+            uint32_t voters=(g && g->r)?efs_raft_voters(g->r):
+                (g?g->voters:group_voters(need[i],h->n));
+            if(!hosts_group(leader,voters)){peer=-1;break;}
+        }
+    }
+    pthread_mutex_unlock(&h->mu);
+    return peer;
 }
 
 /* Both scratch groups. HASHED used_shards / file lanes can sit on the
@@ -4195,6 +4237,9 @@ static uint64_t host_pressure_command_charge(const uint8_t *cmd, uint32_t n)
         work=host_pressure_rows_charge((n==38 || n==58) && rd32be(cmd+33)>0 &&
             rd32be(cmd+33)<=EFS_META_APPEND_CATCHUP_MAX ? rd32be(cmd+33)+1 :
             EFS_META_APPEND_CATCHUP_MAX+1,1,48);break;
+    case EFS_MD_CMD_APPEND_ATOMIC:
+        work=sizeof(struct efs_meta_append_plan)+host_pressure_rows_charge(2*(EFS_META_LANES+5),1,EFS_OPID_VAL_MAX);
+        break;
     case EFS_MD_CMD_CLOSE_STEP: work=host_pressure_rows_charge(2*EFS_LOCK_CAP,1,0); break;
     case EFS_MD_CMD_LANE_SWEEP_BATCH: work=64u<<10; break;
     case EFS_MD_CMD_TRUNCATE:
@@ -11905,6 +11950,12 @@ void server_raft_host_create_retained(const struct efs_msg_create_retained *requ
     for(int i=0;i<ng;i++)if(!host_hosts(h,groups[i])) {
         host_retained_create_forward(h,request,out,groups,ng);return;
     }
+    int leader=host_leader_cover_pick(h,efs_raft_shard_group(out->shard),groups,ng);
+    if(leader>=0) {
+        out->rpc.status=EFS_INODE_RPC_NOT_PRIMARY;
+        out->rpc.primary_id=(efs_node_id_t)(leader+1);
+        return;
+    }
     rc=host_retained_create_proof(h,request,out,&hint,&covered);
     if(out->known)return;
     if(request->probe || rc!=EFS_ERR_BUSY) {
@@ -12672,6 +12723,41 @@ static int host_close_append_step(struct efs_raft_host *h,efs_ino_t ino,
  * their physical-log collection, but settle EVERY exact verdict before
  * proposing COMMIT. A pre-decision failure is safely abortable; once the
  * COMMIT is submitted the ordinary ambiguous-decision rules still apply. */
+static int host_append_execute_atomic(struct efs_raft_host *h,
+    const struct efs_meta_append_plan *p,const struct efs_opid_req *q,int *hint)
+{
+    uint8_t *cmd=malloc(1+EFS_META_APPEND_ATOMIC_MAX);uint32_t length=0;
+    if(!cmd)return EFS_ERR_NOMEM;
+    cmd[0]=EFS_MD_CMD_APPEND_ATOMIC;
+    int rc=efs_meta_append_atomic_encode(p,q,cmd+1,EFS_META_APPEND_ATOMIC_MAX,&length);
+    uint64_t index=0,term=0;
+    uint8_t group=efs_raft_shard_group(p->parts.shard[0]);
+    /* Captured offsets cannot use a generic forwarded reply. A role change
+     * retains the caller identity and asks it to redirect to the new leader. */
+    if(rc==EFS_OK)rc=host_propose_mode(h,group,cmd,length+1,&index,&term,hint,1);
+    free(cmd);
+    return rc==EFS_OK?host_wait_verdict(h,group,index,term,hint):rc;
+}
+
+
+/* A node hosting both groups may follow the inode shard's primary. Do not
+ * redirect its complete append plan to a primary that hosts only one group:
+ * that primary would forward the request back here. Keep ordinary cohort
+ * forwarding for this coordinator; atomic verdicts require local leadership. */
+static int host_append_atomic_eligible(struct efs_raft_host *h,
+    const struct efs_meta_append_plan *p,int registered)
+{
+    if(!registered || !p->count || p->parts.n!=1)return 0;
+    uint8_t group=efs_raft_shard_group(p->parts.shard[0]);
+    pthread_mutex_lock(&h->mu);
+    struct efs_raft *r=group_raft(h,group);
+    uint32_t voters=r?efs_raft_voters(r):0;
+    int nonsolo=voters && (voters & (voters-1));
+    int leader=r && nonsolo && efs_raft_role(r)==EFS_RAFT_LEADER;
+    pthread_mutex_unlock(&h->mu);
+    return leader;
+}
+
 struct host_append_batch {
     struct host_resize_ctx base;
     struct host_command_cohort cohort;
@@ -12717,6 +12803,18 @@ static int host_append_batch_resolve(void *user,const struct efs_txid *t,
 {
     struct host_append_batch *c=user;
     return host_resize_resolve(&c->base,t,parts,decision);
+}
+
+static int host_append_execute_batched(struct efs_raft_host *h,
+    const struct efs_meta_append_plan *plan,const struct efs_opid_req *q,
+    const struct efs_txid *t,int registered,int *hint)
+{
+    /* Keep NUC's synchronous ordered session/inode guards on the general
+     * cross-shard path. Only the independently eligible atomic entry bypasses
+     * this adapter; completion and tag52 catch-up retain their own guards. */
+    struct host_append_reserve_ctx batch={.base={h,hint},.leading=registered?2:1};
+    return registered?efs_meta_execute_append_owned(h->kv,plan,q,t,&host_append_reserve_ops,&batch):
+                      efs_meta_execute_append(plan,t,&host_append_reserve_ops,&batch);
 }
 
 /* Normal completion/pruning use immutable captured images just like reserve.
@@ -12806,9 +12904,9 @@ static int host_append_transaction(struct efs_raft_host *h,efs_ino_t ino,uint64_
     rc=efs_meta_capture_append(h->kv,ino,len,q,host_txn_coord,h,plan);
     if(rc==EFS_OK) {
         *offset=plan->offset;fill_txid(h,&t);
-        struct host_append_reserve_ctx batch={.base={h,hint},.leading=registered?2:1};
-        rc=registered?efs_meta_execute_append_owned(h->kv,plan,q,&t,&host_append_reserve_ops,&batch):
-                      efs_meta_execute_append(plan,&t,&host_append_reserve_ops,&batch);
+        rc=host_append_atomic_eligible(h,plan,registered) ?
+            host_append_execute_atomic(h,plan,q,hint):
+            host_append_execute_batched(h,plan,q,&t,registered,hint);
         /* Exact-image conflicts are retryable; capture's retired identity
          * STALE is preserved and never allocated a second reservation. */
         if(rc==EFS_ERR_STALE)rc=EFS_ERR_BUSY;
@@ -15128,6 +15226,15 @@ void server_raft_host_append(efs_ino_t ino, uint64_t len,
             return;
         }
         if (!host_append_primary(h, ig, out))return;
+    }
+    if(ack) {
+        uint8_t need[2];host_need_both(need);
+        int leader=host_leader_cover_pick(h,ig,need,2);
+        if(leader>=0) {
+            out->status=EFS_INODE_RPC_NOT_PRIMARY;
+            out->primary_id=(efs_node_id_t)(leader+1);
+            return;
+        }
     }
     pthread_once(&host_append_once, host_append_init);
     /* Mix the allocation counter with the shard: inodes on one shard

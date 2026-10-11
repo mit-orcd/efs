@@ -9066,6 +9066,22 @@ writes share an inode.
   a monotone allocation cursor derived from observed EOF, never an
   independent counter.
 
+  A registered reservation whose inode, cursor, receipt, reservation and all
+  active lane images belong to one participant shard may use
+  `APPEND_ATOMIC` (command 53). The leader sends the exact captured images;
+  This requires local leadership of that shard with multiple voters; follower
+  coordinators retain forwarded PREPARE/DECIDE/RESOLVE to avoid redirect loops.
+  Replicas validate their canonical receipt fold, established session floor,
+  pending intents/shared guards and every old image before one atomic KV batch.
+  No replica chooses its own EOF. Conflicts install nothing; storage failures
+  retry the entry. Exact replay returns the original reservation without a
+  new effect. Each input key’s transaction predicate version advances in
+  the same batch, matching ordinary EXCL commit semantics; delayed pre-entry
+  guards fail and exact replay advances neither images nor versions.
+  Multi-shard reservations retain coordinated PREPARE/DECIDE/RESOLVE.
+  All daemons must understand this command before it is admitted; older binaries
+  cannot replay its entries. It does not change existing stored row formats.
+
   **Validating EOF once is not enough — the barrier must outlive the
   reservation.** POSIX couples EOF determination and the append write into
   one atomic step, so no intervening modification may fall between them.
@@ -9890,6 +9906,15 @@ because POSIX open-unlinked semantics require it, and it costs one Raft
 entry at each end of a session's use of a file. A fenced (dead) client's
 leases are safely retired by recovery, and a stale session's lease can
 neither keep an inode alive nor be reused (I19). Reclaim is L6.
+
+The production FUSE CREATE path combines its first OPEN with clearing the
+exact pending-CREATE token in one sequenced lease edge. It retains the
+exact combined edge and pending token while that edge is unresolved. A proven successful
+edge settles adoption before releasing that ownership; cleanup first proves the
+same edge, then compensates its OPEN with CLOSE and avoids a duplicate
+CLEAR_PENDING. A proven negative OPEN leaves ordinary pending-token cleanup
+responsible for the CREATE. Existing local open ownership retains the
+separate adoption path, and all waits share the caller’s original deadline.
 
 ### Distributed POSIX locking
 

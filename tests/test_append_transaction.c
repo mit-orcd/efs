@@ -834,6 +834,73 @@ static void bounded_completed_bursts(int cold)
  puts("bounded append bursts: eight DONE records, canonical replay, cold cuts, page retirement and truncate/reset cleanup PASS");
 }
 
+static void atomic_reservation(int cold)
+{
+ char dir[]="/tmp/efs-atomic-append-XXXXXX";if(cold)assert(mkdtemp(dir));
+ struct efs_kv *kv=cold?efs_kv_lsm_open(dir,NULL):efs_kv_mem_create();assert(kv);
+ efs_ino_t ino;uint64_t gen;fixture(kv,&ino,&gen);
+ struct efs_meta_row row;assert(!efs_meta_apply_get_inode(kv,ino,&row));
+ row.active_lanes=1;row.base_size=200;
+ uint8_t ik[EFS_KV_KEY_MAX],iv[EFS_META_INO_BYTES];uint32_t ikl;
+ assert(!efs_kv_key_inode(efs_kv_inode_shard(ino),ino,ik,&ikl));
+ assert(!efs_meta_pack_inode(&row,iv,sizeof(iv)) && !efs_kv_put(kv,ik,ikl,iv,sizeof(iv)));
+ struct efs_opid_req q=identity(1,0);uint32_t shard=efs_kv_inode_shard(ino);
+ assert(!efs_session_create(kv,q.id.client_uuid,1) && !efs_session_register(kv,q.id.client_uuid,1,shard) &&
+        !efs_session_establish(kv,shard,q.id.client_uuid,1));
+ struct efs_meta_append_plan *p=malloc(sizeof(*p)),*decoded=malloc(sizeof(*decoded));assert(p && decoded);
+ assert(!efs_meta_capture_append(kv,ino,8,&q,decision,kv,p) && p->parts.n==1 && p->offset==200);
+ uint8_t *wire=malloc(EFS_META_APPEND_ATOMIC_MAX+1);assert(wire);uint32_t length=0;
+ assert(efs_meta_append_atomic_encode(p,&q,wire,1,&length)==EFS_ERR_INVAL && length>1);
+ assert(!efs_meta_append_atomic_encode(p,&q,wire,EFS_META_APPEND_ATOMIC_MAX,&length));
+ struct efs_opid_req decoded_q;
+ for(unsigned n=0;n<length;n++)assert(efs_meta_append_atomic_decode(wire,n,decoded,&decoded_q)==EFS_ERR_INVAL);
+ assert(efs_meta_append_atomic_decode(wire,length+1,decoded,&decoded_q)==EFS_ERR_INVAL);
+ assert(!efs_meta_append_atomic_decode(wire,length,decoded,&decoded_q));
+ assert(decoded->offset==200 && decoded->count==p->count && !memcmp(&q,&decoded_q,sizeof(q)));
+ /* Shared predicates and exact intents on every input refuse the entire batch. */
+ struct efs_txid tx={{222}};
+ for(unsigned i=0;i<p->count;i++) {
+  uint64_t version;assert(!efs_txn_ver_get(kv,p->images[i].key,p->images[i].klen,&version));
+  assert(!efs_txn_prepare_guard(kv,&tx,&p->parts,p->images[i].key,p->images[i].klen,version));
+  assert(efs_meta_apply_append_atomic(kv,p,&q)==EFS_ERR_BUSY);
+  assert(!efs_txn_decide(kv,shard,&tx,EFS_TXN_ABORT) && !efs_txn_resolve(kv,&tx,shard,EFS_TXN_ABORT));tx.bytes[1]++;
+ }
+ uint32_t open=99;assert(!efs_meta_apply_append_state(kv,ino,NULL,NULL,&open) && !open);
+ assert(!efs_kv_put(kv,p->images[0].key,p->images[0].klen,p->images[0].expected,1));
+ assert(efs_meta_apply_append_atomic(kv,p,&q)==EFS_ERR_STALE);
+ assert(!efs_kv_put(kv,p->images[0].key,p->images[0].klen,p->images[0].expected,p->images[0].expected_len));
+ if(!cold){assert(!efs_kv_mem_fail_next_batch(kv));assert(efs_meta_apply_append_atomic(kv,p,&q)==EFS_ERR_IO);}
+ assert(!efs_meta_apply_append_state(kv,ino,NULL,NULL,&open) && !open);
+ uint64_t off=999;assert(efs_meta_append_result(kv,ino,8,&q,&off)==EFS_ERR_NOT_FOUND && off==999);
+ struct efs_opid_req wrong=q;wrong.id.seq=2;
+ assert(efs_meta_apply_append_atomic(kv,p,&wrong)==EFS_ERR_INVAL);
+ uint64_t before_version=0,after_version=0;
+ assert(!efs_txn_ver_get(kv,p->images[1].key,p->images[1].klen,&before_version));
+ assert(!efs_meta_apply_append_atomic(kv,decoded,&decoded_q));
+ assert(!efs_txn_ver_get(kv,p->images[1].key,p->images[1].klen,&after_version) && after_version==before_version+1);
+ tx.bytes[0]=221;
+ assert(efs_txn_prepare_guard(kv,&tx,&p->parts,p->images[1].key,p->images[1].klen,before_version)==EFS_ERR_STALE);
+ if(cold){efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(dir,NULL);assert(kv);}
+ assert(!efs_meta_apply_append_atomic(kv,p,&q));
+ assert(!efs_txn_ver_get(kv,p->images[1].key,p->images[1].klen,&after_version) && after_version==before_version+1);
+ assert(!efs_meta_apply_append_state(kv,ino,NULL,NULL,&open) && open==1);
+ assert(!efs_meta_append_result(kv,ino,8,&q,&off) && off==200);
+ tx.bytes[0]=223;assert(!efs_meta_finish_append(kv,ino,200,EFS_META_APPEND_COMPLETED,&tx,&ops,kv));
+ /* A delayed old image retains its canonical result after completion/cold cuts. */
+ if(cold){efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(dir,NULL);assert(kv);}
+ assert(!efs_meta_apply_append_atomic(kv,p,&q));
+ assert(!efs_meta_apply_append_state(kv,ino,NULL,NULL,&open) && !open);
+ q=identity(2,1);assert(!efs_meta_capture_append(kv,ino,8,&q,decision,kv,p) && p->offset==208);
+ assert(!efs_session_fence_local(kv,shard,q.id.client_uuid,2));
+ assert(efs_meta_apply_append_atomic(kv,p,&q)==EFS_ERR_STALE);
+ free(wire);free(decoded);free(p);
+ if(cold){efs_kv_lsm_close(kv);DIR *d=opendir(dir);assert(d);struct dirent *e;
+  while((e=readdir(d))){if(e->d_name[0]=='.')continue;char path[512];snprintf(path,sizeof(path),"%s/%s",dir,e->d_name);assert(!unlink(path));}
+  closedir(d);assert(!rmdir(dir));
+ }else efs_kv_mem_free(kv);
+ puts("atomic append: exact single-shard images, guarded conflict/no partial batch, canonical cold replay and revoked floors PASS");
+}
+
 
 int main(void)
-{caught_up(20000,0);caught_up(20000,1);caught_up(EFS_META_APPEND_CATCHUP_MAX,1);completion_batch_gaps();for(int cold=0;cold<2;cold++)for(int owned=0;owned<2;owned++)for(int reverse=0;reverse<2;reverse++)completion_batch(cold,owned,reverse,0);for(int cold=0;cold<2;cold++)completion_batch(cold,1,1,1);for(unsigned v=0;v<3;v++){receipt_capture_race(v,0);receipt_capture_race(v,1);}session_owned_completion(0);session_owned_completion(1);retired_append_receipts(0);retired_append_receipts(1);session_owned_append(0);session_owned_append(1);fenced_completion();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}
+{atomic_reservation(0);atomic_reservation(1);caught_up(20000,0);caught_up(20000,1);caught_up(EFS_META_APPEND_CATCHUP_MAX,1);completion_batch_gaps();for(int cold=0;cold<2;cold++)for(int owned=0;owned<2;owned++)for(int reverse=0;reverse<2;reverse++)completion_batch(cold,owned,reverse,0);for(int cold=0;cold<2;cold++)completion_batch(cold,1,1,1);for(unsigned v=0;v<3;v++){receipt_capture_race(v,0);receipt_capture_race(v,1);}session_owned_completion(0);session_owned_completion(1);retired_append_receipts(0);retired_append_receipts(1);session_owned_append(0);session_owned_append(1);fenced_completion();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}

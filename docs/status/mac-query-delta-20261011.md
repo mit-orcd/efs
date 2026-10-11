@@ -993,3 +993,124 @@ open-unlink, injected deletion failure/retry, cold fold reads, physically
 empty inventory, zero quota and late-PUT fences all pass; owned fixtures
 drain normally (exit 0). Evidence: create-authority-build-unit.txt and
 create-authority-cold-wire.txt. Native timing acceptance follows rollout.
+
+Installed b2c01fa0 still exceeds the unchanged native concurrent CREATE limit
+(25.0 seconds including cleanup). Evidence: native-create-authority.txt.
+The next append candidate uses a single atomic entry only for a registered
+reservation whose complete exact-image plan belongs to one participant shard.
+The leader-selected EOF/receipt and inode/lane/cursor images are preserved;
+replicas check canonical folding, current local epoch/floor, shared/exclusive
+transaction ownership and every expected value before one KV batch. Existing
+cross-shard transactions remain unchanged. Real memory/cold LSM tests pass
+for malformed/truncated wire, guards/conflicts, injected memory-KV batch EIO
+with no partial effect, exact replay after completion/cold cuts and revocation.
+Host tests cover wrong-group refusal, error/offset propagation and local-only
+submission across leadership change. Mac full/cold peer gates remain pending.
+
+Tag 53 is reserved for APPEND_ATOMIC: release integration already uses
+45–51 for packing and reports 52 assigned to another append endpoint. The
+first private unit build used tentative tag 45; it was never deployed or
+logged on installed stores. All subsequent wire gates must use tag 53. This
+adds a log command, so all daemons need support before use and downgrade
+cannot replay it; existing row/store layouts do not change. Evidence:
+atomic-append-build-unit.txt.
+
+Atomic reservation candidate full Mac Linux unit suite passes (exit 0).
+The first private peer gate passes repeats 0–3, then fails repeat 4 after
+cold restart with append EIO/repeated BUSY retries (exit 1). Both client
+mounts and all owned daemons stop normally. Installed service stays on
+b2c01fa0; candidate is not accepted or deployed. Failure evidence remains
+in atomic-append-cold-wire.txt and atomic-append-failure-*.txt; a private
+diagnostic rerun is investigating the stalled stage.
+
+Diagnostic cold rerun initially passed eight races and 800-record handoff
+(66.1 seconds), but a version-sidecar rerun reproduced the failure at race
+6. Private logs prove repeated NOT_PRIMARY (-15), hint 0, on the dual-group
+coordinator while FUSE retries report no usable hint. A single-group leader
+forwards the whole operation back to that coordinator, whose local-only
+atomic proposal redirects again. Atomic eligibility now requires that the
+coordinator itself leads the one participant group with multiple voters;
+follower coordinators retain ordinary forwarded cohorts. Role-change
+submission still returns an exact refusal. Regression covers follower,
+single-voter, unregistered, empty and multiple-participant plans. Version
+sidecars now advance atomically with each input image, and delayed pre-entry
+guards fail STALE; exact replay does not advance versions. Mac wire gates
+for the corrected candidate are running; it remains undeployed. Evidence:
+atomic-append-diag-wire.txt, atomic-append-version-wire.txt and
+atomic-append-version-diagnostics.txt. Temporary diagnostic logging has
+been removed from the source.
+
+Corrected atomic routing private gate passes all eight peer append/truncate
+races (10.5–26.8 seconds), cold restart after four, exact 800-record
+concurrent append handoff (67.9 seconds), physically drained deletion and
+normal client/daemon stop (exit 0). Actual Mac Linux append transaction
+and host/cohort/documentation gates pass. Final complete unit suite is
+running before commit/deployment. Evidence: atomic-append-routing-fixed-wire.txt.
+The earlier failed runs are retained and have not been reclassified.
+
+Final corrected append candidate complete Mac Linux unit suite passes
+(exit 0), including architecture 5/5, after the cold peer wire gate.
+Atomic reservation code is ready for qualified normal Mac rollout; native
+216 acceptance remains open. Evidence: atomic-append-routing-full-unit.txt.
+
+Committed a6885603 was normally rolled to all three Mac daemons and the
+gateway; installed stores were preserved and mounts drained normally.
+Native mtime_monotonic_many_writes passes at 18.8 seconds under the original
+20-second budget. concurrent_creates_same_dir still times out at 20 seconds
+(25.0 including cleanup). Evidence: native-atomic-mtime.txt and
+native-atomic-create.txt. Full native 216 acceptance remains open.
+
+Separate uncommitted FUSE candidate combines first OPEN with exact pending
+CREATE adoption in the existing sequenced lease command. The original
+CREATE object is retained by the OPEN owner through ambiguous replies;
+only exact successful proof marks adoption. Pending cleanup first settles
+OPEN/CLOSE and avoids duplicate CLEAR_PENDING; proven negative OPEN keeps
+ordinary token cleanup. Per-inode stripes serialize that marker, and the
+original 30-second callback budget is retained. Actual helpers test lost
+reply, successful compensation, negative verdict and real pending queue;
+ASAN/UBSAN, Mac Linux OPEN/lease/reply/CREATE/drain tests pass. Private
+cold unique CREATE/rejected descriptor/reclamation gates are running.
+Evidence: create-combined-build-wire.txt.
+
+Combined CREATE private Mac buffered/TCP gates all pass (exit 0):
+1,024 unique files/cold exact bytes, genuine EEXIST and replacements,
+original EEXIST across unlink/cold replay, rejected CREATE/OPEN descriptor
+replies, hardlink/open-unlink lifetime, injected deletion failure and retry,
+zero physical inventory/quota and late-PUT fencing after restart. Owned
+mounts and daemons drain normally. The latest actual helper also covers
+existing local opener fallback; local ASAN/UBSAN and final Mac Linux helper/
+documentation 5/5 pass. Evidence: create-combined-build-wire.txt and
+create-combined-final-tests.txt. Ready for qualified rollout; native timings
+and full 216 acceptance are still pending.
+
+Committed f842cd37 normally rolled to the Mac cluster. Isolated native
+concurrent CREATE passes the original 20-second case budget (24.4 seconds
+including fixture cleanup). Complete unchanged native run is 214/216,
+630.4 seconds: concurrent CREATE and mtime loop still time out; local
+baseline is 216/216, no skipped/notrun cases. These failures remain open.
+Evidence: native-combined-create.txt and native-combined-full-j1.txt.
+Post-suite diagnostic preserves exact 160-file/80-append assertions and
+records inode identities: CREATE work 18.15 seconds (26.67 including extra
+byte-verification reads); even/group-2 append inode 26444 takes 34.11 seconds,
+27.63 in flush/close. Evidence: pre-cover-routing-stages.txt.
+
+Uncommitted coverage-aware routing prefers the operation’s known leader
+only when committed voting masks prove it hosts every required group.
+Identified APPEND and retained CREATE return that hint before mutation/
+allocation; receivers still obtain full fresh authority and exact guards.
+Single-group leaders retain the dual-group coordinator path, closing the
+previously proven redirect-loop hazard. Actual helper tests cover three/
+four-node layouts, committed membership changes, missing/self leaders and
+one-group probes; local ASAN/UBSAN passes. Mac Linux immutable identity/
+append/cohort tests and private cold wire gates are running. No new protocol
+command, deadline change or authority bypass. Installed service remains
+f842cd37. Evidence: cover-routing-build-wire.txt.
+
+Coverage-aware routing candidate passes Mac Linux host/immutable-identity
+regressions and the private buffered/TCP gate (exit 0): original EEXIST
+cold replay, 1,024 unique CREATE exact cold bytes/replacement checks, all
+eight append/truncate races, cold restart after four, exact 800-record
+handoff (100.1 seconds, original 240-second budget), physically drained
+deletions and normal mount/daemon stop. Local ASAN/UBSAN routing tests pass.
+Evidence: cover-routing-build-wire.txt. Ready for qualified Mac rollout;
+the previous 214/216 result remains the current full native acceptance.
