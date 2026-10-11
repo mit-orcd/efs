@@ -8558,6 +8558,11 @@ static void *host_query_thread(void *ctx)
         if (!rc && host_query_cancel(h)) { efs_query_catalog_free(candidate);candidate=NULL;rc=EFS_ERR_BUSY; }
         pthread_rwlock_wrlock(&h->query_lock);
         h->query_error=rc;failed=rc!=EFS_OK;
+        /* A failed disk build can itself exceed the retry interval. Start
+         * its backoff at completion, otherwise a retained invalid namespace
+         * immediately launches another full disk build. Successful refreshes
+         * retain their start-to-start coalescing and pending-age reporting. */
+        if (failed) last_attempt=query_mono_ms();
         if (rc && rc!=EFS_ERR_NOT_PRIMARY && (rc!=last_error || now-last_error_log>=30000)) {
             fprintf(stderr,"query-refresh: rc=%d cap_mib=%llu initial=%d elapsed_ms=%llu\n",
                     rc,(unsigned long long)(catalog_bytes>>20),initial,
