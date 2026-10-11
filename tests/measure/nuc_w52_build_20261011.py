@@ -17,12 +17,15 @@ try:
     if args.variant=='clock':
         assert (base/'data-placement/tests-exit.txt').read_text().strip()=='0'
         if resume_docs:
-            assert src.exists() and not (src/'results').exists()
+            assert src.exists()
+            external=(src/'results').is_symlink()
+            assert external or not (src/'results').exists()
             assert all((out/(phase+'-exit.txt')).read_text().strip()=='0' for phase in ('clean','all'))
             assert (out/'native-exit.txt').read_text().strip()=='2' and (out/'failure.txt').exists()
             log=(out/'native.log').read_text()
             assert 'architecture doc gate: 1/5 checks failed' in log
-            assert 'link target does not exist: ../../results/' in log
+            assert ('link escapes the repo: ../../results/' if external else 'link target does not exist: ../../results/') in log
+            if external:assert (src/'results').resolve()==(base/'batch-src/results').resolve()
             assert 'ok    regen-diff:' in log and 'ok    invariant-refs:' in log and 'ok    single-home:' in log
             assert log.rstrip().endswith('make: *** [Makefile:379: test] Error 1')
         else:assert not src.exists(),'fresh clock source required'
@@ -37,11 +40,22 @@ try:
         assert current==expected,'clock candidate differs from committed core/Makefile'
         (out/'overlay.json').write_text(json.dumps(manifest,indent=2))
         evidence=base/'batch-src/results';assert evidence.is_dir()
-        (src/'results').symlink_to(evidence,target_is_directory=True)
-        (out/'doc-sidecar.json').write_text(json.dumps(dict(path=str(src/'results'),target=str(evidence),core_unchanged=True,resumed_missing_sidecar=resume_docs),indent=2))
+        if (src/'results').is_symlink():
+            assert (src/'results').resolve()==evidence.resolve()
+            (src/'results').unlink()
+        (src/'results').mkdir()
+        # The link checker deliberately rejects paths resolving outside this
+        # checkout. A real directory with hard-linked immutable evidence keeps
+        # that protection and avoids duplicating artifact payloads.
+        subprocess.run(['rsync','-a','--link-dest='+str(evidence),str(evidence)+'/',str(src/'results')+'/'],check=True)
         if resume_docs:
-            retained=out/'doc-sidecar-initial-failure';retained.mkdir()
+            retained=out/('doc-sidecar-external-link-failure' if external else 'doc-sidecar-initial-failure');retained.mkdir()
             for name in ('native.log','native-exit.txt','failure.txt'):(out/name).rename(retained/name)
+            if (out/'doc-sidecar.json').exists():(out/'doc-sidecar.json').rename(retained/'doc-sidecar.json')
+        (out/'doc-sidecar.json').write_text(json.dumps(dict(path=str(src/'results'),source=str(evidence),kind='self-contained hard-linked evidence',core_unchanged=True,resumed_missing_sidecar=resume_docs),indent=2))
+        with (out/'doc-sidecar-check.log').open('w') as log:
+            rc=subprocess.run(['python3','docs/check-architecture.py'],cwd=src,stdout=log,stderr=subprocess.STDOUT,timeout=120).returncode
+        assert rc==0,'self-contained documentation fixture still fails'
     identity='f52cd2dd-nuc' if args.variant=='clock' else '4afc063c-nuc'
     versions=['EFS_GIT_ID='+identity,'EFS_GIT_DESCRIBE='+identity,'EFS_GIT_BRANCH=devel-nuc']
     phases=[('clean',['make','clean']),('all',['make','-j4','all',*versions]),('native',['make','-j4','test',*versions])]
