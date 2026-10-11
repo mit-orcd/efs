@@ -183,6 +183,194 @@
     "bytes": 801,
     "sha256": "b5da57db36e4ee7404f9f322e2cf939e4845c2dd833f0fd74e4c4a69ffe490d2"
   },
+  "clock-linux-focused/fixed-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "clock-linux-focused/fixed.log": {
+    "bytes": 104,
+    "sha256": "2457b1bad2027b800d15601227a008d97a9e8cebf5b1d56a9095e4303da5bb56"
+  },
+  "clock-linux-focused/old-timing-exit.txt": {
+    "bytes": 2,
+    "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+  },
+  "clock-linux-focused/old-timing.log": {
+    "bytes": 600,
+    "sha256": "4b46d1da31b0d01c91b7ac65df0c62e56f7c973ecd193070b2c080dd0a8dd220"
+  },
+  "clock-linux-focused/run-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "clock-linux-focused/scope.json": {
+    "bytes": 205,
+    "sha256": "dfb791d1507fbb8da73189d8ee38025ae0358075aa6455fd3992c06ec59189e7"
+  },
+  "clock-plan/core-expected.json": {
+    "bytes": 15934,
+    "sha256": "48d4df64695e2aab841b6a5ecc459ce5f8c5ffb53e47b25285b862f836fb87e0"
+  },
+  "clock-plan/overlay.json": {
+    "bytes": 241,
+    "sha256": "bbbad363c7ba046567442b3560dd7b4bb152b2afa1729a4c93225deb3cadcd81"
+  },
+  "clock-plan/queued.json": {
+    "bytes": 1477,
+    "sha256": "9b0bf351ac31218217316e58124f73f305436ee59bae15639d46e0b189a050ce"
+  },
+  "data-placement/0-sata/GO": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "data-placement/0-sata/catch-up.json": {
+    "bytes": 1242,
+    "sha256": "5d9a2dae00463914ce2a8d44fdd7688e7313d0f86593477184f4604e5543c87e"
+  },
+  "data-placement/0-sata/cold-verification.json": {
+    "bytes": 4736,
+    "sha256": "d970e611c3155b5e841f9ab856c4aadc3500b5108afb3dbdb46de6fe2903e90a"
+  },
+  "data-placement/0-sata/complete.json": {
+    "bytes": 186,
+    "sha256": "b69ebc0430f4d4e8ab859cd19b0a5359e68bdd583a739b612a4523f8392a9d3c"
+  },
+  "data-placement/0-sata/fuse-cold.log": {
+    "bytes": 237,
+    "sha256": "15d88686424a044ad04866ecb5f2f53920a9eba03ff07c64597a406eb121eaba"
+  },
+  "data-placement/0-sata/fuse.log": {
+    "bytes": 237,
+    "sha256": "15d88686424a044ad04866ecb5f2f53920a9eba03ff07c64597a406eb121eaba"
+  },
+  "data-placement/0-sata/late-profile/callers.txt": {
+    "bytes": 888101,
+    "sha256": "e3f20b968a2ce11b91d1cab2983a31caf49b7b28b1eda9f940aff0bbeea6ac4e"
+  },
+  "data-placement/0-sata/late-profile/flat.txt": {
+    "bytes": 11506,
+    "sha256": "8e04f1ad4404d60d61c31ee3b365c1406a466cb236bda4e679aef0ab128f7b67"
+  },
+  "data-placement/0-sata/late-profile/perf-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "data-placement/0-sata/late-profile/perf.data": {
+    "bytes": 1371928,
+    "sha256": "f71749968093b6e1c280a0efc89be51d79665157e1eda059ee6bea446a49cdeb"
+  },
+  "data-placement/0-sata/late-profile/perf.log": {
+    "bytes": 183,
+    "sha256": "0f3a1aef362b77f1d068040fe6c58a45598953a91ebf2845c2d0afadcedcb46d"
+  },
+  "data-placement/0-sata/late-profile/strace-exit.txt": {
+    "bytes": 4,
+    "sha256": "ca2ebdf97d7469496b1f4b78958f9dc8447efdcb623953fee7b6996b762f6fff"
+  },
+  "data-placement/0-sata/late-profile/strace.log": {
+    "bytes": 4745,
+    "sha256": "a3af36397ea583e741579698b9bc6b4b0deb8aaf8d6a2f51d7113c717a79958f"
+  },
+  "data-placement/0-sata/late-profile/window.json": {
+    "bytes": 464,
+    "sha256": "814010926155e26a90d9f3f75473560e3b4b3a32d2e70307fe09991b23cac355"
+  },
+  "data-placement/0-sata/load-final.json": {
+    "bytes": 7801,
+    "sha256": "d1401a4802c0e9ff817417550b8f7b168ab67962e93f2213a28bd8e3e14073cd"
+  },
+  "data-placement/0-sata/load-start.json": {
+    "bytes": 54,
+    "sha256": "d21da7ed88bf82f46effd7601fa0d1b6110418315965118d9092920fdfe605dc"
+  },
+  "data-placement/0-sata/loader.log": {
+    "bytes": 4784,
+    "sha256": "43ac1e5bfdd55a2ac909bd483f6ef85b8de698cdf88815ade740c6e0850ae49c"
+  },
+  "data-placement/0-sata/mkfs.log": {
+    "bytes": 62,
+    "sha256": "e774c95127a71277b4ed0115d23d3813fa0707f47a4dc51c024055de123c2a45"
+  },
+  "data-placement/0-sata/n1-cold.log": {
+    "bytes": 32863,
+    "sha256": "656fcbcf475281d7537525006f607fcce3036d0205db1fa2827ed6350f68d22a"
+  },
+  "data-placement/0-sata/n1-observations.jsonl": {
+    "bytes": 1154694,
+    "sha256": "cc87f2a9f27653303fdaf46b45583c5de2c5bdfd331ac64a21701c0f1ae32d8f"
+  },
+  "data-placement/0-sata/n1-sync.csv": {
+    "bytes": 163,
+    "sha256": "6dd3f5d7ba4fa50839ef679d452b773d1a49bff40cc5f25d56960f4845f4bce8"
+  },
+  "data-placement/0-sata/n1.log.gz": {
+    "bytes": 171073,
+    "sha256": "4bfbcbaba9533d47000dfa408f22e65f01cb338790c7d4219439ff9621f2b547"
+  },
+  "data-placement/0-sata/n2-cold.log": {
+    "bytes": 23397,
+    "sha256": "58908a6e563df3bc35b32e8ceda17d56a5faf286d30415125d11779068f58b48"
+  },
+  "data-placement/0-sata/n2-observations.jsonl": {
+    "bytes": 1132488,
+    "sha256": "8c556e087555abcaae1e7095c49b47ff1c4450e5c2ed1abf1a619c9f1c31029d"
+  },
+  "data-placement/0-sata/n2-sync.csv": {
+    "bytes": 163,
+    "sha256": "1447e16aa3bfcd2f88223fa27eecdf025f0634b1e7d496f04e923b2c7dcba182"
+  },
+  "data-placement/0-sata/n2.log.gz": {
+    "bytes": 123913,
+    "sha256": "a26663ec2cb1401eedcd454a8bc08d0ce4b46d641e46bdbcfb9822e4e0cd54d9"
+  },
+  "data-placement/0-sata/n3-cold.log": {
+    "bytes": 16519,
+    "sha256": "54e300e3644e7eb8fb301bee38b7cf177ecd18b994e0fb4f3000076533823a0f"
+  },
+  "data-placement/0-sata/n3-observations.jsonl": {
+    "bytes": 1131795,
+    "sha256": "7ea0494c58e88fcf55ae9a0c835a568190a9f7f186c58918a520dcbb606021fa"
+  },
+  "data-placement/0-sata/n3-sync.csv": {
+    "bytes": 163,
+    "sha256": "cdbd4192253cbbc3a97acc032e42db1a8f96effd0a38d0bfaf8c48366ba845b1"
+  },
+  "data-placement/0-sata/n3.log.gz": {
+    "bytes": 123153,
+    "sha256": "69195b2fcf983e26a63bbea119a14a6f6b26eba060afbc0e3a1ef0c9cf65ad2a"
+  },
+  "data-placement/0-sata/placement.json": {
+    "bytes": 555894,
+    "sha256": "00c28fe468c80367aa4050b6806d6c72a6ba4ff7e927465db222f1d7243feff7"
+  },
+  "data-placement/0-sata/progress.jsonl": {
+    "bytes": 102734,
+    "sha256": "122087c83507acbfafec1a9700d4946b25a259a5b8b40416bb9f23bfcdae150e"
+  },
+  "data-placement/0-sata/ready.json": {
+    "bytes": 21,
+    "sha256": "b2a145ca9bbe7837cfc413b005352cc1685aeb3c29319eb697b4afb3691234cd"
+  },
+  "data-placement/0-sata/samples.jsonl": {
+    "bytes": 1785150,
+    "sha256": "f2bba1c0361ce90ed7645f99fe200fc9ab1e084eb413f47db0e23f4c3034021a"
+  },
+  "data-placement/0-sata/storage-placement.json": {
+    "bytes": 470,
+    "sha256": "379081e0d75f428f7d4216bce15bb11805bae19aed8c74346aca26ff3c2c3ecf"
+  },
+  "data-placement/0-sata/sync-control.json": {
+    "bytes": 806,
+    "sha256": "a77d114d99d0a956f5b1ce32881001b40d5d4e0821486752755782640ba02f97"
+  },
+  "data-placement/identity.json": {
+    "bytes": 1167,
+    "sha256": "fea39392d621f9536991c9f21a2532a7a5a1670e4384b03251c90b3d89356ce9"
+  },
+  "data-placement/summary.json": {
+    "bytes": 51474,
+    "sha256": "0e6783bc786a0ab8c381c743dd382160df3c32662ef3fa95f2c55d42451d538b"
+  },
   "direct-fixture-timeout/append-burst-peer-fuse.log": {
     "bytes": 847,
     "sha256": "2905d88b157b58d0b3e4f347137449231ee08410e86228810b77b0e311ecd12d"

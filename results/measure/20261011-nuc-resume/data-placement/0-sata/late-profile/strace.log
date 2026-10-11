@@ -1,0 +1,119 @@
+strace: Process 53436 attached with 30 threads
+strace: Process 53447 attached with 23 threads
+strace: Process 53459 attached with 22 threads
+strace: pid 53663: entering, ptrace_syscall_info.op == 2
+strace: pid 53660: entering, ptrace_syscall_info.op == 2
+strace: Process 54389 attached
+strace: Process 54391 attached
+strace: Process 54393 attached
+strace: Process 54395 attached
+strace: Process 54397 attached
+strace: Process 54399 attached
+strace: Process 53440 detached
+strace: Process 53443 detached
+strace: Process 53472 detached
+strace: Process 53473 detached
+strace: Process 53477 detached
+strace: Process 53649 detached
+strace: Process 53657 detached
+strace: Process 53659 detached
+strace: Process 53666 detached
+strace: Process 53452 detached
+strace: Process 53455 detached
+strace: Process 53475 detached
+strace: Process 53476 detached
+strace: Process 53531 detached
+strace: Process 53465 detached
+strace: Process 53468 detached
+strace: Process 53474 detached
+strace: Process 53478 detached
+strace: Process 53678 detached
+strace: Process 53692 detached
+strace: Process 53675 detached
+strace: Process 53668 detached
+strace: Process 53663 detached
+strace: Process 53662 detached
+strace: Process 53483 detached
+strace: Process 53481 detached
+strace: Process 53470 detached
+strace: Process 53469 detached
+strace: Process 53467 detached
+strace: Process 53466 detached
+strace: Process 53464 detached
+strace: Process 53463 detached
+strace: Process 53462 detached
+strace: Process 53459 detached
+strace: Process 53721 detached
+strace: Process 53685 detached
+strace: Process 53677 detached
+strace: Process 53676 detached
+strace: Process 53667 detached
+strace: Process 53530 detached
+strace: Process 53664 detached
+strace: Process 53661 detached
+strace: Process 53485 detached
+strace: Process 53480 detached
+strace: Process 53461 detached
+strace: Process 53457 detached
+strace: Process 53456 detached
+strace: Process 53454 detached
+strace: Process 53453 detached
+strace: Process 53451 detached
+strace: Process 53450 detached
+strace: Process 53449 detached
+strace: Process 53447 detached
+strace: Process 53843 detached
+strace: Process 53693 detached
+strace: Process 53665 detached
+strace: Process 53660 detached
+strace: Process 53654 detached
+strace: Process 53651 detached
+strace: Process 53532 detached
+strace: Process 53518 detached
+strace: Process 53484 detached
+strace: Process 53482 detached
+strace: Process 53479 detached
+strace: Process 53460 detached
+strace: Process 53448 detached
+strace: Process 53445 detached
+strace: Process 53444 detached
+strace: Process 53442 detached
+strace: Process 53441 detached
+strace: Process 53439 detached
+strace: Process 53438 detached
+strace: Process 53437 detached
+strace: Process 53436 detached
+strace: Process 53720 detached
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 38.31  195.926806         770    254138     23936 futex
+ 37.68  192.709462         519    370675           recvfrom
+ 10.40   53.188842       36331      1464           clock_nanosleep
+  8.19   41.896816         906     46226           poll
+  1.09    5.568818          45    123621           writev
+  0.76    3.886032          51     75151           write
+  0.71    3.639091         163     22217           fdatasync
+  0.56    2.869550          36     79693           setsockopt
+  0.50    2.562848          72     35320           fsync
+  0.40    2.069998          51     40025      4704 openat
+  0.37    1.905174          41     46075           read
+  0.34    1.748239          49     35328           close
+  0.32    1.618458      124496        13         1 restart_syscall
+  0.21    1.066410          42     24855           pwrite64
+  0.10    0.505907          71      7059      2355 mkdir
+  0.02    0.093455          39      2370           fstat
+  0.01    0.063340          44      1417           madvise
+  0.01    0.032648          40       797           sched_yield
+  0.00    0.015334          42       365           pread64
+  0.00    0.001395         232         6           clone3
+  0.00    0.001026          42        24           rt_sigprocmask
+  0.00    0.000974          40        24           fcntl
+  0.00    0.000422          46         9           mprotect
+  0.00    0.000307          51         6           accept
+  0.00    0.000287          47         6           rseq
+  0.00    0.000245          40         6           set_robust_list
+  0.00    0.000244          81         3           fallocate
+  0.00    0.000222          74         3           rename
+  0.00    0.000126          42         3           getpid
+------ ----------- ----------- --------- --------- ----------------
+100.00  511.372475         438   1166899     30996 total
