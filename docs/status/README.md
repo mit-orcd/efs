@@ -36,6 +36,10 @@ unimplemented; unavailable/refusal tests are not lifecycle acceptance.
 
 ## Release correctness review
 
+[Private legacy find cleanup](private-find-cleanup-20261011.md) removes the
+uncalled parser/renderer chain while preserving active query/stats authorization.
+Focused callback/routing/authority gates pass; merged Linux acceptance is pending.
+
 [Recorder shutdown ownership](recorder-stop-20261011.md) fixes signaling after reap
 and ECHILD across the profiling stop paths. Stubbed lifecycle/failure tests pass;
 real Linux recorder and full merged acceptance remain pending.

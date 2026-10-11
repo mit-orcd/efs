@@ -217,7 +217,6 @@ struct stats_ent {
     char text[EFS_STATS_TEXT];
 };
 
-
 static uint64_t stats_now_ms(void)
 {
     struct timespec ts;
@@ -416,8 +415,6 @@ static int name_is_reserved(const char *name)
     (void)name;
     return 0; /* Legacy names are ordinary user entries; .efs collisions win. */
 }
-
-enum find_match { FIND_EXACT, FIND_PREFIX, FIND_SUFFIX, FIND_SUBSTR };
 
 /* Canonical absolute mountpoint, set once in main. .find results are rendered
  * as host-absolute paths (mountpoint + fs-root path) so they can be piped or
@@ -904,81 +901,6 @@ static void ll_inval_stop(void)
     g_inval.started = 0;
 }
 
-struct find_out {
-    char *buf;
-    size_t cap;
-    size_t len;
-};
-
-static int find_out_add(struct find_out *o, const char *prefix, const char *rel)
-{
-    size_t pl = strlen(prefix), rl = strlen(rel);
-    int slash = (pl > 0 && prefix[pl - 1] != '/' && rel[0] != '/');
-    size_t need = pl + (slash ? 1 : 0) + rl + 1; /* newline */
-
-    /* The legacy newline format cannot represent literal newline names.
-     * Fail explicitly until a versioned escaped output is introduced. */
-    if (strchr(rel, '\n') || strchr(prefix, '\n')) return -EILSEQ;
-    if (need > (16u << 20) || o->len > (16u << 20) - need - 1)
-        return -EOVERFLOW;
-    if (o->len + need + 1 > o->cap) {
-        size_t ncap = o->cap ? o->cap * 2 : 4096;
-        while (ncap < o->len + need + 1)
-            ncap *= 2;
-        char *nb = realloc(o->buf, ncap);
-        if (!nb)
-            return EFS_ERR_NOMEM;
-        o->buf = nb;
-        o->cap = ncap;
-    }
-    memcpy(o->buf + o->len, prefix, pl);
-    o->len += pl;
-    if (slash)
-        o->buf[o->len++] = '/';
-    memcpy(o->buf + o->len, rel, rl);
-    o->len += rl;
-    o->buf[o->len++] = '\n';
-    o->buf[o->len] = '\0';
-    return 0;
-}
-
-/* Parse a .find query. Strips trailing whitespace/newline; extracts the
- * leading/trailing '*' and the literal term. Returns 0 on success, -EINVAL if
- * the literal term is shorter than EFS_FIND_MIN_TERM or has an interior '*'. */
-static int __attribute__((unused)) find_parse_query(const char *q, size_t qlen, enum find_match *type,
-                            char *term, size_t *term_len)
-{
-    while (qlen > 0 &&
-           (q[qlen - 1] == '\n' || q[qlen - 1] == '\r' ||
-            q[qlen - 1] == ' ' || q[qlen - 1] == '\t'))
-        qlen--;
-    if (qlen == 0 || qlen >= EFS_MAX_NAME)
-        return -EINVAL;
-    int lead = (q[0] == '*');
-    int trail = (qlen > 1 && q[qlen - 1] == '*');
-    size_t ts = lead ? 1 : 0;
-    size_t te = trail ? qlen - 1 : qlen;
-    size_t tl = (te > ts) ? te - ts : 0;
-    if (tl < EFS_FIND_MIN_TERM)
-        return -EINVAL;
-    for (size_t i = ts; i < te; i++) {
-        if (q[i] == '*')
-            return -EINVAL;
-    }
-    memcpy(term, q + ts, tl);
-    term[tl] = '\0';
-    *term_len = tl;
-    if (lead && trail)
-        *type = FIND_SUBSTR;
-    else if (trail)
-        *type = FIND_PREFIX;
-    else if (lead)
-        *type = FIND_SUFFIX;
-    else
-        *type = FIND_EXACT;
-    return 0;
-}
-
 static int efs_rc_to_errno(int rc);
 static int check_access(const struct efs_inode *ino, uid_t uid, gid_t gid, int mask);
 static int virtual_access(efs_ino_t ino)
@@ -988,37 +910,6 @@ static int virtual_access(efs_ino_t ino)
     if (rc != EFS_OK) return efs_rc_to_errno(rc);
     const struct fuse_ctx *ctx = ll_ctx();
     return ctx ? check_access(&row, ctx->uid, ctx->gid, R_OK | X_OK) : 0;
-}
-
-/* Query immutable server name indexes. Only path rendering happens locally. */
-static int __attribute__((unused)) find_run_query(efs_ino_t dir_ino,
-                          enum find_match type,const char *term,size_t term_len,
-                          char **out_text,int *out_len,size_t *out_cap)
-{
-    (void)term_len;
-    struct efs_msg_query_snapshot req;
-    memset(&req,0,sizeof(req));req.version=EFS_QUERY_VERSION;
-    req.operation=EFS_QUERY_FIND;req.root=dir_ino;req.match=(uint32_t)type;
-    req.max_output=EFS_QUERY_MAX_OUTPUT;req.visit_budget=EFS_QUERY_MAX_VISITS;
-    snprintf(req.term,sizeof(req.term),"%s",term);
-    int rc=query_credentials(&req);
-    if (rc) return rc;
-    struct efs_msg_query_snapshot_reply reply;char *relative=NULL;
-    rc=efs_client_rpc_query_snapshot(&req,&reply,&relative);
-    if (rc) return rc;
-    struct find_out out={0};
-    const char *prefix=g_mountpoint;
-    char *next=relative,*limit=relative+reply.text_len;
-    while (next<limit) {
-        char *newline=memchr(next,'\n',(size_t)(limit-next));
-        if (!newline) { rc=EFS_ERR_PROTO;break; }
-        *newline=0;rc=find_out_add(&out,prefix,next);if (rc) break;
-        next=newline+1;
-    }
-    free(relative);
-    if (rc) { free(out.buf);return rc; }
-    if (!out.buf) { out.buf=calloc(1,1);if (!out.buf) return EFS_ERR_NOMEM; }
-    *out_text=out.buf;*out_len=(int)out.len;*out_cap=out.cap ? out.cap : 1;return EFS_OK;
 }
 
 /* Rendered bytes shared by lookup/getattr/open while immutable per-open
