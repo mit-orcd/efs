@@ -2106,6 +2106,16 @@ next rollout. No cluster rollout or artifact cleanup in this follow-up.
 
 ## W42 · df / efs-mgmt status report the 3-node capacity model on any node count (queue row 2a)
 
+**October 11 ORCD correction:** unlimited stores formerly reported zero capacity
+and skipped files-engine usage accounting. STATUS now carries deduplicated
+filesystem capacity/free bytes, shared by FUSE and management; the portal accepts
+TiB. Native-RDMA unlimited-store and guarded-session reclamation gates pass.
+See [capacity and test evidence](../status/orcd-capacity-tests-20261011.md).
+Live ORCD deployment confirms nonzero matching capacity, preservation of the
+100 GiB file samples, 1526 live POSIX passes and 264 peer passes. Other W42
+protection-debt/repair gates remain open.
+
+
 **Gate follow-up (Oct 7):** NUC full-node gate: one member limited to 64 KiB, 32 MiB write, cold remount bytes, physical deletion and restart all pass. This does not prove three-fragment protection debt/repair or the named 19810 capacity gate. See [gate ledger](../status/gate-30-rounds-20261007.md).
 
 **Current state, reviewed Oct 7.** Both FUSE statfs and management status
@@ -2120,7 +2130,7 @@ third fragment. Trace and validate protection debt/repair before closing W42.
 [Evidence and limits](../archive/queue-review-20261007-round2.md).
 
 
-**W42 · `df` / `efs-mgmt status` report the 3-node capacity model on any node count** (Oct 1 2026, user). **IN TREE Oct 2:** `efs_capacity_logical` (placement.c, binary search on the Σ min(cᵢ, M) ≥ 3M bound), used by `efs_fuse_statfs` (total = quotas, avail = room, used = total − avail) and `efs-mgmt status`; `test_placement` covers 3 equal / 4 equal / 100/100/1000 → 200 / 6 equal / < 3 nodes → 0. Still to do: verify on 19810 (`df` vs `4 × 36T × 2/3`) and the one-QUOTA-member PUT question
+**W42 · `df` / `efs-mgmt status` report the 3-node capacity model on any node count** (Oct 1 2026, user). **IN TREE Oct 2:** `efs_capacity_logical` (placement.c, binary search on the Σ min(cᵢ, M) ≥ 3M bound), used by `efs_fuse_statfs` (filesystem capacity and available bytes, optionally quota-bounded; used = total − avail) and `efs-mgmt status`; `test_placement` covers 3 equal / 4 equal / 100/100/1000 → 200 / 6 equal / < 3 nodes → 0. Still to do: verify on 19810 (`df` vs `4 × 36T × 2/3`) and the one-QUOTA-member PUT question
 
 **Follow-up steps.** mechanical: replace `total_logical = 2 × min_quota` (`efs_fuse_statfs`, `efs_fuse.c:3108–3120`) and `usable_cap = 2 × min_quota` / `usable_free = 2 × min_free` (`efs_mgmt.c:129–185`) with the 3-of-N placement bound: the largest `M` (chunks) with `Σ_i min(c_i, M) ≥ 3M`, `c_i` = node `i`'s quota (or free) in 64 KiB fragments, times 128 KiB; count only up nodes with a quota, as today. Reduces to `2 × min` on three nodes and to `Σ × 2/3` on N equal nodes. Also make `f_blocks` and the used figure come from the same model (statfs today derives used from `Σ phys × 2/3` and total from `2 × min`, so on four nodes used can exceed total and `avail` clamps to 0 while writes still succeed). Unit test with 3 equal, 4 equal, 3 unequal (100/100/1000 → 200, not 800). Then verify on 19810 (`df` vs `efs-mgmt status` vs `4 × 36T × 2/3`)
 

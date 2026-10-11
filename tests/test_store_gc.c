@@ -20,9 +20,10 @@ static int gc_unlink(const char*p){if(fault==4){errno=EACCES;return -1;}return u
 #undef pread
 #undef unlink
 #undef fsync
-int main(void){
+int main(int argc,char **argv){
+ assert(argc==1 || (argc==2 && !strcmp(argv[1],"unlimited")));
  char a[]="/tmp/efs-gc-a-XXXXXX",b[]="/tmp/efs-gc-b-XXXXXX";assert(mkdtemp(a)&&mkdtemp(b));
- struct efsd_server s={.id=1,.node_count=1,.storage_path_count=2,.quota=1ull<<30};
+ struct efsd_server s={.id=1,.node_count=1,.storage_path_count=2,.quota=argc==2?0:1ull<<30};
  pthread_mutex_init(&s.lock,NULL);s.nodes[0].id=1;strcpy(s.storage_paths[0],a);strcpy(s.storage_paths[1],b);strcpy(s.storage_path,a);
  struct efs_export ex={.id=1,.chunk_size=EFS_DEFAULT_CHUNK_SIZE};
  uint8_t *body;assert(!posix_memalign((void**)&body,4096,EFS_FRAGMENT_SIZE));memset(body,0x61,EFS_FRAGMENT_SIZE);
