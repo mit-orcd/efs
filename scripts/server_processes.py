@@ -73,7 +73,7 @@ def retire(pid,kind,value,expected=None,timeout=60):
         if identity(pid) != before:
             print(f'PID {pid} changed identity; process retained',flush=True)
             return
-        print(f'Stopping owned {'perf' if kind=='perf' else 'efsd'} PID {pid} ({kind} {value})',flush=True)
+        print(f"Stopping owned {'perf' if kind=='perf' else 'efsd'} PID {pid} ({kind} {value})",flush=True)
         try:signal.pidfd_send_signal(fd,signal.SIGINT if kind=='perf' else signal.SIGTERM)
         except ProcessLookupError:return
         poll=select.poll();poll.register(fd,select.POLLIN)
