@@ -12,7 +12,8 @@ code=r'''
 #include <assert.h>
 #include <stdio.h>
 struct efs_raft_host { struct efs_kv *kv; };
-static int read_rc,decision_rc,reads,gets;
+static int read_rc,decision_rc,reads,gets,hosted=1;
+static int host_hosts(struct efs_raft_host *h,uint8_t group){(void)h;(void)group;return hosted;}
 static int host_read_index(struct efs_raft_host *h,uint8_t group,int *hint) {
  (void)h;(void)group;(void)hint;reads++;return read_rc;
 }
@@ -30,6 +31,8 @@ int main(void) {
  read_rc=EFS_OK;decision_rc=EFS_ERR_NOT_FOUND;
  assert(host_txn_coord(&host,&id,1,&decision)==EFS_ERR_NOT_FOUND && gets==1);
  decision_rc=EFS_OK;assert(!host_txn_coord(&host,&id,1,&decision) && decision==1 && gets==2 && reads==5);
+ hosted=0;gets=reads=0;decision=0;
+ assert(host_txn_coord(&host,&id,1,&decision)==EFS_ERR_NOT_PRIMARY && !gets && !reads && !decision);
  puts("transaction coordinator: failed quorum authority never becomes decision absence PASS");
 }
 '''

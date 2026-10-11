@@ -1022,7 +1022,7 @@ static int ask_coord(efs_txn_coord_fn coord, void *ctx, const struct efs_txid *t
         return EFS_OK;
     }
     if (rc != EFS_OK)
-        return rc == EFS_ERR_BUSY ? EFS_ERR_BUSY : EFS_ERR_IO;
+        return (rc == EFS_ERR_BUSY || rc == EFS_ERR_NOT_PRIMARY) ? rc : EFS_ERR_IO;
     return EFS_OK;
 }
 

@@ -50,7 +50,7 @@ static int coord_ok(void *user, const struct efs_txid *t, uint32_t shard,
     struct kvs *k = user;
 
     if (k->fail)
-        return k->fail == 2 ? EFS_ERR_BUSY : EFS_ERR_IO;
+        return k->fail == 2 ? EFS_ERR_BUSY : k->fail == 3 ? EFS_ERR_NOT_PRIMARY : EFS_ERR_IO;
     return efs_txn_decision_get(k->kv, shard, t, dec);
 }
 
@@ -136,6 +136,10 @@ static void test_i9(void)
     n = sizeof(got);
     CHECK(efs_txn_read(kv, key, klen, coord_ok, &ctx, got, &n) == EFS_ERR_BUSY,
           "fresh quorum pending is retryable, never absence or old bytes");
+    ctx.fail = 3;
+    n = sizeof(got);
+    CHECK(efs_txn_read(kv, key, klen, coord_ok, &ctx, got, &n) == EFS_ERR_NOT_PRIMARY,
+          "foreign coordinator redirects without exposing old bytes");
     efs_kv_mem_free(kv);
 }
 

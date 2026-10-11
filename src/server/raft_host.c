@@ -5451,6 +5451,10 @@ static int host_txn_coord(void *user, const struct efs_txid *t,
     if (!h || !h->kv || !t || !dec)
         return EFS_ERR_IO;
     group = efs_raft_shard_group(coord_shard);
+    /* An intent may name a coordinator on the other group. The read RPC
+     * must route to a dual host; a missing local decision is not absence. */
+    if (!host_hosts(h, group))
+        return EFS_ERR_NOT_PRIMARY;
     rc = host_read_index(h, group, &hint);
     if (rc != EFS_OK)
         /* A pending fresh quorum is retryable, never decision absence.
@@ -10076,6 +10080,14 @@ void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)
         p1 = now_us_();
     if (rc == EFS_OK)
         rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
+    if (rc == EFS_ERR_NOT_PRIMARY &&
+        (!host_hosts(h, EFS_RAFT_GROUP_SHARD) ||
+         !host_hosts(h, EFS_RAFT_GROUP_SHARD2))) {
+        uint8_t need[2];
+        host_need_both(need);
+        host_fwd_getattr(h, ino, out, need, 2);
+        return;
+    }
     set_inode_rc(out, rc, hint);
     if (rc == EFS_OK)
         stat_to_inode(&st, &out->inode);
@@ -10619,6 +10631,14 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
         rc = efs_meta_apply_getattr(h->kv, dent.ino, host_txn_coord, h, &st);
     if (found_dentry && rc == EFS_ERR_NOT_FOUND)
         rc = EFS_ERR_BUSY; /* retry the complete name lookup across replacement */
+    if (rc == EFS_ERR_NOT_PRIMARY &&
+        (!host_hosts(h, EFS_RAFT_GROUP_SHARD) ||
+         !host_hosts(h, EFS_RAFT_GROUP_SHARD2))) {
+        uint8_t need[2];
+        host_need_both(need);
+        host_fwd_lookup(h, parent, name, out, need, 2);
+        return;
+    }
     set_inode_rc(out, rc, hint);
     if (rc == EFS_OK) {
         stat_to_inode(&st, &out->inode);
@@ -16162,6 +16182,14 @@ void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32
         }
         out->count++;
     }
+    if (rc == EFS_ERR_NOT_PRIMARY &&
+        (!host_hosts(h, EFS_RAFT_GROUP_SHARD) ||
+         !host_hosts(h, EFS_RAFT_GROUP_SHARD2))) {
+        uint8_t need[2];
+        host_need_both(need);
+        host_fwd_getchunks(h, export_id, ino, start, max, generation, out, need, 2);
+        return;
+    }
     out->status = rc_to_inode_status(rc);
     out->primary_id = (hint >= 0) ? (efs_node_id_t)(hint + 1) : 0;
     t1 = now_ns();
@@ -16285,6 +16313,14 @@ void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
     out->next_src = cur.src;
     out->next_done = cur.done ? 1 : 0;
     strncpy(out->next_name, cur.name, EFS_MAX_NAME - 1);
+    if (rc == EFS_ERR_NOT_PRIMARY &&
+        (!host_hosts(h, EFS_RAFT_GROUP_SHARD) ||
+         !host_hosts(h, EFS_RAFT_GROUP_SHARD2))) {
+        uint8_t need[2];
+        host_need_both(need);
+        host_fwd_readdir(h, parent, max_ents, after_src, after_name, out, need, 2);
+        return;
+    }
     if (rc == EFS_OK)
         out->status = EFS_INODE_RPC_OK;
     else {
@@ -16348,6 +16384,14 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
         rc = efs_meta_apply_get_inode(h->kv, cur, &row);
     if (rc == EFS_OK && *p == '\0') {
         rc = efs_meta_apply_getattr(h->kv, cur, host_txn_coord, h, &st);
+        if (rc == EFS_ERR_NOT_PRIMARY &&
+            (!host_hosts(h, EFS_RAFT_GROUP_SHARD) ||
+             !host_hosts(h, EFS_RAFT_GROUP_SHARD2))) {
+            uint8_t need[2];
+            host_need_both(need);
+            host_fwd_lookup_path(h, start, path, out, need, 2);
+            return;
+        }
         set_inode_rc((struct efs_msg_inode_reply *)out, rc, hint);
         if (rc == EFS_OK)
             stat_to_inode(&st, &out->inode);
@@ -16431,6 +16475,14 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
         }
         if (rc == EFS_OK)
             rc = efs_meta_apply_getattr(h->kv, cur, host_txn_coord, h, &st);
+    }
+    if (rc == EFS_ERR_NOT_PRIMARY &&
+        (!host_hosts(h, EFS_RAFT_GROUP_SHARD) ||
+         !host_hosts(h, EFS_RAFT_GROUP_SHARD2))) {
+        uint8_t need[2];
+        host_need_both(need);
+        host_fwd_lookup_path(h, start, path, out, need, 2);
+        return;
     }
     set_inode_rc((struct efs_msg_inode_reply *)out, rc, hint);
     if (rc == EFS_OK) {
