@@ -8798,12 +8798,14 @@ static int query_consume(void *ctx,const struct efs_server_query_view *view,int 
 }
 /* Startup capability is a local ceiling. Durable export policy is resolved
  * through current authority and also gates raw query RPCs and continuations. */
-uint32_t server_raft_host_query_features(void)
+int server_raft_host_query_features_checked(uint32_t *mask)
 {
-    uint32_t mask=0;
-    if(!g_host || !g_host->query_enabled || !g_host->query_started ||
-       host_query_policy_authority(&mask))return 0;
-    return mask;
+    if (!mask) return EFS_ERR_INVAL;
+    *mask=0;
+    if (!g_host) return EFS_ERR_BUSY;
+    if (!g_host->query_enabled) return EFS_OK; /* Authoritative local ceiling. */
+    if (!g_host->query_started) return EFS_ERR_BUSY;
+    return host_query_policy_authority(mask);
 }
 int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,const struct efs_query_filters *filters,void **out,uint32_t *len)
 {

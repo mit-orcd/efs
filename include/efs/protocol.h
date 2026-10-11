@@ -382,6 +382,7 @@ struct efs_msg_raft_status_reply {
 /* GET_FEATURES reply: the export's current feature mask. */
 #define EFS_FEATURES_OK        0
 #define EFS_FEATURES_NOT_FOUND 1
+#define EFS_FEATURES_UNAVAILABLE 2
 struct efs_msg_features_reply {
     uint32_t features;
     uint8_t status; /* EFS_FEATURES_* */
