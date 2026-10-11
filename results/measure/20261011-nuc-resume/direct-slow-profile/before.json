@@ -1,0 +1,44 @@
+{
+  "utc": "2026-10-11T17:52:30Z",
+  "monotonic": 6208.838439898,
+  "processes": [
+    {
+      "pid": 48520,
+      "kind": "efsd",
+      "cmd": "/data1/efs/devel-nuc-20261011/batch-src/efsd --node-id 1 --addr 127.0.0.1 --port 26590 --storage /data1/efs/gc-direct-xl1o4ncu/n1 --quota 1G --direct-io "
+    },
+    {
+      "pid": 48532,
+      "kind": "efsd",
+      "cmd": "/data1/efs/devel-nuc-20261011/batch-src/efsd --node-id 2 --addr 127.0.0.1 --port 26591 --storage /data1/efs/gc-direct-xl1o4ncu/n2 --quota 1G --direct-io --join 127.0.0.1:26590 "
+    },
+    {
+      "pid": 48544,
+      "kind": "efsd",
+      "cmd": "/data1/efs/devel-nuc-20261011/batch-src/efsd --node-id 3 --addr 127.0.0.1 --port 26592 --storage /home/efs/gc-direct-xbc8jksb/n3 --quota 1G --direct-io --join 127.0.0.1:26590 "
+    },
+    {
+      "pid": 48565,
+      "kind": "efsd",
+      "cmd": "/data1/efs/devel-nuc-20261011/batch-src/efsd --node-id 4 --addr 127.0.0.1 --port 26593 --storage /home/efs/gc-direct-xbc8jksb/n4 --quota 1G --direct-io --join 127.0.0.1:26590 "
+    },
+    {
+      "pid": 48642,
+      "kind": "efs-fuse",
+      "cmd": "/data1/efs/devel-nuc-20261011/batch-src/efs-fuse 127.0.0.1:26590 default /data1/efs/mnt -f "
+    },
+    {
+      "pid": 49687,
+      "kind": "efs-fuse",
+      "cmd": "/data1/efs/devel-nuc-20261011/batch-src/efs-fuse 127.0.0.1:26590 default /data1/efs/mnt2 -f "
+    }
+  ],
+  "diskstats": " 259       0 nvme0n1 735453 2032 46914763 136447 5618476 67369 92164642 11979603 0 3470923 17644917 0 0 0 0 2473566 5528866\n 259       1 nvme0n1p1 198 1180 15614 36 3 0 10 14 0 33 50 0 0 0 0 0 0\n 259       2 nvme0n1p2 189 0 8372 36 20 8 4304 43 0 75 80 0 0 0 0 0 0\n 259       3 nvme0n1p3 734922 852 46884273 136355 5618452 67361 92160328 11979545 1 3748643 12115901 0 0 0 0 0 0\n   8       0 sda 721485 844 52496721 281997 5665083 15804 71470248 648405 0 522447 930403 0 0 0 0 0 0\n 253       0 dm-0 68844 0 2910490 24066 171049 0 3446963 191158 0 230086 215224 0 0 0 0 0 0\n 253       1 dm-1 98 0 4192 19 0 0 0 0 0 8 19 0 0 0 0 0 0\n 253       2 dm-2 666590 0 43966535 110363 5513866 0 88713365 12122174 1 3667707 12232537 0 0 0 0 0 0\n",
+  "meminfo": "MemTotal:       32475112 kB\nMemFree:         9843840 kB\nMemAvailable:   15014980 kB\nBuffers:              12 kB\nCached:           651368 kB\nSwapCached:            0 kB\nActive:           942728 kB\nInactive:         648132 kB\nActive(anon):     797944 kB\nInactive(anon):   165404 kB\nActive(file):     144784 kB\nInactive(file):   482728 kB\nUnevictable:       18616 kB\nMlocked:               0 kB\nSwapTotal:             0 kB\nSwapFree:              0 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               792 kB\nWriteback:             0 kB\nAnonPages:        953136 kB\nMapped:            59564 kB\nShmem:             24092 kB\nKReclaimable:    5015064 kB\nSlab:            6125384 kB\nSReclaimable:    5015064 kB\nSUnreclaim:      1110320 kB\nKernelStack:       14416 kB\nPageTables:        17308 kB\nSecPageTables:      4152 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:    16237556 kB\nCommitted_AS:    4949180 kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:       60768 kB\nVmallocChunk:          0 kB\nPercpu:             4288 kB\nHardwareCorrupted:     0 kB\nAnonHugePages:    258048 kB\nShmemHugePages:    12288 kB\nShmemPmdMapped:        0 kB\nFileHugePages:         0 kB\nFilePmdMapped:         0 kB\nCmaTotal:              0 kB\nCmaFree:               0 kB\nUnaccepted:            0 kB\nBalloon:               0 kB\nHugePages_Total:       0\nHugePages_Free:        0\nHugePages_Rsvd:        0\nHugePages_Surp:        0\nHugepagesize:       2048 kB\nHugetlb:               0 kB\nDirectMap4k:      184572 kB\nDirectMap2M:     4671488 kB\nDirectMap1G:    28311552 kB\n",
+  "raft": {
+    "26590": "node 1 root=1 salt=16483761539212287322 groups=2\n  group 0 hosted=1 role=LEADER leader=0 term=44 commit=61447 applied=61447 voters=0x7 joint=0\n  group 2 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0xe joint=0\n",
+    "26591": "node 2 root=1 salt=16483761539212287322 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=0 term=44 commit=61449 applied=61449 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=2 term=25 commit=54484 applied=54484 voters=0xe joint=0\n",
+    "26592": "node 3 root=1 salt=16483761539212287322 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=0 term=44 commit=61447 applied=61447 voters=0x7 joint=0\n  group 2 hosted=1 role=LEADER leader=2 term=25 commit=54484 applied=54484 voters=0xe joint=0\n",
+    "26593": "node 4 root=0 salt=16483761539212287322 groups=2\n  group 0 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=2 term=25 commit=54484 applied=54484 voters=0xe joint=0\n"
+  }
+}

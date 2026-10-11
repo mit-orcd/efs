@@ -39,6 +39,10 @@ try:
         'batch-live/full-direct-exit.txt','batch-live/full-buffered-exit.txt'):
         assert (base/relative).read_text().strip()=='0',relative
     images=json.loads((base/'batch-build/images.json').read_text());verify_images(src,images)
+    built=json.loads((base/'batch-build/source-sha256.json').read_text())
+    core={name:value for name,value in built.items() if name.startswith(('src/','include/')) and Path(name).suffix in ('.c','.h')}
+    current={str(p.relative_to(src)):digest(p) for folder in ('src','include') for p in (src/folder).rglob('*') if p.suffix in ('.c','.h')}
+    assert current==core,'candidate core changed since clean/native acceptance'
     old=json.loads((base/'deployment-20261011/installed-images.json').read_text());verify_images(dst,old)
     before=samples();assert Path('/data1/efs/.mkfs-done').is_file()
     run('source-backup',['tar','-czf',out/'old-source.tar.gz','--exclude=./results',
@@ -57,6 +61,8 @@ try:
     changed=True
     run('install',['rsync','-a','--exclude=/results/','--exclude=/.git/',str(src)+'/',str(dst)+'/'])
     verify_images(dst,images);start('start');samples()
+    (out/'installed-source-sha256.json').write_text(json.dumps({str(p.relative_to(dst)):digest(p)
+        for folder in ('src','include','tests') for p in (dst/folder).rglob('*') if p.suffix in ('.c','.h','.py')},indent=2))
     processes=[]
     for proc in Path('/proc').iterdir():
         if not proc.name.isdigit():continue

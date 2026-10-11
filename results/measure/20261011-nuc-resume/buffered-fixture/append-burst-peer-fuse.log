@@ -1,0 +1,14 @@
+2026-10-11T17:29:58.919Z efs-fuse 4afc063c-nuc (branch devel-nuc, built 2026-10-11T17:10:20Z on nuc), build=4afc063c-nuc: starting export=default mount=/data1/efs/mnt2
+2026-10-11T17:29:58.919Z Discovered 4 cluster nodes from 127.0.0.1:26590
+2026-10-11T17:29:58.919Z   node id=1 127.0.0.1:26590
+2026-10-11T17:29:58.919Z   node id=2 127.0.0.1:26591
+2026-10-11T17:29:58.919Z   node id=3 127.0.0.1:26592
+2026-10-11T17:29:58.919Z   node id=4 127.0.0.1:26593
+2026-10-11T17:29:58.919Z fetching metadata...
+2026-10-11T17:29:58.920Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T17:29:58.920Z export id=1 name=default
+2026-10-11T17:29:58.920Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T17:29:58.922Z efs-fuse: workers max=10 idle=10
+2026-10-11T17:29:58.927Z fuse serving
+2026-10-11T17:33:00.941Z release ino=159745 begin
+2026-10-11T17:33:00.941Z release ino=159745 rc=0
