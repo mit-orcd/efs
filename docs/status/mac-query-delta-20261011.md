@@ -63,7 +63,8 @@ rebuild causes or the complete W109 contention package.
 The journal and first sequential-merge changes were built on the Mac seed;
 full `make test` passed and those binaries were shipped to all three storage
 VMs and gateway. Later focused query fixes passed the targeted seed oracles;
-a fresh full gate and deployment of the latest commit remain pending. The cluster uses
+a fresh full gate passed on the seed using data-disk fixture space, and the latest
+query code is deployed to all Mac service nodes (see the checkpoint below). The cluster uses
 `NODE_QUOTA=10G`: its former explicit 15G exceeds the current safety estimate
 (12.09 GiB on node 1). Cluster-script commit `386c710` permits a per-run quota
 override. Existing stores were preserved; no wipe or forced write discard.
@@ -231,3 +232,27 @@ The actual efsd is relinked with this code; controlled Mac rollout is running.
 
 `04ba852d` commits the live mutation helper and foreground/drain lifecycle fix;
 run5 and run6 acceptance are distinct from the original failed large live gates.
+
+
+### 13:30 UTC Mac checkpoint: failed-build phase attribution
+
+`e679adb7` adds diagnostic-only phase timing to failed query disk builds. The
+Mac targeted query delta/disk/catalog/IO gates pass. The actual efsd is relinked
+and shipped; installed service is restored with buffered/TCP and opt-in existing
+Raft/client RPC counters. No other cluster is touched.
+
+The first measured installed failure reports **index 261,430 ms / stats 345 ms /
+persist 0 ms**, 40,939 inode rows; the same retained orphan directory rejects
+publication. This rules out inode stat refolding as the expensive phase for this
+attempt. It does not yet separate raw/index fsync cost from snapshot scans and
+name sorting; that needs separate syscall/profile captures. RPC samples show
+reply waits dominate pool checkout and sends. Observed Raft persist maxima are
+roughly 69–92 ms; these are intervals, not proof of a causal mechanism.
+
+The isolated native rerun is **137/216 PASS, 16 FAIL, 63 NOTRUN**, 244.4 seconds,
+with an unchanged local-filesystem baseline of 216/216 PASS. Original deadlines
+remain, and append worker survival aborts later cases. The initial peer attempt
+was NOTRUN: its fixed `/mnt/efs/posix-2c` directory has historical permissions
+incompatible with the test user. The cluster wrapper now uses a unique parent
+for local peer mounts as it already did for remote peers. A fresh full peer run
+is in progress; this fixture repair is not a passed EFS correctness gate.
