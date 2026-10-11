@@ -430,6 +430,7 @@ test: all
 	./tests/test_meta_apply
 	./tests/test_lane_bootstrap_recovery
 	./tests/test_raft
+	EFS_TEST_EARLY_READ_ACK=1 ./tests/test_raft
 	./tests/test_sim
 	./tests/test_txn
 	./tests/test_txn_resolve_faults

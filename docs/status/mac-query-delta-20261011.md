@@ -745,3 +745,32 @@ fencing; storage failures remain failures. Independent-RPC, changed lanes,
 directory shard, pair admission, replacement absence and coordinator failure
 gates pass on Mac Linux (inode-overlap-unit.txt); no build warnings.
 A new full native gate is next, with original assertions/deadlines.
+
+Full native Mac buffered/TCP run on b4cd0f0a completed with 209/216 PASS,
+7 FAIL, 0 SKIP, 0 NOTRUN in 820.4 seconds including normal cleanup (TSV
+pre-cleanup work duration 730.2 seconds). Local baseline: 216/216. Both large
+truncate honesty cases, concurrent 200-record append and concurrent create/
+unlink pass. Remaining original-budget timeouts: dir_deep_nesting,
+dir_deep_nesting_beyond_64, dir_many_files, names_crazy_dirs,
+concurrent_creates_same_dir, concurrent_appends_two_proc,
+mtime_monotonic_many_writes. No force discard or assertion/budget changes.
+The gate remains OPEN. Evidence: native-overlap-backoff-full-j1.txt/.rc,
+overlap-backoff-full-sample.json and overlap-backoff-full-late-sample.json.
+
+Query retry escalation is restricted to repeated identical build failures.
+Ordinary BUSY, NOT_PRIMARY and STALE, a changed error, or success reset the
+count (transient failures keep the original two-second retry). This avoids
+turning normal write/leadership contention into a thirty-second scheduling
+delay. Failure classification, saturation and reset tests pass on Mac Linux.
+
+Pending inbox frames now permit only an early leader read-quorum observation,
+not consuming a reply. Every noted reply with pending work still enters the
+original receive queue; follower requests retain the pending-order gate.
+Current boot/term/stable membership and leader own applied-prefix checks stay
+in the core. The fast path neither accepts a new term/configuration promise
+nor commits/applies entries. Raft message reordering cannot substitute an old
+nonce for fresh quorum authority. Host queue-preservation/source gates pass;
+the complete core suite also passes ASAN/UBSAN and Mac Linux with every ACK
+noted before its retained normal recv, including loss/fencing and configuration
+scenarios. Make test runs both modes. Evidence: pending-quorum-unit.txt.
+Live native acceptance on this candidate is pending.

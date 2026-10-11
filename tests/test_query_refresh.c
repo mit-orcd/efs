@@ -20,6 +20,15 @@ int main(void)
     assert(!efs_query_refresh_due(50001,0,50000,0,1,1,256,2000));
     assert(!efs_query_refresh_due(51999,0,50000,0,1,1,256,2000));
     assert(efs_query_refresh_due(52000,0,50000,0,1,1,256,2000));
+    assert(!efs_query_refresh_failures(5,EFS_ERR_IO,EFS_OK));
+    assert(efs_query_refresh_failures(5,EFS_ERR_IO,EFS_ERR_BUSY)==1);
+    assert(efs_query_refresh_failures(5,EFS_ERR_BUSY,EFS_ERR_BUSY)==1);
+    assert(efs_query_refresh_failures(5,EFS_ERR_IO,EFS_ERR_NOT_PRIMARY)==1);
+    assert(efs_query_refresh_failures(5,EFS_ERR_STALE,EFS_ERR_STALE)==1);
+    assert(efs_query_refresh_failures(5,EFS_ERR_IO,EFS_ERR_PROTO)==1);
+    assert(efs_query_refresh_failures(1,EFS_ERR_IO,EFS_ERR_IO)==2);
+    assert(efs_query_refresh_failures(5,EFS_ERR_IO,EFS_ERR_IO)==5);
+    assert(efs_query_refresh_failures(1000,EFS_ERR_IO,EFS_ERR_IO)==5);
     assert(efs_query_refresh_retry(1,2000)==2000);
     assert(efs_query_refresh_retry(2,2000)==4000);
     assert(efs_query_refresh_retry(3,2000)==8000);

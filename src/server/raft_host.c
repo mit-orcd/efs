@@ -8670,7 +8670,7 @@ static void *host_query_thread(void *ctx)
         h->query_cancel_checks=0; /* Always enforce the deadline before publication. */
         if (!rc && host_query_cancel(h)) { efs_query_catalog_free(candidate);candidate=NULL;rc=EFS_ERR_BUSY; }
         pthread_rwlock_wrlock(&h->query_lock);
-        h->query_error=rc;failed=rc!=EFS_OK ? (failed<5?failed+1:5) : 0;
+        h->query_error=rc;failed=(int)efs_query_refresh_failures((unsigned)failed,last_error,rc);
         /* A failed disk build can itself exceed the retry interval. Start
          * its backoff at completion, otherwise a retained invalid namespace
          * immediately launches another full disk build. Successful refreshes
@@ -9533,9 +9533,11 @@ void server_raft_host_stop(void)
     free(h);
 }
 
-/* The pump's off-lock durability tail need not park an independent fresh
- * read probe. Try the existing mutex only; never wait or invert inbox order.
- * Pending inbox work and all state-changing frames retain normal processing. */
+/* The pump's off-lock durability tail need not park a fresh quorum ACK.
+ * Try the existing mutex only. With pending inbox work, replies may note
+ * current-term read quorum but MUST still enter normal recv for ordered
+ * replication bookkeeping. Requests stay behind pending work. No commit,
+ * apply, storage promise or membership change occurs on this path. */
 static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n)
 {
     struct efs_raft_msg msg;
@@ -9548,9 +9550,14 @@ static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n
     pthread_mutex_lock(&h->inbox_mu);
     int pending=h->inbox_n;
     pthread_mutex_unlock(&h->inbox_mu);
-    if (!pending) {
+    if (!pending || msg.type==EFS_RAFT_MSG_AE_REP) {
         struct efs_raft *r=group_raft(h,msg.group);
         handled=efs_raft_read_control(r,&msg);
+        /* A pure read vote does not reorder commit/apply or replication.
+         * Queued higher-term/config frames have made no durable promise yet;
+         * the core's current boot/term/config and own apply checks still rule.
+         * Pending work forbids consuming even an accounted reply. */
+        if(pending && handled==1)handled=2;
         if (handled && msg.type==EFS_RAFT_MSG_AE_REQ) BO_COUNT(BO_READ_CONTROL_REQUEST);
         if (handled && msg.type==EFS_RAFT_MSG_AE_REP) BO_COUNT(BO_READ_CONTROL_REPLY);
         if (handled && msg.type==EFS_RAFT_MSG_AE_REP) {

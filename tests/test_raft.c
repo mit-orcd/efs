@@ -256,6 +256,10 @@ static int send_now(void *net, const struct efs_raft_msg *msg)
     /* Synchronous delivery: the sender's entry buffers stay valid for the
      * whole recv and recv copies each entry into the log store, so no
      * detach copy is needed (this also covers batched multi-entry AEs). */
+    /* Model the host with pending inbox work: observe read quorum first,
+     * then retain every reply for ordinary ordered replication bookkeeping. */
+    if(getenv("EFS_TEST_EARLY_READ_ACK") && msg->type==EFS_RAFT_MSG_AE_REP)
+        (void)efs_raft_read_control(n->r[msg->to],msg);
     return efs_raft_recv(n->r[msg->to], msg);
 }
 

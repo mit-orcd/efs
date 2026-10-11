@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Keep pure read control bounded, serialized and behind pending inbox work."""
+"""Quorum notes may bypass tail I/O; queued replication still receives ACKs."""
 from pathlib import Path
 import subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
@@ -45,6 +45,13 @@ int main(void) {
  p[0]=EFS_RAFT_MSG_AE_REQ;result=2;
  assert(!host_read_control(&h,p,sizeof(p)) && calls==5 && published==2 && woken==2);
  /* Early follower ACK leaves commit/apply on the normal ordered inbox. */
+ h.inbox_n=1;p[0]=EFS_RAFT_MSG_AE_REP;result=2;
+ assert(!host_read_control(&h,p,sizeof(p)) && calls==6 && published==3 && woken==3 && h.inbox_n==1);
+ result=1;assert(!host_read_control(&h,p,sizeof(p)) && calls==7 && published==4 && woken==4 && h.inbox_n==1);
+ result=0;assert(!host_read_control(&h,p,sizeof(p)) && calls==8 && published==4);
+ p[0]=EFS_RAFT_MSG_AE_REQ;result=1;
+ assert(!host_read_control(&h,p,sizeof(p)) && calls==8 && h.inbox_n==1);
+ h.inbox_n=0;
  assert(!pthread_mutex_trylock(&h.mu));pthread_mutex_unlock(&h.mu);
  assert(!pthread_mutex_trylock(&h.inbox_mu));pthread_mutex_unlock(&h.inbox_mu);
  pthread_mutex_destroy(&h.mu);pthread_mutex_destroy(&h.inbox_mu);
