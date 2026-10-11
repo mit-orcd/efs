@@ -119,6 +119,7 @@ sampled-zero GC counters. Independent stopped-store inspection verifies all 16 c
 and both controls, including absent object and checksum files. A bounded untimed profile shows
 background Raft/GC work while the client waits idle; this reclamation phase is
 excluded from creation throughput.
+
 | TCP mode | Separate files/s median (min–max) | Combined files/s median (min–max) | Median paired gain | Open p99 ms separate → combined | Close p99 ms separate → combined |
 | --- | --- | --- | --- | --- | --- |
 | Direct | 280.0 (277.2–282.3) | 330.8 (323.9–343.6) | +18.7% | 15.98 → 7.12 | 110.57 → 102.95 |
@@ -134,11 +135,27 @@ variant keeps its executable hashes unchanged across repeats. This finite
 creation gate does not establish sustained-service performance.
 [Complete observations and verification](../../results/measure/20261010-amd-three-hour/evidence/w94-ab/comparison.json).
 
-Additional live gates are queued for the fault-only consumed combined-adoption
-reply loss (failed descriptor cleanup, original inode reclamation, name reuse
-and cold bytes), and LOCAL/cross-group HASHED crashes before/after adoption.
-Normal and fault-enabled actual-source lease compile/regressions pass; these
-new live variants are not yet accepted.
+The fault-enabled native suite passes on `9c7c7a28-retained-combined-fault`.
+The new **direct/TCP** live scenarios pass retained CREATE committed-reply loss
+and BUSY retry with identical identity/inode; combined-adoption consumed reply
+loss; and a durably negative combined verdict. Both combined cases release the
+failed descriptor's original inode, allow name reuse and verify exact cold bytes
+and reclamation. LOCAL and cross-group HASHED pending CREATE cases pass crashes
+before and after combined adoption, exact replay, CLOSE and physical reclaim.
+
+The complete live matrix **did not pass**: the direct run subsequently aborts
+in `lease_edges --legacy-guard` while PREPARE attempts to insert an absent
+CLOSE_STEP marker (`owner_rpc` retry budget exhausted). The available evidence
+does not establish whether this is retained cleanup/placement or a fixture
+issue. Buffered follow-up was consequently not started. Keep the legacy guard
+failure and the full two-mode failure matrix open; individual earlier passes
+are not a substitute. [Full failed run and partial passes](../../results/measure/20261010-amd-three-hour/evidence/adopt-fault/direct.log).
+
+The initial attempt failed closed because its legacy lost-CREATE-reply hook
+never exercised current retained CREATE framing. That attempt is preserved;
+`9c7c7a28` adds the fault-only hook to actual retained framing and the rerun
+exercises all three stages. Neither failed attempt is presented as acceptance.
+[Initial framing mismatch](../../results/measure/20261010-amd-three-hour/evidence/adopt-fault-unexercised-legacy-marker/direct.log).
 
 ### Negative combined verdict follow-up
 
@@ -150,10 +167,32 @@ pending token, allocates a distinct CLEAR_PENDING identity using CREATE's
 captured FileID, then retires the known negative edge. Admission failure keeps the old body; neither path sends a
 fictional CLOSE. Unknown and successful receipts retain their existing rules.
 
-The queued fault gate corrupts only the guarded request's FileID before send,
+The direct/TCP fault gate corrupts only the guarded request's FileID before send,
 so the actual server records STALE while the caller still owns CREATE's
 correct generation/token. It checks terminal proof, original-inode reclamation,
 name reuse and cold bytes. This deliberately invalid request is not a claimed
-production race. The new server-batch regression and live variants are pending
-the fault build after A/B. The performance builds remain frozen at the earlier
+production race. The new server-batch regression passes in the full fault-enabled native
+suite; the targeted direct/TCP live scenario passes. The later legacy guard
+failure still blocks full live acceptance and buffered follow-up. The performance builds remain frozen at the earlier
 combined candidate; this later failure-path repair is separately gated.
+
+### Final handoff
+
+The requested timed work window has ended. Remaining priority is to diagnose
+the legacy guarded-lease PREPARE timeout, then rerun the complete direct and
+buffered fault matrix. Sustained-service acceptance and full session/data-plane
+integration remain separate W94 obligations; W66's broader scaling and D36
+decisions remain open. No RDMA work, shared devel changes or pushes were made.
+
+The final read-only restoration audit confirms the original four installed
+daemons and both installed TCP clients, `.efs` commands disabled, mounted
+paths accessible and no private test daemons remaining.
+[Restoration proof](../../results/measure/20261010-amd-three-hour/evidence/restoration-proof.json).
+
+A clean isolated normal build (`EFS_FAULTS=0`,
+`9c7c7a28-final-normal`) passes `make -j8 all test`. The first queued attempt
+refused to start after the live matrix failed; that refusal is preserved as
+`prior-live-gate-wait.exit=1`. The independent native rerun, after restoration,
+completes with `native.exit=0` and `round.exit=0`; it does not override the
+failed live verdict.
+[Normal native log](../../results/measure/20261010-amd-three-hour/evidence/final-native/native.log).

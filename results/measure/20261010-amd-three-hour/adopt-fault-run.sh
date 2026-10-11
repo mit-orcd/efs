@@ -24,7 +24,7 @@ restore() {
 trap restore EXIT
 cd "$src"
 set +e
-make -j8 EFS_FAULTS=1 EFS_GIT_ID=718e2dbc-combined-negative-fault EFS_GIT_BRANCH=devel-amd EFS_GIT_DESCRIBE=718e2dbc-combined-negative-fault all test > "$out/native.log" 2>&1
+make -j8 EFS_FAULTS=1 EFS_GIT_ID=9c7c7a28-retained-combined-fault EFS_GIT_BRANCH=devel-amd EFS_GIT_DESCRIBE=9c7c7a28-retained-combined-fault all test > "$out/native.log" 2>&1
 native_rc=$?
 set -e
 echo "$native_rc" > "$out/native.exit"

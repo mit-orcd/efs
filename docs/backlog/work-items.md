@@ -4185,8 +4185,10 @@ replay and cold-GC matrices pass. CRC-validated applied Raft logs for 64 files
 per build prove three versus two creation/close lease entries per file. The
 four-repeat finite TCP A/B passes (+18.7% direct/+23.3% buffered median paired
 gain), with exact cold bytes and empty physical inventories in all 16 cases.
-Additional fault gates are running; sustained-service and full integration
-remain open, so this is not full W94 closure.
+Targeted direct/TCP combined reply-loss, negative verdict and LOCAL/HASHED
+crash gates pass. A subsequent legacy guarded-lease PREPARE timeout blocks
+the complete live run and buffered follow-up. Sustained-service and full
+integration remain open, so this is not full W94 closure.
 [Evidence and limits](../status/amd-non-rdma-20261010.md#w94--combined-first-descriptor-adoption-candidate).
 
 **Historical pre-merge devel review (`cde67dca`, Oct 8):** the flags-0/separate-HOLD observation
