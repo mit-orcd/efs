@@ -15,6 +15,9 @@ static unsigned commands,upload_retired;
 static int admit_fail,put_fail,publication_fail,load_fail,retire_fail,upload_fail;
 static uint32_t current_fi;static uint8_t digest[EFS_HASH_SIZE];static int have_digest;
 static uint64_t pack_now(void){return 1000000000;}
+static __thread uint64_t deadline;
+uint64_t efs_client_rpc_deadline_ms(void){return deadline;}
+void efs_client_rpc_set_deadline_ms(uint64_t v){deadline=v;}
 int efs_client_rpc_past_deadline(void){return 0;}
 static int pack_command(struct pack_context *p,uint8_t tag){
  commands++;assert(p->cohort.sealed && p->cohort.owner.seq==17);
@@ -56,8 +59,8 @@ int efs_client_publication_retire(struct efs_publication_ack_queue *q){
  unsigned i=(unsigned)(uintptr_t)q-1;assert(i<2);retirements[i]++;
  if(i==1&&retire_fail){retire_fail=0;return EFS_ERR_NET;}return 0;
 }
-int efs_client_publication_ack_free(struct efs_publication_ack_queue *q){assert(q);released++;return 0;}
-'''+s[s.index('static int pack_progress('):s.index('static void *pack_worker(')]+r'''
+int efs_client_publication_ack_free(struct efs_publication_ack_queue *q){assert(q);__atomic_fetch_add(&released,1,__ATOMIC_RELAXED);return 0;}
+'''+s[s.index('static int pack_publish_record('):s.index('static void *pack_worker(')]+r'''
 int main(void){
  static struct pack_context p;g_client.node_count=4;
  for(unsigned i=0;i<4;i++)g_client.nodes[i].id=i+1;

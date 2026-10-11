@@ -14,7 +14,7 @@ void efs_client_conn_release(efs_node_id_t n,struct efs_conn *c){assert((uintptr
 void efs_client_conn_drop(efs_node_id_t n,struct efs_conn *c){assert((uintptr_t)c==n);}
 int efs_conn_send_msg(struct efs_conn *c,uint8_t type,const void *p,uint32_t n){assert(c&&type==EFS_MSG_PACK_CAPABILITIES&&!p&&!n);probes++;return network_fail;}
 int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **p,uint32_t *n){assert(c);*type=EFS_MSG_PACK_CAPABILITIES_REPLY;*n=4;*p=calloc(1,4);assert(*p);efs_put_upload_wr32(*p,bad?0:1);return 0;}
-'''+s[s.index('static int pack_capabilities('):s.index('static int pack_progress(')]+r'''
+'''+s[s.index('static int pack_capabilities('):s.index('static int pack_publish_record(')]+r'''
 int main(void){
  g_client.node_count=4;for(unsigned i=0;i<4;i++)g_client.nodes[i].id=i+1;
  uint32_t members;assert(!pack_capabilities(&members)&&members==15&&probes==4);

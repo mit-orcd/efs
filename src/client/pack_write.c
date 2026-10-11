@@ -12,6 +12,9 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #define PACK_WRITERS 16u
+#define PACK_PUBLISH_WORKERS 4u
+#define PACK_PUBLISH_STACK_BYTES (256u << 10)
+#define PACK_PUBLISH_STACK_ALIGN (64u << 10)
 #define PACK_DELAY_NS 10000000ULL
 #define PACK_CAPABILITY_NS 5000000000ULL
 struct pack_writer {
@@ -31,6 +34,9 @@ struct pack_context {
     uint8_t snapshot[EFS_MIN_CHUNK_SIZE];
     uint8_t fragments[EFS_NUM_FRAGMENTS][EFS_SEGMENT_MAX_SIZE/2];
     uint8_t wire[EFS_PACKED_PUT_HEADER+EFS_PACK_UPLOAD_MAX];
+    /* Charged with this nonmoving context before accepting any byte. Join
+     * every helper before reusing either its stack or any writer state. */
+    uint8_t publication_stacks[PACK_PUBLISH_WORKERS-1][PACK_PUBLISH_STACK_BYTES+PACK_PUBLISH_STACK_ALIGN];
     uint32_t members,put_mask;
     uint64_t retry_after;
     int busy,last_error,built;
@@ -121,6 +127,72 @@ static int pack_capabilities(uint32_t *members)
     pthread_mutex_unlock(&pack_mu);
     return EFS_OK;
 }
+static int pack_publish_record(struct pack_context *p,uint32_t i)
+{
+    struct pack_writer *w=&p->writers[i];
+    if(__atomic_load_n(&w->done,__ATOMIC_ACQUIRE))return EFS_OK;
+    if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
+    int rc;
+    if(!w->put_bound) {
+        struct efs_chunk_rec put={.ino=w->plan.ino,.chunk_generation=w->object,
+            .publish_flags=EFS_CHUNK_REC_F_FRESH_OBJECT|EFS_CHUNK_REC_F_PACKED_BASE,.packed=p->cohort.refs[i]};
+        memcpy(put.nodes,p->object.nodes,sizeof(put.nodes));memcpy(put.checksums,p->object.checksums,sizeof(put.checksums));
+        rc=efs_dcache_finish_publication(w->plan.ino,w->plan.generation,0,w->object,w->plan.cache_sequence,EFS_OK,&put);
+        if(rc)return rc;
+        w->put_bound=1;
+    }
+    if(!w->published) {
+        rc=efs_client_publication_writeback(w->acks,w->plan.ino,w->plan.generation,0,w->object,w->plan.cache_sequence,w->len);
+        if(rc)return rc;
+        w->published=1;
+    }
+    if(!w->loaded) {
+        rc=efs_client_pull_chunks_range(w->plan.ino,0,1);if(rc)return rc;
+        efs_dcache_drop(w->plan.ino,0);w->loaded=1;
+    }
+    rc=efs_client_publication_retire(w->acks);if(rc)return rc;
+    rc=efs_client_publication_ack_free(w->acks);if(rc)return rc;
+    w->acks=NULL;__atomic_store_n(&w->done,1,__ATOMIC_RELEASE);
+    return EFS_OK;
+}
+struct pack_publish_run {
+    struct pack_context *context;
+    uint32_t next;
+    uint64_t deadline;
+    int results[PACK_WRITERS];
+};
+static void *pack_publish_worker(void *arg)
+{
+    struct pack_publish_run *run=arg;
+    uint64_t previous=efs_client_rpc_deadline_ms();
+    efs_client_rpc_set_deadline_ms(run->deadline);
+    for(;;) {
+        uint32_t i=__atomic_fetch_add(&run->next,1,__ATOMIC_RELAXED);
+        if(i>=run->context->cohort.count)break;
+        run->results[i]=pack_publish_record(run->context,i);
+    }
+    efs_client_rpc_set_deadline_ms(previous);
+    return NULL;
+}
+static int pack_publish_cohort(struct pack_context *p)
+{
+    struct pack_publish_run run={.context=p,.deadline=efs_client_rpc_deadline_ms()};
+    pthread_t threads[PACK_PUBLISH_WORKERS-1];unsigned started=0;
+    for(unsigned i=0;i<PACK_PUBLISH_WORKERS-1 && i+1<p->cohort.count;i++) {
+        pthread_attr_t attr;
+        if(pthread_attr_init(&attr))break;
+        uintptr_t stack=((uintptr_t)p->publication_stacks[i]+PACK_PUBLISH_STACK_ALIGN-1)&~(uintptr_t)(PACK_PUBLISH_STACK_ALIGN-1);
+        int rc=pthread_attr_setstack(&attr,(void *)stack,PACK_PUBLISH_STACK_BYTES);
+        if(!rc)rc=pthread_create(&threads[started],&attr,pack_publish_worker,&run);
+        pthread_attr_destroy(&attr);
+        if(rc)break; /* The calling thread covers all unassigned records. */
+        started++;
+    }
+    (void)pack_publish_worker(&run);
+    for(unsigned i=0;i<started;i++)pthread_join(threads[i],NULL);
+    for(uint32_t i=0;i<p->cohort.count;i++)if(run.results[i])return run.results[i];
+    return EFS_OK;
+}
 static int pack_progress(struct pack_context *p)
 {
     int rc=EFS_OK;
@@ -157,30 +229,7 @@ static int pack_progress(struct pack_context *p)
             p->put_mask|=1u<<fi;
         }
     }
-    for(uint32_t i=0;i<p->cohort.count;i++) {
-        struct pack_writer *w=&p->writers[i];if(w->done)continue;
-        if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
-        if(!w->put_bound) {
-            struct efs_chunk_rec put={.ino=w->plan.ino,.chunk_generation=w->object,
-                .publish_flags=EFS_CHUNK_REC_F_FRESH_OBJECT|EFS_CHUNK_REC_F_PACKED_BASE,.packed=p->cohort.refs[i]};
-            memcpy(put.nodes,p->object.nodes,sizeof(put.nodes));memcpy(put.checksums,p->object.checksums,sizeof(put.checksums));
-            rc=efs_dcache_finish_publication(w->plan.ino,w->plan.generation,0,w->object,w->plan.cache_sequence,EFS_OK,&put);
-            if(rc)return rc;
-            w->put_bound=1;
-        }
-        if(!w->published) {
-            rc=efs_client_publication_writeback(w->acks,w->plan.ino,w->plan.generation,0,w->object,w->plan.cache_sequence,w->len);
-            if(rc)return rc;
-            w->published=1;
-        }
-        if(!w->loaded) {
-            rc=efs_client_pull_chunks_range(w->plan.ino,0,1);if(rc)return rc;
-            efs_dcache_drop(w->plan.ino,0);w->loaded=1;
-        }
-        rc=efs_client_publication_retire(w->acks);if(rc)return rc;
-        rc=efs_client_publication_ack_free(w->acks);if(rc)return rc;
-        w->acks=NULL;__atomic_store_n(&w->done,1,__ATOMIC_RELEASE);
-    }
+    rc=pack_publish_cohort(p);if(rc)return rc;
     return pack_command(p,EFS_MD_CMD_PACK_UPLOAD_RETIRE);
 }
 static int pack_flush_group(unsigned gi,int force)
