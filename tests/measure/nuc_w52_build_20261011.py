@@ -19,6 +19,10 @@ try:
         assert manifest['commit'].startswith('f52cd2dd') and hashlib.sha256(archive.read_bytes()).hexdigest()==manifest['sha256']
         subprocess.run(['rsync','-a','--exclude=/results/','--exclude=/.git/',str(base/'batch-src')+'/',str(src)+'/'],check=True)
         subprocess.run(['tar','-xf',archive,'-C',src],check=True)
+        expected=json.loads((base/'clock-core-expected.json').read_text())
+        current={str(p.relative_to(src)):hashlib.sha256(p.read_bytes()).hexdigest() for folder in ('src','include') for p in (src/folder).rglob('*') if p.suffix in ('.c','.h')}
+        current['Makefile']=hashlib.sha256((src/'Makefile').read_bytes()).hexdigest()
+        assert current==expected,'clock candidate differs from committed core/Makefile'
         (out/'overlay.json').write_text(json.dumps(manifest,indent=2))
     identity='f52cd2dd-nuc' if args.variant=='clock' else '4afc063c-nuc'
     versions=['EFS_GIT_ID='+identity,'EFS_GIT_DESCRIBE='+identity,'EFS_GIT_BRANCH=devel-nuc']
