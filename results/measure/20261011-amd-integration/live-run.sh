@@ -27,6 +27,6 @@ for m in /data1/efs/mnt /data1/efs/mnt2; do
     /data1/efs/src/scripts/client.sh stop "$m" >> "$out/borrow.log" 2>&1
 done
 for mode in direct buffered; do
-    python3 -u tests/live/gc_reclamation.py --mode "$mode" --transport tcp --root "$out" --port 24190 --mount /data1/efs/mnt --peer-mount /data1/efs/mnt2 --fresh-namespace --append-replay-race --append-sync-boundary --sync-writes --sync-write-fault --fuse-reply-failure --create-live-retry --create-adopt-reply-loss --create-adopt-negative --unique-create --guarded-leases --create-lease --create-negative-replay --posix --continue-regression-failure > "$out/$mode.log" 2>&1
+    python3 -u tests/live/gc_reclamation.py --mode "$mode" --transport tcp --root "$out" --root "$out" --port 24190 --mount /data1/efs/mnt --peer-mount /data1/efs/mnt2 --fresh-namespace --append-replay-race --append-sync-boundary --sync-writes --sync-write-fault --fuse-reply-failure --create-live-retry --create-adopt-reply-loss --create-adopt-negative --unique-create --guarded-leases --create-lease --create-negative-replay --posix --continue-regression-failure > "$out/$mode.log" 2>&1
     echo 0 > "$out/$mode.exit"
 done
