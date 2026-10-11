@@ -824,3 +824,16 @@ failed batches (neither row changes), prepared ownership, fence/new epoch,
 cold persistence, routing and unchanged cross-group admission. Native and
 private-cluster session gates for this candidate are pending.
 Evidence: atomic-session-unit.txt.
+
+The dedicated namespace-session wire gate passes on a unique four-daemon
+Mac Linux buffered/TCP fixture using 21619c91's production code. Seven
+namespace receipts replay before revocation; late mutations and untouched
+first-use are STALE after the complete session barrier. After a drained
+private-fixture crash/restart, all seven old receipts remain STALE and
+namespace contents remain exact. Normal deletion queues drain. The new
+--namespace-session-only option isolates this existing wire helper without
+changing its assertions. Evidence: atomic-session-wire-cold.txt.
+
+Complete Mac Linux make test passes after the combined session admission
+change; architecture documentation gate remains 5/5. Evidence:
+atomic-session-build-full-unit.txt. No native acceptance claim yet.
