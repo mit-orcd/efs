@@ -26,6 +26,13 @@ def start(label):
         rc=subprocess.run(['bash','/data1/efs/w97-latest-20261010/start-preserved.sh'],
             env=env,stdout=log,stderr=subprocess.STDOUT,timeout=360).returncode
     assert rc==0,(label,rc)
+    def listeners():
+        for port in range(17432,17436):
+            try:
+                with socket.create_connection(('127.0.0.1',port),.3):pass
+            except OSError:return False
+        return True
+    wait(listeners,180,label+' actual listeners')
     assert all(os.path.ismount('/data1/efs/'+m) for m in ('mnt','mnt2'))
 def samples():
     prior=json.loads((base/'final-service.json').read_text())['existing_payload_samples_equal_on_both_mounts']
