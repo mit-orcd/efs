@@ -203,6 +203,9 @@ try:
     for command in ('mkfs','raft-mkfs'):
         help_reply=subprocess.run([str(source/'efs-mgmt'),command,'--help'],capture_output=True,text=True,check=True)
         assert '[legacy-label]' in help_reply.stdout and 'ignored' in help_reply.stdout,help_reply.stdout
+        for bad_args,message in (([],'usage:'),(['not-an-address'],'invalid address:')):
+            refused=subprocess.run([str(source/'efs-mgmt'),command,*bad_args],capture_output=True,text=True,timeout=5)
+            assert refused.returncode!=0 and message in refused.stderr.lower(),refused
         lost_mkfs_reply(old,command,work)
         repeated = mgmt(old,command,'compatibility-name')
         assert 'rc=0' in repeated and 'is ignored' in repeated,repeated
