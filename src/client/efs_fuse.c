@@ -1944,6 +1944,12 @@ static int efs_fuse_release_ino(fuse_ino_t ino, struct fuse_file_info *fi);
  * flock UNLOCK on close, so the last-close lease edge is also what drops
  * the inode's server-side locks. */
 static pthread_mutex_t g_open_mu = PTHREAD_MUTEX_INITIALIZER;
+struct efs_pending_create {
+    struct efs_client_create_request request;
+    struct efs_client_lease_request cleanup;
+    int adopted; /* proven combined OPEN/CLEAR_PENDING; inode stripe owned */
+    struct efs_pending_create *next;
+};
 struct efs_open_ref {
     efs_ino_t ino;
     uint64_t n;
@@ -1957,6 +1963,7 @@ struct efs_open_ref {
     uint64_t retry_order; /* published under g_open_mu; edge is stripe-owned */
     struct efs_client_lease_request edge; /* immutable OPEN or CLOSE identity */
     struct efs_client_lease_request adoption; /* clear pending before CLOSE */
+    struct efs_pending_create *create_pending; /* retained until exact OPEN proof */
     struct efs_open_ref *next;
 };
 static struct efs_open_ref *g_open_refs;
@@ -2105,6 +2112,17 @@ static int efs_close_note(efs_ino_t ino, int *leased)
     return last;
 }
 
+/* Caller holds the inode stripe. The original CREATE stays alive across an
+ * unknown combined edge, including compensating last-close recovery. */
+static void efs_open_create_settled(struct efs_open_ref *owner,int rc)
+{
+    if(!owner->create_pending || !owner->edge.complete)return;
+    if(rc==EFS_OK && (owner->edge.flags & EFS_LEASE_EDGE_CLEAR_PENDING) &&
+       owner->edge.pending_token==owner->create_pending->request.wire.q.id.seq)
+        owner->create_pending->adopted=1;
+    owner->create_pending=NULL;
+}
+
 /* Caller holds the inode edge stripe. A failed reply retains the old
  * ownership, preventing a fresh OPEN from racing its delayed release. */
 static int efs_open_release_pending(efs_ino_t ino)
@@ -2128,6 +2146,7 @@ static int efs_open_release_pending(efs_ino_t ino)
     if (request->flags & EFS_LEASE_EDGE_OPEN) {
         rc = efs_client_lease_resume(request, 0);
         if (!request->complete) return rc == EFS_OK ? EFS_ERR_BUSY : rc;
+        efs_open_create_settled(owner,rc);
         if (rc == EFS_OK) {
             (void)efs_client_lease_reset(request);
         } else {
@@ -2218,7 +2237,7 @@ static int efs_open_lease_resume_wait(struct efs_client_lease_request *request)
 }
 
 static int efs_open_acquire_fileid_run(efs_ino_t ino, uint64_t create_generation,
-                                        int *admission_busy)
+    struct efs_pending_create *pending,int *admission_busy)
 {
     *admission_busy=0;
     pthread_mutex_t *edge = open_edge_mu(ino);
@@ -2248,13 +2267,16 @@ static int efs_open_acquire_fileid_run(efs_ino_t ino, uint64_t create_generation
         pthread_mutex_unlock(&g_open_mu);
         if (rc == EFS_OK) {
             rc = efs_client_lease_begin(&owner->edge, ino, generation,
-                                         EFS_LEASE_EDGE_OPEN, 0);
+                                         EFS_LEASE_EDGE_OPEN | (pending?EFS_LEASE_EDGE_CLEAR_PENDING:0),
+                                         pending?pending->request.wire.q.id.seq:0);
             if(rc==EFS_ERR_BUSY && !owner->edge.active)*admission_busy=1;
             if (rc == EFS_OK) {
                 owner->lease_generation = generation;
+                owner->create_pending=pending;
                 efs_open_set_leased(ino);
                 rc = efs_open_lease_resume_wait(&owner->edge);
                 if (rc == EFS_OK && !owner->edge.complete) rc = EFS_ERR_BUSY;
+                efs_open_create_settled(owner,rc);
             }
         }
         if (rc != EFS_OK) {
@@ -2268,7 +2290,8 @@ static int efs_open_acquire_fileid_run(efs_ino_t ino, uint64_t create_generation
 
 /* Budget includes serialization, FileID lookup, the retained OPEN and any
  * compensating cleanup. Never extend an inherited deadline. */
-static int efs_open_acquire_fileid(efs_ino_t ino, uint64_t create_generation)
+static int efs_open_acquire_fileid_with_pending(efs_ino_t ino, uint64_t create_generation,
+    struct efs_pending_create *pending)
 {
     uint64_t previous=efs_client_rpc_deadline_ms();
     uint64_t deadline=stats_now_ms()+30000;
@@ -2277,7 +2300,7 @@ static int efs_open_acquire_fileid(efs_ino_t ino, uint64_t create_generation)
     int rc=EFS_ERR_BUSY;
     while(!efs_client_rpc_past_deadline()) {
         int admission_busy=0;
-        rc=efs_open_acquire_fileid_run(ino,create_generation,&admission_busy);
+        rc=efs_open_acquire_fileid_run(ino,create_generation,pending,&admission_busy);
         /* No identity was allocated. Drop the stripe before waiting so an
          * older append on a colliding inode can finish and release capacity. */
         if(rc!=EFS_ERR_BUSY || !admission_busy)break;
@@ -2285,6 +2308,16 @@ static int efs_open_acquire_fileid(efs_ino_t ino, uint64_t create_generation)
     }
     efs_client_rpc_set_deadline_ms(previous);
     return rc;
+}
+
+static int efs_open_acquire_fileid(efs_ino_t ino,uint64_t generation)
+{
+    return efs_open_acquire_fileid_with_pending(ino,generation,NULL);
+}
+
+static int efs_open_acquire_created(efs_ino_t ino,struct efs_pending_create *pending)
+{
+    return efs_open_acquire_fileid_with_pending(ino,pending->request.generation,pending);
 }
 
 static int efs_open_acquire(efs_ino_t ino)
@@ -2339,11 +2372,7 @@ static int efs_open_adopt(efs_ino_t ino,uint64_t generation,uint64_t token,
 }
 
 #define EFS_PENDING_CREATES_MAX 128u
-struct efs_pending_create {
-    struct efs_client_create_request request;
-    struct efs_client_lease_request cleanup;
-    struct efs_pending_create *next;
-};
+
 static pthread_mutex_t g_pending_create_mu=PTHREAD_MUTEX_INITIALIZER;
 static struct efs_pending_create *g_pending_creates;
 static unsigned g_pending_create_count;
@@ -2391,12 +2420,14 @@ static int efs_pending_create_drain(void)
             pthread_mutex_t *stripe=open_edge_mu(request->inode.ino);
             pthread_mutex_lock(stripe);
             rc=efs_open_release_pending(request->inode.ino);
-            if(rc==EFS_OK && !entry->cleanup.active)
+            if(rc==EFS_OK && !entry->adopted && !entry->cleanup.active)
                 rc=efs_client_lease_begin(&entry->cleanup,request->inode.ino,
                     request->generation,EFS_LEASE_EDGE_CLEAR_PENDING,request->wire.q.id.seq);
-            if(rc==EFS_OK)rc=efs_client_lease_resume(&entry->cleanup,0);
+            if(rc==EFS_OK && !entry->adopted)rc=efs_client_lease_resume(&entry->cleanup,0);
+            int adopted=entry->adopted;
             pthread_mutex_unlock(stripe);
-            if((rc!=EFS_OK && !entry->cleanup.revoked) || !entry->cleanup.complete)goto pending;
+            if((rc!=EFS_OK && (adopted || !entry->cleanup.revoked)) ||
+               (!adopted && !entry->cleanup.complete))goto pending;
             (void)efs_client_lease_reset(&entry->cleanup);
         }
         (void)efs_client_create_reset(request);
@@ -4226,8 +4257,8 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
             return frc;
         }
         fuse_fi_direct_io(fi);
-        int hrc=efs_open_acquire_fileid(ino, pending_create ?
-            pending_create->request.generation : 0);
+        int hrc=pending_create?efs_open_acquire_created(ino,pending_create):
+            efs_open_acquire_fileid(ino,0);
         if(hrc!=EFS_OK) {
             efs_file_close(fi);
             if(pending_create)efs_pending_create_queue(pending_create);
@@ -4235,8 +4266,9 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
         }
         if(pending_create) {
             int handed_off=0;
-            hrc=efs_open_adopt(ino,pending_create->request.generation,
-                pending_create->request.wire.q.id.seq,&handed_off);
+            hrc=pending_create->adopted?EFS_OK:
+                efs_open_adopt(ino,pending_create->request.generation,
+                    pending_create->request.wire.q.id.seq,&handed_off);
             if(hrc!=EFS_OK) {
                 (void)efs_fuse_release_ino(ino,fi);
                 if(!handed_off)efs_pending_create_queue(pending_create);

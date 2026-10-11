@@ -33,7 +33,7 @@ static uid_t captured_uid;
 static gid_t captured_gid;
 static struct {uint64_t export_id;} g_client={1};
 struct request {struct efs_inode inode;int complete,result,attempted;uint64_t generation;struct {struct {struct {uint64_t seq;} id;} q;} wire;};
-struct efs_pending_create {struct request request;};
+struct efs_pending_create {struct request request;int adopted;};
 static int name_is_reserved(const char *name){(void)name;return 0;}
 static int check_dir_wx(const struct efs_inode *p){(void)p;return 0;}
 static int efs_client_stat_ino(efs_ino_t ino,struct efs_inode *p){memset(p,0,sizeof(*p));p->ino=ino;p->mode=parent_mode;p->gid=3001;return EFS_OK;}
@@ -51,6 +51,7 @@ static int efs_client_truncate(efs_ino_t ino,uint64_t size){(void)ino;(void)size
 static int efs_file_open(struct fuse_file_info *fi,efs_ino_t ino){(void)fi;(void)ino;return 0;}
 static void efs_file_close(struct fuse_file_info *fi){(void)fi;}
 static void fuse_fi_direct_io(struct fuse_file_info *fi){(void)fi;}
+static int efs_open_acquire_created(efs_ino_t ino,struct efs_pending_create *p){(void)ino;p->adopted=1;return EFS_OK;}
 static int efs_open_acquire_fileid(efs_ino_t ino,uint64_t gen){(void)ino;(void)gen;return EFS_OK;}
 static int efs_open_adopt(efs_ino_t ino,uint64_t gen,uint64_t token,int *handoff){(void)ino;(void)gen;(void)token;*handoff=1;return EFS_OK;}
 static int efs_fuse_release_ino(efs_ino_t ino,struct fuse_file_info *fi){(void)ino;(void)fi;return 0;}

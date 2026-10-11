@@ -1052,3 +1052,33 @@ Final corrected append candidate complete Mac Linux unit suite passes
 (exit 0), including architecture 5/5, after the cold peer wire gate.
 Atomic reservation code is ready for qualified normal Mac rollout; native
 216 acceptance remains open. Evidence: atomic-append-routing-full-unit.txt.
+
+Committed a6885603 was normally rolled to all three Mac daemons and the
+gateway; installed stores were preserved and mounts drained normally.
+Native mtime_monotonic_many_writes passes at 18.8 seconds under the original
+20-second budget. concurrent_creates_same_dir still times out at 20 seconds
+(25.0 including cleanup). Evidence: native-atomic-mtime.txt and
+native-atomic-create.txt. Full native 216 acceptance remains open.
+
+Separate uncommitted FUSE candidate combines first OPEN with exact pending
+CREATE adoption in the existing sequenced lease command. The original
+CREATE object is retained by the OPEN owner through ambiguous replies;
+only exact successful proof marks adoption. Pending cleanup first settles
+OPEN/CLOSE and avoids duplicate CLEAR_PENDING; proven negative OPEN keeps
+ordinary token cleanup. Per-inode stripes serialize that marker, and the
+original 30-second callback budget is retained. Actual helpers test lost
+reply, successful compensation, negative verdict and real pending queue;
+ASAN/UBSAN, Mac Linux OPEN/lease/reply/CREATE/drain tests pass. Private
+cold unique CREATE/rejected descriptor/reclamation gates are running.
+Evidence: create-combined-build-wire.txt.
+
+Combined CREATE private Mac buffered/TCP gates all pass (exit 0):
+1,024 unique files/cold exact bytes, genuine EEXIST and replacements,
+original EEXIST across unlink/cold replay, rejected CREATE/OPEN descriptor
+replies, hardlink/open-unlink lifetime, injected deletion failure and retry,
+zero physical inventory/quota and late-PUT fencing after restart. Owned
+mounts and daemons drain normally. The latest actual helper also covers
+existing local opener fallback; local ASAN/UBSAN and final Mac Linux helper/
+documentation 5/5 pass. Evidence: create-combined-build-wire.txt and
+create-combined-final-tests.txt. Ready for qualified rollout; native timings
+and full 216 acceptance are still pending.

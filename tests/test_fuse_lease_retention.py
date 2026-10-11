@@ -24,13 +24,13 @@ static uint64_t stats_now_ms(void);
 #include "client_internal.h"
 #include "efs/session.h"
 struct efs_client g_client;
-static int open_rc,close_rc,adopt_rc,opens,closes,adopts,server_hold,revocation,adopt_begin_busy,adopt_resume_busy,adopt_known_busy,pressure_sleep,adopt_begins;
+static int open_rc,close_rc,adopt_rc,opens,closes,adopts,server_hold,revocation,adopt_begin_busy,adopt_resume_busy,adopt_known_busy,pressure_sleep,adopt_begins,open_known_negative,server_pending;
 int efs_client_rpc_getchunks_fileid(efs_export_id_t ex,efs_ino_t ino,uint64_t gen,uint32_t start,struct efs_chunk_rec *recs,uint32_t *count,uint64_t *out) {
  (void)ex;(void)gen;(void)start;(void)recs;(void)count;assert(ino==42);*out=99;return EFS_OK;
 }
 int efs_client_lease_begin(struct efs_client_lease_request *r,efs_ino_t ino,uint64_t gen,unsigned flags,uint64_t token) {
  assert(!r->active&&ino==42&&gen==99);
- assert((flags==EFS_LEASE_EDGE_CLEAR_PENDING&&token==3)||(!token&&flags!=EFS_LEASE_EDGE_CLEAR_PENDING));
+ assert(((flags==EFS_LEASE_EDGE_CLEAR_PENDING || flags==(EFS_LEASE_EDGE_OPEN|EFS_LEASE_EDGE_CLEAR_PENDING))&&token==3)||(!token&&flags!=EFS_LEASE_EDGE_CLEAR_PENDING));
  if(flags==EFS_LEASE_EDGE_CLEAR_PENDING){adopt_begins++;if(adopt_begin_busy){adopt_begin_busy--;pressure_sleep=1;return EFS_ERR_BUSY;}}
  *r=(struct efs_client_lease_request){.ino=ino,.generation=gen,.pending_token=token,.flags=flags,.active=1};r->q.id.seq=55;return EFS_OK;
 }
@@ -39,7 +39,9 @@ int efs_client_lease_resume(struct efs_client_lease_request *r,int probe) {
  assert(!pthread_mutex_trylock(&g_open_mu));pthread_mutex_unlock(&g_open_mu);
  if(r->complete)return r->result;
  int rc;
- if(r->flags&EFS_LEASE_EDGE_OPEN){if(!r->attempted)opens++;server_hold=1;rc=open_rc;}
+ if(r->flags&EFS_LEASE_EDGE_OPEN){if(!r->attempted)opens++;server_hold=1;rc=open_rc;
+  if(open_known_negative){r->complete=1;r->result=EFS_ERR_BUSY;server_hold=0;return EFS_ERR_BUSY;}
+  if(r->flags&EFS_LEASE_EDGE_CLEAR_PENDING)server_pending=0;}
  else if(r->flags==EFS_LEASE_EDGE_CLEAR_PENDING){adopts++;assert(r->q.id.seq==55 && r->pending_token==3);rc=adopt_rc;
   if(adopt_resume_busy){adopt_resume_busy--;pressure_sleep=1;rc=EFS_ERR_BUSY;}
   if(adopt_known_busy){r->complete=1;r->result=EFS_ERR_BUSY;return EFS_ERR_BUSY;}}
@@ -61,15 +63,30 @@ static int fixture_sleep(unsigned us){
 }
 #define usleep fixture_sleep
 '''
-for name in ('efs_open_note','efs_open_set_leased','efs_close_note','efs_open_release_pending','efs_open_drain_pending','wb_lock_budget','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid','efs_open_acquire','efs_open_adopt'):
+for name in ('efs_open_note','efs_open_set_leased','efs_close_note','efs_open_create_settled','efs_open_release_pending','efs_open_drain_pending','wb_lock_budget','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid_with_pending','efs_open_acquire_fileid','efs_open_acquire_created','efs_open_acquire','efs_open_adopt'):
  source+='\n'+function(name)
+source+=r"""
+#define EFS_PENDING_CREATES_MAX 128u
+static pthread_mutex_t g_pending_create_mu=PTHREAD_MUTEX_INITIALIZER;
+static struct efs_pending_create *g_pending_creates;
+static unsigned g_pending_create_count;
+int efs_client_create_resume(struct efs_client_create_request *r,int probe){assert(!probe && r->complete);return r->result;}
+int efs_client_create_reset(struct efs_client_create_request *r){assert(r->complete);memset(r,0,sizeof(*r));return 0;}
+int efs_client_create_cancel(struct efs_client_create_request *r){assert(!r->attempted);return 0;}
+"""
+for name in ('efs_pending_create_alloc','efs_pending_create_free','efs_pending_create_queue','efs_pending_create_drain'):
+ # alloc returns a pointer rather than int/void.
+ if name=='efs_pending_create_alloc':
+  start=s.index('static struct efs_pending_create *'+name+'(')
+  source+='\n'+s[start:s.index('\n}',start)+2]
+ else:source+='\n'+function(name)
 w=s.index('/* A lost last-close reply must not pin')
 x=s.index('/* Client-cache design Part A, pin rule 2:',w)
 source+=r'''
 static _Thread_local uint64_t mock_deadline;
 uint64_t efs_client_rpc_deadline_ms(void){return mock_deadline;}
 void efs_client_rpc_set_deadline_ms(uint64_t deadline){mock_deadline=deadline;}
-static int efs_pending_create_drain(void){return EFS_OK;}
+
 static uint64_t stats_now_ms(void){struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000+t.tv_nsec/1000000;}
 int efs_client_rpc_past_deadline(void){return mock_deadline && stats_now_ms()>=mock_deadline;}
 '''+s[w:x]
@@ -129,7 +146,38 @@ int main(void) {
  assert(efs_close_note(42,&leased));
  assert(efs_open_release_pending(42)==EFS_ERR_BUSY && g_open_refs);
  g_open_refs->adoption.result=EFS_OK;assert(!efs_open_release_pending(42) && !g_open_refs);
- puts("FUSE ambiguous OPEN/CLOSE: retained ownership, reopen barrier and clean-stop retry PASS");
+ struct efs_pending_create pending={0};pending.request.generation=99;pending.request.wire.q.id.seq=3;
+ server_pending=1;open_rc=EFS_ERR_NET;old_closes=closes;before_adopts=adopt_begins;
+ assert(efs_open_acquire_created(42,&pending)==EFS_ERR_NET && !pending.adopted);
+ assert(g_open_refs && g_open_refs->close_pending && g_open_refs->create_pending==&pending);
+ assert(server_hold && !server_pending && closes==old_closes && adopt_begins==before_adopts);
+ assert(efs_open_release_pending(42)==EFS_ERR_NET && closes==old_closes && !pending.adopted);
+ open_rc=0;assert(!efs_open_release_pending(42) && pending.adopted && !g_open_refs && !server_hold);
+ assert(adopt_begins==before_adopts); /* recovery must not send a second CLEAR_PENDING */
+ pending.adopted=0;server_pending=1;open_known_negative=1;
+ assert(efs_open_acquire_created(42,&pending)==EFS_ERR_BUSY && !pending.adopted && !g_open_refs && server_pending);
+ open_known_negative=0;assert(!efs_open_acquire_created(42,&pending) && pending.adopted && !server_pending);
+ assert(!g_open_refs->create_pending);assert(efs_close_note(42,&leased));assert(!efs_open_release_pending(42));
+ struct efs_pending_create *queued=efs_pending_create_alloc();assert(queued);
+ queued->request.complete=1;queued->request.result=0;queued->request.generation=99;
+ queued->request.inode.ino=42;queued->request.wire.q.id.seq=3;
+ open_rc=EFS_ERR_NET;server_pending=1;before_adopts=adopt_begins;
+ assert(efs_open_acquire_created(42,queued)==EFS_ERR_NET);
+ efs_pending_create_queue(queued);
+ assert(efs_pending_create_drain()==EFS_ERR_NET && g_pending_create_count==1 && g_pending_creates==queued);
+ open_rc=0;assert(efs_pending_create_drain()==EFS_ERR_BUSY && !g_pending_create_count && !g_pending_creates);
+ assert(!g_open_refs && !server_hold && !server_pending && adopt_begins==before_adopts);
+ queued=efs_pending_create_alloc();assert(queued);queued->request.complete=1;
+ queued->request.result=0;queued->request.generation=99;queued->request.inode.ino=42;
+ queued->request.wire.q.id.seq=3;server_pending=1;open_known_negative=1;
+ assert(efs_open_acquire_created(42,queued)==EFS_ERR_BUSY && !queued->adopted);
+ efs_pending_create_queue(queued);open_known_negative=0;
+ assert(efs_pending_create_drain()==EFS_ERR_BUSY && !g_pending_create_count && adopt_begins==before_adopts+1);
+ pending.adopted=0;assert(!efs_open_acquire(42));before_adopts=adopt_begins;
+ assert(!efs_open_acquire_created(42,&pending) && !pending.adopted && g_open_refs->n==2 && !g_open_refs->create_pending);
+ assert(!efs_open_adopt(42,99,3,&handed_off) && adopt_begins==before_adopts+1);
+ assert(!efs_close_note(42,&leased));assert(efs_close_note(42,&leased));assert(!efs_open_release_pending(42));
+ puts("FUSE lease retention: ambiguous OPEN/CLOSE, combined CREATE adoption, negative verdict, queued cleanup and clean-stop retry PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-lease-retention-') as d:

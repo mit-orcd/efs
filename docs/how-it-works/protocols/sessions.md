@@ -253,6 +253,15 @@ entry at each end of a session's use of a file. A fenced (dead) client's
 leases are safely retired by recovery, and a stale session's lease can
 neither keep an inode alive nor be reused (I19). Reclaim is L6.
 
+The production FUSE CREATE path combines its first OPEN with clearing the
+exact pending-CREATE token in one sequenced lease edge. It retains the
+original CREATE object while that edge is unresolved. A proven successful
+edge marks adoption before releasing that object; cleanup first proves the
+same edge, then compensates its OPEN with CLOSE and avoids a duplicate
+CLEAR_PENDING. A proven negative OPEN leaves ordinary pending-token cleanup
+responsible for the CREATE. Existing local open ownership retains the
+separate adoption path, and all waits share the caller’s original deadline.
+
 ## Distributed POSIX locking
 
 `fcntl()` byte-range locks and `flock()` must have **one global lock state**
