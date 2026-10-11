@@ -321,7 +321,18 @@ if [ "${EFS_VG_SKIP_UNITS:-0}" = 1 ]; then
 else
 for t in $UNIT_TESTS; do
     log="$WORK-unit-$t.vg"
-    timeout --signal=TERM --kill-after=10 300 $VG --log-file="$log" "./tests/$t" >"$WORK-unit-$t.out" 2>&1
+    unit_vg=$VG
+    case "$t" in
+        test_namespace_session|test_store_containers|test_principles_index|test_append_transaction|test_append_receipt|test_put_ticket|test_mtime_barrier|test_publication_session|test_publication_recovery|test_lane_bootstrap_recovery|test_kv_lsm|test_raft_store|test_session)
+            # These fixtures deliberately _exit in children before destruction.
+            # Keep their crash/recovery assertions and memory-access error exit
+            # checks; gate clean parent leaks separately. Abrupt child allocation
+            # lifetime is not clean-exit leak coverage and is explicitly excluded.
+            unit_vg="$VG --child-silent-after-fork=yes --errors-for-leak-kinds=none"
+            note "unit/$t: parent leak gate; deliberate crash-child leaks EXCLUDED (access-error exits still gated)"
+            ;;
+    esac
+    timeout --signal=TERM --kill-after=10 300 $unit_vg --log-file="$log" "./tests/$t" >"$WORK-unit-$t.out" 2>&1
     rc=$?
     [ "$rc" = 0 ] || fail "unit/$t: process exit $rc"
     gate "$log" "unit/$t"
