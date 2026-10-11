@@ -433,3 +433,26 @@ could immediately launch another full rebuild. Failure backoff now starts at
 completion. Successful start-to-start coalescing, pending-age reporting and
 all authority/durability gates remain unchanged. Scheduler boundary checks
 pass; installed validation of this separate change is pending.
+
+The isolated 100 ms checkpoint run still failed: **138/216 PASS, 15 FAIL,
+63 NOTRUN**, 224.5 seconds. A diagnostic run temporarily disabling query
+publication reached **203/216 PASS, 13 FAIL, 0 NOTRUN**, 550.4 seconds; directory,
+append and repeated-write deadlines still failed. Query contention contributes
+but does not explain the entire failure. The policy was restored to mask 3,
+version 2 before the next normal drain; this disabled-policy run is not an
+acceptance gate. Evidence is outside the repository in
+`/Users/mike/Documents/Codex/2026-10-05/how-x20/results/mac-readindex-resume/`.
+
+Operation-local authority reuse now avoids reissuing a successful parent/name
+shard ReadIndex while resolving the same LOOKUP's inode and lanes. SETATTR and
+UTIMENS likewise reuse their own fenced inode group after successful mutation
+settlement. Other newly observed lane/directory groups remain freshly fenced;
+transaction uncertainty, leader routing and missing-inode retries are preserved.
+No authority mask survives an RPC. The operation helper and captured-inode
+replacement tests pass on the Mac Linux seed; Raft, query scheduler, transaction
+read authority, follower redirects, readdir cursors, checkpoint intervals and
+retirement gates also pass. The local standalone helper passes; the linked
+replacement test needs the Linux-built libefs.a, absent in the macOS checkout.
+The unchanged native suite is running with features restored and the existing
+bounded 1,000 ms checkpoint setting; no default was changed. Full native
+acceptance remains pending.
