@@ -153,3 +153,14 @@ empty through 60 seconds. This proves eventual reclamation of this retained
 fixture, not a pass of its original deadline. Installed service restoration
 passes independently. W94/W95/W97 remain open; the default idle is unchanged.
 [Recovery evidence](../../results/measure/20261011-amd-sustained/evidence/candidate/live/cold-gc-recovery.json).
+
+## Fragment-backlog scheduling follow-up
+
+The first candidate considered only capped inode REAP scans. Repeated writes
+to live ring files instead create fragment-GC records, so that work could
+exhaust its 200-ms group budget without requesting the configured shorter idle.
+The follow-up includes a full fragment batch with pending records and successful
+ACK progress in the backlog signal. Physical deletion progress is still required
+by the idle policy; blocked/idle scans keep their backoff. Default scheduling,
+per-group budgets, authority and durable ACK ordering remain unchanged. This
+candidate is under normal/fault and direct/buffered live validation, not closed.

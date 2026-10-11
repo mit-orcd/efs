@@ -34,7 +34,8 @@ int main(void) {
 # Integration must keep both groups and snapshot-responsive shutdown slices.
 thread=s[b:s.index('/* W92 query publication:',b)]
 assert 'host_gc_reap_pass(h, h->g[g].group' in thread
-assert 'reap_capped |= __atomic_load_n' in thread
+assert 'backlog_capped |= __atomic_load_n' in thread
+assert 'backlog_capped |= host_gc_frag_pass(' in thread
 assert 'removed_before' in thread and 'removed_after' in thread
 assert 'host_snap_export_pass(h)' in thread and 'usleep(20 * 1000)' in thread
 with tempfile.TemporaryDirectory(prefix='efs-gc-idle-') as temp:

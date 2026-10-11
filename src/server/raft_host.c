@@ -7732,7 +7732,7 @@ static int host_gc_ack_flush(struct efs_raft_host *h, uint8_t group,
     return rc;
 }
 
-static void host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
+static int host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
                               uint32_t anchor)
 {
     static struct gc_scan_ctx c; /* one GC thread; 35 KB */
@@ -7742,14 +7742,14 @@ static void host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
     uint32_t plen = 0;
     uint64_t t0 = now_us_();
     int64_t pend;
-    int nack = 0, scans = 0, recs = 0;
+    int nack = 0, scans = 0, recs = 0, ack_progress = 0;
     int i;
 
     int prc, src;
 
     prc = efs_kv_key_gc_prefix(anchor, prefix, &plen);
     if (prc != EFS_OK)
-        return;
+        return 0;
     /* D26: the pending-GC watermark gates the scan. Unknown (process
      * start, snapshot import): derive it once by counting the prefix.
      * Zero: nothing to collect — an empty pass is this peek, no scan. */
@@ -7760,7 +7760,7 @@ static void host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
         src = efs_kv_scan_prefix(h->kv, prefix, plen, gc_count_cb, &n);
         if (src < 0) {
             __atomic_fetch_add(&h->s->gc_scan_errors, 1, __ATOMIC_RELAXED);
-            return;
+            return 0;
         }
         efs_meta_gc_pending_derived(anchor, n);
         pend = efs_meta_gc_pending_peek(anchor);
@@ -7772,7 +7772,7 @@ static void host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
     __atomic_fetch_or(&h->s->gc_sampled_mask, 1u << (group == 0 ? 0 : 1), __ATOMIC_RELAXED);
     if (pend == 0) {
         g_gc_cur_len[gc_gi(group)] = 0;
-        return;
+        return 0;
     }
     for (;;) {
         int gi = gc_gi(group);
@@ -7839,8 +7839,10 @@ static void host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
         }
         memcpy(g_gc_cur[gi], c.keys[c.n - 1], GC_KEY_LEN);
         g_gc_cur_len[gi] = GC_KEY_LEN;
+        int had_acks = nack > 0;
         if (host_gc_ack_flush(h, group, acks, &nack) != EFS_OK)
             break;
+        ack_progress |= had_acks;
         /* The records just acked are still in the KV until the entry
          * applies; a rescan from the cursor starts after them. Stop
          * when the scan was not full, the budget is spent, or the
@@ -8129,7 +8131,7 @@ static void *host_gc_thread(void *arg)
         struct efs_kv_scan_stats sc_frag, sc_all;
         struct reap_times reap_times = {0};
         uint64_t removed_before = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED);
-        int reap_capped = 0;
+        int backlog_capped = 0;
 
         __atomic_store_n(&h->s->gc_pass_start_us, efs_iostats_now_us(), __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_stage, 1, __ATOMIC_RELAXED);
@@ -8172,7 +8174,7 @@ static void *host_gc_thread(void *arg)
             t_orphan += now_us_() - ta;
             ta = now_us_();
             host_gc_reap_pass(h, h->g[g].group, anchor, &reap_times);
-            reap_capped |= __atomic_load_n(&h->s->gc_reap_capped[g], __ATOMIC_RELAXED);
+            backlog_capped |= __atomic_load_n(&h->s->gc_reap_capped[g], __ATOMIC_RELAXED);
             t_reap += now_us_() - ta;
             ta = now_us_();
             {
@@ -8180,7 +8182,7 @@ static void *host_gc_thread(void *arg)
 
                 efs_kv_lsm_scan_stats(&b, 0);
                 __atomic_store_n(&h->s->gc_stage, 4, __ATOMIC_RELAXED);
-                host_gc_frag_pass(h, h->g[g].group, anchor);
+                backlog_capped |= host_gc_frag_pass(h, h->g[g].group, anchor);
                 efs_kv_lsm_scan_stats(&a, 0);
                 sc_frag.scans += a.scans - b.scans;
                 sc_frag.segs += a.segs - b.segs;
@@ -8240,7 +8242,7 @@ static void *host_gc_thread(void *arg)
         __atomic_store_n(&h->s->gc_stage, 0, __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_pass_start_us, 0, __ATOMIC_RELAXED);
         uint64_t removed_after = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED);
-        unsigned idle_ms = host_gc_backlog_idle(h->gc_backlog_idle_ms, reap_capped, removed_before, removed_after);
+        unsigned idle_ms = host_gc_backlog_idle(h->gc_backlog_idle_ms, backlog_capped, removed_before, removed_after);
         if (idle_ms < GC_LOOP_MS && env_on("EFS_RAFT_OBS"))
             fprintf(stderr, "raft-host: gc-backlog-idle ms=%u removed=%llu\n", idle_ms,
                     (unsigned long long)(removed_after - removed_before));
