@@ -250,3 +250,8 @@ the existing 20-ms snapshot/shutdown slice. The next private candidate uses
 Default scheduling and all work/ACK/authority budgets remain unchanged.
 This needs full native/direct functional and both 600-second cold/physical
 gates, with latency/CPU review; it is not unpaced-overload admission or closure.
+
+The 20-ms follow-up also times the existing warm tiny reads, without adding
+I/O. Every generation must still byte-verify before retirement. Read-window
+quantiles are new instrumentation; older cells have no comparable read-tail
+field, so they cannot establish a matched read-latency gain.

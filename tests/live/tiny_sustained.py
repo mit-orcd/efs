@@ -33,7 +33,7 @@ def exercise(mount, pids, seconds, evidence, large_mib_s=0):
     def measure(kind, duration_us):
         window = int((time.monotonic()-start)//30)
         with lock:
-            sample = samples.setdefault(window, {'open': [], 'close': [], 'delete': []})
+            sample = samples.setdefault(window, {'open': [], 'close': [], 'delete': [], 'read': []})
             sample[kind].append(duration_us)
     def tiny(worker):
         gate.wait(timeout=30)
@@ -54,7 +54,9 @@ def exercise(mount, pids, seconds, evidence, large_mib_s=0):
             # Every acknowledged generation is byte-checked before retirement.
             for slot in range(slots):
                 path = folder / f'tiny-{worker}-{slot}'
+                before = time.monotonic_ns()
                 assert path.read_bytes() == data, path
+                measure('read', (time.monotonic_ns()-before)/1000)
             if stop.is_set() or time.monotonic() >= deadline:
                 return generation
             for slot in range(slots):
