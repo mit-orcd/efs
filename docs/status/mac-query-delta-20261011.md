@@ -554,3 +554,18 @@ ordinary per-participant entries separately, each paying a log durability
 barrier. This is the next measured lead; no native pass is claimed. Slowing
 markers to the existing 1,000 ms setting alone also failed the unchanged deep
 pair (0/2, 31.4 seconds), so cadence alone is insufficient.
+
+The collector now covers bounded locally led nonsolo prefixes across groups
+sharing the physical Raft log, and COMMIT participant resolution uses it only
+after the coordinator's durable decision succeeds. Every original resolution
+entry and exact verdict remains independent; failed/partial submission,
+failed fsync or a missing verdict retains the finisher and propagates failure.
+The production collector/commit regression covers all 144 participants,
+ordering across groups, undecided refusal, ambiguous decision, partial batch,
+failed barrier and failed verdict. Linux Raft disk/core, transaction recovery,
+apply retry, namespace fencing and packing-capacity gates pass. The live deep
+pair still failed 0/2 in 37.4 seconds, normally cleaned. Phase samples still
+show 106–188 ms transaction commit and 88–214 ms session admission under this
+load. This is not evidence of a latency improvement. Repeated failed query
+index builds take 24–37 seconds on each replica; a normally restored disabled-
+query diagnostic will distinguish their contribution from consensus costs.

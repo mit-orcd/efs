@@ -51,5 +51,5 @@ for name in ['mkdir','rmdir']:
  body=s[a:b];route=body.index('host_namespace_leader_hint(')
  assert route<body.index('host_namespace_session_admit(')
  assert route<body.index('host_read_index(')
- assert route<body.index('host_prepare_cohort_begin(')
+ assert route<body.index('host_command_cohort_begin(')
  assert 'set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;' in body
