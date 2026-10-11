@@ -423,6 +423,7 @@ test: all
 	./tests/test_publication_recovery
 	./tests/test_append_receipt
 	./tests/test_append_transaction
+	python3 tests/test_append_prepare_batch.py
 	./tests/test_meta_apply
 	./tests/test_lane_bootstrap_recovery
 	./tests/test_raft

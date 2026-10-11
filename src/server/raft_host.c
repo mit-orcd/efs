@@ -11689,9 +11689,10 @@ static int host_mtime_prepare(void *user, const struct efs_txid *t,
 
 /* APPEND selects exact images once on a complete authoritative view.
  * Replicas apply those images; they never recompute EOF from local lanes. */
-static int host_append_prepare(void *user,const struct efs_txid *t,
+static int host_append_prepare_ref(void *user,const struct efs_txid *t,
                                 const struct efs_txn_parts *parts,
-                                const struct efs_meta_append_image *im)
+                                const struct efs_meta_append_image *im,
+                                struct host_idx_ref *ref)
 {
     struct host_resize_ctx *ctx=user;
     uint8_t pay[9+2*EFS_OPID_VAL_MAX];uint32_t pn;
@@ -11700,10 +11701,66 @@ static int host_append_prepare(void *user,const struct efs_txid *t,
     if(rc!=EFS_OK)return rc;
     uint32_t shard=((uint32_t)im->key[0]<<8)|im->key[1];
     return host_prep_raw(ctx->host,shard,EFS_TXN_EXCL_VALUE,t,parts,
-                         im->key,im->klen,pay,pn,NULL,ctx->hint);
+                         im->key,im->klen,pay,pn,ref,ctx->hint);
+}
+static int host_append_prepare(void *user,const struct efs_txid *t,
+                                const struct efs_txn_parts *parts,
+                                const struct efs_meta_append_image *im)
+{
+    return host_append_prepare_ref(user,t,parts,im,NULL);
 }
 static const struct efs_meta_append_ops host_append_ops={
     host_append_prepare,host_resize_decide,host_resize_resolve};
+
+/* Reservations keep their floor and inode guards synchronous and ordered.
+ * The remaining exact images can share Raft durability cohorts. No decision
+ * precedes the existing term/index-matched result check for EVERY proposal.
+ * Completion/pruning continue using the synchronous callbacks above. */
+struct host_append_reserve_ctx {
+    struct host_resize_ctx base;
+    struct host_idx_ref refs[EFS_META_LANES+5];
+    int nrefs,leading;
+};
+static int host_append_reserve_prepare(void *user,const struct efs_txid *t,
+    const struct efs_txn_parts *parts,const struct efs_meta_append_image *im)
+{
+    struct host_append_reserve_ctx *ctx=user;
+    if(ctx->leading) {
+        int rc=host_append_prepare(&ctx->base,t,parts,im);
+        if(rc==EFS_OK)--ctx->leading;
+        return rc;
+    }
+    if(ctx->nrefs>=(int)(sizeof(ctx->refs)/sizeof(ctx->refs[0])))
+        return EFS_ERR_INVAL;
+    int rc=host_append_prepare_ref(&ctx->base,t,parts,im,&ctx->refs[ctx->nrefs]);
+    if(rc==EFS_OK)++ctx->nrefs;
+    return rc;
+}
+static int host_append_reserve_decide(void *user,const struct efs_txid *t,
+    const struct efs_txn_parts *parts,int decision)
+{
+    struct host_append_reserve_ctx *ctx=user;
+    int prepared=host_wait_refs(ctx->base.host,ctx->refs,ctx->nrefs,ctx->base.hint);
+    ctx->nrefs=0;
+    if(decision==EFS_TXN_COMMIT && (prepared!=EFS_OK || ctx->leading)) {
+        /* COMMIT has not been proposed. A late PREPARE refusal must take the
+         * same durable ABORT/cleanup path as a synchronous PREPARE failure. */
+        int rc=host_resize_decide(&ctx->base,t,parts,EFS_TXN_ABORT);
+        if(rc==EFS_OK)rc=host_resize_resolve(&ctx->base,t,parts,EFS_TXN_ABORT);
+        return rc!=EFS_OK?rc:(prepared!=EFS_OK?prepared:EFS_ERR_INVAL);
+    }
+    /* After a COMMIT proposal, preserve ambiguous errors and its finisher;
+     * never turn an unknown COMMIT into ABORT. */
+    return host_resize_decide(&ctx->base,t,parts,decision);
+}
+static int host_append_reserve_resolve(void *user,const struct efs_txid *t,
+    const struct efs_txn_parts *parts,int decision)
+{
+    struct host_append_reserve_ctx *ctx=user;
+    return host_resize_resolve(&ctx->base,t,parts,decision);
+}
+static const struct efs_meta_append_ops host_append_reserve_ops={
+    host_append_reserve_prepare,host_append_reserve_decide,host_append_reserve_resolve};
 static int host_append_authority(struct efs_raft_host *h,int *hint)
 {
     uint8_t groups[2];host_need_both(groups);
@@ -11805,8 +11862,9 @@ static int host_append_transaction(struct efs_raft_host *h,efs_ino_t ino,uint64_
     rc=efs_meta_capture_append(h->kv,ino,len,q,host_txn_coord,h,plan);
     if(rc==EFS_OK) {
         *offset=plan->offset;fill_txid(h,&t);
-        rc=registered?efs_meta_execute_append_owned(h->kv,plan,q,&t,&host_append_ops,&ctx):
-                      efs_meta_execute_append(plan,&t,&host_append_ops,&ctx);
+        struct host_append_reserve_ctx batch={.base={h,hint},.leading=registered?2:1};
+        rc=registered?efs_meta_execute_append_owned(h->kv,plan,q,&t,&host_append_reserve_ops,&batch):
+                      efs_meta_execute_append(plan,&t,&host_append_reserve_ops,&batch);
         /* Exact-image conflicts are retryable; capture's retired identity
          * STALE is preserved and never allocated a second reservation. */
         if(rc==EFS_ERR_STALE)rc=EFS_ERR_BUSY;
