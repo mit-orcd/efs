@@ -3,7 +3,7 @@
 import gzip,hashlib,json,re,shutil
 from pathlib import Path
 base=Path('/data1/efs/devel-nuc-20261011');out=base/'evidence-v3';out.mkdir(exist_ok=True)
-folders=('build','candidate-build','fixed-build','fixed-live','fixed-v2-build','fixed-v2-live','fixed-v3-build','fixed-v3-live','control-build','control-v3-build','append-comparison','append-comparison-v3','block-traces','loaded-append-v2','loaded-append-notrun-plan20','focused','drive-policy','long-control-profile','block-traces-prebudget-plan','append-comparison-v3-prebudget-plan','loaded-append-v2-prebudget-plan','final-native')
+folders=('build','candidate-build','fixed-build','fixed-live','fixed-v2-build','fixed-v2-live','fixed-v3-build','fixed-v3-live','control-build','control-v3-build','append-comparison','append-comparison-v3','block-traces','loaded-append-v2','loaded-append-notrun-plan20','focused','drive-policy','long-control-profile','block-traces-prebudget-plan','append-comparison-v3-prebudget-plan','loaded-append-v2-prebudget-plan','final-native','offline-append-fanout')
 fixtures={}
 def copy(source,dest):
  dest.parent.mkdir(parents=True,exist_ok=True)
@@ -29,7 +29,7 @@ for name,folder in fixtures.items():
   if source.is_file() and source.suffix in ('.json','.tsv','.log','.txt'):
    copy(source,out/'fixtures'/name/source.name)
 for source in base.iterdir():
- if source.is_file() and source.suffix in ('.py','.sh','.json','.log','.txt'):
+ if source.is_file() and source.suffix in ('.py','.sh','.json','.log','.txt','.c'):
   copy(source,out/'controllers'/source.name)
 for label,folder in (('baseline',base/'src'),('candidate',base/'candidate'),('control',base/'control')):
  paths=[p for parent in ('src','include','deps') for p in (folder/parent).rglob('*') if p.is_file() and p.suffix in ('.c','.h')]
