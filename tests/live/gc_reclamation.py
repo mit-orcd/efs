@@ -535,7 +535,7 @@ try:
         if a.posix and a.packing_clients==7:
             mounts=[mount,peer_mount]
             for i in range(2,a.packing_clients):
-                target=work/('pack-client-'+str(i));target.mkdir()
+                target=Path(tempfile.mkdtemp(prefix='efs-pack-client-'+str(i)+'-',dir=tempfile.gettempdir()))
                 log=open(work/('pack-client-'+str(i)+'.log'),'ab');handles.append(log)
                 proc=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(target),'-f'],env=env,stdout=log,stderr=log)
                 extra_clients.append((proc,target));mounts.append(target)
@@ -551,7 +551,7 @@ try:
             with concurrent.futures.ThreadPoolExecutor(max_workers=a.packing_clients) as pool:
                 failures.extend(r for r in pool.map(concurrent_posix,enumerate(mounts)) if r['returncode'])
             for proc,target in extra_clients:
-                run([source/'scripts/client.sh','stop',target]);proc.wait(timeout=15)
+                run([source/'scripts/client.sh','stop',target]);proc.wait(timeout=15);target.rmdir()
             extra_clients.clear()
         if a.posix:
             for label,command in (
@@ -1982,7 +1982,7 @@ os.close(fd)
                 wait(ready,f'IOR independent client {index+1} mounted',40)
         def stop_ior_peers():
             for proc,target in extra_clients:
-                run([source/'scripts/client.sh','stop',target]);proc.wait(timeout=15)
+                run([source/'scripts/client.sh','stop',target]);proc.wait(timeout=15);target.rmdir()
             extra_clients.clear()
         wrapper=work/'ior-client-wrapper'
         wrapper.write_text('#!/usr/bin/env python3\nimport os,sys\nfrom pathlib import Path\nroots='+repr([str(mount)]+[str(work/f'ior-client-{i}') for i in range(1,a.ior_clients)])+'\nargs=sys.argv[1:]\ni=args.index("-o")+1\nrelative=Path(args[i]).relative_to(roots[0])\nargs[i]=str(Path(roots[int(os.environ["PMI_RANK"])//4])/relative)\nos.execv('+repr(str(a.ior_binary))+',['+repr(str(a.ior_binary))+',*args])\n')
