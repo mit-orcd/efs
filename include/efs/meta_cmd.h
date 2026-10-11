@@ -143,4 +143,9 @@
 #define EFS_XATTR_VALUE_MAX 4096
 #define EFS_XATTR_BLOB_MAX  16384
 
+/* LEASE_LOCK_NEXT reply: BUSY with zero index/term and this salt certifies
+ * selection/admission refused before any cleanup command was proposed.
+ * An ordinary BUSY (including an uncertain submitted batch) has no marker. */
+#define EFS_MD_SESSION_CLEANUP_RETRY_SALT 2ull
+
 #endif

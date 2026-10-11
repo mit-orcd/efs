@@ -1286,7 +1286,9 @@ static int sess_cleanup_bounded(const char *host, uint16_t port,
          * remain leaderless beyond sess_rpc's redirect window. Retry only
          * that definite rejection, with the same UUID/epoch/shard and the
          * original invocation deadline (also bounding socket waits). */
-        if (rc == EFS_ERR_NOT_PRIMARY) {
+        if (rc == EFS_ERR_NOT_PRIMARY ||
+            (rc == EFS_ERR_BUSY && !appends && !reply->index && !reply->term &&
+             reply->salt == EFS_MD_SESSION_CLEANUP_RETRY_SALT)) {
             usleep(50000);
             continue;
         }
@@ -1495,7 +1497,9 @@ static int cmd_raft_session(int argc, char **argv)
         memset(&reply, 0, sizeof(reply)); reply.leader_hint = -1;
         int rc = sess_cleanup_bounded(host, port, uuid, (uint32_t)old,
                                       (uint32_t)target, !strcmp(op,"cleanup-appends"), &reply);
-        printf("raft-session op=%s epoch=%lu shard=%lu rc=%d\n", op, old, target, rc);
+        printf("raft-session op=%s epoch=%lu shard=%lu rc=%d index=%llu salt=%llu\n",
+               op, old, target, rc, (unsigned long long)reply.index,
+               (unsigned long long)reply.salt);
         return rc == EFS_OK ? 0 : 1;
     }
     ssh = efs_kv_session_shard(uuid);

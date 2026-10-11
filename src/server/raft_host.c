@@ -10087,7 +10087,14 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     if (clen>=2 && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_LOCK_NEXT) {
         uint32_t packed=0;
         rc=host_pack_session_cleanup(h,cmd,clen,group,&hint,cleanup_cmd,&packed);
-        if (rc!=EFS_OK) {out->rc=rc;out->leader_hint=hint;return;}
+        if (rc!=EFS_OK) {
+            out->rc=rc;out->leader_hint=hint;
+            /* No proposal has occurred: a cold ReadIndex or unfinished
+             * barrier may refuse selection. Never attach this certificate
+             * to a submitted batch's timeout or apply verdict. */
+            if (rc==EFS_ERR_BUSY) out->salt=EFS_MD_SESSION_CLEANUP_RETRY_SALT;
+            return;
+        }
         if (!packed) {
             struct host_view v;host_view_get(h,group,&v);
             out->rc=EFS_OK;out->salt=1;out->index=v.applied;return;
