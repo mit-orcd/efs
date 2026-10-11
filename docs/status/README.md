@@ -421,3 +421,20 @@ after targeted NUC acceptance; W69 correctness passes, with its unidentified
 Spark performance measurement still owed. Grouped open counts are now
 15 unfinished, 11 awaiting gates, three decisions and 18 future features:
 **47 open packages**. Earlier tables remain dated baselines.
+
+
+## Intel follow-ups — W100–W106 (indexed Oct 11, 2026)
+
+This index adds traceable IDs to the Intel acceptance follow-ups; it does not change the existing queue order or accepted design decisions. Existing sustained tiny-file performance remains W97, protection/repair W74/W66, durability W71/W73 and capacity W99.
+
+| ID | Task | Recorded state |
+| --- | --- | --- |
+| [W100](../backlog/work-items.md#w100) | Intel2 repeated-write POSIX timeout | Correctness/performance investigation; open. |
+| [W101](../backlog/work-items.md#w101) | Complete and verify the Intel two-million-file workload | Operational acceptance; in progress. |
+| [W102](../backlog/work-items.md#w102) | Complete Intel2 private peer and GC acceptance | Validation follow-up; blocked by W100 in the full harness. |
+| [W103](../backlog/work-items.md#w103) | Investigate intermittent Intel persistence and stats timeouts | Liveness/performance investigation; open. |
+| [W104](../backlog/work-items.md#w104) | Decide and gate writable shared mmap support | Feature scope/design follow-up; deferred, currently unsupported by specification. |
+| [W105](../backlog/work-items.md#w105) | Stable NFS file handles across EFS client restarts | Gateway acceptance/correctness investigation; open. |
+| [W106](../backlog/work-items.md#w106) | Intel RDMA feasibility and transport acceptance | Optional transport investigation; hardware/software prerequisite blocked. |
+
+Pending choices retain their existing homes: W99 cache-only pressure escalation and numeric thresholds; W54 additional live-reference GC guard; W66/W74 metadata mechanism under accepted D36. W104 separately records the deferred shared-mmap scope choice. No new D number or policy acceptance is implied.
