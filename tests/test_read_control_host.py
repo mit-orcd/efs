@@ -42,6 +42,9 @@ int main(void) {
  result=1;assert(host_read_control(&h,p,sizeof(p)) && calls==3 && published==2 && woken==2);
  /* Fully accounted probe replies leave no pending bookkeeping. */
  result=0;assert(!host_read_control(&h,p,sizeof(p)) && calls==4 && published==2);
+ p[0]=EFS_RAFT_MSG_AE_REQ;result=2;
+ assert(!host_read_control(&h,p,sizeof(p)) && calls==5 && published==2 && woken==2);
+ /* Early follower ACK leaves commit/apply on the normal ordered inbox. */
  assert(!pthread_mutex_trylock(&h.mu));pthread_mutex_unlock(&h.mu);
  assert(!pthread_mutex_trylock(&h.inbox_mu));pthread_mutex_unlock(&h.inbox_mu);
  pthread_mutex_destroy(&h.mu);pthread_mutex_destroy(&h.inbox_mu);

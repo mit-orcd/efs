@@ -561,7 +561,9 @@ static void test_readindex_control(void)
     CHECK(n.cap_n==1 && n.cap_ok && n.cap_match==index,"control ACK exact matched prefix");
     CHECK(app[follower].n==applied,"pure probe never applies");
     probe.leader_commit=index+1;
-    CHECK(!efs_raft_read_control(n.r[follower],&probe),"unapplied commit stays on pump");
+    CHECK(efs_raft_read_control(n.r[follower],&probe)==2,
+          "fresh matched-prefix ACK precedes deferred follower commit/apply");
+    CHECK(app[follower].n==applied,"early follower ACK does not apply");
     probe.leader_commit=index;probe.prev_term++;
     CHECK(!efs_raft_read_control(n.r[follower],&probe),"unmatched prefix stays on pump");
     probe.prev_term--;probe.term++;
@@ -571,13 +573,14 @@ static void test_readindex_control(void)
     probe.boot_id=1;probe.nentries=1;
     CHECK(!efs_raft_read_control(n.r[follower],&probe),"log bytes stay on pump");
     probe.nentries=0;probe.last_log_index=0;
-    CHECK(!efs_raft_read_control(n.r[follower],&probe),"ordinary heartbeat stays on pump");
+    CHECK(efs_raft_read_control(n.r[follower],&probe)==1,
+          "fully applied ordinary heartbeat has no deferred bookkeeping");
     struct efs_raft_msg reply={0};reply.type=EFS_RAFT_MSG_AE_REP;
     reply.from=follower;reply.to=leader;reply.term=efs_raft_term(n.r[leader]);
     reply.boot_id=1;reply.success=1;reply.match_index=index;
     reply.last_log_index=efs_raft_read_round(n.r[leader])-1;
-    CHECK(!efs_raft_read_control(n.r[leader],&reply) && !efs_raft_read_ready(n.r[leader]),
-          "uncorrelated zero-context heartbeat stays on pump without authority");
+    CHECK(efs_raft_read_control(n.r[leader],&reply)==1 && !efs_raft_read_ready(n.r[leader]),
+          "accounted zero-context heartbeat never grants read authority");
     reply.last_log_index++;
     reply.success=0;
     CHECK(!efs_raft_read_control(n.r[leader],&reply),"failed/pressure ACK is not authority");
@@ -624,6 +627,32 @@ static void test_readindex_control(void)
           "uncommitted suffix retains normal reply bookkeeping");
     CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"another suffix round");
     CHECK(!efs_raft_read_control(n.r[leader],&reply),"old suffix probe stays on pump");
+    n.hold_ae_replies=0;elect(&n,4);
+    app[follower].park_apply=1;
+    CHECK(efs_raft_propose(n.r[leader],&cmd,1,&index)==EFS_OK,"follower parked new durable prefix");
+    elect(&n,4);n.hold_ae_replies=1;
+    CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"fresh round with parked follower apply");
+    probe.prev_index=index;probe.prev_term=efs_raft_term(n.r[leader]);
+    probe.leader_commit=index;probe.last_log_index=efs_raft_read_round(n.r[leader]);
+    probe.nentries=0;probe.term=efs_raft_term(n.r[leader]);
+    applied=app[follower].n;
+    CHECK(efs_raft_applied(n.r[follower])<index,"follower's apply really remains parked");
+    CHECK(efs_raft_read_control(n.r[follower],&probe)==2 && app[follower].n==applied,
+          "durable matched prefix votes early but retains queued apply work");
+    uint64_t fresh_context=probe.last_log_index;probe.last_log_index=0;
+    CHECK(!efs_raft_read_control(n.r[follower],&probe),
+          "ordinary heartbeat still queues parked commit/apply work");
+    probe.last_log_index=fresh_context;
+    reply.last_log_index=probe.last_log_index;reply.match_index=index;
+    reply.term=probe.term;reply.vote_granted=1;
+    CHECK(efs_raft_read_control(n.r[leader],&reply)>0 && efs_raft_read_ready(n.r[leader]) &&
+          efs_raft_applied(n.r[leader])>=index,
+          "parked follower can vote; leader still proves its own applied read barrier");
+    probe.prev_term++;
+    CHECK(!efs_raft_read_control(n.r[follower],&probe),"unproven parked prefix cannot vote");
+    probe.prev_term--;app[follower].park_apply=0;
+    CHECK(efs_raft_recv(n.r[follower],&probe)==EFS_OK && efs_raft_applied(n.r[follower])>=index,
+          "queued original request completes follower commit/apply after early ACK");
     n.hold_ae_replies=0;elect(&n,4);
     /* Installing an uncommitted joint configuration disables this path,
      * even before the committed configuration switches. */

@@ -2458,12 +2458,12 @@ int efs_raft_read_begin(struct efs_raft *r)
     return broadcast_ae(r);
 }
 
-/* Service an already-applied, stable-leader read probe without walking the
- * replication/apply path. Caller holds the normal Raft serialization lock.
- * Boot changes, configuration transitions, unknown leaders and any unproven
- * log/apply work remain on recv. No storage mutation or replication progress
- * is performed here. Only exact already-accounted probe replies may be fully
- * consumed. Replies needing replication bookkeeping still pass through recv. */
+/* Service matched durable-prefix stable-leader probes without waiting for
+ * follower KV apply. Caller holds normal Raft serialization; incomplete log
+ * batches, boot/config changes and unknown leaders stay on recv. An early ACK
+ * grants heartbeat quorum only: requests owing commit/apply and replies owing
+ * replication progress still pass through recv. The leader retains its own
+ * applied-prefix barrier. Fully accounted empty traffic can be consumed. */
 int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *in)
 {
     uint64_t term=0;
@@ -2472,15 +2472,18 @@ int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *in)
         in->from<0 || in->from>=EFS_RAFT_MAX_PEERS || in->from==r->id ||
         !r->peer_boot[in->from] ||
         (in->boot_id?in->boot_id:1)!=r->peer_boot[in->from] ||
-        in->term!=r->current_term || in->nentries || !in->last_log_index ||
+        in->term!=r->current_term || in->nentries ||
         !is_voter(r,in->from) || !is_voter(r,r->id) ||
         r->log_new || r->app_new || r->log_old!=r->app_old)
         return 0;
     if (in->type==EFS_RAFT_MSG_AE_REQ) {
         if (r->role!=EFS_RAFT_FOLLOWER || r->leader!=in->from ||
-            in->leader_commit>r->last_applied || in->prev_index>r->last_applied ||
             log_term(r,in->prev_index,&term)!=EFS_OK || term!=in->prev_term)
             return 0;
+        /* Zero-context heartbeats can bypass only when no commit/apply
+         * bookkeeping is owed. They never grant request-scoped authority. */
+        if(!in->last_log_index && (in->leader_commit>r->last_applied ||
+                                  r->commit_index>r->last_applied))return 0;
         struct efs_raft_msg reply={0};
         reply.type=EFS_RAFT_MSG_AE_REP;reply.to=in->from;
         reply.success=1;reply.vote_granted=in->vote_granted;
@@ -2488,7 +2491,14 @@ int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *in)
         reset_election(r);
         /* Send failure falls back to normal receive; duplicate read ACKs
          * cannot form an extra vote or grant another round's authority. */
-        return send_msg(r,&reply)==EFS_OK ? 1 : 0;
+        if(send_msg(r,&reply)!=EFS_OK)return 0;
+        /* The same-term known leader's matched, previously persisted prefix
+         * grants a heartbeat vote, not KV authority. If commit/apply work is
+         * still owed, queue the request for normal recv after this early ACK.
+         * Deferred log batches/failure are excluded above; the leader still
+         * needs its own apply barrier before any read may complete. */
+        return in->leader_commit<=r->last_applied &&
+               r->commit_index<=r->last_applied ? 1 : 2;
     }
     if (in->type!=EFS_RAFT_MSG_AE_REP || r->role!=EFS_RAFT_LEADER || !in->success)
         return 0;
