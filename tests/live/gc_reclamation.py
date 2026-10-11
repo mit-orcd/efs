@@ -868,11 +868,16 @@ try:
             raise
         assert 'two concurrent receipt PREPAREs' in namespace_guard,namespace_guard
         (work/'namespace-guard-wire.txt').write_text(namespace_guard)
-        guard_path=mount/'legacy-close-guard';guard_path.write_bytes(b'guard')
-        guard_ino=guard_path.stat().st_ino
-        guarded_wire=run([helper,'--legacy-guard',str(a.port),str(guard_ino)],capture_output=True,text=True,timeout=45).stdout
-        assert 'later RESOLVE and retry' in guarded_wire,guarded_wire
-        (work/'legacy-close-guard.txt').write_text(guarded_wire)
+        guard_path=mount/'legacy-close-guard'
+        # The absent-value PREPARE below owns the test marker. Keep the real
+        # descriptor open until RESOLVE: closing it first queues its own
+        # CLOSE_STEP and makes the fixture race unrelated GC retirement.
+        with guard_path.open('wb') as guard_file:
+            guard_file.write(b'guard');guard_file.flush();os.fsync(guard_file.fileno())
+            guard_ino=guard_path.stat().st_ino
+            guarded_wire=run([helper,'--legacy-guard',str(a.port),str(guard_ino)],capture_output=True,text=True,timeout=45).stdout
+            assert 'later RESOLVE and retry' in guarded_wire,guarded_wire
+            (work/'legacy-close-guard.txt').write_text(guarded_wire)
         guard_path.unlink();wait(lambda:not files(guard_ino),'legacy prepared-close guard physical reclaim',180)
 
         # Error constants are extracted from the build header, not host errno.

@@ -14,10 +14,13 @@
 static void be(uint8_t *p,uint64_t v,unsigned n){while(n){p[--n]=(uint8_t)v;v>>=8;}}
 static uint64_t owner_rpc(unsigned port, const uint8_t *payload, unsigned length, int expected)
 {
+    unsigned connect_failures = 0, transport_failures = 0, redirects = 0;
+    unsigned cleanup_stale = 0, cleanup_busy = 0, session_busy = 0;
     fprintf(stderr,"owner BEGIN command=%u sub=%u length=%u expected=%d\n",payload[1],payload[2],length,expected);
     for (unsigned a = 0; a < 120; a++) {
         int fd = efs_connect_tcp("127.0.0.1", port + a % 4);
         if (fd < 0) {
+            connect_failures++;
             usleep(10000);
             continue;
         }
@@ -31,6 +34,7 @@ static uint64_t owner_rpc(unsigned port, const uint8_t *payload, unsigned length
             rc = efs_recv_msg(fd, &type, &body, &len);
         close(fd);
         if (rc) {
+            transport_failures++;
             free(body);
             usleep(10000);
             continue;
@@ -40,6 +44,7 @@ static uint64_t owner_rpc(unsigned port, const uint8_t *payload, unsigned length
         memcpy(&reply, body, sizeof(reply));
         free(body);
         if (reply.rc == EFS_ERR_NOT_PRIMARY) {
+            redirects++;
             usleep(10000);
             continue;
         }
@@ -49,13 +54,15 @@ static uint64_t owner_rpc(unsigned port, const uint8_t *payload, unsigned length
         if(expected==EFS_OK && reply.rc==EFS_ERR_BUSY &&
            payload[1]==EFS_MD_CMD_SESSION &&
            (payload[2]==0 || (payload[2]==EFS_MD_SESS_FINISH && length==23))) {
-            usleep(10000);continue;
+            session_busy++;usleep(10000);continue;
         }
         /* Sequenced mounted CLOSE can leave its real cleanup obligation
          * queued briefly. An absent-value PREPARE must wait for that work;
          * never replace or overwrite the pre-existing marker. */
         if (payload[1] == EFS_MD_CMD_PREPARE && expected == EFS_OK &&
             (reply.rc == EFS_ERR_STALE || reply.rc == EFS_ERR_BUSY)) {
+            cleanup_stale += reply.rc == EFS_ERR_STALE;
+            cleanup_busy += reply.rc == EFS_ERR_BUSY;
             usleep(10000);
             continue;
         }
@@ -64,6 +71,9 @@ static uint64_t owner_rpc(unsigned port, const uint8_t *payload, unsigned length
         assert(reply.rc == expected);
         return reply.salt;
     }
+    fprintf(stderr,"owner RPC exhausted group=%u command=%u sub=%u connect=%u transport=%u redirects=%u cleanup_stale=%u cleanup_busy=%u session_busy=%u\n",
+            payload[0],payload[1],payload[2],connect_failures,transport_failures,
+            redirects,cleanup_stale,cleanup_busy,session_busy);
     assert(!"owner RPC deadline");
     return 0;
 }
