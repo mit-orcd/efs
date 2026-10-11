@@ -185,7 +185,8 @@ try:
         # This cross-parent transaction needs both metadata groups. Group 0
         # electing a new leader alone does not make group 2 authoritative.
         transaction_session='00000000000000000000000000000001' # even FNV shard, group 2
-        assert active_session(mgmt(old,'raft-session','create',transaction_session,1))
+        transaction_created=mgmt(old,'raft-session','create',transaction_session,1)
+        assert 'status=0' in transaction_created,transaction_created
         assert active_session(mgmt(old,'raft-session','get',transaction_session))
         txn_parents=[]
         for name in ('txn-source','txn-destination'):
