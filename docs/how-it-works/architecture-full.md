@@ -1800,7 +1800,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | tiny-create | **W94** · atomic CREATE plus open lease | performance / lifecycle | partial — retained FUSE CREATE/adoption, sequenced lease edges and cleanup AMD gated; REPORT session fences AMD gated; data-plane/per-publication integration and measured consensus/throughput gate remain open | [work item](#w94) |
 | scratch-expiry | **W90** · scratch-file expiry metadata and safe lifecycle | feature | design accepted D33; opt-in fixed deadlines and safe lifecycle; implementation/gates open | [work item](#w90) · [design](../status/scratch-expiry-interface.md) |
 | virtual-commands | **W91** · directory-local virtual `.efs/` command interface | usability feature | design accepted D34; `.efs/` commands and bounded query paths; implementation/compatibility gates remain | [work item](#w91) · [design](../status/scratch-expiry-interface.md) |
-| tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | partial — tiny/durable/cold/crash/churn gates pass; indexed packing and P4.1 decision remain | [work item](#w95) |
+| tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | partial — independent indexed packing, publication/GC fault and 24-sample AMD churn gates pass; P4.1 production-format and migration decision remain | [work item](#w95) |
 | tiny-kv | **W96** · bounded KV WAL preallocation | performance experiment | partial — recovery/reservation/fault and final guard cold gates pass; isolated NUC acceptance owed | [work item](#w96) |
 | decisions | **D28** client-death loss policy · **D29** durable publication receipts · **D30** bounded admission/pacing | accepted design | accepted Oct 8: salvage deferred; D29/W88 implementation first, then D30/W23/W89; implementation and acceptance remain open | [contracts and gates](#d28d30--accepted-oct-8-2026) |
 | op1 | **W70** · shrink-quota falsely reports background migration | operator observability bug | truthful running-quota reporting implemented; NUC accepted/refused shrink and unchanged-byte gates pass; no migration or persistence claim | [work item](#w70) |
@@ -6484,7 +6484,7 @@ open latency as a measured saving.
 
 ### W95 · Tiny-file data persistence and packing principles
 
-**Implementation update (Oct 8):** Independent tiny geometry, durable cohort latency, retained/cold/process-crash experiments and production churn are tested. An independent indexed-packing protocol and any production-format decision remain open.
+**Implementation update (Oct 8):** Independent tiny geometry, durable cohort latency, retained/cold/process-crash experiments and production churn are tested. The independent indexed-packing protocol and model are implemented and gated; the P4.1 production-format decision remains open.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
 **Pre-merge devel review (`cde67dca`, Oct 8):** extend the existing independent
@@ -6496,7 +6496,7 @@ Measure every record's time to its durable batch completion; current per-op
 latency includes the barrier only on the boundary operation. Mixed churn and
 cold-recovery experiments remain required. [Review](../status/tiny-file-performance-plan-20261008.md#review-against-devel-oct-8).
 
-**Class/status:** Storage performance experiment; partial implementation. Tiny logical/physical geometry, durable cohort timing, retained/cold/crash principles and production churn are tested. Independent indexed packing and any production layout selection remain P4.1 work; no migration is activated.
+**Class/status:** Storage performance experiment; partial implementation. Tiny logical/physical geometry, durable cohort timing, retained/cold/crash principles and production churn are tested. Independent indexed packing now passes bounded publication/recovery/GC faults and sustained AMD churn. Production layout selection remains P4.1 work; no migration is activated.
 
 **Evidence:** round-7 generator close averaged 77.8 ms; n3 fragment syncs
 averaged 22.4 ms (356 calls in its separate trace). The default chunk is
@@ -6505,7 +6505,7 @@ The client profile concentrates sampled CPU in flush/report and fragment
 transfer. Separate traces cannot be divided to infer an exact fragment count
 or write-amplification ratio per file. Measure that explicitly.
 
-**Remaining action:** Extend the independent model with an indexed packing candidate only when its publication/recovery semantics are specified, and compare sustained churn at equal durability. Current fixed-geometry seal crash tests are not a production packed index. Port only a demonstrated principle; retain existing stores and require explicit P4.1 compatibility/migration decisions before a layout change.
+**Remaining action:** Review the implemented immutable-body/checksummed-manifest candidate and the retained 24 AMD sustained-churn samples (184320 operations), including durability, index overhead and reclamation. Its process-crash/fault-tested independent model is not a production packed index. [Implemented model and limits](../status/w95-indexed-model-20261008.md). Port only a demonstrated principle; retain existing stores and require explicit P4.1 compatibility/migration decisions before a layout change.
 
 **Governing contracts/related work:** W71 durable PUT, W73 synchronous writes,
 W75 integrity, W86 ownership/GC fencing and W77 publication. P4.1 owns the
