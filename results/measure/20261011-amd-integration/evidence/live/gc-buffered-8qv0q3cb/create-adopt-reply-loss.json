@@ -1,0 +1,10 @@
+{
+  "fault": "reply-loss",
+  "edge_sequence": 5,
+  "original_inode": 8193,
+  "initial_errno": 5,
+  "descriptor_acknowledged": false,
+  "original_inode_reclaimed": true,
+  "recreated_inode": 12289,
+  "cold_bytes_verified": true
+}

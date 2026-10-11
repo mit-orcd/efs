@@ -97,3 +97,30 @@ guard, authoritative inode reclaim, normal CREATE EEXIST cold replay, pending
 LOCAL/HASHED cold edges and POSIX/peer. Buffered follow-up is running.
 The production source is unchanged since the successful `8e0e4f3c` normal and
 fault-native gates; the final fixture revision is `5360c735`.
+
+## Follow-up captured integration
+
+Other active branches advanced while the first AMD matrix ran. Captured Mac
+`e679adb7`, NUC `d7b7e7e1` and ORCD `de348f87` are now integrated at
+`611ea8ad`. The overlapping session fix preserves both REGISTER and ESTABLISH
+verdicts, with both branches' regressions retained. The quota-test conflict
+retains real filesystem inventory and controlled headroom, asymmetric used
+bytes, mixed-device grouping and overflow checks. Both indexed Mac and ORCD
+status notes are preserved; generated architecture output is regenerated.
+[Captured updates](../../results/measure/20261011-amd-integration/follow-up-refs.json).
+
+The earlier `8e0e4f3c` candidate with the corrected fixture passes full normal
+and fault suites and direct/buffered TCP matrices: core 216/216, peer 67/67 in
+each mode, exact cold bytes, inode/physical reclaim and zero final quota.
+All four installed daemons and two TCP/commands-off clients restore, with no
+private listeners left. Those passes are retained as **earlier-candidate**
+evidence, not claimed for the follow-up source.
+[Direct](../../results/measure/20261011-amd-integration/evidence/live/direct.log) /
+[buffered](../../results/measure/20261011-amd-integration/evidence/live/buffered.log) /
+[restoration](../../results/measure/20261011-amd-integration/evidence/restoration-proof.json).
+
+The follow-up candidate is queued for fresh full normal/fault builds and both
+TCP matrices, also covering six cold first-mutation namespace paths without
+prior OPEN, identical APPEND replay and cross-group append/sync recovery.
+Production queries remain disabled; Mac/ORCD query runtime acceptance is not
+claimed by this AMD gate. W72/W94 remain partial.

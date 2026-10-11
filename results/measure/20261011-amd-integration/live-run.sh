@@ -1,10 +1,11 @@
 #!/bin/bash
 set -euo pipefail
-src=/data1/efs/devel-amd-merged-20261011
-out=/data1/efs/amd-integration-20261011/live
+src=${EFS_AMD_SOURCE_DIR:-/data1/efs/devel-amd-merged-20261011}
+out=${EFS_AMD_GATE_OUT:-/data1/efs/amd-integration-20261011/live}
 mkdir -p "$out"
 export EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0
-[ "$(cat /data1/efs/amd-integration-20261011/fault-native.exit)" = 0 ]
+native=${EFS_AMD_NATIVE_ROOT:-/data1/efs/amd-integration-20261011}
+[ "$(cat "$native/fault-native.exit")" = 0 ]
 restore() {
     local old_rc=$? restore_rc=0
     trap - EXIT
@@ -26,6 +27,6 @@ for m in /data1/efs/mnt /data1/efs/mnt2; do
     /data1/efs/src/scripts/client.sh stop "$m" >> "$out/borrow.log" 2>&1
 done
 for mode in direct buffered; do
-    python3 -u tests/live/gc_reclamation.py --mode "$mode" --transport tcp --root "$out" --root "$out" --port 24190 --mount /data1/efs/mnt --peer-mount /data1/efs/mnt2 --fuse-reply-failure --create-live-retry --create-adopt-reply-loss --create-adopt-negative --unique-create --guarded-leases --create-lease --create-negative-replay --posix --continue-regression-failure > "$out/$mode.log" 2>&1
+    python3 -u tests/live/gc_reclamation.py --mode "$mode" --transport tcp --root "$out" --root "$out" --port 24190 --mount /data1/efs/mnt --peer-mount /data1/efs/mnt2 --fresh-namespace --append-replay-race --append-sync-boundary --sync-writes --sync-write-fault --fuse-reply-failure --create-live-retry --create-adopt-reply-loss --create-adopt-negative --unique-create --guarded-leases --create-lease --create-negative-replay --posix --continue-regression-failure > "$out/$mode.log" 2>&1
     echo 0 > "$out/$mode.exit"
 done
