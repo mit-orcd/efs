@@ -3,18 +3,23 @@
 import argparse,hashlib,json,os,subprocess,sys,time,traceback
 from pathlib import Path
 base=Path('/data1/efs/devel-nuc-20261011')
-p=argparse.ArgumentParser(description=__doc__);p.add_argument('--count',type=int,default=20000);p.add_argument('--name',default='w52-resume');p.add_argument('--after',choices=('meta-placement','batch-install'),default='meta-placement');p.add_argument('--before-2000',action='store_true',help='Run a separate identical 2,000-record preserved-store check before the long gate.')
+p=argparse.ArgumentParser(description=__doc__);p.add_argument('--count',type=int,default=20000);p.add_argument('--name',default='w52-resume');p.add_argument('--after',choices=('meta-placement','batch-install','clock-install'),default='meta-placement');p.add_argument('--before-2000',action='store_true',help='Run a separate identical 2,000-record preserved-store check before the long gate.')
 a=p.parse_args();assert a.count in (400,2000,20000) and a.name.replace('-','').isalnum()
-assert not a.before_2000 or (a.count==20000 and a.after=='batch-install')
+assert not a.before_2000 or (a.count==20000 and a.after.endswith('-install'))
 out=base/a.name;out.mkdir(exist_ok=False)
 installed=Path('/data1/efs/src');end=time.monotonic()+14400
 ready=base/a.after/('restore-exit.txt' if a.after=='meta-placement' else 'run-exit.txt')
 while not ready.exists():
     assert time.monotonic()<end,'metadata placement restoration timeout'
+    phases=(a.after,) if a.after=='meta-placement' else tuple(a.after.split('-')[0]+'-'+v for v in ('build','live','install'))
+    failed=[v for v in phases if (base/v/'failure.txt').exists()]
+    if failed:
+        (out/'blocked-prerequisite.json').write_text(json.dumps(dict(status='not run',no_workload_created=True,failed=failed),indent=2))
+        (out/'run-exit.txt').write_text('125\n');sys.exit(125)
     time.sleep(1)
 assert ready.read_text().strip()=='0'
 if a.after=='meta-placement':assert (base/'meta-placement/tests-exit.txt').read_text().strip()=='0'
-identity_path=base/('deployment-20261011/installed-images.json' if a.after=='meta-placement' else 'batch-install/images.json')
+identity_path=base/('deployment-20261011/installed-images.json' if a.after=='meta-placement' else a.after+'/images.json')
 expected=json.loads(identity_path.read_text())
 for name,identity in expected.items():
     assert hashlib.sha256((installed/name).read_bytes()).hexdigest()==identity['sha256']

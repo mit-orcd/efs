@@ -4,8 +4,10 @@ import argparse,hashlib,json,os,re,signal,socket,subprocess,time,traceback
 from pathlib import Path
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--resume-buffered',type=Path,help='Retain an already accepted buffered gate only when its exact images and fixture match.')
+parser.add_argument('--variant',choices=('batch','clock'),default='batch')
 args=parser.parse_args()
-base=Path('/data1/efs/devel-nuc-20261011');src=base/'batch-src';out=base/'batch-live';out.mkdir(exist_ok=False)
+assert not args.resume_buffered or args.variant=='batch'
+base=Path('/data1/efs/devel-nuc-20261011');src=base/(args.variant+'-src');out=base/(args.variant+'-live');out.mkdir(exist_ok=False)
 env=dict(os.environ,EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_TRANSPORT='tcp',EFS_MD_RAFT_N='4',EFS_RAFT_FLOW='1',EFS_RAFT_FLOW_EARLY_RETIRE='0',EFS_RAFT_BATCH_OVERLAP='0',EFS_RAFT_BATCH_NOOP='0',EFS_RAFT_GROUP_DRAIN='0',EFS_RAFT_APPLIED_INTERVAL_MS='10',EFS_BATCH_OBS='0')
 def wait(fn,seconds,label):
  end=time.monotonic()+seconds
@@ -28,9 +30,18 @@ def port(p):
  except OSError:return False
 stopped=False
 try:
- wait(lambda:(base/'meta-placement/restore-exit.txt').exists(),7200,'metadata placement restoration')
- wait(lambda:(base/'batch-build/run-exit.txt').exists(),7200,'native suite')
- assert (base/'batch-build/run-exit.txt').read_text().strip()=='0','native failed; do not stop regular service'
+ native=base/(args.variant+'-build')
+ placement=base/('data-placement' if args.variant=='clock' else 'meta-placement')
+ def placed():
+  assert not (placement/'failure.txt').exists(),'placement failed; do not stop regular service'
+  assert not (native/'failure.txt').exists(),'native failed; do not stop regular service'
+  return (placement/'restore-exit.txt').exists()
+ wait(placed,7200,'placement restoration')
+ def built():
+  assert not (native/'failure.txt').exists(),'native failed; do not stop regular service'
+  return (native/'run-exit.txt').exists()
+ wait(built,7200,'native suite')
+ assert (native/'run-exit.txt').read_text().strip()=='0','native failed; do not stop regular service'
  images={n:dict(sha256=hashlib.sha256((src/n).read_bytes()).hexdigest(),version=subprocess.check_output([str(src/n),'--version'],text=True)) for n in ('efsd','efs-fuse','efs-mgmt')}
  (out/'binaries.json').write_text(json.dumps(images,indent=2))
  codes={}
