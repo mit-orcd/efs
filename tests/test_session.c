@@ -523,6 +523,17 @@ static void test_guarded_pending_and_fence(void)
     CHECK(efs_lease_guarded_edge(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK && efs_lease_any(kv,ino,1)==0,"combined adoption leaves no pending hold after final CLOSE");
     kv->ops=combined_original;
     efs_kv_mem_free(kv);
+    kv=efs_kv_mem_create();CHECK(kv!=NULL,"negative combined adoption KV");if(!kv)return;
+    guarded_session_init(kv,uuid);ino=0;create=guarded_request(uuid,1,0);
+    CHECK(efs_meta_apply_create_file_log_pending(kv,&g_at,EFS_ROOT_INO,S_IFREG|0600,"negative-combined",0,-1,&create,uuid,1,&ino)==EFS_OK,"negative adoption pending fixture");
+    q=guarded_request(uuid,2,1);
+    CHECK(efs_lease_guarded_edge_deferred(kv,ino,2,&q,combined,1)==EFS_ERR_STALE,"wrong FileID records negative combined verdict");
+    CHECK(efs_lease_guarded_probe_deferred(kv,ino,2,&q,combined,1,&combined_verdict)==1 && combined_verdict==EFS_ERR_STALE,"negative combined edge has durable exact proof");
+    CHECK(!efs_lease_any(kv,ino,2) && efs_lease_any(kv,ino,1)==1,"negative combined edge acquires nothing and preserves original pending ownership");
+    struct efs_opid_req clear=guarded_request(uuid,3,1);
+    CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&clear,EFS_LEASE_EDGE_CLEAR_PENDING,1)==EFS_OK && !efs_lease_any(kv,ino,1),"original CREATE token can clear without fictional CLOSE");
+    CHECK(efs_lease_guarded_probe_deferred(kv,ino,2,&q,combined,1,&combined_verdict)==1 && combined_verdict==EFS_ERR_STALE,"later cleanup preserves original negative verdict");
+    efs_kv_mem_free(kv);
 }
 static void test_guarded_retire_missing_authority(void)
 {

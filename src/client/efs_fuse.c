@@ -2094,8 +2094,28 @@ static int efs_open_release_pending(efs_ino_t ino)
      * before creating its compensating CLOSE; never replace unknown identity. */
     if (owner->adoption.active) {
         int adoption_rc=efs_client_lease_resume(&owner->adoption,0);
-        if((adoption_rc!=EFS_OK && !owner->adoption.revoked) || !owner->adoption.complete)
+        if (!owner->adoption.complete)
             return adoption_rc==EFS_OK?EFS_ERR_BUSY:adoption_rc;
+        if (adoption_rc!=EFS_OK && !owner->adoption.revoked) {
+            if (owner->adoption.flags!=(EFS_LEASE_EDGE_OPEN|EFS_LEASE_EDGE_CLEAR_PENDING)) return adoption_rc;
+            /* A later probe may prove the combined OPEN was refused. It
+             * acquired no normal ownership, but still owns CREATE's pending
+             * token. Allocate pending-only cleanup before replacing that
+             * completed negative identity; admission failure keeps its body. */
+            owner->leased=0;
+            struct efs_client_lease_request clear={0};
+            int rc=efs_client_lease_begin(&clear,ino,owner->lease_generation,
+                EFS_LEASE_EDGE_CLEAR_PENDING,owner->adoption.pending_token);
+            if (rc!=EFS_OK) return rc;
+            if (getenv("EFS_OPID_TRACE"))
+                fprintf(stderr,"opid-create-adopt: rejected seq=%llu ino=%llu rc=%d terminal=1\n",
+                    (unsigned long long)owner->adoption.q.id.seq,(unsigned long long)ino,adoption_rc);
+            (void)efs_client_lease_reset(&owner->adoption);
+            owner->adoption=clear;
+            adoption_rc=efs_client_lease_resume(&owner->adoption,0);
+            if ((adoption_rc!=EFS_OK && !owner->adoption.revoked) || !owner->adoption.complete)
+                return adoption_rc==EFS_OK?EFS_ERR_BUSY:adoption_rc;
+        }
         (void)efs_client_lease_reset(&owner->adoption);
     }
     struct efs_client_lease_request *request = &owner->edge;

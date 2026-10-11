@@ -51,6 +51,7 @@ p.add_argument('--deferred-close',action='store_true',help='staged identified cl
 p.add_argument('--typed-writeback',action='store_true',help='actual typed cache bytes, publication/retirement lost ACK and post-snapshot peer preservation')
 p.add_argument('--guarded-leases',action='store_true',help='sequenced lease wire reorder, lost reply probe, cold replay and last-close reclaim')
 p.add_argument('--put-barrier-fault',action='store_true',help='test-only server fragment fsync refusal, unpublished state, retained-body recovery and cold bytes')
+p.add_argument('--create-adopt-negative',action='store_true',help='force a real stale FileID combined-adoption refusal, retain original CREATE token cleanup and verify name reuse cold; requires fault build')
 p.add_argument('--create-adopt-reply-loss',action='store_true',help='hide one committed combined CREATE adoption reply; failed descriptor cleanup, name reuse and cold bytes; requires fault build')
 p.add_argument('--create-live-retry',action='store_true',help='actual FUSE CREATE retries consumed committed reply then BUSY using one identity')
 p.add_argument('--create-negative-replay',action='store_true',help='ordinary CREATE EEXIST identity survives unlink, cold restart and name reuse')
@@ -298,6 +299,8 @@ def mount_client():
     global client
     log=open(work/'fuse.log','ab');handles.append(log)
     client_env=dict(env)
+    if a.create_adopt_negative:
+        client_env.update(EFS_FAULT_CREATE_ADOPT_NEGATIVE_FILE=str(work/'create-adopt-negative-fault'),EFS_OPID_TRACE='1')
     if a.create_adopt_reply_loss:
         client_env['EFS_FAULT_CREATE_ADOPT_REPLY_FILE']=str(work/'create-adopt-reply-fault')
     if a.create_live_retry:
@@ -521,20 +524,26 @@ try:
             'stages':stages,'original_durable_inode':ino,'cold_bytes':True,
             'genuine_exclusive_conflict':True},indent=2))
         print('actual FUSE CREATE lost committed reply, BUSY replay, same opid/inode and cold bytes PASS',flush=True)
-    if a.create_adopt_reply_loss:
-        marker=work/'create-adopt-reply-fault';marker.touch()
-        path=mount/'w94-adopt-reply-loss'
+    adoption_faults=(['reply-loss'] if a.create_adopt_reply_loss else [])+(['negative'] if a.create_adopt_negative else [])
+    for adoption_fault in adoption_faults:
+        marker=work/('create-adopt-reply-fault' if adoption_fault=='reply-loss' else 'create-adopt-negative-fault')
+        marker.touch();path=mount/('w94-adopt-'+adoption_fault)
         try:
             fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
         except OSError as error:
             assert error.errno==errno.EIO,error
         else:
-            os.close(fd);raise AssertionError('combined adoption reply loss not injected')
+            os.close(fd);raise AssertionError('combined adoption '+adoption_fault+' not injected')
         assert not marker.exists(),'fault build did not consume adoption marker'
-        ino=path.stat().st_ino
-        matches=re.findall(r'test-create-adopt-reply-loss seq=(\d+) ino=(\d+) known=1 hidden=1',
-                           (work/'fuse.log').read_text())
+        ino=path.stat().st_ino;log=(work/'fuse.log').read_text()
+        pattern=(r'test-create-adopt-reply-loss seq=(\d+) ino=(\d+) known=1 hidden=1'
+                 if adoption_fault=='reply-loss' else
+                 r'opid-create-adopt: rejected seq=(\d+) ino=(\d+) rc=-14 terminal=1')
+        matches=re.findall(pattern,log)
         assert len(matches)==1 and int(matches[0][1])==ino,matches
+        if adoption_fault=='negative':
+            forced=re.findall(r'test-create-adopt-negative-request ino=(\d+) generation=(\d+) original=(\d+)',log)
+            assert len(forced)==1 and int(forced[0][0])==ino and forced[0][1]!=forced[0][2],forced
         path.unlink()
         def inode_gone():
             for node in range(4):
@@ -542,19 +551,19 @@ try:
                     f'127.0.0.1:{a.port+node}',str(ino)],env=env,capture_output=True,text=True,timeout=10)
                 if reply.returncode==0 and re.search(r'status=1\b',reply.stdout):return True
             return False
-        wait(inode_gone,'lost combined ACK descriptor cleanup releases original inode',90)
-        payload=b'W94 recreated after hidden durable combined lease reply'
+        wait(inode_gone,'combined '+adoption_fault+' descriptor cleanup releases original inode',90)
+        payload=('W94 recreated after combined '+adoption_fault).encode()
         with path.open('xb',buffering=0) as out:
             assert out.write(payload)==len(payload);os.fsync(out.fileno())
         reused_ino=path.stat().st_ino;assert reused_ino!=ino
         unmount();stop(crash=True);start();mount_client()
         assert path.read_bytes()==payload
-        path.unlink();wait(lambda:not files(reused_ino),'combined reply-loss name reuse cold bytes reclaimed',180)
-        (work/'create-adopt-reply-loss.json').write_text(json.dumps(dict(
-            hidden_edge_sequence=int(matches[0][0]),original_inode=ino,
+        path.unlink();wait(lambda:not files(reused_ino),'combined '+adoption_fault+' name reuse cold bytes reclaimed',180)
+        (work/('create-adopt-'+adoption_fault+'.json')).write_text(json.dumps(dict(
+            fault=adoption_fault,edge_sequence=int(matches[0][0]),original_inode=ino,
             initial_errno=errno.EIO,descriptor_acknowledged=False,original_inode_reclaimed=True,
             recreated_inode=reused_ino,cold_bytes_verified=True),indent=2))
-        print('actual FUSE lost combined adoption ACK: failed descriptor cleanup, name reuse and cold bytes PASS',flush=True)
+        print('actual FUSE combined '+adoption_fault+': failed descriptor cleanup, name reuse and cold bytes PASS',flush=True)
     if a.create_negative_replay:
         helper=work/'create-negative-replay'
         run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),

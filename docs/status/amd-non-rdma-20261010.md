@@ -127,3 +127,21 @@ reply loss (failed descriptor cleanup, original inode reclamation, name reuse
 and cold bytes), and LOCAL/cross-group HASHED crashes before/after adoption.
 Normal and fault-enabled actual-source lease compile/regressions pass; these
 new live variants are not yet accepted.
+
+### Negative combined verdict follow-up
+
+Review reproduced a new-path ownership bug: a durably refused combined edge
+could remain marked as leased. The actual-source regression fails against the
+first candidate and passes after the repair, including ASan/UBSan. Negative
+proof, whether immediate or learned on a later probe, retains the
+pending token, allocates a distinct CLEAR_PENDING identity using CREATE's
+captured FileID, then retires the known negative edge. Admission failure keeps the old body; neither path sends a
+fictional CLOSE. Unknown and successful receipts retain their existing rules.
+
+The queued fault gate corrupts only the guarded request's FileID before send,
+so the actual server records STALE while the caller still owns CREATE's
+correct generation/token. It checks terminal proof, original-inode reclamation,
+name reuse and cold bytes. This deliberately invalid request is not a claimed
+production race. The new server-batch regression and live variants are pending
+the fault build after A/B. The performance builds remain frozen at the earlier
+combined candidate; this later failure-path repair is separately gated.

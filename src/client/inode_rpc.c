@@ -1348,6 +1348,17 @@ int efs_client_lease_begin(struct efs_client_lease_request *r,efs_ino_t ino,
     *r = (struct efs_client_lease_request){.q=q,.ino=ino,
         .generation=generation,.pending_token=token,.flags=flags,
         .slot=slot,.active=1};
+#if EFS_FAULTS
+    /* Corrupt only the guarded request's FileID before its first send. The
+     * caller retains CREATE's correct generation for pending-only cleanup. */
+    const char *marker=getenv("EFS_FAULT_CREATE_ADOPT_NEGATIVE_FILE");
+    if (flags==(EFS_LEASE_EDGE_OPEN|EFS_LEASE_EDGE_CLEAR_PENDING) &&
+        marker && unlink(marker)==0) {
+        r->generation=generation==UINT64_MAX ? generation-1 : generation+1;
+        fprintf(stderr,"test-create-adopt-negative-request ino=%llu generation=%llu original=%llu\n",
+            (unsigned long long)ino,(unsigned long long)r->generation,(unsigned long long)generation);
+    }
+#endif
     return EFS_OK;
 }
 

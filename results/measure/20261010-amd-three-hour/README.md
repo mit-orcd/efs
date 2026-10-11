@@ -93,3 +93,11 @@ The perf capture has zero lost samples and its cycle report decodes. Header
 inspection warns about unavailable event-description metadata; preserve that
 limitation when reusing this diagnostic. It is not a calibrated attribution
 of wall latency or an A/B CPU measurement.
+
+A later review reproduces a refused-combined-edge bookkeeping leak in the
+first candidate. Before/after actual-source regressions and sanitizer evidence
+are retained. Cleanup now handles immediate negative proof and negative proof learned
+after an unknown reply, preserves the original CREATE FileID, and
+allocates pending-only cleanup before retiring the known negative body. Its
+live invalid-FileID and server-batch tests remain queued. A/B binaries stay
+frozen; performance results describe the earlier successful-path candidate.
