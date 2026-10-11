@@ -27,7 +27,7 @@ integrated explicitly; moving branch tips are not test identities.
 | Owner / branch | Submitted checkpoint | Integration state | Acceptance limits |
 | --- | --- | --- | --- |
 | AMD / devel-amd | `19f7efb3` | merged in `eff8d05a` | W94 CREATE/adoption closed; normal/fault native and both-mode full lifecycle pass. W97 repeated pressure comparisons continue; feedback stays opt-in. |
-| ORCD / devel-orcd | `a48076c4` | merged in `ea5f5dc4` | Full native and packed private lifecycle evidence; mounted concurrent POSIX times out. New pinned-stats gate, retest and matched performance/allocation acceptance pending. |
+| ORCD / devel-orcd | code `a48076c4`, evidence `8d07b45a` | code merged in `ea5f5dc4`; deployed evidence integrated | Full native and packed private lifecycle evidence; mounted concurrent POSIX times out. New pinned-stats gate, retest and matched performance/allocation acceptance pending. |
 | Intel / devel-intel | `5f03ec76` (tested C source `3d69edb4`) | merged in `22056d9b` | Both-host native and complete direct/buffered private fixtures pass; supplemental fault matrix, remaining canonical/cold gates and retained-data deployment still pending. Production remains `7bde5f43`. |
 | Review / devel-code-review | reports `1b0c6b7c`, allocator fix `a8b2de20` | merged in `5e381545` | Reproduced use-after-free fixed; focused merged regression passes. Capacity accounting/admission and profiling stop-after-reap fixes pending; full merged/Linux/live acceptance required. |
 | NUC / devel-nuc | revised `ba73f304` | merged in `5cbe0ce4` | APPEND_CATCHUP tag52; focused merged gates pass. New-tag native rebuild, live/fault/cold/20k and measured W97 acceptance pending. Production remains `f52cd2dd-nuc`; preserved writer must finish before restart. |
@@ -44,6 +44,8 @@ dropped merely because its branch name was retired.
 ## Priority 1: mounted tiny-file packing
 
 [ORCD packing](orcd-tiny-packing-20261011.md) targets actual tiny logical payloads.
+[Mounted coalescing checkpoint and failed gates](orcd-mounted-coalescing-20261011.md)
+records the deployed implementation separately from its pending acceptance.
 The ordinary 512-byte sample occupies 208,896 fragment bytes (408 times payload).
 Containers pack existing padded fragments; that is a separate optimization.
 Keep both implementations and evidence, without treating containers as proof

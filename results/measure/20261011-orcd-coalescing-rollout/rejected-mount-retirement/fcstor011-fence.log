@@ -1,0 +1,1 @@
+raft-session status=0 rc=0 primary=2 op=fence ssh=546 shard=550 epoch=2 state=1 touched=1 index=1731992

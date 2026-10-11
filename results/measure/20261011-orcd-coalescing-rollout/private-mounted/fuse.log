@@ -1,0 +1,56 @@
+2026-10-11T17:59:27.163Z efs-fuse: legacy export label 'fs' is ignored; mounting the single export 'default' (id=1)
+2026-10-11T17:59:27.163Z efs-fuse (no git metadata, branch unknown, built 2026-10-11T17:56:18Z on fcstor007), build=unknown: starting export=default mount=/tmp/efs-mounted-pack-gate
+2026-10-11T17:59:27.164Z Discovered 4 cluster nodes from 172.16.223.57:19833
+2026-10-11T17:59:27.164Z   node id=1 172.16.223.57:19833
+2026-10-11T17:59:27.164Z   node id=2 172.16.223.58:19833
+2026-10-11T17:59:27.164Z   node id=3 172.16.223.59:19833
+2026-10-11T17:59:27.164Z   node id=4 172.16.223.60:19833
+2026-10-11T17:59:27.164Z fetching metadata...
+2026-10-11T17:59:27.164Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T17:59:27.164Z export id=1 name=default
+2026-10-11T17:59:27.164Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-11T17:59:27.164Z efs-fuse daemon pid=1644119
+2026-10-11T17:59:27.166Z efs-fuse: workers max=10 idle=10
+2026-10-11T17:59:27.168Z fuse serving
+2026-10-11T18:05:09.397Z efs-fuse: legacy export label 'fs' is ignored; mounting the single export 'default' (id=1)
+2026-10-11T18:05:09.397Z efs-fuse (no git metadata, branch unknown, built 2026-10-11T17:56:18Z on fcstor007), build=unknown: starting export=default mount=/tmp/efs-mounted-pack-gate
+2026-10-11T18:05:09.397Z Discovered 4 cluster nodes from 172.16.223.57:19833
+2026-10-11T18:05:09.397Z   node id=1 172.16.223.57:19833
+2026-10-11T18:05:09.397Z   node id=2 172.16.223.58:19833
+2026-10-11T18:05:09.397Z   node id=3 172.16.223.59:19833
+2026-10-11T18:05:09.397Z   node id=4 172.16.223.60:19833
+2026-10-11T18:05:09.397Z fetching metadata...
+2026-10-11T18:05:09.397Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T18:05:09.398Z export id=1 name=default
+2026-10-11T18:05:09.398Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-11T18:05:09.398Z efs-fuse daemon pid=1644524
+2026-10-11T18:05:09.400Z efs-fuse: workers max=10 idle=10
+2026-10-11T18:05:09.402Z fuse serving
+2026-10-11T18:08:09.442Z efs-fuse: legacy export label 'fs' is ignored; mounting the single export 'default' (id=1)
+2026-10-11T18:08:09.442Z efs-fuse (no git metadata, branch unknown, built 2026-10-11T18:06:51Z on fcstor007), build=unknown: starting export=default mount=/tmp/efs-mounted-pack-gate
+2026-10-11T18:08:09.443Z Discovered 4 cluster nodes from 172.16.223.57:19833
+2026-10-11T18:08:09.443Z   node id=1 172.16.223.57:19833
+2026-10-11T18:08:09.443Z   node id=2 172.16.223.58:19833
+2026-10-11T18:08:09.443Z   node id=3 172.16.223.59:19833
+2026-10-11T18:08:09.443Z   node id=4 172.16.223.60:19833
+2026-10-11T18:08:09.443Z fetching metadata...
+2026-10-11T18:08:09.443Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T18:08:09.443Z export id=1 name=default
+2026-10-11T18:08:09.443Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-11T18:08:09.443Z efs-fuse daemon pid=1644817
+2026-10-11T18:08:09.445Z efs-fuse: workers max=10 idle=10
+2026-10-11T18:08:09.447Z fuse serving
+2026-10-11T18:09:09.709Z efs-fuse: legacy export label 'fs' is ignored; mounting the single export 'default' (id=1)
+2026-10-11T18:09:09.709Z efs-fuse (no git metadata, branch unknown, built 2026-10-11T18:06:51Z on fcstor007), build=unknown: starting export=default mount=/tmp/efs-mounted-pack-gate
+2026-10-11T18:09:09.710Z Discovered 4 cluster nodes from 172.16.223.57:19833
+2026-10-11T18:09:09.710Z   node id=1 172.16.223.57:19833
+2026-10-11T18:09:09.710Z   node id=2 172.16.223.58:19833
+2026-10-11T18:09:09.710Z   node id=3 172.16.223.59:19833
+2026-10-11T18:09:09.710Z   node id=4 172.16.223.60:19833
+2026-10-11T18:09:09.710Z fetching metadata...
+2026-10-11T18:09:09.710Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T18:09:09.710Z export id=1 name=default
+2026-10-11T18:09:09.710Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-11T18:09:09.710Z efs-fuse daemon pid=1645318
+2026-10-11T18:09:09.712Z efs-fuse: workers max=10 idle=10
+2026-10-11T18:09:09.714Z fuse serving

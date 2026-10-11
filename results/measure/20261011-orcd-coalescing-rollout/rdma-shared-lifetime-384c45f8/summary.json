@@ -1,0 +1,27 @@
+{
+  "deployed_revision": "384c45f854f7c61276c10a2d21eb3798026419d8",
+  "pack_id": 4925959731071590093,
+  "generation": 2793619445051681373,
+  "records": 2,
+  "record_payload_bytes": 512,
+  "placement_nodes": [
+    1,
+    2,
+    3
+  ],
+  "captured_members": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "transport": "native RDMA mlx5_2",
+  "storage": "files direct I/O",
+  "partial_unlink_exact_read": "PASS",
+  "cold_restart_exact_read": "PASS",
+  "last_unlink_with_nonplacement_node_4_offline": "three fragments retained; fences only nodes 1\u20133",
+  "rejoin_immediate_probe": "three fragments still present (asynchronous progress)",
+  "rejoin_later_probe": "zero fragments; durable exact-generation fences all four",
+  "post_candidate_upgrade_probe": "PASS: zero fragments and all four durable fences after cold restart into dbf2b5db69e6",
+  "concurrent_POSIX_acceptance": "pending"
+}

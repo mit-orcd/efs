@@ -1,0 +1,14 @@
+{
+  "refs/heads/devel": "48a2719d19fb5a6b0464935c70a967a1f1a86236",
+  "refs/heads/devel-amd": "007d7a08a54c5379b46f9f3870c8265a1450d8e9",
+  "refs/heads/devel-code-review": "48a2719d19fb5a6b0464935c70a967a1f1a86236",
+  "refs/heads/devel-intel": "0087f496eac333efbc7ea331484ea4ed3b691132",
+  "refs/heads/devel-mac": "27e9b8f14c7150cbf86eeecdde831f935f8c69c0",
+  "refs/heads/devel-nuc": "b7d821aaad0c0310756ffb9c7342f1730845e9d5",
+  "refs/heads/devel-orcd": "c33dd845f48e6ab87af0625388ffc6f8bef87c0d",
+  "refs/heads/fix-orcd-capacity-15975da0": "60f3628238d3a2fd69be0ce7a329540256234b7e",
+  "refs/heads/main": "53be1da7f19045f406a05f4f78f6cf44f5c92212",
+  "refs/remotes/origin/HEAD": "53be1da7f19045f406a05f4f78f6cf44f5c92212",
+  "refs/remotes/origin/devel": "53be1da7f19045f406a05f4f78f6cf44f5c92212",
+  "refs/remotes/origin/main": "53be1da7f19045f406a05f4f78f6cf44f5c92212"
+}

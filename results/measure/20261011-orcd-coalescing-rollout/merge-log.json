@@ -1,0 +1,30 @@
+[
+  {
+    "ref": "refs/heads/devel-amd",
+    "sha": "007d7a08a54c5379b46f9f3870c8265a1450d8e9",
+    "returncode": 1,
+    "stdout": "Auto-merging docs/backlog/work-items.md\nCONFLICT (content): Merge conflict in docs/backlog/work-items.md\nAuto-merging docs/how-it-works/architecture-full.md\nCONFLICT (content): Merge conflict in docs/how-it-works/architecture-full.md\nAuto-merging docs/how-it-works/architecture.html\nCONFLICT (content): Merge conflict in docs/how-it-works/architecture.html\nAuto-merging docs/status/README.md\nAuto-merging src/server/raft_host.c\nAutomatic merge failed; fix conflicts and then commit the result.\n",
+    "stderr": ""
+  },
+  {
+    "ref": "refs/heads/devel-intel",
+    "sha": "0087f496eac333efbc7ea331484ea4ed3b691132",
+    "returncode": 1,
+    "stdout": "Auto-merging docs/backlog/work-items.md\nAuto-merging docs/how-it-works/architecture-full.md\nAuto-merging docs/how-it-works/architecture.html\nCONFLICT (content): Merge conflict in docs/how-it-works/architecture.html\nAuto-merging include/efs/meta_cmd.h\nAuto-merging src/mgmt/efs_mgmt.c\nAuto-merging src/server/raft_host.c\nAutomatic merge failed; fix conflicts and then commit the result.\n",
+    "stderr": ""
+  },
+  {
+    "ref": "refs/heads/devel-mac",
+    "sha": "27e9b8f14c7150cbf86eeecdde831f935f8c69c0",
+    "returncode": 1,
+    "stdout": "Auto-merging Makefile\nCONFLICT (content): Merge conflict in Makefile\nAuto-merging src/server/raft_host.c\nCONFLICT (content): Merge conflict in src/server/raft_host.c\nAuto-merging tests/test_lookup_replacement.py\nCONFLICT (content): Merge conflict in tests/test_lookup_replacement.py\nAutomatic merge failed; fix conflicts and then commit the result.\n",
+    "stderr": ""
+  },
+  {
+    "ref": "refs/heads/devel-nuc",
+    "sha": "b7d821aaad0c0310756ffb9c7342f1730845e9d5",
+    "returncode": 1,
+    "stdout": "Auto-merging docs/backlog/work-items.md\nCONFLICT (content): Merge conflict in docs/backlog/work-items.md\nAuto-merging docs/how-it-works/architecture-full.md\nCONFLICT (content): Merge conflict in docs/how-it-works/architecture-full.md\nAuto-merging docs/how-it-works/architecture.html\nCONFLICT (content): Merge conflict in docs/how-it-works/architecture.html\nAuto-merging docs/status/README.md\nCONFLICT (content): Merge conflict in docs/status/README.md\nAuto-merging tests/live/gc_reclamation.py\nAutomatic merge failed; fix conflicts and then commit the result.\n",
+    "stderr": ""
+  }
+]
