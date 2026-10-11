@@ -1157,6 +1157,17 @@ static int sess_rpc(const char *host, uint16_t port, const uint8_t *payload,
             free(reply);out->rc=EFS_ERR_IO;return out->rc;
         }
         memcpy(out,reply,sizeof(*out));free(reply);
+        /* Fresh session reads and exact-floor fences can be BUSY while a
+         * cold participant catches up. These requests are idempotent with
+         * unchanged bytes. BEGIN and cleanup selection retain their one
+         * definite-result requirement, as do all transport failures. */
+        if(out->rc==EFS_ERR_BUSY && plen>=3 && payload[1]==EFS_MD_CMD_SESSION &&
+           ((payload[2]==0 && plen==23) ||
+            (payload[2]==EFS_MD_SESS_FENCE_LOC && plen==27) ||
+            (payload[2]==EFS_MD_SESS_STORAGE_FENCE && plen==23))) {
+            usleep(50000);
+            continue;
+        }
         if(out->rc!=EFS_ERR_NOT_PRIMARY)return out->rc;
         if(out->leader_hint<0) {
             /* Explicit NOT_PRIMARY means this request was not proposed.
