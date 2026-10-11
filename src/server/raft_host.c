@@ -411,6 +411,7 @@ struct efs_raft_host {
     int pressure_enabled;
     int flow_enabled, inbox_pressure, group_drain, flow_early_retire;
     uint64_t applied_persist_us; /* pump-only bounded checkpoint cadence */
+    unsigned gc_backlog_idle_ms; /* opt-in; preserve default 1s idle */
     unsigned inbox_work_n;
     uint64_t inbox_work_bytes;
     uint64_t inbox_probe_sent[HOST_NGROUPS][EFS_RAFT_MAX_PEERS];
@@ -2201,7 +2202,11 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     }
     /* A blocked local fence is not a completed revocation barrier. Preserve
      * its business verdict in the apply ring so the coordinator cannot ACK it. */
-    if (cmd[1] == EFS_MD_SESS_FINISH || cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
+    /* First-touch namespace admission bootstraps only after REGISTER's
+     * authoritative NOT_FOUND. Turning that verdict into OK skips CREATE
+     * and makes an existing name appear absent on a fresh mount. */
+    if (cmd[1] == EFS_MD_SESS_REGISTER || cmd[1] == EFS_MD_SESS_ESTABLISH ||
+        cmd[1] == EFS_MD_SESS_FINISH || cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
         cmd[1] == EFS_MD_SESS_LEASE_EDGE_DEFERRED || cmd[1] == EFS_MD_SESS_LEASE_OPEN ||
         cmd[1] == EFS_MD_SESS_LEASE_CLOSE) return rc;
     if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_INVAL || rc == EFS_ERR_BUSY ||
@@ -2647,10 +2652,13 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
      * their core error and retry; the policy did not become visible. */
     if(cmd[0]==EFS_MD_CMD_QUERY_POLICY &&
        (rc==EFS_ERR_STALE || rc==EFS_ERR_INVAL || rc==EFS_ERR_PROTO))ret=EFS_OK;
-    /* FINISH/FENCE_LOC BUSY must let later ACK/RESOLVE drain ownership. It is
+    /* REGISTER's missing-owner verdict must let the following CREATE apply.
+     * Admission refusals remain in the ring; IO/NOMEM still retry this index.
+     * FINISH/FENCE_LOC BUSY must let later ACK/RESOLVE drain ownership. It is
      * a rejected command, not a retryable storage failure at this log index. */
     if (cmd[0] == EFS_MD_CMD_SESSION && clen >= 2 &&
-        (cmd[1] == EFS_MD_SESS_FINISH || cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
+        (cmd[1] == EFS_MD_SESS_REGISTER || cmd[1] == EFS_MD_SESS_ESTABLISH ||
+         cmd[1] == EFS_MD_SESS_FINISH || cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
          cmd[1] == EFS_MD_SESS_LEASE_EDGE_DEFERRED || cmd[1] == EFS_MD_SESS_LEASE_OPEN ||
          cmd[1] == EFS_MD_SESS_LEASE_CLOSE) &&
         rc != EFS_ERR_IO && rc != EFS_ERR_NOMEM)
@@ -8105,6 +8113,29 @@ static void host_snap_import_pass(struct efs_raft_host *h)
     }
 }
 
+static int host_gc_backlog_config(const char *value, unsigned *ms)
+{
+    *ms = GC_LOOP_MS;
+    if (!value) return EFS_OK;
+    if (!*value) return EFS_ERR_INVAL;
+    for (const char *p = value; *p; p++)
+        if (*p < '0' || *p > '9') return EFS_ERR_INVAL;
+    char *end;
+    errno = 0;
+    unsigned long n = strtoul(value, &end, 10);
+    if (errno || *end || n < 100 || n > GC_LOOP_MS) return EFS_ERR_INVAL;
+    *ms = (unsigned)n;
+    return EFS_OK;
+}
+
+static unsigned host_gc_backlog_idle(unsigned configured, int capped,
+                                     uint64_t removed_before, uint64_t removed_after)
+{
+    /* No acceleration for idle scans, blocked/offline deletion or counter
+     * reset. Keep all per-group work/ACK budgets and a >=100ms fair yield. */
+    return capped && removed_after > removed_before ? configured : GC_LOOP_MS;
+}
+
 static void *host_gc_thread(void *arg)
 {
     struct efs_raft_host *h = arg;
@@ -8114,6 +8145,8 @@ static void *host_gc_thread(void *arg)
         uint64_t t0, t_orphan = 0, t_reap = 0, t_frag = 0, t_spread, t_rec, t_all;
         struct efs_kv_scan_stats sc_frag, sc_all;
         struct reap_times reap_times = {0};
+        uint64_t removed_before = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED);
+        int reap_capped = 0;
 
         __atomic_store_n(&h->s->gc_pass_start_us, efs_iostats_now_us(), __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_stage, 1, __ATOMIC_RELAXED);
@@ -8156,6 +8189,7 @@ static void *host_gc_thread(void *arg)
             t_orphan += now_us_() - ta;
             ta = now_us_();
             host_gc_reap_pass(h, h->g[g].group, anchor, &reap_times);
+            reap_capped |= __atomic_load_n(&h->s->gc_reap_capped[g], __ATOMIC_RELAXED);
             t_reap += now_us_() - ta;
             ta = now_us_();
             {
@@ -8222,9 +8256,14 @@ static void *host_gc_thread(void *arg)
         __atomic_fetch_add(&h->s->gc_passes, 1, __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_stage, 0, __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_pass_start_us, 0, __ATOMIC_RELAXED);
-        /* ~1s between passes, in 20 ms slices so shutdown is prompt.
+        uint64_t removed_after = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED);
+        unsigned idle_ms = host_gc_backlog_idle(h->gc_backlog_idle_ms, reap_capped, removed_before, removed_after);
+        if (idle_ms < GC_LOOP_MS && env_on("EFS_RAFT_OBS"))
+            fprintf(stderr, "raft-host: gc-backlog-idle ms=%u removed=%llu\n", idle_ms,
+                    (unsigned long long)(removed_after - removed_before));
+        /* Default 1s between passes, in 20 ms slices so shutdown is prompt.
          * A snapshot export queued by the pump starts on the next slice. */
-        for (g = 0; g < GC_LOOP_MS / 20 && h->gc_running; g++) {
+        for (g = 0; g < (int)((idle_ms + 19) / 20) && h->gc_running; g++) {
             host_snap_export_pass(h);
             host_snap_import_pass(h);
             usleep(20 * 1000);
@@ -9022,6 +9061,11 @@ int server_raft_host_start(struct efsd_server *s)
         fprintf(stderr,"raft-host: EFS_COMMANDS_SERVER must be 0 or 1\n");
         return EFS_ERR_INVAL;
     }
+    unsigned gc_backlog_idle_ms;
+    if (host_gc_backlog_config(getenv("EFS_GC_BACKLOG_IDLE_MS"), &gc_backlog_idle_ms) != EFS_OK) {
+        fprintf(stderr, "raft-host: EFS_GC_BACKLOG_IDLE_MS must be 100..1000\n");
+        return EFS_ERR_INVAL;
+    }
     int query_enabled=!commands || !strcmp(commands,"1");
     const char *flow=getenv("EFS_RAFT_FLOW");
     if (flow && strcmp(flow,"0") && strcmp(flow,"1")) return EFS_ERR_INVAL;
@@ -9064,6 +9108,7 @@ int server_raft_host_start(struct efsd_server *s)
     if (efs_admission_init(&h->proposal_queue,&limits) != EFS_OK) { free(h); return EFS_ERR_IO; }
     h->applied_persist_us=applied_interval;
     h->flow_enabled=flow && !strcmp(flow,"1");
+    h->gc_backlog_idle_ms = gc_backlog_idle_ms;
     h->flow_early_retire=early_retire && !strcmp(early_retire,"1"); /* candidate opt-in until acceptance */
     h->group_drain=group_drain && !strcmp(group_drain,"1");
     h->pressure_enabled=pressure && !strcmp(pressure,"1");
@@ -11804,7 +11849,7 @@ static const struct efs_meta_append_ops host_append_ops={
 /* Reservations keep their floor and inode guards synchronous and ordered.
  * The remaining exact images can share Raft durability cohorts. No decision
  * precedes the existing term/index-matched result check for EVERY proposal.
- * Completion/pruning continue using the synchronous callbacks above. */
+ * REPORT completion uses the same ordered guards; pruning stays synchronous. */
 struct host_append_reserve_ctx {
     struct host_resize_ctx base;
     struct host_idx_ref refs[EFS_META_LANES+5];
@@ -15100,7 +15145,7 @@ static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
 {
     uint64_t offs[64], lens[64];
     uint32_t n = 64, i;
-    struct host_resize_ctx ctx={h,hint};struct efs_txid t;
+    struct efs_txid t;
     int rc,authoritative=0;
 
     /* append_open caps at 64. A 400-record O_APPEND burst is 400 OPEN
@@ -15127,12 +15172,17 @@ static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
                  * Recollect OPEN ranges from the current complete view. */
                 break;
             }
+            /* Freeze owner (when present) and inode before pipelining the
+             * exact cursor/reservation/lane images. The shared callback checks
+             * every applied verdict before committing the transaction. */
+            struct host_append_reserve_ctx batch={.base={h,hint},
+                                                   .leading=session?2:1};
             fill_txid(h,&t);
             rc = session ?
                 efs_meta_finish_append_owned(h->kv, ino, offs[i], EFS_META_APPEND_COMPLETED,
-                                             session, &t, &host_append_ops, &ctx) :
+                                             session, &t, &host_append_reserve_ops, &batch) :
                 efs_meta_finish_append(h->kv, ino, offs[i], EFS_META_APPEND_COMPLETED,
-                                       &t, &host_append_ops, &ctx);
+                                       &t, &host_append_reserve_ops, &batch);
             if(rc!=EFS_OK)return rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
             did++;
         }

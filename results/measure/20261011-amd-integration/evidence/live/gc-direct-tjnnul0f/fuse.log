@@ -1,0 +1,971 @@
+2026-10-11T13:20:11.640Z efs-fuse 8e0e4f3c-merged-fault (branch devel-amd, built 2026-10-11T13:11:22Z on amd-395), build=8e0e4f3c-merged-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T13:20:11.641Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T13:20:11.641Z   node id=1 127.0.0.1:24190
+2026-10-11T13:20:11.641Z   node id=2 127.0.0.1:24191
+2026-10-11T13:20:11.641Z   node id=3 127.0.0.1:24192
+2026-10-11T13:20:11.641Z   node id=4 127.0.0.1:24193
+2026-10-11T13:20:11.641Z fetching metadata...
+2026-10-11T13:20:11.641Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T13:20:11.641Z export id=1 name=default
+2026-10-11T13:20:11.641Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T13:20:11.643Z efs-fuse: workers max=10 idle=10
+2026-10-11T13:20:11.644Z fuse serving
+2026-10-11T13:20:11.908Z test-create-retry: stage=0 seq=1 ino=4097 identical=1 retained=1
+2026-10-11T13:20:11.909Z test-create-retry: stage=1 seq=1 ino=4097 identical=1 retained=1
+2026-10-11T13:20:11.909Z test-create-retry: stage=2 seq=1 ino=4097 identical=1 retained=1
+2026-10-11T13:20:16.319Z efs-fuse 8e0e4f3c-merged-fault (branch devel-amd, built 2026-10-11T13:11:22Z on amd-395), build=8e0e4f3c-merged-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T13:20:16.320Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T13:20:16.320Z   node id=1 127.0.0.1:24190
+2026-10-11T13:20:16.320Z   node id=2 127.0.0.1:24191
+2026-10-11T13:20:16.320Z   node id=3 127.0.0.1:24192
+2026-10-11T13:20:16.320Z   node id=4 127.0.0.1:24193
+2026-10-11T13:20:16.320Z fetching metadata...
+2026-10-11T13:20:16.320Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T13:20:16.320Z export id=1 name=default
+2026-10-11T13:20:16.320Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T13:20:16.323Z efs-fuse: workers max=10 idle=10
+2026-10-11T13:20:16.325Z fuse serving
+2026-10-11T13:20:16.590Z test-create-adopt-reply-loss seq=5 ino=8193 known=1 hidden=1
+2026-10-11T13:20:16.590Z opid-lease: unresolved seq=5 ino=8193 flags=5 rc=-6
+2026-10-11T13:20:20.953Z efs-fuse 8e0e4f3c-merged-fault (branch devel-amd, built 2026-10-11T13:11:22Z on amd-395), build=8e0e4f3c-merged-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T13:20:20.953Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T13:20:20.953Z   node id=1 127.0.0.1:24190
+2026-10-11T13:20:20.953Z   node id=2 127.0.0.1:24191
+2026-10-11T13:20:20.953Z   node id=3 127.0.0.1:24192
+2026-10-11T13:20:20.953Z   node id=4 127.0.0.1:24193
+2026-10-11T13:20:20.953Z fetching metadata...
+2026-10-11T13:20:20.954Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T13:20:20.954Z export id=1 name=default
+2026-10-11T13:20:20.954Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T13:20:20.956Z efs-fuse: workers max=10 idle=10
+2026-10-11T13:20:20.958Z fuse serving
+2026-10-11T13:20:22.234Z test-create-adopt-negative-request ino=16385 generation=2 original=1
+2026-10-11T13:20:22.234Z opid-lease: unresolved seq=5 ino=16385 flags=5 rc=-14
+2026-10-11T13:20:22.234Z opid-create-adopt: rejected seq=5 ino=16385 rc=-14 terminal=1
+2026-10-11T13:20:26.648Z efs-fuse 8e0e4f3c-merged-fault (branch devel-amd, built 2026-10-11T13:11:22Z on amd-395), build=8e0e4f3c-merged-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T13:20:26.649Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T13:20:26.649Z   node id=1 127.0.0.1:24190
+2026-10-11T13:20:26.649Z   node id=2 127.0.0.1:24191
+2026-10-11T13:20:26.649Z   node id=3 127.0.0.1:24192
+2026-10-11T13:20:26.649Z   node id=4 127.0.0.1:24193
+2026-10-11T13:20:26.649Z fetching metadata...
+2026-10-11T13:20:26.649Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T13:20:26.649Z export id=1 name=default
+2026-10-11T13:20:26.649Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T13:20:26.651Z efs-fuse: workers max=10 idle=10
+2026-10-11T13:20:26.652Z fuse serving
+2026-10-11T13:20:32.246Z efs-fuse 8e0e4f3c-merged-fault (branch devel-amd, built 2026-10-11T13:11:22Z on amd-395), build=8e0e4f3c-merged-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T13:20:32.247Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T13:20:32.247Z   node id=1 127.0.0.1:24190
+2026-10-11T13:20:32.247Z   node id=2 127.0.0.1:24191
+2026-10-11T13:20:32.247Z   node id=3 127.0.0.1:24192
+2026-10-11T13:20:32.247Z   node id=4 127.0.0.1:24193
+2026-10-11T13:20:32.247Z fetching metadata...
+2026-10-11T13:20:32.247Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T13:20:32.247Z export id=1 name=default
+2026-10-11T13:20:32.247Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T13:20:32.250Z efs-fuse: workers max=10 idle=10
+2026-10-11T13:20:32.251Z fuse serving
+2026-10-11T13:20:32.528Z opid-mkdir: parent=1 name=w58-unique-create seq=1 transport_rc=0 status=0
+2026-10-11T13:20:32.534Z opid-mkdir: parent=163 name=0 seq=2 transport_rc=0 status=0
+2026-10-11T13:20:32.535Z opid-mkdir: parent=163 name=1 seq=3 transport_rc=0 status=0
+2026-10-11T13:20:32.541Z opid-mkdir: parent=163 name=2 seq=4 transport_rc=0 status=0
+2026-10-11T13:20:32.542Z opid-mkdir: parent=163 name=3 seq=7 transport_rc=0 status=0
+2026-10-11T13:20:32.551Z opid-mkdir: parent=163 name=4 seq=9 transport_rc=0 status=0
+2026-10-11T13:20:32.553Z opid-mkdir: parent=163 name=5 seq=14 transport_rc=0 status=0
+2026-10-11T13:20:32.564Z opid-mkdir: parent=163 name=6 seq=15 transport_rc=0 status=0
+2026-10-11T13:20:32.565Z opid-mkdir: parent=163 name=7 seq=25 transport_rc=0 status=0
+2026-10-11T13:20:32.575Z opid-mkdir: parent=163 name=8 seq=28 transport_rc=0 status=0
+2026-10-11T13:20:32.578Z opid-mkdir: parent=163 name=10 seq=37 transport_rc=0 status=0
+2026-10-11T13:20:32.581Z opid-mkdir: parent=163 name=9 seq=41 transport_rc=0 status=0
+2026-10-11T13:20:32.584Z opid-mkdir: parent=163 name=12 seq=47 transport_rc=0 status=0
+2026-10-11T13:20:32.596Z opid-mkdir: parent=163 name=11 seq=50 transport_rc=0 status=0
+2026-10-11T13:20:32.606Z opid-mkdir: parent=163 name=13 seq=62 transport_rc=0 status=0
+2026-10-11T13:20:32.612Z opid-mkdir: parent=163 name=14 seq=72 transport_rc=0 status=0
+2026-10-11T13:20:32.628Z opid-mkdir: parent=163 name=15 seq=83 transport_rc=0 status=0
+2026-10-11T13:20:39.066Z efs-fuse 8e0e4f3c-merged-fault (branch devel-amd, built 2026-10-11T13:11:22Z on amd-395), build=8e0e4f3c-merged-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T13:20:39.067Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T13:20:39.067Z   node id=1 127.0.0.1:24190
+2026-10-11T13:20:39.067Z   node id=2 127.0.0.1:24191
+2026-10-11T13:20:39.067Z   node id=3 127.0.0.1:24192
+2026-10-11T13:20:39.067Z   node id=4 127.0.0.1:24193
+2026-10-11T13:20:39.067Z fetching metadata...
+2026-10-11T13:20:39.067Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T13:20:39.067Z export id=1 name=default
+2026-10-11T13:20:39.067Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T13:20:39.070Z efs-fuse: workers max=10 idle=10
+2026-10-11T13:20:39.071Z fuse serving
+2026-10-11T13:21:05.492Z opid-mkdir: parent=1 name=pending-create-wire seq=3102 transport_rc=0 status=0
+2026-10-11T13:21:10.009Z efs-fuse 8e0e4f3c-merged-fault (branch devel-amd, built 2026-10-11T13:11:22Z on amd-395), build=8e0e4f3c-merged-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T13:21:10.010Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T13:21:10.010Z   node id=1 127.0.0.1:24190
+2026-10-11T13:21:10.010Z   node id=2 127.0.0.1:24191
+2026-10-11T13:21:10.010Z   node id=3 127.0.0.1:24192
+2026-10-11T13:21:10.010Z   node id=4 127.0.0.1:24193
+2026-10-11T13:21:10.010Z fetching metadata...
+2026-10-11T13:21:10.010Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T13:21:10.010Z export id=1 name=default
+2026-10-11T13:21:10.010Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T13:21:10.013Z efs-fuse: workers max=10 idle=10
+2026-10-11T13:21:10.014Z fuse serving
+2026-10-11T13:21:10.347Z opid-mkdir: parent=1 name=pending-create-hashed seq=3 transport_rc=0 status=0
+2026-10-11T13:21:14.618Z efs-fuse 8e0e4f3c-merged-fault (branch devel-amd, built 2026-10-11T13:11:22Z on amd-395), build=8e0e4f3c-merged-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T13:21:14.619Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T13:21:14.619Z   node id=1 127.0.0.1:24190
+2026-10-11T13:21:14.619Z   node id=2 127.0.0.1:24191
+2026-10-11T13:21:14.619Z   node id=3 127.0.0.1:24192
+2026-10-11T13:21:14.619Z   node id=4 127.0.0.1:24193
+2026-10-11T13:21:14.619Z fetching metadata...
+2026-10-11T13:21:14.619Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T13:21:14.619Z export id=1 name=default
+2026-10-11T13:21:14.619Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T13:21:14.622Z efs-fuse: workers max=10 idle=10
+2026-10-11T13:21:14.623Z fuse serving
+2026-10-11T13:21:14.902Z opid-mkdir: parent=1 name=pending-create-wire seq=3 transport_rc=0 status=0
+2026-10-11T13:21:19.262Z efs-fuse 8e0e4f3c-merged-fault (branch devel-amd, built 2026-10-11T13:11:22Z on amd-395), build=8e0e4f3c-merged-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T13:21:19.262Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T13:21:19.262Z   node id=1 127.0.0.1:24190
+2026-10-11T13:21:19.262Z   node id=2 127.0.0.1:24191
+2026-10-11T13:21:19.262Z   node id=3 127.0.0.1:24192
+2026-10-11T13:21:19.262Z   node id=4 127.0.0.1:24193
+2026-10-11T13:21:19.262Z fetching metadata...
+2026-10-11T13:21:19.263Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T13:21:19.263Z export id=1 name=default
+2026-10-11T13:21:19.263Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T13:21:19.265Z efs-fuse: workers max=10 idle=10
+2026-10-11T13:21:19.267Z fuse serving
+2026-10-11T13:21:19.544Z opid-mkdir: parent=1 name=pending-create-hashed seq=3 transport_rc=0 status=0
+2026-10-11T13:21:24.027Z efs-fuse 8e0e4f3c-merged-fault (branch devel-amd, built 2026-10-11T13:11:22Z on amd-395), build=8e0e4f3c-merged-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T13:21:24.028Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T13:21:24.028Z   node id=1 127.0.0.1:24190
+2026-10-11T13:21:24.028Z   node id=2 127.0.0.1:24191
+2026-10-11T13:21:24.028Z   node id=3 127.0.0.1:24192
+2026-10-11T13:21:24.028Z   node id=4 127.0.0.1:24193
+2026-10-11T13:21:24.028Z fetching metadata...
+2026-10-11T13:21:24.028Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T13:21:24.028Z export id=1 name=default
+2026-10-11T13:21:24.028Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T13:21:24.030Z efs-fuse: workers max=10 idle=10
+2026-10-11T13:21:24.032Z fuse serving
+2026-10-11T13:21:24.380Z opid-mkdir: parent=1 name=retained-create-request seq=3 transport_rc=0 status=0
+2026-10-11T13:21:26.546Z opid-mkdir: parent=1 name=report-many-inodes seq=14 transport_rc=0 status=0
+2026-10-11T13:21:31.170Z efs-fuse 8e0e4f3c-merged-fault (branch devel-amd, built 2026-10-11T13:11:22Z on amd-395), build=8e0e4f3c-merged-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T13:21:31.170Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T13:21:31.170Z   node id=1 127.0.0.1:24190
+2026-10-11T13:21:31.170Z   node id=2 127.0.0.1:24191
+2026-10-11T13:21:31.170Z   node id=3 127.0.0.1:24192
+2026-10-11T13:21:31.170Z   node id=4 127.0.0.1:24193
+2026-10-11T13:21:31.170Z fetching metadata...
+2026-10-11T13:21:31.171Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T13:21:31.171Z export id=1 name=default
+2026-10-11T13:21:31.171Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T13:21:31.173Z efs-fuse: workers max=10 idle=10
+2026-10-11T13:21:31.175Z fuse serving
+2026-10-11T13:21:31.443Z efs: read hole ino=5609 ci=0 holes=1
+2026-10-11T13:21:37.777Z opid-mkdir: parent=1 name=namespace-session-fence seq=122 transport_rc=0 status=0
+2026-10-11T13:21:37.899Z opid-mkdir: parent=1 name=namespace-first-touch seq=123 transport_rc=0 status=0
+2026-10-11T13:21:44.003Z efs-fuse 8e0e4f3c-merged-fault (branch devel-amd, built 2026-10-11T13:11:22Z on amd-395), build=8e0e4f3c-merged-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T13:21:44.004Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T13:21:44.004Z   node id=1 127.0.0.1:24190
+2026-10-11T13:21:44.004Z   node id=2 127.0.0.1:24191
+2026-10-11T13:21:44.004Z   node id=3 127.0.0.1:24192
+2026-10-11T13:21:44.004Z   node id=4 127.0.0.1:24193
+2026-10-11T13:21:44.004Z fetching metadata...
+2026-10-11T13:21:44.004Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T13:21:44.004Z export id=1 name=default
+2026-10-11T13:21:44.004Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T13:21:44.007Z efs-fuse: workers max=10 idle=10
+2026-10-11T13:21:44.009Z fuse serving
+2026-10-11T13:21:56.640Z efs-fuse 8e0e4f3c-merged-fault (branch devel-amd, built 2026-10-11T13:11:22Z on amd-395), build=8e0e4f3c-merged-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T13:21:56.640Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T13:21:56.640Z   node id=1 127.0.0.1:24190
+2026-10-11T13:21:56.640Z   node id=2 127.0.0.1:24191
+2026-10-11T13:21:56.640Z   node id=3 127.0.0.1:24192
+2026-10-11T13:21:56.640Z   node id=4 127.0.0.1:24193
+2026-10-11T13:21:56.640Z fetching metadata...
+2026-10-11T13:21:56.640Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T13:21:56.640Z export id=1 name=default
+2026-10-11T13:21:56.640Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T13:21:56.642Z efs-fuse: workers max=10 idle=10
+2026-10-11T13:21:56.644Z fuse serving
+2026-10-11T13:22:01.269Z efs-fuse 8e0e4f3c-merged-fault (branch devel-amd, built 2026-10-11T13:11:22Z on amd-395), build=8e0e4f3c-merged-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T13:22:01.270Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T13:22:01.270Z   node id=1 127.0.0.1:24190
+2026-10-11T13:22:01.270Z   node id=2 127.0.0.1:24191
+2026-10-11T13:22:01.270Z   node id=3 127.0.0.1:24192
+2026-10-11T13:22:01.270Z   node id=4 127.0.0.1:24193
+2026-10-11T13:22:01.270Z fetching metadata...
+2026-10-11T13:22:01.270Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T13:22:01.270Z export id=1 name=default
+2026-10-11T13:22:01.270Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T13:22:01.273Z efs-fuse: workers max=10 idle=10
+2026-10-11T13:22:01.274Z fuse serving
+2026-10-11T13:22:02.680Z opid-mkdir: parent=1 name=lease-local seq=9 transport_rc=0 status=0
+2026-10-11T13:22:02.689Z opid-mkdir: parent=1 name=lease-hashed seq=10 transport_rc=0 status=0
+2026-10-11T13:22:07.953Z efs-fuse 8e0e4f3c-merged-fault (branch devel-amd, built 2026-10-11T13:11:22Z on amd-395), build=8e0e4f3c-merged-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T13:22:07.953Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T13:22:07.953Z   node id=1 127.0.0.1:24190
+2026-10-11T13:22:07.953Z   node id=2 127.0.0.1:24191
+2026-10-11T13:22:07.953Z   node id=3 127.0.0.1:24192
+2026-10-11T13:22:07.953Z   node id=4 127.0.0.1:24193
+2026-10-11T13:22:07.953Z fetching metadata...
+2026-10-11T13:22:07.953Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T13:22:07.953Z export id=1 name=default
+2026-10-11T13:22:07.953Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T13:22:07.956Z efs-fuse: workers max=10 idle=10
+2026-10-11T13:22:07.957Z fuse serving
+2026-10-11T13:22:08.566Z efs-fuse 8e0e4f3c-merged-fault (branch devel-amd, built 2026-10-11T13:11:22Z on amd-395), build=8e0e4f3c-merged-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T13:22:08.566Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T13:22:08.566Z   node id=1 127.0.0.1:24190
+2026-10-11T13:22:08.566Z   node id=2 127.0.0.1:24191
+2026-10-11T13:22:08.566Z   node id=3 127.0.0.1:24192
+2026-10-11T13:22:08.566Z   node id=4 127.0.0.1:24193
+2026-10-11T13:22:08.566Z fetching metadata...
+2026-10-11T13:22:08.566Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T13:22:08.566Z export id=1 name=default
+2026-10-11T13:22:08.566Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T13:22:08.569Z efs-fuse: workers max=10 idle=10
+2026-10-11T13:22:08.570Z fuse serving
+2026-10-11T13:22:09.117Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:22:09.125Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:22:09.132Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:22:09.139Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:22:09.146Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:22:09.153Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:22:09.161Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:22:09.168Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:22:09.175Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=0
+2026-10-11T13:22:09.179Z efs: report rec ino=61441 ci=0 rejected unowned staging observation nodes=1,2,3 (putid miss, n=1)
+2026-10-11T13:22:26.684Z dcache-pressure live=34078720 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:22:44.534Z efs-fuse 8e0e4f3c-merged-fault (branch devel-amd, built 2026-10-11T13:11:22Z on amd-395), build=8e0e4f3c-merged-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T13:22:44.534Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T13:22:44.534Z   node id=1 127.0.0.1:24190
+2026-10-11T13:22:44.534Z   node id=2 127.0.0.1:24191
+2026-10-11T13:22:44.534Z   node id=3 127.0.0.1:24192
+2026-10-11T13:22:44.534Z   node id=4 127.0.0.1:24193
+2026-10-11T13:22:44.534Z fetching metadata...
+2026-10-11T13:22:44.534Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T13:22:44.534Z export id=1 name=default
+2026-10-11T13:22:44.534Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T13:22:44.537Z efs-fuse: workers max=10 idle=10
+2026-10-11T13:22:44.538Z fuse serving
+2026-10-11T13:22:45.601Z dcache-pressure live=33554432 reserved=0 backing=33554432 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:01.251Z efs-fuse 8e0e4f3c-merged-fault (branch devel-amd, built 2026-10-11T13:11:22Z on amd-395), build=8e0e4f3c-merged-fault: starting export=default mount=/data1/efs/mnt
+2026-10-11T13:23:01.251Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T13:23:01.251Z   node id=1 127.0.0.1:24190
+2026-10-11T13:23:01.251Z   node id=2 127.0.0.1:24191
+2026-10-11T13:23:01.251Z   node id=3 127.0.0.1:24192
+2026-10-11T13:23:01.251Z   node id=4 127.0.0.1:24193
+2026-10-11T13:23:01.251Z fetching metadata...
+2026-10-11T13:23:01.251Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T13:23:01.251Z export id=1 name=default
+2026-10-11T13:23:01.251Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T13:23:01.253Z efs-fuse: workers max=10 idle=10
+2026-10-11T13:23:01.254Z fuse serving
+2026-10-11T13:23:03.382Z opid-mkdir: parent=1 name=posix-amd-395-a7ir57ik seq=2 transport_rc=0 status=0
+2026-10-11T13:23:03.434Z opid-mkdir: parent=1034 name=basic_write_read seq=3 transport_rc=0 status=0
+2026-10-11T13:23:03.435Z opid-mkdir: parent=1034 name=basic_append seq=4 transport_rc=0 status=0
+2026-10-11T13:23:03.435Z opid-mkdir: parent=1034 name=basic_empty_file seq=5 transport_rc=0 status=0
+2026-10-11T13:23:03.436Z opid-mkdir: parent=1034 name=basic_oappend_flag seq=7 transport_rc=0 status=0
+2026-10-11T13:23:03.540Z opid-mkdir: parent=1034 name=basic_terminal_cp_cat seq=33 transport_rc=0 status=0
+2026-10-11T13:23:03.540Z opid-mkdir: parent=1034 name=basic_read_past_eof seq=34 transport_rc=0 status=0
+2026-10-11T13:23:03.547Z opid-mkdir: parent=1034 name=basic_overwrite_middle seq=36 transport_rc=0 status=0
+2026-10-11T13:23:03.553Z opid-mkdir: parent=1034 name=basic_seek_read seq=39 transport_rc=0 status=0
+2026-10-11T13:23:03.638Z opid-mkdir: parent=1034 name=basic_o_trunc seq=71 transport_rc=0 status=0
+2026-10-11T13:23:03.639Z opid-mkdir: parent=1034 name=basic_dd_rw seq=72 transport_rc=0 status=0
+2026-10-11T13:23:03.641Z opid-mkdir: parent=1034 name=basic_pread_pwrite seq=74 transport_rc=0 status=0
+2026-10-11T13:23:03.697Z opid-mkdir: parent=1034 name=basic_dup_write seq=96 transport_rc=0 status=0
+2026-10-11T13:23:03.742Z opid-mkdir: parent=1034 name=basic_chunk_boundary seq=100 transport_rc=0 status=0
+2026-10-11T13:23:03.747Z opid-mkdir: parent=1034 name=fsync_reopen_visible seq=101 transport_rc=0 status=0
+2026-10-11T13:23:03.753Z opid-mkdir: parent=1034 name=basic_ftruncate_vs_truncate seq=103 transport_rc=0 status=0
+2026-10-11T13:23:03.764Z efs: read hole ino=4706 ci=1 holes=1
+2026-10-11T13:23:03.795Z opid-mkdir: parent=1034 name=basic_seek_end_then_write seq=118 transport_rc=0 status=0
+2026-10-11T13:23:03.851Z opid-mkdir: parent=1034 name=basic_rdwr_no_reopen seq=126 transport_rc=0 status=0
+2026-10-11T13:23:03.857Z opid-mkdir: parent=1034 name=basic_seek_cur_past_eof_write seq=127 transport_rc=0 status=0
+2026-10-11T13:23:03.864Z opid-mkdir: parent=1034 name=trunc_shrink seq=130 transport_rc=0 status=0
+2026-10-11T13:23:03.899Z opid-mkdir: parent=1034 name=trunc_grow_sparse seq=142 transport_rc=0 status=0
+2026-10-11T13:23:03.955Z opid-mkdir: parent=1034 name=sparse_write_huge_offset seq=148 transport_rc=0 status=0
+2026-10-11T13:23:03.956Z opid-mkdir: parent=1034 name=trunc_to_zero seq=149 transport_rc=0 status=0
+2026-10-11T13:23:03.957Z opid-mkdir: parent=1034 name=sparse_st_blocks seq=151 transport_rc=0 status=0
+2026-10-11T13:23:04.008Z opid-mkdir: parent=1034 name=dir_mkdir_rmdir seq=162 transport_rc=0 status=0
+2026-10-11T13:23:04.014Z opid-mkdir: parent=59 name=sub seq=163 transport_rc=0 status=0
+2026-10-11T13:23:04.060Z opid-mkdir: parent=1034 name=dir_readdir_listing seq=165 transport_rc=0 status=0
+2026-10-11T13:23:04.060Z opid-mkdir: parent=1034 name=dir_rename_file seq=166 transport_rc=0 status=0
+2026-10-11T13:23:04.061Z opid-mkdir: parent=1034 name=dir_mkdir_p_terminal seq=167 transport_rc=0 status=0
+2026-10-11T13:23:04.073Z opid-mkdir: parent=1396 name=a seq=171 transport_rc=0 status=0
+2026-10-11T13:23:04.076Z opid-mkdir: parent=881 name=b seq=175 transport_rc=0 status=0
+2026-10-11T13:23:04.082Z opid-mkdir: parent=3683 name=c seq=179 transport_rc=0 status=0
+2026-10-11T13:23:04.085Z opid-mkdir: parent=4025 name=d seq=180 transport_rc=0 status=0
+2026-10-11T13:23:04.089Z opid-mkdir: parent=765 name=e seq=183 transport_rc=0 status=0
+2026-10-11T13:23:04.109Z opid-mkdir: parent=1034 name=dir_rename_over_existing seq=202 transport_rc=0 status=0
+2026-10-11T13:23:04.165Z opid-mkdir: parent=1034 name=dir_rename_dir_with_contents seq=247 transport_rc=0 status=0
+2026-10-11T13:23:04.170Z opid-mkdir: parent=1034 name=dir_move_into_subdir seq=249 transport_rc=0 status=0
+2026-10-11T13:23:04.173Z opid-mkdir: parent=339 name=src seq=250 transport_rc=0 status=0
+2026-10-11T13:23:04.174Z opid-mkdir: parent=1161 name=a seq=252 transport_rc=0 status=0
+2026-10-11T13:23:04.177Z opid-mkdir: parent=419 name=sub seq=254 transport_rc=0 status=0
+2026-10-11T13:23:04.182Z opid-mkdir: parent=1161 name=b seq=256 transport_rc=0 status=0
+2026-10-11T13:23:04.216Z opid-mkdir: parent=1034 name=dir_rename_file_over_dir seq=276 transport_rc=0 status=0
+2026-10-11T13:23:04.229Z opid-mkdir: parent=1761 name=sub seq=287 transport_rc=0 status=0
+2026-10-11T13:23:04.319Z opid-mkdir: parent=1034 name=dir_rename_dir_over_nonempty seq=361 transport_rc=0 status=0
+2026-10-11T13:23:04.325Z opid-mkdir: parent=1034 name=dir_rename_dir_over_file seq=362 transport_rc=0 status=0
+2026-10-11T13:23:04.326Z opid-mkdir: parent=3323 name=a seq=363 transport_rc=0 status=0
+2026-10-11T13:23:04.330Z opid-mkdir: parent=1034 name=dir_rename_noreplace seq=365 transport_rc=0 status=0
+2026-10-11T13:23:04.337Z opid-mkdir: parent=1089 name=sub seq=366 transport_rc=0 status=0
+2026-10-11T13:23:04.340Z opid-mkdir: parent=3323 name=b seq=368 transport_rc=0 status=0
+2026-10-11T13:23:04.354Z efs: rename_at 3323/a -> 3323/b rc=-12 after 1 tries
+2026-10-11T13:23:04.423Z opid-mkdir: parent=1034 name=dir_rename_symlink seq=386 transport_rc=0 status=0
+2026-10-11T13:23:04.424Z opid-mkdir: parent=1 name=posixroot-rendir-465380-a seq=389 transport_rc=0 status=0
+2026-10-11T13:23:04.430Z opid-mkdir: parent=1034 name=dir_rename_exchange_preserves_both_files seq=388 transport_rc=0 status=0
+2026-10-11T13:23:04.529Z opid-mkdir: parent=1 name=posixroot-mkd-465385-a seq=416 transport_rc=0 status=0
+2026-10-11T13:23:04.533Z opid-mkdir: parent=1 name=posixroot-renup-465382-a seq=420 transport_rc=0 status=0
+2026-10-11T13:23:04.547Z opid-mkdir: parent=1 name=posixroot-rendown-465383-b seq=424 transport_rc=0 status=0
+2026-10-11T13:23:04.625Z opid-mkdir: parent=1034 name=dir_deep_nesting seq=440 transport_rc=0 status=0
+2026-10-11T13:23:04.626Z opid-mkdir: parent=1034 name=dir_many_files seq=441 transport_rc=0 status=0
+2026-10-11T13:23:04.631Z opid-mkdir: parent=1034 name=dir_times_create seq=444 transport_rc=0 status=0
+2026-10-11T13:23:04.655Z opid-mkdir: parent=2198 name=d00 seq=457 transport_rc=0 status=0
+2026-10-11T13:23:04.659Z opid-mkdir: parent=79 name=d01 seq=460 transport_rc=0 status=0
+2026-10-11T13:23:04.666Z opid-mkdir: parent=569 name=d02 seq=462 transport_rc=0 status=0
+2026-10-11T13:23:04.675Z opid-mkdir: parent=264 name=d03 seq=466 transport_rc=0 status=0
+2026-10-11T13:23:04.682Z opid-mkdir: parent=323 name=d04 seq=468 transport_rc=0 status=0
+2026-10-11T13:23:04.683Z opid-mkdir: parent=1034 name=dir_times_unlink seq=467 transport_rc=0 status=0
+2026-10-11T13:23:04.689Z opid-mkdir: parent=1625 name=d05 seq=473 transport_rc=0 status=0
+2026-10-11T13:23:04.693Z opid-mkdir: parent=2893 name=d06 seq=475 transport_rc=0 status=0
+2026-10-11T13:23:04.702Z opid-mkdir: parent=447 name=d07 seq=480 transport_rc=0 status=0
+2026-10-11T13:23:04.711Z opid-mkdir: parent=232 name=d08 seq=484 transport_rc=0 status=0
+2026-10-11T13:23:04.720Z opid-mkdir: parent=2381 name=d09 seq=488 transport_rc=0 status=0
+2026-10-11T13:23:04.730Z opid-mkdir: parent=268 name=d10 seq=492 transport_rc=0 status=0
+2026-10-11T13:23:04.738Z opid-mkdir: parent=3831 name=d11 seq=493 transport_rc=0 status=0
+2026-10-11T13:23:04.748Z opid-mkdir: parent=2922 name=d12 seq=497 transport_rc=0 status=0
+2026-10-11T13:23:04.754Z opid-mkdir: parent=329 name=d13 seq=501 transport_rc=0 status=0
+2026-10-11T13:23:04.760Z opid-mkdir: parent=699 name=d14 seq=505 transport_rc=0 status=0
+2026-10-11T13:23:04.770Z opid-mkdir: parent=1033 name=d15 seq=509 transport_rc=0 status=0
+2026-10-11T13:23:04.775Z opid-mkdir: parent=3194 name=d16 seq=513 transport_rc=0 status=0
+2026-10-11T13:23:04.787Z opid-mkdir: parent=3792 name=d17 seq=517 transport_rc=0 status=0
+2026-10-11T13:23:04.792Z opid-mkdir: parent=115 name=d18 seq=521 transport_rc=0 status=0
+2026-10-11T13:23:04.797Z opid-mkdir: parent=947 name=d19 seq=525 transport_rc=0 status=0
+2026-10-11T13:23:04.809Z opid-mkdir: parent=729 name=d20 seq=529 transport_rc=0 status=0
+2026-10-11T13:23:04.815Z opid-mkdir: parent=724 name=d21 seq=533 transport_rc=0 status=0
+2026-10-11T13:23:04.828Z opid-mkdir: parent=3678 name=d22 seq=537 transport_rc=0 status=0
+2026-10-11T13:23:04.835Z opid-mkdir: parent=181 name=d23 seq=541 transport_rc=0 status=0
+2026-10-11T13:23:04.846Z opid-mkdir: parent=2711 name=d24 seq=545 transport_rc=0 status=0
+2026-10-11T13:23:04.853Z opid-mkdir: parent=82 name=d25 seq=552 transport_rc=0 status=0
+2026-10-11T13:23:04.865Z opid-mkdir: parent=3726 name=d26 seq=556 transport_rc=0 status=0
+2026-10-11T13:23:04.871Z opid-mkdir: parent=9953 name=d27 seq=562 transport_rc=0 status=0
+2026-10-11T13:23:04.879Z opid-mkdir: parent=1321 name=d28 seq=567 transport_rc=0 status=0
+2026-10-11T13:23:04.886Z opid-mkdir: parent=1177 name=d29 seq=573 transport_rc=0 status=0
+2026-10-11T13:23:04.893Z opid-mkdir: parent=161 name=d30 seq=578 transport_rc=0 status=0
+2026-10-11T13:23:04.905Z opid-mkdir: parent=2147 name=d31 seq=583 transport_rc=0 status=0
+2026-10-11T13:23:04.911Z opid-mkdir: parent=2114 name=d32 seq=589 transport_rc=0 status=0
+2026-10-11T13:23:04.925Z opid-mkdir: parent=2814 name=d33 seq=596 transport_rc=0 status=0
+2026-10-11T13:23:04.933Z opid-mkdir: parent=1695 name=d34 seq=603 transport_rc=0 status=0
+2026-10-11T13:23:04.945Z opid-mkdir: parent=2743 name=d35 seq=610 transport_rc=0 status=0
+2026-10-11T13:23:04.960Z opid-mkdir: parent=2504 name=d36 seq=617 transport_rc=0 status=0
+2026-10-11T13:23:04.976Z opid-mkdir: parent=3631 name=d37 seq=623 transport_rc=0 status=0
+2026-10-11T13:23:04.985Z opid-mkdir: parent=1206 name=d38 seq=631 transport_rc=0 status=0
+2026-10-11T13:23:05.000Z opid-mkdir: parent=3628 name=d39 seq=638 transport_rc=0 status=0
+2026-10-11T13:23:05.012Z opid-mkdir: parent=1031 name=d40 seq=645 transport_rc=0 status=0
+2026-10-11T13:23:05.025Z opid-mkdir: parent=1342 name=d41 seq=652 transport_rc=0 status=0
+2026-10-11T13:23:05.039Z opid-mkdir: parent=3091 name=d42 seq=661 transport_rc=0 status=0
+2026-10-11T13:23:05.052Z opid-mkdir: parent=2872 name=d43 seq=669 transport_rc=0 status=0
+2026-10-11T13:23:05.068Z opid-mkdir: parent=3433 name=d44 seq=676 transport_rc=0 status=0
+2026-10-11T13:23:05.085Z opid-mkdir: parent=4039 name=d45 seq=683 transport_rc=0 status=0
+2026-10-11T13:23:05.096Z opid-mkdir: parent=3436 name=d46 seq=693 transport_rc=0 status=0
+2026-10-11T13:23:05.106Z opid-mkdir: parent=2088 name=d47 seq=702 transport_rc=0 status=0
+2026-10-11T13:23:05.120Z opid-mkdir: parent=736 name=d48 seq=710 transport_rc=0 status=0
+2026-10-11T13:23:05.136Z opid-mkdir: parent=2839 name=d49 seq=720 transport_rc=0 status=0
+2026-10-11T13:23:05.152Z opid-mkdir: parent=8508 name=d50 seq=731 transport_rc=0 status=0
+2026-10-11T13:23:05.161Z opid-mkdir: parent=4435 name=d51 seq=742 transport_rc=0 status=0
+2026-10-11T13:23:05.171Z opid-mkdir: parent=515 name=d52 seq=750 transport_rc=0 status=0
+2026-10-11T13:23:05.187Z opid-mkdir: parent=3159 name=d53 seq=759 transport_rc=0 status=0
+2026-10-11T13:23:05.197Z opid-mkdir: parent=271990 name=d54 seq=768 transport_rc=0 status=0
+2026-10-11T13:23:05.209Z opid-mkdir: parent=1872 name=d55 seq=777 transport_rc=0 status=0
+2026-10-11T13:23:05.225Z opid-mkdir: parent=1394 name=d56 seq=787 transport_rc=0 status=0
+2026-10-11T13:23:05.236Z opid-mkdir: parent=2367 name=d57 seq=797 transport_rc=0 status=0
+2026-10-11T13:23:05.254Z opid-mkdir: parent=997 name=d58 seq=807 transport_rc=0 status=0
+2026-10-11T13:23:05.265Z opid-mkdir: parent=1456 name=d59 seq=817 transport_rc=0 status=0
+2026-10-11T13:23:05.630Z opid-mkdir: parent=1034 name=dir_times_mkdir_rmdir seq=1057 transport_rc=0 status=0
+2026-10-11T13:23:05.784Z opid-mkdir: parent=1034 name=dir_times_rename seq=1200 transport_rc=0 status=0
+2026-10-11T13:23:05.832Z opid-mkdir: parent=1034 name=dir_times_link seq=1241 transport_rc=0 status=0
+2026-10-11T13:23:05.840Z opid-mkdir: parent=4026 name=sub seq=1251 transport_rc=0 status=0
+2026-10-11T13:23:06.437Z opid-mkdir: parent=1034 name=dir_times_write_no_bump seq=1787 transport_rc=0 status=0
+2026-10-11T13:23:06.589Z opid-mkdir: parent=1034 name=dir_dot_entries seq=1793 transport_rc=0 status=0
+2026-10-11T13:23:06.591Z opid-mkdir: parent=1447 name=sub seq=1794 transport_rc=0 status=0
+2026-10-11T13:23:06.693Z opid-mkdir: parent=1034 name=dir_hidden_files seq=1795 transport_rc=0 status=0
+2026-10-11T13:23:06.695Z opid-mkdir: parent=4094 name=sub seq=1796 transport_rc=0 status=0
+2026-10-11T13:23:06.798Z opid-mkdir: parent=1034 name=dir_chmod_and_create_denied seq=1809 transport_rc=0 status=0
+2026-10-11T13:23:06.803Z opid-mkdir: parent=1201 name=sub seq=1810 transport_rc=0 status=0
+2026-10-11T13:23:06.860Z opid-mkdir: parent=1932 name=sub seq=1812 transport_rc=0 status=0
+2026-10-11T13:23:06.895Z opid-mkdir: parent=1034 name=dir_nlink seq=1813 transport_rc=0 status=0
+2026-10-11T13:23:06.901Z opid-mkdir: parent=49 name=sub seq=1814 transport_rc=0 status=0
+2026-10-11T13:23:06.906Z opid-mkdir: parent=3306 name=a seq=1816 transport_rc=0 status=0
+2026-10-11T13:23:06.997Z opid-mkdir: parent=1034 name=symlink_create_readlink seq=1818 transport_rc=0 status=0
+2026-10-11T13:23:07.000Z opid-mkdir: parent=1034 name=dir_readdir_while_unlink seq=1820 transport_rc=0 status=0
+2026-10-11T13:23:07.101Z opid-mkdir: parent=1034 name=symlink_to_dir seq=1908 transport_rc=0 status=0
+2026-10-11T13:23:07.110Z opid-mkdir: parent=1864 name=realdir seq=1910 transport_rc=0 status=0
+2026-10-11T13:23:07.206Z opid-mkdir: parent=1034 name=symlink_dangling seq=1955 transport_rc=0 status=0
+2026-10-11T13:23:07.254Z opid-mkdir: parent=1034 name=symlink_chain seq=1957 transport_rc=0 status=0
+2026-10-11T13:23:07.304Z opid-mkdir: parent=1034 name=symlink_absolute seq=1965 transport_rc=0 status=0
+2026-10-11T13:23:07.362Z opid-mkdir: parent=1034 name=hardlink_basic seq=1972 transport_rc=0 status=0
+2026-10-11T13:23:07.412Z opid-mkdir: parent=1034 name=hardlink_shared_data seq=1979 transport_rc=0 status=0
+2026-10-11T13:23:07.465Z opid-mkdir: parent=1034 name=hardlink_unlink_one seq=1989 transport_rc=0 status=0
+2026-10-11T13:23:07.512Z opid-mkdir: parent=1034 name=hardlink_terminal_ln seq=1997 transport_rc=0 status=0
+2026-10-11T13:23:07.563Z opid-mkdir: parent=1034 name=hardlink_rename_one_name seq=2002 transport_rc=0 status=0
+2026-10-11T13:23:07.624Z opid-mkdir: parent=1034 name=symlink_unlink_keeps_target seq=2010 transport_rc=0 status=0
+2026-10-11T13:23:07.667Z opid-mkdir: parent=1034 name=symlink_relative_after_parent_rename seq=2018 transport_rc=0 status=0
+2026-10-11T13:23:07.677Z opid-mkdir: parent=2940 name=a seq=2019 transport_rc=0 status=0
+2026-10-11T13:23:07.720Z opid-mkdir: parent=1034 name=symlink_chmod_follows seq=2029 transport_rc=0 status=0
+2026-10-11T13:23:07.764Z opid-mkdir: parent=1034 name=attr_chmod seq=2035 transport_rc=0 status=0
+2026-10-11T13:23:07.816Z opid-mkdir: parent=1034 name=attr_chown_self seq=2039 transport_rc=0 status=0
+2026-10-11T13:23:07.816Z opid-mkdir: parent=1034 name=attr_utimens seq=2040 transport_rc=0 status=0
+2026-10-11T13:23:07.870Z opid-mkdir: parent=1034 name=attr_utimens_ns seq=2047 transport_rc=0 status=0
+2026-10-11T13:23:07.919Z opid-mkdir: parent=1034 name=attr_stat_fields seq=2051 transport_rc=0 status=0
+2026-10-11T13:23:07.924Z opid-mkdir: parent=1034 name=attr_touch_terminal seq=2052 transport_rc=0 status=0
+2026-10-11T13:23:07.969Z opid-mkdir: parent=1034 name=attr_access seq=2062 transport_rc=0 status=0
+2026-10-11T13:23:08.020Z opid-mkdir: parent=1034 name=perm_file_000_denied seq=2066 transport_rc=0 status=0
+2026-10-11T13:23:08.026Z opid-mkdir: parent=1034 name=attr_ctime_after_chmod seq=2070 transport_rc=0 status=0
+2026-10-11T13:23:08.042Z opid-mkdir: parent=1932 name=sa seq=2074 transport_rc=0 status=0
+2026-10-11T13:23:08.047Z opid-mkdir: parent=1932 name=sb seq=2075 transport_rc=0 status=0
+2026-10-11T13:23:08.069Z opid-mkdir: parent=1034 name=perm_file_write_only seq=2079 transport_rc=0 status=0
+2026-10-11T13:23:08.136Z opid-mkdir: parent=1034 name=perm_file_read_only_ops seq=2085 transport_rc=0 status=0
+2026-10-11T13:23:08.176Z opid-mkdir: parent=1034 name=perm_owner_bits_not_other seq=2093 transport_rc=0 status=0
+2026-10-11T13:23:08.177Z opid-mkdir: parent=1034 name=perm_owner_bits_not_group seq=2094 transport_rc=0 status=0
+2026-10-11T13:23:08.227Z opid-mkdir: parent=1034 name=perm_create_mode_000_reopen seq=2101 transport_rc=0 status=0
+2026-10-11T13:23:08.274Z opid-mkdir: parent=1034 name=perm_owner_chmod_restore seq=2105 transport_rc=0 status=0
+2026-10-11T13:23:08.290Z opid-mkdir: parent=1034 name=perm_owner_utime_readonly seq=2111 transport_rc=0 status=0
+2026-10-11T13:23:08.296Z opid-mkdir: parent=1034 name=perm_open_fd_survives_chmod seq=2112 transport_rc=0 status=0
+2026-10-11T13:23:08.331Z opid-mkdir: parent=1034 name=perm_fchmod seq=2121 transport_rc=0 status=0
+2026-10-11T13:23:08.380Z opid-mkdir: parent=1034 name=perm_access_rwx seq=2125 transport_rc=0 status=0
+2026-10-11T13:23:08.386Z opid-mkdir: parent=1034 name=perm_ftruncate_after_chmod seq=2127 transport_rc=0 status=0
+2026-10-11T13:23:08.393Z opid-mkdir: parent=1034 name=perm_exec_denied_no_x seq=2131 transport_rc=0 status=0
+2026-10-11T13:23:08.407Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:08.410Z efs: report rec ino=4675 ci=0 rejected unowned staging observation nodes=1,2,3 (putid miss, n=1)
+2026-10-11T13:23:08.488Z opid-mkdir: parent=1034 name=perm_suid_sgid_sticky_stored seq=2139 transport_rc=0 status=0
+2026-10-11T13:23:08.502Z opid-mkdir: parent=1034 name=perm_setgid_directory_inheritance seq=2143 transport_rc=0 status=0
+2026-10-11T13:23:08.503Z opid-mkdir: parent=1034 name=perm_exec_allowed_with_x seq=2144 transport_rc=0 status=0
+2026-10-11T13:23:08.514Z opid-mkdir: parent=3707 name=group-parent seq=2145 transport_rc=0 status=0
+2026-10-11T13:23:08.515Z opid-mkdir: parent=1153 name=sub seq=2147 transport_rc=0 status=0
+2026-10-11T13:23:08.525Z opid-mkdir: parent=3118 name=child seq=2150 transport_rc=0 status=0
+2026-10-11T13:23:08.528Z opid-mkdir: parent=889 name=grandchild seq=2153 transport_rc=0 status=0
+2026-10-11T13:23:08.590Z opid-mkdir: parent=1034 name=perm_chown_other_gid_denied seq=2162 transport_rc=0 status=0
+2026-10-11T13:23:08.597Z opid-mkdir: parent=1034 name=perm_chown_other_uid_denied seq=2163 transport_rc=0 status=0
+2026-10-11T13:23:08.599Z opid-mkdir: parent=1034 name=perm_sticky_owner_can_unlink seq=2166 transport_rc=0 status=0
+2026-10-11T13:23:08.607Z opid-mkdir: parent=116 name=sub seq=2168 transport_rc=0 status=0
+2026-10-11T13:23:08.691Z opid-mkdir: parent=1034 name=perm_dir_wx_no_r seq=2176 transport_rc=0 status=0
+2026-10-11T13:23:08.697Z opid-mkdir: parent=2650 name=sub seq=2177 transport_rc=0 status=0
+2026-10-11T13:23:08.703Z opid-mkdir: parent=1034 name=perm_dir_no_r_list seq=2178 transport_rc=0 status=0
+2026-10-11T13:23:08.708Z opid-mkdir: parent=1034 name=perm_dir_readonly_mutate seq=2179 transport_rc=0 status=0
+2026-10-11T13:23:08.718Z opid-mkdir: parent=3767 name=sub seq=2181 transport_rc=0 status=0
+2026-10-11T13:23:08.721Z opid-mkdir: parent=1829 name=sub seq=2183 transport_rc=0 status=0
+2026-10-11T13:23:08.794Z opid-mkdir: parent=1034 name=perm_dir_000_restore seq=2201 transport_rc=0 status=0
+2026-10-11T13:23:08.798Z opid-mkdir: parent=2977 name=sub seq=2203 transport_rc=0 status=0
+2026-10-11T13:23:08.800Z opid-mkdir: parent=1034 name=perm_unlink_mode_000_file seq=2202 transport_rc=0 status=0
+2026-10-11T13:23:08.846Z opid-mkdir: parent=1034 name=perm_nested_parent_no_x seq=2213 transport_rc=0 status=0
+2026-10-11T13:23:08.848Z opid-mkdir: parent=2733 name=a seq=2214 transport_rc=0 status=0
+2026-10-11T13:23:08.850Z opid-mkdir: parent=1421 name=b seq=2215 transport_rc=0 status=0
+2026-10-11T13:23:08.895Z opid-mkdir: parent=1034 name=perm_rename_into_readonly_dir seq=2219 transport_rc=0 status=0
+2026-10-11T13:23:08.902Z opid-mkdir: parent=64 name=src seq=2220 transport_rc=0 status=0
+2026-10-11T13:23:08.903Z opid-mkdir: parent=64 name=dst seq=2221 transport_rc=0 status=0
+2026-10-11T13:23:08.911Z opid-mkdir: parent=1034 name=perm_symlink_target_denied seq=2223 transport_rc=0 status=0
+2026-10-11T13:23:08.956Z opid-mkdir: parent=1034 name=perm_hardlink_shares_mode seq=2230 transport_rc=0 status=0
+2026-10-11T13:23:09.003Z opid-mkdir: parent=1034 name=names_dash_prefix_terminal seq=2237 transport_rc=0 status=0
+2026-10-11T13:23:09.009Z opid-mkdir: parent=1034 name=names_crazy_roundtrip seq=2238 transport_rc=0 status=0
+2026-10-11T13:23:09.058Z opid-mkdir: parent=1034 name=names_too_long_component seq=2267 transport_rc=0 status=0
+2026-10-11T13:23:09.117Z opid-mkdir: parent=1034 name=names_reserved_dots seq=2298 transport_rc=0 status=0
+2026-10-11T13:23:09.124Z opid-mkdir: parent=1034 name=names_near_path_max seq=2303 transport_rc=0 status=0
+2026-10-11T13:23:09.129Z opid-mkdir: parent=1753 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2306 transport_rc=0 status=0
+2026-10-11T13:23:09.137Z opid-mkdir: parent=691 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2307 transport_rc=0 status=0
+2026-10-11T13:23:09.141Z opid-mkdir: parent=2081 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2310 transport_rc=0 status=0
+2026-10-11T13:23:09.150Z opid-mkdir: parent=2481 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2313 transport_rc=0 status=0
+2026-10-11T13:23:09.158Z opid-mkdir: parent=1446 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2315 transport_rc=0 status=0
+2026-10-11T13:23:09.163Z opid-mkdir: parent=3313 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2318 transport_rc=0 status=0
+2026-10-11T13:23:09.168Z opid-mkdir: parent=3077 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2322 transport_rc=0 status=0
+2026-10-11T13:23:09.181Z opid-mkdir: parent=3961 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2324 transport_rc=0 status=0
+2026-10-11T13:23:09.191Z opid-mkdir: parent=2312 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2329 transport_rc=0 status=0
+2026-10-11T13:23:09.203Z opid-mkdir: parent=3375 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2334 transport_rc=0 status=0
+2026-10-11T13:23:09.212Z opid-mkdir: parent=1034 name=names_near_path_max_dir seq=2338 transport_rc=0 status=0
+2026-10-11T13:23:09.214Z opid-mkdir: parent=9345 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2343 transport_rc=0 status=0
+2026-10-11T13:23:09.216Z opid-mkdir: parent=1752 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2342 transport_rc=0 status=0
+2026-10-11T13:23:09.221Z opid-mkdir: parent=3773 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2345 transport_rc=0 status=0
+2026-10-11T13:23:09.227Z opid-mkdir: parent=1615 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2349 transport_rc=0 status=0
+2026-10-11T13:23:09.233Z opid-mkdir: parent=1426 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2350 transport_rc=0 status=0
+2026-10-11T13:23:09.242Z opid-mkdir: parent=785 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2352 transport_rc=0 status=0
+2026-10-11T13:23:09.254Z opid-mkdir: parent=1508 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2356 transport_rc=0 status=0
+2026-10-11T13:23:09.259Z opid-mkdir: parent=2845 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2357 transport_rc=0 status=0
+2026-10-11T13:23:09.269Z opid-mkdir: parent=1015 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2362 transport_rc=0 status=0
+2026-10-11T13:23:09.282Z opid-mkdir: parent=1336 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2366 transport_rc=0 status=0
+2026-10-11T13:23:09.283Z opid-mkdir: parent=5542 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2368 transport_rc=0 status=0
+2026-10-11T13:23:09.295Z opid-mkdir: parent=1505 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2373 transport_rc=0 status=0
+2026-10-11T13:23:09.302Z opid-mkdir: parent=2971 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2375 transport_rc=0 status=0
+2026-10-11T13:23:09.309Z opid-mkdir: parent=2306 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2380 transport_rc=0 status=0
+2026-10-11T13:23:09.318Z opid-mkdir: parent=1034 name=names_path_too_long seq=2383 transport_rc=0 status=0
+2026-10-11T13:23:09.320Z opid-mkdir: parent=818 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2382 transport_rc=0 status=0
+2026-10-11T13:23:09.323Z opid-mkdir: parent=1569 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2387 transport_rc=0 status=0
+2026-10-11T13:23:09.330Z opid-mkdir: parent=917 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2389 transport_rc=0 status=0
+2026-10-11T13:23:09.337Z opid-mkdir: parent=1160 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2393 transport_rc=0 status=0
+2026-10-11T13:23:09.342Z opid-mkdir: parent=2475 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2392 transport_rc=0 status=0
+2026-10-11T13:23:09.350Z opid-mkdir: parent=3004 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2398 transport_rc=0 status=0
+2026-10-11T13:23:09.359Z opid-mkdir: parent=2816 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2400 transport_rc=0 status=0
+2026-10-11T13:23:09.364Z opid-mkdir: parent=1921 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2403 transport_rc=0 status=0
+2026-10-11T13:23:09.370Z opid-mkdir: parent=584 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2409 transport_rc=0 status=0
+2026-10-11T13:23:09.371Z opid-mkdir: parent=3285 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2410 transport_rc=0 status=0
+2026-10-11T13:23:09.375Z opid-mkdir: parent=2606 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2414 transport_rc=0 status=0
+2026-10-11T13:23:09.380Z opid-mkdir: parent=2228 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2419 transport_rc=0 status=0
+2026-10-11T13:23:09.386Z opid-mkdir: parent=3945 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2418 transport_rc=0 status=0
+2026-10-11T13:23:09.389Z opid-mkdir: parent=2068 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2422 transport_rc=0 status=0
+2026-10-11T13:23:09.401Z opid-mkdir: parent=1460 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2426 transport_rc=0 status=0
+2026-10-11T13:23:09.401Z opid-mkdir: parent=952 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2427 transport_rc=0 status=0
+2026-10-11T13:23:09.406Z opid-mkdir: parent=2663 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2431 transport_rc=0 status=0
+2026-10-11T13:23:09.414Z opid-mkdir: parent=3573 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2435 transport_rc=0 status=0
+2026-10-11T13:23:09.416Z opid-mkdir: parent=1253 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2437 transport_rc=0 status=0
+2026-10-11T13:23:09.420Z opid-mkdir: parent=2657 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2441 transport_rc=0 status=0
+2026-10-11T13:23:09.427Z opid-mkdir: parent=46 name=d seq=2443 transport_rc=0 status=0
+2026-10-11T13:23:09.429Z opid-mkdir: parent=3151 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2447 transport_rc=0 status=0
+2026-10-11T13:23:09.438Z opid-mkdir: parent=3351 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2450 transport_rc=0 status=0
+2026-10-11T13:23:09.452Z opid-mkdir: parent=432 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2456 transport_rc=0 status=0
+2026-10-11T13:23:09.458Z opid-mkdir: parent=1034 name=names_control_and_high_bytes seq=2467 transport_rc=0 status=0
+2026-10-11T13:23:09.464Z opid-mkdir: parent=895 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2465 transport_rc=0 status=0
+2026-10-11T13:23:09.511Z opid-mkdir: parent=1034 name=names_unicode_nfc_nfd_coexist seq=2525 transport_rc=0 status=0
+2026-10-11T13:23:09.516Z opid-mkdir: parent=1034 name=names_crazy_dirs seq=2530 transport_rc=0 status=0
+2026-10-11T13:23:09.517Z opid-mkdir: parent=11606 name=with space seq=2531 transport_rc=0 status=0
+2026-10-11T13:23:09.536Z opid-mkdir: parent=11606 name=with	tab seq=2551 transport_rc=0 status=0
+2026-10-11T13:23:09.547Z opid-mkdir: parent=11606 name=with
+2026-10-11T13:23:09.547Z newline seq=2566 transport_rc=0 status=0
+2026-10-11T13:23:09.561Z opid-mkdir: parent=11606 name=dash-prefix seq=2578 transport_rc=0 status=0
+2026-10-11T13:23:09.568Z opid-mkdir: parent=1034 name=dir_deep_nesting_beyond_64 seq=2579 transport_rc=0 status=0
+2026-10-11T13:23:09.571Z opid-mkdir: parent=2919 name=d seq=2582 transport_rc=0 status=0
+2026-10-11T13:23:09.574Z opid-mkdir: parent=3467 name=d seq=2583 transport_rc=0 status=0
+2026-10-11T13:23:09.582Z opid-mkdir: parent=3169 name=d seq=2585 transport_rc=0 status=0
+2026-10-11T13:23:09.587Z opid-mkdir: parent=11606 name=-rf seq=2588 transport_rc=0 status=0
+2026-10-11T13:23:09.594Z opid-mkdir: parent=1712 name=d seq=2589 transport_rc=0 status=0
+2026-10-11T13:23:09.603Z opid-mkdir: parent=127 name=d seq=2592 transport_rc=0 status=0
+2026-10-11T13:23:09.611Z opid-mkdir: parent=1102 name=d seq=2594 transport_rc=0 status=0
+2026-10-11T13:23:09.613Z opid-mkdir: parent=4091 name=d seq=2597 transport_rc=0 status=0
+2026-10-11T13:23:09.615Z opid-mkdir: parent=1034 name=content_all_byte_values seq=2600 transport_rc=0 status=0
+2026-10-11T13:23:09.618Z opid-mkdir: parent=1034 name=content_random_roundtrip seq=2601 transport_rc=0 status=0
+2026-10-11T13:23:09.622Z opid-mkdir: parent=11606 name=--help seq=2599 transport_rc=0 status=0
+2026-10-11T13:23:09.622Z opid-mkdir: parent=547 name=d seq=2598 transport_rc=0 status=0
+2026-10-11T13:23:09.628Z opid-mkdir: parent=2532 name=d seq=2604 transport_rc=0 status=0
+2026-10-11T13:23:09.636Z opid-mkdir: parent=8718 name=d seq=2609 transport_rc=0 status=0
+2026-10-11T13:23:09.644Z opid-mkdir: parent=271001 name=d seq=2610 transport_rc=0 status=0
+2026-10-11T13:23:09.652Z opid-mkdir: parent=534 name=d seq=2616 transport_rc=0 status=0
+2026-10-11T13:23:09.654Z opid-mkdir: parent=11606 name=dot.mid.name seq=2624 transport_rc=0 status=0
+2026-10-11T13:23:09.656Z opid-mkdir: parent=1345 name=d seq=2622 transport_rc=0 status=0
+2026-10-11T13:23:09.667Z opid-mkdir: parent=167 name=d seq=2625 transport_rc=0 status=0
+2026-10-11T13:23:09.678Z opid-mkdir: parent=2278 name=d seq=2632 transport_rc=0 status=0
+2026-10-11T13:23:09.685Z opid-mkdir: parent=2759 name=d seq=2635 transport_rc=0 status=0
+2026-10-11T13:23:09.694Z opid-mkdir: parent=672 name=d seq=2641 transport_rc=0 status=0
+2026-10-11T13:23:09.698Z opid-mkdir: parent=11606 name=trailingdot. seq=2643 transport_rc=0 status=0
+2026-10-11T13:23:09.699Z opid-mkdir: parent=995 name=d seq=2644 transport_rc=0 status=0
+2026-10-11T13:23:09.709Z opid-mkdir: parent=1687 name=d seq=2646 transport_rc=0 status=0
+2026-10-11T13:23:09.717Z opid-mkdir: parent=700 name=d seq=2653 transport_rc=0 status=0
+2026-10-11T13:23:09.725Z opid-mkdir: parent=1034 name=content_whitespace_and_line_endings seq=2659 transport_rc=0 status=0
+2026-10-11T13:23:09.725Z opid-mkdir: parent=2751 name=d seq=2655 transport_rc=0 status=0
+2026-10-11T13:23:09.729Z opid-mkdir: parent=11606 name=..dots.. seq=2664 transport_rc=0 status=0
+2026-10-11T13:23:09.733Z opid-mkdir: parent=2280 name=d seq=2661 transport_rc=0 status=0
+2026-10-11T13:23:09.737Z opid-mkdir: parent=3973 name=d seq=2668 transport_rc=0 status=0
+2026-10-11T13:23:09.746Z opid-mkdir: parent=2729 name=d seq=2670 transport_rc=0 status=0
+2026-10-11T13:23:09.754Z opid-mkdir: parent=2170 name=d seq=2676 transport_rc=0 status=0
+2026-10-11T13:23:09.758Z opid-mkdir: parent=283 name=d seq=2681 transport_rc=0 status=0
+2026-10-11T13:23:09.765Z opid-mkdir: parent=1117 name=d seq=2684 transport_rc=0 status=0
+2026-10-11T13:23:09.766Z opid-mkdir: parent=11606 name=... seq=2688 transport_rc=0 status=0
+2026-10-11T13:23:09.774Z opid-mkdir: parent=3724 name=d seq=2690 transport_rc=0 status=0
+2026-10-11T13:23:09.778Z opid-mkdir: parent=2923 name=d seq=2694 transport_rc=0 status=0
+2026-10-11T13:23:09.781Z opid-mkdir: parent=2535 name=d seq=2697 transport_rc=0 status=0
+2026-10-11T13:23:09.785Z opid-mkdir: parent=3841 name=d seq=2699 transport_rc=0 status=0
+2026-10-11T13:23:09.792Z opid-mkdir: parent=85 name=d seq=2703 transport_rc=0 status=0
+2026-10-11T13:23:09.802Z opid-mkdir: parent=11606 name=quote'single seq=2712 transport_rc=0 status=0
+2026-10-11T13:23:09.803Z opid-mkdir: parent=3232 name=d seq=2709 transport_rc=0 status=0
+2026-10-11T13:23:09.808Z opid-mkdir: parent=473 name=d seq=2715 transport_rc=0 status=0
+2026-10-11T13:23:09.818Z opid-mkdir: parent=3075 name=d seq=2720 transport_rc=0 status=0
+2026-10-11T13:23:09.830Z opid-mkdir: parent=2214 name=d seq=2725 transport_rc=0 status=0
+2026-10-11T13:23:09.842Z opid-mkdir: parent=11606 name=quote"double seq=2730 transport_rc=0 status=0
+2026-10-11T13:23:09.844Z opid-mkdir: parent=1159 name=d seq=2729 transport_rc=0 status=0
+2026-10-11T13:23:09.849Z opid-mkdir: parent=1978 name=d seq=2732 transport_rc=0 status=0
+2026-10-11T13:23:09.853Z opid-mkdir: parent=3010 name=d seq=2734 transport_rc=0 status=0
+2026-10-11T13:23:09.861Z opid-mkdir: parent=646 name=d seq=2737 transport_rc=0 status=0
+2026-10-11T13:23:09.867Z opid-mkdir: parent=1937 name=d seq=2741 transport_rc=0 status=0
+2026-10-11T13:23:09.875Z opid-mkdir: parent=11606 name=back\slash seq=2746 transport_rc=0 status=0
+2026-10-11T13:23:09.876Z opid-mkdir: parent=3117 name=d seq=2745 transport_rc=0 status=0
+2026-10-11T13:23:09.877Z opid-mkdir: parent=1034 name=content_nul_and_control seq=2748 transport_rc=0 status=0
+2026-10-11T13:23:09.878Z opid-mkdir: parent=13284 name=d seq=2749 transport_rc=0 status=0
+2026-10-11T13:23:09.886Z opid-mkdir: parent=964 name=d seq=2752 transport_rc=0 status=0
+2026-10-11T13:23:09.891Z opid-mkdir: parent=3028 name=d seq=2757 transport_rc=0 status=0
+2026-10-11T13:23:09.900Z opid-mkdir: parent=3676 name=d seq=2760 transport_rc=0 status=0
+2026-10-11T13:23:09.915Z opid-mkdir: parent=603 name=d seq=2763 transport_rc=0 status=0
+2026-10-11T13:23:09.918Z opid-mkdir: parent=2364 name=d seq=2769 transport_rc=0 status=0
+2026-10-11T13:23:09.919Z opid-mkdir: parent=11606 name=semi;colon seq=2771 transport_rc=0 status=0
+2026-10-11T13:23:09.927Z opid-mkdir: parent=2598 name=d seq=2772 transport_rc=0 status=0
+2026-10-11T13:23:09.943Z opid-mkdir: parent=2793 name=d seq=2777 transport_rc=0 status=0
+2026-10-11T13:23:09.953Z opid-mkdir: parent=3258 name=d seq=2779 transport_rc=0 status=0
+2026-10-11T13:23:09.957Z opid-mkdir: parent=1399 name=d seq=2783 transport_rc=0 status=0
+2026-10-11T13:23:09.964Z opid-mkdir: parent=11606 name=pipe|char seq=2788 transport_rc=0 status=0
+2026-10-11T13:23:09.966Z opid-mkdir: parent=2157 name=d seq=2786 transport_rc=0 status=0
+2026-10-11T13:23:09.975Z opid-mkdir: parent=1034 name=content_random_overwrite_append seq=2791 transport_rc=0 status=0
+2026-10-11T13:23:09.980Z opid-mkdir: parent=3184 name=d seq=2792 transport_rc=0 status=0
+2026-10-11T13:23:09.987Z opid-mkdir: parent=457 name=d seq=2796 transport_rc=0 status=0
+2026-10-11T13:23:10.001Z opid-mkdir: parent=2227 name=d seq=2798 transport_rc=0 status=0
+2026-10-11T13:23:10.011Z opid-mkdir: parent=2138 name=d seq=2803 transport_rc=0 status=0
+2026-10-11T13:23:10.019Z opid-mkdir: parent=3899 name=d seq=2808 transport_rc=0 status=0
+2026-10-11T13:23:10.021Z opid-mkdir: parent=11606 name=amp&ersand seq=2809 transport_rc=0 status=0
+2026-10-11T13:23:10.033Z opid-mkdir: parent=1763 name=d seq=2812 transport_rc=0 status=0
+2026-10-11T13:23:10.046Z opid-mkdir: parent=1648 name=d seq=2818 transport_rc=0 status=0
+2026-10-11T13:23:10.051Z opid-mkdir: parent=1343 name=d seq=2820 transport_rc=0 status=0
+2026-10-11T13:23:10.054Z opid-mkdir: parent=10549 name=d seq=2823 transport_rc=0 status=0
+2026-10-11T13:23:10.064Z opid-mkdir: parent=967 name=d seq=2824 transport_rc=0 status=0
+2026-10-11T13:23:10.066Z opid-mkdir: parent=11606 name=dollar$sign seq=2825 transport_rc=0 status=0
+2026-10-11T13:23:10.069Z opid-mkdir: parent=2323 name=d seq=2828 transport_rc=0 status=0
+2026-10-11T13:23:10.073Z opid-mkdir: parent=11645 name=d seq=2831 transport_rc=0 status=0
+2026-10-11T13:23:10.080Z opid-mkdir: parent=1034 name=content_random_large_multichunk seq=2832 transport_rc=0 status=0
+2026-10-11T13:23:10.082Z opid-mkdir: parent=1891 name=d seq=2834 transport_rc=0 status=0
+2026-10-11T13:23:10.085Z opid-mkdir: parent=1475 name=d seq=2835 transport_rc=0 status=0
+2026-10-11T13:23:10.095Z opid-mkdir: parent=3153 name=d seq=2837 transport_rc=0 status=0
+2026-10-11T13:23:10.096Z opid-mkdir: parent=11606 name=star*char seq=2840 transport_rc=0 status=0
+2026-10-11T13:23:10.099Z opid-mkdir: parent=3968 name=d seq=2841 transport_rc=0 status=0
+2026-10-11T13:23:10.110Z opid-mkdir: parent=1660 name=d seq=2843 transport_rc=0 status=0
+2026-10-11T13:23:10.116Z opid-mkdir: parent=1299 name=d seq=2846 transport_rc=0 status=0
+2026-10-11T13:23:10.127Z opid-mkdir: parent=577 name=d seq=2848 transport_rc=0 status=0
+2026-10-11T13:23:10.137Z opid-mkdir: parent=10 name=d seq=2852 transport_rc=0 status=0
+2026-10-11T13:23:10.138Z opid-mkdir: parent=1034 name=err_mkdir_existing seq=2854 transport_rc=0 status=0
+2026-10-11T13:23:10.140Z opid-mkdir: parent=11606 name=quest?char seq=2853 transport_rc=0 status=0
+2026-10-11T13:23:10.157Z opid-mkdir: parent=1059 name=d seq=2855 transport_rc=0 status=0
+2026-10-11T13:23:10.159Z opid-mkdir: parent=564 name=sub seq=2856 transport_rc=0 status=0
+2026-10-11T13:23:10.176Z opid-mkdir: parent=1198 name=d seq=2858 transport_rc=0 status=0
+2026-10-11T13:23:10.179Z opid-mkdir: parent=3483 name=d seq=2862 transport_rc=0 status=0
+2026-10-11T13:23:10.183Z opid-mkdir: parent=3377 name=d seq=2864 transport_rc=0 status=0
+2026-10-11T13:23:10.190Z opid-mkdir: parent=11606 name=brack[et] seq=2868 transport_rc=0 status=0
+2026-10-11T13:23:10.190Z opid-mkdir: parent=10863 name=d seq=2867 transport_rc=0 status=0
+2026-10-11T13:23:10.195Z opid-mkdir: parent=1464 name=d seq=2869 transport_rc=0 status=0
+2026-10-11T13:23:10.199Z opid-mkdir: parent=438 name=d seq=2871 transport_rc=0 status=0
+2026-10-11T13:23:10.202Z opid-mkdir: parent=4016 name=d seq=2874 transport_rc=0 status=0
+2026-10-11T13:23:10.211Z opid-mkdir: parent=44 name=d seq=2875 transport_rc=0 status=0
+2026-10-11T13:23:10.220Z opid-mkdir: parent=11606 name=brace{curly} seq=2880 transport_rc=0 status=0
+2026-10-11T13:23:10.220Z opid-mkdir: parent=2257 name=d seq=2878 transport_rc=0 status=0
+2026-10-11T13:23:10.225Z opid-mkdir: parent=1524 name=d seq=2882 transport_rc=0 status=0
+2026-10-11T13:23:10.226Z opid-mkdir: parent=1034 name=err_rmdir_nonempty seq=2883 transport_rc=0 status=0
+2026-10-11T13:23:10.238Z opid-mkdir: parent=218 name=d seq=2884 transport_rc=0 status=0
+2026-10-11T13:23:10.240Z opid-mkdir: parent=560 name=sub seq=2886 transport_rc=0 status=0
+2026-10-11T13:23:10.243Z opid-mkdir: parent=2963 name=d seq=2887 transport_rc=0 status=0
+2026-10-11T13:23:10.254Z opid-mkdir: parent=2175 name=d seq=2891 transport_rc=0 status=0
+2026-10-11T13:23:10.265Z opid-mkdir: parent=5302 name=d seq=2894 transport_rc=0 status=0
+2026-10-11T13:23:10.265Z opid-mkdir: parent=11606 name=paren(thesis) seq=2895 transport_rc=0 status=0
+2026-10-11T13:23:10.277Z opid-mkdir: parent=1139 name=d seq=2897 transport_rc=0 status=0
+2026-10-11T13:23:10.278Z opid-mkdir: parent=1034 name=err_rmdir_a_file seq=2905 transport_rc=0 status=0
+2026-10-11T13:23:10.287Z opid-mkdir: parent=3646 name=d seq=2906 transport_rc=0 status=0
+2026-10-11T13:23:10.300Z opid-mkdir: parent=1749 name=d seq=2915 transport_rc=0 status=0
+2026-10-11T13:23:10.308Z opid-mkdir: parent=11606 name=bang!char seq=2922 transport_rc=0 status=0
+2026-10-11T13:23:10.308Z opid-mkdir: parent=3522 name=d seq=2925 transport_rc=0 status=0
+2026-10-11T13:23:10.312Z opid-mkdir: parent=4000 name=d seq=2929 transport_rc=0 status=0
+2026-10-11T13:23:10.316Z opid-mkdir: parent=988 name=d seq=2933 transport_rc=0 status=0
+2026-10-11T13:23:10.319Z opid-mkdir: parent=2860 name=d seq=2935 transport_rc=0 status=0
+2026-10-11T13:23:10.328Z opid-mkdir: parent=1732 name=d seq=2936 transport_rc=0 status=0
+2026-10-11T13:23:10.331Z opid-mkdir: parent=3851 name=d seq=2939 transport_rc=0 status=0
+2026-10-11T13:23:10.334Z opid-mkdir: parent=11606 name=tilde~char seq=2942 transport_rc=0 status=0
+2026-10-11T13:23:10.341Z opid-mkdir: parent=1587 name=d seq=2941 transport_rc=0 status=0
+2026-10-11T13:23:10.345Z opid-mkdir: parent=864 name=d seq=2944 transport_rc=0 status=0
+2026-10-11T13:23:10.353Z opid-mkdir: parent=11606 name=percent%char seq=2949 transport_rc=0 status=0
+2026-10-11T13:23:10.371Z opid-mkdir: parent=11606 name=caret^char seq=2955 transport_rc=0 status=0
+2026-10-11T13:23:10.373Z opid-mkdir: parent=344 name=d seq=2956 transport_rc=0 status=0
+2026-10-11T13:23:10.387Z opid-mkdir: parent=1034 name=err_open_dir_for_write seq=2958 transport_rc=0 status=0
+2026-10-11T13:23:10.388Z opid-mkdir: parent=1034 name=err_read_from_dir seq=2960 transport_rc=0 status=0
+2026-10-11T13:23:10.391Z opid-mkdir: parent=369 name=sub seq=2961 transport_rc=0 status=0
+2026-10-11T13:23:10.401Z opid-mkdir: parent=678 name=sub seq=2962 transport_rc=0 status=0
+2026-10-11T13:23:10.407Z opid-mkdir: parent=11606 name=plus+equals= seq=2966 transport_rc=0 status=0
+2026-10-11T13:23:10.419Z opid-mkdir: parent=11606 name=comma,colon:char seq=2972 transport_rc=0 status=0
+2026-10-11T13:23:10.436Z opid-mkdir: parent=11606 name=unicode-café-ümlaut-中文-🚀 seq=2981 transport_rc=0 status=0
+2026-10-11T13:23:10.452Z opid-mkdir: parent=11606 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa seq=2987 transport_rc=0 status=0
+2026-10-11T13:23:10.481Z opid-mkdir: parent=1034 name=err_create_excl_existing seq=3004 transport_rc=0 status=0
+2026-10-11T13:23:10.490Z opid-mkdir: parent=1034 name=err_rename_dir_into_itself seq=3007 transport_rc=0 status=0
+2026-10-11T13:23:10.507Z opid-mkdir: parent=1408 name=a seq=3011 transport_rc=0 status=0
+2026-10-11T13:23:10.511Z opid-mkdir: parent=1949 name=b seq=3016 transport_rc=0 status=0
+2026-10-11T13:23:10.583Z opid-mkdir: parent=1034 name=err_unlink_nonexistent seq=3049 transport_rc=0 status=0
+2026-10-11T13:23:10.584Z opid-mkdir: parent=1034 name=err_hardlink_to_dir seq=3050 transport_rc=0 status=0
+2026-10-11T13:23:10.586Z opid-mkdir: parent=5492 name=sub seq=3052 transport_rc=0 status=0
+2026-10-11T13:23:10.641Z opid-mkdir: parent=1034 name=err_hardlink_nonexistent_src seq=3065 transport_rc=0 status=0
+2026-10-11T13:23:10.647Z opid-mkdir: parent=1034 name=err_symlink_loop seq=3066 transport_rc=0 status=0
+2026-10-11T13:23:10.648Z opid-mkdir: parent=1034 name=err_write_readonly_file seq=3067 transport_rc=0 status=0
+2026-10-11T13:23:10.693Z opid-mkdir: parent=1034 name=err_stat_nonexistent seq=3073 transport_rc=0 status=0
+2026-10-11T13:23:10.698Z opid-mkdir: parent=1034 name=err_create_under_a_file seq=3074 transport_rc=0 status=0
+2026-10-11T13:23:10.742Z opid-mkdir: parent=1034 name=err_rmdir_dot_dotdot seq=3078 transport_rc=0 status=0
+2026-10-11T13:23:10.743Z opid-mkdir: parent=1034 name=err_unlink_a_directory seq=3079 transport_rc=0 status=0
+2026-10-11T13:23:10.746Z opid-mkdir: parent=4034 name=sub seq=3081 transport_rc=0 status=0
+2026-10-11T13:23:10.750Z opid-mkdir: parent=1034 name=fsync_write seq=3082 transport_rc=0 status=0
+2026-10-11T13:23:10.752Z opid-mkdir: parent=606 name=sub seq=3080 transport_rc=0 status=0
+2026-10-11T13:23:10.792Z opid-mkdir: parent=1034 name=fsync_dir seq=3088 transport_rc=0 status=0
+2026-10-11T13:23:10.798Z opid-mkdir: parent=3134 name=sub seq=3089 transport_rc=0 status=0
+2026-10-11T13:23:10.799Z opid-mkdir: parent=1034 name=fdatasync_write seq=3090 transport_rc=0 status=0
+2026-10-11T13:23:10.859Z opid-mkdir: parent=1034 name=unlink_open_file seq=3097 transport_rc=0 status=0
+2026-10-11T13:23:10.868Z opid-mkdir: parent=1034 name=flock_basic seq=3099 transport_rc=0 status=0
+2026-10-11T13:23:10.902Z opid-mkdir: parent=1034 name=flock_shared_then_exclusive seq=3108 transport_rc=0 status=0
+2026-10-11T13:23:10.909Z opid-mkdir: parent=1034 name=fcntl_lock_basic seq=3109 transport_rc=0 status=0
+2026-10-11T13:23:10.954Z opid-mkdir: parent=1034 name=fcntl_byte_range_lock seq=3120 transport_rc=0 status=0
+2026-10-11T13:23:10.974Z opid-mkdir: parent=1034 name=flock_two_proc_exclusive seq=3125 transport_rc=0 status=0
+2026-10-11T13:23:11.014Z opid-mkdir: parent=1034 name=concurrent_creates_same_dir seq=3141 transport_rc=0 status=0
+2026-10-11T13:23:11.015Z opid-mkdir: parent=1034 name=statfs_sane seq=3145 transport_rc=0 status=0
+2026-10-11T13:23:11.107Z opid-mkdir: parent=1034 name=concurrent_appends_two_proc seq=3233 transport_rc=0 status=0
+2026-10-11T13:23:11.114Z opid-mkdir: parent=1034 name=concurrent_appends seq=3238 transport_rc=0 status=0
+2026-10-11T13:23:11.484Z opid-mkdir: parent=1034 name=concurrent_writes_disjoint seq=3418 transport_rc=0 status=0
+2026-10-11T13:23:11.758Z opid-mkdir: parent=1034 name=concurrent_create_unlink_two_proc seq=3485 transport_rc=0 status=0
+2026-10-11T13:23:12.733Z opid-mkdir: parent=1034 name=concurrent_write_and_readdir seq=3995 transport_rc=0 status=0
+2026-10-11T13:23:13.488Z opid-mkdir: parent=1034 name=opt_fallocate seq=4251 transport_rc=0 status=0
+2026-10-11T13:23:13.533Z efs: read hole ino=7448 ci=0 holes=3
+2026-10-11T13:23:13.634Z opid-mkdir: parent=1034 name=opt_xattr seq=4294 transport_rc=0 status=0
+2026-10-11T13:23:13.692Z opid-mkdir: parent=1034 name=opt_seek_hole_data seq=4308 transport_rc=0 status=0
+2026-10-11T13:23:13.745Z opid-mkdir: parent=1034 name=opt_copy_file_range seq=4322 transport_rc=0 status=0
+2026-10-11T13:23:13.793Z opid-mkdir: parent=1034 name=opt_openat seq=4344 transport_rc=0 status=0
+2026-10-11T13:23:13.802Z opid-mkdir: parent=1934 name=sub seq=4346 transport_rc=0 status=0
+2026-10-11T13:23:13.898Z opid-mkdir: parent=1034 name=flock_second_fd_exclusive seq=4373 transport_rc=0 status=0
+2026-10-11T13:23:13.946Z opid-mkdir: parent=1034 name=direct_unaligned_einval seq=4381 transport_rc=0 status=0
+2026-10-11T13:23:13.955Z opid-mkdir: parent=1034 name=direct_aligned_rdwr seq=4382 transport_rc=0 status=0
+2026-10-11T13:23:14.002Z opid-mkdir: parent=1034 name=direct_rmw_4k_in_chunk seq=4395 transport_rc=0 status=0
+2026-10-11T13:23:14.045Z opid-mkdir: parent=1034 name=packed_then_grow_past_chunk seq=4401 transport_rc=0 status=0
+2026-10-11T13:23:14.049Z opid-mkdir: parent=1034 name=writev_readv_chunk_straddle seq=4402 transport_rc=0 status=0
+2026-10-11T13:23:14.093Z opid-mkdir: parent=1034 name=zero_length_write seq=4413 transport_rc=0 status=0
+2026-10-11T13:23:14.150Z opid-mkdir: parent=1034 name=fcntl_setfl_oappend seq=4422 transport_rc=0 status=0
+2026-10-11T13:23:14.152Z opid-mkdir: parent=1034 name=two_fds_size_mtime seq=4424 transport_rc=0 status=0
+2026-10-11T13:23:14.191Z opid-mkdir: parent=1034 name=trunc_open_other_fd seq=4435 transport_rc=0 status=0
+2026-10-11T13:23:14.241Z opid-mkdir: parent=1034 name=link_across_dirs seq=4447 transport_rc=0 status=0
+2026-10-11T13:23:14.250Z opid-mkdir: parent=1034 name=last_link_unlink_other_dir seq=4449 transport_rc=0 status=0
+2026-10-11T13:23:14.251Z opid-mkdir: parent=376 name=a seq=4448 transport_rc=0 status=0
+2026-10-11T13:23:14.253Z opid-mkdir: parent=4713 name=a seq=4451 transport_rc=0 status=0
+2026-10-11T13:23:14.256Z opid-mkdir: parent=376 name=b seq=4452 transport_rc=0 status=0
+2026-10-11T13:23:14.263Z opid-mkdir: parent=4713 name=b seq=4453 transport_rc=0 status=0
+2026-10-11T13:23:14.303Z opid-mkdir: parent=1034 name=nlink_after_unlink_open seq=4464 transport_rc=0 status=0
+2026-10-11T13:23:14.396Z opid-mkdir: parent=1034 name=o_directory seq=4481 transport_rc=0 status=0
+2026-10-11T13:23:14.407Z opid-mkdir: parent=1034 name=ctime_on_link_rename seq=4483 transport_rc=0 status=0
+2026-10-11T13:23:14.419Z opid-mkdir: parent=1034 name=o_nofollow seq=4485 transport_rc=0 status=0
+2026-10-11T13:23:14.432Z opid-mkdir: parent=2614 name=sub seq=4490 transport_rc=0 status=0
+2026-10-11T13:23:14.497Z opid-mkdir: parent=1034 name=st_ino_unique_hardlink_same seq=4500 transport_rc=0 status=0
+2026-10-11T13:23:14.500Z opid-mkdir: parent=1034 name=create_excl_two_proc seq=4502 transport_rc=0 status=0
+2026-10-11T13:23:14.599Z opid-mkdir: parent=1034 name=concurrent_overlap_write seq=4519 transport_rc=0 status=0
+2026-10-11T13:23:14.649Z opid-mkdir: parent=1034 name=fstat_size_after_write seq=4529 transport_rc=0 status=0
+2026-10-11T13:23:14.708Z opid-mkdir: parent=1034 name=trunc_shrink_same_fd seq=4536 transport_rc=0 status=0
+2026-10-11T13:23:14.725Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=0
+2026-10-11T13:23:14.730Z efs: report rec ino=7113 ci=0 rejected unowned staging observation nodes=2,3,4 (putid miss, n=2)
+2026-10-11T13:23:14.759Z opid-mkdir: parent=1034 name=unlink_open_then_recreate seq=4541 transport_rc=0 status=0
+2026-10-11T13:23:14.813Z opid-mkdir: parent=1034 name=rename_to_self seq=4551 transport_rc=0 status=0
+2026-10-11T13:23:14.867Z opid-mkdir: parent=1034 name=rename_empty_over_empty_dir seq=4560 transport_rc=0 status=0
+2026-10-11T13:23:14.871Z opid-mkdir: parent=3802 name=a seq=4561 transport_rc=0 status=0
+2026-10-11T13:23:14.878Z opid-mkdir: parent=3802 name=b seq=4563 transport_rc=0 status=0
+2026-10-11T13:23:14.912Z opid-mkdir: parent=1034 name=lstat_symlink_size seq=4567 transport_rc=0 status=0
+2026-10-11T13:23:14.964Z opid-mkdir: parent=1034 name=chmod_preserves_mtime seq=4573 transport_rc=0 status=0
+2026-10-11T13:23:15.010Z opid-mkdir: parent=1034 name=unlink_recreate_new_ino seq=4581 transport_rc=0 status=0
+2026-10-11T13:23:15.065Z opid-mkdir: parent=1034 name=case_sensitive_names seq=4594 transport_rc=0 status=0
+2026-10-11T13:23:15.121Z opid-mkdir: parent=1034 name=o_append_pwrite_absolute seq=4610 transport_rc=0 status=0
+2026-10-11T13:23:15.165Z opid-mkdir: parent=1034 name=two_fds_independent_offset seq=4621 transport_rc=0 status=0
+2026-10-11T13:23:15.219Z opid-mkdir: parent=1034 name=dir_nlink_after_rmdir_child seq=4629 transport_rc=0 status=0
+2026-10-11T13:23:15.229Z opid-mkdir: parent=3126 name=p seq=4630 transport_rc=0 status=0
+2026-10-11T13:23:15.244Z opid-mkdir: parent=1335 name=c seq=4631 transport_rc=0 status=0
+2026-10-11T13:23:15.275Z opid-mkdir: parent=1034 name=access_f_ok_after_unlink seq=4635 transport_rc=0 status=0
+2026-10-11T13:23:15.323Z opid-mkdir: parent=1034 name=write_hole_pread_zeros seq=4642 transport_rc=0 status=0
+2026-10-11T13:23:15.331Z efs: read hole ino=20176 ci=0 holes=13
+2026-10-11T13:23:15.370Z opid-mkdir: parent=1034 name=hardlink_three_names seq=4648 transport_rc=0 status=0
+2026-10-11T13:23:15.426Z opid-mkdir: parent=1034 name=rename_file_over_symlink seq=4661 transport_rc=0 status=0
+2026-10-11T13:23:15.476Z opid-mkdir: parent=1034 name=flock_unlock_on_close seq=4669 transport_rc=0 status=0
+2026-10-11T13:23:15.575Z opid-mkdir: parent=1034 name=mkdirat_unlinkat seq=4689 transport_rc=0 status=0
+2026-10-11T13:23:15.578Z opid-mkdir: parent=980 name=sub seq=4690 transport_rc=0 status=0
+2026-10-11T13:23:15.584Z opid-mkdir: parent=1034 name=trailing_slash_on_file seq=4693 transport_rc=0 status=0
+2026-10-11T13:23:15.683Z opid-mkdir: parent=1034 name=fsync_then_fstat_size seq=4728 transport_rc=0 status=0
+2026-10-11T13:23:15.691Z opid-mkdir: parent=1034 name=creat_existing_dir_eisdir seq=4730 transport_rc=0 status=0
+2026-10-11T13:23:15.695Z opid-mkdir: parent=6941 name=sub seq=4732 transport_rc=0 status=0
+2026-10-11T13:23:15.792Z opid-mkdir: parent=1034 name=dir_times_bump_on_child_mutation seq=4743 transport_rc=0 status=0
+2026-10-11T13:23:15.798Z opid-mkdir: parent=1019 name=watched seq=4745 transport_rc=0 status=0
+2026-10-11T13:23:15.798Z opid-mkdir: parent=1034 name=mtime_bumps_on_write seq=4744 transport_rc=0 status=0
+2026-10-11T13:23:15.937Z opid-mkdir: parent=1034 name=rename_readdir_lookup_consistent seq=4760 transport_rc=0 status=0
+2026-10-11T13:23:15.960Z opid-mkdir: parent=14959 name=da seq=4768 transport_rc=0 status=0
+2026-10-11T13:23:16.037Z opid-mkdir: parent=1034 name=rename_dir_same_parent seq=4770 transport_rc=0 status=0
+2026-10-11T13:23:16.040Z opid-mkdir: parent=3731 name=old seq=4771 transport_rc=0 status=0
+2026-10-11T13:23:16.149Z opid-mkdir: parent=1034 name=link_of_symlink seq=4782 transport_rc=0 status=0
+2026-10-11T13:23:16.239Z opid-mkdir: parent=1034 name=link_of_symlink_follow seq=4794 transport_rc=0 status=0
+2026-10-11T13:23:16.338Z opid-mkdir: parent=1034 name=link_of_symlink_dangling seq=4810 transport_rc=0 status=0
+2026-10-11T13:23:16.440Z opid-mkdir: parent=1034 name=concurrent_extend_high_then_low seq=4820 transport_rc=0 status=0
+2026-10-11T13:23:16.452Z opid-mkdir: parent=1034 name=mtime_monotonic_many_writes seq=4826 transport_rc=0 status=0
+2026-10-11T13:23:16.592Z opid-mkdir: parent=1034 name=trunc_zero_then_high_pwrite seq=4857 transport_rc=0 status=0
+2026-10-11T13:23:16.616Z efs: read hole ino=6167 ci=0 holes=14
+2026-10-11T13:23:16.695Z opid-mkdir: parent=1034 name=write_beyond_eof_then_seek_end seq=4881 transport_rc=0 status=0
+2026-10-11T13:23:19.170Z opid-mkdir: parent=1034 name=truncate_big_ftruncate_honest seq=5092 transport_rc=0 status=0
+2026-10-11T13:23:19.176Z dcache-pressure live=33816576 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=77024 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:19.185Z dcache-pressure live=35127296 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:19.266Z dcache-pressure live=34471936 reserved=0 backing=67108864 limit=335544320 request=5242880 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=high-water
+2026-10-11T13:23:19.286Z dcache-pressure live=35651584 reserved=0 backing=67108864 limit=335544320 request=5242880 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=high-water
+2026-10-11T13:23:19.306Z dcache-pressure live=34734080 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=1992 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:19.324Z dcache-pressure live=34078720 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:19.342Z dcache-pressure live=33685504 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:19.365Z dcache-pressure live=35651584 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:19.385Z dcache-pressure live=35127296 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:19.404Z dcache-pressure live=34471936 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:19.424Z dcache-pressure live=34471936 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:19.446Z dcache-pressure live=34471936 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=1328 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:19.468Z dcache-pressure live=35913728 reserved=0 backing=67108864 limit=335544320 request=5242880 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=high-water
+2026-10-11T13:23:19.489Z dcache-pressure live=34078720 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:19.509Z dcache-pressure live=33685504 reserved=0 backing=67108864 limit=335544320 request=5242880 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=high-water
+2026-10-11T13:23:19.541Z dcache-pressure live=34209792 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:20.073Z opid-mkdir: parent=1034 name=truncate_big_o_trunc_honest seq=5100 transport_rc=0 status=0
+2026-10-11T13:23:20.077Z dcache-pressure live=134086656 reserved=0 backing=134217728 limit=335544320 request=5242880 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=high-water
+2026-10-11T13:23:20.084Z dcache-pressure live=36438016 reserved=0 backing=134217728 limit=335544320 request=5242880 metadata=3984 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=high-water
+2026-10-11T13:23:20.160Z dcache-pressure live=33816576 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=2656 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:20.181Z dcache-pressure live=33554432 reserved=0 backing=134217728 limit=335544320 request=5242880 metadata=3320 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=high-water
+2026-10-11T13:23:20.199Z dcache-pressure live=33816576 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=3320 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:20.218Z dcache-pressure live=33947648 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=5312 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:20.237Z dcache-pressure live=35520512 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=4648 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:20.255Z dcache-pressure live=34734080 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:20.277Z dcache-pressure live=34209792 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=2656 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:20.298Z dcache-pressure live=34471936 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:20.316Z dcache-pressure live=33816576 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=1328 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:20.338Z dcache-pressure live=35520512 reserved=0 backing=134217728 limit=335544320 request=5242880 metadata=4648 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=high-water
+2026-10-11T13:23:20.358Z dcache-pressure live=34603008 reserved=0 backing=134217728 limit=335544320 request=5242880 metadata=1992 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=high-water
+2026-10-11T13:23:20.377Z dcache-pressure live=34209792 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=3320 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:20.397Z dcache-pressure live=34340864 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=3984 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:20.417Z dcache-pressure live=34209792 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=3320 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:20.875Z opid-mkdir: parent=1034 name=dir_mkdir_umask seq=5106 transport_rc=0 status=0
+2026-10-11T13:23:20.881Z opid-mkdir: parent=2628 name=sub seq=5107 transport_rc=0 status=0
+2026-10-11T13:23:20.975Z opid-mkdir: parent=1034 name=attr_umask_respected seq=5108 transport_rc=0 status=0
+2026-10-11T13:23:21.078Z opid-mkdir: parent=1034 name=perm_dir_no_x_search seq=5112 transport_rc=0 status=0
+2026-10-11T13:23:21.080Z opid-mkdir: parent=2313 name=sub seq=5113 transport_rc=0 status=0
+2026-10-11T13:23:21.083Z dcache-pressure live=134086656 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=2656 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-11T13:23:21.183Z opid-mkdir: parent=1034 name=err_chdir_into_file seq=5117 transport_rc=0 status=0
+2026-10-11T13:23:21.284Z opid-mkdir: parent=1034 name=chdir_dotdot_after_mkdir seq=5121 transport_rc=0 status=0
+2026-10-11T13:23:21.290Z opid-mkdir: parent=1053 name=sub seq=5122 transport_rc=0 status=0
+2026-10-11T13:23:23.670Z opid-mkdir: parent=1 name=gc-posix-peer seq=6053 transport_rc=0 status=0
+2026-10-11T13:23:23.677Z opid-mkdir: parent=963 name=peer_mkdir_visible seq=6054 transport_rc=0 status=0
+2026-10-11T13:23:23.682Z opid-mkdir: parent=963 name=peer_mkdir_exclusive_race seq=6055 transport_rc=0 status=0
+2026-10-11T13:23:23.682Z opid-mkdir: parent=963 name=peer_create_visible seq=6056 transport_rc=0 status=0
+2026-10-11T13:23:23.687Z opid-mkdir: parent=963 name=peer_write_read seq=6057 transport_rc=0 status=0
+2026-10-11T13:23:23.688Z opid-mkdir: parent=963 name=peer_listdir_siblings seq=6058 transport_rc=0 status=0
+2026-10-11T13:23:23.689Z opid-mkdir: parent=963 name=peer_shared_creat seq=6059 transport_rc=0 status=0
+2026-10-11T13:23:23.693Z opid-mkdir: parent=963 name=peer_open_existing seq=6060 transport_rc=0 status=0
+2026-10-11T13:23:23.694Z opid-mkdir: parent=963 name=peer_creat_excl_eexist seq=6061 transport_rc=0 status=0
+2026-10-11T13:23:23.698Z opid-mkdir: parent=963 name=peer_stat_size seq=6062 transport_rc=0 status=0
+2026-10-11T13:23:23.699Z opid-mkdir: parent=963 name=peer_rename_visible seq=6063 transport_rc=0 status=0
+2026-10-11T13:23:23.703Z opid-mkdir: parent=963 name=peer_mkdir_then_create seq=6064 transport_rc=0 status=0
+2026-10-11T13:23:23.704Z opid-mkdir: parent=963 name=peer_shared_pwrite seq=6065 transport_rc=0 status=0
+2026-10-11T13:23:23.705Z opid-mkdir: parent=963 name=peer_unlink_gone seq=6066 transport_rc=0 status=0
+2026-10-11T13:23:23.709Z opid-mkdir: parent=963 name=peer_chmod_visible seq=6067 transport_rc=0 status=0
+2026-10-11T13:23:23.713Z opid-mkdir: parent=963 name=peer_utimens_visible seq=6068 transport_rc=0 status=0
+2026-10-11T13:23:23.717Z opid-mkdir: parent=963 name=peer_dir_mtime_bump_visible seq=6069 transport_rc=0 status=0
+2026-10-11T13:23:23.718Z opid-mkdir: parent=963 name=peer_truncate_visible seq=6070 transport_rc=0 status=0
+2026-10-11T13:23:23.722Z opid-mkdir: parent=963 name=peer_hardlink_visible seq=6071 transport_rc=0 status=0
+2026-10-11T13:23:23.726Z opid-mkdir: parent=963 name=peer_symlink_visible seq=6072 transport_rc=0 status=0
+2026-10-11T13:23:23.730Z opid-mkdir: parent=963 name=peer_symlink_hardlinks seq=6073 transport_rc=0 status=0
+2026-10-11T13:23:23.735Z opid-mkdir: parent=963 name=peer_negative_dentry seq=6074 transport_rc=0 status=0
+2026-10-11T13:23:23.739Z opid-mkdir: parent=963 name=peer_fsync_then_read seq=6075 transport_rc=0 status=0
+2026-10-11T13:23:23.743Z opid-mkdir: parent=963 name=peer_mkdir_rmdir_recreate seq=6076 transport_rc=0 status=0
+2026-10-11T13:23:23.744Z opid-mkdir: parent=963 name=peer_oappend seq=6077 transport_rc=0 status=0
+2026-10-11T13:23:23.745Z opid-mkdir: parent=963 name=peer_rename_over seq=6078 transport_rc=0 status=0
+2026-10-11T13:23:23.749Z opid-mkdir: parent=963 name=peer_flock_exclusive seq=6079 transport_rc=0 status=0
+2026-10-11T13:23:23.753Z opid-mkdir: parent=963 name=peer_unlink_while_b_has_fd seq=6080 transport_rc=0 status=0
+2026-10-11T13:23:23.760Z opid-mkdir: parent=963 name=peer_rmdir_gone seq=6081 transport_rc=0 status=0
+2026-10-11T13:23:23.764Z opid-mkdir: parent=963 name=peer_nlink_after_link seq=6082 transport_rc=0 status=0
+2026-10-11T13:23:23.764Z opid-mkdir: parent=963 name=peer_hardlink_write seq=6083 transport_rc=0 status=0
+2026-10-11T13:23:23.765Z opid-mkdir: parent=963 name=peer_cached_directory_rename seq=6084 transport_rc=0 status=0
+2026-10-11T13:23:23.769Z opid-mkdir: parent=963 name=peer_rename_dir seq=6085 transport_rc=0 status=0
+2026-10-11T13:23:23.770Z opid-mkdir: parent=963 name=peer_o_trunc_visible seq=6086 transport_rc=0 status=0
+2026-10-11T13:23:23.771Z opid-mkdir: parent=963 name=peer_unlink_recreate seq=6087 transport_rc=0 status=0
+2026-10-11T13:23:23.775Z opid-mkdir: parent=963 name=peer_lstat_symlink_size seq=6088 transport_rc=0 status=0
+2026-10-11T13:23:23.779Z opid-mkdir: parent=963 name=peer_listdir_after_unlink seq=6089 transport_rc=0 status=0
+2026-10-11T13:23:23.783Z opid-mkdir: parent=963 name=peer_chmod_via_hardlink seq=6090 transport_rc=0 status=0
+2026-10-11T13:23:23.787Z opid-mkdir: parent=963 name=peer_sparse_size seq=6091 transport_rc=0 status=0
+2026-10-11T13:23:23.792Z opid-mkdir: parent=963 name=peer_overlap_pwrite_same_range seq=6092 transport_rc=0 status=0
+2026-10-11T13:23:23.792Z opid-mkdir: parent=963 name=peer_overlap_pwrite_partial seq=6093 transport_rc=0 status=0
+2026-10-11T13:23:23.793Z opid-mkdir: parent=963 name=peer_overlap_pwrite_chunk_straddle seq=6094 transport_rc=0 status=0
+2026-10-11T13:23:23.797Z opid-mkdir: parent=963 name=peer_concurrent_append seq=6095 transport_rc=0 status=0
+2026-10-11T13:23:23.798Z opid-mkdir: parent=963 name=peer_append_while_truncate seq=6096 transport_rc=0 status=0
+2026-10-11T13:23:23.799Z opid-mkdir: parent=963 name=peer_disjoint_extend seq=6097 transport_rc=0 status=0
+2026-10-11T13:23:23.799Z opid-mkdir: parent=963 name=peer_disjoint_extend_reverse_completion seq=6098 transport_rc=0 status=0
+2026-10-11T13:23:23.800Z opid-mkdir: parent=963 name=peer_extend_and_truncate seq=6099 transport_rc=0 status=0
+2026-10-11T13:23:23.801Z opid-mkdir: parent=963 name=peer_stat_during_extend seq=6100 transport_rc=0 status=0
+2026-10-11T13:23:23.802Z opid-mkdir: parent=963 name=peer_trunc_then_pwrite_old_fd seq=6101 transport_rc=0 status=0
+2026-10-11T13:23:23.806Z opid-mkdir: parent=963 name=peer_trunc_zero_then_high_pwrite seq=6102 transport_rc=0 status=0
+2026-10-11T13:23:23.807Z opid-mkdir: parent=963 name=peer_pwrite_then_peer_truncate seq=6103 transport_rc=0 status=0
+2026-10-11T13:23:23.807Z opid-mkdir: parent=963 name=peer_rename_same_src_two_dst seq=6104 transport_rc=0 status=0
+2026-10-11T13:23:23.808Z opid-mkdir: parent=963 name=peer_rename_vs_unlink_src seq=6105 transport_rc=0 status=0
+2026-10-11T13:23:23.813Z opid-mkdir: parent=963 name=peer_rename_vs_unlink_dst seq=6106 transport_rc=0 status=0
+2026-10-11T13:23:23.817Z opid-mkdir: parent=963 name=peer_rename_across_dirs_chase seq=6107 transport_rc=0 status=0
+2026-10-11T13:23:23.821Z opid-mkdir: parent=963 name=peer_creat_excl_race seq=6108 transport_rc=0 status=0
+2026-10-11T13:23:23.825Z opid-mkdir: parent=963 name=peer_create_unlink_stat_churn seq=6109 transport_rc=0 status=0
+2026-10-11T13:23:23.829Z opid-mkdir: parent=963 name=peer_negative_after_unlink seq=6110 transport_rc=0 status=0
+2026-10-11T13:23:23.833Z opid-mkdir: parent=963 name=peer_rename_negative seq=6111 transport_rc=0 status=0
+2026-10-11T13:23:23.837Z opid-mkdir: parent=963 name=peer_unlink_recreate_stale_ino seq=6112 transport_rc=0 status=0
+2026-10-11T13:23:23.837Z opid-mkdir: parent=963 name=peer_open_unlink_nlink seq=6113 transport_rc=0 status=0
+2026-10-11T13:23:23.842Z opid-mkdir: parent=963 name=peer_open_rename_fd seq=6114 transport_rc=0 status=0
+2026-10-11T13:23:23.846Z opid-mkdir: parent=963 name=peer_unlink_recreate_old_fd seq=6115 transport_rc=0 status=0
+2026-10-11T13:23:23.847Z opid-mkdir: parent=963 name=peer_concurrent_hardlink seq=6116 transport_rc=0 status=0
+2026-10-11T13:23:23.852Z opid-mkdir: parent=963 name=peer_concurrent_unlink_hardlinks seq=6117 transport_rc=0 status=0
+2026-10-11T13:23:23.856Z opid-mkdir: parent=963 name=peer_fcntl_range_conflict seq=6118 transport_rc=0 status=0
+2026-10-11T13:23:23.860Z opid-mkdir: parent=963 name=peer_fcntl_range_adjacent seq=6119 transport_rc=0 status=0
+2026-10-11T13:23:23.864Z opid-mkdir: parent=963 name=peer_mtime_no_regress seq=6120 transport_rc=0 status=0
+2026-10-11T13:23:23.875Z opid-mkdir: parent=1180 name=sub seq=6124 transport_rc=0 status=0
+2026-10-11T13:23:23.885Z opid-mkdir: parent=1522 name=raced-0 seq=6128 transport_rc=0 status=0
+2026-10-11T13:23:23.951Z opid-mkdir: parent=1522 name=raced-1 seq=6135 transport_rc=0 status=2
+2026-10-11T13:23:23.986Z opid-mkdir: parent=1522 name=raced-4 seq=6154 transport_rc=0 status=0
+2026-10-11T13:23:24.157Z opid-mkdir: parent=1522 name=raced-5 seq=6161 transport_rc=0 status=2
+2026-10-11T13:23:24.196Z opid-mkdir: parent=1522 name=raced-7 seq=6174 transport_rc=0 status=2
+2026-10-11T13:23:24.370Z opid-mkdir: parent=2798 name=dir seq=6241 transport_rc=0 status=0
+2026-10-11T13:23:24.437Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=6
+2026-10-11T13:23:24.445Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=5
+2026-10-11T13:23:24.455Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=6
+2026-10-11T13:23:24.466Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=5
+2026-10-11T13:23:24.479Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=4
+2026-10-11T13:23:24.496Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=6
+2026-10-11T13:23:24.511Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-11T13:23:24.525Z fsync-split ino=6907 flush_ms=103 report_ms=0 rc=0
+2026-10-11T13:23:24.639Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=3
+2026-10-11T13:23:24.643Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:23:24.702Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:24.706Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:24.712Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:23:24.808Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:24.811Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:24.818Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-11T13:23:25.015Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:23:25.019Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:25.024Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:23:25.032Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:25.041Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:23:25.074Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:25.077Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:23:25.085Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=4
+2026-10-11T13:23:25.180Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-11T13:23:25.184Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:23:25.190Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:23:25.203Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=7
+2026-10-11T13:23:25.212Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:23:25.247Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-11T13:23:25.251Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:23:25.257Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:25.737Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=4
+2026-10-11T13:23:25.745Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=5
+2026-10-11T13:23:25.753Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=4
+2026-10-11T13:23:25.764Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=4
+2026-10-11T13:23:25.775Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-11T13:23:25.788Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-11T13:23:25.932Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=4
+2026-10-11T13:23:25.938Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-11T13:23:25.947Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=2 replay_ms=3
+2026-10-11T13:23:25.957Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:25.972Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=2 replay_ms=4
+2026-10-11T13:23:25.985Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:26.005Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=8
+2026-10-11T13:23:26.024Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=4
+2026-10-11T13:23:26.041Z fsync-split ino=6907 flush_ms=120 report_ms=0 rc=0
+2026-10-11T13:23:26.078Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=6
+2026-10-11T13:23:26.082Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:26.155Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=4
+2026-10-11T13:23:26.164Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=6
+2026-10-11T13:23:26.170Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:26.317Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=4
+2026-10-11T13:23:26.322Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-11T13:23:26.380Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-11T13:23:26.383Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=0
+2026-10-11T13:23:26.390Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:26.436Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-11T13:23:26.441Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-11T13:23:27.198Z opid-mkdir: parent=3158 name=sub seq=6293 transport_rc=0 status=0
+2026-10-11T13:23:27.212Z opid-mkdir: parent=3158 name=sub seq=6295 transport_rc=0 status=0
+2026-10-11T13:23:27.605Z opid-mkdir: parent=1908 name=gone seq=6342 transport_rc=0 status=0
+2026-10-11T13:23:27.690Z opid-mkdir: parent=319 name=old seq=6355 transport_rc=0 status=0
+2026-10-11T13:23:27.726Z opid-mkdir: parent=4796 name=old seq=6363 transport_rc=0 status=0
+2026-10-11T13:23:37.662Z efs: read hole ino=6586 ci=0 holes=15
+2026-10-11T13:23:37.743Z efs: rename_at 4075/x -> 4075/y rc=-3 after 1 tries
+2026-10-11T13:23:37.854Z opid-mkdir: parent=164 name=d1 seq=7035 transport_rc=0 status=0
+2026-10-11T13:23:37.857Z opid-mkdir: parent=164 name=d2 seq=7036 transport_rc=0 status=0
+2026-10-11T13:23:37.858Z opid-mkdir: parent=164 name=d3 seq=7037 transport_rc=0 status=0

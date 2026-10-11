@@ -1,0 +1,8 @@
+cluster: mac
+files=6000 delta=1023 refolded=6000 rebuilt=1 stats_ms=124.265
+files=6000 delta=1024 refolded=6000 rebuilt=1 stats_ms=124.042
+files=6000 delta=1025 refolded=6000 rebuilt=1 stats_ms=121.032
+files=6000 delta=4096 refolded=6000 rebuilt=1 stats_ms=140.296
+phase=create refolded=8049 tree_files=8048
+phase=delete refolded=3953 tree_files=6000
+query large delta: PASS

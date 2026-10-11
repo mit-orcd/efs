@@ -1,0 +1,142 @@
+[
+  {
+    "kind": "ref",
+    "name": "refs/heads/devel",
+    "sha": "48a2719d19fb5a6b0464935c70a967a1f1a86236",
+    "missing_from_amd": 46,
+    "missing_from_devel": 0
+  },
+  {
+    "kind": "ref",
+    "name": "refs/heads/devel-amd",
+    "sha": "aba08244900d7bd899311b65f0f0f4013ba55ac8",
+    "missing_from_amd": 0,
+    "missing_from_devel": 12
+  },
+  {
+    "kind": "ref",
+    "name": "refs/heads/devel-intel",
+    "sha": "1bd6ed91ab2e0b06fbfdef50068fb6f326e4edd0",
+    "missing_from_amd": 56,
+    "missing_from_devel": 42
+  },
+  {
+    "kind": "ref",
+    "name": "refs/heads/devel-mac",
+    "sha": "f02c4fae41fecf7b9b604cbb1ad17431faa89ff7",
+    "missing_from_amd": 51,
+    "missing_from_devel": 5
+  },
+  {
+    "kind": "ref",
+    "name": "refs/heads/devel-nuc",
+    "sha": "1658d628fec7e50043c6d5549c07a83802a88d6a",
+    "missing_from_amd": 31,
+    "missing_from_devel": 18
+  },
+  {
+    "kind": "ref",
+    "name": "refs/heads/devel-orcd",
+    "sha": "c52a464391a685a766ee49aa76a162de58162a81",
+    "missing_from_amd": 125,
+    "missing_from_devel": 91
+  },
+  {
+    "kind": "ref",
+    "name": "refs/heads/fix-orcd-capacity-15975da0",
+    "sha": "60f3628238d3a2fd69be0ce7a329540256234b7e",
+    "missing_from_amd": 7,
+    "missing_from_devel": 0
+  },
+  {
+    "kind": "ref",
+    "name": "refs/heads/main",
+    "sha": "53be1da7f19045f406a05f4f78f6cf44f5c92212",
+    "missing_from_amd": 0,
+    "missing_from_devel": 0
+  },
+  {
+    "kind": "ref",
+    "name": "refs/remotes/origin/HEAD",
+    "sha": "53be1da7f19045f406a05f4f78f6cf44f5c92212",
+    "missing_from_amd": 0,
+    "missing_from_devel": 0
+  },
+  {
+    "kind": "ref",
+    "name": "refs/remotes/origin/devel",
+    "sha": "53be1da7f19045f406a05f4f78f6cf44f5c92212",
+    "missing_from_amd": 0,
+    "missing_from_devel": 0
+  },
+  {
+    "kind": "ref",
+    "name": "refs/remotes/origin/main",
+    "sha": "53be1da7f19045f406a05f4f78f6cf44f5c92212",
+    "missing_from_amd": 0,
+    "missing_from_devel": 0
+  },
+  {
+    "kind": "detached-worktree",
+    "name": "/Users/mike/git/efs",
+    "sha": "db22f1908a7f1daf11fbf3808313abe171229c1e",
+    "missing_from_amd": 0,
+    "missing_from_devel": 0
+  },
+  {
+    "kind": "detached-worktree",
+    "name": "/private/tmp/efs-w66-20261008",
+    "sha": "3317ae4ec2927d5f7aa247c160683050d524c7fb",
+    "missing_from_amd": 0,
+    "missing_from_devel": 0
+  },
+  {
+    "kind": "detached-worktree",
+    "name": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-bench",
+    "sha": "5071867ca75e6457419395f9838a81dd9c39aa00",
+    "missing_from_amd": 0,
+    "missing_from_devel": 0
+  },
+  {
+    "kind": "detached-worktree",
+    "name": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-find-stats",
+    "sha": "92c95b44292a85446ac6469a9c9e7fa1617de654",
+    "missing_from_amd": 0,
+    "missing_from_devel": 0
+  },
+  {
+    "kind": "detached-worktree",
+    "name": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-known-bugs",
+    "sha": "e97d139c76407d8cab86e0c69a52cb9874c32fbd",
+    "missing_from_amd": 0,
+    "missing_from_devel": 0
+  },
+  {
+    "kind": "detached-worktree",
+    "name": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-storage-engine",
+    "sha": "709236665854c5546462021520071035f15b2990",
+    "missing_from_amd": 0,
+    "missing_from_devel": 0
+  },
+  {
+    "kind": "detached-worktree",
+    "name": "/Users/mike/Documents/Codex/2026-10-07/i-l/work/efs-gate-closure",
+    "sha": "e9c82302d56b79695289aeb89f85dbd6eaf57e32",
+    "missing_from_amd": 0,
+    "missing_from_devel": 0
+  },
+  {
+    "kind": "detached-worktree",
+    "name": "/Users/mike/Documents/Codex/2026-10-07/i-l/work/efs-roce-rdma",
+    "sha": "6cb79c5330008caad2d214dfa1ba03087a653b02",
+    "missing_from_amd": 0,
+    "missing_from_devel": 0
+  },
+  {
+    "kind": "detached-worktree",
+    "name": "/Users/mike/Documents/Codex/2026-10-08/efs/work/devel-compaction-pressure",
+    "sha": "0abe7fd74078a0352d9a49d6913a6bcb4764f01f",
+    "missing_from_amd": 0,
+    "missing_from_devel": 0
+  }
+]

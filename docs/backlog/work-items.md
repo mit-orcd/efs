@@ -2336,6 +2336,15 @@ the quick ones).** Each row is a queue item; the W number is binding.
 
 ## W52 · a REPORT after thousands of O_APPEND writes answers after > 30 s (plan row 15)
 
+**Oct 11 NUC partial optimization:** guarded per-reservation REPORT completion
+PREPARE operations share the existing bounded pipeline after owner/inode guards.
+Every applied verdict is checked before COMMIT; refusal cleanup remains durable.
+The actual-loop regression fails on the old synchronous loop. Matched controls
+and the exact 20,000-record peer/cold/fsync gate are pending. The accepted
+single-proposal completion of all caught-up reservations remains open; this
+smaller pipeline is not that implementation.
+[Integration ledger](../status/devel-nuc-integration-20261011.md).
+
 **Implementation check, Oct 7.** Approved shape A is still pending:
 `host_resolve_caught_up()` loops over each eligible reservation and calls
 `host_propose_wait()` separately. The ordinary append POSIX/concurrency
@@ -2920,6 +2929,15 @@ accepted durability contract or fixing only FUSE flag handling.
 <a id="w72"></a>
 
 ## W72 · Production mount session lifecycle is not connected to I23 (queue row spec2)
+
+**Oct 11 NUC integration follow-up:** REGISTER-first namespace admission was
+masking the real missing-owner verdict, causing a false ENOENT on the first
+cold-mount mutation. Preserve REGISTER/ESTABLISH apply verdicts and advance Raft
+for business refusals while retrying IO/NOMEM. Actual-dispatcher and apply-policy
+regressions fail on their respective old sources. Six cold-mount first-mutation
+and full direct/buffered acceptance are in progress; the intermediate failed
+fixtures are retained. This does not close production publication integration.
+[Integration ledger](../status/devel-nuc-integration-20261011.md).
 
 **Class:** fencing integration. **Status:** partial; full mount identity, retained
 FUSE CREATE/adoption/OPEN/CLOSE and namespace shard admission are implemented and
@@ -4218,9 +4236,11 @@ per build prove three versus two creation/close lease entries per file. The
 four-repeat finite TCP A/B passes (+18.7% direct/+23.3% buffered median paired
 gain), with exact cold bytes and empty physical inventories in all 16 cases.
 Targeted direct/TCP combined reply-loss, negative verdict and LOCAL/HASHED
-crash gates pass. A subsequent legacy guarded-lease PREPARE timeout blocks
-the complete live run and buffered follow-up. Sustained-service and full
-integration remain open, so this is not full W94 closure.
+crash gates pass. The legacy guarded-lease PREPARE fixture was repaired; final
+captured `90a47313` full normal/fault native and both TCP matrices pass, including
+cold first-mutation namespace and APPEND/sync recovery. Sustained-service and
+full integration remain open, so this is not full W94 closure.
+[Integration follow-up](../status/amd-integration-20261011.md).
 [Evidence and limits](../status/amd-non-rdma-20261010.md#w94--combined-first-descriptor-adoption-candidate).
 
 **Historical pre-merge devel review (`cde67dca`, Oct 8):** the flags-0/separate-HOLD observation
@@ -4306,7 +4326,9 @@ The client profile concentrates sampled CPU in flush/report and fragment
 transfer. Separate traces cannot be divided to infer an exact fragment count
 or write-amplification ratio per file. Measure that explicitly.
 
-**Remaining action:** Review the implemented immutable-body/checksummed-manifest candidate and the retained 24 AMD sustained-churn samples (184320 operations), including durability, index overhead and reclamation. Its process-crash/fault-tested independent model is not a production packed index. [Implemented model and limits](../status/w95-indexed-model-20261008.md). Port only a demonstrated principle; retain existing stores and require explicit P4.1 compatibility/migration decisions before a layout change.
+**Oct 11 AMD review completed:** all 24 raw samples / 184,320 operations reconcile; publication order, failure fencing, generation checks and reference-based collection reviewed. Manifest writes independently match 10,320 bytes per cohort (10,320/322.5 index bytes per operation for cohorts 1/32). Full-snapshot index cost grows with capacity and is not selected for production. [Review and limits](../status/amd-sustained-20261011.md#w95-retained-amd-experiment-review-completed).
+
+**Remaining action:** Complete mounted/shared-object production integration and P4.1 format/compatibility decisions; the process-crash/fault-tested independent model is not a production packed index. [Implemented model and limits](../status/w95-indexed-model-20261008.md). Port only a demonstrated principle; retain existing stores and require explicit P4.1 compatibility/migration decisions before a layout change.
 
 **Governing contracts/related work:** W71 durable PUT, W73 synchronous writes,
 W75 integrity, W86 ownership/GC fencing and W77 publication. P4.1 owns the
@@ -4391,6 +4413,16 @@ or present the Raft improvement as measured KV acceptance.
 <a id="w97"></a>
 
 ## W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
+
+**Oct 11 AMD mixed-load follow-up:** eight rotating tiny workers plus four
+unpaced 16-MiB overwrite-ring writers reach the explicit 4-GiB-per-node quota
+within about one minute. The host has 389 GiB free. A separate cold/no-writer
+60-second run reclaims about 1.2 GiB payload per node with successful GC ACKs;
+the failed load has not passed a cold-byte oracle. This is a retained GC/admission
+pressure finding, not proof of the historical NUC incident's cause. A separately
+paced 2-MiB/s-per-writer gate cannot close the unpaced failure. Require bounded
+reclamation/admission, fairness and exact cold-byte recovery before claiming a
+fix. [AMD evidence](../status/amd-sustained-20261011.md#unpaced-mixed-load-failure--retained-not-closed).
 
 **Oct11 NUC isolated follow-up:** two eight-minute growing-file repeats outside
 EFS reproduce aggregate430/428→188/186 durable64KiB writes/s, per-writer mean
@@ -4894,6 +4926,17 @@ incremental budget while each publication refolds over a million rows. Full
 fallback is the strongest repair hypothesis; compaction overlap and GC BUSY
 semantics need separate attribution. See the
 [findings, hypotheses and discriminating tests](../status/orcd-communication-hypotheses-20261011.md).
+
+**Mac confirmation (Oct 11, devel-mac):** production-builder oracle tests
+reproduce the 1,024 changed-inode cliff. Commits `7c3b48d2`, `dadbb2ef`, `ff5f1c87`, `408043b6` and `c09ef7f8`
+journal larger deltas with bounded RAM, merge inode streams, validate exact
+stat dependencies and batch alias lookups by shard. Mac buffered/TCP gates
+and deployment are recorded separately from other clusters.
+Dirty-directory fallback, representative performance and original liveness
+gates remain open. The retained Mac namespace also rejects an old unlinked
+directory during initial query build. See
+[Mac evidence and gate checkpoint](../status/mac-query-delta-20261011.md).
+
 
 <a id="w110"></a>
 

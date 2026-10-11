@@ -1,0 +1,150 @@
+{
+  "processes": [
+    {
+      "pid": 493911,
+      "exe": "/data1/efs/src/efs-fuse",
+      "args": [
+        "./efs-fuse",
+        "127.0.0.1:17432",
+        "fs",
+        "/data1/efs/mnt"
+      ],
+      "env": {
+        "EFS_TRANSPORT": "tcp",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_MD_RAFT_N": null
+      }
+    },
+    {
+      "pid": 493949,
+      "exe": "/data1/efs/src/efs-fuse",
+      "args": [
+        "./efs-fuse",
+        "127.0.0.1:17432",
+        "fs",
+        "/data1/efs/mnt2"
+      ],
+      "env": {
+        "EFS_TRANSPORT": "tcp",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_MD_RAFT_N": null
+      }
+    },
+    {
+      "pid": 848092,
+      "exe": "/data1/efs/src/efsd",
+      "args": [
+        "/data1/efs/src/efsd",
+        "--node-id",
+        "1",
+        "--addr",
+        "127.0.0.1",
+        "--port",
+        "17432",
+        "--storage",
+        "/data1/efs/n1",
+        "--quota",
+        "37.5G",
+        "--direct-io"
+      ],
+      "env": {
+        "EFS_TRANSPORT": "tcp",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_MD_RAFT_N": "4"
+      }
+    },
+    {
+      "pid": 848149,
+      "exe": "/data1/efs/src/efsd",
+      "args": [
+        "/data1/efs/src/efsd",
+        "--node-id",
+        "2",
+        "--addr",
+        "127.0.0.1",
+        "--port",
+        "17433",
+        "--storage",
+        "/data1/efs/n2",
+        "--quota",
+        "37.5G",
+        "--direct-io",
+        "--join",
+        "127.0.0.1:17432"
+      ],
+      "env": {
+        "EFS_TRANSPORT": "tcp",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_MD_RAFT_N": "4"
+      }
+    },
+    {
+      "pid": 848210,
+      "exe": "/data1/efs/src/efsd",
+      "args": [
+        "/data1/efs/src/efsd",
+        "--node-id",
+        "3",
+        "--addr",
+        "127.0.0.1",
+        "--port",
+        "17434",
+        "--storage",
+        "/data1/efs/n3",
+        "--quota",
+        "37.5G",
+        "--direct-io",
+        "--join",
+        "127.0.0.1:17432"
+      ],
+      "env": {
+        "EFS_TRANSPORT": "tcp",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_MD_RAFT_N": "4"
+      }
+    },
+    {
+      "pid": 848426,
+      "exe": "/data1/efs/src/efsd",
+      "args": [
+        "/data1/efs/src/efsd",
+        "--node-id",
+        "4",
+        "--addr",
+        "127.0.0.1",
+        "--port",
+        "17435",
+        "--storage",
+        "/data1/efs/n4",
+        "--quota",
+        "37.5G",
+        "--direct-io",
+        "--join",
+        "127.0.0.1:17432"
+      ],
+      "env": {
+        "EFS_TRANSPORT": "tcp",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_MD_RAFT_N": "4"
+      }
+    }
+  ],
+  "mounts": [
+    {
+      "path": "/data1/efs/mnt",
+      "inode": 1
+    },
+    {
+      "path": "/data1/efs/mnt2",
+      "inode": 1
+    }
+  ],
+  "installed_version": "efsd 978caaf7 (branch devel-w66, built 2026-10-09T03:17:20Z on amd-395)",
+  "installed_efsd_sha256": "117e77c6c93028d60d4cd7f5b3eae5e280e941616c6e1ea8d7d7efdd0a0d64bf"
+}

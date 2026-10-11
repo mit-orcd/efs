@@ -1,0 +1,125 @@
+{
+  "samples": 24,
+  "operations": 184320,
+  "all_raw_fields_match": true,
+  "all_expected_cells_present": true,
+  "index_snapshot_bytes": 10320,
+  "summary": [
+    {
+      "cohort": 1,
+      "mixed": 0,
+      "models": {
+        "files": {
+          "mean_ops_s": 1789.9053333333334,
+          "mean_sample_p99_us": 661.5296666666667,
+          "max_peak_allocated_bytes": 524288,
+          "mean_body_written_per_op": 162.59583333333333,
+          "mean_index_written_per_op": 0.0,
+          "mean_reclaimed_allocated_bytes": 0
+        },
+        "indexed": {
+          "mean_ops_s": 755.7573333333333,
+          "mean_sample_p99_us": 1209.8173333333334,
+          "max_peak_allocated_bytes": 540672,
+          "mean_body_written_per_op": 180.69583333333333,
+          "mean_index_written_per_op": 10320.0,
+          "mean_reclaimed_allocated_bytes": 23330816
+        }
+      },
+      "paired_indexed_files_ops_ratio": [
+        0.4215992824409907,
+        0.4223567796032754,
+        0.4227488790370809
+      ]
+    },
+    {
+      "cohort": 1,
+      "mixed": 1,
+      "models": {
+        "files": {
+          "mean_ops_s": 1780.834,
+          "mean_sample_p99_us": 665.167,
+          "max_peak_allocated_bytes": 1048576,
+          "mean_body_written_per_op": 3302.8145833333333,
+          "mean_index_written_per_op": 0.0,
+          "mean_reclaimed_allocated_bytes": 0
+        },
+        "indexed": {
+          "mean_ops_s": 753.4546666666666,
+          "mean_sample_p99_us": 1212.8396666666667,
+          "max_peak_allocated_bytes": 1130496,
+          "mean_body_written_per_op": 3320.914583333333,
+          "mean_index_written_per_op": 10320.0,
+          "mean_reclaimed_allocated_bytes": 46923776
+        }
+      },
+      "paired_indexed_files_ops_ratio": [
+        0.42205851291213764,
+        0.4214452891509111,
+        0.4257835903546144
+      ]
+    },
+    {
+      "cohort": 32,
+      "mixed": 0,
+      "models": {
+        "files": {
+          "mean_ops_s": 4290.071333333333,
+          "mean_sample_p99_us": 9672.200666666668,
+          "max_peak_allocated_bytes": 524288,
+          "mean_body_written_per_op": 162.59583333333333,
+          "mean_index_written_per_op": 0.0,
+          "mean_reclaimed_allocated_bytes": 0
+        },
+        "indexed": {
+          "mean_ops_s": 27030.065,
+          "mean_sample_p99_us": 1126.5283333333334,
+          "max_peak_allocated_bytes": 53248,
+          "mean_body_written_per_op": 163.34583333333333,
+          "mean_index_written_per_op": 322.5,
+          "mean_reclaimed_allocated_bytes": 1687552
+        }
+      },
+      "paired_indexed_files_ops_ratio": [
+        6.662808258483824,
+        6.011909440108435,
+        6.23305670734511
+      ]
+    },
+    {
+      "cohort": 32,
+      "mixed": 1,
+      "models": {
+        "files": {
+          "mean_ops_s": 4258.585333333333,
+          "mean_sample_p99_us": 9965.129,
+          "max_peak_allocated_bytes": 1048576,
+          "mean_body_written_per_op": 3302.8145833333333,
+          "mean_index_written_per_op": 0.0,
+          "mean_reclaimed_allocated_bytes": 0
+        },
+        "indexed": {
+          "mean_ops_s": 25284.16933333333,
+          "mean_sample_p99_us": 1290.6486666666667,
+          "max_peak_allocated_bytes": 708608,
+          "mean_body_written_per_op": 3303.5645833333333,
+          "mean_index_written_per_op": 322.5,
+          "mean_reclaimed_allocated_bytes": 25280512
+        }
+      },
+      "paired_indexed_files_ops_ratio": [
+        5.977142115111842,
+        5.820477248083963,
+        6.015311905680458
+      ]
+    }
+  ],
+  "limits": [
+    "serial independent model",
+    "buffered single AMD filesystem",
+    "sampled allocation excludes transient manifest replacement",
+    "GC/inventory included in throughput but excluded from publication latency",
+    "process crash not hardware power loss",
+    "not production EFS or a selected format"
+  ]
+}

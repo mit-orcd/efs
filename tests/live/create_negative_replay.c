@@ -35,6 +35,8 @@ static struct efs_msg_inode_reply call(unsigned type, const void *req,
             usleep(10000); continue;
         }
         if (rep.status == EFS_INODE_RPC_BUSY) { usleep(10000); continue; }
+        fprintf(stderr, "CREATE replay wire type=%u seq=%u status=%u ino=%llu\n",
+                type, seq, rep.status, (unsigned long long)rep.inode.ino);
         return rep;
     }
     abort();

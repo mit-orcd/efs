@@ -7,7 +7,7 @@ p.add_argument('--source',required=True,type=Path)
 p.add_argument('--root',required=True,type=Path)
 a=p.parse_args()
 sys.path.insert(0,str(a.source/'tests/live'))
-from raft_tail import commands
+from raft_tail import commands,applied_index
 proof={}
 for variant in ('separate','combined'):
     records=list((a.root/('trace-'+variant)).glob('gc-*/tiny-mixed.json'))
@@ -15,7 +15,7 @@ for variant in ('separate','combined'):
     fixture=records[0].parent
     assert json.loads(records[0].read_text())['tiny_files']==64
     node=fixture/'n2/mdraft'
-    bounds={group:int.from_bytes((node/f'applied.{group}').read_bytes(),'big') for group in (0,2)}
+    bounds={group:applied_index(node/f'applied.{group}') for group in (0,2)}
     leases=collections.defaultdict(list)
     for (group,index),(term,command) in commands(node/'log/raft.log',bounds).items():
         if len(command)==66 and command[:2]==bytes([9,16]):

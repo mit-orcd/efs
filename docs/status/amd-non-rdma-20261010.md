@@ -196,3 +196,12 @@ refused to start after the live matrix failed; that refusal is preserved as
 completes with `native.exit=0` and `round.exit=0`; it does not override the
 failed live verdict.
 [Normal native log](../../results/measure/20261010-amd-three-hour/evidence/final-native/native.log).
+
+Oct 11 audit correction: the original lease-count script decoded the whole
+16-byte applied checkpoint as an integer. The corrected reader validates the
+index/complement and filters by the first 64-bit index (legacy atomic 8-byte
+records remain supported). Reinspection of the same stopped control stores
+still proves all 64 files and 192 versus 128 committed creation/close lease
+commands. Throughput and byte oracles are unchanged. The invalid prior proof
+is retained separately, not accepted as evidence.
+[Correction and preserved history](amd-integration-20261011.md#applied-checkpoint-evidence-correction).

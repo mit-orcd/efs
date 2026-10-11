@@ -2,8 +2,8 @@
   "separate": {
     "source_log": "/data1/efs/amd-round-20261010/w94-ab/trace-separate/gc-direct-44vkhrd_/n2/mdraft/log/raft.log",
     "applied_bounds": {
-      "0": 461168601842738790375,
-      "2": 14462247353788288466160
+      "0": 24,
+      "2": 783
     },
     "files": 64,
     "creation_lease_entries_per_file": 3,
@@ -2382,8 +2382,8 @@
   "combined": {
     "source_log": "/data1/efs/amd-round-20261010/w94-ab/trace-combined/gc-direct-oipv05ho/n2/mdraft/log/raft.log",
     "applied_bounds": {
-      "0": 332041393326771929070,
-      "2": 13097188292333781646650
+      "0": 17,
+      "2": 709
     },
     "files": 64,
     "creation_lease_entries_per_file": 2,

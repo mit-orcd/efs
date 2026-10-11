@@ -410,8 +410,8 @@ test: all
 	./tests/test_query_policy
 	./tests/test_query_catalog
 	./tests/test_query_disk
-	./tests/test_query_delta
-	EFS_QUERY_DELTA_LANES=1 ./tests/test_query_delta
+	EFS_QUERY_DELTA_DIRS=1 ./tests/test_query_delta
+	EFS_QUERY_DELTA_PARENTS=64 EFS_QUERY_DELTA_LANES=1 ./tests/test_query_delta
 	./tests/test_query_disk_io
 	./tests/test_query_refresh
 	./tests/test_name_index
@@ -451,6 +451,9 @@ test: all
 	python3 tests/test_store_tls.py
 	python3 tests/test_report_session_admission.py
 	python3 tests/test_namespace_owner_once.py
+	python3 tests/test_gc_backlog_idle.py
+	python3 tests/test_session_register_verdict.py
+	python3 tests/test_namespace_session_apply.py
 	python3 tests/test_gc_session_admission.py
 	python3 tests/test_partition_fence_verdict.py
 	python3 tests/test_mkdir_committed_reply.py

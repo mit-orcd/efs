@@ -40,6 +40,8 @@ p.add_argument('--posix', action='store_true')
 p.add_argument('--posix-jobs', type=int, default=4, help='parallel POSIX cases (default: 4); each case retains its own concurrent writers')
 p.add_argument('--storage-session-fence-fault',action='store_true',help='private certificate fsync EIO: revocation must remain incomplete, then recover and survive cold restart; requires --guarded-leases')
 p.add_argument('--continue-posix-failure','--continue-regression-failure',dest='continue_posix_failure',action='store_true',help='retain POSIX/peer failure, run independent later gates, then exit unsuccessfully')
+p.add_argument('--tiny-sustained-large-mib-s',type=float,default=0,help='0=unpaced; otherwise 0..64 MiB/s per large writer in sustained gate')
+p.add_argument('--tiny-sustained-seconds',type=int,default=0,help='1..1800 seconds of bounded tiny/large churn; cold exact survivors and physical reclaim, then exit')
 p.add_argument('--tiny-mixed',action='store_true',help='bounded large-writer overlap with 512 tiny CREATE/close operations, cold exact bytes and physical deletion')
 p.add_argument('--tiny-create-only',action='store_true',help='finite eight-worker tiny CREATE/write/close benchmark with exact cold bytes and physical reclaim, without large writers')
 p.add_argument('--tiny-mixed-only',action='store_true',help='run only the mixed-load cold-read/reclamation gate; implies --tiny-mixed')
@@ -64,6 +66,9 @@ p.add_argument('--sync-write-fault',action='store_true',help='actual O_SYNC/O_DS
 p.add_argument('--sync-writes',action='store_true',help='O_SYNC/O_DSYNC publication before write replies, including queued append across lane groups')
 p.add_argument('--append-sync-boundary',action='store_true',help='append/fsync across lane groups, peer visibility and cold crash bytes')
 p.add_argument('--append-replay-race', action='store_true', help='32 identical concurrent APPEND RPCs allocate once')
+p.add_argument('--fresh-namespace',action='store_true',help='six first-mutation namespace operations on fresh cold mounts with no prior file OPEN')
+p.add_argument('--append-burst-only',action='store_true',help='only exact APPEND burst, peer/cold bytes and physical cleanup')
+p.add_argument('--append-burst',type=int,default=0,help='100..20000 unique 4-KiB O_APPEND writes, final fsync, exact peer/cold blocks')
 p.add_argument('--append-audit', action='store_true', help='mixed append descriptions during physical GC, then exact cold records')
 p.add_argument('--integrity', action='store_true')
 p.add_argument('--namespace', action='store_true')
@@ -115,6 +120,10 @@ p.add_argument('--idle-seconds',type=int,default=0,help='measure live-table idle
 p.add_argument('--full-node',action='store_true',help='one node quota exhausted while three fragment targets remain writable')
 p.add_argument('--port', type=int, default=20190)
 a = p.parse_args()
+if not 0 <= a.tiny_sustained_large_mib_s <= 64:p.error('--tiny-sustained-large-mib-s must be 0..64')
+if not 0 <= a.tiny_sustained_seconds <= 1800:p.error('--tiny-sustained-seconds must be 0..1800')
+if a.append_burst_only and not a.append_burst:p.error('--append-burst-only requires --append-burst')
+if a.append_burst and not 100<=a.append_burst<=20000:p.error('--append-burst must be 100..20000')
 if a.posix_jobs < 1:
     p.error("--posix-jobs must be positive")
 if a.mount_sync:a.sync_writes=True
@@ -461,6 +470,55 @@ try:
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.fresh_namespace:
+        fresh=mount/'fresh-namespace';fresh.mkdir()
+        for name in ('unlink','rename','link'):
+            with (fresh/name).open('xb',buffering=0) as fd:
+                assert fd.write(b'fresh-owner:'+name.encode())==12+len(name)
+                os.fsync(fd.fileno())
+        (fresh/'rmdir').mkdir()
+        checks=[]
+        for action in ('unlink','rename','rmdir','mkdir','create','link'):
+            unmount();stop();start();mount_client()
+            # Read-only stat/LOOKUP can precede the mutation. A file OPEN
+            # must not silently bootstrap the global session in this gate.
+            target=fresh/action
+            started=time.monotonic()
+            if action=='unlink':target.unlink();assert not target.exists()
+            elif action=='rename':
+                target.rename(fresh/'renamed')
+                assert (fresh/'renamed').read_bytes()==b'fresh-owner:rename'
+            elif action=='rmdir':target.rmdir();assert not target.exists()
+            elif action=='mkdir':target.mkdir();assert target.is_dir()
+            elif action=='create':
+                with target.open('xb',buffering=0) as fd:
+                    assert fd.write(b'new-owner')==9;os.fsync(fd.fileno())
+                assert target.read_bytes()==b'new-owner'
+            else:
+                os.link(target,fresh/'linked');assert target.stat().st_nlink==2
+                assert (fresh/'linked').read_bytes()==b'fresh-owner:link'
+            checks.append(dict(first_mutation=action,elapsed_s=time.monotonic()-started,passed=True))
+            (work/'fresh-namespace.json').write_text(json.dumps(checks,indent=2))
+        shutil.rmtree(fresh);wait(drained,'fresh namespace cold first-mutation physical cleanup',180)
+        print('six cold mounts first CREATE/MKDIR/UNLINK/RMDIR/RENAME/LINK without prior OPEN PASS',flush=True)
+    if a.append_burst_only:
+        import append_burst
+        peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
+        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+        wait(lambda:os.path.ismount(peer_mount),'append burst peer mounted',40)
+        burst_path,burst_report=append_burst.run(mount,peer_mount,a.append_burst,work)
+        burst_ino=burst_path.stat().st_ino
+        run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
+        unmount();stop();start();mount_client()
+        burst_report['cold_sha256']=append_burst.verify(burst_path,a.append_burst)
+        assert burst_report['cold_sha256']==burst_report['warm_primary_sha256']
+        burst_path.unlink()
+        wait(lambda:not files(burst_ino),'append burst physical fragments empty',180)
+        wait(drained,'append burst GC drained',180)
+        wait(lambda:totals(status())['data_usage_bytes']==0,'append burst quota zero',180)
+        (work/'append-burst.json').write_text(json.dumps(burst_report,indent=2))
+        print('append burst exact peer/cold blocks, final fsync and zero physical/quota PASS',flush=True)
+        raise SystemExit(0)
     if a.peer_mkdir_race_only:
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
         peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
@@ -635,6 +693,19 @@ try:
         evidence=reject_replies(mount,work,source,a.port,env)
         (work/'fuse-reply-failure.json').write_text(json.dumps(evidence,indent=2))
         print('rejected CREATE/OPEN replies release handles and reclaim server inodes PASS',flush=True)
+    if a.tiny_sustained_seconds:
+        from tiny_sustained import exercise as sustained,verify_and_delete as verify_sustained
+        record=sustained(mount,[client.pid,*[proc.pid for proc in servers]],
+                         a.tiny_sustained_seconds,work/'tiny-sustained.json',a.tiny_sustained_large_mib_s)
+        unmount();stop(crash=True);start();mount_client()
+        verify_sustained(mount,record['generations'])
+        wait(lambda:drained() and all(not any(path.is_file() for path in
+             (root/'data/exports/1').glob('**/*')) for root in data_roots),
+             'sustained cold bytes and physical deletion drained',180)
+        record.update(cold_verified=True,physical_inventory_empty=True)
+        (work/'tiny-sustained.json').write_text(json.dumps(record,indent=2))
+        print('sustained tiny/large warm generations, cold bytes and physical reclamation PASS',flush=True)
+        raise SystemExit(0)
     if a.tiny_churn:
         from tiny_churn import exercise as churn,verify_and_delete as verify_churn
         record=churn(mount)
@@ -868,12 +939,30 @@ try:
             raise
         assert 'two concurrent receipt PREPAREs' in namespace_guard,namespace_guard
         (work/'namespace-guard-wire.txt').write_text(namespace_guard)
-        guard_path=mount/'legacy-close-guard';guard_path.write_bytes(b'guard')
-        guard_ino=guard_path.stat().st_ino
+        guard_path=mount/'legacy-close-guard'
+        # Ordinary unleased CREATE isolates the legacy wire guard from
+        # mounted CREATE adoption: CLEAR_PENDING queues its own CLOSE_STEP,
+        # even while a normal descriptor remains open. Never overwrite it.
+        for node in range(4):
+            guard_create=subprocess.run([str(source/'efs-mgmt'),'raft-create',
+                f'127.0.0.1:{a.port+node}','1',guard_path.name],env=env,
+                capture_output=True,text=True,timeout=30)
+            if guard_create.returncode==0 and 'status=0' in guard_create.stdout:break
+        else:raise AssertionError('legacy guard CREATE failed: '+guard_create.stdout+guard_create.stderr)
+        guard_ino=int(re.search(r'ino=(\d+)',guard_create.stdout).group(1))
+        assert guard_path.stat().st_ino==guard_ino
         guarded_wire=run([helper,'--legacy-guard',str(a.port),str(guard_ino)],capture_output=True,text=True,timeout=45).stdout
         assert 'later RESOLVE and retry' in guarded_wire,guarded_wire
-        (work/'legacy-close-guard.txt').write_text(guarded_wire)
+        (work/'legacy-close-guard.txt').write_text(guard_create.stdout+guarded_wire)
         guard_path.unlink();wait(lambda:not files(guard_ino),'legacy prepared-close guard physical reclaim',180)
+        def legacy_guard_inode_gone():
+            for node in range(4):
+                result=subprocess.run([str(source/'efs-mgmt'),'raft-getattr',
+                    f'127.0.0.1:{a.port+node}',str(guard_ino)],env=env,
+                    capture_output=True,text=True,timeout=10)
+                if result.returncode==0 and re.search(r'status=1\b',result.stdout):return True
+            return False
+        wait(legacy_guard_inode_gone,'legacy prepared-close guard inode reclaimed',90)
 
         # Error constants are extracted from the build header, not host errno.
         header=(source/'include/efs/common.h').read_text()
@@ -2488,6 +2577,16 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
         (work/'posix-gc-effect.json').write_text(json.dumps({
             'before': posix_checkpoint, 'after': after_posix}, indent=2))
         print('POSIX deletes advance GC passes and physical removal counters PASS',flush=True)
+    if a.append_burst:
+        import append_burst
+        burst_path,burst_report=append_burst.run(mount,peer_mount,a.append_burst,work)
+        unmount();stop();start();mount_client()
+        cold_hash=append_burst.verify(burst_path,a.append_burst)
+        assert cold_hash==burst_report['warm_primary_sha256']
+        burst_report['cold_sha256']=cold_hash
+        (work/'append-burst.json').write_text(json.dumps(burst_report,indent=2))
+        burst_path.unlink();wait(drained,'append burst physical deletion drained',180)
+        print('append burst exact peer/cold blocks and final fsync PASS',flush=True)
     if a.append_audit:
         from collections import Counter
         path=mount/'append-cold-audit';path.touch()

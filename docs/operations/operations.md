@@ -212,6 +212,15 @@ cleanly to bring legacy hints current; crash downgrade is unsupported.
 Keep the default pending sustained and recovery acceptance.
 [Investigation and gates](../archive/status-20261011/w93-checkpoint-cadence-20261010.md).
 
+GC scheduling experiment (W94/W97): `EFS_GC_BACKLOG_IDLE_MS` is unset by
+default, retaining a 1,000-ms inter-pass idle. Explicit integers 100–1,000
+shorten the idle only when a leader's reap scan is capped and physical deletion
+makes progress in that pass. Empty scans and wholly blocked work retain the
+normal backoff; partially blocked work can still accelerate if other deletions
+succeed. Per-group scan/fragment/ACK budgets, deletion authority and durability
+ordering remain unchanged. This is an opt-in experiment, not an overload fix
+or production default. [AMD gates and limits](../status/amd-sustained-20261011.md#opt-in-gc-scheduling-candidate).
+
 Metadata plane (Raft + KV):
 
 ```bash

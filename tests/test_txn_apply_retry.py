@@ -3,7 +3,7 @@
 from pathlib import Path
 import os, shlex, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=Path(os.environ.get('EFS_APPLY_POLICY_SOURCE',root/'src/server/raft_host.c')).read_text()
 defines='\n'.join(line for line in s.splitlines() if line.startswith(('#define HOST_APPEND_RSV_LEN ', '#define HOST_LOCK_LEN ')))
 a=s.index('    ret = (cmd[0] == EFS_MD_CMD_PREPARE')
 # Test only verdict classification; the atomic commit scope has its own tests.
@@ -28,8 +28,13 @@ int main(void) {
   assert(policy(txn[i],0,EFS_ERR_NOMEM)==EFS_ERR_NOMEM);
   for(unsigned j=0;j<sizeof(business)/sizeof(business[0]);j++)assert(policy(txn[i],0,business[j])==EFS_OK);
  }
- for(unsigned j=0;j<sizeof(business)/sizeof(business[0]);j++)
-  assert(policy(EFS_MD_CMD_SESSION,EFS_MD_SESS_FINISH,business[j])==EFS_OK);
+ unsigned sessions[]={EFS_MD_SESS_REGISTER,EFS_MD_SESS_ESTABLISH,EFS_MD_SESS_FINISH};
+ for(unsigned i=0;i<sizeof(sessions)/sizeof(sessions[0]);i++) {
+  for(unsigned j=0;j<sizeof(business)/sizeof(business[0]);j++)
+   assert(policy(EFS_MD_CMD_SESSION,sessions[i],business[j])==EFS_OK);
+  assert(policy(EFS_MD_CMD_SESSION,sessions[i],EFS_ERR_IO)==EFS_ERR_IO);
+  assert(policy(EFS_MD_CMD_SESSION,sessions[i],EFS_ERR_NOMEM)==EFS_ERR_NOMEM);
+ }
  assert(policy(EFS_MD_CMD_SESSION,EFS_MD_SESS_FINISH,EFS_ERR_IO)==EFS_ERR_IO);
  assert(policy(EFS_MD_CMD_SESSION,EFS_MD_SESS_FINISH,EFS_ERR_NOMEM)==EFS_ERR_NOMEM);
  for(unsigned j=0;j<sizeof(business)/sizeof(business[0]);j++) {

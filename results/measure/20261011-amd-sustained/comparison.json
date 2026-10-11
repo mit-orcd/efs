@@ -1,0 +1,36 @@
+{
+  "baseline": {
+    "requested_seconds": 600,
+    "observed_seconds": 300.0119471810176,
+    "intentionally_interrupted": true,
+    "cold_verified": false,
+    "completed_close_counts_30s": [
+      5417,
+      5149,
+      5415,
+      5156,
+      5187,
+      5312,
+      5229,
+      5281,
+      5298,
+      5020
+    ],
+    "mean_close_completions_s": 174.88,
+    "per_node_final_usage_bytes": [
+      3084189696,
+      2759720960,
+      3084713984,
+      2760179712
+    ]
+  },
+  "candidate": {},
+  "not_matched_ab": true,
+  "limits": [
+    "single AMD host/four local daemons",
+    "baseline intentionally interrupted without cold-byte oracle",
+    "independent fresh roots/placement and unequal duration; no causal throughput gain",
+    "candidate opt-in; production default unchanged",
+    "180-second candidate does not close ten-minute or unpaced sustained acceptance"
+  ]
+}
