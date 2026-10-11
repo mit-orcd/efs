@@ -216,6 +216,7 @@ test-fold-observation:
 
 test-lookup-memo:
 	python3 tests/test_lookup_memo.py
+	python3 tests/test_bench_lookup_walk.py
 
 tests/test_fence_view: tests/test_fence_view.c include/efs/fence_view.h
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $<

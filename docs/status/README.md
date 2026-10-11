@@ -36,6 +36,10 @@ unimplemented; unavailable/refusal tests are not lifecycle acceptance.
 
 ## Release correctness review
 
+[Benchmark walker mode cleanup](benchmark-walk-mode-20261011.md) removes the
+unselectable private execute-check mode. Before/after owner-RPC batch/fallback
+regressions pass, with public lookup and FUSE permissions unchanged.
+
 [Retained-body flush simplification](flush-retained-body-mode-20261011.md) removes
 the unselectable stolen-body mode after the pipeline correctness fix. Cache/fence/
 pressure gates pass; ownership through exact REPORT ACK is preserved.
