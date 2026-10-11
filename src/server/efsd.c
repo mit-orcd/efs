@@ -483,6 +483,14 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    const char *data_pressure = getenv("EFS_DATA_GC_ADMISSION");
+    if (data_pressure && strcmp(data_pressure, "0") && strcmp(data_pressure, "1")) {
+        fprintf(stderr, "EFS_DATA_GC_ADMISSION must be 0 or 1\n");
+        return 1;
+    }
+    server.data_gc_admission = data_pressure && !strcmp(data_pressure, "1");
+    fprintf(stderr, "Data GC admission: %s\n", server.data_gc_admission ? "experimental" : "disabled");
+
     server.nodes[0].id = server.id;
     strncpy(server.nodes[0].addr, server.addr, sizeof(server.nodes[0].addr) - 1);
     server.nodes[0].port = server.port;

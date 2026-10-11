@@ -1,0 +1,9 @@
+fcstor006
+uid=246111(erbmi1) gid=246111(erbmi1) groups=246111(erbmi1),1045(sched_mit_hill),1184(sloan_admins),36571(engaging_admin_owners),53459(ere_admins),54472(mvogelsb_admin),81917(mki_admin),135814(sched_mit_orcd),149488(psfc_admins),151131(orcd_rg_hstor001_orcd),151132(orcd_rg_fstor001_orcd),151370(nse_admin),152031(orcd_rg_engagingsw_orcd-sw),166255(ou_bcs_high),166256(ou_bcs_low),167043(orcd_rg_hstor002_ou_orcd),167044(orcd_rg_hstor003_ou_orcd),167045(orcd_rg_hstor004_ou_orcd),167046(orcd_rg_hstor005_ou_orcd),167047(orcd_rg_hstor006_ou_orcd),167723(orcd_rg_par_ou_orcd_testing),168458(orcd_ug_ou_ki_all),168459(orcd_rg_hstor003_ou_ki),169168(orcd_rg_hstor010_ou_orcd),169233(orcd_rg_hstor011_ou_orcd),169549(orcd_rg_par_ou_ki_highmem),169550(orcd_rg_par_ou_ki),184906(orcd_rg_hstor012_ou_orcd),184907(orcd_rg_hstor013_ou_orcd),184953(orcd_rg_hstor003_pg_ki_proteom),184956(orcd_rg_hstor003_pg_ki_metpro),198423(orcd_rg_hstor006_pi_msur),199125(orcd_rg_swlic_ou_mtl),199668(orcd_rg_hstor013_ou_ki),215252(orcd_rg_fstortest_ou_orcd),215906(orcd_ug_pg_c7_all),228080(orcd_rg_fstor011_ou_orcd),230434(orcd_rg_hstor014_ou_orcd),230435(orcd_rg_hstor015_ou_orcd),11000467(econ_admins)
+Linux 5.14.0-687.39.1.el9_8.x86_64
+/      /dev/md0 xfs
+unit rc: 0
+build warnings: 0
+private source: ebb7ab464985a3b0b95e3e02734511cb4c79dba0
+live runtime: version 172.16.223.60:17432 efsd v0.2.1-pre-alpha-602-g52bc8edb (branch devel, built 2026-10-11T04:21:14Z on fcstor006)
+tiny-files screen: No Sockets found in /run/screen/S-erbmi1.

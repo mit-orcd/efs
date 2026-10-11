@@ -382,6 +382,7 @@ struct efs_msg_raft_status_reply {
 /* GET_FEATURES reply: the export's current feature mask. */
 #define EFS_FEATURES_OK        0
 #define EFS_FEATURES_NOT_FOUND 1
+#define EFS_FEATURES_UNAVAILABLE 2
 struct efs_msg_features_reply {
     uint32_t features;
     uint8_t status; /* EFS_FEATURES_* */
@@ -455,6 +456,7 @@ struct efs_msg_put_chunk {
 #define EFS_PUT_CHUNK_OK     0
 #define EFS_PUT_CHUNK_ERROR  1
 #define EFS_PUT_CHUNK_QUOTA_EXCEEDED 2
+#define EFS_PUT_CHUNK_BUSY 3 /* transient admission; no durable PUT receipt */
 
 #define EFS_BENCH_PUT_OK     0
 #define EFS_BENCH_PUT_ERROR  1

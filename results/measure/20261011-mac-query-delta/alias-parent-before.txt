@@ -1,0 +1,14 @@
+cluster: mac
+1153572 /tmp/efs/efs-fuse 127.0.0.1:24800 w92-private /data1/mac-query-gates-20261011/run4/mnt1
+1155829 bash -c pgrep -af mac-query-gates; findmnt -t fuse.efs-fuse; cd /tmp/efs && cp src/meta/query_disk.o /tmp/mac-query-before-alias-batch.o && make tests/test_query_delta && EFS_QUERY_DELTA_PARENTS=64 EFS_QUERY_DELTA_LANES=1 ./tests/test_query_delta
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"' -DEFS_VERSION='"unknown"' -DEFS_GIT_BRANCH='"unknown"' -DEFS_BUILD_TIME='"2026-10-11T13:09:23Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o tests/test_query_delta.o tests/test_query_delta.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"' -DEFS_VERSION='"unknown"' -DEFS_GIT_BRANCH='"unknown"' -DEFS_BUILD_TIME='"2026-10-11T13:09:23Z"'  -o tests/test_query_delta tests/test_query_delta.o libefs.a -lpthread -lm -ldl -libverbs
+files=6000 delta=1023 refolded=1023 rebuilt=64 stats_ms=128.292
+files=6000 delta=1024 refolded=1024 rebuilt=64 stats_ms=117.518
+files=6000 delta=1025 refolded=1025 rebuilt=64 stats_ms=126.129
+files=6000 delta=4096 refolded=4096 rebuilt=64 stats_ms=463.091
+lane-only=changed refolded=1 size=16384 alloc=2
+lane-only=absent refolded=1 size=0 alloc=0
+phase=create refolded=2049 tree_files=8048
+phase=delete refolded=65 tree_files=6000
+query large delta: PASS

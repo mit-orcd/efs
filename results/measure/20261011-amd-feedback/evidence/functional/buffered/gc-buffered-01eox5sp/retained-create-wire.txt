@@ -1,0 +1,2 @@
+retained CREATE discard=0 ino=6611 shard=2515: pure routing probe, exact result, pending adoption/CLOSE and negative receipt PASS
+retained CREATE discard=1 ino=10707 shard=2515: pure routing probe, exact result, pending adoption/CLOSE and negative receipt PASS

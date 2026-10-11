@@ -1,0 +1,74 @@
+2026-10-11T16:46:14.991Z efs-fuse e9ea8ca1-deploy-normal (branch devel-amd, built 2026-10-11T16:43:13Z on amd-395), build=e9ea8ca1-deploy-normal: starting export=default mount=/data1/efs/mnt
+2026-10-11T16:46:14.992Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T16:46:14.992Z   node id=1 127.0.0.1:24190
+2026-10-11T16:46:14.992Z   node id=2 127.0.0.1:24191
+2026-10-11T16:46:14.992Z   node id=3 127.0.0.1:24192
+2026-10-11T16:46:14.992Z   node id=4 127.0.0.1:24193
+2026-10-11T16:46:14.992Z fetching metadata...
+2026-10-11T16:46:14.992Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T16:46:14.992Z export id=1 name=default
+2026-10-11T16:46:14.992Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T16:46:14.994Z efs-fuse: workers max=10 idle=10
+2026-10-11T16:46:14.995Z fuse serving
+2026-10-11T16:46:18.908Z fsync-split ino=18952 flush_ms=132 report_ms=0 rc=0
+2026-10-11T16:46:18.955Z fsync-split ino=14856 flush_ms=179 report_ms=0 rc=0
+2026-10-11T16:46:26.878Z fsync-split ino=10760 flush_ms=101 report_ms=0 rc=0
+2026-10-11T16:46:30.945Z fsync-split ino=10760 flush_ms=169 report_ms=0 rc=0
+2026-10-11T16:46:40.885Z fsync-split ino=14856 flush_ms=110 report_ms=0 rc=0
+2026-10-11T16:46:48.910Z fsync-split ino=14856 flush_ms=134 report_ms=0 rc=0
+2026-10-11T16:46:48.916Z fsync-split ino=18952 flush_ms=141 report_ms=0 rc=0
+2026-10-11T16:46:50.899Z fsync-split ino=10760 flush_ms=123 report_ms=0 rc=0
+2026-10-11T16:46:56.893Z fsync-split ino=18952 flush_ms=118 report_ms=0 rc=0
+2026-10-11T16:46:58.972Z fsync-split ino=18952 flush_ms=198 report_ms=0 rc=0
+2026-10-11T16:47:00.889Z fsync-split ino=6664 flush_ms=112 report_ms=0 rc=0
+2026-10-11T16:47:02.882Z fsync-split ino=6664 flush_ms=107 report_ms=0 rc=0
+2026-10-11T16:47:02.932Z fsync-split ino=18952 flush_ms=157 report_ms=0 rc=0
+2026-10-11T16:47:10.877Z fsync-split ino=18952 flush_ms=102 report_ms=0 rc=0
+2026-10-11T16:47:10.905Z fsync-split ino=10760 flush_ms=129 report_ms=0 rc=0
+2026-10-11T16:47:14.958Z fsync-split ino=18952 flush_ms=182 report_ms=0 rc=0
+2026-10-11T16:47:15.027Z fsync-split ino=10760 flush_ms=251 report_ms=0 rc=0
+2026-10-11T16:47:16.876Z fsync-split ino=6664 flush_ms=100 report_ms=0 rc=0
+2026-10-11T16:47:16.893Z fsync-split ino=10760 flush_ms=113 report_ms=0 rc=0
+2026-10-11T16:47:20.886Z fsync-split ino=14856 flush_ms=110 report_ms=0 rc=0
+2026-10-11T16:47:24.903Z fsync-split ino=18952 flush_ms=127 report_ms=0 rc=0
+2026-10-11T16:47:30.893Z fsync-split ino=10760 flush_ms=118 report_ms=0 rc=0
+2026-10-11T16:47:34.918Z fsync-split ino=10760 flush_ms=142 report_ms=0 rc=0
+2026-10-11T16:47:36.890Z fsync-split ino=10760 flush_ms=114 report_ms=0 rc=0
+2026-10-11T16:47:46.879Z fsync-split ino=14856 flush_ms=103 report_ms=0 rc=0
+2026-10-11T16:47:48.882Z fsync-split ino=10760 flush_ms=105 report_ms=0 rc=0
+2026-10-11T16:47:54.878Z fsync-split ino=14856 flush_ms=102 report_ms=0 rc=0
+2026-10-11T16:47:56.961Z fsync-split ino=6664 flush_ms=187 report_ms=0 rc=0
+2026-10-11T16:47:58.894Z fsync-split ino=10760 flush_ms=116 report_ms=0 rc=0
+2026-10-11T16:48:16.918Z fsync-split ino=6664 flush_ms=142 report_ms=0 rc=0
+2026-10-11T16:48:16.985Z fsync-split ino=18952 flush_ms=209 report_ms=0 rc=0
+2026-10-11T16:48:18.909Z fsync-split ino=6664 flush_ms=123 report_ms=0 rc=0
+2026-10-11T16:48:18.978Z fsync-split ino=10760 flush_ms=203 report_ms=0 rc=0
+2026-10-11T16:48:20.879Z fsync-split ino=18952 flush_ms=104 report_ms=0 rc=0
+2026-10-11T16:48:20.951Z fsync-split ino=10760 flush_ms=176 report_ms=0 rc=0
+2026-10-11T16:48:22.913Z fsync-split ino=10760 flush_ms=138 report_ms=0 rc=0
+2026-10-11T16:48:24.879Z fsync-split ino=6664 flush_ms=103 report_ms=0 rc=0
+2026-10-11T16:48:24.902Z fsync-split ino=10760 flush_ms=126 report_ms=0 rc=0
+2026-10-11T16:48:26.881Z fsync-split ino=14856 flush_ms=105 report_ms=0 rc=0
+2026-10-11T16:48:26.912Z fsync-split ino=18952 flush_ms=136 report_ms=0 rc=0
+2026-10-11T16:48:30.883Z fsync-split ino=6664 flush_ms=107 report_ms=0 rc=0
+2026-10-11T16:48:34.884Z fsync-split ino=14856 flush_ms=108 report_ms=0 rc=0
+2026-10-11T16:48:34.962Z fsync-split ino=10760 flush_ms=186 report_ms=0 rc=0
+2026-10-11T16:48:44.896Z fsync-split ino=6664 flush_ms=120 report_ms=0 rc=0
+2026-10-11T16:48:54.885Z fsync-split ino=6664 flush_ms=104 report_ms=0 rc=0
+2026-10-11T16:49:01.083Z fsync-split ino=10760 flush_ms=306 report_ms=0 rc=0
+2026-10-11T16:49:10.894Z fsync-split ino=14856 flush_ms=118 report_ms=0 rc=0
+2026-10-11T16:49:10.906Z fsync-split ino=10760 flush_ms=130 report_ms=0 rc=0
+2026-10-11T16:49:12.928Z fsync-split ino=14856 flush_ms=149 report_ms=0 rc=0
+2026-10-11T16:49:16.914Z fsync-split ino=6664 flush_ms=136 report_ms=0 rc=0
+2026-10-11T16:49:23.065Z efs-fuse e9ea8ca1-deploy-normal (branch devel-amd, built 2026-10-11T16:43:13Z on amd-395), build=e9ea8ca1-deploy-normal: starting export=default mount=/data1/efs/mnt
+2026-10-11T16:49:23.065Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T16:49:23.065Z   node id=1 127.0.0.1:24190
+2026-10-11T16:49:23.065Z   node id=2 127.0.0.1:24191
+2026-10-11T16:49:23.065Z   node id=3 127.0.0.1:24192
+2026-10-11T16:49:23.065Z   node id=4 127.0.0.1:24193
+2026-10-11T16:49:23.065Z fetching metadata...
+2026-10-11T16:49:23.066Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T16:49:23.066Z export id=1 name=default
+2026-10-11T16:49:23.066Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T16:49:23.068Z efs-fuse: workers max=10 idle=10
+2026-10-11T16:49:23.070Z fuse serving

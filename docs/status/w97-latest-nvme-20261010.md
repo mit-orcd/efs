@@ -1,5 +1,11 @@
 # W97 latest merged NUC slowdown and NVMe observation — Oct 10
 
+**Tracking update, Oct 11:** The NUC filesystem/device persistence-latency
+investigation in this report is now [W111](w111-nuc-persistence-investigation-20261011.md).
+Dated W97 labels and measurements below are retained as historical evidence.
+The [AMD overload/admission gate](amd-overload-admission-20261011.md) is closed
+and does not depend on this NUC investigation.
+
 Status: this merge/deploy/continuous observation is complete; W97 remains open. User requests merging all current commits,
 deploying on NUC and observing whether the time-dependent decline persists,
 including the NVMe cache hypothesis. No production persistence/SSD-setting change

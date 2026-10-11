@@ -1,0 +1,884 @@
+2026-10-11T21:30:53.352Z storage-engine=files direct_io=off
+2026-10-11T21:30:53.352Z Data GC admission: experimental
+2026-10-11T21:30:53.352Z Storage quota: explicit 4.00 GiB (safe maximum 148.40 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:30:53.353Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:30:53.354Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:30:53.354Z raft-host: up raft_id=0 n=4 boot=4881106132042248 salt=5452771806533833059 g0=hosted g2=off
+2026-10-11T21:30:53.354Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-11T21:30:53.354Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:30:55.353Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=995 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:30:57.635Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=965 p50_us=965 max_us=965 wdisk ops=1 bytes=65536 errors=0 avg_us=872 p50_us=872 max_us=872
+2026-10-11T21:30:57.957Z storage-engine=files direct_io=off
+2026-10-11T21:30:57.957Z Data GC admission: experimental
+2026-10-11T21:30:57.957Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1/meta/cluster_nodes.bin
+2026-10-11T21:30:57.957Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:30:57.957Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:30:57.957Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:30:57.957Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:30:57.957Z Storage quota: explicit 4.00 GiB (safe maximum 148.39 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:30:57.957Z Trying to rejoin via persisted peer 127.0.0.1:24211 (node 2)...
+2026-10-11T21:30:57.957Z Cannot connect to peer 127.0.0.1:24211
+2026-10-11T21:30:57.957Z Failed to rejoin via 127.0.0.1:24211
+2026-10-11T21:30:57.957Z Trying to rejoin via persisted peer 127.0.0.1:24212 (node 3)...
+2026-10-11T21:30:57.957Z Cannot connect to peer 127.0.0.1:24212
+2026-10-11T21:30:57.957Z Failed to rejoin via 127.0.0.1:24212
+2026-10-11T21:30:57.957Z Trying to rejoin via persisted peer 127.0.0.1:24213 (node 4)...
+2026-10-11T21:30:57.957Z Cannot connect to peer 127.0.0.1:24213
+2026-10-11T21:30:57.957Z Failed to rejoin via 127.0.0.1:24213
+2026-10-11T21:30:57.957Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T21:30:57.957Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T21:30:57.958Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:30:57.959Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:30:57.959Z raft-host: up raft_id=0 n=4 boot=4881106132042249 salt=13169388889397607185 g0=hosted g2=off
+2026-10-11T21:30:57.959Z kv-obs: mt_bytes=1819 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:30:57.959Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1 (1 paths, stripe=none), used=65536, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-11T21:30:59.958Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=984 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:31:02.230Z iostats: get ops=1 bytes=65536 errors=0 avg_us=86 p50_us=86 max_us=86 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:31:02.565Z storage-engine=files direct_io=off
+2026-10-11T21:31:02.565Z Data GC admission: experimental
+2026-10-11T21:31:02.565Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1/meta/cluster_nodes.bin
+2026-10-11T21:31:02.565Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:31:02.565Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:31:02.565Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:31:02.565Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:31:02.566Z Storage quota: explicit 4.00 GiB (safe maximum 148.39 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:31:02.566Z Trying to rejoin via persisted peer 127.0.0.1:24211 (node 2)...
+2026-10-11T21:31:02.566Z Cannot connect to peer 127.0.0.1:24211
+2026-10-11T21:31:02.566Z Failed to rejoin via 127.0.0.1:24211
+2026-10-11T21:31:02.566Z Trying to rejoin via persisted peer 127.0.0.1:24212 (node 3)...
+2026-10-11T21:31:02.566Z Cannot connect to peer 127.0.0.1:24212
+2026-10-11T21:31:02.566Z Failed to rejoin via 127.0.0.1:24212
+2026-10-11T21:31:02.566Z Trying to rejoin via persisted peer 127.0.0.1:24213 (node 4)...
+2026-10-11T21:31:02.566Z Cannot connect to peer 127.0.0.1:24213
+2026-10-11T21:31:02.566Z Failed to rejoin via 127.0.0.1:24213
+2026-10-11T21:31:02.566Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T21:31:02.566Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T21:31:02.566Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:31:02.567Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:31:02.568Z raft-host: up raft_id=0 n=4 boot=4881106132042250 salt=13761592481442396633 g0=hosted g2=off
+2026-10-11T21:31:02.568Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1 (1 paths, stripe=none), used=131072, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-11T21:31:02.568Z kv-obs: mt_bytes=3470 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:31:03.589Z raft-host: gc-pass ms=7 orphan=2 reap=4 frag=0 spread=0 recover=0 fscans=2 fsegs=0 fkeys=2 femit=2 ftomb=0 scans=8 segs=0 keys=38 emit=30 tomb=8 reap_scan=0 reap_sweep=0 reap_fence=3 reap_done=0
+2026-10-11T21:31:04.567Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=977 passes=2 sampled=1 pending=1,0 reap=2,0 removed=1 file_bytes=65568 payload_bytes=65536 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:31:06.841Z iostats: get ops=1 bytes=65536 errors=0 avg_us=66 p50_us=66 max_us=66 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:31:07.569Z kv-obs: mt_bytes=3525 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:31:07.741Z raft-host: gc-pass ms=77 orphan=2 reap=6 frag=0 spread=0 recover=67 fscans=1 fsegs=0 fkeys=2 femit=1 ftomb=1 scans=199 segs=0 keys=10 emit=6 tomb=4 reap_scan=0 reap_sweep=1 reap_fence=5 reap_done=0
+2026-10-11T21:31:08.184Z storage-engine=files direct_io=off
+2026-10-11T21:31:08.184Z Data GC admission: experimental
+2026-10-11T21:31:08.184Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1/meta/cluster_nodes.bin
+2026-10-11T21:31:08.184Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:31:08.184Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:31:08.184Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:31:08.184Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:31:08.184Z Storage quota: explicit 4.00 GiB (safe maximum 148.39 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:31:08.184Z Trying to rejoin via persisted peer 127.0.0.1:24211 (node 2)...
+2026-10-11T21:31:08.185Z Cannot connect to peer 127.0.0.1:24211
+2026-10-11T21:31:08.185Z Failed to rejoin via 127.0.0.1:24211
+2026-10-11T21:31:08.185Z Trying to rejoin via persisted peer 127.0.0.1:24212 (node 3)...
+2026-10-11T21:31:08.185Z Cannot connect to peer 127.0.0.1:24212
+2026-10-11T21:31:08.185Z Failed to rejoin via 127.0.0.1:24212
+2026-10-11T21:31:08.185Z Trying to rejoin via persisted peer 127.0.0.1:24213 (node 4)...
+2026-10-11T21:31:08.185Z Cannot connect to peer 127.0.0.1:24213
+2026-10-11T21:31:08.185Z Failed to rejoin via 127.0.0.1:24213
+2026-10-11T21:31:08.185Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T21:31:08.185Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T21:31:08.185Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:31:08.186Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:31:08.186Z kv-obs: mt_bytes=4483 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:31:08.186Z raft-host: up raft_id=0 n=4 boot=4881106132042251 salt=4932417091396799306 g0=hosted g2=off
+2026-10-11T21:31:08.186Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1 (1 paths, stripe=none), used=65536, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-11T21:31:10.185Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=976 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:31:10.241Z raft-host: gc-pass ms=7 orphan=4 reap=2 frag=0 spread=0 recover=0 fscans=1 fsegs=0 fkeys=2 femit=0 ftomb=2 scans=8 segs=0 keys=60 emit=32 tomb=28 reap_scan=0 reap_sweep=0 reap_fence=2 reap_done=0
+2026-10-11T21:31:11.266Z raft-host: gc-pass ms=5 orphan=0 reap=4 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=6 segs=0 keys=11 emit=4 tomb=7 reap_scan=0 reap_sweep=3 reap_fence=1 reap_done=0
+2026-10-11T21:31:12.291Z raft-host: gc-pass ms=5 orphan=0 reap=5 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=6 segs=0 keys=11 emit=4 tomb=7 reap_scan=0 reap_sweep=3 reap_fence=2 reap_done=0
+2026-10-11T21:31:12.456Z iostats: get ops=1 bytes=65536 errors=0 avg_us=93 p50_us=93 max_us=93 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:31:13.186Z kv-obs: mt_bytes=4838 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:31:13.381Z raft-host: gc-pass ms=76 orphan=2 reap=5 frag=0 spread=0 recover=67 fscans=1 fsegs=0 fkeys=3 femit=1 ftomb=2 scans=200 segs=0 keys=16 emit=8 tomb=8 reap_scan=0 reap_sweep=1 reap_fence=4 reap_done=0
+2026-10-11T21:31:13.531Z raft-host: applied session index=66 kind=1 shard=0 ino=0
+2026-10-11T21:31:13.533Z raft-host: apply create rc=-4 index=70 parent=1 name=w58-negative
+2026-10-11T21:31:13.756Z storage-engine=files direct_io=off
+2026-10-11T21:31:13.756Z Data GC admission: experimental
+2026-10-11T21:31:13.756Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1/meta/cluster_nodes.bin
+2026-10-11T21:31:13.756Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:31:13.756Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:31:13.756Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:31:13.756Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:31:13.756Z Storage quota: explicit 4.00 GiB (safe maximum 148.39 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:31:13.756Z Trying to rejoin via persisted peer 127.0.0.1:24211 (node 2)...
+2026-10-11T21:31:13.756Z Cannot connect to peer 127.0.0.1:24211
+2026-10-11T21:31:13.756Z Failed to rejoin via 127.0.0.1:24211
+2026-10-11T21:31:13.756Z Trying to rejoin via persisted peer 127.0.0.1:24212 (node 3)...
+2026-10-11T21:31:13.756Z Cannot connect to peer 127.0.0.1:24212
+2026-10-11T21:31:13.756Z Failed to rejoin via 127.0.0.1:24212
+2026-10-11T21:31:13.756Z Trying to rejoin via persisted peer 127.0.0.1:24213 (node 4)...
+2026-10-11T21:31:13.756Z Cannot connect to peer 127.0.0.1:24213
+2026-10-11T21:31:13.756Z Failed to rejoin via 127.0.0.1:24213
+2026-10-11T21:31:13.756Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T21:31:13.756Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T21:31:13.757Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:31:13.758Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:31:13.758Z raft-host: up raft_id=0 n=4 boot=4881106132042252 salt=10946864698392432364 g0=hosted g2=off
+2026-10-11T21:31:13.758Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-11T21:31:13.758Z kv-obs: mt_bytes=6113 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:31:14.786Z raft-host: gc-pass ms=7 orphan=0 reap=7 frag=0 spread=0 recover=0 fscans=1 fsegs=0 fkeys=3 femit=0 ftomb=3 scans=9 segs=0 keys=76 emit=37 tomb=39 reap_scan=0 reap_sweep=3 reap_fence=4 reap_done=0
+2026-10-11T21:31:15.757Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=970 passes=2 sampled=1 pending=0,0 reap=6,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:31:15.804Z raft-host: gc-pass ms=5 orphan=0 reap=5 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=7 segs=0 keys=14 emit=6 tomb=8 reap_scan=0 reap_sweep=3 reap_fence=2 reap_done=0
+2026-10-11T21:31:16.826Z raft-host: gc-pass ms=6 orphan=0 reap=6 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=7 segs=0 keys=14 emit=6 tomb=8 reap_scan=0 reap_sweep=4 reap_fence=2 reap_done=0
+2026-10-11T21:31:17.849Z raft-host: gc-pass ms=6 orphan=0 reap=6 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=7 segs=0 keys=14 emit=6 tomb=8 reap_scan=0 reap_sweep=3 reap_fence=2 reap_done=0
+2026-10-11T21:31:18.027Z raft-host: opid-replay parent=1 name=w58-negative seq=2 rc=-4 ino=0 (stub)
+2026-10-11T21:31:18.030Z raft-host: opid-replay parent=1 name=w58-negative seq=2 rc=-4 ino=0 (stub)
+2026-10-11T21:31:18.486Z storage-engine=files direct_io=off
+2026-10-11T21:31:18.486Z Data GC admission: experimental
+2026-10-11T21:31:18.486Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1/meta/cluster_nodes.bin
+2026-10-11T21:31:18.486Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:31:18.486Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:31:18.486Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:31:18.486Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:31:18.486Z Storage quota: explicit 4.00 GiB (safe maximum 148.39 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:31:18.486Z Trying to rejoin via persisted peer 127.0.0.1:24211 (node 2)...
+2026-10-11T21:31:18.486Z Cannot connect to peer 127.0.0.1:24211
+2026-10-11T21:31:18.486Z Failed to rejoin via 127.0.0.1:24211
+2026-10-11T21:31:18.486Z Trying to rejoin via persisted peer 127.0.0.1:24212 (node 3)...
+2026-10-11T21:31:18.486Z Cannot connect to peer 127.0.0.1:24212
+2026-10-11T21:31:18.486Z Failed to rejoin via 127.0.0.1:24212
+2026-10-11T21:31:18.486Z Trying to rejoin via persisted peer 127.0.0.1:24213 (node 4)...
+2026-10-11T21:31:18.486Z Cannot connect to peer 127.0.0.1:24213
+2026-10-11T21:31:18.486Z Failed to rejoin via 127.0.0.1:24213
+2026-10-11T21:31:18.486Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T21:31:18.486Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T21:31:18.487Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:31:18.488Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:31:18.488Z raft-host: up raft_id=0 n=4 boot=4881106132042253 salt=13143990670597466222 g0=hosted g2=off
+2026-10-11T21:31:18.488Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-11T21:31:18.488Z kv-obs: mt_bytes=7243 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:31:19.519Z raft-host: gc-pass ms=14 orphan=0 reap=14 frag=0 spread=0 recover=0 fscans=1 fsegs=0 fkeys=3 femit=0 ftomb=3 scans=23 segs=0 keys=90 emit=45 tomb=45 reap_scan=0 reap_sweep=3 reap_fence=8 reap_done=2
+2026-10-11T21:31:20.487Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=968 passes=2 sampled=1 pending=0,0 reap=7,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:31:22.766Z raft-host: applied session index=106 kind=1 shard=0 ino=0
+2026-10-11T21:31:22.781Z raft-host: applied session index=120 kind=1 shard=0 ino=0
+2026-10-11T21:31:22.805Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:31:23.109Z storage-engine=files direct_io=off
+2026-10-11T21:31:23.109Z Data GC admission: experimental
+2026-10-11T21:31:23.109Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1/meta/cluster_nodes.bin
+2026-10-11T21:31:23.109Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:31:23.109Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:31:23.109Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:31:23.109Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:31:23.109Z Storage quota: explicit 4.00 GiB (safe maximum 148.39 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:31:23.109Z Trying to rejoin via persisted peer 127.0.0.1:24211 (node 2)...
+2026-10-11T21:31:23.109Z Cannot connect to peer 127.0.0.1:24211
+2026-10-11T21:31:23.109Z Failed to rejoin via 127.0.0.1:24211
+2026-10-11T21:31:23.109Z Trying to rejoin via persisted peer 127.0.0.1:24212 (node 3)...
+2026-10-11T21:31:23.109Z Cannot connect to peer 127.0.0.1:24212
+2026-10-11T21:31:23.109Z Failed to rejoin via 127.0.0.1:24212
+2026-10-11T21:31:23.109Z Trying to rejoin via persisted peer 127.0.0.1:24213 (node 4)...
+2026-10-11T21:31:23.109Z Cannot connect to peer 127.0.0.1:24213
+2026-10-11T21:31:23.109Z Failed to rejoin via 127.0.0.1:24213
+2026-10-11T21:31:23.109Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T21:31:23.109Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T21:31:23.110Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:31:23.111Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:31:23.111Z kv-obs: mt_bytes=12933 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:31:23.111Z raft-host: up raft_id=0 n=4 boot=4881106132042254 salt=5314090319321262719 g0=hosted g2=off
+2026-10-11T21:31:23.111Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-11T21:31:25.110Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=984 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:31:27.381Z raft-host: applied session index=134 kind=1 shard=0 ino=0
+2026-10-11T21:31:27.387Z raft-host: applied session index=141 kind=1 shard=0 ino=0
+2026-10-11T21:31:27.405Z raft-host: applied session index=169 kind=1 shard=0 ino=0
+2026-10-11T21:31:27.729Z storage-engine=files direct_io=off
+2026-10-11T21:31:27.729Z Data GC admission: experimental
+2026-10-11T21:31:27.729Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1/meta/cluster_nodes.bin
+2026-10-11T21:31:27.729Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:31:27.729Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:31:27.729Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:31:27.729Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:31:27.729Z Storage quota: explicit 4.00 GiB (safe maximum 148.39 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:31:27.729Z Trying to rejoin via persisted peer 127.0.0.1:24211 (node 2)...
+2026-10-11T21:31:27.729Z Cannot connect to peer 127.0.0.1:24211
+2026-10-11T21:31:27.729Z Failed to rejoin via 127.0.0.1:24211
+2026-10-11T21:31:27.729Z Trying to rejoin via persisted peer 127.0.0.1:24212 (node 3)...
+2026-10-11T21:31:27.729Z Cannot connect to peer 127.0.0.1:24212
+2026-10-11T21:31:27.729Z Failed to rejoin via 127.0.0.1:24212
+2026-10-11T21:31:27.729Z Trying to rejoin via persisted peer 127.0.0.1:24213 (node 4)...
+2026-10-11T21:31:27.730Z Cannot connect to peer 127.0.0.1:24213
+2026-10-11T21:31:27.730Z Failed to rejoin via 127.0.0.1:24213
+2026-10-11T21:31:27.730Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T21:31:27.730Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T21:31:27.730Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:31:27.732Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:31:27.732Z kv-obs: mt_bytes=17110 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:31:27.732Z raft-host: up raft_id=0 n=4 boot=4881106132042255 salt=1492983118754650589 g0=hosted g2=off
+2026-10-11T21:31:27.732Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-11T21:31:28.752Z raft-host: gc-pass ms=5 orphan=2 reap=2 frag=0 spread=0 recover=0 fscans=1 fsegs=0 fkeys=3 femit=0 ftomb=3 scans=8 segs=0 keys=162 emit=62 tomb=100 reap_scan=0 reap_sweep=0 reap_fence=2 reap_done=0
+2026-10-11T21:31:29.730Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=978 passes=2 sampled=1 pending=0,0 reap=1,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:31:32.003Z raft-host: applied session index=174 kind=1 shard=0 ino=0
+2026-10-11T21:31:32.023Z raft-host: applied session index=189 kind=1 shard=0 ino=0
+2026-10-11T21:31:32.072Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:31:32.353Z storage-engine=files direct_io=off
+2026-10-11T21:31:32.353Z Data GC admission: experimental
+2026-10-11T21:31:32.353Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1/meta/cluster_nodes.bin
+2026-10-11T21:31:32.353Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:31:32.353Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:31:32.353Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:31:32.353Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:31:32.353Z Storage quota: explicit 4.00 GiB (safe maximum 148.39 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:31:32.353Z Trying to rejoin via persisted peer 127.0.0.1:24211 (node 2)...
+2026-10-11T21:31:32.353Z Cannot connect to peer 127.0.0.1:24211
+2026-10-11T21:31:32.353Z Failed to rejoin via 127.0.0.1:24211
+2026-10-11T21:31:32.353Z Trying to rejoin via persisted peer 127.0.0.1:24212 (node 3)...
+2026-10-11T21:31:32.353Z Cannot connect to peer 127.0.0.1:24212
+2026-10-11T21:31:32.353Z Failed to rejoin via 127.0.0.1:24212
+2026-10-11T21:31:32.353Z Trying to rejoin via persisted peer 127.0.0.1:24213 (node 4)...
+2026-10-11T21:31:32.353Z Cannot connect to peer 127.0.0.1:24213
+2026-10-11T21:31:32.353Z Failed to rejoin via 127.0.0.1:24213
+2026-10-11T21:31:32.353Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T21:31:32.353Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T21:31:32.354Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:31:32.355Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:31:32.355Z raft-host: up raft_id=0 n=4 boot=4881106132042256 salt=2877531536366957926 g0=hosted g2=off
+2026-10-11T21:31:32.355Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-11T21:31:32.355Z kv-obs: mt_bytes=21321 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:31:34.354Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=979 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:31:36.626Z raft-host: applied session index=212 kind=1 shard=0 ino=0
+2026-10-11T21:31:36.712Z raft-host: applied session index=238 kind=1 shard=0 ino=0
+2026-10-11T21:31:36.715Z raft-host: apply create rc=-4 index=244 parent=1881 name=retained0
+2026-10-11T21:31:36.715Z raft-host: opid-replay parent=1881 name=retained0 seq=4 rc=-4 ino=0 (stub)
+2026-10-11T21:31:37.355Z kv-obs: mt_bytes=25916 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:31:37.479Z raft-host: applied session index=256 kind=1 shard=0 ino=0
+2026-10-11T21:31:37.481Z raft-host: applied session index=260 kind=1 shard=0 ino=0
+2026-10-11T21:31:37.483Z raft-host: apply create rc=-4 index=265 parent=1881 name=retained1
+2026-10-11T21:31:37.484Z raft-host: opid-replay parent=1881 name=retained1 seq=4 rc=-4 ino=0 (stub)
+2026-10-11T21:31:37.525Z raft-host: gc-pass ms=82 orphan=4 reap=9 frag=1 spread=0 recover=67 fscans=1 fsegs=0 fkeys=4 femit=1 ftomb=3 scans=202 segs=0 keys=59 emit=6 tomb=53 reap_scan=0 reap_sweep=0 reap_fence=7 reap_done=0
+2026-10-11T21:31:38.625Z raft-host: gc-pass ms=79 orphan=4 reap=6 frag=1 spread=0 recover=67 fscans=1 fsegs=0 fkeys=4 femit=1 ftomb=3 scans=200 segs=0 keys=25 emit=4 tomb=21 reap_scan=0 reap_sweep=0 reap_fence=5 reap_done=0
+2026-10-11T21:31:38.873Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=1221 p50_us=1221 max_us=1221 wdisk ops=1 bytes=65536 errors=0 avg_us=1156 p50_us=1156 max_us=1156
+2026-10-11T21:31:39.106Z raft-host: applied session index=402 kind=1 shard=0 ino=0
+2026-10-11T21:31:39.350Z storage-engine=files direct_io=off
+2026-10-11T21:31:39.350Z Data GC admission: experimental
+2026-10-11T21:31:39.350Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1/meta/cluster_nodes.bin
+2026-10-11T21:31:39.350Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:31:39.350Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:31:39.350Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:31:39.350Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:31:39.351Z Storage quota: explicit 4.00 GiB (safe maximum 148.37 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:31:39.351Z Trying to rejoin via persisted peer 127.0.0.1:24211 (node 2)...
+2026-10-11T21:31:39.351Z Cannot connect to peer 127.0.0.1:24211
+2026-10-11T21:31:39.351Z Failed to rejoin via 127.0.0.1:24211
+2026-10-11T21:31:39.351Z Trying to rejoin via persisted peer 127.0.0.1:24212 (node 3)...
+2026-10-11T21:31:39.351Z Cannot connect to peer 127.0.0.1:24212
+2026-10-11T21:31:39.351Z Failed to rejoin via 127.0.0.1:24212
+2026-10-11T21:31:39.351Z Trying to rejoin via persisted peer 127.0.0.1:24213 (node 4)...
+2026-10-11T21:31:39.351Z Cannot connect to peer 127.0.0.1:24213
+2026-10-11T21:31:39.351Z Failed to rejoin via 127.0.0.1:24213
+2026-10-11T21:31:39.351Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T21:31:39.351Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T21:31:39.352Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:31:39.354Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:31:39.354Z raft-host: up raft_id=0 n=4 boot=4881106132042257 salt=9338717162070331078 g0=hosted g2=off
+2026-10-11T21:31:39.354Z kv-obs: mt_bytes=48828 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:31:39.354Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1 (1 paths, stripe=none), used=2686976, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-11T21:31:40.376Z raft-host: gc-pass ms=7 orphan=7 reap=0 frag=0 spread=0 recover=0 fscans=1 fsegs=0 fkeys=5 femit=0 ftomb=5 scans=6 segs=0 keys=447 emit=236 tomb=211 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:31:41.352Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=976 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:31:41.397Z raft-host: gc-pass ms=6 orphan=6 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=4 segs=0 keys=20 emit=8 tomb=12 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:31:42.419Z raft-host: gc-pass ms=6 orphan=6 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=4 segs=0 keys=20 emit=8 tomb=12 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:31:43.440Z raft-host: gc-pass ms=6 orphan=6 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=4 segs=0 keys=20 emit=8 tomb=12 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:31:43.631Z iostats: get ops=1 bytes=65536 errors=0 avg_us=142 p50_us=142 max_us=142 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:31:44.356Z kv-obs: mt_bytes=49796 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:31:44.617Z raft-host: gc-pass ms=166 orphan=6 reap=92 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=89 emit=42 tomb=47 reap_scan=0 reap_sweep=9 reap_fence=83 reap_done=0
+2026-10-11T21:31:44.729Z raft-host: gc-pass ms=91 orphan=1 reap=22 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=46 emit=34 tomb=12 reap_scan=0 reap_sweep=8 reap_fence=13 reap_done=0
+2026-10-11T21:31:45.836Z raft-host: gc-pass ms=95 orphan=6 reap=22 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=62 emit=41 tomb=21 reap_scan=0 reap_sweep=7 reap_fence=14 reap_done=0
+2026-10-11T21:31:46.949Z raft-host: gc-pass ms=97 orphan=7 reap=22 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=53 emit=41 tomb=12 reap_scan=0 reap_sweep=8 reap_fence=14 reap_done=0
+2026-10-11T21:31:48.058Z raft-host: gc-pass ms=98 orphan=5 reap=25 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=53 emit=41 tomb=12 reap_scan=0 reap_sweep=8 reap_fence=17 reap_done=0
+2026-10-11T21:31:48.632Z iostats: get ops=40 bytes=2621440 errors=0 avg_us=35 p50_us=31 max_us=142 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:31:49.177Z raft-host: gc-pass ms=105 orphan=6 reap=31 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=61 emit=40 tomb=21 reap_scan=0 reap_sweep=10 reap_fence=20 reap_done=0
+2026-10-11T21:31:49.358Z kv-obs: mt_bytes=48356 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:31:50.322Z raft-host: gc-pass ms=131 orphan=0 reap=64 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=260 segs=0 keys=121 emit=33 tomb=88 reap_scan=0 reap_sweep=16 reap_fence=37 reap_done=10
+2026-10-11T21:31:51.437Z raft-host: gc-pass ms=98 orphan=0 reap=31 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=212 segs=0 keys=101 emit=8 tomb=93 reap_scan=0 reap_sweep=6 reap_fence=21 reap_done=3
+2026-10-11T21:31:51.685Z raft-host: applied session index=682 kind=1 shard=0 ino=0
+2026-10-11T21:31:51.686Z raft-host: applied session index=683 kind=1 shard=0 ino=0
+2026-10-11T21:31:51.690Z raft-host: applied session index=688 kind=3 shard=0 ino=0
+2026-10-11T21:31:51.704Z raft-host: applied session index=690 kind=5 shard=1 ino=0
+2026-10-11T21:31:51.991Z raft-host: applied session index=705 kind=1 shard=0 ino=0
+2026-10-11T21:31:51.994Z raft-host: applied session index=709 kind=1 shard=0 ino=0
+2026-10-11T21:31:51.996Z raft-host: applied session index=715 kind=1 shard=0 ino=0
+2026-10-11T21:31:51.999Z raft-host: applied session index=720 kind=3 shard=0 ino=0
+2026-10-11T21:31:52.000Z test-put-storage-fence: refusing certificate sync
+2026-10-11T21:31:52.000Z storage-fence: member=1 floor=2 check=0 rc=-1
+2026-10-11T21:31:52.001Z raft-host: applied session index=721 kind=3 shard=0 ino=0
+2026-10-11T21:31:52.015Z raft-host: applied session index=723 kind=5 shard=1 ino=0
+2026-10-11T21:31:52.309Z raft-host: applied session index=727 kind=1 shard=0 ino=0
+2026-10-11T21:31:52.311Z raft-host: applied session index=729 kind=1 shard=0 ino=0
+2026-10-11T21:31:52.316Z raft-host: applied session index=731 kind=1 shard=0 ino=0
+2026-10-11T21:31:52.512Z raft-host: gc-pass ms=70 orphan=2 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=101 emit=1 tomb=100 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:31:52.541Z storage-engine=files direct_io=off
+2026-10-11T21:31:52.541Z Data GC admission: experimental
+2026-10-11T21:31:52.541Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1/meta/cluster_nodes.bin
+2026-10-11T21:31:52.541Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:31:52.541Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:31:52.541Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:31:52.541Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:31:52.541Z Storage quota: explicit 4.00 GiB (safe maximum 148.35 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:31:52.541Z Trying to rejoin via persisted peer 127.0.0.1:24211 (node 2)...
+2026-10-11T21:31:52.541Z Cannot connect to peer 127.0.0.1:24211
+2026-10-11T21:31:52.541Z Failed to rejoin via 127.0.0.1:24211
+2026-10-11T21:31:52.541Z Trying to rejoin via persisted peer 127.0.0.1:24212 (node 3)...
+2026-10-11T21:31:52.541Z Cannot connect to peer 127.0.0.1:24212
+2026-10-11T21:31:52.541Z Failed to rejoin via 127.0.0.1:24212
+2026-10-11T21:31:52.541Z Trying to rejoin via persisted peer 127.0.0.1:24213 (node 4)...
+2026-10-11T21:31:52.541Z Cannot connect to peer 127.0.0.1:24213
+2026-10-11T21:31:52.541Z Failed to rejoin via 127.0.0.1:24213
+2026-10-11T21:31:52.541Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T21:31:52.541Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T21:31:52.542Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:31:52.544Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:31:52.544Z raft-host: up raft_id=0 n=4 boot=4881106132042258 salt=4066252253481729168 g0=hosted g2=off
+2026-10-11T21:31:52.544Z kv-obs: mt_bytes=56688 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:31:52.544Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1 (1 paths, stripe=none), used=262144, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-11T21:31:54.542Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=985 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:31:56.839Z iostats: get ops=1 bytes=65536 errors=0 avg_us=114 p50_us=114 max_us=114 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:31:56.843Z raft-host: applied session index=752 kind=3 shard=0 ino=0
+2026-10-11T21:31:56.846Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:56.902Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:56.956Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:57.011Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:57.066Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:57.121Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:57.175Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:57.231Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:57.386Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:57.440Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:57.494Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:57.545Z kv-obs: mt_bytes=57581 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:31:57.548Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:57.602Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:57.656Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:57.678Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=155 emit=0 tomb=155 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:31:57.711Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:57.765Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:57.921Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:57.974Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:58.029Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:58.083Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:58.136Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:58.190Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:58.247Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:58.301Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:58.457Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:58.511Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:58.566Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:58.622Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:58.676Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:58.730Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:58.758Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=101 emit=0 tomb=101 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:31:58.785Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:58.839Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:58.994Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:59.049Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:59.104Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:59.159Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:59.213Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:59.268Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:59.323Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:59.378Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:59.534Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:59.589Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:59.643Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:59.698Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:59.752Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:59.807Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:59.837Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=101 emit=0 tomb=101 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:31:59.860Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:31:59.916Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:00.071Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:00.124Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:00.179Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:00.233Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:00.287Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:00.342Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:00.396Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:00.450Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:00.606Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:00.661Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:00.716Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:00.770Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:00.825Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:00.878Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:00.915Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=101 emit=0 tomb=101 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:32:00.932Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:00.987Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:01.141Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:01.193Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:01.247Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:01.302Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:01.356Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:01.410Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:01.464Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:01.519Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:01.674Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:01.728Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:01.784Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:01.838Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:01.843Z iostats: get ops=1 bytes=65536 errors=0 avg_us=114 p50_us=114 max_us=114 put ops=1 bytes=65536 errors=0 avg_us=765 p50_us=765 max_us=765 wdisk ops=1 bytes=65536 errors=0 avg_us=498 p50_us=498 max_us=498
+2026-10-11T21:32:01.892Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:01.946Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:01.994Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=101 emit=0 tomb=101 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:32:02.000Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:02.056Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:02.210Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:02.264Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:02.318Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:02.372Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:02.426Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:02.480Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:02.533Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:02.588Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:02.740Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:02.794Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:02.848Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:02.902Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:02.956Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:03.010Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T21:32:03.070Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=101 emit=0 tomb=101 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:32:03.076Z raft-host: applied session index=753 kind=5 shard=868 ino=0
+2026-10-11T21:32:03.086Z raft-host: applied session index=759 kind=3 shard=0 ino=0
+2026-10-11T21:32:03.099Z raft-host: applied session index=761 kind=5 shard=1 ino=0
+2026-10-11T21:32:03.111Z raft-host: applied session index=777 kind=1 shard=0 ino=0
+2026-10-11T21:32:03.112Z raft-host: applied session index=779 kind=1 shard=0 ino=0
+2026-10-11T21:32:04.159Z raft-host: gc-pass ms=78 orphan=3 reap=6 frag=1 spread=0 recover=67 fscans=1 fsegs=0 fkeys=6 femit=1 ftomb=5 scans=200 segs=0 keys=137 emit=4 tomb=133 reap_scan=0 reap_sweep=0 reap_fence=5 reap_done=0
+2026-10-11T21:32:04.235Z raft-host: applied session index=786 kind=1 shard=0 ino=0
+2026-10-11T21:32:04.238Z raft-host: applied session index=791 kind=3 shard=0 ino=0
+2026-10-11T21:32:04.246Z raft-host: applied session index=800 kind=5 shard=0 ino=0
+2026-10-11T21:32:04.249Z raft-host: applied session index=803 kind=5 shard=7 ino=0
+2026-10-11T21:32:04.273Z raft-host: applied session index=817 kind=1 shard=0 ino=0
+2026-10-11T21:32:04.301Z raft-host: applied session index=826 kind=12 shard=1 ino=40961
+2026-10-11T21:32:04.302Z raft-host: applied session index=827 kind=12 shard=1 ino=40961
+2026-10-11T21:32:04.303Z raft-host: applied session index=828 kind=12 shard=1 ino=40961
+2026-10-11T21:32:04.741Z storage-engine=files direct_io=off
+2026-10-11T21:32:04.741Z Data GC admission: experimental
+2026-10-11T21:32:04.741Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1/meta/cluster_nodes.bin
+2026-10-11T21:32:04.741Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:32:04.741Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:32:04.741Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:32:04.741Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:32:04.741Z Storage quota: explicit 4.00 GiB (safe maximum 148.35 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:32:04.741Z Trying to rejoin via persisted peer 127.0.0.1:24211 (node 2)...
+2026-10-11T21:32:04.741Z Cannot connect to peer 127.0.0.1:24211
+2026-10-11T21:32:04.741Z Failed to rejoin via 127.0.0.1:24211
+2026-10-11T21:32:04.741Z Trying to rejoin via persisted peer 127.0.0.1:24212 (node 3)...
+2026-10-11T21:32:04.741Z Cannot connect to peer 127.0.0.1:24212
+2026-10-11T21:32:04.741Z Failed to rejoin via 127.0.0.1:24212
+2026-10-11T21:32:04.741Z Trying to rejoin via persisted peer 127.0.0.1:24213 (node 4)...
+2026-10-11T21:32:04.741Z Cannot connect to peer 127.0.0.1:24213
+2026-10-11T21:32:04.741Z Failed to rejoin via 127.0.0.1:24213
+2026-10-11T21:32:04.741Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T21:32:04.741Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T21:32:04.742Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:32:04.744Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:32:04.744Z raft-host: up raft_id=0 n=4 boot=4881106132042259 salt=12444089801481088586 g0=hosted g2=off
+2026-10-11T21:32:04.744Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1 (1 paths, stripe=none), used=65536, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-11T21:32:04.744Z kv-obs: mt_bytes=62812 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:32:05.765Z raft-host: gc-pass ms=5 orphan=3 reap=1 frag=0 spread=0 recover=0 fscans=1 fsegs=0 fkeys=6 femit=0 ftomb=6 scans=6 segs=0 keys=726 emit=151 tomb=575 reap_scan=0 reap_sweep=0 reap_fence=1 reap_done=0
+2026-10-11T21:32:06.742Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=976 passes=2 sampled=1 pending=0,0 reap=1,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:32:09.015Z iostats: get ops=1 bytes=65536 errors=0 avg_us=87 p50_us=87 max_us=87 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:32:09.018Z raft-host: applied session index=842 kind=12 shard=1 ino=40961
+2026-10-11T21:32:09.341Z storage-engine=files direct_io=off
+2026-10-11T21:32:09.341Z Data GC admission: experimental
+2026-10-11T21:32:09.341Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1/meta/cluster_nodes.bin
+2026-10-11T21:32:09.341Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:32:09.341Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:32:09.341Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:32:09.341Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:32:09.342Z Storage quota: explicit 4.00 GiB (safe maximum 148.35 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:32:09.342Z Trying to rejoin via persisted peer 127.0.0.1:24211 (node 2)...
+2026-10-11T21:32:09.342Z Cannot connect to peer 127.0.0.1:24211
+2026-10-11T21:32:09.342Z Failed to rejoin via 127.0.0.1:24211
+2026-10-11T21:32:09.342Z Trying to rejoin via persisted peer 127.0.0.1:24212 (node 3)...
+2026-10-11T21:32:09.342Z Cannot connect to peer 127.0.0.1:24212
+2026-10-11T21:32:09.342Z Failed to rejoin via 127.0.0.1:24212
+2026-10-11T21:32:09.342Z Trying to rejoin via persisted peer 127.0.0.1:24213 (node 4)...
+2026-10-11T21:32:09.342Z Cannot connect to peer 127.0.0.1:24213
+2026-10-11T21:32:09.342Z Failed to rejoin via 127.0.0.1:24213
+2026-10-11T21:32:09.342Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T21:32:09.342Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T21:32:09.343Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:32:09.345Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:32:09.345Z raft-host: up raft_id=0 n=4 boot=4881106132042260 salt=18290637853024261568 g0=hosted g2=off
+2026-10-11T21:32:09.345Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1 (1 paths, stripe=none), used=65536, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-11T21:32:09.345Z kv-obs: mt_bytes=63142 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:32:10.379Z raft-host: gc-pass ms=14 orphan=3 reap=8 frag=1 spread=0 recover=0 fscans=2 fsegs=0 fkeys=14 femit=2 ftomb=12 scans=12 segs=0 keys=743 emit=157 tomb=586 reap_scan=0 reap_sweep=0 reap_fence=7 reap_done=1
+2026-10-11T21:32:11.343Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=963 passes=2 sampled=1 pending=1,0 reap=2,0 removed=1 file_bytes=65568 payload_bytes=65536 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:32:13.615Z raft-host: applied session index=849 kind=12 shard=1 ino=40961
+2026-10-11T21:32:13.617Z raft-host: applied session index=850 kind=12 shard=1 ino=40961
+2026-10-11T21:32:13.618Z raft-host: applied session index=851 kind=1 shard=0 ino=0
+2026-10-11T21:32:13.623Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=891 p50_us=891 max_us=891 wdisk ops=1 bytes=65536 errors=0 avg_us=832 p50_us=832 max_us=832
+2026-10-11T21:32:13.634Z raft-host: applied session index=865 kind=12 shard=1 ino=49153
+2026-10-11T21:32:13.635Z raft-host: applied session index=867 kind=3 shard=0 ino=0
+2026-10-11T21:32:13.649Z raft-host: applied session index=869 kind=5 shard=1 ino=0
+2026-10-11T21:32:13.667Z raft-host: applied session index=872 kind=12 shard=1 ino=49153
+2026-10-11T21:32:14.345Z kv-obs: mt_bytes=66270 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:32:14.525Z raft-host: gc-pass ms=80 orphan=3 reap=8 frag=1 spread=0 recover=67 fscans=1 fsegs=0 fkeys=9 femit=2 ftomb=7 scans=203 segs=0 keys=186 emit=9 tomb=177 reap_scan=0 reap_sweep=0 reap_fence=7 reap_done=0
+2026-10-11T21:32:14.974Z raft-host: applied session index=902 kind=1 shard=0 ino=0
+2026-10-11T21:32:15.007Z raft-host: applied session index=921 kind=1 shard=0 ino=0
+2026-10-11T21:32:15.024Z raft-host: applied session index=945 kind=1 shard=0 ino=0
+2026-10-11T21:32:15.041Z raft-host: applied session index=972 kind=1 shard=0 ino=0
+2026-10-11T21:32:15.063Z raft-host: applied session index=999 kind=1 shard=0 ino=0
+2026-10-11T21:32:15.088Z raft-host: applied session index=1031 kind=1 shard=0 ino=0
+2026-10-11T21:32:15.116Z raft-host: applied session index=1062 kind=1 shard=0 ino=0
+2026-10-11T21:32:15.145Z raft-host: applied session index=1097 kind=1 shard=0 ino=0
+2026-10-11T21:32:15.177Z raft-host: applied session index=1132 kind=1 shard=0 ino=0
+2026-10-11T21:32:15.212Z raft-host: applied session index=1172 kind=1 shard=0 ino=0
+2026-10-11T21:32:15.244Z raft-host: applied session index=1210 kind=1 shard=0 ino=0
+2026-10-11T21:32:15.279Z raft-host: applied session index=1253 kind=1 shard=0 ino=0
+2026-10-11T21:32:15.315Z raft-host: applied session index=1297 kind=1 shard=0 ino=0
+2026-10-11T21:32:15.356Z raft-host: applied session index=1345 kind=1 shard=0 ino=0
+2026-10-11T21:32:15.395Z raft-host: applied session index=1393 kind=1 shard=0 ino=0
+2026-10-11T21:32:15.435Z raft-host: applied session index=1445 kind=1 shard=0 ino=0
+2026-10-11T21:32:15.478Z raft-host: applied session index=1497 kind=1 shard=0 ino=0
+2026-10-11T21:32:15.543Z raft-host: applied session index=1562 kind=1 shard=0 ino=0
+2026-10-11T21:32:15.575Z raft-host: applied session index=1610 kind=1 shard=0 ino=0
+2026-10-11T21:32:15.610Z raft-host: gc-pass ms=77 orphan=10 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=114 emit=3 tomb=111 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:32:16.284Z storage-engine=files direct_io=off
+2026-10-11T21:32:16.284Z Data GC admission: experimental
+2026-10-11T21:32:16.284Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1/meta/cluster_nodes.bin
+2026-10-11T21:32:16.284Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:32:16.284Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:32:16.284Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:32:16.284Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:32:16.285Z Storage quota: explicit 4.00 GiB (safe maximum 148.35 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:32:16.285Z Trying to rejoin via persisted peer 127.0.0.1:24211 (node 2)...
+2026-10-11T21:32:16.285Z Cannot connect to peer 127.0.0.1:24211
+2026-10-11T21:32:16.285Z Failed to rejoin via 127.0.0.1:24211
+2026-10-11T21:32:16.285Z Trying to rejoin via persisted peer 127.0.0.1:24212 (node 3)...
+2026-10-11T21:32:16.285Z Cannot connect to peer 127.0.0.1:24212
+2026-10-11T21:32:16.285Z Failed to rejoin via 127.0.0.1:24212
+2026-10-11T21:32:16.285Z Trying to rejoin via persisted peer 127.0.0.1:24213 (node 4)...
+2026-10-11T21:32:16.285Z Cannot connect to peer 127.0.0.1:24213
+2026-10-11T21:32:16.285Z Failed to rejoin via 127.0.0.1:24213
+2026-10-11T21:32:16.285Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T21:32:16.285Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T21:32:16.286Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:32:16.289Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:32:16.289Z raft-host: up raft_id=0 n=4 boot=4881106132042261 salt=14862159175419798573 g0=hosted g2=off
+2026-10-11T21:32:16.289Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1 (1 paths, stripe=none), used=2031616, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-11T21:32:16.289Z kv-obs: mt_bytes=90874 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:32:17.720Z raft-host: gc-pass ms=413 orphan=413 reap=0 frag=0 spread=0 recover=0 fscans=1 fsegs=0 fkeys=9 femit=0 ftomb=9 scans=6 segs=0 keys=1016 emit=313 tomb=703 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:32:18.286Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=565 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:32:18.741Z raft-host: gc-pass ms=7 orphan=6 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=4 segs=0 keys=115 emit=2 tomb=113 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:32:20.559Z iostats: get ops=2 bytes=131072 errors=0 avg_us=52 p50_us=81 max_us=81 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:32:20.801Z raft-host: gc-pass ms=35 orphan=5 reap=29 frag=0 spread=0 recover=0 fscans=1 fsegs=0 fkeys=32 femit=23 ftomb=9 scans=19 segs=0 keys=166 emit=46 tomb=120 reap_scan=0 reap_sweep=12 reap_fence=16 reap_done=0
+2026-10-11T21:32:21.160Z storage-engine=files direct_io=off
+2026-10-11T21:32:21.160Z Data GC admission: experimental
+2026-10-11T21:32:21.160Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1/meta/cluster_nodes.bin
+2026-10-11T21:32:21.160Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:32:21.160Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:32:21.160Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:32:21.160Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:32:21.161Z Storage quota: explicit 4.00 GiB (safe maximum 148.35 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:32:21.161Z Trying to rejoin via persisted peer 127.0.0.1:24211 (node 2)...
+2026-10-11T21:32:21.161Z Cannot connect to peer 127.0.0.1:24211
+2026-10-11T21:32:21.161Z Failed to rejoin via 127.0.0.1:24211
+2026-10-11T21:32:21.161Z Trying to rejoin via persisted peer 127.0.0.1:24212 (node 3)...
+2026-10-11T21:32:21.161Z Cannot connect to peer 127.0.0.1:24212
+2026-10-11T21:32:21.161Z Failed to rejoin via 127.0.0.1:24212
+2026-10-11T21:32:21.161Z Trying to rejoin via persisted peer 127.0.0.1:24213 (node 4)...
+2026-10-11T21:32:21.161Z Cannot connect to peer 127.0.0.1:24213
+2026-10-11T21:32:21.161Z Failed to rejoin via 127.0.0.1:24213
+2026-10-11T21:32:21.161Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T21:32:21.161Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T21:32:21.161Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:32:21.165Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:32:21.165Z kv-obs: mt_bytes=91267 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:32:21.165Z raft-host: up raft_id=0 n=4 boot=4881106132042262 salt=471278617582920076 g0=hosted g2=off
+2026-10-11T21:32:21.165Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-11T21:32:22.607Z raft-host: gc-pass ms=423 orphan=405 reap=17 frag=0 spread=0 recover=0 fscans=2 fsegs=0 fkeys=64 femit=22 ftomb=42 scans=21 segs=0 keys=1150 emit=333 tomb=817 reap_scan=0 reap_sweep=14 reap_fence=2 reap_done=0
+2026-10-11T21:32:23.161Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=554 passes=2 sampled=1 pending=11,0 reap=4,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:32:23.469Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:32:23.640Z raft-host: gc-pass ms=18 orphan=7 reap=11 frag=0 spread=0 recover=0 fscans=2 fsegs=0 fkeys=33 femit=12 ftomb=21 scans=20 segs=0 keys=167 emit=17 tomb=150 reap_scan=0 reap_sweep=9 reap_fence=2 reap_done=0
+2026-10-11T21:32:24.672Z raft-host: gc-pass ms=16 orphan=3 reap=12 frag=0 spread=0 recover=0 fscans=2 fsegs=0 fkeys=33 femit=12 ftomb=21 scans=20 segs=0 keys=167 emit=17 tomb=150 reap_scan=0 reap_sweep=10 reap_fence=2 reap_done=0
+2026-10-11T21:32:26.931Z storage-engine=files direct_io=off
+2026-10-11T21:32:26.931Z Data GC admission: experimental
+2026-10-11T21:32:26.931Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1/meta/cluster_nodes.bin
+2026-10-11T21:32:26.931Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:32:26.931Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:32:26.931Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:32:26.931Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:32:26.931Z Storage quota: explicit 4.00 GiB (safe maximum 148.35 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:32:26.932Z Trying to rejoin via persisted peer 127.0.0.1:24211 (node 2)...
+2026-10-11T21:32:26.932Z Cannot connect to peer 127.0.0.1:24211
+2026-10-11T21:32:26.932Z Failed to rejoin via 127.0.0.1:24211
+2026-10-11T21:32:26.932Z Trying to rejoin via persisted peer 127.0.0.1:24212 (node 3)...
+2026-10-11T21:32:26.932Z Cannot connect to peer 127.0.0.1:24212
+2026-10-11T21:32:26.932Z Failed to rejoin via 127.0.0.1:24212
+2026-10-11T21:32:26.932Z Trying to rejoin via persisted peer 127.0.0.1:24213 (node 4)...
+2026-10-11T21:32:26.932Z Cannot connect to peer 127.0.0.1:24213
+2026-10-11T21:32:26.932Z Failed to rejoin via 127.0.0.1:24213
+2026-10-11T21:32:26.932Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T21:32:26.932Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T21:32:26.932Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:32:26.936Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:32:26.936Z raft-host: up raft_id=0 n=4 boot=4881106132042263 salt=2790209525110738803 g0=hosted g2=off
+2026-10-11T21:32:26.936Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-11T21:32:26.936Z kv-obs: mt_bytes=91379 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:32:28.214Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:32:28.932Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=978 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:32:31.202Z raft-host: applied session index=1805 kind=1 shard=0 ino=0
+2026-10-11T21:32:31.836Z storage-engine=files direct_io=off
+2026-10-11T21:32:31.836Z Data GC admission: experimental
+2026-10-11T21:32:31.836Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1/meta/cluster_nodes.bin
+2026-10-11T21:32:31.836Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:32:31.836Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:32:31.836Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:32:31.836Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:32:31.837Z Storage quota: explicit 4.00 GiB (safe maximum 148.35 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:32:31.837Z Trying to rejoin via persisted peer 127.0.0.1:24211 (node 2)...
+2026-10-11T21:32:31.837Z Cannot connect to peer 127.0.0.1:24211
+2026-10-11T21:32:31.837Z Failed to rejoin via 127.0.0.1:24211
+2026-10-11T21:32:31.837Z Trying to rejoin via persisted peer 127.0.0.1:24212 (node 3)...
+2026-10-11T21:32:31.837Z Cannot connect to peer 127.0.0.1:24212
+2026-10-11T21:32:31.837Z Failed to rejoin via 127.0.0.1:24212
+2026-10-11T21:32:31.837Z Trying to rejoin via persisted peer 127.0.0.1:24213 (node 4)...
+2026-10-11T21:32:31.837Z Cannot connect to peer 127.0.0.1:24213
+2026-10-11T21:32:31.837Z Failed to rejoin via 127.0.0.1:24213
+2026-10-11T21:32:31.837Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T21:32:31.837Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T21:32:31.837Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:32:31.841Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:32:31.841Z kv-obs: mt_bytes=91825 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:32:31.841Z raft-host: up raft_id=0 n=4 boot=4881106132042264 salt=8477581803633687592 g0=hosted g2=off
+2026-10-11T21:32:31.841Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-11T21:32:33.837Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=982 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:32:55.468Z storage-engine=files direct_io=off
+2026-10-11T21:32:55.469Z Data GC admission: experimental
+2026-10-11T21:32:55.469Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1/meta/cluster_nodes.bin
+2026-10-11T21:32:55.469Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:32:55.469Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:32:55.469Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:32:55.469Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:32:55.469Z Storage quota: explicit 4.00 GiB (safe maximum 148.35 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:32:55.469Z Trying to rejoin via persisted peer 127.0.0.1:24211 (node 2)...
+2026-10-11T21:32:55.469Z Cannot connect to peer 127.0.0.1:24211
+2026-10-11T21:32:55.469Z Failed to rejoin via 127.0.0.1:24211
+2026-10-11T21:32:55.469Z Trying to rejoin via persisted peer 127.0.0.1:24212 (node 3)...
+2026-10-11T21:32:55.469Z Cannot connect to peer 127.0.0.1:24212
+2026-10-11T21:32:55.469Z Failed to rejoin via 127.0.0.1:24212
+2026-10-11T21:32:55.469Z Trying to rejoin via persisted peer 127.0.0.1:24213 (node 4)...
+2026-10-11T21:32:55.469Z Cannot connect to peer 127.0.0.1:24213
+2026-10-11T21:32:55.469Z Failed to rejoin via 127.0.0.1:24213
+2026-10-11T21:32:55.469Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T21:32:55.469Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T21:32:55.470Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:32:55.473Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:32:55.474Z raft-host: up raft_id=0 n=4 boot=4881106132042265 salt=12418363912217134624 g0=hosted g2=off
+2026-10-11T21:32:55.474Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-11T21:32:55.474Z kv-obs: mt_bytes=92708 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:32:57.470Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=979 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:33:01.471Z heartbeat: node 2 (127.0.0.1:24211) unresponsive — marked down for 30s
+2026-10-11T21:33:01.471Z heartbeat: node 3 (127.0.0.1:24212) unresponsive — marked down for 30s
+2026-10-11T21:33:01.471Z heartbeat: node 4 (127.0.0.1:24213) unresponsive — marked down for 30s
+2026-10-11T21:33:05.722Z raft-host: gc-pass ms=76 orphan=4 reap=3 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=68 femit=4 ftomb=64 scans=200 segs=0 keys=1279 emit=309 tomb=970 reap_scan=0 reap_sweep=0 reap_fence=3 reap_done=0
+2026-10-11T21:33:06.810Z raft-host: gc-pass ms=70 orphan=1 reap=1 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=35 femit=3 ftomb=32 scans=199 segs=0 keys=158 emit=5 tomb=153 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:33:07.083Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=2031 p50_us=2031 max_us=2031 wdisk ops=1 bytes=65536 errors=0 avg_us=1451 p50_us=1451 max_us=1451
+2026-10-11T21:33:07.900Z raft-host: gc-pass ms=73 orphan=4 reap=1 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=35 femit=3 ftomb=32 scans=199 segs=0 keys=158 emit=5 tomb=153 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:33:08.989Z raft-host: gc-pass ms=71 orphan=2 reap=0 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=35 femit=3 ftomb=32 scans=199 segs=0 keys=159 emit=5 tomb=154 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:33:10.077Z raft-host: gc-pass ms=72 orphan=3 reap=1 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=35 femit=3 ftomb=32 scans=199 segs=0 keys=158 emit=5 tomb=153 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:33:10.479Z kv-obs: mt_bytes=93040 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:33:29.880Z storage-engine=files direct_io=off
+2026-10-11T21:33:29.880Z Data GC admission: experimental
+2026-10-11T21:33:29.880Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1/meta/cluster_nodes.bin
+2026-10-11T21:33:29.880Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:33:29.880Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:33:29.880Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:33:29.880Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:33:29.880Z Storage quota: explicit 4.00 GiB (safe maximum 148.35 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:33:29.880Z Trying to rejoin via persisted peer 127.0.0.1:24211 (node 2)...
+2026-10-11T21:33:29.880Z Cannot connect to peer 127.0.0.1:24211
+2026-10-11T21:33:29.880Z Failed to rejoin via 127.0.0.1:24211
+2026-10-11T21:33:29.880Z Trying to rejoin via persisted peer 127.0.0.1:24212 (node 3)...
+2026-10-11T21:33:29.880Z Cannot connect to peer 127.0.0.1:24212
+2026-10-11T21:33:29.880Z Failed to rejoin via 127.0.0.1:24212
+2026-10-11T21:33:29.880Z Trying to rejoin via persisted peer 127.0.0.1:24213 (node 4)...
+2026-10-11T21:33:29.880Z Cannot connect to peer 127.0.0.1:24213
+2026-10-11T21:33:29.880Z Failed to rejoin via 127.0.0.1:24213
+2026-10-11T21:33:29.880Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T21:33:29.880Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T21:33:29.881Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:33:29.885Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:33:29.885Z raft-host: up raft_id=0 n=4 boot=4881106132042266 salt=8788586515500579550 g0=hosted g2=off
+2026-10-11T21:33:29.885Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1 (1 paths, stripe=none), used=65536, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-11T21:33:29.885Z kv-obs: mt_bytes=93513 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:33:31.882Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=978 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:33:35.883Z heartbeat: node 2 (127.0.0.1:24211) unresponsive — marked down for 30s
+2026-10-11T21:33:35.883Z heartbeat: node 3 (127.0.0.1:24212) unresponsive — marked down for 30s
+2026-10-11T21:33:35.883Z heartbeat: node 4 (127.0.0.1:24213) unresponsive — marked down for 30s
+2026-10-11T21:33:40.160Z raft-host: gc-pass ms=73 orphan=4 reap=1 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=68 femit=4 ftomb=64 scans=200 segs=0 keys=1288 emit=312 tomb=976 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:33:41.249Z raft-host: gc-pass ms=72 orphan=4 reap=0 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=35 femit=3 ftomb=32 scans=199 segs=0 keys=159 emit=5 tomb=154 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:33:41.494Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=2447 p50_us=2447 max_us=2447 wdisk ops=1 bytes=65536 errors=0 avg_us=2135 p50_us=2135 max_us=2135
+2026-10-11T21:33:42.335Z raft-host: gc-pass ms=72 orphan=3 reap=1 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=35 femit=3 ftomb=32 scans=199 segs=0 keys=159 emit=5 tomb=154 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:33:43.419Z raft-host: gc-pass ms=72 orphan=3 reap=1 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=35 femit=3 ftomb=32 scans=199 segs=0 keys=160 emit=5 tomb=155 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:33:44.509Z raft-host: gc-pass ms=71 orphan=3 reap=0 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=35 femit=3 ftomb=32 scans=199 segs=0 keys=159 emit=5 tomb=154 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:33:44.892Z kv-obs: mt_bytes=93953 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:33:45.271Z storage-engine=files direct_io=off
+2026-10-11T21:33:45.271Z Data GC admission: experimental
+2026-10-11T21:33:45.271Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1/meta/cluster_nodes.bin
+2026-10-11T21:33:45.271Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:33:45.271Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:33:45.271Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:33:45.271Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:33:45.271Z Storage quota: explicit 4.00 GiB (safe maximum 148.35 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:33:45.271Z Trying to rejoin via persisted peer 127.0.0.1:24211 (node 2)...
+2026-10-11T21:33:45.271Z Cannot connect to peer 127.0.0.1:24211
+2026-10-11T21:33:45.271Z Failed to rejoin via 127.0.0.1:24211
+2026-10-11T21:33:45.271Z Trying to rejoin via persisted peer 127.0.0.1:24212 (node 3)...
+2026-10-11T21:33:45.271Z Cannot connect to peer 127.0.0.1:24212
+2026-10-11T21:33:45.271Z Failed to rejoin via 127.0.0.1:24212
+2026-10-11T21:33:45.271Z Trying to rejoin via persisted peer 127.0.0.1:24213 (node 4)...
+2026-10-11T21:33:45.271Z Cannot connect to peer 127.0.0.1:24213
+2026-10-11T21:33:45.271Z Failed to rejoin via 127.0.0.1:24213
+2026-10-11T21:33:45.271Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T21:33:45.271Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T21:33:45.272Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:33:45.276Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:33:45.276Z raft-host: up raft_id=0 n=4 boot=4881106132042267 salt=3777443487846547121 g0=hosted g2=off
+2026-10-11T21:33:45.276Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1 (1 paths, stripe=none), used=131072, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-11T21:33:45.276Z kv-obs: mt_bytes=93953 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:33:46.304Z raft-host: gc-pass ms=10 orphan=2 reap=7 frag=0 spread=0 recover=0 fscans=2 fsegs=0 fkeys=68 femit=4 ftomb=64 scans=10 segs=0 keys=1179 emit=313 tomb=866 reap_scan=0 reap_sweep=0 reap_fence=5 reap_done=0
+2026-10-11T21:33:47.272Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=968 passes=2 sampled=1 pending=0,0 reap=1,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:33:49.548Z raft-host: applied session index=1891 kind=1 shard=0 ino=0
+2026-10-11T21:33:49.551Z iostats: get ops=1 bytes=65536 errors=0 avg_us=62 p50_us=62 max_us=62 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:33:50.276Z kv-obs: mt_bytes=96027 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:33:50.439Z raft-host: gc-pass ms=76 orphan=1 reap=6 frag=0 spread=0 recover=67 fscans=1 fsegs=0 fkeys=36 femit=2 ftomb=34 scans=203 segs=0 keys=278 emit=9 tomb=269 reap_scan=0 reap_sweep=0 reap_fence=5 reap_done=0
+2026-10-11T21:33:51.562Z raft-host: gc-pass ms=108 orphan=2 reap=35 frag=2 spread=0 recover=67 fscans=1 fsegs=0 fkeys=37 femit=36 ftomb=1 scans=231 segs=0 keys=200 emit=74 tomb=126 reap_scan=0 reap_sweep=28 reap_fence=6 reap_done=0
+2026-10-11T21:33:52.667Z raft-host: gc-pass ms=95 orphan=4 reap=4 frag=18 spread=0 recover=67 fscans=1 fsegs=0 fkeys=23 femit=22 ftomb=1 scans=200 segs=0 keys=155 emit=27 tomb=128 reap_scan=0 reap_sweep=0 reap_fence=3 reap_done=0
+2026-10-11T21:33:53.754Z raft-host: gc-pass ms=75 orphan=2 reap=3 frag=1 spread=0 recover=67 fscans=1 fsegs=0 fkeys=3 femit=2 ftomb=1 scans=200 segs=0 keys=138 emit=5 tomb=133 reap_scan=0 reap_sweep=0 reap_fence=2 reap_done=0
+2026-10-11T21:33:54.556Z iostats: get ops=144 bytes=9437184 errors=0 avg_us=43 p50_us=39 max_us=152 put ops=109 bytes=7143424 errors=0 avg_us=2010 p50_us=1769 max_us=4652 wdisk ops=109 bytes=7143424 errors=0 avg_us=1949 p50_us=1714 max_us=4608
+2026-10-11T21:33:54.843Z raft-host: gc-pass ms=75 orphan=3 reap=3 frag=0 spread=0 recover=67 fscans=1 fsegs=0 fkeys=3 femit=2 ftomb=1 scans=200 segs=0 keys=139 emit=5 tomb=134 reap_scan=0 reap_sweep=0 reap_fence=2 reap_done=0
+2026-10-11T21:33:55.276Z kv-obs: mt_bytes=126598 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:33:55.935Z raft-host: gc-pass ms=75 orphan=2 reap=4 frag=0 spread=0 recover=67 fscans=1 fsegs=0 fkeys=3 femit=2 ftomb=1 scans=200 segs=0 keys=141 emit=5 tomb=136 reap_scan=0 reap_sweep=0 reap_fence=3 reap_done=0
+2026-10-11T21:33:57.028Z raft-host: gc-pass ms=76 orphan=3 reap=5 frag=0 spread=0 recover=67 fscans=1 fsegs=0 fkeys=3 femit=2 ftomb=1 scans=200 segs=0 keys=170 emit=5 tomb=165 reap_scan=0 reap_sweep=0 reap_fence=4 reap_done=0
+2026-10-11T21:33:58.118Z raft-host: gc-pass ms=78 orphan=3 reap=6 frag=1 spread=0 recover=67 fscans=1 fsegs=0 fkeys=3 femit=2 ftomb=1 scans=200 segs=0 keys=145 emit=5 tomb=140 reap_scan=0 reap_sweep=1 reap_fence=4 reap_done=0
+2026-10-11T21:33:59.216Z raft-host: gc-pass ms=83 orphan=6 reap=8 frag=1 spread=0 recover=67 fscans=1 fsegs=0 fkeys=3 femit=2 ftomb=1 scans=200 segs=0 keys=150 emit=5 tomb=145 reap_scan=0 reap_sweep=4 reap_fence=3 reap_done=0
+2026-10-11T21:33:59.559Z iostats: get ops=144 bytes=9437184 errors=0 avg_us=43 p50_us=39 max_us=152 put ops=109 bytes=7143424 errors=0 avg_us=2010 p50_us=1769 max_us=4652 wdisk ops=109 bytes=7143424 errors=0 avg_us=1949 p50_us=1714 max_us=4608
+2026-10-11T21:34:00.276Z kv-obs: mt_bytes=128910 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:34:00.306Z raft-host: gc-pass ms=76 orphan=3 reap=5 frag=1 spread=0 recover=67 fscans=1 fsegs=0 fkeys=3 femit=2 ftomb=1 scans=200 segs=0 keys=149 emit=5 tomb=144 reap_scan=0 reap_sweep=0 reap_fence=3 reap_done=0
+2026-10-11T21:34:01.397Z raft-host: gc-pass ms=75 orphan=2 reap=4 frag=1 spread=0 recover=67 fscans=1 fsegs=0 fkeys=3 femit=2 ftomb=1 scans=200 segs=0 keys=151 emit=5 tomb=146 reap_scan=0 reap_sweep=0 reap_fence=3 reap_done=0
+2026-10-11T21:34:02.486Z raft-host: gc-pass ms=76 orphan=3 reap=5 frag=1 spread=0 recover=67 fscans=1 fsegs=0 fkeys=3 femit=2 ftomb=1 scans=200 segs=0 keys=153 emit=5 tomb=148 reap_scan=0 reap_sweep=0 reap_fence=3 reap_done=0
+2026-10-11T21:34:03.280Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=794 passes=17 sampled=1 pending=62,0 reap=1,0 removed=59 file_bytes=3868512 payload_bytes=3866624 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:34:03.578Z raft-host: gc-pass ms=76 orphan=3 reap=5 frag=0 spread=0 recover=67 fscans=1 fsegs=0 fkeys=3 femit=2 ftomb=1 scans=200 segs=0 keys=156 emit=5 tomb=151 reap_scan=0 reap_sweep=0 reap_fence=3 reap_done=0
+2026-10-11T21:34:04.560Z iostats: get ops=144 bytes=9437184 errors=0 avg_us=43 p50_us=39 max_us=152 put ops=115 bytes=7536640 errors=0 avg_us=1954 p50_us=1769 max_us=4652 wdisk ops=115 bytes=7536640 errors=0 avg_us=1893 p50_us=1714 max_us=4608
+2026-10-11T21:34:04.666Z raft-host: gc-pass ms=75 orphan=2 reap=4 frag=0 spread=0 recover=67 fscans=1 fsegs=0 fkeys=3 femit=2 ftomb=1 scans=200 segs=0 keys=158 emit=5 tomb=153 reap_scan=0 reap_sweep=0 reap_fence=3 reap_done=0
+2026-10-11T21:34:05.280Z kv-obs: mt_bytes=144928 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:34:05.783Z raft-host: gc-pass ms=106 orphan=3 reap=32 frag=2 spread=0 recover=67 fscans=1 fsegs=0 fkeys=38 femit=37 ftomb=1 scans=231 segs=0 keys=230 emit=76 tomb=154 reap_scan=0 reap_sweep=27 reap_fence=4 reap_done=0
+2026-10-11T21:34:06.909Z raft-host: gc-pass ms=112 orphan=2 reap=33 frag=9 spread=0 recover=67 fscans=1 fsegs=0 fkeys=37 femit=36 ftomb=1 scans=229 segs=0 keys=231 emit=74 tomb=157 reap_scan=0 reap_sweep=28 reap_fence=4 reap_done=0
+2026-10-11T21:34:08.022Z raft-host: gc-pass ms=100 orphan=0 reap=32 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=190 femit=37 ftomb=153 scans=230 segs=0 keys=384 emit=38 tomb=346 reap_scan=0 reap_sweep=32 reap_fence=0 reap_done=0
+2026-10-11T21:34:09.138Z raft-host: gc-pass ms=98 orphan=0 reap=31 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=190 femit=37 ftomb=153 scans=230 segs=0 keys=385 emit=38 tomb=347 reap_scan=0 reap_sweep=30 reap_fence=0 reap_done=0
+2026-10-11T21:34:09.180Z storage-engine=files direct_io=off
+2026-10-11T21:34:09.180Z Data GC admission: experimental
+2026-10-11T21:34:09.180Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1/meta/cluster_nodes.bin
+2026-10-11T21:34:09.180Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:34:09.180Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:34:09.180Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:34:09.180Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:34:09.181Z Storage quota: explicit 4.00 GiB (safe maximum 148.34 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:34:09.181Z Trying to rejoin via persisted peer 127.0.0.1:24211 (node 2)...
+2026-10-11T21:34:09.181Z Cannot connect to peer 127.0.0.1:24211
+2026-10-11T21:34:09.181Z Failed to rejoin via 127.0.0.1:24211
+2026-10-11T21:34:09.181Z Trying to rejoin via persisted peer 127.0.0.1:24212 (node 3)...
+2026-10-11T21:34:09.181Z Cannot connect to peer 127.0.0.1:24212
+2026-10-11T21:34:09.181Z Failed to rejoin via 127.0.0.1:24212
+2026-10-11T21:34:09.181Z Trying to rejoin via persisted peer 127.0.0.1:24213 (node 4)...
+2026-10-11T21:34:09.181Z Cannot connect to peer 127.0.0.1:24213
+2026-10-11T21:34:09.181Z Failed to rejoin via 127.0.0.1:24213
+2026-10-11T21:34:09.181Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T21:34:09.181Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T21:34:09.182Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:34:09.186Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:34:09.186Z kv-obs: mt_bytes=152626 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:34:09.186Z raft-host: up raft_id=0 n=4 boot=4881106132042268 salt=1664022926095971351 g0=hosted g2=off
+2026-10-11T21:34:09.186Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1 (1 paths, stripe=none), used=7143424, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-11T21:34:10.459Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:34:10.475Z raft-host: gc-pass ms=269 orphan=0 reap=269 frag=0 spread=0 recover=0 fscans=2 fsegs=0 fkeys=378 femit=72 ftomb=306 scans=39 segs=0 keys=2207 emit=561 tomb=1646 reap_scan=0 reap_sweep=266 reap_fence=2 reap_done=0
+2026-10-11T21:34:11.182Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=706 passes=2 sampled=1 pending=0,0 reap=1,0 removed=55 file_bytes=3606240 payload_bytes=3604480 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:34:11.521Z raft-host: gc-pass ms=31 orphan=0 reap=31 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=36 segs=0 keys=194 emit=1 tomb=193 reap_scan=0 reap_sweep=31 reap_fence=0 reap_done=0
+2026-10-11T21:34:12.557Z raft-host: gc-pass ms=29 orphan=0 reap=29 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=36 segs=0 keys=194 emit=1 tomb=193 reap_scan=0 reap_sweep=28 reap_fence=0 reap_done=0
+2026-10-11T21:34:13.600Z raft-host: gc-pass ms=30 orphan=0 reap=30 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=36 segs=0 keys=194 emit=1 tomb=193 reap_scan=0 reap_sweep=30 reap_fence=0 reap_done=0
+2026-10-11T21:34:14.188Z kv-obs: mt_bytes=148594 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:34:14.710Z raft-host: gc-pass ms=97 orphan=0 reap=30 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=228 segs=0 keys=320 emit=1 tomb=319 reap_scan=0 reap_sweep=29 reap_fence=0 reap_done=0
+2026-10-11T21:34:15.461Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:34:15.824Z raft-host: gc-pass ms=99 orphan=0 reap=31 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=228 segs=0 keys=194 emit=1 tomb=193 reap_scan=0 reap_sweep=29 reap_fence=2 reap_done=0
+2026-10-11T21:34:16.933Z raft-host: gc-pass ms=96 orphan=0 reap=29 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=228 segs=0 keys=194 emit=1 tomb=193 reap_scan=0 reap_sweep=29 reap_fence=0 reap_done=0
+2026-10-11T21:34:18.044Z raft-host: gc-pass ms=99 orphan=0 reap=31 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=228 segs=0 keys=195 emit=1 tomb=194 reap_scan=0 reap_sweep=31 reap_fence=0 reap_done=0
+2026-10-11T21:34:19.154Z raft-host: gc-pass ms=97 orphan=0 reap=29 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=228 segs=0 keys=194 emit=1 tomb=193 reap_scan=0 reap_sweep=29 reap_fence=0 reap_done=0
+2026-10-11T21:34:20.266Z raft-host: gc-pass ms=101 orphan=0 reap=31 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=230 segs=0 keys=194 emit=1 tomb=193 reap_scan=0 reap_sweep=29 reap_fence=1 reap_done=0
+2026-10-11T21:34:20.461Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:34:21.365Z raft-host: gc-pass ms=78 orphan=0 reap=0 frag=0 spread=0 recover=78 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=185 emit=0 tomb=185 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:34:21.731Z raft-host: applied session index=2700 kind=1 shard=0 ino=0
+2026-10-11T21:34:22.463Z raft-host: gc-pass ms=79 orphan=5 reap=5 frag=1 spread=0 recover=67 fscans=1 fsegs=0 fkeys=190 femit=9 ftomb=181 scans=200 segs=0 keys=350 emit=13 tomb=337 reap_scan=0 reap_sweep=0 reap_fence=4 reap_done=0
+2026-10-11T21:34:22.534Z raft-host: applied session index=2715 kind=1 shard=0 ino=0
+2026-10-11T21:34:23.583Z raft-host: gc-pass ms=106 orphan=3 reap=32 frag=2 spread=0 recover=67 fscans=1 fsegs=0 fkeys=134 femit=36 ftomb=98 scans=229 segs=0 keys=334 emit=74 tomb=260 reap_scan=0 reap_sweep=28 reap_fence=4 reap_done=0
+2026-10-11T21:34:24.192Z kv-obs: mt_bytes=161083 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:34:24.690Z raft-host: gc-pass ms=97 orphan=0 reap=29 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=227 femit=18 ftomb=209 scans=230 segs=0 keys=424 emit=19 tomb=405 reap_scan=0 reap_sweep=29 reap_fence=0 reap_done=0
+2026-10-11T21:34:25.464Z iostats: get ops=65 bytes=4259840 errors=0 avg_us=44 p50_us=40 max_us=179 put ops=54 bytes=3538944 errors=0 avg_us=1921 p50_us=1717 max_us=4500 wdisk ops=54 bytes=3538944 errors=0 avg_us=1851 p50_us=1656 max_us=4435
+2026-10-11T21:34:25.796Z raft-host: gc-pass ms=94 orphan=0 reap=26 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=228 femit=19 ftomb=209 scans=230 segs=0 keys=425 emit=20 tomb=405 reap_scan=0 reap_sweep=26 reap_fence=0 reap_done=0
+2026-10-11T21:34:25.921Z storage-engine=files direct_io=off
+2026-10-11T21:34:25.921Z Data GC admission: experimental
+2026-10-11T21:34:25.921Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1/meta/cluster_nodes.bin
+2026-10-11T21:34:25.921Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:34:25.921Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:34:25.921Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:34:25.921Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:34:25.921Z Storage quota: explicit 4.00 GiB (safe maximum 148.34 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:34:25.921Z Trying to rejoin via persisted peer 127.0.0.1:24211 (node 2)...
+2026-10-11T21:34:25.921Z Cannot connect to peer 127.0.0.1:24211
+2026-10-11T21:34:25.921Z Failed to rejoin via 127.0.0.1:24211
+2026-10-11T21:34:25.921Z Trying to rejoin via persisted peer 127.0.0.1:24212 (node 3)...
+2026-10-11T21:34:25.921Z Cannot connect to peer 127.0.0.1:24212
+2026-10-11T21:34:25.921Z Failed to rejoin via 127.0.0.1:24212
+2026-10-11T21:34:25.921Z Trying to rejoin via persisted peer 127.0.0.1:24213 (node 4)...
+2026-10-11T21:34:25.921Z Cannot connect to peer 127.0.0.1:24213
+2026-10-11T21:34:25.921Z Failed to rejoin via 127.0.0.1:24213
+2026-10-11T21:34:25.921Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T21:34:25.921Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T21:34:25.922Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:34:25.927Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:34:25.927Z kv-obs: mt_bytes=161083 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:34:25.927Z raft-host: up raft_id=0 n=4 boot=4881106132042269 salt=15843078630982696332 g0=hosted g2=off
+2026-10-11T21:34:25.927Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1 (1 paths, stripe=none), used=3538944, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-11T21:34:27.127Z raft-host: gc-pass ms=185 orphan=0 reap=185 frag=0 spread=0 recover=0 fscans=2 fsegs=0 fkeys=452 femit=36 ftomb=416 scans=39 segs=0 keys=2434 emit=539 tomb=1895 reap_scan=0 reap_sweep=184 reap_fence=0 reap_done=0
+2026-10-11T21:34:27.922Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=794 passes=2 sampled=1 pending=18,0 reap=1,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:34:28.176Z raft-host: gc-pass ms=31 orphan=0 reap=31 frag=0 spread=0 recover=0 fscans=2 fsegs=0 fkeys=228 femit=19 ftomb=209 scans=38 segs=0 keys=425 emit=20 tomb=405 reap_scan=0 reap_sweep=31 reap_fence=0 reap_done=0
+2026-10-11T21:34:29.225Z raft-host: gc-pass ms=30 orphan=0 reap=30 frag=0 spread=0 recover=0 fscans=2 fsegs=0 fkeys=228 femit=19 ftomb=209 scans=38 segs=0 keys=425 emit=20 tomb=405 reap_scan=0 reap_sweep=30 reap_fence=0 reap_done=0
+2026-10-11T21:34:30.269Z raft-host: gc-pass ms=30 orphan=0 reap=29 frag=0 spread=0 recover=0 fscans=2 fsegs=0 fkeys=228 femit=19 ftomb=209 scans=38 segs=0 keys=425 emit=20 tomb=405 reap_scan=0 reap_sweep=29 reap_fence=0 reap_done=0
+2026-10-11T21:34:31.385Z raft-host: gc-pass ms=97 orphan=0 reap=30 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=228 femit=19 ftomb=209 scans=230 segs=0 keys=551 emit=20 tomb=531 reap_scan=0 reap_sweep=29 reap_fence=0 reap_done=0
+2026-10-11T21:34:32.496Z raft-host: gc-pass ms=98 orphan=0 reap=30 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=228 femit=19 ftomb=209 scans=230 segs=0 keys=425 emit=20 tomb=405 reap_scan=0 reap_sweep=30 reap_fence=0 reap_done=0
+2026-10-11T21:34:33.607Z raft-host: gc-pass ms=97 orphan=0 reap=30 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=228 femit=19 ftomb=209 scans=230 segs=0 keys=425 emit=20 tomb=405 reap_scan=0 reap_sweep=29 reap_fence=0 reap_done=0
+2026-10-11T21:34:34.718Z raft-host: gc-pass ms=100 orphan=0 reap=32 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=228 femit=19 ftomb=209 scans=230 segs=0 keys=426 emit=20 tomb=406 reap_scan=0 reap_sweep=32 reap_fence=0 reap_done=0
+2026-10-11T21:34:35.831Z raft-host: gc-pass ms=100 orphan=0 reap=33 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=228 femit=19 ftomb=209 scans=230 segs=0 keys=425 emit=20 tomb=405 reap_scan=0 reap_sweep=32 reap_fence=0 reap_done=0
+2026-10-11T21:34:36.948Z raft-host: gc-pass ms=103 orphan=0 reap=34 frag=1 spread=0 recover=67 fscans=2 fsegs=0 fkeys=228 femit=19 ftomb=209 scans=232 segs=0 keys=425 emit=20 tomb=405 reap_scan=0 reap_sweep=29 reap_fence=3 reap_done=0
+2026-10-11T21:34:38.041Z raft-host: gc-pass ms=71 orphan=0 reap=0 frag=0 spread=0 recover=71 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=188 emit=0 tomb=188 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:34:39.169Z raft-host: gc-pass ms=108 orphan=0 reap=39 frag=2 spread=0 recover=67 fscans=1 fsegs=0 fkeys=262 femit=36 ftomb=226 scans=231 segs=0 keys=460 emit=73 tomb=387 reap_scan=0 reap_sweep=32 reap_fence=6 reap_done=0
+2026-10-11T21:34:39.946Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:34:40.248Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=165 emit=0 tomb=165 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:34:40.608Z storage-engine=files direct_io=off
+2026-10-11T21:34:40.608Z Data GC admission: experimental
+2026-10-11T21:34:40.608Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1/meta/cluster_nodes.bin
+2026-10-11T21:34:40.608Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:34:40.608Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:34:40.608Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:34:40.608Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:34:40.608Z Storage quota: explicit 4.00 GiB (safe maximum 148.35 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:34:40.608Z Trying to rejoin via persisted peer 127.0.0.1:24211 (node 2)...
+2026-10-11T21:34:40.608Z Cannot connect to peer 127.0.0.1:24211
+2026-10-11T21:34:40.608Z Failed to rejoin via 127.0.0.1:24211
+2026-10-11T21:34:40.608Z Trying to rejoin via persisted peer 127.0.0.1:24212 (node 3)...
+2026-10-11T21:34:40.608Z Cannot connect to peer 127.0.0.1:24212
+2026-10-11T21:34:40.608Z Failed to rejoin via 127.0.0.1:24212
+2026-10-11T21:34:40.608Z Trying to rejoin via persisted peer 127.0.0.1:24213 (node 4)...
+2026-10-11T21:34:40.608Z Cannot connect to peer 127.0.0.1:24213
+2026-10-11T21:34:40.608Z Failed to rejoin via 127.0.0.1:24213
+2026-10-11T21:34:40.608Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T21:34:40.608Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T21:34:40.609Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:34:40.614Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:34:40.614Z raft-host: up raft_id=0 n=4 boot=4881106132042270 salt=11945205670849148419 g0=hosted g2=off
+2026-10-11T21:34:40.614Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/n1 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-11T21:34:40.614Z kv-obs: mt_bytes=155247 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:34:42.609Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=976 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:34:44.628Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=0 errors=1 avg_us=364 p50_us=364 max_us=364 wdisk ops=1 bytes=65536 errors=1 avg_us=201 p50_us=201 max_us=201

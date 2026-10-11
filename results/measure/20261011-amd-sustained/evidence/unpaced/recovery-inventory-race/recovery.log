@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/data1/efs/amd-sustained-recover-20261011.py", line 26, in <module>
+    row['nodes'].append({'status':result.stdout+result.stderr,'status_rc':result.returncode,'files':len(inventory),'allocated_bytes':sum(f.stat().st_blocks*512 for f in inventory)})
+                                                                                                                                     ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data1/efs/amd-sustained-recover-20261011.py", line 26, in <genexpr>
+    row['nodes'].append({'status':result.stdout+result.stderr,'status_rc':result.returncode,'files':len(inventory),'allocated_bytes':sum(f.stat().st_blocks*512 for f in inventory)})
+                                                                                                                                         ~~~~~~^^
+  File "/usr/lib/python3.14/pathlib/__init__.py", line 655, in stat
+    return os.stat(self, follow_symlinks=follow_symlinks)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/data1/efs/amd-sustained-20261011/gc-direct-nrd2llep/n1/data/exports/1/0000/0000/0000/0000/4982/0/73.1.378588763608149116'

@@ -1,0 +1,51 @@
+Evidence directory: /data1/efs/amd-integration-20261011/live/gc-direct-3pxq2jnl
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=243988133905479002
+client serving PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 357940 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+live CREATE ambiguous/BUSY retry cold deletion drained PASS
+actual FUSE CREATE lost committed reply, BUSY replay, same opid/inode and cold bytes PASS
+combined reply-loss descriptor cleanup releases original inode PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 358459 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+combined reply-loss name reuse cold bytes reclaimed PASS
+actual FUSE combined reply-loss: failed descriptor cleanup, name reuse and cold bytes PASS
+combined negative descriptor cleanup releases original inode PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 359035 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+combined negative name reuse cold bytes reclaimed PASS
+actual FUSE combined negative: failed descriptor cleanup, name reuse and cold bytes PASS
+create-negative-replay: /data1/efs/devel-amd-merged-20261011/tests/live/create_negative_replay.c:51: main: Assertion `call(EFS_MSG_INODE_CREATE, &create, sizeof(create), 1).status == EFS_INODE_RPC_OK' failed.
+Traceback (most recent call last):
+  File "/data1/efs/devel-amd-merged-20261011/tests/live/gc_reclamation.py", line 594, in <module>
+    run([helper,a.port,'prepare'],timeout=60)
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data1/efs/devel-amd-merged-20261011/tests/live/gc_reclamation.py", line 217, in run
+    return subprocess.run([str(x) for x in args], check=True, timeout=kwargs.pop("timeout",60), env=kwargs.pop("env",env), **kwargs)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/data1/efs/amd-integration-20261011/live/gc-direct-3pxq2jnl/create-negative-replay', '24190', 'prepare']' died with <Signals.SIGABRT: 6>.

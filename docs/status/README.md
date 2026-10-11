@@ -1,8 +1,37 @@
 # Project status — current work and index
 
+Production tiny-file packing is the first ORCD priority on `devel-orcd`: see
+[W95/P4.1 plan and allocation baseline](orcd-tiny-packing-20261011.md). The
+408× calculation is for 512-byte payloads in separate full-sized fragments;
+production packing and measured savings remain open.
+[W108 owner-name rendering](w108-owner-name-display-20261011.md) is retained
+in the ORCD queue after the packing priority.
+
 [Architecture](../how-it-works/architecture.md) · [Current handoff](in-flight.md) ·
 [Decisions](decisions.md) · [Work-item details](../backlog/work-items.md) ·
 [Operations](../operations/operations.md) · [Archive](../archive/README.md)
+
+## NUC integration session — October 11
+
+[Current two-hour integration and repair ledger](devel-nuc-integration-20261011.md)
+records the captured all-branch merge, W72 fresh-mount admission fixes, a bounded
+W52 prepare-pipeline experiment and their retained failures. Corrected full
+native/direct/buffered suites and matched append controls are in progress.
+
+## NUC closure session — October 10–11
+
+[Current NUC acceptance](devel-nuc-closure-20261010.md) closes W70, W78, W79
+and W80 for their named operator-correctness scopes, plus W96's isolated
+allocation and software recovery acceptance. Full native, actual stale
+PID startup/stop, both mkfs aliases' consumed-reply recovery and explicit
+retired-query outcomes pass. W96's sixteen drive comparisons, exact retained
+replay, ASan/UBSan and Valgrind pass. Both full live modes pass POSIX214/214,
+peer66/66, cold/fault/GC and actual follower WAL-fsync refusal recovery.
+W111's clean allocation, separate XFS profiles and written-ring controls all
+finish: NVMe latency rises even on written extents; W111 remains open. The
+three-hour session restores four regular daemons and both mounts, verifies
+installed/live hashes and16 existing payload samples. New-binary installation
+remains approval-blocked; the original installed build is retained.
 
 ## Governing node-count contract — D36
 
@@ -36,17 +65,43 @@ unimplemented; unavailable/refusal tests are not lifecycle acceptance.
 
 ## Tiny-file performance follow-up
 
-[W97 matched three-node SSD tests](w97-three-drive-20261010.md): NVMe
+**W94 CREATE/adoption closed Oct 11**, by the user's explicit scope decision:
+[accepted lifecycle, fault and performance evidence](amd-feedback-integration-20261011.md#w94--createadoption-closed-by-user-scoped-decision).
+Broader flush/PUT-ticket integration remains W72/W86/W88; no activation is implied.
+
+[AMD W94/W97 lifecycle and replication-feedback acceptance](amd-feedback-integration-20261011.md)
+records passed actual Linux async and two-mode full lifecycle/POSIX/fault/cold
+gates with feedback on; pressure/recovery and repeated comparisons are running.
+Slow-lane control/read-probe starvation is reproduced and repaired (`4ff779d0`);
+actual CREATE-owner allocation, deterministic adoption/competing-OPEN and
+slow-follower barrier regressions pass. Corrected full native/fault and direct
+live lifecycle gates pass; buffered and subsequent fault/pressure acceptance
+are pending. Normal stores and the completed
+AMD admission closure are retained.
+
+**Scope split — Oct 11:** [W111](w111-nuc-persistence-investigation-20261011.md)
+now owns the NUC durable-write slowdown investigation. **AMD unpaced
+overload/admission is closed** ([accepted deployment](amd-overload-admission-20261011.md));
+its closure is independent of W111.
+
+| Work item / scope | State | Evidence |
+|---|---|---|
+| W97 AMD data-GC overload/admission | Closed: direct/buffered unpaced, cold recovery, physical drain and deployed service audit pass | [Closure](amd-overload-admission-20261011.md) |
+| W97 replication-inbox feedback | Open: sustained receiver-feedback/queue/catch-up acceptance | [W97](../backlog/work-items.md#w97) |
+| W111 NUC persistence latency | Open: isolate filesystem, block queue and device/cache effects | [W111](../backlog/work-items.md#w111) · [Status](w111-nuc-persistence-investigation-20261011.md) |
+
+
+[W111 matched three-node SSD tests](w97-three-drive-20261010.md): NVMe
 31.83→10.80 files/s with Raft sync 2.465→6.993 ms; SATA 562.73→299.40 with
 0.150→0.319 ms. Both slow, at very different absolute latency; no reported NVMe
 thermal event during recorded slow phase. Cache/ceiling remains unproved.
 128 private cold payload checks pass and normal four-node service restores.
 
 
-[W97 latest merged NUC observation](w97-latest-nvme-20261010.md) deploys
+[W111 latest merged NUC observation](w97-latest-nvme-20261010.md) deploys
 `6b8f05acb484`: first-minute 152/159 files/s falls to 53/48 before/after a
 10-minute creation pause, with higher NVMe flush latency. Rest restores only
-a brief burst. Cache/thermal cause remains unproved; W97 stays open. Full
+a brief burst. Cache/thermal cause remains unproved; W111 stays open. Full
 repeat gates pass with the earlier append timeout retained, and normal defaults
 plus both cold mounts are restored.
 
@@ -60,7 +115,7 @@ in the larger matched read check. Both NUC mounts are restored on the repaired
 build with default settings. Tested tuning remains opt-in; W53/W94/W97 remain separate.
 
 
-[Oct 10 W93 checkpoint cadence](w93-checkpoint-cadence-20261010.md) records
+[Oct 10 W93 checkpoint cadence](../archive/status-20261011/w93-checkpoint-cadence-20261010.md) records
 all-branch integration, failed-marker immediate retry, bounded checkpoint
 coalescing, original/repeated NUC functional gates and private retained-marker
 crash replay. The 10 ms default remains; performance and remaining recovery
@@ -69,8 +124,8 @@ acceptance are recorded separately from implementation.
 
 [W93–W96: NUC profiling evidence and next experiments](tiny-file-performance-plan-20261008.md)
 register broader Raft group commit, atomic CREATE/open lease, tiny-file data
-persistence/packing, and KV WAL preallocation. W93 is now closed by the final acceptance above; W94–W96 retain their
-separate remaining implementation/acceptance obligations. W95 refines existing P4.1,
+persistence/packing, and KV WAL preallocation. W93 is closed by its final acceptance, and W96 closes after the Oct11 isolated
+NUC gate above. W94/W95 retain separate implementation/acceptance obligations. W95 refines existing P4.1,
 so the earlier grouped count below is retained as a dated baseline rather than
 recomputed by blindly adding four. W90–W92 keep their existing scopes.
 
@@ -85,12 +140,12 @@ quotas and large-scale acceptance remain open.
 [W92 tiny-file profiling](query-cache-tiny-profile-20261009.md) records deployed
 bounded read windows and immutable-file persistence reuse: controlled unchanged
 refresh is 2.07× faster; the mixed live creation-rate drop remains unisolated.
-[W92 three additional tiny-file rounds](query-cache-three-rounds-20261009.md)
+[W92 three additional tiny-file rounds](../archive/status-20261011/query-cache-three-rounds-20261009.md)
 records all-node profiles, exact-match lookup, bounded combined-record writes
 and one checked raw/index persistence barrier; controlled syscall and cold
 correctness evidence stays separate from live throughput observations.
 
-[W92 merged-source suites and three further rounds](query-cache-merged-three-rounds-20261009.md)
+[W92 merged-source suites and three further rounds](../archive/status-20261011/query-cache-merged-three-rounds-20261009.md)
 records native, core/concurrent/extras and cold persistence gates, nine all-node
 CPU captures and three logical cache fixes. Frozen-namespace preads fall 78.0%,
 pwrites 23.6% and median process CPU 29.1%, preserving fsync counts; fixed memory
@@ -98,7 +153,7 @@ increases within the tested budget. Live throughput and narrower NFS evidence
 are qualified separately. Runtime `a8a15a14` is restored with ordinary `.efs`
 mount opt-in disabled; eight retained trees pass cold query/payload checks.
 
-[W92 previous integration and three further profiles](query-cache-next-three-rounds-20261010.md)
+[W92 previous integration and three further profiles](../archive/status-20261011/query-cache-next-three-rounds-20261010.md)
 records the captured branch boundary, parent-rollup coalescing and constant-time
 cache descriptor hits, with bounded memory and persistence regressions. Controlled
 measurements show 39.1% fewer preads, 34.9% fewer pwrites and 15.0% lower median
@@ -179,6 +234,24 @@ count below.
 records latency controls, the rejected credit-order experiment and independent
 functional recovery fixes. That early-credit experiment is not promoted; W97 remains open. W93
 subsequently closes through the final recovery and sustained acceptance above.
+
+[W94/W97 AMD unpaced admission follow-up](amd-overload-admission-20261011.md)
+records reproduced unpaced ENOSPC, an implemented opt-in transient data-pressure
+candidate, full normal/fault native passes, an ENOSPC control with cold recovery,
+and no-refusal 180-second direct/buffered cold/physical passes; ten-minute
+unpaced fairness/recovery gates pass (no refusals, 58.09/53.98-s drain and
+post-pressure cold writes); full admission-enabled 216/67 functional gates pass,
+and exact-artifact retained-service deployment/two-client audit pass. The bounded
+AMD overload/admission gate is **closed**. NUC persistence attribution is
+[W111](w111-nuc-persistence-investigation-20261011.md); it is not an AMD
+acceptance requirement. W72/W86/W88 integration, W97 receiver feedback and W99
+capacity-domain policy remain independent open scopes.
+
+[W94/W97 AMD sustained mixed-load follow-up](amd-sustained-20261011.md) retains
+an unpaced private-quota failure, successful quiescent GC progress and an
+intentionally interrupted 300-second bounded baseline. Progress-conditioned GC scheduling
+passes native/direct functional gates but fails the direct 180-second drain deadline; extra quiescent recovery empties all four stores. The deployed fragment-budget build (`85fb3a4b`) passes native/direct functional and buffered sustained gates; direct sustained cold bytes pass but its drain deadline fails. All-member inode-fence fanout (`e9ea8ca1`) passes full native/direct functional and both 180-second paced cold/physical gates; both ten-minute cold-byte gates pass but drain deadlines fail; the 20-ms follow-up passes native/direct functional gates and both ten-minute cold/physical gates (79.23/77.94-s drains); canonical service restoration passes; the later [unpaced acceptance](amd-overload-admission-20261011.md) closes the AMD overload/admission gate. W94 CREATE/adoption is now closed; W72/W86/W88 integration and W97 receiver feedback remain separate. The same note
+records the completed W95 retained experiment review and its format limits.
 
 ## Storage pressure policy
 
@@ -301,7 +374,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | 0s | **W62** · sweep/truncate batch boundaries lose delta GC records | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](../backlog/work-items.md#w62) |
 | 0t | **W64** · durable append reservation replay across leader changes | correctness / recovery | partial — durable replay, coordinated cross-group EOF/completion and bounded cleanup pass AMD direct/TCP replay, POSIX/peer, sync-write and cold-byte gates; production sessions and broader failover acceptance remain open ([ledger](replay-readiness-20261008.md)) | [work item](../backlog/work-items.md#w64) |
 | 0u | **W65** · daemon exceeds graceful shutdown wait | liveness investigation | closed for supported TCP: six active-fsynced-write leader stops (three direct/three buffered) recover every acknowledged file cold; RDMA deferred | [work item](../backlog/work-items.md#w65) |
-| posix-link | **AMD `link_of_symlink` — Python request/test mismatch** | test correctness | Closed AMD test mismatch: corrected no-follow historical matrix passes; new explicit follow/dangling/core and peer cases pass native and AMD direct/buffered TCP; unrelated buffered MKDIR failure retained | [evidence and fix](amd-link-symlink.md) |
+| posix-link | **AMD `link_of_symlink` — Python request/test mismatch** | test correctness | Closed AMD test mismatch: corrected no-follow historical matrix passes; new explicit follow/dangling/core and peer cases pass native and AMD direct/buffered TCP; pre-fix buffered MKDIR failure retained; later repaired by W66 | [evidence and fix](amd-link-symlink.md) |
 | virtual-io | **W91/W92 · `.efs/` commands — server snapshots and safe reads** | correctness / performance / access control | in progress — disk index, bounded incremental catch-up, aggregate quota and replicated policy landed; named native/live/cold and Linux NFSv4.0 gates pass; actual 2^32/400 GiB gates and named virtual-export fix rollout remain open; Mac/Linux NFS candidate oracles pass | [closure](query-cache-closure-20261010.md) · [persistent policy](efs-query-persistent-policy-20261010.md) |
 | gc-obs | **W63** · GC backlog, reclaimed bytes and retry progress are missing | observability enhancement | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](../backlog/work-items.md#w63) |
 | 0e | **W38** · ior-hard fold tombstone without the span's bytes | correctness | code present; dated Oct 5 checkpoint — replay preserves live spans; folds require byte observations; deterministic regression + ASan/UBSan pass; traced real IOR-hard + independent cold hardscan pass (108000 records, bad=0, short=0); nine physical hosts remain; AMD software-RXE fold/GC gate passes, hardware RDMA remains | [full text](../backlog/work-items.md#w38--ior-hard-fold-tombstone-without-the-spans-bytes-queue-row-0e) |
@@ -326,13 +399,13 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | P4.1–P4.4 | fragment on-disk layout (**wipe**), W40 FUSE write copy, RDMA zero-copy receive, 9-client scaling | performance | deferred until P3's numbers | [full text](../backlog/work-items.md#p4--deferred-until-p3s-numbers-long-one-is-a-wipe) |
 | meta-scale | **W66** · metadata leadership distribution and topology-independent routing | scalability | open — Oct 10 AMD unhosted namespace-coordinator read routing repaired and direct/buffered 128-race cold gates pass ([checkpoint](amd-non-rdma-20261010.md#w66--unresolved-namespace-coordinator-routing)); four-voter host/engine, persistence/failover and staged leadership distribution pass; prolonged preferred-peer loss has no read errors/term churn; default two-group topology unchanged; D36 commit authority/recovery choice, routing/migration and scale remain | [evidence, phases and gates](metadata-scaling.md) |
 | tiny-raft | **W93** · broader durable Raft group commit | performance | closed Oct 10 — AMD + repeated NUC batching, read-tail, atomic recovery, fault and cold gates pass; tuning opt-in | [acceptance](w93-atomic-apply-20261010.md) |
-| tiny-create | **W94** · atomic CREATE plus open lease | performance / lifecycle | partial — retained FUSE CREATE/adoption, sequenced lease edges and cleanup AMD gated; REPORT session fences AMD gated; data-plane/per-publication integration and measured consensus/throughput gate remain open | [work item](../backlog/work-items.md#w94) |
+| tiny-create | **W94** · atomic CREATE plus open lease | performance / lifecycle | **Closed Oct 11: CREATE/adoption scope approved by user.** Measured lease/throughput savings, actual allocation/competing-OPEN barriers, both-mode full native/live/fault/cold and sustained admission acceptance pass. Broader production flush/PUT-ticket integration remains W72/W86/W88; no D25 activation | [closure](amd-feedback-integration-20261011.md#w94--createadoption-closed-by-user-scoped-decision) · [work item](../backlog/work-items.md#w94) |
 | scratch-expiry | **W90** · scratch-file expiry metadata and safe lifecycle | feature | design accepted D33; opt-in fixed deadlines and safe lifecycle; implementation/gates open | [work item](../backlog/work-items.md#w90) · [design](scratch-expiry-interface.md) |
 | virtual-commands | **W91** · directory-local virtual `.efs/` command interface | usability feature | design accepted D34; `.efs/` commands and bounded query paths; implementation/compatibility gates remain | [work item](../backlog/work-items.md#w91) · [design](scratch-expiry-interface.md) |
-| tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | partial — independent indexed packing, publication/GC fault and 24-sample AMD churn gates pass; P4.1 production-format and migration decision remain | [work item](../backlog/work-items.md#w95) |
-| tiny-kv | **W96** · bounded KV WAL preallocation | performance experiment | partial — recovery/reservation/fault and final guard cold gates pass; isolated NUC acceptance owed | [work item](../backlog/work-items.md#w96) |
+| tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | partial — independent indexed packing, publication/GC fault and 24-sample AMD churn gates pass; retained raw-field/index-cost review completed ([review](amd-sustained-20261011.md#w95-retained-amd-experiment-review-completed)); P4.1 production-format and migration decision remain | [work item](../backlog/work-items.md#w95) |
+| tiny-kv | **W96** · bounded KV WAL preallocation | performance experiment | Closed Oct11: isolated SATA/NVMe repeated matrix, exact replay/reset/reservation, full native/POSIX/peer/fault/cold and WAL sanitizer gates pass; conditional benefit and SATA tails retained | [closure](devel-nuc-closure-20261010.md) |
 | decisions | **D28** client-death loss policy · **D29** durable publication receipts · **D30** bounded admission/pacing | accepted design | accepted Oct 8: salvage deferred; D29/W88 implementation first, then D30/W23/W89; implementation and acceptance remain open | [contracts and gates](decisions.md#d28d30--accepted-oct-8-2026) |
-| op1 | **W70** · shrink-quota falsely reports background migration | operator observability bug | truthful running-quota reporting implemented; NUC accepted/refused shrink and unchanged-byte gates pass; no migration or persistence claim | [work item](../backlog/work-items.md#w70) |
+| op1 | **W70** · shrink-quota falsely reports background migration | operator observability bug | Closed Oct11: current NUC direct/buffered × one/two-root accepted/refused reductions, truthful running quota and exact retained bytes pass; no migration/persistence claim | [closure](devel-nuc-closure-20261010.md) |
 
 ### Source findings awaiting triage
 
@@ -342,15 +415,15 @@ positions do not assign an execution order or override the active handoff.
 | review ID | finding | classification | review state | evidence / gate |
 | --- | --- | --- | --- | --- |
 | spec1 | **W71** · fragment PUT lacks a production persistence barrier | durability correctness | implemented barrier — file and pathname fsync before production PUT ACK; fault/live gates pass, hardware power-loss gate owed | [evidence and gate](../backlog/work-items.md#w71) |
-| spec2 | **W72** · production mount session lifecycle / I23 integration | fencing integration | partial — full mount UUID/epoch shared by append/HOLD/FLOCK; retained FUSE CREATE/adoption and sequenced OPEN/CLOSE plus proven-revocation recovery pass AMD direct/TCP; namespace shard admission and fenced replay/effect checks are AMD gated; REPORT mapping/activation/completion session fences pass AMD direct/TCP; staged typed per-publication recovery/newer-range ownership passes AMD; production flush/PUT-ticket integration remain open | [evidence and gate](../backlog/work-items.md#w72) · [Oct9 mounted-client gates](dependency-package-20261009.md#terminal-retained-identity-recovery--implementedgated) |
+| spec2 | **W72** · production mount session lifecycle / I23 integration | fencing integration | partial — full mount UUID/epoch shared by append/HOLD/FLOCK; retained FUSE CREATE/adoption and sequenced OPEN/CLOSE plus proven-revocation recovery pass AMD direct/TCP; namespace shard admission and fenced replay/effect checks are AMD gated; Oct 11 merged REGISTER verdict mismatch repaired; before/after proof retained; REGISTER/ESTABLISH verdict regressions and final captured `90a47313` full normal/fault native plus direct/buffered TCP cold namespace/APPEND/sync gates pass ([follow-up](amd-integration-20261011.md#w72-register-verdict-mismatch--reproduced-and-repaired)); REPORT mapping/activation/completion session fences pass AMD direct/TCP; staged typed per-publication recovery/newer-range ownership passes AMD; production flush/PUT-ticket integration remain open | [evidence and gate](../backlog/work-items.md#w72) · [Oct9 mounted-client gates](dependency-package-20261009.md#terminal-retained-identity-recovery--implementedgated) |
 | spec3 | **W73** · synchronous application-write publication | integration | Closed supported software integration: application sync and mount-sync direct/buffered × TCP/RXE gates accepted; hardware power-loss acceptance remains W71 ([Oct9 closure](amd-rxe-gate-closure-20261009.md)) | [evidence and gate](../backlog/work-items.md#w73) |
 | spec4 | **W74** · protection profiles, debt and automatic repair | recovery feature gap | fixed 2+1; no automatic repair/profile cutover; accepted design exceeds current capability | [evidence and gate](../backlog/work-items.md#w74) |
 | spec5 | **W75** · fragment integrity trust / missing checksum fallback | integrity correctness | missing/corrupt evidence fails closed; captured metadata digest and PUT validation gates pass on NUC; identity-bound format remains open | [evidence and gate](../backlog/work-items.md#w75) |
 | spec6 | **W76** · opid table exhaustion sends unprotected namespace retries | conditional correctness | Closed: bounded identity admission refuses saturation safely; Oct9 reserves receipt capacity with16 unacknowledged positions (512 tracker slots); all four lost-reply mutations replay across leader death/restart with one effect | [evidence and gate](../backlog/work-items.md#w76) |
 | spec7 | **W77** · atomic multi-chunk public publication/observation | integration gap | per-group REPORT/per-chunk publication; request-wide decision/read-validation gate unestablished | [evidence and gate](../backlog/work-items.md#w77) |
-| op2 | **W78** · server wrapper trusts PID-file process identity | conditional operator correctness | identity-checked pidfd daemon/recorder retirement implemented; NUC ownership fixtures pass; daemon shutdown remains W65 | [evidence and gate](../backlog/work-items.md#w78) |
-| op3 | **W79** · mkfs help/name argument disagrees with single-export handler | operator observability | legacy label explicitly reported as ignored; extra arguments rejected; NUC repeated mkfs preserves salt/namespace | [evidence and gate](../backlog/work-items.md#w79) |
-| op4 | **W80** · efs-query reports retired zero-filled statistics as totals | operator observability | unsupported status and CLI nonzero exit replace invented zero totals; NUC RPC/CLI gates pass; actual totals remain unimplemented | [evidence and gate](../backlog/work-items.md#w80) |
+| op2 | **W78** · server wrapper trusts PID-file process identity | conditional operator correctness | Closed Oct11: actual NUC startup/stop retains unrelated processes; absent/dead/invalid/wrong-storage/stale-start and recorder ownership gates pass; shutdown remains W65 | [closure](devel-nuc-closure-20261010.md) |
+| op3 | **W79** · mkfs help/name argument disagrees with single-export handler | operator observability | Closed Oct11: aliases/help/argument refusals, ignored label, consumed successful replies and explicit retry preserve namespace/salt in both NUC I/O modes | [closure](devel-nuc-closure-20261010.md) |
+| op4 | **W80** · efs-query reports retired zero-filled statistics as totals | operator observability | Closed Oct11 for retired endpoint: nonempty namespace normal/raw, help, legacy and malformed replies pass; mounted stats/scale remain W92 | [closure](devel-nuc-closure-20261010.md) |
 | scale1 | **W81** · automatic directory spreading lacks a pressure trigger | scalability feature gap | size trigger/migrator exist; pressure policy remains unspecified and unwired | [evidence and gate](../backlog/work-items.md#w81) |
 | proto1 | **W82** · stale completed ReadIndex authority survives leader isolation | read correctness | Closed: stale LOOKUP/GETATTR/session/publication/transaction views and configuration partition gates pass; coordinator callback refuses untrusted absence | [evidence and gate](../backlog/work-items.md#w82) |
 | proto2 | **W83** · transaction decision records lack safe retirement | metadata lifecycle gap | resolve/drop remove participant records; no decision acknowledgement/GC path found | [evidence and gate](../backlog/work-items.md#w83) |
@@ -434,13 +507,15 @@ Spark performance measurement still owed. Grouped open counts are now
 
 ## Intel follow-ups — W100–W106 (indexed Oct 11, 2026)
 
+Current [devel-intel acceptance ledger](intel-deployment-acceptance-20261011.md) retains failures alongside reruns. [Captured evidence](../../results/measure/20261011-intel-devel-intel/acceptance-in-progress.json) remains explicitly in progress until the complete host/mode matrix terminates.
+
 This index adds traceable IDs to the Intel acceptance follow-ups; it does not change the existing queue order or accepted design decisions. Existing sustained tiny-file performance remains W97, protection/repair W74/W66, durability W71/W73 and capacity W99.
 
 | ID | Task | Recorded state |
 | --- | --- | --- |
-| [W100](../backlog/work-items.md#w100) | Intel2 repeated-write POSIX timeout | Correctness/performance investigation; open. |
+| [W100](../backlog/work-items.md#w100) | Intel concurrent POSIX timeouts and mixed-workload EIO | Correctness/performance investigation; open. |
 | [W101](../backlog/work-items.md#w101) | Complete and verify the Intel two-million-file workload | Operational acceptance; in progress. |
-| [W102](../backlog/work-items.md#w102) | Complete Intel2 private peer and GC acceptance | Validation follow-up; blocked by W100 in the full harness. |
+| [W102](../backlog/work-items.md#w102) | Complete Intel2 private peer and GC acceptance | Validation follow-up; in progress, aggregate acceptance remains open. |
 | [W103](../backlog/work-items.md#w103) | Investigate intermittent Intel persistence and stats timeouts | Liveness/performance investigation; open. |
 | [W104](../backlog/work-items.md#w104) | Decide and gate writable shared mmap support | Feature scope/design follow-up; deferred, currently unsupported by specification. |
 | [W105](../backlog/work-items.md#w105) | Stable NFS file handles across EFS client restarts | Gateway acceptance/correctness investigation; open. |
@@ -467,3 +542,17 @@ W95 packing and W106 broader hardware acceptance remain separate work.
 prioritize the 1,024-change query fallback; distinguish compaction correlation,
 GC partial-progress BUSY and TCP duplicate probes from established failures.
 W109/W110 remain open on orcd-test.
+
+
+## Mac verification of W109's changed-inode fallback
+
+[Mac query delta evidence](mac-query-delta-20261011.md): `devel-mac` confirms
+the exact 1,024-ID cliff, removes it with a bounded candidate journal, and
+optimizes inode diff scans. Mac buffered/TCP deployment and unit gates passed.
+Installed-namespace bootstrap and broader live gates retain their own verdicts;
+no ORCD acceptance or W109 closure is implied.
+
+[Latest ORCD branch integration and rollout](orcd-merged-rollout-20261011.md):
+all current development branches merged and `c52a4643` deployed to eleven hosts.
+Full Linux units and retained file samples pass; loaded POSIX/query gates remain
+failed, and the fresh tiny-file benchmark is running.

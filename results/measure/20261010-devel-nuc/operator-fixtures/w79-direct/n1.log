@@ -1,0 +1,14 @@
+2026-10-11T04:19:43.967Z storage-engine=files direct_io=on
+2026-10-11T04:19:43.976Z Joined cluster with 2 nodes
+2026-10-11T04:19:43.979Z heartbeat: enabled (2000 ms interval)
+2026-10-11T04:19:43.992Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T04:19:43.992Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-11T04:19:43.992Z raft-host: up raft_id=1 n=3 boot=15690439826381717 salt=2413024160245585549 g0=hosted g2=hosted
+2026-10-11T04:19:43.992Z efsd 3df19310-nuc (branch devel-nuc, built 2026-10-11T04:12:28Z on nuc), build=3df1931032b8-nuc: node 2 listening on 127.0.0.1:21341, storage=/tmp/efs-read-freshness-omz676fz/n1 (1 paths, stripe=none), used=0, quota=0, direct_io=on, writers=4 shared
+2026-10-11T04:19:44.844Z raft-host: applied session index=9 kind=1 shard=0 ino=0
+2026-10-11T04:19:45.836Z raft-host: applied session index=19 kind=3 shard=0 ino=0
+2026-10-11T04:19:45.980Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=981 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T04:19:48.995Z kv-obs: mt_bytes=2822 l0_bytes=0 l0=0 l1=0
+2026-10-11T04:19:49.982Z heartbeat: node 1 (127.0.0.1:21340) unresponsive — marked down for 30s
+2026-10-11T04:20:01.986Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=908 passes=18 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T04:20:03.786Z raft-host: applied session index=20 kind=3 shard=0 ino=0

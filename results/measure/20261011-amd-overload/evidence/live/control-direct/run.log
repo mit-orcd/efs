@@ -1,0 +1,21 @@
+Evidence directory: /data1/efs/amd-overload-20261011/live/control-direct/gc-direct-0s7bqvdq
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=12458722399242618620
+client serving PASS
+sustained seconds=0.0 counts={}
+sustained seconds=30.0 counts={'0': {'open': 1943, 'close': 1936, 'delete': 1536, 'read': 1536}}
+sustained seconds=60.0 counts={'0': {'open': 1943, 'close': 1936, 'delete': 1536, 'read': 1536}, '1': {'open': 1618, 'close': 1623, 'delete': 1614, 'read': 1724}}
+sustained seconds=90.0 counts={'0': {'open': 1943, 'close': 1936, 'delete': 1536, 'read': 1536}, '1': {'open': 1618, 'close': 1623, 'delete': 1614, 'read': 1724}, '2': {'open': 1619, 'close': 1618, 'delete': 1769, 'read': 1769}, '3': {'open': 1, 'close': 0, 'delete': 2, 'read': 0}}
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 1047178 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+sustained cold bytes and physical deletion drained PASS
+overload acknowledged-byte recovery and physical reclamation PASS; refused I/O remains in verdict

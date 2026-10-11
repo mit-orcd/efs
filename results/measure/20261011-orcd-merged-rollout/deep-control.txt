@@ -1,0 +1,14 @@
+parallel 2 tests jobs=1 (serial 0 after)
+pass dir_deep_nesting                
+pass dir_deep_nesting_beyond_64      
+============================================================
+POSIX suite: 2/2 pass, 0 fail, 0 skip, 0 notrun  (0.2s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/merged-orcd-c52a464391a6/fcstor007/deep-native.tsv
+native_rc=0
+parallel 2 tests jobs=1 (serial 0 after)
+pass dir_deep_nesting                
+pass dir_deep_nesting_beyond_64      
+============================================================
+POSIX suite: 2/2 pass, 0 fail, 0 skip, 0 notrun  (35.1s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/merged-orcd-c52a464391a6/fcstor007/deep-efs.tsv
+efs_rc=0

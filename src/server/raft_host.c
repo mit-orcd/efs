@@ -175,6 +175,7 @@ struct host_outbox {
      * thread only; reconnected on the next message after an error. */
     struct efs_conn *conn;
     struct efs_raft_flow_sender flow;
+    unsigned flow_next; /* bounded turns: critical, group-0/group-2 probes, data */
     uint64_t probe_sent[HOST_NGROUPS], probe_read[HOST_NGROUPS];
     uint8_t probe_header[HOST_NGROUPS][EFS_WIRE_RAFT_HDR_LEN];
     unsigned probe_valid[HOST_NGROUPS], pending_entries[HOST_NGROUPS];
@@ -408,6 +409,7 @@ struct efs_raft_host {
     int pressure_enabled;
     int flow_enabled, inbox_pressure, group_drain, flow_early_retire;
     uint64_t applied_persist_us; /* pump-only bounded checkpoint cadence */
+    unsigned gc_backlog_idle_ms; /* opt-in; preserve default 1s idle */
     unsigned inbox_work_n;
     uint64_t inbox_work_bytes;
     uint64_t inbox_probe_sent[HOST_NGROUPS][EFS_RAFT_MAX_PEERS];
@@ -745,44 +747,59 @@ static void host_sender_take(struct host_outbox *tx, int priority, int index,
 static int host_sender_pick(struct host_outbox *tx, uint8_t **bufs,
                              uint32_t *lens, int depth, uint64_t now)
 {
-    int n=0,i,gi,control_depth=depth;
+    int n=0;
+    unsigned ordinary=0,window=tx->flow.window ? tx->flow.window : 1;
     if (!tx->h->flow_enabled || !tx->flow.active) {
         while (n<depth && tx->npri) { host_sender_take(tx,1,0,&bufs[n],&lens[n]); n++; }
         while (n<depth && tx->nent) { host_sender_take(tx,0,0,&bufs[n],&lens[n]); n++; }
         return n;
     }
-    /* One due data slot cannot be starved by a steady stream of probes.
-     * Critical frames retain FIFO; at depth one they get the next loop. */
-    if (now>=tx->flow.deadline_us && tx->nent) control_depth=depth-1;
-    for (i=0;i<tx->npri && n<control_depth;) {
-        if (!efs_raft_flow_critical(tx->pri[i].buf,tx->pri[i].len)) { i++; continue; }
-        host_sender_take(tx,1,i,&bufs[n],&lens[n]); n++; BO_COUNT(BO_FLOW_CONTROL);
-    }
-    for (gi=0;gi<HOST_NGROUPS && n<control_depth;gi++) {
-        uint64_t read;
-        if (!tx->probe_valid[gi]) continue;
-        read=efs_raft_flow_rd64(tx->probe_header[gi]+28);
-        if (!efs_raft_flow_probe_due(tx->probe_sent[gi],tx->probe_read[gi],now,read)) continue;
-        bufs[n]=malloc(EFS_WIRE_RAFT_HDR_LEN);
-        if (!bufs[n]) continue;
-        /* Use the newest queued/current-term template. A stale template
-         * retains its old term/boot/read context and earns no new authority. */
-        efs_raft_flow_probe(bufs[n],tx->probe_header[gi]);
-        lens[n]=EFS_WIRE_RAFT_HDR_LEN; n++;
-        tx->probe_sent[gi]=now; tx->probe_read[gi]=read; BO_COUNT(BO_FLOW_PROBE);
-    }
-    if (now>=tx->flow.deadline_us) {
-        unsigned ordinary=0,window=tx->flow.window ? tx->flow.window : 1;
-        /* Replies/votes and bounded read/heartbeat escapes went first.
-         * Remaining commit probes must not starve entry catch-up. */
-        while (n<depth && ordinary<window && tx->nent) {
-            host_sender_take(tx,0,0,&bufs[n],&lens[n]); n++; ordinary++;
+    /* Each eligible class gets a turn within four selections, even when a
+     * slow one-slot round trip makes data due on every iteration. Keep FIFO
+     * within the entry lane and among critical frames. Probe templates retain
+     * their exact term/boot/read context; transport admission earns no ACK. */
+    while (n<depth) {
+        unsigned tried;
+        for (tried=0;tried<HOST_NGROUPS+2u;tried++) {
+            unsigned kind=(tx->flow_next+tried)%(HOST_NGROUPS+2u);
+            if (kind==0) {
+                int i;
+                for (i=0;i<tx->npri;i++)
+                    if (efs_raft_flow_critical(tx->pri[i].buf,tx->pri[i].len)) break;
+                if (i==tx->npri) continue;
+                host_sender_take(tx,1,i,&bufs[n],&lens[n]);
+                BO_COUNT(BO_FLOW_CONTROL);
+            } else if (kind<=HOST_NGROUPS) {
+                unsigned gi=kind-1;
+                uint64_t read;
+                if (!tx->probe_valid[gi]) continue;
+                read=efs_raft_flow_rd64(tx->probe_header[gi]+28);
+                if (!efs_raft_flow_probe_due(tx->probe_sent[gi],tx->probe_read[gi],now,read)) continue;
+                bufs[n]=malloc(EFS_WIRE_RAFT_HDR_LEN);
+                if (!bufs[n]) continue;
+                efs_raft_flow_probe(bufs[n],tx->probe_header[gi]);
+                lens[n]=EFS_WIRE_RAFT_HDR_LEN;
+                tx->probe_sent[gi]=now; tx->probe_read[gi]=read;
+                BO_COUNT(BO_FLOW_PROBE);
+            } else {
+                if (now<tx->flow.deadline_us || ordinary>=window) continue;
+                if (tx->nent) host_sender_take(tx,0,0,&bufs[n],&lens[n]);
+                else {
+                    int i;
+                    for (i=0;i<tx->npri;i++)
+                        if (!efs_raft_flow_critical(tx->pri[i].buf,tx->pri[i].len)) break;
+                    if (i==tx->npri) continue;
+                    host_sender_take(tx,1,i,&bufs[n],&lens[n]);
+                }
+                ordinary++;
+            }
+            tx->flow_next=(kind+1)%(HOST_NGROUPS+2u);
+            n++;
+            break;
         }
-        while (n<depth && ordinary<window && tx->npri) {
-            host_sender_take(tx,1,0,&bufs[n],&lens[n]); n++; ordinary++;
-        }
-        if (ordinary) tx->flow.deadline_us=now+efs_raft_flow_delay_us(&tx->flow);
+        if (tried==HOST_NGROUPS+2u) break;
     }
+    if (ordinary) tx->flow.deadline_us=now+efs_raft_flow_delay_us(&tx->flow);
     return n;
 }
 
@@ -2198,7 +2215,11 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     }
     /* A blocked local fence is not a completed revocation barrier. Preserve
      * its business verdict in the apply ring so the coordinator cannot ACK it. */
-    if (cmd[1] == EFS_MD_SESS_FINISH || cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
+    /* First-touch namespace admission bootstraps only after REGISTER's
+     * authoritative NOT_FOUND. Turning that verdict into OK skips CREATE
+     * and makes an existing name appear absent on a fresh mount. */
+    if (cmd[1] == EFS_MD_SESS_REGISTER || cmd[1] == EFS_MD_SESS_ESTABLISH ||
+        cmd[1] == EFS_MD_SESS_FINISH || cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
         cmd[1] == EFS_MD_SESS_LEASE_EDGE_DEFERRED || cmd[1] == EFS_MD_SESS_LEASE_OPEN ||
         cmd[1] == EFS_MD_SESS_LEASE_CLOSE) return rc;
     if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_INVAL || rc == EFS_ERR_BUSY ||
@@ -2637,10 +2658,13 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
      * their core error and retry; the policy did not become visible. */
     if(cmd[0]==EFS_MD_CMD_QUERY_POLICY &&
        (rc==EFS_ERR_STALE || rc==EFS_ERR_INVAL || rc==EFS_ERR_PROTO))ret=EFS_OK;
-    /* FINISH/FENCE_LOC BUSY must let later ACK/RESOLVE drain ownership. It is
+    /* REGISTER's missing-owner verdict must let the following CREATE apply.
+     * Admission refusals remain in the ring; IO/NOMEM still retry this index.
+     * FINISH/FENCE_LOC BUSY must let later ACK/RESOLVE drain ownership. It is
      * a rejected command, not a retryable storage failure at this log index. */
     if (cmd[0] == EFS_MD_CMD_SESSION && clen >= 2 &&
-        (cmd[1] == EFS_MD_SESS_FINISH || cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
+        (cmd[1] == EFS_MD_SESS_REGISTER || cmd[1] == EFS_MD_SESS_ESTABLISH ||
+         cmd[1] == EFS_MD_SESS_FINISH || cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
          cmd[1] == EFS_MD_SESS_LEASE_EDGE_DEFERRED || cmd[1] == EFS_MD_SESS_LEASE_OPEN ||
          cmd[1] == EFS_MD_SESS_LEASE_CLOSE) &&
         rc != EFS_ERR_IO && rc != EFS_ERR_NOMEM)
@@ -5451,9 +5475,15 @@ static int host_txn_coord(void *user, const struct efs_txid *t,
     if (!h || !h->kv || !t || !dec)
         return EFS_ERR_IO;
     group = efs_raft_shard_group(coord_shard);
+    /* An intent may name a coordinator on the other group. The read RPC
+     * must route to a dual host; a missing local decision is not absence. */
+    if (!host_hosts(h, group))
+        return EFS_ERR_NOT_PRIMARY;
     rc = host_read_index(h, group, &hint);
     if (rc != EFS_OK)
-        return EFS_ERR_IO; /* I9: cannot establish authority, never absence */
+        /* A pending fresh quorum is retryable, never decision absence.
+         * Hard authority failures retain I9's IO refusal. */
+        return rc == EFS_ERR_BUSY ? EFS_ERR_BUSY : EFS_ERR_IO;
     return efs_txn_decision_get(h->kv, coord_shard, t, dec);
 }
 
@@ -5621,8 +5651,8 @@ static int host_row_lanes_hosted(struct efs_raft_host *h, efs_ino_t ino,
     return 1;
 }
 
-static int host_read_inode_lanes(struct efs_raft_host *h, efs_ino_t ino,
-                                 int *leader_hint)
+static int host_read_inode_lanes_after_group(struct efs_raft_host *h, efs_ino_t ino,
+                                 int *leader_hint, int covered_group)
 {
     struct efs_meta_row row;
     uint32_t ish;
@@ -5633,9 +5663,15 @@ static int host_read_inode_lanes(struct efs_raft_host *h, efs_ino_t ino,
 
     ish = efs_kv_inode_shard(ino);
     ig = efs_raft_shard_group(ish);
-    rc = host_read_index(h, ig, leader_hint);
-    if (rc != EFS_OK)
-        return rc;
+    /* LOOKUP already established a fresh ReadIndex for its parent group.
+     * Reuse that proof only within this request when the child is on that
+     * same group. Transaction-aware inode reads still resolve pending state,
+     * and every other lane group still gets its own fresh ReadIndex. */
+    if (ig != covered_group) {
+        rc = host_read_index(h, ig, leader_hint);
+        if (rc != EFS_OK)
+            return rc;
+    }
     struct host_txn_read_context txn={.host=h};
     rc = efs_meta_apply_get_inode_tx(h->kv, ino, host_txn_read_coord, &txn, &row);
     if (rc != EFS_OK && txn.unhosted_coordinator)
@@ -5683,6 +5719,12 @@ static int host_read_inode_lanes(struct efs_raft_host *h, efs_ino_t ino,
         }
     }
     return EFS_OK;
+}
+
+static int host_read_inode_lanes(struct efs_raft_host *h, efs_ino_t ino,
+                                 int *leader_hint)
+{
+    return host_read_inode_lanes_after_group(h, ino, leader_hint, -1);
 }
 
 /* Stable per-group order, bounded chunks, and global control fences. Only
@@ -6952,6 +6994,8 @@ out:
 static int host_gc_inode_nodes(struct efs_raft_host *h, efs_ino_t ino, uint64_t gen)
 {
     struct efs_node nodes[EFS_MAX_NODES];
+    struct efs_conn *pending[EFS_MAX_NODES] = {0};
+    int status[EFS_MAX_NODES];
     uint32_t count;
     pthread_mutex_lock(&h->s->lock);
     count = h->s->node_count;
@@ -6963,43 +7007,55 @@ static int host_gc_inode_nodes(struct efs_raft_host *h, efs_ino_t ino, uint64_t 
             return EFS_ERR_BUSY;
         present |= 1u << (nodes[i].id - 1);
     }
-    /* A restart can form a quorum before its final storage member rejoins.
-     * Missing membership/address is not proof that its orphan files are gone. */
+    /* Missing membership/address never proves an orphan is gone. */
     int result = present == ((1u << h->n) - 1u) ? EFS_OK : EFS_ERR_BUSY;
+    /* Pipeline independent storage fences before waiting for disk durability.
+     * Connections stay exclusively borrowed until their reply is consumed.
+     * Every member must still finish; BUSY/errors retain the durable REAP. */
     for (uint32_t i = 0; i < count; i++) {
-        int rc = EFS_ERR_IO;
+        status[i] = EFS_ERR_IO;
         if (nodes[i].id == h->s->id)
-            rc = server_gc_inode(h->s, 1, ino, gen);
-        else {
-            struct efs_conn *pc = server_peer_conn_get(nodes[i].addr, nodes[i].port);
-            if (pc) {
-                if (pc->kind == EFS_CONN_TCP) {
-                    efs_set_recv_timeout(pc->fd, HOST_SEND_IO_MS);
-                    efs_set_send_timeout(pc->fd, HOST_SEND_IO_MS);
-                }
-                struct efs_msg_gc_inode req = {
-                    .export_id = 1, .ino = ino, .generation = gen};
-                uint8_t type;
-                void *reply = NULL;
-                uint32_t len = 0;
-                if (!efs_conn_send_msg(pc, EFS_MSG_GC_INODE, &req, sizeof(req)) &&
-                    !efs_conn_recv_msg(pc, &type, &reply, &len) &&
-                    type == EFS_MSG_GC_INODE_REPLY &&
-                    len == sizeof(struct efs_msg_gc_inode_reply))
-                    rc = ((struct efs_msg_gc_inode_reply *)reply)->rc;
-                free(reply);
-                if (rc == EFS_OK || rc == EFS_ERR_BUSY) {
-                    if (pc->kind == EFS_CONN_TCP) {
-                        efs_set_recv_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
-                        efs_set_send_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
-                    }
-                    server_peer_conn_release(nodes[i].addr, nodes[i].port, pc);
-                } else
-                    server_peer_conn_drop(nodes[i].addr, nodes[i].port, pc);
-            }
+            continue;
+        struct efs_conn *pc = server_peer_conn_get(nodes[i].addr, nodes[i].port);
+        if (!pc)
+            continue;
+        if (pc->kind == EFS_CONN_TCP) {
+            efs_set_recv_timeout(pc->fd, HOST_SEND_IO_MS);
+            efs_set_send_timeout(pc->fd, HOST_SEND_IO_MS);
         }
-        if (rc != EFS_OK)
-            result = rc;
+        struct efs_msg_gc_inode req = {
+            .export_id = 1, .ino = ino, .generation = gen};
+        if (efs_conn_send_msg(pc, EFS_MSG_GC_INODE, &req, sizeof(req))) {
+            server_peer_conn_drop(nodes[i].addr, nodes[i].port, pc);
+            continue;
+        }
+        pending[i] = pc;
+    }
+    for (uint32_t i = 0; i < count; i++)
+        if (nodes[i].id == h->s->id)
+            status[i] = server_gc_inode(h->s, 1, ino, gen);
+    for (uint32_t i = 0; i < count; i++) {
+        struct efs_conn *pc = pending[i];
+        if (pc) {
+            uint8_t type;
+            void *reply = NULL;
+            uint32_t len = 0;
+            if (!efs_conn_recv_msg(pc, &type, &reply, &len) &&
+                type == EFS_MSG_GC_INODE_REPLY &&
+                len == sizeof(struct efs_msg_gc_inode_reply))
+                status[i] = ((struct efs_msg_gc_inode_reply *)reply)->rc;
+            free(reply);
+            if (status[i] == EFS_OK || status[i] == EFS_ERR_BUSY) {
+                if (pc->kind == EFS_CONN_TCP) {
+                    efs_set_recv_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
+                    efs_set_send_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
+                }
+                server_peer_conn_release(nodes[i].addr, nodes[i].port, pc);
+            } else
+                server_peer_conn_drop(nodes[i].addr, nodes[i].port, pc);
+        }
+        if (status[i] != EFS_OK)
+            result = status[i];
     }
     return result;
 }
@@ -7140,6 +7196,13 @@ static void host_gc_close_step_pass(struct efs_raft_host *h,uint8_t group,uint32
     for(uint32_t i=0;i<scan.n && h->gc_running;i++) {
         uint8_t cmd[46]={EFS_MD_CMD_CLOSE_STEP};
         wr64be(cmd+1,scan.ino[i]);memcpy(cmd+9,scan.identity[i],EFS_CLOSE_STEP_VALUE);
+        /* RETIRE atomically checks identity, leases, locks and append rows.
+         * Ordinary tiny files usually owe none of those. Avoid an empty lock
+         * proposal plus dual-group append ReadIndexes for every such close.
+         * BUSY retains the existing bounded cleanup path and every barrier. */
+        cmd[45]=EFS_CLOSE_STEP_RETIRE;
+        rc=host_gc_propose(h,group,cmd,sizeof(cmd));
+        if(rc!=EFS_ERR_BUSY)continue;
         cmd[45]=EFS_CLOSE_STEP_LOCKS;
         rc=host_gc_propose(h,group,cmd,sizeof(cmd));
         if(rc!=EFS_OK)continue;
@@ -7699,7 +7762,7 @@ static int host_gc_ack_flush(struct efs_raft_host *h, uint8_t group,
     return rc;
 }
 
-static void host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
+static int host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
                               uint32_t anchor)
 {
     static struct gc_scan_ctx c; /* one GC thread; 35 KB */
@@ -7709,14 +7772,14 @@ static void host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
     uint32_t plen = 0;
     uint64_t t0 = now_us_();
     int64_t pend;
-    int nack = 0, scans = 0, recs = 0;
+    int nack = 0, scans = 0, recs = 0, ack_progress = 0;
     int i;
 
     int prc, src;
 
     prc = efs_kv_key_gc_prefix(anchor, prefix, &plen);
     if (prc != EFS_OK)
-        return;
+        return 0;
     /* D26: the pending-GC watermark gates the scan. Unknown (process
      * start, snapshot import): derive it once by counting the prefix.
      * Zero: nothing to collect — an empty pass is this peek, no scan. */
@@ -7727,7 +7790,7 @@ static void host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
         src = efs_kv_scan_prefix(h->kv, prefix, plen, gc_count_cb, &n);
         if (src < 0) {
             __atomic_fetch_add(&h->s->gc_scan_errors, 1, __ATOMIC_RELAXED);
-            return;
+            return 0;
         }
         efs_meta_gc_pending_derived(anchor, n);
         pend = efs_meta_gc_pending_peek(anchor);
@@ -7739,7 +7802,7 @@ static void host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
     __atomic_fetch_or(&h->s->gc_sampled_mask, 1u << (group == 0 ? 0 : 1), __ATOMIC_RELAXED);
     if (pend == 0) {
         g_gc_cur_len[gc_gi(group)] = 0;
-        return;
+        return 0;
     }
     for (;;) {
         int gi = gc_gi(group);
@@ -7806,8 +7869,10 @@ static void host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
         }
         memcpy(g_gc_cur[gi], c.keys[c.n - 1], GC_KEY_LEN);
         g_gc_cur_len[gi] = GC_KEY_LEN;
+        int had_acks = nack > 0;
         if (host_gc_ack_flush(h, group, acks, &nack) != EFS_OK)
             break;
+        ack_progress |= had_acks;
         /* The records just acked are still in the KV until the entry
          * applies; a rescan from the cursor starts after them. Stop
          * when the scan was not full, the budget is spent, or the
@@ -7826,6 +7891,11 @@ out:
         fprintf(stderr, "raft-host: gc-frag group=%u scans=%d records=%d ms=%llu\n",
                 group, scans, recs,
                 (unsigned long long)((now_us_() - t0) / 1000));
+    /* Live-file overwrites have fragment GC without dead-inode REAP.
+     * Require durable ACK progress, pending work and a full budget-limited
+     * batch; idle/blocked scans retain the ordinary backoff. */
+    return ack_progress && pend > 0 && c.full &&
+           now_us_() - t0 > GC_FRAG_BUDGET_US;
 }
 
 static void host_dir_spread_pass(struct efs_raft_host *h);
@@ -8063,6 +8133,29 @@ static void host_snap_import_pass(struct efs_raft_host *h)
     }
 }
 
+static int host_gc_backlog_config(const char *value, unsigned *ms)
+{
+    *ms = GC_LOOP_MS;
+    if (!value) return EFS_OK;
+    if (!*value) return EFS_ERR_INVAL;
+    for (const char *p = value; *p; p++)
+        if (*p < '0' || *p > '9') return EFS_ERR_INVAL;
+    char *end;
+    errno = 0;
+    unsigned long n = strtoul(value, &end, 10);
+    if (errno || *end || n < 20 || n > GC_LOOP_MS) return EFS_ERR_INVAL;
+    *ms = (unsigned)n;
+    return EFS_OK;
+}
+
+static unsigned host_gc_backlog_idle(unsigned configured, int capped,
+                                     uint64_t removed_before, uint64_t removed_after)
+{
+    /* No acceleration for idle scans, blocked/offline deletion or counter
+     * reset. Keep all per-group work/ACK budgets and a >=20ms fair yield. */
+    return capped && removed_after > removed_before ? configured : GC_LOOP_MS;
+}
+
 static void *host_gc_thread(void *arg)
 {
     struct efs_raft_host *h = arg;
@@ -8072,6 +8165,8 @@ static void *host_gc_thread(void *arg)
         uint64_t t0, t_orphan = 0, t_reap = 0, t_frag = 0, t_spread, t_rec, t_all;
         struct efs_kv_scan_stats sc_frag, sc_all;
         struct reap_times reap_times = {0};
+        uint64_t removed_before = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED);
+        int backlog_capped = 0;
 
         __atomic_store_n(&h->s->gc_pass_start_us, efs_iostats_now_us(), __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_stage, 1, __ATOMIC_RELAXED);
@@ -8114,6 +8209,7 @@ static void *host_gc_thread(void *arg)
             t_orphan += now_us_() - ta;
             ta = now_us_();
             host_gc_reap_pass(h, h->g[g].group, anchor, &reap_times);
+            backlog_capped |= __atomic_load_n(&h->s->gc_reap_capped[g], __ATOMIC_RELAXED);
             t_reap += now_us_() - ta;
             ta = now_us_();
             {
@@ -8121,7 +8217,7 @@ static void *host_gc_thread(void *arg)
 
                 efs_kv_lsm_scan_stats(&b, 0);
                 __atomic_store_n(&h->s->gc_stage, 4, __ATOMIC_RELAXED);
-                host_gc_frag_pass(h, h->g[g].group, anchor);
+                backlog_capped |= host_gc_frag_pass(h, h->g[g].group, anchor);
                 efs_kv_lsm_scan_stats(&a, 0);
                 sc_frag.scans += a.scans - b.scans;
                 sc_frag.segs += a.segs - b.segs;
@@ -8180,9 +8276,14 @@ static void *host_gc_thread(void *arg)
         __atomic_fetch_add(&h->s->gc_passes, 1, __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_stage, 0, __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_pass_start_us, 0, __ATOMIC_RELAXED);
-        /* ~1s between passes, in 20 ms slices so shutdown is prompt.
+        uint64_t removed_after = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED);
+        unsigned idle_ms = host_gc_backlog_idle(h->gc_backlog_idle_ms, backlog_capped, removed_before, removed_after);
+        if (idle_ms < GC_LOOP_MS && env_on("EFS_RAFT_OBS"))
+            fprintf(stderr, "raft-host: gc-backlog-idle ms=%u removed=%llu\n", idle_ms,
+                    (unsigned long long)(removed_after - removed_before));
+        /* Default 1s between passes, in 20 ms slices so shutdown is prompt.
          * A snapshot export queued by the pump starts on the next slice. */
-        for (g = 0; g < GC_LOOP_MS / 20 && h->gc_running; g++) {
+        for (g = 0; g < (int)((idle_ms + 19) / 20) && h->gc_running; g++) {
             host_snap_export_pass(h);
             host_snap_import_pass(h);
             usleep(20 * 1000);
@@ -8819,12 +8920,14 @@ static int query_consume(void *ctx,const struct efs_server_query_view *view,int 
 }
 /* Startup capability is a local ceiling. Durable export policy is resolved
  * through current authority and also gates raw query RPCs and continuations. */
-uint32_t server_raft_host_query_features(void)
+int server_raft_host_query_features_checked(uint32_t *mask)
 {
-    uint32_t mask=0;
-    if(!g_host || !g_host->query_enabled || !g_host->query_started ||
-       host_query_policy_authority(&mask))return 0;
-    return mask;
+    if (!mask) return EFS_ERR_INVAL;
+    *mask=0;
+    if (!g_host) return EFS_ERR_BUSY;
+    if (!g_host->query_enabled) return EFS_OK; /* Authoritative local ceiling. */
+    if (!g_host->query_started) return EFS_ERR_BUSY;
+    return host_query_policy_authority(mask);
 }
 int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,const struct efs_query_filters *filters,void **out,uint32_t *len)
 {
@@ -8978,6 +9081,11 @@ int server_raft_host_start(struct efsd_server *s)
         fprintf(stderr,"raft-host: EFS_COMMANDS_SERVER must be 0 or 1\n");
         return EFS_ERR_INVAL;
     }
+    unsigned gc_backlog_idle_ms;
+    if (host_gc_backlog_config(getenv("EFS_GC_BACKLOG_IDLE_MS"), &gc_backlog_idle_ms) != EFS_OK) {
+        fprintf(stderr, "raft-host: EFS_GC_BACKLOG_IDLE_MS must be 20..1000\n");
+        return EFS_ERR_INVAL;
+    }
     int query_enabled=!commands || !strcmp(commands,"1");
     const char *flow=getenv("EFS_RAFT_FLOW");
     if (flow && strcmp(flow,"0") && strcmp(flow,"1")) return EFS_ERR_INVAL;
@@ -9020,6 +9128,7 @@ int server_raft_host_start(struct efsd_server *s)
     if (efs_admission_init(&h->proposal_queue,&limits) != EFS_OK) { free(h); return EFS_ERR_IO; }
     h->applied_persist_us=applied_interval;
     h->flow_enabled=flow && !strcmp(flow,"1");
+    h->gc_backlog_idle_ms = gc_backlog_idle_ms;
     h->flow_early_retire=early_retire && !strcmp(early_retire,"1"); /* candidate opt-in until acceptance */
     h->group_drain=group_drain && !strcmp(group_drain,"1");
     h->pressure_enabled=pressure && !strcmp(pressure,"1");
@@ -9434,9 +9543,9 @@ void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
         out->leader_hint = hint;
 }
 
-static int host_session_get(struct efs_raft_host *h, const uint8_t *cmd,
+static int host_session_get_after_group(struct efs_raft_host *h, const uint8_t *cmd,
                             uint32_t clen, uint8_t group, int *hint,
-                            uint64_t *salt_out)
+                            uint64_t *salt_out, int covered_group)
 {
     uint8_t uuid[EFS_OPID_UUID_LEN];
     uint32_t shard = 0;
@@ -9446,9 +9555,13 @@ static int host_session_get(struct efs_raft_host *h, const uint8_t *cmd,
     memcpy(uuid, cmd + 2, EFS_OPID_UUID_LEN);
     if (clen >= HOST_SESS_REG_LEN - 4)
         shard = rd32be(cmd + 18);
-    rc = host_read_index(h, group, hint);
-    if (rc != EFS_OK)
-        return rc;
+    /* APPEND has just established both group views within this request.
+     * Ordinary callers and every unmatched owner still require a fresh read. */
+    if (group != covered_group) {
+        rc = host_read_index(h, group, hint);
+        if (rc != EFS_OK)
+            return rc;
+    }
     rc = efs_session_get(h->kv, uuid, &rec);
     if (rc != EFS_OK)
         return rc;
@@ -9469,6 +9582,13 @@ static int host_session_get(struct efs_raft_host *h, const uint8_t *cmd,
     if (efs_session_bit_get(rec.touched, shard))
         *salt_out |= 1ull << 40;
     return EFS_OK;
+}
+
+static int host_session_get(struct efs_raft_host *h, const uint8_t *cmd,
+                            uint32_t clen, uint8_t group, int *hint,
+                            uint64_t *salt_out)
+{
+    return host_session_get_after_group(h,cmd,clen,group,hint,salt_out,-1);
 }
 
 /* ESTABLISH must follow authoritative ACTIVE + REGISTER on the session
@@ -9531,15 +9651,15 @@ static int host_session_cleanup_admit(struct efs_raft_host *h,
 
 /* Legacy unregistered append identities remain compatible. Once a session is
  * registered, absence/error is never authority to bypass its global/local floor. */
-static int host_append_session_admit(struct efs_raft_host *h,efs_ino_t ino,
-    const struct efs_opid_req *q,int *hint,int *registered)
+static int host_append_session_admit_after_group(struct efs_raft_host *h,efs_ino_t ino,
+    const struct efs_opid_req *q,int *hint,int *registered,int covered_group)
 {
     uint32_t shard=efs_kv_inode_shard(ino);uint8_t query[HOST_SESS_HDR_LEN+4]={EFS_MD_CMD_SESSION,HOST_SESS_GET};
     memcpy(query+2,q->id.client_uuid,16);wr32be(query+18,shard);
     uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(q->id.client_uuid));
     uint64_t salt=0;int rc;
     *registered=0;
-    if(host_hosts(h,owner))rc=host_session_get(h,query,sizeof(query),owner,hint,&salt);
+    if(host_hosts(h,owner))rc=host_session_get_after_group(h,query,sizeof(query),owner,hint,&salt,covered_group);
     else {
         struct efs_msg_raft_mkfs_reply reply={0};
         rc=host_remote_cmd(h,owner,query,sizeof(query),&reply,-1);salt=reply.salt;
@@ -9556,6 +9676,12 @@ static int host_append_session_admit(struct efs_raft_host *h,efs_ino_t ino,
     rc=efs_session_accept(h->kv,shard,q->id.client_uuid,q->id.session_epoch);
     if(rc==EFS_OK)*registered=1;
     return rc;
+}
+
+static int host_append_session_admit(struct efs_raft_host *h,efs_ino_t ino,
+    const struct efs_opid_req *q,int *hint,int *registered)
+{
+    return host_append_session_admit_after_group(h,ino,q,hint,registered,-1);
 }
 
 static int host_pack_session_cleanup(struct efs_raft_host *h,const uint8_t *cmd,
@@ -10612,7 +10738,7 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
             }
             return;
         }
-        rc = host_read_inode_lanes(h, dent.ino, &hint);
+        rc = host_read_inode_lanes_after_group(h, dent.ino, &hint, pg);
         if (rc == EFS_ERR_NOT_PRIMARY) {
             uint8_t need[2];
 
@@ -10634,6 +10760,14 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
     }
     if (found_dentry && rc == EFS_ERR_NOT_FOUND)
         rc = EFS_ERR_BUSY; /* retry the complete name lookup across replacement */
+    if (rc == EFS_ERR_NOT_PRIMARY &&
+        (!host_hosts(h, EFS_RAFT_GROUP_SHARD) ||
+         !host_hosts(h, EFS_RAFT_GROUP_SHARD2))) {
+        uint8_t need[2];
+        host_need_both(need);
+        host_fwd_lookup(h, parent, name, out, need, 2);
+        return;
+    }
     set_inode_rc(out, rc, hint);
     if (rc == EFS_OK) {
         stat_to_inode(&st, &out->inode);
@@ -10678,25 +10812,46 @@ static int host_namespace_session_command(struct efs_raft_host *h,uint8_t group,
     if(reply.leader_hint>=0)*hint=reply.leader_hint;
     return rc;
 }
-static int host_namespace_session_admit(struct efs_raft_host *h,uint32_t shard,
+static int host_namespace_session_prepare_owner(struct efs_raft_host *h,
     const struct efs_opid_req *q,int *hint)
+{
+    if(!q || !efs_opid_req_valid(q) || !q->id.session_epoch)return EFS_OK;
+    if(q->ack>=q->id.seq)return EFS_ERR_INVAL;
+    uint8_t cmd[HOST_SESS_CREATE_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_CREATE};
+    memcpy(cmd+2,q->id.client_uuid,16);wr32be(cmd+18,q->id.session_epoch);
+    uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(q->id.client_uuid));
+    return host_namespace_session_command(h,owner,cmd,sizeof(cmd),hint);
+}
+static int host_namespace_session_admit_after_group(struct efs_raft_host *h,
+    uint32_t shard,const struct efs_opid_req *q,int owner_prepared,
+    int covered_group,int *hint)
 {
     if(!q || !efs_opid_req_valid(q) || !q->id.session_epoch)return EFS_OK;
     if(q->ack>=q->id.seq || shard>=EFS_SESSION_BITS)return EFS_ERR_INVAL;
     uint8_t group=efs_raft_shard_group(shard);
-    int rc=host_read_index(h,group,hint);if(rc!=EFS_OK)return rc;
+    /* The namespace handler has already crossed a fresh ReadIndex for its destination
+     * group in this same request. Reuse only that proof, never a previous
+     * request or another group. ESTABLISH still gets its post-apply read. */
+    int rc=EFS_OK;
+    if(group!=covered_group)rc=host_read_index(h,group,hint);
+    if(rc!=EFS_OK)return rc;
     uint8_t key[EFS_KV_KEY_MAX],value[EFS_SESS_LOCAL_VAL];uint32_t kl=0,vl=sizeof(value);
     rc=efs_kv_key_sess_local(shard,q->id.client_uuid,key,&kl);
     if(rc==EFS_OK)rc=efs_kv_get(h->kv,key,kl,value,&vl);
     if(rc==EFS_OK)return efs_session_accept(h->kv,shard,q->id.client_uuid,q->id.session_epoch);
     if(rc!=EFS_ERR_NOT_FOUND)return rc;
-    uint8_t cmd[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_CREATE};
+    uint8_t cmd[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_REGISTER};
     memcpy(cmd+2,q->id.client_uuid,16);wr32be(cmd+18,q->id.session_epoch);wr32be(cmd+22,shard);
     uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(q->id.client_uuid));
-    rc=host_namespace_session_command(h,owner,cmd,HOST_SESS_CREATE_LEN,hint);
-    if(rc!=EFS_OK)return rc;
-    cmd[1]=EFS_MD_SESS_REGISTER;
+    /* REGISTER itself proves the current owner's epoch/state and durably
+     * includes this participant. Existing owners need no idempotent CREATE.
+     * Only the authoritative missing-record verdict can bootstrap an owner;
+     * neither refusal nor an uncertain I/O result grants that permission. */
     rc=host_namespace_session_command(h,owner,cmd,sizeof(cmd),hint);
+    if(rc==EFS_ERR_NOT_FOUND && !owner_prepared) {
+        rc=host_namespace_session_prepare_owner(h,q,hint);
+        if(rc==EFS_OK)rc=host_namespace_session_command(h,owner,cmd,sizeof(cmd),hint);
+    }
     if(rc!=EFS_OK)return rc;
     cmd[1]=EFS_MD_SESS_ESTABLISH;
     rc=host_session_establish_admit(h,cmd,sizeof(cmd),group,hint);
@@ -10704,6 +10859,117 @@ static int host_namespace_session_admit(struct efs_raft_host *h,uint32_t shard,
     if(rc==EFS_OK)rc=host_read_index(h,group,hint);
     if(rc==EFS_OK)rc=efs_session_accept(h->kv,shard,q->id.client_uuid,q->id.session_epoch);
     return rc;
+}
+static int host_namespace_session_admit_with_owner(struct efs_raft_host *h,
+    uint32_t shard,const struct efs_opid_req *q,int owner_prepared,int *hint)
+{
+    return host_namespace_session_admit_after_group(h,shard,q,owner_prepared,-1,hint);
+}
+static int host_namespace_session_admit(struct efs_raft_host *h,uint32_t shard,
+    const struct efs_opid_req *q,int *hint)
+{
+    return host_namespace_session_admit_with_owner(h,shard,q,0,hint);
+}
+
+/* REPORT can first-touch dozens of lane shards. Preserve each admission's
+ * durable REGISTER/ESTABLISH proof while overlapping its quorum waits. At most
+ * three additional threads exist process-wide. Contended multi-shard batches
+ * return retryable BUSY instead of serializing dozens of quorum admissions.
+ * No worker or stack-owned request survives the join, including partial error. */
+struct host_report_session_work {
+    struct efs_raft_host *host;
+    const struct efs_opid_req *request;
+    uint32_t shards[EFS_SESSION_BITS];
+    unsigned count;
+    unsigned next;
+    int ready;
+    int rc;
+    int hint;
+};
+static pthread_mutex_t host_report_session_parallel = PTHREAD_MUTEX_INITIALIZER;
+static void *host_report_session_worker(void *value)
+{
+    struct host_report_session_work *work = value;
+    while (!__atomic_load_n(&work->ready, __ATOMIC_ACQUIRE)) usleep(1000);
+    while (!__atomic_load_n(&work->rc, __ATOMIC_ACQUIRE)) {
+        unsigned index = __atomic_fetch_add(&work->next, 1u, __ATOMIC_RELAXED);
+        if (index >= work->count) break;
+        int hint = -1;
+        int rc = host_namespace_session_admit_with_owner(work->host,
+            work->shards[index], work->request, 1, &hint);
+        if (rc) {
+            int expected = EFS_OK;
+            if (__atomic_compare_exchange_n(&work->rc, &expected, rc, 0,
+                                            __ATOMIC_RELEASE, __ATOMIC_RELAXED))
+                work->hint = hint;
+            break;
+        }
+    }
+    return NULL;
+}
+static int host_report_session_admit(struct efs_raft_host *h,
+    const struct efs_chunk_rec *recs, uint32_t count,
+    const struct efs_opid *session, int *hint)
+{
+    struct efs_opid_req request = {.id = *session};
+    request.id.seq = 1;
+    struct host_report_session_work work = {.host = h, .request = &request,
+                                            .hint = -1};
+    uint8_t seen[EFS_SESSION_BITS / 8] = {0};
+    for (uint32_t i = 0; i < count; ++i) {
+        uint32_t shards[2] = {efs_kv_inode_shard(recs[i].ino),
+            efs_kv_lane_shard(recs[i].ino, recs[i].chunk_index % EFS_META_LANES)};
+        for (unsigned k = 0; k < 2; ++k) {
+            uint32_t shard = shards[k];
+            if (shard >= EFS_SESSION_BITS) return EFS_ERR_INVAL;
+            if (seen[shard / 8] & (1u << (shard % 8))) continue;
+            seen[shard / 8] |= (uint8_t)(1u << (shard % 8));
+            int rc = efs_session_accept(h->kv, shard, session->client_uuid,
+                                        session->session_epoch);
+            if (rc == EFS_ERR_BUSY || rc == EFS_ERR_NOT_FOUND)
+                work.shards[work.count++] = shard;
+            else if (rc != EFS_OK) return rc;
+        }
+    }
+    pthread_t threads[3];
+    unsigned started = 0;
+    int parallel = 0;
+    if (work.count > 1) {
+        if (pthread_mutex_trylock(&host_report_session_parallel) != 0)
+            return EFS_ERR_BUSY;
+        parallel = 1;
+    }
+    if (parallel) {
+        for (; started < 3; ++started)
+            if (pthread_create(&threads[started], NULL,
+                               host_report_session_worker, &work) != 0) break;
+    }
+    /* No admission has started if all worker creation failed. Keep the
+     * bounded client retry rather than falling back to a long serial batch. */
+    if (parallel && !started) {
+        pthread_mutex_unlock(&host_report_session_parallel);
+        return EFS_ERR_BUSY;
+    }
+    /* CREATE is idempotent global preparation, not shard admission. One
+     * batch needs one durable owner record, rather than dozens of no-op
+     * Raft CREATE entries. Every participant still performs its original
+     * REGISTER, authoritative ESTABLISH check and local floor validation.
+     * Credits and workers are secured first, preserving zero effects on
+     * contention or complete worker-creation failure. */
+    if (work.count) {
+        int owner_hint = -1;
+        int rc = host_namespace_session_prepare_owner(h, &request, &owner_hint);
+        if (rc) {
+            work.hint = owner_hint;
+            __atomic_store_n(&work.rc, rc, __ATOMIC_RELEASE);
+        }
+    }
+    __atomic_store_n(&work.ready, 1, __ATOMIC_RELEASE);
+    host_report_session_worker(&work);
+    for (unsigned i = 0; i < started; ++i) pthread_join(threads[i], NULL);
+    if (parallel) pthread_mutex_unlock(&host_report_session_parallel);
+    if (work.rc && work.hint >= 0) *hint = work.hint;
+    return work.rc;
 }
 
 /* I16 leader-side probe: the op's window lives on `shard` (the dentry
@@ -10718,6 +10984,20 @@ static int host_opid_replay(struct efs_raft_host *h, uint32_t shard,
     if (!q)
         return 0;
     hit = efs_meta_apply_opid_probe(h->kv, shard, &q->id, rep);
+    if (!hit && efs_opid_req_valid(q) && q->id.session_epoch) {
+        /* A transaction can expose its committed dentry before its receipt
+         * reduction is materialized. A raw miss is not permission to run
+         * that identity again while its receipt key is still pending. */
+        uint8_t key[EFS_KV_KEY_MAX];
+        uint32_t bytes = 0;
+        int rc = efs_kv_key_opid(shard, q->id.client_uuid, q->id.session_epoch,
+                                key, &bytes);
+        if (rc == EFS_OK) rc = efs_txn_key_busy(h->kv, key, bytes);
+        if (rc != EFS_OK) return rc;
+        /* RESOLVE writes the receipt and removes its reduction atomically.
+         * Re-probe after the free-key check to cover concurrent RESOLVE. */
+        hit = efs_meta_apply_opid_probe(h->kv, shard, &q->id, rep);
+    }
     if (hit > 0)
         __atomic_fetch_add(&h->obs_opid_replay, 1, __ATOMIC_RELAXED);
     return hit;
@@ -10852,7 +11132,7 @@ static void host_create(efs_ino_t parent, const char *name, uint32_t mode,
             if (rc!=EFS_OK) {set_inode_rc(out,rc,hint);return;}
         }
         struct efs_opid_reply rep;
-        int admitted=host_namespace_session_admit(h,dsh,q,&hint);
+        int admitted=host_namespace_session_admit_after_group(h,dsh,q,0,dg,&hint);
         int hit=admitted==EFS_OK?host_opid_replay(h,dsh,q,&rep):admitted;
 
         if (hit < 0) {
@@ -11525,9 +11805,10 @@ static int host_mtime_prepare(void *user, const struct efs_txid *t,
 
 /* APPEND selects exact images once on a complete authoritative view.
  * Replicas apply those images; they never recompute EOF from local lanes. */
-static int host_append_prepare(void *user,const struct efs_txid *t,
+static int host_append_prepare_ref(void *user,const struct efs_txid *t,
                                 const struct efs_txn_parts *parts,
-                                const struct efs_meta_append_image *im)
+                                const struct efs_meta_append_image *im,
+                                struct host_idx_ref *ref)
 {
     struct host_resize_ctx *ctx=user;
     uint8_t pay[9+2*EFS_OPID_VAL_MAX];uint32_t pn;
@@ -11536,10 +11817,66 @@ static int host_append_prepare(void *user,const struct efs_txid *t,
     if(rc!=EFS_OK)return rc;
     uint32_t shard=((uint32_t)im->key[0]<<8)|im->key[1];
     return host_prep_raw(ctx->host,shard,EFS_TXN_EXCL_VALUE,t,parts,
-                         im->key,im->klen,pay,pn,NULL,ctx->hint);
+                         im->key,im->klen,pay,pn,ref,ctx->hint);
+}
+static int host_append_prepare(void *user,const struct efs_txid *t,
+                                const struct efs_txn_parts *parts,
+                                const struct efs_meta_append_image *im)
+{
+    return host_append_prepare_ref(user,t,parts,im,NULL);
 }
 static const struct efs_meta_append_ops host_append_ops={
     host_append_prepare,host_resize_decide,host_resize_resolve};
+
+/* Reservations keep their floor and inode guards synchronous and ordered.
+ * The remaining exact images can share Raft durability cohorts. No decision
+ * precedes the existing term/index-matched result check for EVERY proposal.
+ * REPORT completion uses the same ordered guards; pruning stays synchronous. */
+struct host_append_reserve_ctx {
+    struct host_resize_ctx base;
+    struct host_idx_ref refs[EFS_META_LANES+5];
+    int nrefs,leading;
+};
+static int host_append_reserve_prepare(void *user,const struct efs_txid *t,
+    const struct efs_txn_parts *parts,const struct efs_meta_append_image *im)
+{
+    struct host_append_reserve_ctx *ctx=user;
+    if(ctx->leading) {
+        int rc=host_append_prepare(&ctx->base,t,parts,im);
+        if(rc==EFS_OK)--ctx->leading;
+        return rc;
+    }
+    if(ctx->nrefs>=(int)(sizeof(ctx->refs)/sizeof(ctx->refs[0])))
+        return EFS_ERR_INVAL;
+    int rc=host_append_prepare_ref(&ctx->base,t,parts,im,&ctx->refs[ctx->nrefs]);
+    if(rc==EFS_OK)++ctx->nrefs;
+    return rc;
+}
+static int host_append_reserve_decide(void *user,const struct efs_txid *t,
+    const struct efs_txn_parts *parts,int decision)
+{
+    struct host_append_reserve_ctx *ctx=user;
+    int prepared=host_wait_refs(ctx->base.host,ctx->refs,ctx->nrefs,ctx->base.hint);
+    ctx->nrefs=0;
+    if(decision==EFS_TXN_COMMIT && (prepared!=EFS_OK || ctx->leading)) {
+        /* COMMIT has not been proposed. A late PREPARE refusal must take the
+         * same durable ABORT/cleanup path as a synchronous PREPARE failure. */
+        int rc=host_resize_decide(&ctx->base,t,parts,EFS_TXN_ABORT);
+        if(rc==EFS_OK)rc=host_resize_resolve(&ctx->base,t,parts,EFS_TXN_ABORT);
+        return rc!=EFS_OK?rc:(prepared!=EFS_OK?prepared:EFS_ERR_INVAL);
+    }
+    /* After a COMMIT proposal, preserve ambiguous errors and its finisher;
+     * never turn an unknown COMMIT into ABORT. */
+    return host_resize_decide(&ctx->base,t,parts,decision);
+}
+static int host_append_reserve_resolve(void *user,const struct efs_txid *t,
+    const struct efs_txn_parts *parts,int decision)
+{
+    struct host_append_reserve_ctx *ctx=user;
+    return host_resize_resolve(&ctx->base,t,parts,decision);
+}
+static const struct efs_meta_append_ops host_append_reserve_ops={
+    host_append_reserve_prepare,host_append_reserve_decide,host_append_reserve_resolve};
 static int host_append_authority(struct efs_raft_host *h,int *hint)
 {
     uint8_t groups[2];host_need_both(groups);
@@ -11615,7 +11952,12 @@ static int host_append_transaction(struct efs_raft_host *h,efs_ino_t ino,uint64_
 {
     struct host_resize_ctx ctx={h,hint};struct efs_txid t;
     int registered=0,rc=host_append_authority(h,hint);
-    if(rc==EFS_OK)rc=host_append_session_admit(h,ino,q,hint,&registered);
+    if(rc==EFS_OK) {
+        uint8_t groups[2];host_need_both(groups);
+        uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(q->id.client_uuid));
+        int covered=(owner==groups[0] || owner==groups[1])?owner:-1;
+        rc=host_append_session_admit_after_group(h,ino,q,hint,&registered,covered);
+    }
     if(rc!=EFS_OK)return rc;
     /* Replayed reservations do not need cleanup or a new transaction. */
     rc=efs_meta_append_result(h->kv,ino,len,q,offset);
@@ -11636,8 +11978,9 @@ static int host_append_transaction(struct efs_raft_host *h,efs_ino_t ino,uint64_
     rc=efs_meta_capture_append(h->kv,ino,len,q,host_txn_coord,h,plan);
     if(rc==EFS_OK) {
         *offset=plan->offset;fill_txid(h,&t);
-        rc=registered?efs_meta_execute_append_owned(h->kv,plan,q,&t,&host_append_ops,&ctx):
-                      efs_meta_execute_append(plan,&t,&host_append_ops,&ctx);
+        struct host_append_reserve_ctx batch={.base={h,hint},.leading=registered?2:1};
+        rc=registered?efs_meta_execute_append_owned(h->kv,plan,q,&t,&host_append_reserve_ops,&batch):
+                      efs_meta_execute_append(plan,&t,&host_append_reserve_ops,&batch);
         /* Exact-image conflicts are retryable; capture's retired identity
          * STALE is preserved and never allocated a second reservation. */
         if(rc==EFS_ERR_STALE)rc=EFS_ERR_BUSY;
@@ -12273,7 +12616,7 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
         dsh = 0;
     if (rc == EFS_OK) {
         struct efs_opid_reply rep;
-        int admitted=host_namespace_session_admit(h,dsh,q,&hint);
+        int admitted=host_namespace_session_admit_after_group(h,dsh,q,0,efs_raft_shard_group(dsh),&hint);
         int hit=admitted==EFS_OK?host_opid_replay(h,dsh,q,&rep):admitted;
 
         if (hit < 0) {
@@ -12540,7 +12883,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
         /* I16: a committed rmdir's retry finds no dentry; answer the
          * recorded OK instead of ENOENT. */
         struct efs_opid_reply rep;
-        int admitted=host_namespace_session_admit(h,dsh,q,&hint);
+        int admitted=host_namespace_session_admit_after_group(h,dsh,q,0,efs_raft_shard_group(dsh),&hint);
         int hit=admitted==EFS_OK?host_opid_replay(h,dsh,q,&rep):admitted;
 
         if (hit < 0) {
@@ -13091,7 +13434,7 @@ void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
         /* I16: the retry of a committed unlink finds no dentry — answer
          * the recorded OK (ino, nlink after) instead of ENOENT. */
         struct efs_opid_reply rep;
-        int admitted=host_namespace_session_admit(h,dsh,q,&hint);
+        int admitted=host_namespace_session_admit_after_group(h,dsh,q,0,efs_raft_shard_group(dsh),&hint);
         int hit=admitted==EFS_OK?host_opid_replay(h,dsh,q,&rep):admitted;
 
         if (hit < 0) {
@@ -14268,7 +14611,7 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
          * (ENOENT) or new_name present. The window is on the dest dentry
          * shard. */
         struct efs_opid_reply rep;
-        int admitted=host_namespace_session_admit(h,dsh,q,&hint);
+        int admitted=host_namespace_session_admit_after_group(h,dsh,q,0,efs_raft_shard_group(dsh),&hint);
         int hit=admitted==EFS_OK?host_opid_replay(h,dsh,q,&rep):admitted;
 
         if (hit < 0) {
@@ -14784,7 +15127,7 @@ static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
 {
     uint64_t offs[64], lens[64];
     uint32_t n = 64, i;
-    struct host_resize_ctx ctx={h,hint};struct efs_txid t;
+    struct efs_txid t;
     int rc,authoritative=0;
 
     /* append_open caps at 64. A 400-record O_APPEND burst is 400 OPEN
@@ -14811,12 +15154,17 @@ static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
                  * Recollect OPEN ranges from the current complete view. */
                 break;
             }
+            /* Freeze owner (when present) and inode before pipelining the
+             * exact cursor/reservation/lane images. The shared callback checks
+             * every applied verdict before committing the transaction. */
+            struct host_append_reserve_ctx batch={.base={h,hint},
+                                                   .leading=session?2:1};
             fill_txid(h,&t);
             rc = session ?
                 efs_meta_finish_append_owned(h->kv, ino, offs[i], EFS_META_APPEND_COMPLETED,
-                                             session, &t, &host_append_ops, &ctx) :
+                                             session, &t, &host_append_reserve_ops, &batch) :
                 efs_meta_finish_append(h->kv, ino, offs[i], EFS_META_APPEND_COMPLETED,
-                                       &t, &host_append_ops, &ctx);
+                                       &t, &host_append_reserve_ops, &batch);
             if(rc!=EFS_OK)return rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
             did++;
         }
@@ -15331,25 +15679,8 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
     /* Register first-touch participants before lane activation or publication.
      * Existing floors are checked under the group ReadIndex above; no quorum
      * round per chunk. Missing local state is never authority to resurrect. */
-    if (session && rc == EFS_OK) {
-        uint8_t seen[EFS_SESSION_BITS / 8] = {0};
-        struct efs_opid_req q = {.id = *session};
-        q.id.seq = 1; q.ack = 0;
-        for (i = 0; i < count && rc == EFS_OK; i++) {
-            uint32_t shards[2] = {efs_kv_inode_shard(recs[i].ino),
-                efs_kv_lane_shard(recs[i].ino, recs[i].chunk_index % EFS_META_LANES)};
-            for (unsigned k = 0; k < 2 && rc == EFS_OK; k++) {
-                uint32_t shard = shards[k];
-                if (shard >= EFS_SESSION_BITS) { rc = EFS_ERR_INVAL; break; }
-                if (seen[shard / 8] & (1u << (shard % 8))) continue;
-                seen[shard / 8] |= (uint8_t)(1u << (shard % 8));
-                rc = efs_session_accept(h->kv, shard, session->client_uuid,
-                                        session->session_epoch);
-                if (rc == EFS_ERR_BUSY || rc == EFS_ERR_NOT_FOUND)
-                    rc = host_namespace_session_admit(h, shard, &q, &hint);
-            }
-        }
-    }
+    if (session && rc == EFS_OK)
+        rc = host_report_session_admit(h, recs, count, session, &hint);
     {
         efs_ino_t uino[32];
         uint64_t usz[32];
@@ -16107,6 +16438,14 @@ void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32
         }
         out->count++;
     }
+    if (rc == EFS_ERR_NOT_PRIMARY &&
+        (!host_hosts(h, EFS_RAFT_GROUP_SHARD) ||
+         !host_hosts(h, EFS_RAFT_GROUP_SHARD2))) {
+        uint8_t need[2];
+        host_need_both(need);
+        host_fwd_getchunks(h, export_id, ino, start, max, generation, out, need, 2);
+        return;
+    }
     out->status = rc_to_inode_status(rc);
     out->primary_id = (hint >= 0) ? (efs_node_id_t)(hint + 1) : 0;
     t1 = now_ns();
@@ -16230,6 +16569,14 @@ void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
     out->next_src = cur.src;
     out->next_done = cur.done ? 1 : 0;
     strncpy(out->next_name, cur.name, EFS_MAX_NAME - 1);
+    if (rc == EFS_ERR_NOT_PRIMARY &&
+        (!host_hosts(h, EFS_RAFT_GROUP_SHARD) ||
+         !host_hosts(h, EFS_RAFT_GROUP_SHARD2))) {
+        uint8_t need[2];
+        host_need_both(need);
+        host_fwd_readdir(h, parent, max_ents, after_src, after_name, out, need, 2);
+        return;
+    }
     if (rc == EFS_OK)
         out->status = EFS_INODE_RPC_OK;
     else {
@@ -16293,6 +16640,14 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
         rc = efs_meta_apply_get_inode(h->kv, cur, &row);
     if (rc == EFS_OK && *p == '\0') {
         rc = efs_meta_apply_getattr(h->kv, cur, host_txn_coord, h, &st);
+        if (rc == EFS_ERR_NOT_PRIMARY &&
+            (!host_hosts(h, EFS_RAFT_GROUP_SHARD) ||
+             !host_hosts(h, EFS_RAFT_GROUP_SHARD2))) {
+            uint8_t need[2];
+            host_need_both(need);
+            host_fwd_lookup_path(h, start, path, out, need, 2);
+            return;
+        }
         set_inode_rc((struct efs_msg_inode_reply *)out, rc, hint);
         if (rc == EFS_OK)
             stat_to_inode(&st, &out->inode);
@@ -16376,6 +16731,14 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
         }
         if (rc == EFS_OK)
             rc = efs_meta_apply_getattr(h->kv, cur, host_txn_coord, h, &st);
+    }
+    if (rc == EFS_ERR_NOT_PRIMARY &&
+        (!host_hosts(h, EFS_RAFT_GROUP_SHARD) ||
+         !host_hosts(h, EFS_RAFT_GROUP_SHARD2))) {
+        uint8_t need[2];
+        host_need_both(need);
+        host_fwd_lookup_path(h, start, path, out, need, 2);
+        return;
     }
     set_inode_rc((struct efs_msg_inode_reply *)out, rc, hint);
     if (rc == EFS_OK) {

@@ -1,0 +1,8 @@
+2026-10-11T03:41:49.090Z storage-engine=files direct_io=on
+2026-10-11T03:41:49.092Z Joined cluster with 3 nodes
+2026-10-11T03:41:49.093Z heartbeat: enabled (2000 ms interval)
+2026-10-11T03:41:49.094Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T03:41:49.094Z raft-host: up raft_id=2 n=4 boot=7270473409495242 salt=7681014358432859832 g0=hosted g2=hosted
+2026-10-11T03:41:49.094Z efsd (no git metadata, branch unknown, built 2026-10-11T03:41:15Z on amd-395), build=unknown: node 3 listening on 127.0.0.1:24192, storage=/data1/efs/amd-round-20261010/gc-direct-4c40wbqu/n3 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=28 shared
+2026-10-11T03:41:49.094Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-11T03:41:51.093Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=993 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0

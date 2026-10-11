@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Private daemon RPC check: store read and GC request/removal counters."""
+import argparse
 import ctypes as c
 import os
 from pathlib import Path
@@ -10,6 +11,9 @@ import subprocess
 import tempfile
 import time
 
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--mode',choices=('direct','buffered'),default='buffered')
+args=parser.parse_args()
 root = Path(__file__).resolve().parents[2]
 class Put(c.Structure):
     _fields_ = [('eid', c.c_uint32), ('ino', c.c_uint64), ('ci', c.c_uint32),
@@ -47,7 +51,7 @@ with tempfile.TemporaryDirectory(prefix='efs-io-stats-') as work:
     with open(work+'/daemon.log', 'w+') as log:
         proc = subprocess.Popen([str(root/'efsd'), '--node-id', '1', '--addr',
                                  '127.0.0.1', '--port', str(port), '--storage', work,
-                                 '--no-direct-io'], env=dict(os.environ,EFS_MD_RAFT_N='3'),
+                                 '--direct-io' if args.mode=='direct' else '--no-direct-io'], env=dict(os.environ,EFS_MD_RAFT_N='3'),
                                 stdout=log, stderr=log)
         try:
             for _ in range(100):

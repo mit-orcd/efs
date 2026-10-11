@@ -1,0 +1,8 @@
+pending_uuid=75bd70e8d6aceb98fe88765157eaf612 ino=4920 name=pending shard=824 hashed=0
+pending CREATE epoch7: same inode on retry, exact adoption/CLOSE and replay cannot reacquire pending ownership PASS ino=4920
+pending_uuid=bf67428dad9002c8180368d66a6fb2b1 ino=3435 name=pending1 shard=3435 hashed=1
+pending CREATE epoch7: same inode on retry, exact adoption/CLOSE and replay cannot reacquire pending ownership PASS ino=3435
+pending_uuid=e797778ef962a5a8e3c14cd2ee0db640 ino=13112 name=pending shard=824 hashed=0 combined_seq=11 known=1
+pending CREATE epoch7: same inode on retry, exact adoption/CLOSE and replay cannot reacquire pending ownership PASS ino=13112
+pending_uuid=9d7595fbd7c0140e360a6eb6b30081c5 ino=7531 name=pending1 shard=3435 hashed=1 combined_seq=11 known=1
+pending CREATE epoch7: same inode on retry, exact adoption/CLOSE and replay cannot reacquire pending ownership PASS ino=7531

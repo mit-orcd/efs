@@ -89,6 +89,38 @@ class Commands(unittest.TestCase):
             self.assertEqual(commands.main([], str(self.directory / "stats")), 0)
         self.assertIn("refresh error 5; showing the last available snapshot", stderr.getvalue())
 
+    def test_owner_names_independent_fallback_cache_and_safe_text(self):
+        from types import SimpleNamespace
+        import pwd, grp
+        args = SimpleNamespace(relative=True, print0=False, long=True,
+                               human_readable=False, time_style=None, numeric_uid_gid=False)
+        entry = envelope("ls", [b"file"])["entries"][0]
+        with patch.object(pwd, "getpwuid", return_value=SimpleNamespace(pw_name="user\x1b")) as user, \
+             patch.object(grp, "getgrgid", return_value=SimpleNamespace(gr_name="group\u202e")) as group:
+            for _ in range(3):
+                line = commands.render_entry(entry, b"file", args, b"/scope", 0)
+                self.assertIn(b"user\\u001b:group\\u202e", line)
+            user.assert_called_once_with(1000)
+            group.assert_called_once_with(1001)
+        args.owner_names = commands.OwnerNames()
+        with patch.object(pwd, "getpwuid", side_effect=KeyError) as user, \
+             patch.object(grp, "getgrgid", return_value=SimpleNamespace(gr_name="independent")):
+            for _ in range(3):
+                self.assertIn(b"1000:independent", commands.render_entry(entry,b"file",args,b"/scope",0))
+            user.assert_called_once()
+        args.owner_names = commands.OwnerNames()
+        with patch.object(pwd, "getpwuid", return_value=SimpleNamespace(pw_name="known")), \
+             patch.object(grp, "getgrgid", side_effect=OSError):
+            self.assertIn(b"known:1001", commands.render_entry(entry,b"file",args,b"/scope",0))
+        args.numeric_uid_gid = True
+        with patch.object(pwd, "getpwuid") as user, patch.object(grp,"getgrgid") as group:
+            self.assertIn(b"1000:1001", commands.render_entry(entry,b"file",args,b"/scope",0))
+            user.assert_not_called(); group.assert_not_called()
+        names = commands.OwnerNames(limit=2)
+        with patch.object(pwd,"getpwuid",side_effect=KeyError):
+            for uid in range(10): names.name(uid,True)
+        self.assertEqual(len(names.cache),2)
+
     def test_embedded_source_matches_python(self):
         lines = (SOURCE.parent / 'source.h').read_text().splitlines()[2:]
         literal = ''.join(json.loads(line.rstrip(';')) for line in lines)
@@ -274,7 +306,7 @@ class Commands(unittest.TestCase):
         self.assertEqual(names("--sort", "size"), [b"a", b"line\nbreak", b"z", b"dir"])
         self.assertEqual(names("--sort", "mtime", "--reverse", "--dirs-first"),
                          [b"dir", b"z", b"line\nbreak", b"a"])
-        p = self.run_command("ls", "-l", "--human-readable", "--time-style", "full", "--relative")
+        p = self.run_command("ls", "-n", "--human-readable", "--time-style", "full", "--relative")
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertIn(b"-rw-r--r-- 1000:1001", p.stdout)
         self.assertIn(b"2.0 KiB", p.stdout)

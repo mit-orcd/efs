@@ -1,0 +1,131 @@
+{
+  "elapsed_s": 90.00574433701695,
+  "window_counts": {
+    "0": {
+      "open": 1945,
+      "close": 1940,
+      "delete": 1536,
+      "read": 1576
+    },
+    "1": {
+      "open": 1629,
+      "close": 1631,
+      "delete": 1549,
+      "read": 1767
+    },
+    "2": {
+      "open": 1585,
+      "close": 1582,
+      "delete": 1843,
+      "read": 1662
+    },
+    "3": {
+      "open": 0,
+      "close": 1,
+      "delete": 0,
+      "read": 1
+    }
+  },
+  "process_samples": [
+    {
+      "seconds": 0.003562378027709201,
+      "processes": {
+        "1033346": {
+          "rss_kib": 10260,
+          "cpu_ticks": 0
+        },
+        "1033169": {
+          "rss_kib": 7356,
+          "cpu_ticks": 11
+        },
+        "1033204": {
+          "rss_kib": 7132,
+          "cpu_ticks": 13
+        },
+        "1033240": {
+          "rss_kib": 6760,
+          "cpu_ticks": 9
+        },
+        "1033277": {
+          "rss_kib": 6116,
+          "cpu_ticks": 7
+        }
+      }
+    },
+    {
+      "seconds": 30.00412080102251,
+      "processes": {
+        "1033346": {
+          "rss_kib": 102320,
+          "cpu_ticks": 965
+        },
+        "1033169": {
+          "rss_kib": 45116,
+          "cpu_ticks": 1823
+        },
+        "1033204": {
+          "rss_kib": 48996,
+          "cpu_ticks": 1616
+        },
+        "1033240": {
+          "rss_kib": 42264,
+          "cpu_ticks": 1511
+        },
+        "1033277": {
+          "rss_kib": 29476,
+          "cpu_ticks": 1260
+        }
+      }
+    },
+    {
+      "seconds": 60.004733105015475,
+      "processes": {
+        "1033346": {
+          "rss_kib": 107368,
+          "cpu_ticks": 1860
+        },
+        "1033169": {
+          "rss_kib": 56188,
+          "cpu_ticks": 3597
+        },
+        "1033204": {
+          "rss_kib": 60532,
+          "cpu_ticks": 3198
+        },
+        "1033240": {
+          "rss_kib": 52920,
+          "cpu_ticks": 2989
+        },
+        "1033277": {
+          "rss_kib": 35660,
+          "cpu_ticks": 2496
+        }
+      }
+    },
+    {
+      "seconds": 90.0053792730032,
+      "processes": {
+        "1033346": {
+          "rss_kib": 112040,
+          "cpu_ticks": 2723
+        },
+        "1033169": {
+          "rss_kib": 65192,
+          "cpu_ticks": 5288
+        },
+        "1033204": {
+          "rss_kib": 71084,
+          "cpu_ticks": 4705
+        },
+        "1033240": {
+          "rss_kib": 63972,
+          "cpu_ticks": 4383
+        },
+        "1033277": {
+          "rss_kib": 42160,
+          "cpu_ticks": 3659
+        }
+      }
+    }
+  ]
+}

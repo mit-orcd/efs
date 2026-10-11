@@ -1,0 +1,10 @@
+2026-10-11T05:53:07.608Z storage-engine=files direct_io=on
+2026-10-11T05:53:07.611Z Joined cluster with 4 nodes
+2026-10-11T05:53:07.612Z heartbeat: enabled (2000 ms interval)
+2026-10-11T05:53:07.613Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T05:53:07.614Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-11T05:53:07.614Z raft-host: up raft_id=3 n=4 boot=10938736246014090 salt=10097898189825332196 g0=off g2=hosted
+2026-10-11T05:53:07.614Z efsd 718e2dbc-combined-negative-fault (branch devel-amd, built 2026-10-11T05:51:52Z on amd-395), build=718e2dbc-combined-negative-fault: node 4 listening on 127.0.0.1:24193, storage=/data1/efs/amd-round-20261010/adopt-fault/gc-direct-871kom7o/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=28 shared
+2026-10-11T05:53:09.612Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=986 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T05:53:11.166Z raft-host: applied session index=3 kind=1 shard=0 ino=0
+2026-10-11T05:53:11.167Z raft-host: applied session index=4 kind=2 shard=1 ino=0

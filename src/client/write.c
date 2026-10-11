@@ -2345,6 +2345,10 @@ static int put_recv_reply(efs_node_id_t nid, struct efs_conn *conn,
         efs_client_conn_release(nid, conn);
         return 0;
     }
+    if (status == EFS_PUT_CHUNK_BUSY) {
+        efs_client_conn_release(nid, conn);
+        return -2;
+    }
     efs_client_conn_drop(nid, conn);
     efs_client_node_note_fail(nid);
     return -1;
@@ -2363,6 +2367,7 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
     struct efs_msg_put_chunk hdrs[EFS_NUM_FRAGMENTS];
     int acks = 0;
     int quota_errors = 0;
+    int busy_errors = 0;
     int reachable = 0;
     /* One budget spans checkout, sends, quorum replies and optional drain.
      * Starting it after sends gave an inherited 8s flush a fresh 30s poll. */
@@ -2501,7 +2506,10 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                     acks++;
                 else if (r == 0)
                     quota_errors++;
-                else if (failed_out)
+                else if (r == -2) {
+                    busy_errors++;
+                    if (failed_out) failed_out[i] = 2;
+                } else if (failed_out)
                     failed_out[i] = 1;
                 conns[i] = NULL;
                 pending[i] = 0;
@@ -2530,7 +2538,10 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                     acks++;
                 else if (r == 0)
                     quota_errors++;
-                else if (failed_out)
+                else if (r == -2) {
+                    busy_errors++;
+                    if (failed_out) failed_out[i] = 2;
+                } else if (failed_out)
                     failed_out[i] = 1;
                 conns[i] = NULL;
                 pending[i] = 0;
@@ -2560,7 +2571,10 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                     acks++;
                 else if (r == 0)
                     quota_errors++;
-                else if (failed_out)
+                else if (r == -2) {
+                    busy_errors++;
+                    if (failed_out) failed_out[i] = 2;
+                } else if (failed_out)
                     failed_out[i] = 1;
                 conns[i] = NULL;
                 pending[i] = 0;
@@ -2631,7 +2645,10 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                 acks++;
             else if (r == 0)
                 quota_errors++;
-            else if (failed_out)
+            else if (r == -2) {
+                busy_errors++;
+                if (failed_out) failed_out[i] = 2;
+            } else if (failed_out)
                 failed_out[i] = 1;
             conns[i] = NULL;
             pending[i] = 0;
@@ -2720,7 +2737,7 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
         return EFS_ERR_QUOTA;
     if (acks >= 2)
         return EFS_OK;
-    if (efs_client_rpc_past_deadline())
+    if (busy_errors || efs_client_rpc_past_deadline())
         return EFS_ERR_BUSY;
     if (reachable == 0)
         return EFS_ERR_NET;
@@ -2781,7 +2798,8 @@ static int put_fragments_parallel_run(efs_ino_t ino, uint32_t chunk_index,
     /* Retry transient blips; only invalidate peers that actually failed. */
     int rc = EFS_ERR_NET;
     int failed[EFS_NUM_FRAGMENTS] = {0, 0, 0};
-    for (int attempt = 1; attempt <= 4; attempt++) {
+    int hard_attempts = 0;
+    for (int attempt = 1; attempt <= 128; attempt++) {
         /* A lost reply can follow a successful remote write. Relocating
          * this generation would abandon that copy outside its publication.
          * Only an object that has never been sent can change placement. */
@@ -2793,6 +2811,14 @@ static int put_fragments_parallel_run(efs_ino_t ino, uint32_t chunk_index,
             return rc;
         if (efs_client_rpc_past_deadline())
             return EFS_ERR_BUSY;
+        /* Pressure is a healthy negative reply. Keep the same generation and
+         * placement, retry only inside the inherited whole-operation budget. */
+        if (rc == EFS_ERR_BUSY) {
+            int pause_rc = report_retry_pause(50000);
+            if (pause_rc != EFS_OK) return pause_rc;
+            continue;
+        }
+        ++hard_attempts;
         /* Only hard I/O failures invalidate a node's idle pool. failed[] is
          * also set for POLLOUT soft-misses (window backpressure) and down-skip,
          * which must NOT trigger a reconnect storm — the node is not dead. */
@@ -2828,15 +2854,16 @@ static int put_fragments_parallel_run(efs_ino_t ino, uint32_t chunk_index,
         }
         fprintf(stderr,
                 "put_fragments ino=%llu chunk=%u nodes=%u,%u,%u "
-                "attempt %d/4 failed: %s (efs_rc=%d)%s\n",
+                "attempt %d failed: %s (efs_rc=%d)%s\n",
                 (unsigned long long)ino, chunk_index,
                 (unsigned)nodes[0], (unsigned)nodes[1], (unsigned)nodes[2],
                 attempt, efs_strerror(rc), rc,
-                attempt < 4 ? " — retrying" : " — giving up");
+                hard_attempts < 4 ? " — retrying" : " — giving up");
         fflush(stderr);
+        if (hard_attempts >= 4) return rc;
         /* Exponential backoff + jitter instead of a fixed linear sleep. */
-        if (attempt < 4) {
-            useconds_t base = 100000u << (attempt - 1); /* 100,200,400ms */
+        if (hard_attempts < 4) {
+            useconds_t base = 100000u << (hard_attempts - 1); /* 100,200,400ms */
             useconds_t jitter = (useconds_t)(rand() % 50000);
             int pause_rc = report_retry_pause(base + jitter);
             if (pause_rc != EFS_OK) return pause_rc;

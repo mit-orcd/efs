@@ -1,0 +1,26 @@
+Evidence directory: /data1/efs/amd-overload-20261011/baseline/gc-direct-euif_3i0
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=10884293654572625954
+client serving PASS
+sustained seconds=0.0 counts={}
+sustained seconds=30.0 counts={'0': {'open': 1945, 'close': 1940, 'delete': 1536, 'read': 1576}, '1': {'open': 0, 'close': 1, 'delete': 0, 'read': 0}}
+sustained seconds=60.0 counts={'0': {'open': 1945, 'close': 1940, 'delete': 1536, 'read': 1576}, '1': {'open': 1629, 'close': 1631, 'delete': 1549, 'read': 1767}, '2': {'open': 0, 'close': 0, 'delete': 3, 'read': 1}}
+sustained seconds=90.0 counts={'0': {'open': 1945, 'close': 1940, 'delete': 1536, 'read': 1576}, '1': {'open': 1629, 'close': 1631, 'delete': 1549, 'read': 1767}, '2': {'open': 1585, 'close': 1582, 'delete': 1843, 'read': 1662}, '3': {'open': 0, 'close': 1, 'delete': 0, 'read': 1}}
+Traceback (most recent call last):
+  File "/data1/efs/devel-amd-gc-yield20-20261011/tests/live/gc_reclamation.py", line 698, in <module>
+    record=sustained(mount,[client.pid,*[proc.pid for proc in servers]],
+                     a.tiny_sustained_seconds,work/'tiny-sustained.json',a.tiny_sustained_large_mib_s)
+  File "/data1/efs/devel-amd-gc-yield20-20261011/tests/live/tiny_sustained.py", line 99, in exercise
+    if future.done() and future.exception(): raise future.exception()
+                                             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/concurrent/futures/thread.py", line 86, in run
+    result = ctx.run(self.task)
+  File "/usr/lib/python3.14/concurrent/futures/thread.py", line 73, in run
+    return fn(*args, **kwargs)
+  File "/data1/efs/devel-amd-gc-yield20-20261011/tests/live/tiny_sustained.py", line 76, in large
+    if written % 4 == 0: os.fsync(fd)
+                         ~~~~~~~~^^^^
+OSError: [Errno 28] No space left on device

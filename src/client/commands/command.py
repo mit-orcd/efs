@@ -120,6 +120,36 @@ def prepare_export(path):
     return os.fdopen(fd, "wb"), temporary, target
 
 
+class OwnerNames:
+    """Bounded, invocation-local NSS cache, including unknown-ID results."""
+    def __init__(self, limit=2048):
+        self.limit = limit
+        self.cache = {}
+
+    def name(self, identifier, user):
+        key = (user, identifier)
+        if key in self.cache:
+            # Refresh insertion order for a bounded LRU without extra imports.
+            result = self.cache.pop(key)
+            self.cache[key] = result
+            return result
+        result = str(identifier)
+        try:
+            if user:
+                import pwd
+                result = pwd.getpwuid(identifier).pw_name
+            else:
+                import grp
+                result = grp.getgrgid(identifier).gr_name
+        except (ImportError, KeyError, OSError, OverflowError, UnicodeError):
+            pass
+        result = safe_text(result)
+        if len(self.cache) >= self.limit:
+            self.cache.pop(next(iter(self.cache)))
+        self.cache[key] = result
+        return result
+
+
 def render_entry(entry, path, args, root, now_ns):
     visible = path if args.relative else os.path.join(root, path)
     if args.print0:
@@ -127,8 +157,15 @@ def render_entry(entry, path, args, root, now_ns):
     prefix = ""
     if args.long:
         size = human_size(entry["size"]) if args.human_readable else str(entry["size"])
-        prefix = "%s %d:%d %10s %s  " % (stat.filemode(entry["mode"]), entry["uid"],
-            entry["gid"], size, format_mtime(entry["mtime_ns"], args.time_style or "iso", now_ns))
+        if getattr(args, "numeric_uid_gid", False):
+            owner, group = str(entry["uid"]), str(entry["gid"])
+        else:
+            names = getattr(args, "owner_names", None)
+            if names is None:
+                names = args.owner_names = OwnerNames()
+            owner, group = names.name(entry["uid"], True), names.name(entry["gid"], False)
+        prefix = "%s %s:%s %10s %s  " % (stat.filemode(entry["mode"]), owner,
+            group, size, format_mtime(entry["mtime_ns"], args.time_style or "iso", now_ns))
     return (prefix + safe_text(os.fsdecode(visible)) + "\n").encode("utf-8")
 
 
@@ -394,7 +431,8 @@ def main(argv=None, script_path=None):
                             help="Maximum displayed results: 1–10000 (default: 100)")
         parser.add_argument("--file", metavar="PATH", help="Stream all results to a writable file; index order, JSON uses NDJSON")
         parser.add_argument("-0", "--print0", action="store_true", help="NUL-separated paths")
-        parser.add_argument("--long", "-l", action="store_true", help="Permissions, uid:gid, size, modification date and path")
+        parser.add_argument("--long", "-l", action="store_true", help="Permissions, owner:group names, size, modification date and path")
+        parser.add_argument("-n", "--numeric-uid-gid", action="store_true", help="Numeric uid:gid ownership (implies --long/-l)")
         parser.add_argument("--human-readable", action="store_true", help="Format sizes as KiB, MiB, GiB (requires --long/-l)")
         parser.add_argument("--sort", choices=("name", "mtime", "size"), default=None,
                             help="Sort selected results: name ascending (default), newest first, or largest first")
@@ -418,6 +456,8 @@ def main(argv=None, script_path=None):
     if command == "help":
         print_help(command, args.extended)
         return 0
+    if getattr(args, "numeric_uid_gid", False):
+        args.long = True
     if args.json and getattr(args, "print0", False):
         parser.error("--json and --print0 are mutually exclusive")
     now_ns = time.time_ns()

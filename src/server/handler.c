@@ -472,6 +472,8 @@ send_reply:
                             reply = EFS_PUT_CHUNK_OK;
                         } else if (rc == EFS_ERR_QUOTA) {
                             reply = EFS_PUT_CHUNK_QUOTA_EXCEEDED;
+                        } else if (rc == EFS_ERR_BUSY) {
+                            reply = EFS_PUT_CHUNK_BUSY;
                         }
                     }
                 }
@@ -1118,8 +1120,13 @@ send_reply:
             /* Server startup policy applies to this metadata namespace. */
             struct efs_msg_features_reply r;
             memset(&r, 0, sizeof(r));
-            r.features = server_raft_host_query_features();
-            r.status = EFS_FEATURES_OK;
+            uint32_t mask = 0;
+            int rc = server_raft_host_query_features_checked(&mask);
+            r.features = rc == EFS_OK ? mask : 0;
+            /* A transient policy failure must not advertise feature disablement.
+             * Clients ignore unavailable discovery and keep their advisory cache;
+             * every query still checks fresh authoritative policy. */
+            r.status = rc == EFS_OK ? EFS_FEATURES_OK : EFS_FEATURES_UNAVAILABLE;
             efs_conn_send_msg(conn, EFS_MSG_GET_FEATURES_REPLY, &r,
                               sizeof(r));
             break;

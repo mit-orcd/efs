@@ -1,0 +1,17 @@
+{
+  "head": "c3118143b3e121a447b8cc5397b24a727f00abbd",
+  "captured_refs": [
+    "refs/heads/devel 48a2719d19fb5a6b0464935c70a967a1f1a86236",
+    "refs/heads/devel-amd 3b3b0172c587a6942cbbe20c1e3384ffe17c2a95",
+    "refs/heads/devel-intel 1bd6ed91ab2e0b06fbfdef50068fb6f326e4edd0",
+    "refs/heads/devel-mac f02c4fae41fecf7b9b604cbb1ad17431faa89ff7",
+    "refs/heads/devel-nuc c3118143b3e121a447b8cc5397b24a727f00abbd",
+    "refs/heads/devel-orcd c52a464391a685a766ee49aa76a162de58162a81",
+    "refs/heads/fix-orcd-capacity-15975da0 60f3628238d3a2fd69be0ce7a329540256234b7e",
+    "refs/heads/main 53be1da7f19045f406a05f4f78f6cf44f5c92212",
+    "refs/remotes/origin/HEAD 53be1da7f19045f406a05f4f78f6cf44f5c92212",
+    "refs/remotes/origin/devel 53be1da7f19045f406a05f4f78f6cf44f5c92212",
+    "refs/remotes/origin/main 53be1da7f19045f406a05f4f78f6cf44f5c92212"
+  ],
+  "worktrees": "worktree /Users/mike/git/efs\nHEAD db22f1908a7f1daf11fbf3808313abe171229c1e\ndetached\n\nworktree /private/tmp/efs-devel-mac\nHEAD f02c4fae41fecf7b9b604cbb1ad17431faa89ff7\nbranch refs/heads/devel-mac\n\nworktree /private/tmp/efs-integration-20261009\nHEAD 48a2719d19fb5a6b0464935c70a967a1f1a86236\nbranch refs/heads/devel\n\nworktree /private/tmp/efs-orcd-capacity-tests-20261011\nHEAD 60f3628238d3a2fd69be0ce7a329540256234b7e\nbranch refs/heads/fix-orcd-capacity-15975da0\n\nworktree /private/tmp/efs-w66-20261008\nHEAD 3317ae4ec2927d5f7aa247c160683050d524c7fb\ndetached\n\nworktree /Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd\nHEAD 3b3b0172c587a6942cbbe20c1e3384ffe17c2a95\nbranch refs/heads/devel-amd\n\nworktree /Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-bench\nHEAD 5071867ca75e6457419395f9838a81dd9c39aa00\ndetached\n\nworktree /Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-find-stats\nHEAD 92c95b44292a85446ac6469a9c9e7fa1617de654\ndetached\n\nworktree /Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-known-bugs\nHEAD e97d139c76407d8cab86e0c69a52cb9874c32fbd\ndetached\n\nworktree /Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-storage-engine\nHEAD 709236665854c5546462021520071035f15b2990\ndetached\n\nworktree /Users/mike/Documents/Codex/2026-10-07/i-l/work/efs-find-stats\nHEAD c3118143b3e121a447b8cc5397b24a727f00abbd\nbranch refs/heads/devel-nuc\n\nworktree /Users/mike/Documents/Codex/2026-10-07/i-l/work/efs-gate-closure\nHEAD e9c82302d56b79695289aeb89f85dbd6eaf57e32\ndetached\n\nworktree /Users/mike/Documents/Codex/2026-10-07/i-l/work/efs-roce-rdma\nHEAD 6cb79c5330008caad2d214dfa1ba03087a653b02\ndetached\n\nworktree /Users/mike/Documents/Codex/2026-10-08/efs/work/devel-compaction-pressure\nHEAD 0abe7fd74078a0352d9a49d6913a6bcb4764f01f\ndetached\n\nworktree /Users/mike/Documents/Codex/2026-10-08/efs/work/devel-orcd\nHEAD c52a464391a685a766ee49aa76a162de58162a81\nbranch refs/heads/devel-orcd\n\nworktree /Users/mike/Documents/Codex/2026-10-10/n-x20/work/efs-intel\nHEAD 1bd6ed91ab2e0b06fbfdef50068fb6f326e4edd0\nbranch refs/heads/devel-intel\n\n"
+}

@@ -1,0 +1,33 @@
+Evidence directory: /data1/efs/amd-round-20261010/gc-buffered-vk02ch6h
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=3616721405545603432
+client serving PASS
+peer mounted PASS
+prepared /data1/efs/mnt/mkdir-race-00 (67 testdirs)
+pass peer_mkdir_exclusive_race       
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (0.3s)
+wrote /data1/efs/amd-round-20261010/gc-buffered-vk02ch6h/mkdir-race-00.tsv
+prepared /data1/efs/mnt/mkdir-race-01 (67 testdirs)
+FAIL peer_mkdir_exclusive_race        b: raced mkdir returned errno 5
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (30.1s)
+wrote /data1/efs/amd-round-20261010/gc-buffered-vk02ch6h/mkdir-race-01.tsv
+Traceback (most recent call last):
+  File "/data1/efs/devel-amd/tests/live/gc_reclamation.py", line 441, in <module>
+    run(['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+         '--parent',f'mkdir-race-{iteration:02d}','--filter','peer_mkdir_exclusive_race','--keep',
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+         '--results',work/f'mkdir-race-{iteration:02d}.tsv'],timeout=180)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data1/efs/devel-amd/tests/live/gc_reclamation.py", line 214, in run
+    return subprocess.run([str(x) for x in args], check=True, timeout=kwargs.pop("timeout",60), env=kwargs.pop("env",env), **kwargs)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['python3', '/data1/efs/devel-amd/tests/posix/posix_2client.py', '--local', '/data1/efs/mnt', '/data1/efs/mnt2', '--parent', 'mkdir-race-01', '--filter', 'peer_mkdir_exclusive_race', '--keep', '--results', '/data1/efs/amd-round-20261010/gc-buffered-vk02ch6h/mkdir-race-01.tsv']' returned non-zero exit status 1.

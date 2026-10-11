@@ -1,0 +1,1062 @@
+2026-10-11T16:43:33.418Z storage-engine=files direct_io=on
+2026-10-11T16:43:33.418Z Storage quota: explicit 4.00 GiB (safe maximum 169.85 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T16:43:33.420Z heartbeat: enabled (2000 ms interval)
+2026-10-11T16:43:33.421Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T16:43:33.421Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:43:33.421Z raft-host: up raft_id=0 n=4 boot=4130017562818652 salt=6038562348249177287 g0=hosted g2=off
+2026-10-11T16:43:33.421Z efsd e9ea8ca1-deploy-normal (branch devel-amd, built 2026-10-11T16:43:13Z on amd-395), build=e9ea8ca1-deploy-normal: node 1 listening on 127.0.0.1:24190, storage=/data1/efs/amd-gc-fanout-20261011/live/gc-direct-plnwtn_a/n1 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T16:43:35.420Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=988 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T16:43:37.809Z raft-host: applied session index=4 kind=1 shard=0 ino=0
+2026-10-11T16:43:37.816Z raft-host: applied session index=13 kind=1 shard=0 ino=0
+2026-10-11T16:43:38.140Z storage-engine=files direct_io=on
+2026-10-11T16:43:38.141Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-gc-fanout-20261011/live/gc-direct-plnwtn_a/n1/meta/cluster_nodes.bin
+2026-10-11T16:43:38.141Z   persisted node 1: 127.0.0.1:24190
+2026-10-11T16:43:38.141Z   persisted node 2: 127.0.0.1:24191
+2026-10-11T16:43:38.141Z   persisted node 3: 127.0.0.1:24192
+2026-10-11T16:43:38.141Z   persisted node 4: 127.0.0.1:24193
+2026-10-11T16:43:38.141Z Storage quota: explicit 4.00 GiB (safe maximum 169.84 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T16:43:38.141Z Trying to rejoin via persisted peer 127.0.0.1:24191 (node 2)...
+2026-10-11T16:43:38.141Z Cannot connect to peer 127.0.0.1:24191
+2026-10-11T16:43:38.141Z Failed to rejoin via 127.0.0.1:24191
+2026-10-11T16:43:38.141Z Trying to rejoin via persisted peer 127.0.0.1:24192 (node 3)...
+2026-10-11T16:43:38.141Z Cannot connect to peer 127.0.0.1:24192
+2026-10-11T16:43:38.141Z Failed to rejoin via 127.0.0.1:24192
+2026-10-11T16:43:38.141Z Trying to rejoin via persisted peer 127.0.0.1:24193 (node 4)...
+2026-10-11T16:43:38.141Z Cannot connect to peer 127.0.0.1:24193
+2026-10-11T16:43:38.141Z Failed to rejoin via 127.0.0.1:24193
+2026-10-11T16:43:38.141Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T16:43:38.141Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T16:43:38.142Z heartbeat: enabled (2000 ms interval)
+2026-10-11T16:43:38.143Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T16:43:38.143Z kv-obs: mt_bytes=3582 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:43:38.143Z raft-host: up raft_id=0 n=4 boot=4131100146524632 salt=3212307640538074083 g0=hosted g2=off
+2026-10-11T16:43:38.143Z efsd e9ea8ca1-deploy-normal (branch devel-amd, built 2026-10-11T16:43:13Z on amd-395), build=e9ea8ca1-deploy-normal: node 1 listening on 127.0.0.1:24190, storage=/data1/efs/amd-gc-fanout-20261011/live/gc-direct-plnwtn_a/n1 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T16:43:40.142Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=981 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T16:43:42.410Z raft-host: applied session index=16 kind=1 shard=0 ino=0
+2026-10-11T16:43:42.431Z raft-host: applied session index=29 kind=1 shard=0 ino=0
+2026-10-11T16:43:42.443Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T16:43:42.760Z storage-engine=files direct_io=on
+2026-10-11T16:43:42.760Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-gc-fanout-20261011/live/gc-direct-plnwtn_a/n1/meta/cluster_nodes.bin
+2026-10-11T16:43:42.760Z   persisted node 1: 127.0.0.1:24190
+2026-10-11T16:43:42.760Z   persisted node 2: 127.0.0.1:24191
+2026-10-11T16:43:42.760Z   persisted node 3: 127.0.0.1:24192
+2026-10-11T16:43:42.760Z   persisted node 4: 127.0.0.1:24193
+2026-10-11T16:43:42.760Z Storage quota: explicit 4.00 GiB (safe maximum 169.84 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T16:43:42.760Z Trying to rejoin via persisted peer 127.0.0.1:24191 (node 2)...
+2026-10-11T16:43:42.760Z Cannot connect to peer 127.0.0.1:24191
+2026-10-11T16:43:42.760Z Failed to rejoin via 127.0.0.1:24191
+2026-10-11T16:43:42.760Z Trying to rejoin via persisted peer 127.0.0.1:24192 (node 3)...
+2026-10-11T16:43:42.760Z Cannot connect to peer 127.0.0.1:24192
+2026-10-11T16:43:42.760Z Failed to rejoin via 127.0.0.1:24192
+2026-10-11T16:43:42.760Z Trying to rejoin via persisted peer 127.0.0.1:24193 (node 4)...
+2026-10-11T16:43:42.760Z Cannot connect to peer 127.0.0.1:24193
+2026-10-11T16:43:42.760Z Failed to rejoin via 127.0.0.1:24193
+2026-10-11T16:43:42.760Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T16:43:42.760Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T16:43:42.761Z heartbeat: enabled (2000 ms interval)
+2026-10-11T16:43:42.762Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T16:43:42.762Z kv-obs: mt_bytes=7816 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:43:42.762Z raft-host: up raft_id=0 n=4 boot=4131100146524633 salt=1565417999694117339 g0=hosted g2=off
+2026-10-11T16:43:42.762Z efsd e9ea8ca1-deploy-normal (branch devel-amd, built 2026-10-11T16:43:13Z on amd-395), build=e9ea8ca1-deploy-normal: node 1 listening on 127.0.0.1:24190, storage=/data1/efs/amd-gc-fanout-20261011/live/gc-direct-plnwtn_a/n1 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T16:43:44.761Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=986 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T16:43:47.089Z raft-host: applied session index=43 kind=1 shard=0 ino=0
+2026-10-11T16:43:47.701Z storage-engine=files direct_io=on
+2026-10-11T16:43:47.701Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-gc-fanout-20261011/live/gc-direct-plnwtn_a/n1/meta/cluster_nodes.bin
+2026-10-11T16:43:47.701Z   persisted node 1: 127.0.0.1:24190
+2026-10-11T16:43:47.701Z   persisted node 2: 127.0.0.1:24191
+2026-10-11T16:43:47.701Z   persisted node 3: 127.0.0.1:24192
+2026-10-11T16:43:47.701Z   persisted node 4: 127.0.0.1:24193
+2026-10-11T16:43:47.701Z Storage quota: explicit 4.00 GiB (safe maximum 169.84 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T16:43:47.701Z Trying to rejoin via persisted peer 127.0.0.1:24191 (node 2)...
+2026-10-11T16:43:47.701Z Cannot connect to peer 127.0.0.1:24191
+2026-10-11T16:43:47.701Z Failed to rejoin via 127.0.0.1:24191
+2026-10-11T16:43:47.701Z Trying to rejoin via persisted peer 127.0.0.1:24192 (node 3)...
+2026-10-11T16:43:47.701Z Cannot connect to peer 127.0.0.1:24192
+2026-10-11T16:43:47.701Z Failed to rejoin via 127.0.0.1:24192
+2026-10-11T16:43:47.701Z Trying to rejoin via persisted peer 127.0.0.1:24193 (node 4)...
+2026-10-11T16:43:47.701Z Cannot connect to peer 127.0.0.1:24193
+2026-10-11T16:43:47.701Z Failed to rejoin via 127.0.0.1:24193
+2026-10-11T16:43:47.701Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T16:43:47.701Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T16:43:47.702Z heartbeat: enabled (2000 ms interval)
+2026-10-11T16:43:47.703Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T16:43:47.703Z raft-host: up raft_id=0 n=4 boot=4131100146524634 salt=16983129321014705827 g0=hosted g2=off
+2026-10-11T16:43:47.703Z efsd e9ea8ca1-deploy-normal (branch devel-amd, built 2026-10-11T16:43:13Z on amd-395), build=e9ea8ca1-deploy-normal: node 1 listening on 127.0.0.1:24190, storage=/data1/efs/amd-gc-fanout-20261011/live/gc-direct-plnwtn_a/n1 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T16:43:47.703Z kv-obs: mt_bytes=9795 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:43:48.974Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T16:43:49.702Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=984 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T16:43:51.976Z raft-host: applied session index=78 kind=1 shard=0 ino=0
+2026-10-11T16:43:52.426Z storage-engine=files direct_io=on
+2026-10-11T16:43:52.426Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-gc-fanout-20261011/live/gc-direct-plnwtn_a/n1/meta/cluster_nodes.bin
+2026-10-11T16:43:52.426Z   persisted node 1: 127.0.0.1:24190
+2026-10-11T16:43:52.426Z   persisted node 2: 127.0.0.1:24191
+2026-10-11T16:43:52.426Z   persisted node 3: 127.0.0.1:24192
+2026-10-11T16:43:52.426Z   persisted node 4: 127.0.0.1:24193
+2026-10-11T16:43:52.427Z Storage quota: explicit 4.00 GiB (safe maximum 169.84 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T16:43:52.427Z Trying to rejoin via persisted peer 127.0.0.1:24191 (node 2)...
+2026-10-11T16:43:52.427Z Cannot connect to peer 127.0.0.1:24191
+2026-10-11T16:43:52.427Z Failed to rejoin via 127.0.0.1:24191
+2026-10-11T16:43:52.427Z Trying to rejoin via persisted peer 127.0.0.1:24192 (node 3)...
+2026-10-11T16:43:52.427Z Cannot connect to peer 127.0.0.1:24192
+2026-10-11T16:43:52.427Z Failed to rejoin via 127.0.0.1:24192
+2026-10-11T16:43:52.427Z Trying to rejoin via persisted peer 127.0.0.1:24193 (node 4)...
+2026-10-11T16:43:52.427Z Cannot connect to peer 127.0.0.1:24193
+2026-10-11T16:43:52.427Z Failed to rejoin via 127.0.0.1:24193
+2026-10-11T16:43:52.427Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T16:43:52.427Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T16:43:52.427Z heartbeat: enabled (2000 ms interval)
+2026-10-11T16:43:52.428Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T16:43:52.429Z kv-obs: mt_bytes=13870 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:43:52.429Z raft-host: up raft_id=0 n=4 boot=4131100146524635 salt=3883594561300328050 g0=hosted g2=off
+2026-10-11T16:43:52.429Z efsd e9ea8ca1-deploy-normal (branch devel-amd, built 2026-10-11T16:43:13Z on amd-395), build=e9ea8ca1-deploy-normal: node 1 listening on 127.0.0.1:24190, storage=/data1/efs/amd-gc-fanout-20261011/live/gc-direct-plnwtn_a/n1 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T16:43:54.427Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=983 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T16:43:56.783Z raft-host: applied session index=137 kind=1 shard=0 ino=0
+2026-10-11T16:43:56.787Z raft-host: apply create rc=-4 index=143 parent=231 name=retained0
+2026-10-11T16:43:56.787Z raft-host: opid-replay parent=231 name=retained0 seq=4 rc=-4 ino=0 (stub)
+2026-10-11T16:43:56.791Z store: put O_DIRECT bounce copy (buf align=816 len=65536)
+2026-10-11T16:43:56.792Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=1158 p50_us=1158 max_us=1158 wdisk ops=1 bytes=65536 errors=0 avg_us=1034 p50_us=1034 max_us=1034
+2026-10-11T16:43:57.430Z kv-obs: mt_bytes=18465 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:43:57.549Z raft-host: applied session index=155 kind=1 shard=0 ino=0
+2026-10-11T16:43:57.552Z raft-host: applied session index=160 kind=1 shard=0 ino=0
+2026-10-11T16:43:57.554Z raft-host: apply create rc=-4 index=165 parent=231 name=retained1
+2026-10-11T16:43:57.554Z raft-host: opid-replay parent=231 name=retained1 seq=4 rc=-4 ino=0 (stub)
+2026-10-11T16:43:57.580Z raft-host: gc-pass ms=79 orphan=2 reap=8 frag=0 spread=0 recover=67 fscans=1 fsegs=0 fkeys=1 femit=1 ftomb=0 scans=202 segs=0 keys=44 emit=6 tomb=38 reap_scan=0 reap_sweep=0 reap_fence=7 reap_done=0
+2026-10-11T16:43:58.677Z raft-host: gc-pass ms=76 orphan=2 reap=5 frag=0 spread=0 recover=67 fscans=1 fsegs=0 fkeys=2 femit=1 ftomb=1 scans=200 segs=0 keys=11 emit=4 tomb=7 reap_scan=0 reap_sweep=1 reap_fence=4 reap_done=0
+2026-10-11T16:43:59.533Z storage-engine=files direct_io=on
+2026-10-11T16:43:59.533Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-gc-fanout-20261011/live/gc-direct-plnwtn_a/n1/meta/cluster_nodes.bin
+2026-10-11T16:43:59.533Z   persisted node 1: 127.0.0.1:24190
+2026-10-11T16:43:59.533Z   persisted node 2: 127.0.0.1:24191
+2026-10-11T16:43:59.533Z   persisted node 3: 127.0.0.1:24192
+2026-10-11T16:43:59.533Z   persisted node 4: 127.0.0.1:24193
+2026-10-11T16:43:59.535Z Storage quota: explicit 4.00 GiB (safe maximum 169.82 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T16:43:59.535Z Trying to rejoin via persisted peer 127.0.0.1:24191 (node 2)...
+2026-10-11T16:43:59.535Z Cannot connect to peer 127.0.0.1:24191
+2026-10-11T16:43:59.535Z Failed to rejoin via 127.0.0.1:24191
+2026-10-11T16:43:59.535Z Trying to rejoin via persisted peer 127.0.0.1:24192 (node 3)...
+2026-10-11T16:43:59.535Z Cannot connect to peer 127.0.0.1:24192
+2026-10-11T16:43:59.535Z Failed to rejoin via 127.0.0.1:24192
+2026-10-11T16:43:59.535Z Trying to rejoin via persisted peer 127.0.0.1:24193 (node 4)...
+2026-10-11T16:43:59.535Z Cannot connect to peer 127.0.0.1:24193
+2026-10-11T16:43:59.535Z Failed to rejoin via 127.0.0.1:24193
+2026-10-11T16:43:59.535Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T16:43:59.535Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T16:43:59.535Z heartbeat: enabled (2000 ms interval)
+2026-10-11T16:43:59.537Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T16:43:59.537Z kv-obs: mt_bytes=40338 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:43:59.537Z raft-host: up raft_id=0 n=4 boot=4131100146524636 salt=1867163201013058395 g0=hosted g2=off
+2026-10-11T16:43:59.537Z efsd e9ea8ca1-deploy-normal (branch devel-amd, built 2026-10-11T16:43:13Z on amd-395), build=e9ea8ca1-deploy-normal: node 1 listening on 127.0.0.1:24190, storage=/data1/efs/amd-gc-fanout-20261011/live/gc-direct-plnwtn_a/n1 (1 paths, stripe=none), used=2686976, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T16:44:01.536Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=979 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T16:44:03.813Z iostats: get ops=1 bytes=65536 errors=0 avg_us=264 p50_us=264 max_us=264 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T16:44:04.277Z raft-host: applied session index=547 kind=1 shard=0 ino=0
+2026-10-11T16:44:04.279Z raft-host: applied session index=548 kind=1 shard=0 ino=0
+2026-10-11T16:44:04.283Z raft-host: applied session index=553 kind=3 shard=0 ino=0
+2026-10-11T16:44:04.287Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:04.341Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:04.396Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:04.451Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:04.504Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:04.540Z kv-obs: mt_bytes=43944 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:44:04.561Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:04.614Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:04.671Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:04.825Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:04.880Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:04.934Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:04.988Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:05.041Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:05.096Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:05.152Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:05.205Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:05.364Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:05.418Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:05.474Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:05.529Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:05.585Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:05.638Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:05.696Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:05.750Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:05.907Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:05.961Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:06.017Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:06.071Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:06.126Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:06.181Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:06.236Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:06.289Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:06.444Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:06.498Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:06.552Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:06.607Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:06.661Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:06.717Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:06.773Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:06.829Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:06.986Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:07.041Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:07.096Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:07.151Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:07.206Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:07.260Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:07.317Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:07.370Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:07.525Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:07.579Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:07.632Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:07.686Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:07.741Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:07.796Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:07.850Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:07.905Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:08.060Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:08.115Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:08.169Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:08.224Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:08.278Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:08.332Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:08.385Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:08.437Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:08.592Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:08.647Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:08.701Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:08.756Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:08.810Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:08.815Z iostats: get ops=40 bytes=2621440 errors=0 avg_us=162 p50_us=150 max_us=312 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T16:44:08.865Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:08.918Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:08.974Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:09.129Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:09.185Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:09.239Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:09.294Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:09.351Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:09.403Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:09.460Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:09.512Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:09.545Z kv-obs: mt_bytes=43080 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:44:09.668Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:09.722Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:09.776Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:09.830Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:09.889Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:09.942Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:09.998Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:10.067Z raft-host: applied session index=579 kind=5 shard=1 ino=0
+2026-10-11T16:44:10.221Z raft-host: applied session index=596 kind=1 shard=0 ino=0
+2026-10-11T16:44:10.238Z raft-host: applied session index=598 kind=3 shard=0 ino=0
+2026-10-11T16:44:10.253Z raft-host: applied session index=599 kind=5 shard=994 ino=0
+2026-10-11T16:44:10.965Z store: put O_DIRECT bounce copy (buf align=448 len=65536)
+2026-10-11T16:44:11.512Z storage-engine=files direct_io=on
+2026-10-11T16:44:11.512Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-gc-fanout-20261011/live/gc-direct-plnwtn_a/n1/meta/cluster_nodes.bin
+2026-10-11T16:44:11.512Z   persisted node 1: 127.0.0.1:24190
+2026-10-11T16:44:11.512Z   persisted node 2: 127.0.0.1:24191
+2026-10-11T16:44:11.512Z   persisted node 3: 127.0.0.1:24192
+2026-10-11T16:44:11.512Z   persisted node 4: 127.0.0.1:24193
+2026-10-11T16:44:11.512Z Storage quota: explicit 4.00 GiB (safe maximum 169.81 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T16:44:11.512Z Trying to rejoin via persisted peer 127.0.0.1:24191 (node 2)...
+2026-10-11T16:44:11.512Z Cannot connect to peer 127.0.0.1:24191
+2026-10-11T16:44:11.512Z Failed to rejoin via 127.0.0.1:24191
+2026-10-11T16:44:11.512Z Trying to rejoin via persisted peer 127.0.0.1:24192 (node 3)...
+2026-10-11T16:44:11.512Z Cannot connect to peer 127.0.0.1:24192
+2026-10-11T16:44:11.512Z Failed to rejoin via 127.0.0.1:24192
+2026-10-11T16:44:11.512Z Trying to rejoin via persisted peer 127.0.0.1:24193 (node 4)...
+2026-10-11T16:44:11.512Z Cannot connect to peer 127.0.0.1:24193
+2026-10-11T16:44:11.512Z Failed to rejoin via 127.0.0.1:24193
+2026-10-11T16:44:11.512Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T16:44:11.512Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T16:44:11.513Z heartbeat: enabled (2000 ms interval)
+2026-10-11T16:44:11.515Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T16:44:11.515Z kv-obs: mt_bytes=46104 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:44:11.515Z raft-host: up raft_id=0 n=4 boot=4131100146524637 salt=9597942204662174761 g0=hosted g2=off
+2026-10-11T16:44:11.515Z efsd e9ea8ca1-deploy-normal (branch devel-amd, built 2026-10-11T16:43:13Z on amd-395), build=e9ea8ca1-deploy-normal: node 1 listening on 127.0.0.1:24190, storage=/data1/efs/amd-gc-fanout-20261011/live/gc-direct-plnwtn_a/n1 (1 paths, stripe=none), used=262144, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T16:44:13.513Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=981 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T16:44:15.811Z iostats: get ops=1 bytes=65536 errors=0 avg_us=249 p50_us=249 max_us=249 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T16:44:15.811Z store: put O_DIRECT bounce copy (buf align=528 len=65536)
+2026-10-11T16:44:15.818Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:15.873Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:15.925Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:15.980Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:16.033Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:16.086Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:16.139Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:16.193Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:16.348Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:16.401Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:16.455Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:16.509Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:16.520Z kv-obs: mt_bytes=46961 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:44:16.565Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:16.618Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:16.658Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=143 emit=0 tomb=143 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:44:16.671Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:16.725Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:16.881Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:16.935Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:16.990Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:17.043Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:17.098Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:17.152Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:17.206Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:17.260Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:17.416Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:17.472Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:17.526Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:17.581Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:17.635Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:17.690Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:17.739Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=89 emit=0 tomb=89 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:44:17.744Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:17.798Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:17.953Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:18.008Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:18.062Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:18.120Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:18.174Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:18.230Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:18.284Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:18.337Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:18.494Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:18.549Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:18.604Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:18.659Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:18.712Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:18.765Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:18.819Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:18.821Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=89 emit=0 tomb=89 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:44:18.873Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:19.028Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:19.082Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:19.135Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:19.190Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:19.245Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:19.299Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:19.355Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:19.410Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:19.566Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:19.621Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:19.676Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:19.729Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:19.784Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:19.839Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:19.892Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:19.897Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=89 emit=0 tomb=89 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:44:19.947Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:20.102Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:20.156Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:20.209Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:20.264Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:20.318Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:20.372Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:20.425Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:20.479Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:20.634Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:20.688Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:20.741Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:20.794Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:20.813Z iostats: get ops=1 bytes=65536 errors=0 avg_us=249 p50_us=249 max_us=249 put ops=1 bytes=65536 errors=0 avg_us=791 p50_us=791 max_us=791 wdisk ops=1 bytes=65536 errors=0 avg_us=452 p50_us=452 max_us=452
+2026-10-11T16:44:20.847Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:20.902Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:20.956Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:20.974Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=89 emit=0 tomb=89 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:44:21.011Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:21.167Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:21.220Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:21.274Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:21.328Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:21.381Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:21.435Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:21.488Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:21.542Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:21.698Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:21.751Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:21.806Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:21.859Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:21.913Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:21.967Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:22.053Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=89 emit=0 tomb=89 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:44:23.141Z raft-host: gc-pass ms=78 orphan=3 reap=6 frag=0 spread=0 recover=67 fscans=1 fsegs=0 fkeys=3 femit=1 ftomb=2 scans=200 segs=0 keys=95 emit=4 tomb=91 reap_scan=0 reap_sweep=0 reap_fence=4 reap_done=0
+2026-10-11T16:44:23.237Z raft-host: applied session index=680 kind=1 shard=0 ino=0
+2026-10-11T16:44:23.266Z raft-host: applied session index=689 kind=12 shard=1 ino=12289
+2026-10-11T16:44:23.267Z raft-host: applied session index=690 kind=12 shard=1 ino=12289
+2026-10-11T16:44:23.268Z raft-host: applied session index=691 kind=12 shard=1 ino=12289
+2026-10-11T16:44:23.708Z storage-engine=files direct_io=on
+2026-10-11T16:44:23.708Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-gc-fanout-20261011/live/gc-direct-plnwtn_a/n1/meta/cluster_nodes.bin
+2026-10-11T16:44:23.708Z   persisted node 1: 127.0.0.1:24190
+2026-10-11T16:44:23.708Z   persisted node 2: 127.0.0.1:24191
+2026-10-11T16:44:23.708Z   persisted node 3: 127.0.0.1:24192
+2026-10-11T16:44:23.708Z   persisted node 4: 127.0.0.1:24193
+2026-10-11T16:44:23.708Z Storage quota: explicit 4.00 GiB (safe maximum 169.80 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T16:44:23.708Z Trying to rejoin via persisted peer 127.0.0.1:24191 (node 2)...
+2026-10-11T16:44:23.708Z Cannot connect to peer 127.0.0.1:24191
+2026-10-11T16:44:23.708Z Failed to rejoin via 127.0.0.1:24191
+2026-10-11T16:44:23.708Z Trying to rejoin via persisted peer 127.0.0.1:24192 (node 3)...
+2026-10-11T16:44:23.708Z Cannot connect to peer 127.0.0.1:24192
+2026-10-11T16:44:23.708Z Failed to rejoin via 127.0.0.1:24192
+2026-10-11T16:44:23.708Z Trying to rejoin via persisted peer 127.0.0.1:24193 (node 4)...
+2026-10-11T16:44:23.708Z Cannot connect to peer 127.0.0.1:24193
+2026-10-11T16:44:23.708Z Failed to rejoin via 127.0.0.1:24193
+2026-10-11T16:44:23.708Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T16:44:23.708Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T16:44:23.709Z heartbeat: enabled (2000 ms interval)
+2026-10-11T16:44:23.710Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T16:44:23.711Z raft-host: up raft_id=0 n=4 boot=4143890053679162 salt=953630605404747847 g0=hosted g2=off
+2026-10-11T16:44:23.711Z efsd e9ea8ca1-deploy-normal (branch devel-amd, built 2026-10-11T16:43:13Z on amd-395), build=e9ea8ca1-deploy-normal: node 1 listening on 127.0.0.1:24190, storage=/data1/efs/amd-gc-fanout-20261011/live/gc-direct-plnwtn_a/n1 (1 paths, stripe=none), used=65536, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T16:44:23.711Z kv-obs: mt_bytes=51093 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:44:24.991Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T16:44:25.709Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=985 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T16:44:27.980Z raft-host: applied session index=700 kind=1 shard=0 ino=0
+2026-10-11T16:44:27.998Z raft-host: applied session index=706 kind=12 shard=1 ino=12289
+2026-10-11T16:44:28.320Z storage-engine=files direct_io=on
+2026-10-11T16:44:28.320Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-gc-fanout-20261011/live/gc-direct-plnwtn_a/n1/meta/cluster_nodes.bin
+2026-10-11T16:44:28.320Z   persisted node 1: 127.0.0.1:24190
+2026-10-11T16:44:28.320Z   persisted node 2: 127.0.0.1:24191
+2026-10-11T16:44:28.320Z   persisted node 3: 127.0.0.1:24192
+2026-10-11T16:44:28.320Z   persisted node 4: 127.0.0.1:24193
+2026-10-11T16:44:28.320Z Storage quota: explicit 4.00 GiB (safe maximum 169.80 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T16:44:28.320Z Trying to rejoin via persisted peer 127.0.0.1:24191 (node 2)...
+2026-10-11T16:44:28.320Z Cannot connect to peer 127.0.0.1:24191
+2026-10-11T16:44:28.320Z Failed to rejoin via 127.0.0.1:24191
+2026-10-11T16:44:28.320Z Trying to rejoin via persisted peer 127.0.0.1:24192 (node 3)...
+2026-10-11T16:44:28.320Z Cannot connect to peer 127.0.0.1:24192
+2026-10-11T16:44:28.320Z Failed to rejoin via 127.0.0.1:24192
+2026-10-11T16:44:28.320Z Trying to rejoin via persisted peer 127.0.0.1:24193 (node 4)...
+2026-10-11T16:44:28.320Z Cannot connect to peer 127.0.0.1:24193
+2026-10-11T16:44:28.320Z Failed to rejoin via 127.0.0.1:24193
+2026-10-11T16:44:28.320Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T16:44:28.320Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T16:44:28.320Z heartbeat: enabled (2000 ms interval)
+2026-10-11T16:44:28.322Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T16:44:28.322Z raft-host: up raft_id=0 n=4 boot=4143890053679163 salt=11550285937095560736 g0=hosted g2=off
+2026-10-11T16:44:28.322Z efsd e9ea8ca1-deploy-normal (branch devel-amd, built 2026-10-11T16:43:13Z on amd-395), build=e9ea8ca1-deploy-normal: node 1 listening on 127.0.0.1:24190, storage=/data1/efs/amd-gc-fanout-20261011/live/gc-direct-plnwtn_a/n1 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T16:44:28.322Z kv-obs: mt_bytes=52324 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:44:30.321Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=984 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T16:44:32.610Z raft-host: applied session index=712 kind=12 shard=1 ino=12289
+2026-10-11T16:44:32.623Z raft-host: applied session index=713 kind=12 shard=1 ino=12289
+2026-10-11T16:44:32.628Z store: put O_DIRECT bounce copy (buf align=2368 len=65536)
+2026-10-11T16:44:32.629Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=997 p50_us=997 max_us=997 wdisk ops=1 bytes=65536 errors=0 avg_us=887 p50_us=887 max_us=887
+2026-10-11T16:44:32.650Z raft-host: applied session index=731 kind=12 shard=1 ino=20481
+2026-10-11T16:44:32.652Z raft-host: applied session index=733 kind=3 shard=0 ino=0
+2026-10-11T16:44:32.655Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:32.708Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:32.765Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:32.819Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:32.873Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:32.927Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:32.982Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:33.036Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:33.192Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:33.248Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:33.302Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:33.323Z kv-obs: mt_bytes=54357 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:44:33.358Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:33.412Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:33.467Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:33.520Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:33.575Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:33.729Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:33.782Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:33.836Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:33.892Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:33.947Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:34.002Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:34.056Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:34.111Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:34.269Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:34.323Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:34.376Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:34.430Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:34.484Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:34.540Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:34.595Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:34.651Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:34.804Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:34.858Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:34.911Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:34.966Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:35.021Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:35.075Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:35.129Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:35.184Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:35.340Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:35.395Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:35.450Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:35.506Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:35.560Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:35.614Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:35.669Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:35.725Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:35.879Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:35.934Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:35.988Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:36.041Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:36.096Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:36.150Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:36.204Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:36.257Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:36.416Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:36.471Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:36.525Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:36.580Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:36.634Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:36.689Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:36.743Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:36.798Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:36.952Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:37.006Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:37.062Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:37.118Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:37.174Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:37.229Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:37.283Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:37.338Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:37.493Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:37.547Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:37.601Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:37.633Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=2 bytes=131072 errors=0 avg_us=934 p50_us=997 max_us=997 wdisk ops=2 bytes=131072 errors=0 avg_us=850 p50_us=887 max_us=887
+2026-10-11T16:44:37.655Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:37.710Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:37.765Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:37.819Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:37.874Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:38.029Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:38.084Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:38.139Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:38.194Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:38.248Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:38.302Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:38.358Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:38.411Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:38.567Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:38.621Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:38.678Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:38.732Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:38.787Z storage-fence: member=4 floor=2 check=0 transport unavailable
+2026-10-11T16:44:38.858Z raft-host: applied session index=740 kind=5 shard=1 ino=0
+2026-10-11T16:44:38.905Z raft-host: applied session index=743 kind=12 shard=1 ino=20481
+2026-10-11T16:44:39.427Z raft-host: applied session index=752 kind=1 shard=0 ino=0
+2026-10-11T16:44:42.635Z iostats: get ops=137 bytes=8978432 errors=0 avg_us=331 p50_us=376 max_us=1039 put ops=94 bytes=6160384 errors=0 avg_us=909 p50_us=987 max_us=2048 wdisk ops=94 bytes=6160384 errors=0 avg_us=865 p50_us=946 max_us=1998
+2026-10-11T16:44:43.331Z kv-obs: mt_bytes=76069 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:44:46.327Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=805 passes=18 sampled=0 pending=0,0 reap=0,0 removed=34 file_bytes=2367488 payload_bytes=2228224 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T16:44:47.636Z iostats: get ops=145 bytes=9502720 errors=0 avg_us=328 p50_us=338 max_us=1039 put ops=102 bytes=6684672 errors=0 avg_us=901 p50_us=969 max_us=2048 wdisk ops=102 bytes=6684672 errors=0 avg_us=856 p50_us=919 max_us=1998
+2026-10-11T16:44:48.335Z kv-obs: mt_bytes=79494 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:44:52.638Z iostats: get ops=145 bytes=9502720 errors=0 avg_us=328 p50_us=338 max_us=1039 put ops=156 bytes=10223616 errors=0 avg_us=1063 p50_us=1006 max_us=3123 wdisk ops=156 bytes=10223616 errors=0 avg_us=1016 p50_us=957 max_us=3055
+2026-10-11T16:44:53.335Z kv-obs: mt_bytes=94462 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:44:57.003Z storage-engine=files direct_io=on
+2026-10-11T16:44:57.003Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-gc-fanout-20261011/live/gc-direct-plnwtn_a/n1/meta/cluster_nodes.bin
+2026-10-11T16:44:57.003Z   persisted node 1: 127.0.0.1:24190
+2026-10-11T16:44:57.003Z   persisted node 2: 127.0.0.1:24191
+2026-10-11T16:44:57.003Z   persisted node 3: 127.0.0.1:24192
+2026-10-11T16:44:57.003Z   persisted node 4: 127.0.0.1:24193
+2026-10-11T16:44:57.004Z Storage quota: explicit 4.00 GiB (safe maximum 169.79 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T16:44:57.004Z Trying to rejoin via persisted peer 127.0.0.1:24191 (node 2)...
+2026-10-11T16:44:57.004Z Cannot connect to peer 127.0.0.1:24191
+2026-10-11T16:44:57.004Z Failed to rejoin via 127.0.0.1:24191
+2026-10-11T16:44:57.004Z Trying to rejoin via persisted peer 127.0.0.1:24192 (node 3)...
+2026-10-11T16:44:57.004Z Cannot connect to peer 127.0.0.1:24192
+2026-10-11T16:44:57.004Z Failed to rejoin via 127.0.0.1:24192
+2026-10-11T16:44:57.004Z Trying to rejoin via persisted peer 127.0.0.1:24193 (node 4)...
+2026-10-11T16:44:57.004Z Cannot connect to peer 127.0.0.1:24193
+2026-10-11T16:44:57.004Z Failed to rejoin via 127.0.0.1:24193
+2026-10-11T16:44:57.004Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T16:44:57.004Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T16:44:57.005Z heartbeat: enabled (2000 ms interval)
+2026-10-11T16:44:57.007Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T16:44:57.007Z raft-host: up raft_id=0 n=4 boot=4147897906234445 salt=9171252222399148467 g0=hosted g2=off
+2026-10-11T16:44:57.007Z efsd e9ea8ca1-deploy-normal (branch devel-amd, built 2026-10-11T16:43:13Z on amd-395), build=e9ea8ca1-deploy-normal: node 1 listening on 127.0.0.1:24190, storage=/data1/efs/amd-gc-fanout-20261011/live/gc-direct-plnwtn_a/n1 (1 paths, stripe=none), used=7798784, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T16:44:57.007Z kv-obs: mt_bytes=100081 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:44:58.112Z raft-host: gc-pass ms=87 orphan=0 reap=86 frag=0 spread=0 recover=0 fscans=2 fsegs=0 fkeys=246 femit=36 ftomb=210 scans=39 segs=0 keys=1485 emit=295 tomb=1190 reap_scan=0 reap_sweep=84 reap_fence=2 reap_done=0
+2026-10-11T16:44:58.284Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T16:44:59.005Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=892 passes=2 sampled=1 pending=0,0 reap=1,0 removed=55 file_bytes=3829760 payload_bytes=3604480 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T16:44:59.162Z raft-host: gc-pass ms=32 orphan=0 reap=32 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=36 segs=0 keys=166 emit=1 tomb=165 reap_scan=0 reap_sweep=32 reap_fence=0 reap_done=0
+2026-10-11T16:45:00.206Z raft-host: gc-pass ms=32 orphan=0 reap=32 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=36 segs=0 keys=166 emit=1 tomb=165 reap_scan=0 reap_sweep=32 reap_fence=0 reap_done=0
+2026-10-11T16:45:01.260Z raft-host: gc-pass ms=34 orphan=0 reap=34 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=36 segs=0 keys=166 emit=1 tomb=165 reap_scan=0 reap_sweep=33 reap_fence=1 reap_done=0
+2026-10-11T16:45:02.007Z kv-obs: mt_bytes=98065 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:45:02.373Z raft-host: gc-pass ms=101 orphan=0 reap=34 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=228 segs=0 keys=242 emit=1 tomb=241 reap_scan=0 reap_sweep=33 reap_fence=0 reap_done=0
+2026-10-11T16:45:03.287Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T16:45:03.484Z raft-host: gc-pass ms=100 orphan=0 reap=33 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=228 segs=0 keys=166 emit=1 tomb=165 reap_scan=0 reap_sweep=32 reap_fence=0 reap_done=0
+2026-10-11T16:45:04.597Z raft-host: gc-pass ms=103 orphan=0 reap=36 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=228 segs=0 keys=166 emit=1 tomb=165 reap_scan=0 reap_sweep=35 reap_fence=0 reap_done=0
+2026-10-11T16:45:05.716Z raft-host: gc-pass ms=102 orphan=0 reap=35 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=228 segs=0 keys=166 emit=1 tomb=165 reap_scan=0 reap_sweep=34 reap_fence=0 reap_done=0
+2026-10-11T16:45:06.831Z raft-host: gc-pass ms=98 orphan=0 reap=31 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=228 segs=0 keys=166 emit=1 tomb=165 reap_scan=0 reap_sweep=30 reap_fence=0 reap_done=0
+2026-10-11T16:45:07.947Z raft-host: gc-pass ms=103 orphan=0 reap=33 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=230 segs=0 keys=166 emit=1 tomb=165 reap_scan=0 reap_sweep=32 reap_fence=1 reap_done=0
+2026-10-11T16:45:08.289Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T16:45:09.035Z raft-host: gc-pass ms=70 orphan=0 reap=0 frag=0 spread=0 recover=70 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=130 emit=0 tomb=130 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:45:10.076Z store: put O_DIRECT bounce copy (buf align=2096 len=65536)
+2026-10-11T16:45:10.130Z raft-host: gc-pass ms=77 orphan=4 reap=4 frag=1 spread=0 recover=67 fscans=1 fsegs=0 fkeys=124 femit=9 ftomb=115 scans=200 segs=0 keys=256 emit=13 tomb=243 reap_scan=0 reap_sweep=0 reap_fence=3 reap_done=0
+2026-10-11T16:45:11.246Z raft-host: gc-pass ms=102 orphan=3 reap=30 frag=1 spread=0 recover=67 fscans=1 fsegs=0 fkeys=137 femit=36 ftomb=101 scans=229 segs=0 keys=306 emit=74 tomb=232 reap_scan=0 reap_sweep=26 reap_fence=3 reap_done=0
+2026-10-11T16:45:12.012Z kv-obs: mt_bytes=111471 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:45:12.364Z raft-host: gc-pass ms=99 orphan=0 reap=32 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=161 femit=37 ftomb=124 scans=230 segs=0 keys=330 emit=38 tomb=292 reap_scan=0 reap_sweep=31 reap_fence=0 reap_done=0
+2026-10-11T16:45:13.291Z iostats: get ops=67 bytes=4390912 errors=0 avg_us=416 p50_us=389 max_us=826 put ops=54 bytes=3538944 errors=0 avg_us=1203 p50_us=1057 max_us=2679 wdisk ops=54 bytes=3538944 errors=0 avg_us=1153 p50_us=1017 max_us=2601
+2026-10-11T16:45:13.398Z storage-engine=files direct_io=on
+2026-10-11T16:45:13.398Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-gc-fanout-20261011/live/gc-direct-plnwtn_a/n1/meta/cluster_nodes.bin
+2026-10-11T16:45:13.398Z   persisted node 1: 127.0.0.1:24190
+2026-10-11T16:45:13.398Z   persisted node 2: 127.0.0.1:24191
+2026-10-11T16:45:13.398Z   persisted node 3: 127.0.0.1:24192
+2026-10-11T16:45:13.398Z   persisted node 4: 127.0.0.1:24193
+2026-10-11T16:45:13.399Z Storage quota: explicit 4.00 GiB (safe maximum 169.79 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T16:45:13.399Z Trying to rejoin via persisted peer 127.0.0.1:24191 (node 2)...
+2026-10-11T16:45:13.399Z Cannot connect to peer 127.0.0.1:24191
+2026-10-11T16:45:13.399Z Failed to rejoin via 127.0.0.1:24191
+2026-10-11T16:45:13.399Z Trying to rejoin via persisted peer 127.0.0.1:24192 (node 3)...
+2026-10-11T16:45:13.399Z Cannot connect to peer 127.0.0.1:24192
+2026-10-11T16:45:13.399Z Failed to rejoin via 127.0.0.1:24192
+2026-10-11T16:45:13.399Z Trying to rejoin via persisted peer 127.0.0.1:24193 (node 4)...
+2026-10-11T16:45:13.399Z Cannot connect to peer 127.0.0.1:24193
+2026-10-11T16:45:13.399Z Failed to rejoin via 127.0.0.1:24193
+2026-10-11T16:45:13.399Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T16:45:13.399Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T16:45:13.399Z heartbeat: enabled (2000 ms interval)
+2026-10-11T16:45:13.402Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T16:45:13.402Z raft-host: up raft_id=0 n=4 boot=4147897906234446 salt=14671483135932504786 g0=hosted g2=off
+2026-10-11T16:45:13.402Z efsd e9ea8ca1-deploy-normal (branch devel-amd, built 2026-10-11T16:43:13Z on amd-395), build=e9ea8ca1-deploy-normal: node 1 listening on 127.0.0.1:24190, storage=/data1/efs/amd-gc-fanout-20261011/live/gc-direct-plnwtn_a/n1 (1 paths, stripe=none), used=3538944, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T16:45:13.402Z kv-obs: mt_bytes=111471 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:45:14.452Z raft-host: gc-pass ms=29 orphan=0 reap=29 frag=0 spread=0 recover=0 fscans=2 fsegs=0 fkeys=320 femit=72 ftomb=248 scans=39 segs=0 keys=1711 emit=380 tomb=1331 reap_scan=0 reap_sweep=28 reap_fence=0 reap_done=0
+2026-10-11T16:45:15.399Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=947 passes=2 sampled=1 pending=36,0 reap=1,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T16:45:15.502Z raft-host: gc-pass ms=31 orphan=0 reap=31 frag=0 spread=0 recover=0 fscans=2 fsegs=0 fkeys=161 femit=37 ftomb=124 scans=38 segs=0 keys=330 emit=38 tomb=292 reap_scan=0 reap_sweep=31 reap_fence=0 reap_done=0
+2026-10-11T16:45:16.549Z raft-host: gc-pass ms=29 orphan=0 reap=29 frag=0 spread=0 recover=0 fscans=2 fsegs=0 fkeys=161 femit=37 ftomb=124 scans=38 segs=0 keys=330 emit=38 tomb=292 reap_scan=0 reap_sweep=29 reap_fence=0 reap_done=0
+2026-10-11T16:45:17.598Z raft-host: gc-pass ms=31 orphan=0 reap=31 frag=0 spread=0 recover=0 fscans=2 fsegs=0 fkeys=161 femit=37 ftomb=124 scans=38 segs=0 keys=330 emit=38 tomb=292 reap_scan=0 reap_sweep=30 reap_fence=0 reap_done=0
+2026-10-11T16:45:18.707Z raft-host: gc-pass ms=97 orphan=0 reap=29 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=161 femit=37 ftomb=124 scans=230 segs=0 keys=406 emit=38 tomb=368 reap_scan=0 reap_sweep=29 reap_fence=0 reap_done=0
+2026-10-11T16:45:19.821Z raft-host: gc-pass ms=97 orphan=0 reap=30 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=161 femit=37 ftomb=124 scans=230 segs=0 keys=330 emit=38 tomb=292 reap_scan=0 reap_sweep=29 reap_fence=0 reap_done=0
+2026-10-11T16:45:20.935Z raft-host: gc-pass ms=98 orphan=0 reap=30 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=161 femit=37 ftomb=124 scans=230 segs=0 keys=330 emit=38 tomb=292 reap_scan=0 reap_sweep=30 reap_fence=0 reap_done=0
+2026-10-11T16:45:22.050Z raft-host: gc-pass ms=101 orphan=0 reap=34 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=161 femit=37 ftomb=124 scans=230 segs=0 keys=330 emit=38 tomb=292 reap_scan=0 reap_sweep=33 reap_fence=0 reap_done=0
+2026-10-11T16:45:23.160Z raft-host: gc-pass ms=97 orphan=0 reap=30 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=161 femit=37 ftomb=124 scans=230 segs=0 keys=330 emit=38 tomb=292 reap_scan=0 reap_sweep=29 reap_fence=0 reap_done=0
+2026-10-11T16:45:24.278Z raft-host: gc-pass ms=104 orphan=0 reap=34 frag=2 spread=0 recover=67 fscans=2 fsegs=0 fkeys=161 femit=37 ftomb=124 scans=232 segs=0 keys=330 emit=38 tomb=292 reap_scan=0 reap_sweep=29 reap_fence=4 reap_done=0
+2026-10-11T16:45:25.368Z raft-host: gc-pass ms=73 orphan=0 reap=0 frag=0 spread=0 recover=73 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=133 emit=0 tomb=133 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:45:26.493Z raft-host: gc-pass ms=107 orphan=0 reap=37 frag=2 spread=0 recover=67 fscans=1 fsegs=0 fkeys=196 femit=36 ftomb=160 scans=231 segs=0 keys=366 emit=73 tomb=293 reap_scan=0 reap_sweep=31 reap_fence=5 reap_done=0
+2026-10-11T16:45:27.404Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T16:45:27.574Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=134 emit=0 tomb=134 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:45:27.662Z store: put O_DIRECT bounce copy (buf align=2368 len=65536)
+2026-10-11T16:45:28.410Z kv-obs: mt_bytes=152295 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:45:28.658Z raft-host: gc-pass ms=81 orphan=4 reap=0 frag=10 spread=0 recover=67 fscans=1 fsegs=0 fkeys=200 femit=4 ftomb=196 scans=197 segs=0 keys=295 emit=12 tomb=283 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:45:29.755Z raft-host: gc-pass ms=94 orphan=3 reap=18 frag=4 spread=0 recover=67 fscans=1 fsegs=0 fkeys=198 femit=3 ftomb=195 scans=209 segs=0 keys=288 emit=19 tomb=269 reap_scan=0 reap_sweep=2 reap_fence=14 reap_done=1
+2026-10-11T16:45:30.850Z raft-host: gc-pass ms=91 orphan=15 reap=6 frag=3 spread=0 recover=67 fscans=2 fsegs=0 fkeys=206 femit=2 ftomb=204 scans=201 segs=0 keys=296 emit=12 tomb=284 reap_scan=0 reap_sweep=0 reap_fence=4 reap_done=0
+2026-10-11T16:45:31.409Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=558 passes=17 sampled=1 pending=1,0 reap=1,0 removed=128 file_bytes=8912896 payload_bytes=8388608 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T16:45:31.932Z raft-host: gc-pass ms=79 orphan=3 reap=6 frag=1 spread=0 recover=67 fscans=1 fsegs=0 fkeys=199 femit=1 ftomb=198 scans=203 segs=0 keys=316 emit=13 tomb=303 reap_scan=0 reap_sweep=0 reap_fence=5 reap_done=0
+2026-10-11T16:45:32.405Z iostats: get ops=44 bytes=2883584 errors=0 avg_us=165 p50_us=168 max_us=336 put ops=383 bytes=25100288 errors=0 avg_us=1515 p50_us=817 max_us=9422 wdisk ops=383 bytes=25100288 errors=0 avg_us=1482 p50_us=780 max_us=9375
+2026-10-11T16:45:33.022Z raft-host: gc-pass ms=87 orphan=5 reap=11 frag=2 spread=0 recover=67 fscans=2 fsegs=0 fkeys=408 femit=5 ftomb=403 scans=207 segs=0 keys=664 emit=19 tomb=645 reap_scan=0 reap_sweep=2 reap_fence=8 reap_done=1
+2026-10-11T16:45:33.410Z kv-obs: mt_bytes=378295 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:45:34.346Z raft-host: gc-pass ms=321 orphan=5 reap=215 frag=32 spread=0 recover=67 fscans=1 fsegs=0 fkeys=229 femit=29 ftomb=200 scans=287 segs=0 keys=496 emit=97 tomb=399 reap_scan=0 reap_sweep=27 reap_fence=162 reap_done=25
+2026-10-11T16:45:35.579Z raft-host: gc-pass ms=229 orphan=8 reap=126 frag=27 spread=0 recover=67 fscans=2 fsegs=0 fkeys=259 femit=18 ftomb=241 scans=246 segs=0 keys=431 emit=58 tomb=373 reap_scan=0 reap_sweep=16 reap_fence=93 reap_done=16
+2026-10-11T16:45:36.869Z raft-host: gc-pass ms=286 orphan=8 reap=199 frag=12 spread=0 recover=67 fscans=1 fsegs=0 fkeys=239 femit=16 ftomb=223 scans=254 segs=0 keys=473 emit=62 tomb=411 reap_scan=0 reap_sweep=20 reap_fence=159 reap_done=19
+2026-10-11T16:45:37.405Z iostats: get ops=114 bytes=7471104 errors=0 avg_us=200 p50_us=198 max_us=510 put ops=700 bytes=45875200 errors=0 avg_us=3186 p50_us=6190 max_us=10977 wdisk ops=700 bytes=45875200 errors=0 avg_us=3155 p50_us=6155 max_us=10938
+2026-10-11T16:45:38.210Z raft-host: gc-pass ms=337 orphan=9 reap=225 frag=35 spread=0 recover=67 fscans=1 fsegs=0 fkeys=118 femit=31 ftomb=87 scans=293 segs=0 keys=427 emit=107 tomb=320 reap_scan=0 reap_sweep=27 reap_fence=173 reap_done=24
+2026-10-11T16:45:38.410Z kv-obs: mt_bytes=736579 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:45:38.565Z raft-host: gc-pass ms=255 orphan=7 reap=178 frag=2 spread=0 recover=67 fscans=1 fsegs=0 fkeys=33 femit=32 ftomb=1 scans=295 segs=0 keys=336 emit=105 tomb=231 reap_scan=0 reap_sweep=23 reap_fence=136 reap_done=18
+2026-10-11T16:45:38.794Z raft-host: gc-pass ms=128 orphan=6 reap=46 frag=8 spread=0 recover=67 fscans=1 fsegs=0 fkeys=8 femit=7 ftomb=1 scans=221 segs=0 keys=315 emit=32 tomb=283 reap_scan=0 reap_sweep=5 reap_fence=34 reap_done=5
+2026-10-11T16:45:39.877Z raft-host: gc-pass ms=80 orphan=4 reap=6 frag=2 spread=0 recover=67 fscans=2 fsegs=0 fkeys=353 femit=8 ftomb=345 scans=204 segs=0 keys=661 emit=21 tomb=640 reap_scan=0 reap_sweep=0 reap_fence=4 reap_done=0
+2026-10-11T16:45:41.030Z raft-host: gc-pass ms=150 orphan=5 reap=0 frag=77 spread=0 recover=67 fscans=2 fsegs=0 fkeys=604 femit=48 ftomb=556 scans=198 segs=0 keys=893 emit=56 tomb=837 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:45:42.145Z raft-host: gc-pass ms=106 orphan=5 reap=0 frag=33 spread=0 recover=67 fscans=2 fsegs=0 fkeys=770 femit=41 ftomb=729 scans=198 segs=0 keys=1015 emit=49 tomb=966 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:45:42.406Z iostats: get ops=146 bytes=9568256 errors=0 avg_us=202 p50_us=198 max_us=510 put ops=874 bytes=57278464 errors=0 avg_us=2998 p50_us=656 max_us=10977 wdisk ops=874 bytes=57278464 errors=0 avg_us=2964 p50_us=610 max_us=10938
+2026-10-11T16:45:43.231Z raft-host: gc-pass ms=73 orphan=5 reap=0 frag=0 spread=0 recover=67 fscans=2 fsegs=0 fkeys=775 femit=0 ftomb=775 scans=198 segs=0 keys=1040 emit=8 tomb=1032 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:45:43.410Z kv-obs: mt_bytes=953496 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:45:44.308Z raft-host: gc-pass ms=73 orphan=5 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=400 emit=8 tomb=392 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:45:45.383Z raft-host: gc-pass ms=71 orphan=3 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=397 emit=8 tomb=389 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:45:46.418Z raft-host: apply lane-sweep rc=-13 index=9326 ino=4379
+2026-10-11T16:45:46.420Z raft-host: apply lane-sweep rc=-13 index=9329 ino=4379
+2026-10-11T16:45:46.422Z raft-host: apply lane-sweep rc=-13 index=9331 ino=4379
+2026-10-11T16:45:46.425Z raft-host: apply lane-sweep rc=-13 index=9333 ino=4379
+2026-10-11T16:45:46.427Z raft-host: apply lane-sweep rc=-13 index=9334 ino=4379
+2026-10-11T16:45:46.429Z raft-host: apply lane-sweep rc=-13 index=9335 ino=4379
+2026-10-11T16:45:46.432Z raft-host: apply lane-sweep rc=-13 index=9337 ino=4379
+2026-10-11T16:45:46.435Z raft-host: apply lane-sweep rc=-13 index=9340 ino=4379
+2026-10-11T16:45:46.438Z raft-host: apply lane-sweep rc=-13 index=9342 ino=4379
+2026-10-11T16:45:46.441Z raft-host: apply lane-sweep rc=-13 index=9343 ino=4379
+2026-10-11T16:45:46.443Z raft-host: apply lane-sweep rc=-13 index=9344 ino=4379
+2026-10-11T16:45:46.445Z raft-host: apply lane-sweep rc=-13 index=9345 ino=4379
+2026-10-11T16:45:46.447Z raft-host: apply lane-sweep rc=-13 index=9346 ino=4379
+2026-10-11T16:45:46.448Z raft-host: apply lane-sweep rc=-13 index=9347 ino=4379
+2026-10-11T16:45:46.453Z raft-host: apply lane-sweep rc=-13 index=9351 ino=4379
+2026-10-11T16:45:46.455Z raft-host: apply lane-sweep rc=-13 index=9353 ino=4379
+2026-10-11T16:45:46.457Z raft-host: apply lane-sweep rc=-13 index=9354 ino=4379
+2026-10-11T16:45:46.460Z raft-host: apply lane-sweep rc=-13 index=9356 ino=4379
+2026-10-11T16:45:46.462Z raft-host: apply lane-sweep rc=-13 index=9357 ino=4379
+2026-10-11T16:45:46.464Z raft-host: apply lane-sweep rc=-13 index=9358 ino=4379
+2026-10-11T16:45:46.465Z raft-host: apply lane-sweep rc=-13 index=9359 ino=4379
+2026-10-11T16:45:46.468Z raft-host: apply lane-sweep rc=-13 index=9361 ino=4379
+2026-10-11T16:45:46.471Z raft-host: apply lane-sweep rc=-13 index=9363 ino=4379
+2026-10-11T16:45:46.474Z raft-host: apply lane-sweep rc=-13 index=9365 ino=4379
+2026-10-11T16:45:46.476Z raft-host: apply lane-sweep rc=-13 index=9366 ino=4379
+2026-10-11T16:45:46.479Z raft-host: apply lane-sweep rc=-13 index=9367 ino=4379
+2026-10-11T16:45:46.481Z raft-host: apply lane-sweep rc=-13 index=9368 ino=4379
+2026-10-11T16:45:46.483Z raft-host: apply lane-sweep rc=-13 index=9369 ino=4379
+2026-10-11T16:45:46.485Z raft-host: apply lane-sweep rc=-13 index=9370 ino=4379
+2026-10-11T16:45:46.488Z raft-host: apply lane-sweep rc=-13 index=9372 ino=4379
+2026-10-11T16:45:46.490Z raft-host: apply lane-sweep rc=-13 index=9375 ino=4379
+2026-10-11T16:45:46.491Z raft-host: apply lane-sweep rc=-13 index=9377 ino=4379
+2026-10-11T16:45:47.259Z raft-host: gc-pass ms=873 orphan=7 reap=287 frag=510 spread=0 recover=67 fscans=1 fsegs=0 fkeys=262 femit=257 ftomb=5 scans=322 segs=0 keys=753 emit=590 tomb=163 reap_scan=0 reap_sweep=101 reap_fence=162 reap_done=22
+2026-10-11T16:45:47.367Z raft-host: apply lane-sweep rc=-13 index=9923 ino=4379
+2026-10-11T16:45:47.369Z raft-host: apply lane-sweep rc=-13 index=9924 ino=4379
+2026-10-11T16:45:47.370Z raft-host: apply lane-sweep rc=-13 index=9925 ino=4379
+2026-10-11T16:45:47.371Z raft-host: apply lane-sweep rc=-13 index=9926 ino=4379
+2026-10-11T16:45:47.373Z raft-host: apply lane-sweep rc=-13 index=9927 ino=4379
+2026-10-11T16:45:47.374Z raft-host: apply lane-sweep rc=-13 index=9928 ino=4379
+2026-10-11T16:45:47.375Z raft-host: apply lane-sweep rc=-13 index=9929 ino=4379
+2026-10-11T16:45:47.376Z raft-host: apply lane-sweep rc=-13 index=9930 ino=4379
+2026-10-11T16:45:47.378Z raft-host: apply lane-sweep rc=-13 index=9931 ino=4379
+2026-10-11T16:45:47.379Z raft-host: apply lane-sweep rc=-13 index=9932 ino=4379
+2026-10-11T16:45:47.380Z raft-host: apply lane-sweep rc=-13 index=9933 ino=4379
+2026-10-11T16:45:47.382Z raft-host: apply lane-sweep rc=-13 index=9934 ino=4379
+2026-10-11T16:45:47.384Z raft-host: apply lane-sweep rc=-13 index=9935 ino=4379
+2026-10-11T16:45:47.385Z raft-host: apply lane-sweep rc=-13 index=9936 ino=4379
+2026-10-11T16:45:47.386Z raft-host: apply lane-sweep rc=-13 index=9937 ino=4379
+2026-10-11T16:45:47.388Z raft-host: apply lane-sweep rc=-13 index=9938 ino=4379
+2026-10-11T16:45:47.389Z raft-host: apply lane-sweep rc=-13 index=9939 ino=4379
+2026-10-11T16:45:47.390Z raft-host: apply lane-sweep rc=-13 index=9940 ino=4379
+2026-10-11T16:45:47.391Z raft-host: apply lane-sweep rc=-13 index=9941 ino=4379
+2026-10-11T16:45:47.393Z raft-host: apply lane-sweep rc=-13 index=9942 ino=4379
+2026-10-11T16:45:47.394Z raft-host: apply lane-sweep rc=-13 index=9943 ino=4379
+2026-10-11T16:45:47.395Z raft-host: apply lane-sweep rc=-13 index=9944 ino=4379
+2026-10-11T16:45:47.397Z raft-host: apply lane-sweep rc=-13 index=9945 ino=4379
+2026-10-11T16:45:47.398Z raft-host: apply lane-sweep rc=-13 index=9946 ino=4379
+2026-10-11T16:45:47.400Z raft-host: apply lane-sweep rc=-13 index=9947 ino=4379
+2026-10-11T16:45:47.401Z raft-host: apply lane-sweep rc=-13 index=9948 ino=4379
+2026-10-11T16:45:47.402Z raft-host: apply lane-sweep rc=-13 index=9949 ino=4379
+2026-10-11T16:45:47.403Z raft-host: apply lane-sweep rc=-13 index=9950 ino=4379
+2026-10-11T16:45:47.405Z raft-host: apply lane-sweep rc=-13 index=9951 ino=4379
+2026-10-11T16:45:47.406Z iostats: get ops=3446 bytes=225837056 errors=0 avg_us=292 p50_us=267 max_us=1567 put ops=4501 bytes=294977536 errors=0 avg_us=2015 p50_us=1513 max_us=10977 wdisk ops=4501 bytes=294977536 errors=0 avg_us=1946 p50_us=1456 max_us=10938
+2026-10-11T16:45:47.406Z raft-host: apply lane-sweep rc=-13 index=9952 ino=4379
+2026-10-11T16:45:47.408Z raft-host: apply lane-sweep rc=-13 index=9953 ino=4379
+2026-10-11T16:45:47.409Z raft-host: apply lane-sweep rc=-13 index=9954 ino=4379
+2026-10-11T16:45:47.411Z gc-health: stage=3 group=0 elapsed_ms=51 last_pass_age_ms=151 passes=32 sampled=1 pending=42,0 reap=32,0 removed=880 file_bytes=61276160 payload_bytes=57671680 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T16:45:47.541Z raft-host: apply lane-sweep rc=-13 index=10014 ino=7023
+2026-10-11T16:45:47.542Z raft-host: apply lane-sweep rc=-13 index=10015 ino=7023
+2026-10-11T16:45:47.544Z raft-host: apply lane-sweep rc=-13 index=10016 ino=7023
+2026-10-11T16:45:47.545Z raft-host: apply lane-sweep rc=-13 index=10017 ino=7023
+2026-10-11T16:45:47.547Z raft-host: apply lane-sweep rc=-13 index=10018 ino=7023
+2026-10-11T16:45:47.548Z raft-host: apply lane-sweep rc=-13 index=10019 ino=7023
+2026-10-11T16:45:47.550Z raft-host: apply lane-sweep rc=-13 index=10020 ino=7023
+2026-10-11T16:45:47.552Z raft-host: apply lane-sweep rc=-13 index=10021 ino=7023
+2026-10-11T16:45:47.553Z raft-host: apply lane-sweep rc=-13 index=10022 ino=7023
+2026-10-11T16:45:47.554Z raft-host: apply lane-sweep rc=-13 index=10023 ino=7023
+2026-10-11T16:45:47.556Z raft-host: apply lane-sweep rc=-13 index=10024 ino=7023
+2026-10-11T16:45:47.557Z raft-host: apply lane-sweep rc=-13 index=10025 ino=7023
+2026-10-11T16:45:47.558Z raft-host: apply lane-sweep rc=-13 index=10026 ino=7023
+2026-10-11T16:45:47.560Z raft-host: apply lane-sweep rc=-13 index=10027 ino=7023
+2026-10-11T16:45:47.562Z raft-host: apply lane-sweep rc=-13 index=10028 ino=7023
+2026-10-11T16:45:47.563Z raft-host: apply lane-sweep rc=-13 index=10029 ino=7023
+2026-10-11T16:45:47.564Z raft-host: apply lane-sweep rc=-13 index=10030 ino=7023
+2026-10-11T16:45:47.566Z raft-host: apply lane-sweep rc=-13 index=10031 ino=7023
+2026-10-11T16:45:47.567Z raft-host: apply lane-sweep rc=-13 index=10032 ino=7023
+2026-10-11T16:45:47.569Z raft-host: apply lane-sweep rc=-13 index=10033 ino=7023
+2026-10-11T16:45:47.571Z raft-host: apply lane-sweep rc=-13 index=10034 ino=7023
+2026-10-11T16:45:47.572Z raft-host: apply lane-sweep rc=-13 index=10035 ino=7023
+2026-10-11T16:45:47.574Z raft-host: apply lane-sweep rc=-13 index=10036 ino=7023
+2026-10-11T16:45:47.575Z raft-host: apply lane-sweep rc=-13 index=10037 ino=7023
+2026-10-11T16:45:47.577Z raft-host: apply lane-sweep rc=-13 index=10038 ino=7023
+2026-10-11T16:45:47.579Z raft-host: apply lane-sweep rc=-13 index=10039 ino=7023
+2026-10-11T16:45:47.580Z raft-host: apply lane-sweep rc=-13 index=10040 ino=7023
+2026-10-11T16:45:47.582Z raft-host: apply lane-sweep rc=-13 index=10041 ino=7023
+2026-10-11T16:45:47.584Z raft-host: apply lane-sweep rc=-13 index=10042 ino=7023
+2026-10-11T16:45:47.585Z raft-host: apply lane-sweep rc=-13 index=10043 ino=7023
+2026-10-11T16:45:47.587Z raft-host: apply lane-sweep rc=-13 index=10044 ino=7023
+2026-10-11T16:45:47.588Z raft-host: apply lane-sweep rc=-13 index=10046 ino=7023
+2026-10-11T16:45:47.899Z raft-host: applied session index=10314 kind=1 shard=0 ino=0
+2026-10-11T16:45:48.114Z raft-host: gc-pass ms=754 orphan=6 reap=252 frag=427 spread=0 recover=67 fscans=1 fsegs=0 fkeys=348 femit=257 ftomb=91 scans=358 segs=0 keys=1295 emit=851 tomb=444 reap_scan=0 reap_sweep=126 reap_fence=109 reap_done=16
+2026-10-11T16:45:48.221Z raft-host: apply lane-sweep rc=-13 index=10349 ino=4379
+2026-10-11T16:45:48.223Z raft-host: apply lane-sweep rc=-13 index=10350 ino=4379
+2026-10-11T16:45:48.225Z raft-host: apply lane-sweep rc=-13 index=10351 ino=4379
+2026-10-11T16:45:48.226Z raft-host: apply lane-sweep rc=-13 index=10352 ino=4379
+2026-10-11T16:45:48.227Z raft-host: apply lane-sweep rc=-13 index=10353 ino=4379
+2026-10-11T16:45:48.230Z raft-host: apply lane-sweep rc=-13 index=10354 ino=4379
+2026-10-11T16:45:48.231Z raft-host: apply lane-sweep rc=-13 index=10355 ino=4379
+2026-10-11T16:45:48.235Z raft-host: apply lane-sweep rc=-13 index=10356 ino=4379
+2026-10-11T16:45:48.236Z raft-host: apply lane-sweep rc=-13 index=10357 ino=4379
+2026-10-11T16:45:48.238Z raft-host: apply lane-sweep rc=-13 index=10358 ino=4379
+2026-10-11T16:45:48.240Z raft-host: apply lane-sweep rc=-13 index=10359 ino=4379
+2026-10-11T16:45:48.242Z raft-host: apply lane-sweep rc=-13 index=10360 ino=4379
+2026-10-11T16:45:48.243Z raft-host: apply lane-sweep rc=-13 index=10361 ino=4379
+2026-10-11T16:45:48.245Z raft-host: apply lane-sweep rc=-13 index=10362 ino=4379
+2026-10-11T16:45:48.246Z raft-host: apply lane-sweep rc=-13 index=10363 ino=4379
+2026-10-11T16:45:48.247Z raft-host: apply lane-sweep rc=-13 index=10364 ino=4379
+2026-10-11T16:45:48.249Z raft-host: apply lane-sweep rc=-13 index=10365 ino=4379
+2026-10-11T16:45:48.251Z raft-host: apply lane-sweep rc=-13 index=10366 ino=4379
+2026-10-11T16:45:48.252Z raft-host: apply lane-sweep rc=-13 index=10367 ino=4379
+2026-10-11T16:45:48.254Z raft-host: apply lane-sweep rc=-13 index=10368 ino=4379
+2026-10-11T16:45:48.255Z raft-host: apply lane-sweep rc=-13 index=10369 ino=4379
+2026-10-11T16:45:48.257Z raft-host: apply lane-sweep rc=-13 index=10370 ino=4379
+2026-10-11T16:45:48.259Z raft-host: apply lane-sweep rc=-13 index=10371 ino=4379
+2026-10-11T16:45:48.261Z raft-host: apply lane-sweep rc=-13 index=10372 ino=4379
+2026-10-11T16:45:48.263Z raft-host: apply lane-sweep rc=-13 index=10373 ino=4379
+2026-10-11T16:45:48.264Z raft-host: apply lane-sweep rc=-13 index=10374 ino=4379
+2026-10-11T16:45:48.265Z raft-host: apply lane-sweep rc=-13 index=10375 ino=4379
+2026-10-11T16:45:48.266Z raft-host: apply lane-sweep rc=-13 index=10376 ino=4379
+2026-10-11T16:45:48.268Z raft-host: apply lane-sweep rc=-13 index=10377 ino=4379
+2026-10-11T16:45:48.269Z raft-host: apply lane-sweep rc=-13 index=10378 ino=4379
+2026-10-11T16:45:48.271Z raft-host: apply lane-sweep rc=-13 index=10379 ino=4379
+2026-10-11T16:45:48.274Z raft-host: apply lane-sweep rc=-13 index=10380 ino=4379
+2026-10-11T16:45:48.275Z raft-host: apply lane-sweep rc=-13 index=10381 ino=7023
+2026-10-11T16:45:48.277Z raft-host: apply lane-sweep rc=-13 index=10382 ino=7023
+2026-10-11T16:45:48.278Z raft-host: apply lane-sweep rc=-13 index=10383 ino=7023
+2026-10-11T16:45:48.281Z raft-host: apply lane-sweep rc=-13 index=10384 ino=7023
+2026-10-11T16:45:48.283Z raft-host: apply lane-sweep rc=-13 index=10385 ino=7023
+2026-10-11T16:45:48.284Z raft-host: apply lane-sweep rc=-13 index=10386 ino=7023
+2026-10-11T16:45:48.286Z raft-host: apply lane-sweep rc=-13 index=10387 ino=7023
+2026-10-11T16:45:48.288Z raft-host: apply lane-sweep rc=-13 index=10388 ino=7023
+2026-10-11T16:45:48.289Z raft-host: apply lane-sweep rc=-13 index=10389 ino=7023
+2026-10-11T16:45:48.291Z raft-host: apply lane-sweep rc=-13 index=10390 ino=7023
+2026-10-11T16:45:48.293Z raft-host: apply lane-sweep rc=-13 index=10391 ino=7023
+2026-10-11T16:45:48.295Z raft-host: apply lane-sweep rc=-13 index=10392 ino=7023
+2026-10-11T16:45:48.297Z raft-host: apply lane-sweep rc=-13 index=10393 ino=7023
+2026-10-11T16:45:48.298Z raft-host: apply lane-sweep rc=-13 index=10394 ino=7023
+2026-10-11T16:45:48.299Z raft-host: apply lane-sweep rc=-13 index=10395 ino=7023
+2026-10-11T16:45:48.301Z raft-host: apply lane-sweep rc=-13 index=10396 ino=7023
+2026-10-11T16:45:48.303Z raft-host: apply lane-sweep rc=-13 index=10397 ino=7023
+2026-10-11T16:45:48.305Z raft-host: apply lane-sweep rc=-13 index=10398 ino=7023
+2026-10-11T16:45:48.307Z raft-host: apply lane-sweep rc=-13 index=10399 ino=7023
+2026-10-11T16:45:48.308Z raft-host: apply lane-sweep rc=-13 index=10400 ino=7023
+2026-10-11T16:45:48.310Z raft-host: apply lane-sweep rc=-13 index=10401 ino=7023
+2026-10-11T16:45:48.312Z raft-host: apply lane-sweep rc=-13 index=10402 ino=7023
+2026-10-11T16:45:48.314Z raft-host: apply lane-sweep rc=-13 index=10403 ino=7023
+2026-10-11T16:45:48.315Z raft-host: apply lane-sweep rc=-13 index=10404 ino=7023
+2026-10-11T16:45:48.317Z raft-host: apply lane-sweep rc=-13 index=10405 ino=7023
+2026-10-11T16:45:48.318Z raft-host: apply lane-sweep rc=-13 index=10406 ino=7023
+2026-10-11T16:45:48.320Z raft-host: apply lane-sweep rc=-13 index=10407 ino=7023
+2026-10-11T16:45:48.322Z raft-host: apply lane-sweep rc=-13 index=10408 ino=7023
+2026-10-11T16:45:48.324Z raft-host: apply lane-sweep rc=-13 index=10409 ino=7023
+2026-10-11T16:45:48.326Z raft-host: apply lane-sweep rc=-13 index=10410 ino=7023
+2026-10-11T16:45:48.328Z raft-host: apply lane-sweep rc=-13 index=10411 ino=7023
+2026-10-11T16:45:48.329Z raft-host: apply lane-sweep rc=-13 index=10412 ino=7023
+2026-10-11T16:45:48.410Z kv-obs: mt_bytes=1355291 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:45:48.454Z raft-host: applied session index=10472 kind=1 shard=0 ino=0
+2026-10-11T16:45:48.502Z raft-host: applied session index=10500 kind=1 shard=0 ino=0
+2026-10-11T16:45:48.517Z raft-host: applied session index=10505 kind=1 shard=0 ino=0
+2026-10-11T16:45:48.572Z raft-host: applied session index=10530 kind=1 shard=0 ino=0
+2026-10-11T16:45:48.590Z raft-host: applied session index=10535 kind=1 shard=0 ino=0
+2026-10-11T16:45:48.601Z raft-host: applied session index=10543 kind=1 shard=0 ino=0
+2026-10-11T16:45:48.681Z raft-host: applied session index=10570 kind=1 shard=0 ino=0
+2026-10-11T16:45:48.754Z raft-host: applied session index=10586 kind=1 shard=0 ino=0
+2026-10-11T16:45:48.806Z raft-host: applied session index=10608 kind=1 shard=0 ino=0
+2026-10-11T16:45:48.852Z raft-host: gc-pass ms=638 orphan=6 reap=261 frag=303 spread=0 recover=67 fscans=1 fsegs=0 fkeys=527 femit=200 ftomb=327 scans=352 segs=0 keys=2019 emit=787 tomb=1232 reap_scan=0 reap_sweep=129 reap_fence=116 reap_done=15
+2026-10-11T16:45:48.855Z raft-host: applied session index=10627 kind=1 shard=0 ino=0
+2026-10-11T16:45:48.897Z raft-host: applied session index=10646 kind=1 shard=0 ino=0
+2026-10-11T16:45:48.947Z raft-host: applied session index=10666 kind=1 shard=0 ino=0
+2026-10-11T16:45:48.958Z raft-host: apply lane-sweep rc=-13 index=10679 ino=4379
+2026-10-11T16:45:48.959Z raft-host: apply lane-sweep rc=-13 index=10680 ino=4379
+2026-10-11T16:45:48.961Z raft-host: apply lane-sweep rc=-13 index=10682 ino=4379
+2026-10-11T16:45:48.962Z raft-host: apply lane-sweep rc=-13 index=10683 ino=4379
+2026-10-11T16:45:48.964Z raft-host: apply lane-sweep rc=-13 index=10684 ino=4379
+2026-10-11T16:45:48.966Z raft-host: apply lane-sweep rc=-13 index=10686 ino=4379
+2026-10-11T16:45:48.968Z raft-host: apply lane-sweep rc=-13 index=10687 ino=4379
+2026-10-11T16:45:48.969Z raft-host: apply lane-sweep rc=-13 index=10688 ino=4379
+2026-10-11T16:45:48.971Z raft-host: apply lane-sweep rc=-13 index=10689 ino=4379
+2026-10-11T16:45:48.972Z raft-host: apply lane-sweep rc=-13 index=10690 ino=4379
+2026-10-11T16:45:48.973Z raft-host: apply lane-sweep rc=-13 index=10691 ino=4379
+2026-10-11T16:45:48.975Z raft-host: apply lane-sweep rc=-13 index=10692 ino=4379
+2026-10-11T16:45:48.976Z raft-host: apply lane-sweep rc=-13 index=10694 ino=4379
+2026-10-11T16:45:48.978Z raft-host: apply lane-sweep rc=-13 index=10695 ino=4379
+2026-10-11T16:45:48.979Z raft-host: apply lane-sweep rc=-13 index=10696 ino=4379
+2026-10-11T16:45:48.981Z raft-host: apply lane-sweep rc=-13 index=10697 ino=4379
+2026-10-11T16:45:48.982Z raft-host: apply lane-sweep rc=-13 index=10698 ino=4379
+2026-10-11T16:45:48.983Z raft-host: apply lane-sweep rc=-13 index=10699 ino=4379
+2026-10-11T16:45:48.985Z raft-host: apply lane-sweep rc=-13 index=10700 ino=4379
+2026-10-11T16:45:48.990Z raft-host: apply lane-sweep rc=-13 index=10702 ino=4379
+2026-10-11T16:45:48.991Z raft-host: apply lane-sweep rc=-13 index=10703 ino=4379
+2026-10-11T16:45:48.992Z raft-host: apply lane-sweep rc=-13 index=10704 ino=4379
+2026-10-11T16:45:48.994Z raft-host: apply lane-sweep rc=-13 index=10705 ino=4379
+2026-10-11T16:45:48.995Z raft-host: apply lane-sweep rc=-13 index=10706 ino=4379
+2026-10-11T16:45:48.996Z raft-host: apply lane-sweep rc=-13 index=10707 ino=4379
+2026-10-11T16:45:48.998Z raft-host: apply lane-sweep rc=-13 index=10708 ino=4379
+2026-10-11T16:45:48.999Z raft-host: apply lane-sweep rc=-13 index=10709 ino=4379
+2026-10-11T16:45:49.001Z raft-host: apply lane-sweep rc=-13 index=10711 ino=4379
+2026-10-11T16:45:49.003Z raft-host: apply lane-sweep rc=-13 index=10712 ino=4379
+2026-10-11T16:45:49.004Z raft-host: apply lane-sweep rc=-13 index=10713 ino=4379
+2026-10-11T16:45:49.005Z raft-host: apply lane-sweep rc=-13 index=10714 ino=4379
+2026-10-11T16:45:49.007Z raft-host: apply lane-sweep rc=-13 index=10715 ino=4379
+2026-10-11T16:45:49.009Z raft-host: apply lane-sweep rc=-13 index=10717 ino=7023
+2026-10-11T16:45:49.010Z raft-host: apply lane-sweep rc=-13 index=10718 ino=7023
+2026-10-11T16:45:49.012Z raft-host: apply lane-sweep rc=-13 index=10719 ino=7023
+2026-10-11T16:45:49.013Z raft-host: apply lane-sweep rc=-13 index=10720 ino=7023
+2026-10-11T16:45:49.014Z raft-host: apply lane-sweep rc=-13 index=10721 ino=7023
+2026-10-11T16:45:49.016Z raft-host: apply lane-sweep rc=-13 index=10722 ino=7023
+2026-10-11T16:45:49.017Z raft-host: apply lane-sweep rc=-13 index=10723 ino=7023
+2026-10-11T16:45:49.019Z raft-host: apply lane-sweep rc=-13 index=10725 ino=7023
+2026-10-11T16:45:49.020Z raft-host: apply lane-sweep rc=-13 index=10726 ino=7023
+2026-10-11T16:45:49.022Z raft-host: apply lane-sweep rc=-13 index=10727 ino=7023
+2026-10-11T16:45:49.023Z raft-host: apply lane-sweep rc=-13 index=10728 ino=7023
+2026-10-11T16:45:49.025Z raft-host: apply lane-sweep rc=-13 index=10729 ino=7023
+2026-10-11T16:45:49.026Z raft-host: apply lane-sweep rc=-13 index=10730 ino=7023
+2026-10-11T16:45:49.028Z raft-host: apply lane-sweep rc=-13 index=10732 ino=7023
+2026-10-11T16:45:49.029Z raft-host: apply lane-sweep rc=-13 index=10733 ino=7023
+2026-10-11T16:45:49.031Z raft-host: apply lane-sweep rc=-13 index=10734 ino=7023
+2026-10-11T16:45:49.032Z raft-host: apply lane-sweep rc=-13 index=10735 ino=7023
+2026-10-11T16:45:49.033Z raft-host: apply lane-sweep rc=-13 index=10736 ino=7023
+2026-10-11T16:45:49.035Z raft-host: apply lane-sweep rc=-13 index=10738 ino=7023
+2026-10-11T16:45:49.037Z raft-host: apply lane-sweep rc=-13 index=10739 ino=7023
+2026-10-11T16:45:49.038Z raft-host: apply lane-sweep rc=-13 index=10740 ino=7023
+2026-10-11T16:45:49.039Z raft-host: apply lane-sweep rc=-13 index=10741 ino=7023
+2026-10-11T16:45:49.041Z raft-host: apply lane-sweep rc=-13 index=10743 ino=7023
+2026-10-11T16:45:49.042Z raft-host: apply lane-sweep rc=-13 index=10744 ino=7023
+2026-10-11T16:45:49.044Z raft-host: apply lane-sweep rc=-13 index=10745 ino=7023
+2026-10-11T16:45:49.045Z raft-host: apply lane-sweep rc=-13 index=10746 ino=7023
+2026-10-11T16:45:49.046Z raft-host: apply lane-sweep rc=-13 index=10747 ino=7023
+2026-10-11T16:45:49.048Z raft-host: apply lane-sweep rc=-13 index=10749 ino=7023
+2026-10-11T16:45:49.049Z raft-host: apply lane-sweep rc=-13 index=10750 ino=7023
+2026-10-11T16:45:49.050Z raft-host: apply lane-sweep rc=-13 index=10751 ino=7023
+2026-10-11T16:45:49.052Z raft-host: apply lane-sweep rc=-13 index=10752 ino=7023
+2026-10-11T16:45:49.054Z raft-host: apply lane-sweep rc=-13 index=10753 ino=7023
+2026-10-11T16:45:49.070Z raft-host: applied session index=10764 kind=1 shard=0 ino=0
+2026-10-11T16:45:49.242Z raft-host: applied session index=10842 kind=1 shard=0 ino=0
+2026-10-11T16:45:49.324Z raft-host: applied session index=10875 kind=1 shard=0 ino=0
+2026-10-11T16:45:49.382Z raft-host: applied session index=10895 kind=1 shard=0 ino=0
+2026-10-11T16:45:49.426Z raft-host: applied session index=10916 kind=1 shard=0 ino=0
+2026-10-11T16:45:49.502Z raft-host: applied session index=10937 kind=1 shard=0 ino=0
+2026-10-11T16:45:49.545Z raft-host: applied session index=10957 kind=1 shard=0 ino=0
+2026-10-11T16:45:49.618Z raft-host: applied session index=10978 kind=1 shard=0 ino=0
+2026-10-11T16:45:49.653Z raft-host: applied session index=10997 kind=1 shard=0 ino=0
+2026-10-11T16:45:49.664Z raft-host: gc-pass ms=710 orphan=4 reap=242 frag=396 spread=0 recover=67 fscans=2 fsegs=0 fkeys=555 femit=257 ftomb=298 scans=350 segs=0 keys=2631 emit=838 tomb=1793 reap_scan=0 reap_sweep=117 reap_fence=111 reap_done=13
+2026-10-11T16:45:49.688Z raft-host: applied session index=10999 kind=1 shard=0 ino=0
+2026-10-11T16:45:49.731Z raft-host: applied session index=11019 kind=1 shard=0 ino=0
+2026-10-11T16:45:49.831Z raft-host: apply lane-sweep rc=-13 index=11078 ino=7023
+2026-10-11T16:45:49.831Z raft-host: applied session index=11079 kind=1 shard=0 ino=0
+2026-10-11T16:45:49.833Z raft-host: apply lane-sweep rc=-13 index=11081 ino=7023
+2026-10-11T16:45:49.835Z raft-host: apply lane-sweep rc=-13 index=11083 ino=7023
+2026-10-11T16:45:49.837Z raft-host: apply lane-sweep rc=-13 index=11085 ino=7023
+2026-10-11T16:45:49.839Z raft-host: apply lane-sweep rc=-13 index=11086 ino=7023
+2026-10-11T16:45:49.840Z raft-host: apply lane-sweep rc=-13 index=11087 ino=7023
+2026-10-11T16:45:49.842Z raft-host: apply lane-sweep rc=-13 index=11088 ino=7023
+2026-10-11T16:45:49.843Z raft-host: apply lane-sweep rc=-13 index=11089 ino=7023
+2026-10-11T16:45:49.845Z raft-host: apply lane-sweep rc=-13 index=11090 ino=7023
+2026-10-11T16:45:49.847Z raft-host: apply lane-sweep rc=-13 index=11092 ino=7023
+2026-10-11T16:45:49.849Z raft-host: apply lane-sweep rc=-13 index=11093 ino=7023
+2026-10-11T16:45:49.850Z raft-host: apply lane-sweep rc=-13 index=11094 ino=7023
+2026-10-11T16:45:49.852Z raft-host: apply lane-sweep rc=-13 index=11095 ino=7023
+2026-10-11T16:45:49.854Z raft-host: apply lane-sweep rc=-13 index=11096 ino=7023
+2026-10-11T16:45:49.855Z raft-host: apply lane-sweep rc=-13 index=11097 ino=7023
+2026-10-11T16:45:49.858Z raft-host: apply lane-sweep rc=-13 index=11099 ino=7023
+2026-10-11T16:45:49.859Z raft-host: apply lane-sweep rc=-13 index=11100 ino=7023
+2026-10-11T16:45:49.861Z raft-host: apply lane-sweep rc=-13 index=11101 ino=7023
+2026-10-11T16:45:49.863Z raft-host: apply lane-sweep rc=-13 index=11102 ino=7023
+2026-10-11T16:45:49.865Z raft-host: apply lane-sweep rc=-13 index=11103 ino=7023
+2026-10-11T16:45:49.866Z raft-host: apply lane-sweep rc=-13 index=11104 ino=7023
+2026-10-11T16:45:49.869Z raft-host: apply lane-sweep rc=-13 index=11106 ino=7023
+2026-10-11T16:45:49.870Z raft-host: apply lane-sweep rc=-13 index=11107 ino=7023
+2026-10-11T16:45:49.872Z raft-host: apply lane-sweep rc=-13 index=11108 ino=7023
+2026-10-11T16:45:49.874Z raft-host: apply lane-sweep rc=-13 index=11109 ino=7023
+2026-10-11T16:45:49.876Z raft-host: apply lane-sweep rc=-13 index=11110 ino=7023
+2026-10-11T16:45:49.877Z raft-host: apply lane-sweep rc=-13 index=11111 ino=7023
+2026-10-11T16:45:49.880Z raft-host: apply lane-sweep rc=-13 index=11113 ino=7023
+2026-10-11T16:45:49.881Z raft-host: apply lane-sweep rc=-13 index=11114 ino=7023
+2026-10-11T16:45:49.883Z raft-host: apply lane-sweep rc=-13 index=11115 ino=7023
+2026-10-11T16:45:49.884Z raft-host: apply lane-sweep rc=-13 index=11116 ino=7023
+2026-10-11T16:45:49.886Z raft-host: apply lane-sweep rc=-13 index=11117 ino=7023
+2026-10-11T16:45:49.967Z raft-host: applied session index=11158 kind=1 shard=0 ino=0
+2026-10-11T16:45:50.191Z raft-host: applied session index=11217 kind=1 shard=0 ino=0
+2026-10-11T16:45:50.310Z raft-host: applied session index=11251 kind=1 shard=0 ino=0
+2026-10-11T16:45:50.349Z raft-host: applied session index=11254 kind=1 shard=0 ino=0
+2026-10-11T16:45:50.415Z raft-host: applied session index=11276 kind=1 shard=0 ino=0
+2026-10-11T16:45:50.487Z raft-host: applied session index=11297 kind=1 shard=0 ino=0
+2026-10-11T16:45:50.528Z raft-host: gc-pass ms=764 orphan=5 reap=280 frag=410 spread=0 recover=67 fscans=1 fsegs=0 fkeys=345 femit=257 ftomb=88 scans=351 segs=0 keys=2962 emit=760 tomb=2202 reap_scan=0 reap_sweep=137 reap_fence=125 reap_done=17
+2026-10-11T16:45:50.545Z raft-host: applied session index=11317 kind=1 shard=0 ino=0
+2026-10-11T16:45:50.603Z raft-host: applied session index=11336 kind=1 shard=0 ino=0
+2026-10-11T16:45:50.715Z raft-host: applied session index=11410 kind=1 shard=0 ino=0
+2026-10-11T16:45:50.847Z raft-host: applied session index=11483 kind=1 shard=0 ino=0
+2026-10-11T16:45:50.919Z raft-host: applied session index=11525 kind=1 shard=0 ino=0
+2026-10-11T16:45:51.081Z raft-host: applied session index=11558 kind=1 shard=0 ino=0
+2026-10-11T16:45:51.174Z raft-host: applied session index=11587 kind=1 shard=0 ino=0
+2026-10-11T16:45:51.326Z raft-host: gc-pass ms=697 orphan=5 reap=269 frag=355 spread=0 recover=67 fscans=1 fsegs=0 fkeys=316 femit=257 ftomb=59 scans=351 segs=0 keys=3740 emit=504 tomb=3236 reap_scan=0 reap_sweep=129 reap_fence=126 reap_done=14
+2026-10-11T16:45:51.790Z raft-host: applied session index=11737 kind=1 shard=0 ino=0
+2026-10-11T16:45:51.880Z raft-host: applied session index=11748 kind=1 shard=0 ino=0
+2026-10-11T16:45:51.894Z raft-host: applied session index=11753 kind=1 shard=0 ino=0
+2026-10-11T16:45:51.906Z raft-host: applied session index=11755 kind=1 shard=0 ino=0
+2026-10-11T16:45:51.944Z raft-host: applied session index=11757 kind=1 shard=0 ino=0
+2026-10-11T16:45:51.946Z raft-host: gc-pass ms=519 orphan=5 reap=224 frag=222 spread=0 recover=67 fscans=1 fsegs=0 fkeys=447 femit=257 ftomb=190 scans=351 segs=0 keys=3627 emit=328 tomb=3299 reap_scan=0 reap_sweep=108 reap_fence=103 reap_done=11
+2026-10-11T16:45:51.980Z raft-host: applied session index=11759 kind=1 shard=0 ino=0
+2026-10-11T16:45:51.991Z raft-host: applied session index=11761 kind=1 shard=0 ino=0
+2026-10-11T16:45:52.022Z raft-host: applied session index=11779 kind=1 shard=0 ino=0
+2026-10-11T16:45:52.035Z raft-host: applied session index=11789 kind=1 shard=0 ino=0
+2026-10-11T16:45:52.129Z raft-host: applied session index=11875 kind=1 shard=0 ino=0
+2026-10-11T16:45:52.234Z raft-host: applied session index=11927 kind=1 shard=0 ino=0
+2026-10-11T16:45:52.237Z raft-host: applied session index=11929 kind=1 shard=0 ino=0
+2026-10-11T16:45:52.328Z raft-host: applied session index=11963 kind=1 shard=0 ino=0
+2026-10-11T16:45:52.407Z iostats: get ops=5008 bytes=328204288 errors=0 avg_us=255 p50_us=168 max_us=2459 put ops=5366 bytes=351666176 errors=0 avg_us=1999 p50_us=1585 max_us=12649 wdisk ops=5366 bytes=351666176 errors=0 avg_us=1937 p50_us=1550 max_us=12584
+2026-10-11T16:45:52.469Z raft-host: applied session index=11977 kind=1 shard=0 ino=0
+2026-10-11T16:45:52.508Z raft-host: applied session index=12010 kind=1 shard=0 ino=0
+2026-10-11T16:45:52.533Z raft-host: applied session index=12026 kind=1 shard=0 ino=0
+2026-10-11T16:45:52.590Z raft-host: applied session index=12068 kind=1 shard=0 ino=0
+2026-10-11T16:45:52.616Z raft-host: applied session index=12082 kind=1 shard=0 ino=0
+2026-10-11T16:45:52.643Z raft-host: applied session index=12098 kind=1 shard=0 ino=0
+2026-10-11T16:45:52.671Z raft-host: applied session index=12103 kind=1 shard=0 ino=0
+2026-10-11T16:45:52.734Z raft-host: applied session index=12106 kind=1 shard=0 ino=0
+2026-10-11T16:45:52.752Z raft-host: applied session index=12108 kind=1 shard=0 ino=0
+2026-10-11T16:45:52.777Z raft-host: applied session index=12116 kind=1 shard=0 ino=0
+2026-10-11T16:45:52.809Z raft-host: applied session index=12135 kind=1 shard=0 ino=0
+2026-10-11T16:45:52.818Z raft-host: applied session index=12142 kind=1 shard=0 ino=0
+2026-10-11T16:45:52.840Z raft-host: applied session index=12151 kind=1 shard=0 ino=0
+2026-10-11T16:45:52.884Z raft-host: gc-pass ms=837 orphan=8 reap=301 frag=460 spread=0 recover=67 fscans=1 fsegs=0 fkeys=258 femit=257 ftomb=1 scans=353 segs=0 keys=3462 emit=328 tomb=3134 reap_scan=0 reap_sweep=141 reap_fence=139 reap_done=19
+2026-10-11T16:45:53.410Z kv-obs: mt_bytes=1382893 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:45:53.801Z raft-host: gc-pass ms=816 orphan=6 reap=266 frag=475 spread=0 recover=67 fscans=1 fsegs=0 fkeys=323 femit=257 ftomb=66 scans=322 segs=0 keys=2088 emit=329 tomb=1759 reap_scan=0 reap_sweep=80 reap_fence=161 reap_done=25
+2026-10-11T16:45:54.601Z raft-host: gc-pass ms=699 orphan=7 reap=285 frag=368 spread=0 recover=37 fscans=1 fsegs=0 fkeys=326 femit=257 ftomb=69 scans=238 segs=0 keys=2119 emit=329 tomb=1790 reap_scan=0 reap_sweep=78 reap_fence=184 reap_done=22
+2026-10-11T16:45:55.082Z raft-host: gc-pass ms=380 orphan=3 reap=162 frag=213 spread=0 recover=0 fscans=1 fsegs=0 fkeys=326 femit=257 ftomb=69 scans=88 segs=0 keys=2097 emit=300 tomb=1797 reap_scan=0 reap_sweep=59 reap_fence=90 reap_done=12
+2026-10-11T16:45:55.445Z raft-host: gc-pass ms=263 orphan=5 reap=55 frag=202 spread=0 recover=0 fscans=1 fsegs=0 fkeys=575 femit=257 ftomb=318 scans=39 segs=0 keys=2329 emit=266 tomb=2063 reap_scan=0 reap_sweep=49 reap_fence=5 reap_done=0
+2026-10-11T16:45:55.728Z raft-host: gc-pass ms=182 orphan=6 reap=0 frag=175 spread=0 recover=0 fscans=1 fsegs=0 fkeys=381 femit=177 ftomb=204 scans=5 segs=0 keys=935 emit=185 tomb=750 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:45:56.798Z raft-host: gc-pass ms=59 orphan=6 reap=0 frag=52 spread=0 recover=0 fscans=2 fsegs=0 fkeys=3672 femit=57 ftomb=3615 scans=6 segs=0 keys=4226 emit=65 tomb=4161 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:45:57.411Z iostats: get ops=5027 bytes=329449472 errors=0 avg_us=255 p50_us=175 max_us=2459 put ops=5385 bytes=352911360 errors=0 avg_us=2002 p50_us=2174 max_us=12649 wdisk ops=5385 bytes=352911360 errors=0 avg_us=1940 p50_us=2116 max_us=12584
+2026-10-11T16:45:57.817Z raft-host: gc-pass ms=13 orphan=4 reap=0 frag=0 spread=0 recover=8 fscans=2 fsegs=0 fkeys=6029 femit=0 ftomb=6029 scans=30 segs=0 keys=6753 emit=8 tomb=6745 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:45:58.411Z kv-obs: mt_bytes=1240176 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:45:58.826Z raft-host: gc-pass ms=6 orphan=6 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=4 segs=0 keys=554 emit=8 tomb=546 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:46:00.746Z raft-host: apply truncate rc=-13 index=12804 ino=4401
+2026-10-11T16:46:00.762Z raft-host: apply truncate rc=-13 index=12840 ino=4401
+2026-10-11T16:46:00.777Z raft-host: apply truncate rc=-13 index=12872 ino=4401
+2026-10-11T16:46:00.794Z raft-host: apply truncate rc=-13 index=12899 ino=4401
+2026-10-11T16:46:00.808Z raft-host: apply truncate rc=-13 index=12930 ino=4401
+2026-10-11T16:46:00.824Z raft-host: apply truncate rc=-13 index=12967 ino=4401
+2026-10-11T16:46:00.842Z raft-host: gc-pass ms=5 orphan=3 reap=0 frag=1 spread=0 recover=0 fscans=1 fsegs=0 fkeys=3672 femit=1 ftomb=3671 scans=5 segs=0 keys=4226 emit=9 tomb=4217 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:46:01.412Z raft-host: applied session index=13768 kind=1 shard=0 ino=0
+2026-10-11T16:46:01.429Z raft-host: applied session index=13787 kind=1 shard=0 ino=0
+2026-10-11T16:46:01.432Z raft-host: applied session index=13791 kind=1 shard=0 ino=0
+2026-10-11T16:46:01.449Z raft-host: applied session index=13811 kind=1 shard=0 ino=0
+2026-10-11T16:46:01.853Z raft-host: gc-pass ms=6 orphan=2 reap=0 frag=3 spread=0 recover=0 fscans=1 fsegs=0 fkeys=2465 femit=2 ftomb=2463 scans=5 segs=0 keys=3013 emit=4 tomb=3009 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:46:02.022Z raft-host: applied session index=13854 kind=1 shard=0 ino=0
+2026-10-11T16:46:02.095Z raft-host: applied session index=13880 kind=1 shard=0 ino=0
+2026-10-11T16:46:02.098Z raft-host: applied session index=13882 kind=1 shard=0 ino=0
+2026-10-11T16:46:02.120Z raft-host: applied session index=13890 kind=1 shard=0 ino=0
+2026-10-11T16:46:02.191Z raft-host: applied session index=13920 kind=1 shard=0 ino=0
+2026-10-11T16:46:02.212Z raft-host: applied session index=13944 kind=1 shard=0 ino=0
+2026-10-11T16:46:02.292Z raft-host: applied session index=13960 kind=1 shard=0 ino=0
+2026-10-11T16:46:02.353Z raft-host: applied session index=13992 kind=1 shard=0 ino=0
+2026-10-11T16:46:02.367Z raft-host: applied session index=13996 kind=1 shard=0 ino=0
+2026-10-11T16:46:02.384Z raft-host: applied session index=13998 kind=1 shard=0 ino=0
+2026-10-11T16:46:02.411Z iostats: get ops=5044 bytes=330498048 errors=1 avg_us=254 p50_us=171 max_us=2459 put ops=5414 bytes=354811904 errors=0 avg_us=1998 p50_us=1822 max_us=12649 wdisk ops=5414 bytes=354811904 errors=0 avg_us=1936 p50_us=1796 max_us=12584
+2026-10-11T16:46:02.576Z raft-host: applied session index=14000 kind=1 shard=0 ino=0
+2026-10-11T16:46:02.588Z raft-host: applied session index=14002 kind=1 shard=0 ino=0
+2026-10-11T16:46:02.605Z raft-host: applied session index=14004 kind=1 shard=0 ino=0
+2026-10-11T16:46:02.876Z raft-host: gc-pass ms=20 orphan=7 reap=10 frag=1 spread=0 recover=0 fscans=1 fsegs=0 fkeys=1803 femit=1 ftomb=1802 scans=11 segs=0 keys=2365 emit=14 tomb=2351 reap_scan=0 reap_sweep=1 reap_fence=8 reap_done=1
+2026-10-11T16:46:02.963Z raft-host: applied session index=14072 kind=1 shard=0 ino=0
+2026-10-11T16:46:03.155Z raft-host: applied session index=14102 kind=1 shard=0 ino=0
+2026-10-11T16:46:03.157Z raft-host: applied session index=14104 kind=1 shard=0 ino=0
+2026-10-11T16:46:03.282Z raft-host: applied session index=14106 kind=1 shard=0 ino=0
+2026-10-11T16:46:03.285Z raft-host: applied session index=14108 kind=1 shard=0 ino=0
+2026-10-11T16:46:03.411Z kv-obs: mt_bytes=1305020 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:46:03.412Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=536 passes=51 sampled=1 pending=3,0 reap=2,0 removed=5325 file_bytes=370790400 payload_bytes=348979200 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T16:46:03.893Z raft-host: apply reap-done rc=-13 index=14464 ino=4401
+2026-10-11T16:46:04.009Z raft-host: gc-pass ms=130 orphan=6 reap=122 frag=0 spread=0 recover=0 fscans=1 fsegs=0 fkeys=531 femit=4 ftomb=527 scans=117 segs=0 keys=839 emit=104 tomb=735 reap_scan=0 reap_sweep=33 reap_fence=78 reap_done=10
+2026-10-11T16:46:04.115Z raft-host: apply reap-done rc=-13 index=14551 ino=4401
+2026-10-11T16:46:04.174Z raft-host: gc-pass ms=64 orphan=4 reap=48 frag=10 spread=0 recover=0 fscans=1 fsegs=0 fkeys=530 femit=11 ftomb=519 scans=38 segs=0 keys=1192 emit=49 tomb=1143 reap_scan=0 reap_sweep=7 reap_fence=36 reap_done=5
+2026-10-11T16:46:05.202Z raft-host: gc-pass ms=19 orphan=5 reap=1 frag=12 spread=0 recover=0 fscans=2 fsegs=0 fkeys=3914 femit=184 ftomb=3730 scans=9 segs=0 keys=4563 emit=194 tomb=4369 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:46:06.221Z raft-host: gc-pass ms=6 orphan=5 reap=0 frag=0 spread=0 recover=1 fscans=2 fsegs=0 fkeys=4288 femit=0 ftomb=4288 scans=9 segs=0 keys=4941 emit=8 tomb=4933 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:46:06.761Z storage-engine=files direct_io=on
+2026-10-11T16:46:06.761Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-gc-fanout-20261011/live/gc-direct-plnwtn_a/n1/meta/cluster_nodes.bin
+2026-10-11T16:46:06.761Z   persisted node 1: 127.0.0.1:24190
+2026-10-11T16:46:06.761Z   persisted node 2: 127.0.0.1:24191
+2026-10-11T16:46:06.761Z   persisted node 3: 127.0.0.1:24192
+2026-10-11T16:46:06.761Z   persisted node 4: 127.0.0.1:24193
+2026-10-11T16:46:06.761Z Storage quota: explicit 4.00 GiB (safe maximum 169.74 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T16:46:06.761Z Trying to rejoin via persisted peer 127.0.0.1:24191 (node 2)...
+2026-10-11T16:46:06.761Z Cannot connect to peer 127.0.0.1:24191
+2026-10-11T16:46:06.761Z Failed to rejoin via 127.0.0.1:24191
+2026-10-11T16:46:06.761Z Trying to rejoin via persisted peer 127.0.0.1:24192 (node 3)...
+2026-10-11T16:46:06.761Z Cannot connect to peer 127.0.0.1:24192
+2026-10-11T16:46:06.761Z Failed to rejoin via 127.0.0.1:24192
+2026-10-11T16:46:06.761Z Trying to rejoin via persisted peer 127.0.0.1:24193 (node 4)...
+2026-10-11T16:46:06.761Z Cannot connect to peer 127.0.0.1:24193
+2026-10-11T16:46:06.761Z Failed to rejoin via 127.0.0.1:24193
+2026-10-11T16:46:06.761Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-11T16:46:06.761Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-11T16:46:06.762Z heartbeat: enabled (2000 ms interval)
+2026-10-11T16:46:06.805Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T16:46:06.805Z raft-host: up raft_id=0 n=4 boot=4147897906234447 salt=2750971935437521268 g0=hosted g2=off
+2026-10-11T16:46:06.805Z efsd e9ea8ca1-deploy-normal (branch devel-amd, built 2026-10-11T16:43:13Z on amd-395), build=e9ea8ca1-deploy-normal: node 1 listening on 127.0.0.1:24190, storage=/data1/efs/amd-gc-fanout-20261011/live/gc-direct-plnwtn_a/n1 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T16:46:06.805Z kv-obs: mt_bytes=1278979 l0_bytes=0 l0=0 l1=0
+2026-10-11T16:46:07.815Z raft-host: gc-pass ms=6 orphan=6 reap=0 frag=0 spread=0 recover=0 fscans=1 fsegs=0 fkeys=3743 femit=0 ftomb=3743 scans=6 segs=0 keys=21640 emit=3601 tomb=18039 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:46:08.762Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=946 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T16:46:08.827Z raft-host: gc-pass ms=6 orphan=6 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=4 segs=0 keys=602 emit=8 tomb=594 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:46:09.836Z raft-host: gc-pass ms=6 orphan=6 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=4 segs=0 keys=600 emit=8 tomb=592 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T16:46:10.774Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=0 errors=1 avg_us=240 p50_us=240 max_us=240 wdisk ops=1 bytes=65536 errors=1 avg_us=137 p50_us=137 max_us=137

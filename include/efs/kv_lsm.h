@@ -35,6 +35,16 @@ struct efs_kv_lsm_cfg {
 struct efs_kv *efs_kv_lsm_open(const char *dir, const struct efs_kv_lsm_cfg *cfg);
 void efs_kv_lsm_close(struct efs_kv *kv);
 
+/* Staged W95 minimum-reader barrier. No current mounted writer calls this.
+ * Before publishing format-dependent metadata, every owning/importing store
+ * must durably require its reader capability. Requirements only increase;
+ * disabling new-format writes never makes an existing store downgrade-safe.
+ * This guards cold legacy readers through a versioned MANIFEST; live peer
+ * build negotiation and snapshot/import activation remain separate gates.
+ * Only success establishes durability. Retry after an uncertain failure. */
+#define EFS_KV_READER_PACK_V1 1u
+int efs_kv_lsm_require_reader(struct efs_kv *,uint32_t required);
+
 /* Test/maintenance hooks. flush makes the memtable an L0 segment; compact
  * merges L0 plus the overlapping L1 into a new L1. */
 int efs_kv_lsm_flush(struct efs_kv *kv);

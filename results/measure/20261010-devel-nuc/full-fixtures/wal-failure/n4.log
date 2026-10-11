@@ -1,0 +1,27 @@
+2026-10-11T04:36:59.735Z storage-engine=files direct_io=on
+2026-10-11T04:36:59.744Z Joined cluster with 3 nodes
+2026-10-11T04:36:59.747Z heartbeat: enabled (2000 ms interval)
+2026-10-11T04:36:59.761Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T04:36:59.761Z raft-host: up raft_id=3 n=4 boot=16134956237352965 salt=6059686229067919651 g0=off g2=hosted
+2026-10-11T04:36:59.761Z efsd 3df19310-nuc (branch devel-nuc, built 2026-10-11T04:12:28Z on nuc), build=3df1931032b8-nuc: node 4 listening on 127.0.0.1:26593, storage=/home/efs/gc-direct-ynqdmxx6/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-11T04:36:59.761Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-11T04:37:01.748Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=980 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T04:37:06.515Z store: put O_DIRECT bounce copy (buf align=3120 len=65536)
+2026-10-11T04:37:06.531Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=15624 p50_us=15624 max_us=15624 wdisk ops=1 bytes=65536 errors=0 avg_us=15516 p50_us=15516 max_us=15516
+2026-10-11T04:37:06.534Z raft-host: applied session index=3 kind=7 shard=868 ino=0
+2026-10-11T04:37:08.742Z storage-engine=files direct_io=on
+2026-10-11T04:37:08.742Z Loaded 4 persisted cluster node(s) from /home/efs/gc-direct-ynqdmxx6/n4/meta/cluster_nodes.bin
+2026-10-11T04:37:08.742Z   persisted node 1: 127.0.0.1:26590
+2026-10-11T04:37:08.742Z   persisted node 2: 127.0.0.1:26591
+2026-10-11T04:37:08.742Z   persisted node 4: 127.0.0.1:26593
+2026-10-11T04:37:08.742Z   persisted node 3: 127.0.0.1:26592
+2026-10-11T04:37:08.762Z Joined cluster with 4 nodes
+2026-10-11T04:37:08.766Z heartbeat: enabled (2000 ms interval)
+2026-10-11T04:37:08.773Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T04:37:08.773Z kv-obs: mt_bytes=681 l0_bytes=0 l0=0 l1=0
+2026-10-11T04:37:08.773Z raft-host: up raft_id=3 n=4 boot=16134956237352966 salt=8443096336434103996 g0=off g2=hosted
+2026-10-11T04:37:08.773Z efsd 3df19310-nuc (branch devel-nuc, built 2026-10-11T04:12:28Z on nuc), build=3df1931032b8-nuc: node 4 listening on 127.0.0.1:26593, storage=/home/efs/gc-direct-ynqdmxx6/n4 (1 paths, stripe=none), used=65536, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-11T04:37:10.766Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=987 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T04:37:15.527Z raft-host: applied session index=6 kind=1 shard=0 ino=0
+2026-10-11T04:37:15.534Z raft-host: applied session index=7 kind=2 shard=1 ino=0
+2026-10-11T04:37:15.737Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0

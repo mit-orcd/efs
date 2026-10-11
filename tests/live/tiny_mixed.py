@@ -11,10 +11,12 @@ def body(worker,index):
     return hashlib.sha256(f'{worker}:{index}'.encode()).digest()*16
 
 
-def exercise(mount,pids,files=512):
+def exercise(mount,pids,files=512,large_workers=4):
     assert 8<=files<=8192 and files%8==0
     folder=Path(mount)/'tiny-mixed';folder.mkdir()
-    tiny_workers,large_workers,count=8,4,files//8
+    parent_ino=folder.stat().st_ino
+    assert large_workers in (0,4)
+    tiny_workers,count=8,files//8
     gate=threading.Barrier(tiny_workers+large_workers)
     done=threading.Event();monitor_done=threading.Event()
     opened=[];closed=[];rss={str(pid):0 for pid in pids};samples=0
@@ -65,20 +67,23 @@ def exercise(mount,pids,files=512):
     def quantiles(values):
         values=sorted(values);assert len(values)==tiny_workers*count
         return {f'p{q}_us':values[min(len(values)-1,(len(values)*q+99)//100-1)] for q in (50,95,99)}|{'max_us':values[-1]}
-    return {'tiny_files':tiny_workers*count,'tiny_bytes':512,'large_files':large_workers,
+    return {'parent_ino':parent_ino,'tiny_files':tiny_workers*count,'tiny_bytes':512,'large_files':large_workers,
             'large_live_bytes_each':16<<20,'large_written_bytes':written,
             'wall_s':time.monotonic()-started,'open':quantiles(opened),'close':quantiles(closed),
             'peak_rss_kib':rss,'rss_samples':samples}
 
 
-def verify_and_delete(mount,files=512):
+def verify_and_delete(mount,files=512,large_workers=4,verification_workers=1):
     assert 8<=files<=8192 and files%8==0
     folder=Path(mount)/'tiny-mixed'
-    for worker in range(8):
+    assert verification_workers in (1,8)
+    def verify_tiny(worker):
         for index in range(files//8):
             path=folder/f'tiny-{worker}-{index}';assert path.read_bytes()==body(worker,index),path
             path.unlink()
-    for worker in range(4):
+    with concurrent.futures.ThreadPoolExecutor(max_workers=verification_workers) as pool:
+        list(pool.map(verify_tiny,range(8)))
+    for worker in range(large_workers):
         path=folder/f'large-{worker}'
         expected=hashlib.sha256(f'large-{worker}'.encode()).digest()*32768
         with path.open('rb') as stream:

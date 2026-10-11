@@ -1,0 +1,11 @@
+CANDIDATE=/tmp/efs-w108-7_4kz_qh/command.py
+ARGS=['-l', '--limit', '3']
+drwxr-xr-x erbmi1:erbmi1          0 2026-10-11 03:08Z  /tmp/efs-mount/001
+drwxr-xr-x erbmi1:erbmi1          0 2026-10-11 03:58Z  /tmp/efs-mount/capacity-peer-20261011-fcstor007
+drwxr-xr-x erbmi1:erbmi1          0 2026-10-11 03:58Z  /tmp/efs-mount/capacity-peer-20261011-fcstor009
+ARGS=['-n', '--limit', '3']
+drwxr-xr-x 246111:246111          0 2026-10-11 03:08Z  /tmp/efs-mount/001
+drwxr-xr-x 246111:246111          0 2026-10-11 03:58Z  /tmp/efs-mount/capacity-peer-20261011-fcstor007
+drwxr-xr-x 246111:246111          0 2026-10-11 03:58Z  /tmp/efs-mount/capacity-peer-20261011-fcstor009
+ARGS=['--json', '--limit', '1']
+{"version":1,"operation":"ls","complete":true,"expiry":"unavailable","snapshot":{"boot_id":4760842447227473,"generation":504,"source_ns":1791696438565261276,"built_ns":1791696450200923493,"applied_g0":5345642,"applied_g2":5114276,"term_g0":101,"term_g2":21,"refresh_error":0,"refresh_n":256,"refresh_ms":2000,"refresh_min_ms":2000,"pending_changes_at_least":256,"pending_age_ms_at_sample":0,"lag_sample_ns":1791696450552498866,"refresh_overdue":false},"build":{"kind":"build","pin_ms":2,"total_ms":11635,"index_ns":225671087,"stats_ns":8792967912,"persist_ns":2601640007,"restore_ns":0},"filters":{"type":null,"min_size":null,"max_size":null,"modified_after_ns":null,"modified_before_ns":null},"entries":[{"path_hex":"303031","mode":16877,"uid":246111,"gid":246111,"size":0,"mtime_ns":1791688090485442042,"expiry":null}],"truncated":true,"page":{"token":"201970966889412745","cursor":"4294967297","more":true,"more_confirmed":true}}

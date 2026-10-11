@@ -52,6 +52,16 @@ int connect(int fd, const struct sockaddr *addr, socklen_t len) {
 }
 '''
 
+def incomplete_storage_fence(reply):
+    # Deliberate peer isolation can exhaust the command's existing socket
+    # budget after a definite BUSY. A hard transport IO refusal is valid too;
+    # neither may certify FINISH. The caller separately reads durable FENCING.
+    return bool(re.search(r'^raft-session status=3 rc=-(?:1|13)\b[^\n]*\bepoch=2 state=2\b',reply,re.M))
+
+def active_session(reply):
+    return bool(re.search(r'^raft-session status=0\b[^\n]*\bepoch=1 state=1\b',reply,re.M))
+
+
 def relay(client, src, dst):
     peer = None
     try:
@@ -222,6 +232,12 @@ try:
     session_before=mgmt(old,'raft-session','get',session_uuid)
     assert 'status=0' in session_before and 'epoch=1 state=1' in session_before,session_before
     if args.transactions:
+        # This cross-parent transaction needs both metadata groups. Group 0
+        # electing a new leader alone does not make group 2 authoritative.
+        transaction_session='00000000000000000000000000000001' # even FNV shard, group 2
+        transaction_created=mgmt(old,'raft-session','create',transaction_session,1)
+        assert 'status=0' in transaction_created,transaction_created
+        assert active_session(mgmt(old,'raft-session','get',transaction_session))
         txn_parents=[]
         for name in ('txn-source','txn-destination'):
             created=mgmt(old,'raft-create',1,name,'040755')
@@ -263,6 +279,8 @@ try:
     current = mgmt(new,'raft-getattr',1)
     assert 'status=0' in current and 'mode=040700' in current, current
     if args.transactions:
+        wait(lambda: True if active_session(mgmt(new,'raft-session','get',transaction_session)) else None,
+             'majority group 2 fresh session')
         moved=mgmt(new,'raft-rename',txn_parents[0],'txn-file',txn_parents[1],'txn-moved')
         assert 'status=0' in moved,moved
         assert 'status=1' in mgmt(new,'raft-lookup',txn_parents[0],'txn-file')
@@ -285,7 +303,7 @@ try:
     # Metadata quorum can BEGIN revocation, but cannot certify an unreachable
     # storage member. The merged storage fence must retain FENCING and refuse
     # completion until every configured member has sealed its old PUT guards.
-    assert 'status=3 rc=-13' in fenced and 'epoch=2 state=2' in fenced,fenced
+    assert incomplete_storage_fence(fenced),fenced
     majority_session=mgmt(new,'raft-session','get',session_uuid)
     assert 'status=0' in majority_session and 'epoch=2 state=2' in majority_session,majority_session
     session_replies = [mgmt(old,'raft-session','get',session_uuid) for _ in range(3)]

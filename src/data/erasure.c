@@ -39,12 +39,12 @@ static void xor_into(uint8_t *dst, const uint8_t *a, const uint8_t *b, size_t n)
 #include <string.h>
 #include <stdio.h>
 
-int efs_encode_chunk(const uint8_t *chunk, size_t chunk_len, size_t chunk_size,
-                     uint8_t *fragments[EFS_NUM_FRAGMENTS])
+static int encode(const uint8_t *chunk, size_t chunk_len, size_t chunk_size,
+                  uint8_t *fragments[EFS_NUM_FRAGMENTS], size_t minimum, size_t maximum)
 {
     if (!chunk || !fragments || !fragments[0] || !fragments[1] || !fragments[2])
         return EFS_ERR_INVAL;
-    if (chunk_size < EFS_MIN_CHUNK_SIZE || chunk_size > EFS_MAX_CHUNK_SIZE)
+    if (chunk_size < minimum || chunk_size > maximum)
         return EFS_ERR_INVAL;
     if ((chunk_size & 1u) != 0)
         return EFS_ERR_INVAL;
@@ -88,13 +88,13 @@ int efs_encode_chunk(const uint8_t *chunk, size_t chunk_len, size_t chunk_size,
     return EFS_OK;
 }
 
-int efs_decode_chunk(uint8_t *const fragments[EFS_NUM_FRAGMENTS], size_t chunk_size,
-                     int have_a, int have_b, int missing,
-                     uint8_t *chunk, size_t chunk_len)
+static int decode(uint8_t *const fragments[EFS_NUM_FRAGMENTS], size_t chunk_size,
+                  int have_a, int have_b, int missing,
+                  uint8_t *chunk, size_t chunk_len, size_t minimum, size_t maximum)
 {
     if (!fragments || !fragments[0] || !fragments[1] || !fragments[2] || !chunk)
         return EFS_ERR_INVAL;
-    if (chunk_size < EFS_MIN_CHUNK_SIZE || chunk_size > EFS_MAX_CHUNK_SIZE)
+    if (chunk_size < minimum || chunk_size > maximum)
         return EFS_ERR_INVAL;
     if ((chunk_size & 1u) != 0)
         return EFS_ERR_INVAL;
@@ -130,4 +130,46 @@ int efs_decode_chunk(uint8_t *const fragments[EFS_NUM_FRAGMENTS], size_t chunk_s
 
     (void)chunk_len;
     return EFS_OK;
+}
+
+/* Ordinary chunks retain their existing validation and representation. */
+int efs_encode_chunk(const uint8_t *chunk, size_t len, size_t size,
+                     uint8_t *fragments[EFS_NUM_FRAGMENTS])
+{
+    return encode(chunk, len, size, fragments, EFS_MIN_CHUNK_SIZE, EFS_MAX_CHUNK_SIZE);
+}
+int efs_decode_chunk(uint8_t *const fragments[EFS_NUM_FRAGMENTS], size_t size,
+                     int a, int b, int missing, uint8_t *chunk, size_t len)
+{
+    return decode(fragments, size, a, b, missing, chunk, len,
+                  EFS_MIN_CHUNK_SIZE, EFS_MAX_CHUNK_SIZE);
+}
+
+int efs_segment_geometry(size_t body_bytes, size_t *size)
+{
+    if (!size || !body_bytes || body_bytes > EFS_SEGMENT_MAX_SIZE)
+        return EFS_ERR_INVAL;
+    *size = ((body_bytes + EFS_SEGMENT_ALIGNMENT - 1) / EFS_SEGMENT_ALIGNMENT)
+            * EFS_SEGMENT_ALIGNMENT;
+    return EFS_OK;
+}
+static int segment_valid(size_t size)
+{
+    return size >= EFS_SEGMENT_ALIGNMENT && size <= EFS_SEGMENT_MAX_SIZE &&
+           size % EFS_SEGMENT_ALIGNMENT == 0;
+}
+int efs_encode_segment(const uint8_t *body, size_t len, size_t size,
+                       uint8_t *fragments[EFS_NUM_FRAGMENTS])
+{
+    if (!segment_valid(size))
+        return EFS_ERR_INVAL;
+    return encode(body, len, size, fragments, EFS_SEGMENT_ALIGNMENT, EFS_SEGMENT_MAX_SIZE);
+}
+int efs_decode_segment(uint8_t *const fragments[EFS_NUM_FRAGMENTS], size_t size,
+                       int a, int b, int missing, uint8_t *body, size_t len)
+{
+    if (!segment_valid(size))
+        return EFS_ERR_INVAL;
+    return decode(fragments, size, a, b, missing, body, len,
+                  EFS_SEGMENT_ALIGNMENT, EFS_SEGMENT_MAX_SIZE);
 }

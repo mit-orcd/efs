@@ -7,6 +7,18 @@ import struct
 import zlib
 from pathlib import Path
 
+def applied_index(path):
+    """Read the legacy atomic index or current index/complement checkpoint."""
+    data=Path(path).read_bytes()
+    if len(data)==8:
+        return struct.unpack('>Q',data)[0]
+    if len(data)!=16:
+        raise ValueError('invalid applied checkpoint length')
+    index,check=struct.unpack('>QQ',data)
+    if check!=index^((1<<64)-1):
+        raise ValueError('invalid applied checkpoint complement')
+    return index
+
 def commands(path, commits):
     data=Path(path).read_bytes()
     if len(data)<8 or struct.unpack_from('>II',data)!=(0x52464c31,1):

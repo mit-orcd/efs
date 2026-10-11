@@ -1,0 +1,13 @@
+raft-session status=0 rc=0 primary=1 op=get ssh=1503 shard=1503 epoch=1 state=1 touched=0 index=9
+
+raft-session status=3 rc=-13 primary=3 op=fence ssh=1503 shard=0 epoch=2 state=2 touched=0 index=0
+
+raft-session status=0 rc=0 primary=3 op=get ssh=1503 shard=1503 epoch=2 state=2 touched=0 index=19
+
+raft-session status=3 rc=-13 primary=1 op=get ssh=1503 shard=1503 epoch=0 state=0 touched=0 index=9
+
+raft-session status=3 rc=-13 primary=1 op=get ssh=1503 shard=1503 epoch=0 state=0 touched=0 index=9
+
+raft-session status=3 rc=-13 primary=1 op=get ssh=1503 shard=1503 epoch=0 state=0 touched=0 index=9
+
+raft-session status=0 rc=0 primary=3 op=fence ssh=1503 shard=0 epoch=2 state=1 touched=0 index=21

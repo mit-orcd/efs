@@ -210,7 +210,17 @@ do not advance application. Oversized entries refuse above 32,768 effect keys
 or 64 MiB. Before downgrading to a binary without atomic cursors, shut down
 cleanly to bring legacy hints current; crash downgrade is unsupported.
 Keep the default pending sustained and recovery acceptance.
-[Investigation and gates](../status/w93-checkpoint-cadence-20261010.md).
+[Investigation and gates](../archive/status-20261011/w93-checkpoint-cadence-20261010.md).
+
+GC scheduling experiment (W94/W97): `EFS_GC_BACKLOG_IDLE_MS` is unset by
+default, retaining a 1,000-ms inter-pass idle. Explicit integers 20–1,000
+shorten the idle when a leader's reap scan is capped, or a full fragment-GC
+batch successfully commits ACKs and exhausts its budget with pending work,
+and physical deletion makes progress in that pass. Empty scans and wholly blocked work retain the
+normal backoff; partially blocked work can still accelerate if other deletions
+succeed. Per-group scan/fragment/ACK budgets, deletion authority and durability
+ordering remain unchanged. This is an opt-in experiment, not an overload fix
+or production default. [AMD gates and limits](../status/amd-sustained-20261011.md#opt-in-gc-scheduling-candidate).
 
 Metadata plane (Raft + KV):
 

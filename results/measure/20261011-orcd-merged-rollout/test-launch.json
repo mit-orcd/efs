@@ -1,0 +1,16 @@
+{
+  "revision": "c52a464391a685a766ee49aa76a162de58162a81",
+  "bulk": "/home/erbmi1/orcd/scratch/efs/orcd-test/merged-orcd-c52a464391a6",
+  "clients": [
+    "fcstor007",
+    "fcstor008",
+    "fcstor009",
+    "fcstor010",
+    "fcstor011",
+    "fcstor012",
+    "fcstor013"
+  ],
+  "benchmark": "/home/erbmi1/orcd/scratch/efs/orcd-test/merged-orcd-c52a464391a6/fcstor007/tiny-files.log",
+  "suite": "all",
+  "jobs": 16
+}

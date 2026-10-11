@@ -1,0 +1,15 @@
+{
+  "pid": 4012091,
+  "tids": "4012091,4012092,4012093,4012094",
+  "cmdline": [
+    "python3",
+    "/data1/efs/devel-nuc-20261010/src/tests/measure/nuc_durable_io.py",
+    "/home/efs/devel-nuc-w96-20261010/profile-nvme-grow",
+    "/data1/efs/devel-nuc-20261010/allocation-profile/nvme-grow/data",
+    "--mode",
+    "grow",
+    "--seconds",
+    "180",
+    ""
+  ]
+}

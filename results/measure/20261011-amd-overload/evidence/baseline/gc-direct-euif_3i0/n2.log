@@ -1,0 +1,625 @@
+2026-10-11T18:54:14.152Z storage-engine=files direct_io=on
+2026-10-11T18:54:14.152Z Storage quota: explicit 4.00 GiB (safe maximum 164.79 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T18:54:14.155Z Joined cluster with 2 nodes
+2026-10-11T18:54:14.156Z heartbeat: enabled (2000 ms interval)
+2026-10-11T18:54:14.157Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T18:54:14.157Z raft-host: up raft_id=1 n=4 boot=4408216223548763 salt=12302986834794884372 g0=hosted g2=hosted
+2026-10-11T18:54:14.157Z efsd 715b1103-deploy-normal (branch devel-amd, built 2026-10-11T17:25:15Z on amd-395), build=715b1103-deploy-normal: node 2 listening on 127.0.0.1:24211, storage=/data1/efs/amd-overload-20261011/baseline/gc-direct-euif_3i0/n2 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T18:54:14.157Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-11T18:54:16.156Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=984 passes=2 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T18:54:18.179Z raft-host: applied session index=4 kind=1 shard=0 ino=0
+2026-10-11T18:54:18.183Z raft-host: applied session index=8 kind=1 shard=0 ino=0
+2026-10-11T18:54:18.192Z store: put O_DIRECT bounce copy (buf align=656 len=65536)
+2026-10-11T18:54:18.195Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=4 bytes=262144 errors=0 avg_us=3226 p50_us=3217 max_us=3412 wdisk ops=4 bytes=262144 errors=0 avg_us=3171 p50_us=3175 max_us=3315
+2026-10-11T18:54:18.232Z raft-host: applied session index=35 kind=1 shard=0 ino=0
+2026-10-11T18:54:18.279Z raft-host: applied session index=97 kind=1 shard=0 ino=0
+2026-10-11T18:54:19.158Z kv-obs: mt_bytes=568091 l0_bytes=0 l0=0 l1=0
+2026-10-11T18:54:19.824Z raft-host: gc-pass ms=599 orphan=0 reap=0 frag=531 spread=0 recover=67 fscans=1 fsegs=0 fkeys=257 femit=257 ftomb=0 scans=197 segs=0 keys=257 emit=257 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:20.429Z raft-host: gc-pass ms=585 orphan=0 reap=0 frag=517 spread=0 recover=67 fscans=1 fsegs=0 fkeys=258 femit=257 ftomb=1 scans=197 segs=0 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:21.017Z raft-host: gc-pass ms=567 orphan=0 reap=0 frag=500 spread=0 recover=67 fscans=1 fsegs=0 fkeys=258 femit=257 ftomb=1 scans=197 segs=0 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:21.627Z raft-host: gc-pass ms=589 orphan=0 reap=0 frag=522 spread=0 recover=67 fscans=1 fsegs=0 fkeys=258 femit=257 ftomb=1 scans=197 segs=0 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:22.232Z raft-host: gc-pass ms=585 orphan=0 reap=0 frag=517 spread=0 recover=67 fscans=1 fsegs=0 fkeys=258 femit=257 ftomb=1 scans=197 segs=0 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:22.882Z raft-host: gc-pass ms=629 orphan=0 reap=0 frag=562 spread=0 recover=67 fscans=1 fsegs=0 fkeys=258 femit=257 ftomb=1 scans=197 segs=0 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:23.195Z iostats: get ops=14 bytes=917504 errors=0 avg_us=231 p50_us=224 max_us=315 put ops=6776 bytes=444071936 errors=0 avg_us=3564 p50_us=2042 max_us=21516 wdisk ops=6776 bytes=444071936 errors=0 avg_us=3521 p50_us=2009 max_us=21461
+2026-10-11T18:54:23.530Z raft-host: gc-pass ms=628 orphan=0 reap=0 frag=560 spread=0 recover=67 fscans=1 fsegs=0 fkeys=258 femit=257 ftomb=1 scans=197 segs=0 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:24.110Z raft-host: gc-pass ms=559 orphan=0 reap=0 frag=492 spread=0 recover=67 fscans=1 fsegs=0 fkeys=222 femit=221 ftomb=1 scans=197 segs=0 keys=222 emit=221 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:24.158Z kv-obs: mt_bytes=2061643 l0_bytes=0 l0=0 l1=0
+2026-10-11T18:54:25.779Z raft-host: gc-pass ms=667 orphan=0 reap=0 frag=599 spread=0 recover=67 fscans=2 fsegs=0 fkeys=313 femit=257 ftomb=56 scans=198 segs=0 keys=313 emit=257 tomb=56 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:26.450Z raft-host: gc-pass ms=650 orphan=0 reap=0 frag=583 spread=0 recover=67 fscans=1 fsegs=0 fkeys=308 femit=257 ftomb=51 scans=197 segs=0 keys=308 emit=257 tomb=51 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:27.107Z raft-host: gc-pass ms=637 orphan=0 reap=0 frag=569 spread=0 recover=67 fscans=1 fsegs=0 fkeys=297 femit=257 ftomb=40 scans=197 segs=0 keys=297 emit=257 tomb=40 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:27.769Z raft-host: gc-pass ms=642 orphan=0 reap=0 frag=574 spread=0 recover=67 fscans=1 fsegs=0 fkeys=295 femit=257 ftomb=38 scans=197 segs=0 keys=295 emit=257 tomb=38 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:28.195Z iostats: get ops=256 bytes=16777216 errors=0 avg_us=242 p50_us=201 max_us=594 put ops=12797 bytes=838664192 errors=0 avg_us=3939 p50_us=5535 max_us=21516 wdisk ops=12797 bytes=838664192 errors=0 avg_us=3896 p50_us=5502 max_us=21461
+2026-10-11T18:54:28.418Z raft-host: gc-pass ms=628 orphan=0 reap=0 frag=561 spread=0 recover=67 fscans=1 fsegs=0 fkeys=304 femit=257 ftomb=47 scans=197 segs=0 keys=304 emit=257 tomb=47 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:29.065Z raft-host: gc-pass ms=627 orphan=0 reap=0 frag=559 spread=0 recover=67 fscans=1 fsegs=0 fkeys=291 femit=257 ftomb=34 scans=197 segs=0 keys=291 emit=257 tomb=34 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:29.158Z kv-obs: mt_bytes=3242869 l0_bytes=0 l0=0 l1=0
+2026-10-11T18:54:29.687Z raft-host: gc-pass ms=602 orphan=0 reap=0 frag=534 spread=0 recover=67 fscans=1 fsegs=0 fkeys=307 femit=257 ftomb=50 scans=197 segs=0 keys=307 emit=257 tomb=50 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:30.312Z raft-host: gc-pass ms=604 orphan=0 reap=0 frag=536 spread=0 recover=67 fscans=1 fsegs=0 fkeys=310 femit=257 ftomb=53 scans=197 segs=0 keys=310 emit=257 tomb=53 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:30.937Z raft-host: gc-pass ms=605 orphan=0 reap=0 frag=537 spread=0 recover=67 fscans=1 fsegs=0 fkeys=291 femit=257 ftomb=34 scans=197 segs=0 keys=291 emit=257 tomb=34 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:31.557Z raft-host: gc-pass ms=599 orphan=0 reap=0 frag=532 spread=0 recover=67 fscans=1 fsegs=0 fkeys=291 femit=257 ftomb=34 scans=197 segs=0 keys=291 emit=257 tomb=34 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:32.161Z gc-health: stage=6 group=2 elapsed_ms=583 last_pass_age_ms=603 passes=23 sampled=2 pending=0,5598 reap=0,0 removed=6929 file_bytes=482480128 payload_bytes=454098944 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T18:54:32.195Z raft-host: gc-pass ms=617 orphan=0 reap=0 frag=549 spread=0 recover=67 fscans=1 fsegs=0 fkeys=300 femit=257 ftomb=43 scans=197 segs=0 keys=300 emit=257 tomb=43 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:32.840Z raft-host: gc-pass ms=625 orphan=0 reap=0 frag=557 spread=0 recover=67 fscans=1 fsegs=0 fkeys=291 femit=257 ftomb=34 scans=197 segs=0 keys=291 emit=257 tomb=34 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:33.197Z iostats: get ops=420 bytes=27525120 errors=0 avg_us=235 p50_us=197 max_us=594 put ops=18175 bytes=1191116800 errors=0 avg_us=4147 p50_us=7735 max_us=21516 wdisk ops=18175 bytes=1191116800 errors=0 avg_us=4105 p50_us=7703 max_us=21461
+2026-10-11T18:54:33.539Z raft-host: gc-pass ms=678 orphan=0 reap=0 frag=611 spread=0 recover=67 fscans=1 fsegs=0 fkeys=312 femit=257 ftomb=55 scans=197 segs=0 keys=312 emit=257 tomb=55 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:33.573Z kv-compact: start l0=21 inputs=1 range=1 l0only=0
+2026-10-11T18:54:33.573Z raft-host: getchunks slow ino=18153 start=79 n=1 ri_ms=20 total_ms=20 rc=0 slow=1
+2026-10-11T18:54:33.578Z kv-compact: end bytes=1181421 ms=5 l0=20 l1=1 rc=0
+2026-10-11T18:54:33.578Z kv-compact: start l0=20 inputs=1 range=2 l0only=0
+2026-10-11T18:54:33.582Z kv-compact: end bytes=912795 ms=4 l0=19 l1=2 rc=0
+2026-10-11T18:54:33.582Z kv-compact: start l0=19 inputs=1 range=261 l0only=0
+2026-10-11T18:54:33.586Z kv-compact: end bytes=362306 ms=4 l0=18 l1=3 rc=0
+2026-10-11T18:54:33.586Z kv-compact: start l0=18 inputs=1 range=262 l0only=0
+2026-10-11T18:54:33.588Z kv-compact: end bytes=9540 ms=3 l0=17 l1=4 rc=0
+2026-10-11T18:54:33.588Z kv-compact: start l0=17 inputs=1 range=256 l0only=0
+2026-10-11T18:54:33.591Z kv-compact: end bytes=8480 ms=2 l0=16 l1=5 rc=0
+2026-10-11T18:54:33.591Z kv-compact: start l0=16 inputs=1 range=257 l0only=0
+2026-10-11T18:54:33.594Z kv-compact: end bytes=8480 ms=3 l0=15 l1=6 rc=0
+2026-10-11T18:54:33.594Z kv-compact: start l0=15 inputs=1 range=263 l0only=0
+2026-10-11T18:54:33.597Z kv-compact: end bytes=8480 ms=3 l0=14 l1=7 rc=0
+2026-10-11T18:54:33.597Z kv-compact: start l0=14 inputs=1 range=264 l0only=0
+2026-10-11T18:54:33.600Z kv-compact: end bytes=8480 ms=3 l0=13 l1=8 rc=0
+2026-10-11T18:54:33.600Z kv-compact: start l0=13 inputs=1 range=265 l0only=0
+2026-10-11T18:54:33.603Z kv-compact: end bytes=8480 ms=3 l0=12 l1=9 rc=0
+2026-10-11T18:54:33.603Z kv-compact: start l0=12 inputs=1 range=266 l0only=0
+2026-10-11T18:54:33.606Z kv-compact: end bytes=8480 ms=4 l0=11 l1=10 rc=0
+2026-10-11T18:54:33.606Z kv-compact: start l0=11 inputs=1 range=267 l0only=0
+2026-10-11T18:54:33.610Z kv-compact: end bytes=8480 ms=3 l0=10 l1=11 rc=0
+2026-10-11T18:54:33.610Z kv-compact: start l0=10 inputs=1 range=268 l0only=0
+2026-10-11T18:54:33.613Z kv-compact: end bytes=8480 ms=3 l0=9 l1=12 rc=0
+2026-10-11T18:54:33.613Z kv-compact: start l0=9 inputs=1 range=269 l0only=0
+2026-10-11T18:54:33.616Z kv-compact: end bytes=8480 ms=3 l0=8 l1=13 rc=0
+2026-10-11T18:54:33.616Z kv-compact: start l0=8 inputs=1 range=270 l0only=0
+2026-10-11T18:54:33.619Z kv-compact: end bytes=8480 ms=3 l0=7 l1=14 rc=0
+2026-10-11T18:54:33.619Z kv-compact: start l0=7 inputs=1 range=258 l0only=0
+2026-10-11T18:54:33.623Z kv-compact: end bytes=5088 ms=4 l0=6 l1=15 rc=0
+2026-10-11T18:54:33.623Z kv-compact: start l0=6 inputs=1 range=19 l0only=0
+2026-10-11T18:54:33.626Z kv-compact: end bytes=1696 ms=3 l0=5 l1=16 rc=0
+2026-10-11T18:54:33.626Z kv-compact: start l0=5 inputs=1 range=70 l0only=0
+2026-10-11T18:54:33.629Z kv-compact: end bytes=1696 ms=3 l0=4 l1=17 rc=0
+2026-10-11T18:54:33.629Z kv-compact: start l0=4 inputs=1 range=121 l0only=0
+2026-10-11T18:54:33.633Z kv-compact: end bytes=1696 ms=4 l0=3 l1=18 rc=0
+2026-10-11T18:54:34.158Z kv-obs: mt_bytes=356678 l0_bytes=3456 l0=3 l1=18
+2026-10-11T18:54:34.204Z raft-host: gc-pass ms=644 orphan=0 reap=0 frag=563 spread=0 recover=67 fscans=1 fsegs=1 fkeys=318 femit=257 ftomb=61 scans=197 segs=154 keys=318 emit=257 tomb=61 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:34.902Z raft-host: gc-pass ms=678 orphan=0 reap=0 frag=611 spread=0 recover=67 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=197 segs=157 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:35.562Z raft-host: gc-pass ms=639 orphan=0 reap=0 frag=571 spread=0 recover=67 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=197 segs=154 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:36.211Z raft-host: gc-pass ms=629 orphan=0 reap=0 frag=561 spread=0 recover=67 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=197 segs=157 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:36.856Z raft-host: gc-pass ms=624 orphan=0 reap=0 frag=557 spread=0 recover=67 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=197 segs=151 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:37.480Z raft-host: gc-pass ms=603 orphan=0 reap=0 frag=535 spread=0 recover=67 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=197 segs=160 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:38.104Z raft-host: gc-pass ms=604 orphan=0 reap=0 frag=536 spread=0 recover=67 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=197 segs=151 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:38.198Z iostats: get ops=512 bytes=33554432 errors=0 avg_us=236 p50_us=215 max_us=720 put ops=23723 bytes=1554710528 errors=0 avg_us=4197 p50_us=2253 max_us=21516 wdisk ops=23723 bytes=1554710528 errors=0 avg_us=4155 p50_us=2215 max_us=21461
+2026-10-11T18:54:38.772Z raft-host: gc-pass ms=648 orphan=0 reap=0 frag=580 spread=0 recover=67 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=197 segs=160 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:39.158Z kv-obs: mt_bytes=2254224 l0_bytes=3456 l0=3 l1=18
+2026-10-11T18:54:39.433Z raft-host: gc-pass ms=640 orphan=0 reap=0 frag=573 spread=0 recover=67 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=197 segs=148 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:40.094Z raft-host: gc-pass ms=641 orphan=0 reap=0 frag=574 spread=0 recover=67 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=197 segs=163 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:40.778Z raft-host: gc-pass ms=663 orphan=0 reap=0 frag=596 spread=0 recover=67 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=197 segs=148 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:41.396Z raft-host: gc-pass ms=597 orphan=0 reap=0 frag=597 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:42.012Z raft-host: gc-pass ms=595 orphan=0 reap=0 frag=595 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:42.640Z raft-host: gc-pass ms=607 orphan=0 reap=0 frag=607 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:43.198Z iostats: get ops=736 bytes=48234496 errors=0 avg_us=240 p50_us=213 max_us=720 put ops=29237 bytes=1916076032 errors=0 avg_us=4318 p50_us=3917 max_us=21516 wdisk ops=29237 bytes=1916076032 errors=0 avg_us=4276 p50_us=3885 max_us=21461
+2026-10-11T18:54:43.278Z raft-host: gc-pass ms=617 orphan=0 reap=0 frag=617 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:43.911Z raft-host: gc-pass ms=612 orphan=0 reap=0 frag=612 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:44.158Z kv-obs: mt_bytes=3842255 l0_bytes=3456 l0=3 l1=18
+2026-10-11T18:54:44.509Z raft-host: gc-pass ms=578 orphan=0 reap=0 frag=578 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:45.109Z raft-host: gc-pass ms=579 orphan=0 reap=0 frag=579 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:45.355Z kv-compact: start l0=24 inputs=2 range=1 l0only=0
+2026-10-11T18:54:45.355Z raft-host: apply-sleep us=27288 group=0 idx=15679 applied=15678
+2026-10-11T18:54:45.361Z kv-compact: end bytes=2071723 ms=6 l0=23 l1=18 rc=0
+2026-10-11T18:54:45.361Z kv-compact: start l0=23 inputs=2 range=2 l0only=0
+2026-10-11T18:54:45.366Z kv-compact: end bytes=1432185 ms=5 l0=22 l1=18 rc=0
+2026-10-11T18:54:45.366Z kv-compact: start l0=22 inputs=2 range=261 l0only=0
+2026-10-11T18:54:45.370Z kv-compact: end bytes=454319 ms=4 l0=21 l1=18 rc=0
+2026-10-11T18:54:45.370Z kv-compact: start l0=21 inputs=2 range=256 l0only=0
+2026-10-11T18:54:45.373Z kv-compact: end bytes=8480 ms=3 l0=20 l1=18 rc=0
+2026-10-11T18:54:45.373Z kv-compact: start l0=20 inputs=2 range=257 l0only=0
+2026-10-11T18:54:45.376Z kv-compact: end bytes=8480 ms=3 l0=19 l1=18 rc=0
+2026-10-11T18:54:45.376Z kv-compact: start l0=19 inputs=2 range=262 l0only=0
+2026-10-11T18:54:45.379Z kv-compact: end bytes=9540 ms=4 l0=18 l1=18 rc=0
+2026-10-11T18:54:45.380Z kv-compact: start l0=18 inputs=2 range=263 l0only=0
+2026-10-11T18:54:45.383Z kv-compact: end bytes=8480 ms=4 l0=17 l1=18 rc=0
+2026-10-11T18:54:45.384Z kv-compact: start l0=17 inputs=2 range=264 l0only=0
+2026-10-11T18:54:45.387Z kv-compact: end bytes=8480 ms=3 l0=16 l1=18 rc=0
+2026-10-11T18:54:45.387Z kv-compact: start l0=16 inputs=2 range=265 l0only=0
+2026-10-11T18:54:45.391Z kv-compact: end bytes=8480 ms=4 l0=15 l1=18 rc=0
+2026-10-11T18:54:45.391Z kv-compact: start l0=15 inputs=2 range=266 l0only=0
+2026-10-11T18:54:45.394Z kv-compact: end bytes=8480 ms=3 l0=14 l1=18 rc=0
+2026-10-11T18:54:45.395Z kv-compact: start l0=14 inputs=2 range=267 l0only=0
+2026-10-11T18:54:45.397Z kv-compact: end bytes=8480 ms=2 l0=13 l1=18 rc=0
+2026-10-11T18:54:45.397Z kv-compact: start l0=13 inputs=2 range=268 l0only=0
+2026-10-11T18:54:45.400Z kv-compact: end bytes=8480 ms=3 l0=12 l1=18 rc=0
+2026-10-11T18:54:45.400Z kv-compact: start l0=12 inputs=2 range=269 l0only=0
+2026-10-11T18:54:45.403Z kv-compact: end bytes=8480 ms=4 l0=11 l1=18 rc=0
+2026-10-11T18:54:45.403Z kv-compact: start l0=11 inputs=2 range=270 l0only=0
+2026-10-11T18:54:45.406Z kv-compact: end bytes=8480 ms=2 l0=10 l1=18 rc=0
+2026-10-11T18:54:45.406Z kv-compact: start l0=10 inputs=2 range=258 l0only=0
+2026-10-11T18:54:45.409Z kv-compact: end bytes=5088 ms=3 l0=9 l1=18 rc=0
+2026-10-11T18:54:45.409Z kv-compact: start l0=9 inputs=2 range=172 l0only=0
+2026-10-11T18:54:45.413Z kv-compact: end bytes=1696 ms=4 l0=7 l1=19 rc=0
+2026-10-11T18:54:45.413Z kv-compact: start l0=7 inputs=2 range=223 l0only=0
+2026-10-11T18:54:45.416Z kv-compact: end bytes=1696 ms=3 l0=5 l1=20 rc=0
+2026-10-11T18:54:45.416Z kv-compact: start l0=5 inputs=2 range=19 l0only=0
+2026-10-11T18:54:45.419Z kv-compact: end bytes=1696 ms=4 l0=4 l1=20 rc=0
+2026-10-11T18:54:45.420Z kv-compact: start l0=4 inputs=2 range=70 l0only=0
+2026-10-11T18:54:45.423Z kv-compact: end bytes=1696 ms=3 l0=3 l1=20 rc=0
+2026-10-11T18:54:45.708Z raft-host: gc-pass ms=578 orphan=0 reap=0 frag=578 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:46.311Z raft-host: gc-pass ms=583 orphan=0 reap=0 frag=583 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:46.929Z raft-host: gc-pass ms=597 orphan=0 reap=0 frag=596 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:47.530Z raft-host: gc-pass ms=581 orphan=0 reap=0 frag=581 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:48.145Z raft-host: gc-pass ms=594 orphan=0 reap=0 frag=594 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:48.163Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=17 passes=49 sampled=2 pending=0,10535 reap=0,0 removed=15701 file_bytes=1093292032 payload_bytes=1028980736 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T18:54:48.199Z iostats: get ops=786 bytes=51511296 errors=0 avg_us=241 p50_us=208 max_us=720 put ops=34511 bytes=2261712896 errors=0 avg_us=4307 p50_us=6399 max_us=21516 wdisk ops=34511 bytes=2261712896 errors=0 avg_us=4265 p50_us=6363 max_us=21461
+2026-10-11T18:54:48.766Z raft-host: gc-pass ms=601 orphan=0 reap=0 frag=601 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:49.158Z kv-obs: mt_bytes=1555229 l0_bytes=1788 l0=3 l1=20
+2026-10-11T18:54:49.403Z raft-host: gc-pass ms=616 orphan=0 reap=0 frag=616 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:50.045Z raft-host: gc-pass ms=622 orphan=0 reap=0 frag=622 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:50.648Z raft-host: gc-pass ms=582 orphan=0 reap=0 frag=582 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:51.240Z raft-host: gc-pass ms=571 orphan=0 reap=0 frag=571 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:51.879Z raft-host: gc-pass ms=619 orphan=0 reap=0 frag=619 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:52.661Z raft-host: gc-pass ms=762 orphan=0 reap=0 frag=762 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:52.778Z raft-host: gc-pass ms=96 orphan=0 reap=0 frag=96 spread=0 recover=0 fscans=1 fsegs=1 fkeys=42 femit=41 ftomb=1 scans=5 segs=1 keys=42 emit=41 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:53.199Z iostats: get ops=1016 bytes=66584576 errors=0 avg_us=255 p50_us=242 max_us=1316 put ops=39986 bytes=2620522496 errors=0 avg_us=4400 p50_us=5824 max_us=21516 wdisk ops=39986 bytes=2620522496 errors=0 avg_us=4358 p50_us=5789 max_us=21461
+2026-10-11T18:54:54.158Z kv-obs: mt_bytes=3260740 l0_bytes=1788 l0=3 l1=20
+2026-10-11T18:54:54.373Z raft-host: gc-pass ms=591 orphan=0 reap=0 frag=591 spread=0 recover=0 fscans=2 fsegs=2 fkeys=258 femit=257 ftomb=1 scans=6 segs=2 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:54.974Z raft-host: gc-pass ms=581 orphan=0 reap=0 frag=580 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:55.569Z raft-host: gc-pass ms=574 orphan=0 reap=0 frag=574 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:56.181Z raft-host: gc-pass ms=591 orphan=0 reap=0 frag=591 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:56.815Z raft-host: gc-pass ms=613 orphan=0 reap=0 frag=613 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:56.945Z kv-compact: start l0=24 inputs=2 range=1 l0only=0
+2026-10-11T18:54:56.945Z raft-host: apply-sleep us=26907 group=0 idx=21873 applied=21872
+2026-10-11T18:54:56.947Z raft-host: getchunks slow ino=9961 start=87 n=1 ri_ms=27 total_ms=27 rc=0 slow=2
+2026-10-11T18:54:56.952Z kv-compact: end bytes=2871650 ms=7 l0=23 l1=20 rc=0
+2026-10-11T18:54:56.952Z kv-compact: start l0=23 inputs=2 range=2 l0only=0
+2026-10-11T18:54:56.958Z kv-compact: end bytes=1954620 ms=6 l0=22 l1=20 rc=0
+2026-10-11T18:54:56.959Z kv-compact: start l0=22 inputs=2 range=261 l0only=0
+2026-10-11T18:54:56.963Z kv-compact: end bytes=623555 ms=4 l0=21 l1=20 rc=0
+2026-10-11T18:54:56.963Z kv-compact: start l0=21 inputs=2 range=256 l0only=0
+2026-10-11T18:54:56.967Z kv-compact: end bytes=8480 ms=4 l0=20 l1=20 rc=0
+2026-10-11T18:54:56.967Z kv-compact: start l0=20 inputs=2 range=257 l0only=0
+2026-10-11T18:54:56.970Z kv-compact: end bytes=8480 ms=3 l0=19 l1=20 rc=0
+2026-10-11T18:54:56.970Z kv-compact: start l0=19 inputs=2 range=262 l0only=0
+2026-10-11T18:54:56.973Z kv-compact: end bytes=9540 ms=4 l0=18 l1=20 rc=0
+2026-10-11T18:54:56.974Z kv-compact: start l0=18 inputs=2 range=263 l0only=0
+2026-10-11T18:54:56.977Z kv-compact: end bytes=8480 ms=4 l0=17 l1=20 rc=0
+2026-10-11T18:54:56.977Z kv-compact: start l0=17 inputs=2 range=264 l0only=0
+2026-10-11T18:54:56.981Z kv-compact: end bytes=8480 ms=3 l0=16 l1=20 rc=0
+2026-10-11T18:54:56.981Z kv-compact: start l0=16 inputs=2 range=265 l0only=0
+2026-10-11T18:54:56.984Z kv-compact: end bytes=8480 ms=3 l0=15 l1=20 rc=0
+2026-10-11T18:54:56.984Z kv-compact: start l0=15 inputs=2 range=266 l0only=0
+2026-10-11T18:54:56.987Z kv-compact: end bytes=8480 ms=3 l0=14 l1=20 rc=0
+2026-10-11T18:54:56.987Z kv-compact: start l0=14 inputs=2 range=267 l0only=0
+2026-10-11T18:54:56.991Z kv-compact: end bytes=8480 ms=4 l0=13 l1=20 rc=0
+2026-10-11T18:54:56.991Z kv-compact: start l0=13 inputs=2 range=268 l0only=0
+2026-10-11T18:54:56.995Z kv-compact: end bytes=8480 ms=4 l0=12 l1=20 rc=0
+2026-10-11T18:54:56.995Z kv-compact: start l0=12 inputs=2 range=269 l0only=0
+2026-10-11T18:54:56.998Z kv-compact: end bytes=8480 ms=3 l0=11 l1=20 rc=0
+2026-10-11T18:54:56.998Z kv-compact: start l0=11 inputs=2 range=270 l0only=0
+2026-10-11T18:54:57.001Z kv-compact: end bytes=8480 ms=3 l0=10 l1=20 rc=0
+2026-10-11T18:54:57.001Z kv-compact: start l0=10 inputs=2 range=258 l0only=0
+2026-10-11T18:54:57.004Z kv-compact: end bytes=5088 ms=3 l0=9 l1=20 rc=0
+2026-10-11T18:54:57.004Z kv-compact: start l0=9 inputs=3 range=121 l0only=0
+2026-10-11T18:54:57.008Z kv-compact: end bytes=1696 ms=4 l0=7 l1=20 rc=0
+2026-10-11T18:54:57.008Z kv-compact: start l0=7 inputs=2 range=19 l0only=0
+2026-10-11T18:54:57.010Z kv-compact: end bytes=1696 ms=3 l0=6 l1=20 rc=0
+2026-10-11T18:54:57.010Z kv-compact: start l0=6 inputs=2 range=70 l0only=0
+2026-10-11T18:54:57.014Z kv-compact: end bytes=1696 ms=3 l0=5 l1=20 rc=0
+2026-10-11T18:54:57.014Z kv-compact: start l0=5 inputs=2 range=172 l0only=0
+2026-10-11T18:54:57.018Z kv-compact: end bytes=1696 ms=4 l0=4 l1=20 rc=0
+2026-10-11T18:54:57.018Z kv-compact: start l0=4 inputs=2 range=223 l0only=0
+2026-10-11T18:54:57.021Z kv-compact: end bytes=1696 ms=3 l0=3 l1=20 rc=0
+2026-10-11T18:54:57.433Z raft-host: gc-pass ms=598 orphan=0 reap=0 frag=598 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:58.031Z raft-host: gc-pass ms=577 orphan=0 reap=0 frag=577 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:58.201Z iostats: get ops=1075 bytes=70451200 errors=0 avg_us=257 p50_us=242 max_us=1316 put ops=45226 bytes=2963931136 errors=0 avg_us=4410 p50_us=6058 max_us=21516 wdisk ops=45226 bytes=2963931136 errors=0 avg_us=4368 p50_us=6020 max_us=21461
+2026-10-11T18:54:58.666Z raft-host: gc-pass ms=614 orphan=0 reap=0 frag=614 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:59.158Z kv-obs: mt_bytes=969293 l0_bytes=192 l0=3 l1=20
+2026-10-11T18:54:59.298Z raft-host: gc-pass ms=612 orphan=0 reap=0 frag=612 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:54:59.962Z raft-host: gc-pass ms=644 orphan=0 reap=0 frag=644 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:00.630Z raft-host: gc-pass ms=648 orphan=0 reap=0 frag=647 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:01.264Z raft-host: gc-pass ms=613 orphan=0 reap=0 frag=613 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:01.858Z raft-host: gc-pass ms=574 orphan=0 reap=0 frag=574 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:02.421Z raft-host: gc-pass ms=542 orphan=0 reap=0 frag=542 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:03.012Z raft-host: gc-pass ms=570 orphan=0 reap=0 frag=570 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:03.201Z iostats: get ops=1261 bytes=82640896 errors=0 avg_us=257 p50_us=230 max_us=1316 put ops=50317 bytes=3297574912 errors=0 avg_us=4495 p50_us=6118 max_us=21516 wdisk ops=50317 bytes=3297574912 errors=0 avg_us=4453 p50_us=6074 max_us=21461
+2026-10-11T18:55:03.595Z raft-host: gc-pass ms=562 orphan=0 reap=0 frag=562 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:04.158Z kv-obs: mt_bytes=2684763 l0_bytes=192 l0=3 l1=20
+2026-10-11T18:55:04.164Z gc-health: stage=4 group=2 elapsed_ms=548 last_pass_age_ms=568 passes=73 sampled=2 pending=0,15061 reap=0,0 removed=24364 file_bytes=1696514048 payload_bytes=1596719104 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T18:55:04.184Z raft-host: gc-pass ms=568 orphan=0 reap=0 frag=568 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:04.758Z raft-host: gc-pass ms=553 orphan=0 reap=0 frag=553 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:05.374Z raft-host: gc-pass ms=596 orphan=0 reap=0 frag=596 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:05.978Z raft-host: gc-pass ms=583 orphan=0 reap=0 frag=583 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:06.584Z raft-host: gc-pass ms=585 orphan=0 reap=0 frag=585 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:07.172Z raft-host: gc-pass ms=567 orphan=0 reap=0 frag=567 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:07.760Z raft-host: gc-pass ms=568 orphan=0 reap=0 frag=568 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:08.202Z iostats: get ops=1340 bytes=87818240 errors=0 avg_us=258 p50_us=228 max_us=1316 put ops=55427 bytes=3632463872 errors=0 avg_us=4521 p50_us=5592 max_us=21516 wdisk ops=55427 bytes=3632463872 errors=0 avg_us=4480 p50_us=5554 max_us=21461
+2026-10-11T18:55:08.388Z raft-host: gc-pass ms=607 orphan=0 reap=0 frag=607 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:08.693Z kv-compact: start l0=24 inputs=2 range=1 l0only=0
+2026-10-11T18:55:08.703Z kv-compact: end bytes=3626769 ms=9 l0=23 l1=20 rc=0
+2026-10-11T18:55:08.703Z kv-compact: start l0=23 inputs=2 range=2 l0only=0
+2026-10-11T18:55:08.711Z kv-compact: end bytes=2345685 ms=9 l0=22 l1=20 rc=0
+2026-10-11T18:55:08.711Z kv-compact: start l0=22 inputs=2 range=261 l0only=0
+2026-10-11T18:55:08.716Z kv-compact: end bytes=731012 ms=4 l0=21 l1=20 rc=0
+2026-10-11T18:55:08.716Z kv-compact: start l0=21 inputs=2 range=256 l0only=0
+2026-10-11T18:55:08.719Z kv-compact: end bytes=8480 ms=4 l0=20 l1=20 rc=0
+2026-10-11T18:55:08.719Z kv-compact: start l0=20 inputs=2 range=257 l0only=0
+2026-10-11T18:55:08.723Z kv-compact: end bytes=8480 ms=3 l0=19 l1=20 rc=0
+2026-10-11T18:55:08.723Z kv-compact: start l0=19 inputs=2 range=262 l0only=0
+2026-10-11T18:55:08.726Z kv-compact: end bytes=9540 ms=3 l0=18 l1=20 rc=0
+2026-10-11T18:55:08.726Z kv-compact: start l0=18 inputs=2 range=263 l0only=0
+2026-10-11T18:55:08.729Z kv-compact: end bytes=8480 ms=3 l0=17 l1=20 rc=0
+2026-10-11T18:55:08.729Z kv-compact: start l0=17 inputs=2 range=264 l0only=0
+2026-10-11T18:55:08.732Z kv-compact: end bytes=8480 ms=3 l0=16 l1=20 rc=0
+2026-10-11T18:55:08.732Z kv-compact: start l0=16 inputs=2 range=265 l0only=0
+2026-10-11T18:55:08.735Z kv-compact: end bytes=8480 ms=3 l0=15 l1=20 rc=0
+2026-10-11T18:55:08.736Z kv-compact: start l0=15 inputs=2 range=266 l0only=0
+2026-10-11T18:55:08.739Z kv-compact: end bytes=8480 ms=3 l0=14 l1=20 rc=0
+2026-10-11T18:55:08.739Z kv-compact: start l0=14 inputs=2 range=267 l0only=0
+2026-10-11T18:55:08.742Z kv-compact: end bytes=8480 ms=3 l0=13 l1=20 rc=0
+2026-10-11T18:55:08.742Z kv-compact: start l0=13 inputs=2 range=268 l0only=0
+2026-10-11T18:55:08.745Z kv-compact: end bytes=8480 ms=3 l0=12 l1=20 rc=0
+2026-10-11T18:55:08.746Z kv-compact: start l0=12 inputs=2 range=269 l0only=0
+2026-10-11T18:55:08.750Z kv-compact: end bytes=8480 ms=4 l0=11 l1=20 rc=0
+2026-10-11T18:55:08.750Z kv-compact: start l0=11 inputs=2 range=270 l0only=0
+2026-10-11T18:55:08.753Z kv-compact: end bytes=8480 ms=3 l0=10 l1=20 rc=0
+2026-10-11T18:55:08.753Z kv-compact: start l0=10 inputs=2 range=258 l0only=0
+2026-10-11T18:55:08.757Z kv-compact: end bytes=5088 ms=4 l0=9 l1=20 rc=0
+2026-10-11T18:55:08.757Z kv-compact: start l0=9 inputs=2 range=19 l0only=0
+2026-10-11T18:55:08.760Z kv-compact: end bytes=1696 ms=4 l0=8 l1=20 rc=0
+2026-10-11T18:55:08.760Z kv-compact: start l0=8 inputs=2 range=70 l0only=0
+2026-10-11T18:55:08.764Z kv-compact: end bytes=1696 ms=3 l0=7 l1=20 rc=0
+2026-10-11T18:55:08.764Z kv-compact: start l0=7 inputs=2 range=121 l0only=0
+2026-10-11T18:55:08.768Z kv-compact: end bytes=1696 ms=4 l0=6 l1=20 rc=0
+2026-10-11T18:55:08.768Z kv-compact: start l0=6 inputs=2 range=172 l0only=0
+2026-10-11T18:55:08.772Z kv-compact: end bytes=1696 ms=4 l0=5 l1=20 rc=0
+2026-10-11T18:55:08.772Z kv-compact: start l0=5 inputs=2 range=223 l0only=0
+2026-10-11T18:55:08.776Z kv-compact: end bytes=1696 ms=4 l0=4 l1=20 rc=0
+2026-10-11T18:55:08.776Z kv-compact: start l0=4 inputs=4 range=510 l0only=0
+2026-10-11T18:55:08.779Z kv-compact: end bytes=64 ms=4 l0=0 l1=21 rc=0
+2026-10-11T18:55:08.996Z raft-host: gc-pass ms=588 orphan=0 reap=0 frag=588 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:09.158Z kv-obs: mt_bytes=318264 l0_bytes=0 l0=0 l1=21
+2026-10-11T18:55:09.638Z raft-host: gc-pass ms=621 orphan=0 reap=0 frag=621 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:10.310Z raft-host: gc-pass ms=651 orphan=0 reap=0 frag=651 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:10.903Z raft-host: gc-pass ms=573 orphan=0 reap=0 frag=573 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:11.524Z raft-host: gc-pass ms=600 orphan=0 reap=0 frag=600 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:12.132Z raft-host: gc-pass ms=587 orphan=0 reap=0 frag=587 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:12.766Z raft-host: gc-pass ms=613 orphan=0 reap=0 frag=613 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:13.204Z iostats: get ops=1534 bytes=100532224 errors=0 avg_us=258 p50_us=244 max_us=1316 put ops=60655 bytes=3975086080 errors=0 avg_us=4550 p50_us=3300 max_us=21516 wdisk ops=60655 bytes=3975086080 errors=0 avg_us=4508 p50_us=3273 max_us=21461
+2026-10-11T18:55:13.380Z raft-host: gc-pass ms=594 orphan=0 reap=0 frag=594 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:13.957Z raft-host: gc-pass ms=556 orphan=0 reap=0 frag=556 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:14.158Z kv-obs: mt_bytes=2241537 l0_bytes=0 l0=0 l1=21
+2026-10-11T18:55:14.559Z raft-host: gc-pass ms=581 orphan=0 reap=0 frag=581 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:15.149Z raft-host: gc-pass ms=570 orphan=0 reap=0 frag=570 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:15.769Z raft-host: gc-pass ms=599 orphan=0 reap=0 frag=599 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:16.386Z raft-host: gc-pass ms=596 orphan=0 reap=0 frag=596 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:17.028Z raft-host: gc-pass ms=622 orphan=0 reap=0 frag=622 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:17.651Z raft-host: gc-pass ms=603 orphan=0 reap=0 frag=603 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:18.206Z iostats: get ops=1665 bytes=109117440 errors=0 avg_us=260 p50_us=223 max_us=1316 put ops=66194 bytes=4338089984 errors=0 avg_us=4538 p50_us=5213 max_us=21516 wdisk ops=66194 bytes=4338089984 errors=0 avg_us=4497 p50_us=5154 max_us=21461
+2026-10-11T18:55:18.285Z raft-host: gc-pass ms=613 orphan=0 reap=0 frag=613 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:18.944Z raft-host: gc-pass ms=638 orphan=0 reap=0 frag=638 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:19.158Z kv-obs: mt_bytes=3959054 l0_bytes=0 l0=0 l1=21
+2026-10-11T18:55:19.590Z raft-host: gc-pass ms=626 orphan=0 reap=0 frag=626 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:19.996Z kv-compact: start l0=21 inputs=2 range=1 l0only=0
+2026-10-11T18:55:20.006Z kv-compact: end bytes=4424116 ms=10 l0=20 l1=21 rc=0
+2026-10-11T18:55:20.006Z kv-compact: start l0=20 inputs=2 range=2 l0only=0
+2026-10-11T18:55:20.015Z kv-compact: end bytes=2792140 ms=9 l0=19 l1=21 rc=0
+2026-10-11T18:55:20.015Z kv-compact: start l0=19 inputs=2 range=261 l0only=0
+2026-10-11T18:55:20.020Z kv-compact: end bytes=794324 ms=5 l0=18 l1=21 rc=0
+2026-10-11T18:55:20.020Z kv-compact: start l0=18 inputs=2 range=256 l0only=0
+2026-10-11T18:55:20.023Z kv-compact: end bytes=8480 ms=4 l0=17 l1=21 rc=0
+2026-10-11T18:55:20.024Z kv-compact: start l0=17 inputs=2 range=257 l0only=0
+2026-10-11T18:55:20.027Z kv-compact: end bytes=8480 ms=3 l0=16 l1=21 rc=0
+2026-10-11T18:55:20.027Z kv-compact: start l0=16 inputs=2 range=262 l0only=0
+2026-10-11T18:55:20.030Z kv-compact: end bytes=9540 ms=3 l0=15 l1=21 rc=0
+2026-10-11T18:55:20.030Z kv-compact: start l0=15 inputs=2 range=263 l0only=0
+2026-10-11T18:55:20.032Z kv-compact: end bytes=8480 ms=3 l0=14 l1=21 rc=0
+2026-10-11T18:55:20.032Z kv-compact: start l0=14 inputs=2 range=264 l0only=0
+2026-10-11T18:55:20.035Z kv-compact: end bytes=8480 ms=3 l0=13 l1=21 rc=0
+2026-10-11T18:55:20.035Z kv-compact: start l0=13 inputs=2 range=265 l0only=0
+2026-10-11T18:55:20.038Z kv-compact: end bytes=8480 ms=2 l0=12 l1=21 rc=0
+2026-10-11T18:55:20.038Z kv-compact: start l0=12 inputs=2 range=266 l0only=0
+2026-10-11T18:55:20.041Z kv-compact: end bytes=8480 ms=3 l0=11 l1=21 rc=0
+2026-10-11T18:55:20.041Z kv-compact: start l0=11 inputs=2 range=267 l0only=0
+2026-10-11T18:55:20.044Z kv-compact: end bytes=8480 ms=3 l0=10 l1=21 rc=0
+2026-10-11T18:55:20.044Z kv-compact: start l0=10 inputs=2 range=268 l0only=0
+2026-10-11T18:55:20.047Z kv-compact: end bytes=8480 ms=3 l0=9 l1=21 rc=0
+2026-10-11T18:55:20.047Z kv-compact: start l0=9 inputs=2 range=269 l0only=0
+2026-10-11T18:55:20.050Z kv-compact: end bytes=8480 ms=2 l0=8 l1=21 rc=0
+2026-10-11T18:55:20.050Z kv-compact: start l0=8 inputs=2 range=270 l0only=0
+2026-10-11T18:55:20.053Z kv-compact: end bytes=8480 ms=3 l0=7 l1=21 rc=0
+2026-10-11T18:55:20.053Z kv-compact: start l0=7 inputs=2 range=258 l0only=0
+2026-10-11T18:55:20.056Z kv-compact: end bytes=5088 ms=3 l0=6 l1=21 rc=0
+2026-10-11T18:55:20.056Z kv-compact: start l0=6 inputs=2 range=19 l0only=0
+2026-10-11T18:55:20.060Z kv-compact: end bytes=1696 ms=4 l0=5 l1=21 rc=0
+2026-10-11T18:55:20.060Z kv-compact: start l0=5 inputs=2 range=70 l0only=0
+2026-10-11T18:55:20.063Z kv-compact: end bytes=1696 ms=4 l0=4 l1=21 rc=0
+2026-10-11T18:55:20.063Z kv-compact: start l0=4 inputs=2 range=121 l0only=0
+2026-10-11T18:55:20.067Z kv-compact: end bytes=1696 ms=3 l0=3 l1=21 rc=0
+2026-10-11T18:55:20.165Z gc-health: stage=4 group=2 elapsed_ms=554 last_pass_age_ms=574 passes=99 sampled=2 pending=0,19157 reap=0,0 removed=33472 file_bytes=2330722304 payload_bytes=2193620992 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T18:55:20.198Z raft-host: gc-pass ms=587 orphan=0 reap=0 frag=587 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:20.811Z raft-host: gc-pass ms=593 orphan=0 reap=0 frag=593 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:21.451Z raft-host: gc-pass ms=619 orphan=0 reap=0 frag=619 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:22.062Z raft-host: gc-pass ms=590 orphan=0 reap=0 frag=590 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:22.677Z raft-host: gc-pass ms=595 orphan=0 reap=0 frag=595 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:23.206Z iostats: get ops=1790 bytes=117309440 errors=0 avg_us=259 p50_us=213 max_us=1316 put ops=71399 bytes=4679204864 errors=0 avg_us=4549 p50_us=3031 max_us=21516 wdisk ops=71399 bytes=4679204864 errors=0 avg_us=4507 p50_us=3003 max_us=21461
+2026-10-11T18:55:23.307Z raft-host: gc-pass ms=609 orphan=0 reap=0 frag=609 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:23.927Z raft-host: gc-pass ms=599 orphan=0 reap=0 frag=599 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:24.158Z kv-obs: mt_bytes=1765381 l0_bytes=3384 l0=3 l1=21
+2026-10-11T18:55:24.510Z raft-host: gc-pass ms=563 orphan=0 reap=0 frag=563 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:25.142Z raft-host: gc-pass ms=611 orphan=0 reap=0 frag=611 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:25.780Z raft-host: gc-pass ms=618 orphan=0 reap=0 frag=617 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:26.426Z raft-host: gc-pass ms=625 orphan=0 reap=0 frag=625 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:27.073Z raft-host: gc-pass ms=627 orphan=0 reap=0 frag=627 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:27.660Z raft-host: gc-pass ms=566 orphan=0 reap=0 frag=565 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:28.207Z iostats: get ops=1966 bytes=128843776 errors=0 avg_us=262 p50_us=243 max_us=1316 put ops=76746 bytes=5029625856 errors=0 avg_us=4558 p50_us=5028 max_us=21516 wdisk ops=76746 bytes=5029625856 errors=0 avg_us=4516 p50_us=4975 max_us=21461
+2026-10-11T18:55:28.303Z raft-host: gc-pass ms=623 orphan=0 reap=0 frag=623 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:28.907Z raft-host: gc-pass ms=583 orphan=0 reap=0 frag=583 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:29.158Z kv-obs: mt_bytes=3483695 l0_bytes=3384 l0=3 l1=21
+2026-10-11T18:55:29.508Z raft-host: gc-pass ms=580 orphan=0 reap=0 frag=580 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:30.140Z raft-host: gc-pass ms=611 orphan=0 reap=0 frag=611 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:30.736Z raft-host: gc-pass ms=576 orphan=0 reap=0 frag=576 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:31.181Z kv-compact: start l0=24 inputs=2 range=1 l0only=0
+2026-10-11T18:55:31.181Z raft-host: apply-sleep us=25454 group=0 idx=40804 applied=40803
+2026-10-11T18:55:31.181Z raft-host: apply-sleep us=24677 group=2 idx=8958 applied=8957
+2026-10-11T18:55:31.191Z kv-compact: end bytes=5208087 ms=10 l0=23 l1=21 rc=0
+2026-10-11T18:55:31.191Z kv-compact: start l0=23 inputs=2 range=2 l0only=0
+2026-10-11T18:55:31.201Z kv-compact: end bytes=3244830 ms=9 l0=22 l1=21 rc=0
+2026-10-11T18:55:31.201Z kv-compact: start l0=22 inputs=2 range=261 l0only=0
+2026-10-11T18:55:31.205Z kv-compact: end bytes=898957 ms=5 l0=21 l1=21 rc=0
+2026-10-11T18:55:31.205Z kv-compact: start l0=21 inputs=2 range=256 l0only=0
+2026-10-11T18:55:31.209Z kv-compact: end bytes=8480 ms=3 l0=20 l1=21 rc=0
+2026-10-11T18:55:31.209Z kv-compact: start l0=20 inputs=2 range=257 l0only=0
+2026-10-11T18:55:31.213Z kv-compact: end bytes=8480 ms=4 l0=19 l1=21 rc=0
+2026-10-11T18:55:31.213Z kv-compact: start l0=19 inputs=2 range=262 l0only=0
+2026-10-11T18:55:31.217Z kv-compact: end bytes=9540 ms=4 l0=18 l1=21 rc=0
+2026-10-11T18:55:31.217Z kv-compact: start l0=18 inputs=2 range=263 l0only=0
+2026-10-11T18:55:31.221Z kv-compact: end bytes=8480 ms=4 l0=17 l1=21 rc=0
+2026-10-11T18:55:31.221Z kv-compact: start l0=17 inputs=2 range=264 l0only=0
+2026-10-11T18:55:31.225Z kv-compact: end bytes=8480 ms=5 l0=16 l1=21 rc=0
+2026-10-11T18:55:31.225Z kv-compact: start l0=16 inputs=2 range=265 l0only=0
+2026-10-11T18:55:31.229Z kv-compact: end bytes=8480 ms=3 l0=15 l1=21 rc=0
+2026-10-11T18:55:31.229Z kv-compact: start l0=15 inputs=2 range=266 l0only=0
+2026-10-11T18:55:31.233Z kv-compact: end bytes=8480 ms=4 l0=14 l1=21 rc=0
+2026-10-11T18:55:31.233Z kv-compact: start l0=14 inputs=2 range=267 l0only=0
+2026-10-11T18:55:31.235Z kv-compact: end bytes=8480 ms=2 l0=13 l1=21 rc=0
+2026-10-11T18:55:31.236Z kv-compact: start l0=13 inputs=2 range=268 l0only=0
+2026-10-11T18:55:31.239Z kv-compact: end bytes=8480 ms=4 l0=12 l1=21 rc=0
+2026-10-11T18:55:31.239Z kv-compact: start l0=12 inputs=2 range=269 l0only=0
+2026-10-11T18:55:31.243Z kv-compact: end bytes=8480 ms=3 l0=11 l1=21 rc=0
+2026-10-11T18:55:31.243Z kv-compact: start l0=11 inputs=2 range=270 l0only=0
+2026-10-11T18:55:31.247Z kv-compact: end bytes=8480 ms=4 l0=10 l1=21 rc=0
+2026-10-11T18:55:31.247Z kv-compact: start l0=10 inputs=2 range=258 l0only=0
+2026-10-11T18:55:31.251Z kv-compact: end bytes=5088 ms=5 l0=9 l1=21 rc=0
+2026-10-11T18:55:31.251Z kv-compact: start l0=9 inputs=3 range=172 l0only=0
+2026-10-11T18:55:31.255Z kv-compact: end bytes=1696 ms=4 l0=7 l1=21 rc=0
+2026-10-11T18:55:31.255Z kv-compact: start l0=7 inputs=3 range=223 l0only=0
+2026-10-11T18:55:31.259Z kv-compact: end bytes=1696 ms=3 l0=5 l1=21 rc=0
+2026-10-11T18:55:31.259Z kv-compact: start l0=5 inputs=2 range=19 l0only=0
+2026-10-11T18:55:31.263Z kv-compact: end bytes=1696 ms=4 l0=4 l1=21 rc=0
+2026-10-11T18:55:31.263Z kv-compact: start l0=4 inputs=2 range=70 l0only=0
+2026-10-11T18:55:31.266Z kv-compact: end bytes=1696 ms=4 l0=3 l1=21 rc=0
+2026-10-11T18:55:31.338Z raft-host: gc-pass ms=582 orphan=0 reap=0 frag=582 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:31.916Z raft-host: gc-pass ms=557 orphan=0 reap=0 frag=557 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:32.473Z raft-host: gc-pass ms=536 orphan=0 reap=0 frag=536 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:33.055Z raft-host: gc-pass ms=562 orphan=0 reap=0 frag=562 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:33.207Z iostats: get ops=2065 bytes=135331840 errors=0 avg_us=262 p50_us=220 max_us=1316 put ops=82108 bytes=5381029888 errors=0 avg_us=4566 p50_us=2653 max_us=21516 wdisk ops=82108 bytes=5381029888 errors=0 avg_us=4524 p50_us=2502 max_us=21461
+2026-10-11T18:55:33.629Z raft-host: gc-pass ms=554 orphan=0 reap=0 frag=554 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:34.158Z kv-obs: mt_bytes=1306471 l0_bytes=1788 l0=3 l1=21
+2026-10-11T18:55:34.229Z raft-host: gc-pass ms=579 orphan=0 reap=0 frag=579 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:34.840Z raft-host: gc-pass ms=591 orphan=0 reap=0 frag=591 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:35.454Z raft-host: gc-pass ms=593 orphan=0 reap=0 frag=593 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:36.046Z raft-host: gc-pass ms=572 orphan=0 reap=0 frag=572 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:36.166Z gc-health: stage=4 group=2 elapsed_ms=99 last_pass_age_ms=119 passes=126 sampled=2 pending=0,23565 reap=0,0 removed=42285 file_bytes=2944389120 payload_bytes=2771189760 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T18:55:36.691Z raft-host: gc-pass ms=624 orphan=0 reap=0 frag=624 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:37.336Z raft-host: gc-pass ms=625 orphan=0 reap=0 frag=625 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:37.938Z raft-host: gc-pass ms=582 orphan=0 reap=0 frag=581 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:38.207Z iostats: get ops=2261 bytes=148176896 errors=0 avg_us=261 p50_us=246 max_us=1316 put ops=87518 bytes=5735579648 errors=0 avg_us=4576 p50_us=4058 max_us=21516 wdisk ops=87518 bytes=5735579648 errors=0 avg_us=4534 p50_us=4087 max_us=21461
+2026-10-11T18:55:38.550Z raft-host: gc-pass ms=591 orphan=0 reap=0 frag=591 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:39.147Z raft-host: gc-pass ms=577 orphan=0 reap=0 frag=577 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:39.158Z kv-obs: mt_bytes=3122139 l0_bytes=1788 l0=3 l1=21
+2026-10-11T18:55:39.752Z raft-host: gc-pass ms=584 orphan=0 reap=0 frag=583 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:40.367Z raft-host: gc-pass ms=595 orphan=0 reap=0 frag=595 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:40.978Z raft-host: gc-pass ms=590 orphan=0 reap=0 frag=590 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:41.568Z raft-host: gc-pass ms=569 orphan=0 reap=0 frag=569 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:42.155Z raft-host: gc-pass ms=567 orphan=0 reap=0 frag=566 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:42.465Z kv-compact: start l0=24 inputs=2 range=1 l0only=0
+2026-10-11T18:55:42.467Z raft-host: apply-sleep us=22563 group=0 idx=47332 applied=47330
+2026-10-11T18:55:42.476Z kv-compact: end bytes=5940010 ms=12 l0=23 l1=21 rc=0
+2026-10-11T18:55:42.476Z kv-compact: start l0=23 inputs=2 range=2 l0only=0
+2026-10-11T18:55:42.484Z kv-compact: end bytes=3624150 ms=7 l0=22 l1=21 rc=0
+2026-10-11T18:55:42.484Z kv-compact: start l0=22 inputs=2 range=261 l0only=0
+2026-10-11T18:55:42.489Z kv-compact: end bytes=902754 ms=5 l0=21 l1=21 rc=0
+2026-10-11T18:55:42.489Z kv-compact: start l0=21 inputs=2 range=256 l0only=0
+2026-10-11T18:55:42.491Z kv-compact: end bytes=8480 ms=3 l0=20 l1=21 rc=0
+2026-10-11T18:55:42.491Z kv-compact: start l0=20 inputs=2 range=257 l0only=0
+2026-10-11T18:55:42.495Z kv-compact: end bytes=8480 ms=3 l0=19 l1=21 rc=0
+2026-10-11T18:55:42.495Z kv-compact: start l0=19 inputs=2 range=262 l0only=0
+2026-10-11T18:55:42.497Z kv-compact: end bytes=9540 ms=2 l0=18 l1=21 rc=0
+2026-10-11T18:55:42.497Z kv-compact: start l0=18 inputs=2 range=263 l0only=0
+2026-10-11T18:55:42.501Z kv-compact: end bytes=8480 ms=4 l0=17 l1=21 rc=0
+2026-10-11T18:55:42.501Z kv-compact: start l0=17 inputs=2 range=264 l0only=0
+2026-10-11T18:55:42.505Z kv-compact: end bytes=8480 ms=4 l0=16 l1=21 rc=0
+2026-10-11T18:55:42.505Z kv-compact: start l0=16 inputs=2 range=265 l0only=0
+2026-10-11T18:55:42.509Z kv-compact: end bytes=8480 ms=4 l0=15 l1=21 rc=0
+2026-10-11T18:55:42.509Z kv-compact: start l0=15 inputs=2 range=266 l0only=0
+2026-10-11T18:55:42.513Z kv-compact: end bytes=8480 ms=4 l0=14 l1=21 rc=0
+2026-10-11T18:55:42.513Z kv-compact: start l0=14 inputs=2 range=267 l0only=0
+2026-10-11T18:55:42.517Z kv-compact: end bytes=8480 ms=4 l0=13 l1=21 rc=0
+2026-10-11T18:55:42.517Z kv-compact: start l0=13 inputs=2 range=268 l0only=0
+2026-10-11T18:55:42.520Z kv-compact: end bytes=8480 ms=4 l0=12 l1=21 rc=0
+2026-10-11T18:55:42.520Z kv-compact: start l0=12 inputs=2 range=269 l0only=0
+2026-10-11T18:55:42.524Z kv-compact: end bytes=8480 ms=3 l0=11 l1=21 rc=0
+2026-10-11T18:55:42.524Z kv-compact: start l0=11 inputs=2 range=270 l0only=0
+2026-10-11T18:55:42.527Z kv-compact: end bytes=8480 ms=3 l0=10 l1=21 rc=0
+2026-10-11T18:55:42.527Z kv-compact: start l0=10 inputs=2 range=258 l0only=0
+2026-10-11T18:55:42.531Z kv-compact: end bytes=5088 ms=4 l0=9 l1=21 rc=0
+2026-10-11T18:55:42.531Z kv-compact: start l0=9 inputs=3 range=121 l0only=0
+2026-10-11T18:55:42.534Z kv-compact: end bytes=1696 ms=3 l0=7 l1=21 rc=0
+2026-10-11T18:55:42.534Z kv-compact: start l0=7 inputs=2 range=19 l0only=0
+2026-10-11T18:55:42.538Z kv-compact: end bytes=1696 ms=5 l0=6 l1=21 rc=0
+2026-10-11T18:55:42.538Z kv-compact: start l0=6 inputs=2 range=70 l0only=0
+2026-10-11T18:55:42.542Z kv-compact: end bytes=1696 ms=4 l0=5 l1=21 rc=0
+2026-10-11T18:55:42.542Z kv-compact: start l0=5 inputs=2 range=172 l0only=0
+2026-10-11T18:55:42.546Z kv-compact: end bytes=1696 ms=4 l0=4 l1=21 rc=0
+2026-10-11T18:55:42.547Z kv-compact: start l0=4 inputs=2 range=223 l0only=0
+2026-10-11T18:55:42.550Z kv-compact: end bytes=1696 ms=4 l0=3 l1=21 rc=0
+2026-10-11T18:55:42.784Z raft-host: gc-pass ms=609 orphan=0 reap=0 frag=609 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:43.207Z iostats: get ops=2320 bytes=152043520 errors=0 avg_us=261 p50_us=209 max_us=1316 put ops=92235 bytes=6044712960 errors=0 avg_us=4602 p50_us=5978 max_us=21516 wdisk ops=92235 bytes=6044712960 errors=0 avg_us=4560 p50_us=5947 max_us=21461
+2026-10-11T18:55:43.405Z raft-host: gc-pass ms=600 orphan=0 reap=0 frag=600 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:44.036Z raft-host: gc-pass ms=610 orphan=0 reap=0 frag=610 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:44.160Z kv-obs: mt_bytes=669920 l0_bytes=192 l0=3 l1=21
+2026-10-11T18:55:44.664Z raft-host: gc-pass ms=607 orphan=0 reap=0 frag=607 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:45.302Z raft-host: gc-pass ms=618 orphan=0 reap=0 frag=618 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:45.925Z raft-host: gc-pass ms=602 orphan=0 reap=0 frag=602 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:46.534Z raft-host: gc-pass ms=589 orphan=0 reap=0 frag=589 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:47.125Z raft-host: gc-pass ms=570 orphan=0 reap=0 frag=570 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:47.775Z raft-host: gc-pass ms=629 orphan=0 reap=0 frag=629 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:48.208Z iostats: get ops=2513 bytes=164691968 errors=0 avg_us=262 p50_us=221 max_us=1316 put ops=96511 bytes=6324944896 errors=0 avg_us=4653 p50_us=6302 max_us=21516 wdisk ops=96511 bytes=6324944896 errors=0 avg_us=4611 p50_us=6382 max_us=21461
+2026-10-11T18:55:48.408Z raft-host: gc-pass ms=613 orphan=0 reap=0 frag=613 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:49.044Z raft-host: gc-pass ms=615 orphan=0 reap=0 frag=615 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:49.163Z kv-obs: mt_bytes=2240270 l0_bytes=192 l0=3 l1=21
+2026-10-11T18:55:49.659Z raft-host: gc-pass ms=594 orphan=0 reap=0 frag=594 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:50.267Z raft-host: gc-pass ms=587 orphan=0 reap=0 frag=587 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:50.883Z raft-host: gc-pass ms=596 orphan=0 reap=0 frag=596 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:51.473Z raft-host: gc-pass ms=569 orphan=0 reap=0 frag=569 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:52.085Z raft-host: gc-pass ms=592 orphan=0 reap=0 frag=592 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:52.167Z gc-health: stage=4 group=2 elapsed_ms=61 last_pass_age_ms=81 passes=152 sampled=2 pending=0,26256 reap=0,0 removed=49824 file_bytes=3469344768 payload_bytes=3265265664 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T18:55:52.708Z raft-host: gc-pass ms=602 orphan=0 reap=0 frag=602 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:53.213Z iostats: get ops=2567 bytes=168230912 errors=0 avg_us=263 p50_us=218 max_us=1316 put ops=100847 bytes=6609108992 errors=0 avg_us=4675 p50_us=4915 max_us=21516 wdisk ops=100847 bytes=6609108992 errors=0 avg_us=4633 p50_us=4869 max_us=21461
+2026-10-11T18:55:53.312Z raft-host: gc-pass ms=583 orphan=0 reap=0 frag=583 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:53.930Z raft-host: gc-pass ms=597 orphan=0 reap=0 frag=597 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:54.163Z kv-obs: mt_bytes=3723764 l0_bytes=192 l0=3 l1=21
+2026-10-11T18:55:54.570Z raft-host: gc-pass ms=620 orphan=0 reap=0 frag=620 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:55.175Z raft-host: gc-pass ms=585 orphan=0 reap=0 frag=584 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:55.789Z raft-host: gc-pass ms=593 orphan=0 reap=0 frag=593 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:55.831Z kv-compact: start l0=24 inputs=2 range=1 l0only=0
+2026-10-11T18:55:55.831Z raft-host: apply-sleep us=24817 group=0 idx=55299 applied=55298
+2026-10-11T18:55:55.831Z raft-host: apply-sleep us=25570 group=2 idx=11663 applied=11662
+2026-10-11T18:55:55.831Z raft-host: apply-sleep us=24396 group=0 idx=55299 applied=55298
+2026-10-11T18:55:55.834Z raft-host: getchunks slow ino=18153 start=7 n=1 ri_ms=29 total_ms=29 rc=0 slow=3
+2026-10-11T18:55:55.842Z kv-compact: end bytes=7004990 ms=11 l0=23 l1=21 rc=0
+2026-10-11T18:55:55.842Z kv-compact: start l0=23 inputs=2 range=2 l0only=0
+2026-10-11T18:55:55.851Z kv-compact: end bytes=3875435 ms=8 l0=22 l1=21 rc=0
+2026-10-11T18:55:55.851Z kv-compact: start l0=22 inputs=2 range=261 l0only=0
+2026-10-11T18:55:55.855Z kv-compact: end bytes=762622 ms=4 l0=21 l1=21 rc=0
+2026-10-11T18:55:55.855Z kv-compact: start l0=21 inputs=2 range=256 l0only=0
+2026-10-11T18:55:55.858Z kv-compact: end bytes=8480 ms=3 l0=20 l1=21 rc=0
+2026-10-11T18:55:55.858Z kv-compact: start l0=20 inputs=2 range=257 l0only=0
+2026-10-11T18:55:55.861Z kv-compact: end bytes=8480 ms=3 l0=19 l1=21 rc=0
+2026-10-11T18:55:55.861Z kv-compact: start l0=19 inputs=2 range=262 l0only=0
+2026-10-11T18:55:55.864Z kv-compact: end bytes=9540 ms=3 l0=18 l1=21 rc=0
+2026-10-11T18:55:55.864Z kv-compact: start l0=18 inputs=2 range=263 l0only=0
+2026-10-11T18:55:55.868Z kv-compact: end bytes=8480 ms=4 l0=17 l1=21 rc=0
+2026-10-11T18:55:55.868Z kv-compact: start l0=17 inputs=2 range=264 l0only=0
+2026-10-11T18:55:55.872Z kv-compact: end bytes=8480 ms=4 l0=16 l1=21 rc=0
+2026-10-11T18:55:55.872Z kv-compact: start l0=16 inputs=2 range=265 l0only=0
+2026-10-11T18:55:55.879Z kv-compact: end bytes=8480 ms=7 l0=15 l1=21 rc=0
+2026-10-11T18:55:55.879Z kv-compact: start l0=15 inputs=2 range=266 l0only=0
+2026-10-11T18:55:55.882Z kv-compact: end bytes=8480 ms=4 l0=14 l1=21 rc=0
+2026-10-11T18:55:55.883Z kv-compact: start l0=14 inputs=2 range=267 l0only=0
+2026-10-11T18:55:55.887Z kv-compact: end bytes=8480 ms=4 l0=13 l1=21 rc=0
+2026-10-11T18:55:55.887Z kv-compact: start l0=13 inputs=2 range=268 l0only=0
+2026-10-11T18:55:55.891Z kv-compact: end bytes=8480 ms=4 l0=12 l1=21 rc=0
+2026-10-11T18:55:55.891Z kv-compact: start l0=12 inputs=2 range=269 l0only=0
+2026-10-11T18:55:55.895Z kv-compact: end bytes=8480 ms=3 l0=11 l1=21 rc=0
+2026-10-11T18:55:55.895Z kv-compact: start l0=11 inputs=2 range=270 l0only=0
+2026-10-11T18:55:55.898Z kv-compact: end bytes=8480 ms=3 l0=10 l1=21 rc=0
+2026-10-11T18:55:55.898Z kv-compact: start l0=10 inputs=2 range=258 l0only=0
+2026-10-11T18:55:55.902Z kv-compact: end bytes=5088 ms=4 l0=9 l1=21 rc=0
+2026-10-11T18:55:55.902Z kv-compact: start l0=9 inputs=2 range=19 l0only=0
+2026-10-11T18:55:55.905Z kv-compact: end bytes=1696 ms=3 l0=8 l1=21 rc=0
+2026-10-11T18:55:55.905Z kv-compact: start l0=8 inputs=2 range=70 l0only=0
+2026-10-11T18:55:55.908Z kv-compact: end bytes=1696 ms=4 l0=7 l1=21 rc=0
+2026-10-11T18:55:55.908Z kv-compact: start l0=7 inputs=2 range=121 l0only=0
+2026-10-11T18:55:55.911Z kv-compact: end bytes=1696 ms=2 l0=6 l1=21 rc=0
+2026-10-11T18:55:55.911Z kv-compact: start l0=6 inputs=2 range=172 l0only=0
+2026-10-11T18:55:55.916Z kv-compact: end bytes=1696 ms=5 l0=5 l1=21 rc=0
+2026-10-11T18:55:55.916Z kv-compact: start l0=5 inputs=2 range=223 l0only=0
+2026-10-11T18:55:55.920Z kv-compact: end bytes=1696 ms=4 l0=4 l1=21 rc=0
+2026-10-11T18:55:55.920Z kv-compact: start l0=4 inputs=5 range=510 l0only=0
+2026-10-11T18:55:55.923Z kv-compact: end bytes=64 ms=4 l0=0 l1=21 rc=0
+2026-10-11T18:55:56.465Z raft-host: gc-pass ms=655 orphan=0 reap=0 frag=634 spread=0 recover=0 fscans=1 fsegs=2 fkeys=258 femit=257 ftomb=1 scans=5 segs=2 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:57.105Z raft-host: gc-pass ms=619 orphan=0 reap=0 frag=619 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:57.751Z raft-host: gc-pass ms=625 orphan=0 reap=0 frag=625 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:58.213Z iostats: get ops=2758 bytes=180748288 errors=0 avg_us=262 p50_us=206 max_us=1316 put ops=105014 bytes=6882197504 errors=0 avg_us=4713 p50_us=5506 max_us=21516 wdisk ops=105014 bytes=6882197504 errors=0 avg_us=4671 p50_us=5481 max_us=21461
+2026-10-11T18:55:58.366Z raft-host: gc-pass ms=595 orphan=0 reap=0 frag=595 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:58.975Z raft-host: gc-pass ms=589 orphan=0 reap=0 frag=588 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:55:59.163Z kv-obs: mt_bytes=1223705 l0_bytes=0 l0=0 l1=21
+2026-10-11T18:55:59.598Z raft-host: gc-pass ms=602 orphan=0 reap=0 frag=602 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:00.191Z raft-host: gc-pass ms=572 orphan=0 reap=0 frag=572 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:00.803Z raft-host: gc-pass ms=592 orphan=0 reap=0 frag=592 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:01.409Z raft-host: gc-pass ms=585 orphan=0 reap=0 frag=585 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:01.995Z raft-host: gc-pass ms=565 orphan=0 reap=0 frag=565 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:02.606Z raft-host: gc-pass ms=591 orphan=0 reap=0 frag=591 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:03.156Z raft-host: gc-pass ms=529 orphan=0 reap=0 frag=529 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:03.213Z iostats: get ops=2834 bytes=185729024 errors=0 avg_us=261 p50_us=209 max_us=1316 put ops=109468 bytes=7174094848 errors=0 avg_us=4725 p50_us=3526 max_us=21516 wdisk ops=109468 bytes=7174094848 errors=0 avg_us=4683 p50_us=3485 max_us=21461
+2026-10-11T18:56:03.761Z raft-host: gc-pass ms=585 orphan=0 reap=0 frag=585 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:04.163Z kv-obs: mt_bytes=2638672 l0_bytes=0 l0=0 l1=21
+2026-10-11T18:56:04.389Z raft-host: gc-pass ms=607 orphan=0 reap=0 frag=607 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:05.024Z raft-host: gc-pass ms=615 orphan=0 reap=0 frag=615 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:05.583Z raft-host: gc-pass ms=539 orphan=0 reap=0 frag=539 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:06.127Z raft-host: gc-pass ms=524 orphan=0 reap=0 frag=523 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:06.662Z raft-host: gc-pass ms=514 orphan=0 reap=0 frag=514 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:07.226Z raft-host: gc-pass ms=544 orphan=0 reap=0 frag=544 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:07.822Z raft-host: gc-pass ms=576 orphan=0 reap=0 frag=575 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:08.168Z gc-health: stage=4 group=2 elapsed_ms=325 last_pass_age_ms=345 passes=178 sampled=2 pending=0,25642 reap=0,0 removed=57547 file_bytes=4007112704 payload_bytes=3771400192 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T18:56:08.213Z iostats: get ops=3111 bytes=203882496 errors=0 avg_us=260 p50_us=197 max_us=1316 put ops=109889 bytes=7201685504 errors=0 avg_us=4730 p50_us=6351 max_us=21516 wdisk ops=109889 bytes=7201685504 errors=0 avg_us=4688 p50_us=6301 max_us=21461
+2026-10-11T18:56:08.488Z raft-host: gc-pass ms=646 orphan=0 reap=0 frag=646 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:09.120Z raft-host: gc-pass ms=611 orphan=0 reap=0 frag=611 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:09.163Z kv-obs: mt_bytes=3319651 l0_bytes=0 l0=0 l1=21
+2026-10-11T18:56:09.768Z raft-host: gc-pass ms=627 orphan=0 reap=0 frag=627 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:10.412Z raft-host: gc-pass ms=624 orphan=0 reap=0 frag=624 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:11.016Z raft-host: gc-pass ms=584 orphan=0 reap=0 frag=584 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:11.647Z raft-host: gc-pass ms=610 orphan=0 reap=0 frag=610 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:12.255Z raft-host: gc-pass ms=587 orphan=0 reap=0 frag=587 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:12.889Z raft-host: gc-pass ms=614 orphan=0 reap=0 frag=614 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:13.214Z iostats: get ops=3354 bytes=219807744 errors=0 avg_us=266 p50_us=261 max_us=1566 put ops=110229 bytes=7223967744 errors=0 avg_us=4734 p50_us=6609 max_us=21516 wdisk ops=110229 bytes=7223967744 errors=0 avg_us=4693 p50_us=6579 max_us=21461
+2026-10-11T18:56:13.527Z raft-host: gc-pass ms=617 orphan=0 reap=0 frag=617 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:14.163Z kv-obs: mt_bytes=3960036 l0_bytes=0 l0=0 l1=21
+2026-10-11T18:56:14.183Z raft-host: gc-pass ms=636 orphan=0 reap=0 frag=636 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:14.815Z raft-host: gc-pass ms=611 orphan=0 reap=0 frag=611 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:15.466Z raft-host: gc-pass ms=630 orphan=0 reap=0 frag=630 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:16.083Z raft-host: gc-pass ms=597 orphan=0 reap=0 frag=597 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:16.363Z kv-compact: start l0=21 inputs=2 range=261 l0only=0
+2026-10-11T18:56:16.368Z kv-compact: end bytes=734692 ms=5 l0=20 l1=21 rc=0
+2026-10-11T18:56:16.368Z kv-compact: start l0=20 inputs=2 range=2 l0only=0
+2026-10-11T18:56:16.368Z raft-host: apply-sleep us=28190 group=0 idx=72053 applied=72051
+2026-10-11T18:56:16.375Z kv-compact: end bytes=3223370 ms=8 l0=19 l1=21 rc=0
+2026-10-11T18:56:16.375Z kv-compact: start l0=19 inputs=2 range=256 l0only=0
+2026-10-11T18:56:16.379Z kv-compact: end bytes=8480 ms=3 l0=18 l1=21 rc=0
+2026-10-11T18:56:16.379Z kv-compact: start l0=18 inputs=2 range=257 l0only=0
+2026-10-11T18:56:16.381Z kv-compact: end bytes=8480 ms=3 l0=17 l1=21 rc=0
+2026-10-11T18:56:16.382Z kv-compact: start l0=17 inputs=2 range=262 l0only=0
+2026-10-11T18:56:16.384Z kv-compact: end bytes=9540 ms=3 l0=16 l1=21 rc=0
+2026-10-11T18:56:16.385Z kv-compact: start l0=16 inputs=2 range=263 l0only=0
+2026-10-11T18:56:16.388Z kv-compact: end bytes=8480 ms=3 l0=15 l1=21 rc=0
+2026-10-11T18:56:16.388Z kv-compact: start l0=15 inputs=2 range=264 l0only=0
+2026-10-11T18:56:16.391Z kv-compact: end bytes=8480 ms=4 l0=14 l1=21 rc=0
+2026-10-11T18:56:16.392Z kv-compact: start l0=14 inputs=2 range=265 l0only=0
+2026-10-11T18:56:16.395Z kv-compact: end bytes=8480 ms=3 l0=13 l1=21 rc=0
+2026-10-11T18:56:16.395Z kv-compact: start l0=13 inputs=2 range=266 l0only=0
+2026-10-11T18:56:16.398Z kv-compact: end bytes=8480 ms=3 l0=12 l1=21 rc=0
+2026-10-11T18:56:16.398Z kv-compact: start l0=12 inputs=2 range=267 l0only=0
+2026-10-11T18:56:16.401Z kv-compact: end bytes=8480 ms=4 l0=11 l1=21 rc=0
+2026-10-11T18:56:16.402Z kv-compact: start l0=11 inputs=2 range=268 l0only=0
+2026-10-11T18:56:16.405Z kv-compact: end bytes=8480 ms=3 l0=10 l1=21 rc=0
+2026-10-11T18:56:16.405Z kv-compact: start l0=10 inputs=2 range=269 l0only=0
+2026-10-11T18:56:16.409Z kv-compact: end bytes=8480 ms=4 l0=9 l1=21 rc=0
+2026-10-11T18:56:16.409Z kv-compact: start l0=9 inputs=2 range=270 l0only=0
+2026-10-11T18:56:16.413Z kv-compact: end bytes=8480 ms=4 l0=8 l1=21 rc=0
+2026-10-11T18:56:16.413Z kv-compact: start l0=8 inputs=2 range=258 l0only=0
+2026-10-11T18:56:16.417Z kv-compact: end bytes=5088 ms=4 l0=7 l1=21 rc=0
+2026-10-11T18:56:16.417Z kv-compact: start l0=7 inputs=2 range=19 l0only=0
+2026-10-11T18:56:16.421Z kv-compact: end bytes=1696 ms=4 l0=6 l1=21 rc=0
+2026-10-11T18:56:16.421Z kv-compact: start l0=6 inputs=2 range=70 l0only=0
+2026-10-11T18:56:16.425Z kv-compact: end bytes=1696 ms=4 l0=5 l1=21 rc=0
+2026-10-11T18:56:16.425Z kv-compact: start l0=5 inputs=2 range=121 l0only=0
+2026-10-11T18:56:16.429Z kv-compact: end bytes=1696 ms=4 l0=4 l1=21 rc=0
+2026-10-11T18:56:16.429Z kv-compact: start l0=4 inputs=2 range=172 l0only=0
+2026-10-11T18:56:16.433Z kv-compact: end bytes=1696 ms=4 l0=3 l1=21 rc=0
+2026-10-11T18:56:16.677Z raft-host: gc-pass ms=573 orphan=0 reap=0 frag=573 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:17.278Z raft-host: gc-pass ms=580 orphan=0 reap=0 frag=580 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:17.899Z raft-host: gc-pass ms=601 orphan=0 reap=0 frag=601 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:18.214Z iostats: get ops=3605 bytes=236257280 errors=0 avg_us=270 p50_us=216 max_us=1566 put ops=110583 bytes=7247167488 errors=0 avg_us=4740 p50_us=6293 max_us=21516 wdisk ops=110583 bytes=7247167488 errors=0 avg_us=4699 p50_us=6259 max_us=21461
+2026-10-11T18:56:18.544Z raft-host: gc-pass ms=624 orphan=0 reap=0 frag=624 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:18.756Z raft-host: gc-pass ms=191 orphan=0 reap=0 frag=191 spread=0 recover=0 fscans=1 fsegs=1 fkeys=82 femit=81 ftomb=1 scans=5 segs=1 keys=82 emit=81 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:19.163Z kv-obs: mt_bytes=498542 l0_bytes=850291 l0=3 l1=21
+2026-10-11T18:56:20.515Z raft-host: gc-pass ms=756 orphan=0 reap=0 frag=755 spread=0 recover=0 fscans=2 fsegs=2 fkeys=258 femit=257 ftomb=1 scans=6 segs=2 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T18:56:21.411Z raft-host: apply-sleep us=400101 group=2 idx=12619 applied=12618
+2026-10-11T18:56:21.411Z raft-host: gc-pass ms=876 orphan=0 reap=0 frag=875 spread=0 recover=0 fscans=1 fsegs=1 fkeys=258 femit=257 ftomb=1 scans=5 segs=1 keys=258 emit=257 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0

@@ -6,7 +6,7 @@ admission/retirement and queue selection remain the actual source functions.
 from pathlib import Path
 import os, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=Path(os.environ.get('EFS_RAFT_HOST_SOURCE',root/'src/server/raft_host.c')).read_text()
 def function(name):
     starts=[f'static void *{name}(',f'static void {name}(',f'static int {name}(',f'int {name}(']
     a=next(s.index(x) for x in starts if x in s)
@@ -190,14 +190,44 @@ static void selection(void)
  queue(tx,3,0,1);queue(tx,3,2,1);queue(tx,4,0,0);queue(tx,2,2,0);
  assert(!host_send_ready(h,1,0)&&!host_send_ready(h,1,2));
  uint8_t*b[8];uint32_t n[8];int count=host_sender_pick(tx,b,n,8,100);
- assert(count==4&&tx->nent==2);assert(b[0][0]==4&&b[1][0]==2);
+ assert(count==4&&tx->nent==2);
+ unsigned crit_order[2],nc=0;for(int i=0;i<count;i++)if(efs_raft_flow_critical(b[i],n[i]))crit_order[nc++]=b[i][0];
+ assert(nc==2&&crit_order[0]==4&&crit_order[1]==2);
  for(int i=0;i<count;i++)free(b[i]);
  assert(!host_sender_pick(tx,b,n,8,200));
  /* New read context can escape in 5ms; different groups never overwrite. */
  tx->probe_header[0][35]=8;count=host_sender_pick(tx,b,n,8,5100);
  assert(count==1&&efs_raft_flow_rd64(b[0]+28)==8);free(b[0]);
- count=host_sender_pick(tx,b,n,1,100000);assert(count==1&&n[0]>80);free(b[0]);
+ unsigned selected_data=0,selected_probes=0;
+ for(int i=0;i<3;i++) {
+  count=host_sender_pick(tx,b,n,1,100000);assert(count==1);
+  if(n[0]>80)selected_data++;
+  else selected_probes|=1u<<efs_raft_flow_group(b[0][1]);
+  free(b[0]);
+ }
+ assert(selected_data==1 && selected_probes==3);
  assert(host_send_ready(h,1,0)&&!host_send_ready(h,1,2));
+ for(int i=0;i<tx->nent;i++)free(tx->ent[i].buf);free(h);
+}
+/* Slow single-slot round trips must not starve control or either group's
+ * fresh read probe behind an always-due entry stream. This also exercises
+ * the scheduler independently of the transport's usual eight-slot TCP lane. */
+static void slow_lane_fairness(void)
+{
+ struct efs_raft_host*h=host();struct host_outbox*tx=&h->tx[1];
+ tx->flow=(struct efs_raft_flow_sender){.active=1,.window=1,.delay_ms=50,.deadline_us=1};
+ for(int i=0;i<8;i++){queue(tx,3,(i&1)?2:0,1);queue(tx,4,(i&1)?2:0,0);}
+ unsigned critical_seen=0,data_seen=0,probe_seen[2]={0};
+ uint8_t*b[8];uint32_t n[8];
+ for(unsigned round=0;round<4;round++) {
+  int count=host_sender_pick(tx,b,n,1,100000ull*(round+1));assert(count==1);
+  if(efs_raft_flow_critical(b[0],n[0]))critical_seen++;
+  else if(n[0]>80)data_seen++;
+  else probe_seen[efs_raft_flow_group(b[0][1])]++;
+  free(b[0]);
+ }
+ assert(critical_seen && data_seen && probe_seen[0] && probe_seen[1]);
+ for(int i=0;i<tx->npri;i++)free(tx->pri[i].buf);
  for(int i=0;i<tx->nent;i++)free(tx->ent[i].buf);free(h);
 }
 #ifdef __linux__
@@ -260,7 +290,7 @@ static void asynchronous(void)
  stop_sender(h,tx,tid);assert(tx->st_fail);retire(g_host);free(g_host);free(h);
 }
 #endif
-int main(void){codec();admission();selection();
+int main(void){codec();admission();selection();slow_lane_fairness();
 #ifdef __linux__
  asynchronous();
 #endif

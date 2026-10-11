@@ -1,0 +1,21 @@
+strace: Process 4023841 attached with 4 threads
+strace: Process 4023841 detached
+strace: Process 4023844 detached
+strace: Process 4023842 detached
+strace: Process 4023843 detached
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 57.14    0.710900         158      4481           fdatasync
+ 26.12    0.324966      162483         2           clock_nanosleep
+ 10.34    0.128617          28      4484           pwrite64
+  6.32    0.078661          12      6326      1468 futex
+  0.03    0.000320          16        20           read
+  0.02    0.000222          17        13           openat
+  0.01    0.000148          49         3           statfs
+  0.01    0.000116           5        23           fstat
+  0.01    0.000086          17         5           write
+  0.01    0.000080           2        29           lseek
+  0.01    0.000064           4        13           close
+  0.00    0.000044           3        13        13 ioctl
+------ ----------- ----------- --------- --------- ----------------
+100.00    1.244224          80     15412      1481 total

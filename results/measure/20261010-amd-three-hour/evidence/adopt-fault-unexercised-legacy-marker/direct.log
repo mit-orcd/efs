@@ -1,0 +1,12 @@
+Evidence directory: /data1/efs/amd-round-20261010/adopt-fault/gc-direct-xa6z8w72
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=2993038468754997202
+client serving PASS
+Traceback (most recent call last):
+  File "/data1/efs/devel-amd-fault/tests/live/gc_reclamation.py", line 517, in <module>
+    assert len(stages)==3 and [int(x[0]) for x in stages]==[0,1,2],stages
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: []

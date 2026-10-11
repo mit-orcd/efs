@@ -1,0 +1,67 @@
+2026-10-11T13:22:08.844Z efs-fuse 8e0e4f3c-merged-fault (branch devel-amd, built 2026-10-11T13:11:22Z on amd-395), build=8e0e4f3c-merged-fault: starting export=default mount=/data1/efs/mnt2
+2026-10-11T13:22:08.844Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T13:22:08.844Z   node id=1 127.0.0.1:24190
+2026-10-11T13:22:08.844Z   node id=2 127.0.0.1:24191
+2026-10-11T13:22:08.844Z   node id=3 127.0.0.1:24192
+2026-10-11T13:22:08.844Z   node id=4 127.0.0.1:24193
+2026-10-11T13:22:08.844Z fetching metadata...
+2026-10-11T13:22:08.844Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T13:22:08.844Z export id=1 name=default
+2026-10-11T13:22:08.844Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T13:22:08.847Z efs-fuse: workers max=10 idle=10
+2026-10-11T13:22:08.848Z fuse serving
+2026-10-11T13:23:23.373Z efs-fuse 8e0e4f3c-merged-fault (branch devel-amd, built 2026-10-11T13:11:22Z on amd-395), build=8e0e4f3c-merged-fault: starting export=default mount=/data1/efs/mnt2
+2026-10-11T13:23:23.374Z Discovered 4 cluster nodes from 127.0.0.1:24190
+2026-10-11T13:23:23.374Z   node id=1 127.0.0.1:24190
+2026-10-11T13:23:23.374Z   node id=2 127.0.0.1:24191
+2026-10-11T13:23:23.374Z   node id=3 127.0.0.1:24192
+2026-10-11T13:23:23.374Z   node id=4 127.0.0.1:24193
+2026-10-11T13:23:23.374Z fetching metadata...
+2026-10-11T13:23:23.374Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T13:23:23.374Z export id=1 name=default
+2026-10-11T13:23:23.374Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T13:23:23.377Z efs-fuse: workers max=10 idle=10
+2026-10-11T13:23:23.379Z fuse serving
+2026-10-11T13:23:24.866Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-11T13:23:24.870Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:23:24.875Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:24.883Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:23:24.893Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-11T13:23:24.904Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:23:24.921Z efs: report rec ino=6907 ci=6 rejected unowned staging observation nodes=3,4,1 (putid miss, n=1)
+2026-10-11T13:23:24.926Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-11T13:23:24.930Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:24.935Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=0
+2026-10-11T13:23:24.981Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:25.129Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:25.133Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:23:25.139Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:23:25.147Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:23:25.156Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=0
+2026-10-11T13:23:25.338Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:25.343Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:25.349Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:23:25.357Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:23:25.367Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-11T13:23:25.394Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=0
+2026-10-11T13:23:25.399Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:25.404Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:23:25.411Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:23:25.461Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:23:25.506Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-11T13:23:25.550Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-11T13:23:25.554Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:25.559Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:23:25.666Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:25.826Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=5
+2026-10-11T13:23:25.834Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=5
+2026-10-11T13:23:25.840Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-11T13:23:25.849Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:25.862Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=5
+2026-10-11T13:23:25.877Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=3
+2026-10-11T13:23:27.896Z efs: read hole ino=5738 ci=0 holes=1
+2026-10-11T13:23:27.923Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=3
+2026-10-11T13:23:27.926Z efs: report rec ino=5282 ci=0 rejected unowned staging observation nodes=4,1,2 (putid miss, n=3)
+2026-10-11T13:23:27.955Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-11T13:23:27.994Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-11T13:23:37.677Z efs: read hole ino=8049 ci=0 holes=2
