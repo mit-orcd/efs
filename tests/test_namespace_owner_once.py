@@ -38,6 +38,8 @@ code=r'''
 #define EFS_SESSION_BITS 64
 #define EFS_KV_KEY_MAX 64
 #define EFS_SESS_LOCAL_VAL 8
+#define HOST_SESS_HDR_LEN 18
+#define HOST_SESS_GET 0
 #define HOST_SESS_CREATE_LEN 22
 #define HOST_SESS_REG_LEN 26
 #define EFS_MD_CMD_SESSION 1
@@ -53,8 +55,9 @@ struct efs_opid_req {struct efs_opid id;uint64_t ack;};
 static unsigned creates,registers,establishes,reads,admit_checks,accepts;
 static int read_error,owner_error,local_error,establish_error,fenced,owner_exists,register_error;
 static uint8_t floors[64],registered[64];
-static int local_owner=1,proof_read_error,corrupt_proof,fencing_idempotent,fence_after_register;
+static int local_owner=1,proof_read_error,corrupt_proof,fencing_idempotent,fence_after_register,fence_after_view;
 static uint32_t rd32(const uint8_t *p) {return (uint32_t)p[0]<<24|(uint32_t)p[1]<<16|(uint32_t)p[2]<<8|p[3];}
+#define rd32be rd32
 static void wr32be(uint8_t *p,uint32_t v) {p[0]=v>>24;p[1]=v>>16;p[2]=v>>8;p[3]=v;}
 static int efs_opid_req_valid(const struct efs_opid_req *q) {return q->id.seq && q->id.client_uuid[0];}
 static uint8_t efs_raft_shard_group(uint32_t shard) {return shard%2?2:0;}
@@ -112,8 +115,18 @@ static int host_session_establish_admit(struct efs_raft_host *h,const uint8_t *c
  uint32_t shard=rd32(cmd+22);assert(group==efs_raft_shard_group(shard)&&registered[shard]);admit_checks++;
  return establish_error?establish_error:fenced?EFS_ERR_STALE:0;
 }
+
+struct efs_msg_raft_mkfs_reply {int leader_hint;uint64_t salt;};
+static int host_session_get(struct efs_raft_host *h,const uint8_t *q,uint32_t n,uint8_t group,int *hint,uint64_t *out) {
+ (void)h;(void)hint;assert(group==0&&q[1]==HOST_SESS_GET&&n==22);
+ if(!owner_exists)return EFS_ERR_NOT_FOUND;
+ uint32_t shard=rd32(q+18);*out=3ull|((uint64_t)(fenced?EFS_SESSION_FENCING:EFS_SESSION_ACTIVE)<<32)|((uint64_t)registered[shard]<<40);if(fence_after_view)fenced=1;return EFS_OK;
+}
+static int host_remote_cmd(struct efs_raft_host *h,uint8_t group,const uint8_t *q,uint32_t n,struct efs_msg_raft_mkfs_reply *reply,int skip) {
+ (void)skip;reply->leader_hint=1;return host_session_get(h,q,n,group,NULL,&reply->salt);
+}
 ''' +s[a:b]+r'''
-static void reset(void) {creates=registers=establishes=reads=admit_checks=accepts=0;read_error=owner_error=local_error=establish_error=fenced=owner_exists=register_error=0;local_owner=1;proof_read_error=corrupt_proof=fencing_idempotent=fence_after_register=0;memset(floors,0,sizeof(floors));memset(registered,0,sizeof(registered));}
+static void reset(void) {creates=registers=establishes=reads=admit_checks=accepts=0;read_error=owner_error=local_error=establish_error=fenced=owner_exists=register_error=0;local_owner=1;proof_read_error=corrupt_proof=fencing_idempotent=fence_after_register=fence_after_view=0;memset(floors,0,sizeof(floors));memset(registered,0,sizeof(registered));}
 int main(void) {
  struct efs_raft_host h={0};struct efs_opid_req q={.id={.client_uuid={19},.session_epoch=3,.seq=1}};int hint=-1;
  reset();owner_exists=1;assert(!host_namespace_session_admit(&h,5,&q,&hint));
@@ -126,27 +139,27 @@ int main(void) {
  }
  reset();register_error=EFS_ERR_IO;
  assert(host_namespace_session_admit(&h,5,&q,&hint)==EFS_ERR_IO);
- assert(!creates&&registers==1&&!establishes&&!accepts);
+ assert(creates==1&&registers==1&&!establishes&&!accepts);
  reset();assert(host_namespace_session_admit_with_owner(&h,5,&q,1,&hint)==EFS_ERR_NOT_FOUND);
- assert(!creates&&registers==1&&!establishes&&!accepts);
+ assert(!creates&&!registers&&!establishes&&!accepts);
  reset();register_error=EFS_ERR_NOT_FOUND;
  assert(host_namespace_session_admit(&h,5,&q,&hint)==EFS_ERR_NOT_FOUND);
- assert(creates==1&&registers==2&&!establishes&&!accepts);
+ assert(creates==1&&registers==1&&!establishes&&!accepts);
  reset();assert(!host_namespace_session_prepare_owner(&h,&q,&hint));
  for(unsigned shard=1;shard<=4;shard++)assert(!host_namespace_session_admit_with_owner(&h,shard,&q,1,&hint));
  assert(creates==1&&registers==4&&establishes==4&&admit_checks==0&&reads==8&&accepts==4);
  reset();assert(!host_namespace_session_admit(&h,5,&q,&hint));
- assert(creates==1&&registers==2&&establishes==1&&admit_checks==0&&reads==2&&accepts==1);
+ assert(creates==1&&registers==1&&establishes==1&&admit_checks==0&&reads==2&&accepts==1);
  reset();floors[5]=1;assert(!host_namespace_session_admit(&h,5,&q,&hint));assert(!creates&&!registers&&!establishes&&reads==1&&accepts==1);
  reset();assert(!host_namespace_session_prepare_owner(&h,&q,&hint));fenced=1;
- assert(host_namespace_session_admit_with_owner(&h,5,&q,1,&hint)==EFS_ERR_STALE);assert(creates==1&&registers==1&&!establishes&&!accepts);
+ assert(host_namespace_session_admit_with_owner(&h,5,&q,1,&hint)==EFS_ERR_BUSY);assert(creates==1&&!registers&&!establishes&&!accepts);
  for(int refusal=EFS_ERR_BUSY;refusal>=EFS_ERR_STALE;refusal--) {
   reset();assert(!host_namespace_session_prepare_owner(&h,&q,&hint));establish_error=refusal;local_owner=0;
   assert(host_namespace_session_admit_with_owner(&h,5,&q,1,&hint)==refusal);assert(creates==1&&registers==1&&admit_checks==1&&!establishes&&!accepts);
  }
  reset();read_error=EFS_ERR_BUSY;assert(host_namespace_session_admit_with_owner(&h,5,&q,1,&hint)==EFS_ERR_BUSY);assert(!creates&&!registers&&!establishes&&!accepts);
  reset();local_error=EFS_ERR_IO;assert(host_namespace_session_admit_with_owner(&h,5,&q,1,&hint)==EFS_ERR_IO);assert(!creates&&!registers&&!establishes&&!accepts);
- reset();owner_error=EFS_ERR_IO;assert(host_namespace_session_admit(&h,5,&q,&hint)==EFS_ERR_IO);assert(creates==1&&registers==1&&!establishes&&!accepts);
+ reset();owner_error=EFS_ERR_IO;assert(host_namespace_session_admit(&h,5,&q,&hint)==EFS_ERR_IO);assert(creates==1&&!registers&&!establishes&&!accepts);
  /* Same-request CREATE proof skips only the matching initial group read. */
  reset();floors[5]=1;
  assert(!host_namespace_session_admit_after_group(&h,5,&q,0,2,&hint));
@@ -155,7 +168,7 @@ int main(void) {
  assert(host_namespace_session_admit_after_group(&h,5,&q,0,2,&hint)==EFS_ERR_STALE);
  assert(reads==0&&accepts==1&&!creates&&!registers&&!establishes);
  reset();assert(!host_namespace_session_admit_after_group(&h,5,&q,0,2,&hint));
- assert(reads==1&&creates==1&&registers==2&&establishes==1&&admit_checks==0&&accepts==1);
+ assert(reads==1&&creates==1&&registers==1&&establishes==1&&admit_checks==0&&accepts==1);
  reset();read_error=EFS_ERR_BUSY;
  assert(host_namespace_session_admit_after_group(&h,5,&q,0,0,&hint)==EFS_ERR_BUSY);
  assert(reads==1&&!accepts&&!creates&&!registers&&!establishes);
@@ -164,8 +177,8 @@ int main(void) {
  assert(!reads&&!accepts&&!creates&&!registers&&!establishes);
 
  reset();owner_exists=1;fenced=fencing_idempotent=1;
- assert(host_namespace_session_admit(&h,5,&q,&hint)==EFS_ERR_STALE);
- assert(registers==1&&admit_checks==1&&!establishes&&!accepts&&!h.apply_extra);
+ assert(host_namespace_session_admit(&h,5,&q,&hint)==EFS_ERR_BUSY);
+ assert(!registers&&!admit_checks&&!establishes&&!accepts);
  reset();owner_exists=1;proof_read_error=EFS_ERR_IO;
  assert(!host_namespace_session_admit(&h,5,&q,&hint));assert(admit_checks==1&&!h.apply_extra);
  reset();owner_exists=1;corrupt_proof=1;
@@ -175,6 +188,9 @@ int main(void) {
  reset();owner_exists=1;fence_after_register=1;
  assert(host_namespace_session_admit(&h,5,&q,&hint)==EFS_ERR_STALE);
  assert(registers==1&&admit_checks==0&&establishes==1&&reads==2&&accepts==1);
+ reset();owner_exists=1;registered[5]=1;fence_after_view=1;
+ assert(host_namespace_session_admit(&h,5,&q,&hint)==EFS_ERR_STALE);
+ assert(!creates&&!registers&&establishes==1&&reads==2&&!admit_checks&&accepts==1);
  reset();q.ack=1;assert(host_namespace_session_admit_with_owner(&h,5,&q,1,&hint)==EFS_ERR_INVAL);assert(!reads&&!creates&&!registers);
  puts("shared session owner: actual ACTIVE apply proof, FENCING/unhosted/uncertain/mismatched fallback and post-apply fence refusal; existing-owner REGISTER without CREATE, authoritative missing-only bootstrap, per-shard fresh reads/ESTABLISH/floors, fencing and hard-error refusal PASS");
 }

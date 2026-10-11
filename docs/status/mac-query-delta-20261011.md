@@ -498,3 +498,74 @@ fresh fences, verifies permission ancestors, repeats with independent fences,
 and checks missing groups, IO errors, absence and the existing depth boundary.
 It and the operation/LOOKUP/transaction/control/sender/architecture gates pass
 on the Mac Linux seed. Native deep-directory retesting is pending.
+
+The batched path-authority fix also passed its Linux gates, but the unchanged
+native deep-directory pair still failed (0/2, 33.4 seconds). A separate,
+normally cleaned 60-level mkdir diagnostic with client RPC profiling showed
+that this low-level FUSE path issued no LOOKUP_PATH calls. Its 2,158 LOOKUPs
+spent 2.497 seconds receiving replies, whereas 61 creates spent 18.002 seconds
+(~295 ms each). The path fix therefore does not establish a native-suite
+latency improvement. Durable namespace writes are the remaining measured lead.
+
+A bounded prepare collector now groups at most eight ordinary PREP entries,
+preserving order and every exact index/term verdict. Only contiguous locally
+led nonsolo groups share the existing checked log fsync barrier. Packing
+failures discard unsubmitted commands, leadership changes fail locally instead
+of forwarding inside a hold, and persistence failure overrides admission
+failure. Every hold closes before remote calls or apply waits; COMMIT still
+requires all original PREP verdicts. MKDIR and RMDIR use the collector. There is
+no new transaction opcode or relaxed durability rule. Unit cases exercise the
+bound, ordering, individual identities, role/fsync errors, remote boundaries
+and preexisting shared holds. The initial full Linux gate stopped because the
+REPORT coverage fixture mistook a forward declaration for a function body;
+fixing its definition extraction preserved its durability assertions. The
+remaining full-unit recipes, including Raft, transaction/session, persistence,
+query and client drain gates, then passed. Live acceptance is pending.
+The prepare-cohort live deep-directory pair also completed normally with 0/2
+PASS (two unchanged 20-second deadline failures, 33.4 seconds including
+cleanup). It is not acceptance and no native improvement is established yet.
+
+Whole MKDIR/RMDIR requests now return a parent-group leader hint before
+session admission or transaction effects when committed membership proves
+that leader hosts both scratch groups. Unknown/self/single-group/removed
+leaders keep normal forwarding; this avoids redirect loops on four-node
+placements. Client retries retain the same operation identity. Routing,
+namespace fencing, transaction resolution, follower redirection, metadata
+retry-budget and shared-log coverage gates pass on the Mac Linux seed. The
+unchanged live deep pair still failed 0/2 (33.1 seconds, normal cleanup).
+This routing correction is not sufficient for native acceptance.
+
+New-shard namespace admission now reads fresh session-owner authority before
+logging CREATE: existing ACTIVE sessions skip the no-op CREATE, and an already
+registered participant skips repeated REGISTER. Absence still creates and
+registers; owner read errors, stale epochs and fencing never admit a write.
+ESTABLISH retains its fresh global check, durable local floor and final local
+acceptance. Local/remote owner, missing/error/fenced/revoked-state, registration
+and final-check failure cases pass, as do the Linux session admission,
+namespace cold-WAL/fencing, transaction and cohort gates. The full build is
+clean. Opt-in EFS_READ_PROF now samples monotonic MKDIR phases at most once per
+second per process; production defaults emit none.
+
+The normally cleaned 60-level diagnostic with this candidate shows sampled
+cross-group MKDIRs spending 70–130 ms on session admission and 116–150 ms on
+transaction commit/resolution, versus 16–40 ms on prepare submission (one
+74 ms outlier). Cleanup takes 11.70 seconds. Resolution currently proposes
+ordinary per-participant entries separately, each paying a log durability
+barrier. This is the next measured lead; no native pass is claimed. Slowing
+markers to the existing 1,000 ms setting alone also failed the unchanged deep
+pair (0/2, 31.4 seconds), so cadence alone is insufficient.
+
+The collector now covers bounded locally led nonsolo prefixes across groups
+sharing the physical Raft log, and COMMIT participant resolution uses it only
+after the coordinator's durable decision succeeds. Every original resolution
+entry and exact verdict remains independent; failed/partial submission,
+failed fsync or a missing verdict retains the finisher and propagates failure.
+The production collector/commit regression covers all 144 participants,
+ordering across groups, undecided refusal, ambiguous decision, partial batch,
+failed barrier and failed verdict. Linux Raft disk/core, transaction recovery,
+apply retry, namespace fencing and packing-capacity gates pass. The live deep
+pair still failed 0/2 in 37.4 seconds, normally cleaned. Phase samples still
+show 106–188 ms transaction commit and 88–214 ms session admission under this
+load. This is not evidence of a latency improvement. Repeated failed query
+index builds take 24–37 seconds on each replica; a normally restored disabled-
+query diagnostic will distinguish their contribution from consensus costs.

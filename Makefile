@@ -343,6 +343,9 @@ test: all
 	python3 tests/test_readindex_operation.py
 	python3 tests/test_lookup_path_authority.py
 	python3 tests/test_read_control_host.py
+	python3 tests/test_prepare_cohort.py
+	python3 tests/test_namespace_leader_route.py
+	python3 tests/test_namespace_admission_rounds.py
 	python3 tests/test_w23_samples.py
 	python3 tests/test_read_verify.py
 	python3 tests/test_opid_admission.py

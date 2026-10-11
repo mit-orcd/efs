@@ -4171,7 +4171,7 @@ static int host_pressure_admit(void *app, const struct efs_raft_entry *entries,
  * only read-your-writes (a committed index is unique). */
 static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
                         const uint8_t *cmd, uint32_t clen, uint64_t *idx,
-                        uint64_t *term, int *leader_hint)
+                        uint64_t *term, int *leader_hint, int local_only)
 {
     struct efs_raft *r;
     int rc;
@@ -4204,6 +4204,12 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
         lid = efs_raft_leader(r);
         if (leader_hint)
             *leader_hint = lid;
+        if (local_only && solo) {
+            pthread_mutex_unlock(&h->mu);
+            propose_q_sub();
+            if (quiet) (void)efs_raft_disk_sync_release(h->disk);
+            return EFS_ERR_NOT_PRIMARY;
+        }
         if (efs_raft_role(r) == EFS_RAFT_LEADER && solo && quiet) {
             /* One voter commits inside propose. Drop the hold first so
              * that commit's append fsyncs before it returns. */
@@ -4303,6 +4309,7 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
     propose_q_sub();
     if (quiet)
         (void)efs_raft_disk_sync_release(h->disk);
+    if (local_only) return EFS_ERR_NOT_PRIMARY;
     /* Not the leader: forward to it. host_remote_cmd is a blocking peer
      * RPC; no host lock is held across it. The command is already fully
      * formed and the Raft log + apply-side validation order it against
@@ -4436,19 +4443,26 @@ static int host_wait_settled(struct efs_raft_host *h, uint8_t group,
     return rc;
 }
 
-static int host_propose(struct efs_raft_host *h, uint8_t group,
+static int host_propose_mode(struct efs_raft_host *h, uint8_t group,
                         const uint8_t *cmd, uint32_t clen, uint64_t *idx,
-                        uint64_t *term, int *leader_hint)
+                        uint64_t *term, int *leader_hint, int local_only)
 {
-    if (!h->pressure_enabled) return host_propose_impl(h,group,cmd,clen,idx,term,leader_hint);
+    if (!h->pressure_enabled) return host_propose_impl(h,group,cmd,clen,idx,term,leader_hint,local_only);
     struct efs_admission_ticket ticket={0};
     int rc = efs_admission_try(&h->proposal_queue,(uint64_t)clen+4096,
                                host_pressure_recovery(cmd,clen),&ticket);
     if (rc != EFS_OK) return rc;
-    rc=host_propose_impl(h,group,cmd,clen,idx,term,leader_hint);
+    rc=host_propose_impl(h,group,cmd,clen,idx,term,leader_hint,local_only);
     (void)efs_admission_release(&ticket);
     return rc;
 }
+static int host_propose(struct efs_raft_host *h, uint8_t group,
+                        const uint8_t *cmd, uint32_t clen, uint64_t *idx,
+                        uint64_t *term, int *leader_hint)
+{
+    return host_propose_mode(h,group,cmd,clen,idx,term,leader_hint,0);
+}
+
 
 static int host_propose_wait_idx_impl(struct efs_raft_host *h, uint8_t group,
                                  const uint8_t *cmd, uint32_t clen, int *hint,
@@ -4457,7 +4471,7 @@ static int host_propose_wait_idx_impl(struct efs_raft_host *h, uint8_t group,
     uint64_t idx = 0, term = 0;
     int rc;
 
-    rc = host_propose_impl(h, group, cmd, clen, &idx, &term, hint);
+    rc = host_propose_impl(h, group, cmd, clen, &idx, &term, hint, 0);
     if (rc != EFS_OK)
         return rc;
     if (idx_out)
@@ -4501,7 +4515,7 @@ static int host_propose_wait_ex_impl(struct efs_raft_host *h, uint8_t group,
     uint64_t idx = 0, term = 0;
     int rc, erc;
 
-    rc = host_propose_impl(h, group, cmd, clen, &idx, &term, hint);
+    rc = host_propose_impl(h, group, cmd, clen, &idx, &term, hint, 0);
     if (rc != EFS_OK)
         return rc;
     rc = host_wait_applied(h, group, idx, hint);
@@ -10969,8 +10983,30 @@ static int host_namespace_session_register(struct efs_raft_host *h,uint8_t group
     const uint8_t *cmd,uint32_t bytes,int *hint,uint64_t *active_proof)
 {
     *active_proof=0;
-    /* Hosted replicas retrieve this command's own apply-ring extra. Older
-     * or unhosted owners provide no proof and retain the fresh owner query. */
+    /* A fresh owner view avoids CREATE for existing sessions and REGISTER
+     * for a participant already durably included in the current ACTIVE epoch.
+     * Otherwise REGISTER supplies its own exact apply proof. No owner view
+     * or proof survives this request. */
+    uint32_t shard=rd32be(cmd+22),epoch=rd32be(cmd+18);
+    uint8_t query[HOST_SESS_HDR_LEN+4];
+    memcpy(query,cmd,HOST_SESS_HDR_LEN);query[1]=HOST_SESS_GET;wr32be(query+18,shard);
+    uint64_t session=0;int rc;
+    if(host_hosts(h,group))rc=host_session_get(h,query,sizeof(query),group,hint,&session);
+    else {
+        struct efs_msg_raft_mkfs_reply reply={0};
+        rc=host_remote_cmd(h,group,query,sizeof(query),&reply,-1);
+        if(reply.leader_hint>=0)*hint=reply.leader_hint;
+        if(rc==EFS_OK)session=reply.salt;
+    }
+    if(rc!=EFS_OK)return rc;
+    if((uint32_t)session!=epoch)return EFS_ERR_STALE;
+    uint8_t state=(uint8_t)(session>>32);
+    if(state==EFS_SESSION_FENCING)return EFS_ERR_BUSY;
+    if(state!=EFS_SESSION_ACTIVE)return EFS_ERR_PROTO;
+    if(session&(1ull<<40)) {
+        *active_proof=host_session_register_active_proof(epoch,shard);
+        return EFS_OK;
+    }
     if(host_hosts(h,group))
         return host_propose_wait_ex(h,group,cmd,bytes,hint,active_proof);
     return host_namespace_session_command(h,group,cmd,bytes,hint);
@@ -11018,7 +11054,7 @@ static int host_namespace_session_admit_after_group(struct efs_raft_host *h,
     }
     if(rc!=EFS_OK)return rc;
     cmd[1]=EFS_MD_SESS_ESTABLISH;
-    /* REGISTER atomically proved ACTIVE + this participant at its own apply
+    /* A fresh owner view or REGISTER proved ACTIVE + this participant at its own
      * point. A later BEGIN includes the registered shard in its frozen set;
      * FENCE_LOC writes a monotonic floor even when ESTABLISH has not arrived.
      * Delayed old-epoch establishment/mutation therefore remains rejected.
@@ -11596,6 +11632,94 @@ static int host_wait_refs(struct efs_raft_host *h, struct host_idx_ref *refs,
     return rc;
 }
 
+/* Async namespace prepares used to defer only the apply wait: each still
+ * released its own log hold. Bound collection to eight ordinary PREP entries,
+ * preserving order and each exact (index,term) verdict. Bounded locally
+ * led nonsolo prefixes share the physical log barrier across groups. A role change
+ * fails local-only submission; it cannot forward while the log is held. */
+#define HOST_CMD_COHORT_MAX 8
+struct host_command_cohort {
+    struct efs_raft_host *host;
+    unsigned n;
+    struct {
+        struct host_idx_ref *ref;
+        uint32_t bytes;
+        uint8_t cmd[EFS_TXN_PREPARE_MAX];
+    } item[HOST_CMD_COHORT_MAX];
+};
+static __thread struct host_command_cohort *host_command_capture;
+static int host_report_release(struct efs_raft_host *h, int held);
+
+static int host_command_cohort_flush(struct host_command_cohort *c,int *hint)
+{
+    unsigned i=0;
+    int rc=EFS_OK;
+    while (i<c->n && rc==EFS_OK) {
+        unsigned end=i;
+        int held=0;
+        pthread_mutex_lock(&c->host->mu);
+        /* All hosted groups share one physical Raft log. A bounded local
+         * prefix can therefore share its checked fsync across groups without
+         * reordering commands or changing any group's quorum/apply verdict. */
+        while(end<c->n) {
+            struct efs_raft *r=group_raft(c->host,c->item[end].ref->group);
+            uint32_t voters=r ? efs_raft_voters(r) : 0;
+            if(!r || efs_raft_role(r)!=EFS_RAFT_LEADER || !voters ||
+                !(voters&(voters-1)))break;
+            end++;
+        }
+        pthread_mutex_unlock(&c->host->mu);
+        if(end==i)end=i+1;
+        if (c->host->disk && end-i>1 &&
+            efs_raft_disk_sync_depth(c->host->disk)==0 &&
+            efs_raft_disk_sync_hold(c->host->disk)==EFS_OK)
+            held=1;
+        for (;i<end && rc==EFS_OK;i++) {
+            struct host_idx_ref *ref=c->item[i].ref;
+            rc=host_propose_mode(c->host,ref->group,c->item[i].cmd,
+                c->item[i].bytes,&ref->idx,&ref->term,hint,held);
+        }
+        /* Close on every error as well as success. Failed persistence must
+         * override an earlier admission/role error, never become a verdict. */
+        int sync_rc=held ? host_report_release(c->host,held) : EFS_OK;
+        if (sync_rc!=EFS_OK) rc=sync_rc;
+    }
+    c->n=0;
+    return rc;
+}
+
+static int host_command_cohort_add(struct efs_raft_host *h,
+    struct host_idx_ref *ref,const uint8_t *cmd,uint32_t bytes,int *hint)
+{
+    struct host_command_cohort *c=host_command_capture;
+    if (!c || c->host!=h) return host_propose(h,ref->group,cmd,bytes,
+                                            &ref->idx,&ref->term,hint);
+    if (bytes>sizeof(c->item[0].cmd)) return EFS_ERR_INVAL;
+    if (c->n==HOST_CMD_COHORT_MAX) {
+        int rc=host_command_cohort_flush(c,hint);
+        if (rc!=EFS_OK) return rc;
+    }
+    c->item[c->n].ref=ref;c->item[c->n].bytes=bytes;
+    memcpy(c->item[c->n].cmd,cmd,bytes);c->n++;
+    return EFS_OK;
+}
+
+static void host_command_cohort_begin(struct host_command_cohort *c,
+                                        struct efs_raft_host *h)
+{
+    memset(c,0,sizeof(*c));c->host=h;host_command_capture=c;
+}
+
+static int host_command_cohort_end(struct host_command_cohort *c,int prior,
+                                     int *hint)
+{
+    host_command_capture=NULL;
+    /* A packing/capture failure leaves no accepted promise for remaining
+     * buffered commands. Already flushed PREPs retain normal abort cleanup. */
+    if (prior!=EFS_OK) {c->n=0;return prior;}
+    return host_command_cohort_flush(c,hint);
+}
+
 /* DECIDE COMMIT at the coordinator, then RESOLVE COMMIT on every part
  * (proposed together, waited together). A wait that runs out after the
  * DECIDE is in the log goes to the finisher; the caller still sees the
@@ -11659,15 +11783,17 @@ static int host_txn_commit(struct efs_raft_host *h, const struct efs_txid *t,
 #ifdef EFS_FAULTS
     host_txn_fault_barrier(h, parts, "commit");
 #endif
+    struct host_command_cohort cohort;
+    host_command_cohort_begin(&cohort,h);
     for (i = 0; i < parts->n && i < EFS_TXN_MAX_PART; i++) {
         pack_resolve(cmd, t, parts->shard[i], EFS_TXN_COMMIT);
         refs[n].group = efs_raft_shard_group(parts->shard[i]);
-        rc = host_propose(h, refs[n].group, cmd, 22, &refs[n].idx,
-                          &refs[n].term, hint);
+        rc = host_command_cohort_add(h,&refs[n],cmd,22,hint);
         if (rc != EFS_OK)
             break;
         n++;
     }
+    rc=host_command_cohort_end(&cohort,rc,hint);
     if (rc == EFS_OK)
         rc = host_wait_refs(h, refs, n, hint);
     if (rc != EFS_OK)
@@ -11708,8 +11834,7 @@ static int host_prep_async(struct efs_raft_host *h, uint32_t shard, int kind,
     if (n > sizeof(cmd))
         return EFS_ERR_INVAL;
     ref->group = efs_raft_shard_group(shard);
-    return host_propose(h, ref->group, cmd, n, &ref->idx, &ref->term,
-                        hint);
+    return host_command_cohort_add(h,ref,cmd,n,hint);
 }
 
 /* Commutative parts (§7.2). `ref` NULL = propose and wait (host_prep
@@ -11732,8 +11857,7 @@ static int host_prep_raw(struct efs_raft_host *h, uint32_t shard, int kind,
     if (!ref)
         return host_propose_wait(h, efs_raft_shard_group(shard), cmd, n, hint);
     ref->group = efs_raft_shard_group(shard);
-    return host_propose(h, ref->group, cmd, n, &ref->idx, &ref->term,
-                        hint);
+    return host_command_cohort_add(h,ref,cmd,n,hint);
 }
 
 /* Namespace rows can change through unversioned log applies. Compare their
@@ -12686,6 +12810,24 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
  * nlink++ always; times ride the parent row for LOCAL, the dir-lane stamp
  * (plus a first-use used_shards bit) for HASHED/SPLITTING. dseq bumps on
  * (dsh, lane). A node that does not host a participant group bounces. */
+/* Route before session admission or transaction effects. A parent leader
+ * is useful only when its committed membership also hosts both scratch
+ * groups: redirecting to a single-group voter would bounce back forever.
+ * Unknown configuration/leadership keeps the ordinary forwarding path. */
+static int host_namespace_leader_hint(struct efs_raft_host *h,uint8_t group)
+{
+    int rid=host_local_leader(h,group);
+    if (rid<0 || rid>=h->n || rid==h->raft_id) return -1;
+    pthread_mutex_lock(&h->mu);
+    for (unsigned i=0;i<HOST_NGROUPS;i++) {
+        struct host_group *s=group_slot(h,(uint8_t)(i<<1));
+        uint32_t voters=s ? (s->r ? efs_raft_voters(s->r) : s->voters) : 0;
+        if (!voters || !hosts_group(rid,voters)) {rid=-1;break;}
+    }
+    pthread_mutex_unlock(&h->mu);
+    return rid;
+}
+
 void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
                             uint32_t uid, uint32_t gid,
                             const struct efs_opid_req *q,
@@ -12715,6 +12857,9 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
     int hint = -1;
     int rc, i, np = 0;
     int stage = 0, stamp_lane = 0;
+    int prof=read_prof_on();
+    uint64_t started=prof?now_us_():0,session_us=0,prep_us=0,wait_us=0,commit_us=0;
+    uint64_t phase=0;
 
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
@@ -12728,6 +12873,8 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
         mode |= 0755;
     now = now_ns();
     psh = efs_kv_inode_shard(parent);
+    hint=host_namespace_leader_hint(h,efs_raft_shard_group(psh));
+    if (hint>=0) {set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;}
     if (!host_hosts(h, efs_raft_shard_group(psh))) {
         uint8_t need[2];
         need[0] = EFS_RAFT_GROUP_SHARD;
@@ -12786,7 +12933,9 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
         dsh = 0;
     if (rc == EFS_OK) {
         struct efs_opid_reply rep;
+        phase=prof?now_us_():0;
         int admitted=host_namespace_session_admit_after_group(h,dsh,q,0,efs_raft_shard_group(dsh),&hint);
+        if(prof)session_us=now_us_()-phase;
         int hit=admitted==EFS_OK?host_opid_replay(h,dsh,q,&rep):admitted;
 
         if (hit < 0) {
@@ -12823,9 +12972,12 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
                 rc = pack_create_cmd(mkcmd, &mklen, parent, mode, name, &at2, 0,
                                      next, prow.layout, q, 0);
         }
-        if (rc == EFS_OK)
+        if (rc == EFS_OK) {
+            phase=prof?now_us_():0;
             rc = host_propose_wait(h, efs_raft_shard_group(psh), mkcmd, mklen,
                                    &hint);
+            if(prof)commit_us=now_us_()-phase;
+        }
         goto mkdir_done;
     }
     if (rc == EFS_OK) {
@@ -12900,6 +13052,9 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
             goto mkdir_done;
         stage = 9;
         fill_txid(h, &t);
+        struct host_command_cohort cohort;
+        phase=prof?now_us_():0;
+        host_command_cohort_begin(&cohort,h);
         np = 0;
         for (i = 0; i < parts.n && rc == EFS_OK; i++) {
             uint32_t sh = parts.shard[i];
@@ -12945,14 +13100,19 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
                     np++;
             }
         }
+        rc=host_command_cohort_end(&cohort,rc,&hint);
+        if(prof) {prep_us=now_us_()-phase;phase=now_us_();}
         if (rc == EFS_OK)
             rc = host_wait_refs(h, prefs, np, &hint);
+        if(prof)wait_us=now_us_()-phase;
         if (rc != EFS_OK)
             (void)host_drop_parts(h, &t, &parts, &hint);
         else {
             stage = 10;
             coord = efs_txn_coordinator(&t, &parts);
+            phase=prof?now_us_():0;
             rc = host_txn_commit(h, &t, &parts, coord, &hint);
+            if(prof)commit_us=now_us_()-phase;
         }
     }
 mkdir_done:
@@ -12969,6 +13129,18 @@ mkdir_done:
                 "hint=%d psh=%u csh=%u dsh=%u stage=%d ino=%llu\n",
                 (unsigned long long)parent, name, rc, hint, psh,
                 csh, dsh, stage, (unsigned long long)ino);
+    if(prof) {
+        static uint64_t last;
+        uint64_t now=now_us_(),old=__atomic_load_n(&last,__ATOMIC_RELAXED);
+        if(now-old>=1000000ull && __atomic_compare_exchange_n(&last,&old,now,0,
+            __ATOMIC_RELAXED,__ATOMIC_RELAXED))
+            fprintf(stderr,"namespace-prof: mkdir rc=%d parent=%llu psh=%u csh=%u dsh=%u "
+                "total_us=%llu session_us=%llu prep_us=%llu wait_us=%llu commit_us=%llu\n",
+                rc,(unsigned long long)parent,psh,csh,dsh,
+                (unsigned long long)(now-started),(unsigned long long)session_us,
+                (unsigned long long)prep_us,(unsigned long long)wait_us,
+                (unsigned long long)commit_us);
+    }
     set_inode_rc(out, rc, hint);
     if (rc == EFS_OK) {
         stat_to_inode(&st, &out->inode);
@@ -13017,6 +13189,8 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
     }
     now = now_ns();
     psh = efs_kv_inode_shard(parent);
+    hint=host_namespace_leader_hint(h,efs_raft_shard_group(psh));
+    if (hint>=0) {set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;}
     if (!host_hosts(h, efs_raft_shard_group(psh))) {
         uint8_t need[2];
         need[0] = EFS_RAFT_GROUP_SHARD;
@@ -13226,6 +13400,8 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
         if (rc != EFS_OK)
             goto rmdir_done;
         fill_txid(h, &t);
+        struct host_command_cohort cohort;
+        host_command_cohort_begin(&cohort,h);
         npref = 0;
         for (i = 0; i < parts.n && rc == EFS_OK; i++) {
             uint32_t sh = parts.shard[i];
@@ -13302,6 +13478,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
                     npref++;
             }
         }
+        rc=host_command_cohort_end(&cohort,rc,&hint);
         if (rc == EFS_OK)
             rc = host_wait_refs(h, prefs, npref, &hint);
         if (rc != EFS_OK)
