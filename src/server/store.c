@@ -1911,7 +1911,7 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
      * and an 11-component walk, Oct 1). */
     (void)chunk_index;
     (void)fragment_index;
-    int may_charge = (!efs_ino_is_meta_table(ino)) && (s->quota > 0);
+    int may_charge = (!efs_ino_is_meta_table(ino));
     int first_write = (efs_tls_path_hint == EFS_PATH_HINT_SKIP);
 
     struct shard_io_arg arg;
@@ -1943,7 +1943,8 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
             pthread_mutex_unlock(&s->lock);
             return EFS_ERR_INVAL;
         }
-        under = (local->used <= s->quota && data_len <= s->quota - local->used);
+        under = data_len <= UINT64_MAX - local->used &&
+                (!s->quota || (local->used <= s->quota && data_len <= s->quota - local->used));
         pthread_mutex_unlock(&s->lock);
         if (under) {
             arg.excl = 1;
@@ -1978,7 +1979,8 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
         pthread_mutex_lock(&s->lock);
         struct efs_node *local = server_local_node(s);
         if (local) {
-            if (local->used > s->quota || data_len > s->quota - local->used) {
+            if (data_len > UINT64_MAX - local->used ||
+                (s->quota && (local->used > s->quota || data_len > s->quota - local->used))) {
                 pthread_mutex_unlock(&s->lock);
                 unlink(arg.path);
                 return EFS_ERR_QUOTA;
@@ -2008,7 +2010,8 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
             pthread_mutex_unlock(&s->lock);
             return EFS_ERR_INVAL;
         }
-        if (local->used > s->quota || data_len > s->quota - local->used) {
+        if (data_len > UINT64_MAX - local->used ||
+                (s->quota && (local->used > s->quota || data_len > s->quota - local->used))) {
             pthread_mutex_unlock(&s->lock);
             return EFS_ERR_QUOTA;
         }

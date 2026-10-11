@@ -72,8 +72,11 @@ static int probe_node_up(const char *nhost, uint16_t nport, struct efs_msg_statu
     if (efs_send_msg(pfd, EFS_MSG_STATUS, NULL, 0) == 0 &&
         efs_recv_msg(pfd, &type, &preply, &preply_len) == 0 &&
         type == EFS_MSG_STATUS_REPLY &&
-        preply_len == sizeof(struct efs_msg_status_reply)) {
-        if (status) memcpy(status, preply, sizeof(*status));
+        preply_len >= 24) {
+        if (status) {
+            memset(status, 0, sizeof(*status));
+            memcpy(status, preply, preply_len < sizeof(*status) ? preply_len : sizeof(*status));
+        }
         ok = 1;
     }
     free(preply);
@@ -132,14 +135,14 @@ static int cmd_status(int argc, char **argv)
     int full_nodes = 0;
     int up_nodes = 0;
     int down_nodes = 0;
-    int all_have_quota = (list->node_count > 0);
-    /* W42: per-node quota and remaining room of the UP nodes, fed to
+    int all_have_capacity = (list->node_count > 0);
+    /* W42: per-node capacity and available space of the UP nodes, fed to
      * efs_capacity_logical (same model as FUSE statfs). */
     uint64_t cap_quota[EFS_MAX_NODES], cap_room[EFS_MAX_NODES];
     uint32_t ncap = 0;
     for (uint32_t i = 0; i < list->node_count; i++) {
         /* Probe every advertised addr (may differ from the seed string we used). */
-        struct efs_msg_status_reply current;
+        struct efs_msg_status_reply current = {0};
         int up = probe_node_up(list->nodes[i].addr, list->nodes[i].port, &current);
         if (up) {
             list->nodes[i].used = current.used;
@@ -167,18 +170,19 @@ static int cmd_status(int argc, char **argv)
                    reach, used_str, quota_str, pct, npaths);
             if (up && list->nodes[i].used >= list->nodes[i].quota)
                 full_nodes++;
-            if (up && ncap < EFS_MAX_NODES) {
-                cap_quota[ncap] = list->nodes[i].quota;
-                cap_room[ncap] = (list->nodes[i].used < list->nodes[i].quota)
-                                     ? (list->nodes[i].quota - list->nodes[i].used)
-                                     : 0;
-                ncap++;
-            }
         } else {
-            all_have_quota = 0;
             printf("  node %u: %s:%u  %s  used=%s  quota=unlimited  storage(%u):\n",
                    list->nodes[i].id, list->nodes[i].addr, list->nodes[i].port,
                    reach, used_str, npaths);
+        }
+        if (up && current.capacity_valid && ncap < EFS_MAX_NODES) {
+            cap_quota[ncap] = current.capacity_bytes;
+            cap_room[ncap++] = current.available_bytes;
+        } else if (up && current.quota && ncap < EFS_MAX_NODES) {
+            cap_quota[ncap] = current.quota;
+            cap_room[ncap++] = current.quota > current.used ? current.quota - current.used : 0;
+        } else {
+            all_have_capacity = 0;
         }
         char paths[EFS_MAX_PATH];
         strncpy(paths, list->nodes[i].storage_path, sizeof(paths) - 1);
@@ -195,7 +199,7 @@ static int cmd_status(int argc, char **argv)
      * equal ones) — the same model FUSE df uses, over the nodes that are
      * up. Fewer than three up: nothing can be written; the state line
      * says why. */
-    if (all_have_quota && ncap >= EFS_NUM_FRAGMENTS) {
+    if (all_have_capacity && ncap >= EFS_NUM_FRAGMENTS) {
         uint64_t usable_cap = efs_capacity_logical(cap_quota, ncap);
         uint64_t usable_free = efs_capacity_logical(cap_room, ncap);
         if (usable_free > usable_cap)
@@ -207,13 +211,13 @@ static int cmd_status(int argc, char **argv)
         format_bytes(usable_free, free_s, sizeof(free_s));
         format_bytes(usable_cap, cap_s, sizeof(cap_s));
         double pct = 100.0 * (double)usable_used / (double)usable_cap;
-        printf("Usable (2+1 logical): used=%s  free=%s  capacity=%s (%.1f%%)\n",
+        printf("Usable (2+1 logical): used=%s  free=%s  capacity=%s (%.1f%%; filesystem capacity)\n",
                used_s, free_s, cap_s, pct);
     } else if (down_nodes > 0) {
         printf("Usable (2+1 logical): degraded (%d/%u nodes up)\n",
                up_nodes, list->node_count);
     } else {
-        printf("Usable (2+1 logical): n/a (set a quota on every node)\n");
+        printf("Usable (2+1 logical): n/a (storage capacity unavailable)\n");
     }
 
     const char *cluster_state = "OK";

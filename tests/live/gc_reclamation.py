@@ -42,7 +42,7 @@ p.add_argument('--continue-posix-failure','--continue-regression-failure',dest='
 p.add_argument('--tiny-mixed',action='store_true',help='bounded large-writer overlap with 512 tiny CREATE/close operations, cold exact bytes and physical deletion')
 p.add_argument('--tiny-mixed-only',action='store_true',help='run only the mixed-load cold-read/reclamation gate; implies --tiny-mixed')
 p.add_argument('--tiny-mixed-files',type=int,default=512,help='8..8192 tiny files, divisible by eight; use 4096 for longer mixed-load timing')
-p.add_argument('--fixture-quota',choices=('1G','4G','16G'),help='explicit per-daemon private quota; default preserves each gate existing quota')
+p.add_argument('--fixture-quota',choices=('0','1G','4G','16G'),help='explicit per-daemon private quota; default preserves each gate existing quota')
 p.add_argument('--session-append',action='store_true',help='bounded revoked-session append holes, cold half-completion and exact epoch resume')
 p.add_argument('--session-cleanup',action='store_true',help='staged bounded lease/lock cleanup, global barrier, exact replay and cold physical reclaim')
 p.add_argument('--deferred-close',action='store_true',help='staged identified close, 64 cross-group OPEN appends, crash/resume, exact holes and bounded retirement')
@@ -306,6 +306,10 @@ def mount_client():
         if subprocess.run(['mountpoint','-q',str(mount)]).returncode:return False
         return subprocess.run(['timeout','2','stat',str(mount)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0
     wait(ready,'client serving',40)
+    if a.fixture_quota == '0':
+        capacity = os.statvfs(mount)
+        assert capacity.f_blocks > 0 and capacity.f_bavail > 0, capacity
+        print('unlimited-quota filesystem capacity/free bytes PASS',flush=True)
     if a.mount_sync:
         options=subprocess.check_output(['findmnt','-rn','-o','OPTIONS','--target',str(mount)],text=True).strip().split(',')
         assert 'sync' in options,('mount sync flag absent',options)
