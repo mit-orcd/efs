@@ -8649,7 +8649,7 @@ static void *host_query_thread(void *ctx)
         h->query_cancel_checks=0; /* Always enforce the deadline before publication. */
         if (!rc && host_query_cancel(h)) { efs_query_catalog_free(candidate);candidate=NULL;rc=EFS_ERR_BUSY; }
         pthread_rwlock_wrlock(&h->query_lock);
-        h->query_error=rc;failed=rc!=EFS_OK;
+        h->query_error=rc;failed=rc!=EFS_OK ? (failed<5?failed+1:5) : 0;
         /* A failed disk build can itself exceed the retry interval. Start
          * its backoff at completion, otherwise a retained invalid namespace
          * immediately launches another full disk build. Successful refreshes

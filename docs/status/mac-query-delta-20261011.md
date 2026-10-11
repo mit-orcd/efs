@@ -727,3 +727,12 @@ multiprocess append still misses its original budget: 0/1, 31.4 seconds with
 normal cleanup. Partial RPC diagnostics show reserve 170 ms (65 calls) and
 REPORT 408 ms (22 calls); not a paired throughput comparison or acceptance.
 Evidence: append-completion-unit.txt and native-append-completion.txt.
+
+Consecutive failed derived query builds now retry after 2, 4, 8, 16 and at
+most 30 seconds, measured from completion. Success resets the delay; query
+errors and pending age remain visible, and no namespace bytes are skipped or
+repaired. This reduces repeated failed scratch rebuild pressure; it does not
+resolve the retained orphan or promise native acceptance. Boundary, huge-count,
+overflow and success-reset scheduling tests pass locally and on Mac Linux.
+The full Linux make test passed on the Mac seed after append completion and
+this retry change (latest-linux-unit.txt).
