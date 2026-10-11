@@ -110,7 +110,12 @@
               "observer_end_s": 31.249736000000212
             }
           ],
-          "pooled_raft_sync_ms": 2.450947335553705
+          "pooled_raft_sync_ms": 2.450947335553705,
+          "replicated_raft_syncs_per_completed_file": 11.72660699755899,
+          "replicated_raft_entries_per_completed_file": 13.538649308380798,
+          "raft_entries_per_sync": 1.1545240077713017,
+          "pooled_kv_release_ms": 0.8074769050867276,
+          "pooled_applied_persist_ms": 0.5529654307152602
         },
         "last": {
           "start_s": 570.000100145,
@@ -209,7 +214,12 @@
               "observer_end_s": 597.5992610000001
             }
           ],
-          "pooled_raft_sync_ms": 7.0399269197207675
+          "pooled_raft_sync_ms": 7.0399269197207675,
+          "replicated_raft_syncs_per_completed_file": 11.968668407310705,
+          "replicated_raft_entries_per_completed_file": 13.822454308093995,
+          "raft_entries_per_sync": 1.1548865619546247,
+          "pooled_kv_release_ms": 2.7013644509463286,
+          "pooled_applied_persist_ms": 2.3415690774435403
         }
       },
       "physical": {
@@ -360,7 +370,12 @@
               "observer_end_s": 31.244641999999885
             }
           ],
-          "pooled_raft_sync_ms": 0.10387634478149321
+          "pooled_raft_sync_ms": 0.10387634478149321,
+          "replicated_raft_syncs_per_completed_file": 12.298289805117328,
+          "replicated_raft_entries_per_completed_file": 12.710194882672676,
+          "raft_entries_per_sync": 1.0334928745445529,
+          "pooled_kv_release_ms": 0.016941263207695945,
+          "pooled_applied_persist_ms": 0.0018215376123639803
         },
         "last": {
           "start_s": 570.0001167309999,
@@ -459,7 +474,12 @@
               "observer_end_s": 596.4408919999998
             }
           ],
-          "pooled_raft_sync_ms": 0.10872504207635751
+          "pooled_raft_sync_ms": 0.10872504207635751,
+          "replicated_raft_syncs_per_completed_file": 9.984375,
+          "replicated_raft_entries_per_completed_file": 10.347287735849056,
+          "raft_entries_per_sync": 1.0363480674402812,
+          "pooled_kv_release_ms": 0.017165355620419563,
+          "pooled_applied_persist_ms": 0.003596539341886983
         }
       },
       "physical": {
@@ -610,7 +630,12 @@
               "observer_end_s": 31.77685500000007
             }
           ],
-          "pooled_raft_sync_ms": 2.5215920249751664
+          "pooled_raft_sync_ms": 2.5215920249751664,
+          "replicated_raft_syncs_per_completed_file": 11.754795663052544,
+          "replicated_raft_entries_per_completed_file": 13.457047539616347,
+          "raft_entries_per_sync": 1.14481339577125,
+          "pooled_kv_release_ms": 0.8956054882009092,
+          "pooled_applied_persist_ms": 0.6166981760121237
         },
         "last": {
           "start_s": 570.0001000540001,
@@ -709,7 +734,12 @@
               "observer_end_s": 598.3795020000002
             }
           ],
-          "pooled_raft_sync_ms": 7.091157176878112
+          "pooled_raft_sync_ms": 7.091157176878112,
+          "replicated_raft_syncs_per_completed_file": 12.060052219321149,
+          "replicated_raft_entries_per_completed_file": 13.767624020887729,
+          "raft_entries_per_sync": 1.1415890885473046,
+          "pooled_kv_release_ms": 2.7818555216479117,
+          "pooled_applied_persist_ms": 2.4211909212283045
         }
       },
       "physical": {
@@ -752,5 +782,5 @@
       }
     }
   ],
-  "limits": "Fresh three-voter clusters, fixed engine and NVMe data, changing metadata device. First/last completed approximately 30-second windows; cumulative non-atomic Raft histograms have sampling boundary skew. Host physical block counters include queue time and other I/O. W52 focused compilation/testing overlaps the first NVMe middle, not an uninstrumented exclusive-host ceiling. Cold checks sample 64 payloads per cell, not every file or power loss."
+  "limits": "Fresh three-voter clusters, fixed engine and NVMe data, changing metadata device. First/last completed approximately 30-second windows; cumulative non-atomic Raft histograms have sampling boundary skew. Sync/entry counts sum three replicas and include background work; they are not logical operation counts. Host physical block counters include queue time and other I/O. W52 focused compilation/testing overlaps the first NVMe middle, not an uninstrumented exclusive-host ceiling. Cold checks sample 64 payloads per cell, not every file or power loss."
 }

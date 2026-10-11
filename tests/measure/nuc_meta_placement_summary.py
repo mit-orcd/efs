@@ -36,12 +36,20 @@ for tag in ('0-nvme','1-sata','2-nvme'):
         ranges[label]['nodes']=nodes
         sync_n=sum(v['hist']['sync_us']['n'] for v in nodes)
         ranges[label]['pooled_raft_sync_ms']=sum(v['hist']['sync_us']['sum'] for v in nodes)/sync_n/1000 if sync_n else None
+        files=ranges[label]['files_s']*seconds
+        entries=sum(v['hist']['wal_entries']['sum'] for v in nodes)
+        ranges[label]['replicated_raft_syncs_per_completed_file']=sync_n/files if files else None
+        ranges[label]['replicated_raft_entries_per_completed_file']=entries/files if files else None
+        ranges[label]['raft_entries_per_sync']=entries/sync_n if sync_n else None
+        for phase in ('kv_release_us','applied_persist_us'):
+            count=sum(v['hist'][phase]['n'] for v in nodes)
+            ranges[label]['pooled_'+phase.replace('_us','_ms')]=sum(v['hist'][phase]['sum'] for v in nodes)/count/1000 if count else None
     disk_hosts=[dict(monotonic=r['seconds'],diskstats=r['diskstats']) for r in samples]
     physical={dev:windows(disk_hosts,dev,end) for dev in ('sda','nvme0n1')} if duration>=60 else {}
     accepted=json.loads((root/'complete.json').read_text()) if (root/'complete.json').exists() else None
     cells.append(dict(cell=tag,accepted=accepted,windows=ranges,physical=physical))
 complete=len(cells)==3 and all(r['accepted'] for r in cells) and all((a.root/n).exists() and (a.root/n).read_text().strip()=='0' for n in ('tests-exit.txt','restore-exit.txt'))
-report=dict(matrix_accepted=complete,cells=cells,limits='Fresh three-voter clusters, fixed engine and NVMe data, changing metadata device. First/last completed approximately 30-second windows; cumulative non-atomic Raft histograms have sampling boundary skew. Host physical block counters include queue time and other I/O. W52 focused compilation/testing overlaps the first NVMe middle, not an uninstrumented exclusive-host ceiling. Cold checks sample 64 payloads per cell, not every file or power loss.')
+report=dict(matrix_accepted=complete,cells=cells,limits='Fresh three-voter clusters, fixed engine and NVMe data, changing metadata device. First/last completed approximately 30-second windows; cumulative non-atomic Raft histograms have sampling boundary skew. Sync/entry counts sum three replicas and include background work; they are not logical operation counts. Host physical block counters include queue time and other I/O. W52 focused compilation/testing overlaps the first NVMe middle, not an uninstrumented exclusive-host ceiling. Cold checks sample 64 payloads per cell, not every file or power loss.')
 (a.root/'summary.json').write_text(json.dumps(report,indent=2)+'\n')
 for cell in cells:
     print(cell['cell'],'accepted',bool(cell['accepted']),{k:dict(files_s=round(v['files_s'],2),sync_ms=v['pooled_raft_sync_ms']) for k,v in cell['windows'].items()})
