@@ -73,7 +73,7 @@ static int incremental_nodes(struct efs_query_disk *d,struct efs_query_disk *old
     } else if(d->part[shard].inodes){fd=make_file(d,shard,'d');if(fd<0)rc=EFS_ERR_IO;}
     if(same && !(old->part[shard].dependencies&s->changed_partitions))return rc;
     if(!same)d->part[shard].dependencies=0;
-    efs_ino_t previous=0;
+    efs_ino_t previous=0;uint64_t old_at=0;
     for(uint64_t i=0;i<d->part[shard].inodes && !rc;i++){
         if(cancelled(d)){rc=EFS_ERR_BUSY;break;}
         struct disk_node n={0},before={0};int found=0,fold=0;
@@ -87,9 +87,14 @@ static int incremental_nodes(struct efs_query_disk *d,struct efs_query_disk *old
             if(!rc)for(unsigned k=3;k<11;k++)encoded=(encoded<<8)|key[k];
             if(!rc && (encoded!=n.row.ino || efs_kv_inode_shard(encoded)!=shard || (i && encoded<=previous)))rc=EFS_ERR_PROTO;
             previous=encoded;if(rc)break;
-            int lookup=locate(old,encoded,&before,NULL);
-            if(lookup && lookup!=EFS_ERR_NOT_FOUND){rc=lookup;break;}
-            found=!lookup;
+            /* Both streams are inode-sorted. A forward merge preserves the
+             * old stat/link without a binary lookup for every unchanged row. */
+            while(old_at<old->part[shard].inodes){
+                rc=node_at(old,shard,old_at,&before,0);if(rc)break;
+                if(before.row.ino>=encoded){found=before.row.ino==encoded;break;}
+                old_at++;
+            }
+            if(rc)break;
             /* Own-shard lane/PVER/DSEQ changes can affect getattr even if the
              * inode row is identical. Re-fold unless all stat inputs are proved row-only. */
             fold=1;
@@ -204,10 +209,17 @@ static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old
     for(uint32_t shard=0;shard<SHARDS && !rc;shard++){
         if(d->part[shard].revision==old->part[shard].revision)continue;
         /* Removed inode IDs still invalidate hard-link parents in old edges. */
+        uint64_t candidate_at=0;
         for(uint64_t i=0;i<old->part[shard].inodes && !rc;i++){
+            if(cancelled(d)){rc=EFS_ERR_BUSY;break;}
             struct disk_node n,now;rc=node_at(old,shard,i,&n,0);if(rc)break;
-            int lookup=locate(d,n.row.ino,&now,NULL);
-            if(lookup==EFS_ERR_NOT_FOUND)rc=changed_add(d,&s,n.row.ino);else if(lookup)rc=lookup;
+            int found=0;
+            while(candidate_at<d->part[shard].inodes){
+                rc=node_at(d,shard,candidate_at,&now,0);if(rc)break;
+                if(now.row.ino>=n.row.ino){found=now.row.ino==n.row.ino;break;}
+                candidate_at++;
+            }
+            if(!rc && !found)rc=changed_add(d,&s,n.row.ino);
         }
         if(!rc)rc=changed_dentries(d,old,&s,shard);
     }
