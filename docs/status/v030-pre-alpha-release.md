@@ -212,7 +212,8 @@ seven-client outcomes are recorded below.
 
 Protocol coordination reserves **transport** EFS_MSG141/142 for ORCD's
 undeployed bounded packed-RPC batching proposal. Checked free in this release
-header; all other owners notified. No new wire handlers are integrated yet.
+header; all other owners notified. Wire handlers were integrated in `dcf2f918` after native-qualified owner
+submission; mounted acceptance remains open.
 Durable metadata tags45-51/52/53 are separate. Any future batch must preserve
 capability fallback, exact per-record verdicts, retry identities and durable
 receipt/GC/fresh-authority checks.
@@ -258,5 +259,14 @@ overall pass. [Full parser-era native qualification](../../results/measure/20261
 preserves the earlier full passing normal/fault/sanitizer candidate.
 ORCD bounded transport batch `e5a38553` passes its native/focused gates but its
 seven-client live run is 209 PASS/4 FAIL/1 SKIP/7 NOTRUN per client. A packing-OFF
-control is in progress. That checkpoint is pending integration; reserved IDs
-141/142 are not yet implemented by the merged release candidate.
+control is in progress. That checkpoint is integrated in `dcf2f918`; IDs141/142 are capability-negotiated
+transport handlers. Native/fault/sanitizer qualification of the new merged source
+and both-mode seven-client jobs16 acceptance are next. AMD jobs4 results must
+not be represented as the ORCD jobs16 workload.
+
+ORCD same-revision packing-OFF control passes all seven clients at jobs16:
+220 PASS/0 FAIL/1 expected SKIP/0 NOTRUN, versus packing-ON 209/4/1/7. This
+narrows the unresolved workload failure to enabled packing. Global per-group
+packing context waits and repeated authority/admission RPCs are diagnostic
+candidates, not established causes. Review owner is examining the submitted
+batch for correctness independently of the performance acceptance.

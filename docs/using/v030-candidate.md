@@ -36,8 +36,10 @@ Upgrade all voting servers to understand new durable commands before admitting
 them. Packing reserves metadata tags45-51; APPEND_CATCHUP uses52. Unknown
 committed commands cannot safely be handled by rolling back to old server
 binaries. Client/server build negotiation and native wire layouts must also
-match. Proposed packed batching transport IDs141/142 are reserved but have no
-accepted implementation in this candidate.
+match. Packed batching transport IDs141/142 are integrated with capability-negotiated
+scalar fallback. The bounded implementation preserves per-record durable
+receipts and validates the entire reply before exposing record verdicts; live
+concurrent acceptance remains open.
 
 Select fragment I/O with `--direct-io` or `--no-direct-io`, and transport with
 `EFS_TRANSPORT=tcp|rdma|auto`. Keep the storage engine choice independent:
