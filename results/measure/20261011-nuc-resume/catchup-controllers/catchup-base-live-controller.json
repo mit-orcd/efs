@@ -1,12 +1,12 @@
 {
-  "pid": 109758,
+  "pid": 129781,
   "command": [
     "python3",
     "/data1/efs/devel-nuc-20261011/nuc_catchup_live_20261011.py",
     "--variant",
     "catchup-base"
   ],
-  "script_sha256": "76edb7d350ef7440b89f16cbccc75c86ec58b34cb247e579335074b7b32184f8",
-  "started_utc": "2026-10-11T21:29:48Z",
+  "script_sha256": "1ef549982517a9582bfc3e3e6e2767a6fe0aba9e9baeff4326cd5e0fdb040e60",
+  "started_utc": "2026-10-11T22:21:55Z",
   "scope": "Prerequisite-gated; normal drain, preserved stores"
 }

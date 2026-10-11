@@ -200,6 +200,7 @@ test-report-pressure:
 	python3 tests/test_append_session_admission.py
 	python3 tests/test_append_session_host.py
 	python3 tests/test_session_read_proof.py
+	python3 tests/test_pack_authority.py
 	python3 tests/test_append_host_authority.py
 	python3 tests/test_report_orphan.py
 
@@ -356,6 +357,8 @@ test: all
 	python3 tests/test_read_control_host.py
 	python3 tests/test_prepare_cohort.py
 	python3 tests/test_append_cohort.py
+	python3 tests/test_atomic_append_host.py
+	python3 tests/test_host_cover_route.py
 	python3 tests/test_namespace_leader_route.py
 	python3 tests/test_namespace_admission_rounds.py
 	python3 tests/test_session_combined_group.py
@@ -799,6 +802,6 @@ src/meta/pack_mapping.o: include/efs/pack_mapping.h include/efs/pack_ledger.h in
 tests/test_pack_cohort: tests/test_pack_cohort.c $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(LIB) $(LDFLAGS)
 
-src/server/raft_host.o: src/server/packed_gc.h
+src/server/raft_host.o: src/server/packed_gc.h src/server/pack_authority.h
 
 src/server/raft_host.o: src/server/publication_session_fast.h

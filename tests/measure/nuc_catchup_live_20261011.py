@@ -63,7 +63,10 @@ stopped = False
 try:
     prerequisite = base / ('clock-cold' if args.variant == 'catchup-base' else 'catchup-service-cold')
     native = base / (args.variant + '-build')
-    wait(lambda: accepted(prerequisite) and accepted(native), 21600, 'prior cold and native gates')
+    # This is only an idle scheduling wait. Two allowed three-hour long
+    # fixtures plus full suites/restarts cannot fit a six-hour root wait.
+    wait(lambda: accepted(prerequisite) and accepted(native),
+         21600 if args.variant == 'catchup-base' else 86400, 'prior cold and native gates')
     expected = json.loads((native / 'provenance.json').read_text())['core_sha256']
     current = {str(p.relative_to(src)): digest(p) for folder in ('src', 'include')
                for p in (src / folder).rglob('*') if p.suffix in ('.c', '.h')}

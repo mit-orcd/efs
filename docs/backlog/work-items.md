@@ -2345,8 +2345,8 @@ recapture. Actual-KV 20k/maximum-count, atomic-scope rollback, session/fencing,
 partial publication and cold/lost-COMMIT regressions pass on NUC. The full native
 suites passed for the initial matched builds. Release coordination then found
 that command tag 45 collides with ORCD packing; APPEND_CATCHUP is reassigned to
-52 before any NUC admission. New-tag native, direct/buffered live, deployed
-20k and cold gates remain pending. All voters must
+52 before any NUC admission. Both corrected-tag native suites pass.
+Direct/buffered live, deployed 20k and cold gates remain pending. All voters must
 support the new log command; no timeout or durability guarantee is relaxed.
 [Implementation and acceptance ledger](../status/nuc-w52-w97-resume-20261011.md).
 

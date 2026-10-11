@@ -674,3 +674,124 @@ partial rejection/BUSY results, once-only cache consumption, oldest receipt retr
 partial cleanup credits and rejected bytes retained for ordinary rebase. Full
 native and live seven-client deployment gates are pending. This is a pressure
 reduction candidate, not evidence that the directory/query timeouts are resolved.
+
+
+## Batch deployment and same-revision packing control
+
+`e5a385530223` passes full native Linux `make all`/`make test` with all 662
+tracked sources matching, all ten staged builds, exact runtime identity on all
+eleven processes and pinned stats. The RPC fault gate also passes ASan/UBSan.
+The quiet seven-client packing-enabled workload still fails uniformly: 209 PASS,
+four FAIL, one expected SKIP and seven NOTRUN per client, 44.6–46.3 seconds.
+Failures are deep nesting, cancelled dir_many_files, stats timeout and downstream
+find worker cancellation. This does not close mounted acceptance.
+
+The same revision, seven clients, jobs=16 and existing 30-second case deadlines
+with packing disabled passes on every client: 220 PASS, zero FAIL, one expected
+SKIP, zero NOTRUN, 47.0–48.7 seconds. Raw 21-file result sets are retained for
+both controls. This narrows the problem to packing under concurrent load. Query
+transaction-cut and authority fences remain intact.
+
+The first phase diagnostic is invalid as a seven-client comparison: two remounts
+failed because old processes held their mount locks; those clients accidentally
+ran on ordinary local directories. Their results are excluded. Five mounted
+clients spent 25–29 seconds in deep mkdir, before a 0.4–0.6-second leaf close/read
+and roughly 1–2-second rmtree. The remount helper now waits for actual flock
+release, and the second diagnostic started only after all eleven processes and
+seven packing-enabled mounts were verified. All seven then reproduced the four
+failures before deep mkdir completed. Profiling is diagnostic, not acceptance.
+Metadata-server samples include many fresh ReadIndex waits, ordinary GC activity
+and one batch publication handler; they do not prove a stuck leaf cohort.
+
+An inventory of all 24 active storage roots finds 126,656 packed-data directories
+for 21,540 fragment files, approximately 5.88 directories per fragment. All these
+packed writes are in configured root zero. Random PackIDs use five decimal
+hierarchy levels plus generation; PUT/retry establishes file and ancestor
+durability. This is measured filesystem metadata amplification, not yet proof of
+the timeout cause. Shallow paths would require backward read/retry/GC and cold
+fault validation; no path-format change has been made. Another bounded candidate
+is a whole-cohort upload-authority request, avoiding repeated per-record remote
+writer-view forwarding from storage nodes that do not host both metadata groups.
+
+
+## Whole-cohort upload authority candidate
+
+Reserved packets 143/144 carry one read-only, manifest-bound authority envelope
+for at most 16 records. A non-dual storage host forwards the complete envelope
+to a dual-group replica. That request establishes both fresh metadata barriers,
+checks global and participant session authority, exact durable admission and
+every current FileID/content epoch. Remote observations do not seed local
+coverage. Local durable session and exact-object storage fences still follow.
+Unsupported or malformed service replies use independently fresh legacy checks;
+BUSY, stale authority and network uncertainty never grant a PUT permit.
+
+Focused native build, actual buffered/direct storage and authority tests pass,
+including last-record epoch/FileID failures, fencing/reclamation, exact frame
+lengths, digest binding, lost replies and safe fallback. Existing mounted retry,
+admission, fanout and batch ownership gates also pass. Full merged native and
+quiet mounted acceptance remain pending. This is not a timeout closure claim.
+
+
+## Latest branch reconciliation before qualification
+
+All frozen local branch tips in `latest-ref-snapshot.json` are ancestors of this
+branch, including release a77d83d5, Mac 0f869394, NUC 75bc93ad, Intel 60c86d88
+and review 16422542. The tested GC backlog signal is included. Mac atomic APPEND
+uses durable tag 53 alongside NUC catch-up tag 52 and packed tags 45–51. General
+cross-shard APPEND retains the ordered session/inode PREPARE guards; the atomic
+path is limited to its independently verified single-shard leader eligibility.
+Dynamic exact-image capture is bounded at twice the ordinary image count so the
+atomic predicate-version images cannot overrun NUC's smaller completion allocation.
+The combined CREATE implementation already reconciled in the release is retained
+with its negative/unknown reply cleanup and competing OPEN barrier tests; the
+Mac alternative pointer ownership implementation is superseded by that equivalent
+reviewed path. Generated architecture artifacts were regenerated from sources.
+
+The review's old-peer batch fallback patch is applied to production: after NET,
+only a fresh successful scalar-only capability probe permits exact scalar replay.
+Failed probes and all-modern peers retain immutable batch ownership. The actual
+scheduler test passes all three cases for publication and retirement. The upload
+authority helper now uses the merged request-local session coverage mask API;
+the earlier intermediate native link failure is retained and is not a pass.
+Local focused authority, atomic APPEND, CREATE credentials, OPEN deadline and
+lease retention gates pass. Full exact merged native qualification is next.
+
+
+The new authority RPC is preceded by an existing PACK_CAPABILITIES request for
+level 3. New servers answer 3 only to that request; existing client level-2 and
+legacy empty probes retain their responses. Old packed peers answer unsupported
+without receiving opcode 143, allowing fresh legacy authority fallback. Focused
+tests prove no new opcode is sent to such a peer and do not cache authority.
+
+The first fully merged native run compiled successfully, then exposed a test
+extractor that included the newly adjacent reservation adapter without its
+ordered guard dependencies. The pruning/close cohort extractor now excludes
+that unrelated wrapper; its original fault assertions remain and pass locally.
+That interrupted suite remains failed evidence, not full native acceptance.
+
+
+The next native run passed atomic APPEND cold replay and the actual ordered
+PREPARE fault checks, then failed their structural location assertion because
+the general adapter is now behind the atomic selector. The assertion now
+follows that wrapper and verifies both selection and unchanged ordered guard
+configuration. This test-only correction passes locally; a complete native
+rerun is still required and this interrupted run is retained as failed.
+
+
+The review fallback adds a forward declaration outside the scalar fixture's
+extracted functions. Dedicated admission and fanout extracts omit that unrelated
+declaration; the scalar retry fixture supplies a non-downgrading boundary double.
+The capability fixture executes the actual fresh helper and proves modern,
+failed probe, confirmed older peer, failed probe after an older result, and
+modern recovery. All four corrected fixtures pass against the Linux library
+with their existing warning checks. Batch ownership continues to use the actual
+helper in its separate fault gate. No production behavior changed in these
+fixture corrections. Full native acceptance remains pending.
+
+
+Atomic tag53 introduced a plan-size dependency in the minimal tag52 catch-up
+fixture's copied admission switch. That fixture now excludes the unrelated
+tag53 arm while preserving all catch-up charge and routing assertions. The
+real-header host pressure gate explicitly checks atomic plan plus predicate
+image charging. Both pass locally. This is fixture reconciliation, not reduced
+production accounting or a larger admission limit.

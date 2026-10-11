@@ -45,6 +45,9 @@ int main(void) {
  h.g[0].host=&h;h.g[0].r=(struct efs_raft*)&h;
  uint8_t close_step[46]={EFS_MD_CMD_CLOSE_STEP};
  assert(host_pressure_command_charge(close_step,sizeof(close_step))>=host_pressure_rows_charge(64,1,0));
+ uint8_t atomic_append=EFS_MD_CMD_APPEND_ATOMIC;
+ assert(host_pressure_command_charge(&atomic_append,1)>=sizeof(struct efs_meta_append_plan)+
+        host_pressure_rows_charge(2*(EFS_META_LANES+5),1,EFS_OPID_VAL_MAX));
  assert(host_pressure_recovery(close_step,sizeof(close_step)));
  uint8_t deferred[EFS_MD_SESS_LEASE_EDGE_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_LEASE_EDGE_DEFERRED};
  assert(host_pressure_command_charge(deferred,sizeof(deferred))>=host_pressure_rows_charge(19,1,EFS_OPID_VAL_MAX));

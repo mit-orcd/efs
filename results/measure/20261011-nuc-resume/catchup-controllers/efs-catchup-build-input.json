@@ -1,7 +1,9 @@
 {
-  "source_commit": "9598d03e",
-  "engine_commit": "32b472c5",
-  "archive_sha256": "4a9fb64184fdfe4296859e1978daea5bda44cd499d36991f9e4ab2f8ba9b0850",
+  "source_commit": "ba73f3043f6e986ef63518e3657e7409c3777566",
+  "engine_commit": "ba73f3043f6e986ef63518e3657e7409c3777566",
+  "command_tag": 52,
+  "archive_name": "efs-catchup-ba73f304.tar.gz",
+  "archive_sha256": "a25f8e71792dfa8cef02c1dc4b8929b1b64d1c96a49a0686a228f62e39a84fcb",
   "core_sha256": {
     "src/bench/storage_churn.h": "7e711b02a412d7729ef9bf8832dc95ea713ab53e38c621179b2966c83eb688b3",
     "src/bench/storage_principles.h": "5e9fc23c21af09c88ad572da38b36191b49672701ceea881b7f921633d08e77a",
@@ -149,7 +151,7 @@
     "include/efs/fence_view.h": "aadce923ff03a81b82dd719dca8e156ef48fa26aed98ac1fba9a53909f25d26e",
     "include/efs/writer_state.h": "1a350f195a79947b772d3a08cf33efffb050ae53fe7c591af241398e8efd25c0",
     "include/efs/put_upload.h": "2230c8ea054d3e9edce59389c2a03865c97b1fca2e67bee7ba8166b5e8bc78c0",
-    "include/efs/meta_cmd.h": "0b02d2b1d0938c73568910abd42bd3655a2f94c0e56171c74851155d42b19bd9",
+    "include/efs/meta_cmd.h": "cb08a0adcb60a16c9610a3fb8ca3f0d2e17abc951eb68ce1fc5e516d07dbb45c",
     "include/efs/rdma.h": "127a3e98094078aba0a74493fc3f609f9868bd5d966abce909aae580d653d4a2",
     "include/efs/pack_ledger.h": "7a0e45b4537f82282224446824dab9e3691b6810ac1fd754aa627d67a67f67d1",
     "include/efs/kv_snap.h": "449085ae1063359f45fb7fe09532160a38994f81d5a3c454b1f57001c28d0831",
@@ -168,9 +170,9 @@
     "include/efs/publication.h": "8ad69f7dbe3a56b8c4ebf1b608e9c646311d3cf5a088c3af7fbc5e2fbee665b0",
     "include/efs/checksum.h": "ebaa683d44735eddb9ed4ae3f0e8d28fcbedded155633bf3cd75817ae5fc6fba",
     "include/efs/kv_key.h": "44f9119b7eb9b52d1e05663920af4139c0aa166897256fbf697e507161b7ad85",
-    "Makefile": "66f0e14be8f3b2952d4bc4ff274dbcaec1c1bb21c6de52dd372b7ea30cf5494e"
+    "Makefile": "7159099dffcb3a4b70c4ebb201c06542cc27d41158c18992514f3bde8397253e"
   },
-  "baseline_root_overlay_sha256": "473b96d60de484afad9e3b663149d1dece4d7f2deef272754377f4c966e252b5",
+  "baseline_root_overlay_sha256": "8202854cb067717a9a336c0241da0afac2f92204f84fdd5faa3d19652392c214",
   "baseline_root_files": {
     "src/server/store.c": "ed43832a3f8e03c19ddb4d2aee6bd3cdbd47b4a124bb29f9355667e1dbf77274",
     "src/server/packed_fence.h": "2be060b131268760db82dfd0604d581aa7b0aa25ab2c80d3afc3a6f30a6a63e4",

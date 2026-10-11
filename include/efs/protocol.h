@@ -198,6 +198,8 @@ enum efs_msg_type {
     EFS_MSG_PACK_CAPABILITIES_REPLY = 140,
     EFS_MSG_PUBLICATION_BATCH = 141,
     EFS_MSG_PUBLICATION_BATCH_REPLY = 142,
+    EFS_MSG_PACK_AUTHORITY = 143,
+    EFS_MSG_PACK_AUTHORITY_REPLY = 144,
 };
 
 /* Storage session seal/check. Reply echoes the exact identity and floor.
@@ -994,6 +996,18 @@ static inline size_t efs_publication_batch_bytes(uint32_t count)
 { return offsetof(struct efs_msg_publication_batch,records)+count*sizeof(struct efs_msg_publication); }
 static inline size_t efs_publication_batch_reply_bytes(uint32_t count)
 { return offsetof(struct efs_msg_publication_batch_reply,records)+count*sizeof(struct efs_msg_publication_reply); }
+
+/* Read-only upload authority: [version:1][group:1][canonical EFSUPLD1].
+ * The digest binds the entire envelope; OK means every record's current
+ * FileID/content epoch and the exact durable admission were checked. Storage
+ * must still take its local durable session and object-fence guards. */
+#define EFS_PACK_AUTHORITY_VERSION 1u
+#define EFS_PACK_AUTHORITY_MAX 16u
+struct efs_msg_pack_authority_reply {
+    uint32_t version,group,count;
+    int32_t rc;
+    uint8_t digest[EFS_HASH_SIZE];
+};
 
 /* Resolve the publication epoch before any registration/proposal side effect.
  * The apply-side fence check must still cover a race after this snapshot. */

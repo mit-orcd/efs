@@ -5,6 +5,12 @@ import os,subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text()
 a=s.index('#define HOST_CMD_COHORT_MAX');b=s.index('/* DECIDE COMMIT at the coordinator',a)
 c=s.index('struct host_append_batch {');d=s.index('static int host_append_transaction(',c)
+batch=s[c:d]
+# Reservation uses the separately tested ordered guard adapter. This gate
+# exercises pruning and close cohorts, not that adjacent reservation wrapper.
+start=batch.index('static int host_append_execute_batched(')
+end=batch.index('\n}',start)+2
+batch=batch[:start]+batch[end:]
 code=r'''
 #include "efs/raft.h"
 #include "efs/meta_apply.h"
@@ -65,7 +71,7 @@ int efs_meta_finish_append_close(struct efs_kv *k,efs_ino_t ino,uint64_t off,con
  rc=ops->decide(ctx,t,&parts,EFS_TXN_COMMIT);return rc?rc:ops->resolve(ctx,t,&parts,EFS_TXN_COMMIT);}
 int efs_meta_prune_append_close(struct efs_kv *k,efs_ino_t ino,const uint8_t identity[36],const struct efs_txid *t,const struct efs_meta_append_ops *ops,void *ctx,unsigned *removed){
  int rc=efs_meta_finish_append_close(k,ino,8,identity,t,ops,ctx);*removed=rc?0:8;return rc;}
-'''+s[c:d]+r'''
+'''+batch+r'''
 static void reset(void){submitted=holds=waited=commits=aborts=resolves=prepared=first_prepared=0;first_prepare_rc=reopen=0;sync_rc=wait_rc=commit_rc=abort_rc=pack_rc=execute_rc=0;}
 int main(void){struct efs_raft_disk disk={0};struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.disk=&disk,.r={.role=EFS_RAFT_LEADER}};
  struct efs_txid t={0};int hint=-1;unsigned removed;

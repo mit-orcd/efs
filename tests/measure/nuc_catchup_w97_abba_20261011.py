@@ -183,7 +183,7 @@ def pin_leaders(roots,cell):
 
 service_stopped=False
 try:
- wait(lambda:all(accepted(n) for n in ('catchup-base-build','catchup-root-build','catchup-base-live','catchup-install','catchup-service-cold','catchup-root-live')),43200,'full matched native/live/cold acceptance')
+ wait(lambda:all(accepted(n) for n in ('catchup-base-build','catchup-root-build','catchup-base-live','catchup-install','catchup-service-cold','catchup-root-live')),108000,'full matched native/live/cold acceptance')
  baseline=json.loads((session/'catchup-base-build/provenance.json').read_text())['core_sha256']
  candidate=json.loads((session/'catchup-root-build/provenance.json').read_text())['core_sha256']
  assert set(baseline)==set(candidate)

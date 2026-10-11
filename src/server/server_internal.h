@@ -442,6 +442,8 @@ void server_raft_host_publication(const struct efs_msg_publication *, int query_
                                   struct efs_msg_publication_reply *);
 void server_raft_host_publication_batch(const struct efs_msg_publication_batch *,
                                         struct efs_msg_publication_batch_reply *);
+void server_raft_host_pack_authority(const uint8_t *,uint32_t,
+                                    struct efs_msg_pack_authority_reply *);
 void server_raft_host_lane_writer_view(const struct efs_msg_lane_writer_view *,
                                         struct efs_msg_lane_writer_view_reply *);
 /* Internal cold coordinator; not enabled in application write admission yet. */

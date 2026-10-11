@@ -2058,7 +2058,7 @@ Spark performance measurement still owed. Grouped open counts are now
 
 ### Intel follow-ups — W100–W106 (indexed Oct 11, 2026)
 
-Current [devel-intel acceptance ledger](../status/intel-deployment-acceptance-20261011.md) retains failures alongside reruns. Frozen `5abf8e7b` retains the certified APPEND cleanup repair and corrects exact salted namespace and physical compactor-drain fixtures. Corrected live reviews precede fresh complete TCP/direct and TCP/buffered acceptance on both Intel hosts; preceding real namespace/compactor failures remain retained. Its four targeted live APPEND reviews pass. The preceding retained-CREATE candidate passed all four 214/214 POSIX cores but failed Intel2 APPEND cleanup; its unfinished remainder remains required. The superseded 1,000 ms trial passed 110 main checks and 30 canonical rounds on each host but failed the supplemental CREATE injection. Earlier candidates and partial checkpoints are archived; no partial or failed trial establishes deployment acceptance.
+Current [devel-intel acceptance ledger](../status/intel-deployment-acceptance-20261011.md) retains failures alongside reruns. Frozen `0ae7e480` retains the certified APPEND cleanup repair and corrects exact salted namespace and physical compactor-drain fixtures. All corrected namespace/compactor live reviews pass on both hosts; the confirmed worker allocation errno repair passes all six focused direct/buffered fault fixtures on each host before fresh complete qualification with six standalone cold-safety gates and TCP/direct and TCP/buffered acceptance on both Intel hosts; preceding real namespace/compactor failures remain retained. Its four targeted live APPEND reviews pass. The preceding retained-CREATE candidate passed all four 214/214 POSIX cores but failed Intel2 APPEND cleanup; its unfinished remainder remains required. The superseded 1,000 ms trial passed 110 main checks and 30 canonical rounds on each host but failed the supplemental CREATE injection. Earlier candidates and partial checkpoints are archived; no partial or failed trial establishes deployment acceptance.
 
 This index adds traceable IDs to the Intel acceptance follow-ups; it does not change the existing queue order or accepted design decisions. Existing sustained tiny-file performance remains W97, protection/repair W74/W66, durability W71/W73 and capacity W99.
 
@@ -4869,8 +4869,8 @@ recapture. Actual-KV 20k/maximum-count, atomic-scope rollback, session/fencing,
 partial publication and cold/lost-COMMIT regressions pass on NUC. The full native
 suites passed for the initial matched builds. Release coordination then found
 that command tag 45 collides with ORCD packing; APPEND_CATCHUP is reassigned to
-52 before any NUC admission. New-tag native, direct/buffered live, deployed
-20k and cold gates remain pending. All voters must
+52 before any NUC admission. Both corrected-tag native suites pass.
+Direct/buffered live, deployed 20k and cold gates remain pending. All voters must
 support the new log command; no timeout or durability guarantee is relaxed.
 [Implementation and acceptance ledger](../status/nuc-w52-w97-resume-20261011.md).
 
@@ -9076,6 +9076,22 @@ writes share an inode.
   a monotone allocation cursor derived from observed EOF, never an
   independent counter.
 
+  A registered reservation whose inode, cursor, receipt, reservation and all
+  active lane images belong to one participant shard may use
+  `APPEND_ATOMIC` (command 53). The leader sends the exact captured images;
+  This requires local leadership of that shard with multiple voters; follower
+  coordinators retain forwarded PREPARE/DECIDE/RESOLVE to avoid redirect loops.
+  Replicas validate their canonical receipt fold, established session floor,
+  pending intents/shared guards and every old image before one atomic KV batch.
+  No replica chooses its own EOF. Conflicts install nothing; storage failures
+  retry the entry. Exact replay returns the original reservation without a
+  new effect. Each input key’s transaction predicate version advances in
+  the same batch, matching ordinary EXCL commit semantics; delayed pre-entry
+  guards fail and exact replay advances neither images nor versions.
+  Multi-shard reservations retain coordinated PREPARE/DECIDE/RESOLVE.
+  All daemons must understand this command before it is admitted; older binaries
+  cannot replay its entries. It does not change existing stored row formats.
+
   **Validating EOF once is not enough — the barrier must outlive the
   reservation.** POSIX couples EOF determination and the append write into
   one atomic step, so no intervening modification may fall between them.
@@ -9900,6 +9916,15 @@ because POSIX open-unlinked semantics require it, and it costs one Raft
 entry at each end of a session's use of a file. A fenced (dead) client's
 leases are safely retired by recovery, and a stale session's lease can
 neither keep an inode alive nor be reused (I19). Reclaim is L6.
+
+The production FUSE CREATE path combines its first OPEN with clearing the
+exact pending-CREATE token in one sequenced lease edge. It retains the
+exact combined edge and pending token while that edge is unresolved. A proven successful
+edge settles adoption before releasing that ownership; cleanup first proves the
+same edge, then compensates its OPEN with CLOSE and avoids a duplicate
+CLEAR_PENDING. A proven negative OPEN leaves ordinary pending-token cleanup
+responsible for the CREATE. Existing local open ownership retains the
+separate adoption path, and all waits share the caller’s original deadline.
 
 ### Distributed POSIX locking
 

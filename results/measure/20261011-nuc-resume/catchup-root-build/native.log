@@ -1,6 +1,6 @@
 make tests/test_put_storage_fence
 make[1]: Entering directory '/data1/efs/devel-nuc-20261011/catchup-root-src'
-gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"32b472c5-root-nuc"' -DEFS_VERSION='"32b472c5-root-nuc"' -DEFS_GIT_BRANCH='"devel-nuc"' -DEFS_BUILD_TIME='"2026-10-11T21:30:19Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_put_storage_fence tests/test_put_storage_fence.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"ba73f304-root-nuc"' -DEFS_VERSION='"ba73f304-root-nuc"' -DEFS_GIT_BRANCH='"devel-nuc"' -DEFS_BUILD_TIME='"2026-10-11T22:11:47Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_put_storage_fence tests/test_put_storage_fence.c libefs.a -lpthread -lm -ldl -libverbs
 make[1]: Leaving directory '/data1/efs/devel-nuc-20261011/catchup-root-src'
 ./tests/test_put_storage_fence
 storage session fence: full UUID, monotonic cold floor, guarded-write ordering, file/directory sync failures and corrupt-certificate rejection PASS
@@ -14,13 +14,13 @@ raft-session status=0 rc=0 primary=0 op=fence ssh=7 shard=1 epoch=5 state=1 touc
 session FINISH: BUSY retries keep UUID/epoch, one BEGIN, both cleanup stages PASS
 make tests/test_put_upload_server
 make[1]: Entering directory '/data1/efs/devel-nuc-20261011/catchup-root-src'
-gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"32b472c5-root-nuc"' -DEFS_VERSION='"32b472c5-root-nuc"' -DEFS_GIT_BRANCH='"devel-nuc"' -DEFS_BUILD_TIME='"2026-10-11T21:30:20Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_put_upload_server tests/test_put_upload_server.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"ba73f304-root-nuc"' -DEFS_VERSION='"ba73f304-root-nuc"' -DEFS_GIT_BRANCH='"devel-nuc"' -DEFS_BUILD_TIME='"2026-10-11T22:11:47Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_put_upload_server tests/test_put_upload_server.c libefs.a -lpthread -lm -ldl -libverbs
 make[1]: Leaving directory '/data1/efs/devel-nuc-20261011/catchup-root-src'
 ./tests/test_put_upload_server
 ticketed PUT receiver: exact frame/checksum/FileID, ADMITTED-only authority, IO retention, exact retry and revoke-before-store floor PASS
 make tests/test_put_upload_client
 make[1]: Entering directory '/data1/efs/devel-nuc-20261011/catchup-root-src'
-gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"32b472c5-root-nuc"' -DEFS_VERSION='"32b472c5-root-nuc"' -DEFS_GIT_BRANCH='"devel-nuc"' -DEFS_BUILD_TIME='"2026-10-11T21:30:20Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_put_upload_client tests/test_put_upload_client.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"ba73f304-root-nuc"' -DEFS_VERSION='"ba73f304-root-nuc"' -DEFS_GIT_BRANCH='"devel-nuc"' -DEFS_BUILD_TIME='"2026-10-11T22:11:48Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_put_upload_client tests/test_put_upload_client.c libefs.a -lpthread -lm -ldl -libverbs
 make[1]: Leaving directory '/data1/efs/devel-nuc-20261011/catchup-root-src'
 ./tests/test_put_upload_client
 ticketed PUT client: immutable fragments, ADMITTED-only fresh probe, bounded inherited deadline, lost reply drop and exact retry PASS
@@ -112,25 +112,25 @@ opid-admission: BUSY oldest=52 next=68 live=16 window=16
 namespace admission: waits before allocation, exact one identity, inherited deadline sends nothing PASS
 namespace opid saturation: four mutations send nothing, released admission keeps watermark, sequence overflow refused PASS
 python3 tests/test_server_processes.py
-Stopped efsd for storage /tmp/efs-owner-u9ou8me2/store (if any)
-Stale daemon identity for PID 110909; process retained
-Stopped efsd for storage /tmp/efs-owner-u9ou8me2/store (if any)
-Invalid PID record /tmp/efs-owner-u9ou8me2/store/log/efsd.pid; no process signaled
-Stopped efsd for storage /tmp/efs-owner-u9ou8me2/store (if any)
-Invalid PID record /tmp/efs-owner-u9ou8me2/store/log/efsd.pid; no process signaled
-Stopped efsd for storage /tmp/efs-owner-u9ou8me2/store (if any)
-Stale daemon identity for PID 110902; process retained
-Stopped efsd for storage /tmp/efs-owner-u9ou8me2/store (if any)
-Stale daemon identity for PID 110903; process retained
-Stopped efsd for storage /tmp/efs-owner-u9ou8me2/store (if any)
-Stale daemon identity for PID 110903; process retained
-Stopped efsd for storage /tmp/efs-owner-u9ou8me2/other (if any)
-Stopping owned efsd PID 110903 (storage /tmp/efs-owner-u9ou8me2/store)
-Stopped efsd for storage /tmp/efs-owner-u9ou8me2/store (if any)
-Stale daemon identity for PID 110952; process retained
-Stale daemon identity for PID 110902; process retained
-Stopping owned perf PID 110952 (perf /tmp/efs-owner-u9ou8me2/efsd.data)
-Evidence: /tmp/efs-wrapper-start-vwfkljv1
+Stopped efsd for storage /tmp/efs-owner-y_gsko2z/store (if any)
+Stale daemon identity for PID 124115; process retained
+Stopped efsd for storage /tmp/efs-owner-y_gsko2z/store (if any)
+Invalid PID record /tmp/efs-owner-y_gsko2z/store/log/efsd.pid; no process signaled
+Stopped efsd for storage /tmp/efs-owner-y_gsko2z/store (if any)
+Invalid PID record /tmp/efs-owner-y_gsko2z/store/log/efsd.pid; no process signaled
+Stopped efsd for storage /tmp/efs-owner-y_gsko2z/store (if any)
+Stale daemon identity for PID 124108; process retained
+Stopped efsd for storage /tmp/efs-owner-y_gsko2z/store (if any)
+Stale daemon identity for PID 124109; process retained
+Stopped efsd for storage /tmp/efs-owner-y_gsko2z/store (if any)
+Stale daemon identity for PID 124109; process retained
+Stopped efsd for storage /tmp/efs-owner-y_gsko2z/other (if any)
+Stopping owned efsd PID 124109 (storage /tmp/efs-owner-y_gsko2z/store)
+Stopped efsd for storage /tmp/efs-owner-y_gsko2z/store (if any)
+Stale daemon identity for PID 124158; process retained
+Stale daemon identity for PID 124108; process retained
+Stopping owned perf PID 124158 (perf /tmp/efs-owner-y_gsko2z/efsd.data)
+Evidence: /tmp/efs-wrapper-start-n2hgupo4
 wrapper real start/stop: invalid unrelated process retained PASS
 wrapper real start/stop: unrelated unrelated process retained PASS
 wrapper real start/stop: dead unrelated process retained PASS
@@ -190,7 +190,7 @@ applied cursor: atomic proof, legacy upgrade and strict recovery refusal PASS
 python3 tests/test_tiny_fragment_audit.py
 ..
 ----------------------------------------------------------------------
-Ran 2 tests in 0.002s
+Ran 2 tests in 0.001s
 
 OK
 python3 tests/test_bench_cli.py
@@ -208,7 +208,7 @@ python3 tests/test_bench_profile.py
 Generating reports for 2 profiles, up to 4 parallel jobs
 [reports 1/2] data-direct-w0-qd1: FAIL
 [reports 2/2] data-buffered-w0-qd1: FAIL
-Results and analysis: /tmp/profile test o1avv1qp/output/ANALYSIS.md
+Results and analysis: /tmp/profile test ke1v8nn9/output/ANALYSIS.md
 Storage coverage: one location; supply --storage-root twice for multi-location comparisons
 ..Storage coverage: one location; supply --storage-root twice for multi-location comparisons
 [1/2] data-buffered-w0-qd1
@@ -216,7 +216,7 @@ Storage coverage: one location; supply --storage-root twice for multi-location c
 Generating reports for 2 profiles, up to 4 parallel jobs
 [reports 1/2] data-buffered-w0-qd1: OK
 [reports 2/2] data-direct-w0-qd1: OK
-Results and analysis: /tmp/profile test e1kfvojn/output/ANALYSIS.md
+Results and analysis: /tmp/profile test jatvfi0y/output/ANALYSIS.md
 Storage coverage: one location; supply --storage-root twice for multi-location comparisons
 ..Reports unavailable: missing: perf.data missing
 Generating reports for 0 profiles, up to 4 parallel jobs
@@ -224,16 +224,16 @@ Generating reports for 0 profiles, up to 4 parallel jobs
 [1/2] data-buffered-w0-qd1
 [2/2] data-direct-w0-qd1
 Generating reports for 2 profiles, up to 4 parallel jobs
-[reports 1/2] data-direct-w0-qd1: FAIL
-[reports 2/2] data-buffered-w0-qd1: FAIL
-Results and analysis: /tmp/profile test ovfabsvh/output/ANALYSIS.md
+[reports 1/2] data-buffered-w0-qd1: FAIL
+[reports 2/2] data-direct-w0-qd1: FAIL
+Results and analysis: /tmp/profile test oqombjtb/output/ANALYSIS.md
 Storage coverage: one location; supply --storage-root twice for multi-location comparisons
 ....
 ----------------------------------------------------------------------
-Ran 20 tests in 2.931s
+Ran 20 tests in 2.820s
 
 OK
-Results and analysis: /tmp/tmp9gumxa1c/ANALYSIS.md
+Results and analysis: /tmp/tmpha3omixy/ANALYSIS.md
 ./tests/test_principles_index
 indexed principles: 18 crash points, conditional identity, 4800 churn operations, cold bytes/quota/physical GC and corrupt-evidence refusal PASS
 ./tests/test_principles_index_fault
@@ -241,7 +241,7 @@ indexed fault gates: four publication barriers, ten short-write/ENOSPC boundarie
 python3 tests/test_storage_principles.py
 .............
 ----------------------------------------------------------------------
-Ran 13 tests in 9.743s
+Ran 13 tests in 9.760s
 
 OK
 python3 tests/test_bench_ranges.py
@@ -253,19 +253,19 @@ OK
 python3 tests/test_storage_ranges.py
 ......
 ----------------------------------------------------------------------
-Ran 6 tests in 16.681s
+Ran 6 tests in 17.949s
 
 OK
 python3 tests/test_storage_churn.py
 ...........
 ----------------------------------------------------------------------
-Ran 11 tests in 239.876s
+Ran 11 tests in 237.535s
 
 OK
 python3 tests/test_bench_churn.py
 ........
 ----------------------------------------------------------------------
-Ran 8 tests in 0.166s
+Ran 8 tests in 0.171s
 
 OK
 python3 docs/check-architecture.py
@@ -368,7 +368,7 @@ stop drain: detached REPORT ownership, unresolved body refusal and deadline rest
 python3 tests/test_fixture_interrupt.py
 background fixture SIGINT/SIGTERM finally cleanup PASS
 python3 tests/test_client_processes.py
-Retiring drained efs-fuse PID 113442 for /tmp/efs-process-owner-3dy8zoem/mount
+Retiring drained efs-fuse PID 126448 for /tmp/efs-process-owner-388prb70/mount
 client processes: detached discovery and ambiguous command refusal PASS
 make[1]: Leaving directory '/data1/efs/devel-nuc-20261011/catchup-root-src'
 make test-lookup-memo
@@ -490,7 +490,7 @@ network send: partial/full socket deadlines, expired admission, wire framing and
 python3 tests/test_connect_deadline.py
 connect: parent deadline, EINTR, late success, flag restoration and errno cleanup PASS
 python3 tests/test_resolver_deadline.py
-checkout-local hung DNS elapsed_ms=51 restored_deadline=0 busy=0 peer_failures=0
+checkout-local hung DNS elapsed_ms=50 restored_deadline=0 busy=0 peer_failures=0
 resolver: hung NSS deadlines, eight-job cap, late completion ownership, thread failure and hostname connect and checkout-local DNS budget PASS
 python3 tests/test_rdma_reply_budget.py
 RDMA wrapper: shared deadline, late-frame repost, TCP fallback and malformed ownership PASS
@@ -517,7 +517,7 @@ python3 tests/test_put_retry_budget.py
 put_fragments ino=1 chunk=0 nodes=1,2,3 attempt 1/4 failed: injected (efs_rc=-6) — retrying
 PUT retry: inherited backoff, no expired sends/reprobes, stable object and terminal outcomes PASS
 python3 tests/test_put_reply_deadline.py
-mode=0 rc=-13 elapsed_ms=15 sent=3 drops=3 releases=0 peer_fail=0
+mode=0 rc=-13 elapsed_ms=16 sent=3 drops=3 releases=0 peer_fail=0
 mode=1 rc=0 elapsed_ms=15 sent=3 drops=1 releases=2 peer_fail=0
 mode=2 rc=-13 elapsed_ms=0 sent=0 drops=0 releases=0 peer_fail=0
 mode=3 rc=-13 elapsed_ms=15 sent=3 drops=2 releases=1 peer_fail=0
@@ -599,230 +599,230 @@ python3 tests/test_recv_overlap.py
 actual overlap classifier: duplicate/new suffix/conflict/config/log/overflow PASS
 ./tests/test_kv_lsm
 kv-compact: start l0=2 inputs=2 range=362 l0only=0
-kv-compact: end bytes=4573 ms=52 l0=0 l1=1 rc=0
+kv-compact: end bytes=4573 ms=48 l0=0 l1=1 rc=0
 kv-compact: start l0=2 inputs=1 range=367 l0only=0
-kv-compact: end bytes=26 ms=44 l0=1 l1=1 rc=0
+kv-compact: end bytes=26 ms=42 l0=1 l1=1 rc=0
 kv-compact: start l0=2 inputs=1 range=367 l0only=0
-kv-compact: end bytes=26 ms=52 l0=1 l1=1 rc=0
+kv-compact: end bytes=26 ms=65 l0=1 l1=1 rc=0
 kv-compact: start l0=3 inputs=3 range=353 l0only=0
-kv-compact: end bytes=56316 ms=81 l0=1 l1=1 rc=0
+kv-compact: end bytes=56316 ms=95 l0=1 l1=1 rc=0
 kv-compact: start l0=1 inputs=1 range=353 l0only=0
-kv-compact: end bytes=18772 ms=65 l0=1 l1=2 rc=0
+kv-compact: end bytes=18772 ms=93 l0=1 l1=2 rc=0
 kv-compact: start l0=3 inputs=3 range=353 l0only=0
-kv-compact: end bytes=56316 ms=95 l0=1 l1=3 rc=0
+kv-compact: end bytes=56316 ms=85 l0=1 l1=3 rc=0
 kv-compact: start l0=1 inputs=1 range=353 l0only=0
-kv-compact: end bytes=18772 ms=99 l0=1 l1=4 rc=0
+kv-compact: end bytes=18772 ms=60 l0=1 l1=4 rc=0
 kv-compact: start l0=3 inputs=3 range=353 l0only=0
-kv-compact: end bytes=56316 ms=95 l0=1 l1=5 rc=0
+kv-compact: end bytes=56316 ms=83 l0=1 l1=5 rc=0
 kv-compact: start l0=64 inputs=64 range=357 l0only=0
-kv-compact: end bytes=960 ms=69 l0=0 l1=1 rc=0
+kv-compact: end bytes=960 ms=56 l0=0 l1=1 rc=0
 kv-compact: start l0=64 inputs=65 range=357 l0only=0
-kv-compact: end bytes=960 ms=48 l0=0 l1=1 rc=0
+kv-compact: end bytes=960 ms=64 l0=0 l1=1 rc=0
 kv-compact: start l0=1 inputs=1 range=256 l0only=0
-kv-compact: end bytes=14 ms=33 l0=0 l1=1 rc=0
+kv-compact: end bytes=14 ms=37 l0=0 l1=1 rc=0
 kv-compact: start l0=1 inputs=1 range=257 l0only=0
-kv-compact: end bytes=14 ms=38 l0=0 l1=2 rc=0
+kv-compact: end bytes=14 ms=41 l0=0 l1=2 rc=0
 kv-compact: start l0=1 inputs=1 range=258 l0only=0
-kv-compact: end bytes=14 ms=39 l0=0 l1=3 rc=0
+kv-compact: end bytes=14 ms=41 l0=0 l1=3 rc=0
 kv-compact: start l0=1 inputs=1 range=259 l0only=0
-kv-compact: end bytes=14 ms=51 l0=0 l1=4 rc=0
+kv-compact: end bytes=14 ms=38 l0=0 l1=4 rc=0
 kv-compact: start l0=1 inputs=1 range=260 l0only=0
-kv-compact: end bytes=14 ms=54 l0=0 l1=5 rc=0
+kv-compact: end bytes=14 ms=41 l0=0 l1=5 rc=0
 kv-compact: start l0=1 inputs=1 range=261 l0only=0
-kv-compact: end bytes=14 ms=64 l0=0 l1=6 rc=0
+kv-compact: end bytes=14 ms=57 l0=0 l1=6 rc=0
 kv-compact: start l0=1 inputs=1 range=262 l0only=0
-kv-compact: end bytes=14 ms=53 l0=0 l1=7 rc=0
+kv-compact: end bytes=14 ms=54 l0=0 l1=7 rc=0
 kv-compact: start l0=1 inputs=1 range=263 l0only=0
-kv-compact: end bytes=14 ms=51 l0=0 l1=8 rc=0
+kv-compact: end bytes=14 ms=58 l0=0 l1=8 rc=0
 kv-compact: start l0=1 inputs=1 range=264 l0only=0
-kv-compact: end bytes=14 ms=46 l0=0 l1=9 rc=0
+kv-compact: end bytes=14 ms=42 l0=0 l1=9 rc=0
 kv-compact: start l0=1 inputs=1 range=265 l0only=0
-kv-compact: end bytes=14 ms=42 l0=0 l1=10 rc=0
+kv-compact: end bytes=14 ms=50 l0=0 l1=10 rc=0
 kv-compact: start l0=1 inputs=1 range=266 l0only=0
-kv-compact: end bytes=14 ms=49 l0=0 l1=11 rc=0
+kv-compact: end bytes=14 ms=48 l0=0 l1=11 rc=0
 kv-compact: start l0=1 inputs=1 range=267 l0only=0
-kv-compact: end bytes=14 ms=39 l0=0 l1=12 rc=0
+kv-compact: end bytes=14 ms=49 l0=0 l1=12 rc=0
 kv-compact: start l0=1 inputs=1 range=268 l0only=0
-kv-compact: end bytes=14 ms=46 l0=0 l1=13 rc=0
+kv-compact: end bytes=14 ms=51 l0=0 l1=13 rc=0
 kv-compact: start l0=1 inputs=1 range=269 l0only=0
-kv-compact: end bytes=14 ms=60 l0=0 l1=14 rc=0
+kv-compact: end bytes=14 ms=69 l0=0 l1=14 rc=0
 kv-compact: start l0=1 inputs=1 range=270 l0only=0
-kv-compact: end bytes=14 ms=69 l0=0 l1=15 rc=0
+kv-compact: end bytes=14 ms=56 l0=0 l1=15 rc=0
 kv-compact: start l0=1 inputs=1 range=271 l0only=0
 kv-compact: end bytes=14 ms=65 l0=0 l1=16 rc=0
 kv-compact: start l0=1 inputs=1 range=272 l0only=0
-kv-compact: end bytes=14 ms=40 l0=0 l1=17 rc=0
+kv-compact: end bytes=14 ms=44 l0=0 l1=17 rc=0
 kv-compact: start l0=1 inputs=1 range=273 l0only=0
-kv-compact: end bytes=14 ms=44 l0=0 l1=18 rc=0
+kv-compact: end bytes=14 ms=50 l0=0 l1=18 rc=0
 kv-compact: start l0=1 inputs=1 range=274 l0only=0
-kv-compact: end bytes=14 ms=48 l0=0 l1=19 rc=0
+kv-compact: end bytes=14 ms=39 l0=0 l1=19 rc=0
 kv-compact: start l0=1 inputs=1 range=275 l0only=0
-kv-compact: end bytes=14 ms=39 l0=0 l1=20 rc=0
+kv-compact: end bytes=14 ms=35 l0=0 l1=20 rc=0
 kv-compact: start l0=1 inputs=1 range=276 l0only=0
-kv-compact: end bytes=14 ms=40 l0=0 l1=21 rc=0
+kv-compact: end bytes=14 ms=41 l0=0 l1=21 rc=0
 kv-compact: start l0=1 inputs=1 range=277 l0only=0
-kv-compact: end bytes=14 ms=37 l0=0 l1=22 rc=0
+kv-compact: end bytes=14 ms=51 l0=0 l1=22 rc=0
 kv-compact: start l0=1 inputs=1 range=278 l0only=0
-kv-compact: end bytes=14 ms=46 l0=0 l1=23 rc=0
+kv-compact: end bytes=14 ms=58 l0=0 l1=23 rc=0
 kv-compact: start l0=1 inputs=1 range=279 l0only=0
-kv-compact: end bytes=14 ms=54 l0=0 l1=24 rc=0
+kv-compact: end bytes=14 ms=59 l0=0 l1=24 rc=0
 kv-compact: start l0=1 inputs=1 range=280 l0only=0
-kv-compact: end bytes=14 ms=65 l0=0 l1=25 rc=0
+kv-compact: end bytes=14 ms=48 l0=0 l1=25 rc=0
 kv-compact: start l0=1 inputs=1 range=281 l0only=0
-kv-compact: end bytes=14 ms=46 l0=0 l1=26 rc=0
+kv-compact: end bytes=14 ms=42 l0=0 l1=26 rc=0
 kv-compact: start l0=1 inputs=1 range=282 l0only=0
-kv-compact: end bytes=14 ms=48 l0=0 l1=27 rc=0
+kv-compact: end bytes=14 ms=41 l0=0 l1=27 rc=0
 kv-compact: start l0=1 inputs=1 range=283 l0only=0
-kv-compact: end bytes=14 ms=41 l0=0 l1=28 rc=0
+kv-compact: end bytes=14 ms=47 l0=0 l1=28 rc=0
 kv-compact: start l0=1 inputs=1 range=284 l0only=0
-kv-compact: end bytes=14 ms=50 l0=0 l1=29 rc=0
+kv-compact: end bytes=14 ms=46 l0=0 l1=29 rc=0
 kv-compact: start l0=1 inputs=1 range=285 l0only=0
-kv-compact: end bytes=14 ms=50 l0=0 l1=30 rc=0
+kv-compact: end bytes=14 ms=57 l0=0 l1=30 rc=0
 kv-compact: start l0=1 inputs=1 range=286 l0only=0
-kv-compact: end bytes=14 ms=44 l0=0 l1=31 rc=0
+kv-compact: end bytes=14 ms=60 l0=0 l1=31 rc=0
 kv-compact: start l0=1 inputs=1 range=287 l0only=0
-kv-compact: end bytes=14 ms=56 l0=0 l1=32 rc=0
+kv-compact: end bytes=14 ms=57 l0=0 l1=32 rc=0
 kv-compact: start l0=1 inputs=1 range=288 l0only=0
-kv-compact: end bytes=14 ms=55 l0=0 l1=33 rc=0
+kv-compact: end bytes=14 ms=41 l0=0 l1=33 rc=0
 kv-compact: start l0=1 inputs=1 range=289 l0only=0
-kv-compact: end bytes=14 ms=60 l0=0 l1=34 rc=0
+kv-compact: end bytes=14 ms=32 l0=0 l1=34 rc=0
 kv-compact: start l0=1 inputs=1 range=290 l0only=0
-kv-compact: end bytes=14 ms=39 l0=0 l1=35 rc=0
+kv-compact: end bytes=14 ms=57 l0=0 l1=35 rc=0
 kv-compact: start l0=1 inputs=1 range=291 l0only=0
-kv-compact: end bytes=14 ms=36 l0=0 l1=36 rc=0
+kv-compact: end bytes=14 ms=39 l0=0 l1=36 rc=0
 kv-compact: start l0=1 inputs=1 range=292 l0only=0
-kv-compact: end bytes=14 ms=42 l0=0 l1=37 rc=0
+kv-compact: end bytes=14 ms=33 l0=0 l1=37 rc=0
 kv-compact: start l0=1 inputs=1 range=293 l0only=0
-kv-compact: end bytes=14 ms=39 l0=0 l1=38 rc=0
+kv-compact: end bytes=14 ms=46 l0=0 l1=38 rc=0
 kv-compact: start l0=1 inputs=1 range=294 l0only=0
 kv-compact: end bytes=14 ms=48 l0=0 l1=39 rc=0
 kv-compact: start l0=1 inputs=1 range=295 l0only=0
-kv-compact: end bytes=14 ms=56 l0=0 l1=40 rc=0
+kv-compact: end bytes=14 ms=65 l0=0 l1=40 rc=0
 kv-compact: start l0=1 inputs=1 range=296 l0only=0
-kv-compact: end bytes=14 ms=66 l0=0 l1=41 rc=0
+kv-compact: end bytes=14 ms=60 l0=0 l1=41 rc=0
 kv-compact: start l0=1 inputs=1 range=297 l0only=0
-kv-compact: end bytes=14 ms=58 l0=0 l1=42 rc=0
+kv-compact: end bytes=14 ms=51 l0=0 l1=42 rc=0
 kv-compact: start l0=1 inputs=1 range=298 l0only=0
-kv-compact: end bytes=14 ms=43 l0=0 l1=43 rc=0
+kv-compact: end bytes=14 ms=36 l0=0 l1=43 rc=0
 kv-compact: start l0=1 inputs=1 range=299 l0only=0
-kv-compact: end bytes=14 ms=45 l0=0 l1=44 rc=0
+kv-compact: end bytes=14 ms=39 l0=0 l1=44 rc=0
 kv-compact: start l0=1 inputs=1 range=300 l0only=0
-kv-compact: end bytes=14 ms=63 l0=0 l1=45 rc=0
+kv-compact: end bytes=14 ms=56 l0=0 l1=45 rc=0
 kv-compact: start l0=1 inputs=1 range=301 l0only=0
-kv-compact: end bytes=14 ms=44 l0=0 l1=46 rc=0
+kv-compact: end bytes=14 ms=38 l0=0 l1=46 rc=0
 kv-compact: start l0=1 inputs=1 range=302 l0only=0
-kv-compact: end bytes=14 ms=45 l0=0 l1=47 rc=0
+kv-compact: end bytes=14 ms=60 l0=0 l1=47 rc=0
 kv-compact: start l0=1 inputs=1 range=303 l0only=0
-kv-compact: end bytes=14 ms=61 l0=0 l1=48 rc=0
+kv-compact: end bytes=14 ms=59 l0=0 l1=48 rc=0
 kv-compact: start l0=1 inputs=1 range=304 l0only=0
-kv-compact: end bytes=14 ms=62 l0=0 l1=49 rc=0
+kv-compact: end bytes=14 ms=56 l0=0 l1=49 rc=0
 kv-compact: start l0=1 inputs=1 range=305 l0only=0
-kv-compact: end bytes=14 ms=56 l0=0 l1=50 rc=0
+kv-compact: end bytes=14 ms=37 l0=0 l1=50 rc=0
 kv-compact: start l0=1 inputs=1 range=306 l0only=0
-kv-compact: end bytes=14 ms=61 l0=0 l1=51 rc=0
+kv-compact: end bytes=14 ms=57 l0=0 l1=51 rc=0
 kv-compact: start l0=1 inputs=1 range=307 l0only=0
-kv-compact: end bytes=14 ms=44 l0=0 l1=52 rc=0
+kv-compact: end bytes=14 ms=39 l0=0 l1=52 rc=0
 kv-compact: start l0=1 inputs=1 range=308 l0only=0
-kv-compact: end bytes=14 ms=37 l0=0 l1=53 rc=0
+kv-compact: end bytes=14 ms=44 l0=0 l1=53 rc=0
 kv-compact: start l0=1 inputs=1 range=309 l0only=0
-kv-compact: end bytes=14 ms=40 l0=0 l1=54 rc=0
+kv-compact: end bytes=14 ms=54 l0=0 l1=54 rc=0
 kv-compact: start l0=1 inputs=1 range=310 l0only=0
-kv-compact: end bytes=14 ms=43 l0=0 l1=55 rc=0
+kv-compact: end bytes=14 ms=67 l0=0 l1=55 rc=0
 kv-compact: start l0=1 inputs=1 range=311 l0only=0
-kv-compact: end bytes=14 ms=44 l0=0 l1=56 rc=0
+kv-compact: end bytes=14 ms=71 l0=0 l1=56 rc=0
 kv-compact: start l0=1 inputs=1 range=312 l0only=0
-kv-compact: end bytes=14 ms=57 l0=0 l1=57 rc=0
+kv-compact: end bytes=14 ms=47 l0=0 l1=57 rc=0
 kv-compact: start l0=1 inputs=1 range=313 l0only=0
-kv-compact: end bytes=14 ms=58 l0=0 l1=58 rc=0
+kv-compact: end bytes=14 ms=40 l0=0 l1=58 rc=0
 kv-compact: start l0=1 inputs=1 range=314 l0only=0
-kv-compact: end bytes=14 ms=59 l0=0 l1=59 rc=0
+kv-compact: end bytes=14 ms=58 l0=0 l1=59 rc=0
 kv-compact: start l0=1 inputs=1 range=315 l0only=0
-kv-compact: end bytes=14 ms=40 l0=0 l1=60 rc=0
+kv-compact: end bytes=14 ms=48 l0=0 l1=60 rc=0
 kv-compact: start l0=1 inputs=1 range=316 l0only=0
-kv-compact: end bytes=14 ms=51 l0=0 l1=61 rc=0
+kv-compact: end bytes=14 ms=49 l0=0 l1=61 rc=0
 kv-compact: start l0=1 inputs=1 range=317 l0only=0
-kv-compact: end bytes=14 ms=38 l0=0 l1=62 rc=0
+kv-compact: end bytes=14 ms=55 l0=0 l1=62 rc=0
 kv-compact: start l0=1 inputs=1 range=318 l0only=0
-kv-compact: end bytes=14 ms=50 l0=0 l1=63 rc=0
+kv-compact: end bytes=14 ms=68 l0=0 l1=63 rc=0
 kv-compact: start l0=1 inputs=1 range=319 l0only=0
-kv-compact: end bytes=14 ms=51 l0=0 l1=64 rc=0
+kv-compact: end bytes=14 ms=58 l0=0 l1=64 rc=0
 kv-compact: start l0=1 inputs=1 range=320 l0only=0
-kv-compact: end bytes=14 ms=59 l0=0 l1=65 rc=0
+kv-compact: end bytes=14 ms=48 l0=0 l1=65 rc=0
 kv-compact: start l0=1 inputs=1 range=321 l0only=0
-kv-compact: end bytes=14 ms=66 l0=0 l1=66 rc=0
+kv-compact: end bytes=14 ms=54 l0=0 l1=66 rc=0
 kv-compact: start l0=1 inputs=1 range=322 l0only=0
-kv-compact: end bytes=14 ms=68 l0=0 l1=67 rc=0
+kv-compact: end bytes=14 ms=52 l0=0 l1=67 rc=0
 kv-compact: start l0=1 inputs=1 range=323 l0only=0
-kv-compact: end bytes=14 ms=57 l0=0 l1=68 rc=0
+kv-compact: end bytes=14 ms=44 l0=0 l1=68 rc=0
 kv-compact: start l0=1 inputs=1 range=324 l0only=0
-kv-compact: end bytes=14 ms=48 l0=0 l1=69 rc=0
+kv-compact: end bytes=14 ms=34 l0=0 l1=69 rc=0
 kv-compact: start l0=1 inputs=1 range=325 l0only=0
-kv-compact: end bytes=14 ms=36 l0=0 l1=70 rc=0
+kv-compact: end bytes=14 ms=59 l0=0 l1=70 rc=0
 kv-compact: start l0=1 inputs=1 range=326 l0only=0
-kv-compact: end bytes=14 ms=40 l0=0 l1=71 rc=0
+kv-compact: end bytes=14 ms=58 l0=0 l1=71 rc=0
 kv-compact: start l0=1 inputs=1 range=327 l0only=0
-kv-compact: end bytes=14 ms=43 l0=0 l1=72 rc=0
+kv-compact: end bytes=14 ms=63 l0=0 l1=72 rc=0
 kv-compact: start l0=1 inputs=1 range=328 l0only=0
-kv-compact: end bytes=14 ms=51 l0=0 l1=73 rc=0
+kv-compact: end bytes=14 ms=61 l0=0 l1=73 rc=0
 kv-compact: start l0=1 inputs=1 range=329 l0only=0
-kv-compact: end bytes=14 ms=64 l0=0 l1=74 rc=0
+kv-compact: end bytes=14 ms=41 l0=0 l1=74 rc=0
 kv-compact: start l0=1 inputs=1 range=330 l0only=0
-kv-compact: end bytes=14 ms=63 l0=0 l1=75 rc=0
+kv-compact: end bytes=14 ms=46 l0=0 l1=75 rc=0
 kv-compact: start l0=1 inputs=1 range=331 l0only=0
-kv-compact: end bytes=14 ms=62 l0=0 l1=76 rc=0
+kv-compact: end bytes=14 ms=53 l0=0 l1=76 rc=0
 kv-compact: start l0=1 inputs=1 range=332 l0only=0
-kv-compact: end bytes=14 ms=56 l0=0 l1=77 rc=0
+kv-compact: end bytes=14 ms=43 l0=0 l1=77 rc=0
 kv-compact: start l0=1 inputs=1 range=333 l0only=0
-kv-compact: end bytes=14 ms=47 l0=0 l1=78 rc=0
+kv-compact: end bytes=14 ms=50 l0=0 l1=78 rc=0
 kv-compact: start l0=1 inputs=1 range=334 l0only=0
-kv-compact: end bytes=14 ms=51 l0=0 l1=79 rc=0
+kv-compact: end bytes=14 ms=63 l0=0 l1=79 rc=0
 kv-compact: start l0=1 inputs=1 range=335 l0only=0
-kv-compact: end bytes=14 ms=47 l0=0 l1=80 rc=0
+kv-compact: end bytes=14 ms=71 l0=0 l1=80 rc=0
 kv-compact: start l0=2 inputs=1 range=356 l0only=0
-kv-compact: end bytes=19 ms=38 l0=1 l1=1 rc=0
+kv-compact: end bytes=19 ms=60 l0=1 l1=1 rc=0
 kv-compact: start l0=2 inputs=1 range=356 l0only=0
-kv-compact: end bytes=19 ms=35 l0=1 l1=2 rc=0
+kv-compact: end bytes=19 ms=68 l0=1 l1=2 rc=0
 kv-compact: start l0=2 inputs=1 range=356 l0only=0
-kv-compact: end bytes=19 ms=48 l0=1 l1=3 rc=0
+kv-compact: end bytes=19 ms=66 l0=1 l1=3 rc=0
 kv-compact: start l0=2 inputs=1 range=356 l0only=0
-kv-compact: end bytes=19 ms=52 l0=1 l1=4 rc=0
+kv-compact: end bytes=19 ms=47 l0=1 l1=4 rc=0
 kv-compact: start l0=2 inputs=1 range=356 l0only=0
-kv-compact: end bytes=19 ms=65 l0=1 l1=5 rc=0
+kv-compact: end bytes=19 ms=46 l0=1 l1=5 rc=0
 kv-compact: start l0=2 inputs=1 range=356 l0only=0
-kv-compact: end bytes=19 ms=64 l0=1 l1=6 rc=0
+kv-compact: end bytes=19 ms=47 l0=1 l1=6 rc=0
 kv-compact: start l0=2 inputs=1 range=356 l0only=0
-kv-compact: end bytes=19 ms=46 l0=1 l1=7 rc=0
+kv-compact: end bytes=19 ms=51 l0=1 l1=7 rc=0
 kv-compact: start l0=2 inputs=1 range=356 l0only=0
 kv-compact: end bytes=19 ms=52 l0=1 l1=8 rc=0
 kv-compact: start l0=2 inputs=1 range=356 l0only=0
-kv-compact: end bytes=19 ms=47 l0=1 l1=9 rc=0
+kv-compact: end bytes=19 ms=75 l0=1 l1=9 rc=0
 kv-compact: start l0=2 inputs=1 range=367 l0only=0
-kv-compact: end bytes=18 ms=35 l0=1 l1=10 rc=0
+kv-compact: end bytes=18 ms=43 l0=1 l1=10 rc=0
 kv-compact: start l0=2 inputs=2 range=356 l0only=0
-kv-compact: end bytes=38 ms=35 l0=0 l1=11 rc=0
+kv-compact: end bytes=38 ms=51 l0=0 l1=11 rc=0
 kv-compact: start l0=2 inputs=2 range=356 l0only=0
-kv-compact: end bytes=38 ms=45 l0=0 l1=12 rc=0
+kv-compact: end bytes=38 ms=57 l0=0 l1=12 rc=0
 kv-compact: start l0=2 inputs=2 range=356 l0only=0
-kv-compact: end bytes=38 ms=54 l0=0 l1=13 rc=0
+kv-compact: end bytes=38 ms=42 l0=0 l1=13 rc=0
 kv-compact: start l0=2 inputs=2 range=356 l0only=0
-kv-compact: end bytes=38 ms=51 l0=0 l1=14 rc=0
+kv-compact: end bytes=38 ms=34 l0=0 l1=14 rc=0
 kv-compact: start l0=3 inputs=3 range=356 l0only=0
-kv-compact: end bytes=57 ms=50 l0=0 l1=15 rc=0
+kv-compact: end bytes=57 ms=54 l0=0 l1=15 rc=0
 kv-compact: start l0=1 inputs=1 range=367 l0only=0
-kv-compact: end bytes=17 ms=37 l0=0 l1=1 rc=0
+kv-compact: end bytes=17 ms=58 l0=0 l1=1 rc=0
 kv-compact: start l0=1 inputs=1 range=367 l0only=0
-kv-compact: end bytes=46 ms=34 l0=0 l1=1 rc=0
+kv-compact: end bytes=46 ms=51 l0=0 l1=1 rc=0
 kv-compact: start l0=1 inputs=2 range=367 l0only=0
-kv-compact: end bytes=37 ms=55 l0=0 l1=1 rc=0
+kv-compact: end bytes=37 ms=48 l0=0 l1=1 rc=0
 kv-compact: start l0=3 inputs=3 range=17 l0only=0
-kv-compact: end bytes=14 ms=43 l0=0 l1=1 rc=0
+kv-compact: end bytes=14 ms=39 l0=0 l1=1 rc=0
 kv-compact: start l0=1 inputs=1 range=354 l0only=0
 kv-compact: start l0=2 inputs=1 range=256 l0only=0
-kv-compact: end bytes=18 ms=57 l0=1 l1=1 rc=0
+kv-compact: end bytes=18 ms=47 l0=1 l1=1 rc=0
 kv-compact: start l0=1 inputs=1 range=383 l0only=0
-kv-compact: end bytes=18 ms=49 l0=0 l1=2 rc=0
+kv-compact: end bytes=18 ms=43 l0=0 l1=2 rc=0
 kv-compact: start l0=1 inputs=1 range=256 l0only=0
-kv-compact: end bytes=18 ms=45 l0=0 l1=3 rc=0
+kv-compact: end bytes=18 ms=38 l0=0 l1=3 rc=0
 test_kv_lsm: OK
 ./tests/test_query_policy
 query policy: defaults, masks, stale CAS, cold persistence, read/write IO/NOMEM/BUSY refusal without effects, overflow and malformed refusal PASS
@@ -832,18 +832,18 @@ test_query_catalog: OK
 query-disk: unlinked directory ino=36864004096 parent=1 nlink=2
 query disk: RAM oracle, external sort, bounded metadata, retained snapshot, rename and cancellation PASS
 ./tests/test_query_delta
-files=6000 delta=1023 refolded=1023 rebuilt=1 stats_ms=34.334
-files=6000 delta=1024 refolded=1024 rebuilt=1 stats_ms=28.224
-files=6000 delta=1025 refolded=1025 rebuilt=1 stats_ms=24.874
-files=6000 delta=4096 refolded=4096 rebuilt=1 stats_ms=76.854
+files=6000 delta=1023 refolded=1023 rebuilt=1 stats_ms=31.005
+files=6000 delta=1024 refolded=1024 rebuilt=1 stats_ms=26.639
+files=6000 delta=1025 refolded=1025 rebuilt=1 stats_ms=33.288
+files=6000 delta=4096 refolded=4096 rebuilt=1 stats_ms=74.735
 phase=create refolded=2049 tree_files=8048
 phase=delete refolded=1 tree_files=6000
 query large delta: PASS
 EFS_QUERY_DELTA_LANES=1 ./tests/test_query_delta
-files=6000 delta=1023 refolded=1023 rebuilt=1 stats_ms=89.968
-files=6000 delta=1024 refolded=1024 rebuilt=1 stats_ms=85.243
-files=6000 delta=1025 refolded=1025 rebuilt=1 stats_ms=84.196
-files=6000 delta=4096 refolded=4096 rebuilt=1 stats_ms=149.249
+files=6000 delta=1023 refolded=1023 rebuilt=1 stats_ms=90.791
+files=6000 delta=1024 refolded=1024 rebuilt=1 stats_ms=88.202
+files=6000 delta=1025 refolded=1025 rebuilt=1 stats_ms=80.184
+files=6000 delta=4096 refolded=4096 rebuilt=1 stats_ms=145.076
 lane-only=changed refolded=1 size=16384 alloc=2
 lane-only=absent refolded=1 size=0 alloc=0
 phase=create refolded=2050 tree_files=8048
@@ -909,6 +909,8 @@ append durable receipt: atomic reservation, bounded ACK retirement, payload bind
 append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS
 python3 tests/test_append_prepare_batch.py
 append PREPARE: ordered floor/inode guards, bounded cohorts, every applied verdict before decision, refusal/abort cleanup and ambiguous COMMIT retention PASS
+python3 tests/test_meta_cmd_namespace.py
+metadata command namespace: actual header unique; packing/completion collision and byte overflow rejected PASS
 python3 tests/test_append_catchup_host.py
 append catchup host: one completion proposal for 20k, strict route/wire, failed verdicts, partial REPORT and interrupted retirement retry PASS
 ./tests/test_meta_apply
@@ -994,7 +996,7 @@ command mount: explicit opt-in, disabled and partial feature masks PASS
 python3 tests/test_efs_commands.py
 .............................
 ----------------------------------------------------------------------
-Ran 29 tests in 1.933s
+Ran 29 tests in 1.938s
 
 OK
 python3 tests/test_namespace_bounds.py
@@ -1030,11 +1032,11 @@ packed store: explicit geometry, immutable retries, barriers, cold EC reads, quo
 pack ledger: neighbors, pending retention, replay fences, captured-member GC, corruption and atomic mapping batch PASS
 ./tests/test_pack_ledger_recovery
 kv-compact: start l0=1 inputs=1 range=1 l0only=0
-kv-compact: end bytes=824 ms=62 l0=0 l1=1 rc=0
+kv-compact: end bytes=824 ms=58 l0=0 l1=1 rc=0
 pack ledger: durable mapping cohort, abrupt WAL recovery, cold compaction, neighbor retention and GC ACK replay PASS
 ./tests/test_kv_reader_gate
 kv-compact: start l0=1 inputs=1 range=1 l0only=0
-kv-compact: end bytes=13 ms=46 l0=0 l1=1 rc=0
+kv-compact: end bytes=13 ms=53 l0=0 l1=1 rc=0
 minimum reader: legacy preservation, durable retries, apply abort, cold recovery and unknown-format refusal PASS
 ./tests/test_placement
 test_placement: OK

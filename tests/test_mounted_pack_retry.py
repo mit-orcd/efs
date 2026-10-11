@@ -12,6 +12,8 @@ code=s[:s.index('static uint64_t pack_now(')].replace('static int pack_batch_pee
 #include "efs/publication_ack.h"
 #include "efs/erasure.h"
 struct efs_client g_client;
+/* This gate drives scalar retry ownership. The actual compatibility helper
+ * and both batch downgrade paths are exercised by their dedicated gates. */
 static unsigned sends[3],publications[2],loads[2],retirements[2],released;
 static unsigned commands,upload_retired,retire_inflight,retire_peak;
 static int admit_fail,put_fail,publication_fail,load_fail,retire_fail,upload_fail;

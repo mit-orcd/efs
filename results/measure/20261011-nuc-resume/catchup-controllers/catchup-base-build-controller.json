@@ -1,12 +1,12 @@
 {
-  "pid": 101945,
+  "pid": 117510,
   "command": [
     "python3",
     "/data1/efs/devel-nuc-20261011/nuc_catchup_build_20261011.py",
     "--variant",
     "catchup-base"
   ],
-  "script_sha256": "d61def743472db98ec0e58d5d68d081a2485a34c6041e0e8ba1ebfb33bba1b66",
-  "start_utc": "2026-10-11T21:17:13Z",
-  "phase": "isolated native build; no service restart"
+  "script_sha256": "682a4de8755c5c9a0f6616182632e95c24d88627aaf351e6f2bb2eb5ae0ab7e4",
+  "start_utc": "2026-10-11T22:03:24Z",
+  "command_tag": 52
 }

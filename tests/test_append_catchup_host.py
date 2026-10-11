@@ -7,6 +7,11 @@ source = (root / 'src/server/raft_host.c').read_text()
 def function(name):
     begin = source.index('static int ' + name + '(')
     return source[begin:source.index('\n}', begin) + 2]
+pressure=source[source.index('static uint64_t host_pressure_add('):source.index('static int host_pressure_recovery(')]
+# This minimal adapter fixture owns tag52 only. Tag53's real plan size and
+# admission policy are compiled against production headers in host_pressure.
+pressure,n=re.subn(r'    case EFS_MD_CMD_APPEND_ATOMIC:\n.*?        break;\n','',pressure,flags=re.S)
+assert n==1
 code = r'''
 #include <stdint.h>
 #include "efs/meta_cmd.h"
@@ -87,7 +92,7 @@ static int efs_meta_apply_append_catchup(void *kv,efs_ino_t ino,uint64_t gen,uin
  if(owner)assert(owner->client_uuid[0]==42&&owner->session_epoch==3);
  apply_calls++;return metadata_error;
 }
-''' + source[source.index('static uint64_t host_pressure_add('):source.index('static int host_pressure_recovery(')] + function('host_resolve_caught_up') + '\n' + function('apply_append_catchup_cmd') + r'''
+''' + pressure + function('host_resolve_caught_up') + '\n' + function('apply_append_catchup_cmd') + r'''
 static void reset(void){
  watermark=80000;remaining=20000;completed=proposals=retirements=authorities=apply_calls=0;
  state_error=authority_error=inode_error=proposal_error=retirement_error=metadata_error=0;
