@@ -36,6 +36,11 @@ unimplemented; unavailable/refusal tests are not lifecycle acceptance.
 
 ## Release correctness review
 
+[Full flush-pipeline failure](flush-pipe-failure-20261011.md) reproduces and fixes
+a clean incoming snapshot losing dirty retry eligibility after the full pipe fails.
+Actual cache/pipe fault-injection and sanitizer gates pass; mounted acceptance
+remains pending.
+
 [Private legacy find cleanup](private-find-cleanup-20261011.md) removes the
 uncalled parser/renderer chain while preserving active query/stats authorization.
 Focused callback/routing/authority gates pass; merged Linux acceptance is pending.

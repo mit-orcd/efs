@@ -5791,8 +5791,9 @@ static int flush_pipe_add(struct flush_pipe *p, efs_ino_t ino, uint32_t ci,
         int drc = flush_pipe_drain(p);
 
         if (drc != EFS_OK) {
-            if (drop_body &&
-                dcache_flush_keep(ino, ci, copy, len, 0, seq, 1))
+            /* This snapshot already cleared dirty state before the pipe
+             * drained. Restore retry eligibility even with a retained body. */
+            if (dcache_flush_keep(ino, ci, copy, len, 0, seq, drop_body))
                 copy = NULL;
             efs_buf_free(copy, len);
             put_win_close(ino);

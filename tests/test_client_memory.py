@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 import sys
 root = Path(__file__).resolve().parents[1]
-w = (root / 'src/client/write.c').read_text()
+w = Path(os.environ.get('EFS_CLIENT_MEMORY_WRITE_SOURCE', root / 'src/client/write.c')).read_text()
 f = (root / 'src/client/efs_fuse.c').read_text()
 r = (root / 'src/client/read.c').read_text()
 def function(s, name):
@@ -78,6 +78,17 @@ for name in ['dcache_slot','dcache_mu','dcache_find','dcache_find_meta','dcache_
 source += '\n'+function(w,'efs_dcache_trim_metadata')
 source += '\n'+block(w, 'struct dcache_init {')
 for name in ['dcache_apply_init','dcache_store_owned_locked','dcache_drop_locked','dcache_body_to_rdcache','dcache_install_image','dcache_flush_keep']:
+    source += '\n'+function(w,name)
+source += '\n'+block(w, 'struct chunk_put_job {')+'\n'+block(w, 'struct flush_pipe {')
+source += r'''
+static unsigned pipe_windows_closed;
+static void put_win_close(efs_ino_t ino) { (void)ino; pipe_windows_closed++; }
+static int put_pool_run(struct chunk_put_job *jobs, uint32_t n) {
+    for (uint32_t i=0;i<n;i++) jobs[i].rc=EFS_ERR_IO;
+    return EFS_ERR_IO;
+}
+'''
+for name in ['flush_pipe_init','flush_pipe_drain','flush_pipe_add']:
     source += '\n'+function(w,name)
 source += '\n'+function(w,'efs_dcache_admit_lane_write')+'\n'+function(w,'dcache_range_covered')+'\n'+function(w,'efs_dcache_overlay_lane')+'\n'+function(w,'efs_dcache_retire_clipped')
 source += r'''
@@ -206,6 +217,30 @@ int main(void) {
     assert(g_live==EFS_CHUNK_SIZE);
     dcache_drop_locked(1,0,0);
     assert(!g_live);
+    /* A full pipe fails while the next chunk already owns a clean snapshot.
+     * Its retained body must be re-dirtied even though it never entered PUT. */
+    struct flush_pipe failed_pipe;flush_pipe_init(&failed_pipe);
+    pipe_windows_closed=0;
+    uint64_t pipe_dirty_before=dirty_bytes;
+    for(uint32_t j=0;j<=EFS_WRITE_PIPELINE;j++) {
+        uint32_t ci=300+j;
+        uint8_t *body=efs_buf_alloc(EFS_CHUNK_SIZE);assert(body);body[0]=91;
+        assert(!dcache_store_owned(1,ci,body,EFS_CHUNK_SIZE,&in));
+        struct dcache_ent *incoming=entry(ci);
+        incoming->dirty=0;incoming->on_dirty=0;dirty_bytes-=EFS_CHUNK_SIZE;
+        uint8_t *snapshot=efs_buf_alloc(EFS_CHUNK_SIZE);assert(snapshot);
+        memcpy(snapshot,body,EFS_CHUNK_SIZE);
+        int rc=flush_pipe_add(&failed_pipe,1,ci,snapshot,EFS_CHUNK_SIZE,0,7,0,0,0,NULL);
+        assert(rc==(j==EFS_WRITE_PIPELINE?EFS_ERR_IO:EFS_OK));
+    }
+    assert(failed_pipe.n==0 && pipe_windows_closed==EFS_WRITE_PIPELINE+1);
+    assert(dirty_bytes==pipe_dirty_before+(EFS_WRITE_PIPELINE+1)*EFS_CHUNK_SIZE);
+    for(uint32_t j=0;j<=EFS_WRITE_PIPELINE;j++) {
+        uint32_t ci=300+j;struct dcache_ent *retained=entry(ci);
+        assert(retained->dirty && retained->on_dirty && retained->data[0]==91);
+        dcache_drop_locked(1,ci,0);
+    }
+    assert(dirty_bytes==pipe_dirty_before && !g_live);
     /* Typed ownership alone protects against legacy drop/replacement/reuse. */
     uint32_t owned_slot=dcache_slot(1,0);
     struct dcache_ent *owned=&g_dcache.e[owned_slot];
