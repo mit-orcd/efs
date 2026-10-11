@@ -1,6 +1,6 @@
 # Intel devel-intel acceptance — 2026-10-11
 
-Current production candidate is `8238f20b` on `devel-intel`; this ledger is in progress. The prior `1b6796ef` full native and 75 standalone scripts pass on both hosts. The complete-source final matrix is `intel-session-accept-8238f20b`; the earlier `e66feefd-ready` matrix remains retained as pre-backpressure evidence. The earlier incomplete-source `e66feefd` run is excluded from acceptance and retired without live fixtures. The [earlier 775d935c acceptance](../archive/status-20261011/intel-deployment-acceptance-775d935c-20261011.md) preserves historical failures and workload evidence.
+Current production build is `7bde5f43` on `devel-intel`; the branch also contains the test-only admission repair `e9c395c7`. This ledger remains in progress. The complete-source matrix is `intel-session-accept-7bde5f43`. Historical candidate verdicts below are retained separately; an incomplete-source run is excluded from acceptance. The [earlier 775d935c acceptance](../archive/status-20261011/intel-deployment-acceptance-775d935c-20261011.md) preserves the original failures and workload evidence.
 
 ## Deployment and test contract
 
@@ -50,3 +50,21 @@ The final `8238f20b` native target and all 76 additional standalone regressions 
 Intel2 final direct resume strictly verifies 614,948 existing files in 392.8 seconds before actual creation resumes (615,119 observed). Both hosts pass the 256 immutable payload sample checks after deployment. Final production concurrent core/extras/peer tests run while the resumed writer is active. Final private direct acceptance still retains a beyond-64-level directory timeout; no deadline is increased.
 
 Intel2 final buffered query passes reader freshness (generations 2–7) and exact closed-writer publication (601 files / 153,856 logical bytes), then the original sequential payload oracle exceeds the unchanged 150-second harness budget. The bounded-reader repair is committed with both-host regression proof; its live follow-ons remain pending.
+
+
+## Current 7bde5f43 matrix
+
+The deployment completed in 25.30 seconds and startup/mount checks in 216.45 seconds at unchanged per-node limits. Runtime identity, four 400 GiB quotas, direct I/O, opposite-host client seeds and `.efs/help` pass. Preserved size/SHA256 checks pass for 256 samples per host. Intel2 resumes its existing tree after strict inventory; inventory alone is not counted as creation.
+
+| Tier | Intel1 | Intel2 |
+| --- | --- | --- |
+| Native target | PASS | PASS |
+| Additional standalone scripts | 78/78 PASS | 78/78 PASS |
+| Six query/.efs gates, direct | PASS, 68.77 s | PASS, 68.66 s |
+| Six query/.efs gates, buffered | PASS, 57.78 s | PASS, 220.55 s |
+| Full private direct | FAIL before POSIX; rerun queued | Running |
+| Full private buffered | FAIL, core 213/214 and peer 66/66 PASS | Queued |
+| Valgrind, independent gates, faults | Queued | Queued |
+| Production concurrent/persistence, both modes | Queued | Queued |
+
+Intel1's direct private run reaches the second guarded-lease session admission, then receives explicit `EFS_ERR_BUSY` from ESTABLISH. It stops before the later POSIX tier; those cases are NOTRUN in that attempt. Commit `e9c395c7` retries the unchanged administrative request only on explicit BUSY within the original 60-second command budget. Hard errors, stale epochs and expiration still fail. Regression tests pass locally and on both Intel hosts. Full private reruns in both modes are queued after the current owned fixtures finish. The original failed aggregate remains recorded. All six real query gates passed on both hosts and modes, including exact count/byte convergence and every payload check using the bounded readers; the unnecessary idle query-repeat queues were retired.
