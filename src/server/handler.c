@@ -400,6 +400,11 @@ send_reply:
             }
             break;
         }
+        case EFS_MSG_PACK_AUTHORITY: {
+            struct efs_msg_pack_authority_reply reply={.rc=EFS_ERR_INVAL};
+            if(server_raft_host_active())server_raft_host_pack_authority(payload,payload_len,&reply);
+            efs_conn_send_msg(conn,EFS_MSG_PACK_AUTHORITY_REPLY,&reply,sizeof(reply));break;
+        }
         case EFS_MSG_PACK_CAPABILITIES: {
             uint8_t reply[4];efs_put_upload_wr32(reply,
                 !g_server->storage_engine && server_raft_host_active()?

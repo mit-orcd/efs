@@ -21,13 +21,29 @@ int server_packed_upload(struct efsd_server *s, const uint8_t *body, uint32_t by
     efs_hash(data, fragment_len, sum);
     if (memcmp(sum, object.checksums[fi], sizeof(sum))) return EFS_ERR_CHECKSUM;
     uint8_t *query = malloc(2u + len); if (!query) return EFS_ERR_NOMEM;
-    query[0] = object.ledger.publication_group; query[1] = EFS_MD_REQ_PACK_STATUS;
     memcpy(query + 2, body + EFS_PACKED_PUT_HEADER, len);
-    struct efs_msg_raft_mkfs_reply authority; server_raft_host_submit(query, len + 2, &authority); free(query);
-    if (authority.rc) return authority.rc;
-    if (authority.salt != EFS_PACK_ACTIVE) return EFS_ERR_STALE;
+    int checked=0;
+    if(count<=EFS_PACK_AUTHORITY_MAX) {
+        query[0]=EFS_PACK_AUTHORITY_VERSION;query[1]=(uint8_t)object.ledger.publication_group;
+        struct efs_msg_pack_authority_reply reply;
+        server_raft_host_pack_authority(query,len+2,&reply);
+        if(!reply.rc) {
+            uint8_t digest[EFS_HASH_SIZE];efs_hash(query,len+2,digest);
+            if(reply.version!=EFS_PACK_AUTHORITY_VERSION || reply.group!=object.ledger.publication_group ||
+               reply.count!=count || memcmp(digest,reply.digest,sizeof(digest)))rc=EFS_ERR_PROTO;
+            else checked=1;
+        } else rc=reply.rc;
+        if(rc && rc!=EFS_ERR_PROTO){free(query);return rc;}
+    }
+    if(!checked) {
+        query[0] = object.ledger.publication_group; query[1] = EFS_MD_REQ_PACK_STATUS;
+        struct efs_msg_raft_mkfs_reply authority;server_raft_host_submit(query,len+2,&authority);
+        if(authority.rc){free(query);return authority.rc;}
+        if(authority.salt!=EFS_PACK_ACTIVE){free(query);return EFS_ERR_STALE;}
+    }
+    free(query);
     uint8_t covered = 0;
-    for (uint32_t i = 0; i < count; i++) {
+    for (uint32_t i = 0; !checked && i < count; i++) {
         if (efs_ino_is_meta_table(refs[i].ino)) return EFS_ERR_INVAL;
         struct efs_msg_inode_writer_view req = {refs[i].ino, refs[i].inode_generation, 0, 0};
         struct efs_msg_inode_writer_view_reply reply;

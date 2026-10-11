@@ -16856,6 +16856,8 @@ void server_raft_host_writer_view(const struct efs_msg_inode_writer_view *req,
     server_raft_host_writer_view_reuse(req, out, &covered);
 }
 
+#include "pack_authority.h"
+
 void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32_t start, uint32_t max, uint64_t generation,
                                 struct efs_msg_inode_getchunks_reply *out)
 {

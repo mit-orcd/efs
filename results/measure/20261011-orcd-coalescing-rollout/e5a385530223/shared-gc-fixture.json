@@ -1,0 +1,472 @@
+{
+  "relative": "0079/4803/5269/6828/8485/8280623438628253995",
+  "count": 3,
+  "inos": [
+    306005,
+    293717,
+    301909
+  ],
+  "pack_id": 794803526968288485,
+  "generation": 8280623438628253995,
+  "header_host": "fcstor003",
+  "header_store": "/data1/01/efs-orcd-test-erbmi1",
+  "files": [
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/21",
+      "ino": 293717,
+      "sha256": "ac50622ad6ed9d8e0ef9a4191bb19943ec7559febd7e213b0e3792357e62e05c",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/23",
+      "ino": 301909,
+      "sha256": "9837ca29df5a587cc8bec65c1e60f50ef29672a05ec409c03eaa531c2afc72af",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/24",
+      "ino": 306005,
+      "sha256": "656f70995b20464f5693c3464b4145f133939ba921e5ad25d366f24dd6ea794b",
+      "bytes": 512
+    }
+  ],
+  "mapping_checks": [
+    {
+      "rc": 0,
+      "output": "{\"ino\":293717,\"generation\":1,\"packed\":1,\"segment_id\":794803526968288485,\"segment_generation\":8280623438628253995}\n",
+      "error": "",
+      "ino": 293717
+    },
+    {
+      "rc": 0,
+      "output": "{\"ino\":301909,\"generation\":1,\"packed\":1,\"segment_id\":794803526968288485,\"segment_generation\":8280623438628253995}\n",
+      "error": "",
+      "ino": 301909
+    },
+    {
+      "rc": 0,
+      "output": "{\"ino\":306005,\"generation\":1,\"packed\":1,\"segment_id\":794803526968288485,\"segment_generation\":8280623438628253995}\n",
+      "error": "",
+      "ino": 306005
+    }
+  ],
+  "live_count": 3,
+  "all_files": [
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/0",
+      "ino": 207701,
+      "sha256": "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/1",
+      "ino": 211797,
+      "sha256": "6caf38d537984e261527b8caef5f990fb91415a1db917198821a79ed28997973",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/2",
+      "ino": 215893,
+      "sha256": "1bd8d04bb127c9dbdb406c3c213b202c84dc75f122ecd553b02fb322bffafdc9",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/3",
+      "ino": 224085,
+      "sha256": "6571078006e9eb2f1bc9372e4f564fb3be6c928a1e8a1f8237e4d372878640d0",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/4",
+      "ino": 219989,
+      "sha256": "d0618efdc1e250a067433d8784bf88ee7c76717dc1ab3a6fac816353eb708d4f",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/5",
+      "ino": 228181,
+      "sha256": "a5f8eb5a72fbfe1df7e89e36ad3da94b7cdec6bae126c7f746f3b17c83998921",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/6",
+      "ino": 232277,
+      "sha256": "bc82fdcd53821c5d6fafb71c86658af54eaaea00222d4f76cbb075e5521127ea",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/7",
+      "ino": 236373,
+      "sha256": "15933044960fd23a7daaac9ce51355f1f39894d1c3fe6de21b59b28ce2c77e77",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/8",
+      "ino": 240469,
+      "sha256": "7debd4d73a98c0df9eb7b083fd21033d7bd0907b3947f22338d8c82154face23",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/9",
+      "ino": 244565,
+      "sha256": "702afe5b5f6a15bb360d0ea9771e100d37f1dd68ec666b481f8ef5b098404336",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/10",
+      "ino": 248661,
+      "sha256": "f33ab12d20ffae0e2aa71cc286f76c44f3eb0a277a1751746dbf3686d72e6e60",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/11",
+      "ino": 252757,
+      "sha256": "2450209ce96af7054e917d449b73497a24a46ef9a9998e74160cec0ed03163aa",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/12",
+      "ino": 260949,
+      "sha256": "2a42f59aa222448dc4722a4574a0520be6989aca3f3b2a2502012928a2432024",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/13",
+      "ino": 256853,
+      "sha256": "14925991e068ac1cd3998ea3acf3df954db780220ba26202f5894905a20cf315",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/14",
+      "ino": 265045,
+      "sha256": "19bb7dceafc1a5b46d2a8989e6f315a78f1fadc8573b512a34ca0523ddcfffbb",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/15",
+      "ino": 269141,
+      "sha256": "941657fde04ff270f8ae019ede5287c71d887758641536ab0eb87a0d434526bd",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/16",
+      "ino": 273237,
+      "sha256": "b3d0e1cd2e268569311b96826bfa03fea954d9d56e2d3dd6961b751d9d155d89",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/17",
+      "ino": 277333,
+      "sha256": "981b8ac0e448c2a01df760648f17ba027d1ed0a9ada17aa4cc74b9694b45d4ad",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/18",
+      "ino": 281429,
+      "sha256": "dcea6e8f86485edab2dd083f9592ce3eb4fdf0b79ceeaa5cabfa2265c7760c5a",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/19",
+      "ino": 285525,
+      "sha256": "fd9f31d64d6ec2445e78477f287bb9a92244f0189ba991cef3efe8ff1fb9d997",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/20",
+      "ino": 289621,
+      "sha256": "a972ec391651affa4c5fda46569137ac994f6afce0ddea774db659a0ece42918",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/21",
+      "ino": 293717,
+      "sha256": "ac50622ad6ed9d8e0ef9a4191bb19943ec7559febd7e213b0e3792357e62e05c",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/22",
+      "ino": 297813,
+      "sha256": "a2467f5d30b3ef783c88494ca4d69aadd3b3e49a3d400adad04dfb46beb78783",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/23",
+      "ino": 301909,
+      "sha256": "9837ca29df5a587cc8bec65c1e60f50ef29672a05ec409c03eaa531c2afc72af",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/24",
+      "ino": 306005,
+      "sha256": "656f70995b20464f5693c3464b4145f133939ba921e5ad25d366f24dd6ea794b",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/25",
+      "ino": 310101,
+      "sha256": "60226aab6da3aa2f9a63efb8f76ed04938810b19a981cfa2e4ee8ddefbbb0a70",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/26",
+      "ino": 314197,
+      "sha256": "390230a3fba05f799b00212b5b46efd0fc81f62bdcd6aea88c87a45079c41643",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/27",
+      "ino": 318293,
+      "sha256": "bf5020b6aafdf34fab9fcffa3548b328e1bfe191775e131f7bc0ab1c51a156f0",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/28",
+      "ino": 322389,
+      "sha256": "cc46c2eac916d75019f20751fd148412a256420047360e51abce69ce8bc34858",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/29",
+      "ino": 326485,
+      "sha256": "be562a1ab91ceb933b28d1f1aa3869218ef172f72e14e6b3163c110ab1e2515d",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/30",
+      "ino": 330581,
+      "sha256": "4bb80985e5306611ba89c9eef8f65da27380c3a3f87c7cde79d2b6ad77b8bc55",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/31",
+      "ino": 334677,
+      "sha256": "81c6f0ca6122c385f0423c5cb84e54188b2f438003f57a065b8e94a60d0b5f59",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/32",
+      "ino": 338773,
+      "sha256": "e449eaf70850b3535de8c39146533eec81cab7ce154bdae59affa8b14963e1ae",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/33",
+      "ino": 342869,
+      "sha256": "aeb1da71a4ab6e3c659da3f13cfe8d51afefd31365cee129668ff91002a71a86",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/34",
+      "ino": 346965,
+      "sha256": "1eac5232727c050943510355b423e62b953a3a1fe99d8cb15f79737b1d81a6bd",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/35",
+      "ino": 351061,
+      "sha256": "ed02533f307e25a0eb841718952b4e508ece2dd4a3d2d99ebea7cab78bd33977",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/36",
+      "ino": 355157,
+      "sha256": "0b43bf18e70289b568dbe069fc69f6e7ae51ce06fa878d8f85ede83f9d08eb86",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/37",
+      "ino": 359253,
+      "sha256": "ddeaf858c9d13f0b467646ca7a1a4ece1b12010d7900781f699a8866dbc77c97",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/38",
+      "ino": 363349,
+      "sha256": "bdcc5d0d7956fa3837d9c24169f46b5c429009b2cecb75b00d396d6ca2537ec8",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/39",
+      "ino": 367445,
+      "sha256": "746cba66a1c2e5ad7ef4fe64195b126df69fe8c0fdbf5a0d14487546f2d059c3",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/40",
+      "ino": 371541,
+      "sha256": "8a584aa328b22c56570d6d48fbe37d43a91d730d692b6163001c2bd831753343",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/41",
+      "ino": 375637,
+      "sha256": "d68607264e512b50f81be8bbf7fb1b8a38dabf9515e3900f8539dac5de945058",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/42",
+      "ino": 379733,
+      "sha256": "84867454d4a00b8cc5e38dea6f9356eff696f54614526e11a62b4f5c80413d80",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/43",
+      "ino": 383829,
+      "sha256": "8c40176477a0e0082796d62e740076f0d1124e4f2168f1584ad84e50cbc9e758",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/44",
+      "ino": 387925,
+      "sha256": "1057137c85e32da6fbf8211a1a21f508787f50be00365891f0cc3ab2ed6794be",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/45",
+      "ino": 392021,
+      "sha256": "aaa1973547956d6d8e0d4f430448998a74fec6a77b10d9ad14b9e3bc680c2e4a",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/46",
+      "ino": 396117,
+      "sha256": "d55ef2b797140202d4b4ea49b464d0285f53dee1ff6cbee6a2f65a76e90290da",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/47",
+      "ino": 400213,
+      "sha256": "8be9dd9aa2ce4f6ca129ec12a928e715e8ab94ee6f5ee992d8a141f185f95808",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/48",
+      "ino": 404309,
+      "sha256": "17ded6e69bc62c7196b1e93a4b3713243767de04ab0367fe35e18d358206c55f",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/49",
+      "ino": 408405,
+      "sha256": "dabdd72895a4cb287ddfadff4412cb3a9c3ef61f0fdae70939b5a0eba4863c2a",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/50",
+      "ino": 412501,
+      "sha256": "745bba944effaa7b3340579ad769bf56baea2f02470328e2d0e70e006b8d1baf",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/51",
+      "ino": 416597,
+      "sha256": "fa208fd33608e8a21ed13a7c9a92cdbbd6a936acd1a377f4ac10e9d333113866",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/52",
+      "ino": 420693,
+      "sha256": "82e003382897be7f9c2c9e6d241af8c82c66cc95ba0d75c8ddf497cb381ef903",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/53",
+      "ino": 424789,
+      "sha256": "372307fa30e21a7fbc4b5c5b29c837259d2c0bd0eaf82653ee281a3692b1e736",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/54",
+      "ino": 428885,
+      "sha256": "c5205f4b3475a8c80b0ce183d95163af4ebf6f3eaeaa3c1cf9cf1cc3522d8e48",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/55",
+      "ino": 432981,
+      "sha256": "714e436b1014daca0c7cae1377dd769822fdf346554a58bd601e9181d70b23b5",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/56",
+      "ino": 437077,
+      "sha256": "cb73746090ab5f2531897b2c179ba0e6c89fb537981ec07a6086ccc071feecdc",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/57",
+      "ino": 441173,
+      "sha256": "fc57e8faebed23cd98192e35763422b1cb68489a6201da94bb6e2304531a2c64",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/58",
+      "ino": 445269,
+      "sha256": "f2d7c25e55f34e939e764a12f4feb85eec3813ff24d2f777b2751b6a798df323",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/59",
+      "ino": 449365,
+      "sha256": "1921ce2e152e26b82c69a727ddf9a06ca141f28820a5dee955cb67b6dc644196",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/60",
+      "ino": 453461,
+      "sha256": "c6759fbcf6a8188b3bbf6342490fddfe7a8e9c80c861d0f6e9487a8540926b2c",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/61",
+      "ino": 457557,
+      "sha256": "d42617828d496914e6cb3774e4f978deea6947718e0792af1945e33a60411774",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/62",
+      "ino": 461653,
+      "sha256": "03b1237d540ebe572881ea9c23bc42c525d0b6f9d43e4c0e093c7e6c68cae0bb",
+      "bytes": 512
+    },
+    {
+      "path": "/tmp/efs-mount/shared-gc-e5a385530223/63",
+      "ino": 465749,
+      "sha256": "3a4561f07cec13a7563b043cc0ebfe4b3299b9eae59dacd0120094d8ce65d73b",
+      "bytes": 512
+    }
+  ],
+  "removed": [],
+  "initial_physical": {
+    "nodes": [
+      {
+        "host": "fcstor003",
+        "fragments": [
+          "/data1/01/efs-orcd-test-erbmi1/data/packs-v1/1/0079/4803/5269/6828/8485/8280623438628253995/0"
+        ],
+        "fences": []
+      },
+      {
+        "host": "fcstor004",
+        "fragments": [
+          "/data1/01/efs-orcd-test-erbmi1/data/packs-v1/1/0079/4803/5269/6828/8485/8280623438628253995/1"
+        ],
+        "fences": []
+      },
+      {
+        "host": "fcstor005",
+        "fragments": [
+          "/data1/01/efs-orcd-test-erbmi1/data/packs-v1/1/0079/4803/5269/6828/8485/8280623438628253995/2"
+        ],
+        "fences": []
+      },
+      {
+        "host": "fcstor006",
+        "fragments": [],
+        "fences": []
+      }
+    ],
+    "total": 3
+  }
+}
