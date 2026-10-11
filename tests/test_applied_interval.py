@@ -20,6 +20,8 @@ code=r'''
 #define HOST_APPLIED_MAX_TAIL 1024ull
 struct group {int hosted;void*r;uint64_t applied_saved,applied_saved_us;int applied_fd;uint8_t group;};
 struct efs_raft_host {struct group g[2];uint64_t applied_persist_us;};
+struct host_view {int has;};
+static void host_view_get(struct efs_raft_host *h,uint8_t group,struct host_view *v){v->has=h->g[group>>1].hosted && h->g[group>>1].r!=NULL;}
 static int writes,syncs,fail_open,fail_write,fail_sync,closes;
 static uint8_t record[16];
 #define O_RDWR 2

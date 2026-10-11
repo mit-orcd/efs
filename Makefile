@@ -394,6 +394,7 @@ test: all
 	python3 tests/test_host_flow.py
 	python3 tests/test_host_inbox.py
 	python3 tests/test_host_checkpoint.py
+	python3 tests/test_checkpoint_worker.py
 	python3 tests/test_host_retire.py
 	python3 tests/test_recv_overlap.py
 	./tests/test_kv_lsm

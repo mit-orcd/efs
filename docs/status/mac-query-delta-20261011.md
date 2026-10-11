@@ -569,3 +569,32 @@ show 106–188 ms transaction commit and 88–214 ms session admission under thi
 load. This is not evidence of a latency improvement. Repeated failed query
 index builds take 24–37 seconds on each replica; a normally restored disabled-
 query diagnostic will distinguish their contribution from consensus costs.
+
+The follow-up query-disabled diagnostic also failed the unchanged deep pair
+(0/2, 34.9 seconds, normal cleanup). Policy was restored to mask 3, version 4.
+Failed catalog rebuilds amplify the IO load, but they do not explain the
+entire remaining failure.
+
+An uncommitted candidate moves applied-marker persistence to a worker with
+one captured in-flight prefix and no growing queue. The pump still completes
+its KV barrier before enqueueing; no log, quorum, apply or ReadIndex rule is
+relaxed. The marker helper uses the published host view rather than racing an
+underlying core pointer. A blocked previous job supplies backpressure before
+accepting another; a failed KV barrier cannot enqueue a marker, and failed
+marker persistence remains retryable. Thread creation failure retains the
+synchronous path. Shutdown joins the accepted marker job before its existing
+forced KV-before-marker checkpoint and file close. Actual worker persistence
+cost remains in the opt-in batch histogram. Captured-prefix, bounded admission,
+KV failure, marker failure/repair, fallback and blocked shutdown tests pass,
+along with original checkpoint/retirement/cadence tests and local ASAN/UBSAN.
+The full Mac Linux unit gate is running with service normally drained; native
+validation and acceptance remain pending. Stores and VM services are preserved.
+The checkpoint-worker candidate's full clean Linux `make test` passed and it
+was shipped to all Mac replicas/gateway. The unchanged native deep pair still
+failed 0/2 (34.9 seconds, normal completion); the worker does not establish a
+native latency win. Its sampled MKDIRs still spend 84–178 ms admitting cold
+namespace shards and 100–138 ms deciding/resolving cross-group transactions.
+The current admission helper starts several independent ReadIndex rounds
+within the same operation, including immediately after its own successful
+REGISTER/ESTABLISH settlement. Request-scoped authority reuse is the next
+lead; independent RPCs and new groups must still obtain fresh authority.

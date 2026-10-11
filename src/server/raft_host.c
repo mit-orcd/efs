@@ -223,8 +223,8 @@ struct host_group {
     uint32_t voters;
     uint32_t desired; /* operator target; actual follows via joint (I18) */
     uint64_t applied_saved;
-    uint64_t applied_saved_us; /* pump-only: last applied-file write */
-    int applied_fd;            /* pump-only: applied.<g>, held open; -1 */
+    uint64_t applied_saved_us; /* checkpoint owner: last applied-file write */
+    int applied_fd;            /* checkpoint owner: applied.<g>, held open; -1 */
     /* Snapshot file for this group. The pump pins a view and the GC
      * thread writes snap-<group>-<incl>.kvx. part_* is the follower's
      * in-progress InstallSnapshot. fds are -1 when closed. */
@@ -5903,9 +5903,14 @@ static int persist_applied(struct efs_raft_host *h, int gi, uint64_t idx,
     uint8_t buf[16];
     int n;
 
-    if (!h->g[gi].hosted || !h->g[gi].r)
-        return EFS_OK;
-    if (idx == 0 || idx == h->g[gi].applied_saved)
+    if (idx==0)return EFS_OK;
+    /* Marker ownership is independent of the core pointer. Configuration
+     * attachment publishes a view only after its recovery fields are ready;
+     * never race an off-lock checkpoint against a changing Raft pointer. */
+    struct host_view view;
+    host_view_get(h,(uint8_t)(gi<<1),&view);
+    if(!view.has)return EFS_OK;
+    if (idx == h->g[gi].applied_saved)
         return EFS_OK;
     uint64_t interval=h->applied_persist_us ? h->applied_persist_us : HOST_APPLIED_PERSIST_US;
     /* The entry cap bounds the deliberately deferred replay tail. Timer
@@ -6257,11 +6262,92 @@ static void host_balance_leaders(struct efs_raft_host *h, uint64_t now)
     }
 }
 
+/* One in-flight checkpoint, no growing queue. The pump already flushed
+ * the captured KV prefix before handing this replay hint to the worker.
+ * Only marker writes and transport credit retirement move off the pump;
+ * log durability, quorum, apply and read authority remain unchanged. */
+struct host_checkpoint_worker {
+    struct efs_raft_host *host;
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    pthread_t tid;
+    int started,busy,stop,result;
+    uint64_t idx[HOST_NGROUPS],now,bytes;
+    unsigned n;
+};
+
+static void *host_checkpoint_work(void *arg)
+{
+    struct host_checkpoint_worker *w=arg;
+    pthread_mutex_lock(&w->mu);
+    for (;;) {
+        while(!w->busy && !w->stop)pthread_cond_wait(&w->cv,&w->mu);
+        if(!w->busy && w->stop)break;
+        uint64_t idx[HOST_NGROUPS],now=w->now,bytes=w->bytes;
+        unsigned n=w->n;
+        memcpy(idx,w->idx,sizeof(idx));
+        pthread_mutex_unlock(&w->mu);
+        uint64_t start=BO_ON()?efs_batch_obs_now_us():0;
+        int rc=host_checkpoint_retire(w->host,idx,now,EFS_OK,n,bytes);
+        if(BO_ON())BO_HIST(BH_APPLIED_PERSIST_US,efs_batch_obs_now_us()-start);
+        pthread_mutex_lock(&w->mu);
+        w->result=rc;w->busy=0;
+        pthread_cond_broadcast(&w->cv);
+    }
+    pthread_mutex_unlock(&w->mu);
+    return NULL;
+}
+
+static int host_checkpoint_start(struct host_checkpoint_worker *w,
+                                  struct efs_raft_host *h)
+{
+    memset(w,0,sizeof(*w));w->host=h;
+    if(pthread_mutex_init(&w->mu,NULL)!=0)return EFS_ERR_IO;
+    if(pthread_cond_init(&w->cv,NULL)!=0) {
+        pthread_mutex_destroy(&w->mu);return EFS_ERR_IO;
+    }
+    if(efsd_pthread_create(&w->tid,host_checkpoint_work,w)!=0) {
+        pthread_cond_destroy(&w->cv);pthread_mutex_destroy(&w->mu);
+        return EFS_ERR_IO;
+    }
+    w->started=1;return EFS_OK;
+}
+
+static int host_checkpoint_dispatch(struct host_checkpoint_worker *w,
+    const uint64_t *idx,uint64_t now,int kv_rc,unsigned n,uint64_t bytes)
+{
+    /* A failed KV barrier cannot enqueue a marker. Retirement itself is
+     * unchanged and does not grant any Raft ACK or read authority. */
+    if(kv_rc!=EFS_OK)return host_checkpoint_retire(w->host,idx,now,kv_rc,n,bytes);
+    pthread_mutex_lock(&w->mu);
+    while(w->busy)pthread_cond_wait(&w->cv,&w->mu);
+    int previous=w->result;
+    memcpy(w->idx,idx,sizeof(w->idx));w->now=now;w->n=n;w->bytes=bytes;
+    w->busy=1;pthread_cond_broadcast(&w->cv);
+    pthread_mutex_unlock(&w->mu);
+    return previous;
+}
+
+static int host_checkpoint_stop(struct host_checkpoint_worker *w)
+{
+    if(!w->started)return EFS_OK;
+    pthread_mutex_lock(&w->mu);w->stop=1;
+    pthread_cond_broadcast(&w->cv);pthread_mutex_unlock(&w->mu);
+    /* Finish the accepted prefix; never cancel an owned persistence job. */
+    pthread_join(w->tid,NULL);
+    int rc=w->result;
+    pthread_cond_destroy(&w->cv);pthread_mutex_destroy(&w->mu);
+    w->started=0;return rc;
+}
+
 static void *host_pump(void *arg)
 {
     struct efs_raft_host *h = arg;
     uint64_t last_tick_us = 0;
     int checkpoint_failed = 0;
+    struct host_checkpoint_worker checkpoint;
+    if(host_checkpoint_start(&checkpoint,h)!=EFS_OK)
+        fprintf(stderr,"raft-host: checkpoint worker unavailable; using synchronous persistence\n");
 
     while (h->running) {
         struct pollfd pfd;
@@ -6421,13 +6507,16 @@ static void *host_pump(void *arg)
 
             /* pnow is wall time for applied-index persistence; diagnostics
              * use monotonic time, matching cohort/hold measurements. */
-            int durable_rc=host_checkpoint_retire(h,applied_now,pnow,kv_rc,done_n,done_bytes);
+            int durable_rc=checkpoint.started
+                ? host_checkpoint_dispatch(&checkpoint,applied_now,pnow,kv_rc,done_n,done_bytes)
+                : host_checkpoint_retire(h,applied_now,pnow,kv_rc,done_n,done_bytes);
             if (durable_rc != EFS_OK && !checkpoint_failed)
                 fprintf(stderr,"raft-host: applied checkpoint not advanced after persistence failure\n");
             checkpoint_failed=durable_rc!=EFS_OK;
         }
         if (batch_obs) {
-            BO_HIST(BH_APPLIED_PERSIST_US, efs_batch_obs_now_us() - phase_us);
+            if(!checkpoint.started)
+                BO_HIST(BH_APPLIED_PERSIST_US, efs_batch_obs_now_us() - phase_us);
             efs_batch_obs_dump(efs_batch_obs_now_us());
         }
         if (obs) {
@@ -6454,6 +6543,8 @@ static void *host_pump(void *arg)
         uint64_t idx[HOST_NGROUPS];
         int i;
 
+        if(host_checkpoint_stop(&checkpoint)!=EFS_OK)
+            fprintf(stderr,"raft-host: checkpoint worker persistence failed during drain\n");
         pthread_mutex_lock(&h->mu);
         for (i = 0; i < HOST_NGROUPS; i++)
             idx[i] = h->g[i].hosted && h->g[i].r
