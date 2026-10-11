@@ -4236,9 +4236,11 @@ per build prove three versus two creation/close lease entries per file. The
 four-repeat finite TCP A/B passes (+18.7% direct/+23.3% buffered median paired
 gain), with exact cold bytes and empty physical inventories in all 16 cases.
 Targeted direct/TCP combined reply-loss, negative verdict and LOCAL/HASHED
-crash gates pass. A subsequent legacy guarded-lease PREPARE timeout blocks
-the complete live run and buffered follow-up. Sustained-service and full
-integration remain open, so this is not full W94 closure.
+crash gates pass. The legacy guarded-lease PREPARE fixture was repaired; final
+captured `90a47313` full normal/fault native and both TCP matrices pass, including
+cold first-mutation namespace and APPEND/sync recovery. Sustained-service and
+full integration remain open, so this is not full W94 closure.
+[Integration follow-up](../status/amd-integration-20261011.md).
 [Evidence and limits](../status/amd-non-rdma-20261010.md#w94--combined-first-descriptor-adoption-candidate).
 
 **Historical pre-merge devel review (`cde67dca`, Oct 8):** the flags-0/separate-HOLD observation
@@ -4319,7 +4321,9 @@ The client profile concentrates sampled CPU in flush/report and fragment
 transfer. Separate traces cannot be divided to infer an exact fragment count
 or write-amplification ratio per file. Measure that explicitly.
 
-**Remaining action:** Review the implemented immutable-body/checksummed-manifest candidate and the retained 24 AMD sustained-churn samples (184320 operations), including durability, index overhead and reclamation. Its process-crash/fault-tested independent model is not a production packed index. [Implemented model and limits](../status/w95-indexed-model-20261008.md). Port only a demonstrated principle; retain existing stores and require explicit P4.1 compatibility/migration decisions before a layout change.
+**Oct 11 AMD review completed:** all 24 raw samples / 184,320 operations reconcile; publication order, failure fencing, generation checks and reference-based collection reviewed. Manifest writes independently match 10,320 bytes per cohort (10,320/322.5 index bytes per operation for cohorts 1/32). Full-snapshot index cost grows with capacity and is not selected for production. [Review and limits](../status/amd-sustained-20261011.md#w95-retained-amd-experiment-review-completed).
+
+**Remaining action:** Complete mounted/shared-object production integration and P4.1 format/compatibility decisions; the process-crash/fault-tested independent model is not a production packed index. [Implemented model and limits](../status/w95-indexed-model-20261008.md). Port only a demonstrated principle; retain existing stores and require explicit P4.1 compatibility/migration decisions before a layout change.
 
 **Governing contracts/related work:** W71 durable PUT, W73 synchronous writes,
 W75 integrity, W86 ownership/GC fencing and W77 publication. P4.1 owns the

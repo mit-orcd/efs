@@ -1833,7 +1833,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | tiny-create | **W94** · atomic CREATE plus open lease | performance / lifecycle | partial — retained FUSE CREATE/adoption, sequenced lease edges and cleanup AMD gated; REPORT session fences AMD gated; combined first adoption passes native and both TCP POSIX/cold matrices; committed lease entries fall from three to two per created/closed file; four-repeat finite TCP A/B gains +18.7% direct/+23.3% buffered; targeted direct reply-loss/negative/crash gates pass; legacy guarded-lease fixture corrected to start with ordinary unleased CREATE, avoiding mounted adoption cleanup markers; final captured candidate `90a47313` passes full normal/fault native and direct/buffered TCP matrices, including six cold first-mutation namespace and APPEND/sync fault gates; applied-bound proof corrected and lease counts revalidated ([follow-up](../status/amd-integration-20261011.md)); 600-second-per-mode sustained-service gate in progress ([gate](../status/amd-sustained-20261011.md)); full data-plane integration remains open ([checkpoint](../status/amd-non-rdma-20261010.md#w94--combined-first-descriptor-adoption-candidate)) | [work item](#w94) |
 | scratch-expiry | **W90** · scratch-file expiry metadata and safe lifecycle | feature | design accepted D33; opt-in fixed deadlines and safe lifecycle; implementation/gates open | [work item](#w90) · [design](../status/scratch-expiry-interface.md) |
 | virtual-commands | **W91** · directory-local virtual `.efs/` command interface | usability feature | design accepted D34; `.efs/` commands and bounded query paths; implementation/compatibility gates remain | [work item](#w91) · [design](../status/scratch-expiry-interface.md) |
-| tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | partial — independent indexed packing, publication/GC fault and 24-sample AMD churn gates pass; P4.1 production-format and migration decision remain | [work item](#w95) |
+| tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | partial — independent indexed packing, publication/GC fault and 24-sample AMD churn gates pass; retained raw-field/index-cost review completed ([review](../status/amd-sustained-20261011.md#w95-retained-amd-experiment-review-completed)); P4.1 production-format and migration decision remain | [work item](#w95) |
 | tiny-kv | **W96** · bounded KV WAL preallocation | performance experiment | Closed Oct11: isolated SATA/NVMe repeated matrix, exact replay/reset/reservation, full native/POSIX/peer/fault/cold and WAL sanitizer gates pass; conditional benefit and SATA tails retained | [closure](../status/devel-nuc-closure-20261010.md) |
 | decisions | **D28** client-death loss policy · **D29** durable publication receipts · **D30** bounded admission/pacing | accepted design | accepted Oct 8: salvage deferred; D29/W88 implementation first, then D30/W23/W89; implementation and acceptance remain open | [contracts and gates](#d28d30--accepted-oct-8-2026) |
 | op1 | **W70** · shrink-quota falsely reports background migration | operator observability bug | Closed Oct11: current NUC direct/buffered × one/two-root accepted/refused reductions, truthful running quota and exact retained bytes pass; no migration/persistence claim | [closure](../status/devel-nuc-closure-20261010.md) |
@@ -6608,9 +6608,11 @@ per build prove three versus two creation/close lease entries per file. The
 four-repeat finite TCP A/B passes (+18.7% direct/+23.3% buffered median paired
 gain), with exact cold bytes and empty physical inventories in all 16 cases.
 Targeted direct/TCP combined reply-loss, negative verdict and LOCAL/HASHED
-crash gates pass. A subsequent legacy guarded-lease PREPARE timeout blocks
-the complete live run and buffered follow-up. Sustained-service and full
-integration remain open, so this is not full W94 closure.
+crash gates pass. The legacy guarded-lease PREPARE fixture was repaired; final
+captured `90a47313` full normal/fault native and both TCP matrices pass, including
+cold first-mutation namespace and APPEND/sync recovery. Sustained-service and
+full integration remain open, so this is not full W94 closure.
+[Integration follow-up](../status/amd-integration-20261011.md).
 [Evidence and limits](../status/amd-non-rdma-20261010.md#w94--combined-first-descriptor-adoption-candidate).
 
 **Historical pre-merge devel review (`cde67dca`, Oct 8):** the flags-0/separate-HOLD observation
@@ -6691,7 +6693,9 @@ The client profile concentrates sampled CPU in flush/report and fragment
 transfer. Separate traces cannot be divided to infer an exact fragment count
 or write-amplification ratio per file. Measure that explicitly.
 
-**Remaining action:** Review the implemented immutable-body/checksummed-manifest candidate and the retained 24 AMD sustained-churn samples (184320 operations), including durability, index overhead and reclamation. Its process-crash/fault-tested independent model is not a production packed index. [Implemented model and limits](../status/w95-indexed-model-20261008.md). Port only a demonstrated principle; retain existing stores and require explicit P4.1 compatibility/migration decisions before a layout change.
+**Oct 11 AMD review completed:** all 24 raw samples / 184,320 operations reconcile; publication order, failure fencing, generation checks and reference-based collection reviewed. Manifest writes independently match 10,320 bytes per cohort (10,320/322.5 index bytes per operation for cohorts 1/32). Full-snapshot index cost grows with capacity and is not selected for production. [Review and limits](../status/amd-sustained-20261011.md#w95-retained-amd-experiment-review-completed).
+
+**Remaining action:** Complete mounted/shared-object production integration and P4.1 format/compatibility decisions; the process-crash/fault-tested independent model is not a production packed index. [Implemented model and limits](../status/w95-indexed-model-20261008.md). Port only a demonstrated principle; retain existing stores and require explicit P4.1 compatibility/migration decisions before a layout change.
 
 **Governing contracts/related work:** W71 durable PUT, W73 synchronous writes,
 W75 integrity, W86 ownership/GC fencing and W77 publication. P4.1 owns the
