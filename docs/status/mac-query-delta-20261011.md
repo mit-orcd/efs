@@ -355,3 +355,27 @@ A 186–188-second whole-host Mac TCP window during the peer run records:
 
 SSH is included. These counters do not identify lost EFS RPCs or rule out
 intermittent stalls. Mac buffered/TCP results do not close ORCD IB/RDMA gates.
+
+A separate, tracer-free 20-second `/proc` observation during the peer workload
+adds a storage-layer constraint:
+
+| VM | Data write MiB/s | Data-device busy | Flushes/s | Full I/O pressure time |
+| --- | ---: | ---: | ---: | ---: |
+| efs1 | 3.00 | 96.9% | 294.8 | 31.5% |
+| efs2 | 1.90 | 98.7% | 255.8 | 41.4% |
+| efs3 | 2.12 | 86.5% | 158.8 | 37.0% |
+
+Counters are whole-VM `vdb` and pressure deltas, including background work;
+device busy is not physical-device utilization or an EFS-only percentage.
+CPU pressure averages are near zero. EFS kernel wait samples include
+`submit_bio_wait`, `xlog_wait_on_iclog` and `__flush_workqueue`. Per-cycle Raft
+durability-tail maxima in the same interval are approximately 45–61 ms,
+while pump-held work is usually under one millisecond. These observations
+support durability waiting rather than CPU/network bandwidth as the next lead;
+they do not distinguish query, GC and foreground causality. GC reports 1,223
+removed files / 80,189,664 file bytes since service start, with pending work and
+47 reap errors; classify those outcomes before calling them communication loss.
+
+All four Mac nodes have matching query source and binary hashes. Every running
+server and both gateway FUSE executables match the installed binary byte for
+byte. Build identities and raw counter observations are retained with evidence.

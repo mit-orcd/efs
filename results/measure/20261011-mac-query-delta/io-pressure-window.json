@@ -1,0 +1,126 @@
+{
+  "scope": "20-second whole-VM /proc pressure and vdb counters during installed peer acceptance; no tracer or competing test",
+  "summary": [
+    {
+      "node": "efs1",
+      "seconds": 20.010748624801636,
+      "write_iops": 611.3714298942814,
+      "write_MiB_s": 3.004269200940299,
+      "flush_iops": 294.79156980107615,
+      "mean_flush_ms": 3.1907102898796404,
+      "busy_percent": 96.85794551423051,
+      "full_io_stall_percent": 31.459337769090606
+    },
+    {
+      "node": "efs2",
+      "seconds": 20.005778312683105,
+      "write_iops": 485.2598008569054,
+      "write_MiB_s": 1.904771947229945,
+      "flush_iops": 255.77610228520652,
+      "mean_flush_ms": 3.7717412546413915,
+      "busy_percent": 98.65649659572252,
+      "full_io_stall_percent": 41.376130788934226
+    },
+    {
+      "node": "efs3",
+      "seconds": 20.01456093788147,
+      "write_iops": 327.46159260457586,
+      "write_MiB_s": 2.1198677696669477,
+      "flush_iops": 158.83436113670228,
+      "mean_flush_ms": 5.3718150361748975,
+      "busy_percent": 86.54698973293353,
+      "full_io_stall_percent": 36.96697630771588
+    }
+  ],
+  "rows": [
+    {
+      "node": "efs1",
+      "before": {
+        "time": 1791728836.9531398,
+        "io_pressure": "some avg10=27.00 avg60=28.53 avg300=27.24 total=2195082970\nfull avg10=26.80 avg60=28.12 avg300=26.77 total=2146950721\n",
+        "cpu_pressure": "some avg10=0.03 avg60=0.04 avg300=0.05 total=113753975\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "diskstats": " 253       0 vda 9145 248 1382164 4785 954670 18787 20154449 1204721 0 499229 1607878 0 0 0 0 27770 398372\n 253       1 vda1 164 199 11409 20 2 0 9 0 0 14 20 0 0 0 0 0 0\n 253       2 vda2 149 0 10300 21 19 9 4406 41 0 58 63 0 0 0 0 0 0\n 253       3 vda3 8734 49 1357643 4731 954641 18778 20150034 1204679 0 505549 1209410 0 0 0 0 0 0\n 253      16 vdb 119547 273 2959231 101532 3649981 779025 83530962 40723481 1 29770476 69813620 0 0 0 0 2520755 28988606\n 251       0 zram0 105 0 4448 0 148 0 1184 2 0 2 2 0 0 0 0 0 0\n",
+        "thread_waits": {
+          "poll_schedule_timeout.constprop.0": 2,
+          "futex_do_wait": 7,
+          "hrtimer_nanosleep": 1,
+          "__flush_workqueue": 1,
+          "wait_woken": 25
+        }
+      },
+      "after": {
+        "time": 1791728856.9638884,
+        "io_pressure": "some avg10=31.48 avg60=29.43 avg300=27.54 total=2201491843\nfull avg10=30.79 avg60=28.91 avg300=27.04 total=2153245970\n",
+        "cpu_pressure": "some avg10=0.00 avg60=0.02 avg300=0.05 total=113846221\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "diskstats": " 253       0 vda 9145 248 1382164 4785 954708 18791 20155056 1205090 0 499463 1608473 0 0 0 0 27788 398598\n 253       1 vda1 164 199 11409 20 2 0 9 0 0 14 20 0 0 0 0 0 0\n 253       2 vda2 149 0 10300 21 19 9 4406 41 0 58 63 0 0 0 0 0 0\n 253       3 vda3 8734 49 1357643 4731 954679 18782 20150641 1205047 0 505783 1209778 0 0 0 0 0 0\n 253      16 vdb 119547 273 2959231 101532 3662215 779437 83654083 40780686 2 29789858 69889648 0 0 0 0 2526654 29007428\n 251       0 zram0 105 0 4448 0 148 0 1184 2 0 2 2 0 0 0 0 0 0\n",
+        "thread_waits": {
+          "poll_schedule_timeout.constprop.0": 1,
+          "futex_do_wait": 5,
+          "hrtimer_nanosleep": 2,
+          "submit_bio_wait": 1,
+          "xlog_wait_on_iclog": 1,
+          "wait_woken": 26
+        }
+      }
+    },
+    {
+      "node": "efs2",
+      "before": {
+        "time": 1791728835.5390694,
+        "io_pressure": "some avg10=40.09 avg60=40.55 avg300=34.82 total=1750249478\nfull avg10=39.79 avg60=40.14 avg300=34.40 total=1730251958\n",
+        "cpu_pressure": "some avg10=0.06 avg60=0.04 avg300=0.00 total=85934796\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "diskstats": " 253       0 vda 3893 222 815961 1868 882913 16652 18081985 1003247 0 400947 1305338 0 0 0 0 24073 300221\n 253       1 vda1 164 199 11409 33 2 0 9 0 0 25 33 0 0 0 0 0 0\n 253       2 vda2 149 0 10378 30 19 7 4373 35 0 57 66 0 0 0 0 0 0\n 253       3 vda3 3482 23 791362 1787 882884 16645 18077603 1003210 0 405840 1004997 0 0 0 0 0 0\n 253      16 vdb 8750 252 602071 6254 3063168 806122 75687905 36677334 3 29394459 65338720 0 0 0 0 2370037 28655131\n 251       0 zram0 105 0 4448 0 1 0 8 0 0 0 0 0 0 0 0 0 0\n",
+        "thread_waits": {
+          "poll_schedule_timeout.constprop.0": 1,
+          "futex_do_wait": 4,
+          "hrtimer_nanosleep": 2,
+          "submit_bio_wait": 2,
+          "wait_woken": 17,
+          "xlog_wait_on_iclog": 1
+        }
+      },
+      "after": {
+        "time": 1791728855.5448477,
+        "io_pressure": "some avg10=41.48 avg60=41.01 avg300=35.31 total=1758595764\nfull avg10=41.02 avg60=40.57 avg300=34.90 total=1738529575\n",
+        "cpu_pressure": "some avg10=0.00 avg60=0.02 avg300=0.00 total=85988874\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "diskstats": " 253       0 vda 3893 222 815961 1868 882932 16653 18082306 1003420 0 401087 1305660 0 0 0 0 24085 300371\n 253       1 vda1 164 199 11409 33 2 0 9 0 0 25 33 0 0 0 0 0 0\n 253       2 vda2 149 0 10378 30 19 7 4373 35 0 57 66 0 0 0 0 0 0\n 253       3 vda3 3482 23 791362 1787 882903 16646 18077924 1003383 0 405997 1005170 0 0 0 0 0 0\n 253      16 vdb 8750 252 602071 6254 3072876 806122 75765947 36734696 2 29414196 65415383 0 0 0 0 2375154 28674431\n 251       0 zram0 105 0 4448 0 1 0 8 0 0 0 0 0 0 0 0 0 0\n",
+        "thread_waits": {
+          "poll_schedule_timeout.constprop.0": 1,
+          "futex_do_wait": 4,
+          "hrtimer_nanosleep": 2,
+          "submit_bio_wait": 1,
+          "__flush_workqueue": 1,
+          "wait_woken": 18
+        }
+      }
+    },
+    {
+      "node": "efs3",
+      "before": {
+        "time": 1791728836.708983,
+        "io_pressure": "some avg10=37.34 avg60=39.95 avg300=34.82 total=1648956262\nfull avg10=36.86 avg60=39.53 avg300=34.42 total=1628651864\n",
+        "cpu_pressure": "some avg10=0.00 avg60=0.02 avg300=0.00 total=84830481\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "diskstats": " 253       0 vda 5017 203 502964 1948 418846 8764 42175533 803771 0 379797 1108928 0 0 0 0 24103 303207\n 253       1 vda1 165 199 9585 23 2 0 9 0 0 17 24 0 0 0 0 0 0\n 253       2 vda2 147 0 7682 23 15 9 4285 39 0 62 62 0 0 0 0 0 0\n 253       3 vda3 4607 4 482885 1887 418821 8755 42171239 803727 0 383350 805615 0 0 0 0 0 0\n 253      16 vdb 10101 186 598017 10629 3098338 770666 75528755 37195858 2 29363192 65833167 0 0 0 0 2355732 28626679\n 251       0 zram0 105 0 4448 0 1 0 8 0 0 0 0 0 0 0 0 0 0\n",
+        "thread_waits": {
+          "do_poll.constprop.0": 1,
+          "futex_wait_queue": 4,
+          "hrtimer_nanosleep": 2,
+          "submit_bio_wait": 2,
+          "wait_woken": 16
+        }
+      },
+      "after": {
+        "time": 1791728856.723544,
+        "io_pressure": "some avg10=37.09 avg60=39.15 avg300=34.98 total=1656443046\nfull avg10=36.66 avg60=38.73 avg300=34.58 total=1636050642\n",
+        "cpu_pressure": "some avg10=0.09 avg60=0.04 avg300=0.00 total=84910748\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "diskstats": " 253       0 vda 5017 203 502964 1948 419317 8772 42225004 804338 0 380143 1109740 0 0 0 0 24121 303453\n 253       1 vda1 165 199 9585 23 2 0 9 0 0 17 24 0 0 0 0 0 0\n 253       2 vda2 147 0 7682 23 15 9 4285 39 0 62 62 0 0 0 0 0 0\n 253       3 vda3 4607 4 482885 1887 419292 8763 42220710 804294 0 383696 806181 0 0 0 0 0 0\n 253      16 vdb 10101 186 598017 10629 3104892 772028 75615648 37232999 0 29380514 65887386 0 0 0 0 2358911 28643756\n 251       0 zram0 105 0 4448 0 1 0 8 0 0 0 0 0 0 0 0 0 0\n",
+        "thread_waits": {
+          "do_poll.constprop.0": 2,
+          "futex_wait_queue": 4,
+          "hrtimer_nanosleep": 3,
+          "wait_woken": 16
+        }
+      }
+    }
+  ]
+}
