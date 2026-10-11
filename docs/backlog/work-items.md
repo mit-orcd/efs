@@ -2699,6 +2699,15 @@ signals (63–215 ms); handlers still drain before teardown.
 
 ## W66 · Metadata leadership distribution and routing (queue row meta-scale)
 
+**Oct 10 AMD routing repair:** a prepared namespace transaction can require a
+coordinator group outside a serving replica's placement. A per-read context
+now redirects only that explicit condition during LOOKUP/GETATTR instead of
+returning EIO before the competing MKDIR; genuine hosted authority/storage
+errors remain errors. Direct and buffered TCP each pass 64 competing MKDIR
+races, exact cold directory recovery and reclamation; the combined candidate's
+full native suite passes. Default placement/quorum and W66/D36 protection
+obligations remain unchanged. [Checkpoint](../status/amd-non-rdma-20261010.md#w66--unresolved-namespace-coordinator-routing).
+
 **Class:** scalability enhancement / metadata protection protocol. **Status:** open; indexed Oct 7, 2026.
 
 **D36 (Oct 9):** topology work must satisfy the user-required four-node,
