@@ -19,11 +19,15 @@ static __thread uint64_t deadline;
 uint64_t efs_client_rpc_deadline_ms(void){return deadline;}
 void efs_client_rpc_set_deadline_ms(uint64_t v){deadline=v;}
 int efs_client_rpc_past_deadline(void){return 0;}
+static int pack_command_wire(uint32_t group,const struct efs_pack_object *object,const struct efs_pack_ref *refs,uint32_t count,uint8_t *wire,size_t capacity,uint8_t tag){
+ (void)group;(void)refs;(void)wire;assert(object->ledger.owner.seq==17&&count==2&&capacity);
+ assert(tag==EFS_MD_CMD_PACK_UPLOAD_RETIRE);
+ if(upload_fail){upload_fail=0;return EFS_ERR_NET;}upload_retired++;return 0;
+}
 static int pack_command(struct pack_context *p,uint8_t tag){
  commands++;assert(p->cohort.sealed && p->cohort.owner.seq==17);
  if(tag==EFS_MD_CMD_PACK_ADMIT){if(admit_fail){admit_fail=0;return EFS_ERR_NET;}return 0;}
- assert(tag==EFS_MD_CMD_PACK_UPLOAD_RETIRE && p->writers[0].done && p->writers[1].done);
- if(upload_fail){upload_fail=0;return EFS_ERR_NET;}upload_retired++;return 0;
+ assert(0);return EFS_ERR_PROTO;
 }
 struct efs_conn *efs_client_conn_get(efs_node_id_t n){assert(n>=1&&n<=4);return (struct efs_conn *)(uintptr_t)n;}
 void efs_client_conn_release(efs_node_id_t n,struct efs_conn *c){assert((uintptr_t)c==n);}
@@ -60,7 +64,7 @@ int efs_client_publication_retire(struct efs_publication_ack_queue *q){
  if(i==1&&retire_fail){retire_fail=0;return EFS_ERR_NET;}return 0;
 }
 int efs_client_publication_ack_free(struct efs_publication_ack_queue *q){assert(q);__atomic_fetch_add(&released,1,__ATOMIC_RELAXED);return 0;}
-'''+s[s.index('static int pack_publish_record('):s.index('static void *pack_worker(')]+r'''
+'''+s[s.index('static int pack_retire_group('):s.index('static int pack_capabilities(')]+s[s.index('static int pack_publish_record('):s.index('static void *pack_worker(')]+r'''
 int main(void){
  static struct pack_context p;g_client.node_count=4;
  for(unsigned i=0;i<4;i++)g_client.nodes[i].id=i+1;
@@ -74,21 +78,29 @@ int main(void){
   p.writers[i].object=r.record_generation;p.writers[i].len=512;
   p.writers[i].acks=(struct efs_publication_ack_queue *)(uintptr_t)(i+1);
  }
- pack_groups[0]=&p;
+ static struct pack_retirement retirement;pack_groups[0]=&p;pack_retirements[0]=&retirement;pack_ack_credits=2;
  assert(!pack_flush_group(0,0)&&!commands); /* partial cohort waits only its bound */
  p.busy=1;assert(pack_flush_group(0,1)==EFS_ERR_BUSY&&!commands);p.busy=0;
  admit_fail=put_fail=publication_fail=load_fail=retire_fail=upload_fail=1;
  assert(pack_flush_group(0,1)==EFS_ERR_NET && p.built && p.cohort.count==2 && !released);
  assert(pack_flush_group(0,1)==EFS_ERR_NET && p.put_mask==1 && !released);
- assert(pack_flush_group(0,1)==EFS_ERR_NET && p.put_mask==7 && p.writers[0].done && !p.writers[1].done && released==1);
+ assert(pack_flush_group(0,1)==EFS_ERR_NET && p.put_mask==7 && p.writers[0].done && !p.writers[1].done && !released);
  assert(pack_flush_group(0,1)==EFS_ERR_NET && p.writers[1].published && !p.writers[1].loaded);
- assert(pack_flush_group(0,1)==EFS_ERR_NET && p.writers[1].loaded && !p.writers[1].done);
- assert(pack_flush_group(0,1)==EFS_ERR_NET && p.writers[1].done && p.cohort.count==2 && released==2);
- assert(!pack_flush_group(0,1) && !p.cohort.count && upload_retired==1);
+ assert(!pack_flush_group(0,1) && !p.cohort.count && retirement.active && !released && pack_ack_credits==2);
+ p.cohort.count=2;p.cohort.sealed=1;p.built=1;p.put_mask=7;
+ p.writers[0].done=p.writers[1].done=1;
+ assert(pack_flush_group(0,1)==EFS_ERR_BUSY && p.cohort.count==2 && retirement.active && !released);
+ p.cohort.count=0;
+ /* Close is complete, but exact ACKs/manifest still survive all cleanup errors.
+  * The data context is reusable; its cleanup slot cannot be overwritten. */
+ assert(pack_retire_group(0)==EFS_ERR_NET && retirement.active && released==1 && pack_ack_credits==1);
+ assert(pack_retire_group(0)==EFS_ERR_NET && retirement.active && released==2 && !pack_ack_credits && !upload_retired);
+ assert(!pack_retire_group(0) && !retirement.active && upload_retired==1);
+ assert(!pack_retire_group(0) && upload_retired==1);
  assert(sends[0]==1&&sends[1]==2&&sends[2]==1); /* no re-PUT after publication */
  assert(publications[0]==1&&publications[1]==2 && loads[0]==1&&loads[1]==2);
  assert(retirements[0]==1&&retirements[1]==2);
- puts("mounted pack retry: bounded partial cohort, immutable lost-ACK retry, per-record receipt/load/retirement retention and no re-PUT after publication PASS");
+ puts("mounted pack retry: bounded partial cohort, immutable lost-ACK retry, per-record receipt/load retention, bounded deferred retirement and no re-PUT after publication PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-mounted-pack-') as d:

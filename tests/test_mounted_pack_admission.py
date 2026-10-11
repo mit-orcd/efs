@@ -15,6 +15,7 @@ static int pack_start(void){return 0;}
 static void cache_unlocked(void){assert(!pthread_mutex_trylock(&pack_mu));assert(pack_groups[0]->busy);pthread_mutex_unlock(&pack_mu);}
 static int pack_capabilities(uint32_t *n){*n=15;return cap_error;}
 static int pack_flush_group(unsigned gi,int force){(void)gi;assert(force);return EFS_ERR_BUSY;}
+static int pack_retire_group(unsigned gi){assert(gi<2);return EFS_ERR_BUSY;}
 static int pack_pause(void){return EFS_ERR_BUSY;}
 int efs_export_get_inode(struct efs_export *e,efs_ino_t ino,struct efs_inode *out){(void)e;*out=(struct efs_inode){.ino=ino,.size=inode_size,.mode=S_IFREG|0600};return 0;}
 int efs_dcache_ino_pinned(efs_ino_t ino){assert(ino==101);return pinned;}

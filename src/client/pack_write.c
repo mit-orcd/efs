@@ -41,6 +41,19 @@ struct pack_context {
     uint64_t retry_after;
     int busy,last_error,built;
 };
+/* Only immutable authority/ACK state survives completed publication. Body
+ * buffers can serve the next cohort while this bounded slot retains cleanup. */
+struct pack_retirement {
+    struct efs_pack_object object;
+    struct efs_pack_ref refs[PACK_WRITERS];
+    struct efs_publication_ack_queue *acks[PACK_WRITERS];
+    uint8_t wire[EFS_PACK_UPLOAD_MAX+2];
+    uint32_t group,count;
+    int active,busy,last_error;
+};
+static struct pack_retirement *pack_retirements[2];
+/* At most two cohorts' worth of charged ACK queues across active + cleanup. */
+static unsigned pack_ack_credits;
 static pthread_mutex_t pack_mu=PTHREAD_MUTEX_INITIALIZER;
 static struct pack_context *pack_groups[2];
 static pthread_t pack_tid;
@@ -61,18 +74,18 @@ static int pack_pause(void)
     if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
     usleep(1000);return efs_client_rpc_past_deadline()?EFS_ERR_BUSY:EFS_OK;
 }
-static int pack_command(struct pack_context *p,uint8_t tag)
+static int pack_command_wire(uint32_t group,const struct efs_pack_object *object,
+    const struct efs_pack_ref *refs,uint32_t count,uint8_t *wire,size_t capacity,uint8_t tag)
 {
-    size_t n;p->wire[0]=(uint8_t)p->cohort.group;p->wire[1]=tag;
-    int rc=efs_pack_upload_encode(&p->object,p->cohort.refs,p->cohort.count,
-        p->wire+2,sizeof(p->wire)-2,&n);if(rc)return rc;
+    size_t n;wire[0]=(uint8_t)group;wire[1]=tag;
+    int rc=efs_pack_upload_encode(object,refs,count,wire+2,capacity-2,&n);if(rc)return rc;
     efs_node_id_t target=0;
     for(unsigned attempt=0;attempt<12;attempt++) {
         if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
         efs_node_id_t node=target?target:g_client.nodes[attempt%g_client.node_count].id;
         struct efs_conn *conn=efs_client_conn_get(node);if(!conn){rc=EFS_ERR_NET;continue;}
         uint8_t type=0;void *raw=NULL;uint32_t bytes=0;
-        if(efs_conn_send_msg(conn,EFS_MSG_RAFT_MKFS,p->wire,(uint32_t)n+2) ||
+        if(efs_conn_send_msg(conn,EFS_MSG_RAFT_MKFS,wire,(uint32_t)n+2) ||
            efs_conn_recv_msg(conn,&type,&raw,&bytes)) {
             free(raw);efs_client_conn_drop(node,conn);rc=EFS_ERR_NET;continue;
         }
@@ -90,6 +103,32 @@ static int pack_command(struct pack_context *p,uint8_t tag)
         if(pack_pause())return EFS_ERR_BUSY;
     }
     return rc;
+}
+static int pack_command(struct pack_context *p,uint8_t tag)
+{
+    return pack_command_wire(p->cohort.group,&p->object,p->cohort.refs,
+        p->cohort.count,p->wire,sizeof(p->wire),tag);
+}
+static int pack_retire_group(unsigned gi)
+{
+    pthread_mutex_lock(&pack_mu);
+    struct pack_retirement *r=pack_retirements[gi];
+    if(!r || !r->active){pthread_mutex_unlock(&pack_mu);return EFS_OK;}
+    if(r->busy){pthread_mutex_unlock(&pack_mu);return EFS_ERR_BUSY;}
+    r->busy=1;pthread_mutex_unlock(&pack_mu);
+    int rc=EFS_OK;
+    for(uint32_t i=0;i<r->count;i++) {
+        if(!r->acks[i])continue;
+        rc=efs_client_publication_retire(r->acks[i]);if(rc)break;
+        rc=efs_client_publication_ack_free(r->acks[i]);if(rc)break;
+        r->acks[i]=NULL;
+        pthread_mutex_lock(&pack_mu);pack_ack_credits--;pthread_mutex_unlock(&pack_mu);
+    }
+    if(!rc)rc=pack_command_wire(r->group,&r->object,r->refs,r->count,
+        r->wire,sizeof(r->wire),EFS_MD_CMD_PACK_UPLOAD_RETIRE);
+    pthread_mutex_lock(&pack_mu);
+    r->last_error=rc;r->busy=0;if(!rc)r->active=0;
+    pthread_mutex_unlock(&pack_mu);return rc;
 }
 static int pack_capabilities(uint32_t *members)
 {
@@ -150,9 +189,9 @@ static int pack_publish_record(struct pack_context *p,uint32_t i)
         rc=efs_client_pull_chunks_range(w->plan.ino,0,1);if(rc)return rc;
         efs_dcache_drop(w->plan.ino,0);w->loaded=1;
     }
-    rc=efs_client_publication_retire(w->acks);if(rc)return rc;
-    rc=efs_client_publication_ack_free(w->acks);if(rc)return rc;
-    w->acks=NULL;__atomic_store_n(&w->done,1,__ATOMIC_RELEASE);
+    /* Close/fsync require consumed durable publication and a loaded mapping.
+     * Retirement is separately retained; it never changes file visibility. */
+    __atomic_store_n(&w->done,1,__ATOMIC_RELEASE);
     return EFS_OK;
 }
 struct pack_publish_run {
@@ -230,7 +269,7 @@ static int pack_progress(struct pack_context *p)
         }
     }
     rc=pack_publish_cohort(p);if(rc)return rc;
-    return pack_command(p,EFS_MD_CMD_PACK_UPLOAD_RETIRE);
+    return EFS_OK;
 }
 static int pack_flush_group(unsigned gi,int force)
 {
@@ -246,6 +285,16 @@ static int pack_flush_group(unsigned gi,int force)
     int rc=pack_progress(p);
     pthread_mutex_lock(&pack_mu);p->last_error=rc;p->busy=0;p->retry_after=pack_now()+10000000;
     if(!rc) {
+        struct pack_retirement *r=pack_retirements[gi];
+        if(r->active)rc=EFS_ERR_BUSY;
+        else {
+            r->object=p->object;r->group=p->cohort.group;r->count=p->cohort.count;
+            memcpy(r->refs,p->cohort.refs,r->count*sizeof(r->refs[0]));
+            for(uint32_t i=0;i<r->count;i++)r->acks[i]=p->writers[i].acks;
+            r->active=1;r->last_error=EFS_OK;
+        }
+    }
+    if(!rc) {
         uint32_t group=p->cohort.group;
         memset(p,0,sizeof(*p));(void)efs_pack_cohort_init(&p->cohort,group,PACK_WRITERS,PACK_DELAY_NS);
     }
@@ -257,7 +306,7 @@ static void *pack_worker(void *unused)
     while(__atomic_load_n(&pack_running,__ATOMIC_ACQUIRE)) {
         for(unsigned gi=0;gi<2;gi++) {
             efs_client_rpc_set_deadline_ms(pack_now()/1000000+8000);
-            (void)pack_flush_group(gi,0);efs_client_rpc_set_deadline_ms(0);
+            (void)pack_retire_group(gi);(void)pack_flush_group(gi,0);efs_client_rpc_set_deadline_ms(0);
         }
         usleep(1000);
     }
@@ -307,10 +356,15 @@ int efs_client_pack_write(efs_ino_t ino,uint64_t off,uint32_t len,const uint8_t 
         if(!p) {
             p=efs_buf_metadata_alloc(sizeof(*p));
             if(!p){pthread_mutex_unlock(&pack_mu);return EFS_ERR_NOMEM;}
+            struct pack_retirement *r=efs_buf_metadata_alloc(sizeof(*r));
+            if(!r){efs_buf_metadata_free(p,sizeof(*p));pthread_mutex_unlock(&pack_mu);return EFS_ERR_NOMEM;}
+            memset(r,0,sizeof(*r));pack_retirements[gi]=r;
             memset(p,0,sizeof(*p));efs_pack_cohort_init(&p->cohort,gi?2:0,PACK_WRITERS,PACK_DELAY_NS);pack_groups[gi]=p;
         }
-        if(p->busy || p->cohort.sealed || p->cohort.count==PACK_WRITERS) {
+        if(p->busy || p->cohort.sealed || p->cohort.count==PACK_WRITERS || pack_ack_credits==2*PACK_WRITERS) {
             pthread_mutex_unlock(&pack_mu);rc=pack_flush_group(gi,1);
+            if(rc!=EFS_OK && rc!=EFS_ERR_BUSY)return rc;
+            rc=pack_retire_group(gi);
             if(rc!=EFS_OK && rc!=EFS_ERR_BUSY)return rc;
             if(pack_pause())return EFS_ERR_BUSY;
             continue;
@@ -329,7 +383,7 @@ int efs_client_pack_write(efs_ino_t ino,uint64_t off,uint32_t len,const uint8_t 
         /* Cache admission accounts presence under the directory/index locks.
          * Reserve this context, then release the scheduler lock before any
          * cache operation, including private-candidate failure cleanup. */
-        p->busy=1;
+        p->busy=1;pack_ack_credits++;
         pthread_mutex_unlock(&pack_mu);
         rc=efs_client_publication_admit_write(&w->acks,ino,authority.generation,0,&view,0,data,len);
         struct efs_msg_inode_getchunks_reply *base=NULL;
@@ -355,7 +409,7 @@ int efs_client_pack_write(efs_ino_t ino,uint64_t off,uint32_t len,const uint8_t 
             if(w->acks)(void)efs_dcache_abort_pack_admission(ino,authority.generation);
             if(w->acks)(void)efs_client_publication_ack_free(w->acks);
             memset(w,0,sizeof(*w));
-            pthread_mutex_lock(&pack_mu);p->busy=0;pthread_mutex_unlock(&pack_mu);return rc;
+            pthread_mutex_lock(&pack_mu);p->busy=0;pack_ack_credits--;pthread_mutex_unlock(&pack_mu);return rc;
         }
         /* The accepted snapshot stays reserved until its size is visible. */
         efs_dcache_note_packed_size(ino,len);
@@ -388,7 +442,9 @@ int efs_client_pack_flush(efs_ino_t ino)
 static int pack_drain_run(void)
 {
     for(unsigned gi=0;gi<2;gi++) {
-        int rc=pack_flush_group(gi,1);if(rc)return rc;
+        int rc=pack_retire_group(gi);if(rc)return rc;
+        rc=pack_flush_group(gi,1);if(rc)return rc;
+        rc=pack_retire_group(gi);if(rc)return rc;
     }
     return EFS_OK;
 }
@@ -408,6 +464,9 @@ void efs_client_pack_stop(void)
     if(started)pthread_join(pack_tid,NULL);
     for(unsigned gi=0;gi<2;gi++)if(pack_groups[gi] && !pack_groups[gi]->cohort.count) {
         efs_buf_metadata_free(pack_groups[gi],sizeof(*pack_groups[gi]));pack_groups[gi]=NULL;
+    }
+    for(unsigned gi=0;gi<2;gi++)if(pack_retirements[gi] && !pack_retirements[gi]->active) {
+        efs_buf_metadata_free(pack_retirements[gi],sizeof(*pack_retirements[gi]));pack_retirements[gi]=NULL;
     }
     pack_started=0;
 }
