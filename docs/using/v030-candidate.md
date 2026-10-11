@@ -15,7 +15,8 @@ commits, failures and remaining gates. No push has occurred.
   Mac's separate single-shard tag53 experiment is not integrated or accepted.
 - Code-review repairs cover rollup allocation ownership and retained-capacity
   accounting, recorder shutdown after reap, incoming chunk retention after a
-  full write-pipeline failure, and strict address-port parsing. Private legacy
+  full write-pipeline failure, strict address-port parsing and typed FUSE read errors (allocation failure
+  returns ENOMEM). Private legacy
   find/flush/walker paths were removed with focused compatibility regressions.
 - Previously committed storage-engine, cache/index, CREATE/publication and
   transport work is retained through the branch ancestry audit. Native tests
@@ -53,10 +54,21 @@ activation is implied by this release integration.
 The merged AMD normal/fault native suites and two-client packed direct/buffered
 POSIX, peer, cold-byte and physical-GC gates pass at `d1197381`. Mmap remains
 unsupported and is explicitly skipped in extras. Later parser and seven-client
-changes are undergoing a new frozen qualification at `f1c322e1`.
+changes pass full normal/fault native and four sanitizer gates at `f1c322e1`.
+Seven-client AMD direct and buffered runs at the production-identical
+`39b4297b` pass all file-operation and cold-byte checks but exceed the original
+180-second physical packed GC deadline. A bounded scheduler correction is
+undergoing full merged qualification at `bbb84e41`.
 
 Four loopback daemons on one AMD host are functional evidence, not proof of
 independent hardware failure resilience. Current fixed2+1 data and three-voter
-metadata groups do not implement D36's four-node/two-loss guarantee. ORCD
-seven-client packing timeouts, owner-reported live/cold/long APPEND gates and
+metadata groups do not implement D36's four-node/two-loss guarantee. AMD physical packed GC and ORCD
+seven-client directory/query timeouts, owner-reported live/cold/long APPEND gates and
 final exact-source acceptance still block promotion and tagging.
+
+The packed GC scheduler correction preserves the one-second default idle.
+`EFS_GC_BACKLOG_IDLE_MS=20..1000` is the existing opt-in setting for shorter
+backlog idle, used at 20ms in these private AMD fixtures. Acceleration requires
+a capped page and actual local physical deletion; blocked, idle and fence-only
+passes retain normal backoff. All durable member fences/ACKs and work budgets
+remain required. A focused regression pass alone does not close the live gate.

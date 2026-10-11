@@ -207,7 +207,8 @@ The reviewed parser fix `7a8ed4a5` is merged; it rejects signed, malformed and
 overflowing ports across six callers. Candidate `f1c322e1` adds seven concurrent
 mounted clients running unchanged221-case suites/deadlines before peer/cold/GC
 checks. Full normal/fault native plus allocation/pipeline/parser sanitizers
-precede direct and buffered seven-client runs. New outcomes remain pending.
+precede direct and buffered seven-client runs. Completed native/sanitizer and
+seven-client outcomes are recorded below.
 
 Protocol coordination reserves **transport** EFS_MSG141/142 for ORCD's
 undeployed bounded packed-RPC batching proposal. Checked free in this release
@@ -241,3 +242,21 @@ passes. Focused extracted-production scheduler regressions pass. Full merged
 native and unchanged mounted deadline verification of this fix remain pending.
 W95/P4.1 production acceptance remains open; these results do not certify other
 hosts, multi-host timings or engine/container configurations.
+
+The scheduler repair is `6146f264`; reviewed FUSE error propagation `0ae7e480`
+is integrated as `1bd41ded`. Exact merged AMD candidate `bbb84e41` includes both,
+ORCD atomic older-receipt retirement `8eb35446`, and Intel both-mode tooling
+`236121dc`. Full normal/fault native, sanitizers and gated seven-client runs are
+in progress. The first attempt failed the documentation link gate because the
+staged checkout omitted historical linked evidence; those actual linked files
+and directory layout were restored, the five doc gates pass, and full testing
+restarted. This infrastructure failure is retained separately from runtime gates.
+
+[Seven-client raw gates and diagnostic inventories](../../results/measure/20261011-v030-seven-packing/39b4297b/acceptance-summary.json)
+retain failed reclamation and successful restoration, rather than reporting an
+overall pass. [Full parser-era native qualification](../../results/measure/20261011-v030-merged-native/f1c322e1/acceptance-summary.json)
+preserves the earlier full passing normal/fault/sanitizer candidate.
+ORCD bounded transport batch `e5a38553` passes its native/focused gates but its
+seven-client live run is 209 PASS/4 FAIL/1 SKIP/7 NOTRUN per client. A packing-OFF
+control is in progress. That checkpoint is pending integration; reserved IDs
+141/142 are not yet implemented by the merged release candidate.

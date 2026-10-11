@@ -1485,7 +1485,10 @@ are included, together with bounded packed receipt retirement. Completed AMD
 feedback comparisons remain opt-in and do not close global W97. Full merged
 AMD normal/fault native qualification passes at `d1197381`; mounted packing
 two-client packing passes in direct/buffered (cold bytes and physical GC).
-Seven-client qualification and final parser/sanitizer gates are running.
+Final parser/sanitizer gates pass at `f1c322e1`. Seven-client AMD file-operation
+and cold-byte checks pass both modes, but physical packed GC exceeds 180s.
+Scheduler repair `6146f264` and typed FUSE read-error repair are under full merged
+qualification at `bbb84e41`.
 ORCD packing timeouts remain
 a release blocker. Small-file packing and code-review correctness have priority. Branch checkpoints
 are not final release acceptance. Shared devel/main and pushes remain unchanged
