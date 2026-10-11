@@ -178,3 +178,29 @@ local persistence failures retain the durable REAP record. Storage inventory
 and durable death-fence implementations are unchanged. The actual-source
 regression checks request ordering and failure cleanup; full native/live
 acceptance is pending. This does not enable RDMA or change GC authority.
+
+## Fragment scheduling build `85fb3a4b` verdict
+
+Full normal/fault native gates pass. The normal build is deployed to the four
+installed AMD direct/TCP nodes, retaining their stores and default GC idle;
+both commands-off clients remount successfully. The private opt-in direct
+functional gate passes 216 core/67 peer tests, guarded leases, missing-member
+retention and cold/physical recovery.
+
+| 180-second paced mode | Warm-verified tiny generations | Full-window closes/s | Exact cold survivors | Empty inventory by 180-second drain deadline |
+|---|---:|---:|---|---|
+| Direct | 26,944 | 147.43 | Pass | **Fail** |
+| Buffered | 20,224 | 111.66 | Pass | Pass |
+
+Both runs use eight tiny workers/four overwrite rings and the same explicit
+4-GiB/node quota and 2-MiB/s/large-writer offered rate. Independent roots and
+placement make these acceptance observations, not a matched performance A/B.
+Both installed mounts restore successfully. The conditional ten-minute run
+is not started because direct failed; fanout validation follows without
+overlapping load or compilation. W94/W97 remain open.
+[Retained verdicts](../../results/measure/20261011-amd-sustained/evidence/fragments/live/round.exit).
+
+Rejected setup/build attempts are retained alongside accepted gates: an aborted
+incorrect build label, a stale generated-doc upload, missing linked evidence,
+and the first candidate's missing C return. None was deployed; `85fb3a4b`
+corrects the return and passes the actual-source regression/full gates.
