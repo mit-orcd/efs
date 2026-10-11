@@ -42,8 +42,14 @@ try:
         for mode in ('grow','ring'):
             cell=out/(drive+'-'+mode);cell.mkdir()
             log=(cell/'run.log').open('w')
-            bench=subprocess.Popen(['python3',str(src/'tests/measure/nuc_durable_io.py'),str(root/('profile-'+drive+'-'+mode)),str(cell/'data'),'--mode',mode,'--seconds','90'],stdout=log,stderr=subprocess.STDOUT)
-            time.sleep(30);assert bench.poll() is None
+            bench=subprocess.Popen(['python3',str(src/'tests/measure/nuc_durable_io.py'),str(root/('profile-'+drive+'-'+mode)),str(cell/'data'),'--mode',mode,'--seconds','180'],stdout=log,stderr=subprocess.STDOUT)
+            # First writing a fallocated extent still needs conversion. Warm
+            # through that pass before attributing ring profiles to overwrites.
+            time.sleep(45);time.sleep(45);assert bench.poll() is None
+            if mode=='ring':
+                for writer in range(3):
+                    windows=(cell/'data'/f'writer{writer}.jsonl').read_text().splitlines()
+                    assert json.loads(windows[-1])['count']>=4096,'ring has not completed first extent-writing pass'
             proc=Path('/proc',str(bench.pid))
             assert str(src/'tests/measure/nuc_durable_io.py').encode() in (proc/'cmdline').read_bytes()
             tids=','.join(p.name for p in (proc/'task').iterdir())
@@ -53,7 +59,7 @@ try:
             run(['perf','record','-F','99','-g','-p',str(bench.pid),'-o',cell/'cycles.data','--','sleep','15'],cell/'cycles-record.txt',35)
             run(['perf','report','--stdio','--no-children','--percent-limit','1','-i',cell/'cycles.data'],cell/'cycles-report.txt',40)
             run(['timeout','--signal=INT','10','strace','-f','-c','-p',str(bench.pid)],cell/'strace-summary.txt',30)
-            rc=bench.wait(timeout=60);bench=None;log.close()
+            rc=bench.wait(timeout=120);bench=None;log.close()
             (cell/'exit.txt').write_text(str(rc)+'\n');assert rc==0
     (out/'run-exit.txt').write_text('0\n')
 except BaseException:
