@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 """NUC controls with fully written extents: NVMe/SATA/SATA/NVMe, no tracing."""
-import os,signal,socket,subprocess,time,traceback
+import argparse,os,signal,socket,subprocess,time,traceback
 from pathlib import Path
-base=Path('/data1/efs/devel-nuc-20261010');out=base/'written-ring';out.mkdir(exist_ok=False)
+base=Path('/data1/efs/devel-nuc-20261010')
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--profile',type=Path,default=base/'allocation-profile')
+parser.add_argument('--out',type=Path,default=base/'written-ring')
+parser.add_argument('--seconds',type=int,default=480)
+args=parser.parse_args();out=args.out;out.mkdir(exist_ok=False)
+assert 60<=args.seconds<=480
 def wait(fn,seconds,label):
     end=time.monotonic()+seconds
     while time.monotonic()<end:
@@ -20,8 +26,8 @@ def run(name,args,timeout):
     (out/(name+'-exit.txt')).write_text(str(rc)+'\n');print('END',name,rc,flush=True);assert rc==0
 stopped=False
 try:
-    wait(lambda:(base/'allocation-profile/restore-exit.txt').exists(),6500,'profile restoration')
-    assert (base/'allocation-profile/run-exit.txt').read_text().strip()=='0'
+    wait(lambda:(args.profile/'restore-exit.txt').exists(),6500,'profile restoration')
+    assert (args.profile/'run-exit.txt').read_text().strip()=='0'
     pids=subprocess.check_output(['pgrep','-f','^/data1/efs/src/efsd .*--port 1743[2-5]( |$)'],text=True).split();assert len(pids)==4
     for p in pids:assert os.path.realpath(Path('/proc',p,'exe'))=='/data1/efs/src/efsd'
     stopped=True
@@ -35,8 +41,8 @@ try:
     for i,drive in enumerate(('nvme','sata','sata','nvme')):
         assert subprocess.run(['pgrep','-x','efsd'],stdout=subprocess.DEVNULL).returncode==1
         root=Path('/home/efs/devel-nuc-w96-20261010') if drive=='nvme' else base/'w96-data'
-        cell=f'written-{i}-{drive}'
-        run(cell,['python3',base/'nuc_durable_written.py',root/cell,out/cell,'--mode','written-ring','--seconds','480'],650)
+        cell=f'{out.name}-{i}-{drive}'
+        run(cell,['python3',base/'nuc_durable_written.py',root/cell,out/cell,'--mode','written-ring','--seconds',str(args.seconds)],650)
     (out/'run-exit.txt').write_text('0\n')
 except BaseException:
     (out/'failure.txt').write_text(traceback.format_exc());raise

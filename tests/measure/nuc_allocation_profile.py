@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Separate instrumented allocation controls, after the uninstrumented ABBA run."""
-import json,os,signal,socket,subprocess,time
+import argparse,json,os,signal,socket,subprocess,time
 from pathlib import Path
-base=Path('/data1/efs/devel-nuc-20261010');src=base/'src';out=base/'allocation-profile'
+base=Path('/data1/efs/devel-nuc-20261010');src=base/'src'
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--out',type=Path,default=base/'allocation-profile')
+parser.add_argument('--after-profile-failure',action='store_true')
+args=parser.parse_args();out=args.out
 out.mkdir(exist_ok=False)
 def wait(fn,seconds,label):
     deadline=time.monotonic()+seconds
@@ -21,7 +25,10 @@ def listening(port):
     except OSError:return False
 stopped=False;bench=None
 try:
-    wait(lambda:(base/'closure/restore-exit.txt').exists(),6500,'ABBA completion and restoration')
+    predecessor=base/'allocation-profile' if args.after_profile_failure else base/'closure'
+    wait(lambda:(predecessor/'restore-exit.txt').exists(),6500,'prior workload restoration')
+    if args.after_profile_failure:
+        assert (predecessor/'failure.txt').exists(),'must retain the earlier failed profile'
     assert (base/'closure/run-exit.txt').read_text().strip()=='0'
     assert (base/'closure/restore-exit.txt').read_text().strip()=='0'
     pids=subprocess.check_output(['pgrep','-f','^/data1/efs/src/efsd .*--port 1743[2-5]( |$)'],text=True).split()
@@ -42,14 +49,18 @@ try:
         for mode in ('grow','ring'):
             cell=out/(drive+'-'+mode);cell.mkdir()
             log=(cell/'run.log').open('w')
-            bench=subprocess.Popen(['python3',str(src/'tests/measure/nuc_durable_io.py'),str(root/('profile-'+drive+'-'+mode)),str(cell/'data'),'--mode',mode,'--seconds','180'],stdout=log,stderr=subprocess.STDOUT)
+            payload=root/(out.name+'-'+drive+'-'+mode)
+            bench=subprocess.Popen(['python3',str(src/'tests/measure/nuc_durable_io.py'),str(payload),str(cell/'data'),'--mode',mode,'--seconds','180'],stdout=log,stderr=subprocess.STDOUT)
             # First writing a fallocated extent still needs conversion. Warm
             # through that pass before attributing ring profiles to overwrites.
             time.sleep(45);time.sleep(45);assert bench.poll() is None
             if mode=='ring':
                 for writer in range(3):
-                    windows=(cell/'data'/f'writer{writer}.jsonl').read_text().splitlines()
-                    assert json.loads(windows[-1])['count']>=4096,'ring has not completed first extent-writing pass'
+                    # A 30s reporting window can lag actual progress. Verify
+                    # the last slot's real counter instead of a stale report.
+                    with (payload/f'writer{writer}').open('rb',buffering=0) as data:
+                        data.seek(4095*65536);counter=int.from_bytes(data.read(8),'little')
+                    assert counter>=4095 and counter%4096==4095,'ring has not completed first extent-writing pass'
             proc=Path('/proc',str(bench.pid))
             assert str(src/'tests/measure/nuc_durable_io.py').encode() in (proc/'cmdline').read_bytes()
             tids=','.join(p.name for p in (proc/'task').iterdir())
