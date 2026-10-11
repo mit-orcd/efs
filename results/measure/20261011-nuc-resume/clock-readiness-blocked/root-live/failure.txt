@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/data1/efs/devel-nuc-20261011/nuc_root_scope_live_restore_guard_20261011.py", line 39, in <module>
+    wait(placed,7200,'placement restoration')
+  File "/data1/efs/devel-nuc-20261011/nuc_root_scope_live_restore_guard_20261011.py", line 15, in wait
+    if fn():return
+       ^^^^
+  File "/data1/efs/devel-nuc-20261011/nuc_root_scope_live_restore_guard_20261011.py", line 36, in placed
+    assert not (placement/'failure.txt').exists(),'placement failed; do not stop regular service'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: placement failed; do not stop regular service

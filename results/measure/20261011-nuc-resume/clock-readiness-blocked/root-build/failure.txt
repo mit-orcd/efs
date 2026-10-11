@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/data1/efs/devel-nuc-20261011/nuc_root_scope_build_20261011.py", line 13, in <module>
+    assert not (base/phase/'failure.txt').exists(),phase+' failed; no build accepted'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: clock-install failed; no build accepted

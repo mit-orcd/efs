@@ -1,0 +1,32 @@
+[
+  {
+    "first_mutation": "unlink",
+    "elapsed_s": 0.004819795000003069,
+    "passed": true
+  },
+  {
+    "first_mutation": "rename",
+    "elapsed_s": 0.013971493999633822,
+    "passed": true
+  },
+  {
+    "first_mutation": "rmdir",
+    "elapsed_s": 0.03653640800075664,
+    "passed": true
+  },
+  {
+    "first_mutation": "mkdir",
+    "elapsed_s": 0.027883794999070233,
+    "passed": true
+  },
+  {
+    "first_mutation": "create",
+    "elapsed_s": 0.042474943000343046,
+    "passed": true
+  },
+  {
+    "first_mutation": "link",
+    "elapsed_s": 0.14407803999893076,
+    "passed": true
+  }
+]

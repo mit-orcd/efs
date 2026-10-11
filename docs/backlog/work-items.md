@@ -2343,9 +2343,12 @@ Failed drains now retry before new admission. The actual-function regression
 passes and fails under the old timing behavior. No RPC budget or durability
 barrier is widened. The complete Linux native suite passes after retained
 documentation-fixture failures are repaired without changing the core. The
-full direct live suite passes, including POSIX 216/216, peer 67/67, 2,000 exact
-4 KiB records in 169.046 seconds, final fsync and cold bytes. Buffered live,
-installation and the exact preserved-store 20k/cold gates remain pending;
+full direct and buffered live suites pass, each with POSIX 216/216, peer
+67/67, 2,000 exact 4 KiB records, final fsync and cold bytes. Direct writes
+take 169.046 seconds; buffered writes take 164.413 seconds. The unchanged
+accepted images are installed after a retained startup BUSY and read-only
+readiness retry verifying all prior samples. The separate preserved-store
+20k/cold gates remain pending;
 the earlier candidate's corrected direct fixture times out and is not installed.
 
 **Oct 11 continuation:** `4afc063c` shares one guarded completion transaction

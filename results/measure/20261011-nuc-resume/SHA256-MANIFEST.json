@@ -1,7 +1,7 @@
 {
   "README.md": {
-    "bytes": 2571,
-    "sha256": "17841300bb806420289d67ba6d5005f2b6926ee7640ad898cce8dfa27c92b979"
+    "bytes": 3652,
+    "sha256": "c9eafc0fd538f07cf2115bd343bebfcd87a9098ca0ac3e3f49f23ce527ec2133"
   },
   "append-clock-focused/fixed-exit.txt": {
     "bytes": 2,
@@ -190,6 +190,134 @@
   "clock-acceptance-queued/run-exit.txt": {
     "bytes": 2,
     "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "clock-buffered-live/append-burst-peer-fuse.log": {
+    "bytes": 946,
+    "sha256": "f48474e0dc8a076d9ff362b9796606e1b38f01244c377439669fa4f9ceab19e6"
+  },
+  "clock-buffered-live/append-burst-progress.json": {
+    "bytes": 78,
+    "sha256": "464540b275b98cbcdd4e7ddc6d545af0316c001d69e03efa0a6f3806d4c45afd"
+  },
+  "clock-buffered-live/append-burst.json": {
+    "bytes": 1204,
+    "sha256": "2e3dfc2d5470f3c7a72b0d65c491b7fe62395312e6cae41de54b12dff0208fe4"
+  },
+  "clock-buffered-live/append-cold-audit.json": {
+    "bytes": 498,
+    "sha256": "ad238708d1dee0572d70e0a979ba4649573a6afdacce724aad2c7d856f7794b1"
+  },
+  "clock-buffered-live/append-leader-death.json": {
+    "bytes": 85,
+    "sha256": "055358bf55870bcabee6e3fca58dcc74656d5924f4ec52a33d10a711c30b9cb7"
+  },
+  "clock-buffered-live/append-replay-acknowledged-next.log": {
+    "bytes": 915,
+    "sha256": "59ea46234f4071886697d50b9b519c966b81919317dc6960256de12c6f8a415a"
+  },
+  "clock-buffered-live/append-replay-changed-payload.log": {
+    "bytes": 883,
+    "sha256": "16b66c9bbf83b6ad3d1217e9b3860d6d418077766fcb12cdb56b3f83d26352ea"
+  },
+  "clock-buffered-live/append-replay-cold-next.log": {
+    "bytes": 915,
+    "sha256": "59ea46234f4071886697d50b9b519c966b81919317dc6960256de12c6f8a415a"
+  },
+  "clock-buffered-live/append-replay-cold-retired.log": {
+    "bytes": 883,
+    "sha256": "16b66c9bbf83b6ad3d1217e9b3860d6d418077766fcb12cdb56b3f83d26352ea"
+  },
+  "clock-buffered-live/append-replay-cold-retry.log": {
+    "bytes": 883,
+    "sha256": "83887341bd5df0967242b6e9c574850cc9e2a9c7d73902b98d57ceab4920043d"
+  },
+  "clock-buffered-live/append-replay-initial.log": {
+    "bytes": 883,
+    "sha256": "83887341bd5df0967242b6e9c574850cc9e2a9c7d73902b98d57ceab4920043d"
+  },
+  "clock-buffered-live/append-replay-leader-death.log": {
+    "bytes": 883,
+    "sha256": "83887341bd5df0967242b6e9c574850cc9e2a9c7d73902b98d57ceab4920043d"
+  },
+  "clock-buffered-live/append-replay-retired.log": {
+    "bytes": 883,
+    "sha256": "16b66c9bbf83b6ad3d1217e9b3860d6d418077766fcb12cdb56b3f83d26352ea"
+  },
+  "clock-buffered-live/final-status.json": {
+    "bytes": 5093,
+    "sha256": "cc5342280579b708bbdcb11a6413f3914aa0d5633807e593c67c5a8ebab880f9"
+  },
+  "clock-buffered-live/fresh-namespace.json": {
+    "bytes": 590,
+    "sha256": "d91588d932f7fcaf424f4e16a4d1845ebf8794317ec1b24fba993ce9dd972296"
+  },
+  "clock-buffered-live/fuse.log": {
+    "bytes": 5688098,
+    "sha256": "41a248d55e0bb984f45296ef2e37b903a76250a073c55e1d3308d94b3d61c344"
+  },
+  "clock-buffered-live/last-close-gc-effect.json": {
+    "bytes": 334,
+    "sha256": "a8e4dabd37b960c9380d185f9897754c857e3af18c84b5657f4eb4b24a553abd"
+  },
+  "clock-buffered-live/manifest.json": {
+    "bytes": 3619,
+    "sha256": "1ec15c2e3f938115a9da97a73afadf3c00c3527602bbea454c69005ff9afaaf1"
+  },
+  "clock-buffered-live/n1.log": {
+    "bytes": 208282,
+    "sha256": "4946701b36599c9d7ae3d89102e515ebbafe5328e8e6bff71bdef394489d1331"
+  },
+  "clock-buffered-live/n2.log": {
+    "bytes": 516941,
+    "sha256": "ce5378e50ee0020f6d99ea7c93f4a299d18f32c88a88dc0ff9238c674e0f605d"
+  },
+  "clock-buffered-live/n3.log": {
+    "bytes": 192154,
+    "sha256": "0208f62ccb4cf070916a6359af078e26820f2efc94b2556ee066b5dc4b9575c8"
+  },
+  "clock-buffered-live/n4.log": {
+    "bytes": 111750,
+    "sha256": "1b6778be330b5ab9d5fcba67353cd55d1c981e9d4dd772771ec49e2f3800a36e"
+  },
+  "clock-buffered-live/peer-fuse.log": {
+    "bytes": 602447,
+    "sha256": "c575d7f598e561882274823bf620086748cde5d8e86d96c72587c2a499c0ddc5"
+  },
+  "clock-buffered-live/posix-gc-effect.json": {
+    "bytes": 274,
+    "sha256": "cca93a81b261ff3f24405f8159e0da60b993c0e45ba9e3e9dfa66827a43fa659"
+  },
+  "clock-buffered-live/posix.tsv": {
+    "bytes": 12991,
+    "sha256": "d45da8f98c37396ede5afce56b1c5a594a8204ba874109a3e5b26e792a55d257"
+  },
+  "clock-buffered-live/posix2.tsv": {
+    "bytes": 4346,
+    "sha256": "db1ad74a0c59f057b80696f64ab4bfffbabd2eb0b130b6547c85ce754846ded5"
+  },
+  "clock-buffered-live/shutdown-mutations.json": {
+    "bytes": 347,
+    "sha256": "aefdba3cffef0fc415f4213e08baedaeebaeeada2dbb3c4094e3b7c4a1889e6e"
+  },
+  "clock-buffered-live/stop-dirty-recovery.json": {
+    "bytes": 298,
+    "sha256": "85abcc2b3eacde81c80cb9137724e0cb9e2926626e480a26a40fa008d1ac8c96"
+  },
+  "clock-buffered-live/sync-peer.log": {
+    "bytes": 3598,
+    "sha256": "8569e4646db68d00cbfbc4b851eac0656871b95001cef71fcb4240dfb874c533"
+  },
+  "clock-buffered-live/synchronous-write-fault.json": {
+    "bytes": 469,
+    "sha256": "70a812130f5e47cc9fd37f1182c03a2df73bdf52c65f845cf44477693ba528c1"
+  },
+  "clock-buffered-live/synchronous-writes.json": {
+    "bytes": 2893,
+    "sha256": "5eb66b30ab26a1aa1087c4684fea500ae91a954f75fa50889e816c41140cb884"
+  },
+  "clock-buffered-live/wal-tail-recovery.json": {
+    "bytes": 801,
+    "sha256": "17eccdcb836db3f16ae7c882d6e8286525746ee3bad5c59944ae022ac2b4f66e"
   },
   "clock-build/all-exit.txt": {
     "bytes": 2,
@@ -443,6 +571,86 @@
     "bytes": 4174430,
     "sha256": "b5b9b37d8f131452329fb5e29c4b08e7e65880a4534a9e38cc6908239656f886"
   },
+  "clock-install/after.json": {
+    "bytes": 4699,
+    "sha256": "3b31be7770a8bf2f248165977104529442356cd1cc696399729742658353198d"
+  },
+  "clock-install/images.json": {
+    "bytes": 988,
+    "sha256": "905312dd5fc191404c25d5b5d1ad3dbe24e474750030a921c981ea5012e69ee0"
+  },
+  "clock-install/installed-source-sha256.json": {
+    "bytes": 55322,
+    "sha256": "dca539b2cbb1d7adb97ad7a9ca1251f7ded626c295556720673616fdb30f7aaa"
+  },
+  "clock-install/qualified-retry.json": {
+    "bytes": 387,
+    "sha256": "405d2e58de5dd95aa0d11fed1207ae636732787ed860e0671d2cdf993430ced9"
+  },
+  "clock-install/run-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "clock-install-initial-readiness-failure/backup-provenance.json": {
+    "bytes": 204,
+    "sha256": "009d87f92d587f8233952e699d4b697c5ff4dc9fde413dc5444f4186ffef52fb"
+  },
+  "clock-install-initial-readiness-failure/failure.txt": {
+    "bytes": 1121,
+    "sha256": "7e4c63d58328160fe81f23b33b7a03a4831699117ddcdb7f0000221a073db520"
+  },
+  "clock-install-initial-readiness-failure/install-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "clock-install-initial-readiness-failure/install.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "clock-install-initial-readiness-failure/mnt-stop-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "clock-install-initial-readiness-failure/mnt-stop.log": {
+    "bytes": 106,
+    "sha256": "4c09510554ee3ae6c878e739106d6e7993e061dcd2fbb7e16e1ed36eb6709b12"
+  },
+  "clock-install-initial-readiness-failure/mnt2-stop-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "clock-install-initial-readiness-failure/mnt2-stop.log": {
+    "bytes": 109,
+    "sha256": "5698d4493d7230cac9ae26e1cdf87c884efccf09ea14f0d3a0616fb60d1249cf"
+  },
+  "clock-install-initial-readiness-failure/source-backup-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "clock-install-initial-readiness-failure/source-backup.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "clock-install-initial-readiness-failure/start.log": {
+    "bytes": 11896,
+    "sha256": "1d02219711306cebb235d3f5d45283b4afaee3a6166840c3b6a5bc8e4c310b0f"
+  },
+  "clock-install-readiness-retry/controller-provenance.json": {
+    "bytes": 195,
+    "sha256": "40054b4fd048825fae6bae0317924d698b29f0ce461e04f3c87e31c0db5ca688"
+  },
+  "clock-install-readiness-retry/queued.json": {
+    "bytes": 1398,
+    "sha256": "32676eebfd1fcf680d3f77c5c79921bdca51183c56e224d35b75caf535fb143a"
+  },
+  "clock-install-readiness-retry/run-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "clock-install-readiness-retry/verified.json": {
+    "bytes": 23849,
+    "sha256": "52fea71318d8fbc12a4f4d2b92882dd18bb4e7c005c90685bc83e77675559daf"
+  },
   "clock-linux-focused/fixed-exit.txt": {
     "bytes": 2,
     "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
@@ -471,6 +679,14 @@
     "bytes": 588,
     "sha256": "a3fba2a011c3f9a561110b53b002130499ed054d6633497f0a653150181b02d0"
   },
+  "clock-live/full-buffered-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "clock-live/full-buffered.log": {
+    "bytes": 20082,
+    "sha256": "648eb6d8e536eec87c0d7f533864e002bff9f9fcd6f00b0ee666a1446bf663c8"
+  },
   "clock-live/full-direct-exit.txt": {
     "bytes": 2,
     "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
@@ -478,6 +694,38 @@
   "clock-live/full-direct.log": {
     "bytes": 20073,
     "sha256": "9df5c367aa8731b2778f9638035415b7706a34794b3a396c3be9648edfbe88fb"
+  },
+  "clock-live/mnt-stop-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "clock-live/mnt-stop.log": {
+    "bytes": 106,
+    "sha256": "4929995bc3efbac080051402a2f761ded2307dc988e098ef28d95ee8699159b6"
+  },
+  "clock-live/mnt2-stop-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "clock-live/mnt2-stop.log": {
+    "bytes": 109,
+    "sha256": "71772fae4880537bff5c2388ca53f29a4dafaa43a92f1e390f76a124261c42fc"
+  },
+  "clock-live/restore-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "clock-live/restore.log": {
+    "bytes": 13914,
+    "sha256": "5fd176709812b9e972482a258ff9f083b2ce9cbbdf02bef1fc4de17e2235f000"
+  },
+  "clock-live/run-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "clock-live/verdicts.json": {
+    "bytes": 44,
+    "sha256": "b6e8983a21e6566bc42f317e9c0a43a32f4a743c1c72c71493b92b4ef77bbf7c"
   },
   "clock-native-doc-sidecar-initial-failure/failure.txt": {
     "bytes": 296,
@@ -502,6 +750,42 @@
   "clock-plan/queued.json": {
     "bytes": 1477,
     "sha256": "9b0bf351ac31218217316e58124f73f305436ee59bae15639d46e0b189a050ce"
+  },
+  "clock-preserved-short/append-burst-progress.json": {
+    "bytes": 78,
+    "sha256": "e232657fa87df0972dfdab33cfbba51dc2e506a30f4a67b1c37e6baf81057fe4"
+  },
+  "clock-preserved-short/append-burst.json": {
+    "bytes": 1235,
+    "sha256": "d733f249761c751e1bec3975b53a62a3a96d19d4fd6403d8e5b0f35bd9f28f1a"
+  },
+  "clock-preserved-short/run-exit.txt": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "clock-readiness-blocked/append/blocked-prerequisite.json": {
+    "bytes": 95,
+    "sha256": "ee27a9df1877e85da0a17fc17f62676cb740808458bec43bf93716bc201ec346"
+  },
+  "clock-readiness-blocked/append/run-exit.txt": {
+    "bytes": 4,
+    "sha256": "a5e45837a2959db847f7e67a915d0ecaddd47f943af2af5fa6453be497faabca"
+  },
+  "clock-readiness-blocked/cold/failure.txt": {
+    "bytes": 324,
+    "sha256": "81210d62a9c289b6d436aa3ca8dcfc42dfc1c1b110fff80ad3386400b37a1a1b"
+  },
+  "clock-readiness-blocked/profile/failure.txt": {
+    "bytes": 279,
+    "sha256": "5230fc3b19c0b14996a5bef6b91d95e67a745315d55183f8f0b0b147a38fc6cb"
+  },
+  "clock-readiness-blocked/root-build/failure.txt": {
+    "bytes": 322,
+    "sha256": "4fa0037744e31a574f19468f3072a1444cf64150faa3f7be65c918e978dbb45a"
+  },
+  "clock-readiness-blocked/root-live/failure.txt": {
+    "bytes": 637,
+    "sha256": "22c575fd128a877ab98eaf81700e8d565ef59da6b08327c2ff7d6b0557a71d36"
   },
   "data-cold-quota-retry/commands.json": {
     "bytes": 1021,
@@ -1814,6 +2098,10 @@
   "root-scope-focused-initial-compile-failure/fixed-compile.log": {
     "bytes": 1524,
     "sha256": "af31e5b5289e4e9757f2558380294c8d7c5fb7bea73a9671b64a1c3bb99527af"
+  },
+  "root-scope-live-queue-replacement/replacement.json": {
+    "bytes": 234,
+    "sha256": "f38cd7be20c72d925113aaaa5928de1e21f2fa09a0814821126a02093c1f8757"
   },
   "target-test-v3.log": {
     "bytes": 121,
