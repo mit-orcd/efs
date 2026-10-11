@@ -256,3 +256,15 @@ was NOTRUN: its fixed `/mnt/efs/posix-2c` directory has historical permissions
 incompatible with the test user. The cluster wrapper now uses a unique parent
 for local peer mounts as it already did for remote peers. A fresh full peer run
 is in progress; this fixture repair is not a passed EFS correctness gate.
+
+
+### Full installed Mac peer acceptance, before raw-sync batching
+
+The unique-parent local two-mount peer gate completed **67/67 PASS, 0 FAIL**
+in 1,534.8 seconds. All 800 concurrent append records were present, complete and
+unique. Append versus truncate, reverse extension completion, rename/unlink
+source and destination races, hardlinks and range locks pass. The harness exited
+and normally drained the secondary mount; no forced discard or killed client.
+This is two independent FUSE mounts on one gateway against three Mac storage VMs,
+not two physical client hosts. It does not turn the native deadline failures into
+passes. A separate syscall/profile capture follows this correctness run.
