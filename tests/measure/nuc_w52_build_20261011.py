@@ -2,8 +2,10 @@
 """Build the frozen W52 change after matched controls and baseline finish."""
 import argparse,hashlib,json,subprocess,time,traceback
 from pathlib import Path
-parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--variant',choices=('batch','clock'),default='batch');args=parser.parse_args()
-base=Path('/data1/efs/devel-nuc-20261011');src=base/(args.variant+'-src');out=base/(args.variant+'-build');out.mkdir(exist_ok=args.variant=='batch')
+parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--variant',choices=('batch','clock'),default='batch');parser.add_argument('--resume-doc-sidecar',action='store_true',help='Retry the exact missing-results documentation fixture failure without changing the already clean-built core.');args=parser.parse_args()
+assert not args.resume_doc_sidecar or args.variant=='clock'
+resume_docs=args.resume_doc_sidecar
+base=Path('/data1/efs/devel-nuc-20261011');src=base/(args.variant+'-src');out=base/(args.variant+'-build');out.mkdir(exist_ok=args.variant=='batch' or resume_docs)
 end=time.monotonic()+7200
 try:
     prerequisite=base/('data-placement/restore-exit.txt' if args.variant=='clock' else 'w52-baseline-2000/run-exit.txt')
@@ -14,19 +16,36 @@ try:
     assert prerequisite.read_text().strip()=='0'
     if args.variant=='clock':
         assert (base/'data-placement/tests-exit.txt').read_text().strip()=='0'
-        assert not src.exists(),'fresh clock source required'
+        if resume_docs:
+            assert src.exists() and not (src/'results').exists()
+            assert all((out/(phase+'-exit.txt')).read_text().strip()=='0' for phase in ('clean','all'))
+            assert (out/'native-exit.txt').read_text().strip()=='2' and (out/'failure.txt').exists()
+            log=(out/'native.log').read_text()
+            assert 'architecture doc gate: 1/5 checks failed' in log
+            assert 'link target does not exist: ../../results/' in log
+            assert 'ok    regen-diff:' in log and 'ok    invariant-refs:' in log and 'ok    single-home:' in log
+            assert log.rstrip().endswith('make: *** [Makefile:379: test] Error 1')
+        else:assert not src.exists(),'fresh clock source required'
         manifest=json.loads((base/'clock-overlay.json').read_text());archive=base/'clock-overlay.tar'
         assert manifest['commit'].startswith('f52cd2dd') and hashlib.sha256(archive.read_bytes()).hexdigest()==manifest['sha256']
-        subprocess.run(['rsync','-a','--exclude=/results/','--exclude=/.git/',str(base/'batch-src')+'/',str(src)+'/'],check=True)
-        subprocess.run(['tar','-xf',archive,'-C',src],check=True)
+        if not resume_docs:
+            subprocess.run(['rsync','-a','--exclude=/results/','--exclude=/.git/',str(base/'batch-src')+'/',str(src)+'/'],check=True)
+            subprocess.run(['tar','-xf',archive,'-C',src],check=True)
         expected=json.loads((base/'clock-core-expected.json').read_text())
         current={str(p.relative_to(src)):hashlib.sha256(p.read_bytes()).hexdigest() for folder in ('src','include') for p in (src/folder).rglob('*') if p.suffix in ('.c','.h')}
         current['Makefile']=hashlib.sha256((src/'Makefile').read_bytes()).hexdigest()
         assert current==expected,'clock candidate differs from committed core/Makefile'
         (out/'overlay.json').write_text(json.dumps(manifest,indent=2))
+        evidence=base/'batch-src/results';assert evidence.is_dir()
+        (src/'results').symlink_to(evidence,target_is_directory=True)
+        (out/'doc-sidecar.json').write_text(json.dumps(dict(path=str(src/'results'),target=str(evidence),core_unchanged=True,resumed_missing_sidecar=resume_docs),indent=2))
+        if resume_docs:
+            retained=out/'doc-sidecar-initial-failure';retained.mkdir()
+            for name in ('native.log','native-exit.txt','failure.txt'):(out/name).rename(retained/name)
     identity='f52cd2dd-nuc' if args.variant=='clock' else '4afc063c-nuc'
     versions=['EFS_GIT_ID='+identity,'EFS_GIT_DESCRIBE='+identity,'EFS_GIT_BRANCH=devel-nuc']
-    for name,args in (('clean',['make','clean']),('all',['make','-j4','all',*versions]),('native',['make','-j4','test',*versions])):
+    phases=[('clean',['make','clean']),('all',['make','-j4','all',*versions]),('native',['make','-j4','test',*versions])]
+    for name,args in (phases[2:] if resume_docs else phases):
         with (out/(name+'.log')).open('w') as log:
             rc=subprocess.run(args,cwd=src,stdout=log,stderr=subprocess.STDOUT,timeout=1800).returncode
         (out/(name+'-exit.txt')).write_text(str(rc)+'\n');assert rc==0,(name,rc)

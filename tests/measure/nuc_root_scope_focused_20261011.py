@@ -12,17 +12,18 @@ try:
         assert not (base/'data-placement/failure.txt').exists(),'placement failed'
         assert time.monotonic()<deadline,'final cell wait exceeded'
         time.sleep(1)
-    archive=base/'efs-root-scope-19cbb11f.tar'
-    assert hashlib.sha256(archive.read_bytes()).hexdigest()=='b5b8bd15ac17116c4f0630c9c5428996b050a6bfa42aa6b99ac9c4c00c9992c5'
+    archive=base/'efs-root-scope-766814c8.tar'
+    assert hashlib.sha256(archive.read_bytes()).hexdigest()=='5a93449aee83416c535b3d622c5f7f91d0aa8e156a05d9fabe27af5466943c5b'
     prior=base/'efs-root-scope-old-store.c'
     assert hashlib.sha256(prior.read_bytes()).hexdigest()=='ed43832a3f8e03c19ddb4d2aee6bd3cdbd47b4a124bb29f9355667e1dbf77274'
     src.mkdir();old.mkdir()
     for target in (src,old):
         with tarfile.open(archive) as tar:
-            assert set(tar.getnames())=={'src/server/store.c','tests/test_store_durability.c'}
+            assert set(tar.getnames())=={'src/server/store.c','src/server/packed_fence.h','tests/test_store_durability.c'}
             tar.extractall(target,filter='data')
     (old/'src/server/store.c').write_bytes(prior.read_bytes())
     deps=base/'batch-src'
+    (old/'src/server/packed_fence.h').write_bytes((deps/'src/server/packed_fence.h').read_bytes())
     resource.setrlimit(resource.RLIMIT_CORE,(0,0))
     codes={}
     for name,target in (('fixed',src),('old-scope',old)):
@@ -41,9 +42,9 @@ try:
             codes[name]=subprocess.run([str(target/'test')],stdout=log,stderr=subprocess.STDOUT,timeout=120).returncode
         (out/(name+'-exit.txt')).write_text(str(codes[name])+'\n')
     assert codes=={'fixed':0,'old-scope':-6},codes
-    provenance=dict(candidate='19cbb11f',codes=codes,
+    provenance=dict(candidate='766814c8',root_scope_core='19cbb11f',codes=codes,
         sources={str(p.relative_to(src)):hashlib.sha256(p.read_bytes()).hexdigest()
-            for p in src.rglob('*.c')},
+            for p in src.rglob('*') if p.suffix in ('.c','.h')},
         dependencies={str(p.relative_to(deps)):hashlib.sha256(p.read_bytes()).hexdigest()
             for p in (deps/'libefs.a',deps/'src/bench/writer.o',deps/'src/bench/store_containers.o')},
         limits='Focused Linux production shard-I/O regression after timed placement. Not full native/live acceptance or measured speedup; no installed images changed.')
