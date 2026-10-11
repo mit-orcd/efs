@@ -17,7 +17,7 @@ code=r'''
 #define BH_APPLIED_PERSIST_US 0
 #define BO_HIST(k,n) ((void)(k),(void)(n))
 static uint64_t efs_batch_obs_now_us(void){return 0;}
-struct efs_raft_host {int unused;};
+struct efs_raft_host {int flow_enabled;};
 static pthread_mutex_t gate=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t changed=PTHREAD_COND_INITIALIZER;
 static int paused,entered,create_fail,result_rc;
@@ -41,18 +41,28 @@ static void wait_entered(unsigned n){pthread_mutex_lock(&gate);while((unsigned)e
 static void release(void){pthread_mutex_lock(&gate);paused=0;pthread_cond_broadcast(&changed);pthread_mutex_unlock(&gate);}
 static void idle(struct host_checkpoint_worker *w){pthread_mutex_lock(&w->mu);while(w->busy)pthread_cond_wait(&w->cv,&w->mu);pthread_mutex_unlock(&w->mu);}
 int main(void){
- struct efs_raft_host h={0};struct host_checkpoint_worker w;uint64_t idx[2]={10,11};
+ struct efs_raft_host h={.flow_enabled=1};struct host_checkpoint_worker w;uint64_t idx[2]={10,11};
  create_fail=1;assert(host_checkpoint_start(&w,&h)==EFS_ERR_IO && !w.started);assert(!host_checkpoint_stop(&w));create_fail=0;
  assert(!host_checkpoint_start(&w,&h));paused=1;
  assert(!host_checkpoint_dispatch(&w,idx,1,0,1,100));idx[0]=999;wait_entered(1);
  /* A failed later KV barrier cannot overwrite/enqueue the captured job. */
  assert(host_checkpoint_dispatch(&w,idx,2,EFS_ERR_IO,3,300)==EFS_ERR_IO);
  assert(w.busy && w.idx[0]==10 && !markers && credits==3);
+ uint64_t same[2]={10,11};
+ /* The accepted prefix requires no second slot, including when its I/O is
+  * blocked. No pending credits may disappear through this shortcut. */
+ assert(!host_checkpoint_dispatch(&w,same,2,0,0,0) && w.busy && w.idx[0]==10);
+ h.flow_enabled=0;
+ assert(!host_checkpoint_dispatch(&w,same,2,0,5,500) && w.busy && credits==3);
+ h.flow_enabled=1;
  struct call c={.w=&w};pthread_t tid;assert(!pthread_create(&tid,NULL,invoke,&c));
  usleep(10000);assert(!__atomic_load_n(&c.done,__ATOMIC_ACQUIRE));
  pthread_mutex_lock(&w.mu);assert(w.busy && w.idx[0]==10);pthread_mutex_unlock(&w.mu);
  release();pthread_join(tid,NULL);assert(!c.rc);idle(&w);
  assert(markers==2 && last_idx==20 && credits==6 && last_bytes==200);
+ same[0]=20;same[1]=21;
+ assert(!host_checkpoint_dispatch(&w,same,2,0,0,0));idle(&w);assert(markers==2);
+ assert(!host_checkpoint_dispatch(&w,same,2,0,1,10));idle(&w);assert(markers==3 && credits==7);
  /* Errors are delivered to the pump; a newer successful prefix can repair. */
  pthread_mutex_lock(&gate);result_rc=EFS_ERR_IO;pthread_mutex_unlock(&gate);
  assert(!host_checkpoint_dispatch(&w,idx,3,0,1,1));idle(&w);

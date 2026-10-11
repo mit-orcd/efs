@@ -6320,6 +6320,16 @@ static int host_checkpoint_dispatch(struct host_checkpoint_worker *w,
      * unchanged and does not grant any Raft ACK or read authority. */
     if(kv_rc!=EFS_OK)return host_checkpoint_retire(w->host,idx,now,kv_rc,n,bytes);
     pthread_mutex_lock(&w->mu);
+    /* No new prefix and no credits: an already accepted job owns exactly
+     * this request. Do not park fresh ReadIndex processing behind its I/O.
+     * Failed completed jobs must be resubmitted; newer prefixes and pending
+     * credits still wait for the one bounded slot. */
+    if ((!w->host->flow_enabled || !n) &&
+        !memcmp(w->idx,idx,sizeof(w->idx)) && (w->busy || w->result==EFS_OK)) {
+        int previous=w->result;
+        pthread_mutex_unlock(&w->mu);
+        return previous;
+    }
     while(w->busy)pthread_cond_wait(&w->cv,&w->mu);
     int previous=w->result;
     memcpy(w->idx,idx,sizeof(w->idx));w->now=now;w->n=n;w->bytes=bytes;

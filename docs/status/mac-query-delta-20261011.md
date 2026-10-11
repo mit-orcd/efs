@@ -628,3 +628,15 @@ control-deep.txt` and `native-accounted-heartbeat-deep.txt`). The latest
 LOOKUP average remains 5.45 ms. This is no native speedup proof. Log fsync
 averages 19.35 ms; wire RTT averages 0.36–0.38 ms. Duplicate applied-marker
 dispatch still waits behind an accepted same-prefix job and is the next lead.
+
+The bounded marker dispatcher now skips duplicate requests for an already
+accepted/completed exact prefix when no transport credits need retirement.
+Newer prefixes retain backpressure; a failed completed marker is retried and
+failed KV release still cannot schedule a marker. Actual worker tests cover a
+blocked identical-prefix request, credit-bearing duplicate, new-prefix wait,
+failed same-prefix repair and shutdown drain; ASAN/UBSAN and Mac Linux
+checkpoint/retirement/control gates pass. Native deep pair still fails 0/2
+(33.6 seconds, normal cleanup). Its LOOKUP average is 4.12 ms, versus 5.45 ms
+in the preceding candidate run; these are consecutive diagnostic runs, not
+a paired performance proof or native acceptance. Evidence: `native-checkpoint-
+duplicate-deep.txt`, `checkpoint-duplicate-sample-efs1.json`.
