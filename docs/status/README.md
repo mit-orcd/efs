@@ -1,5 +1,14 @@
 # Project status — current work and index
 
+## v0.3.0-pre-alpha release integration
+
+[Release checkpoint, priorities and acceptance ledger](v030-pre-alpha-release.md):
+all agent improvements are being integrated on `release-v0.3.0-pre-alpha`;
+small-file packing and code-review correctness have priority. Branch checkpoints
+are not final release acceptance. Shared devel/main and pushes remain unchanged
+until a frozen merged candidate passes its recorded gates.
+
+
 Production tiny-file packing is the first ORCD priority on `devel-orcd`: see
 [W95/P4.1 plan and allocation baseline](orcd-tiny-packing-20261011.md). The
 408× calculation is for 512-byte payloads in separate full-sized fragments;

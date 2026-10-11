@@ -1,0 +1,63 @@
+[
+  {
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-bench",
+    "commit": "5071867ca75e6457419395f9838a81dd9c39aa00",
+    "contained": true,
+    "unique_commits": 0,
+    "tracked_changes": []
+  },
+  {
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-storage-engine",
+    "commit": "709236665854c5546462021520071035f15b2990",
+    "contained": true,
+    "unique_commits": 0,
+    "tracked_changes": []
+  },
+  {
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-known-bugs",
+    "commit": "e97d139c76407d8cab86e0c69a52cb9874c32fbd",
+    "contained": true,
+    "unique_commits": 0,
+    "tracked_changes": []
+  },
+  {
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-find-stats",
+    "commit": "92c95b44292a85446ac6469a9c9e7fa1617de654",
+    "contained": true,
+    "unique_commits": 0,
+    "tracked_changes": [
+      " M results/measure/20261010-w92-closure/capacity-recovery-handoff/handoff-1434aa83.log",
+      " M results/measure/20261010-w92-closure/capacity-recovery-handoff/handoff-cdc13b88.log",
+      " M results/measure/20261010-w92-closure/capacity-recovery-handoff/handoff-cf4e365a.log",
+      " M results/measure/20261010-w92-closure/capacity-recovery-handoff/handoff.log"
+    ]
+  },
+  {
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/i-l/work/efs-roce-rdma",
+    "commit": "6cb79c5330008caad2d214dfa1ba03087a653b02",
+    "contained": true,
+    "unique_commits": 0,
+    "tracked_changes": []
+  },
+  {
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/i-l/work/efs-gate-closure",
+    "commit": "e9c82302d56b79695289aeb89f85dbd6eaf57e32",
+    "contained": true,
+    "unique_commits": 0,
+    "tracked_changes": []
+  },
+  {
+    "worktree": "/Users/mike/Documents/Codex/2026-10-08/efs/work/devel-compaction-pressure",
+    "commit": "0abe7fd74078a0352d9a49d6913a6bcb4764f01f",
+    "contained": true,
+    "unique_commits": 0,
+    "tracked_changes": []
+  },
+  {
+    "worktree": "/Users/mike/git/efs",
+    "commit": "db22f1908a7f1daf11fbf3808313abe171229c1e",
+    "contained": true,
+    "unique_commits": 0,
+    "tracked_changes": []
+  }
+]
