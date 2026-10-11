@@ -1,0 +1,156 @@
+2026-10-11T04:03:12.055Z storage-engine=files direct_io=off
+2026-10-11T04:03:12.058Z Joined cluster with 3 nodes
+2026-10-11T04:03:12.059Z heartbeat: enabled (2000 ms interval)
+2026-10-11T04:03:12.060Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T04:03:12.060Z raft-host: up raft_id=2 n=4 boot=7799716595687211 salt=9209468973559743742 g0=hosted g2=hosted
+2026-10-11T04:03:12.060Z efsd 8cb41c929ca0-coordinator-trace (branch devel-amd, built 2026-10-11T04:03:03Z on amd-395), build=8cb41c929ca0-coordinator-trace: node 3 listening on 127.0.0.1:24192, storage=/data1/efs/amd-round-20261010/gc-buffered-mt84h6wq/n3 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=off, writers=28 shared
+2026-10-11T04:03:12.060Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-11T04:03:14.059Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=985 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T04:03:15.559Z raft-host: applied mkfs index=2 salt=3616721405545603432
+2026-10-11T04:03:15.560Z raft-host: applied salt index=2 anchor=2 salt=3616721405545603432
+2026-10-11T04:03:16.123Z raft-host: applied session index=3 kind=1 shard=0 ino=0
+2026-10-11T04:03:16.124Z raft-host: applied session index=4 kind=2 shard=1 ino=0
+2026-10-11T04:03:16.124Z raft-host: applied session index=5 kind=7 shard=1 ino=0
+2026-10-11T04:03:16.125Z raft-host: applied create index=6 parent=1 name=mkdir-race-00 ino=645
+2026-10-11T04:03:16.126Z raft-host: applied session index=7 kind=1 shard=0 ino=0
+2026-10-11T04:03:16.127Z raft-host: applied session index=8 kind=2 shard=645 ino=0
+2026-10-11T04:03:16.127Z raft-host: applied session index=9 kind=7 shard=645 ino=0
+2026-10-11T04:03:16.138Z raft-host: applied create index=22 parent=645 name=peer_create_visible ino=4077
+2026-10-11T04:03:16.144Z raft-host: applied create index=28 parent=645 name=peer_listdir_siblings ino=2327
+2026-10-11T04:03:16.145Z raft-host: applied create index=29 parent=645 name=peer_shared_creat ino=1887
+2026-10-11T04:03:16.151Z raft-host: applied create index=36 parent=645 name=peer_creat_excl_eexist ino=613
+2026-10-11T04:03:16.157Z raft-host: applied create index=42 parent=645 name=peer_rename_visible ino=671
+2026-10-11T04:03:16.163Z raft-host: applied create index=48 parent=645 name=peer_shared_pwrite ino=919
+2026-10-11T04:03:16.164Z raft-host: applied create index=49 parent=645 name=peer_unlink_gone ino=4073
+2026-10-11T04:03:16.179Z raft-host: applied create index=68 parent=645 name=peer_truncate_visible ino=19
+2026-10-11T04:03:16.208Z raft-host: applied create index=104 parent=645 name=peer_oappend ino=3059
+2026-10-11T04:03:16.209Z raft-host: applied create index=105 parent=645 name=peer_rename_over ino=2343
+2026-10-11T04:03:16.229Z raft-host: applied create index=128 parent=645 name=peer_hardlink_write ino=2069
+2026-10-11T04:03:16.229Z raft-host: applied create index=129 parent=645 name=peer_cached_directory_rename ino=3019
+2026-10-11T04:03:16.236Z raft-host: applied create index=135 parent=645 name=peer_o_trunc_visible ino=2471
+2026-10-11T04:03:16.236Z raft-host: applied create index=136 parent=645 name=peer_unlink_recreate ino=2059
+2026-10-11T04:03:16.260Z raft-host: applied create index=162 parent=645 name=peer_overlap_pwrite_partial ino=1353
+2026-10-11T04:03:16.261Z raft-host: applied create index=163 parent=645 name=peer_overlap_pwrite_chunk_straddle ino=473
+2026-10-11T04:03:16.267Z raft-host: applied create index=169 parent=645 name=peer_append_while_truncate ino=2811
+2026-10-11T04:03:16.268Z raft-host: applied create index=170 parent=645 name=peer_disjoint_extend ino=1231
+2026-10-11T04:03:16.269Z raft-host: applied create index=171 parent=645 name=peer_disjoint_extend_reverse_completion ino=2167
+2026-10-11T04:03:16.269Z raft-host: applied create index=172 parent=645 name=peer_extend_and_truncate ino=3351
+2026-10-11T04:03:16.270Z raft-host: applied create index=173 parent=645 name=peer_stat_during_extend ino=3003
+2026-10-11T04:03:16.271Z raft-host: applied create index=174 parent=645 name=peer_trunc_then_pwrite_old_fd ino=2243
+2026-10-11T04:03:16.277Z raft-host: applied create index=181 parent=645 name=peer_pwrite_then_peer_truncate ino=2609
+2026-10-11T04:03:16.278Z raft-host: applied create index=182 parent=645 name=peer_rename_same_src_two_dst ino=2203
+2026-10-11T04:03:16.278Z raft-host: applied create index=183 parent=645 name=peer_rename_vs_unlink_src ino=3063
+2026-10-11T04:03:16.313Z raft-host: applied create index=223 parent=645 name=peer_open_unlink_nlink ino=1061
+2026-10-11T04:03:16.324Z raft-host: applied create index=236 parent=645 name=peer_concurrent_hardlink ino=3589
+2026-10-11T04:03:16.344Z raft-host: applied session index=260 kind=1 shard=0 ino=0
+2026-10-11T04:03:16.345Z raft-host: applied session index=261 kind=2 shard=645 ino=0
+2026-10-11T04:03:16.345Z raft-host: applied session index=262 kind=7 shard=645 ino=0
+2026-10-11T04:03:16.346Z raft-host: applied create index=263 parent=645 name=.keep ino=4741
+2026-10-11T04:03:16.350Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=1666 p50_us=1666 max_us=1666 wdisk ops=1 bytes=65536 errors=0 avg_us=1441 p50_us=1441 max_us=1441
+2026-10-11T04:03:16.353Z raft-host: applied session index=268 kind=1 shard=0 ino=0
+2026-10-11T04:03:16.353Z raft-host: applied session index=269 kind=2 shard=3080 ino=0
+2026-10-11T04:03:16.354Z raft-host: applied session index=270 kind=1 shard=0 ino=0
+2026-10-11T04:03:16.355Z raft-host: applied session index=140 kind=7 shard=3080 ino=0
+2026-10-11T04:03:16.355Z raft-host: applied session index=271 kind=2 shard=3080 ino=0
+2026-10-11T04:03:16.356Z raft-host: applied session index=141 kind=7 shard=3080 ino=0
+2026-10-11T04:03:16.356Z raft-host: applied create index=142 parent=3080 name=ready-a-0 ino=7176
+2026-10-11T04:03:16.357Z raft-host: applied create index=143 parent=3080 name=ready-b-0 ino=11272
+2026-10-11T04:03:16.365Z raft-host: applied create index=152 parent=3080 name=raced-0 ino=3592
+2026-10-11T04:03:16.366Z raft-host: applied create index=153 parent=3080 name=.race-b-0 ino=15368
+2026-10-11T04:03:16.367Z raft-host: applied create index=155 parent=3080 name=.race-a-0 ino=19464
+2026-10-11T04:03:16.372Z raft-host: applied create index=163 parent=3080 name=ready-b-1 ino=23560
+2026-10-11T04:03:16.373Z raft-host: applied create index=166 parent=3080 name=ready-a-1 ino=27656
+2026-10-11T04:03:16.383Z raft-host: applied create index=179 parent=3080 name=.race-b-1 ino=31752
+2026-10-11T04:03:16.385Z raft-host: applied create index=182 parent=3080 name=.race-a-1 ino=35848
+2026-10-11T04:03:16.388Z raft-host: applied create index=187 parent=3080 name=ready-b-2 ino=39944
+2026-10-11T04:03:16.392Z raft-host: applied create index=192 parent=3080 name=ready-a-2 ino=44040
+2026-10-11T04:03:16.395Z raft-host: applied create index=197 parent=3080 name=raced-2 ino=3486
+2026-10-11T04:03:16.396Z raft-host: applied create index=199 parent=3080 name=.race-b-2 ino=48136
+2026-10-11T04:03:16.399Z raft-host: applied create index=203 parent=3080 name=.race-a-2 ino=52232
+2026-10-11T04:03:16.402Z raft-host: applied create index=208 parent=3080 name=ready-b-3 ino=56328
+2026-10-11T04:03:16.406Z raft-host: applied create index=213 parent=3080 name=ready-a-3 ino=60424
+2026-10-11T04:03:16.417Z raft-host: applied create index=225 parent=3080 name=.race-b-3 ino=64520
+2026-10-11T04:03:16.419Z raft-host: applied create index=228 parent=3080 name=.race-a-3 ino=68616
+2026-10-11T04:03:16.421Z raft-host: applied create index=233 parent=3080 name=ready-b-4 ino=72712
+2026-10-11T04:03:16.427Z raft-host: applied create index=238 parent=3080 name=ready-a-4 ino=76808
+2026-10-11T04:03:16.429Z raft-host: applied create index=243 parent=3080 name=raced-4 ino=1476
+2026-10-11T04:03:16.431Z raft-host: applied create index=246 parent=3080 name=.race-b-4 ino=80904
+2026-10-11T04:03:16.433Z raft-host: applied create index=249 parent=3080 name=.race-a-4 ino=85000
+2026-10-11T04:03:16.438Z raft-host: applied create index=256 parent=3080 name=ready-b-5 ino=89096
+2026-10-11T04:03:16.439Z raft-host: applied create index=257 parent=3080 name=ready-a-5 ino=93192
+2026-10-11T04:03:16.451Z raft-host: applied create index=276 parent=3080 name=.race-b-5 ino=97288
+2026-10-11T04:03:16.455Z raft-host: applied create index=281 parent=3080 name=ready-b-6 ino=101384
+2026-10-11T04:03:16.502Z raft-host: applied create index=286 parent=3080 name=.race-a-5 ino=105480
+2026-10-11T04:03:16.509Z raft-host: applied create index=291 parent=3080 name=ready-a-6 ino=109576
+2026-10-11T04:03:16.513Z raft-host: applied create index=296 parent=3080 name=raced-6 ino=3674
+2026-10-11T04:03:16.514Z raft-host: applied create index=297 parent=3080 name=.race-b-6 ino=113672
+2026-10-11T04:03:16.515Z raft-host: applied create index=298 parent=3080 name=.race-a-6 ino=117768
+2026-10-11T04:03:16.520Z raft-host: applied create index=307 parent=3080 name=ready-b-7 ino=121864
+2026-10-11T04:03:16.521Z raft-host: applied create index=308 parent=3080 name=ready-a-7 ino=125960
+2026-10-11T04:03:16.534Z raft-host: applied create index=328 parent=3080 name=.race-a-7 ino=130056
+2026-10-11T04:03:16.589Z raft-host: applied create index=333 parent=3080 name=.race-b-7 ino=134152
+2026-10-11T04:03:16.694Z raft-host: applied session index=297 kind=1 shard=0 ino=0
+2026-10-11T04:03:16.695Z raft-host: applied session index=298 kind=2 shard=3094 ino=0
+2026-10-11T04:03:16.695Z raft-host: applied session index=374 kind=7 shard=3094 ino=0
+2026-10-11T04:03:16.705Z raft-host: applied create index=387 parent=3094 name=peer_create_visible ino=904
+2026-10-11T04:03:16.711Z raft-host: applied create index=394 parent=3094 name=peer_listdir_siblings ino=3394
+2026-10-11T04:03:16.712Z raft-host: applied create index=395 parent=3094 name=peer_shared_creat ino=866
+2026-10-11T04:03:16.718Z raft-host: applied create index=402 parent=3094 name=peer_creat_excl_eexist ino=2650
+2026-10-11T04:03:16.723Z raft-host: applied create index=408 parent=3094 name=peer_rename_visible ino=3818
+2026-10-11T04:03:16.729Z raft-host: applied create index=415 parent=3094 name=peer_shared_pwrite ino=424
+2026-10-11T04:03:16.729Z raft-host: applied create index=416 parent=3094 name=peer_unlink_gone ino=1406
+2026-10-11T04:03:16.744Z raft-host: applied create index=434 parent=3094 name=peer_truncate_visible ino=3522
+2026-10-11T04:03:16.772Z raft-host: applied create index=469 parent=3094 name=peer_oappend ino=3132
+2026-10-11T04:03:16.773Z raft-host: applied create index=470 parent=3094 name=peer_rename_over ino=3384
+2026-10-11T04:03:16.793Z raft-host: applied create index=493 parent=3094 name=peer_hardlink_write ino=2832
+2026-10-11T04:03:16.794Z raft-host: applied create index=494 parent=3094 name=peer_cached_directory_rename ino=3812
+2026-10-11T04:03:16.799Z raft-host: applied create index=500 parent=3094 name=peer_o_trunc_visible ino=4040
+2026-10-11T04:03:16.800Z raft-host: applied create index=501 parent=3094 name=peer_unlink_recreate ino=1236
+2026-10-11T04:03:16.824Z raft-host: applied create index=531 parent=3094 name=peer_overlap_pwrite_partial ino=624
+2026-10-11T04:03:16.824Z raft-host: applied create index=532 parent=3094 name=peer_overlap_pwrite_chunk_straddle ino=2878
+2026-10-11T04:03:16.830Z raft-host: applied create index=538 parent=3094 name=peer_append_while_truncate ino=3604
+2026-10-11T04:03:16.830Z raft-host: applied create index=539 parent=3094 name=peer_disjoint_extend ino=2468
+2026-10-11T04:03:16.831Z raft-host: applied create index=540 parent=3094 name=peer_disjoint_extend_reverse_completion ino=2762
+2026-10-11T04:03:16.833Z raft-host: applied create index=541 parent=3094 name=peer_extend_and_truncate ino=3364
+2026-10-11T04:03:16.834Z raft-host: applied create index=542 parent=3094 name=peer_stat_during_extend ino=1530
+2026-10-11T04:03:16.834Z raft-host: applied create index=543 parent=3094 name=peer_trunc_then_pwrite_old_fd ino=1854
+2026-10-11T04:03:16.839Z raft-host: applied create index=549 parent=3094 name=peer_pwrite_then_peer_truncate ino=4026
+2026-10-11T04:03:16.840Z raft-host: applied create index=550 parent=3094 name=peer_rename_same_src_two_dst ino=3360
+2026-10-11T04:03:16.841Z raft-host: applied create index=551 parent=3094 name=peer_rename_vs_unlink_src ino=1282
+2026-10-11T04:03:16.879Z raft-host: applied create index=605 parent=3094 name=peer_open_unlink_nlink ino=1174
+2026-10-11T04:03:16.890Z raft-host: applied create index=621 parent=3094 name=peer_concurrent_hardlink ino=3726
+2026-10-11T04:03:16.909Z raft-host: applied session index=434 kind=1 shard=0 ino=0
+2026-10-11T04:03:16.910Z raft-host: applied session index=435 kind=2 shard=3094 ino=0
+2026-10-11T04:03:16.910Z raft-host: applied session index=643 kind=7 shard=3094 ino=0
+2026-10-11T04:03:16.911Z raft-host: applied create index=644 parent=3094 name=.keep ino=7190
+2026-10-11T04:03:16.915Z raft-host: applied session index=436 kind=1 shard=0 ino=0
+2026-10-11T04:03:16.916Z raft-host: applied session index=437 kind=2 shard=3541 ino=0
+2026-10-11T04:03:16.916Z raft-host: applied session index=438 kind=7 shard=3541 ino=0
+2026-10-11T04:03:16.917Z raft-host: applied create index=439 parent=3541 name=ready-a-0 ino=7637
+2026-10-11T04:03:16.917Z raft-host: applied session index=440 kind=1 shard=0 ino=0
+2026-10-11T04:03:16.918Z raft-host: applied session index=442 kind=2 shard=3541 ino=0
+2026-10-11T04:03:16.919Z raft-host: applied session index=444 kind=7 shard=3541 ino=0
+2026-10-11T04:03:16.920Z raft-host: applied create index=445 parent=3541 name=ready-b-0 ino=11733
+2026-10-11T04:03:16.931Z raft-host: applied create index=458 parent=3541 name=.race-b-0 ino=15829
+2026-10-11T04:03:16.931Z raft-host: applied create index=459 parent=3541 name=.race-a-0 ino=19925
+2026-10-11T04:03:16.937Z raft-host: applied create index=468 parent=3541 name=ready-a-1 ino=24021
+2026-10-11T04:03:16.938Z raft-host: applied create index=470 parent=3541 name=ready-b-1 ino=28117
+2026-10-11T04:03:16.943Z raft-host: applied create index=478 parent=3541 name=raced-1 ino=925
+2026-10-11T04:03:16.944Z raft-host: apply create rc=-4 index=479 parent=3541 name=raced-1
+2026-10-11T04:03:16.945Z raft-host: applied create index=480 parent=3541 name=.race-a-1 ino=32213
+2026-10-11T04:03:16.946Z raft-host: applied create index=483 parent=3541 name=.race-b-1 ino=36309
+2026-10-11T04:03:16.951Z raft-host: applied create index=490 parent=3541 name=ready-a-2 ino=40405
+2026-10-11T04:03:16.953Z raft-host: applied create index=493 parent=3541 name=ready-b-2 ino=44501
+2026-10-11T04:03:16.963Z raft-host: applied create index=505 parent=3541 name=.race-a-2 ino=48597
+2026-10-11T04:03:16.967Z raft-host: applied create index=510 parent=3541 name=ready-a-3 ino=52693
+2026-10-11T04:03:17.063Z kv-obs: mt_bytes=173857 l0_bytes=0 l0=0 l1=0
+2026-10-11T04:03:21.353Z iostats: get ops=7 bytes=458752 errors=0 avg_us=33 p50_us=29 max_us=61 put ops=32 bytes=2097152 errors=0 avg_us=1454 p50_us=1113 max_us=6815 wdisk ops=32 bytes=2097152 errors=0 avg_us=1415 p50_us=1078 max_us=6775
+2026-10-11T04:03:22.063Z kv-obs: mt_bytes=172561 l0_bytes=0 l0=0 l1=0
+2026-10-11T04:03:26.353Z iostats: get ops=7 bytes=458752 errors=0 avg_us=33 p50_us=29 max_us=61 put ops=32 bytes=2097152 errors=0 avg_us=1454 p50_us=1113 max_us=6815 wdisk ops=32 bytes=2097152 errors=0 avg_us=1415 p50_us=1078 max_us=6775
+2026-10-11T04:03:27.066Z kv-obs: mt_bytes=172525 l0_bytes=0 l0=0 l1=0
+2026-10-11T04:03:30.064Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=861 passes=18 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T04:03:31.353Z iostats: get ops=7 bytes=458752 errors=0 avg_us=33 p50_us=29 max_us=61 put ops=32 bytes=2097152 errors=0 avg_us=1454 p50_us=1113 max_us=6815 wdisk ops=32 bytes=2097152 errors=0 avg_us=1415 p50_us=1078 max_us=6775
+2026-10-11T04:03:36.354Z iostats: get ops=7 bytes=458752 errors=0 avg_us=33 p50_us=29 max_us=61 put ops=32 bytes=2097152 errors=0 avg_us=1454 p50_us=1113 max_us=6815 wdisk ops=32 bytes=2097152 errors=0 avg_us=1415 p50_us=1078 max_us=6775
+2026-10-11T04:03:41.357Z iostats: get ops=7 bytes=458752 errors=0 avg_us=33 p50_us=29 max_us=61 put ops=32 bytes=2097152 errors=0 avg_us=1454 p50_us=1113 max_us=6815 wdisk ops=32 bytes=2097152 errors=0 avg_us=1415 p50_us=1078 max_us=6775
+2026-10-11T04:03:46.068Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=790 passes=34 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T04:03:46.358Z iostats: get ops=7 bytes=458752 errors=0 avg_us=33 p50_us=29 max_us=61 put ops=32 bytes=2097152 errors=0 avg_us=1454 p50_us=1113 max_us=6815 wdisk ops=32 bytes=2097152 errors=0 avg_us=1415 p50_us=1078 max_us=6775
