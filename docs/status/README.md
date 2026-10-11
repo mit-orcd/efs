@@ -4,6 +4,13 @@
 [Decisions](decisions.md) · [Work-item details](../backlog/work-items.md) ·
 [Operations](../operations/operations.md) · [Archive](../archive/README.md)
 
+## Design proposals
+
+[Scratch expiry and virtual `.efs/` commands](scratch-expiry-interface.md)
+records the preferred `/scratch/.efs/help`, `ls`, `find` and `stats` interface,
+expiry presentation and proposed lifecycle design. Tracked as **W90** (expiry)
+and **W91** (`.efs/` commands); policies were subsequently accepted as D33/D34; implementation and gates remain open.
+
 ## Accepted design follow-up
 
 [D32–D35](accepted-namespace-scratch-20261008.md) settle W84's current transaction
@@ -22,8 +29,9 @@ unimplemented; unavailable/refusal tests are not lifecycle acceptance.
 
 [W93–W96: NUC profiling evidence and next experiments](tiny-file-performance-plan-20261008.md)
 register broader Raft group commit, atomic CREATE/open lease, tiny-file data
-persistence/packing, and KV WAL preallocation. All four are open; W93/W94 are
-the recommended first priorities within this set. W95 refines existing P4.1,
+persistence/packing, and KV WAL preallocation. All four are open; the devel
+review found a W96 WAL recovery prerequisite to fix first, followed by scoped
+W94 work and W93 measurement. W95 refines existing P4.1,
 so the earlier grouped count below is retained as a dated baseline rather than
 recomputed by blindly adding four. W90–W92 keep their existing scopes.
 
@@ -157,6 +165,8 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | bench-churn | **W90** · independent steady-state storage churn benchmark | benchmark enhancement | implemented on `devel-bench`; functional gates pass; initial matched 50/80/95-percent evidence; 64 KiB scaling, shared ranges and five profiling rounds recorded; bounded punch batching retained; merged into isolated `devel-storage-engine`; matched simulator comparison validated; 8 longer cases favor punch at 95%/QD4 (same-device roots); no production changes | [work item](../backlog/work-items.md#w90) · [ranges](bench-scaling-ranges-20261008.md) · [profiles](bench-perf-five-rounds-20261008.md) · [comparison](bench-layout-comparison-20261008.md) |
 | P4.1–P4.4 | fragment on-disk layout (**wipe**), W40 FUSE write copy, RDMA zero-copy receive, 9-client scaling | performance | deferred until P3's numbers | [full text](../backlog/work-items.md#p4--deferred-until-p3s-numbers-long-one-is-a-wipe) |
 | meta-scale | **W66** · metadata leadership distribution and topology-independent routing | scalability | open — Oct 5 implementation gap recorded; correctness work first, then baseline measurement and staged multi-Raft implementation | [evidence, phases and gates](metadata-scaling.md) |
+| scratch-expiry | **W90** · scratch-file expiry metadata and safe lifecycle | feature | design accepted D33; opt-in fixed deadlines and safe lifecycle; implementation/gates open | [work item](../backlog/work-items.md#w90) · [design](scratch-expiry-interface.md) |
+| virtual-commands | **W91** · directory-local virtual `.efs/` command interface | usability feature | design accepted D34; `.efs/` commands and bounded query paths; implementation/compatibility gates remain | [work item](../backlog/work-items.md#w91) · [design](scratch-expiry-interface.md) |
 | tiny-raft | **W93** · broader durable Raft group commit | performance | implemented — covered AMD batching/fault/cold and balanced long mixed-load gates pass | [work item](../backlog/work-items.md#w93) |
 | tiny-create | **W94** · atomic CREATE plus open lease | performance / lifecycle | partial — atomic server lease/reply cleanup pass; guarded adoption and session integration open | [work item](../backlog/work-items.md#w94) |
 | tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | partial — tiny/durable/cold/crash/churn gates pass; indexed packing and P4.1 decision remain | [work item](../backlog/work-items.md#w95) |

@@ -150,7 +150,7 @@ W84 sizing and W91 command/script clarifications.
 | --- | --- | --- |
 | D32 / W84 | Current 144-participant limit, no hardcoded directory depth; prompt atomic refusal with diagnostics; larger-operation protocol deferred. | [Contract](accepted-namespace-scratch-20261008.md#d32--w84-bounded-namespace-transactions) |
 | D33 / W90 | Opt-in fixed deadlines, owner renewal within operator limits, singly linked regular files, clock-safe conditional namespace deletion. No universal TTL. | [Contract](accepted-namespace-scratch-20261008.md#d33--w90-opt-in-fixed-scratch-expiry) |
-| D34 / W91 | Opt-in `.efs/` commands, initially readable Python 3 scripts using bounded versioned query paths and immutable results; real names win collisions. | [Contract](accepted-namespace-scratch-20261008.md#d34--w91-directory-local-efs-commands) |
+| D34 / W91 | Opt-in `.efs/` commands, initially readable Python 3 scripts using bounded versioned query paths and immutable results; real names win collisions. User revision: `.efs/find` and `.efs/stats` replace legacy `.find`/`.stats` under W92. | [Contract](accepted-namespace-scratch-20261008.md#d34--w91-directory-local-efs-commands) |
 | D35 / W81 | Sustained directory-local contention plus activity triggers spread, with hysteresis, bounded migration and measured configurable thresholds. | [Contract](accepted-namespace-scratch-20261008.md#d35--w81-sustained-contention-directory-spreading) |
 
 Accepted policy does not establish deployment acceptance. Numeric W81 settings,
