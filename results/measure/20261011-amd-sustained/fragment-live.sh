@@ -29,6 +29,7 @@ python3 -u tests/live/gc_reclamation.py --mode direct --transport tcp \
  --mount /data1/efs/mnt --peer-mount /data1/efs/mnt2 \
  --guarded-leases --posix > "$out/direct-functional.log" 2>&1
 echo 0 > "$out/direct-functional.exit"
+failed=0
 for mode in direct buffered; do
  set +e
  python3 -u tests/live/gc_reclamation.py --mode "$mode" --transport tcp \
@@ -38,5 +39,6 @@ for mode in direct buffered; do
  rc=$?
  set -e
  echo "$rc" > "$out/$mode.exit"
- [ "$rc" = 0 ] || exit "$rc"
+ [ "$rc" = 0 ] || failed=1
 done
+exit "$failed"

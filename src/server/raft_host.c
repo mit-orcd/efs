@@ -7861,6 +7861,11 @@ out:
         fprintf(stderr, "raft-host: gc-frag group=%u scans=%d records=%d ms=%llu\n",
                 group, scans, recs,
                 (unsigned long long)((now_us_() - t0) / 1000));
+    /* Live-file overwrites have fragment GC without dead-inode REAP.
+     * Require durable ACK progress, pending work and a full budget-limited
+     * batch; idle/blocked scans retain the ordinary backoff. */
+    return ack_progress && pend > 0 && c.full &&
+           now_us_() - t0 > GC_FRAG_BUDGET_US;
 }
 
 static void host_dir_spread_pass(struct efs_raft_host *h);
