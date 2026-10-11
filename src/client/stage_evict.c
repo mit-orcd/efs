@@ -36,6 +36,7 @@
 #include "efs/common.h"
 #include "efs/metadata.h"
 #include "client_internal.h"
+#include "../common/stage_limit.h"
 
 #include <pthread.h>
 #include <sched.h>
@@ -354,16 +355,6 @@ static int stage_op_pinned(efs_ino_t ino)
     return hit;
 }
 
-static uint64_t stage_cap_bytes(void)
-{
-    const char *env = getenv("EFS_CLIENT_META_MB");
-    if (env && *env) {
-        unsigned long v = strtoul(env, NULL, 10);
-        if (v >= 16 && v <= (1UL << 20))
-            return (uint64_t)v << 20;
-    }
-    return 256ULL << 20;
-}
 
 /* Scan collects SCAN_BATCH oldest candidates per pass; up to EVICT_BATCH
  * of them (unpinned) are evicted. The 4x scan ratio keeps a pass
@@ -619,7 +610,7 @@ static int evict_cold_tabs(uint64_t cap, uint64_t *bytes_io)
 static void *stage_evict_main(void *arg)
 {
     (void)arg;
-    uint64_t cap = stage_cap_bytes();
+    uint64_t cap = efs_stage_cap_bytes();
     int logged_grow = 0;
     pthread_mutex_lock(&g_evict_mu);
     for (;;) {
@@ -743,7 +734,7 @@ void efs_client_stage_evict_kick(void)
     if (!g_evict_started)
         return;
     if (__atomic_load_n(&g_stage_bytes_seen, __ATOMIC_RELAXED) <=
-        stage_cap_bytes())
+        efs_stage_cap_bytes())
         return;
     if (evict_now_ms() <
         __atomic_load_n(&g_evict_idle_until, __ATOMIC_RELAXED))

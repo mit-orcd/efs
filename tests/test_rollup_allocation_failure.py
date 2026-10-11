@@ -24,6 +24,15 @@ source = r'''
 #include <string.h>
 #include <stdio.h>
 #include "efs/metadata.h"
+#include "src/common/stage_limit.h"
+static void staged_refresh(struct efs_export *e) { (void)e; }
+void efs_export_ensure_rollups(struct efs_export *e) { (void)e; assert(0); }
+static void apply_size_delta_for_ino(struct efs_export *e, efs_ino_t ino, int64_t delta) {
+    (void)e; (void)ino; (void)delta; assert(0);
+}
+static void rollup_expand_parents_of(struct efs_export *e, efs_ino_t ino) {
+    (void)e; (void)ino; assert(0);
+}
 static unsigned allocation_call, failure;
 static void *fault_malloc(size_t n) {
     if (++allocation_call == failure) return NULL;
@@ -109,5 +118,5 @@ with tempfile.TemporaryDirectory(prefix='efs-rollup-oom-') as tmp:
     flags = ['-fsanitize=address,undefined', '-fno-omit-frame-pointer'] if args.sanitize else []
     subprocess.run(shlex.split(os.environ.get('CC', 'cc')) +
                    ['-std=c99', '-D_GNU_SOURCE', '-Wall', '-Wextra', '-Werror', '-g',
-                    '-I' + str(root / 'include'), *flags, str(c), '-o', str(exe)], check=True)
+                    '-I' + str(root / 'include'), '-I' + str(root), *flags, str(c), '-o', str(exe)], check=True)
     subprocess.run([str(exe)], check=True)

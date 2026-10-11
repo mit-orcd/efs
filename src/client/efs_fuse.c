@@ -30,6 +30,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include "../common/recorder_stop.h"
 #include <sys/statvfs.h>
 #include <poll.h>
 #include <time.h>
@@ -7025,17 +7026,7 @@ static pid_t start_strace_recorder(pid_t target, const char *path)
  * ~5 s, then SIGKILL. */
 static void stop_recorder(pid_t *pidp)
 {
-    if (*pidp > 0) {
-        kill(*pidp, SIGTERM);
-        for (int i = 0; i < 50; i++) {
-            if (waitpid(*pidp, NULL, WNOHANG) == *pidp)
-                break;
-            usleep(100000);
-        }
-        kill(*pidp, SIGKILL);
-        waitpid(*pidp, NULL, 0);
-        *pidp = -1;
-    }
+    efs_stop_recorder(pidp);
 }
 
 static void stop_perf_recorder(void)
@@ -7571,14 +7562,7 @@ static int efs_fuse_bench_run(const char *kind, double time_sec)
         rc = 1;
     }
     if (bench_perf > 0) {
-        kill(bench_perf, SIGTERM);
-        for (int i = 0; i < 50; i++) {
-            if (waitpid(bench_perf, NULL, WNOHANG) == bench_perf)
-                break;
-            usleep(100000);
-        }
-        kill(bench_perf, SIGKILL);
-        waitpid(bench_perf, NULL, 0);
+        efs_stop_recorder(&bench_perf);
         char cmd[600];
         snprintf(cmd, sizeof(cmd),
                  "perf report --stdio --no-children --percent-limit=2 -i '%s' "

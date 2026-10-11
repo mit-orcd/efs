@@ -19,6 +19,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include "../common/recorder_stop.h"
 #include <sys/resource.h>
 #include <time.h>
 
@@ -231,17 +232,7 @@ static pid_t start_strace_recorder(pid_t target, const char *path)
  * up to ~5 s, then SIGKILL. */
 static void stop_recorder(pid_t *pidp)
 {
-    if (*pidp > 0) {
-        kill(*pidp, SIGTERM);
-        for (int i = 0; i < 50; i++) {
-            if (waitpid(*pidp, NULL, WNOHANG) == *pidp)
-                break;
-            usleep(100000);
-        }
-        kill(*pidp, SIGKILL);
-        waitpid(*pidp, NULL, 0);
-        *pidp = -1;
-    }
+    efs_stop_recorder(pidp);
 }
 
 static void stop_perf_recorder(void)

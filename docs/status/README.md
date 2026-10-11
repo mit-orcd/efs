@@ -86,10 +86,19 @@ unimplemented; unavailable/refusal tests are not lifecycle acceptance.
 
 ## Release correctness review
 
+[Recorder shutdown ownership](recorder-stop-20261011.md) fixes signaling after reap
+and ECHILD across the profiling stop paths. Stubbed lifecycle/failure tests pass;
+real Linux recorder and full merged acceptance remain pending.
+
+[Deferred rollup budget](rollup-budget-20261011.md) charges retained queue capacity
+and admits replacement growth against the existing staging target, falling back to
+eager rollups under pressure. Focused accounting/boundary regressions pass; this
+does not change the cache's pinned-work over-target policy.
+
 [Rollup allocation-failure fix](rollup-allocation-failure-20261011.md) records the
 reproduced dangling-owner failure, ownership-safe queue growth and focused sanitizer
-gates. Full merged/Linux acceptance and separate queue-accounting/recorder findings
-remain open. [Review release disposition](../reviews/release-disposition-20261011.md)
+gates. Full merged/Linux acceptance remains pending; focused queue-accounting and
+recorder repairs are indexed above. [Review release disposition](../reviews/release-disposition-20261011.md)
 protects active packed/query consumers from broad cleanup.
 
 ## Tiny-file performance follow-up
