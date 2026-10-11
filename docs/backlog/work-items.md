@@ -4778,15 +4778,19 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 
 ## W108 · Resolve owner names in directory-local long listings
 
-**Class/state:** Command usability; open.
+**Class/state:** Command usability; implemented with rollout gate open.
+
+**Oct 11 checkpoint:** names/fallback, bounded NSS cache, numeric `-n` mode and
+safe output are implemented; 29 local regressions and the live candidate using
+ORCD's actual snapshot pass. The running clients still embed the old formatter;
+keep the rebuilt-client/shared find/ls deployment gate open.
 
 `.efs/ls -l` and shared find rendering currently hard-code numeric UID:GID
 formatting, so ORCD UID 246111 appears as a number rather than `erbmi1`.
 Resolve human-readable names on the executing client, retain numeric fallback
 and explicit numeric mode, and keep stored/JSON IDs unchanged. Gate known and
 unknown mappings, safe output, repeated NSS lookup caching, and the rebuilt
-ORCD virtual command. Assigned follow-up to efs-coding 1 - orcd after current
-work, later October 11. See the [cause and plan](../status/w108-owner-name-display-20261011.md).
+ORCD virtual command. Now owned by `devel-orcd` under the user's ORCD assignment. See the [cause and plan](../status/w108-owner-name-display-20261011.md).
 
 <a id="w109"></a>
 

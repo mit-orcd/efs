@@ -203,6 +203,8 @@ immutable retries after rerouting, file and directory sync failures, quota
 limits, restart accounting, duplicate-root rejection and inode-GC isolation.
 [Private storage gate](../../results/measure/20261011-orcd-tiny-packing/linux-packed-store-dev.txt).
 This uses private local `/tmp` roots on one ORCD host, not distributed hardware
-RDMA, the data-volume benchmark, or end-to-end files/s acceptance. Full-suite
-acceptance of this additional storage step remains separate from the earlier
-committed format/codec suite. No mounted tiny-file packing is activated yet.
+RDMA, the data-volume benchmark, or end-to-end files/s acceptance. The committed storage snapshot `ebb7ab464985` then passed the complete Linux
+suite on fcstor006, with zero compiler warnings. The [audit](../../results/measure/20261011-orcd-tiny-packing/linux-unit-audit.txt)
+records Linux 5.14.0-687.39.1.el9_8, private roots on local XFS `/dev/md0`,
+source identity and unchanged live runtime `52bc8edb`. No mounted tiny-file
+packing is activated yet.
