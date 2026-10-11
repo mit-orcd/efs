@@ -133,11 +133,41 @@ int main(void)
         assert(!link(source,absent));uint32_t cap=flen;
         assert(server_read_packed_fragment(&server,1,501,503,0,flen,r[0],&cap,wrong)==EFS_ERR_IO);
         assert(!unlink(absent));
+        /* Typed generation fences block every late PUT, including retries
+         * after failed file/directory barriers. No ACK without both barriers. */
+        server.quota=0;fail_file=1;
+        assert(server_fence_packed_object(&server,1,901,903)==EFS_ERR_IO);
+        for(unsigned fi=0;fi<3;fi++)
+            assert(server_write_packed_fragment(&server,1,901,903,fi,f[fi],flen,sums[fi])==EFS_ERR_STALE);
+        fail_file=1;assert(server_fence_packed_object(&server,1,901,903)==EFS_ERR_IO);
+        fail_directory=1;assert(server_fence_packed_object(&server,1,901,903)==EFS_ERR_IO);
+        file_syncs=directory_syncs=0;assert(!server_fence_packed_object(&server,1,901,903));
+        assert(file_syncs && directory_syncs);
+        assert(!server_fence_packed_object(&server,1,501,503));
+        /* Fencing changes upload admission, not existing reader bytes. */
+        cap=flen;assert(!server_read_packed_fragment(&server,1,501,503,0,flen,r[0],&cap,wrong));
+        /* Simulate collection of private exact objects; no GC RPC is claimed. */
+        for(unsigned fi=0;fi<3;fi++) {
+            char path[8192];assert(!server_packed_fragment_path(&server,0,1,501,503,fi,path,sizeof(path)));
+            assert(!unlink(path));
+        }
+        server_storage_engine_close(&server);assert(!server_storage_engine_init(&server));
+        for(unsigned fi=0;fi<3;fi++)
+            assert(server_write_packed_fragment(&server,1,501,503,fi,f[fi],flen,sums[fi])==EFS_ERR_STALE);
+        /* Ordinary inode death, another export and a new segment generation
+         * are separate namespaces; the old typed fence must not poison them. */
+        assert(!server_write_packed_fragment(&server,1,501,505,0,f[0],flen,sums[0]));
+        assert(!server_write_packed_fragment(&server,2,501,503,0,f[0],flen,sums[0]));
+        char fence[8192];assert(!packed_fence_path(&server,1,901,903,fence,sizeof(fence)));
+        int fd=open(fence,O_WRONLY);assert(fd>=0);uint8_t broken=0xff;
+        assert(pwrite(fd,&broken,1,0)==1);assert(!close(fd));
+        assert(server_fence_packed_object(&server,1,901,903)==EFS_ERR_IO);
+        assert(server_write_packed_fragment(&server,1,901,903,0,f[0],flen,sums[0])==EFS_ERR_IO);
         printf("PACK_STORE direct=%d records=16 payload=8192 fragment_payload_bytes=%u allocated_bytes=%llu\n",
             direct,3*flen,(unsigned long long)allocated);
         server_storage_engine_close(&server);pthread_mutex_destroy(&server.lock);
         assert(!nftw(root,cleanup,32,FTW_DEPTH|FTW_PHYS));
     }
     free(image);free(decoded);free(frags);free(read);
-    puts("packed store: explicit geometry, immutable retries, barriers, cold EC reads, quota and inode-GC isolation PASS");
+    puts("packed store: explicit geometry, immutable retries, barriers, cold EC reads, quota, inode-GC isolation and durable typed upload fences PASS");
 }

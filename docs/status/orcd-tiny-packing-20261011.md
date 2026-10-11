@@ -229,3 +229,29 @@ terminal replay, all-member fence/delete ordering, canonical corruption and
 an atomic KV batch failure that leaves both mapping and ledger unchanged.
 The rebuilt W108 candidate `757b0a56d2ed` also passes full Linux `make test`;
 live mounts remain unchanged pending the production integration gates.
+
+The committed ledger snapshot `5a5caee9ceb1` passes complete Linux `make test`
+on fcstor006. Its persistent-KV gate publishes sixteen mappings plus the ledger
+and a synthetic receipt in one durable batch, exits without KV close/flush,
+and recovers all records from the WAL. After fifteen releases and cold
+compaction, the final neighbor still prevents collection. Further abrupt exits
+recover partial fence/delete ACK sets and terminal retirement without allowing
+publication replay to revive a reference. These are local KV/planner gates,
+not a distributed Raft/RPC publication or POSIX close acceptance result.
+
+Storage upload fencing is implemented independently of inode death pages. A
+certificate identifies export, segment ID and generation with a checksum.
+A shared generation lock serializes uploads against retirement, and fence ACKs
+require both file and ancestor persistence, including retries. Fences do not
+delete reader bytes. Their stable primary-root namespace must survive restart;
+pruning requires a future authoritative admission floor. No external retirement
+RPC or physical pack GC is enabled by this step.
+
+A private fcstor006 overlay passes the packed-storage tests in both buffered
+and direct modes with these fences. Failed file and ancestor barriers remain
+failures on retry; a valid visible fence immediately rejects every fragment
+upload, and reopened storage still rejects the old generation after private
+files are removed. Fencing does not delete existing reader bytes, does not
+poison a different export/new generation, and corruption refuses both PUT and
+fence ACK. The earlier 90.6667× allocation control still passes.
+[Private typed-fence gate](../../results/measure/20261011-orcd-tiny-packing/linux-packed-fences-dev.txt).

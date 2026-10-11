@@ -4232,7 +4232,11 @@ format pass full Linux units. A separate files-backend packed namespace passes
 private cold/retry/quota/GC-isolation gates and a matched physical control:
 36,864 versus 3,342,336 allocated fragment bytes for sixteen 512-byte payloads
 (90.6667× reduction). Mounted publication, shared-object GC and throughput
-acceptance remain open; no packing is activated.
+acceptance remain open; no packing is activated. Shared-lifetime planning now passes full Linux units including abrupt
+WAL exits and cold compaction: mappings and ledger commit together, neighbors
+retain the body, terminal references cannot revive, and every captured member
+must fence uploads before deletion. Actual Raft/session/RPC integration remains
+open; this staged planner grants no upload or publication authority.
 
 **Oct 11 ORCD priority:** production logical-payload packing is the first item on
 `devel-orcd`. Replace per-file full-stripe padding with bounded immutable packed

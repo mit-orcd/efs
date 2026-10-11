@@ -673,3 +673,5 @@ tests/test_pack_ledger_recovery: tests/test_pack_ledger_recovery.c $(LIB)
 
 tests/test_packed_store: tests/test_packed_store.c src/server/store.c src/server/server_internal.h src/bench/writer.o src/bench/store_containers.o $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o src/bench/store_containers.o $(LIB) $(LDFLAGS)
+
+src/server/store.o src/bench/store.o tests/test_packed_store tests/test_store_durability tests/test_store_overwrite tests/test_store_gc tests/test_store_containers: src/server/packed_fence.h

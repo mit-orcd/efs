@@ -2355,7 +2355,7 @@ int server_read_packed_fragment(struct efsd_server *s, efs_export_id_t eid,
     *capacity = got;
     return EFS_OK;
 }
-int server_write_packed_fragment(struct efsd_server *s, efs_export_id_t eid,
+static int write_packed_fragment_unfenced(struct efsd_server *s, efs_export_id_t eid,
                                  uint64_t id, uint64_t generation, uint32_t fi,
                                  const uint8_t *data, uint32_t fragment_len,
                                  const uint8_t sum[EFS_HASH_SIZE])
@@ -2437,3 +2437,5 @@ int server_write_packed_fragment(struct efsd_server *s, efs_export_id_t eid,
     return rc;
 #endif
 }
+
+#include "packed_fence.h"

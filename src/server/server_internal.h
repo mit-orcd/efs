@@ -474,6 +474,10 @@ int server_rejoin_cluster(struct efsd_server *s);
 int server_packed_fragment_path(struct efsd_server *, uint32_t root, efs_export_id_t,
                                 uint64_t id, uint64_t generation, uint32_t fi,
                                 char *, size_t);
+/* Internal only: caller verifies authoritative shared-ledger retirement.
+ * ACK persists a typed, generation-specific upload fence; no bytes deleted. */
+int server_fence_packed_object(struct efsd_server *, efs_export_id_t,
+                               uint64_t id, uint64_t generation);
 int server_write_packed_fragment(struct efsd_server *, efs_export_id_t,
                                  uint64_t id, uint64_t generation, uint32_t fi,
                                  const uint8_t *, uint32_t fragment_len, const uint8_t sum[EFS_HASH_SIZE]);
