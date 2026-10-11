@@ -11,7 +11,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 static unsigned file_syncs,directory_syncs,sync_opens;
-static int fail_file,fail_directory,interrupt_directory,fail_directory_close;
+static int fail_file,fail_directory,fail_directory_at,interrupt_directory,fail_directory_close;
 static int barrier_open(const char *path,int flags,...)
 {
     int mode=0;
@@ -26,7 +26,7 @@ static int barrier_sync(int fd)
         directory_syncs++;
         assert(file_syncs); /* never publish the name before fencing bytes */
         if(interrupt_directory) {interrupt_directory--;errno=EINTR;return -1;}
-        if(fail_directory) {errno=EIO;return -1;}
+        if(fail_directory || directory_syncs==(unsigned)fail_directory_at) {errno=EIO;return -1;}
     } else {
         file_syncs++;
         if(fail_file) {errno=EIO;return -1;}
@@ -53,18 +53,32 @@ int main(void)
     uint8_t *data;assert(!posix_memalign((void **)&data,4096,65536));memset(data,0x37,65536);
     uint8_t sum[EFS_HASH_SIZE];memset(sum,0x42,sizeof(sum));
     struct shard_io_arg a={.buf=data,.len=4096,.is_write=1,.sum=sum};strcpy(a.path,path);
+    struct efsd_server *server=calloc(1,sizeof(*server));assert(server);
+    assert(!pthread_mutex_init(&server->lock,NULL));
+    server->storage_path_count=1;strcpy(server->storage_paths[0],dir);
+    a.s=server;
+    /* A configured but unsealed root cannot shorten the ACK barrier. */
+    file_syncs=directory_syncs=0;shard_io_thread(&a);
+    assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==5);
+    /* Startup seals root ancestry before publishing this initialized target.
+     * Two descendant directories and the root remain required on every PUT. */
+    server->container_targets[0]=server;
     for(int direct=0;direct<2;direct++) for(int bounce=0;bounce<2;bounce++) {
         a.direct=direct;a.buf=data+bounce;
         for(int attempt=0;attempt<2;attempt++) {
             file_syncs=directory_syncs=0;shard_io_thread(&a);
-            assert(a.result==EFS_OK && file_syncs==1 && directory_syncs>=3 && !sync_opens);
+            assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==3 && !sync_opens);
         }
         file_syncs=directory_syncs=0;fail_file=1;shard_io_thread(&a);
         assert(a.result==EFS_ERR_IO && file_syncs==1 && !directory_syncs);fail_file=0;
         file_syncs=directory_syncs=0;fail_directory=1;shard_io_thread(&a);
         assert(a.result==EFS_ERR_IO && file_syncs==1 && directory_syncs==1);fail_directory=0;
+        file_syncs=directory_syncs=0;fail_directory_at=3;shard_io_thread(&a);
+        assert(a.result==EFS_ERR_IO && file_syncs==1 && directory_syncs==3);fail_directory_at=0;
+        file_syncs=directory_syncs=0;shard_io_thread(&a);
+        assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==3);
         file_syncs=directory_syncs=0;interrupt_directory=1;shard_io_thread(&a);
-        assert(a.result==EFS_OK && file_syncs==1 && directory_syncs>=4);
+        assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==4);
         file_syncs=directory_syncs=0;fail_directory_close=1;shard_io_thread(&a);
         assert(a.result==EFS_ERR_IO && file_syncs==1 && directory_syncs==1);fail_directory_close=0;
     }
@@ -75,8 +89,13 @@ int main(void)
         file_syncs=directory_syncs=0;
         assert(!pthread_create(&thread,NULL,shard_io_thread,&a));
         assert(!pthread_join(thread,NULL));
-        assert(a.result==EFS_OK && file_syncs==1 && directory_syncs>=3);
+        assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==3);
     }
+    /* A textual prefix is not an initialized ancestor; retain all barriers. */
+    server->storage_paths[0][strlen(dir)-1]=0;
+    file_syncs=directory_syncs=0;shard_io_thread(&a);
+    assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==5);
+    assert(!pthread_mutex_destroy(&server->lock));free(server);
     assert(!unlink(path));snprintf(path,sizeof(path),"%s/a/b",dir);assert(!rmdir(path));
     snprintf(path,sizeof(path),"%s/a",dir);assert(!rmdir(path));assert(!rmdir(dir));free(data);
     puts("production PUT durability: buffered/direct/bounce file and pathname barriers, retries and fault refusal PASS");
