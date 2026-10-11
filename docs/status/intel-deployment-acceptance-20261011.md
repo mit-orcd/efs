@@ -18,6 +18,10 @@ Both modes on both hosts pass all three enabled `.efs` extras (stats read, find 
 
 The original tiny-file trees remain intact. At 13:26 UTC Intel1 has completed exactly 1,000,000 files with exit 0; Intel2 has created 921,110 of its original million-file target and continues writing. No replacement million-file tree was started. [Historical candidate snapshots](../archive/status-20261011/intel-candidate-history-20261011.md) preserve earlier failed deadlines, native successes, partial coverage and prior deployment observations. No failed gate is waived.
 
+Committed repair `f9e77c9f` is frozen and its complete 110-gate main matrix, 30 canonical rounds, diagnostic comparison, 84 supplemental rows and two publication-apply modes are launched or queued on both Intel hosts. The preceding `02c13e0b` parents were retired only after their current owned buffered-sequential fixtures exited and completed cleanup; actual completed verdicts are preserved, remaining phases are NOTRUN on that source and required on `f9e77c9f`. Intel1 buffered sequential fails a late sentinel UNLINK with ENOENT after its reclamation checks pass; Intel2 buffered sequential fails the physical-deletion deadline. These distinct failures are retained.
+
+A [historical fault coverage correction](../../results/measure/20261011-intel-devel-intel/e073-fault-coverage-correction.json) verifies the actual E073 outputs: each host and mode has 14 integration PASS, one repair GAP and one simulator NOTRUN because `fault_sim` was not built. Any earlier 19 PASS / two GAP aggregate attributed to E073 is incorrect. The current runner explicitly builds the simulator after native compilation and before fault suites. Complete fault coverage requires all 21 distinct layer/case/node/fragment identities, 19 PASS and the two specifically named repair GAPs; missing simulator output cannot satisfy it.
+
 ## Repairs on this branch
 
 - Preserve failed pooled-query routing decisions and exact first-page publisher ownership.

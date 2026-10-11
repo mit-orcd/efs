@@ -4293,7 +4293,7 @@ or present the Raft improvement as measured KV acceptance.
 
 ## W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
 
-**Oct 11 Intel resume follow-up:** A large-directory inventory could cycle indefinitely because READDIR discarded a source-only continuation when its name was empty. The actual callback now preserves that source; old-source regressions fail and both native Intel regressions pass. The deployed wire probe reaches EOF with 92,557 entries in 1.580 seconds, and full FUSE enumeration returns the same count in 1.183 seconds. This repairs enumeration termination, not sustained write latency; W97 remains open. [Cursor repair and limits](../status/intel-readdir-source-cursor-20261011.md).
+**Oct 11 Intel resume follow-up:** A large-directory inventory could cycle indefinitely because READDIR discarded a source-only continuation when its name was empty. The actual callback now preserves that source; old-source regressions fail and both native Intel regressions pass. The deployed wire probe reaches EOF with 92,557 entries in 1.580 seconds, and full FUSE enumeration returns the same count in 1.183 seconds. This repairs enumeration termination, not sustained write latency; W97 remains open. [Cursor repair and limits](../archive/status-20261011/intel-readdir-source-cursor-20261011.md).
 
 **Oct 10 matched three-node drive test:** same frozen `6b8f05acb484` engine,
 20 minutes per drive, true three-voter groups, preserved regular cluster stopped.

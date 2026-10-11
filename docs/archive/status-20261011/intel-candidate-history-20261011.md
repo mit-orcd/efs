@@ -71,3 +71,7 @@ Production 7bde5f43 has completed both modes and returned to direct I/O. In each
 
 Intel1's 27 independent gates are terminal: 25 PASS, two FAIL (buffered sequential physical reclamation deadline and W82 partition storage fence returning hard IO while retaining FENCING). Intel2 also finishes 25/27: direct sequential REPORT fsync EIO and the original W82 refusal oracle fail. Both hosts retain 19 PASS / 2 repair-protection GAP in each fault mode. The admission follow-on runs at the original limits. Idle obsolete supplemental queues were retired without interrupting any fixture, retaining NOTRUN records; their remaining scenarios require the final candidate.
 
+
+## Fault coverage correction at 13:35 UTC
+
+The [actual E073 fault outputs](../../../results/measure/20261011-intel-devel-intel/e073-fault-coverage-correction.json) show 14 integration PASS, one repair GAP and one simulator NOTRUN on each host and mode. The simulator binary was missing. Any earlier E073 aggregate claiming 19 PASS / two GAP is superseded by these retained machine results; a missing layer is not a pass.

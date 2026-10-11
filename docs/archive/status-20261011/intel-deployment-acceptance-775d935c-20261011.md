@@ -12,9 +12,9 @@ Exactly one production mount per host at `/data1/efs/mnt`, Intel1 via Intel2:174
 
 ## Repairs and evidence
 
-The source-only READDIR cursor repair retains its source when its name is empty, preventing repeated earlier pages at exact source boundaries. The old actual-callback regression fails; the repaired fixture passes on macOS and both native Intel hosts. The real corrected wire probe reaches EOF with 92,557 entries in 1.580 seconds; FUSE returns the same count in 1.183 seconds. See [cursor repair](../../status/intel-readdir-source-cursor-20261011.md).
+The source-only READDIR cursor repair retains its source when its name is empty, preventing repeated earlier pages at exact source boundaries. The old actual-callback regression fails; the repaired fixture passes on macOS and both native Intel hosts. The real corrected wire probe reaches EOF with 92,557 entries in 1.580 seconds; FUSE returns the same count in 1.183 seconds. See [cursor repair](intel-readdir-source-cursor-20261011.md).
 
-Authoritative CREATE EXIST remains EEXIST without a second LOOKUP replacing it with BUSY/IO. Actual helper negative controls fail on the old source; repaired tests pass on all three platforms. The earlier private MKDIR EIO remains retained without assigning an unproved cause; the corrected live wired exclusive-MKDIR race passes. See [creation verdict](../../status/intel-create-exist-verdict-20261011.md).
+Authoritative CREATE EXIST remains EEXIST without a second LOOKUP replacing it with BUSY/IO. Actual helper negative controls fail on the old source; repaired tests pass on all three platforms. The earlier private MKDIR EIO remains retained without assigning an unproved cause; the corrected live wired exclusive-MKDIR race passes. See [creation verdict](intel-create-exist-verdict-20261011.md).
 
 Other integrated Intel repairs cover setgid inheritance, competing-MKDIR ownership, bounded supplementary groups, unchanged chown authorization, indexed readdir collection, privileged execute permission, unsupported rename flag refusal, operation errno propagation, empty user xattr names and authoritative peer directory bindings. The regressions execute production functions and retain old-source failures where applicable.
 

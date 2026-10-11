@@ -163,3 +163,5 @@ Superseded deployment and integration checkpoints retain their raw evidence and 
 - [Oct 9 W93 overlap investigation](status-20261011/w93-overlap-suffix-20261009.md) and [Oct 10 checkpoint-cadence investigation](status-20261011/w93-checkpoint-cadence-20261010.md) — intermediate measurements and retained failures superseded for W93 by the later atomic-apply acceptance. W97 and Intel acceptance remain active.
 
 - [Historical Intel candidate observations](status-20261011/intel-candidate-history-20261011.md) — preceding candidate counterexamples and partial results moved from the active Intel ledger; all unresolved current acceptance obligations remain active.
+
+Intel historical CREATE refusal and READDIR cursor repairs: [authoritative EXIST](status-20261011/intel-create-exist-verdict-20261011.md), [source-only cursor](status-20261011/intel-readdir-source-cursor-20261011.md). Final-candidate and broader work-item obligations remain in the current queue.
