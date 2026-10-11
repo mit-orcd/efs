@@ -21,7 +21,7 @@ struct efs_raft_host { struct server *s; int n; };
 struct efs_msg_gc_inode { unsigned export_id; efs_ino_t ino; uint64_t generation; };
 struct efs_msg_gc_inode_reply { int rc; };
 static struct efs_conn conns[4];
-static int sent,received,local_done,released,dropped,failed_send,failed_recv,busy,wrong_type,wrong_size,missing,local_rc;
+static int sent,received,local_done,released,dropped,failed_send,failed_recv,busy,wrong_type,wrong_size,missing,local_rc,expected_sends=3;
 static struct efs_conn *server_peer_conn_get(const char *a,unsigned p) { (void)a;return (int)p==missing?NULL:&conns[p]; }
 static void efs_set_recv_timeout(int fd,int ms) { (void)fd;(void)ms; }
 static void efs_set_send_timeout(int fd,int ms) { (void)fd;(void)ms; }
@@ -32,7 +32,7 @@ static int efs_conn_send_msg(struct efs_conn *c,int type,const void *v,unsigned 
  return c->fd==failed_send?-1:0;
 }
 static int server_gc_inode(struct server *s,unsigned eid,efs_ino_t ino,uint64_t gen) {
- (void)s;assert(sent==3-(missing>=1&&missing<=3));assert(eid==1&&ino==77&&gen==99);assert(!received);local_done=1;return local_rc;
+ (void)s;assert(sent==expected_sends-(missing>=1&&missing<=3));assert(eid==1&&ino==77&&gen==99);assert(!received);local_done=1;return local_rc;
 }
 static int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **v,uint32_t *n) {
  assert(local_done);received++;if(c->fd==failed_recv)return -1;
@@ -60,7 +60,12 @@ int main(void) {
  wrong_size=3;assert(exercise()==EFS_ERR_IO && dropped==1);wrong_size=-1;
  missing=3;assert(exercise()==EFS_ERR_IO && sent==2 && received==2);missing=-1;
  local_rc=EFS_ERR_BUSY;assert(exercise()==EFS_ERR_BUSY && received==3);
- struct server server={.lock=PTHREAD_MUTEX_INITIALIZER,.node_count=0,.id=1};struct efs_raft_host h={&server,4};
+ local_rc=EFS_ERR_IO;assert(exercise()==EFS_ERR_IO && received==3);local_rc=0;
+ struct server server={.lock=PTHREAD_MUTEX_INITIALIZER,.node_count=3,.id=1};struct efs_raft_host h={&server,4};
+ for(unsigned i=0;i<3;i++){server.nodes[i].id=i+1;server.nodes[i].port=i;}
+ expected_sends=2;sent=received=local_done=released=dropped=0;
+ assert(host_gc_inode_nodes(&h,77,99)==EFS_ERR_BUSY && received==2);
+ server.node_count=0;
  assert(host_gc_inode_nodes(&h,77,99)==EFS_ERR_BUSY);pthread_mutex_destroy(&server.lock);
  puts("GC inode fanout: all sends before waits, every member required, failure/BUSY/malformed replies drained PASS");
 }
