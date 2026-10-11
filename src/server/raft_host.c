@@ -10668,6 +10668,79 @@ static int host_namespace_session_admit(struct efs_raft_host *h,uint32_t shard,
     return rc;
 }
 
+/* REPORT can first-touch dozens of lane shards. Preserve each admission's
+ * durable REGISTER/ESTABLISH proof while overlapping its quorum waits. At most
+ * three additional threads exist process-wide; other requests use their caller.
+ * No worker or stack-owned request survives the join, including partial error. */
+struct host_report_session_work {
+    struct efs_raft_host *host;
+    const struct efs_opid_req *request;
+    uint32_t shards[EFS_SESSION_BITS];
+    unsigned count;
+    unsigned next;
+    int rc;
+    int hint;
+};
+static pthread_mutex_t host_report_session_parallel = PTHREAD_MUTEX_INITIALIZER;
+static void *host_report_session_worker(void *value)
+{
+    struct host_report_session_work *work = value;
+    while (!__atomic_load_n(&work->rc, __ATOMIC_ACQUIRE)) {
+        unsigned index = __atomic_fetch_add(&work->next, 1u, __ATOMIC_RELAXED);
+        if (index >= work->count) break;
+        int hint = -1;
+        int rc = host_namespace_session_admit(work->host, work->shards[index],
+                                              work->request, &hint);
+        if (rc) {
+            int expected = EFS_OK;
+            if (__atomic_compare_exchange_n(&work->rc, &expected, rc, 0,
+                                            __ATOMIC_RELEASE, __ATOMIC_RELAXED))
+                work->hint = hint;
+            break;
+        }
+    }
+    return NULL;
+}
+static int host_report_session_admit(struct efs_raft_host *h,
+    const struct efs_chunk_rec *recs, uint32_t count,
+    const struct efs_opid *session, int *hint)
+{
+    struct efs_opid_req request = {.id = *session};
+    request.id.seq = 1;
+    struct host_report_session_work work = {.host = h, .request = &request,
+                                            .hint = -1};
+    uint8_t seen[EFS_SESSION_BITS / 8] = {0};
+    for (uint32_t i = 0; i < count; ++i) {
+        uint32_t shards[2] = {efs_kv_inode_shard(recs[i].ino),
+            efs_kv_lane_shard(recs[i].ino, recs[i].chunk_index % EFS_META_LANES)};
+        for (unsigned k = 0; k < 2; ++k) {
+            uint32_t shard = shards[k];
+            if (shard >= EFS_SESSION_BITS) return EFS_ERR_INVAL;
+            if (seen[shard / 8] & (1u << (shard % 8))) continue;
+            seen[shard / 8] |= (uint8_t)(1u << (shard % 8));
+            int rc = efs_session_accept(h->kv, shard, session->client_uuid,
+                                        session->session_epoch);
+            if (rc == EFS_ERR_BUSY || rc == EFS_ERR_NOT_FOUND)
+                work.shards[work.count++] = shard;
+            else if (rc != EFS_OK) return rc;
+        }
+    }
+    pthread_t threads[3];
+    unsigned started = 0;
+    int parallel = work.count > 1 &&
+                   pthread_mutex_trylock(&host_report_session_parallel) == 0;
+    if (parallel) {
+        for (; started < 3; ++started)
+            if (pthread_create(&threads[started], NULL,
+                               host_report_session_worker, &work) != 0) break;
+    }
+    host_report_session_worker(&work);
+    for (unsigned i = 0; i < started; ++i) pthread_join(threads[i], NULL);
+    if (parallel) pthread_mutex_unlock(&host_report_session_parallel);
+    if (work.rc && work.hint >= 0) *hint = work.hint;
+    return work.rc;
+}
+
 /* I16 leader-side probe: the op's window lives on `shard` (the dentry
  * shard of the named entry), which this host must hold. 1 = replay, reply
  * filled from the recorded verdict; 0 = new; <0 = KV error. */
@@ -15293,25 +15366,8 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
     /* Register first-touch participants before lane activation or publication.
      * Existing floors are checked under the group ReadIndex above; no quorum
      * round per chunk. Missing local state is never authority to resurrect. */
-    if (session && rc == EFS_OK) {
-        uint8_t seen[EFS_SESSION_BITS / 8] = {0};
-        struct efs_opid_req q = {.id = *session};
-        q.id.seq = 1; q.ack = 0;
-        for (i = 0; i < count && rc == EFS_OK; i++) {
-            uint32_t shards[2] = {efs_kv_inode_shard(recs[i].ino),
-                efs_kv_lane_shard(recs[i].ino, recs[i].chunk_index % EFS_META_LANES)};
-            for (unsigned k = 0; k < 2 && rc == EFS_OK; k++) {
-                uint32_t shard = shards[k];
-                if (shard >= EFS_SESSION_BITS) { rc = EFS_ERR_INVAL; break; }
-                if (seen[shard / 8] & (1u << (shard % 8))) continue;
-                seen[shard / 8] |= (uint8_t)(1u << (shard % 8));
-                rc = efs_session_accept(h->kv, shard, session->client_uuid,
-                                        session->session_epoch);
-                if (rc == EFS_ERR_BUSY || rc == EFS_ERR_NOT_FOUND)
-                    rc = host_namespace_session_admit(h, shard, &q, &hint);
-            }
-        }
-    }
+    if (session && rc == EFS_OK)
+        rc = host_report_session_admit(h, recs, count, session, &hint);
     {
         efs_ino_t uino[32];
         uint64_t usz[32];
