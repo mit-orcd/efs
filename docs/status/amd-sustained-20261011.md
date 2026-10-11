@@ -136,3 +136,20 @@ ten full 30-second windows (174.88/s), with final per-node charged usage
 cooperative SIGINT, exit 130, and restoration exit 0. This is an intentional
 diagnostic stop, not a storage failure or cold-byte acceptance result.
 [Interval/final-status evidence](../../results/measure/20261011-amd-sustained/evidence/baseline/baseline-stop.json).
+
+## Final first-candidate verdict
+
+Candidate `79a3ef38` passes full normal/fault native suites and direct TCP
+functional acceptance (216 core, 67 peer, guarded leases and cold recovery).
+The 180-second paced direct load warm-verifies 26,688 tiny generations and
+passes exact cold survivor checks, but fails the unchanged 180-second physical
+drain deadline. Buffered was not run after that failure. The old harness did
+not persist the cold-phase marker before draining; it now records each phase
+independently. No throughput improvement or sustained acceptance is claimed.
+
+An additional cold/no-writer diagnostic exits zero: all four physical fragment
+inventories reach zero files/allocated bytes at the 30-second sample and remain
+empty through 60 seconds. This proves eventual reclamation of this retained
+fixture, not a pass of its original deadline. Installed service restoration
+passes independently. W94/W95/W97 remain open; the default idle is unchanged.
+[Recovery evidence](../../results/measure/20261011-amd-sustained/evidence/candidate/live/cold-gc-recovery.json).

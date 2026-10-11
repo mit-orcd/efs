@@ -1,0 +1,233 @@
+[
+  {
+    "seconds": 0,
+    "nodes": [
+      {
+        "status": "node=1 stage=3 group=0 exports=0 passes=1 elapsed_ms=24 last_pass_age_ms=1033 last_delete_age_ms=3\ndata_usage_bytes=67371008 removed_fragments=1 unlinked_file_bytes=69632 reclaimed_payload_bytes=65536 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=32 orphan_seen=0 capped=1 first_reap_ino=103674041 observed_age_ms=9\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=1 bytes=0 errors=0 us_sum=24 avg_us=24\ngc_io=dir_sync ops=12 bytes=0 errors=0 us_sum=2187 avg_us=182\n",
+        "status_rc": 0,
+        "files": 1023,
+        "allocated_bytes": 71233536,
+        "concurrent_disappearances": 3
+      },
+      {
+        "status": "node=2 stage=0 group=0 exports=0 passes=1 elapsed_ms=0 last_pass_age_ms=727 last_delete_age_ms=1\ndata_usage_bytes=67698688 removed_fragments=8 unlinked_file_bytes=557056 reclaimed_payload_bytes=524288 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=8 bytes=0 errors=0 us_sum=90 avg_us=11\ngc_io=dir_sync ops=59 bytes=0 errors=0 us_sum=10249 avg_us=173\n",
+        "status_rc": 0,
+        "files": 1028,
+        "allocated_bytes": 71581696,
+        "concurrent_disappearances": 2
+      },
+      {
+        "status": "node=3 stage=0 group=0 exports=0 passes=1 elapsed_ms=0 last_pass_age_ms=455 last_delete_age_ms=1\ndata_usage_bytes=67698688 removed_fragments=12 unlinked_file_bytes=835584 reclaimed_payload_bytes=786432 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=12 bytes=0 errors=0 us_sum=122 avg_us=10\ngc_io=dir_sync ops=93 bytes=0 errors=0 us_sum=16250 avg_us=174\n",
+        "status_rc": 0,
+        "files": 1028,
+        "allocated_bytes": 71581696,
+        "concurrent_disappearances": 1
+      },
+      {
+        "status": "node=4 stage=0 group=0 exports=0 passes=1 elapsed_ms=0 last_pass_age_ms=352 last_delete_age_ms=18446744073709551615\ndata_usage_bytes=67502080 removed_fragments=0 unlinked_file_bytes=0 reclaimed_payload_bytes=0 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=dir_sync ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\n",
+        "status_rc": 0,
+        "files": 1030,
+        "allocated_bytes": 71720960,
+        "concurrent_disappearances": 0
+      }
+    ]
+  },
+  {
+    "seconds": 10,
+    "nodes": [
+      {
+        "status": "node=1 stage=3 group=0 exports=1 passes=11 elapsed_ms=62 last_pass_age_ms=1069 last_delete_age_ms=10045\ndata_usage_bytes=66387968 removed_fragments=16 unlinked_file_bytes=1114112 reclaimed_payload_bytes=1048576 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=1 pending_estimate=57 reap_seen=32 orphan_seen=0 capped=1 first_reap_ino=103674041 observed_age_ms=10136\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=16 bytes=0 errors=0 us_sum=175 avg_us=10\ngc_io=dir_sync ops=1775 bytes=0 errors=0 us_sum=210443 avg_us=118\n",
+        "status_rc": 0,
+        "files": 1013,
+        "allocated_bytes": 70537216,
+        "concurrent_disappearances": 0
+      },
+      {
+        "status": "node=2 stage=0 group=2 exports=1 passes=11 elapsed_ms=0 last_pass_age_ms=306 last_delete_age_ms=10007\ndata_usage_bytes=66125824 removed_fragments=32 unlinked_file_bytes=2228224 reclaimed_payload_bytes=2097152 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=1 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=32 bytes=0 errors=0 us_sum=308 avg_us=9\ngc_io=dir_sync ops=1869 bytes=0 errors=0 us_sum=42210 avg_us=22\n",
+        "status_rc": 0,
+        "files": 1009,
+        "allocated_bytes": 70258688,
+        "concurrent_disappearances": 0
+      },
+      {
+        "status": "node=3 stage=0 group=0 exports=1 passes=11 elapsed_ms=0 last_pass_age_ms=404 last_delete_age_ms=10035\ndata_usage_bytes=66453504 removed_fragments=31 unlinked_file_bytes=2158592 reclaimed_payload_bytes=2031616 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=31 bytes=0 errors=0 us_sum=280 avg_us=9\ngc_io=dir_sync ops=1855 bytes=0 errors=0 us_sum=41679 avg_us=22\n",
+        "status_rc": 0,
+        "files": 1014,
+        "allocated_bytes": 70606848,
+        "concurrent_disappearances": 0
+      },
+      {
+        "status": "node=4 stage=0 group=0 exports=1 passes=11 elapsed_ms=0 last_pass_age_ms=361 last_delete_age_ms=67\ndata_usage_bytes=66453504 removed_fragments=16 unlinked_file_bytes=1114112 reclaimed_payload_bytes=1048576 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=16 bytes=0 errors=0 us_sum=176 avg_us=11\ngc_io=dir_sync ops=225 bytes=0 errors=0 us_sum=25237 avg_us=112\n",
+        "status_rc": 0,
+        "files": 1014,
+        "allocated_bytes": 70606848,
+        "concurrent_disappearances": 0
+      }
+    ]
+  },
+  {
+    "seconds": 20,
+    "nodes": [
+      {
+        "status": "node=1 stage=3 group=0 exports=1 passes=35 elapsed_ms=70 last_pass_age_ms=170 last_delete_age_ms=3\ndata_usage_bytes=29097984 removed_fragments=585 unlinked_file_bytes=40734720 reclaimed_payload_bytes=38338560 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=1 pending_estimate=31 reap_seen=32 orphan_seen=0 capped=1 first_reap_ino=106819769 observed_age_ms=64\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=585 bytes=0 errors=0 us_sum=5939 avg_us=10\ngc_io=dir_sync ops=7473 bytes=0 errors=0 us_sum=1010326 avg_us=135\n",
+        "status_rc": 0,
+        "files": 442,
+        "allocated_bytes": 30777344,
+        "concurrent_disappearances": 0
+      },
+      {
+        "status": "node=2 stage=0 group=2 exports=1 passes=20 elapsed_ms=0 last_pass_age_ms=747 last_delete_age_ms=3\ndata_usage_bytes=29687808 removed_fragments=588 unlinked_file_bytes=40943616 reclaimed_payload_bytes=38535168 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=1 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=588 bytes=0 errors=0 us_sum=5730 avg_us=9\ngc_io=dir_sync ops=7489 bytes=0 errors=0 us_sum=818709 avg_us=109\n",
+        "status_rc": 0,
+        "files": 451,
+        "allocated_bytes": 31404032,
+        "concurrent_disappearances": 0
+      },
+      {
+        "status": "node=3 stage=0 group=0 exports=1 passes=21 elapsed_ms=0 last_pass_age_ms=386 last_delete_age_ms=3\ndata_usage_bytes=29884416 removed_fragments=589 unlinked_file_bytes=41013248 reclaimed_payload_bytes=38600704 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=589 bytes=0 errors=0 us_sum=5498 avg_us=9\ngc_io=dir_sync ops=7493 bytes=0 errors=0 us_sum=817912 avg_us=109\n",
+        "status_rc": 0,
+        "files": 454,
+        "allocated_bytes": 31612928,
+        "concurrent_disappearances": 0
+      },
+      {
+        "status": "node=4 stage=0 group=0 exports=1 passes=21 elapsed_ms=0 last_pass_age_ms=381 last_delete_age_ms=102\ndata_usage_bytes=29687808 removed_fragments=577 unlinked_file_bytes=40177664 reclaimed_payload_bytes=37814272 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=577 bytes=0 errors=0 us_sum=5434 avg_us=9\ngc_io=dir_sync ops=5894 bytes=0 errors=0 us_sum=840797 avg_us=142\n",
+        "status_rc": 0,
+        "files": 452,
+        "allocated_bytes": 31473664,
+        "concurrent_disappearances": 0
+      }
+    ]
+  },
+  {
+    "seconds": 30,
+    "nodes": [
+      {
+        "status": "node=1 stage=0 group=0 exports=1 passes=58 elapsed_ms=0 last_pass_age_ms=466 last_delete_age_ms=3544\ndata_usage_bytes=0 removed_fragments=1029 unlinked_file_bytes=71651328 reclaimed_payload_bytes=67436544 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=1 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=1029 bytes=0 errors=0 us_sum=10665 avg_us=10\ngc_io=dir_sync ops=12018 bytes=0 errors=0 us_sum=1668425 avg_us=138\n",
+        "status_rc": 0,
+        "files": 0,
+        "allocated_bytes": 0,
+        "concurrent_disappearances": 0
+      },
+      {
+        "status": "node=2 stage=0 group=2 exports=1 passes=30 elapsed_ms=0 last_pass_age_ms=40 last_delete_age_ms=3582\ndata_usage_bytes=0 removed_fragments=1041 unlinked_file_bytes=72486912 reclaimed_payload_bytes=68222976 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=1 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=1041 bytes=0 errors=0 us_sum=9975 avg_us=9\ngc_io=dir_sync ops=12074 bytes=0 errors=0 us_sum=1470094 avg_us=121\n",
+        "status_rc": 0,
+        "files": 0,
+        "allocated_bytes": 0,
+        "concurrent_disappearances": 0
+      },
+      {
+        "status": "node=3 stage=0 group=0 exports=1 passes=31 elapsed_ms=0 last_pass_age_ms=357 last_delete_age_ms=3544\ndata_usage_bytes=0 removed_fragments=1045 unlinked_file_bytes=72765440 reclaimed_payload_bytes=68485120 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=1045 bytes=0 errors=0 us_sum=10460 avg_us=10\ngc_io=dir_sync ops=12064 bytes=0 errors=0 us_sum=1475149 avg_us=122\n",
+        "status_rc": 0,
+        "files": 0,
+        "allocated_bytes": 0,
+        "concurrent_disappearances": 0
+      },
+      {
+        "status": "node=4 stage=0 group=0 exports=1 passes=31 elapsed_ms=0 last_pass_age_ms=326 last_delete_age_ms=3543\ndata_usage_bytes=0 removed_fragments=1030 unlinked_file_bytes=71720960 reclaimed_payload_bytes=67502080 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=1030 bytes=0 errors=0 us_sum=10338 avg_us=10\ngc_io=dir_sync ops=10432 bytes=0 errors=0 us_sum=1535466 avg_us=147\n",
+        "status_rc": 0,
+        "files": 0,
+        "allocated_bytes": 0,
+        "concurrent_disappearances": 0
+      }
+    ]
+  },
+  {
+    "seconds": 40,
+    "nodes": [
+      {
+        "status": "node=1 stage=0 group=0 exports=1 passes=68 elapsed_ms=0 last_pass_age_ms=267 last_delete_age_ms=13552\ndata_usage_bytes=0 removed_fragments=1029 unlinked_file_bytes=71651328 reclaimed_payload_bytes=67436544 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=1 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=1029 bytes=0 errors=0 us_sum=10665 avg_us=10\ngc_io=dir_sync ops=12018 bytes=0 errors=0 us_sum=1668425 avg_us=138\n",
+        "status_rc": 0,
+        "files": 0,
+        "allocated_bytes": 0,
+        "concurrent_disappearances": 0
+      },
+      {
+        "status": "node=2 stage=0 group=2 exports=1 passes=39 elapsed_ms=0 last_pass_age_ms=448 last_delete_age_ms=13588\ndata_usage_bytes=0 removed_fragments=1041 unlinked_file_bytes=72486912 reclaimed_payload_bytes=68222976 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=1 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=1041 bytes=0 errors=0 us_sum=9975 avg_us=9\ngc_io=dir_sync ops=12074 bytes=0 errors=0 us_sum=1470094 avg_us=121\n",
+        "status_rc": 0,
+        "files": 0,
+        "allocated_bytes": 0,
+        "concurrent_disappearances": 0
+      },
+      {
+        "status": "node=3 stage=0 group=0 exports=1 passes=41 elapsed_ms=0 last_pass_age_ms=255 last_delete_age_ms=13550\ndata_usage_bytes=0 removed_fragments=1045 unlinked_file_bytes=72765440 reclaimed_payload_bytes=68485120 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=1045 bytes=0 errors=0 us_sum=10460 avg_us=10\ngc_io=dir_sync ops=12064 bytes=0 errors=0 us_sum=1475149 avg_us=122\n",
+        "status_rc": 0,
+        "files": 0,
+        "allocated_bytes": 0,
+        "concurrent_disappearances": 0
+      },
+      {
+        "status": "node=4 stage=0 group=0 exports=1 passes=41 elapsed_ms=0 last_pass_age_ms=216 last_delete_age_ms=13548\ndata_usage_bytes=0 removed_fragments=1030 unlinked_file_bytes=71720960 reclaimed_payload_bytes=67502080 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=1030 bytes=0 errors=0 us_sum=10338 avg_us=10\ngc_io=dir_sync ops=10432 bytes=0 errors=0 us_sum=1535466 avg_us=147\n",
+        "status_rc": 0,
+        "files": 0,
+        "allocated_bytes": 0,
+        "concurrent_disappearances": 0
+      }
+    ]
+  },
+  {
+    "seconds": 50,
+    "nodes": [
+      {
+        "status": "node=1 stage=0 group=0 exports=1 passes=78 elapsed_ms=0 last_pass_age_ms=59 last_delete_age_ms=23557\ndata_usage_bytes=0 removed_fragments=1029 unlinked_file_bytes=71651328 reclaimed_payload_bytes=67436544 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=1 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=1029 bytes=0 errors=0 us_sum=10665 avg_us=10\ngc_io=dir_sync ops=12018 bytes=0 errors=0 us_sum=1668425 avg_us=138\n",
+        "status_rc": 0,
+        "files": 0,
+        "allocated_bytes": 0,
+        "concurrent_disappearances": 0
+      },
+      {
+        "status": "node=2 stage=0 group=2 exports=1 passes=49 elapsed_ms=0 last_pass_age_ms=330 last_delete_age_ms=23594\ndata_usage_bytes=0 removed_fragments=1041 unlinked_file_bytes=72486912 reclaimed_payload_bytes=68222976 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=1 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=1041 bytes=0 errors=0 us_sum=9975 avg_us=9\ngc_io=dir_sync ops=12074 bytes=0 errors=0 us_sum=1470094 avg_us=121\n",
+        "status_rc": 0,
+        "files": 0,
+        "allocated_bytes": 0,
+        "concurrent_disappearances": 0
+      },
+      {
+        "status": "node=3 stage=0 group=0 exports=1 passes=51 elapsed_ms=0 last_pass_age_ms=149 last_delete_age_ms=23555\ndata_usage_bytes=0 removed_fragments=1045 unlinked_file_bytes=72765440 reclaimed_payload_bytes=68485120 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=1045 bytes=0 errors=0 us_sum=10460 avg_us=10\ngc_io=dir_sync ops=12064 bytes=0 errors=0 us_sum=1475149 avg_us=122\n",
+        "status_rc": 0,
+        "files": 0,
+        "allocated_bytes": 0,
+        "concurrent_disappearances": 0
+      },
+      {
+        "status": "node=4 stage=0 group=0 exports=1 passes=51 elapsed_ms=0 last_pass_age_ms=110 last_delete_age_ms=23553\ndata_usage_bytes=0 removed_fragments=1030 unlinked_file_bytes=71720960 reclaimed_payload_bytes=67502080 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=1030 bytes=0 errors=0 us_sum=10338 avg_us=10\ngc_io=dir_sync ops=10432 bytes=0 errors=0 us_sum=1535466 avg_us=147\n",
+        "status_rc": 0,
+        "files": 0,
+        "allocated_bytes": 0,
+        "concurrent_disappearances": 0
+      }
+    ]
+  },
+  {
+    "seconds": 60,
+    "nodes": [
+      {
+        "status": "node=1 stage=0 group=0 exports=1 passes=87 elapsed_ms=0 last_pass_age_ms=867 last_delete_age_ms=33566\ndata_usage_bytes=0 removed_fragments=1029 unlinked_file_bytes=71651328 reclaimed_payload_bytes=67436544 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=1 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=1029 bytes=0 errors=0 us_sum=10665 avg_us=10\ngc_io=dir_sync ops=12018 bytes=0 errors=0 us_sum=1668425 avg_us=138\n",
+        "status_rc": 0,
+        "files": 0,
+        "allocated_bytes": 0,
+        "concurrent_disappearances": 0
+      },
+      {
+        "status": "node=2 stage=0 group=2 exports=1 passes=59 elapsed_ms=0 last_pass_age_ms=221 last_delete_age_ms=33603\ndata_usage_bytes=0 removed_fragments=1041 unlinked_file_bytes=72486912 reclaimed_payload_bytes=68222976 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=1 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=1041 bytes=0 errors=0 us_sum=9975 avg_us=9\ngc_io=dir_sync ops=12074 bytes=0 errors=0 us_sum=1470094 avg_us=121\n",
+        "status_rc": 0,
+        "files": 0,
+        "allocated_bytes": 0,
+        "concurrent_disappearances": 0
+      },
+      {
+        "status": "node=3 stage=0 group=0 exports=1 passes=61 elapsed_ms=0 last_pass_age_ms=40 last_delete_age_ms=33565\ndata_usage_bytes=0 removed_fragments=1045 unlinked_file_bytes=72765440 reclaimed_payload_bytes=68485120 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=1045 bytes=0 errors=0 us_sum=10460 avg_us=10\ngc_io=dir_sync ops=12064 bytes=0 errors=0 us_sum=1475149 avg_us=122\n",
+        "status_rc": 0,
+        "files": 0,
+        "allocated_bytes": 0,
+        "concurrent_disappearances": 0
+      },
+      {
+        "status": "node=4 stage=0 group=0 exports=1 passes=61 elapsed_ms=0 last_pass_age_ms=2 last_delete_age_ms=33564\ndata_usage_bytes=0 removed_fragments=1030 unlinked_file_bytes=71720960 reclaimed_payload_bytes=67502080 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=1030 bytes=0 errors=0 us_sum=10338 avg_us=10\ngc_io=dir_sync ops=10432 bytes=0 errors=0 us_sum=1535466 avg_us=147\n",
+        "status_rc": 0,
+        "files": 0,
+        "allocated_bytes": 0,
+        "concurrent_disappearances": 0
+      }
+    ]
+  }
+]

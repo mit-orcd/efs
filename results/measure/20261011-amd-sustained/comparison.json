@@ -25,6 +25,18 @@
     ]
   },
   "candidate": {},
+  "candidate_failures": {
+    "direct": {
+      "created_and_warm_verified": 26688,
+      "requested_seconds": 180,
+      "wall_s": 183.17772682700888,
+      "physical_inventory_empty": false,
+      "mean_full_window_close_completions_s": 145.7277777777778,
+      "cold_marker_recorded": null,
+      "mean_window_close_p99_us": 160794.2905,
+      "mean_window_open_p99_us": 47132.427
+    }
+  },
   "not_matched_ab": true,
   "limits": [
     "single AMD host/four local daemons",

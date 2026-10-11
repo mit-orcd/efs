@@ -13,7 +13,7 @@ out={'baseline':{'requested_seconds':600,'observed_seconds':baseline['elapsed_s'
  'intentionally_interrupted':True,'cold_verified':False,
  'completed_close_counts_30s':counts,'mean_close_completions_s':sum(counts)/300,
  'per_node_final_usage_bytes':[int(re.search(r'data_usage_bytes=(\d+)',n['status']).group(1)) for n in stop['nodes']]},
- 'candidate':{},'not_matched_ab':True,'limits':['single AMD host/four local daemons',
+ 'candidate':{},'candidate_failures':{},'not_matched_ab':True,'limits':['single AMD host/four local daemons',
  'baseline intentionally interrupted without cold-byte oracle',
  'independent fresh roots/placement and unequal duration; no causal throughput gain',
  'candidate opt-in; production default unchanged',
@@ -22,7 +22,14 @@ for mode in ('direct','buffered'):
  paths=[]
  for p in (root/'evidence/candidate/live').glob(f'gc-{mode}-*/tiny-sustained.json'):
   r=json.loads(p.read_text());
-  if r.get('cold_verified'):paths.append((p,r))
+  if r.get('cold_verified') and r.get('physical_inventory_empty'):paths.append((p,r))
+  elif 'windows' in r:
+   out['candidate_failures'][mode]={'created_and_warm_verified':r['created'],'requested_seconds':r['requested_seconds'],
+     'wall_s':r['wall_s'],'physical_inventory_empty':False,
+     'mean_full_window_close_completions_s':sum(w['counts']['close'] for w in r['windows'] if w['window']<6)/180,
+     'cold_marker_recorded':r.get('cold_verified'),
+     'mean_window_close_p99_us':statistics.mean(w['close']['p99_us'] for w in r['windows'] if w['window']<6),
+     'mean_window_open_p99_us':statistics.mean(w['open']['p99_us'] for w in r['windows'] if w['window']<6)}
  if not paths:continue
  assert len(paths)==1
  p,r=paths[0]
