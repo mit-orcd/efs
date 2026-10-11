@@ -9865,6 +9865,8 @@ static int host_storage_fence_members(struct efs_raft_host *h,const uint8_t uuid
     pthread_mutex_unlock(&h->s->lock);return same?EFS_OK:EFS_ERR_BUSY;
 }
 
+#include "publication_session_fast.h"
+
 /* Payload: group byte, then command bytes (empty command = ReadIndex).
  * A hosted replica proposes (or ReadIndexes) even when it is not the
  * leader; an unhosted node forwards a non-empty command to a voter.
@@ -10197,8 +10199,11 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     }
     if (clen >= 2 && cmd[0] == EFS_MD_CMD_SESSION &&
         cmd[1] == EFS_MD_SESS_ESTABLISH) {
-        rc = host_session_establish_admit(h, cmd, clen, group, &hint);
-        if (rc != EFS_OK) { out->rc = rc; return; }
+        int reused=0;
+        rc = host_session_establish_reuse(h,cmd,clen,group,&hint,&reused);
+        if (rc != EFS_OK || reused) {
+            out->rc=rc;out->leader_hint=hint;return;
+        }
     }
     if (clen == 0) {
         rc = host_read_index(h, group, &hint);
