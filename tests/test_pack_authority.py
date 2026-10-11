@@ -49,8 +49,8 @@ static int host_read_index(struct efs_raft_host *h,uint8_t g,int *hint)
 {(void)h;(void)hint;assert(g==(reads%2?2:0));reads++;return read_rc;}
 static void wr32be(uint8_t *p,uint32_t n){for(int i=0;i<4;i++)p[i]=n>>(24-8*i);}
 uint32_t efs_kv_session_shard(const uint8_t uuid[EFS_OPID_UUID_LEN]){assert(uuid[0]==42);return 2;}
-static int host_session_get_after_group(struct efs_raft_host *h,const uint8_t *p,uint32_t n,uint8_t g,int *hint,uint64_t *out,int covered)
-{(void)h;(void)hint;assert(reads==2 && n==22 && g==2 && covered==2 && p[2]==42 && p[21]==1);*out=salt;return 0;}
+static int host_session_get_covered(struct efs_raft_host *h,const uint8_t *p,uint32_t n,uint8_t g,int *hint,uint64_t *out,uint8_t covered)
+{(void)h;(void)hint;assert(reads==2 && n==22 && g==2 && covered==5 && p[2]==42 && p[21]==1);*out=salt;return 0;}
 int efs_session_accept(struct efs_kv *kv,uint32_t shard,const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch)
 {(void)kv;assert(shard==1 && uuid[0]==42 && epoch==7);return local_rc;}
 int efs_pack_admission_get(struct efs_kv *kv,const struct efs_pack_object *request,struct efs_pack_object *out)

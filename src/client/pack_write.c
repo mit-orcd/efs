@@ -67,6 +67,7 @@ static int pack_started,pack_running;
 static uint32_t pack_capability_members;
 static uint64_t pack_capability_checked;
 static int pack_capability_batch;
+static int pack_batch_peer_unsupported(void);
 static uint64_t pack_now(void)
 {
     struct timespec t;if(clock_gettime(CLOCK_MONOTONIC,&t))return 0;
@@ -195,7 +196,7 @@ static int pack_retire_batch(struct pack_retirement *r)
     }
     if(!b->count)return error;
     int rc=efs_client_rpc_publication_batch(b,&r->batch_reply);
-    if(rc==EFS_ERR_PROTO){r->batch=0;return rc;} /* Exact scalar replay is safe. */
+    if(rc==EFS_ERR_PROTO || (rc==EFS_ERR_NET && pack_batch_peer_unsupported())){r->batch=0;return EFS_ERR_PROTO;} /* Exact scalar replay is safe. */
     if(rc)return rc;
     for(uint32_t j=0;j<b->count;j++) {
         uint32_t i=slots[j];const struct efs_msg_publication_reply *reply=&r->batch_reply.records[j];
@@ -271,6 +272,21 @@ static int pack_capabilities(uint32_t *members)
     pack_capability_members=*members;pack_capability_checked=pack_now();pack_capability_batch=batch;
     pthread_mutex_unlock(&pack_mu);
     return EFS_OK;
+}
+/* Unknown opcodes on old peers can time out without a protocol reply.
+ * Downgrade only after a fresh successful compatibility probe; transport
+ * uncertainty alone must preserve immutable publication/retirement ownership. */
+static int pack_batch_peer_unsupported(void)
+{
+    pthread_mutex_lock(&pack_mu);
+    pack_capability_members=0;
+    pthread_mutex_unlock(&pack_mu);
+    uint32_t members=0;
+    if(pack_capabilities(&members))return 0;
+    pthread_mutex_lock(&pack_mu);
+    int unsupported=!pack_capability_batch;
+    pthread_mutex_unlock(&pack_mu);
+    return unsupported;
 }
 static int pack_publish_record(struct pack_context *p,uint32_t i)
 {
@@ -351,7 +367,7 @@ static void pack_publish_batch(struct pack_context *p)
     }
     if(!b->count)return;
     int rc=efs_client_rpc_publication_batch(b,&p->batch_reply);
-    if(rc==EFS_ERR_PROTO){p->batch=0;return;} /* Replay same immutable requests. */
+    if(rc==EFS_ERR_PROTO || (rc==EFS_ERR_NET && pack_batch_peer_unsupported())){p->batch=0;return;} /* Replay same immutable requests. */
     for(uint32_t j=0;j<b->count;j++) {
         struct pack_writer *w=&p->writers[slots[j]];
         const struct efs_msg_publication_reply *reply=&p->batch_reply.records[j];

@@ -62,7 +62,7 @@ void server_raft_host_pack_authority(const uint8_t *request,uint32_t bytes,
     uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(object.ledger.owner.client_uuid));
     uint64_t salt=0;
     /* Both owner and participant barriers were obtained in THIS request. */
-    rc=host_session_get_after_group(h,query,sizeof(query),owner,&hint,&salt,owner);
+    rc=host_session_get_covered(h,query,sizeof(query),owner,&hint,&salt,covered);
     if(!rc) {
         uint32_t epoch=(uint32_t)salt;uint8_t state=(uint8_t)(salt>>32);
         if(epoch!=object.ledger.owner.session_epoch)rc=EFS_ERR_STALE;

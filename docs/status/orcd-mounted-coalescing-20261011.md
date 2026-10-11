@@ -730,3 +730,28 @@ including last-record epoch/FileID failures, fencing/reclamation, exact frame
 lengths, digest binding, lost replies and safe fallback. Existing mounted retry,
 admission, fanout and batch ownership gates also pass. Full merged native and
 quiet mounted acceptance remain pending. This is not a timeout closure claim.
+
+
+## Latest branch reconciliation before qualification
+
+All frozen local branch tips in `latest-ref-snapshot.json` are ancestors of this
+branch, including release a77d83d5, Mac 0f869394, NUC 75bc93ad, Intel 60c86d88
+and review 16422542. The tested GC backlog signal is included. Mac atomic APPEND
+uses durable tag 53 alongside NUC catch-up tag 52 and packed tags 45–51. General
+cross-shard APPEND retains the ordered session/inode PREPARE guards; the atomic
+path is limited to its independently verified single-shard leader eligibility.
+Dynamic exact-image capture is bounded at twice the ordinary image count so the
+atomic predicate-version images cannot overrun NUC's smaller completion allocation.
+The combined CREATE implementation already reconciled in the release is retained
+with its negative/unknown reply cleanup and competing OPEN barrier tests; the
+Mac alternative pointer ownership implementation is superseded by that equivalent
+reviewed path. Generated architecture artifacts were regenerated from sources.
+
+The review's old-peer batch fallback patch is applied to production: after NET,
+only a fresh successful scalar-only capability probe permits exact scalar replay.
+Failed probes and all-modern peers retain immutable batch ownership. The actual
+scheduler test passes all three cases for publication and retirement. The upload
+authority helper now uses the merged request-local session coverage mask API;
+the earlier intermediate native link failure is retained and is not a pass.
+Local focused authority, atomic APPEND, CREATE credentials, OPEN deadline and
+lease retention gates pass. Full exact merged native qualification is next.
