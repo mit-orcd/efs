@@ -76,7 +76,7 @@ inventory remains tested; duplicate-root and two-root quota comparisons use one
 fixed 100 GiB/60 GiB available snapshot with exact expected quotas. Assertions
 are not relaxed and production capacity behavior is unchanged.
 
-## Validation ledger (drive and loaded gates in progress)
+## Validation ledger
 
 | Build / run | Result |
 | --- | --- |
@@ -90,13 +90,20 @@ are not relaxed and production capacity behavior is unchanged.
 | `108afa3e-nuc` full buffered | Pass: POSIX 216/216, peer 67/67, six cold first mutations, selected sync/append/recovery/GC gates |
 | Matched REPORT 400-record ABBA controls | All four pass exact fsync/peer/cold/reclamation; no sustained write gain established |
 | Exact 20,000-record gates | Both stopped through normal client drain after slowdown; incomplete, not acceptance |
+| Written-ring physical drive controls | All four 240-second cells pass 49,152 exact reopened blocks; all eight trace windows retain qualified distributions |
+| Loaded two-mount APPEND during GC | Both modes pass one round / 800 exact warm/peer/cold records each; zero physical/quota state |
+| Final native current-test overlay `658e42a2` | Full clean `make -j4 test` passes; three new harness/reducer/controller regressions pass |
+| Enabled `.efs` commands and options | Both modes pass focused two-mount command/options, permissions, immutable output, slot recovery and physical/quota cleanup |
+| Final restored runtime | Four original installed daemons, two mounts, unchanged live/installed image hashes, TCP/query-disabled setup, 16 prior payload samples equal on both mounts |
 
 Raw evidence is retained under
 [the session evidence directory](../../results/measure/20261011-devel-nuc/).
-Failed runs are evidence, not acceptance. Further results and final restored
-runtime checks will be added before this session finishes.
+Failed runs are evidence, not acceptance. Binary traces remain on NUC with
+checksums; compressed text, manifests, exact versions and source hashes are
+retained locally. The ordinary service uses its original installed binaries;
+this session validates the merged fixes on private stores.
 
-## W97: physical request discrimination (in progress)
+## W97: repeated physical request discrimination
 
 Read-only kernel policy context: SATA `sda` reports write-through, no FUA,
 `mq-deadline`; NVMe `nvme0n1` reports write-back, FUA, scheduler `none`,
@@ -115,15 +122,43 @@ timing; this is not another untraced throughput acceptance matrix or a NAND-only
 latency measurement. Ambiguous sector/length pairs and unmatched trace edges
 are counted rather than silently treated as exact request identities.
 
-## W87: added loaded two-mount gate (queued)
+All four cells finish with exit 0 and 12,288 exact reopened 64 KiB blocks each
+(49,152 across the matrix). First → last completed ~30-second windows:
+
+| Cell | Aggregate durable writes/s | Mean of three writer sync means |
+| --- | --- | --- |
+| NVMe first | 1381.8 → 440.7 | 2.111 → 6.702 ms |
+| SATA first | 6968.6 → 7092.0 | 0.418 → 0.409 ms |
+| SATA repeat | 7099.5 → 7090.8 | 0.410 → 0.410 ms |
+| NVMe repeat | 1388.2 → 448.6 | 2.101 → 6.584 ms |
+
+All eight trace windows have no observed error completion or lost-record line.
+Qualified issued-`WS` request means rise 0.750 → 2.994 ms and 0.748 → 2.952 ms
+on NVMe; issued-`FF` means rise 1.198 → 3.258 ms and 1.162 → 3.348 ms.
+SATA issued-`WS` remains 0.408 → 0.392 ms and 0.399 → 0.399 ms.
+NVMe qualified pairing covers 50.5–51.4% of issues; overlapping indistinguishable
+keys and unmatched edges are omitted/counted. SATA coverage rounds to 100%.
+These are qualified physical request distributions, not all-request averages.
+
+The physical path contributes a reproducible decline outside EFS on this NVMe
+storage path, while the written SATA controls remain steady. These controls do
+not isolate firmware, NAND caching, power management or every block-queue effect,
+and do not explain the separate sustained EFS SATA slowdown. Temperature is not
+sampled in this new matrix. Raw trace output itself writes to SATA; traces may
+include that output and other system I/O. Keep W97 open; no policy change,
+production durability change or hardware-ceiling claim is made.
+
+## W87: loaded two-mount gate acceptance
 
 The new optional loaded gate combines persistent and per-record-close APPEND
 descriptions from both mounts with physical GC of 128 files. Each round expects
 800 unique records with no omissions/duplicates, equal peer bytes, exact byte
 order after a full cold restart, and empty physical/quota state after cleanup.
-The harness supports 1–20 rounds; this bounded session queues one per storage
-mode only if enough time remains. This does not identify the original W87 cause
-or replace the requirement for repeated broader-load acceptance.
+Both direct and buffered modes pass one round each: 800 exact warm/peer/cold
+records, GC pass progress and zero physical/quota state after cleanup. The
+harness supports 1–20 rounds; only one per mode is accepted in this session.
+This does not identify the original W87 cause or replace repeated original-load
+acceptance. W87 remains open.
 
 ## Long-control slowdown and controlled stop
 
@@ -172,3 +207,49 @@ compressed into the checked-in evidence.
 The candidate engine's C/H sources still match this branch after the later
 harness-only commits. The later Makefile difference adds only the fixture
 interrupt regression to two test targets; compile/link flags are unchanged.
+
+## Remaining append software fanout
+
+Offline inspection opens only new copies of the stopped private control and
+candidate KV. Original file hashes are checked before/after. Both retained
+`append-burst` inode rows have all 64 active lanes (control base size 10,084,352
+bytes; candidate 10,346,496 bytes). The current reservation capture collects
+four fixed images plus one per active lane: 68 images at this point, plus the
+owned session guard. This is a source/state work count, not a measured durable
+barrier count or proof that lane fanout causes the slowdown. It supplies a
+concrete software target alongside the reproduced device-path latency.
+
+Any reduction must retain complete authoritative EOF collection, lane stamps,
+session fencing and exact guarded images. Removing these checks or merely
+increasing timeouts would not be a safe fix. The inspection helper refuses
+paths outside the explicitly named offline copy directory.
+
+## Enabled command gates and final runtime verification
+
+Both storage modes pass `efs_commands.py` and `efs_command_options.py` inside
+new private fixtures with server/client command support enabled. Gates cover
+truthful subtree stats, peer mutation convergence, raw/escaped/NUL names,
+permission denial including hidden descendants, immutable open output,
+query identity exhaustion/release, sorting/filtering and human formatting.
+Both helpers' trees are deleted and physical fragment/quota state reaches zero.
+This is focused W91/W92 integration acceptance, not large-scale, NFS, all fault
+gates or billions-of-files acceptance. Expiry remains unavailable in these
+commands; unsupported expiry arguments are refused, not tested for deletion.
+
+The full final native rerun uses tracked tests/docs/Makefile overlay `658e42a2`
+on identical engine C/H, with a clean rebuild. Later measurement-only helpers
+are tested separately. No engine C/H changes follow the full live acceptance
+on `108afa3e-nuc`.
+
+The first runtime verifier used argv[0] and missed wrappers launched as
+`./efs-fuse`; a normalization attempt also lacked the target process's cwd.
+Both failed outputs are retained. The corrected verifier uses actual mapped
+`/proc/PID/exe` identity and SHA-256. Its real-process regression accepts
+relative/parent-directory argv and rejects an unrelated executable with spoofed
+installed argv. This is a checker repair, not a cluster failure.
+
+After the last private command fixture restores service, all four original
+installed daemons and both mounts are checked, executable hashes match the
+prior accepted installation, and all 16 prior payload samples match on both
+mounts. Whitelisted environment checks confirm TCP and commands disabled as
+before. This is a bounded preservation check, not an entire tree inventory.

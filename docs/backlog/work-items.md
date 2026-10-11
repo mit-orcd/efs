@@ -3659,6 +3659,14 @@ collection remain open. [Checkpoint](../status/dependency-package-20261009.md#ex
 
 ## W87 · Buffered concurrent append loses records under broader load
 
+**Oct 11 NUC integration acceptance:** merged fixed core passes full POSIX
+216/216 and peer 67/67 in both direct and buffered modes. An additional focused
+round per mode combines four two-mount persistent/per-record-close APPEND
+writers with GC of 128 files: 800 exact warm/peer/cold records per round and
+zero physical/quota state after cleanup. These green results do not isolate
+the original missing-record cause or replace repeated original-load acceptance;
+keep W87 open. [Retained failures and new gates](../status/devel-nuc-integration-20261011.md).
+
 **Oct 8 AMD follow-up:** Retrieved the original NUC failure TSV/manifest: missing W1S0002 and W0S0004 records, beyond first-record loss. AMD broad buffered POSIX 216/0/1 skip and peer 64/64 pass, plus mixed-close append during GC and 800 exact cold records. The separate identical-RPC reservation race is fixed, but is not established as this incident's sole cause.
 See [the package evidence](../status/amd-functional-gates-20261008.md).
 
@@ -4001,6 +4009,14 @@ POSIX/peer suites. Record build identity and retained evidence before closure.
 <a id="w91"></a>
 
 ## W91 · Directory-local virtual .efs command interface
+
+**Oct 11 NUC merged integration:** focused two-mount `efs_commands.py` and
+`efs_command_options.py` gates pass in direct and buffered private fixtures:
+truthful stats/peer convergence, permissions/hidden descendants, immutable
+output, raw/NUL names, query identity exhaustion/recovery, sorting/filtering,
+formatting and zero physical/quota state after cleanup. Expiry arguments remain
+unavailable/refused; this is not expiry deletion, NFS or large-scale acceptance.
+[Integration evidence](../status/devel-nuc-integration-20261011.md).
 
 **Policy accepted Oct 8 (D34):** opt-in `.efs/` commands, initially readable Python 3 scripts with bounded versioned query paths and immutable results. Real entries take precedence; NFS support requires separate gates. This supersedes the initial open-policy discussion below; implementation remains open. [Contract](../status/accepted-namespace-scratch-20261008.md#d34--w91-directory-local-efs-commands).
 
@@ -4407,6 +4423,17 @@ or present the Raft improvement as measured KV acceptance.
 <a id="w97"></a>
 
 ## W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
+
+**Oct 11 repeated physical-trace follow-up:** all four 240-second written-ring
+controls pass 49,152 exact reopened blocks. NVMe repeats decline about
+1382/1388 → 441/449 durable writes/s with mean sync 2.1 → 6.6–6.7 ms; SATA
+repeats remain about 7100/s and 0.41 ms. Qualified physical issued-WS means
+rise about 0.75 → 2.95–2.99 ms on NVMe while SATA stays near 0.40 ms; NVMe
+issued-FF means also rise. All eight windows report no observed error/lost
+records, but only about half of NVMe issues have unambiguous paired completions.
+This confirms a device-path contribution outside EFS, not a NAND/cache diagnosis
+or hardware ceiling. Software append fanout and the separate EFS SATA decline
+remain open. [Current raw-evidence ledger](../status/devel-nuc-integration-20261011.md).
 
 **Oct11 NUC isolated follow-up:** two eight-minute growing-file repeats outside
 EFS reproduce aggregate430/428→188/186 durable64KiB writes/s, per-writer mean

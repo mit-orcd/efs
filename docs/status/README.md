@@ -16,8 +16,12 @@ in the ORCD queue after the packing priority.
 [Current two-hour integration and repair ledger](devel-nuc-integration-20261011.md)
 records the captured all-branch merge, W72 fresh-mount admission fixes, a bounded
 W52 prepare-pipeline experiment and their retained failures. Corrected native
-and both full live modes pass (POSIX216/216, peer67/67 per mode). Matched
-append and drive observations are in progress.
+and both full live modes pass (POSIX 216/216, peer 67/67 per mode). Additional
+loaded APPEND/GC rounds pass in both modes. Four written-ring drive controls
+repeat the NVMe decline with physical request evidence; no cache diagnosis or
+hardware ceiling is claimed. Long 20k append gates remain incomplete. Enabled
+command/options gates pass in both modes, final native passes, and the original
+installed runtime and retained sample bytes are verified after restoration.
 
 ## NUC closure session — October 10–11
 
