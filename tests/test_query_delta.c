@@ -6,8 +6,11 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <ftw.h>
 static int failures;
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"FAIL %d: %s\n",__LINE__,#x);failures++;}}while(0)
+static int clean_fixture(const char *path,const struct stat *st,int kind,struct FTW *walk)
+{(void)st;(void)kind;(void)walk;return remove(path);}
 int main(void)
 {
     char store[]="/tmp/efs-query-delta-kv-XXXXXX",cache[]="/tmp/efs-query-delta-cache-XXXXXX";
@@ -155,5 +158,9 @@ int main(void)
         }
     }
     efs_query_catalog_free(old);efs_kv_lsm_close(kv);free(ids);
+    /* Keep failing fixtures for diagnosis, but successful repeated oracles
+     * must not consume the seed's tmpfs indefinitely. These are our mkdtemp
+     * roots; physical traversal never follows a symlink outside them. */
+    if(!failures){CHECK(!nftw(cache,clean_fixture,16,FTW_DEPTH|FTW_PHYS));CHECK(!nftw(store,clean_fixture,16,FTW_DEPTH|FTW_PHYS));}
     printf("query large delta: %s\n",failures?"FAIL":"PASS");return failures?1:0;
 }
