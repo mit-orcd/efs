@@ -4407,7 +4407,15 @@ behind a reserved EOF, zero-fill over valid records, remove durability barriers,
 or present the Raft improvement as measured KV acceptance.
 <a id="w97"></a>
 
-## W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
+## W97 · Replication inbox pressure and sustained service admission
+
+**Scope split (Oct 11):** The AMD bounded unpaced overload/admission gate is
+**closed**, with deployed and independently audited exact artifacts. NUC
+filesystem/device persistence-latency attribution now belongs to [W111](#w111),
+not an additional AMD acceptance condition. W97 remains open only for the
+independent receiver-feedback/queue-pressure acceptance below; W94 production
+data-plane integration and W99 capacity-domain policy are separate. Historical
+observations below retain their original dates and failures.
 
 **Oct 11 AMD mixed-load follow-up:** eight rotating tiny workers plus four
 unpaced 16-MiB overwrite-ring writers reach the explicit 4-GiB-per-node quota
@@ -4438,69 +4446,12 @@ gates pass without refusals, with 58.09/53.98-s physical drain and post-pressure
 cold writes; full admission-enabled 216/67 functional compatibility and
 exact-artifact retained-service deployment/two-client audit pass. The bounded AMD
 unpaced admission gate is closed. AMD-only admission/20-ms idle defaults are
-explicit, with commands disabled and all normal stores retained. Global W94/W97
-integration/NUC gates and W99 capacity-domain policy remain open.
+explicit, with commands disabled and all normal stores retained. W94 integration,
+W97 receiver-feedback and W99 capacity-domain policy remain open independently;
+NUC persistence attribution is [W111](#w111).
 [Indexed follow-up](../status/amd-overload-admission-20261011.md).
 
-**Oct11 NUC isolated follow-up:** two eight-minute growing-file repeats outside
-EFS reproduce aggregate430/428→188/186 durable64KiB writes/s, per-writer mean
-sync~6.9→~16ms. Preallocated-ring repeats finish near438ops/s, with materially
-different initial windows and tails. Allocation/overwrite behaviour matters,
-but XFS versus drive/cache attribution is not yet isolated. All eight allocation cells, four separate XFS/perf/strace profiles and four
-fully written-ring cells finish with exact reopen checks. Written NVMe repeats
-also decline1373/1356→450/439ops/s, while block write/flush elapsed averages
-increase~3×; written SATA stays near7100ops/s. This excludes allocation as the
-whole cause but does not isolate drive firmware from the block queue.
-W97 remains open; no drive settings or production defaults change.
-[Evidence and limitations](../status/devel-nuc-closure-20261010.md).
-
-**XFS mechanism observed:** separate writer-TID counts show roughly two log-force
-calls per fdatasync on growing files on both devices; warmed rings show zero.
-Host-wide counters closely match growth and remain small for rings. This is
-metadata-journal work, not a count of drive flushes. Stable raw SATA controls
-do not repair the earlier sustained EFS SATA slowdown; NVMe cache/firmware
-attribution remains unproven. W95 must specify safe packing/reuse semantics
-before a production layout port. Current durability barriers are retained.
-
 **Oct 11 Intel resume follow-up:** A large-directory inventory could cycle indefinitely because READDIR discarded a source-only continuation when its name was empty. The actual callback now preserves that source; old-source regressions fail and both native Intel regressions pass. The deployed wire probe reaches EOF with 92,557 entries in 1.580 seconds, and full FUSE enumeration returns the same count in 1.183 seconds. This repairs enumeration termination, not sustained write latency; W97 remains open. [Cursor repair and limits](../status/intel-readdir-source-cursor-20261011.md).
-
-**Oct 10 matched three-node drive test:** same frozen `6b8f05acb484` engine,
-20 minutes per drive, true three-voter groups, preserved regular cluster stopped.
-NVMe first/final rates 31.83/10.80 files/s and pooled server Raft sync
-2.465/6.993 ms; SATA 562.73/299.40 files/s and 0.150/0.319 ms. Both drives slow;
-SATA late rates fluctuate. NVMe root telemetry during slow phase has no reported
-thermal events/warnings (composite <=45.85°C, sensor2 <=61.85°C). SATA health is
-unavailable. Large inbox refusals are not necessary: NVMe records only 35,
-SATA 124, with zero loader errors, replica catch-up and 64 exact cold payload
-checks per drive. Normal four-node service/both mounts restore and verify.
-**W97 remains open:** isolate growing-file/XFS versus drive service latency;
-NAND cache cause and hardware ceiling remain unproved. This compares these two
-models/storage paths, one run each, not protocols in general.
-[Report](../status/w97-three-drive-20261010.md).
-
-**Oct 10 latest merged-code observation:** all 16 newly captured branch tips
-integrate at `6b8f05acb484` and deploy to preserved NUC stores. A continuous
-20-minute write / 10-minute drained pause / 20-minute same-worker resume creates
-138,881 files with zero loader errors. First-minute rates 152.47 and 159.35
-files/s fall to final-minute 52.85 and 48.05; corresponding NVMe flush means
-rise from 1.33/1.34 to 3.65/3.66 ms. Rest restores the burst without restart,
-but the decline repeats. n3 retains 75,109 sampled inbox refusals; all replicas
-catch up. No root SSD health data arrives; cache occupancy/thermal cause and
-hardware ceiling remain unproved. Native and unchanged-repeat full/fault gates
-pass (POSIX 212/212, peer 64/64), but retain the earlier concurrent-append
-30-second timeout. Defaults/diagnostics off are restored; 128 sampled exact
-cold payload checks and live executable hashes pass. **Keep W97 open.**
-Next isolate sustained durable-write latency with root NVMe health and matched
-EFS-stopped/loaded growing-WAL versus preallocated-overwrite probes.
-[Report](../status/w97-latest-nvme-20261010.md).
-
-**Oct 10 NUC:** return control reproduces fast-then-slow rates at 10 ms.
-NVMe host flush mean rises 2.38 to 3.70 ms while rates fall; an independent
-low-load XFS overwrite+fdatasync probe with EFS stopped measures NVMe 1.12 ms
-versus SATA 85.9 microseconds at QD1. This localizes persistence costs but does
-not identify the drive/filesystem mechanism or prove a software/hardware ceiling.
-Checkpoint-tail experiment gains throughput but fails append replay acceptance;
-keep the default and W97 open. [Report](../archive/status-20261011/w93-checkpoint-cadence-20261010.md).
 
 **Oct 9 completed-credit admission candidate:** `ea23775b` adds default-off
 retirement after KV release and before the marker tail, preserving queue caps,
@@ -4558,9 +4509,10 @@ versus baseline 112.2 → 60.5 → 48.4; n3 drops increase to 129,365. The defec
 is fixed, but pressure and inconsistent sustained performance remain open.
 [Trials, exact evidence and remaining solution gates](../status/w97-solution-investigation-20261009.md).
 
-**Class/status:** Performance investigation; open. Sustained tiny-file
-throughput declines alongside persistence latency and replication pressure.
-The causal mechanism and a validated production fix remain open.
+**Class/status:** Replication/admission performance investigation; open for
+receiver feedback and bounded queue/catch-up acceptance. AMD data-GC admission
+is closed. Physical persistence attribution is owned by W111; correlations
+below do not establish that replication pressure causes the drive slowdown.
 
 **Finding (Oct 9, NUC):** Eight tiny-file workers decline from **118.4 → 81.7 → 42.4 files/s** across
 three consecutive 100-second windows. n3 drops **112,982 replication frames**
@@ -4585,9 +4537,8 @@ performance gain claim against earlier runs.
 **Action:** Correlate per-group offered/accepted replication traffic,
 in-flight requests, retry/overlap causes, queue residence/depth, sync blocking
 and dropped-frame recovery over time. Attribute persistence latency between
-filesystem/device completion, scheduler waits and competing I/O. Record
-device temperature/cache behavior where available before claiming a device
-limit. Reproduce the decline with fixed workload seeds and comparable
+filesystem/device completion, scheduler waits and competing I/O in cooperation
+with W111; device temperature/cache attribution belongs to that item. Reproduce the decline with fixed workload seeds and comparable
 initial namespace/device state; test one scheduling, flow-control or batching
 change at a time. Keep memory, queues and diagnostic volume bounded.
 
@@ -4601,8 +4552,9 @@ payloads, full POSIX/peer suites and applicable W64/W73 durability gates.
 Report residual drops and late-run regression honestly; higher startup
 throughput alone does not close this item.
 
-**Related work:** W93 owns durable group-commit improvements; W97 owns the
-time-dependent decline and receiver/persistence feedback investigation.
+**Related work:** W93 owns durable group-commit improvements; W97 owns
+receiver feedback and queue-pressure acceptance; W111 owns the NUC
+time-dependent persistence decline and filesystem/device attribution.
 W95 covers tiny-payload storage principles, W96 KV WAL preallocation and W53
 mixed large-writer/tiny-close tails.
 
@@ -4981,3 +4933,102 @@ duplicate-probe hypothesis rather than demonstrated permanent RPC loss. The
 five-second software send guard qualifies the hardware RNR retry concern.
 Per-flow causality and deadline/recovery gates remain open; see the
 [evidence and test hypotheses](../status/orcd-communication-hypotheses-20261011.md).
+
+
+<a id="w111"></a>
+
+## W111 · NUC sustained durable-write slowdown: filesystem, device and queue attribution
+
+**Class/state:** performance investigation; open. **Assigned cluster:** NUC.
+Split from W97 by user request on Oct 11, 2026. This is not an AMD admission
+acceptance gate. The bounded AMD unpaced overload/admission work is closed;
+W97's independent replication-feedback acceptance remains separate.
+
+**Finding:** Durable tiny-file throughput falls over sustained NUC runs while
+server sync and device completion latency rise. EFS-stopped controls also show
+a NVMe decline on fully written extents, so allocation alone does not explain
+it. XFS journal work, block scheduling/queueing and device/cache behaviour
+still need discrimination. No hardware ceiling or cache/firmware cause has
+been established, and stable raw SATA controls do not repair the earlier EFS
+SATA slowdown.
+
+**Evidence transferred from W97 (historical observations unchanged):**
+
+**Oct11 NUC isolated follow-up:** two eight-minute growing-file repeats outside
+EFS reproduce aggregate430/428→188/186 durable64KiB writes/s, per-writer mean
+sync~6.9→~16ms. Preallocated-ring repeats finish near438ops/s, with materially
+different initial windows and tails. Allocation/overwrite behaviour matters,
+but XFS versus drive/cache attribution is not yet isolated. All eight allocation cells, four separate XFS/perf/strace profiles and four
+fully written-ring cells finish with exact reopen checks. Written NVMe repeats
+also decline1373/1356→450/439ops/s, while block write/flush elapsed averages
+increase~3×; written SATA stays near7100ops/s. This excludes allocation as the
+whole cause but does not isolate drive firmware from the block queue.
+W111 remains open; no drive settings or production defaults change.
+[Evidence and limitations](../status/devel-nuc-closure-20261010.md).
+
+**XFS mechanism observed:** separate writer-TID counts show roughly two log-force
+calls per fdatasync on growing files on both devices; warmed rings show zero.
+Host-wide counters closely match growth and remain small for rings. This is
+metadata-journal work, not a count of drive flushes. Stable raw SATA controls
+do not repair the earlier sustained EFS SATA slowdown; NVMe cache/firmware
+attribution remains unproven. W95 must specify safe packing/reuse semantics
+before a production layout port. Current durability barriers are retained.
+
+**Oct 10 matched three-node drive test:** same frozen `6b8f05acb484` engine,
+20 minutes per drive, true three-voter groups, preserved regular cluster stopped.
+NVMe first/final rates 31.83/10.80 files/s and pooled server Raft sync
+2.465/6.993 ms; SATA 562.73/299.40 files/s and 0.150/0.319 ms. Both drives slow;
+SATA late rates fluctuate. NVMe root telemetry during slow phase has no reported
+thermal events/warnings (composite <=45.85°C, sensor2 <=61.85°C). SATA health is
+unavailable. Large inbox refusals are not necessary: NVMe records only 35,
+SATA 124, with zero loader errors, replica catch-up and 64 exact cold payload
+checks per drive. Normal four-node service/both mounts restore and verify.
+**W111 remains open:** isolate growing-file/XFS versus drive service latency;
+NAND cache cause and hardware ceiling remain unproved. This compares these two
+models/storage paths, one run each, not protocols in general.
+[Report](../status/w97-three-drive-20261010.md).
+
+**Oct 10 latest merged-code observation:** all 16 newly captured branch tips
+integrate at `6b8f05acb484` and deploy to preserved NUC stores. A continuous
+20-minute write / 10-minute drained pause / 20-minute same-worker resume creates
+138,881 files with zero loader errors. First-minute rates 152.47 and 159.35
+files/s fall to final-minute 52.85 and 48.05; corresponding NVMe flush means
+rise from 1.33/1.34 to 3.65/3.66 ms. Rest restores the burst without restart,
+but the decline repeats. n3 retains 75,109 sampled inbox refusals; all replicas
+catch up. No root SSD health data arrives; cache occupancy/thermal cause and
+hardware ceiling remain unproved. Native and unchanged-repeat full/fault gates
+pass (POSIX 212/212, peer 64/64), but retain the earlier concurrent-append
+30-second timeout. Defaults/diagnostics off are restored; 128 sampled exact
+cold payload checks and live executable hashes pass. **Keep W111 open.**
+Next isolate sustained durable-write latency with root NVMe health and matched
+EFS-stopped/loaded growing-WAL versus preallocated-overwrite probes.
+[Report](../status/w97-latest-nvme-20261010.md).
+
+**Oct 10 NUC:** return control reproduces fast-then-slow rates at 10 ms.
+NVMe host flush mean rises 2.38 to 3.70 ms while rates fall; an independent
+low-load XFS overwrite+fdatasync probe with EFS stopped measures NVMe 1.12 ms
+versus SATA 85.9 microseconds at QD1. This localizes persistence costs but does
+not identify the drive/filesystem mechanism or prove a software/hardware ceiling.
+Checkpoint-tail experiment gains throughput but fails append replay acceptance;
+keep the default; this persistence investigation remains open as W111. [Report](../archive/status-20261011/w93-checkpoint-cadence-20261010.md).
+
+
+**Action:** Repeat growing-file, preallocated and fully written-ring controls
+with comparable initial device state, workload/build IDs and durable payloads.
+Correlate writer sync distributions, XFS journal activity, block dispatch/
+completion latency, queue depth and scheduler waits; record device health,
+temperature and power/cache telemetry where available. Separate EFS-stopped
+controls from loaded EFS tests and NVMe from SATA verdicts. Keep existing
+durability barriers and normal service/data intact.
+
+**Done when:** Repeated controls identify the dominant cause with evidence
+that distinguishes filesystem, block-queue and device effects. Any proposed
+repair must improve sustained rates/tails in repeated comparable NUC runs,
+retain bounded queues and peer progress, and pass exact cold-byte, native,
+POSIX/peer and applicable persistence/fault gates. If the cause is a hardware
+limit, document the measured boundary and mitigation without calling the
+software repaired. No drive setting change is authorized by this split.
+
+**Related:** W97 replication feedback, W93 group commit, W95 tiny-payload
+layout, W96 KV WAL allocation, W53 mixed-write tails and W99 capacity policy.
+See the [current status and evidence index](../status/w111-nuc-persistence-investigation-20261011.md).

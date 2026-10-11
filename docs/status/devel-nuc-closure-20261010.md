@@ -1,5 +1,11 @@
 # NUC closure session — October 10, 2026
 
+**Tracking update, Oct 11:** The NUC filesystem/device persistence-latency
+investigation in this report is now [W111](w111-nuc-persistence-investigation-20261011.md).
+Dated W97 labels and measurements below are retained as historical evidence.
+The [AMD overload/admission gate](amd-overload-admission-20261011.md) is closed
+and does not depend on this NUC investigation.
+
 User assignment: review devel, create and use `devel-nuc`, reserve NUC
 exclusively for three hours, prioritize documentation items with short remaining
 NUC gates. Session starts October 10 at 23:41 EDT (October 11 03:41 UTC);

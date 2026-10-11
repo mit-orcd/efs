@@ -4,8 +4,10 @@
 Direct and buffered ten-minute load, worker progress, cold acknowledged bytes,
 physical reclamation, post-pressure cold writes and full functional gates pass.
 The exact tested binaries are deployed on the four retained AMD stores; the
-independent two-client service audit passes. W94/W97 remain open globally for
-their broader integration and historical NUC persistence investigations.
+independent two-client service audit passes. NUC persistence attribution is
+now [W111](w111-nuc-persistence-investigation-20261011.md), an independent open
+investigation, not an AMD closure requirement. W94 production integration and
+W97 replication-feedback acceptance remain separate open scopes.
 
 Continue from [sustained acceptance](amd-sustained-20261011.md). The private
 180-second direct reproduction uses the current 20-ms GC candidate, unchanged
@@ -131,7 +133,8 @@ general throughput improvement.
 The gated full direct functional suite passes with admission on: 216/216 POSIX,
 67/67 two-client, zero skips/failures, plus guarded recovery, offline-member
 retention, exact cold bytes and physical cleanup. W94/W97 remain open globally
-for the integration and NUC persistence gates.
+for production integration and replication-feedback gates; NUC persistence
+is now W111.
 
 
 ## Retained service deployed and independently audited
@@ -171,5 +174,6 @@ functional/long acceptance `55906500`. No push was performed.
 
 This closes the bounded AMD unpaced overload/admission follow-up. It does not
 prove universal starvation freedom, instantaneous physical-space bounds or
-hardware power-loss safety. W94 production data-plane integration and W97
-NUC drive/cache/queue attribution remain open under their own acceptance gates.
+hardware power-loss safety. W94 production data-plane integration, W97
+receiver feedback and W111 NUC drive/cache/queue attribution remain open
+under their own acceptance gates. None reopens the accepted AMD admission work.

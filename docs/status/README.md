@@ -27,8 +27,8 @@ PID startup/stop, both mkfs aliases' consumed-reply recovery and explicit
 retired-query outcomes pass. W96's sixteen drive comparisons, exact retained
 replay, ASan/UBSan and Valgrind pass. Both full live modes pass POSIX214/214,
 peer66/66, cold/fault/GC and actual follower WAL-fsync refusal recovery.
-W97's clean allocation, separate XFS profiles and written-ring controls all
-finish: NVMe latency rises even on written extents; W97 remains open. The
+W111's clean allocation, separate XFS profiles and written-ring controls all
+finish: NVMe latency rises even on written extents; W111 remains open. The
 three-hour session restores four regular daemons and both mounts, verifies
 installed/live hashes and16 existing payload samples. New-binary installation
 remains approval-blocked; the original installed build is retained.
@@ -65,17 +65,29 @@ unimplemented; unavailable/refusal tests are not lifecycle acceptance.
 
 ## Tiny-file performance follow-up
 
-[W97 matched three-node SSD tests](w97-three-drive-20261010.md): NVMe
+**Scope split — Oct 11:** [W111](w111-nuc-persistence-investigation-20261011.md)
+now owns the NUC durable-write slowdown investigation. **AMD unpaced
+overload/admission is closed** ([accepted deployment](amd-overload-admission-20261011.md));
+its closure is independent of W111.
+
+| Work item / scope | State | Evidence |
+|---|---|---|
+| W97 AMD data-GC overload/admission | Closed: direct/buffered unpaced, cold recovery, physical drain and deployed service audit pass | [Closure](amd-overload-admission-20261011.md) |
+| W97 replication-inbox feedback | Open: sustained receiver-feedback/queue/catch-up acceptance | [W97](../backlog/work-items.md#w97) |
+| W111 NUC persistence latency | Open: isolate filesystem, block queue and device/cache effects | [W111](../backlog/work-items.md#w111) · [Status](w111-nuc-persistence-investigation-20261011.md) |
+
+
+[W111 matched three-node SSD tests](w97-three-drive-20261010.md): NVMe
 31.83→10.80 files/s with Raft sync 2.465→6.993 ms; SATA 562.73→299.40 with
 0.150→0.319 ms. Both slow, at very different absolute latency; no reported NVMe
 thermal event during recorded slow phase. Cache/ceiling remains unproved.
 128 private cold payload checks pass and normal four-node service restores.
 
 
-[W97 latest merged NUC observation](w97-latest-nvme-20261010.md) deploys
+[W111 latest merged NUC observation](w97-latest-nvme-20261010.md) deploys
 `6b8f05acb484`: first-minute 152/159 files/s falls to 53/48 before/after a
 10-minute creation pause, with higher NVMe flush latency. Rest restores only
-a brief burst. Cache/thermal cause remains unproved; W97 stays open. Full
+a brief burst. Cache/thermal cause remains unproved; W111 stays open. Full
 repeat gates pass with the earlier append timeout retained, and normal defaults
 plus both cold mounts are restored.
 
@@ -216,12 +228,15 @@ and no-refusal 180-second direct/buffered cold/physical passes; ten-minute
 unpaced fairness/recovery gates pass (no refusals, 58.09/53.98-s drain and
 post-pressure cold writes); full admission-enabled 216/67 functional gates pass,
 and exact-artifact retained-service deployment/two-client audit pass. The bounded
-AMD overload/admission gate is closed; global W94/W97 and W99 remain open.
+AMD overload/admission gate is **closed**. NUC persistence attribution is
+[W111](w111-nuc-persistence-investigation-20261011.md); it is not an AMD
+acceptance requirement. W94 integration, W97 receiver feedback and W99
+capacity-domain policy remain independent open scopes.
 
 [W94/W97 AMD sustained mixed-load follow-up](amd-sustained-20261011.md) retains
 an unpaced private-quota failure, successful quiescent GC progress and an
 intentionally interrupted 300-second bounded baseline. Progress-conditioned GC scheduling
-passes native/direct functional gates but fails the direct 180-second drain deadline; extra quiescent recovery empties all four stores. The deployed fragment-budget build (`85fb3a4b`) passes native/direct functional and buffered sustained gates; direct sustained cold bytes pass but its drain deadline fails. All-member inode-fence fanout (`e9ea8ca1`) passes full native/direct functional and both 180-second paced cold/physical gates; both ten-minute cold-byte gates pass but drain deadlines fail; the 20-ms follow-up passes native/direct functional gates and both ten-minute cold/physical gates (79.23/77.94-s drains); canonical service restoration passes; W94/W97 remain open. The same note
+passes native/direct functional gates but fails the direct 180-second drain deadline; extra quiescent recovery empties all four stores. The deployed fragment-budget build (`85fb3a4b`) passes native/direct functional and buffered sustained gates; direct sustained cold bytes pass but its drain deadline fails. All-member inode-fence fanout (`e9ea8ca1`) passes full native/direct functional and both 180-second paced cold/physical gates; both ten-minute cold-byte gates pass but drain deadlines fail; the 20-ms follow-up passes native/direct functional gates and both ten-minute cold/physical gates (79.23/77.94-s drains); canonical service restoration passes; the later [unpaced acceptance](amd-overload-admission-20261011.md) closes the AMD overload/admission gate. W94 integration and W97 receiver feedback remain separate. The same note
 records the completed W95 retained experiment review and its format limits.
 
 ## Storage pressure policy
