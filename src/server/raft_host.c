@@ -8399,13 +8399,17 @@ static struct query_page_session {
     int refresh_error;
 } query_page_sessions[HOST_QUERY_PAGE_SESSIONS];
 static uint64_t query_page_serial;
-static void query_page_clear(struct query_page_session *session)
+/* Detach under admission lock; final disk-generation destruction may unlink
+ * thousands of files and must run after dropping that lock. */
+static struct efs_query_catalog *query_page_clear(struct query_page_session *session)
 {
-    efs_query_catalog_free(session->view.catalog);
+    struct efs_query_catalog *old=session->view.catalog;
     memset(session,0,sizeof(*session));
+    return old;
 }
 static void query_page_sweep(int force)
 {
+    struct efs_query_catalog *retired[HOST_QUERY_PAGE_SESSIONS];unsigned count=0;
     if (force) pthread_mutex_lock(&query_page_mu);
     else if (pthread_mutex_trylock(&query_page_mu)) return;
     if (force) {
@@ -8420,15 +8424,17 @@ static void query_page_sweep(int force)
     for (unsigned i=0;i<HOST_QUERY_PAGE_SESSIONS;i++) {
         struct query_page_session *session=&query_page_sessions[i];
         if (!session->busy && session->token &&
-            (force || query_export_expired(now,session->touched,session->born))) query_page_clear(session);
+            (force || query_export_expired(now,session->touched,session->born))) retired[count++]=query_page_clear(session);
     }
     pthread_mutex_unlock(&query_page_mu);
+    for(unsigned i=0;i<count;i++)efs_query_catalog_free(retired[i]);
 }
 /* Return an exclusively reserved stream, including repeated first-page opens
  * for the same immutable virtual inode. Tokens are never shared across callers. */
 static int query_page_acquire(const struct efs_msg_query_snapshot_v4 *req,
                               struct query_page_session **out,int *created)
 {
+    struct efs_query_catalog *retired[HOST_QUERY_PAGE_SESSIONS];unsigned count=0;
     struct efs_msg_query_snapshot_v4 identity=*req;
     identity.token=identity.cursor=0;identity.limit=0;
     *out=NULL;*created=0;
@@ -8437,7 +8443,7 @@ static int query_page_acquire(const struct efs_msg_query_snapshot_v4 *req,
     struct query_page_session *empty=NULL,*session=NULL;
     for (unsigned i=0;i<HOST_QUERY_PAGE_SESSIONS;i++) {
         struct query_page_session *p=&query_page_sessions[i];
-        if (!p->busy && p->token && query_export_expired(now,p->touched,p->born)) query_page_clear(p);
+        if (!p->busy && p->token && query_export_expired(now,p->touched,p->born)) retired[count++]=query_page_clear(p);
         if (!p->token) { if (!empty) empty=p;continue; }
         if (req->token ? p->token==req->token : !memcmp(&identity,&p->request,sizeof(identity))) { session=p;break; }
     }
@@ -8458,16 +8464,19 @@ static int query_page_acquire(const struct efs_msg_query_snapshot_v4 *req,
         session->busy=1;session->touched=now;*out=session;
     }
     pthread_mutex_unlock(&query_page_mu);
+    for(unsigned i=0;i<count;i++)efs_query_catalog_free(retired[i]);
     return rc;
 }
 static void query_page_release(struct query_page_session *session,int clear)
 {
     if (!session) return;
     pthread_mutex_lock(&query_page_mu);
-    if (clear) query_page_clear(session);
+    struct efs_query_catalog *retired=NULL;
+    if (clear) retired=query_page_clear(session);
     else { session->touched=query_mono_ms();session->busy=0; }
     pthread_cond_broadcast(&query_page_cv);
     pthread_mutex_unlock(&query_page_mu);
+    efs_query_catalog_free(retired);
 }
 static int host_query_cancel(void *ctx)
 {
@@ -8669,6 +8678,7 @@ static void *host_query_thread(void *ctx)
         if(rc && candidate){efs_query_catalog_free(candidate);candidate=NULL;}
         h->query_cancel_checks=0; /* Always enforce the deadline before publication. */
         if (!rc && host_query_cancel(h)) { efs_query_catalog_free(candidate);candidate=NULL;rc=EFS_ERR_BUSY; }
+        struct efs_query_catalog *retired=NULL;
         pthread_rwlock_wrlock(&h->query_lock);
         h->query_error=rc;failed=rc!=EFS_OK;
         /* A failed disk build can itself exceed the retry interval. Start
@@ -8699,11 +8709,13 @@ static void *host_query_thread(void *ctx)
                 (unsigned long long)view.build_ms,root_rc,(unsigned long long)root.tree_files,
                 (unsigned long long)root.tree_dirs,(unsigned long long)root.tree_bytes);
             memcpy(published,revisions,sizeof(published));first_dirty=0;
-            /* query_lock drains readers before retirement; one builder bounds
-             * simultaneous old/candidate generations to two per host. */
-            efs_query_catalog_free(old);
+            /* The write lock drained borrowed readers. Retained page pins
+             * hold their own references. Drop the publisher reference after
+             * unlocking; finish destruction before building another candidate. */
+            retired=old;
         }
         pthread_rwlock_unlock(&h->query_lock);
+        efs_query_catalog_free(retired);
     }
     if(disk_lease>=0)close(disk_lease);
     return NULL;

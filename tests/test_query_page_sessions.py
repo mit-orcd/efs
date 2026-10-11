@@ -20,8 +20,13 @@ static uint64_t clock_ms=1000;
 static uint64_t query_mono_ms(void){return clock_ms;}
 static uint64_t now_ns(void){return 567890;}
 static int query_export_expired(uint64_t now,uint64_t touched,uint64_t born){return now-touched>60000||now-born>3600000;}
-static void efs_query_catalog_free(struct efs_query_catalog *c){if(c)assert(c->refs-->0);}
+static void efs_query_catalog_free(struct efs_query_catalog *c);
 ''' + s[a:b] + r'''
+static void efs_query_catalog_free(struct efs_query_catalog *c){
+ /* Last-reference destruction must never hold stream admission/lifetime lock. */
+ assert(!pthread_mutex_trylock(&query_page_mu));pthread_mutex_unlock(&query_page_mu);
+ if(c)assert(c->refs-->0);
+}
 static struct efs_msg_query_snapshot_v4 req={.base={.uid=100,.gid=100,.root=1},.limit=1};
 static void *independent(void *unused){(void)unused;struct efs_msg_query_snapshot_v4 r=req;r.nonce=2;struct query_page_session *p;int created;assert(!query_page_acquire(&r,&p,&created)&&created);query_page_release(p,1);return NULL;}
 int main(void){
