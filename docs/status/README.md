@@ -60,7 +60,7 @@ in the larger matched read check. Both NUC mounts are restored on the repaired
 build with default settings. Tested tuning remains opt-in; W53/W94/W97 remain separate.
 
 
-[Oct 10 W93 checkpoint cadence](w93-checkpoint-cadence-20261010.md) records
+[Oct 10 W93 checkpoint cadence](../archive/status-20261011/w93-checkpoint-cadence-20261010.md) records
 all-branch integration, failed-marker immediate retry, bounded checkpoint
 coalescing, original/repeated NUC functional gates and private retained-marker
 crash replay. The 10 ms default remains; performance and remaining recovery

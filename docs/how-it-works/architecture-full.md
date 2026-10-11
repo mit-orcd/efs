@@ -1531,7 +1531,7 @@ in the larger matched read check. Both NUC mounts are restored on the repaired
 build with default settings. Tested tuning remains opt-in; W53/W94/W97 remain separate.
 
 
-[Oct 10 W93 checkpoint cadence](../status/w93-checkpoint-cadence-20261010.md) records
+[Oct 10 W93 checkpoint cadence](../archive/status-20261011/w93-checkpoint-cadence-20261010.md) records
 all-branch integration, failed-marker immediate retry, bounded checkpoint
 coalescing, original/repeated NUC functional gates and private retained-marker
 crash replay. The 10 ms default remains; performance and remaining recovery
@@ -4871,7 +4871,7 @@ not adopted; this is a safety blocker. Check dual-host receipt visibility and
 exact-image retry; Append-only controls at 10 and 100 ms both pass; these omit the preceding
 sync/crash cases of the failing full batch. Cause/cadence attribution remains
 open; retain the failure before any adoption.
-[Evidence, limits and restoration](../status/w93-checkpoint-cadence-20261010.md).
+[Evidence, limits and restoration](../archive/status-20261011/w93-checkpoint-cadence-20261010.md).
 
 **Oct 8 New York / Oct 9 UTC RXE acceptance:** integrated source `f6233987`
 passes direct and buffered RXE core POSIX 212/212, peer 64/64, sync/failure
@@ -6284,7 +6284,7 @@ rates are 66.26/77.05 files/s, common-180 10/100/10 are 94.89/104.06/92.69.
 However the required ACK-bearing append replay gate fails (31/32 wrong offsets);
 longer cadence remains disabled. Remaining fault gates are not run after failure.
 Both default mounts restore and 384 exact cold payload checks pass. Details are in
-[the Oct 10 checkpoint report](../status/w93-checkpoint-cadence-20261010.md).
+[the Oct 10 checkpoint report](../archive/status-20261011/w93-checkpoint-cadence-20261010.md).
 This is an experiment, not W93/W97 closure or a new runtime default.
 
 
@@ -6319,7 +6319,7 @@ is absent in the enabled interval. This is not causal or repeated acceptance.
 Both loaders drain, replicas cover the leader cut, and 256 first/last exact
 cold payload checks and private sync/append/shutdown/WAL-tail/GC fault gates
 pass; experiments and diagnostics are disabled after restoration. Evidence is in
-[overlap results](../status/w93-overlap-suffix-20261009.md).
+[overlap results](../archive/status-20261011/w93-overlap-suffix-20261009.md).
 Broader NUC sustained-performance acceptance remains open: settle background
 queues, reverse/repeat the pair, and isolate group 0 read tails before default
 enablement. Earlier AMD acceptance does not prove this extension or a device ceiling.
@@ -6609,7 +6609,7 @@ low-load XFS overwrite+fdatasync probe with EFS stopped measures NVMe 1.12 ms
 versus SATA 85.9 microseconds at QD1. This localizes persistence costs but does
 not identify the drive/filesystem mechanism or prove a software/hardware ceiling.
 Checkpoint-tail experiment gains throughput but fails append replay acceptance;
-keep the default and W97 open. [Report](../status/w93-checkpoint-cadence-20261010.md).
+keep the default and W97 open. [Report](../archive/status-20261011/w93-checkpoint-cadence-20261010.md).
 
 **Oct 9 completed-credit admission candidate:** `ea23775b` adds default-off
 retirement after KV release and before the marker tail, preserving queue caps,
