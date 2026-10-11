@@ -1,0 +1,63 @@
+{
+  "mode": "written-ring",
+  "seconds": 480,
+  "writers": [
+    {
+      "writer": 2,
+      "count": 104238,
+      "seconds": 480.00224505001097,
+      "operations_s": 217.1614842950152,
+      "sync_mean_ms": 4.5169013026823235,
+      "sync_p50_us": 3829,
+      "sync_p95_us": 7057,
+      "sync_p99_us": 9877,
+      "histogram_overflow_ge100ms": 0,
+      "sync_max_ms": 45.579119,
+      "rotations": 0,
+      "rotation_seconds": 0.0,
+      "reopened_exact_blocks": 4096,
+      "logical_bytes": 268435456,
+      "allocated_bytes": 268435456
+    },
+    {
+      "writer": 0,
+      "count": 104835,
+      "seconds": 480.00525079198997,
+      "operations_s": 218.4038608474102,
+      "sync_mean_ms": 4.491724749177279,
+      "sync_p50_us": 3798,
+      "sync_p95_us": 7049,
+      "sync_p99_us": 9880,
+      "histogram_overflow_ge100ms": 0,
+      "sync_max_ms": 47.121422,
+      "rotations": 0,
+      "rotation_seconds": 0.0,
+      "reopened_exact_blocks": 4096,
+      "logical_bytes": 268435456,
+      "allocated_bytes": 268435456
+    },
+    {
+      "writer": 1,
+      "count": 104538,
+      "seconds": 480.00612795801135,
+      "operations_s": 217.78471963413034,
+      "sync_mean_ms": 4.50392213686889,
+      "sync_p50_us": 3821,
+      "sync_p95_us": 7052,
+      "sync_p99_us": 9872,
+      "histogram_overflow_ge100ms": 0,
+      "sync_max_ms": 47.347643,
+      "rotations": 0,
+      "rotation_seconds": 0.0,
+      "reopened_exact_blocks": 4096,
+      "logical_bytes": 268435456,
+      "allocated_bytes": 268435456
+    }
+  ],
+  "total_operations_s": 653.3500647765558,
+  "verified": true,
+  "body": "64 KiB SHAKE-derived tail plus unique 8-byte counter",
+  "body_sha256": "c5e629a0a6ce3d3518c2e201ba186774ecad1b05a03b1e499b1a7582fe7deda3",
+  "cpu_user_seconds": 13.66,
+  "cpu_system_seconds": 25.14
+}

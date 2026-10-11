@@ -54,7 +54,10 @@ file and a SHAKE-derived full-length body with an eight-byte counter. Growing
 mode truncates and durably resets at the boundary; ring mode
 preallocates before timing and overwrites slots. It measures allocation/rotation
 costs; it neither implements an alternative EFS storage engine nor establishes
-NAND-cache occupancy. Full current files are reopened and checked exactly,
+NAND-cache occupancy. These controls use ordinary buffered file I/O plus
+fdatasync, not O_DIRECT. Their64KiB body relates to a physical fragment, but
+they do not model fragment/checksum files, parent-directory barriers, metadata
+publication or the complete EFS workload. Full current files are reopened and checked exactly,
 without claiming kernel-cold or power-loss coverage. Sync histograms overflow
 at 100 ms, retain the overflow count and exact maximum. Passive counters retain
 host contention and process CPU rather than assuming zero software overhead.
@@ -271,3 +274,29 @@ These observations strengthen W95's case for an independently specified,
 durable packing/reuse experiment. They do not permit skipping file/parent
 barriers, replacing checksums/ownership/publication, migrating installed stores
 or calling W97 fixed. Fully written-ring controls are the final follow-up.
+
+## Fully written NVMe ring — first completed cell
+
+With every extent already written and fsynced before timing, aggregate rate
+still falls1372.53→450.18ops/s. Per-writer sync means rise~2.12→~6.56ms.
+Exact reopened checks pass for all12288 current blocks. Physical counter
+windows around those complete30s writer windows also change:
+
+| Block counter | First window | Late window |
+| --- | ---: | ---: |
+| Mean write request elapsed | 1.031ms | 3.212ms |
+| Mean flush request elapsed | 1.288ms | 3.490ms |
+| Host-written MiB in window | 2574.68 | 844.42 |
+
+Edges use the nearest5s host samples; elapsed windows are30.005/30.006s.
+Block counters include queue time and other host I/O. They are not raw NAND
+latency. This excludes initial allocation/conversion as the entire slowdown
+explanation and demonstrates a lower block-path latency increase too, without
+distinguishing firmware cache, device garbage collection, power policy or
+kernel/block scheduling. The reversed NVMe repeat remains in progress.
+
+Next W97 discrimination should record block dispatch/completion and drive
+health during matched idle/active repeats, then actual direct-I/O fragment and
+ancestor-barrier geometry. W95 can test a specified bounded indexed-packing
+candidate at equal durability. Neither an unsupported format change nor cache/
+power setting changes are adopted from these file controls.
