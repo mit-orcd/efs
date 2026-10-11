@@ -502,6 +502,8 @@ test: all
 	python3 tests/test_command_policy_mount.py
 	python3 tests/test_efs_commands.py
 	python3 tests/test_namespace_bounds.py
+	python3 tests/test_namespace_fixture.py
+	python3 tests/test_gc_fixture_drain.py
 	python3 tests/test_rename_budget.py
 	./tests/test_namespace_session
 	./tests/test_session
