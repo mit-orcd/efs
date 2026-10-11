@@ -2111,7 +2111,9 @@ and skipped files-engine usage accounting. STATUS now carries deduplicated
 filesystem capacity/free bytes, shared by FUSE and management; the portal accepts
 TiB. Native-RDMA unlimited-store and guarded-session reclamation gates pass.
 See [capacity and test evidence](../status/orcd-capacity-tests-20261011.md).
-Live deployment confirmation is tracked there; the other W42 gates remain open.
+Live ORCD deployment confirms nonzero matching capacity, preservation of the
+100 GiB file samples, 1526 live POSIX passes and 264 peer passes. Other W42
+protection-debt/repair gates remain open.
 
 
 **Gate follow-up (Oct 7):** NUC full-node gate: one member limited to 64 KiB, 32 MiB write, cold remount bytes, physical deletion and restart all pass. This does not prove three-fragment protection debt/repair or the named 19810 capacity gate. See [gate ledger](../status/gate-30-rounds-20261007.md).

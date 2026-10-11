@@ -54,9 +54,30 @@ The failover fixture now keeps its original overall recovery budget while
 allowing EFS's 30-second I/O budget and recording unsuccessful attempts. The final
 policy RPC previously used hardcoded UID 1000, which correctly fails against
 ORCD owner-only directories; it now tests the real mount owner and retains an
-explicit outsider denial oracle. Its full rerun is pending.
+explicit outsider denial oracle. The full corrected query/publication suite passes, including both publishers
+and the outsider-denial check.
 
 Capacity commit: `15975da0`. Pinned FINISH retry: `9b232ffd`. Fixture corrections:
-`b6ebf194`. The live deployment and existing-file post-restart comparison remain
-pending. Private same-host fixture results do not prove distributed hardware
+`b6ebf194`. The live rollout completed on all four storage hosts and seven clients.
+Daemons/FUSE are `85944ad33f2c`; a compatible management-only reporting update
+is `8117b4f9` (recorded separately in `.orcd-test-mgmt-revision`). All processes
+use native `mlx5_2` RDMA; daemons use direct I/O and `.efs` remains enabled.
+The existing 100 GiB file retained size, owner/mode and all four sampled blocks.
+No complete-file hash or hardware power-loss claim is made.
+
+Live `df` after rollout: 122901870542848 total bytes, 293616047616 used,
+122608254495232 available (human output: 112T / 274G / 112T). Values vary with
+workload; used space includes filesystem overhead and external consumption.
+Management now exposes exact usable bytes, so the portal does not reconstruct
+large totals from rounded TiB. The portal API has positive, internally
+consistent capacity/free/used values with source `server_filesystems`.
+Source-version comparison retains commit/branch/dirty identity while excluding
+build host/time, correcting the false mismatch from separately compiled hosts.
+
+Live full POSIX on seven clients: 1526 PASS, 0 FAIL, 7 unsupported mmap skips.
+Distributed two-client verification: four physical pairs, 264/264 PASS. Full `make test`,
+private guarded native-RDMA/GC, unlimited-quota GC, ten migrated virtual gates,
+query failover and cold policy recovery all pass. Deployment snapshots retain
+source, documentation and cited evidence without shipping historical run logs.
+ Private same-host fixture results do not prove distributed hardware
 power-loss behavior. Installed ORCD stores are never reformatted.
