@@ -14,6 +14,7 @@ import re
 import select
 import socket
 import subprocess
+import struct
 import tempfile
 import threading
 import time
@@ -92,6 +93,38 @@ def mgmt(node, command, *args):
                             capture_output=True, text=True, timeout=20)
     return result.stdout+result.stderr
 
+def lost_mkfs_reply(node, command, work):
+    """Consume a successful real reply, then close without delivering it."""
+    evidence, errors = [], []
+    def exact(sock, count):
+        out=b''
+        while len(out)<count:
+            data=sock.recv(count-len(out))
+            assert data,'short management frame'
+            out+=data
+        return out
+    with socket.socket() as listener:
+        listener.bind(('127.0.0.1',0));listener.listen();listener.settimeout(10)
+        def drop():
+            try:
+                with listener.accept()[0] as client,socket.create_connection(('127.0.0.1',base+node),5) as server:
+                    client.settimeout(10);server.settimeout(10)
+                    header=exact(client,4);length=struct.unpack('>I',header)[0]
+                    assert length==1
+                    request=exact(client,length);assert request==bytes([95])
+                    server.sendall(header+request)
+                    reply_length=struct.unpack('>I',exact(server,4))[0]
+                    assert 5<=reply_length<=128
+                    reply=exact(server,reply_length)
+                    assert reply[0]==96 and struct.unpack('<i',reply[1:5])[0]==0,reply.hex()
+                    evidence.append(dict(request_hex=request.hex(),successful_reply_hex=reply.hex(),delivered_bytes=0))
+            except BaseException as error:errors.append(repr(error))
+        worker=threading.Thread(target=drop);worker.start()
+        result=subprocess.run([str(source/'efs-mgmt'),command,f'127.0.0.1:{listener.getsockname()[1]}'],capture_output=True,text=True,timeout=20)
+        worker.join(12);assert not worker.is_alive() and not errors,(errors,evidence)
+    assert evidence and result.returncode!=0 and 'Failed to raft-mkfs' in result.stderr,result
+    (work/(command+'-lost-reply.json')).write_text(json.dumps(dict(exchange=evidence,exit=result.returncode,stdout=result.stdout,stderr=result.stderr),indent=2))
+
 def wait(fn, label):
     end = time.monotonic()+60
     while time.monotonic() < end:
@@ -157,13 +190,14 @@ try:
     assert 'status=0' in mgmt(old,'raft-lookup',1,'before-rename')
     first_salt = re.search(r'salt=(\d+)',mgmt(old,'raft-status')).group(1)
     for command in ('mkfs','raft-mkfs'):
+        lost_mkfs_reply(old,command,work)
         repeated = mgmt(old,command,'compatibility-name')
         assert 'rc=0' in repeated and 'is ignored' in repeated,repeated
         assert re.search(r'salt=(\d+)',mgmt(old,'raft-status')).group(1)==first_salt
         assert 'status=0' in mgmt(old,'raft-lookup',1,'before-rename')
         malformed = mgmt(old,command,'label','extra')
         assert 'usage:' in malformed.lower() and 'rc=0' not in malformed,malformed
-    print('PASS: both mkfs aliases preserve namespace/salt and explain ignored legacy label',flush=True)
+    print('PASS: both mkfs aliases recover consumed successful replies, preserve namespace/salt and explain ignored legacy label',flush=True)
     before = mgmt(old,'raft-getattr',1)
     assert 'status=0' in before and 'mode=040755' in before, before
     session_uuid = '00000000000000000000000000000002' # odd FNV shard, group 0

@@ -24,6 +24,11 @@ with tempfile.TemporaryDirectory(prefix='efs-owner-') as work:
     def wrapper():
         subprocess.run(['bash',str(root/'scripts/server.sh'),'stop',str(storage)],check=True,timeout=10)
     try:
+        wrapper() # Absent record must leave both live processes untouched.
+        assert unrelated.poll() is None and daemon.poll() is None
+        dead=subprocess.Popen(['true']);dead.wait(5)
+        pidfile.write_text(str(dead.pid));wrapper()
+        assert unrelated.poll() is None and daemon.poll() is None
         for _ in range(100):
             if module.owns(module.identity(daemon.pid),'storage',str(storage)):break
             time.sleep(.01)
