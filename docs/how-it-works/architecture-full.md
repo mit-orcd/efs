@@ -1552,8 +1552,8 @@ acceptance are recorded separately from implementation.
 
 [W93–W96: NUC profiling evidence and next experiments](../status/tiny-file-performance-plan-20261008.md)
 register broader Raft group commit, atomic CREATE/open lease, tiny-file data
-persistence/packing, and KV WAL preallocation. W93 is now closed by the final acceptance above; W94–W96 retain their
-separate remaining implementation/acceptance obligations. W95 refines existing P4.1,
+persistence/packing, and KV WAL preallocation. W93 is closed by its final acceptance, and W96 closes after the Oct11 isolated
+NUC gate above. W94/W95 retain separate implementation/acceptance obligations. W95 refines existing P4.1,
 so the earlier grouped count below is retained as a dated baseline rather than
 recomputed by blindly adding four. W90–W92 keep their existing scopes.
 
@@ -1813,7 +1813,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | scratch-expiry | **W90** · scratch-file expiry metadata and safe lifecycle | feature | design accepted D33; opt-in fixed deadlines and safe lifecycle; implementation/gates open | [work item](#w90) · [design](../status/scratch-expiry-interface.md) |
 | virtual-commands | **W91** · directory-local virtual `.efs/` command interface | usability feature | design accepted D34; `.efs/` commands and bounded query paths; implementation/compatibility gates remain | [work item](#w91) · [design](../status/scratch-expiry-interface.md) |
 | tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | partial — tiny/durable/cold/crash/churn gates pass; indexed packing and P4.1 decision remain | [work item](#w95) |
-| tiny-kv | **W96** · bounded KV WAL preallocation | performance experiment | partial — recovery/reservation/fault and final guard cold gates pass; isolated NUC acceptance owed | [work item](#w96) |
+| tiny-kv | **W96** · bounded KV WAL preallocation | performance experiment | Closed Oct11: isolated SATA/NVMe repeated matrix, exact replay/reset/reservation, full native/POSIX/peer/fault/cold and WAL sanitizer gates pass; conditional benefit and SATA tails retained | [closure](../status/devel-nuc-closure-20261010.md) |
 | decisions | **D28** client-death loss policy · **D29** durable publication receipts · **D30** bounded admission/pacing | accepted design | accepted Oct 8: salvage deferred; D29/W88 implementation first, then D30/W23/W89; implementation and acceptance remain open | [contracts and gates](#d28d30--accepted-oct-8-2026) |
 | op1 | **W70** · shrink-quota falsely reports background migration | operator observability bug | Closed Oct11: current NUC direct/buffered × one/two-root accepted/refused reductions, truthful running quota and exact retained bytes pass; no migration/persistence claim | [closure](../status/devel-nuc-closure-20261010.md) |
 
@@ -2065,9 +2065,12 @@ measurement work and decisions. This handoff adds no deployment authorization.
 
 ### Operator review findings
 
-[W78–W80](#source-findings-awaiting-triage) record conditional stale
-PID-file signaling, misleading mkfs name syntax and zero-filled `efs-query`
-statistics. These are source findings with gates, not a new execution order.
+[W78–W80](../status/devel-nuc-closure-20261010.md) close on Oct11 current-code NUC
+operator acceptance: actual stale-PID startup/stop, both mkfs aliases and
+consumed-reply retry, and explicit retired-query refusal without false totals.
+W70's running-quota reporting and W96's isolated allocation/recovery gates also
+close in that report. W97 remains open; neither raw drive controls nor these
+operator gates establish sustained EFS throughput or a hardware ceiling.
 Use the corrected operations guide; query zeros are not GC completion evidence.
 W81 separately records the missing automatic directory pressure trigger; its
 size-based admission/migrator exists and the pressure policy still needs review.
@@ -6572,7 +6575,7 @@ WAL ASan/UBSan and normal-binary Valgrind pass. Hardware power loss and W97's
 sustained drive slowdown remain separate.
 [Acceptance and limits](../status/devel-nuc-closure-20261010.md).
 
-**Implementation update (Oct 8):** EOF-tail repair, detectable interior-damage refusal, sticky failures and bounded reservation are tested. The final guard passes full Linux/live cold/POSIX/peer/GC gates. Quiet NUC two-device performance acceptance remains open while an unrelated million-file generator runs.
+**Historical implementation update (Oct 8):** EOF-tail repair, detectable interior-damage refusal, sticky failures and bounded reservation are tested. The final guard passes full Linux/live cold/POSIX/peer/GC gates. Quiet NUC two-device performance acceptance remains open while an unrelated million-file generator runs.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
 **Pre-merge devel review (`cde67dca`, Oct 8): recovery correctness comes first.** Neither

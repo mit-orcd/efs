@@ -8,12 +8,18 @@ between private fixtures. No physical power-loss or distributed-RDMA proof.
 
 ## Current state
 
+**Oct11 NUC completion:** W96's deferred isolated two-device gate now passes,
+with sixteen repeated production-WAL cells, exact replay, full native and both
+TCP I/O modes' POSIX/peer/fault/cold acceptance. Preserve its SATA tail tradeoff
+and software-only boundary; [current closure](devel-nuc-closure-20261010.md).
+Earlier dated statements below describe the gates outstanding at that time.
+
 | Item | Completed | Still open |
 |---|---|---|
 | W93 | Bounded batching, durability/fault/cold/full Linux/live gates and balanced long controls | Preserve regression coverage; W53 close tails remain separate |
 | W94 | Atomic server lease, rejected replies, pending ownership/atomic CREATE, bounded sequenced-edge and cold tests | Client ownership/recovery integration, production runtime sessions and activation gates |
 | W95 | Tiny/durable timing, independent indexed recovery/GC model, finite-create comparisons and production churn | P4.1 production-layout selection/migration; no format activation |
-| W96 | Tail/interior-damage recovery, reservation/fallback/fault and final full live gates | AMD covered acceptance passed; historical two-device comparison deferred |
+| W96 | Tail/interior-damage recovery, reservation/fallback/fault, full live and isolated NUC two-device acceptance | Closed Oct11; preserve regressions, conditional performance benefit and separate hardware-power-loss obligations |
 
 ## W96 recovery prerequisite
 
