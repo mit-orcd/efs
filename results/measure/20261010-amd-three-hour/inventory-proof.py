@@ -15,6 +15,7 @@ for case in sorted(a.root.iterdir()):
     roots=json.loads(manifest.read_text())['real_roots'];assert len(roots)==4
     inventories=[]
     for root in roots:
+        assert Path(root).is_dir() and (Path(root)/'data').is_dir(),('missing private store',root)
         files=[str(f) for f in (Path(root)/'data/exports/1').rglob('*') if f.is_file()]
         inventories.append(dict(root=root,physical_files=len(files)))
         assert not files,(case,root,files[:10])

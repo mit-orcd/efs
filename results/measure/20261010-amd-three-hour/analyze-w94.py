@@ -19,7 +19,11 @@ for repeat in range(1,5):
             inventory=inventories[folder.name]
             assert inventory['result_sha256']==hashlib.sha256(raw).hexdigest()
             assert len(inventory['inventories'])==4 and all(entry['physical_files']==0 for entry in inventory['inventories'])
-            manifest=json.loads((paths[0].parent/'manifest.json').read_text())
+            manifest_raw=(paths[0].parent/'manifest.json').read_bytes()
+            assert inventory['manifest_sha256']==hashlib.sha256(manifest_raw).hexdigest()
+            manifest=json.loads(manifest_raw)
+            assert manifest['real_roots']==[entry['root'] for entry in inventory['inventories']]
+            assert len(set(manifest['real_roots']))==4
             assert manifest['mode']==mode and manifest['gates']['transport']=='tcp'
             assert manifest['gates']['tiny_create_only'] and manifest['gates']['tiny_mixed_files']==8192
             assert manifest['gates']['storage_roots']==1 and manifest['port']==24190
@@ -30,10 +34,14 @@ for repeat in range(1,5):
             assert record.get('cold_verification_workers',1)==(1 if repeat==1 and mode=='direct' and variant=='separate' else 8)
             assert 'exact cold bytes and reclaim PASS' in (folder/'run.log').read_text()
             cases.append(dict(repeat=repeat,mode=mode,variant=variant,files_s=8192/record['wall_s'],
-                result=str(paths[0]),sha256=hashlib.sha256(raw).hexdigest(),**record))
+                result=str(paths[0]),sha256=hashlib.sha256(raw).hexdigest(),binary_sha256=manifest['binary_sha256'],**record))
 if not a.partial:
     assert not missing,missing
     for name in ('round.exit','restore.exit'):assert (a.root/name).read_text().strip()=='0',name
+# Each variant must retain its frozen executables through every repeat.
+for variant in ('separate','combined'):
+    identities={json.dumps(row['binary_sha256'],sort_keys=True) for row in cases if row['variant']==variant}
+    assert len(identities)<=1,('executable changed during A/B',variant,identities)
 summary=[]
 for mode in ('direct','buffered'):
     for variant in ('separate','combined'):

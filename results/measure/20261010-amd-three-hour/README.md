@@ -52,8 +52,9 @@ and immutable identities for all 64 control files; cold reads add the same
 OPEN/CLOSE pair to both paths. Text logs omit successful deferred edges.
 
 `analyze-w94.py LOCAL_AB_EVIDENCE [--partial]` verifies case markers, payload,
-mode/transport, exact cold checks, independent physical-inventory proof and
-restoration before summarizing rates and
+mode/transport, exact cold checks, independent physical-inventory proof,
+manifest identity, four existing private stores, frozen per-variant executable
+hashes and restoration before summarizing rates and
 latency. Percentiles are medians of per-case percentiles, not pooled samples.
 Finite storms do not establish sustained-service or universal RSS bounds.
 
