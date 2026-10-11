@@ -491,3 +491,8 @@ W95 packing and W106 broader hardware acceptance remain separate work.
 prioritize the 1,024-change query fallback; distinguish compaction correlation,
 GC partial-progress BUSY and TCP duplicate probes from established failures.
 W109/W110 remain open on orcd-test.
+
+[Latest ORCD branch integration and rollout](orcd-merged-rollout-20261011.md):
+all current development branches merged and `c52a4643` deployed to eleven hosts.
+Full Linux units and retained file samples pass; loaded POSIX/query gates remain
+failed, and the fresh tiny-file benchmark is running.

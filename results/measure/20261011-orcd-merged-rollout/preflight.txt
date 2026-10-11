@@ -1,0 +1,18 @@
+Sun Oct 11 12:39:40 PM UTC 2026
+1381139 python /home/erbmi1/efs-runs/tiny_files.py --max-depth 8 --max-files-per-folder 1000 --max-files 10000000 --workers 16 /tmp/efs-mount/tiny-files3
+There is a screen on:
+	1334126.tiny-files	(Detached)
+1 Socket in /run/screen/S-erbmi1.
+[erbmi1@fcstor007 ~]$
+[erbmi1@fcstor007 ~]$ mount |grep fuse
+fusectl on /sys/fs/fuse/connections type fusectl (rw,nosuid,nodev,noexec,relatime)
+efs-fuse on /tmp/efs-mount type fuse.efs-fuse (rw,nosuid,nodev,relatime,user_id=246111,group_id=246111)
+[erbmi1@fcstor007 ~]$
+[erbmi1@fcstor007 ~]$
+[erbmi1@fcstor007 ~]$ python ~/efs-runs/tiny_files.py --max-depth 8 --max-files-per-folder 1000 --max-files 10000000 --workers 16 /tmp/efs-mount/tiny-files3
+9,415,687/10,000,000 files (94.2%), 29486.7 s, 319 files/s
+commands-policy rc=0 version=2 mask=3 leader_hint=0
+node 1 root=1 salt=5787332502847942219 groups=2
+  group 0 hosted=1 role=LEADER leader=0 term=122 commit=26354295 applied=26354295 voters=0x7 joint=0
+  group 2 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0xe joint=0
+{"path": "/tmp/efs-mount/001/dat01", "size": 107374182400, "uid": 246111, "gid": 246111, "mode": 33188, "samples": [[0, "0f0ede5f284b1b6bc37f738240ab1242f4bc2bcc01964562e31537da1b0bc07e"], [65536, "6138a25640c5be435061a821af66fe71738c2430828fa432bea3aa82510485a4"], [53687091200, "0f0ede5f284b1b6bc37f738240ab1242f4bc2bcc01964562e31537da1b0bc07e"], [107374116864, "8593ff387887abee8f6b464b804465ca53337457537c2fe508f68e1fc60a6c35"]]}

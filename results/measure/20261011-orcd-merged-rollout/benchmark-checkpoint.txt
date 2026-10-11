@@ -1,0 +1,11 @@
+Sun Oct 11 12:58:22 PM UTC 2026
+1564996 Sl   python -u /home/erbmi1/orcd/scratch/efs/orcd-test/tiny_files-merged-c52a464391a6.py --max-depth 8 --max-files-per-folder 1000 --max-files 10000000 --workers 16 /tmp/efs-mount/tiny-files-merged-c52a464391a6
+.8%), 263.0 s, 320 files/s
+84,463/10,000,000 files (0.8%), 264.0 s, 320 files/s
+84,527/10,000,000 files (0.8%), 265.0 s, 319 files/s
+84,783/10,000,000 files (0.8%), 266.0 s, 319 files/s
+85,103/10,000,000 files (0.9%), 267.0 s, 319 files/s
+85,560/10,000,000 files (0.9%), 268.0 s, 319 files/s
+85,599/10,000,000 files (0.9%), 269.0 s, 318 files/s
+85,663/10,000,000 files (0.9%), 270.0 s, 317 files/s
+85,963/10,000,000 files (0.9%), 271.0 s, 317 files/s
