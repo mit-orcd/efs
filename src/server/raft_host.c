@@ -175,6 +175,7 @@ struct host_outbox {
      * thread only; reconnected on the next message after an error. */
     struct efs_conn *conn;
     struct efs_raft_flow_sender flow;
+    unsigned flow_next; /* bounded turns: critical, group-0/group-2 probes, data */
     uint64_t probe_sent[HOST_NGROUPS], probe_read[HOST_NGROUPS];
     uint8_t probe_header[HOST_NGROUPS][EFS_WIRE_RAFT_HDR_LEN];
     unsigned probe_valid[HOST_NGROUPS], pending_entries[HOST_NGROUPS];
@@ -746,44 +747,59 @@ static void host_sender_take(struct host_outbox *tx, int priority, int index,
 static int host_sender_pick(struct host_outbox *tx, uint8_t **bufs,
                              uint32_t *lens, int depth, uint64_t now)
 {
-    int n=0,i,gi,control_depth=depth;
+    int n=0;
+    unsigned ordinary=0,window=tx->flow.window ? tx->flow.window : 1;
     if (!tx->h->flow_enabled || !tx->flow.active) {
         while (n<depth && tx->npri) { host_sender_take(tx,1,0,&bufs[n],&lens[n]); n++; }
         while (n<depth && tx->nent) { host_sender_take(tx,0,0,&bufs[n],&lens[n]); n++; }
         return n;
     }
-    /* One due data slot cannot be starved by a steady stream of probes.
-     * Critical frames retain FIFO; at depth one they get the next loop. */
-    if (now>=tx->flow.deadline_us && tx->nent) control_depth=depth-1;
-    for (i=0;i<tx->npri && n<control_depth;) {
-        if (!efs_raft_flow_critical(tx->pri[i].buf,tx->pri[i].len)) { i++; continue; }
-        host_sender_take(tx,1,i,&bufs[n],&lens[n]); n++; BO_COUNT(BO_FLOW_CONTROL);
-    }
-    for (gi=0;gi<HOST_NGROUPS && n<control_depth;gi++) {
-        uint64_t read;
-        if (!tx->probe_valid[gi]) continue;
-        read=efs_raft_flow_rd64(tx->probe_header[gi]+28);
-        if (!efs_raft_flow_probe_due(tx->probe_sent[gi],tx->probe_read[gi],now,read)) continue;
-        bufs[n]=malloc(EFS_WIRE_RAFT_HDR_LEN);
-        if (!bufs[n]) continue;
-        /* Use the newest queued/current-term template. A stale template
-         * retains its old term/boot/read context and earns no new authority. */
-        efs_raft_flow_probe(bufs[n],tx->probe_header[gi]);
-        lens[n]=EFS_WIRE_RAFT_HDR_LEN; n++;
-        tx->probe_sent[gi]=now; tx->probe_read[gi]=read; BO_COUNT(BO_FLOW_PROBE);
-    }
-    if (now>=tx->flow.deadline_us) {
-        unsigned ordinary=0,window=tx->flow.window ? tx->flow.window : 1;
-        /* Replies/votes and bounded read/heartbeat escapes went first.
-         * Remaining commit probes must not starve entry catch-up. */
-        while (n<depth && ordinary<window && tx->nent) {
-            host_sender_take(tx,0,0,&bufs[n],&lens[n]); n++; ordinary++;
+    /* Each eligible class gets a turn within four selections, even when a
+     * slow one-slot round trip makes data due on every iteration. Keep FIFO
+     * within the entry lane and among critical frames. Probe templates retain
+     * their exact term/boot/read context; transport admission earns no ACK. */
+    while (n<depth) {
+        unsigned tried;
+        for (tried=0;tried<HOST_NGROUPS+2u;tried++) {
+            unsigned kind=(tx->flow_next+tried)%(HOST_NGROUPS+2u);
+            if (kind==0) {
+                int i;
+                for (i=0;i<tx->npri;i++)
+                    if (efs_raft_flow_critical(tx->pri[i].buf,tx->pri[i].len)) break;
+                if (i==tx->npri) continue;
+                host_sender_take(tx,1,i,&bufs[n],&lens[n]);
+                BO_COUNT(BO_FLOW_CONTROL);
+            } else if (kind<=HOST_NGROUPS) {
+                unsigned gi=kind-1;
+                uint64_t read;
+                if (!tx->probe_valid[gi]) continue;
+                read=efs_raft_flow_rd64(tx->probe_header[gi]+28);
+                if (!efs_raft_flow_probe_due(tx->probe_sent[gi],tx->probe_read[gi],now,read)) continue;
+                bufs[n]=malloc(EFS_WIRE_RAFT_HDR_LEN);
+                if (!bufs[n]) continue;
+                efs_raft_flow_probe(bufs[n],tx->probe_header[gi]);
+                lens[n]=EFS_WIRE_RAFT_HDR_LEN;
+                tx->probe_sent[gi]=now; tx->probe_read[gi]=read;
+                BO_COUNT(BO_FLOW_PROBE);
+            } else {
+                if (now<tx->flow.deadline_us || ordinary>=window) continue;
+                if (tx->nent) host_sender_take(tx,0,0,&bufs[n],&lens[n]);
+                else {
+                    int i;
+                    for (i=0;i<tx->npri;i++)
+                        if (!efs_raft_flow_critical(tx->pri[i].buf,tx->pri[i].len)) break;
+                    if (i==tx->npri) continue;
+                    host_sender_take(tx,1,i,&bufs[n],&lens[n]);
+                }
+                ordinary++;
+            }
+            tx->flow_next=(kind+1)%(HOST_NGROUPS+2u);
+            n++;
+            break;
         }
-        while (n<depth && ordinary<window && tx->npri) {
-            host_sender_take(tx,1,0,&bufs[n],&lens[n]); n++; ordinary++;
-        }
-        if (ordinary) tx->flow.deadline_us=now+efs_raft_flow_delay_us(&tx->flow);
+        if (tried==HOST_NGROUPS+2u) break;
     }
+    if (ordinary) tx->flow.deadline_us=now+efs_raft_flow_delay_us(&tx->flow);
     return n;
 }
 

@@ -1540,6 +1540,11 @@ unimplemented; unavailable/refusal tests are not lifecycle acceptance.
 
 ### Tiny-file performance follow-up
 
+[AMD W94/W97 lifecycle and replication-feedback acceptance](../status/amd-feedback-integration-20261011.md)
+is in progress: actual Linux async and two-mode full lifecycle/POSIX/cold gates
+with feedback on, followed by pressure/recovery and repeated comparisons.
+Normal stores and the completed AMD admission closure are retained.
+
 **Scope split — Oct 11:** [W111](../status/w111-nuc-persistence-investigation-20261011.md)
 now owns the NUC durable-write slowdown investigation. **AMD unpaced
 overload/admission is closed** ([accepted deployment](../status/amd-overload-admission-20261011.md));
