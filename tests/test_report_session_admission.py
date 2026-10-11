@@ -24,6 +24,7 @@ struct efs_chunk_rec {uint64_t ino;uint32_t chunk_index;};
 struct efs_raft_host {void *kv;};
 static unsigned calls[64],active,max_active,create_calls,fail_after=99;
 static int existing,refusal,fail_shard=-1;
+static unsigned expected_parallel=1,gate_open;
 static uint32_t efs_kv_inode_shard(uint64_t ino) {return ino==999?64:1;}
 static uint32_t efs_kv_lane_shard(uint64_t ino,uint32_t lane) {(void)ino;return 2+lane;}
 static int efs_session_accept(void *kv,uint32_t shard,const uint8_t *uuid,uint32_t epoch) {
@@ -34,7 +35,10 @@ static int host_namespace_session_admit(struct efs_raft_host *h,uint32_t shard,c
  __atomic_add_fetch(&calls[shard],1,__ATOMIC_RELAXED);
  unsigned n=__atomic_add_fetch(&active,1,__ATOMIC_RELAXED),old;
  do {old=__atomic_load_n(&max_active,__ATOMIC_RELAXED);if(old>=n)break;} while(!__atomic_compare_exchange_n(&max_active,&old,n,0,__ATOMIC_RELAXED,__ATOMIC_RELAXED));
- usleep(10000);__atomic_sub_fetch(&active,1,__ATOMIC_RELAXED);
+ if(n>=expected_parallel)__atomic_store_n(&gate_open,1,__ATOMIC_RELEASE);
+ for(unsigned retry=0;!__atomic_load_n(&gate_open,__ATOMIC_ACQUIRE)&&retry<10000;retry++)usleep(100);
+ assert(__atomic_load_n(&gate_open,__ATOMIC_ACQUIRE));
+ usleep(1000);__atomic_sub_fetch(&active,1,__ATOMIC_RELAXED);
  *hint=3;return (int)shard==fail_shard ? EFS_ERR_STALE : EFS_OK;
 }
 static int tracked_create(pthread_t *thread,const pthread_attr_t *attr,void *(*fn)(void *),void *arg) {
@@ -44,13 +48,13 @@ static int tracked_create(pthread_t *thread,const pthread_attr_t *attr,void *(*f
 #define pthread_create tracked_create
 ''' + s[a:b] + r'''
 #undef pthread_create
-static void reset(void) {memset(calls,0,sizeof(calls));active=max_active=create_calls=0;existing=refusal=0;fail_shard=-1;fail_after=99;}
+static void reset(void) {memset(calls,0,sizeof(calls));active=max_active=create_calls=0;existing=refusal=0;fail_shard=-1;fail_after=99;gate_open=0;expected_parallel=1;}
 int main(void) {
  struct efs_raft_host h={0};struct efs_opid session={.client_uuid={17},.session_epoch=2};int hint=-1;
  struct efs_chunk_rec recs[16];for(unsigned i=0;i<16;i++)recs[i]=(struct efs_chunk_rec){1,i};
  for(unsigned allowed=0;allowed<=3;allowed++) {
-  reset();fail_after=allowed;assert(!host_report_session_admit(&h,recs,16,&session,&hint));
-  assert(!active && max_active<=allowed+1 && max_active>=1);
+  reset();fail_after=allowed;expected_parallel=allowed+1;assert(!host_report_session_admit(&h,recs,16,&session,&hint));
+  assert(!active && max_active==allowed+1);
   for(unsigned shard=1;shard<10;shard++)assert(calls[shard]==1);
  }
  reset();assert(!pthread_mutex_lock(&host_report_session_parallel));
