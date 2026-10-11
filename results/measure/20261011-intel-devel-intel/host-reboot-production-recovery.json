@@ -1,0 +1,133 @@
+{
+  "utc": "2026-10-11T16:15:01.085018+00:00",
+  "expected_source": "7bde5f43",
+  "intel1_efs": {
+    "host": "intel1",
+    "daemons": [
+      {
+        "pid": 5945,
+        "node": "1",
+        "args": [
+          "/data1/efs/src/efsd",
+          "--node-id",
+          "1",
+          "--addr",
+          "10.0.0.207",
+          "--port",
+          "17432",
+          "--storage",
+          "/data1/efs/n1",
+          "--quota",
+          "400G",
+          "--direct-io"
+        ],
+        "binary_sha256": "0348f53eb0e866f1bfa63cf641fa31631088d71a76ab0546b8c9afc095978749"
+      },
+      {
+        "pid": 5953,
+        "node": "2",
+        "args": [
+          "/data1/efs/src/efsd",
+          "--node-id",
+          "2",
+          "--addr",
+          "10.0.0.207",
+          "--port",
+          "17433",
+          "--storage",
+          "/data2/efs/n2",
+          "--quota",
+          "400G",
+          "--direct-io",
+          "--join",
+          "10.0.0.207:17432"
+        ],
+        "binary_sha256": "0348f53eb0e866f1bfa63cf641fa31631088d71a76ab0546b8c9afc095978749"
+      }
+    ],
+    "clients": [
+      {
+        "pid": 6602,
+        "args": [
+          "./efs-fuse",
+          "10.0.0.209:17432",
+          "fs",
+          "/data1/efs/mnt"
+        ],
+        "commands_enabled": true
+      }
+    ],
+    "status": "Cluster nodes (4):\n  node 1: 10.0.0.207:17432  up  used=91.95 GiB  quota=400.00 GiB (23.0%)  storage(1):\n      /data1/efs/n1\n  node 2: 10.0.0.207:17433  up  used=91.94 GiB  quota=400.00 GiB (23.0%)  storage(1):\n      /home/efs/additional-work-dir/n2\n  node 3: 10.0.0.209:17432  up  used=91.95 GiB  quota=400.00 GiB (23.0%)  storage(1):\n      /data1/efs/n3\n  node 4: 10.0.0.209:17433  up  used=91.94 GiB  quota=400.00 GiB (23.0%)  storage(1):\n      /home/efs/additional-work-dir/n4\nUsable (2+1 logical): used=245.18 GiB  free=821.49 GiB  capacity=1.04 TiB (23.0%)\nCluster state: OK (4 up, 0 down)\nVersions: efsd v0.2.1-pre-alpha-594-g7bde5f43 (branch devel-intel, built 2026-10-11T08:01:01Z) \u2014 4/4 identical\nNode 10.0.0.207:17432 state: active\nHeal:\n  node 1: idle\n  node 2: idle\n  node 3: idle\n  node 4: idle\n"
+  },
+  "intel2_efs": {
+    "host": "intel2",
+    "daemons": [
+      {
+        "pid": 10086,
+        "node": "3",
+        "args": [
+          "/data1/efs/src/efsd",
+          "--node-id",
+          "3",
+          "--addr",
+          "10.0.0.209",
+          "--port",
+          "17432",
+          "--storage",
+          "/data1/efs/n3",
+          "--quota",
+          "400G",
+          "--direct-io",
+          "--join",
+          "10.0.0.207:17432"
+        ],
+        "binary_sha256": "999ea038a22e5170c8b6b2ad7383b60f4bd3728629a0038dace9b19cda714bae"
+      },
+      {
+        "pid": 10094,
+        "node": "4",
+        "args": [
+          "/data1/efs/src/efsd",
+          "--node-id",
+          "4",
+          "--addr",
+          "10.0.0.209",
+          "--port",
+          "17433",
+          "--storage",
+          "/data2/efs/n4",
+          "--quota",
+          "400G",
+          "--direct-io",
+          "--join",
+          "10.0.0.207:17432"
+        ],
+        "binary_sha256": "999ea038a22e5170c8b6b2ad7383b60f4bd3728629a0038dace9b19cda714bae"
+      }
+    ],
+    "clients": [
+      {
+        "pid": 10331,
+        "args": [
+          "./efs-fuse",
+          "10.0.0.207:17432",
+          "fs",
+          "/data1/efs/mnt"
+        ],
+        "commands_enabled": true
+      }
+    ],
+    "status": "Cluster nodes (4):\n  node 1: 10.0.0.207:17432  up  used=91.95 GiB  quota=400.00 GiB (23.0%)  storage(1):\n      /data1/efs/n1\n  node 2: 10.0.0.207:17433  up  used=91.94 GiB  quota=400.00 GiB (23.0%)  storage(1):\n      /home/efs/additional-work-dir/n2\n  node 3: 10.0.0.209:17432  up  used=91.95 GiB  quota=400.00 GiB (23.0%)  storage(1):\n      /data1/efs/n3\n  node 4: 10.0.0.209:17433  up  used=91.94 GiB  quota=400.00 GiB (23.0%)  storage(1):\n      /home/efs/additional-work-dir/n4\nUsable (2+1 logical): used=245.18 GiB  free=821.49 GiB  capacity=1.04 TiB (23.0%)\nCluster state: OK (4 up, 0 down)\nVersions: efsd v0.2.1-pre-alpha-594-g7bde5f43 (branch devel-intel, built 2026-10-11T08:01:01Z) \u2014 4/4 identical\nNode 10.0.0.207:17432 state: active\nHeal:\n  node 1: idle\n  node 2: idle\n  node 3: idle\n  node 4: idle\n"
+  },
+  "scope": "Recovery of the previously installed7bde5f43 production service after both Intel hosts rebooted. No candidate5f5fb14d rollout or full-test acceptance. Both original million-file jobs completed before reboot and were not restarted.",
+  "preserved_payload_checks": {
+    "intel1_efs": {
+      "samples": 256,
+      "size_and_sha256_match": true
+    },
+    "intel2_efs": {
+      "samples": 256,
+      "size_and_sha256_match": true
+    }
+  }
+}

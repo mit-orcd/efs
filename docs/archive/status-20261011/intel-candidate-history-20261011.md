@@ -75,3 +75,32 @@ Intel1's 27 independent gates are terminal: 25 PASS, two FAIL (buffered sequenti
 ## Fault coverage correction at 13:35 UTC
 
 The [actual E073 fault outputs](../../../results/measure/20261011-intel-devel-intel/e073-fault-coverage-correction.json) show 14 integration PASS, one repair GAP and one simulator NOTRUN on each host and mode. The simulator binary was missing. Any earlier E073 aggregate claiming 19 PASS / two GAP is superseded by these retained machine results; a missing layer is not a pass.
+
+
+## Review snapshots superseded at 14:22 UTC
+
+These paragraphs retain the original historical queue and production descriptions. Their pending/active statements describe their dated attempts; both f9 parents have since completed their owned current fixtures and been retired. Remaining tests are required on the active source. The current ledger owns current verdicts. Fault summaries remain subject to the named historical corrections above.
+
+Committed repair `f9e77c9f` is frozen and its complete 110-gate main matrix, 30 canonical rounds, diagnostic comparison, 84 supplemental rows and two publication-apply modes are launched or queued on both Intel hosts. The preceding `02c13e0b` parents were retired only after their current owned buffered-sequential fixtures exited and completed cleanup; actual completed verdicts are preserved, remaining phases are NOTRUN on that source and required on `f9e77c9f`. Intel1 buffered sequential fails a late sentinel UNLINK with ENOENT after its reclamation checks pass; Intel2 buffered sequential fails the physical-deletion deadline. These distinct failures are retained.
+
+### Historical 7bde5f43 matrix
+
+The deployment completed in 25.30 seconds and startup/mount checks in 216.45 seconds at unchanged per-node limits. Runtime identity, four 400 GiB quotas, direct I/O, opposite-host client seeds and `.efs/help` pass. Preserved size/SHA256 checks pass for 256 samples per host. Intel2 resumes its existing tree after strict inventory; inventory alone is not counted as creation.
+
+| Tier | Intel1 | Intel2 |
+| --- | --- | --- |
+| Native target | PASS | PASS |
+| Additional standalone scripts | 78/78 PASS | 78/78 PASS |
+| Six query/.efs gates, direct | PASS, 68.77 s | PASS, 68.66 s |
+| Six query/.efs gates, buffered | PASS, 57.78 s | PASS, 220.55 s |
+| Full private direct | FAIL before POSIX; admission follow-on active | FAIL, core 213/214, peer 66/66 PASS |
+| Full private buffered | FAIL, core 213/214 and peer 66/66 PASS | FAIL, core 213/214 and peer 66/66 PASS |
+| Valgrind, both modes | PASS | PASS |
+| Independent live gates | 25/27 PASS, two FAIL | 25/27 PASS, two FAIL |
+| Repair/protection faults | 19 PASS / 2 GAP per mode | 19 PASS / 2 GAP per mode |
+| Production concurrent core, both modes | 213/214, FAIL | 213/214, FAIL |
+| Cold persistence, both modes | 27/27 PASS | 27/27 PASS |
+
+Intel1's direct private run reaches the second guarded-lease session admission, then receives explicit `EFS_ERR_BUSY` from ESTABLISH. It stops before the later POSIX tier; those cases are NOTRUN in that attempt. Commit `e9c395c7` retries the unchanged administrative request only on explicit BUSY within the original 60-second command budget. Hard errors, stale epochs and expiration still fail. Regression tests pass locally and on both Intel hosts. Full private reruns in both modes are queued after the current owned fixtures finish. The original failed aggregate remains recorded. All six real query gates passed on both hosts and modes, including exact count/byte convergence and every payload check using the bounded readers; the unnecessary idle query-repeat queues were retired.
+
+Three additional dated Intel repair notes (rename flag refusal, empty xattr names and creation inheritance) are archived after their named current POSIX contracts pass. [Named contract evidence](../../../results/measure/20261011-intel-devel-intel/intel-repair-contracts-7bde5f43.json) retains per-mode rows; these passes do not close the remaining full-suite failures.
