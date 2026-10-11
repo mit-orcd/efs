@@ -1,0 +1,15 @@
+{"writer": 0, "seconds": 30.000431007007137, "operations_s": 1785.2743511415, "sync_mean_ms": 0.5398171608319797, "count": 53559, "rotations": 13}
+{"writer": 0, "seconds": 60.00065403699409, "operations_s": 1792.8200049125896, "sync_mean_ms": 0.5380551760899879, "count": 107344, "rotations": 26}
+{"writer": 0, "seconds": 90.0010177140066, "operations_s": 1823.2778971913797, "sync_mean_ms": 0.5294082055796266, "count": 162043, "rotations": 39}
+{"writer": 0, "seconds": 120.0014944349823, "operations_s": 1815.9711429488289, "sync_mean_ms": 0.5306714428046989, "count": 216523, "rotations": 52}
+{"writer": 0, "seconds": 150.0016709890042, "operations_s": 1824.7225945962364, "sync_mean_ms": 0.5287361120163677, "count": 271265, "rotations": 66}
+{"writer": 0, "seconds": 180.0018926569901, "operations_s": 1814.586592141496, "sync_mean_ms": 0.5315431269885007, "count": 325703, "rotations": 79}
+{"writer": 0, "seconds": 210.0021385870059, "operations_s": 1832.1849803572939, "sync_mean_ms": 0.5267454231161082, "count": 380669, "rotations": 92}
+{"writer": 0, "seconds": 240.00219820800703, "operations_s": 1821.0630475465996, "sync_mean_ms": 0.5292176452994583, "count": 435301, "rotations": 106}
+{"writer": 0, "seconds": 270.00240951401065, "operations_s": 1807.5872681986054, "sync_mean_ms": 0.5335394328391238, "count": 489529, "rotations": 119}
+{"writer": 0, "seconds": 300.0027853650099, "operations_s": 1825.2771322588637, "sync_mean_ms": 0.5283634343943461, "count": 544288, "rotations": 132}
+{"writer": 0, "seconds": 330.0029605340096, "operations_s": 1821.2226992747178, "sync_mean_ms": 0.5297109468492047, "count": 598925, "rotations": 146}
+{"writer": 0, "seconds": 360.00298808398657, "operations_s": 1817.2316645103178, "sync_mean_ms": 0.5285039783737183, "count": 653442, "rotations": 159}
+{"writer": 0, "seconds": 390.00320084998384, "operations_s": 1803.220544532751, "sync_mean_ms": 0.534900787733146, "count": 707539, "rotations": 172}
+{"writer": 0, "seconds": 420.0033093880047, "operations_s": 1783.69354671442, "sync_mean_ms": 0.5408622143858273, "count": 761050, "rotations": 185}
+{"writer": 0, "seconds": 450.0038020100037, "operations_s": 1785.7040107640198, "sync_mean_ms": 0.5410723518255806, "count": 814622, "rotations": 198}

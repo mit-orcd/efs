@@ -189,3 +189,35 @@ payload checks on both mounts. Automatic approval review refuses execution:
 it interprets this request as testing authorization rather than explicit
 authorization to replace installed binaries. The user's approval is pending;
 no installation has run. Private validation remains authorized and continues.
+
+## W97 clean eight-cell matrix completed
+
+All eight cells finish with exit0 and exact current-file verification. The
+SATA half repeats the same grow/ring/ring/grow order and geometry:
+
+| Order / mode | Whole-run ops/s | First window ops/s | Last window ops/s | First → last per-writer mean sync |
+| --- | ---: | ---: | ---: | --- |
+| 0 growing | 5336.77 | 5314.93 | 5384.20 | ~0.546 → ~0.537ms |
+| 1 ring | 6916.75 | 6607.08 | 6975.94 | ~0.427 → ~0.404ms |
+| 2 ring | 6926.14 | 6696.20 | 6720.09 | ~0.420 → ~0.418ms |
+| 3 growing | 5422.36 | 5356.95 | 5356.90 | ~0.540 → ~0.541ms |
+
+SATA p99 is833–838µs for growing and766–776µs for rings. Summed CPU is97–124s
+per480s cell, including setup and reopen verification. Explicit growing-file
+rotation costs only~2.1s summed across writers. Both volumes retain at least
+300GiB physical headroom. Growing files cap their logical lengths at256MiB per
+writer; total bytes written across rotations are much larger than retained
+file sizes. Raw device sectors and per-operation counts are retained rather
+than treating bounded space as bounded write traffic.
+
+Read-only device context identifies Samsung970EVO1TB NVMe and MK0800GEYKE SATA.
+The kernel reports NVMe write-back and SATA write-through. NVMe physical flush
+counters advance; SATA's do not in these samples. Those observations are
+important context for the different durable-call behaviour, but do not prove
+firmware guarantees, power-loss protection or NAND-cache exhaustion. Device
+settings, APST, cache, filesystem mount options and durability calls are unchanged.
+
+`closure/allocation-summary.json` reproduces the complete matrix. Rings offer
+an overwrite benefit here; they are not a compatible production WAL/container
+format. Earlier three-node EFS SATA runs also slowed, so stable raw SATA cells
+do not establish that EFS's SATA slowdown is repaired. W97 remains open.

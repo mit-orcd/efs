@@ -29,3 +29,10 @@ END w97-nvme-2-ring 0
 START w97-nvme-3-grow 2026-10-11T05:01:26Z
 END w97-nvme-3-grow 0
 START w97-sata-0-grow 2026-10-11T05:09:32Z
+END w97-sata-0-grow 0
+START w97-sata-1-ring 2026-10-11T05:17:37Z
+END w97-sata-1-ring 0
+START w97-sata-2-ring 2026-10-11T05:25:42Z
+END w97-sata-2-ring 0
+START w97-sata-3-grow 2026-10-11T05:33:47Z
+END w97-sata-3-grow 0

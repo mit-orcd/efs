@@ -1,0 +1,47 @@
+ERROR: n1 did not start; log:
+2026-10-11T04:19:20.620Z raft-host: gc-pass ms=13 orphan=13 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=39 keys=72612 emit=4098 tomb=68514 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:21.635Z raft-host: gc-pass ms=10 orphan=10 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=39 keys=72612 emit=4098 tomb=68514 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:22.651Z raft-host: gc-pass ms=9 orphan=9 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=39 keys=72612 emit=4098 tomb=68514 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:23.660Z raft-host: gc-pass ms=5 orphan=5 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=39 keys=72612 emit=4098 tomb=68514 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:24.676Z raft-host: gc-pass ms=11 orphan=10 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=39 keys=72612 emit=4098 tomb=68514 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:25.692Z raft-host: gc-pass ms=10 orphan=10 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=39 keys=72612 emit=4098 tomb=68514 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:26.702Z raft-host: gc-pass ms=5 orphan=5 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=39 keys=72612 emit=4098 tomb=68514 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:27.718Z raft-host: gc-pass ms=11 orphan=11 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=39 keys=72612 emit=4098 tomb=68514 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:28.731Z raft-host: gc-pass ms=8 orphan=7 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=39 keys=72612 emit=4098 tomb=68514 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:29.746Z raft-host: gc-pass ms=11 orphan=11 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=39 keys=72612 emit=4098 tomb=68514 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:30.762Z raft-host: gc-pass ms=11 orphan=10 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=39 keys=72612 emit=4098 tomb=68514 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:32.781Z raft-host: gc-pass ms=5 orphan=5 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=39 keys=72612 emit=4098 tomb=68514 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:34.808Z raft-host: gc-pass ms=12 orphan=12 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=39 keys=72612 emit=4098 tomb=68514 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:36.252Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=435 passes=483 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T05:41:52.966Z storage-engine=files direct_io=on
+2026-10-11T05:41:52.967Z Loaded 4 persisted cluster node(s) from /data1/efs/n1/meta/cluster_nodes.bin
+2026-10-11T05:41:52.967Z   persisted node 1: 127.0.0.1:17432
+2026-10-11T05:41:52.967Z   persisted node 2: 127.0.0.1:17433
+2026-10-11T05:41:52.967Z   persisted node 3: 127.0.0.1:17434
+2026-10-11T05:41:52.967Z   persisted node 4: 127.0.0.1:17435
+start readiness attempt 1 failed; retaining processes for bounded retry
+n1 already running (pid 4001805)
+ERROR: n2 did not start; log:
+2026-10-11T04:19:04.947Z raft-host: gc-pass ms=6 orphan=6 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=43 keys=4100 emit=4098 tomb=2 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:08.983Z raft-host: gc-pass ms=7 orphan=7 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=43 keys=4098 emit=4098 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:12.010Z raft-host: gc-pass ms=6 orphan=6 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=43 keys=4101 emit=4098 tomb=3 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:13.023Z raft-host: gc-pass ms=7 orphan=7 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=43 keys=4102 emit=4098 tomb=4 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:14.034Z raft-host: gc-pass ms=7 orphan=7 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=43 keys=4098 emit=4098 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:19.080Z raft-host: gc-pass ms=8 orphan=8 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=43 keys=4098 emit=4098 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:20.092Z raft-host: gc-pass ms=6 orphan=6 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=43 keys=4098 emit=4098 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:20.250Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=157 passes=450 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T04:19:22.113Z raft-host: gc-pass ms=6 orphan=6 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=43 keys=4098 emit=4098 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:25.140Z raft-host: gc-pass ms=6 orphan=6 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=43 keys=4098 emit=4098 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:28.167Z raft-host: gc-pass ms=5 orphan=5 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=43 keys=4100 emit=4098 tomb=2 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:30.187Z raft-host: gc-pass ms=8 orphan=8 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=43 keys=4098 emit=4098 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:31.199Z raft-host: gc-pass ms=7 orphan=7 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=43 keys=4100 emit=4098 tomb=2 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T04:19:36.252Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=1022 passes=465 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T05:42:28.650Z storage-engine=files direct_io=on
+2026-10-11T05:42:28.651Z Loaded 4 persisted cluster node(s) from /data1/efs/n2/meta/cluster_nodes.bin
+2026-10-11T05:42:28.651Z   persisted node 1: 127.0.0.1:17432
+2026-10-11T05:42:28.651Z   persisted node 2: 127.0.0.1:17433
+2026-10-11T05:42:28.651Z   persisted node 3: 127.0.0.1:17434
+2026-10-11T05:42:28.651Z   persisted node 4: 127.0.0.1:17435
+start readiness attempt 2 failed; retaining processes for bounded retry
+n1 already running (pid 4001805)
+n2 already running (pid 4004529)
