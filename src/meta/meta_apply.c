@@ -4541,7 +4541,7 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     if(found==EFS_OK && verdict!=EFS_META_PUBLICATION_PENDING)return verdict;
     if(found!=EFS_ERR_NOT_FOUND && found!=EFS_OK)return found;
     be32(value+4,rc==EFS_OK?1:rc==EFS_ERR_STALE?2:3);
-    struct efs_kv_item completed[2] = {receipt}; unsigned completed_n = 1;
+    struct efs_kv_item completed[3] = {receipt}; unsigned completed_n = 1;
     uint8_t tk[EFS_PUT_TICKET_KEY_LEN], tv[EFS_PUT_TICKET_VAL_LEN];
     if (p->ticketed && rc == EFS_OK) {
         struct efs_put_ticket ticket;
@@ -4550,7 +4550,17 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
         if (trc != EFS_OK) return trc;
         completed_n++;
     }
+    struct efs_pack_mapping_plan rejected={0};
+    if(rc!=EFS_OK && p->coding_profile_id==EFS_META_PROFILE_PACK_K2F1) {
+        int prc=efs_pack_mapping_reject(kv,p,&rejected);
+        /* Invalid/unbound requests cannot cancel another admitted reference.
+         * Their exact terminal receipt is still recorded. Storage uncertainty
+         * must retain both the pending receipt and its lifetime reference. */
+        if(prc!=EFS_OK && prc!=EFS_ERR_INVAL && prc!=EFS_ERR_STALE && prc!=EFS_ERR_NOT_FOUND)return prc;
+        if(!prc)completed[completed_n++]=rejected.items[0];
+    }
     int written=meta_write_batch(kv,completed,completed_n);
+    efs_pack_mapping_plan_free(&rejected);
     return written==EFS_OK?rc:written;
 }
 

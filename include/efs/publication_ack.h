@@ -28,6 +28,10 @@ int efs_publication_ack_request(const struct efs_publication_ack_queue *,
 /* Call only AFTER cache ownership consumed an exact terminal result. */
 int efs_publication_ack_consumed(struct efs_publication_ack_queue *,
     uint64_t sequence, const struct efs_msg_publication_reply *);
+/* Only an exact terminal rejection already consumed by cache ownership.
+ * Transport/session errors and unconsumed receipts provide no handoff proof. */
+int efs_publication_ack_rejected(const struct efs_publication_ack_queue *,
+    uint64_t sequence, int *verdict);
 int efs_publication_ack_next(const struct efs_publication_ack_queue *,
                              struct efs_msg_publication *);
 /* Only an exact RETIRED reply removes the oldest consumed intent. */

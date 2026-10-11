@@ -56,6 +56,7 @@ static void run(unsigned scenario)
         memcpy(pubs[i].ch.checksums, object.checksums, sizeof(object.checksums));
         if (!i) assert(!efs_meta_apply_publication_admit(kv, pubs + i));
         else {
+            if(scenario==4)assert(!efs_meta_apply_content_fence(kv,pubs[i].ino,pubs[i].inode_gen,EFS_META_FENCE_INODE,pubs[i].content_epoch,pubs[i].content_epoch+1,0,110));
             /* Direct terminal publication must not expose a mapping, receipt or
              * LIVE reference when its one atomic storage batch fails. */
             real_ops=kv->ops;struct efs_kv_ops fault_ops=*real_ops;
@@ -69,9 +70,16 @@ static void run(unsigned scenario)
             assert(!efs_pack_admission_get(kv,&object,&current));
             assert(current.ledger.state[0]==EFS_PACK_LIVE && current.ledger.state[1]==EFS_PACK_PENDING);
         }
-        assert(!efs_meta_apply_publish(kv, pubs + i)); assert(!efs_meta_apply_publish(kv, pubs + i));
+        int expected=scenario==4 && i==1?EFS_ERR_STALE:EFS_OK;
+        assert(efs_meta_apply_publish(kv, pubs + i)==expected); assert(efs_meta_apply_publish(kv, pubs + i)==expected);
         int verdict; struct efs_publication_locator locator;
-        assert(!efs_meta_publication_receipt(kv, pubs + i, &verdict, &locator) && !verdict && locator.index == 101 + i);
+        assert(!efs_meta_publication_receipt(kv, pubs + i, &verdict, &locator) && verdict==expected && locator.index == 101 + i);
+        if(expected) {
+            struct efs_meta_chunk absent;assert(efs_meta_apply_get_chunk(kv,pubs[i].ino,0,&absent)==EFS_ERR_NOT_FOUND);
+            assert(!efs_pack_admission_get(kv,&object,&current));
+            assert(current.ledger.state[0]==EFS_PACK_LIVE&&current.ledger.state[1]==EFS_PACK_CANCELLED);
+            continue;
+        }
         struct efs_meta_chunk mapped; assert(!efs_meta_apply_get_chunk(kv, pubs[i].ino, 0, &mapped));
         assert(mapped.coding_profile_id == EFS_META_PROFILE_PACK_K2F1 && mapped.packed.segment_id == id);
         assert(!efs_pack_admission_get(kv, &object, &current));
@@ -80,13 +88,20 @@ static void run(unsigned scenario)
     assert(!efs_pack_upload_retire(kv, &object)); assert(!efs_pack_upload_retire(kv, &object));
     assert(efs_pack_admission_get(kv, &object, &current) == EFS_ERR_STALE);
     assert(!efs_pack_object_get(kv, 0, id, gen, &current));
-    assert(current.ledger.state[0] == EFS_PACK_LIVE && current.ledger.state[1] == EFS_PACK_LIVE);
+    assert(current.ledger.state[0] == EFS_PACK_LIVE && current.ledger.state[1] == (scenario==4?EFS_PACK_CANCELLED:EFS_PACK_LIVE));
     uint8_t digest[32], changed[32]; assert(!efs_publication_digest(pubs, digest));
     struct efs_meta_pub bad = pubs[0]; bad.ch.packed.digest[0] ^= 1; assert(!efs_publication_digest(&bad, changed));
     assert(memcmp(digest, changed, 32)); assert(efs_meta_apply_publish(kv, &bad) == EFS_ERR_PROTO);
     assert(!efs_kv_lsm_compact(kv)); efs_kv_lsm_close(kv); kv = efs_kv_lsm_open(dir, NULL); assert(kv);
     assert(!efs_meta_apply_publish(kv, pubs)); assert(!efs_pack_object_get(kv, 0, id, gen, &current));
-    assert(current.ledger.state[0] == EFS_PACK_LIVE && current.ledger.state[1] == EFS_PACK_LIVE);
+    assert(current.ledger.state[0] == EFS_PACK_LIVE && current.ledger.state[1] == (scenario==4?EFS_PACK_CANCELLED:EFS_PACK_LIVE));
+    if(scenario==4) {
+        assert(efs_meta_apply_publish(kv,pubs+1)==EFS_ERR_STALE);
+        assert(!efs_meta_apply_lane_sweep(kv,pubs[0].ino,pubs[0].inode_gen,0));
+        assert(!efs_pack_object_get(kv,0,id,gen,&current)&&current.ledger.phase==EFS_PACK_RECLAIMING);
+        efs_kv_lsm_close(kv);assert(!nftw(dir,cleanup,32,FTW_DEPTH|FTW_PHYS));
+        puts("packed rejection: atomic receipt/cancellation, failed-batch retention, live neighbor, upload retirement and cold GC eligibility PASS");return;
+    }
     uint32_t ci = 0;
     if (!scenario) {
         real_ops = kv->ops; struct efs_kv_ops fault_ops = *real_ops; fault_ops.batch = fault_batch;
@@ -130,4 +145,4 @@ static void run(unsigned scenario)
     printf("packed publication: admission-bound mapping/receipt, exact replay, retirement scenario %u, neighbor retention and cold restart PASS\n", scenario);
 }
 
-int main(void) { for (unsigned i = 0; i < 4; i++) run(i); return 0; }
+int main(void) { for (unsigned i = 0; i < 5; i++) run(i); return 0; }

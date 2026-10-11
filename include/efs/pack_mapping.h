@@ -7,7 +7,8 @@
  * already checked by mapping CAS, and commits returned ledger items WITH the
  * mappings and durable receipts in one KV batch. It must hold serialized apply
  * or include the ledger keys in its transaction EXCL guards. Planning neither
- * proves durable PUT nor admits an upload. No mounted writer selects it yet. */
+ * proves durable PUT nor admits an upload. Mounted packed publications use
+ * this planner through the ordinary serialized publication apply. */
 #define EFS_PACK_MAPPING_OBJECT_MAX 64u
 #define EFS_PACK_OBJECT_KEY_BYTES 19u
 #define EFS_PACK_OBJECT_HEADER 128u
@@ -37,4 +38,8 @@ struct efs_pack_mapping_plan {
 int efs_pack_mapping_plan(struct efs_kv *, const struct efs_pack_mapping_change *,
     uint32_t count, struct efs_pack_mapping_plan *);
 void efs_pack_mapping_plan_free(struct efs_pack_mapping_plan *);
+/* Exact admitted reference only. Commit its cancellation WITH the terminal
+ * rejection receipt; no successful/uncertain publication may call this. */
+int efs_pack_mapping_reject(struct efs_kv *, const struct efs_meta_pub *,
+    struct efs_pack_mapping_plan *);
 #endif

@@ -6,6 +6,7 @@
 #include "efs/checksum.h"
 #include "efs/kv_key.h"
 #include "efs/raft.h"
+#include "efs/publication_ack.h"
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -182,7 +183,18 @@ static int pack_publish_record(struct pack_context *p,uint32_t i)
     }
     if(!w->published) {
         rc=efs_client_publication_writeback(w->acks,w->plan.ino,w->plan.generation,0,w->object,w->plan.cache_sequence,w->len);
-        if(rc)return rc;
+        if(rc) {
+            int verdict;
+            if((rc==EFS_ERR_STALE || rc==EFS_ERR_INVAL) &&
+                !efs_publication_ack_rejected(w->acks,w->plan.cache_sequence,&verdict) && verdict==rc) {
+                /* The exact rejection released the old publication token,
+                 * not its accepted bytes. Leave the dirty cache owned so the
+                 * enclosing ordinary flush fetches/rebases a fresh view.
+                 * Retain this ACK for exact retirement with its neighbors. */
+                __atomic_store_n(&w->done,1,__ATOMIC_RELEASE);return EFS_OK;
+            }
+            return rc;
+        }
         w->published=1;
     }
     if(!w->loaded) {

@@ -65,6 +65,9 @@ static void ownership(void)
     ra=reply(&a,EFS_PUBLICATION_REJECTED,EFS_ERR_STALE);ra.digest[0]^=1;
     assert(efs_publication_ack_consumed(&q,10,&ra)==EFS_ERR_PROTO);ra.digest[0]^=1;
     assert(efs_publication_ack_consumed(&q,10,&ra)==EFS_OK);
+    int rejected_verdict;
+    assert(!efs_publication_ack_rejected(&q,10,&rejected_verdict) && rejected_verdict==EFS_ERR_STALE);
+    assert(efs_publication_ack_rejected(&q,11,&rejected_verdict)==EFS_ERR_BUSY);
     assert(efs_publication_ack_consumed(&q,10,&ra)==EFS_OK);
     struct efs_msg_publication_reply conflict=reply(&a,EFS_PUBLICATION_COMMITTED,EFS_OK);
     assert(efs_publication_ack_consumed(&q,10,&conflict)==EFS_ERR_PROTO);

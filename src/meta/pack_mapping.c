@@ -4,6 +4,7 @@
 #include "efs/raft.h"
 #include "efs/session.h"
 #include "efs/txn.h"
+#include "efs/pack_admission.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -193,4 +194,36 @@ int efs_pack_mapping_plan(struct efs_kv *kv, const struct efs_pack_mapping_chang
     return EFS_OK;
 fail:
     efs_pack_mapping_plan_free(out); return rc;
+}
+
+int efs_pack_mapping_reject(struct efs_kv *kv,const struct efs_meta_pub *p,
+    struct efs_pack_mapping_plan *out)
+{
+    if(!kv || !p || !out)return EFS_ERR_INVAL;
+    memset(out,0,sizeof(*out));
+    if(!p->durable_result || p->coding_profile_id!=EFS_META_PROFILE_PACK_K2F1 ||
+        p->candidate_gen!=efs_meta_candidate_gen(p->publication_id.client_uuid,
+            p->publication_id.session_epoch,p->publication_id.seq,0,0))return EFS_ERR_INVAL;
+    struct efs_meta_chunk ch=p->ch;
+    ch.generation=p->candidate_gen;ch.content_epoch=p->content_epoch;
+    struct efs_pack_mapping_change change={p->ino,p->inode_gen,p->chunk_index,NULL,&ch};
+    uint8_t wire[EFS_PACK_REF_BYTES];int rc=reference(&change,&ch,wire);if(rc)return rc;
+    struct work *w=calloc(1,sizeof(*w));if(!w)return EFS_ERR_NOMEM;
+    out->storage=w;struct entry *e;unsigned at;
+    rc=load(kv,w,&ch.packed,&e);if(rc)goto fail;
+    if(memcmp(e->object.ledger.owner.client_uuid,p->publication_id.client_uuid,EFS_OPID_UUID_LEN) ||
+        e->object.ledger.owner.session_epoch!=p->publication_id.session_epoch){rc=EFS_ERR_INVAL;goto fail;}
+    struct efs_pack_object admitted;
+    rc=efs_pack_admission_get(kv,&e->object,&admitted);if(rc)goto fail;
+    rc=slot(e,&ch,wire,&at);if(rc)goto fail;
+    if(e->object.ledger.phase!=EFS_PACK_ACTIVE ||
+        e->object.ledger.state[at]!=EFS_PACK_PENDING){rc=EFS_ERR_STALE;goto fail;}
+    rc=efs_pack_ledger_cancel(&e->object.ledger,&ch.packed);if(rc)goto fail;
+    rc=efs_pack_ledger_reclaim_begin(&e->object.ledger);
+    if(rc!=EFS_OK && rc!=EFS_ERR_BUSY)goto fail;
+    size_t bytes;rc=efs_pack_object_encode(&e->object,e->value,sizeof(e->value),&bytes);if(rc)goto fail;
+    out->items[0]=(struct efs_kv_item){EFS_KV_PUT,e->key,sizeof(e->key),e->value,(uint32_t)bytes};
+    out->count=1;return EFS_OK;
+fail:
+    efs_pack_mapping_plan_free(out);return rc;
 }
