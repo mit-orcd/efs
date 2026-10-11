@@ -180,3 +180,36 @@ retain the exact artifact identity. Normal binaries identify as
 buffered packing, final sanitizer and later parser checkpoint acceptance are
 still pending. This native pass does not close ORCD's quiet concurrent
 directory/query timeouts or certify a tagged release.
+
+## Two-client packed mounted gate on AMD
+
+Both direct and buffered TCP at frozen `d1197381` exit0, followed by clean
+normal-mount restoration. Per mode: POSIX core+extras220 PASS/0 FAIL/1 SKIP
+(unsupported mmap)/0 NOTRUN, peer67 PASS/0 FAIL/0 SKIP. Actual mounted
+64 x 512-byte first writes produce30 physical packed fragments, preserve neighbor
+bytes through ordinary growth/truncate/unlink, and pass acknowledged cold
+hashes, physical packed disappearance and metadata-queue drain.
+[Raw results and exact manifest](../../results/measure/20261011-v030-mounted-packing/d1197381/acceptance-summary.json)
+retain the implementation and gate identity. Initial fragment-file lengths sum
+to245760 bytes direct and123840 buffered for32768 payload bytes. These are file
+lengths, not a filesystem allocated-block or performance benchmark.
+
+Two mounts/four daemons on one AMD host do not certify ORCD's seven-client
+multihost workload. ORCD `627d48ba` fails even with fresh stores: directory/query
+timeouts and canceled workers remain, despite passing cold/shared-GC/stats.
+Prior failing cases include deep nesting, many files, unusual names and virtual
+stats/find. Client RPC waits, server ReadIndex/apply waits and query publication
+refusal followed by a9.75s build are observations, not a proven single cause.
+
+The reviewed parser fix `7a8ed4a5` is merged; it rejects signed, malformed and
+overflowing ports across six callers. Candidate `f1c322e1` adds seven concurrent
+mounted clients running unchanged221-case suites/deadlines before peer/cold/GC
+checks. Full normal/fault native plus allocation/pipeline/parser sanitizers
+precede direct and buffered seven-client runs. New outcomes remain pending.
+
+Protocol coordination reserves **transport** EFS_MSG141/142 for ORCD's
+undeployed bounded packed-RPC batching proposal. Checked free in this release
+header; all other owners notified. No new wire handlers are integrated yet.
+Durable metadata tags45-51/52/53 are separate. Any future batch must preserve
+capability fallback, exact per-record verdicts, retry identities and durable
+receipt/GC/fresh-authority checks.
