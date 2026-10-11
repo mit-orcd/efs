@@ -7119,6 +7119,13 @@ static void host_gc_close_step_pass(struct efs_raft_host *h,uint8_t group,uint32
     for(uint32_t i=0;i<scan.n && h->gc_running;i++) {
         uint8_t cmd[46]={EFS_MD_CMD_CLOSE_STEP};
         wr64be(cmd+1,scan.ino[i]);memcpy(cmd+9,scan.identity[i],EFS_CLOSE_STEP_VALUE);
+        /* RETIRE atomically checks identity, leases, locks and append rows.
+         * Ordinary tiny files usually owe none of those. Avoid an empty lock
+         * proposal plus dual-group append ReadIndexes for every such close.
+         * BUSY retains the existing bounded cleanup path and every barrier. */
+        cmd[45]=EFS_CLOSE_STEP_RETIRE;
+        rc=host_gc_propose(h,group,cmd,sizeof(cmd));
+        if(rc!=EFS_ERR_BUSY)continue;
         cmd[45]=EFS_CLOSE_STEP_LOCKS;
         rc=host_gc_propose(h,group,cmd,sizeof(cmd));
         if(rc!=EFS_OK)continue;

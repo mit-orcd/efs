@@ -970,11 +970,25 @@ static void test_deferred_close_identity(void)
     q.id.seq=2;
     CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK && efs_lease_any(kv,ino,1)==1,"old close cannot remove reopened lease");
     n=sizeof(value);CHECK(efs_kv_get(kv,key,len,value,&n)==EFS_OK && !memcmp(before,value,n),"old close does not recreate obligation");
+    CHECK(efs_close_step_apply(kv,ino,before,EFS_CLOSE_STEP_RETIRE)==EFS_ERR_BUSY,"early retirement retains reopened lease");
     q.id.seq=4;q.ack=3;
     CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK,"next close changes obligation");
     n=sizeof(value);CHECK(efs_kv_get(kv,key,len,value,&n)==EFS_OK && value[35]==4,"later close has new exact identity");
     CHECK(efs_close_step_apply(kv,ino,before,EFS_CLOSE_STEP_RETIRE)==EFS_ERR_STALE,"obsolete cleanup cannot retire later close");
+    uint8_t obligation[EFS_KV_KEY_MAX],one=1;uint32_t obligation_len;
+    uint32_t inode_shard=efs_kv_inode_shard(ino);
+    CHECK(efs_kv_key_lock(inode_shard,ino,1,1,0,UINT64_MAX,1,1,uuid,1,obligation,&obligation_len)==EFS_OK &&
+          efs_kv_put(kv,obligation,obligation_len,&one,1)==EFS_OK,"early retirement lock fixture");
+    CHECK(efs_close_step_apply(kv,ino,value,EFS_CLOSE_STEP_RETIRE)==EFS_ERR_BUSY,"early retirement retains outstanding locks");
     CHECK(efs_close_step_apply(kv,ino,value,EFS_CLOSE_STEP_LOCKS)==EFS_OK,"identified lock phase");
+    CHECK(efs_kv_key_append_rsv(inode_shard,ino,1,0,obligation,&obligation_len)==EFS_OK &&
+          efs_kv_put(kv,obligation,obligation_len,&one,1)==EFS_OK,"early retirement append fixture");
+    CHECK(efs_close_step_apply(kv,ino,value,EFS_CLOSE_STEP_RETIRE)==EFS_ERR_BUSY,"early retirement retains outstanding append rows");
+    CHECK(efs_kv_del(kv,obligation,obligation_len)==EFS_OK,"clear owned append fixture");
+    CHECK(efs_kv_key_append_cur(inode_shard,ino,1,obligation,&obligation_len)==EFS_OK &&
+          efs_kv_put(kv,obligation,obligation_len,&one,1)==EFS_OK,"early retirement cursor fixture");
+    CHECK(efs_close_step_apply(kv,ino,value,EFS_CLOSE_STEP_RETIRE)==EFS_ERR_BUSY,"early retirement retains append cursor");
+    CHECK(efs_kv_del(kv,obligation,obligation_len)==EFS_OK,"clear owned cursor fixture");
     CHECK(efs_close_step_apply(kv,ino,value,EFS_CLOSE_STEP_RETIRE)==EFS_OK,"empty append/lock state retires exact obligation");
     CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK,"lost close reply remains known after cleanup");
     n=sizeof(value);CHECK(efs_kv_get(kv,key,len,value,&n)==EFS_ERR_NOT_FOUND,"known close replay cannot recreate retired obligation");
