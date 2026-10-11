@@ -5605,8 +5605,8 @@ static int host_row_lanes_hosted(struct efs_raft_host *h, efs_ino_t ino,
     return 1;
 }
 
-static int host_read_inode_lanes(struct efs_raft_host *h, efs_ino_t ino,
-                                 int *leader_hint)
+static int host_read_inode_lanes_after_group(struct efs_raft_host *h, efs_ino_t ino,
+                                 int *leader_hint, int covered_group)
 {
     struct efs_meta_row row;
     uint32_t ish;
@@ -5617,9 +5617,15 @@ static int host_read_inode_lanes(struct efs_raft_host *h, efs_ino_t ino,
 
     ish = efs_kv_inode_shard(ino);
     ig = efs_raft_shard_group(ish);
-    rc = host_read_index(h, ig, leader_hint);
-    if (rc != EFS_OK)
-        return rc;
+    /* LOOKUP already established a fresh ReadIndex for its parent group.
+     * Reuse that proof only within this request when the child is on that
+     * same group. Transaction-aware inode reads still resolve pending state,
+     * and every other lane group still gets its own fresh ReadIndex. */
+    if (ig != covered_group) {
+        rc = host_read_index(h, ig, leader_hint);
+        if (rc != EFS_OK)
+            return rc;
+    }
     rc = efs_meta_apply_get_inode_tx(h->kv, ino, host_txn_coord, h, &row);
     if (rc != EFS_OK)
         return rc;
@@ -5664,6 +5670,12 @@ static int host_read_inode_lanes(struct efs_raft_host *h, efs_ino_t ino,
         }
     }
     return EFS_OK;
+}
+
+static int host_read_inode_lanes(struct efs_raft_host *h, efs_ino_t ino,
+                                 int *leader_hint)
+{
+    return host_read_inode_lanes_after_group(h, ino, leader_hint, -1);
 }
 
 /* Stable per-group order, bounded chunks, and global control fences. Only
@@ -10590,7 +10602,7 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
             }
             return;
         }
-        rc = host_read_inode_lanes(h, dent.ino, &hint);
+        rc = host_read_inode_lanes_after_group(h, dent.ino, &hint, pg);
         if (rc == EFS_ERR_NOT_PRIMARY) {
             uint8_t need[2];
 

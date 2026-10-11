@@ -331,6 +331,7 @@ test: all
 	python3 tests/test_fuse_lease_retention.py
 	python3 tests/test_create_admission_wait.py
 	python3 tests/test_lookup_replacement.py
+	python3 tests/test_lookup_read_group.py
 	python3 tests/test_w23_samples.py
 	python3 tests/test_read_verify.py
 	python3 tests/test_opid_admission.py

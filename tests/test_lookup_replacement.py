@@ -25,7 +25,7 @@ static void host_fwd_getattr(struct efs_raft_host*p,efs_ino_t i,struct efs_msg_i
 static int host_txn_coord(void*u,const struct efs_txid*t,uint32_t sh,int*d){(void)u;(void)t;(void)sh;*d=EFS_TXN_COMMIT;return 0;}
 int efs_meta_apply_get_inode(struct efs_kv*k,efs_ino_t i,struct efs_meta_row*r){(void)k;(void)i;memset(r,0,sizeof(*r));r->layout=EFS_META_LAYOUT_LOCAL;return 0;}
 int efs_meta_apply_lookup_tx(struct efs_kv*k,efs_ino_t i,const char*n,efs_txn_coord_fn f,void*u,struct efs_meta_dentry*r){(void)k;(void)i;(void)n;(void)f;(void)u;r->ino=2;return missing_name?EFS_ERR_NOT_FOUND:0;}
-static int host_read_inode_lanes(struct efs_raft_host*p,efs_ino_t i,int*h){(void)p;(void)i;(void)h;return missing_inode?EFS_ERR_NOT_FOUND:0;}
+static int host_read_inode_lanes_after_group(struct efs_raft_host*p,efs_ino_t i,int*h,int g){(void)p;(void)i;(void)h;(void)g;return missing_inode?EFS_ERR_NOT_FOUND:0;}
 static void host_need_both(uint8_t g[2]){g[0]=0;g[1]=1;}
 int efs_meta_apply_getattr(struct efs_kv*k,efs_ino_t i,efs_txn_coord_fn f,void*u,struct efs_meta_stat*r){(void)k;(void)f;(void)u;memset(r,0,sizeof(*r));r->ino=i;return 0;}
 static void set_inode_rc(struct efs_msg_inode_reply*r,int rc,int h){(void)h;r->status=rc==0?EFS_INODE_RPC_OK:rc==EFS_ERR_BUSY?EFS_INODE_RPC_BUSY:rc==EFS_ERR_NOT_FOUND?EFS_INODE_RPC_NOT_FOUND:EFS_INODE_RPC_ERROR;}
