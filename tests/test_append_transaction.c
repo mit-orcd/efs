@@ -586,11 +586,12 @@ static void session_owned_completion(int cold)
  }else efs_kv_mem_free(kv);
 }
 
-static void completion_batch(int cold,int owned,int reverse)
+static void completion_batch(int cold,int owned,int reverse,int wide)
 {
  char dir[]="/tmp/efs-batch-completion-XXXXXX";if(cold)assert(mkdtemp(dir));
  struct efs_kv *kv=cold?efs_kv_lsm_open(dir,NULL):efs_kv_mem_create();assert(kv);
  efs_ino_t ino;uint64_t gen;fixture(kv,&ino,&gen);
+ if(wide)assert(efs_meta_apply_activate_lanes(kv,ino,UINT64_MAX)==EFS_OK);
  struct efs_meta_append_plan *plan=malloc(sizeof(*plan));assert(plan);
  struct efs_opid_req q=identity(1,0);struct efs_txid tx={{231}};
  uint64_t offsets[EFS_META_APPEND_COMPLETE_MAX];
@@ -664,4 +665,4 @@ static void completion_batch_gaps(void)
  free(plan);efs_kv_mem_free(kv);
 }
 int main(void)
-{completion_batch_gaps();for(int cold=0;cold<2;cold++)for(int owned=0;owned<2;owned++)for(int reverse=0;reverse<2;reverse++)completion_batch(cold,owned,reverse);for(unsigned v=0;v<3;v++){receipt_capture_race(v,0);receipt_capture_race(v,1);}session_owned_completion(0);session_owned_completion(1);retired_append_receipts(0);retired_append_receipts(1);session_owned_append(0);session_owned_append(1);fenced_completion();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}
+{completion_batch_gaps();for(int cold=0;cold<2;cold++)for(int owned=0;owned<2;owned++)for(int reverse=0;reverse<2;reverse++)completion_batch(cold,owned,reverse,0);for(int cold=0;cold<2;cold++)completion_batch(cold,1,1,1);for(unsigned v=0;v<3;v++){receipt_capture_race(v,0);receipt_capture_race(v,1);}session_owned_completion(0);session_owned_completion(1);retired_append_receipts(0);retired_append_receipts(1);session_owned_append(0);session_owned_append(1);fenced_completion();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}
