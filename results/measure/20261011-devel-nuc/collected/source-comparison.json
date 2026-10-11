@@ -1,0 +1,8 @@
+{
+  "candidate_core_matches_current_branch": true,
+  "core_deltas": {},
+  "control_candidate_core_differences": [
+    "src/server/raft_host.c"
+  ],
+  "scope": "C/header and Makefile contents; build macro IDs differ and tests/harness evidence are separately retained"
+}

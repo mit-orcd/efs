@@ -1,0 +1,13 @@
+START mnt-stop 2026-10-11T13:22:01Z
+END mnt-stop 0
+START mnt2-stop 2026-10-11T13:22:02Z
+END mnt2-stop 0
+START full-direct 2026-10-11T13:22:04Z
+END full-direct 1
+START full-buffered 2026-10-11T13:22:39Z
+END full-buffered 1
+Traceback (most recent call last):
+  File "/data1/efs/devel-nuc-20261011/nuc-fixed-v2-live.py", line 41, in <module>
+    (out/'verdicts.json').write_text(json.dumps(codes,indent=2));assert all(rc==0 for rc in codes.values()),codes
+                                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'full-direct': 1, 'full-buffered': 1}

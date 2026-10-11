@@ -1,0 +1,37 @@
+2026-10-11T14:25:57.704Z storage-engine=files direct_io=off
+2026-10-11T14:25:57.704Z Storage quota: explicit 1.00 GiB (safe maximum 293.06 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T14:25:57.710Z Joined cluster with 3 nodes
+2026-10-11T14:25:57.714Z heartbeat: enabled (2000 ms interval)
+2026-10-11T14:25:57.727Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T14:25:57.727Z raft-host: up raft_id=2 n=4 boot=11298116404104322 salt=10018171426674979871 g0=hosted g2=hosted
+2026-10-11T14:25:57.727Z efsd 108afa3e-nuc (branch devel-nuc, built 2026-10-11T13:24:25Z on nuc), build=108afa3e-nuc: node 3 listening on 127.0.0.1:26592, storage=/home/efs/gc-buffered-61re_krn/n3 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-11T14:25:57.727Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-11T14:25:59.714Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=979 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T14:26:01.752Z raft-host: applied session index=3 kind=1 shard=0 ino=0
+2026-10-11T14:26:01.770Z raft-host: gc-pass ms=16 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T14:26:01.780Z raft-host: applied session index=15 kind=1 shard=0 ino=0
+2026-10-11T14:26:01.785Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=4676 p50_us=4676 max_us=4676 wdisk ops=1 bytes=65536 errors=0 avg_us=4541 p50_us=4541 max_us=4541
+2026-10-11T14:26:02.728Z kv-obs: mt_bytes=44999 l0_bytes=0 l0=0 l1=0
+2026-10-11T14:26:04.555Z raft-host: applied session index=535 kind=1 shard=0 ino=0
+2026-10-11T14:26:04.787Z raft-host: gc-pass ms=6 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T14:26:05.799Z raft-host: gc-pass ms=8 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T14:26:06.785Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=192 bytes=12582912 errors=0 avg_us=5159 p50_us=4112 max_us=15608 wdisk ops=192 bytes=12582912 errors=0 avg_us=5102 p50_us=4038 max_us=15556
+2026-10-11T14:26:07.765Z kv-obs: mt_bytes=236882 l0_bytes=0 l0=0 l1=0
+2026-10-11T14:26:11.786Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=428 bytes=28049408 errors=0 avg_us=5218 p50_us=4608 max_us=15608 wdisk ops=428 bytes=28049408 errors=0 avg_us=5164 p50_us=4580 max_us=15556
+2026-10-11T14:26:12.769Z kv-obs: mt_bytes=426442 l0_bytes=0 l0=0 l1=0
+2026-10-11T14:26:15.479Z storage-engine=files direct_io=off
+2026-10-11T14:26:15.479Z Loaded 4 persisted cluster node(s) from /home/efs/gc-buffered-61re_krn/n3/meta/cluster_nodes.bin
+2026-10-11T14:26:15.479Z   persisted node 1: 127.0.0.1:26590
+2026-10-11T14:26:15.479Z   persisted node 2: 127.0.0.1:26591
+2026-10-11T14:26:15.479Z   persisted node 3: 127.0.0.1:26592
+2026-10-11T14:26:15.479Z   persisted node 4: 127.0.0.1:26593
+2026-10-11T14:26:15.481Z Storage quota: explicit 1.00 GiB (safe maximum 293.05 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T14:26:15.500Z Joined cluster with 4 nodes
+2026-10-11T14:26:15.504Z heartbeat: enabled (2000 ms interval)
+2026-10-11T14:26:15.550Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T14:26:15.550Z raft-host: up raft_id=2 n=4 boot=11298587972112440 salt=15029879226797916894 g0=hosted g2=hosted
+2026-10-11T14:26:15.550Z efsd 108afa3e-nuc (branch devel-nuc, built 2026-10-11T13:24:25Z on nuc), build=108afa3e-nuc: node 3 listening on 127.0.0.1:26592, storage=/home/efs/gc-buffered-61re_krn/n3 (1 paths, stripe=none), used=3997696, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-11T14:26:15.550Z kv-obs: mt_bytes=459187 l0_bytes=0 l0=0 l1=0
+2026-10-11T14:26:16.332Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T14:26:17.504Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=947 passes=2 sampled=0 pending=0,0 reap=0,0 removed=60 file_bytes=3934080 payload_bytes=3932160 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T14:26:19.256Z raft-host: applied session index=986 kind=1 shard=0 ino=0

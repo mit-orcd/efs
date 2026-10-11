@@ -1,0 +1,176 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'cycles:P'
+# Event count (approx.): 17020465253
+#
+# Overhead  Command   Shared Object      Symbol                                    
+# ........  ........  .................  ..........................................
+#
+     2.03%  efsd      [kernel.kallsyms]  [k] _raw_spin_lock_irqsave
+            |          
+             --1.88%--_raw_spin_lock_irqsave
+
+     1.81%  efsd      [nf_tables]        [k] nft_do_chain
+            |
+            ---nft_do_chain
+               nft_do_chain_inet
+               nf_hook_slow
+               |          
+                --1.40%--ip_rcv
+                          __netif_receive_skb_one_core
+                          process_backlog
+                          __napi_poll
+                          net_rx_action
+                          handle_softirqs
+                          do_softirq
+                          __local_bh_enable_ip
+                          __dev_queue_xmit
+                          ip_finish_output2
+                          ip_output
+                          __ip_queue_xmit
+                          __tcp_transmit_skb
+                          tcp_write_xmit
+                          __tcp_push_pending_frames
+                          tcp_sendmsg_locked
+                          tcp_sendmsg
+                          sock_write_iter
+                          do_iter_readv_writev
+                          vfs_writev
+                          do_writev
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __GI___writev
+                          efs_conn_send_msg
+
+     1.72%  efsd      efsd               [.] efs_txn_prepare_excl
+            |
+            ---efs_txn_prepare_excl
+               efs_txn_prepare_excl_value
+               efs_txn_apply_prepare
+               host_apply_dispatch
+               host_apply
+               apply_committed
+               |          
+                --1.02%--on_ae_req
+                          efs_raft_recv_batch
+                          drain_inbox
+                          host_pump
+                          start_thread
+
+     1.60%  efsd      [kernel.kallsyms]  [k] dequeue_entity
+            |          
+             --1.38%--dequeue_entity
+                       dequeue_entities
+                       dequeue_task_fair
+                       try_to_block_task.constprop.0.isra.0
+                       __schedule
+                       schedule
+
+     1.49%  efsd      [kernel.kallsyms]  [k] _raw_spin_lock_irq
+            |
+            ---_raw_spin_lock_irq
+
+     1.46%  efsd      [kernel.kallsyms]  [k] __intel_pmu_enable_all.isra.0
+            |
+            ---__intel_pmu_enable_all.isra.0
+               |          
+                --1.41%--perf_ctx_enable
+                          __perf_event_task_sched_in
+                          finish_task_switch.isra.0
+                          __schedule
+                          schedule
+
+     1.43%  efsd      libc.so.6          [.] __memset_evex_unaligned_erms
+            |          
+             --1.33%--__memset_evex_unaligned_erms
+
+     1.40%  efsd      efsd               [.] efs_crc32
+            |
+            ---efs_crc32
+               |          
+                --1.00%--kv_wal_append
+                          lsm_batch
+                          efs_kv_lsm_apply_end
+                          host_apply
+                          apply_committed
+
+     1.37%  efsd      efsd               [.] host_pump
+            |          
+             --1.29%--host_pump
+                       start_thread
+
+     1.26%  efsd      [kernel.kallsyms]  [k] sched_balance_update_blocked_averages
+            |
+            ---sched_balance_update_blocked_averages
+               |          
+                --1.18%--sched_balance_newidle
+                          pick_next_task_fair
+                          __pick_next_task
+                          __schedule
+                          schedule
+
+     1.17%  efsd      libc.so.6          [.] pthread_mutex_lock@@GLIBC_2.2.5
+            |
+            ---pthread_mutex_lock@@GLIBC_2.2.5
+
+     1.15%  efsd      [kernel.kallsyms]  [k] avg_vruntime
+            |
+            ---avg_vruntime
+               update_entity_lag
+               dequeue_entity
+               dequeue_entities
+               dequeue_task_fair
+               try_to_block_task.constprop.0.isra.0
+               __schedule
+               schedule
+
+     1.13%  efsd      [kernel.kallsyms]  [k] __update_load_avg_se
+            |
+            ---__update_load_avg_se
+               update_load_avg
+               |          
+                --1.02%--dequeue_entity
+                          dequeue_entities
+                          dequeue_task_fair
+                          try_to_block_task.constprop.0.isra.0
+                          __schedule
+                          schedule
+
+     1.12%  efsd      [kernel.kallsyms]  [k] clear_bhb_loop
+     1.11%  efsd      [kernel.kallsyms]  [k] _raw_spin_lock
+            |
+            ---_raw_spin_lock
+
+     1.09%  efsd      [kernel.kallsyms]  [k] update_load_avg
+            |
+            ---update_load_avg
+
+     1.05%  efsd      [kernel.kallsyms]  [k] __schedule
+            |          
+             --1.02%--__schedule
+                       schedule
+
+     1.01%  efsd      libc.so.6          [.] __GI___pthread_mutex_unlock_usercnt
+            |
+            ---__GI___pthread_mutex_unlock_usercnt
+
+     1.01%  efsd      [kernel.kallsyms]  [k] tcp_recvmsg_locked
+            |
+            ---tcp_recvmsg_locked
+               tcp_recvmsg
+               inet_recvmsg
+               sock_recvmsg
+               __sys_recvfrom
+               __x64_sys_recvfrom
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __libc_recv
+
+
+
+#
+# (Tip: Treat branches as callchains: perf record -b ... ; perf report --branch-history)
+#

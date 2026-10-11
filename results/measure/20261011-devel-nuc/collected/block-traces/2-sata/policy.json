@@ -1,0 +1,10 @@
+{
+  "/sys/block/sda/queue/write_cache": "write through",
+  "/sys/block/nvme0n1/queue/write_cache": "write back",
+  "/sys/block/sda/queue/fua": "0",
+  "/sys/block/nvme0n1/queue/fua": "1",
+  "/sys/block/sda/queue/scheduler": "none [mq-deadline] kyber bfq",
+  "/sys/block/nvme0n1/queue/scheduler": "[none] mq-deadline kyber bfq",
+  "/sys/class/nvme/nvme0/firmware_rev": "2B2QEXE7",
+  "/sys/module/nvme_core/parameters/default_ps_max_latency_us": "100000"
+}

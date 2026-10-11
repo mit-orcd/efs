@@ -1,0 +1,13 @@
+2026-10-11T13:22:08.582Z efs-fuse 2669064e-nuc (branch devel-nuc, built 2026-10-11T13:18:42Z on nuc), build=2669064e-nuc: starting export=default mount=/data1/efs/mnt
+2026-10-11T13:22:08.582Z Discovered 4 cluster nodes from 127.0.0.1:26590
+2026-10-11T13:22:08.582Z   node id=1 127.0.0.1:26590
+2026-10-11T13:22:08.582Z   node id=2 127.0.0.1:26591
+2026-10-11T13:22:08.582Z   node id=3 127.0.0.1:26592
+2026-10-11T13:22:08.582Z   node id=4 127.0.0.1:26593
+2026-10-11T13:22:08.582Z fetching metadata...
+2026-10-11T13:22:08.582Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T13:22:08.582Z export id=1 name=default
+2026-10-11T13:22:08.582Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T13:22:08.586Z efs-fuse: workers max=10 idle=10
+2026-10-11T13:22:08.589Z fuse serving
+2026-10-11T13:22:38.837Z inode-rpc: retry type=45 attempt=27 why=recv rc=-6 req_len=332 recv_ms=30000
