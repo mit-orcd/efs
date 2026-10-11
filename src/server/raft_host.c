@@ -11907,15 +11907,17 @@ static int host_resize_resolve(void *user, const struct efs_txid *t,
     struct host_idx_ref refs[EFS_TXN_MAX_PART];
     uint8_t cmd[22];
     int rc = EFS_OK, n = 0;
+    struct host_command_cohort cohort;
+    host_command_cohort_begin(&cohort,ctx->host);
     for (uint32_t i = 0; i < parts->n; ++i) {
         pack_resolve(cmd, t, parts->shard[i], decision);
         refs[n].group = efs_raft_shard_group(parts->shard[i]);
-        rc = host_propose(ctx->host, refs[n].group, cmd, sizeof(cmd),
-                           &refs[n].idx, &refs[n].term, ctx->hint);
+        rc = host_command_cohort_add(ctx->host,&refs[n],cmd,sizeof(cmd),ctx->hint);
         if (rc != EFS_OK)
             break;
         ++n;
     }
+    rc=host_command_cohort_end(&cohort,rc,ctx->hint);
     if (rc == EFS_OK)
         rc = host_wait_refs(ctx->host, refs, n, ctx->hint);
     if (rc != EFS_OK)
@@ -12024,6 +12026,74 @@ static int host_close_append_step(struct efs_raft_host *h,efs_ino_t ino,
     return rc==EFS_OK && removed?EFS_ERR_BUSY:rc;
 }
 
+/* Reservation images are independent PREPs of one captured plan. Bound
+ * their physical-log collection, but settle EVERY exact verdict before
+ * proposing COMMIT. A pre-decision failure is safely abortable; once the
+ * COMMIT is submitted the ordinary ambiguous-decision rules still apply. */
+struct host_append_batch {
+    struct host_resize_ctx base;
+    struct host_command_cohort cohort;
+    struct host_idx_ref refs[EFS_META_LANES+5];
+    unsigned n;
+};
+static int host_append_batch_prepare(void *user,const struct efs_txid *t,
+    const struct efs_txn_parts *parts,const struct efs_meta_append_image *im)
+{
+    struct host_append_batch *c=user;
+    if(c->n>=EFS_META_LANES+5)return EFS_ERR_OVERFLOW;
+    uint8_t pay[9+2*EFS_OPID_VAL_MAX];uint32_t pn;
+    int rc=efs_txn_encode_excl_value(pay,sizeof(pay),&pn,im->expected,
+                                     im->expected_len,im->op,im->value,im->new_len);
+    if(rc!=EFS_OK)return rc;
+    uint32_t sh=((uint32_t)im->key[0]<<8)|im->key[1];
+    rc=host_prep_raw(c->base.host,sh,EFS_TXN_EXCL_VALUE,t,parts,
+                     im->key,im->klen,pay,pn,&c->refs[c->n],c->base.hint);
+    if(rc==EFS_OK)c->n++;
+    return rc;
+}
+static int host_append_batch_decide(void *user,const struct efs_txid *t,
+    const struct efs_txn_parts *parts,int decision)
+{
+    struct host_append_batch *c=user;
+    int rc=host_command_cohort_end(&c->cohort,
+                    decision==EFS_TXN_COMMIT?EFS_OK:EFS_ERR_BUSY,c->base.hint);
+    if(decision==EFS_TXN_COMMIT) {
+        if(rc==EFS_OK)rc=host_wait_refs(c->base.host,c->refs,c->n,c->base.hint);
+        if(rc!=EFS_OK) {
+            /* No COMMIT was proposed. Release any already accepted PREPs
+             * through a durable ABORT; never fabricate a prepare verdict. */
+            int aborted=host_resize_decide(&c->base,t,parts,EFS_TXN_ABORT);
+            if(aborted!=EFS_OK)return aborted;
+            (void)host_resize_resolve(&c->base,t,parts,EFS_TXN_ABORT);
+            return rc;
+        }
+    }
+    return host_resize_decide(&c->base,t,parts,decision);
+}
+static int host_append_batch_resolve(void *user,const struct efs_txid *t,
+    const struct efs_txn_parts *parts,int decision)
+{
+    struct host_append_batch *c=user;
+    return host_resize_resolve(&c->base,t,parts,decision);
+}
+static int host_append_execute_batched(struct efs_raft_host *h,
+    const struct efs_meta_append_plan *plan,const struct efs_opid_req *q,
+    const struct efs_txid *t,int registered,int *hint)
+{
+    if(host_command_capture)return EFS_ERR_BUSY;
+    struct host_append_batch c={.base={h,hint}};
+    const struct efs_meta_append_ops ops={host_append_batch_prepare,
+        host_append_batch_decide,host_append_batch_resolve};
+    host_command_cohort_begin(&c.cohort,h);
+    int rc=registered?efs_meta_execute_append_owned(h->kv,plan,q,t,&ops,&c):
+                      efs_meta_execute_append(plan,t,&ops,&c);
+    /* Validation/no-op paths never call decide; discard their empty buffer.
+     * No thread-local capture may outlive this request's stack. */
+    if(host_command_capture==&c.cohort)
+        (void)host_command_cohort_end(&c.cohort,EFS_ERR_BUSY,hint);
+    return rc;
+}
+
 static int host_append_transaction(struct efs_raft_host *h,efs_ino_t ino,uint64_t len,
                                     const struct efs_opid_req *q,uint64_t *offset,int *hint)
 {
@@ -12050,8 +12120,7 @@ static int host_append_transaction(struct efs_raft_host *h,efs_ino_t ino,uint64_
     rc=efs_meta_capture_append(h->kv,ino,len,q,host_txn_coord,h,plan);
     if(rc==EFS_OK) {
         *offset=plan->offset;fill_txid(h,&t);
-        rc=registered?efs_meta_execute_append_owned(h->kv,plan,q,&t,&host_append_ops,&ctx):
-                      efs_meta_execute_append(plan,&t,&host_append_ops,&ctx);
+        rc=host_append_execute_batched(h,plan,q,&t,registered,hint);
         /* Exact-image conflicts are retryable; capture's retired identity
          * STALE is preserved and never allocated a second reservation. */
         if(rc==EFS_ERR_STALE)rc=EFS_ERR_BUSY;

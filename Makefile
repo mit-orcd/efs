@@ -331,6 +331,7 @@ test: all
 	python3 tests/test_lookup_path_authority.py
 	python3 tests/test_read_control_host.py
 	python3 tests/test_prepare_cohort.py
+	python3 tests/test_append_cohort.py
 	python3 tests/test_namespace_leader_route.py
 	python3 tests/test_namespace_admission_rounds.py
 	python3 tests/test_namespace_authority.py

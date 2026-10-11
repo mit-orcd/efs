@@ -698,3 +698,21 @@ repair and shutdown tests pass under sanitizers and Mac Linux. Live deep pair
 remains 0/2 (35.9 seconds including normal cleanup); neither fix closes the
 native gate. Evidence: native-bounded-marker-deep.txt and
 bounded-marker-sample-efs1.json under results/mac-readindex-resume.
+
+APPEND reservations now collect independent captured image PREPs in the
+existing eight-entry physical-log cohort, preserving stable refs and all exact
+verdicts before DECIDE COMMIT. A flush/verdict failure before DECIDE drives
+durable ABORT; an already-submitted ambiguous COMMIT is never converted.
+Validation/no-op/error paths clear request-local capture. Generic resize/
+append RESOLVE participants also share bounded barriers after their decision.
+Captured-plan, owned-session, 69-image bound/overflow, pending verdict, sync
+failure, abort failure, ambiguous COMMIT, nested-capture refusal and TLS cleanup
+regressions pass under sanitizers. Mac Linux append transaction/recovery,
+receipt, transaction fault, session and cohort gates pass; build has no warnings.
+The isolated native multiprocess append still times out at its original
+30-second budget (31.1 seconds including normal cleanup), without a surviving
+worker. Its sampled reserve RPC average is 223 ms (54 calls), while REPORT
+averages 600 ms (24 calls). Different runs/partial timed-out workloads are
+diagnostic only, not paired performance or correctness acceptance. REPORT's
+append completion still prepares images individually and is the next lead.
+Evidence: append-cohort-unit.txt and native-append-cohort.txt.
