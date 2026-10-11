@@ -29,8 +29,16 @@ def run(mount,peer,count,work):
             if now-checkpoint>=30:
                 windows.append(dict(elapsed_s=now-started,records=index+1,records_per_s=(index+1-previous)/(now-checkpoint)))
                 print('append burst',index+1,'/',count,'elapsed',round(now-started,3),flush=True)
+                (work/'append-burst-progress.json').write_text(json.dumps(dict(phase='writes',records=index+1,elapsed_s=now-started)))
                 previous=index+1;checkpoint=now
-        writes=time.monotonic()-started;before=time.monotonic();os.fsync(fd);sync=time.monotonic()-before
+        writes=time.monotonic()-started
+        (work/'append-burst-progress.json').write_text(json.dumps(dict(phase='final-fsync',records=count,write_seconds=writes)))
+        before=time.monotonic()
+        try:os.fsync(fd)
+        except OSError as error:
+            (work/'append-burst-error.json').write_text(json.dumps(dict(records=count,write_seconds=writes,fsync_seconds=time.monotonic()-before,errno=error.errno,error=str(error))))
+            raise
+        sync=time.monotonic()-before
     finally:os.close(fd)
     expected=verify(path,count);assert verify(peer/path.name,count)==expected
     ordered=sorted(latency)

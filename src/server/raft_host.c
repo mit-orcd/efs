@@ -2641,10 +2641,13 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
      * their core error and retry; the policy did not become visible. */
     if(cmd[0]==EFS_MD_CMD_QUERY_POLICY &&
        (rc==EFS_ERR_STALE || rc==EFS_ERR_INVAL || rc==EFS_ERR_PROTO))ret=EFS_OK;
-    /* FINISH/FENCE_LOC BUSY must let later ACK/RESOLVE drain ownership. It is
+    /* REGISTER's missing-owner verdict must let the following CREATE apply.
+     * Admission refusals remain in the ring; IO/NOMEM still retry this index.
+     * FINISH/FENCE_LOC BUSY must let later ACK/RESOLVE drain ownership. It is
      * a rejected command, not a retryable storage failure at this log index. */
     if (cmd[0] == EFS_MD_CMD_SESSION && clen >= 2 &&
-        (cmd[1] == EFS_MD_SESS_FINISH || cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
+        (cmd[1] == EFS_MD_SESS_REGISTER || cmd[1] == EFS_MD_SESS_ESTABLISH ||
+         cmd[1] == EFS_MD_SESS_FINISH || cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
          cmd[1] == EFS_MD_SESS_LEASE_EDGE_DEFERRED || cmd[1] == EFS_MD_SESS_LEASE_OPEN ||
          cmd[1] == EFS_MD_SESS_LEASE_CLOSE) &&
         rc != EFS_ERR_IO && rc != EFS_ERR_NOMEM)
