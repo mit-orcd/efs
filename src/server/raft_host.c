@@ -1913,6 +1913,24 @@ static int apply_append_res_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
+static int apply_append_catchup_cmd(struct efs_raft_host *h,const uint8_t *cmd,
+                                    uint32_t clen,uint8_t group)
+{
+    if(clen!=38 && clen!=58)return EFS_ERR_PROTO;
+    if(cmd[37]>1 || (cmd[37] && clen!=58) || (!cmd[37] && clen!=38))return EFS_ERR_PROTO;
+    uint32_t limit=rd32be(cmd+33);
+    if(!limit || limit>EFS_META_APPEND_CATCHUP_MAX)return EFS_ERR_INVAL;
+    efs_ino_t ino=rd64be(cmd+1);
+    if(group!=efs_raft_shard_group(efs_kv_inode_shard(ino)))return EFS_ERR_INVAL;
+    struct efs_opid session={0};
+    if(cmd[37]) {
+        memcpy(session.client_uuid,cmd+38,EFS_OPID_UUID_LEN);
+        session.session_epoch=rd32be(cmd+54);
+    }
+    return efs_meta_apply_append_catchup(h->kv,ino,rd64be(cmd+9),
+        rd64be(cmd+17),rd64be(cmd+25),limit,cmd[37]?&session:NULL);
+}
+
 /* Same encoding as sim_dir_apply. Empty LOCAL → HASHED for the smoke.
  * Same-group leftover migrate stays this apply. A leftover whose HASHED
  * shard is on the other group is a txn from host_dir_migrate (hashed PUT
@@ -2586,7 +2604,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         memcpy(key+4,cmd+1,8);
         rc=efs_kv_put(h->kv,key,sizeof(key),cmd+9,clen-9);
     } else
-    if ((cmd[0]==EFS_MD_CMD_PREPARE || cmd[0]==EFS_MD_CMD_DECIDE ||
+    if ((cmd[0]==EFS_MD_CMD_APPEND_CATCHUP || cmd[0]==EFS_MD_CMD_PREPARE || cmd[0]==EFS_MD_CMD_DECIDE ||
          cmd[0]==EFS_MD_CMD_RESOLVE || cmd[0]==EFS_MD_CMD_DROP) &&
         getenv("EFS_FAULT_TXN_APPLY_FILE") &&
         access(getenv("EFS_FAULT_TXN_APPLY_FILE"),F_OK)==0) {
@@ -2620,7 +2638,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     ret = (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
            cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP ||
            cmd[0] == EFS_MD_CMD_RMDIR || cmd[0] == EFS_MD_CMD_APPEND_RSV ||
-           cmd[0] == EFS_MD_CMD_APPEND_RES ||
+           cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_APPEND_CATCHUP ||
            cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_PUBLISH ||
            cmd[0] == EFS_MD_CMD_REPORT_PUBLISH ||
            cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
@@ -2660,7 +2678,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
-         cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
+         cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_APPEND_CATCHUP || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
          cmd[0] == EFS_MD_CMD_REPORT_PUBLISH || cmd[0] == EFS_MD_CMD_ACTIVATE_LANE ||
          cmd[0] == EFS_MD_CMD_PUBLISH || cmd[0] == EFS_MD_CMD_PUBLICATION ||
          cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE ||
@@ -3005,6 +3023,8 @@ static int host_maybe_snapshot(struct efs_raft_host *h, int gi)
 static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t term, uint8_t group,
                                const uint8_t *cmd, uint32_t clen)
 {
+    if(cmd[0]==EFS_MD_CMD_APPEND_CATCHUP)
+        return apply_append_catchup_cmd(h,cmd,clen,group);
     if (cmd[0] == EFS_MD_CMD_QUERY_POLICY) {
         if(clen!=13 || group!=efs_raft_shard_group(1))return EFS_ERR_INVAL;
         return efs_query_policy_apply(h->kv,rd64be(cmd+1),rd32be(cmd+9));
@@ -4025,6 +4045,10 @@ static uint64_t host_pressure_command_charge(const uint8_t *cmd, uint32_t n)
     }
     uint64_t work = 0;
     switch (cmd[0]) {
+    case EFS_MD_CMD_APPEND_CATCHUP:
+        work=host_pressure_rows_charge((n==38 || n==58) && rd32be(cmd+33)>0 &&
+            rd32be(cmd+33)<=EFS_META_APPEND_CATCHUP_MAX ? rd32be(cmd+33)+1 :
+            EFS_META_APPEND_CATCHUP_MAX+1,1,48);break;
     case EFS_MD_CMD_CLOSE_STEP: work=host_pressure_rows_charge(2*EFS_LOCK_CAP,1,0); break;
     case EFS_MD_CMD_LANE_SWEEP_BATCH: work=64u<<10; break;
     case EFS_MD_CMD_TRUNCATE:
@@ -4053,6 +4077,7 @@ static int host_pressure_recovery(const uint8_t *cmd, uint32_t n)
     if (cmd[0]==EFS_MD_CMD_SESSION && n>=2 && cmd[1]==EFS_MD_SESS_LEASE_LOCK_BATCH)
         return 1;
     switch (cmd[0]) {
+    case EFS_MD_CMD_APPEND_CATCHUP:
     case EFS_MD_CMD_DECIDE: case EFS_MD_CMD_RESOLVE: case EFS_MD_CMD_DROP:
     case EFS_MD_CMD_LANE_SWEEP: case EFS_MD_CMD_LANE_SWEEP_BATCH:
     case EFS_MD_CMD_REAP_DONE: case EFS_MD_CMD_REAP_BATCH:
@@ -11867,6 +11892,9 @@ static int host_close_append_step(struct efs_raft_host *h,efs_ino_t ino,
         rc=efs_meta_finish_append_close(h->kv,ino,offset,identity,&tx,&host_append_ops,&ctx);
         return rc==EFS_OK?EFS_ERR_BUSY:rc; /* another pass checks completion */
     }
+    rc=efs_meta_retire_append_barriers(h->kv,ino,NULL,&tx,&host_append_ops,&ctx);
+    if(rc!=EFS_OK)return rc;
+    fill_txid(h,&tx);
     unsigned removed=0;
     rc=efs_meta_prune_append_close(h->kv,ino,identity,&tx,&host_append_ops,&ctx,&removed);
     return rc==EFS_OK && removed?EFS_ERR_BUSY:rc;
@@ -11887,6 +11915,14 @@ static int host_append_transaction(struct efs_raft_host *h,efs_ino_t ino,uint64_
     /* Replayed reservations do not need cleanup or a new transaction. */
     rc=efs_meta_append_result(h->kv,ino,len,q,offset);
     if(rc!=EFS_ERR_NOT_FOUND)return rc;
+    uint64_t closed_watermark=0;uint32_t remaining_open=0;
+    rc=efs_meta_apply_append_state(h->kv,ino,&closed_watermark,NULL,&remaining_open);
+    if(rc!=EFS_OK)return rc;
+    if(closed_watermark && !remaining_open) {
+        fill_txid(h,&t);
+        rc=efs_meta_retire_append_barriers(h->kv,ino,&q->id,&t,&host_append_ops,&ctx);
+        if(rc!=EFS_OK)return rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
+    }
     /* Bound this request's cleanup effort. BUSY retains the caller's identity
      * and deadline; a later attempt resumes from durable deleted pages. */
     for(unsigned page=0;page<32;++page) {
@@ -15044,68 +15080,46 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     }
 }
 
-/* OPEN reservations whose range is at or below the published size become
- * COMPLETED. No new opcode: REPORT already committed the data. Catch-up
- * with nopen==0 is a no-op (existing raft-smoke-p). */
+/* One inode-group completion proposal marks every caught-up reservation.
+ * Lane barriers are separate authorities: retire them with one guarded
+ * cross-shard transaction, never mutate foreign shards in the inode log. */
 static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
                                   uint64_t sz, const struct efs_opid *session, int *hint)
 {
-    uint64_t offs[64], lens[64];
-    uint32_t n = 64, i;
-    struct efs_txid t;
-    int rc,authoritative=0;
-
-    /* append_open caps at 64. A 400-record O_APPEND burst is 400 OPEN
-     * rows; one pass left nopen>0 and the peer stayed BUSY forever. */
-    for (;;) {
-        uint32_t did = 0;
-
-        n = 64;
-        rc = efs_meta_apply_append_open(h->kv, ino, offs, lens, &n);
-        if (rc == EFS_ERR_NOT_FOUND)
-            return EFS_OK;
-        if (rc != EFS_OK)
-            return rc;
-        if (n == 0)
-            return EFS_OK;
-        for (i = 0; i < n; i++) {
-            if (offs[i] + lens[i] > sz)
-                continue;
-            if(!authoritative) {
-                rc=host_append_authority(h,hint);
-                if(rc!=EFS_OK)return rc;
-                authoritative=1;
-                /* The old scan may precede the fresh authority boundary.
-                 * Recollect OPEN ranges from the current complete view. */
-                break;
-            }
-            /* Freeze owner (when present) and inode before pipelining the
-             * exact cursor/reservation/lane images. The shared callback checks
-             * every applied verdict before committing the transaction. */
-            uint32_t count=1;
-            while(count<EFS_META_APPEND_COMPLETE_MAX && i+count<n &&
-                  offs[i+count]+lens[i+count]<=sz)++count;
-            for(;;) {
-                struct host_append_reserve_ctx batch={.base={h,hint},
-                                                       .leading=session?2:1};
-                fill_txid(h,&t);
-                rc = session ?
-                    efs_meta_finish_append_batch_owned(h->kv, ino, offs+i, count,
-                        EFS_META_APPEND_COMPLETED, session, &t, &host_append_reserve_ops, &batch) :
-                    efs_meta_finish_append_batch(h->kv, ino, offs+i, count,
-                        EFS_META_APPEND_COMPLETED, &t, &host_append_reserve_ops, &batch);
-                /* An unusual active-lane distribution can exhaust the unchanged
-                 * per-shard image bound. Recapture a smaller batch; never raise
-                 * that bound or discard a guard to make it fit. */
-                if(rc!=EFS_ERR_INVAL || count==1)break;
-                count=(count+1)/2;
-            }
-            if(rc!=EFS_OK)return rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
-            did+=count;i+=count-1;
+    uint64_t watermark=0;uint32_t open=0;
+    int rc=efs_meta_apply_append_state(h->kv,ino,&watermark,NULL,&open);
+    if(rc==EFS_ERR_NOT_FOUND)return EFS_OK;
+    if(rc!=EFS_OK || !watermark)return rc;
+    rc=host_append_authority(h,hint);
+    if(rc!=EFS_OK)return rc;
+    struct efs_meta_row row;
+    rc=efs_meta_apply_get_inode(h->kv,ino,&row);
+    if(rc!=EFS_OK)return rc==EFS_ERR_NOT_FOUND?EFS_ERR_BUSY:rc;
+    rc=efs_meta_apply_append_state(h->kv,ino,&watermark,NULL,&open);
+    if(rc!=EFS_OK)return rc;
+    if(open) {
+        if(open>EFS_META_APPEND_CATCHUP_MAX)return EFS_ERR_OVERFLOW;
+        uint8_t cmd[58]={EFS_MD_CMD_APPEND_CATCHUP};
+        wr64be(cmd+1,ino);wr64be(cmd+9,row.generation);
+        wr64be(cmd+17,row.content_epoch);wr64be(cmd+25,sz);
+        wr32be(cmd+33,open);cmd[37]=session!=NULL;
+        if(session) {
+            memcpy(cmd+38,session->client_uuid,EFS_OPID_UUID_LEN);
+            wr32be(cmd+54,session->session_epoch);
         }
-        if (!did && i==n)
-            return EFS_OK;
+        rc=host_propose_wait(h,efs_raft_shard_group(efs_kv_inode_shard(ino)),
+                             cmd,session?58:38,hint);
+        if(rc!=EFS_OK)return rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
     }
+    /* A partial REPORT leaves the remaining reservation barriers intact.
+     * A crash/lost reply after completion retries only barrier retirement. */
+    rc=efs_meta_apply_append_state(h->kv,ino,&watermark,NULL,&open);
+    if(rc!=EFS_OK)return rc;
+    if(open || !watermark)return EFS_OK;
+    struct efs_txid tx;fill_txid(h,&tx);
+    struct host_append_reserve_ctx batch={.base={h,hint},.leading=session?2:1};
+    rc=efs_meta_retire_append_barriers(h->kv,ino,session,&tx,&host_append_reserve_ops,&batch);
+    return rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
 }
 
 /* Files and symlinks carry a chunk map; FUSE stores a symlink target as

@@ -7932,6 +7932,127 @@ int efs_meta_collect_append_completion(struct efs_kv *kv,efs_ino_t ino,uint64_t 
     return meta_append_resolve(kv,ino,off,outcome,emit,ctx);
 }
 
+struct catchup_change {uint8_t key[27], value[APPEND_RSV_VAL];};
+struct catchup_scan {
+    struct efs_kv *kv;
+    struct catchup_change *changes;
+    uint32_t count, capacity, seen, open;
+    uint64_t published, frontier, watermark, generation;
+    efs_ino_t ino;
+    int rc;
+};
+static int catchup_row(void *user,const uint8_t *key,uint32_t kl,
+                         const uint8_t *value,uint32_t vl)
+{
+    struct catchup_scan *s=user;struct append_rsv r;
+    if(++s->seen>EFS_META_APPEND_CATCHUP_MAX) {
+        s->rc=EFS_ERR_OVERFLOW;return 1;
+    }
+    if(kl!=27 || vl!=APPEND_RSV_VAL || rd64(key+3)!=s->ino ||
+       rd64(key+11)!=s->generation || unpack_append_rsv(value,vl,&r)!=EFS_OK ||
+       rd64(key+19)!=r.off || !r.len || r.off>UINT64_MAX-r.len ||
+       r.off+r.len>s->watermark || r.state>APPEND_DONE) {
+        s->rc=EFS_ERR_PROTO;return 1;
+    }
+    if(r.state==APPEND_OPEN) {
+        ++s->open;
+        if(r.off+r.len<=s->published) {
+            if(s->count==s->capacity) {s->rc=EFS_ERR_PROTO;return 1;}
+            s->rc=meta_write_check(s->kv,key,kl);
+            if(s->rc!=EFS_OK)return 1;
+            struct catchup_change *c=&s->changes[s->count++];
+            memcpy(c->key,key,kl);memcpy(c->value,value,vl);
+            c->value[44]=APPEND_DONE;r.state=APPEND_DONE;
+        }
+    }
+    if(r.off==s->frontier && r.state==APPEND_DONE)s->frontier=r.off+r.len;
+    return 0;
+}
+
+/* Only reservation rows and their cursor belong to this inode group's log.
+ * REPORT has already durably published its EOF on every touched lane group.
+ * Never recompute that EOF from a replica's possibly partial lane view here.
+ * Keep the closed cursor until the separate exact-image transaction retires
+ * all lane barriers; a crash between phases remains safe and retryable. */
+int efs_meta_apply_append_catchup(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
+    uint64_t epoch,uint64_t published,uint32_t limit,const struct efs_opid *session)
+{
+    if(!kv || !ino || !gen || !limit || limit>EFS_META_APPEND_CATCHUP_MAX)return EFS_ERR_INVAL;
+    uint32_t shard=efs_kv_inode_shard(ino),ki=0,kc=0,pl=0,sl=0;
+    uint8_t inode[EFS_KV_KEY_MAX],cursor[EFS_KV_KEY_MAX],prefix[EFS_KV_KEY_MAX],start[EFS_KV_KEY_MAX];
+    uint8_t value[APPEND_CUR_VAL];struct efs_meta_row row;struct append_cur cur;
+    int rc=efs_meta_apply_get_inode(kv,ino,&row);
+    if(rc!=EFS_OK)return rc;
+    if(row.generation!=gen || row.content_epoch!=epoch)return EFS_ERR_STALE;
+    if(!S_ISREG(row.mode))return EFS_ERR_INVAL;
+    if(session) {
+        struct efs_opid_req q={.id=*session};q.id.seq=1;
+        if(!efs_opid_req_valid(&q) || !session->session_epoch)return EFS_ERR_INVAL;
+        rc=efs_session_accept(kv,shard,session->client_uuid,session->session_epoch);
+        if(rc!=EFS_OK)return rc;
+    }
+    rc=efs_kv_key_inode(shard,ino,inode,&ki);
+    if(rc==EFS_OK)rc=meta_write_check(kv,inode,ki);
+    if(rc==EFS_OK)rc=efs_kv_key_append_cur(shard,ino,gen,cursor,&kc);
+    if(rc==EFS_OK)rc=meta_write_check(kv,cursor,kc);
+    if(rc==EFS_OK)rc=efs_txn_key_exclusive(kv,cursor,kc);
+    if(rc==EFS_OK)rc=load_append_cur(kv,ino,gen,&cur);
+    if(rc!=EFS_OK || !cur.nopen)return rc;
+    if(cur.frontier>cur.watermark)return EFS_ERR_PROTO;
+    if(cur.nopen>EFS_META_APPEND_CATCHUP_MAX)return EFS_ERR_OVERFLOW;
+    if(cur.nopen>limit)return EFS_ERR_BUSY; /* recapture before changing any row */
+    struct catchup_change *changes=calloc(cur.nopen,sizeof(*changes));
+    struct efs_kv_item *items=calloc((size_t)cur.nopen+1,sizeof(*items));
+    if(!changes || !items){free(changes);free(items);return EFS_ERR_NOMEM;}
+    struct catchup_scan scan={.kv=kv,.changes=changes,.capacity=cur.nopen,
+        .published=published,.frontier=cur.frontier,.watermark=cur.watermark,
+        .generation=gen,.ino=ino};
+    rc=efs_kv_key_append_rsv_prefix(shard,ino,gen,prefix,&pl);
+    if(rc==EFS_OK)rc=efs_kv_key_append_rsv(shard,ino,gen,cur.frontier,start,&sl);
+    if(rc==EFS_OK)rc=efs_kv_scan_from(kv,prefix,pl,start,sl,catchup_row,&scan);
+    if(scan.rc!=EFS_OK)rc=scan.rc;
+    if(rc==1)rc=EFS_ERR_PROTO;
+    if(rc==EFS_OK && scan.open!=cur.nopen)rc=EFS_ERR_BUSY;
+    if(rc==EFS_OK && scan.count) {
+        cur.nopen-=scan.count;cur.frontier=scan.frontier;
+        if(!cur.nopen && cur.frontier!=cur.watermark)rc=EFS_ERR_PROTO;
+        else {
+            for(uint32_t i=0;i<scan.count;++i)
+                items[i]=(struct efs_kv_item){EFS_KV_PUT,changes[i].key,27,
+                                              changes[i].value,APPEND_RSV_VAL};
+            pack_append_cur(value,&cur);
+            items[scan.count]=(struct efs_kv_item){EFS_KV_PUT,cursor,kc,value,sizeof(value)};
+            rc=meta_write_batch(kv,items,scan.count+1);
+        }
+    }
+    free(items);free(changes);return rc;
+}
+
+int efs_meta_collect_append_barrier_retirement(struct efs_kv *kv,efs_ino_t ino,
+    int (*emit)(void *,const struct efs_kv_item *,uint32_t),void *ctx)
+{
+    if(!kv || !ino || !emit)return EFS_ERR_INVAL;
+    struct efs_meta_row row;struct append_cur cur;
+    uint8_t kc[EFS_KV_KEY_MAX],ki[EFS_KV_KEY_MAX],vi[INO_VAL];uint32_t nc=0,ni=0,n=0;
+    uint8_t kl[EFS_META_LANES][EFS_KV_KEY_MAX],vl[EFS_META_LANES][LANE_VAL];
+    struct efs_kv_item items[EFS_META_LANES+2];
+    int rc=efs_meta_apply_get_inode(kv,ino,&row);
+    if(rc==EFS_OK)rc=load_append_cur(kv,ino,row.generation,&cur);
+    if(rc!=EFS_OK)return rc;
+    if(cur.nopen)return EFS_ERR_BUSY;
+    if(!cur.watermark)return EFS_OK; /* already retired / ordinary REPORT */
+    if(cur.frontier!=cur.watermark)return EFS_ERR_PROTO;
+    rc=efs_kv_key_append_cur(efs_kv_inode_shard(ino),ino,row.generation,kc,&nc);
+    if(rc==EFS_OK)rc=efs_kv_key_inode(efs_kv_inode_shard(ino),ino,ki,&ni);
+    if(rc==EFS_OK)rc=fence_lane_bits(kv,ino,row.generation,row.active_lanes,
+                                    append_bar_clr,NULL,items,&n,kl,vl);
+    if(rc!=EFS_OK)return rc;
+    row.base_size=max_u64(row.base_size,cur.frontier);pack_inode(vi,&row);
+    items[n++]=(struct efs_kv_item){EFS_KV_PUT,ki,ni,vi,sizeof(vi)};
+    items[n++]=(struct efs_kv_item){EFS_KV_DEL,kc,nc,NULL,0};
+    return emit(ctx,items,n);
+}
+
 int efs_meta_apply_append_state(struct efs_kv *kv, efs_ino_t ino,
                                 uint64_t *watermark, uint64_t *frontier,
                                 uint32_t *nopen)

@@ -148,6 +148,16 @@ struct efs_meta_append_ops {
 /* Bound collection. The caller retains the existing per-shard image limit
  * and shrinks a batch if its active-lane distribution needs more guards. */
 #define EFS_META_APPEND_COMPLETE_MAX 8u
+/* One completion entry, bounded allocation; existing per-shard transaction
+ * image limits are unchanged. Oversized backlog refuses before mutation. */
+/* Leave two keys for the cursor and Raft applied marker inside the existing
+ * 32,768-key atomic apply scope; do not increase that engine limit. */
+#define EFS_META_APPEND_CATCHUP_MAX 32766u
+int efs_meta_apply_append_catchup(struct efs_kv *, efs_ino_t, uint64_t generation,
+    uint64_t content_epoch, uint64_t published_size, uint32_t limit, const struct efs_opid *session);
+int efs_meta_retire_append_barriers(struct efs_kv *, efs_ino_t,
+    const struct efs_opid *session, const struct efs_txid *,
+    const struct efs_meta_append_ops *, void *ctx);
 int efs_meta_capture_append(struct efs_kv *kv, efs_ino_t ino, uint64_t len,
                              const struct efs_opid_req *q,
                              efs_txn_coord_fn coord, void *ctx,
@@ -187,6 +197,8 @@ int efs_meta_collect_append_completion(struct efs_kv *kv, efs_ino_t ino,
                                         uint64_t offset, int outcome,
                                         int (*emit)(void *, const struct efs_kv_item *, uint32_t),
                                         void *ctx);
+int efs_meta_collect_append_barrier_retirement(struct efs_kv *, efs_ino_t,
+    int (*emit)(void *,const struct efs_kv_item *,uint32_t),void *ctx);
 
 /* Closed bursts retain DONE records until bounded cleanup. Pending returns
  * 0/1 or an error. Prune never removes records while an OPEN cursor exists. */
