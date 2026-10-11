@@ -1082,3 +1082,35 @@ existing local opener fallback; local ASAN/UBSAN and final Mac Linux helper/
 documentation 5/5 pass. Evidence: create-combined-build-wire.txt and
 create-combined-final-tests.txt. Ready for qualified rollout; native timings
 and full 216 acceptance are still pending.
+
+Committed f842cd37 normally rolled to the Mac cluster. Isolated native
+concurrent CREATE passes the original 20-second case budget (24.4 seconds
+including fixture cleanup). Complete unchanged native run is 214/216,
+630.4 seconds: concurrent CREATE and mtime loop still time out; local
+baseline is 216/216, no skipped/notrun cases. These failures remain open.
+Evidence: native-combined-create.txt and native-combined-full-j1.txt.
+Post-suite diagnostic preserves exact 160-file/80-append assertions and
+records inode identities: CREATE work 18.15 seconds (26.67 including extra
+byte-verification reads); even/group-2 append inode 26444 takes 34.11 seconds,
+27.63 in flush/close. Evidence: pre-cover-routing-stages.txt.
+
+Uncommitted coverage-aware routing prefers the operation’s known leader
+only when committed voting masks prove it hosts every required group.
+Identified APPEND and retained CREATE return that hint before mutation/
+allocation; receivers still obtain full fresh authority and exact guards.
+Single-group leaders retain the dual-group coordinator path, closing the
+previously proven redirect-loop hazard. Actual helper tests cover three/
+four-node layouts, committed membership changes, missing/self leaders and
+one-group probes; local ASAN/UBSAN passes. Mac Linux immutable identity/
+append/cohort tests and private cold wire gates are running. No new protocol
+command, deadline change or authority bypass. Installed service remains
+f842cd37. Evidence: cover-routing-build-wire.txt.
+
+Coverage-aware routing candidate passes Mac Linux host/immutable-identity
+regressions and the private buffered/TCP gate (exit 0): original EEXIST
+cold replay, 1,024 unique CREATE exact cold bytes/replacement checks, all
+eight append/truncate races, cold restart after four, exact 800-record
+handoff (100.1 seconds, original 240-second budget), physically drained
+deletions and normal mount/daemon stop. Local ASAN/UBSAN routing tests pass.
+Evidence: cover-routing-build-wire.txt. Ready for qualified Mac rollout;
+the previous 214/216 result remains the current full native acceptance.

@@ -3412,6 +3412,31 @@ static int host_pick_peer(struct efs_raft_host *h, const uint8_t *groups, int ng
     return -1;
 }
 
+/* Prefer the operation's leader only if its committed voting membership
+ * covers every required group. Otherwise a single-group leader would bounce
+ * the whole operation back to a dual-host coordinator. Routing is not an
+ * authority proof: the receiver still establishes fresh views and guards. */
+static int host_leader_cover_pick(struct efs_raft_host *h,uint8_t group,
+    const uint8_t *need,int count)
+{
+    if(!need || count<1 || count>HOST_NGROUPS)return -1;
+    int peer=-1;
+    pthread_mutex_lock(&h->mu);
+    struct efs_raft *r=group_raft(h,group);
+    int leader=r?efs_raft_leader(r):-1;
+    if(leader>=0 && leader<h->n && leader!=h->raft_id) {
+        peer=leader;
+        for(int i=0;i<count;i++) {
+            struct host_group *g=group_slot(h,need[i]);
+            uint32_t voters=(g && g->r)?efs_raft_voters(g->r):
+                (g?g->voters:group_voters(need[i],h->n));
+            if(!hosts_group(leader,voters)){peer=-1;break;}
+        }
+    }
+    pthread_mutex_unlock(&h->mu);
+    return peer;
+}
+
 /* Both scratch groups. HASHED used_shards / file lanes can sit on the
  * group this replica does not host; bounce to a dual-host instead of
  * returning NOT_PRIMARY to the client. */
@@ -11452,6 +11477,12 @@ void server_raft_host_create_retained(const struct efs_msg_create_retained *requ
     for(int i=0;i<ng;i++)if(!host_hosts(h,groups[i])) {
         host_retained_create_forward(h,request,out,groups,ng);return;
     }
+    int leader=host_leader_cover_pick(h,efs_raft_shard_group(out->shard),groups,ng);
+    if(leader>=0) {
+        out->rpc.status=EFS_INODE_RPC_NOT_PRIMARY;
+        out->rpc.primary_id=(efs_node_id_t)(leader+1);
+        return;
+    }
     rc=host_retained_create_proof(h,request,out,&hint,&covered);
     if(out->known)return;
     if(request->probe || rc!=EFS_ERR_BUSY) {
@@ -14665,6 +14696,15 @@ void server_raft_host_append(efs_ino_t ino, uint64_t len,
             return;
         }
         if (!host_append_primary(h, ig, out))return;
+    }
+    if(ack) {
+        uint8_t need[2];host_need_both(need);
+        int leader=host_leader_cover_pick(h,ig,need,2);
+        if(leader>=0) {
+            out->status=EFS_INODE_RPC_NOT_PRIMARY;
+            out->primary_id=(efs_node_id_t)(leader+1);
+            return;
+        }
     }
     pthread_once(&host_append_once, host_append_init);
     /* Mix the allocation counter with the shard: inodes on one shard
