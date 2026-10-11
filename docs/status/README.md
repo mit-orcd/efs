@@ -434,13 +434,13 @@ Spark performance measurement still owed. Grouped open counts are now
 
 ## Intel follow-ups — W100–W106 (indexed Oct 11, 2026)
 
-Current [devel-intel acceptance ledger](intel-deployment-acceptance-20261011.md) retains failures alongside reruns. Frozen `f9e77c9f` repairs REGISTER apply-verdict propagation and is undergoing complete TCP/direct and TCP/buffered acceptance on both Intel hosts. [Earlier captured evidence](../../results/measure/20261011-intel-devel-intel/acceptance-in-progress.json) is a historical checkpoint; it does not establish current-source acceptance. The ledger links exact-source failures, native proof and the historical simulator NOTRUN correction.
+Current [devel-intel acceptance ledger](intel-deployment-acceptance-20261011.md) retains failures alongside reruns. Frozen `ae26ab6b` repairs retained-CREATE fault coverage and is undergoing fresh complete TCP/direct and TCP/buffered acceptance on both Intel hosts. The superseded 1,000 ms trial passed 110 main checks and 30 canonical rounds on each host but failed the supplemental CREATE injection. Earlier candidates and partial checkpoints are archived; no partial or failed trial establishes deployment acceptance.
 
 This index adds traceable IDs to the Intel acceptance follow-ups; it does not change the existing queue order or accepted design decisions. Existing sustained tiny-file performance remains W97, protection/repair W74/W66, durability W71/W73 and capacity W99.
 
 | ID | Task | Recorded state |
 | --- | --- | --- |
-| [W100](../backlog/work-items.md#w100) | Intel concurrent POSIX timeouts and mixed-workload EIO | Correctness/performance investigation; open. Current bounded-config private main checks pass on both hosts, including four 214/214 concurrent cores; independent/fault and production acceptance pending. |
+| [W100](../backlog/work-items.md#w100) | Intel concurrent POSIX timeouts and mixed-workload EIO | Correctness/performance investigation; open. Current bounded-config private main checks pass on both hosts, including four 214/214 concurrent cores; All 30 independent rounds passed; repaired-source fault and production acceptance pending. |
 | [W101](../backlog/work-items.md#w101) | Complete and verify the Intel two-million-file workload | Operational acceptance; in progress. |
 | [W102](../backlog/work-items.md#w102) | Complete Intel2 private peer and GC acceptance | Validation follow-up; in progress, aggregate acceptance remains open. |
 | [W103](../backlog/work-items.md#w103) | Investigate intermittent Intel persistence and stats timeouts | Liveness/performance investigation; open. |
