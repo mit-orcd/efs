@@ -1,0 +1,48 @@
+{
+  "records": 2000,
+  "record_bytes": 4096,
+  "exact_bytes": 8192000,
+  "write_seconds": 185.32807005700124,
+  "final_fsync_seconds": 0.11989916000129597,
+  "final_fsync_returned_zero": true,
+  "write_latency_s": {
+    "50": 0.06441193799946632,
+    "95": 0.29850241400163213,
+    "99": 0.4558753040000738,
+    "100": 0.5751547290001326
+  },
+  "windows": [
+    {
+      "elapsed_s": 30.05998834500133,
+      "records": 845,
+      "records_per_s": 28.11045667422938
+    },
+    {
+      "elapsed_s": 60.1242816970007,
+      "records": 1162,
+      "records_per_s": 10.544069547502554
+    },
+    {
+      "elapsed_s": 90.1598100500014,
+      "records": 1397,
+      "records_per_s": 7.824067458980535
+    },
+    {
+      "elapsed_s": 120.24812430100064,
+      "records": 1603,
+      "records_per_s": 6.846511847806783
+    },
+    {
+      "elapsed_s": 150.2941860660012,
+      "records": 1816,
+      "records_per_s": 7.089115427703576
+    },
+    {
+      "elapsed_s": 180.44855908499994,
+      "records": 1976,
+      "records_per_s": 5.306029739009732
+    }
+  ],
+  "warm_primary_sha256": "3dc0bebc63ce0f4f9f8c3f072aea966ae136171338626636f147c08088f0fad9",
+  "warm_peer_sha256": "3dc0bebc63ce0f4f9f8c3f072aea966ae136171338626636f147c08088f0fad9"
+}
