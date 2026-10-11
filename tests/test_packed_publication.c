@@ -54,7 +54,21 @@ static void run(unsigned scenario)
     for (unsigned i = 0; i < 2; i++) {
         pubs[i].ch.packed = refs[i]; memcpy(pubs[i].ch.nodes, object.nodes, sizeof(object.nodes));
         memcpy(pubs[i].ch.checksums, object.checksums, sizeof(object.checksums));
-        assert(!efs_meta_apply_publication_admit(kv, pubs + i));
+        if (!i) assert(!efs_meta_apply_publication_admit(kv, pubs + i));
+        else {
+            /* Direct terminal publication must not expose a mapping, receipt or
+             * LIVE reference when its one atomic storage batch fails. */
+            real_ops=kv->ops;struct efs_kv_ops fault_ops=*real_ops;
+            fault_ops.batch=fault_batch;kv->ops=&fault_ops;fail_batch=1;
+            assert(efs_meta_apply_publish(kv,pubs+i)==EFS_ERR_IO);
+            kv->ops=real_ops;
+            int verdict;
+            assert(efs_meta_publication_result(kv,pubs+i,&verdict)==EFS_ERR_NOT_FOUND);
+            struct efs_meta_chunk absent;
+            assert(efs_meta_apply_get_chunk(kv,pubs[i].ino,0,&absent)==EFS_ERR_NOT_FOUND);
+            assert(!efs_pack_admission_get(kv,&object,&current));
+            assert(current.ledger.state[0]==EFS_PACK_LIVE && current.ledger.state[1]==EFS_PACK_PENDING);
+        }
         assert(!efs_meta_apply_publish(kv, pubs + i)); assert(!efs_meta_apply_publish(kv, pubs + i));
         int verdict; struct efs_publication_locator locator;
         assert(!efs_meta_publication_receipt(kv, pubs + i, &verdict, &locator) && !verdict && locator.index == 101 + i);

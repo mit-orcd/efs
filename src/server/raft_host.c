@@ -16510,7 +16510,11 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
                 cmd[HOST_PUBLISH_LEN - 1] |= HOST_PUB_F_PACKED;
                 rc = efs_pack_ref_encode(&p.ch.packed, cmd + len); len += EFS_PACK_REF_BYTES;
             }
-            if(!query_only && rc==EFS_OK) {
+            /* Packed objects already have a durable admission and immutable
+             * PENDING record manifest. Apply can atomically install the mapping,
+             * LIVE reference and terminal receipt without an extra per-file
+             * PENDING proposal. Unknown outcomes still retain client ownership. */
+            if(!query_only && rc==EFS_OK && p.coding_profile_id!=EFS_META_PROFILE_PACK_K2F1) {
                 /* Pending is issued only after replicated admission is visible
                  * under fresh authority, never from a proposed index/term. */
                 cmd[0]=EFS_MD_CMD_PUBLICATION_ADMIT;
