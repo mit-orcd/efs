@@ -151,7 +151,8 @@ src/client/efs_bench.o: src/bench/storage_principles.h src/bench/storage_churn.h
 src/common/admission.o tests/test_admission: include/efs/admission.h
 
 $(BENCH_CLIENT_OBJ): src/bench/bench_local.h src/bench/blake3_bench.h src/bench/io_bench.h
-$(BENCH_STORE_OBJS) src/bench/bench_local.o src/server/thread.o: src/server/server_internal.h
+$(SERVER_OBJS) $(BENCH_STORE_OBJS) src/bench/bench_local.o: src/server/server_internal.h
+src/server/store.o src/bench/store.o: src/server/data_pressure.h
 
 MGMT_SRC = src/mgmt/efs_mgmt.c
 MGMT_OBJ = $(MGMT_SRC:.c=.o)
