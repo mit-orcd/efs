@@ -250,7 +250,8 @@ int efs_raft_recv_batch(struct efs_raft *r, const struct efs_raft_msg *msgs,
 int efs_raft_propose(struct efs_raft *r, const uint8_t *cmd, uint32_t clen,
                      uint64_t *index_out);
 /* Append only. Pair with efs_raft_submit (raise the send ceiling) before
- * the fsync and efs_raft_durable (leader may vote) after it. The pump
+ * the fsync and efs_raft_durable (leader may vote/apply) after it, or
+ * efs_raft_note_durable followed by pump-owned commit/apply. The pump
  * calls efs_raft_flush to replicate; submit itself does not send, so
  * other appends join that batch. Caller holds the lock. Not for a
  * 1-voter group. */
@@ -262,6 +263,9 @@ int efs_raft_submit(struct efs_raft *r, uint64_t idx);
  * No empty heartbeat. Caller holds the lock. */
 int efs_raft_flush(struct efs_raft *r);
 int efs_raft_durable(struct efs_raft *r, uint64_t idx);
+/* Same checked durable watermark, without commit/apply callbacks. Hosts
+ * with batched KV apply must wake their serialized pump after noting it. */
+int efs_raft_note_durable(struct efs_raft *r, uint64_t idx);
 /* Compact log prefix through last_applied. snap_open (if set) captures
  * the state at that index so InstallSnapshot can rebuild a learner that
  * never applied 1..snap_idx. The bytes may become readable later (BUSY);

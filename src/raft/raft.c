@@ -2190,7 +2190,7 @@ int efs_raft_flush(struct efs_raft *r)
     return EFS_OK;
 }
 
-int efs_raft_durable(struct efs_raft *r, uint64_t idx)
+int efs_raft_note_durable(struct efs_raft *r, uint64_t idx)
 {
     if (!r)
         return EFS_ERR_INVAL;
@@ -2199,7 +2199,13 @@ int efs_raft_durable(struct efs_raft *r, uint64_t idx)
     efs_raft_arm_durable(r);
     if (idx > r->durable_idx)
         r->durable_idx = idx;
-    return try_commit(r);
+    return EFS_OK;
+}
+
+int efs_raft_durable(struct efs_raft *r, uint64_t idx)
+{
+    int rc=efs_raft_note_durable(r,idx);
+    return rc==EFS_OK ? try_commit(r) : rc;
 }
 
 int efs_raft_change(struct efs_raft *r, uint32_t new_voters)

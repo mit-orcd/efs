@@ -657,3 +657,19 @@ sync and cohort release. One shown KV sync costs 12.4 ms while the handler
 holds h->mu. These callbacks currently bypass the pump's KV sync hold.
 `results/mac-readindex-resume/kv-apply-stacks.txt` records the evidence.
 Separating the synced-log watermark from pump-owned apply is the next fix.
+
+Handler-side log-sync completion now records its checked durable watermark
+without calling commit/apply. Disk-backed proposer, background and cohort
+release paths wake the pump, which retains commit/apply inside its original
+KV hold. The existing synchronous API remains available for core/memory
+callers. Own votes still require the actual synced-log prefix; command waiters
+still require exact applied verdicts. A two-voter regression receives the
+peer ACK before local sync, notes the monotonic watermark without commit or
+apply, then verifies the pump commits/applies exactly once. Core ASAN/UBSAN,
+Mac Linux Raft disk/transaction/resolve, host dispatch/log coverage, session
+fencing, cohort, checkpoint and read authority gates pass. The live deep pair
+remains 0/2 (36.3 seconds, normal cleanup); no closure is claimed. The full
+unchanged native suite and local baseline are now running with one outer
+fixture at a time; intrinsic multiprocess cases and original deadlines are
+retained. Its deep-60 and 300-file cases have still exceeded their deadlines.
+Live read samples: LOOKUP 3.71 ms average, KV body 7 us, lanes 3 us.

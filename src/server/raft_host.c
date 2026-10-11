@@ -3979,7 +3979,7 @@ static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
 
 /* h->mu held. One fsync covered every append whose record ends at or
  * before the synced offset, on every group this process leads. */
-static void host_durable_synced(struct efs_raft_host *h)
+static void host_durable_synced_mode(struct efs_raft_host *h,int apply)
 {
     uint64_t synced;
     int i;
@@ -3996,9 +3996,19 @@ static void host_durable_synced(struct efs_raft_host *h)
         if (efs_raft_role(r) != EFS_RAFT_LEADER)
             continue;
         idx = efs_raft_disk_covered_index(h->disk, h->g[i].group, synced);
-        if (idx)
-            (void)efs_raft_durable(r, idx);
+        if (idx) {
+            if(apply)(void)efs_raft_durable(r,idx);
+            else (void)efs_raft_note_durable(r,idx);
+        }
     }
+}
+static void host_durable_synced(struct efs_raft_host *h)
+{
+    host_durable_synced_mode(h,1);
+}
+static void host_note_durable_synced(struct efs_raft_host *h)
+{
+    host_durable_synced_mode(h,0);
 }
 
 /* h->mu held. An outer REPORT/cohort hold may still own this append.
@@ -4010,7 +4020,8 @@ static int host_mark_durable_covered(struct efs_raft_host *h, uint8_t group,
     uint64_t synced = efs_raft_disk_synced_bytes(h->disk);
     uint64_t covered = efs_raft_disk_covered_index(h->disk, group, synced);
     if (covered < index) return EFS_OK; /* Pump/release will mark it later. */
-    return efs_raft_durable(r, covered);
+    /* Apply belongs to the pump's KV hold, never a handler under h->mu. */
+    return efs_raft_note_durable(r, covered);
 }
 
 /* Saturate observations: overflow must close admission, never create capacity. */
@@ -4249,7 +4260,7 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
                     if (!r || efs_raft_role(r) != EFS_RAFT_LEADER)
                         rc = EFS_ERR_NOT_PRIMARY;
                     else
-                        host_durable_synced(h);
+                        host_note_durable_synced(h);
                     if (rc == EFS_OK && term && r)
                         *term = efs_raft_term(r);
                     host_publish_group(h, group);
@@ -15611,7 +15622,7 @@ static int host_report_release(struct efs_raft_host *h, int held)
     int rc = held ? efs_raft_disk_sync_release_wait(h->disk) : EFS_OK;
     if (rc != EFS_OK) return rc;
     pthread_mutex_lock(&h->mu);
-    host_durable_synced(h);
+    host_note_durable_synced(h);
     pthread_mutex_unlock(&h->mu);
     host_pump_kick(h);
     return EFS_OK;

@@ -498,6 +498,41 @@ static void test_read_quorum_before_apply(void)
     for(int i=0;i<3;i++){efs_raft_free(n.r[i]);efs_raft_mem_free(store[i]);}
 }
 
+/* Handler-side fsync completion records only its proven watermark. It
+ * must not synchronously commit/apply KV while holding the host mutex. */
+static void test_note_durable_without_apply(void)
+{
+    struct net n={.n=2};struct app app[2]={0};struct efs_raft_store *store[2];
+    struct efs_raft_cfg cfg={0};cfg.n=2;cfg.send=send_now;cfg.net=&n;
+    cfg.apply=apply_cmd;cfg.heartbeat_ticks=1;
+    for(int i=0;i<2;i++) {
+        store[i]=efs_raft_mem_create();cfg.id=i;cfg.store=store[i];cfg.store_ctx=store[i];
+        cfg.election_ticks=4+i*4;cfg.app=&app[i];n.r[i]=efs_raft_new(&cfg);
+    }
+    CHECK(elect(&n,20)==1,"durable-note fixture elects");
+    int leader=leader_id(&n),follower=1-leader;uint64_t index=0;
+    int before=app[leader].n;uint64_t commit=efs_raft_commit(n.r[leader]);
+    efs_raft_arm_durable(n.r[leader]);uint8_t cmd='N';
+    CHECK(efs_raft_propose_local(n.r[leader],&cmd,1,&index)==EFS_OK,"durable-note local append");
+    CHECK(efs_raft_submit(n.r[leader],index)==EFS_OK && efs_raft_flush(n.r[leader])==EFS_OK,
+          "peer ACK arrives before local fsync");
+    CHECK(efs_raft_commit(n.r[leader])==commit && app[leader].n==before,
+          "uncovered own vote cannot commit");
+    CHECK(efs_raft_note_durable(n.r[leader],index)==EFS_OK,
+          "completed fsync notes checked local prefix");
+    CHECK(efs_raft_note_durable(n.r[leader],commit)==EFS_OK,
+          "older prefix cannot lower durable watermark");
+    CHECK(efs_raft_commit(n.r[leader])==commit && app[leader].n==before,
+          "noting durability never calls apply or advances commit");
+    CHECK(efs_raft_durable(n.r[leader],commit)==EFS_OK && efs_raft_commit(n.r[leader])>=index &&
+          app[leader].n==before+1 && app[leader].last=='N',
+          "pump commits/applies same exact command from monotonic watermark");
+    CHECK(efs_raft_note_durable(n.r[follower],index)==EFS_ERR_NOT_PRIMARY,
+          "follower cannot acquire a durable leader vote");
+    CHECK(efs_raft_note_durable(NULL,index)==EFS_ERR_INVAL,"null durable-note refusal");
+    for(int i=0;i<2;i++){efs_raft_free(n.r[i]);efs_raft_mem_free(store[i]);}
+}
+
 /* The network can service a pure current read round while the pump is in
  * an unrelated durability tail. No term/config/log/apply work may bypass it. */
 static void test_readindex_control(void)
@@ -2394,6 +2429,7 @@ static void test_pressure_quorum_and_owned_backlog(void)
 
 int main(void)
 {
+    test_note_durable_without_apply();
     test_readindex_control();
     test_read_quorum_before_apply();
     test_pressure_quorum_and_owned_backlog();
