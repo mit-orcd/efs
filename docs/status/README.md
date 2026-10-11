@@ -469,3 +469,8 @@ Pending choices retain their existing homes: W99 cache-only pressure escalation 
 retransmissions, unchanged IB error counters, 22–50 ms metadata apply waits and
 substantial query-build CPU. No transport root cause or gate closure is claimed.
 W95 packing and W106 broader hardware acceptance remain separate work.
+
+[Deeper investigation and repair hypotheses](orcd-communication-hypotheses-20261011.md):
+prioritize the 1,024-change query fallback; distinguish compaction correlation,
+GC partial-progress BUSY and TCP duplicate probes from established failures.
+W109/W110 remain open on orcd-test.
