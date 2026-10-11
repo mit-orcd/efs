@@ -12,6 +12,7 @@ p.add_argument('mount')
 p.add_argument('mgmt')
 p.add_argument('address')
 p.add_argument('--chunk-size', type=int, default=128 * 1024)
+p.add_argument('--node-address',action='append',default=[],help='advertised HOST:PORT for each node, repeated in node-ID order; defaults to NUC local ports')
 a = p.parse_args()
 fd, path = tempfile.mkstemp(prefix='.mtime-barrier-', dir=a.mount)
 try:
@@ -27,10 +28,13 @@ try:
             values = {k: int(v) for k, v in re.findall(r'(status|primary|size|mtime)=(\d+)', out)}
             if values.get('status') == 0:
                 return values
-            # Follow explicit primary hints via the NUC's known four ports.
-            # This harness is NUC-specific; production routing is independent.
+            # A split-host cluster cannot infer an address from node ID.
             if values.get('primary'):
-                a.address = '127.0.0.1:' + str(17431 + values['primary'])
+                if a.node_address:
+                    assert 1<=values['primary']<=len(a.node_address),out
+                    a.address=a.node_address[values['primary']-1]
+                else:
+                    a.address = '127.0.0.1:' + str(17431 + values['primary'])
             time.sleep(0.05)
         raise AssertionError(out)
     for value in (100, 50, 150, 25):

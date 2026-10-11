@@ -1971,9 +1971,22 @@ def dir_deep_nesting_beyond_64(d):
     # must still work via the client's no-ancestor retry / per-component walk.
     depth = 100
     cur = d
-    for _ in range(depth):
-        cur = os.path.join(cur, "d")
-        os.mkdir(cur)
+    # Build the ancestors through directory handles: repeatedly walking every
+    # preceding component makes setup quadratic and can consume the whole
+    # case budget before the depth-limit assertions run. Keep the final MKDIR
+    # and every leaf operation on the full absolute path beyond the batch cap.
+    fd = os.open(d, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for _ in range(depth - 1):
+            os.mkdir("d", dir_fd=fd)
+            child = os.open("d", os.O_RDONLY | os.O_DIRECTORY, dir_fd=fd)
+            os.close(fd)
+            fd = child
+            cur = os.path.join(cur, "d")
+    finally:
+        os.close(fd)
+    cur = os.path.join(cur, "d")
+    os.mkdir(cur)
     p = os.path.join(cur, "leaf")
     wr(p, b"deep")
     eq(rd(p), b"deep", "read at depth ~%d" % depth)
