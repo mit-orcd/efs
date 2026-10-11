@@ -5,6 +5,7 @@ import subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text()
 a=s.index('#define HOST_CMD_COHORT_MAX');b=s.index('/* DECIDE COMMIT at the coordinator',a)
 ca=s.index('static int host_txn_commit(');cb=s.index('\n}',ca)+2
+ra=s.index('static int host_resize_resolve(');rb=s.index('\n}',ra)+2
 code=r'''
 #include "efs/raft.h"
 #include "efs/txn.h"
@@ -41,6 +42,9 @@ static int host_propose_wait(struct efs_raft_host *h,uint8_t group,const uint8_t
 static void host_fin_add(struct efs_raft_host *h,const struct efs_txid *t,const struct efs_txn_parts *p,uint32_t coord){(void)h;(void)t;(void)p;(void)coord;finished++;}
 static int host_wait_refs(struct efs_raft_host *h,struct host_idx_ref *refs,int n,int *hint){(void)h;(void)hint;assert(decided);waited++;for(int i=0;i<n;i++)assert(refs[i].idx==(uint64_t)i+1 && refs[i].term==7);return wait_rc;}
 '''+s[ca:cb]+r'''
+struct host_resize_ctx {struct efs_raft_host *host;int *hint;};
+uint32_t efs_txn_coordinator(const struct efs_txid*t,const struct efs_txn_parts*p){(void)t;(void)p;return 1;}
+'''+s[ra:rb]+r'''
 static int host_report_release(struct efs_raft_host *h,int held){
  assert(held && h->disk->depth==1);h->disk->depth--;releases++;return sync_fail?EFS_ERR_IO:0;
 }
@@ -91,6 +95,13 @@ int main(void){
  reset();fail_call=10;assert(host_txn_commit(&h,&tx,&parts,1,&hint)==EFS_ERR_NOT_PRIMARY && finished==1 && !waited && !disk.depth);
  reset();sync_fail=1;assert(host_txn_commit(&h,&tx,&parts,1,&hint)==EFS_ERR_IO && finished==1 && !waited && !disk.depth);
  reset();wait_rc=EFS_ERR_STALE;assert(host_txn_commit(&h,&tx,&parts,1,&hint)==EFS_ERR_STALE && finished==1 && waited==1 && !disk.depth);
+ struct host_resize_ctx ctx={&h,&hint};reset();decided=1;
+ assert(!host_resize_resolve(&ctx,&tx,&parts,EFS_TXN_COMMIT) && waited==1 && !finished);
+ assert(sequence==EFS_TXN_MAX_PART && holds==EFS_TXN_MAX_PART/8 && releases==holds && !disk.depth);
+ reset();decided=1;sync_fail=1;
+ assert(host_resize_resolve(&ctx,&tx,&parts,EFS_TXN_COMMIT)==EFS_ERR_IO && finished==1 && !waited && !disk.depth);
+ reset();decided=1;wait_rc=EFS_ERR_STALE;
+ assert(host_resize_resolve(&ctx,&tx,&parts,EFS_TXN_COMMIT)==EFS_ERR_STALE && finished==1 && waited==1);
  pthread_mutex_destroy(&h.mu);
  puts("command cohort: eight-entry bound, cross-group ordering, identities, role/fsync failure, remote boundaries and 144-part durable-decision/finisher gates PASS");
 }

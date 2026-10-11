@@ -509,6 +509,8 @@ send_reply:
                             reply = EFS_PUT_CHUNK_OK;
                         } else if (rc == EFS_ERR_QUOTA) {
                             reply = EFS_PUT_CHUNK_QUOTA_EXCEEDED;
+                        } else if (rc == EFS_ERR_BUSY) {
+                            reply = EFS_PUT_CHUNK_BUSY;
                         }
                     }
                 }

@@ -664,5 +664,176 @@ static void completion_batch_gaps(void)
  struct efs_meta_stat st;assert(efs_meta_apply_getattr(kv,ino,decision,kv,&st)==EFS_OK && st.size==264);
  free(plan);efs_kv_mem_free(kv);
 }
+
+static void catchup_be64(uint8_t *p,uint64_t v)
+{for(unsigned i=0;i<8;i++)p[i]=(uint8_t)(v>>(56-8*i));}
+static void catchup_be32(uint8_t *p,uint32_t v)
+{for(unsigned i=0;i<4;i++)p[i]=(uint8_t)(v>>(24-8*i));}
+static const struct efs_kv_ops *catchup_original;
+static int catchup_fault;
+static int catchup_fault_batch(void *ctx,const struct efs_kv_item *items,uint32_t count)
+{return catchup_fault?catchup_fault:catchup_original->batch(ctx,items,count);}
+static void caught_up(unsigned count,int cold)
+{
+ char directory[]="/tmp/efs-catchup-XXXXXX";
+ struct efs_kv *kv;
+ if(cold){assert(mkdtemp(directory));kv=efs_kv_lsm_open(directory,NULL);}
+ else kv=efs_kv_mem_create();
+ assert(kv);efs_ino_t ino;uint64_t gen;fixture(kv,&ino,&gen);
+ assert(efs_meta_apply_activate_lanes(kv,ino,UINT64_MAX)==EFS_OK);
+ struct efs_meta_row row;assert(!efs_meta_apply_get_inode(kv,ino,&row));
+ struct efs_opid_req q=identity(1,0);uint32_t shard=efs_kv_inode_shard(ino);
+ assert(!efs_session_create(kv,q.id.client_uuid,1));
+ assert(!efs_session_register(kv,q.id.client_uuid,1,shard));
+ assert(!efs_session_establish(kv,shard,q.id.client_uuid,1));
+ struct catchup_fixture_row {uint8_t key[64],value[48];};
+ struct catchup_fixture_row *rows=calloc(count,sizeof(*rows));
+ struct efs_kv_item *items=calloc(count,sizeof(*items));assert(rows&&items);
+ uint64_t end=200+8ull*count;
+ for(unsigned i=0;i<count;i++) {
+  uint32_t kl=0;assert(!efs_kv_key_append_rsv(shard,ino,gen,200+8ull*i,rows[i].key,&kl));
+  catchup_be64(rows[i].value,200+8ull*i);catchup_be64(rows[i].value+8,8);
+  memcpy(rows[i].value+16,q.id.client_uuid,16);catchup_be32(rows[i].value+32,1);
+  catchup_be64(rows[i].value+36,i+1);
+  items[i]=(struct efs_kv_item){EFS_KV_PUT,rows[i].key,kl,rows[i].value,48};
+ }
+ assert(!efs_kv_batch(kv,items,count));free(items);free(rows);
+ uint8_t key[64],value[24]={0};uint32_t kl=0;
+ assert(!efs_kv_key_append_cur(shard,ino,gen,key,&kl));
+ catchup_be64(value,end);catchup_be64(value+8,200);catchup_be32(value+16,count);
+ assert(!efs_kv_put(kv,key,kl,value,24));
+ for(unsigned lane=0;lane<64;lane++) {
+  uint8_t lk[64],lv[EFS_META_LANE_BYTES]={0};uint32_t lkl=0,len=sizeof(lv);
+  assert(!efs_kv_key_lane(efs_kv_lane_shard(ino,lane),ino,gen,lane,lk,&lkl));
+  int rc=efs_kv_get(kv,lk,lkl,lv,&len);
+  assert(rc==EFS_OK || rc==EFS_ERR_NOT_FOUND);
+  if(rc==EFS_ERR_NOT_FOUND){len=sizeof(lv);catchup_be64(lv+32,row.content_epoch);catchup_be64(lv+40,row.mtime_gen);}
+  catchup_be64(lv+48,end);
+  assert(!efs_kv_put(kv,lk,lkl,lv,len));
+ }
+ uint64_t wm,frontier;uint32_t open;
+ assert(efs_meta_apply_append_catchup(kv,ino,gen+1,row.content_epoch,end,count,&q.id)==EFS_ERR_STALE);
+ assert(efs_meta_apply_append_catchup(kv,ino,gen,row.content_epoch+1,end,count,&q.id)==EFS_ERR_STALE);
+ struct efs_opid unknown=q.id;unknown.client_uuid[0]++;
+ assert(efs_meta_apply_append_catchup(kv,ino,gen,row.content_epoch,end,count,&unknown)==EFS_ERR_BUSY);
+ /* Capacity rejection precedes allocation/mutation. */
+ catchup_be32(value+16,EFS_META_APPEND_CATCHUP_MAX+1);
+ assert(!efs_kv_put(kv,key,kl,value,24));
+ assert(efs_meta_apply_append_catchup(kv,ino,gen,row.content_epoch,end,count,&q.id)==EFS_ERR_OVERFLOW);
+ catchup_be32(value+16,count);assert(!efs_kv_put(kv,key,kl,value,24));
+ /* A malformed late row must reject before even the first eligible row changes. */
+ uint8_t late_key[64],late_value[48];uint32_t late_kl=0,late_vl=sizeof(late_value);
+ assert(!efs_kv_key_append_rsv(shard,ino,gen,end-8,late_key,&late_kl));
+ assert(!efs_kv_get(kv,late_key,late_kl,late_value,&late_vl));
+ late_value[44]=2;assert(!efs_kv_put(kv,late_key,late_kl,late_value,late_vl));
+ assert(efs_meta_apply_append_catchup(kv,ino,gen,row.content_epoch,end,count,&q.id)==EFS_ERR_PROTO);
+ assert(!efs_meta_apply_append_state(kv,ino,&wm,&frontier,&open)&&frontier==200&&open==count);
+ late_value[44]=0;assert(!efs_kv_put(kv,late_key,late_kl,late_value,late_vl));
+ assert(efs_meta_apply_append_catchup(kv,ino,gen,row.content_epoch,end,count-1,&q.id)==EFS_ERR_BUSY);
+ /* A single atomic batch failure cannot mark a prefix DONE without its cursor. */
+ catchup_original=kv->ops;struct efs_kv_ops faulty=*kv->ops;faulty.batch=catchup_fault_batch;
+ for(unsigned i=0;i<2;i++) {
+  catchup_fault=i?EFS_ERR_NOMEM:EFS_ERR_IO;kv->ops=&faulty;
+  assert(efs_meta_apply_append_catchup(kv,ino,gen,row.content_epoch,end,count,&q.id)==catchup_fault);
+  kv->ops=catchup_original;
+  assert(!efs_meta_apply_append_state(kv,ino,&wm,&frontier,&open)&&wm==end&&frontier==200&&open==count);
+ }
+ catchup_fault=0;
+ struct efs_txid guard={{230}};struct efs_txn_parts parts={.n=1,.shard={shard}};
+ uint8_t ik[64],iv[EFS_META_INO_BYTES];uint32_t ikl=0,ivl=sizeof(iv);
+ assert(!efs_kv_key_inode(shard,ino,ik,&ikl));assert(!efs_kv_get(kv,ik,ikl,iv,&ivl));
+ assert(!efs_txn_prepare_excl_value(kv,&guard,&parts,ik,ikl,iv,ivl,EFS_TXN_PUT,iv,ivl));
+ assert(efs_meta_apply_append_catchup(kv,ino,gen,row.content_epoch,end,count,&q.id)==EFS_ERR_BUSY);
+ assert(!efs_txn_drop(kv,&guard,shard));
+ if(cold) {
+  /* Production Raft apply stages effects; abandoning its applied marker must
+   * discard ALL 20k rows and the frontier, not just fail the returned ACK. */
+  assert(!efs_kv_lsm_apply_begin(kv));
+  assert(!efs_meta_apply_append_catchup(kv,ino,gen,row.content_epoch,end,count,&q.id));
+  assert(!efs_kv_lsm_apply_end(kv,NULL));
+  assert(!efs_meta_apply_append_state(kv,ino,&wm,&frontier,&open)&&frontier==200&&open==count);
+ }
+ /* Half a reservation must stay OPEN; frontier advances over whole ranges. */
+ assert(!efs_meta_apply_append_catchup(kv,ino,gen,row.content_epoch,211,count,NULL));
+ assert(!efs_meta_apply_append_state(kv,ino,&wm,&frontier,&open)&&frontier==208&&open==count-1);
+ struct efs_txid tx={{231}};
+ assert(efs_meta_retire_append_barriers(kv,ino,&q.id,&tx,&ops,kv)==EFS_ERR_BUSY);
+ if(cold)assert(!efs_kv_lsm_apply_begin(kv));
+ assert(!efs_meta_apply_append_catchup(kv,ino,gen,row.content_epoch,end,count,&q.id));
+ if(cold) {
+  uint8_t marker_key[7]={0xff,0xff,0xfe,0,0,0,2},marker_value[16]={1};
+  struct efs_kv_item marker={EFS_KV_PUT,marker_key,sizeof(marker_key),marker_value,sizeof(marker_value)};
+  assert(!efs_kv_lsm_apply_end(kv,&marker));
+ }
+ assert(!efs_meta_apply_append_state(kv,ino,&wm,&frontier,&open)&&!open&&wm==end&&frontier==end);
+ assert(!efs_meta_apply_append_catchup(kv,ino,gen,row.content_epoch,200,count,&q.id)); /* replay cannot undo */
+ if(cold){efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(directory,NULL);assert(kv);}
+ /* Completion survives cold reopen BEFORE lane retirement. */
+ assert(!efs_meta_apply_append_state(kv,ino,&wm,&frontier,&open)&&!open&&frontier==end);
+ for(unsigned i=0;i<count;i+=count>64?count/64:1) {
+  uint8_t rk[64],rv[48];uint32_t rkl=0,rvl=sizeof(rv);
+  assert(!efs_kv_key_append_rsv(shard,ino,gen,200+8ull*i,rk,&rkl));
+  assert(!efs_kv_get(kv,rk,rkl,rv,&rvl)&&rv[44]==1);
+ }
+ const struct efs_meta_append_ops lost={prepare,lost_decision,resolve};
+ assert(efs_meta_retire_append_barriers(kv,ino,&q.id,&tx,&lost,kv)==EFS_ERR_IO);
+ if(cold){efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(directory,NULL);assert(kv);}
+ assert(efs_session_fence_local(kv,shard,q.id.client_uuid,2)==EFS_ERR_BUSY);
+ assert(!resolve(kv,&tx,&last_parts,EFS_TXN_COMMIT));
+ assert(!efs_meta_apply_append_state(kv,ino,&wm,&frontier,&open)&&!wm&&!open);
+ struct efs_meta_stat st;assert(!efs_meta_apply_getattr(kv,ino,decision,kv,&st)&&st.size==end);
+ tx.bytes[1]=1;assert(!efs_meta_retire_append_barriers(kv,ino,&q.id,&tx,&ops,kv));
+ assert(!efs_session_fence_local(kv,shard,q.id.client_uuid,2));
+ assert(efs_meta_apply_append_catchup(kv,ino,gen,row.content_epoch,end,count,&q.id)==EFS_ERR_STALE);
+ assert(!efs_meta_apply_check(kv));
+ if(cold) {
+  efs_kv_lsm_close(kv);DIR *d=opendir(directory);assert(d);struct dirent *e;
+  while((e=readdir(d))){if(e->d_name[0]=='.')continue;char path[512];snprintf(path,sizeof(path),"%s/%s",directory,e->d_name);assert(!unlink(path));}
+  closedir(d);assert(!rmdir(directory));
+ }else efs_kv_mem_free(kv);
+}
+static void bounded_completed_bursts(int cold)
+{
+ char dir[]="/tmp/efs-append-bursts-XXXXXX";
+ struct efs_kv *kv;
+ if(cold){assert(mkdtemp(dir));kv=efs_kv_lsm_open(dir,NULL);}else kv=efs_kv_mem_create();
+ assert(kv);efs_ino_t ino;uint64_t gen;fixture(kv,&ino,&gen);
+ struct efs_meta_append_plan *plan=malloc(sizeof(*plan));assert(plan);
+ struct efs_txid tx={{0}};struct efs_opid_req q;uint64_t off;
+ for(unsigned seq=1;seq<=8;seq++){
+  assert(!efs_meta_append_prune_due(kv,ino));q=identity(seq,seq-1);
+  assert(!efs_meta_capture_append(kv,ino,8,&q,decision,kv,plan));
+  assert(plan->offset==200+8*(seq-1));tx.bytes[0]=seq;tx.bytes[1]=1;
+  assert(!efs_meta_execute_append(plan,&tx,&ops,kv));
+  tx.bytes[1]=2;assert(!efs_meta_finish_append(kv,ino,plan->offset,EFS_META_APPEND_COMPLETED,&tx,&ops,kv));
+  if(cold){efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(dir,NULL);assert(kv);}
+  assert(efs_meta_append_prune_pending(kv,ino)==1);
+  assert(efs_meta_append_prune_due(kv,ino)==(seq==8));
+  assert(!efs_meta_append_result(kv,ino,8,&q,&off) && off==200+8*(seq-1));
+ }
+ q=identity(9,8);assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,plan)==EFS_ERR_BUSY);
+ unsigned removed=0;tx.bytes[0]=30;tx.bytes[1]=0;
+ assert(!efs_meta_prune_append(kv,ino,&tx,&ops,kv,&removed) && removed==8);
+ assert(!efs_meta_capture_append(kv,ino,8,&q,decision,kv,plan) && plan->offset==264);
+ tx.bytes[0]=31;assert(!efs_meta_execute_append(plan,&tx,&ops,kv));
+ tx.bytes[1]=1;assert(!efs_meta_finish_append(kv,ino,264,EFS_META_APPEND_COMPLETED,&tx,&ops,kv));
+ assert(!efs_meta_append_prune_due(kv,ino));
+ struct efs_meta_truncate truncate={.expect_gen=gen,.size=0,.lane_mask=UINT64_MAX};
+ assert(!efs_meta_apply_truncate(kv,ino,400,&truncate));
+ if(cold){efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(dir,NULL);assert(kv);}
+ assert(efs_meta_append_prune_due(kv,ino)==1);
+ q=identity(10,9);assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,plan)==EFS_ERR_BUSY);
+ tx.bytes[0]=32;assert(!efs_meta_prune_append(kv,ino,&tx,&ops,kv,&removed) && removed==1);
+ assert(!efs_meta_capture_append(kv,ino,8,&q,decision,kv,plan) && plan->offset==0);
+ free(plan);
+ if(cold){
+  efs_kv_lsm_close(kv);DIR *d=opendir(dir);assert(d);struct dirent *e;
+  while((e=readdir(d))){if(e->d_name[0]=='.')continue;char path[512];snprintf(path,sizeof(path),"%s/%s",dir,e->d_name);assert(!unlink(path));}
+  closedir(d);assert(!rmdir(dir));
+ }else efs_kv_mem_free(kv);
+ puts("bounded append bursts: eight DONE records, canonical replay, cold cuts, page retirement and truncate/reset cleanup PASS");
+}
+
+
 int main(void)
-{completion_batch_gaps();for(int cold=0;cold<2;cold++)for(int owned=0;owned<2;owned++)for(int reverse=0;reverse<2;reverse++)completion_batch(cold,owned,reverse,0);for(int cold=0;cold<2;cold++)completion_batch(cold,1,1,1);for(unsigned v=0;v<3;v++){receipt_capture_race(v,0);receipt_capture_race(v,1);}session_owned_completion(0);session_owned_completion(1);retired_append_receipts(0);retired_append_receipts(1);session_owned_append(0);session_owned_append(1);fenced_completion();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}
+{caught_up(20000,0);caught_up(20000,1);caught_up(EFS_META_APPEND_CATCHUP_MAX,1);completion_batch_gaps();for(int cold=0;cold<2;cold++)for(int owned=0;owned<2;owned++)for(int reverse=0;reverse<2;reverse++)completion_batch(cold,owned,reverse,0);for(int cold=0;cold<2;cold++)completion_batch(cold,1,1,1);for(unsigned v=0;v<3;v++){receipt_capture_race(v,0);receipt_capture_race(v,1);}session_owned_completion(0);session_owned_completion(1);retired_append_receipts(0);retired_append_receipts(1);session_owned_append(0);session_owned_append(1);fenced_completion();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}

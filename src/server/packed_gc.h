@@ -62,14 +62,15 @@ static int host_pack_gc_command(struct efs_raft_host *h,const struct efs_pack_ob
     if(!lead)return EFS_ERR_NOT_PRIMARY;
     return host_gc_propose(h,(uint8_t)o->ledger.publication_group,cmd,(uint32_t)n+6);
 }
-static void host_gc_pack_pass(struct efs_raft_host *h,uint8_t group,uint32_t anchor)
+static int host_gc_pack_pass(struct efs_raft_host *h,uint8_t group,uint32_t anchor)
 {
     static struct pack_gc_scan scan;int gi=gc_gi(group);
     uint8_t prefix[3];prefix[0]=(uint8_t)(anchor>>8);prefix[1]=(uint8_t)anchor;prefix[2]=EFS_KV_KIND_PACK_OBJECT;
     memset(&scan,0,sizeof(scan));scan.skip_len=pack_gc_cursor_len[gi];
     if(scan.skip_len)memcpy(scan.skip,pack_gc_cursor[gi],19);
     int rc=efs_kv_scan_from(h->kv,prefix,3,scan.skip_len?scan.skip:NULL,scan.skip_len,pack_gc_scan_cb,&scan);
-    if(rc<0 || scan.error){__atomic_fetch_add(&h->s->gc_scan_errors,1,__ATOMIC_RELAXED);return;}
+    if(rc<0 || scan.error){__atomic_fetch_add(&h->s->gc_scan_errors,1,__ATOMIC_RELAXED);return 0;}
+    int capped=scan.count==8 || scan.visited==2048;
     pack_gc_cursor_len[gi]=scan.last_len;
     if(scan.last_len)memcpy(pack_gc_cursor[gi],scan.last,19);
     uint64_t deadline=now_us_()+GC_FRAG_BUDGET_US;
@@ -101,6 +102,10 @@ static void host_gc_pack_pass(struct efs_raft_host *h,uint8_t group,uint32_t anc
         }
         if(!rc && o.ledger.phase==EFS_PACK_RETIRED)
             (void)host_pack_gc_command(h,&o,EFS_MD_CMD_PACK_GC_RETIRE,0,0);
-        if(now_us_()>deadline){pack_gc_cursor_len[gi]=0;break;}
+        if(now_us_()>deadline){capped=1;pack_gc_cursor_len[gi]=0;break;}
     }
+    /* A full packed page is backlog just like ordinary fragments. The caller
+     * accelerates only after actual local physical deletion made progress;
+     * blocked/fence-only work retains the ordinary idle and all work budgets. */
+    return capped;
 }

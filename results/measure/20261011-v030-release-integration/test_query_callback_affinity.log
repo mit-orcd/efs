@@ -1,0 +1,1 @@
+query callback affinity: same nonce keeps owner, new nonce/caller starts independently, every callback reauthorizes PASS

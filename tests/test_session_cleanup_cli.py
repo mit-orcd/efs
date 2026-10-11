@@ -3,10 +3,10 @@
 from pathlib import Path
 import os, shlex, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/mgmt/efs_mgmt.c').read_text()
+s=Path(os.environ.get('EFS_CLEANUP_CLIENT_SOURCE',root/'src/mgmt/efs_mgmt.c')).read_text()
 a=s.index('static int sess_cleanup_bounded(')
 f=s[a:s.index('\n}',a)+2]
-server=(root/'src/server/raft_host.c').read_text()
+server=Path(os.environ.get('EFS_CLEANUP_SERVER_SOURCE',root/'src/server/raft_host.c')).read_text()
 start=server.index('    if (clen>=2 && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_LOCK_NEXT) {')
 end=server.index('    } else if (clen>=2 && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_LOCK_BATCH)',start)
 route=server[start:end]+'    }\n'
@@ -57,9 +57,16 @@ static int sess_rpc(const char *host,uint16_t port,const uint8_t *p,uint32_t n,
    if(mode==13)r->salt=0;
    return EFS_ERR_BUSY;
  }
+ if(mode>=14 && mode<=18 && (calls<13 || mode==18)) {
+   r->salt=EFS_MD_SESSION_APPEND_RETRY_SALT;
+   if(mode==15)r->index=99;
+   if(mode==16)r->term=7;
+   if(mode==17)r->salt=EFS_MD_SESSION_CLEANUP_RETRY_SALT;
+   return EFS_ERR_BUSY;
+ }
  if(mode==1)return EFS_ERR_IO; /* ambiguous submission: do not reselect */
  if(mode==2)return EFS_ERR_BUSY; /* active or incomplete global barrier */
- r->salt=mode==3?2:mode==4?0:((mode==6 || mode==10)?calls==16:calls==4)?1:0;
+ r->salt=mode==19?EFS_MD_SESSION_APPEND_RETRY_SALT:mode==3?2:mode==4?0:((mode==6 || mode==10 || mode==14)?calls==16:calls==4)?1:0;
  if(mode==5)tick=30;
  return EFS_OK;
 }
@@ -97,6 +104,18 @@ int main(void) {
  }
  append_mode=1;mode=10;calls=waits=0;tick=0;
  assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
+ mode=14;calls=waits=0;tick=0;
+ assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_OK && calls==16 && waits==12 && !deadline);
+ for(mode=15;mode<=17;mode++) {
+   calls=waits=0;tick=0;
+   assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
+ }
+ append_mode=0;mode=14;calls=waits=0;tick=0;
+ assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
+ append_mode=1;mode=18;calls=waits=0;tick=0;deadline=3000;
+ assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==3 && waits==3 && deadline==3000);
+ deadline=0;mode=19;calls=waits=0;tick=0;
+ assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_PROTO && calls==1 && !waits && !deadline);
  puts("session CLI: bounded batches, explicit empty proof, ambiguity stops, deadline and work budget PASS");
 }
 '''

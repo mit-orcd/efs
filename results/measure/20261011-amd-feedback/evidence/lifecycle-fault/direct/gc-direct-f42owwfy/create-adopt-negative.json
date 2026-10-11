@@ -1,0 +1,10 @@
+{
+  "fault": "negative",
+  "edge_sequence": 5,
+  "original_inode": 16385,
+  "initial_errno": 5,
+  "descriptor_acknowledged": false,
+  "original_inode_reclaimed": true,
+  "recreated_inode": 20481,
+  "cold_bytes_verified": true
+}

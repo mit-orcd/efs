@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/data1/efs/devel-nuc-20261011/nuc_catchup_build_20261011.py", line 49, in <module>
+    assert rc == 0, (name, rc)
+           ^^^^^^^
+AssertionError: ('native', 2)

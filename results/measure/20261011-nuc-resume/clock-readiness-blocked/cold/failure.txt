@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/data1/efs/devel-nuc-20261011/nuc_clock_cold_20261011.py", line 67, in <module>
+    assert not (base/phase/'failure.txt').exists(),phase+' failed; leave service running'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: clock-install failed; leave service running

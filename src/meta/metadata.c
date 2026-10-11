@@ -1,4 +1,5 @@
 #include "efs/metadata.h"
+#include "../common/stage_limit.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1593,6 +1594,9 @@ static void pending_rollup_clear(struct efs_export *ex)
     ex->rollups_stale = 0;
 }
 
+static void apply_size_delta_for_ino(struct efs_export *ex, efs_ino_t ino,
+                                     int64_t delta);
+
 static int pending_rollup_note(struct efs_export *ex, efs_ino_t ino,
                                int64_t size_delta, int touch)
 {
@@ -1605,20 +1609,52 @@ static int pending_rollup_note(struct efs_export *ex, efs_ino_t ino,
         }
     }
     if (ex->pending_rollup_count >= ex->pending_rollup_cap) {
+        if (ex->pending_rollup_cap > UINT64_MAX / 2)
+            return -1;
         uint64_t ncap = ex->pending_rollup_cap ? ex->pending_rollup_cap * 2 : 64;
-        efs_ino_t *ninos = realloc(ex->pending_rollup_inos, ncap * sizeof(*ninos));
-        int64_t *ndeltas = realloc(ex->pending_rollup_deltas, ncap * sizeof(*ndeltas));
-        uint8_t *ntouch = realloc(ex->pending_rollup_touch, ncap * sizeof(*ntouch));
+        if (ncap > SIZE_MAX / sizeof(efs_ino_t) ||
+            ncap > SIZE_MAX / sizeof(int64_t))
+            return -1;
+        const struct efs_export *root = ex->owner ? ex->owner : ex;
+        const uint64_t slot_bytes = sizeof(efs_ino_t) + sizeof(int64_t) + sizeof(uint8_t);
+        uint64_t limit = efs_stage_cap_bytes();
+        /* The old arrays stay live while replacements are allocated. Admit
+         * their full payload, not just the retained capacity increment. */
+        if (root->staged_total > limit ||
+            ncap > (limit - root->staged_total) / slot_bytes) {
+            /* Deferred statistics are optional. Drain prior work, then apply
+             * this update directly instead of growing under cache pressure. */
+            efs_export_ensure_rollups(ex);
+            apply_size_delta_for_ino(ex, ino, size_delta);
+            if (size_delta || touch)
+                rollup_expand_parents_of(ex, ino);
+            return 0;
+        }
+        /* Keep all owners intact until every replacement exists. Independent
+         * reallocs can move/free an owner before another allocation fails. */
+        efs_ino_t *ninos = malloc(ncap * sizeof(*ninos));
+        int64_t *ndeltas = malloc(ncap * sizeof(*ndeltas));
+        uint8_t *ntouch = malloc(ncap * sizeof(*ntouch));
         if (!ninos || !ndeltas || !ntouch) {
             free(ninos);
             free(ndeltas);
             free(ntouch);
             return -1;
         }
+        if (ex->pending_rollup_count) {
+            size_t count = (size_t)ex->pending_rollup_count;
+            memcpy(ninos, ex->pending_rollup_inos, count * sizeof(*ninos));
+            memcpy(ndeltas, ex->pending_rollup_deltas, count * sizeof(*ndeltas));
+            memcpy(ntouch, ex->pending_rollup_touch, count * sizeof(*ntouch));
+        }
+        free(ex->pending_rollup_inos);
+        free(ex->pending_rollup_deltas);
+        free(ex->pending_rollup_touch);
         ex->pending_rollup_inos = ninos;
         ex->pending_rollup_deltas = ndeltas;
         ex->pending_rollup_touch = ntouch;
         ex->pending_rollup_cap = ncap;
+        staged_refresh(ex);
     }
     uint64_t i = ex->pending_rollup_count++;
     ex->pending_rollup_inos[i] = ino;
@@ -3615,6 +3651,8 @@ static uint64_t export_staged_bytes_one(const struct efs_export *ex)
     if (ex->child_keys)
         b += (ex->child_mask + 1) * 2 * sizeof(uint64_t);
     b += ex->child_vec_cap * sizeof(struct efs_child_vec);
+    b += ex->pending_rollup_cap *
+         (sizeof(efs_ino_t) + sizeof(int64_t) + sizeof(uint8_t));
     return b;
 }
 
@@ -3680,6 +3718,16 @@ static void compact_one_tab(struct efs_export *ex)
             ex->chunks = ncv;
             ex->chunk_capacity = nc;
         }
+    }
+    /* Empty deferred queues need not retain their high-water allocation. */
+    if (!ex->pending_rollup_count) {
+        free(ex->pending_rollup_inos);
+        free(ex->pending_rollup_deltas);
+        free(ex->pending_rollup_touch);
+        ex->pending_rollup_inos = NULL;
+        ex->pending_rollup_deltas = NULL;
+        ex->pending_rollup_touch = NULL;
+        ex->pending_rollup_cap = 0;
     }
     /* 3. Rebuild hash indexes whose load factor dropped under 25% AND
      * whose rebuild would be smaller. The hint floors at the slab

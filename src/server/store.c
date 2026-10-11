@@ -1,5 +1,6 @@
 #include "server_internal.h"
 #include "store_containers.h"
+#include "data_pressure.h"
 #include "efs/checksum.h"
 #include "efs/kv_key.h"
 #include "efs/protocol.h"
@@ -1133,15 +1134,29 @@ static int finish_shard_write(int fd, size_t bytes, int sync_write, int direct)
 }
 
 #ifndef EFS_BENCH_BUILD
-/* A fragment ACK protects both its contents and its pathname. Sync every
- * ancestor after the file barrier: an earlier failed/retried PUT may have
- * created directories without ever acknowledging their persistence. No
- * directory cache or O_DIRECT completion substitutes for this barrier. */
-static int sync_fragment_parents(const char *path)
+/* Startup/attach seals each canonical root's ancestry before publishing its
+ * initialized target. Runtime PUT still fences every directory below that
+ * root and the root itself, including retries after a failed namespace sync.
+ * Unknown/uninitialized roots retain the full ancestry barrier. */
+static int sync_fragment_parents(struct efsd_server *s, const char *path)
 {
-    char parent[8192];
+    char parent[8192], root[EFS_MAX_PATH] = {0};
     size_t n = strlen(path);
     if (!n || n >= sizeof(parent)) return EFS_ERR_INVAL;
+    if (s) {
+        size_t best = 0;
+        pthread_mutex_lock(&s->lock);
+        for (uint32_t i = 0; i < s->storage_path_count; ++i) {
+            const char *candidate = s->storage_paths[i];
+            size_t length = strlen(candidate);
+            if (!s->container_targets[i] || !length || length <= best ||
+                length >= n || strncmp(path, candidate, length) ||
+                (length != 1 && path[length] != '/')) continue;
+            memcpy(root, candidate, length + 1);
+            best = length;
+        }
+        pthread_mutex_unlock(&s->lock);
+    }
     memcpy(parent, path, n + 1);
     char *slash = strrchr(parent, '/');
     if (!slash) strcpy(parent, ".");
@@ -1155,7 +1170,8 @@ static int sync_fragment_parents(const char *path)
         do { rc = fsync(fd); } while (rc < 0 && errno == EINTR);
         int closed = close(fd);
         if (rc < 0 || closed < 0) return EFS_ERR_IO;
-        if (!strcmp(parent, "/") || !strcmp(parent, ".")) break;
+        if (!strcmp(parent, root) || !strcmp(parent, "/") ||
+            !strcmp(parent, ".")) break;
         slash = strrchr(parent, '/');
         if (!slash) strcpy(parent, ".");
         else if (slash == parent) parent[1] = '\0';
@@ -1175,7 +1191,7 @@ static int finish_fragment_put(struct shard_io_arg *a, int fd, size_t bytes)
      * Production does not open O_SYNC, so always establish an explicit file
      * barrier, including same-length direct writes and checksum tails. */
     int rc = finish_shard_write(fd, bytes, 1, 0);
-    return rc == EFS_OK ? sync_fragment_parents(a->path) : rc;
+    return rc == EFS_OK ? sync_fragment_parents(a->s, a->path) : rc;
 #endif
 }
 
@@ -1931,6 +1947,21 @@ int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export
                                         const uint8_t *data, uint32_t data_len,
                                         const uint8_t checksum[EFS_HASH_SIZE]);
 
+static int server_data_gc_busy(struct efsd_server *s, uint64_t used, uint64_t charge)
+{
+    if (!s->data_gc_admission) return 0;
+    int busy = efs_data_gc_pressure(1, s->quota, used, charge,
+        __atomic_load_n(&s->gc_last_delete_us, __ATOMIC_RELAXED), gc_clock_us());
+    if (busy) {
+        uint64_t count = __atomic_add_fetch(&s->data_gc_busy, 1, __ATOMIC_RELAXED);
+        if (count == 1 || !(count % 1024))
+            fprintf(stderr, "data-gc-admission busy=%llu used=%llu quota=%llu\n",
+                (unsigned long long)count, (unsigned long long)used,
+                (unsigned long long)s->quota);
+    }
+    return busy;
+}
+
 /* path must be the server_fragment_path() result for this fragment.
  * checksum, when non-NULL, is stored in the file (4 KiB tail under
  * O_DIRECT, 32 bytes otherwise). */
@@ -1978,7 +2009,7 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
 
     int do_charge = 0;
     if (may_charge && !first_write) {
-        int under;
+        int under, pressured;
         pthread_mutex_lock(&s->lock);
         struct efs_node *local = server_local_node(s);
         if (!local) {
@@ -1987,6 +2018,8 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
         }
         under = data_len <= UINT64_MAX - local->used &&
                 (!s->quota || (local->used <= s->quota && data_len <= s->quota - local->used));
+        pressured = server_data_gc_busy(s, local->used, data_len);
+        under = under && !pressured;
         pthread_mutex_unlock(&s->lock);
         if (under) {
             arg.excl = 1;
@@ -2006,7 +2039,7 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
             if (arg.result == EFS_OK)
                 return EFS_OK; /* overwrite: no charge */
             if (!under)
-                return EFS_ERR_QUOTA;
+                return pressured ? EFS_ERR_BUSY : EFS_ERR_QUOTA;
             if (arg.result != EFS_ERR_NOT_FOUND)
                 return EFS_ERR_IO;
             do_charge = 1;
@@ -2056,6 +2089,10 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
                 (s->quota && (local->used > s->quota || data_len > s->quota - local->used))) {
             pthread_mutex_unlock(&s->lock);
             return EFS_ERR_QUOTA;
+        }
+        if (server_data_gc_busy(s, local->used, data_len)) {
+            pthread_mutex_unlock(&s->lock);
+            return EFS_ERR_BUSY;
         }
         local->used += data_len;
         /* Persist at most every ~64 MiB charged (writer thread, not heartbeat). */
@@ -2400,7 +2437,7 @@ static int write_packed_fragment_unfenced(struct efsd_server *s, efs_export_id_t
                 }
                 int sr; do { sr = fsync(fd); } while (sr < 0 && errno == EINTR);
                 int cr = close(fd);
-                rc = sr < 0 || cr < 0 ? EFS_ERR_IO : sync_fragment_parents(path);
+                rc = sr < 0 || cr < 0 ? EFS_ERR_IO : sync_fragment_parents(s, path);
                 synced = rc == EFS_OK;
                 break;
             }

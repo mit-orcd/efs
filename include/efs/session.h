@@ -57,6 +57,10 @@ int efs_session_get(struct efs_kv *kv, const uint8_t uuid[EFS_OPID_UUID_LEN],
                     struct efs_session_rec *out);
 int efs_session_register(struct efs_kv *kv, const uint8_t uuid[EFS_OPID_UUID_LEN],
                          uint32_t epoch, uint32_t shard);
+/* Caller must place global owner and local shard on the same ordered Raft
+ * group. Rechecks ACTIVE/epoch and atomically records touched bit plus floor. */
+int efs_session_register_establish(struct efs_kv *kv,
+    const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch,uint32_t shard);
 int efs_session_begin_fence(struct efs_kv *kv,
                             const uint8_t uuid[EFS_OPID_UUID_LEN]);
 int efs_session_ack_fence(struct efs_kv *kv,

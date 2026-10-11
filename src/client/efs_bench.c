@@ -1,3 +1,4 @@
+#include "../common/parse_host_port.h"
 #include "efs/cli_help.h"
 #include "client_internal.h"
 #include "../bench/bench_local.h"
@@ -25,6 +26,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include "../common/recorder_stop.h"
 #include <time.h>
 #include <unistd.h>
 
@@ -86,17 +88,7 @@ static pid_t start_perf_recorder(pid_t target, const char *perf_path)
 
 static void stop_perf_recorder(void)
 {
-    if (g_perf_pid > 0) {
-        kill(g_perf_pid, SIGTERM);
-        for (int i = 0; i < 50; i++) {
-            if (waitpid(g_perf_pid, NULL, WNOHANG) == g_perf_pid)
-                break;
-            usleep(100000);
-        }
-        kill(g_perf_pid, SIGKILL);
-        waitpid(g_perf_pid, NULL, 0);
-        g_perf_pid = -1;
-    }
+    efs_stop_recorder(&g_perf_pid);
 }
 
 static double now_sec(void)
@@ -108,19 +100,7 @@ static double now_sec(void)
 
 static int parse_host_port(const char *s, char *host, size_t host_len, uint16_t *port)
 {
-    const char *colon = strrchr(s, ':');
-    if (!colon || colon == s)
-        return -1;
-    size_t n = (size_t)(colon - s);
-    if (n >= host_len)
-        return -1;
-    memcpy(host, s, n);
-    host[n] = '\0';
-    int p = atoi(colon + 1);
-    if (p <= 0 || p > 65535)
-        return -1;
-    *port = (uint16_t)p;
-    return 0;
+    return efs_parse_host_port(s, host, host_len, port);
 }
 
 /* Per-thread PUT templates: header + zero payload; only headers change.

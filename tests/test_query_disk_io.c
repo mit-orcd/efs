@@ -1,4 +1,5 @@
 /* Exercise the production cache boundary and partial-write error behavior. */
+#include "efs/dir_layout.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
@@ -303,9 +304,85 @@ static void alias_batch_test(void)
     }
     pthread_mutex_destroy(&d->mutex);free(d);CHECK(!rmdir(root));
 }
+
+static void orphan_preflight_test(void)
+{
+    char store[]="/tmp/efs-query-orphan-kv-XXXXXX",cache[]="/tmp/efs-query-orphan-cache-XXXXXX";
+    CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};
+    struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);CHECK(kv);if(!kv)return;
+    struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t parent,child;
+    CHECK(!efs_meta_apply_init(kv,100));
+    CHECK(!efs_meta_apply_mkdir(kv,&attrs,EFS_ROOT_INO,S_IFDIR|0755,"parent",&parent));
+    CHECK(!efs_meta_apply_mkdir(kv,&attrs,parent,S_IFDIR|0755,"child",&child));
+    uint8_t key[EFS_KV_KEY_MAX],value[EFS_META_DENT_BYTES];uint32_t kn,vn=sizeof(value);
+    CHECK(!efs_kv_key_dentry(efs_kv_inode_shard(parent),parent,"child",key,&kn));
+    CHECK(!efs_kv_get(kv,key,kn,value,&vn));CHECK(!efs_kv_del(kv,key,kn));
+    struct efs_kv_lsm_snapshot *source=NULL;struct efs_query_disk *disk=NULL;
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));
+    struct efs_query_build_failure failure={0};struct efs_query_build_times times;
+    CHECK(efs_query_disk_build_checked(cache,source,NULL,4<<20,NULL,NULL,&times,&failure,&disk)==EFS_ERR_IO);
+    CHECK(!disk && failure.directory==child);
+    unsigned writes=write_calls,syncs=raw_syncs+index_syncs;
+    CHECK(efs_query_disk_build_checked(cache,source,NULL,4<<20,NULL,NULL,&times,&failure,&disk)==EFS_ERR_IO);
+    CHECK(!disk && failure.directory==child && write_calls==writes && raw_syncs+index_syncs==syncs);
+    CHECK(orphan_preflight(source,&failure,cancel_budget,NULL)==EFS_ERR_BUSY && failure.directory==child);
+    uint8_t other_key[EFS_KV_KEY_MAX];uint32_t other_kn;
+    CHECK(!efs_kv_key_dentry(efs_kv_inode_shard(EFS_ROOT_INO),EFS_ROOT_INO,"moved",other_key,&other_kn));
+    CHECK(!efs_kv_put(kv,other_key,other_kn,value,vn));
+    struct efs_kv_lsm_snapshot *moved=NULL;CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&moved));
+    CHECK(!orphan_preflight(moved,&failure,NULL,NULL) && !failure.directory);
+    efs_kv_lsm_snapshot_release(moved);failure.directory=child;
+    CHECK(!efs_kv_del(kv,other_key,other_kn));
+    CHECK(!efs_kv_put(kv,key,kn,value,vn));
+    /* A later live repair cannot change the old immutable source's verdict. */
+    CHECK(orphan_preflight(source,&failure,NULL,NULL)==EFS_ERR_IO);
+    efs_kv_lsm_snapshot_release(source);source=NULL;
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));
+    CHECK(!orphan_preflight(source,&failure,NULL,NULL) && !failure.directory);
+    CHECK(!efs_query_disk_build_checked(cache,source,NULL,4<<20,NULL,NULL,&times,&failure,&disk));
+    CHECK(disk && !failure.directory);efs_query_disk_free(disk);disk=NULL;
+    efs_kv_lsm_snapshot_release(source);source=NULL;
+    CHECK(!efs_meta_dir_begin_split(kv,parent));
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));failure.directory=child;
+    CHECK(!orphan_preflight(source,&failure,NULL,NULL) && !failure.directory);
+    efs_kv_lsm_snapshot_release(source);source=NULL;
+    while(efs_meta_dir_migrate_one(kv,parent)==EFS_OK){}
+    CHECK(!efs_meta_dir_finish_hashed(kv,parent));
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));failure.directory=child;
+    CHECK(!orphan_preflight(source,&failure,NULL,NULL) && !failure.directory);
+    efs_kv_lsm_snapshot_release(source);source=NULL;
+    CHECK(!efs_kv_key_dentry(efs_kv_dentry_shard(parent,"child",EFS_META_LAYOUT_HASHED),parent,"child",key,&kn));
+    CHECK(!efs_kv_del(kv,key,kn));
+    uint8_t parent_key[EFS_KV_KEY_MAX];uint32_t parent_kn;
+    CHECK(!efs_kv_key_inode(efs_kv_inode_shard(parent),parent,parent_key,&parent_kn));
+    struct efs_txid tx={{0}};tx.bytes[15]=22;
+    struct efs_txn_parts parts={.n=1,.shard={efs_kv_inode_shard(parent)}};
+    uint64_t parent_ver;CHECK(!efs_txn_ver_get(kv,parent_key,parent_kn,&parent_ver));
+    CHECK(!efs_txn_prepare_guard(kv,&tx,&parts,parent_key,parent_kn,parent_ver));
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));failure.directory=child;
+    CHECK(orphan_preflight(source,&failure,NULL,NULL)==EFS_ERR_BUSY && failure.directory==child);
+    efs_kv_lsm_snapshot_release(source);source=NULL;
+    CHECK(!efs_txn_resolve(kv,&tx,parts.shard[0],EFS_TXN_ABORT));
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));failure.directory=UINT64_MAX;
+    CHECK(!orphan_preflight(source,&failure,NULL,NULL) && !failure.directory);
+    efs_kv_lsm_snapshot_release(source);source=NULL;
+    /* The preflight budget is not a directory size limit: inconclusive wide
+     * scans must fall back to the original complete builder. */
+    for(unsigned i=0;i<4100;i++){
+        char name[32];efs_ino_t ino;snprintf(name,sizeof(name),"wide-%04u",i);
+        CHECK(!efs_meta_apply_create_file(kv,&attrs,parent,S_IFREG|0644,name,&ino));
+    }
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));failure.directory=child;
+    CHECK(!orphan_preflight(source,&failure,NULL,NULL) && !failure.directory);
+    efs_kv_lsm_snapshot_release(source);efs_kv_lsm_close(kv);
+    puts("orphan preflight: actual failed graph, no repeated scratch writes/syncs, immutable repair, prepared refusal and fresh rebuild PASS");
+}
+
 int main(void)
 {
     raw_sync_batch_test();
+    orphan_preflight_test();
     alias_batch_test();
     rebuild_cache_test();
     {

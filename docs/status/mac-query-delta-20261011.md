@@ -569,3 +569,427 @@ show 106–188 ms transaction commit and 88–214 ms session admission under thi
 load. This is not evidence of a latency improvement. Repeated failed query
 index builds take 24–37 seconds on each replica; a normally restored disabled-
 query diagnostic will distinguish their contribution from consensus costs.
+
+The follow-up query-disabled diagnostic also failed the unchanged deep pair
+(0/2, 34.9 seconds, normal cleanup). Policy was restored to mask 3, version 4.
+Failed catalog rebuilds amplify the IO load, but they do not explain the
+entire remaining failure.
+
+An uncommitted candidate moves applied-marker persistence to a worker with
+one captured in-flight prefix and no growing queue. The pump still completes
+its KV barrier before enqueueing; no log, quorum, apply or ReadIndex rule is
+relaxed. The marker helper uses the published host view rather than racing an
+underlying core pointer. A blocked previous job supplies backpressure before
+accepting another; a failed KV barrier cannot enqueue a marker, and failed
+marker persistence remains retryable. Thread creation failure retains the
+synchronous path. Shutdown joins the accepted marker job before its existing
+forced KV-before-marker checkpoint and file close. Actual worker persistence
+cost remains in the opt-in batch histogram. Captured-prefix, bounded admission,
+KV failure, marker failure/repair, fallback and blocked shutdown tests pass,
+along with original checkpoint/retirement/cadence tests and local ASAN/UBSAN.
+The full Mac Linux unit gate is running with service normally drained; native
+validation and acceptance remain pending. Stores and VM services are preserved.
+The checkpoint-worker candidate's full clean Linux `make test` passed and it
+was shipped to all Mac replicas/gateway. The unchanged native deep pair still
+failed 0/2 (34.9 seconds, normal completion); the worker does not establish a
+native latency win. Its sampled MKDIRs still spend 84–178 ms admitting cold
+namespace shards and 100–138 ms deciding/resolving cross-group transactions.
+The current admission helper starts several independent ReadIndex rounds
+within the same operation, including immediately after its own successful
+REGISTER/ESTABLISH settlement. Request-scoped authority reuse is the next
+lead; independent RPCs and new groups must still obtain fresh authority.
+
+Namespace session admission now reuses only authority already obtained within
+the same MKDIR/RMDIR RPC. It still reads the current session row and validates
+ACTIVE state, epoch, registration and the durably applied local floor. Remote
+owner checks and independent RPCs keep fresh ReadIndex rounds. The original
+protocol wrappers supply no inherited coverage. Scope/error/fencing tests and
+focused Linux session, cold-WAL, transaction, resolve and authority gates pass.
+The unchanged native deep pair still fails 0/2 in 35.6 seconds, with normal
+cleanup (`results/mac-readindex-resume/native-session-authority-deep.txt`).
+Sampled admission phases often fall to 35–55 ms, but outliers remain and no
+paired improvement or native pass is claimed. LOOKUP measurements show 2,891
+calls averaging 5.59 ms: queued already-accounted read replies may hold later
+fresh rounds behind the durability tail. This requires a conservative exact-
+prefix control-path test, preserving replication bookkeeping whenever needed.
+
+Read control now fully consumes an already-accounted successful empty ACK
+only at the exact committed/applied full-log prefix, with matching recorded
+peer match/next state. An ordinary ACK also requires no outstanding entry
+batch; a probe preserves that batch. Boot, term, group, voter/config and inbox
+ordering checks remain mandatory. Late rounds update peer liveness but never
+current read authority; progress-bearing ACKs retain normal recv bookkeeping.
+Sequential fresh/old-round, outstanding suffix, parked apply, failure and
+configuration tests pass under ASAN/UBSAN and on the Mac Linux seed, together
+with Raft disk, transaction, resolve, cohort and checkpoint regression gates.
+Both the initial probe-only and ordinary-empty-ACK candidates still fail the
+unchanged native deep pair (0/2, normal cleanup; evidence `native-accounted-
+control-deep.txt` and `native-accounted-heartbeat-deep.txt`). The latest
+LOOKUP average remains 5.45 ms. This is no native speedup proof. Log fsync
+averages 19.35 ms; wire RTT averages 0.36–0.38 ms. Duplicate applied-marker
+dispatch still waits behind an accepted same-prefix job and is the next lead.
+
+The bounded marker dispatcher now skips duplicate requests for an already
+accepted/completed exact prefix when no transport credits need retirement.
+Newer prefixes retain backpressure; a failed completed marker is retried and
+failed KV release still cannot schedule a marker. Actual worker tests cover a
+blocked identical-prefix request, credit-bearing duplicate, new-prefix wait,
+failed same-prefix repair and shutdown drain; ASAN/UBSAN and Mac Linux
+checkpoint/retirement/control gates pass. Native deep pair still fails 0/2
+(33.6 seconds, normal cleanup). Its LOOKUP average is 4.12 ms, versus 5.45 ms
+in the preceding candidate run; these are consecutive diagnostic runs, not
+a paired performance proof or native acceptance. Evidence: `native-checkpoint-
+duplicate-deep.txt`, `checkpoint-duplicate-sample-efs1.json`.
+
+Known locally led group reads now overlap their independent fresh rounds.
+Both admissions precede either send; pending earlier rounds remain ineligible.
+Different leaders retain scalar routing. MKDIR overlaps known parent/child
+groups; LOOKUP uses unfenced bytes only as scheduling hints and rereads every
+reply row after authority, fencing newly discovered groups. Stale speculative
+route/timeout failures fall back to authoritative discovery; storage failures
+remain errors. Pre-send admission, pending/current rounds, stepdown/routing,
+overflow, hint corruption, independent-RPC and original replacement/transaction
+authority gates pass on Mac Linux. Native deep pair remains 0/2 (37.6 seconds,
+normal cleanup). A separate bounded strace -k directory diagnostic completed
+and cleaned normally; its timing is not acceptance evidence. It proves 28
+KV fdatasync stacks through handler-side host_apply, both after proposer log
+sync and cohort release. One shown KV sync costs 12.4 ms while the handler
+holds h->mu. These callbacks currently bypass the pump's KV sync hold.
+`results/mac-readindex-resume/kv-apply-stacks.txt` records the evidence.
+Separating the synced-log watermark from pump-owned apply is the next fix.
+
+Handler-side log-sync completion now records its checked durable watermark
+without calling commit/apply. Disk-backed proposer, background and cohort
+release paths wake the pump, which retains commit/apply inside its original
+KV hold. The existing synchronous API remains available for core/memory
+callers. Own votes still require the actual synced-log prefix; command waiters
+still require exact applied verdicts. A two-voter regression receives the
+peer ACK before local sync, notes the monotonic watermark without commit or
+apply, then verifies the pump commits/applies exactly once. Core ASAN/UBSAN,
+Mac Linux Raft disk/transaction/resolve, host dispatch/log coverage, session
+fencing, cohort, checkpoint and read authority gates pass. The live deep pair
+remains 0/2 (36.3 seconds, normal cleanup); no closure is claimed. The full
+unchanged native suite and local baseline are now running with one outer
+fixture at a time; intrinsic multiprocess cases and original deadlines are
+retained. Its deep-60 and 300-file cases have still exceeded their deadlines.
+Live read samples: LOOKUP 3.71 ms average, KV body 7 us, lanes 3 us.
+
+The one-outer-fixture native run completed incomplete: 144/216 PASS, 8 FAIL,
+64 NOTRUN in 538.5 seconds. The surviving timed-out process group was in
+concurrent_create_unlink_two_proc (not concurrent_appends_two_proc). Both
+append cases also timed out. Workers later exited. Normal tree cleanup
+finished; a stop attempted during cleanup refused safely and retained servers.
+After cleanup the next stop drained normally. No force discard was used.
+
+Fresh matched-prefix follower read probes now acknowledge before KV apply,
+while requests owing commit/apply still enter ordinary receive. Only known
+boot/current term/stable voters and previously persisted matching log prefixes
+qualify. Leader applied-prefix authority remains mandatory. Zero-context
+empty traffic contributes liveness only, never a fresh read vote. Parked
+follower apply, prefix mismatch, deferred storage, fresh/old contexts and
+normal queued apply regressions pass, including core ASAN/UBSAN and Mac Linux.
+
+The checkpoint worker can defer a newer no-credit hint while its accepted job
+is blocked, strictly below the original 1,024-entry cap measured from COMPLETED
+marker floors. Captured work is not overwritten; pending credits and cap
+boundaries still backpressure. Stop drains accepted work and retains the
+existing forced latest checkpoint. Blocked cap/credit, captured-prefix, error
+repair and shutdown tests pass under sanitizers and Mac Linux. Live deep pair
+remains 0/2 (35.9 seconds including normal cleanup); neither fix closes the
+native gate. Evidence: native-bounded-marker-deep.txt and
+bounded-marker-sample-efs1.json under results/mac-readindex-resume.
+
+APPEND reservations now collect independent captured image PREPs in the
+existing eight-entry physical-log cohort, preserving stable refs and all exact
+verdicts before DECIDE COMMIT. A flush/verdict failure before DECIDE drives
+durable ABORT; an already-submitted ambiguous COMMIT is never converted.
+Validation/no-op/error paths clear request-local capture. Generic resize/
+append RESOLVE participants also share bounded barriers after their decision.
+Captured-plan, owned-session, 69-image bound/overflow, pending verdict, sync
+failure, abort failure, ambiguous COMMIT, nested-capture refusal and TLS cleanup
+regressions pass under sanitizers. Mac Linux append transaction/recovery,
+receipt, transaction fault, session and cohort gates pass; build has no warnings.
+The isolated native multiprocess append still times out at its original
+30-second budget (31.1 seconds including normal cleanup), without a surviving
+worker. Its sampled reserve RPC average is 223 ms (54 calls), while REPORT
+averages 600 ms (24 calls). Different runs/partial timed-out workloads are
+diagnostic only, not paired performance or correctness acceptance. REPORT's
+append completion still prepares images individually and is the next lead.
+Evidence: append-cohort-unit.txt and native-append-cohort.txt.
+
+Normal append completion and pruning now use the same bounded captured-image
+PREP collector. Registered completion retains the exact local session guard;
+last-close cleanup keeps its synchronous first PREP before checking leases.
+No-op/capture-error exits clear TLS, and failures retain the same pre-decision
+ABORT/ambiguous COMMIT handling. Extended sanitizer and Mac Linux completion,
+prune, owned-session, transaction recovery and receipt gates pass. Live native
+multiprocess append still misses its original budget: 0/1, 31.4 seconds with
+normal cleanup. Partial RPC diagnostics show reserve 170 ms (65 calls) and
+REPORT 408 ms (22 calls); not a paired throughput comparison or acceptance.
+Evidence: append-completion-unit.txt and native-append-completion.txt.
+
+Consecutive failed derived query builds now retry after 2, 4, 8, 16 and at
+most 30 seconds, measured from completion. Success resets the delay; query
+errors and pending age remain visible, and no namespace bytes are skipped or
+repaired. This reduces repeated failed scratch rebuild pressure; it does not
+resolve the retained orphan or promise native acceptance. Boundary, huge-count,
+overflow and success-reset scheduling tests pass locally and on Mac Linux.
+The full Linux make test passed on the Mac seed after append completion and
+this retry change (latest-linux-unit.txt).
+
+Ordinary inode/lane reads now overlap fresh locally led groups predicted
+from unfenced row hints. The helper rereads transactionally afterward and
+fences new authoritative groups; hints never supply reply data or authority.
+Stale/missing hints and speculative BUSY/routing failures fall back to scalar
+fencing; storage failures remain failures. Independent-RPC, changed lanes,
+directory shard, pair admission, replacement absence and coordinator failure
+gates pass on Mac Linux (inode-overlap-unit.txt); no build warnings.
+A new full native gate is next, with original assertions/deadlines.
+
+Full native Mac buffered/TCP run on b4cd0f0a completed with 209/216 PASS,
+7 FAIL, 0 SKIP, 0 NOTRUN in 820.4 seconds including normal cleanup (TSV
+pre-cleanup work duration 730.2 seconds). Local baseline: 216/216. Both large
+truncate honesty cases, concurrent 200-record append and concurrent create/
+unlink pass. Remaining original-budget timeouts: dir_deep_nesting,
+dir_deep_nesting_beyond_64, dir_many_files, names_crazy_dirs,
+concurrent_creates_same_dir, concurrent_appends_two_proc,
+mtime_monotonic_many_writes. No force discard or assertion/budget changes.
+The gate remains OPEN. Evidence: native-overlap-backoff-full-j1.txt/.rc,
+overlap-backoff-full-sample.json and overlap-backoff-full-late-sample.json.
+
+Query retry escalation is restricted to repeated identical build failures.
+Ordinary BUSY, NOT_PRIMARY and STALE, a changed error, or success reset the
+count (transient failures keep the original two-second retry). This avoids
+turning normal write/leadership contention into a thirty-second scheduling
+delay. Failure classification, saturation and reset tests pass on Mac Linux.
+
+Pending inbox frames now permit only an early leader read-quorum observation,
+not consuming a reply. Every noted reply with pending work still enters the
+original receive queue; follower requests retain the pending-order gate.
+Current boot/term/stable membership and leader own applied-prefix checks stay
+in the core. The fast path neither accepts a new term/configuration promise
+nor commits/applies entries. Raft message reordering cannot substitute an old
+nonce for fresh quorum authority. Host queue-preservation/source gates pass;
+the complete core suite also passes ASAN/UBSAN and Mac Linux with every ACK
+noted before its retained normal recv, including loss/fencing and configuration
+scenarios. Make test runs both modes. Evidence: pending-quorum-unit.txt.
+Live native deep-directory acceptance remains 0/2 at the original 20-second
+budgets (60.7 seconds including normal cleanup). Multiprocess append remains
+0/1 at its original 30-second budget (30.8 seconds). Fresh LOOKUP averages
+450 us over 6,777 sampled calls, but write admission/transaction durability
+still dominates. These are diagnostic samples, not closed native gates.
+Evidence: native-pending-quorum-deep.txt, pending-quorum-deep-sample.json
+and native-pending-quorum-append.txt.
+
+The next candidate reuses a validated atomic KV recovery cursor instead of
+fdatasyncing an applied.N file for the same already durable prefix. The pump
+captures the cursor under its apply lock and publishes only that captured
+floor after a successful KV barrier. The worker never reads a newer memory
+cursor as durability proof. No-op/configuration/legacy prefixes beyond the
+proof retain complement-record checkpoints, cadence, replay-tail cap, error
+retry and forced shutdown handling. Unit/sanitizer tests cover failed barriers,
+later writes, malformed/absent/ahead cursors and fallback marker failures.
+Mac Linux KV EIO/recovery fault gate passes: failed KV release/shutdown cannot
+advance markers and retained Raft restores the acknowledged inode after modeled
+loss of the unsynced KV tail. This is injected failure/process recovery, not
+physical power-loss proof. Cold-cursor recovery passes on a unique four-daemon Mac Linux buffered/TCP
+fixture: markers stay unchanged, the stopped follower has a validated newer
+KV cursor, and restart preserves exact payloads, inode/link counts, rename,
+mode, truncate and deletion. Deletion queues drain normally. Native acceptance
+is still pending.
+Evidence: cursor-checkpoint-unit-fault.txt, cursor-checkpoint-private-recovery.txt
+and cursor-checkpoint-cold-replay.txt.
+
+Durable-cursor candidate 9142015b passes the complete Mac Linux make test
+and documentation gate (5/5). Installed Mac buffered/TCP rollout drained
+without forced loss. Native deep pair is 1/2: the 100-level case passes, but
+the recursive 60-level makedirs case still misses 20 seconds. Multiprocess
+append remains 0/1 at 30 seconds (31.5 with cleanup). The sampled checkpoint
+worker average is 8.4 us and only two applied-file syncs occur, compared with
+thousands previously; Raft log barriers still average 19.2 ms. Different run
+lengths/partial workloads do not establish a paired throughput comparison.
+A separate 60-level diagnostic completes makedirs in 10.1 seconds and cleanup
+in 6.9 seconds, leaving little deadline margin; the native gate remains OPEN.
+Evidence: cursor-checkpoint-full-unit.txt, native-cursor-deep.txt,
+native-cursor-append.txt, cursor-deep-sample.json and makedirs-cursor-diag.txt.
+
+Next candidate combines namespace REGISTER and ESTABLISH only when both
+domains share one Raft group. One atomic two-row KV batch rechecks ACTIVE and
+exact epoch, guards global/local keys and preserves established/rejection
+floors. BEGIN before admission rejects it; BEGIN afterward includes the new
+participant. Cross-group protocol stays sequential. Wrong group/length/shard
+commands are rejected, logical verdicts remain audible without blocking the
+log, and storage errors remain retryable. Unit tests pass on Mac Linux for
+failed batches (neither row changes), prepared ownership, fence/new epoch,
+cold persistence, routing and unchanged cross-group admission. Native and
+private-cluster session gates for this candidate are pending.
+Evidence: atomic-session-unit.txt.
+
+The dedicated namespace-session wire gate passes on a unique four-daemon
+Mac Linux buffered/TCP fixture using 21619c91's production code. Seven
+namespace receipts replay before revocation; late mutations and untouched
+first-use are STALE after the complete session barrier. After a drained
+private-fixture crash/restart, all seven old receipts remain STALE and
+namespace contents remain exact. Normal deletion queues drain. The new
+--namespace-session-only option isolates this existing wire helper without
+changing its assertions. Evidence: atomic-session-wire-cold.txt.
+
+Complete Mac Linux make test passes after the combined session admission
+change; architecture documentation gate remains 5/5. Evidence:
+atomic-session-build-full-unit.txt. No native acceptance claim yet.
+
+The complete installed Mac native gate on production 21619c91 (source
+checkpoint a133718e) finished 211/216, five timeouts, no skips, in 859 seconds
+including normal cleanup. Both deep-directory cases and both 300 MiB truncate
+cases pass. Remaining failures are dir_many_files (75 s), names_crazy_dirs,
+concurrent_creates_same_dir, mtime_monotonic_many_writes (20 s each), and
+concurrent_appends_two_proc (30 s). Deadlines and assertions remain unchanged.
+Evidence: native-atomic-session-full-j1.txt/.rc; atomic-session-full-sample.json.
+
+The next candidate retains only the identity of one directory rejected by a
+failed derived query build. Each retry revalidates its current inode, parent
+and authoritative LOCAL/SPLITTING/HASHED backlink against a new immutable KV
+snapshot before creating scratch files. Prepared ownership or cancellation is
+inconclusive; wide scans fall back to the complete builder. A still-proven
+orphan reports IO without repeating thousands of scratch writes and barriers.
+It neither repairs authoritative rows nor publishes a catalog/watermark.
+On Mac Linux, tests pass for the original failed graph, unchanged scratch
+write/sync counts on retry, immutable old sources after live repair, successful
+fresh repair, all three layouts, guarded ownership, missing hints and wide
+parent fallback. Existing query disk fault/sort/oracle tests also pass.
+Evidence: orphan-preflight-unit.txt. Installed native acceptance is pending.
+
+Preflight also scans the immutable source for a backlink under any other
+parent before returning IO. Such a backlink, including an inconclusive stale
+layout copy during a cross-group rename cut, falls back to the original
+builder. The bounded-scratch test covers this alternate-parent case.
+
+Installed 967e2e84's five unchanged native cases finish 3/5: append passes
+(26.0 s including cleanup), names_crazy_dirs passes (15.9 s), and dir_many_files
+passes (66.0 s). Mtime (20 s) and concurrent creates (20 s, 24.6 s including
+cleanup) still time out. Live retries now return inconclusive BUSY in 4–32 ms
+instead of rebuilding scratch files, following the initial 27-second failed
+build. This does not repair the retained directory or prove query freshness.
+Evidence: native-orphan-five.txt; orphan-five-sample.json.
+
+The next candidate preserves the synchronous CLOSE_STEP preparation before
+checking leases, then batches only the later independent exact-image PREPs.
+Every deferred verdict still settles before COMMIT. Reopen and first-PREP
+failure abort before later submissions; later storage/verdict failure aborts;
+ambiguous COMMIT stays pending. Normal close/prune and crash-recovery paths
+use the same helper. Local ASAN/UBSAN and Mac Linux cohort tests pass; existing
+real-KV close race assertions verify reopened ownership blocks cleanup. The
+first full regression attempt failed the wrapper's private /tmp store startup
+because quota estimation refused unsafe headroom. Retrying on the owned
+/data1 test directory; no installed data is discarded or gate assertion changed.
+
+The candidate's private four-daemon Mac buffered/TCP deferred-close gate
+passes: a crash with 64 OPEN cross-group appends resumes exact holes/frontier,
+retires all reservations/markers, preserves reopened bytes and rejects an old
+close identity. The complete accompanying physical GC/hardlink/open-unlink
+checks also finish successfully and drain private stores normally.
+Evidence: close-cohort-cold-wire.txt. This models daemon crashes, not hardware
+power loss. Local sanitizers pass: close-cohort-local-sanitize.txt.
+
+Last-close candidate 98baa960 passes the complete Mac Linux make test with
+private temporary stores on data1, including architecture 5/5. Evidence:
+close-cohort-full-unit-data1.txt. Native rollout awaits the next client fix.
+
+Distinct local-directory file inodes advance by 4096 and keep the same low
+12 shard bits. FUSE's 64-slot OPEN/CLOSE, writeback and append/flush mutex
+tables indexed only those low bits, serializing unrelated same-shard files.
+The next candidate mixes the full inode for all three process-local tables;
+stored/wire identities and lock count remain unchanged. WB initialization
+also uses pthread_once instead of an unsynchronized ready flag. Production
+mutex tests cover 256 same-shard inodes across 241 shards, concurrent first
+initialization, 16,000 same-inode increments, same-file exclusion and distinct
+file progress while another stripe is held. Local ASAN/UBSAN passes. Existing
+lease ownership/retention tests pass locally; Mac Linux full gate is pending.
+
+Inode lock candidate 393caadb passes complete Mac Linux make test, including
+architecture 5/5, with private temporary stores on data1. No compiler warnings
+were emitted in the targeted build. Evidence: inode-stripes-unit-build.txt
+and inode-stripes-full-unit.txt. Local production-mutex tests and sanitizers
+also pass. Installed rollout and unchanged native gates remain pending.
+
+Installed 393caadb still times out both native 20-second cases; the first
+concurrent-create run overlapped the initial rebuild. A separate complete
+80-write diagnostic takes 26.9 seconds: OPEN 2.40 s, CLOSE/user-buffer flush
+22.17 s, STAT 2.09 s. RPC profiling after a normal remount shows append and
+REPORT dominate receive waits, with no BUSY backoff. This is diagnostic
+measurement, not a native gate pass. Evidence: native-stripes-two.txt,
+mtime-stripes-stages.txt and mtime-rpc-stages.txt.
+
+The next candidate keeps fewer than eight completed reservations only when
+all their ranges are wholly below inode base_size (the folded completed
+frontier). Capture freezes that exact inode image before allocating a new
+reservation. A full page, an unsafe range after shrink/reset, or malformed
+state still refuses admission until bounded cleanup succeeds. OPEN cursors
+retain their existing dependencies; close/session cleanup still drains every
+DONE row, and durable receipts/rejection floors are unchanged. Actual memory
+KV and cold LSM tests pass for eight separate completed bursts, canonical
+replay, forced page retirement, truncate-to-zero refusal and offset-zero
+resume after cleanup. Full Mac Linux and private peer/cold gates are pending.
+Evidence: append-burst-unit.txt.
+
+Bounded completed-append candidate passes the complete Mac Linux make test
+(exit 0; architecture 5/5) and the private four-daemon buffered/TCP wire gate:
+eight peer append/truncate races, cold remount halfway through, all 800
+concurrent append records and physical deletion drain. The handoff takes
+232.6 seconds within its unchanged 240-second fixture budget; this is
+correctness evidence, not native timing acceptance. All owned fixtures drain
+and unmount normally. Evidence: append-burst-full-unit.txt and
+append-burst-cold-wire.txt. Installed rollout/native timing gates follow.
+
+Installed 0b45f6cf fails both unchanged native 20-second cases (mtime 20.2 s,
+concurrent CREATE 24.9 s including cleanup). RPC counters show append receive
+time averaging about 85 ms, down from the prior diagnostic's roughly 160 ms;
+this still does not establish native acceptance. No background fixtures or
+builds ran during those cases. Evidence: native-append-burst-two.txt and
+append-burst-two-rpc.txt.
+
+The next candidate pairs fresh authority for append reservation/completion/
+close using the existing two-group admission helper. Both groups must be
+hosted; different leaders retain scalar fresh reads, and pending old rounds
+cannot satisfy a newly admitted read. Reservation reuses only its just-
+completed request-local group boundary for the session owner lookup, still
+reading current epoch/state and enforcing the local acceptance floor. Other
+admission callers retain their independent fresh owner boundary. Production
+helper tests pass for hosted routing refusal, fresh paired rounds, fencing,
+stale local floors, default independent calls and uncovered owner groups.
+Mac Linux targeted and private cold/peer gates follow.
+
+Paired append authority passes the Mac Linux targeted quorum/owner/fencing/
+transaction recovery gates and local ASAN/UBSAN owner admission. Its unchanged
+private four-daemon buffered/TCP cold/peer gate passes all eight races, all
+800 handoff records in 135.6 seconds, and physical deletion drain. Prior
+iteration's handoff took 232.6 seconds; these private runs demonstrate
+correctness, not isolated native performance acceptance. Evidence:
+append-authority-unit.txt and append-authority-cold-wire.txt.
+
+Installed 82f9b88c still fails both unchanged 20-second native cases. An
+isolated 80-append diagnostic completes in 25.93 s (OPEN 2.82 s, flush/CLOSE
+20.40 s, STAT 2.37 s). The isolated 160-file/eight-thread CREATE diagnostic
+completes and verifies every byte in 34.34 s, with mean OPEN 1.11 s and
+mean close/writeback 84.75 ms across concurrent callers. Evidence:
+native-append-authority-two.txt, mtime-paired-stages.txt and
+create-paired-stages.txt. Native acceptance remains open.
+
+The next CREATE candidate carries only this RPC's fresh parent/dentry group
+boundaries through initial receipt lookup and submission admission. All
+rows/epochs/local floors are still read and checked; uncovered groups and
+ordinary/forwarded calls still require fresh authority. Coverage resets
+after mutation, so terminal receipt proof always crosses a new ReadIndex.
+New actual helper tests cover absent/negative/exact receipts, lost attribute
+rows retaining FileID, uncovered/failing authority and post-submit refusal.
+Existing client retained identity/cancellation and namespace floor tests
+pass locally. Mac cold concurrent CREATE gates follow.
+
+Retained CREATE coverage candidate passes Mac Linux production-helper/
+identity/namespace fencing gates and local ASAN/UBSAN. Its private four-daemon
+buffered/TCP gate passes 1,024 unique files from 16 workers, exact cold bytes,
+1,024 genuine EEXIST checks and 16 name replacements. Accompanying hardlink/
+open-unlink, injected deletion failure/retry, cold fold reads, physically
+empty inventory, zero quota and late-PUT fences all pass; owned fixtures
+drain normally (exit 0). Evidence: create-authority-build-unit.txt and
+create-authority-cold-wire.txt. Native timing acceptance follows rollout.

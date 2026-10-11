@@ -1,0 +1,544 @@
+2026-10-11T21:26:51.491Z storage-engine=files direct_io=on
+2026-10-11T21:26:51.491Z Data GC admission: experimental
+2026-10-11T21:26:51.491Z Storage quota: explicit 4.00 GiB (safe maximum 148.45 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:26:51.493Z Joined cluster with 3 nodes
+2026-10-11T21:26:51.495Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:26:51.496Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:26:51.496Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:26:51.496Z raft-host: up raft_id=2 n=4 boot=4920451479952727 salt=10012171534195811064 g0=hosted g2=hosted
+2026-10-11T21:26:51.496Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T21:26:53.495Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=977 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:26:55.267Z raft-host: applied session index=3 kind=1 shard=0 ino=0
+2026-10-11T21:26:55.272Z store: put O_DIRECT bounce copy (buf align=2368 len=65536)
+2026-10-11T21:26:55.273Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=1038 p50_us=1038 max_us=1038 wdisk ops=1 bytes=65536 errors=0 avg_us=921 p50_us=921 max_us=921
+2026-10-11T21:26:56.103Z storage-engine=files direct_io=on
+2026-10-11T21:26:56.104Z Data GC admission: experimental
+2026-10-11T21:26:56.104Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3/meta/cluster_nodes.bin
+2026-10-11T21:26:56.104Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:26:56.104Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:26:56.104Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:26:56.104Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:26:56.104Z Storage quota: explicit 4.00 GiB (safe maximum 148.45 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:26:56.106Z Joined cluster with 4 nodes
+2026-10-11T21:26:56.107Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:26:56.109Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:26:56.109Z raft-host: up raft_id=2 n=4 boot=4920451479952728 salt=10274205338569392713 g0=hosted g2=hosted
+2026-10-11T21:26:56.109Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3 (1 paths, stripe=none), used=65536, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T21:26:56.109Z kv-obs: mt_bytes=3048 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:26:58.108Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=983 passes=2 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:26:59.927Z raft-host: applied session index=4 kind=1 shard=0 ino=0
+2026-10-11T21:26:59.995Z store: put O_DIRECT bounce copy (buf align=2528 len=65536)
+2026-10-11T21:26:59.996Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=935 p50_us=935 max_us=935 wdisk ops=1 bytes=65536 errors=0 avg_us=841 p50_us=841 max_us=841
+2026-10-11T21:27:00.825Z storage-engine=files direct_io=on
+2026-10-11T21:27:00.825Z Data GC admission: experimental
+2026-10-11T21:27:00.825Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3/meta/cluster_nodes.bin
+2026-10-11T21:27:00.825Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:27:00.825Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:27:00.825Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:27:00.825Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:27:00.825Z Storage quota: explicit 4.00 GiB (safe maximum 148.45 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:27:00.828Z Joined cluster with 4 nodes
+2026-10-11T21:27:00.829Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:27:00.830Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:27:00.830Z kv-obs: mt_bytes=5798 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:27:00.830Z raft-host: up raft_id=2 n=4 boot=4920451479952729 salt=7479508464414977792 g0=hosted g2=hosted
+2026-10-11T21:27:00.830Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3 (1 paths, stripe=none), used=131072, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T21:27:01.349Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:27:02.829Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=978 passes=2 sampled=0 pending=0,0 reap=0,0 removed=1 file_bytes=69632 payload_bytes=65536 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:27:04.589Z raft-host: applied session index=7 kind=1 shard=0 ino=0
+2026-10-11T21:27:05.609Z store: put O_DIRECT bounce copy (buf align=2368 len=65536)
+2026-10-11T21:27:05.831Z kv-obs: mt_bytes=7910 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:27:06.436Z storage-engine=files direct_io=on
+2026-10-11T21:27:06.436Z Data GC admission: experimental
+2026-10-11T21:27:06.436Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3/meta/cluster_nodes.bin
+2026-10-11T21:27:06.436Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:27:06.436Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:27:06.436Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:27:06.437Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:27:06.437Z Storage quota: explicit 4.00 GiB (safe maximum 148.45 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:27:06.440Z Joined cluster with 4 nodes
+2026-10-11T21:27:06.441Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:27:06.442Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:27:06.442Z kv-obs: mt_bytes=7910 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:27:06.442Z raft-host: up raft_id=2 n=4 boot=4923964810215362 salt=2649917897216104263 g0=hosted g2=hosted
+2026-10-11T21:27:06.442Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3 (1 paths, stripe=none), used=65536, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T21:27:06.957Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:27:08.441Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=984 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:27:10.204Z raft-host: applied session index=60 kind=1 shard=0 ino=0
+2026-10-11T21:27:11.280Z raft-host: applied session index=72 kind=1 shard=0 ino=0
+2026-10-11T21:27:11.282Z raft-host: apply create rc=-4 index=76 parent=1 name=w58-negative
+2026-10-11T21:27:11.444Z kv-obs: mt_bytes=10639 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:27:12.009Z storage-engine=files direct_io=on
+2026-10-11T21:27:12.009Z Data GC admission: experimental
+2026-10-11T21:27:12.009Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3/meta/cluster_nodes.bin
+2026-10-11T21:27:12.009Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:27:12.009Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:27:12.009Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:27:12.009Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:27:12.010Z Storage quota: explicit 4.00 GiB (safe maximum 148.45 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:27:12.013Z Joined cluster with 4 nodes
+2026-10-11T21:27:12.014Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:27:12.015Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:27:12.015Z kv-obs: mt_bytes=10639 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:27:12.015Z raft-host: up raft_id=2 n=4 boot=4925477083636230 salt=8784939526785973517 g0=hosted g2=hosted
+2026-10-11T21:27:12.015Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T21:27:12.529Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:27:14.014Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=982 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:27:15.902Z raft-host: applied session index=12 kind=1 shard=0 ino=0
+2026-10-11T21:27:15.909Z raft-host: applied session index=18 kind=1 shard=0 ino=0
+2026-10-11T21:27:16.736Z storage-engine=files direct_io=on
+2026-10-11T21:27:16.737Z Data GC admission: experimental
+2026-10-11T21:27:16.737Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3/meta/cluster_nodes.bin
+2026-10-11T21:27:16.737Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:27:16.737Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:27:16.737Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:27:16.737Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:27:16.737Z Storage quota: explicit 4.00 GiB (safe maximum 148.44 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:27:16.738Z Joined cluster with 4 nodes
+2026-10-11T21:27:16.740Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:27:16.741Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:27:16.741Z kv-obs: mt_bytes=15106 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:27:16.741Z raft-host: up raft_id=2 n=4 boot=4925477083636231 salt=12239478069428563904 g0=hosted g2=hosted
+2026-10-11T21:27:16.741Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T21:27:17.260Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:27:18.740Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=983 passes=2 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:27:20.565Z raft-host: applied session index=23 kind=1 shard=0 ino=0
+2026-10-11T21:27:20.832Z raft-host: applied session index=31 kind=1 shard=0 ino=0
+2026-10-11T21:27:20.849Z raft-host: applied session index=123 kind=1 shard=0 ino=0
+2026-10-11T21:27:21.582Z storage-engine=files direct_io=on
+2026-10-11T21:27:21.582Z Data GC admission: experimental
+2026-10-11T21:27:21.582Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3/meta/cluster_nodes.bin
+2026-10-11T21:27:21.582Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:27:21.582Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:27:21.582Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:27:21.582Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:27:21.582Z Storage quota: explicit 4.00 GiB (safe maximum 148.44 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:27:21.584Z Joined cluster with 4 nodes
+2026-10-11T21:27:21.585Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:27:21.586Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:27:21.586Z kv-obs: mt_bytes=21778 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:27:21.586Z raft-host: up raft_id=2 n=4 boot=4925477083636232 salt=8488745086799281200 g0=hosted g2=hosted
+2026-10-11T21:27:21.586Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T21:27:22.358Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:27:23.585Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=981 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:27:25.399Z raft-host: applied session index=137 kind=1 shard=0 ino=0
+2026-10-11T21:27:25.668Z raft-host: applied session index=144 kind=1 shard=0 ino=0
+2026-10-11T21:27:25.686Z raft-host: applied session index=54 kind=1 shard=0 ino=0
+2026-10-11T21:27:26.514Z storage-engine=files direct_io=on
+2026-10-11T21:27:26.514Z Data GC admission: experimental
+2026-10-11T21:27:26.514Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3/meta/cluster_nodes.bin
+2026-10-11T21:27:26.514Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:27:26.514Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:27:26.514Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:27:26.514Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:27:26.514Z Storage quota: explicit 4.00 GiB (safe maximum 148.44 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:27:26.516Z Joined cluster with 4 nodes
+2026-10-11T21:27:26.517Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:27:26.518Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:27:26.518Z raft-host: up raft_id=2 n=4 boot=4925477083636233 salt=11582115046800447052 g0=hosted g2=hosted
+2026-10-11T21:27:26.518Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T21:27:26.518Z kv-obs: mt_bytes=27093 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:27:27.035Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:27:28.518Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=983 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:27:30.285Z raft-host: applied session index=66 kind=1 shard=0 ino=0
+2026-10-11T21:27:30.290Z raft-host: applied session index=175 kind=1 shard=0 ino=0
+2026-10-11T21:27:30.304Z raft-host: applied session index=190 kind=1 shard=0 ino=0
+2026-10-11T21:27:31.137Z storage-engine=files direct_io=on
+2026-10-11T21:27:31.137Z Data GC admission: experimental
+2026-10-11T21:27:31.137Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3/meta/cluster_nodes.bin
+2026-10-11T21:27:31.137Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:27:31.137Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:27:31.137Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:27:31.137Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:27:31.138Z Storage quota: explicit 4.00 GiB (safe maximum 148.44 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:27:31.140Z Joined cluster with 4 nodes
+2026-10-11T21:27:31.141Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:27:31.143Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:27:31.143Z raft-host: up raft_id=2 n=4 boot=4925477083636234 salt=17145779699741976261 g0=hosted g2=hosted
+2026-10-11T21:27:31.143Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T21:27:31.143Z kv-obs: mt_bytes=32882 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:27:33.141Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=983 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:27:34.906Z raft-host: applied session index=212 kind=1 shard=0 ino=0
+2026-10-11T21:27:34.913Z raft-host: applied session index=90 kind=1 shard=0 ino=0
+2026-10-11T21:27:34.993Z raft-host: applied session index=95 kind=1 shard=0 ino=0
+2026-10-11T21:27:34.997Z raft-host: apply create rc=-4 index=242 parent=2311 name=retained0
+2026-10-11T21:27:34.998Z raft-host: applied session index=97 kind=1 shard=0 ino=0
+2026-10-11T21:27:35.001Z store: put O_DIRECT bounce copy (buf align=2368 len=65536)
+2026-10-11T21:27:35.002Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=1049 p50_us=1049 max_us=1049 wdisk ops=1 bytes=65536 errors=0 avg_us=949 p50_us=949 max_us=949
+2026-10-11T21:27:35.760Z raft-host: applied session index=254 kind=1 shard=0 ino=0
+2026-10-11T21:27:35.762Z raft-host: applied session index=258 kind=1 shard=0 ino=0
+2026-10-11T21:27:35.765Z raft-host: apply create rc=-4 index=263 parent=2311 name=retained1
+2026-10-11T21:27:36.146Z kv-obs: mt_bytes=40637 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:27:37.142Z raft-host: applied session index=99 kind=1 shard=0 ino=0
+2026-10-11T21:27:37.149Z raft-host: applied session index=101 kind=1 shard=0 ino=0
+2026-10-11T21:27:37.384Z raft-host: applied session index=400 kind=1 shard=0 ino=0
+2026-10-11T21:27:38.134Z storage-engine=files direct_io=on
+2026-10-11T21:27:38.134Z Data GC admission: experimental
+2026-10-11T21:27:38.134Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3/meta/cluster_nodes.bin
+2026-10-11T21:27:38.134Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:27:38.134Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:27:38.134Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:27:38.134Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:27:38.136Z Storage quota: explicit 4.00 GiB (safe maximum 148.42 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:27:38.138Z Joined cluster with 4 nodes
+2026-10-11T21:27:38.140Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:27:38.142Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:27:38.142Z kv-obs: mt_bytes=74715 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:27:38.142Z raft-host: up raft_id=2 n=4 boot=4925477083636235 salt=17867466646982284351 g0=hosted g2=hosted
+2026-10-11T21:27:38.142Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3 (1 paths, stripe=none), used=2686976, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T21:27:40.140Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=983 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:27:41.899Z raft-host: applied session index=469 kind=1 shard=0 ino=0
+2026-10-11T21:27:41.970Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:27:43.143Z kv-obs: mt_bytes=75432 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:27:43.401Z raft-host: applied session index=652 kind=1 shard=0 ino=0
+2026-10-11T21:27:43.402Z raft-host: applied session index=653 kind=1 shard=0 ino=0
+2026-10-11T21:27:43.406Z raft-host: applied session index=658 kind=3 shard=0 ino=0
+2026-10-11T21:27:46.974Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:27:48.144Z kv-obs: mt_bytes=74008 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:27:48.246Z raft-host: applied session index=685 kind=5 shard=1 ino=0
+2026-10-11T21:27:48.399Z raft-host: applied session index=701 kind=1 shard=0 ino=0
+2026-10-11T21:27:48.417Z raft-host: applied session index=703 kind=3 shard=0 ino=0
+2026-10-11T21:27:48.432Z raft-host: applied session index=704 kind=5 shard=3058 ino=0
+2026-10-11T21:27:48.555Z raft-host: applied session index=184 kind=1 shard=0 ino=0
+2026-10-11T21:27:48.661Z raft-host: applied session index=186 kind=1 shard=0 ino=0
+2026-10-11T21:27:48.770Z raft-host: applied session index=188 kind=1 shard=0 ino=0
+2026-10-11T21:27:48.827Z raft-host: applied session index=190 kind=3 shard=0 ino=0
+2026-10-11T21:27:48.830Z raft-host: applied session index=191 kind=3 shard=0 ino=0
+2026-10-11T21:27:48.845Z raft-host: applied session index=192 kind=5 shard=1 ino=0
+2026-10-11T21:27:49.188Z raft-host: applied session index=726 kind=1 shard=0 ino=0
+2026-10-11T21:27:49.295Z raft-host: applied session index=728 kind=1 shard=0 ino=0
+2026-10-11T21:27:49.354Z store: put O_DIRECT bounce copy (buf align=2512 len=65536)
+2026-10-11T21:27:49.356Z raft-host: applied session index=730 kind=3 shard=0 ino=0
+2026-10-11T21:27:49.372Z raft-host: applied session index=731 kind=5 shard=868 ino=0
+2026-10-11T21:27:49.377Z raft-host: applied session index=200 kind=1 shard=0 ino=0
+2026-10-11T21:27:49.379Z raft-host: applied session index=203 kind=1 shard=0 ino=0
+2026-10-11T21:27:49.385Z raft-host: applied session index=210 kind=3 shard=0 ino=0
+2026-10-11T21:27:49.397Z raft-host: applied session index=212 kind=5 shard=868 ino=0
+2026-10-11T21:27:49.453Z raft-host: applied session index=733 kind=1 shard=0 ino=0
+2026-10-11T21:27:49.559Z raft-host: applied session index=735 kind=1 shard=0 ino=0
+2026-10-11T21:27:49.620Z raft-host: applied session index=219 kind=1 shard=0 ino=0
+2026-10-11T21:27:50.616Z storage-engine=files direct_io=on
+2026-10-11T21:27:50.616Z Data GC admission: experimental
+2026-10-11T21:27:50.616Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3/meta/cluster_nodes.bin
+2026-10-11T21:27:50.616Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:27:50.616Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:27:50.616Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:27:50.616Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:27:50.616Z Storage quota: explicit 4.00 GiB (safe maximum 148.41 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:27:50.619Z Joined cluster with 4 nodes
+2026-10-11T21:27:50.620Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:27:50.622Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:27:50.622Z kv-obs: mt_bytes=87279 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:27:50.622Z raft-host: up raft_id=2 n=4 boot=4925477083636236 salt=13634966448810926781 g0=hosted g2=hosted
+2026-10-11T21:27:50.622Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3 (1 paths, stripe=none), used=262144, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T21:27:52.620Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=976 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:27:54.391Z raft-host: applied session index=746 kind=1 shard=0 ino=0
+2026-10-11T21:27:54.409Z iostats: get ops=1 bytes=65536 errors=0 avg_us=245 p50_us=245 max_us=245 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:27:54.409Z store: put O_DIRECT bounce copy (buf align=528 len=65536)
+2026-10-11T21:27:54.411Z raft-host: applied session index=762 kind=3 shard=0 ino=0
+2026-10-11T21:27:55.624Z kv-obs: mt_bytes=89246 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:27:59.411Z iostats: get ops=1 bytes=65536 errors=0 avg_us=245 p50_us=245 max_us=245 put ops=1 bytes=65536 errors=0 avg_us=875 p50_us=875 max_us=875 wdisk ops=1 bytes=65536 errors=0 avg_us=522 p50_us=522 max_us=522
+2026-10-11T21:28:00.669Z raft-host: applied session index=763 kind=5 shard=868 ino=0
+2026-10-11T21:28:00.674Z raft-host: applied session index=765 kind=1 shard=0 ino=0
+2026-10-11T21:28:00.690Z raft-host: applied session index=234 kind=3 shard=0 ino=0
+2026-10-11T21:28:00.704Z raft-host: applied session index=235 kind=5 shard=1 ino=0
+2026-10-11T21:28:00.715Z raft-host: applied session index=237 kind=1 shard=0 ino=0
+2026-10-11T21:28:00.716Z raft-host: applied session index=239 kind=1 shard=0 ino=0
+2026-10-11T21:28:01.086Z raft-host: applied session index=241 kind=1 shard=0 ino=0
+2026-10-11T21:28:01.121Z raft-host: applied session index=243 kind=3 shard=0 ino=0
+2026-10-11T21:28:01.210Z raft-host: applied session index=244 kind=5 shard=0 ino=0
+2026-10-11T21:28:01.225Z raft-host: applied session index=246 kind=5 shard=7 ino=0
+2026-10-11T21:28:01.271Z raft-host: applied session index=249 kind=1 shard=0 ino=0
+2026-10-11T21:28:01.276Z raft-host: applied session index=251 kind=1 shard=0 ino=0
+2026-10-11T21:28:01.327Z raft-host: applied session index=253 kind=3 shard=0 ino=0
+2026-10-11T21:28:01.341Z raft-host: applied session index=254 kind=5 shard=1 ino=0
+2026-10-11T21:28:01.369Z raft-host: applied session index=821 kind=12 shard=1 ino=40961
+2026-10-11T21:28:01.382Z raft-host: applied session index=822 kind=12 shard=1 ino=40961
+2026-10-11T21:28:02.901Z raft-host: applied session index=825 kind=12 shard=1 ino=40961
+2026-10-11T21:28:03.941Z storage-engine=files direct_io=on
+2026-10-11T21:28:03.941Z Data GC admission: experimental
+2026-10-11T21:28:03.941Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3/meta/cluster_nodes.bin
+2026-10-11T21:28:03.941Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:28:03.941Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:28:03.941Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:28:03.941Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:28:03.942Z Storage quota: explicit 4.00 GiB (safe maximum 148.40 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:28:03.945Z Joined cluster with 4 nodes
+2026-10-11T21:28:03.946Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:28:03.949Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:28:03.949Z raft-host: up raft_id=2 n=4 boot=4925477083636237 salt=4092941849047981184 g0=hosted g2=hosted
+2026-10-11T21:28:03.949Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3 (1 paths, stripe=none), used=65536, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T21:28:03.949Z kv-obs: mt_bytes=95591 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:28:05.946Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=976 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:28:07.708Z raft-host: applied session index=827 kind=1 shard=0 ino=0
+2026-10-11T21:28:07.717Z raft-host: applied session index=833 kind=12 shard=1 ino=40961
+2026-10-11T21:28:08.546Z storage-engine=files direct_io=on
+2026-10-11T21:28:08.546Z Data GC admission: experimental
+2026-10-11T21:28:08.547Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3/meta/cluster_nodes.bin
+2026-10-11T21:28:08.547Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:28:08.547Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:28:08.547Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:28:08.547Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:28:08.547Z Storage quota: explicit 4.00 GiB (safe maximum 148.40 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:28:08.549Z Joined cluster with 4 nodes
+2026-10-11T21:28:08.550Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:28:08.553Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:28:08.553Z raft-host: up raft_id=2 n=4 boot=4925477083636238 salt=17148806707914141274 g0=hosted g2=hosted
+2026-10-11T21:28:08.553Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3 (1 paths, stripe=none), used=65536, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T21:28:08.553Z kv-obs: mt_bytes=97056 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:28:09.076Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:28:10.551Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=977 passes=2 sampled=2 pending=0,0 reap=0,0 removed=1 file_bytes=69632 payload_bytes=65536 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:28:12.312Z raft-host: applied session index=839 kind=12 shard=1 ino=40961
+2026-10-11T21:28:12.314Z raft-host: applied session index=840 kind=12 shard=1 ino=40961
+2026-10-11T21:28:12.367Z raft-host: applied session index=258 kind=1 shard=0 ino=0
+2026-10-11T21:28:12.424Z store: put O_DIRECT bounce copy (buf align=2528 len=65536)
+2026-10-11T21:28:12.437Z raft-host: applied session index=852 kind=12 shard=1 ino=49153
+2026-10-11T21:28:12.439Z raft-host: applied session index=261 kind=3 shard=0 ino=0
+2026-10-11T21:28:12.455Z raft-host: applied session index=262 kind=5 shard=1 ino=0
+2026-10-11T21:28:12.470Z raft-host: applied session index=856 kind=12 shard=1 ino=49153
+2026-10-11T21:28:13.522Z raft-host: applied session index=886 kind=1 shard=0 ino=0
+2026-10-11T21:28:13.553Z kv-obs: mt_bytes=105376 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:28:13.561Z raft-host: applied session index=264 kind=1 shard=0 ino=0
+2026-10-11T21:28:13.580Z raft-host: applied session index=272 kind=1 shard=0 ino=0
+2026-10-11T21:28:13.598Z raft-host: applied session index=279 kind=1 shard=0 ino=0
+2026-10-11T21:28:13.620Z raft-host: applied session index=292 kind=1 shard=0 ino=0
+2026-10-11T21:28:13.641Z raft-host: applied session index=303 kind=1 shard=0 ino=0
+2026-10-11T21:28:13.666Z raft-host: applied session index=320 kind=1 shard=0 ino=0
+2026-10-11T21:28:13.692Z raft-host: applied session index=337 kind=1 shard=0 ino=0
+2026-10-11T21:28:13.711Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=5 emit=0 tomb=5 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:28:13.720Z raft-host: applied session index=357 kind=1 shard=0 ino=0
+2026-10-11T21:28:13.750Z raft-host: applied session index=378 kind=1 shard=0 ino=0
+2026-10-11T21:28:13.780Z raft-host: applied session index=402 kind=1 shard=0 ino=0
+2026-10-11T21:28:13.813Z raft-host: applied session index=425 kind=1 shard=0 ino=0
+2026-10-11T21:28:13.849Z raft-host: applied session index=454 kind=1 shard=0 ino=0
+2026-10-11T21:28:13.890Z raft-host: applied session index=483 kind=1 shard=0 ino=0
+2026-10-11T21:28:13.935Z raft-host: applied session index=517 kind=1 shard=0 ino=0
+2026-10-11T21:28:13.981Z raft-host: applied session index=549 kind=1 shard=0 ino=0
+2026-10-11T21:28:14.026Z raft-host: applied session index=586 kind=1 shard=0 ino=0
+2026-10-11T21:28:14.077Z iostats: get ops=32 bytes=2097152 errors=0 avg_us=168 p50_us=164 max_us=338 put ops=29 bytes=1900544 errors=0 avg_us=855 p50_us=737 max_us=1816 wdisk ops=29 bytes=1900544 errors=0 avg_us=808 p50_us=706 max_us=1405
+2026-10-11T21:28:14.090Z raft-host: applied session index=1492 kind=1 shard=0 ino=0
+2026-10-11T21:28:14.119Z raft-host: applied session index=1539 kind=1 shard=0 ino=0
+2026-10-11T21:28:15.230Z storage-engine=files direct_io=on
+2026-10-11T21:28:15.230Z Data GC admission: experimental
+2026-10-11T21:28:15.230Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3/meta/cluster_nodes.bin
+2026-10-11T21:28:15.230Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:28:15.230Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:28:15.230Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:28:15.230Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:28:15.231Z Storage quota: explicit 4.00 GiB (safe maximum 148.40 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:28:15.233Z Joined cluster with 4 nodes
+2026-10-11T21:28:15.234Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:28:15.238Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:28:15.238Z kv-obs: mt_bytes=133440 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:28:15.238Z raft-host: up raft_id=2 n=4 boot=4925477083636239 salt=591273558921743949 g0=hosted g2=hosted
+2026-10-11T21:28:15.238Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3 (1 paths, stripe=none), used=2097152, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T21:28:17.234Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=976 passes=2 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:28:19.050Z raft-host: applied session index=616 kind=1 shard=0 ino=0
+2026-10-11T21:28:19.119Z iostats: get ops=8 bytes=524288 errors=0 avg_us=225 p50_us=225 max_us=362 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:28:19.326Z store: put O_DIRECT bounce copy (buf align=496 len=65536)
+2026-10-11T21:28:20.270Z storage-engine=files direct_io=on
+2026-10-11T21:28:20.271Z Data GC admission: experimental
+2026-10-11T21:28:20.271Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3/meta/cluster_nodes.bin
+2026-10-11T21:28:20.271Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:28:20.271Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:28:20.271Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:28:20.271Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:28:20.271Z Storage quota: explicit 4.00 GiB (safe maximum 148.40 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:28:20.274Z Joined cluster with 4 nodes
+2026-10-11T21:28:20.275Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:28:20.279Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:28:20.279Z raft-host: up raft_id=2 n=4 boot=4925477083636240 salt=4234159944902927692 g0=hosted g2=hosted
+2026-10-11T21:28:20.279Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3 (1 paths, stripe=none), used=2162688, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T21:28:20.279Z kv-obs: mt_bytes=137280 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:28:20.795Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:28:22.276Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=982 passes=2 sampled=0 pending=0,0 reap=0,0 removed=32 file_bytes=2228224 payload_bytes=2097152 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:28:25.283Z kv-obs: mt_bytes=130620 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:28:26.177Z storage-engine=files direct_io=on
+2026-10-11T21:28:26.177Z Data GC admission: experimental
+2026-10-11T21:28:26.177Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3/meta/cluster_nodes.bin
+2026-10-11T21:28:26.177Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:28:26.177Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:28:26.177Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:28:26.177Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:28:26.178Z Storage quota: explicit 4.00 GiB (safe maximum 148.40 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:28:26.180Z Joined cluster with 4 nodes
+2026-10-11T21:28:26.181Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:28:26.185Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:28:26.185Z raft-host: up raft_id=2 n=4 boot=4925477083636241 salt=17472849260541727742 g0=hosted g2=hosted
+2026-10-11T21:28:26.185Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3 (1 paths, stripe=none), used=65536, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T21:28:26.185Z kv-obs: mt_bytes=130620 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:28:26.960Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:28:28.181Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=976 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:28:29.949Z raft-host: applied session index=681 kind=1 shard=0 ino=0
+2026-10-11T21:28:30.266Z store: put O_DIRECT bounce copy (buf align=384 len=65536)
+2026-10-11T21:28:31.160Z storage-engine=files direct_io=on
+2026-10-11T21:28:31.161Z Data GC admission: experimental
+2026-10-11T21:28:31.161Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3/meta/cluster_nodes.bin
+2026-10-11T21:28:31.161Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:28:31.161Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:28:31.161Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:28:31.161Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:28:31.161Z Storage quota: explicit 4.00 GiB (safe maximum 148.40 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:28:31.163Z Joined cluster with 4 nodes
+2026-10-11T21:28:31.164Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:28:31.169Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:28:31.169Z kv-obs: mt_bytes=132298 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:28:31.169Z raft-host: up raft_id=2 n=4 boot=4925477083636242 salt=15886805747736420225 g0=hosted g2=hosted
+2026-10-11T21:28:31.169Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3 (1 paths, stripe=none), used=131072, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T21:28:33.165Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=977 passes=2 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:28:35.220Z raft-host: applied session index=684 kind=1 shard=0 ino=0
+2026-10-11T21:28:35.277Z iostats: get ops=2 bytes=131072 errors=0 avg_us=194 p50_us=230 max_us=230 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:29:06.704Z storage-engine=files direct_io=on
+2026-10-11T21:29:06.704Z Data GC admission: experimental
+2026-10-11T21:29:06.705Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3/meta/cluster_nodes.bin
+2026-10-11T21:29:06.705Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:29:06.705Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:29:06.705Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:29:06.705Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:29:06.705Z Storage quota: explicit 4.00 GiB (safe maximum 148.40 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:29:06.707Z Joined cluster with 4 nodes
+2026-10-11T21:29:06.708Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:29:06.712Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:29:06.712Z raft-host: up raft_id=2 n=4 boot=4925477083636243 salt=9988169743591620990 g0=hosted g2=hosted
+2026-10-11T21:29:06.712Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3 (1 paths, stripe=none), used=131072, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T21:29:06.712Z kv-obs: mt_bytes=134280 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:29:06.957Z store: put O_DIRECT bounce copy (buf align=2368 len=65536)
+2026-10-11T21:29:06.960Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=3217 p50_us=3217 max_us=3217 wdisk ops=1 bytes=65536 errors=0 avg_us=2983 p50_us=2983 max_us=2983
+2026-10-11T21:29:08.708Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=982 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:29:41.714Z storage-engine=files direct_io=on
+2026-10-11T21:29:41.714Z Data GC admission: experimental
+2026-10-11T21:29:41.714Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3/meta/cluster_nodes.bin
+2026-10-11T21:29:41.714Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:29:41.714Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:29:41.714Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:29:41.714Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:29:41.714Z Storage quota: explicit 4.00 GiB (safe maximum 148.40 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:29:41.716Z Joined cluster with 4 nodes
+2026-10-11T21:29:41.717Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:29:41.722Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:29:41.722Z raft-host: up raft_id=2 n=4 boot=4925477083636244 salt=10692905211701691257 g0=hosted g2=hosted
+2026-10-11T21:29:41.722Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3 (1 paths, stripe=none), used=196608, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T21:29:41.722Z kv-obs: mt_bytes=135085 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:29:41.966Z store: put O_DIRECT bounce copy (buf align=2368 len=65536)
+2026-10-11T21:29:41.968Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=2085 p50_us=2085 max_us=2085 wdisk ops=1 bytes=65536 errors=0 avg_us=1858 p50_us=1858 max_us=1858
+2026-10-11T21:29:43.718Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=982 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:29:46.098Z storage-engine=files direct_io=on
+2026-10-11T21:29:46.098Z Data GC admission: experimental
+2026-10-11T21:29:46.098Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3/meta/cluster_nodes.bin
+2026-10-11T21:29:46.098Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:29:46.098Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:29:46.098Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:29:46.098Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:29:46.099Z Storage quota: explicit 4.00 GiB (safe maximum 148.40 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:29:46.102Z Joined cluster with 4 nodes
+2026-10-11T21:29:46.103Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:29:46.108Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:29:46.108Z kv-obs: mt_bytes=135525 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:29:46.108Z raft-host: up raft_id=2 n=4 boot=4925477083636245 salt=6787168348000210724 g0=hosted g2=hosted
+2026-10-11T21:29:46.108Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3 (1 paths, stripe=none), used=262144, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T21:29:46.623Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:29:48.104Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=980 passes=2 sampled=2 pending=0,0 reap=0,0 removed=2 file_bytes=139264 payload_bytes=131072 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:29:49.867Z raft-host: applied session index=1837 kind=1 shard=0 ino=0
+2026-10-11T21:29:51.112Z kv-obs: mt_bytes=136689 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:29:51.274Z raft-host: gc-pass ms=70 orphan=0 reap=0 frag=0 spread=0 recover=70 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=5 emit=0 tomb=5 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:29:51.624Z iostats: get ops=2 bytes=131072 errors=0 avg_us=180 p50_us=222 max_us=222 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:29:52.364Z raft-host: gc-pass ms=71 orphan=0 reap=0 frag=0 spread=0 recover=71 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=7 emit=0 tomb=7 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:29:53.450Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=5 emit=0 tomb=5 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:29:54.537Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=5 emit=0 tomb=5 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:29:55.621Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=5 emit=0 tomb=5 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:29:56.626Z iostats: get ops=2 bytes=131072 errors=0 avg_us=180 p50_us=222 max_us=222 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:29:56.705Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=6 emit=0 tomb=6 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:29:57.790Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=11 emit=0 tomb=11 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:29:57.895Z raft-host: applied session index=689 kind=1 shard=0 ino=0
+2026-10-11T21:29:57.955Z store: put O_DIRECT bounce copy (buf align=2368 len=65536)
+2026-10-11T21:29:58.063Z raft-host: applied session index=691 kind=1 shard=0 ino=0
+2026-10-11T21:29:58.663Z raft-host: applied session index=788 kind=1 shard=0 ino=0
+2026-10-11T21:29:58.867Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=8 emit=0 tomb=8 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:29:59.820Z raft-host: applied session index=822 kind=1 shard=0 ino=0
+2026-10-11T21:29:59.952Z raft-host: gc-pass ms=72 orphan=0 reap=0 frag=5 spread=0 recover=67 fscans=1 fsegs=0 fkeys=94 femit=36 ftomb=58 scans=197 segs=0 keys=99 emit=36 tomb=63 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:30:00.181Z raft-host: applied session index=825 kind=1 shard=0 ino=0
+2026-10-11T21:30:01.033Z raft-host: gc-pass ms=72 orphan=0 reap=0 frag=4 spread=0 recover=67 fscans=1 fsegs=0 fkeys=23 femit=1 ftomb=22 scans=197 segs=0 keys=28 emit=1 tomb=27 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:30:01.114Z kv-obs: mt_bytes=193753 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:30:01.630Z iostats: get ops=184 bytes=12058624 errors=0 avg_us=321 p50_us=422 max_us=873 put ops=144 bytes=9437184 errors=0 avg_us=1529 p50_us=1603 max_us=4076 wdisk ops=144 bytes=9437184 errors=0 avg_us=1474 p50_us=1540 max_us=4035
+2026-10-11T21:30:02.116Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=6 emit=0 tomb=6 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:30:03.197Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=5 emit=0 tomb=5 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:30:04.111Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=914 passes=17 sampled=2 pending=0,0 reap=0,0 removed=87 file_bytes=6057984 payload_bytes=5701632 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:30:04.282Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=5 emit=0 tomb=5 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:30:05.367Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=10 emit=0 tomb=10 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:30:06.115Z kv-obs: mt_bytes=197000 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:30:06.452Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=5 emit=0 tomb=5 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:30:06.631Z iostats: get ops=194 bytes=12713984 errors=0 avg_us=314 p50_us=366 max_us=873 put ops=154 bytes=10092544 errors=0 avg_us=1494 p50_us=1567 max_us=4076 wdisk ops=154 bytes=10092544 errors=0 avg_us=1437 p50_us=1528 max_us=4035
+2026-10-11T21:30:07.537Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=7 emit=0 tomb=7 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:30:08.619Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=5 emit=0 tomb=5 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:30:09.700Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=5 emit=0 tomb=5 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:30:10.784Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=5 emit=0 tomb=5 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:30:11.115Z kv-obs: mt_bytes=199919 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:30:11.636Z iostats: get ops=204 bytes=13369344 errors=0 avg_us=307 p50_us=327 max_us=873 put ops=164 bytes=10747904 errors=0 avg_us=1466 p50_us=1409 max_us=4076 wdisk ops=164 bytes=10747904 errors=0 avg_us=1402 p50_us=1348 max_us=4035
+2026-10-11T21:30:11.868Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=5 emit=0 tomb=5 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:30:12.947Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=196 segs=0 keys=6 emit=0 tomb=6 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:30:14.033Z raft-host: gc-pass ms=74 orphan=0 reap=0 frag=6 spread=0 recover=67 fscans=1 fsegs=0 fkeys=131 femit=36 ftomb=95 scans=197 segs=0 keys=136 emit=36 tomb=100 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:30:15.130Z raft-host: gc-pass ms=85 orphan=0 reap=0 frag=17 spread=0 recover=67 fscans=1 fsegs=0 fkeys=43 femit=36 ftomb=7 scans=197 segs=0 keys=48 emit=36 tomb=12 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:30:16.117Z kv-obs: mt_bytes=237887 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:30:16.220Z raft-host: gc-pass ms=73 orphan=0 reap=0 frag=5 spread=0 recover=67 fscans=2 fsegs=0 fkeys=173 femit=19 ftomb=154 scans=198 segs=0 keys=198 emit=19 tomb=179 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-11T21:30:16.638Z iostats: get ops=206 bytes=13500416 errors=0 avg_us=321 p50_us=327 max_us=1735 put ops=274 bytes=17956864 errors=0 avg_us=1680 p50_us=1976 max_us=4076 wdisk ops=274 bytes=17956864 errors=0 avg_us=1611 p50_us=1771 max_us=4035
+2026-10-11T21:30:17.692Z storage-engine=files direct_io=on
+2026-10-11T21:30:17.692Z Data GC admission: experimental
+2026-10-11T21:30:17.692Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3/meta/cluster_nodes.bin
+2026-10-11T21:30:17.692Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:30:17.692Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:30:17.692Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:30:17.692Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:30:17.693Z Storage quota: explicit 4.00 GiB (safe maximum 148.39 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:30:17.695Z Joined cluster with 4 nodes
+2026-10-11T21:30:17.696Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:30:17.702Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:30:17.702Z raft-host: up raft_id=2 n=4 boot=4925477083636246 salt=16968514705707998963 g0=hosted g2=hosted
+2026-10-11T21:30:17.702Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3 (1 paths, stripe=none), used=4194304, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T21:30:17.702Z kv-obs: mt_bytes=237887 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:30:18.254Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:30:19.696Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=975 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:30:22.704Z kv-obs: mt_bytes=231839 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:30:23.255Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:30:28.259Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:30:29.475Z raft-host: applied session index=1378 kind=1 shard=0 ino=0
+2026-10-11T21:30:30.266Z store: put O_DIRECT bounce copy (buf align=384 len=65536)
+2026-10-11T21:30:30.278Z raft-host: applied session index=1380 kind=1 shard=0 ino=0
+2026-10-11T21:30:32.712Z kv-obs: mt_bytes=258120 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:30:33.263Z iostats: get ops=58 bytes=3801088 errors=0 avg_us=329 p50_us=326 max_us=509 put ops=54 bytes=3538944 errors=0 avg_us=1880 p50_us=1830 max_us=3013 wdisk ops=54 bytes=3538944 errors=0 avg_us=1809 p50_us=1758 max_us=2975
+2026-10-11T21:30:34.076Z storage-engine=files direct_io=on
+2026-10-11T21:30:34.076Z Data GC admission: experimental
+2026-10-11T21:30:34.076Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3/meta/cluster_nodes.bin
+2026-10-11T21:30:34.076Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:30:34.076Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:30:34.076Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:30:34.076Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:30:34.077Z Storage quota: explicit 4.00 GiB (safe maximum 148.39 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:30:34.079Z Joined cluster with 4 nodes
+2026-10-11T21:30:34.080Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:30:34.088Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:30:34.088Z kv-obs: mt_bytes=258120 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:30:34.088Z raft-host: up raft_id=2 n=4 boot=4925477083636247 salt=10591052301288758099 g0=hosted g2=hosted
+2026-10-11T21:30:34.088Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3 (1 paths, stripe=none), used=3538944, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T21:30:35.644Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:30:36.080Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=977 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:30:39.090Z kv-obs: mt_bytes=254088 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:30:40.646Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:30:45.651Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-11T21:30:45.917Z raft-host: applied session index=1865 kind=1 shard=0 ino=0
+2026-10-11T21:30:49.094Z kv-obs: mt_bytes=245287 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:30:49.637Z storage-engine=files direct_io=on
+2026-10-11T21:30:49.637Z Data GC admission: experimental
+2026-10-11T21:30:49.637Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3/meta/cluster_nodes.bin
+2026-10-11T21:30:49.637Z   persisted node 1: 127.0.0.1:24210
+2026-10-11T21:30:49.637Z   persisted node 2: 127.0.0.1:24211
+2026-10-11T21:30:49.637Z   persisted node 3: 127.0.0.1:24212
+2026-10-11T21:30:49.637Z   persisted node 4: 127.0.0.1:24213
+2026-10-11T21:30:49.637Z Storage quota: explicit 4.00 GiB (safe maximum 148.40 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T21:30:49.640Z Joined cluster with 4 nodes
+2026-10-11T21:30:49.641Z heartbeat: enabled (2000 ms interval)
+2026-10-11T21:30:49.649Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T21:30:49.649Z raft-host: up raft_id=2 n=4 boot=4925477083636248 salt=627257218119003205 g0=hosted g2=hosted
+2026-10-11T21:30:49.649Z efsd amd-feedback-fault (branch devel-amd, built 2026-10-11T21:16:29Z on amd-395), build=amd-feedback-fault: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/amd-feedback-20261011/lifecycle-fault/direct/gc-direct-rt3d7jv2/n3 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T21:30:49.649Z kv-obs: mt_bytes=245287 l0_bytes=0 l0=0 l1=0
+2026-10-11T21:30:51.641Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=975 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-11T21:30:53.156Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=0 errors=1 avg_us=292 p50_us=292 max_us=292 wdisk ops=1 bytes=65536 errors=1 avg_us=183 p50_us=183 max_us=183

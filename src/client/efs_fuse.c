@@ -1,3 +1,4 @@
+#include "../common/parse_host_port.h"
 #include "efs/cli_help.h"
 #define FUSE_USE_VERSION 312
 
@@ -30,6 +31,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include "../common/recorder_stop.h"
 #include <sys/statvfs.h>
 #include <poll.h>
 #include <time.h>
@@ -215,7 +217,6 @@ struct stats_ent {
     int len;
     char text[EFS_STATS_TEXT];
 };
-
 
 static uint64_t stats_now_ms(void)
 {
@@ -415,8 +416,6 @@ static int name_is_reserved(const char *name)
     (void)name;
     return 0; /* Legacy names are ordinary user entries; .efs collisions win. */
 }
-
-enum find_match { FIND_EXACT, FIND_PREFIX, FIND_SUFFIX, FIND_SUBSTR };
 
 /* Canonical absolute mountpoint, set once in main. .find results are rendered
  * as host-absolute paths (mountpoint + fs-root path) so they can be piped or
@@ -903,81 +902,6 @@ static void ll_inval_stop(void)
     g_inval.started = 0;
 }
 
-struct find_out {
-    char *buf;
-    size_t cap;
-    size_t len;
-};
-
-static int find_out_add(struct find_out *o, const char *prefix, const char *rel)
-{
-    size_t pl = strlen(prefix), rl = strlen(rel);
-    int slash = (pl > 0 && prefix[pl - 1] != '/' && rel[0] != '/');
-    size_t need = pl + (slash ? 1 : 0) + rl + 1; /* newline */
-
-    /* The legacy newline format cannot represent literal newline names.
-     * Fail explicitly until a versioned escaped output is introduced. */
-    if (strchr(rel, '\n') || strchr(prefix, '\n')) return -EILSEQ;
-    if (need > (16u << 20) || o->len > (16u << 20) - need - 1)
-        return -EOVERFLOW;
-    if (o->len + need + 1 > o->cap) {
-        size_t ncap = o->cap ? o->cap * 2 : 4096;
-        while (ncap < o->len + need + 1)
-            ncap *= 2;
-        char *nb = realloc(o->buf, ncap);
-        if (!nb)
-            return EFS_ERR_NOMEM;
-        o->buf = nb;
-        o->cap = ncap;
-    }
-    memcpy(o->buf + o->len, prefix, pl);
-    o->len += pl;
-    if (slash)
-        o->buf[o->len++] = '/';
-    memcpy(o->buf + o->len, rel, rl);
-    o->len += rl;
-    o->buf[o->len++] = '\n';
-    o->buf[o->len] = '\0';
-    return 0;
-}
-
-/* Parse a .find query. Strips trailing whitespace/newline; extracts the
- * leading/trailing '*' and the literal term. Returns 0 on success, -EINVAL if
- * the literal term is shorter than EFS_FIND_MIN_TERM or has an interior '*'. */
-static int __attribute__((unused)) find_parse_query(const char *q, size_t qlen, enum find_match *type,
-                            char *term, size_t *term_len)
-{
-    while (qlen > 0 &&
-           (q[qlen - 1] == '\n' || q[qlen - 1] == '\r' ||
-            q[qlen - 1] == ' ' || q[qlen - 1] == '\t'))
-        qlen--;
-    if (qlen == 0 || qlen >= EFS_MAX_NAME)
-        return -EINVAL;
-    int lead = (q[0] == '*');
-    int trail = (qlen > 1 && q[qlen - 1] == '*');
-    size_t ts = lead ? 1 : 0;
-    size_t te = trail ? qlen - 1 : qlen;
-    size_t tl = (te > ts) ? te - ts : 0;
-    if (tl < EFS_FIND_MIN_TERM)
-        return -EINVAL;
-    for (size_t i = ts; i < te; i++) {
-        if (q[i] == '*')
-            return -EINVAL;
-    }
-    memcpy(term, q + ts, tl);
-    term[tl] = '\0';
-    *term_len = tl;
-    if (lead && trail)
-        *type = FIND_SUBSTR;
-    else if (trail)
-        *type = FIND_PREFIX;
-    else if (lead)
-        *type = FIND_SUFFIX;
-    else
-        *type = FIND_EXACT;
-    return 0;
-}
-
 static int efs_rc_to_errno(int rc);
 static int check_access(const struct efs_inode *ino, uid_t uid, gid_t gid, int mask);
 static int virtual_access(efs_ino_t ino)
@@ -987,37 +911,6 @@ static int virtual_access(efs_ino_t ino)
     if (rc != EFS_OK) return efs_rc_to_errno(rc);
     const struct fuse_ctx *ctx = ll_ctx();
     return ctx ? check_access(&row, ctx->uid, ctx->gid, R_OK | X_OK) : 0;
-}
-
-/* Query immutable server name indexes. Only path rendering happens locally. */
-static int __attribute__((unused)) find_run_query(efs_ino_t dir_ino,
-                          enum find_match type,const char *term,size_t term_len,
-                          char **out_text,int *out_len,size_t *out_cap)
-{
-    (void)term_len;
-    struct efs_msg_query_snapshot req;
-    memset(&req,0,sizeof(req));req.version=EFS_QUERY_VERSION;
-    req.operation=EFS_QUERY_FIND;req.root=dir_ino;req.match=(uint32_t)type;
-    req.max_output=EFS_QUERY_MAX_OUTPUT;req.visit_budget=EFS_QUERY_MAX_VISITS;
-    snprintf(req.term,sizeof(req.term),"%s",term);
-    int rc=query_credentials(&req);
-    if (rc) return rc;
-    struct efs_msg_query_snapshot_reply reply;char *relative=NULL;
-    rc=efs_client_rpc_query_snapshot(&req,&reply,&relative);
-    if (rc) return rc;
-    struct find_out out={0};
-    const char *prefix=g_mountpoint;
-    char *next=relative,*limit=relative+reply.text_len;
-    while (next<limit) {
-        char *newline=memchr(next,'\n',(size_t)(limit-next));
-        if (!newline) { rc=EFS_ERR_PROTO;break; }
-        *newline=0;rc=find_out_add(&out,prefix,next);if (rc) break;
-        next=newline+1;
-    }
-    free(relative);
-    if (rc) { free(out.buf);return rc; }
-    if (!out.buf) { out.buf=calloc(1,1);if (!out.buf) return EFS_ERR_NOMEM; }
-    *out_text=out.buf;*out_len=(int)out.len;*out_cap=out.cap ? out.cap : 1;return EFS_OK;
 }
 
 /* Rendered bytes shared by lookup/getattr/open while immutable per-open
@@ -1972,7 +1865,7 @@ static void open_edge_init(void)
 static pthread_mutex_t *open_edge_mu(efs_ino_t ino)
 {
     pthread_once(&g_open_edge_once, open_edge_init);
-    return &g_open_edge_mu[ino % OPEN_EDGE_SHARDS];
+    return &g_open_edge_mu[efs_ino_lock_slot(ino, OPEN_EDGE_SHARDS)];
 }
 
 /* Inodes this client has actually locked. Last close otherwise sent
@@ -2697,7 +2590,7 @@ static int efs_fuse_read_ino(fuse_ino_t ino, char *buf, size_t size, off_t offse
     int rc = efs_client_read(file, (uint64_t)offset, size, buf, &got);
     if (rc != 0) {
         efs_fuse_log_err("read", rc, file, (uint64_t)offset, size, NULL);
-        return -EIO;
+        return efs_rc_to_errno(rc);
     }
     return (int)got;
 }
@@ -2735,21 +2628,16 @@ struct efs_wb_job {
  * across inodes while serializing within one. */
 #define EFS_WB_INO_STRIPES 64
 static pthread_mutex_t g_wb_ino_mu[EFS_WB_INO_STRIPES];
-static int g_wb_ino_mu_ready;
-static pthread_mutex_t g_wb_ino_init_mu = PTHREAD_MUTEX_INITIALIZER;
-
+static pthread_once_t g_wb_ino_once = PTHREAD_ONCE_INIT;
+static void wb_ino_init(void)
+{
+    for (int i = 0; i < EFS_WB_INO_STRIPES; i++)
+        pthread_mutex_init(&g_wb_ino_mu[i], NULL);
+}
 static pthread_mutex_t *efs_wb_ino_lock(efs_ino_t ino)
 {
-    if (!g_wb_ino_mu_ready) {
-        pthread_mutex_lock(&g_wb_ino_init_mu);
-        if (!g_wb_ino_mu_ready) {
-            for (int i = 0; i < EFS_WB_INO_STRIPES; i++)
-                pthread_mutex_init(&g_wb_ino_mu[i], NULL);
-            __atomic_store_n(&g_wb_ino_mu_ready, 1, __ATOMIC_RELEASE);
-        }
-        pthread_mutex_unlock(&g_wb_ino_init_mu);
-    }
-    return &g_wb_ino_mu[(uint64_t)ino % EFS_WB_INO_STRIPES];
+    pthread_once(&g_wb_ino_once, wb_ino_init);
+    return &g_wb_ino_mu[efs_ino_lock_slot(ino, EFS_WB_INO_STRIPES)];
 }
 
 static struct {
@@ -3270,7 +3158,7 @@ static void append_mu_init(void)
 static pthread_mutex_t *append_mu(efs_ino_t ino)
 {
     pthread_once(&g_append_mu_once, append_mu_init);
-    return &g_append_mu[(uint32_t)ino % APPEND_MU_N];
+    return &g_append_mu[efs_ino_lock_slot(ino, APPEND_MU_N)];
 }
 
 /* Close: flush and the REPORT that publishes it are one critical
@@ -6844,16 +6732,7 @@ static const struct fuse_lowlevel_ops efs_ll_ops = {
 
 static int parse_addr(const char *str, char *host, size_t host_len, uint16_t *port)
 {
-    const char *colon = strrchr(str, ':');
-    if (!colon)
-        return -1;
-    size_t hlen = (size_t)(colon - str);
-    if (hlen >= host_len)
-        return -1;
-    memcpy(host, str, hlen);
-    host[hlen] = '\0';
-    *port = (uint16_t)atoi(colon + 1);
-    return 0;
+    return efs_parse_host_port(str, host, host_len, port);
 }
 
 /* Pin the client to the HCA's NUMA node: CPU affinity for every thread
@@ -7025,17 +6904,7 @@ static pid_t start_strace_recorder(pid_t target, const char *path)
  * ~5 s, then SIGKILL. */
 static void stop_recorder(pid_t *pidp)
 {
-    if (*pidp > 0) {
-        kill(*pidp, SIGTERM);
-        for (int i = 0; i < 50; i++) {
-            if (waitpid(*pidp, NULL, WNOHANG) == *pidp)
-                break;
-            usleep(100000);
-        }
-        kill(*pidp, SIGKILL);
-        waitpid(*pidp, NULL, 0);
-        *pidp = -1;
-    }
+    efs_stop_recorder(pidp);
 }
 
 static void stop_perf_recorder(void)
@@ -7571,14 +7440,7 @@ static int efs_fuse_bench_run(const char *kind, double time_sec)
         rc = 1;
     }
     if (bench_perf > 0) {
-        kill(bench_perf, SIGTERM);
-        for (int i = 0; i < 50; i++) {
-            if (waitpid(bench_perf, NULL, WNOHANG) == bench_perf)
-                break;
-            usleep(100000);
-        }
-        kill(bench_perf, SIGKILL);
-        waitpid(bench_perf, NULL, 0);
+        efs_stop_recorder(&bench_perf);
         char cmd[600];
         snprintf(cmd, sizeof(cmd),
                  "perf report --stdio --no-children --percent-limit=2 -i '%s' "

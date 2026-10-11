@@ -1,5 +1,11 @@
 # W97: matched three-node NVMe-only and SATA-only tests — Oct 10
 
+**Tracking update, Oct 11:** The NUC filesystem/device persistence-latency
+investigation in this report is now [W111](w111-nuc-persistence-investigation-20261011.md).
+Dated W97 labels and measurements below are retained as historical evidence.
+The [AMD overload/admission gate](amd-overload-admission-20261011.md) is closed
+and does not depend on this NUC investigation.
+
 Status: requested comparison complete; W97 remains open. Engine source is
 `6b8f05acb484b52284a7ffdd6c1da7b0476f35f6`, build `6b8f05acb484-w97`, branch
 `devel-persistence-pressure`. No production code or drive setting changes.

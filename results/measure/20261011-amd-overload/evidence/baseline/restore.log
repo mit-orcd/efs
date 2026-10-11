@@ -1,0 +1,22 @@
+Stop with: /data1/efs/src/scripts/client.sh stop /data1/efs/mnt
+Logging efs-fuse to /data1/efs/efs-fuse-mnt.log
+Mounted /data1/efs/mnt
+  File: /data1/efs/mnt
+  Size: 0         	Blocks: 0          IO Block: 131072 directory
+Device: 0,52	Inode: 1           Links: 2
+Access: (0755/drwxr-xr-x)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2026-10-07 19:04:24.582746834 -0400
+Modify: 2026-10-08 23:18:10.031834237 -0400
+Change: 2026-10-08 23:18:10.031834237 -0400
+ Birth: -
+Stop with: /data1/efs/src/scripts/client.sh stop /data1/efs/mnt2
+Logging efs-fuse to /data1/efs/efs-fuse-mnt2.log
+Mounted /data1/efs/mnt2
+  File: /data1/efs/mnt2
+  Size: 0         	Blocks: 0          IO Block: 131072 directory
+Device: 0,63	Inode: 1           Links: 2
+Access: (0755/drwxr-xr-x)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2026-10-07 19:04:24.582746834 -0400
+Modify: 2026-10-08 23:18:10.031834237 -0400
+Change: 2026-10-08 23:18:10.031834237 -0400
+ Birth: -

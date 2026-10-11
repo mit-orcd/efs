@@ -1,0 +1,9 @@
+2026-10-11T18:53:15.545Z storage-engine=files direct_io=on
+2026-10-11T18:53:15.545Z Storage quota: explicit 4.00 GiB (safe maximum 164.80 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-11T18:53:15.547Z Joined cluster with 2 nodes
+2026-10-11T18:53:15.548Z heartbeat: enabled (2000 ms interval)
+2026-10-11T18:53:15.550Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-11T18:53:15.550Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-11T18:53:15.550Z raft-host: up raft_id=1 n=4 boot=4456500943600061 salt=438307571726965029 g0=hosted g2=hosted
+2026-10-11T18:53:15.550Z efsd 715b1103-deploy-normal (branch devel-amd, built 2026-10-11T17:25:15Z on amd-395), build=715b1103-deploy-normal: node 2 listening on 127.0.0.1:24211, storage=/data1/efs/amd-overload-20261011/gc-direct-3iep4f52/n2 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-11T18:53:17.548Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=980 passes=2 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0

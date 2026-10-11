@@ -68,6 +68,8 @@ struct efsd_server {
      * moves an existing mdraft on its own. */
     char meta_storage[EFS_MAX_PATH];
     uint64_t quota; /* local storage quota in bytes; 0 = unlimited */
+    int data_gc_admission; /* opt-in transient logical-quota pressure */
+    uint64_t data_gc_busy;
 
     struct efs_node nodes[EFS_MAX_NODES];
     uint32_t node_count;

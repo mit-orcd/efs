@@ -151,7 +151,8 @@ src/client/efs_bench.o: src/bench/storage_principles.h src/bench/storage_churn.h
 src/common/admission.o tests/test_admission: include/efs/admission.h
 
 $(BENCH_CLIENT_OBJ): src/bench/bench_local.h src/bench/blake3_bench.h src/bench/io_bench.h
-$(BENCH_STORE_OBJS) src/bench/bench_local.o src/server/thread.o: src/server/server_internal.h
+$(SERVER_OBJS) $(BENCH_STORE_OBJS) src/bench/bench_local.o: src/server/server_internal.h
+src/server/store.o src/bench/store.o: src/server/data_pressure.h
 
 MGMT_SRC = src/mgmt/efs_mgmt.c
 MGMT_OBJ = $(MGMT_SRC:.c=.o)
@@ -231,6 +232,7 @@ test-fold-observation:
 
 test-lookup-memo:
 	python3 tests/test_lookup_memo.py
+	python3 tests/test_bench_lookup_walk.py
 
 tests/test_fence_view: tests/test_fence_view.c include/efs/fence_view.h
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $<
@@ -284,6 +286,7 @@ test-wb-runtime:
 	python3 tests/test_report_session_apply.py
 	python3 tests/test_report_activation.py
 	python3 tests/test_report_log_coverage.py
+	python3 tests/test_host_durable_dispatch.py
 
 test-wb-recovery:
 	@set -e; wb_test=$$(mktemp /tmp/efs-test-wb-recovery.XXXXXX); \
@@ -310,6 +313,8 @@ docs-check:
 	python3 docs/check-architecture.py
 
 test: all
+	python3 tests/faults/test_create_retry_fault.py
+	python3 tests/faults/test_append_cleanup_retry.py
 	$(MAKE) tests/test_put_storage_fence
 	./tests/test_put_storage_fence
 	python3 tests/test_storage_fence_members.py
@@ -320,6 +325,7 @@ test: all
 	$(MAKE) tests/test_put_upload_client
 	./tests/test_put_upload_client
 	python3 tests/test_applied_interval.py
+	python3 tests/test_cursor_checkpoint.py
 	./tests/test_store_containers
 	python3 tests/test_lookup_errno.py
 	python3 tests/test_storage_capacity.py
@@ -332,6 +338,7 @@ test: all
 	python3 tests/test_access_permissions.py
 	python3 tests/test_rename_flags.py
 	python3 tests/test_attribute_authority_errno.py
+	python3 tests/test_read_errno.py
 	python3 tests/test_opendir_authority_errno.py
 	python3 tests/test_xattr_names.py
 	python3 tests/test_unlink_authority_errno.py
@@ -339,15 +346,21 @@ test: all
 	python3 tests/test_virtual_export_handles.py
 	python3 tests/test_fuse_open_reply.py
 	python3 tests/test_fuse_lease_retention.py
+	python3 tests/test_inode_lock_stripes.py
 	python3 tests/test_create_admission_wait.py
 	python3 tests/test_lookup_replacement.py
 	python3 tests/test_lookup_read_group.py
 	python3 tests/test_readindex_operation.py
+	python3 tests/test_readindex_pair.py
+	python3 tests/test_lookup_group_plan.py
 	python3 tests/test_lookup_path_authority.py
 	python3 tests/test_read_control_host.py
 	python3 tests/test_prepare_cohort.py
+	python3 tests/test_append_cohort.py
 	python3 tests/test_namespace_leader_route.py
 	python3 tests/test_namespace_admission_rounds.py
+	python3 tests/test_session_combined_group.py
+	python3 tests/test_namespace_authority.py
 	python3 tests/test_w23_samples.py
 	python3 tests/test_read_verify.py
 	python3 tests/test_opid_admission.py
@@ -370,6 +383,7 @@ test: all
 	python3 tests/test_put_ticket_owner.py
 	python3 tests/test_put_identity.py
 	python3 tests/test_create_request.py
+	python3 tests/test_retained_create_authority.py
 	python3 tests/test_pending_create_cleanup.py
 	python3 tests/test_mount_identity_rpc.py
 	python3 tests/test_pending_create_command.py
@@ -404,6 +418,10 @@ test: all
 	python3 tests/test_read_failure_admission.py
 	python3 tests/test_read_refs_window.py
 	python3 tests/test_client_memory.py
+	python3 tests/test_rollup_allocation_failure.py
+	python3 tests/test_rollup_budget.py
+	python3 tests/test_recorder_stop.py
+	python3 tests/test_address_parser.py
 	python3 tests/test_publication_writeback.py
 	python3 tests/test_lane_bootstrap_export.py
 	./tests/test_wire
@@ -414,8 +432,10 @@ test: all
 	python3 tests/test_host_pressure.py
 	python3 tests/test_host_outbox.py
 	python3 tests/test_host_flow.py
+	python3 tests/test_raft_slow_sync.py
 	python3 tests/test_host_inbox.py
 	python3 tests/test_host_checkpoint.py
+	python3 tests/test_checkpoint_worker.py
 	python3 tests/test_host_retire.py
 	python3 tests/test_recv_overlap.py
 	./tests/test_kv_lsm
@@ -445,9 +465,12 @@ test: all
 	./tests/test_append_receipt
 	./tests/test_append_transaction
 	python3 tests/test_append_prepare_batch.py
+	python3 tests/test_meta_cmd_namespace.py
+	python3 tests/test_append_catchup_host.py
 	./tests/test_meta_apply
 	./tests/test_lane_bootstrap_recovery
 	./tests/test_raft
+	EFS_TEST_EARLY_READ_ACK=1 ./tests/test_raft
 	./tests/test_sim
 	./tests/test_txn
 	./tests/test_txn_resolve_faults
@@ -468,6 +491,7 @@ test: all
 	python3 tests/test_gc_backlog_idle.py
 	python3 tests/test_gc_fragment_backlog.py
 	python3 tests/test_gc_inode_fanout.py
+	python3 tests/test_tiny_overload_oracle.py
 	python3 tests/test_session_register_verdict.py
 	python3 tests/test_namespace_session_apply.py
 	python3 tests/test_gc_session_admission.py
@@ -483,6 +507,8 @@ test: all
 	python3 tests/test_command_policy_mount.py
 	python3 tests/test_efs_commands.py
 	python3 tests/test_namespace_bounds.py
+	python3 tests/test_namespace_fixture.py
+	python3 tests/test_gc_fixture_drain.py
 	python3 tests/test_rename_budget.py
 	./tests/test_namespace_session
 	./tests/test_session
@@ -498,6 +524,7 @@ test: all
 	./tests/test_packed_reader
 	python3 tests/test_packed_read_budget.py
 	python3 tests/test_packed_gc.py
+	python3 tests/test_packed_gc_budget.py
 	python3 tests/test_mounted_pack_retry.py
 	python3 tests/test_mounted_pack_batch.py
 	python3 tests/test_mounted_pack_parallel.py
@@ -563,6 +590,7 @@ test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	python3 tests/test_fuse_workers.py
 	python3 tests/test_fuse_open_reply.py
 	python3 tests/test_fuse_lease_retention.py
+	python3 tests/test_inode_lock_stripes.py
 	python3 tests/test_create_admission_wait.py
 	./tests/test_reply_buffers
 	./tests/test_reply_buffers key-failure
@@ -571,6 +599,10 @@ test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	python3 tests/test_read_failure_admission.py
 	python3 tests/test_read_refs_window.py
 	python3 tests/test_client_memory.py
+	python3 tests/test_rollup_allocation_failure.py
+	python3 tests/test_rollup_budget.py
+	python3 tests/test_recorder_stop.py
+	python3 tests/test_address_parser.py
 	python3 tests/test_publication_writeback.py
 	python3 tests/test_lane_bootstrap_export.py
 
@@ -581,7 +613,7 @@ src/raft/raft_disk.o src/raft/raft_log.o: src/raft/raft_disk_internal.h
 tests/test_store_durability: tests/test_store_durability.c src/server/store.c src/server/server_internal.h src/bench/writer.o src/bench/store_containers.o $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o src/bench/store_containers.o $(LIB) $(LDFLAGS)
 
-tests/test_store_overwrite: tests/test_store_overwrite.c src/server/store.c src/server/server_internal.h src/bench/writer.o src/bench/store_containers.o $(LIB)
+tests/test_store_overwrite: tests/test_store_overwrite.c src/server/store.c src/server/data_pressure.h src/server/server_internal.h src/bench/writer.o src/bench/store_containers.o $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o src/bench/store_containers.o $(LIB) $(LDFLAGS)
 
 tests/test_store_gc: tests/test_store_gc.c src/server/store.c src/server/server_internal.h src/bench/writer.o src/bench/store_containers.o $(LIB)

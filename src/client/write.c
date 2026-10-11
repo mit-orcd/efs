@@ -2345,6 +2345,10 @@ static int put_recv_reply(efs_node_id_t nid, struct efs_conn *conn,
         efs_client_conn_release(nid, conn);
         return 0;
     }
+    if (status == EFS_PUT_CHUNK_BUSY) {
+        efs_client_conn_release(nid, conn);
+        return -2;
+    }
     efs_client_conn_drop(nid, conn);
     efs_client_node_note_fail(nid);
     return -1;
@@ -2363,6 +2367,7 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
     struct efs_msg_put_chunk hdrs[EFS_NUM_FRAGMENTS];
     int acks = 0;
     int quota_errors = 0;
+    int busy_errors = 0;
     int reachable = 0;
     /* One budget spans checkout, sends, quorum replies and optional drain.
      * Starting it after sends gave an inherited 8s flush a fresh 30s poll. */
@@ -2501,7 +2506,10 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                     acks++;
                 else if (r == 0)
                     quota_errors++;
-                else if (failed_out)
+                else if (r == -2) {
+                    busy_errors++;
+                    if (failed_out) failed_out[i] = 2;
+                } else if (failed_out)
                     failed_out[i] = 1;
                 conns[i] = NULL;
                 pending[i] = 0;
@@ -2530,7 +2538,10 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                     acks++;
                 else if (r == 0)
                     quota_errors++;
-                else if (failed_out)
+                else if (r == -2) {
+                    busy_errors++;
+                    if (failed_out) failed_out[i] = 2;
+                } else if (failed_out)
                     failed_out[i] = 1;
                 conns[i] = NULL;
                 pending[i] = 0;
@@ -2560,7 +2571,10 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                     acks++;
                 else if (r == 0)
                     quota_errors++;
-                else if (failed_out)
+                else if (r == -2) {
+                    busy_errors++;
+                    if (failed_out) failed_out[i] = 2;
+                } else if (failed_out)
                     failed_out[i] = 1;
                 conns[i] = NULL;
                 pending[i] = 0;
@@ -2631,7 +2645,10 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                 acks++;
             else if (r == 0)
                 quota_errors++;
-            else if (failed_out)
+            else if (r == -2) {
+                busy_errors++;
+                if (failed_out) failed_out[i] = 2;
+            } else if (failed_out)
                 failed_out[i] = 1;
             conns[i] = NULL;
             pending[i] = 0;
@@ -2720,7 +2737,7 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
         return EFS_ERR_QUOTA;
     if (acks >= 2)
         return EFS_OK;
-    if (efs_client_rpc_past_deadline())
+    if (busy_errors || efs_client_rpc_past_deadline())
         return EFS_ERR_BUSY;
     if (reachable == 0)
         return EFS_ERR_NET;
@@ -2781,7 +2798,8 @@ static int put_fragments_parallel_run(efs_ino_t ino, uint32_t chunk_index,
     /* Retry transient blips; only invalidate peers that actually failed. */
     int rc = EFS_ERR_NET;
     int failed[EFS_NUM_FRAGMENTS] = {0, 0, 0};
-    for (int attempt = 1; attempt <= 4; attempt++) {
+    int hard_attempts = 0;
+    for (int attempt = 1; attempt <= 128; attempt++) {
         /* A lost reply can follow a successful remote write. Relocating
          * this generation would abandon that copy outside its publication.
          * Only an object that has never been sent can change placement. */
@@ -2793,6 +2811,14 @@ static int put_fragments_parallel_run(efs_ino_t ino, uint32_t chunk_index,
             return rc;
         if (efs_client_rpc_past_deadline())
             return EFS_ERR_BUSY;
+        /* Pressure is a healthy negative reply. Keep the same generation and
+         * placement, retry only inside the inherited whole-operation budget. */
+        if (rc == EFS_ERR_BUSY) {
+            int pause_rc = report_retry_pause(50000);
+            if (pause_rc != EFS_OK) return pause_rc;
+            continue;
+        }
+        ++hard_attempts;
         /* Only hard I/O failures invalidate a node's idle pool. failed[] is
          * also set for POLLOUT soft-misses (window backpressure) and down-skip,
          * which must NOT trigger a reconnect storm — the node is not dead. */
@@ -2828,15 +2854,16 @@ static int put_fragments_parallel_run(efs_ino_t ino, uint32_t chunk_index,
         }
         fprintf(stderr,
                 "put_fragments ino=%llu chunk=%u nodes=%u,%u,%u "
-                "attempt %d/4 failed: %s (efs_rc=%d)%s\n",
+                "attempt %d failed: %s (efs_rc=%d)%s\n",
                 (unsigned long long)ino, chunk_index,
                 (unsigned)nodes[0], (unsigned)nodes[1], (unsigned)nodes[2],
                 attempt, efs_strerror(rc), rc,
-                attempt < 4 ? " — retrying" : " — giving up");
+                hard_attempts < 4 ? " — retrying" : " — giving up");
         fflush(stderr);
+        if (hard_attempts >= 4) return rc;
         /* Exponential backoff + jitter instead of a fixed linear sleep. */
-        if (attempt < 4) {
-            useconds_t base = 100000u << (attempt - 1); /* 100,200,400ms */
+        if (hard_attempts < 4) {
+            useconds_t base = 100000u << (hard_attempts - 1); /* 100,200,400ms */
             useconds_t jitter = (useconds_t)(rand() % 50000);
             int pause_rc = report_retry_pause(base + jitter);
             if (pause_rc != EFS_OK) return pause_rc;
@@ -5535,7 +5562,7 @@ static void span_of(efs_ino_t ino, uint32_t ci, uint64_t bg, uint8_t nrange,
 static int dcache_steal_dirty_budgeted(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
                               uint32_t *len_out, uint64_t *bg_out,
                               uint64_t *seq_out, uint32_t *doff,
-                              uint32_t *dlen, int *drop_body,
+                              uint32_t *dlen,
                               struct efs_chunk_entry *obs_out,
                               int *have_obs_out)
 {
@@ -5554,8 +5581,6 @@ static int dcache_steal_dirty_budgeted(efs_ino_t ino, uint32_t ci, uint8_t **cop
         *doff = 0;
     if (dlen)
         *dlen = 0;
-    if (drop_body)
-        *drop_body = 0;
     if (have_obs_out)
         *have_obs_out = 0;
     pthread_mutex_lock(io);
@@ -5681,14 +5706,14 @@ static int dcache_steal_dirty_budgeted(efs_ino_t ino, uint32_t ci, uint8_t **cop
 static int dcache_steal_dirty(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
                               uint32_t *len_out, uint64_t *bg_out,
                               uint64_t *seq_out, uint32_t *doff,
-                              uint32_t *dlen, int *drop_body,
+                              uint32_t *dlen,
                               struct efs_chunk_entry *obs_out,
                               int *have_obs_out)
 {
     int rc;
     efs_buf_drain_enter();
     rc = dcache_steal_dirty_budgeted(ino, ci, copy_out, len_out, bg_out,
-                                      seq_out, doff, dlen, drop_body,
+                                      seq_out, doff, dlen,
                                       obs_out, have_obs_out);
     efs_buf_drain_leave();
     return rc;
@@ -5697,55 +5722,38 @@ static int dcache_steal_dirty(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
 /* After a pipelined dcache_put_now: keep published bytes as have_base=1
  * (same as flush_slot_inner — dropping the slot made concurrent_appends
  * read zeros). Re-dirty on PUT failure. */
-static int dcache_flush_keep(efs_ino_t ino, uint32_t ci, uint8_t *copy,
-                             uint32_t len, int put_ok, uint64_t seq,
-                             int drop_body)
+static void dcache_flush_keep(efs_ino_t ino, uint32_t ci, uint8_t *copy,
+                              uint32_t len, int put_ok, uint64_t seq)
 {
     uint32_t s = dcache_slot(ino, ci);
     pthread_mutex_t *mu = dcache_mu(s);
     struct dcache_ent *e;
 
     pthread_mutex_lock(mu);
-    e = drop_body ? dcache_find_meta(s, ino, ci) : dcache_find(s, ino, ci);
+    e = dcache_find(s, ino, ci);
     if (!put_ok) {
-        if (drop_body && e && !e->data) {
-            e->data = copy;
-            e->len = len;
-            dcache_set_dirty(e, s);
-            e->have_base = 1;
-            e->nrange = 0;
-            e->base_gen = EFS_CHUNK_BASE_UNCOND;
-            dcache_pin_add(e);
-            dcache_note_dirty_bytes((int64_t)len);
-            DTRACE(e, "keep-putfail-restore");
-            pthread_mutex_unlock(mu);
-            return 1;
-        }
         if (e && e->ino == ino && e->ci == ci && e->data && !e->dirty) {
             dcache_set_dirty(e, s);
             dcache_note_dirty_bytes((int64_t)len);
             DTRACE(e, "keep-putfail");
         }
         pthread_mutex_unlock(mu);
-        return 0;
+        return;
     }
-    /* Every current snapshot keeps its local body through REPORT. The
-     * legacy drop_body path below still restores ownership on PUT failure. */
-    if (!drop_body && e && e->ino == ino && e->ci == ci)
+    /* Every snapshot keeps its local body through REPORT. */
+    if (e && e->ino == ino && e->ci == ci)
         dcache_install_image(e, copy, len, seq);
     /* PUT is not publication: retain the row pin while the immutable
      * object still needs REPORT. Otherwise an evictor can remove its
      * recovery metadata after the dirty snapshot detaches its marks.
      * dcache_note_committed releases the pin after the matching ACK. */
     pthread_mutex_unlock(mu);
-    return 0;
 }
 
 struct flush_pipe {
     struct chunk_put_job jobs[EFS_WRITE_PIPELINE];
     uint8_t *copies[EFS_WRITE_PIPELINE];
     uint32_t lens[EFS_WRITE_PIPELINE];
-    uint8_t drop[EFS_WRITE_PIPELINE];
     uint32_t n;
     int rc;
 };
@@ -5765,10 +5773,9 @@ static int flush_pipe_drain(struct flush_pipe *p)
     for (i = 0; i < p->n; i++) {
         int pok = (p->jobs[i].rc == EFS_OK);
 
-        if (!dcache_flush_keep(p->jobs[i].ino, p->jobs[i].ci, p->copies[i],
-                               p->lens[i], pok, p->jobs[i].flush_seq,
-                               p->drop[i]))
-            efs_buf_free(p->copies[i], p->lens[i]);
+        dcache_flush_keep(p->jobs[i].ino, p->jobs[i].ci, p->copies[i],
+                          p->lens[i], pok, p->jobs[i].flush_seq);
+        efs_buf_free(p->copies[i], p->lens[i]);
         p->copies[i] = NULL;
         put_win_close(p->jobs[i].ino);
         if (!pok && p->rc == EFS_OK)
@@ -5781,7 +5788,7 @@ static int flush_pipe_drain(struct flush_pipe *p)
 static int flush_pipe_add(struct flush_pipe *p, efs_ino_t ino, uint32_t ci,
                           uint8_t *copy, uint32_t len, uint64_t bg,
                           uint64_t seq, uint32_t doff, uint32_t dlen,
-                          int drop_body, const struct efs_chunk_entry *obs)
+                          const struct efs_chunk_entry *obs)
 {
     struct chunk_put_job *j;
 
@@ -5789,9 +5796,9 @@ static int flush_pipe_add(struct flush_pipe *p, efs_ino_t ino, uint32_t ci,
         int drc = flush_pipe_drain(p);
 
         if (drc != EFS_OK) {
-            if (drop_body &&
-                dcache_flush_keep(ino, ci, copy, len, 0, seq, 1))
-                copy = NULL;
+            /* This snapshot already cleared dirty state before the pipe
+             * drained. Restore retry eligibility even with a retained body. */
+            dcache_flush_keep(ino, ci, copy, len, 0, seq);
             efs_buf_free(copy, len);
             put_win_close(ino);
             p->rc = drc;
@@ -5815,7 +5822,6 @@ static int flush_pipe_add(struct flush_pipe *p, efs_ino_t ino, uint32_t ci,
     j->rc = EFS_ERR_IO;
     p->copies[p->n] = copy;
     p->lens[p->n] = len;
-    p->drop[p->n] = drop_body ? 1 : 0;
     p->n++;
     return EFS_OK;
 }
@@ -6175,18 +6181,16 @@ static int dcache_flush_ino_pass(efs_ino_t ino)
         uint32_t len = 0;
         uint64_t bg = 0, seq = 0;
         uint32_t doff = 0, dlen = 0;
-        int drop_body = 0;
         struct efs_chunk_entry obs;
         int have_obs = 0;
         int st = dcache_steal_dirty(ino, ci, &copy, &len, &bg, &seq, &doff,
-                                    &dlen, &drop_body, &obs, &have_obs);
+                                    &dlen, &obs, &have_obs);
 
         if (st < 0)
             pipe.rc = st;
         else if (st > 0 &&
                  flush_pipe_add(&pipe, ino, ci, copy, len, bg, seq, doff,
-                                dlen, drop_body,
-                                have_obs ? &obs : NULL) != EFS_OK)
+                                dlen, have_obs ? &obs : NULL) != EFS_OK)
             break;
     }
     (void)flush_pipe_drain(&pipe);
@@ -6810,7 +6814,6 @@ static void *dcache_reclaim_main(void *arg)
                 uint32_t len = 0;
                 uint64_t bg = 0, seq = 0;
                 uint32_t doff = 0, dlen = 0;
-                int drop_body = 0;
                 struct efs_chunk_entry obs;
                 int have_obs = 0;
                 int st;
@@ -6853,7 +6856,7 @@ static void *dcache_reclaim_main(void *arg)
                                            __ATOMIC_RELAXED);
                 }
                 st = dcache_steal_dirty(pino, pci, &copy, &len, &bg, &seq,
-                                        &doff, &dlen, &drop_body, &obs,
+                                        &doff, &dlen, &obs,
                                         &have_obs);
                 if (st <= 0) {
                     uint32_t s = dcache_slot(pino, pci);
@@ -6872,8 +6875,7 @@ static void *dcache_reclaim_main(void *arg)
                 }
                 npopped++;
                 if (flush_pipe_add(&pipe, pino, pci, copy, len, bg, seq, doff,
-                                   dlen, drop_body,
-                                   have_obs ? &obs : NULL) != EFS_OK)
+                                   dlen, have_obs ? &obs : NULL) != EFS_OK)
                     break;
             }
             (void)flush_pipe_drain(&pipe);

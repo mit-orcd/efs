@@ -1,0 +1,43 @@
+{
+  "hosts": {
+    "intel1_efs": [
+      {
+        "name": "native",
+        "exit": 0,
+        "status": "PASS"
+      },
+      {
+        "name": "asan-ubsan",
+        "exit": 0,
+        "status": "PASS"
+      },
+      {
+        "name": "preceding-hook-negative",
+        "exit": 1,
+        "status": "EXPECTED_NEGATIVE_REFUSAL"
+      }
+    ],
+    "intel2_efs": [
+      {
+        "name": "native",
+        "exit": 0,
+        "status": "PASS"
+      },
+      {
+        "name": "asan-ubsan",
+        "exit": 0,
+        "status": "PASS"
+      },
+      {
+        "name": "preceding-hook-negative",
+        "exit": 1,
+        "status": "EXPECTED_NEGATIVE_REFUSAL"
+      }
+    ]
+  },
+  "source_sha256": {
+    "src/client/inode_rpc.c": "b758986b99e719120f0c947c41eade8fc80fb245415a0ff64b8ad9aba50ff6c3",
+    "tests/faults/test_create_retry_fault.py": "ade46035b6e4c4b0d891612ffeeb56d99ab24827c44d8c85bd0e7f0750c0c486"
+  },
+  "scope": "Actual fault hook body; native and ASan/UBSan on both hosts; prior hook rejects the regression. Full repaired-source live acceptance pending."
+}

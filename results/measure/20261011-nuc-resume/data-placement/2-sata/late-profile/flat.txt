@@ -1,0 +1,271 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 6K of event 'cycles:P'
+# Event count (approx.): 130454622782
+#
+# Overhead  Command   Shared Object           Symbol                                             
+# ........  ........  ......................  ...................................................
+#
+     1.92%  efsd      [nf_tables]             [k] nft_do_chain
+            |          
+             --1.87%--nft_do_chain
+                       nft_do_chain_inet
+                       nf_hook_slow
+                       |          
+                        --1.55%--ip_rcv
+                                  __netif_receive_skb_one_core
+                                  process_backlog
+                                  __napi_poll
+                                  net_rx_action
+                                  handle_softirqs
+                                  do_softirq
+                                  __local_bh_enable_ip
+                                  __dev_queue_xmit
+                                  ip_finish_output2
+                                  ip_output
+                                  __ip_queue_xmit
+                                  __tcp_transmit_skb
+                                  |          
+                                   --1.40%--tcp_write_xmit
+                                             __tcp_push_pending_frames
+                                             tcp_sendmsg_locked
+                                             tcp_sendmsg
+                                             sock_write_iter
+                                             do_iter_readv_writev
+                                             vfs_writev
+                                             do_writev
+                                             do_syscall_64
+                                             entry_SYSCALL_64_after_hwframe
+                                             __GI___writev
+                                             efs_conn_send_msg
+                                             |          
+                                             |--0.76%--server_handle_conn
+                                             |          conn_thread
+                                             |          start_thread
+                                             |          
+                                              --0.63%--host_sender
+                                                        start_thread
+
+     1.60%  efsd      libc.so.6               [.] __memmove_evex_unaligned_erms
+            |          
+             --1.54%--__memmove_evex_unaligned_erms
+                       |          
+                        --1.11%--lsm_batch
+                                  |          
+                                   --1.09%--efs_kv_lsm_apply_end
+                                             host_apply
+                                             apply_committed
+                                             |          
+                                              --0.75%--on_ae_req
+                                                        efs_raft_recv_batch
+                                                        drain_inbox
+                                                        host_pump
+                                                        start_thread
+
+     1.52%  efsd      [kernel.kallsyms]       [k] its_return_thunk
+     1.38%  efsd      [kernel.kallsyms]       [k] _raw_spin_lock
+            |
+            ---_raw_spin_lock
+
+     1.26%  efsd      [kernel.kallsyms]       [k] _raw_spin_lock_irqsave
+            |          
+             --1.22%--_raw_spin_lock_irqsave
+
+     1.10%  efsd      [kernel.kallsyms]       [k] native_queued_spin_lock_slowpath
+            |
+            ---native_queued_spin_lock_slowpath
+               |          
+                --0.54%--_raw_spin_lock
+                          |          
+                           --0.50%--raw_spin_rq_lock_nested
+
+     1.08%  efsd      [kernel.kallsyms]       [k] update_load_avg
+            |          
+             --0.99%--update_load_avg
+                       |          
+                        --0.69%--dequeue_entity
+                                  dequeue_entities
+                                  |          
+                                   --0.63%--dequeue_task_fair
+                                             |          
+                                              --0.62%--try_to_block_task.constprop.0.isra.0
+                                                        __schedule
+                                                        schedule
+
+     1.08%  efsd      efsd                    [.] kv_mtab_pos
+            |          
+             --1.07%--kv_mtab_pos
+                       |          
+                        --0.83%--lookup
+                                  lsm_get
+
+     1.06%  efsd      libc.so.6               [.] pthread_mutex_lock@@GLIBC_2.2.5
+            |          
+             --1.04%--pthread_mutex_lock@@GLIBC_2.2.5
+
+     1.01%  efsd      [kernel.kallsyms]       [k] crc32_body
+            |
+            ---crc32_body
+               chksum_update
+               crc32c
+               |          
+                --0.97%--xlog_cksum
+                          xlog_sync
+                          xlog_state_release_iclog
+                          xlog_force_lsn
+                          |          
+                           --0.70%--xfs_log_force_seq
+                                     xfs_file_fsync
+                                     do_fsync
+                                     |          
+                                      --0.54%--__x64_sys_fsync
+                                                do_syscall_64
+                                                entry_SYSCALL_64_after_hwframe
+                                                fsync
+                                                shard_io_thread.part.0
+                                                server_write_fragment_to_path.isra.0
+                                                server_write_fragment_with_sum_sync
+                                                run_job
+                                                writer_thread
+                                                start_thread
+
+     0.84%  efsd      efsd                    [.] blake3_hash_many_avx512
+            |
+            ---blake3_hash_many_avx512
+               |          
+                --0.82%--blake3_compress_subtree_wide
+                          |          
+                           --0.79%--blake3_compress_subtree_wide
+                                     |          
+                                      --0.77%--blake3_compress_subtree_wide
+                                                blake3_hasher_update.part.0
+                                                efs_hash
+                                                server_handle_conn
+                                                conn_thread
+                                                start_thread
+
+     0.83%  efsd      [kernel.kallsyms]       [k] _raw_spin_lock_irq
+            |          
+             --0.82%--_raw_spin_lock_irq
+
+     0.80%  efsd      efsd                    [.] lookup
+            |
+            ---lookup
+               lsm_get
+
+     0.78%  efsd      [kernel.kallsyms]       [k] dequeue_entity
+            |          
+             --0.60%--dequeue_entity
+                       dequeue_entities
+                       |          
+                        --0.53%--dequeue_task_fair
+                                  try_to_block_task.constprop.0.isra.0
+                                  __schedule
+                                  schedule
+
+     0.77%  efs-fuse  efs-fuse                [.] blake3_hash_many_avx512
+            |
+            ---blake3_hash_many_avx512
+               |          
+                --0.75%--blake3_compress_subtree_wide
+                          blake3_compress_subtree_wide
+                          |          
+                           --0.71%--blake3_compress_subtree_wide
+                                     blake3_hasher_update.part.0
+                                     efs_hash
+                                     |          
+                                      --0.55%--hash_write_fragments
+                                                dcache_put_now_budgeted
+                                                put_pool_run.isra.0
+                                                dcache_flush_ino_pass
+                                                efs_dcache_flush_ino
+                                                efs_append_flush_report.isra.0
+                                                ll_flush
+                                                do_flush.lto_priv.0
+                                                fuse_do_work
+
+     0.70%  efsd      [kernel.kallsyms]       [k] __update_load_avg_cfs_rq
+            |          
+             --0.66%--__update_load_avg_cfs_rq
+                       |          
+                        --0.50%--update_load_avg
+
+     0.70%  efsd      [kernel.kallsyms]       [k] perf_syscall_enter
+            |          
+             --0.67%--perf_syscall_enter
+                       syscall_trace_enter
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+
+     0.68%  efsd      [kernel.kallsyms]       [k] dequeue_entities
+            |          
+             --0.65%--dequeue_entities
+                       |          
+                        --0.60%--dequeue_task_fair
+                                  try_to_block_task.constprop.0.isra.0
+                                  __schedule
+                                  schedule
+
+     0.65%  efsd      [kernel.kallsyms]       [k] clear_bhb_loop
+            |
+            ---clear_bhb_loop
+
+     0.64%  efsd      [kernel.kallsyms]       [k] _copy_to_iter
+            |
+            ---_copy_to_iter
+               |          
+                --0.62%--__skb_datagram_iter
+                          skb_copy_datagram_iter
+                          tcp_recvmsg_locked
+                          tcp_recvmsg
+                          inet_recvmsg
+                          sock_recvmsg
+                          __sys_recvfrom
+                          __x64_sys_recvfrom
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __libc_recv
+
+     0.59%  efsd      [kernel.kallsyms]       [k] avc_lookup
+            |          
+             --0.57%--avc_lookup
+                       avc_has_perm_noaudit
+
+     0.56%  efsd      [kernel.kallsyms]       [k] __rcu_read_unlock
+     0.55%  efsd      efsd                    [.] host_pump
+            |
+            ---host_pump
+               start_thread
+
+     0.55%  efsd      [kernel.kallsyms]       [k] fdget
+            |          
+             --0.51%--fdget
+
+     0.55%  efsd      [kernel.kallsyms]       [k] update_curr
+     0.53%  efsd      [kernel.kallsyms]       [k] finish_task_switch.isra.0
+            |          
+             --0.51%--finish_task_switch.isra.0
+                       __schedule
+                       schedule
+
+     0.53%  efsd      [kernel.kallsyms]       [k] __memcpy
+            |
+            ---__memcpy
+
+     0.53%  efsd      libc.so.6               [.] _int_malloc
+     0.53%  efsd      libc.so.6               [.] malloc
+            |
+            ---malloc
+
+     0.52%  efsd      [kernel.kallsyms]       [k] _raw_spin_lock_bh
+            |          
+             --0.50%--_raw_spin_lock_bh
+
+
+
+#
+# (Tip: For tracepoint events, try: perf report -s trace_fields)
+#

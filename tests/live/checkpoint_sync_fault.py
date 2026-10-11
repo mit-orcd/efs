@@ -6,6 +6,7 @@ cold pre-fault KV image to model loss of its unsynced tail; retain its durable
 Raft log and applied markers. This is injected EIO/process recovery, not a
 physical power-loss certification.
 """
+import argparse
 import hashlib
 import json
 import os
@@ -18,9 +19,13 @@ import subprocess
 import tempfile
 import time
 
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--mode',choices=('direct','buffered'),default='buffered' if os.environ.get('EFS_TEST_DIRECT_IO')=='0' else 'direct',help='storage I/O mode; default preserves the original direct fixture')
+options=parser.parse_args()
 source=Path(__file__).resolve().parents[2]
 server=Path(os.environ.get('EFS_TEST_SERVER_BINARY',str(source/'efsd')))
-work=Path(tempfile.mkdtemp(prefix='efs-checkpoint-fault-',dir='/data1/efs'))
+work=Path(tempfile.mkdtemp(prefix='efs-checkpoint-fault-',dir=os.environ.get('EFS_TEST_WORK_ROOT','/data1/efs')))
+(work/'manifest.json').write_text(json.dumps({'mode':options.mode,'transport':'tcp','source':str(source),'binary_sha256':{name:hashlib.sha256(path.read_bytes()).hexdigest() for name,path in [('efsd',server),('efs-mgmt',source/'efs-mgmt'),('libefs.a',source/'libefs.a')]}},indent=2))
 print('Evidence:',work,flush=True)
 base=22430
 for port in range(base,base+3):
@@ -68,7 +73,7 @@ int main(int argc,char **argv) {
 (work/'fault.c').write_text(shim);(work/'reader.c').write_text(reader)
 subprocess.run(['cc','-Wall','-Wextra','-Werror','-shared','-fPIC',work/'fault.c','-ldl','-o',work/'fault.so'],check=True)
 subprocess.run(['cc','-I'+str(source/'include'),work/'reader.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',work/'reader'],check=True)
-env=dict(os.environ,EFS_MD_RAFT_N='3',EFS_COMMANDS_SERVER='0',EFS_RAFT_FLOW='1',
+env=dict(os.environ,EFS_TRANSPORT='tcp',EFS_MD_RAFT_N='3',EFS_COMMANDS_SERVER='0',EFS_RAFT_FLOW='1',
          EFS_RAFT_BATCH_NOOP='1',EFS_RAFT_GROUP_DRAIN='1')
 servers=[];logs=[];generation=0
 def mgmt(node,cmd,*args):
@@ -98,7 +103,8 @@ def start():
         root=work/f'n{node}';root.mkdir(exist_ok=True)
         log=open(work/f'n{node}-{generation}.log','w');logs.append(log)
         child=dict(env,LD_PRELOAD=str(work/'fault.so'),TEST_KV_BARRIER_FILE=str(work/f'fail-{node}'))
-        cmd=[str(server),'--node-id',str(node+1),'--addr','127.0.0.1','--port',str(base+node),'--storage',str(root),'--direct-io']
+        cmd=[str(server),'--node-id',str(node+1),'--addr','127.0.0.1','--port',str(base+node),'--storage',str(root),
+             '--direct-io' if options.mode=='direct' else '--no-direct-io']
         if node:cmd+=['--join',f'127.0.0.1:{base}']
         proc=subprocess.Popen(cmd,env=child,stdout=log,stderr=log);servers.append(proc)
         def listening():

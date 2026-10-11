@@ -2190,7 +2190,7 @@ int efs_raft_flush(struct efs_raft *r)
     return EFS_OK;
 }
 
-int efs_raft_durable(struct efs_raft *r, uint64_t idx)
+int efs_raft_note_durable(struct efs_raft *r, uint64_t idx)
 {
     if (!r)
         return EFS_ERR_INVAL;
@@ -2199,7 +2199,13 @@ int efs_raft_durable(struct efs_raft *r, uint64_t idx)
     efs_raft_arm_durable(r);
     if (idx > r->durable_idx)
         r->durable_idx = idx;
-    return try_commit(r);
+    return EFS_OK;
+}
+
+int efs_raft_durable(struct efs_raft *r, uint64_t idx)
+{
+    int rc=efs_raft_note_durable(r,idx);
+    return rc==EFS_OK ? try_commit(r) : rc;
 }
 
 int efs_raft_change(struct efs_raft *r, uint32_t new_voters)
@@ -2452,12 +2458,12 @@ int efs_raft_read_begin(struct efs_raft *r)
     return broadcast_ae(r);
 }
 
-/* Service an already-applied, stable-leader read probe without walking the
- * replication/apply path. Caller holds the normal Raft serialization lock.
- * Boot changes, configuration transitions, unknown leaders and any unproven
- * log/apply work remain on recv. No storage mutation or replication progress
- * is performed here. A reply may contribute only to the current read round;
- * it must still pass recv later for ordinary replication bookkeeping. */
+/* Service matched durable-prefix stable-leader probes without waiting for
+ * follower KV apply. Caller holds normal Raft serialization; incomplete log
+ * batches, boot/config changes and unknown leaders stay on recv. An early ACK
+ * grants heartbeat quorum only: requests owing commit/apply and replies owing
+ * replication progress still pass through recv. The leader retains its own
+ * applied-prefix barrier. Fully accounted empty traffic can be consumed. */
 int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *in)
 {
     uint64_t term=0;
@@ -2466,15 +2472,18 @@ int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *in)
         in->from<0 || in->from>=EFS_RAFT_MAX_PEERS || in->from==r->id ||
         !r->peer_boot[in->from] ||
         (in->boot_id?in->boot_id:1)!=r->peer_boot[in->from] ||
-        in->term!=r->current_term || in->nentries || !in->last_log_index ||
+        in->term!=r->current_term || in->nentries ||
         !is_voter(r,in->from) || !is_voter(r,r->id) ||
         r->log_new || r->app_new || r->log_old!=r->app_old)
         return 0;
     if (in->type==EFS_RAFT_MSG_AE_REQ) {
         if (r->role!=EFS_RAFT_FOLLOWER || r->leader!=in->from ||
-            in->leader_commit>r->last_applied || in->prev_index>r->last_applied ||
             log_term(r,in->prev_index,&term)!=EFS_OK || term!=in->prev_term)
             return 0;
+        /* Zero-context heartbeats can bypass only when no commit/apply
+         * bookkeeping is owed. They never grant request-scoped authority. */
+        if(!in->last_log_index && (in->leader_commit>r->last_applied ||
+                                  r->commit_index>r->last_applied))return 0;
         struct efs_raft_msg reply={0};
         reply.type=EFS_RAFT_MSG_AE_REP;reply.to=in->from;
         reply.success=1;reply.vote_granted=in->vote_granted;
@@ -2482,18 +2491,45 @@ int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *in)
         reset_election(r);
         /* Send failure falls back to normal receive; duplicate read ACKs
          * cannot form an extra vote or grant another round's authority. */
-        return send_msg(r,&reply)==EFS_OK ? 1 : 0;
+        if(send_msg(r,&reply)!=EFS_OK)return 0;
+        /* The same-term known leader's matched, previously persisted prefix
+         * grants a heartbeat vote, not KV authority. If commit/apply work is
+         * still owed, queue the request for normal recv after this early ACK.
+         * Deferred log batches/failure are excluded above; the leader still
+         * needs its own apply barrier before any read may complete. */
+        return in->leader_commit<=r->last_applied &&
+               r->commit_index<=r->last_applied ? 1 : 2;
     }
-    if (in->type!=EFS_RAFT_MSG_AE_REP || r->role!=EFS_RAFT_LEADER ||
-        !in->success || r->read_in_flight!=1 ||
-        in->last_log_index!=r->read_round ||
-        r->read_cfg_old!=r->log_old || r->read_cfg_new!=r->log_new)
+    if (in->type!=EFS_RAFT_MSG_AE_REP || r->role!=EFS_RAFT_LEADER || !in->success)
         return 0;
-    r->read_acks|=1u<<in->from;
-    if (r->last_applied>=r->read_index && quorum_ok(r,r->read_acks) &&
-        log_term(r,r->commit_index,&term)==EFS_OK && term==r->current_term)
-        r->read_in_flight=2;
-    return 2; /* Caller must also queue this reply for normal recv. */
+    uint64_t last=0,last_term=0;
+    /* A probe preserves outstanding entry-batch bookkeeping; an ordinary
+     * ACK can be consumed only when there is no entry batch to clear. At an exact
+     * already-applied full prefix, normal recv would neither advance match,
+     * send catch-up entries, commit nor apply. Account peer liveness here so
+     * a late completed-round ACK need not obstruct the next fresh round.
+     * A different prefix or any outstanding local suffix stays on recv. */
+    int accounted=(in->vote_granted || !r->ae_inflight[in->from]) &&
+        in->match_index==r->commit_index &&
+        r->last_applied==r->commit_index &&
+        r->match_index[r->id]==r->commit_index &&
+        r->match_index[in->from]==in->match_index &&
+        r->next_index[in->from]==in->match_index+1 &&
+        last_log(r,&last,&last_term)==EFS_OK && last==r->commit_index;
+    int current=r->read_in_flight==1 && in->last_log_index==r->read_round &&
+        r->read_cfg_old==r->log_old && r->read_cfg_new==r->log_new;
+    if (!accounted && !current)return 0;
+    if (accounted) {
+        r->peer_ack_bits|=1u<<in->from;
+        r->peer_ack_tick[in->from]=r->ticks;
+    }
+    if (current) {
+        r->read_acks|=1u<<in->from;
+        if (r->last_applied>=r->read_index && quorum_ok(r,r->read_acks) &&
+            log_term(r,r->commit_index,&term)==EFS_OK && term==r->current_term)
+            r->read_in_flight=2;
+    }
+    return accounted ? 1 : 2; /* Progress-bearing replies still need recv. */
 }
 
 int efs_raft_read_ready(const struct efs_raft *r)

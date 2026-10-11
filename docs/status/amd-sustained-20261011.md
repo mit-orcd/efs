@@ -1,5 +1,11 @@
 # AMD sustained tiny/large service gate — Oct 11
 
+**Current disposition:** The later [unpaced admission acceptance](amd-overload-admission-20261011.md)
+closes this AMD overload/admission follow-up, including exact-artifact retained
+service deployment. Earlier failures below remain historical evidence. NUC
+persistence attribution is separately tracked by [W111](w111-nuc-persistence-investigation-20261011.md);
+W94 integration and W97 receiver feedback remain separate open scopes.
+
 W94's finite CREATE adoption A/B and full normal/fault/direct/buffered gates
 pass on the [captured integration](amd-integration-20261011.md). This follow-up
 targets sustained service, without claiming full production session/PUT-ticket

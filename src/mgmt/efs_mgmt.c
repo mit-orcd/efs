@@ -1,3 +1,4 @@
+#include "../common/parse_host_port.h"
 #include <errno.h>
 #include "efs/cli_help.h"
 #include "efs/common.h"
@@ -21,16 +22,7 @@
 
 static int parse_host_port(const char *str, char *host, size_t host_len, uint16_t *port)
 {
-    const char *colon = strrchr(str, ':');
-    if (!colon)
-        return -1;
-    size_t hlen = (size_t)(colon - str);
-    if (hlen >= host_len)
-        return -1;
-    memcpy(host, str, hlen);
-    host[hlen] = '\0';
-    *port = (uint16_t)atoi(colon + 1);
-    return 0;
+    return efs_parse_host_port(str, host, host_len, port);
 }
 
 static int send_recv(int fd, uint8_t type, const void *send_payload, uint32_t send_len,
@@ -1287,8 +1279,9 @@ static int sess_cleanup_bounded(const char *host, uint16_t port,
          * that definite rejection, with the same UUID/epoch/shard and the
          * original invocation deadline (also bounding socket waits). */
         if (rc == EFS_ERR_NOT_PRIMARY ||
-            (rc == EFS_ERR_BUSY && !appends && !reply->index && !reply->term &&
-             reply->salt == EFS_MD_SESSION_CLEANUP_RETRY_SALT)) {
+            (rc == EFS_ERR_BUSY && !reply->index && !reply->term &&
+             reply->salt == (appends ? EFS_MD_SESSION_APPEND_RETRY_SALT :
+                                      EFS_MD_SESSION_CLEANUP_RETRY_SALT))) {
             usleep(50000);
             continue;
         }

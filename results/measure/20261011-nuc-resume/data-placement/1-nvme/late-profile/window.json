@@ -1,0 +1,23 @@
+{
+  "start_utc": "2026-10-11T18:31:29Z",
+  "start_monotonic": 8548.374595584,
+  "processes": [
+    {
+      "pid": 55810,
+      "kind": "efsd"
+    },
+    {
+      "pid": 55821,
+      "kind": "efsd"
+    },
+    {
+      "pid": 55833,
+      "kind": "efsd"
+    },
+    {
+      "pid": 55914,
+      "kind": "efs-fuse"
+    }
+  ],
+  "limits": "Matched instrumented window near 450 seconds in every cell; exclude it from unprofiled speed comparisons. Not a hardware ceiling."
+}

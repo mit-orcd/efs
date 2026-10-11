@@ -470,6 +470,7 @@ struct efs_msg_put_chunk {
 #define EFS_PUT_CHUNK_OK     0
 #define EFS_PUT_CHUNK_ERROR  1
 #define EFS_PUT_CHUNK_QUOTA_EXCEEDED 2
+#define EFS_PUT_CHUNK_BUSY 3 /* transient admission; no durable PUT receipt */
 
 #define EFS_BENCH_PUT_OK     0
 #define EFS_BENCH_PUT_ERROR  1

@@ -1,3 +1,4 @@
+#include "../common/parse_host_port.h"
 #include "efs/cli_help.h"
 #include "efs/common.h"
 #include "efs/storage_capacity.h"
@@ -19,6 +20,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include "../common/recorder_stop.h"
 #include <sys/resource.h>
 #include <time.h>
 
@@ -231,17 +233,7 @@ static pid_t start_strace_recorder(pid_t target, const char *path)
  * up to ~5 s, then SIGKILL. */
 static void stop_recorder(pid_t *pidp)
 {
-    if (*pidp > 0) {
-        kill(*pidp, SIGTERM);
-        for (int i = 0; i < 50; i++) {
-            if (waitpid(*pidp, NULL, WNOHANG) == *pidp)
-                break;
-            usleep(100000);
-        }
-        kill(*pidp, SIGKILL);
-        waitpid(*pidp, NULL, 0);
-        *pidp = -1;
-    }
+    efs_stop_recorder(pidp);
 }
 
 static void stop_perf_recorder(void)
@@ -252,16 +244,7 @@ static void stop_perf_recorder(void)
 
 static int parse_host_port(const char *str, char *host, size_t host_len, uint16_t *port)
 {
-    const char *colon = strrchr(str, ':');
-    if (!colon)
-        return -1;
-    size_t hlen = (size_t)(colon - str);
-    if (hlen >= host_len)
-        return -1;
-    memcpy(host, str, hlen);
-    host[hlen] = '\0';
-    *port = (uint16_t)atoi(colon + 1);
-    return 0;
+    return efs_parse_host_port(str, host, host_len, port);
 }
 
 /* Live handler threads (accept path). Used to cap concurrent conns. */
@@ -482,6 +465,14 @@ int main(int argc, char **argv)
                 strerror(errno));
         return 1;
     }
+
+    const char *data_pressure = getenv("EFS_DATA_GC_ADMISSION");
+    if (data_pressure && strcmp(data_pressure, "0") && strcmp(data_pressure, "1")) {
+        fprintf(stderr, "EFS_DATA_GC_ADMISSION must be 0 or 1\n");
+        return 1;
+    }
+    server.data_gc_admission = data_pressure && !strcmp(data_pressure, "1");
+    fprintf(stderr, "Data GC admission: %s\n", server.data_gc_admission ? "experimental" : "disabled");
 
     server.nodes[0].id = server.id;
     strncpy(server.nodes[0].addr, server.addr, sizeof(server.nodes[0].addr) - 1);

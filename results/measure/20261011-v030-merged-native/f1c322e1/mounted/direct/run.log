@@ -1,0 +1,8 @@
+Evidence directory: /data1/efs/release-v030-results-20261011-f1c322e1/mounted/direct/gc-direct-qzf0b6b6
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=14999050321312076854
+client serving PASS
+packing peer mounted PASS

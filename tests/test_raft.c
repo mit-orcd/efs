@@ -256,6 +256,10 @@ static int send_now(void *net, const struct efs_raft_msg *msg)
     /* Synchronous delivery: the sender's entry buffers stay valid for the
      * whole recv and recv copies each entry into the log store, so no
      * detach copy is needed (this also covers batched multi-entry AEs). */
+    /* Model the host with pending inbox work: observe read quorum first,
+     * then retain every reply for ordinary ordered replication bookkeeping. */
+    if(getenv("EFS_TEST_EARLY_READ_ACK") && msg->type==EFS_RAFT_MSG_AE_REP)
+        (void)efs_raft_read_control(n->r[msg->to],msg);
     return efs_raft_recv(n->r[msg->to], msg);
 }
 
@@ -498,6 +502,41 @@ static void test_read_quorum_before_apply(void)
     for(int i=0;i<3;i++){efs_raft_free(n.r[i]);efs_raft_mem_free(store[i]);}
 }
 
+/* Handler-side fsync completion records only its proven watermark. It
+ * must not synchronously commit/apply KV while holding the host mutex. */
+static void test_note_durable_without_apply(void)
+{
+    struct net n={.n=2};struct app app[2]={0};struct efs_raft_store *store[2];
+    struct efs_raft_cfg cfg={0};cfg.n=2;cfg.send=send_now;cfg.net=&n;
+    cfg.apply=apply_cmd;cfg.heartbeat_ticks=1;
+    for(int i=0;i<2;i++) {
+        store[i]=efs_raft_mem_create();cfg.id=i;cfg.store=store[i];cfg.store_ctx=store[i];
+        cfg.election_ticks=4+i*4;cfg.app=&app[i];n.r[i]=efs_raft_new(&cfg);
+    }
+    CHECK(elect(&n,20)==1,"durable-note fixture elects");
+    int leader=leader_id(&n),follower=1-leader;uint64_t index=0;
+    int before=app[leader].n;uint64_t commit=efs_raft_commit(n.r[leader]);
+    efs_raft_arm_durable(n.r[leader]);uint8_t cmd='N';
+    CHECK(efs_raft_propose_local(n.r[leader],&cmd,1,&index)==EFS_OK,"durable-note local append");
+    CHECK(efs_raft_submit(n.r[leader],index)==EFS_OK && efs_raft_flush(n.r[leader])==EFS_OK,
+          "peer ACK arrives before local fsync");
+    CHECK(efs_raft_commit(n.r[leader])==commit && app[leader].n==before,
+          "uncovered own vote cannot commit");
+    CHECK(efs_raft_note_durable(n.r[leader],index)==EFS_OK,
+          "completed fsync notes checked local prefix");
+    CHECK(efs_raft_note_durable(n.r[leader],commit)==EFS_OK,
+          "older prefix cannot lower durable watermark");
+    CHECK(efs_raft_commit(n.r[leader])==commit && app[leader].n==before,
+          "noting durability never calls apply or advances commit");
+    CHECK(efs_raft_durable(n.r[leader],commit)==EFS_OK && efs_raft_commit(n.r[leader])>=index &&
+          app[leader].n==before+1 && app[leader].last=='N',
+          "pump commits/applies same exact command from monotonic watermark");
+    CHECK(efs_raft_note_durable(n.r[follower],index)==EFS_ERR_NOT_PRIMARY,
+          "follower cannot acquire a durable leader vote");
+    CHECK(efs_raft_note_durable(NULL,index)==EFS_ERR_INVAL,"null durable-note refusal");
+    for(int i=0;i<2;i++){efs_raft_free(n.r[i]);efs_raft_mem_free(store[i]);}
+}
+
 /* The network can service a pure current read round while the pump is in
  * an unrelated durability tail. No term/config/log/apply work may bypass it. */
 static void test_readindex_control(void)
@@ -526,7 +565,9 @@ static void test_readindex_control(void)
     CHECK(n.cap_n==1 && n.cap_ok && n.cap_match==index,"control ACK exact matched prefix");
     CHECK(app[follower].n==applied,"pure probe never applies");
     probe.leader_commit=index+1;
-    CHECK(!efs_raft_read_control(n.r[follower],&probe),"unapplied commit stays on pump");
+    CHECK(efs_raft_read_control(n.r[follower],&probe)==2,
+          "fresh matched-prefix ACK precedes deferred follower commit/apply");
+    CHECK(app[follower].n==applied,"early follower ACK does not apply");
     probe.leader_commit=index;probe.prev_term++;
     CHECK(!efs_raft_read_control(n.r[follower],&probe),"unmatched prefix stays on pump");
     probe.prev_term--;probe.term++;
@@ -536,12 +577,14 @@ static void test_readindex_control(void)
     probe.boot_id=1;probe.nentries=1;
     CHECK(!efs_raft_read_control(n.r[follower],&probe),"log bytes stay on pump");
     probe.nentries=0;probe.last_log_index=0;
-    CHECK(!efs_raft_read_control(n.r[follower],&probe),"ordinary heartbeat stays on pump");
+    CHECK(efs_raft_read_control(n.r[follower],&probe)==1,
+          "fully applied ordinary heartbeat has no deferred bookkeeping");
     struct efs_raft_msg reply={0};reply.type=EFS_RAFT_MSG_AE_REP;
     reply.from=follower;reply.to=leader;reply.term=efs_raft_term(n.r[leader]);
     reply.boot_id=1;reply.success=1;reply.match_index=index;
     reply.last_log_index=efs_raft_read_round(n.r[leader])-1;
-    CHECK(!efs_raft_read_control(n.r[leader],&reply),"old round is not read authority");
+    CHECK(efs_raft_read_control(n.r[leader],&reply)==1 && !efs_raft_read_ready(n.r[leader]),
+          "accounted zero-context heartbeat never grants read authority");
     reply.last_log_index++;
     reply.success=0;
     CHECK(!efs_raft_read_control(n.r[leader],&reply),"failed/pressure ACK is not authority");
@@ -553,14 +596,67 @@ static void test_readindex_control(void)
     CHECK(!efs_raft_read_control(n.r[leader],&reply),"different group cannot grant authority");
     reply.group=0;
     uint64_t commit=efs_raft_commit(n.r[leader]);applied=app[leader].n;
-    CHECK(efs_raft_read_control(n.r[leader],&reply)==2,"current reply noted before bookkeeping");
+    CHECK(efs_raft_read_control(n.r[leader],&reply)==1,"current accounted heartbeat fully handled");
     CHECK(efs_raft_read_ready(n.r[leader]),"fresh quorum unblocks applied read");
     CHECK(efs_raft_commit(n.r[leader])==commit && app[leader].n==applied,
           "early read ACK neither advances replication commit nor applies");
     CHECK(efs_raft_recv(n.r[leader],&reply)==EFS_OK,"normal reply bookkeeping retained");
     CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"next request begins independent round");
-    CHECK(!efs_raft_read_control(n.r[leader],&reply) && !efs_raft_read_ready(n.r[leader]),
-          "prior completed round cannot authorize next request");
+    CHECK(efs_raft_read_control(n.r[leader],&reply)==1 && !efs_raft_read_ready(n.r[leader]),
+          "prior accounted completed round cannot authorize next request");
+    /* Fully accounted probes can be consumed without queuing old round
+     * bookkeeping; each new independent request still needs its own ACK. */
+    reply.vote_granted=1;
+    CHECK(efs_raft_read_control(n.r[leader],&reply)==1 && !efs_raft_read_ready(n.r[leader]),
+          "old accounted probe consumed without authorizing new round");
+    reply.last_log_index=efs_raft_read_round(n.r[leader]);
+    CHECK(efs_raft_read_control(n.r[leader],&reply)==1 && efs_raft_read_ready(n.r[leader]),
+          "current accounted probe supplies fresh authority without inbox work");
+    for(int round=0;round<10;round++) {
+        CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"sequential fresh control read");
+        CHECK(efs_raft_read_control(n.r[leader],&reply)==1 && !efs_raft_read_ready(n.r[leader]),
+              "previous sequential probe never supplies fresh authority");
+        reply.last_log_index=efs_raft_read_round(n.r[leader]);
+        CHECK(efs_raft_read_control(n.r[leader],&reply)==1 && efs_raft_read_ready(n.r[leader]),
+              "sequential exact prefix needs no deferred bookkeeping");
+        CHECK(efs_raft_commit(n.r[leader])==commit && app[leader].n==applied,
+              "consumed control ACK never commits or applies");
+    }
+    /* Even a probe must retain normal bookkeeping when a local suffix can
+     * advance replication or commit. Hold replies so the suffix stays live. */
+    CHECK(efs_raft_propose(n.r[leader],&cmd,1,&index)==EFS_OK,"control uncommitted suffix");
+    CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"fresh read during outstanding suffix");
+    reply.last_log_index=efs_raft_read_round(n.r[leader]);
+    CHECK(efs_raft_read_control(n.r[leader],&reply)==2,
+          "uncommitted suffix retains normal reply bookkeeping");
+    CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"another suffix round");
+    CHECK(!efs_raft_read_control(n.r[leader],&reply),"old suffix probe stays on pump");
+    n.hold_ae_replies=0;elect(&n,4);
+    app[follower].park_apply=1;
+    CHECK(efs_raft_propose(n.r[leader],&cmd,1,&index)==EFS_OK,"follower parked new durable prefix");
+    elect(&n,4);n.hold_ae_replies=1;
+    CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"fresh round with parked follower apply");
+    probe.prev_index=index;probe.prev_term=efs_raft_term(n.r[leader]);
+    probe.leader_commit=index;probe.last_log_index=efs_raft_read_round(n.r[leader]);
+    probe.nentries=0;probe.term=efs_raft_term(n.r[leader]);
+    applied=app[follower].n;
+    CHECK(efs_raft_applied(n.r[follower])<index,"follower's apply really remains parked");
+    CHECK(efs_raft_read_control(n.r[follower],&probe)==2 && app[follower].n==applied,
+          "durable matched prefix votes early but retains queued apply work");
+    uint64_t fresh_context=probe.last_log_index;probe.last_log_index=0;
+    CHECK(!efs_raft_read_control(n.r[follower],&probe),
+          "ordinary heartbeat still queues parked commit/apply work");
+    probe.last_log_index=fresh_context;
+    reply.last_log_index=probe.last_log_index;reply.match_index=index;
+    reply.term=probe.term;reply.vote_granted=1;
+    CHECK(efs_raft_read_control(n.r[leader],&reply)>0 && efs_raft_read_ready(n.r[leader]) &&
+          efs_raft_applied(n.r[leader])>=index,
+          "parked follower can vote; leader still proves its own applied read barrier");
+    probe.prev_term++;
+    CHECK(!efs_raft_read_control(n.r[follower],&probe),"unproven parked prefix cannot vote");
+    probe.prev_term--;app[follower].park_apply=0;
+    CHECK(efs_raft_recv(n.r[follower],&probe)==EFS_OK && efs_raft_applied(n.r[follower])>=index,
+          "queued original request completes follower commit/apply after early ACK");
     n.hold_ae_replies=0;elect(&n,4);
     /* Installing an uncommitted joint configuration disables this path,
      * even before the committed configuration switches. */
@@ -2366,6 +2462,7 @@ static void test_pressure_quorum_and_owned_backlog(void)
 
 int main(void)
 {
+    test_note_durable_without_apply();
     test_readindex_control();
     test_read_quorum_before_apply();
     test_pressure_quorum_and_owned_backlog();

@@ -45,11 +45,15 @@ p.add_argument('--transport', choices=('tcp', 'rdma'), default='tcp',
 p.add_argument('--root', action='append', default=[])
 p.add_argument('--mount', type=Path, help='existing empty, unmounted path allowed by host FUSE policy')
 p.add_argument('--peer-mount', type=Path, help='existing empty, unmounted second policy-allowed mount')
+p.add_argument('--packing-clients',type=int,choices=(2,7),default=2,help='two or seven mounted clients for the isolated packing gate')
+p.add_argument('--mounted-packing-only', action='store_true', help='opt-in mounted tiny coalescing, mixed mutation, peer/cold hashes, POSIX and physical packed reclamation')
 p.add_argument('--posix', action='store_true')
 p.add_argument('--posix-jobs', type=int, default=4, help='parallel POSIX cases (default: 4); each case retains its own concurrent writers')
 p.add_argument('--storage-session-fence-fault',action='store_true',help='private certificate fsync EIO: revocation must remain incomplete, then recover and survive cold restart; requires --guarded-leases')
 p.add_argument('--continue-posix-failure','--continue-regression-failure',dest='continue_posix_failure',action='store_true',help='retain POSIX/peer failure, run independent later gates, then exit unsuccessfully')
 p.add_argument('--tiny-sustained-large-mib-s',type=float,default=0,help='0=unpaced; otherwise 0..64 MiB/s per large writer in sustained gate')
+p.add_argument('--tiny-overload',action='store_true',help='retain refused-I/O verdicts and cold-check acknowledged bytes in sustained gate')
+p.add_argument('--replication-pressure',action='store_true',help='test-only 100-ms follower log-sync delay during seconds 30..60 of sustained load, then real peer catch-up')
 p.add_argument('--tiny-sustained-seconds',type=int,default=0,help='1..1800 seconds of bounded tiny/large churn; cold exact survivors and physical reclaim, then exit')
 p.add_argument('--tiny-mixed',action='store_true',help='bounded large-writer overlap with 512 tiny CREATE/close operations, cold exact bytes and physical deletion')
 p.add_argument('--tiny-create-only',action='store_true',help='finite eight-worker tiny CREATE/write/close benchmark with exact cold bytes and physical reclaim, without large writers')
@@ -112,6 +116,7 @@ p.add_argument('--rename-cache', action='store_true', help='root rename evicts t
 p.add_argument('--mixed-reads', action='store_true', help='tiny demand reads while sequential prefetch uses a bounded cache')
 p.add_argument('--ecrawl-binary',type=Path,help='run the actual ecrawl dense/sparse classification gate; requires --allocation')
 p.add_argument('--allocation', action='store_true', help='cold non-writing client allocation reports for dense and sparse files')
+p.add_argument('--namespace-session-only',action='store_true',help='wire namespace admission, revocation, first-touch refusal and cold stale replay only')
 p.add_argument('--applied-checkpoint-replay-only',action='store_true',help='retain follower applied markers, crash private fixture and verify durable metadata replay')
 p.add_argument('--kv-wal-persistence-only',action='store_true',help='refuse follower KV WAL fsync; preserve periodic/shutdown checkpoints and cold replay')
 p.add_argument('--transaction-fault-seed',action='store_true',help='prefer the client seed as fault follower for authority redirect validation')
@@ -188,6 +193,13 @@ for path in sorted(inputs):
                       for name in ('efsd','efs-fuse','efs-mgmt')},
 },indent=2))
 env = dict(os.environ, EFS_MD_RAFT_N='4', EFS_TRANSPORT=a.transport)
+if a.replication_pressure:
+    assert a.tiny_sustained_seconds>=120, 'pressure requires a sustained recovery window'
+    assert not (a.storage_session_fence_fault or a.put_barrier_fault or a.kv_wal_persistence_only or a.compactor_pressure)
+    run_preload=work/'raft-slow-sync.so'
+    subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-shared','-fPIC',source/'tests/live/raft_slow_sync.c','-ldl','-o',run_preload],check=True)
+    env.update(LD_PRELOAD=str(run_preload),EFS_TEST_RAFT_SLOW_FILE=str(work/'raft-slow-armed'))
+if a.mounted_packing_only:env.update(EFS_PACKED_WRITES='1',EFS_COMMANDS='1',EFS_COMMANDS_SERVER='1')
 if a.efs_commands_only:env.update(EFS_COMMANDS='1',EFS_COMMANDS_SERVER='1',EFS_QUERY_TEST_PORT=str(a.port))
 if a.storage_session_fence_fault:
     assert a.guarded_leases and not (a.put_barrier_fault or a.kv_wal_persistence_only or a.compactor_pressure), 'certificate fault must own its preload'
@@ -452,6 +464,12 @@ def drained():
     samples=[group for node in status() for group in node[2:] if group.get('sampled')]
     return {g['group'] for g in samples}=={0,2} and all(g['pending_estimate']==0 and g['reap_seen']==0 and g['orphan_seen']==0 for g in samples)
 
+def physically_drained(inodes):
+    # gc-status samples are estimates and may still show the preceding
+    # zero snapshot immediately after bulk unlink. Do not let that snapshot
+    # certify deletion of the fixture's actual immutable fragments.
+    return drained() and all(not files(ino) for ino in inodes)
+
 def chunk_state(ino, allow_absent=False):
     # Query all reachable replicas until a current authoritative reply exists.
     # BUSY/NOTPRIMARY are not a missing chunk or a zero-filled image.
@@ -484,6 +502,80 @@ try:
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.mounted_packing_only:
+        peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
+        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+        wait(lambda:os.path.ismount(peer_mount),'packing peer mounted',40)
+        tree=mount/'mounted-pack';tree.mkdir()
+        expected={}
+        def tiny_file(i):
+            name='tiny-'+str(i);body=hashlib.sha256(name.encode()).digest()*16
+            with (tree/name).open('xb',buffering=0) as fd:
+                assert fd.write(body)==len(body);os.fsync(fd.fileno())
+            return name,body
+        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+            expected=dict(pool.map(tiny_file,range(64)))
+        def packed_files():
+            return [x for root in data_roots for x in (root/'data/packs-v1/1').rglob('*') if x.is_file() and not x.name.endswith('.sum')]
+        packed=packed_files();assert packed,'opt-in mounted writes produced no physical packed fragments'
+        (work/'mounted-pack-before.json').write_text(json.dumps({'files':len(expected),'logical_bytes':sum(map(len,expected.values())),
+            'physical_files':len(packed),'physical_bytes':sum(x.stat().st_size for x in packed)},indent=2))
+        for name,body in expected.items():assert (peer_mount/'mounted-pack'/name).read_bytes()==body,name
+        # Transition real packed bases through ordinary overwrite, growth and
+        # truncate; unrelated neighbors must retain their exact bytes.
+        path=tree/'tiny-0';body=b'ordinary-growth:'+(bytes(range(256))*1024)
+        with path.open('r+b',buffering=0) as fd:assert fd.write(body)==len(body);os.fsync(fd.fileno())
+        expected['tiny-0']=body
+        path=tree/'tiny-1'
+        with path.open('r+b',buffering=0) as fd:fd.truncate(19);os.fsync(fd.fileno())
+        expected['tiny-1']=expected['tiny-1'][:19]
+        (tree/'tiny-2').unlink();del expected['tiny-2']
+        for name,body in expected.items():assert (peer_mount/'mounted-pack'/name).read_bytes()==body,name
+        failures=[]
+        if a.posix and a.packing_clients==7:
+            mounts=[mount,peer_mount]
+            for i in range(2,a.packing_clients):
+                target=Path(tempfile.mkdtemp(prefix='efs-pack-client-'+str(i)+'-',dir=tempfile.gettempdir()))
+                log=open(work/('pack-client-'+str(i)+'.log'),'ab');handles.append(log)
+                proc=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(target),'-f'],env=env,stdout=log,stderr=log)
+                extra_clients.append((proc,target));mounts.append(target)
+                wait(lambda:os.path.ismount(target),'packing extra client '+str(i)+' mounted',40)
+            def concurrent_posix(item):
+                i,target=item
+                command=['python3',source/'tests/posix/posix_suite.py',target,'--suite','all','--jobs',str(a.posix_jobs),'--timeout-s','30',
+                         '--tag','pack-'+str(i),'--results',work/('posix-client-'+str(i)+'.tsv')]
+                with (work/('posix-client-'+str(i)+'.log')).open('wb') as output:
+                    result=subprocess.run(list(map(str,command)),env=env,stdout=output,stderr=subprocess.STDOUT,timeout=600)
+                print('packing concurrent POSIX client '+str(i)+' exit='+str(result.returncode),flush=True)
+                return {'gate':'posix-client-'+str(i),'returncode':result.returncode}
+            with concurrent.futures.ThreadPoolExecutor(max_workers=a.packing_clients) as pool:
+                failures.extend(r for r in pool.map(concurrent_posix,enumerate(mounts)) if r['returncode'])
+            for proc,target in extra_clients:
+                run([source/'scripts/client.sh','stop',target]);proc.wait(timeout=15);target.rmdir()
+            extra_clients.clear()
+        if a.posix:
+            for label,command in (
+                ('posix',['python3',source/'tests/posix/posix_suite.py',mount,'--suite','all','--jobs',str(a.posix_jobs),'--timeout-s','30','--results',work/'posix.tsv']),
+                ('peer',['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,'--parent','pack-posix-peer','--results',work/'posix2.tsv'])):
+                if label=='posix' and a.packing_clients==7:continue
+                result=subprocess.run(list(map(str,command)),env=env,timeout=600)
+                if result.returncode:failures.append({'gate':label,'returncode':result.returncode})
+        run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
+        unmount();stop(crash=True);start();mount_client()
+        for name,body in expected.items():assert (mount/'mounted-pack'/name).read_bytes()==body,name
+        assert not (mount/'mounted-pack'/'tiny-2').exists()
+        print('mounted packed/ordinary mutations and acknowledged cold hashes PASS',flush=True)
+        shutil.rmtree(mount/'mounted-pack')
+        # Only this isolated fixture owns these objects. Last-reference GC
+        # must delete physical objects as well as retire metadata queues.
+        wait(lambda:not packed_files(),'mounted packed physical fragments reclaimed',180)
+        wait(drained,'mounted packing metadata queues drained',180)
+        report={'cold_verified':True,'physical_packed_empty':True,'failures':failures,
+                'source_sha256':digest.hexdigest(),'clients':a.packing_clients,'mode':a.mode,'transport':a.transport}
+        (work/'mounted-packing.json').write_text(json.dumps(report,indent=2))
+        assert not failures,failures
+        print('mounted packing '+a.mode+' PASS',flush=True)
+        raise SystemExit(0)
     if a.efs_commands_only:
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
         peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
@@ -606,6 +698,28 @@ try:
         shutil.rmtree(mount/'open-contention')
         wait(drained,'peer OPEN contention physical reclamation',180)
         print('twenty concurrent append/OPEN races, full peer POSIX and exact cold bytes PASS',flush=True)
+        raise SystemExit(0)
+    if a.namespace_session_only:
+        helper=work/'client-namespace-session';root=mount/'namespace-session';root.mkdir()
+        untouched=mount/'namespace-untouched';untouched.mkdir();parent=root.stat().st_ino
+        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),
+             source/'tests/live/client_namespace_session.c',source/'libefs.a',
+             '-pthread','-lm','-ldl','-libverbs','-o',helper])
+        packets=work/'namespace-packets.bin'
+        output=run([helper,str(a.port),str(parent),source/'efs-mgmt',packets,
+                    str(untouched.stat().st_ino)],capture_output=True,text=True,timeout=180)
+        (work/'namespace-session-wire.txt').write_text(output.stdout+output.stderr)
+        assert set(x.name for x in root.iterdir())=={'a','still-empty'}
+        assert not any(untouched.iterdir())
+        unmount();stop(crash=True);start();mount_client()
+        output=run([helper,str(a.port),str(parent),source/'efs-mgmt','cold',packets],
+                   capture_output=True,text=True,timeout=180)
+        (work/'namespace-session-cold.txt').write_text(output.stdout+output.stderr)
+        assert set(x.name for x in root.iterdir())=={'a','still-empty'}
+        assert not any(untouched.iterdir())
+        shutil.rmtree(root);untouched.rmdir()
+        wait(drained,'namespace session deletion queues drained',180)
+        print('namespace wire admission/revocation, first-touch refusal and seven cold stale receipts PASS',flush=True)
         raise SystemExit(0)
     if a.applied_checkpoint_replay_only:
         from applied_checkpoint_replay import exercise
@@ -740,11 +854,74 @@ try:
         print('rejected CREATE/OPEN replies release handles and reclaim server inodes PASS',flush=True)
     if a.tiny_sustained_seconds:
         from tiny_sustained import exercise as sustained,verify_and_delete as verify_sustained
-        record=sustained(mount,[client.pid,*[proc.pid for proc in servers]],
-                         a.tiny_sustained_seconds,work/'tiny-sustained.json',a.tiny_sustained_large_mib_s)
+        pressure_done=threading.Event();pressure_errors=[];pressure_thread=None
+        if a.replication_pressure:
+            def pressure_phases():
+                began=time.monotonic();slow_node=None
+                def snapshot(stage,transition_us=None):
+                    rows=[run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+i}'],capture_output=True,text=True,timeout=10).stdout for i in range(4)]
+                    with (work/'replication-pressure.jsonl').open('a') as out:
+                        out.write(json.dumps(dict(stage=stage,seconds=time.monotonic()-began,mono_us=int(time.monotonic()*1000000),transition_mono_us=transition_us,nodes=rows,slow_node=slow_node))+'\n')
+                    return rows
+                try:
+                    snapshot('before')
+                    if pressure_done.wait(30):return
+                    rows=snapshot('pre-slow')
+                    leaders={i for i,row in enumerate(rows) if 'role=LEADER' in row}
+                    candidates=[i for i in (2,1,3,0) if i not in leaders and 'hosted=1' in rows[i]]
+                    assert candidates,rows
+                    # Prefer a follower hosting both groups, using current
+                    # roles at arming time rather than an assumed node ID.
+                    slow_node=max(candidates,key=lambda i:rows[i].count('hosted=1'))+1
+                    (work/'raft-slow-armed').write_text(str(slow_node)+'\n')
+                    armed_at=time.monotonic();snapshot('slow',int(armed_at*1000000))
+                    if pressure_done.wait(max(0,30-(time.monotonic()-armed_at))):return
+                    (work/'raft-slow-armed').unlink()
+                    snapshot('healed',int(time.monotonic()*1000000))
+                    while not pressure_done.wait(30):snapshot('recovery')
+                except BaseException as error:pressure_errors.append(error)
+                finally:(work/'raft-slow-armed').unlink(missing_ok=True)
+            pressure_thread=threading.Thread(target=pressure_phases)
+            pressure_thread.start()
+        try:
+            record=sustained(mount,[client.pid,*[proc.pid for proc in servers]],
+                             a.tiny_sustained_seconds,work/'tiny-sustained.json',a.tiny_sustained_large_mib_s,a.tiny_overload)
+        finally:
+            pressure_done.set()
+            if pressure_thread:pressure_thread.join(timeout=45)
+        if a.replication_pressure:
+            assert not pressure_thread.is_alive() and not pressure_errors,pressure_errors
+            record['load_settled_mono_us']=int(time.monotonic()*1000000)
+            # Freeze the actual leader cuts after acknowledged workload settles;
+            # each hosted follower must reach those cuts before cold restart.
+            def views():
+                return [run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+i}'],capture_output=True,text=True,timeout=10).stdout for i in range(4)]
+            before=views();cuts={}
+            for row in before:
+                for group,commit in re.findall(r'group (\d+) hosted=1 .*?commit=(\d+)',row):
+                    group=int(group);cuts[group]=max(cuts.get(group,0),int(commit))
+            assert set(cuts)=={0,2},cuts
+            caught=[]
+            def catchup():
+                rows=views();found={0:0,2:0}
+                for row in rows:
+                    for group,applied in re.findall(r'group (\d+) hosted=1 .*?applied=(\d+)',row):
+                        group=int(group);found[group]+=1
+                        if int(applied)<cuts[group]:return False
+                if min(found.values())<3:return False
+                caught[:]=rows;return True
+            wait(catchup,'both-group frozen leader cuts caught up after slow follower healed',90)
+            (work/'replication-catchup.json').write_text(json.dumps(dict(cuts=cuts,before=before,after=caught),indent=2))
+            slow_logs='\n'.join((work/f'n{i+1}.log').read_text() for i in range(4))
+            assert 'slow-raft-sync armed' in slow_logs and 'slow-raft-sync healed' in slow_logs
+            record['replication_catchup_verified']=True
+
         cold_start=time.monotonic()
         unmount();stop(crash=True);start();mount_client()
-        verify_sustained(mount,record['generations'])
+        if a.tiny_overload:
+            from tiny_sustained import verify_overload_and_delete
+            verify_overload_and_delete(mount,record)
+        else: verify_sustained(mount,record['generations'])
         record.update(cold_verified=True,physical_inventory_empty=False,
                       cold_recovery_wall_s=time.monotonic()-cold_start)
         (work/'tiny-sustained.json').write_text(json.dumps(record,indent=2))
@@ -757,7 +934,22 @@ try:
         finally:
             record.update(gc_drain_wall_s=time.monotonic()-drain_start,gc_drain_deadline_s=180)
             (work/'tiny-sustained.json').write_text(json.dumps(record,indent=2))
-        print('sustained tiny/large warm generations, cold bytes and physical reclamation PASS',flush=True)
+        if a.tiny_overload:
+            # Pressure must recover without an operator clearing a sticky state.
+            recovery = mount/'overload-recovery'
+            body = hashlib.sha256(b'overload-recovered').digest()*1024
+            with recovery.open('wb') as stream:
+                assert stream.write(body)==len(body)
+                stream.flush();os.fsync(stream.fileno())
+            unmount();stop(crash=True);start();mount_client()
+            assert recovery.read_bytes()==body
+            recovery.unlink()
+            wait(lambda:drained() and all(not any(path.is_file() for path in
+                 (root/'data/exports/1').glob('**/*')) for root in data_roots),
+                 'post-pressure cold write and physical deletion drained',180)
+            record['post_pressure_cold_write_verified']=True
+            (work/'tiny-sustained.json').write_text(json.dumps(record,indent=2))
+        print(('overload acknowledged-byte recovery and physical reclamation PASS; refused I/O remains in verdict' if a.tiny_overload else 'sustained tiny/large warm generations, cold bytes and physical reclamation PASS'),flush=True)
         raise SystemExit(0)
     if a.tiny_churn:
         from tiny_churn import exercise as churn,verify_and_delete as verify_churn
@@ -1549,8 +1741,9 @@ os.close(fd)
                 'recovery_seconds':time.monotonic()-recovery,
                 'pressure_observed':any(s['kv'] and s['kv'][2]>0 for s in samples)}
         (work/'compactor-pressure.json').write_text(json.dumps(result,indent=2))
+        pressure_inodes=[path.stat().st_ino for path in paths+warm_paths]
         for path in paths+warm_paths:path.unlink()
-        wait(drained,'bulk compactor-pressure deletions drained before fault fixture',600)
+        wait(lambda:physically_drained(pressure_inodes),'bulk compactor-pressure deletions drained before fault fixture',600)
         print('finite compactor-pressure outcome '+json.dumps(result),flush=True)
     if a.memo:
         mutations=0
@@ -1789,7 +1982,7 @@ os.close(fd)
                 wait(ready,f'IOR independent client {index+1} mounted',40)
         def stop_ior_peers():
             for proc,target in extra_clients:
-                run([source/'scripts/client.sh','stop',target]);proc.wait(timeout=15)
+                run([source/'scripts/client.sh','stop',target]);proc.wait(timeout=15);target.rmdir()
             extra_clients.clear()
         wrapper=work/'ior-client-wrapper'
         wrapper.write_text('#!/usr/bin/env python3\nimport os,sys\nfrom pathlib import Path\nroots='+repr([str(mount)]+[str(work/f'ior-client-{i}') for i in range(1,a.ior_clients)])+'\nargs=sys.argv[1:]\ni=args.index("-o")+1\nrelative=Path(args[i]).relative_to(roots[0])\nargs[i]=str(Path(roots[int(os.environ["PMI_RANK"])//4])/relative)\nos.execv('+repr(str(a.ior_binary))+',['+repr(str(a.ior_binary))+',*args])\n')
@@ -2027,10 +2220,36 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
         def authoritative_attrs(path):
             ino=path.stat().st_ino
             return tuple(map(int,run([attrs_helper,str(a.port),str(ino)],capture_output=True,text=True).stdout.split()))
-        folder=mount;chain=[];moving=mount/'max-moving';moving.mkdir()
+        folder=mount;chain=[];placements=[]
+        # Depth and distinct transaction participants are separate bounds.
+        # Salted mkdir placement can collide even for different names. Build
+        # exactly 144 participants using the production hash, then retain the
+        # original 145-ancestor refusal and both coordinator-death oracles.
+        used={mount.stat().st_ino & 0xfff}
+        if a.namespace_max_fault:
+            placement_status=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port}'],capture_output=True,text=True).stdout
+            match=re.search(r'root=1 salt=(\d+)',placement_status);assert match,placement_status
+            mkdir_salt=int(match.group(1))
+        def selected_directory(parent,prefix,fresh):
+            result=run([attrs_helper,'choose',str(parent.stat().st_ino),str(mkdir_salt),prefix,'fresh' if fresh else 'member'],input=' '.join(map(str,sorted(used))),capture_output=True,text=True).stdout.split()
+            assert len(result)==2,result
+            shard,name=int(result[0]),result[1]
+            assert (shard not in used)==fresh
+            path=parent/name;path.mkdir()
+            assert path.stat().st_ino & 0xfff == shard,'predicted mkdir placement differs from actual inode'
+            used.add(shard);placements.append({'name':name,'shard':shard,'fresh':fresh})
+            return path
+        if a.namespace_max_fault:moving=selected_directory(mount,'max-moving',True)
+        else:moving=mount/'max-moving';moving.mkdir()
         last=moving;elapsed=None
         for index in range(144):
-            folder=folder/f'max-{index}';folder.mkdir();chain.append(folder)
+            if a.namespace_max_fault:
+                # Root + source + 142 fresh ancestry shards = 144. The next
+                # two ancestors reuse a participant: the last still exceeds
+                # the independent ancestry bound, not the participant bound.
+                folder=selected_directory(folder,f'max-{index}',index<142)
+            else:folder=folder/f'max-{index}';folder.mkdir()
+            chain.append(folder)
             unchanged=lambda path: tuple(getattr(path.stat(),field) for field in
                 ('st_ino','st_mode','st_uid','st_gid','st_nlink','st_mtime_ns','st_ctime_ns'))
             before_source=unchanged(last);before_destination=unchanged(folder)
@@ -2063,6 +2282,8 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
         recovered=mount/'max-recovered';os.rename(last,recovered)
         assert recovered.stat().st_ino==saved
         if a.namespace_max_fault:
+            assert len(used)==144,used
+            (work/'namespace-max-placement.json').write_text(json.dumps({'export_salt':mkdir_salt,'participants':sorted(used),'placements':placements,'distinct_participants':len(used)},indent=2))
             outcomes=[]
             destination=chain[-2]/'moved'
             for stage in ('prepare','commit'):

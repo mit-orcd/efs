@@ -1,0 +1,10 @@
+{
+  "pid": 109760,
+  "command": [
+    "python3",
+    "/data1/efs/devel-nuc-20261011/nuc_catchup_service_cold_20261011.py"
+  ],
+  "script_sha256": "f4f40e6bab35ad368ab5db253ddc65ee784e7c0e21ffebdf03bbfac19caa436b",
+  "started_utc": "2026-10-11T21:29:48Z",
+  "scope": "Prerequisite-gated; normal drain, preserved stores"
+}

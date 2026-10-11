@@ -1,0 +1,4 @@
+host flow: codec, bounded admission/detached work, control/read escape PASS
+Linux async sender: mixed-channel BUSY drain, recovery, legacy/malformed/lost replies and shutdown PASS
+host retirement: credits after KV release/before marker; queued arrivals retained; KV/marker EIO guards PASS
+host outbox: independent group ACKs/heartbeats, vote eviction and bounded replacement PASS

@@ -2336,6 +2336,35 @@ the quick ones).** Each row is a queue item; the W number is binding.
 
 ## W52 · a REPORT after thousands of O_APPEND writes answers after > 30 s (plan row 15)
 
+**Oct 11 follow-up candidate:** REPORT now submits one inode-group
+`APPEND_CATCHUP` proposal for every caught-up reservation, then waits for a
+separate guarded lane-barrier retirement transaction before replying. No
+per-reservation completion loop remains. The existing atomic scope bounds the
+admitted backlog at 32,766; concurrent growth refuses before mutation for
+recapture. Actual-KV 20k/maximum-count, atomic-scope rollback, session/fencing,
+partial publication and cold/lost-COMMIT regressions pass on NUC. The full native
+suites passed for the initial matched builds. Release coordination then found
+that command tag 45 collides with ORCD packing; APPEND_CATCHUP is reassigned to
+52 before any NUC admission. New-tag native, direct/buffered live, deployed
+20k and cold gates remain pending. All voters must
+support the new log command; no timeout or durability guarantee is relaxed.
+[Implementation and acceptance ledger](../status/nuc-w52-w97-resume-20261011.md).
+
+**Oct 11 client feedback fix:** `f52cd2dd` starts append burst age after
+successful publication. Previously a flush exceeding one second immediately
+expired its successor and collapsed batching toward one write per REPORT.
+Failed drains now retry before new admission. The actual-function regression
+passes and fails under the old timing behavior. No RPC budget or durability
+barrier is widened. The complete Linux native suite passes after retained
+documentation-fixture failures are repaired without changing the core. The
+full direct and buffered live suites pass, each with POSIX 216/216, peer
+67/67, 2,000 exact 4 KiB records, final fsync and cold bytes. Direct writes
+take 169.046 seconds; buffered writes take 164.413 seconds. The unchanged
+accepted images are installed after a retained startup BUSY and read-only
+readiness retry verifying all prior samples. The separate preserved-store
+20k/cold gates remain pending;
+the earlier candidate's corrected direct fixture times out and is not installed.
+
 **Oct 11 continuation:** `4afc063c` shares one guarded completion transaction
 across up to eight reservations, shrinking to the unchanged per-shard image
 bound when needed. Actual transaction/cold recovery/session-fencing/gap and
@@ -4251,7 +4280,23 @@ existing preallocation experiment closes this item.
 **Historical implementation update (Oct 8):** Atomic server CREATE/lease and rejected-reply cleanup pass full Linux/live gates. Staged one-key pending ownership, atomic pending CREATE, replay-pressure/retirement refusal and cold ownership edges are tested; production adoption and guarded HOLD/runtime-session integration remain open.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
-**Class/status:** Client/server metadata performance; partial implementation. Atomic server ownership, retained client adoption/lease edges and rejected-descriptor cleanup are AMD tested. Full session/data-plane integration and the measured performance acceptance gate remain open.
+**Class/status:** Client/server metadata performance; **closed Oct 11 for atomic
+CREATE/adoption**, by the user's explicit scope decision. Broader production
+flush/PUT-ticket integration stays open under W72/W86/W88; it is not silently
+activated or claimed complete by this closure.
+
+**Closure evidence:** The earlier CRC/applied-bound lease proof eliminates one
+independent lease consensus round (three→two entries per created/closed file);
+four-repeat finite TCP A/B records +18.7% direct/+23.3% buffered median paired
+gain. Unpaced admission, all-worker progress, acknowledged cold bytes, physical
+drain and post-pressure cold writes pass in both modes. Current corrected
+feedback binaries pass full normal/fault native, direct/buffered 216/216 POSIX
+and 67/67 peer suites, guarded lease/REPORT/session fences, real combined reply
+loss/negative cleanup, CREATE retry/name reuse, certificate-persistence refusal,
+APPEND/sync recovery and physical GC. Actual-helper ENOMEM and deterministic
+CREATE-adoption/competing-OPEN barriers prove no token handoff on allocation
+failure, one lease for two descriptors, and exact last-close release.
+[Closure and preserved limits](../status/amd-feedback-integration-20261011.md#w94--createadoption-closed-by-user-scoped-decision).
 
 **Oct 10/11 AMD candidate:** the first retained FUSE CREATE adopts its pending
 ownership with one existing guarded OPEN|CLEAR_PENDING edge. Existing normal
@@ -4289,7 +4334,16 @@ current open-description lifecycle safely supports it.
 
 **Oct 9 update:** Retained FUSE CREATE/adoption, sequenced OPEN/CLOSE, reply rejection cleanup and authoritative terminal revocation recovery are implemented; AMD direct/TCP cold replay, exact lease edges and POSIX/GC gates pass. [Current checkpoint](../status/dependency-package-20261009.md).
 
-**Remaining action:** Complete REPORT/data-plane session integration and measure the eliminated HOLD round; retain the specific adoption/last-close/unlink and throughput gates below. Server atomicity, CREATE reply reuse and rejected-reply cleanup are prerequisites already implemented; merely enabling the flag is unsafe.
+**Earlier Oct 11 AMD continuation (superseded by closure above):** An actual FUSE bookkeeping ENOMEM regression
+confirms no OPEN/adoption edge or pending-token handoff on failed owner
+allocation. Current feedback-enabled two-mode lifecycle and real combined
+reply-loss/negative/certificate-fsync gates are in progress; this is not full
+W94 closure. [Current ledger](../status/amd-feedback-integration-20261011.md).
+
+**Remaining related work:** W72 owns complete production session integration,
+W86 the default durable PUT-ticket lifecycle and W88 typed publication/replay
+adoption. Retain the CREATE/adoption/last-close/unlink and throughput gates below
+as regressions. The completed W94 scope does not enable D25 or close those items.
 
 **Governing contracts/related work:** W72 session/fencing, W58/W76 namespace retry identity and W69 coherence. CREATE reply reuse is merged (`e6926d85`); it removes a redundant read but does not implement safe lease adoption. Preserve synchronous close semantics.
 
@@ -4438,7 +4492,24 @@ behind a reserved EOF, zero-fill over valid records, remove durability barriers,
 or present the Raft improvement as measured KV acceptance.
 <a id="w97"></a>
 
-## W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
+## W97 · Replication inbox pressure and sustained service admission
+
+**Scope split (Oct 11):** The AMD bounded unpaced overload/admission gate is
+**closed**, with deployed and independently audited exact artifacts. NUC
+filesystem/device persistence-latency attribution now belongs to [W111](#w111),
+not an additional AMD acceptance condition. W97 remains open only for the
+independent receiver-feedback/queue-pressure acceptance below; W94 production
+data-plane integration and W99 capacity-domain policy are separate. Historical
+observations below retain their original dates and failures.
+
+**Oct 11 sender fairness repair:** A slow one-slot pressured sender can select
+due data forever ahead of critical replies/votes and fresh-read probes. Actual
+helper regression fails on the original source; `4ff779d0` rotates bounded turns
+across critical, both group probes and data, preserving lane FIFO and consensus
+ACK authority. Local scheduler and Linux normal/fault async gates pass; live
+two-mode/fault/pressure comparisons are in progress. No default feedback
+promotion or W97 closure is claimed.
+[Acceptance ledger](../status/amd-feedback-integration-20261011.md).
 
 **Oct 11 AMD mixed-load follow-up:** eight rotating tiny workers plus four
 unpaced 16-MiB overwrite-ring writers reach the explicit 4-GiB-per-node quota
@@ -4449,6 +4520,22 @@ pressure finding, not proof of the historical NUC incident's cause. A separately
 paced 2-MiB/s-per-writer gate cannot close the unpaced failure. Require bounded
 reclamation/admission, fairness and exact cold-byte recovery before claiming a
 fix. [AMD evidence](../status/amd-sustained-20261011.md#unpaced-mixed-load-failure--retained-not-closed).
+
+**Oct 11 controlled data placement:** with the same accepted engine and SATA
+metadata, the first SATA-data cell passes 212,648 files and 64 cold samples;
+throughput falls 567 → 283 files/s and SATA write-request elapsed rises
+0.211 → 0.489 ms. The NVMe-data cell passes 71,248 files and 64 cold samples;
+throughput falls 250 → 102 files/s, while SATA Raft sync falls slightly and
+NVMe write/flush elapsed rises. The SATA repeat passes 169,387 files and 64
+cold samples, declining 538 → 271 files/s. A retained quota-only cold retry
+uses 60 GiB instead of the now-unsafe 80 GiB; all timed data is unchanged.
+The full matrix and preserved-service restoration pass.
+The files-engine root-barrier candidate `19cbb11f` plus caller fix `766814c8` reuses the existing startup
+ancestry seal, retaining file, descendant-directory and root syncs and full
+fallback for uninitialized roots. The actual production Linux regression
+passes and the old scope fails its new assertion. Full native/live acceptance
+and measured benefit remain pending; it is not part of the frozen append-timer candidate.
+[Current placement and source ledger](../status/nuc-w52-w97-resume-20261011.md).
 
 **Oct 11 deployed continuation:** the validated merged engine is installed on
 preserved NUC stores. A five-minute measured create/write/close run again
@@ -4482,65 +4569,22 @@ Independent cells do not prove a general throughput improvement, and this
 does not resolve the unpaced quota/admission finding or historical NUC cause.
 [Verdicts and raw summary](../status/amd-sustained-20261011.md#fanout-build-e9ea8ca1--short-gates-accepted).
 
-**Oct11 NUC isolated follow-up:** two eight-minute growing-file repeats outside
-EFS reproduce aggregate430/428→188/186 durable64KiB writes/s, per-writer mean
-sync~6.9→~16ms. Preallocated-ring repeats finish near438ops/s, with materially
-different initial windows and tails. Allocation/overwrite behaviour matters,
-but XFS versus drive/cache attribution is not yet isolated. All eight allocation cells, four separate XFS/perf/strace profiles and four
-fully written-ring cells finish with exact reopen checks. Written NVMe repeats
-also decline1373/1356→450/439ops/s, while block write/flush elapsed averages
-increase~3×; written SATA stays near7100ops/s. This excludes allocation as the
-whole cause but does not isolate drive firmware from the block queue.
-W97 remains open; no drive settings or production defaults change.
-[Evidence and limitations](../status/devel-nuc-closure-20261010.md).
-
-**XFS mechanism observed:** separate writer-TID counts show roughly two log-force
-calls per fdatasync on growing files on both devices; warmed rings show zero.
-Host-wide counters closely match growth and remain small for rings. This is
-metadata-journal work, not a count of drive flushes. Stable raw SATA controls
-do not repair the earlier sustained EFS SATA slowdown; NVMe cache/firmware
-attribution remains unproven. W95 must specify safe packing/reuse semantics
-before a production layout port. Current durability barriers are retained.
+**Oct 11 AMD unpaced admission:** current 20-ms unpaced baseline still hits
+ENOSPC. An opt-in data-quota/actual-GC-progress BUSY candidate passes full
+normal/fault native and both 180-second unpaced cold/physical gates without
+refusals. The admission-off control reproduces ENOSPC but now passes an
+acknowledged-byte cold recovery oracle. Both ten-minute unpaced fairness/recovery
+gates pass without refusals, with 58.09/53.98-s physical drain and post-pressure
+cold writes; full admission-enabled 216/67 functional compatibility and
+exact-artifact retained-service deployment/two-client audit pass. The bounded AMD
+unpaced admission gate is closed. AMD-only admission/20-ms idle defaults are
+explicit, with commands disabled and all normal stores retained. W94
+CREATE/adoption is closed; broader W72/W86/W88 integration, W97
+receiver-feedback and W99 capacity-domain policy remain open independently;
+NUC persistence attribution is [W111](#w111).
+[Indexed follow-up](../status/amd-overload-admission-20261011.md).
 
 **Oct 11 Intel resume follow-up:** A large-directory inventory could cycle indefinitely because READDIR discarded a source-only continuation when its name was empty. The actual callback now preserves that source; old-source regressions fail and both native Intel regressions pass. The deployed wire probe reaches EOF with 92,557 entries in 1.580 seconds, and full FUSE enumeration returns the same count in 1.183 seconds. This repairs enumeration termination, not sustained write latency; W97 remains open. [Cursor repair and limits](../archive/status-20261011/intel-readdir-source-cursor-20261011.md).
-
-**Oct 10 matched three-node drive test:** same frozen `6b8f05acb484` engine,
-20 minutes per drive, true three-voter groups, preserved regular cluster stopped.
-NVMe first/final rates 31.83/10.80 files/s and pooled server Raft sync
-2.465/6.993 ms; SATA 562.73/299.40 files/s and 0.150/0.319 ms. Both drives slow;
-SATA late rates fluctuate. NVMe root telemetry during slow phase has no reported
-thermal events/warnings (composite <=45.85°C, sensor2 <=61.85°C). SATA health is
-unavailable. Large inbox refusals are not necessary: NVMe records only 35,
-SATA 124, with zero loader errors, replica catch-up and 64 exact cold payload
-checks per drive. Normal four-node service/both mounts restore and verify.
-**W97 remains open:** isolate growing-file/XFS versus drive service latency;
-NAND cache cause and hardware ceiling remain unproved. This compares these two
-models/storage paths, one run each, not protocols in general.
-[Report](../status/w97-three-drive-20261010.md).
-
-**Oct 10 latest merged-code observation:** all 16 newly captured branch tips
-integrate at `6b8f05acb484` and deploy to preserved NUC stores. A continuous
-20-minute write / 10-minute drained pause / 20-minute same-worker resume creates
-138,881 files with zero loader errors. First-minute rates 152.47 and 159.35
-files/s fall to final-minute 52.85 and 48.05; corresponding NVMe flush means
-rise from 1.33/1.34 to 3.65/3.66 ms. Rest restores the burst without restart,
-but the decline repeats. n3 retains 75,109 sampled inbox refusals; all replicas
-catch up. No root SSD health data arrives; cache occupancy/thermal cause and
-hardware ceiling remain unproved. Native and unchanged-repeat full/fault gates
-pass (POSIX 212/212, peer 64/64), but retain the earlier concurrent-append
-30-second timeout. Defaults/diagnostics off are restored; 128 sampled exact
-cold payload checks and live executable hashes pass. **Keep W97 open.**
-Next isolate sustained durable-write latency with root NVMe health and matched
-EFS-stopped/loaded growing-WAL versus preallocated-overwrite probes.
-[Report](../status/w97-latest-nvme-20261010.md).
-
-**Oct 10 NUC:** return control reproduces fast-then-slow rates at 10 ms.
-NVMe host flush mean rises 2.38 to 3.70 ms while rates fall; an independent
-low-load XFS overwrite+fdatasync probe with EFS stopped measures NVMe 1.12 ms
-versus SATA 85.9 microseconds at QD1. This localizes persistence costs but does
-not identify the drive/filesystem mechanism or prove a software/hardware ceiling.
-Checkpoint-tail experiment gains throughput but fails append replay acceptance;
-keep the default and W97 open. [Report](../archive/status-20261011/w93-checkpoint-cadence-20261010.md).
 
 **Oct 9 completed-credit admission candidate:** `ea23775b` adds default-off
 retirement after KV release and before the marker tail, preserving queue caps,
@@ -4598,9 +4642,10 @@ versus baseline 112.2 → 60.5 → 48.4; n3 drops increase to 129,365. The defec
 is fixed, but pressure and inconsistent sustained performance remain open.
 [Trials, exact evidence and remaining solution gates](../status/w97-solution-investigation-20261009.md).
 
-**Class/status:** Performance investigation; open. Sustained tiny-file
-throughput declines alongside persistence latency and replication pressure.
-The causal mechanism and a validated production fix remain open.
+**Class/status:** Replication/admission performance investigation; open for
+receiver feedback and bounded queue/catch-up acceptance. AMD data-GC admission
+is closed. Physical persistence attribution is owned by W111; correlations
+below do not establish that replication pressure causes the drive slowdown.
 
 **Finding (Oct 9, NUC):** Eight tiny-file workers decline from **118.4 → 81.7 → 42.4 files/s** across
 three consecutive 100-second windows. n3 drops **112,982 replication frames**
@@ -4625,9 +4670,8 @@ performance gain claim against earlier runs.
 **Action:** Correlate per-group offered/accepted replication traffic,
 in-flight requests, retry/overlap causes, queue residence/depth, sync blocking
 and dropped-frame recovery over time. Attribute persistence latency between
-filesystem/device completion, scheduler waits and competing I/O. Record
-device temperature/cache behavior where available before claiming a device
-limit. Reproduce the decline with fixed workload seeds and comparable
+filesystem/device completion, scheduler waits and competing I/O in cooperation
+with W111; device temperature/cache attribution belongs to that item. Reproduce the decline with fixed workload seeds and comparable
 initial namespace/device state; test one scheduling, flow-control or batching
 change at a time. Keep memory, queues and diagnostic volume bounded.
 
@@ -4641,8 +4685,9 @@ payloads, full POSIX/peer suites and applicable W64/W73 durability gates.
 Report residual drops and late-run regression honestly; higher startup
 throughput alone does not close this item.
 
-**Related work:** W93 owns durable group-commit improvements; W97 owns the
-time-dependent decline and receiver/persistence feedback investigation.
+**Related work:** W93 owns durable group-commit improvements; W97 owns
+receiver feedback and queue-pressure acceptance; W111 owns the NUC
+time-dependent persistence decline and filesystem/device attribution.
 W95 covers tiny-payload storage principles, W96 KV WAL preallocation and W53
 mixed large-writer/tiny-close tails.
 
@@ -4867,7 +4912,7 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 
 **Remaining action:** Correlate per-operation and quorum/queue timings on current `devel-intel`, repeat both TCP storage modes with the existing tiny writer, and repair demonstrated causes. Bounded REPORT session admission and empty close-marker retirement are implemented with fencing regressions. A partial-host trace demonstrates a foreign transaction coordinator being queried on an unhosted group; routing is repaired and 128 peer mkdir races plus both deep-path cases pass per host/mode in targeted trials. Fresh-quorum BUSY propagation and same-request quorum reuse retain their authority proofs. Contended multi-shard REPORT admission now returns BUSY before side effects instead of spending the request deadline on serial fallback; targeted worker/tiny/cold-byte/fencing/reclamation gates pass on both hosts in both modes. REPORT prepares its durable owner once per batch, retaining all per-shard admission/fencing checks; the exact committed MKDIR attributes avoid a second post-success GETATTR. Both hosts pass full native and 78 standalone checks; Intel1 direct sequential cold bytes and reclamation pass. Deep-path fixture setup now uses directory handles, while final full absolute-path depth-100 operations and the 30-second limit remain. Targeted direct cases pass on both hosts; original quadratic-walk timing failures remain evidence and full corrected direct/buffered acceptance is pending. W52/W53/W97 are related investigations, not established diagnoses.
 
-**Oct 11 current acceptance:** [Candidate 5f5fb14d](../../results/measure/20261011-intel-devel-intel/cleanup-and-concurrency-failures-5f5fb14d.json) and [candidate b7b8170f](../../results/measure/20261011-intel-devel-intel/cleanup-busy-and-concurrency-failures-b7b8170f.json) retain Intel1 concurrent-create and process-append 30-second failures. Cold cleanup NP/BUSY admission failures are addressed by bounded exact-request retries and an explicit pre-proposal refusal certificate in `3db4acf6`; normal and sanitizer checks pass on both hosts, with full fresh acceptance in progress. This is not a concurrency-throughput repair claim. The original tiny jobs have completed; W101 now requires preservation/verification.
+**Oct 11 current acceptance:** [Candidate 5f5fb14d](../../results/measure/20261011-intel-devel-intel/cleanup-and-concurrency-failures-5f5fb14d.json) and [candidate b7b8170f](../../results/measure/20261011-intel-devel-intel/cleanup-busy-and-concurrency-failures-b7b8170f.json) retain Intel1 concurrent-create and process-append 30-second failures. Cold cleanup NP/BUSY admission failures are addressed by bounded exact-request retries and an explicit pre-proposal refusal certificate in `3db4acf6`; normal and sanitizer checks pass on both hosts, with full fresh acceptance in progress. This is not a concurrency-throughput repair claim. The original tiny jobs have completed; W101 now requires preservation/verification. The [1,000 ms checkpoint/overlap/no-op trial](../../results/measure/20261011-intel-devel-intel/bundle1000-main-checkpoint-3db4acf6.json) now passes both hosts' 110 main checks and all four unchanged 214/214 concurrent cores. All 30 canonical rounds also pass on both hosts, but supplemental CREATE injection fails because its hook only covers historical framing. `ae26ab6b` covers retained CREATE and passes native/sanitizer checks and all four unchanged 214/214 cores, but supplemental Intel2 APPEND cleanup failed. `3d69edb4` certifies only readonly pre-submission APPEND BUSY refusals; native/sanitizer checks and four actual live direct/buffered APPEND gates pass. Subsequent `3d69edb4` fault reviews exposed salted namespace participant collisions on both hosts and Intel1 premature compactor-drain readiness from stale zero samples. `5abf8e7b` constructs the exact participant envelope and checks owned physical reclamation under unchanged deadlines, with native positives and preceding negative controls on both hosts. Corrected live reviews, fresh complete qualification and production acceptance remain pending; failed verdicts and unrun remainders remain retained. No sustained-throughput improvement is claimed. Intel script defaults and explicit four-way job dispatch are retained on DevOps `devel-intel` with passing Linux and actual-driver regressions.
 
 **Gate:** Repeat private and production core, extras and peer suites under concurrent workload, retaining all original limits, exact payload checks and original failure evidence. Record the depth-fixture setup change separately from any ordinary full-path latency claim.
 
@@ -4891,6 +4936,8 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 
 **Evidence/current state:** Initial Intel2 private attempts stopped after the 213/214 core verdict, leaving later gates NOTRUN. Independent rounds now preserve per-round verdicts while continuing, and the current combined harness continues after core failure without changing its failed aggregate. The offline inspector now scopes markers/reservations to every owned fixture inode; unrelated production-style markers remain diagnostic. Earlier global-marker false failures remain recorded. Production wired peer passed 66/66 direct, with a later buffered append timeout retained; neither substitutes for full private acceptance.
 
+**Current private gate:** The full combined harness passes both modes on both hosts on `3db4acf6` with the 1,000 ms trial; each core is 214/214 and each aggregate exits zero. Independent/fault and production acceptance remain in progress. See [the immutable main checkpoint](../../results/measure/20261011-intel-devel-intel/bundle1000-main-checkpoint-3db4acf6.json).
+
 **Remaining action:** Exercise independent remaining gates while preserving the failing aggregate verdict if needed; after W100 is repaired, repeat the entire unchanged private harness. Retain code/build identity and individual verdicts.
 
 **Gate:** Full Intel2 private core, peer, reclamation, quota, cold restart and fencing gates pass without skipping or masking the W100 failure.
@@ -4902,6 +4949,8 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 **Class/state:** Liveness/performance investigation; open.
 
 **Evidence/current state:** Intel1 initially timed out at the 60-second many-files persistence preparation limit and the 30-second virt_stats_readable limit. Unchanged repeats passed. The stats repeat used an available older snapshot with a BUSY refresh warning. Four later production cold-persistence checks pass. A subsequent cold startup exceeds the 180-second readiness bound while making about 27 million small reads from a roughly 2 GB Raft log. Bounded replay batching and nondestructive read-error refusal pass real durable-store/fault tests; Fresh e66 startup passes in 105.25 seconds and the final 823 aggregate startup/mount checks pass in 181.86 seconds at unchanged per-node limits; all four peers and both opposite-host mounts are verified. The final direct pre-backpressure persistence checks pass on both hosts, with final-mode persistence reruns pending. A separate demonstrated feature-discovery defect converted unavailable authoritative policy into successful disabled commands; the repair preserves unavailable status and existing advisory feature state, and named policy/load/query gates pass both storage modes on both hosts. Final 823 query acceptance passes Intel2 direct and Intel1 buffered; Intel1 direct retains a 12-second stats timeout. Intel2 buffered passes loaded publication and exact 601-file/153,856-byte convergence, then exceeds the 150-second harness budget during sequential payload verification. Commit 12e65920 uses four bounded readers while retaining exact length/SHA checks for every file; local and both-host corruption/short/missing/concurrency regressions pass, with all six real query gates passing on both hosts and modes in the 7bde5f43 matrix. Original failures remain recorded; no universal freshness or timeout repair is established.
+
+**Current private gate:** Both seven-flag query matrices, enabled `.efs` stats/find contracts and both real Valgrind modes pass on each host in the current trial. Production cold persistence and preservation checks remain required. This narrows the present acceptance scope without overwriting the earlier timeouts.
 
 **Remaining action:** Correlate storage, queue and query refresh timings; obtain bounded reproducible evidence and fix any demonstrated cause. Persistence relates to W53/W97; command snapshot semantics remain W91/W92.
 
@@ -5023,3 +5072,102 @@ duplicate-probe hypothesis rather than demonstrated permanent RPC loss. The
 five-second software send guard qualifies the hardware RNR retry concern.
 Per-flow causality and deadline/recovery gates remain open; see the
 [evidence and test hypotheses](../status/orcd-communication-hypotheses-20261011.md).
+
+
+<a id="w111"></a>
+
+## W111 · NUC sustained durable-write slowdown: filesystem, device and queue attribution
+
+**Class/state:** performance investigation; open. **Assigned cluster:** NUC.
+Split from W97 by user request on Oct 11, 2026. This is not an AMD admission
+acceptance gate. The bounded AMD unpaced overload/admission work is closed;
+W97's independent replication-feedback acceptance remains separate.
+
+**Finding:** Durable tiny-file throughput falls over sustained NUC runs while
+server sync and device completion latency rise. EFS-stopped controls also show
+a NVMe decline on fully written extents, so allocation alone does not explain
+it. XFS journal work, block scheduling/queueing and device/cache behaviour
+still need discrimination. No hardware ceiling or cache/firmware cause has
+been established, and stable raw SATA controls do not repair the earlier EFS
+SATA slowdown.
+
+**Evidence transferred from W97 (historical observations unchanged):**
+
+**Oct11 NUC isolated follow-up:** two eight-minute growing-file repeats outside
+EFS reproduce aggregate430/428→188/186 durable64KiB writes/s, per-writer mean
+sync~6.9→~16ms. Preallocated-ring repeats finish near438ops/s, with materially
+different initial windows and tails. Allocation/overwrite behaviour matters,
+but XFS versus drive/cache attribution is not yet isolated. All eight allocation cells, four separate XFS/perf/strace profiles and four
+fully written-ring cells finish with exact reopen checks. Written NVMe repeats
+also decline1373/1356→450/439ops/s, while block write/flush elapsed averages
+increase~3×; written SATA stays near7100ops/s. This excludes allocation as the
+whole cause but does not isolate drive firmware from the block queue.
+W111 remains open; no drive settings or production defaults change.
+[Evidence and limitations](../status/devel-nuc-closure-20261010.md).
+
+**XFS mechanism observed:** separate writer-TID counts show roughly two log-force
+calls per fdatasync on growing files on both devices; warmed rings show zero.
+Host-wide counters closely match growth and remain small for rings. This is
+metadata-journal work, not a count of drive flushes. Stable raw SATA controls
+do not repair the earlier sustained EFS SATA slowdown; NVMe cache/firmware
+attribution remains unproven. W95 must specify safe packing/reuse semantics
+before a production layout port. Current durability barriers are retained.
+
+**Oct 10 matched three-node drive test:** same frozen `6b8f05acb484` engine,
+20 minutes per drive, true three-voter groups, preserved regular cluster stopped.
+NVMe first/final rates 31.83/10.80 files/s and pooled server Raft sync
+2.465/6.993 ms; SATA 562.73/299.40 files/s and 0.150/0.319 ms. Both drives slow;
+SATA late rates fluctuate. NVMe root telemetry during slow phase has no reported
+thermal events/warnings (composite <=45.85°C, sensor2 <=61.85°C). SATA health is
+unavailable. Large inbox refusals are not necessary: NVMe records only 35,
+SATA 124, with zero loader errors, replica catch-up and 64 exact cold payload
+checks per drive. Normal four-node service/both mounts restore and verify.
+**W111 remains open:** isolate growing-file/XFS versus drive service latency;
+NAND cache cause and hardware ceiling remain unproved. This compares these two
+models/storage paths, one run each, not protocols in general.
+[Report](../status/w97-three-drive-20261010.md).
+
+**Oct 10 latest merged-code observation:** all 16 newly captured branch tips
+integrate at `6b8f05acb484` and deploy to preserved NUC stores. A continuous
+20-minute write / 10-minute drained pause / 20-minute same-worker resume creates
+138,881 files with zero loader errors. First-minute rates 152.47 and 159.35
+files/s fall to final-minute 52.85 and 48.05; corresponding NVMe flush means
+rise from 1.33/1.34 to 3.65/3.66 ms. Rest restores the burst without restart,
+but the decline repeats. n3 retains 75,109 sampled inbox refusals; all replicas
+catch up. No root SSD health data arrives; cache occupancy/thermal cause and
+hardware ceiling remain unproved. Native and unchanged-repeat full/fault gates
+pass (POSIX 212/212, peer 64/64), but retain the earlier concurrent-append
+30-second timeout. Defaults/diagnostics off are restored; 128 sampled exact
+cold payload checks and live executable hashes pass. **Keep W111 open.**
+Next isolate sustained durable-write latency with root NVMe health and matched
+EFS-stopped/loaded growing-WAL versus preallocated-overwrite probes.
+[Report](../status/w97-latest-nvme-20261010.md).
+
+**Oct 10 NUC:** return control reproduces fast-then-slow rates at 10 ms.
+NVMe host flush mean rises 2.38 to 3.70 ms while rates fall; an independent
+low-load XFS overwrite+fdatasync probe with EFS stopped measures NVMe 1.12 ms
+versus SATA 85.9 microseconds at QD1. This localizes persistence costs but does
+not identify the drive/filesystem mechanism or prove a software/hardware ceiling.
+Checkpoint-tail experiment gains throughput but fails append replay acceptance;
+keep the default; this persistence investigation remains open as W111. [Report](../archive/status-20261011/w93-checkpoint-cadence-20261010.md).
+
+
+**Action:** Repeat growing-file, preallocated and fully written-ring controls
+with comparable initial device state, workload/build IDs and durable payloads.
+Correlate writer sync distributions, XFS journal activity, block dispatch/
+completion latency, queue depth and scheduler waits; record device health,
+temperature and power/cache telemetry where available. Separate EFS-stopped
+controls from loaded EFS tests and NVMe from SATA verdicts. Keep existing
+durability barriers and normal service/data intact.
+
+**Done when:** Repeated controls identify the dominant cause with evidence
+that distinguishes filesystem, block-queue and device effects. Any proposed
+repair must improve sustained rates/tails in repeated comparable NUC runs,
+retain bounded queues and peer progress, and pass exact cold-byte, native,
+POSIX/peer and applicable persistence/fault gates. If the cause is a hardware
+limit, document the measured boundary and mitigation without calling the
+software repaired. No drive setting change is authorized by this split.
+
+**Related:** W97 replication feedback, W93 group commit, W95 tiny-payload
+layout, W96 KV WAL allocation, W53 mixed-write tails and W99 capacity policy.
+See the [current status and evidence index](../status/w111-nuc-persistence-investigation-20261011.md).

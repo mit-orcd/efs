@@ -887,31 +887,6 @@ void efs_client_adopt_lookup(const struct efs_inode *rpc, struct efs_inode *out)
     overlay_local_size(out, 0);
 }
 
-static int lookup_access_ok(const struct efs_inode *ino, uid_t uid, gid_t gid,
-                            const gid_t *groups, int ngroups, int mask)
-{
-    if (uid == 0)
-        return 0;
-    uint32_t perm;
-    if (uid == ino->uid)
-        perm = (ino->mode >> 6) & 7;
-    else {
-        int in_group = (gid == ino->gid);
-        for (int i = 0; !in_group && i < ngroups; i++) {
-            if (groups[i] == ino->gid)
-                in_group = 1;
-        }
-        perm = in_group ? ((ino->mode >> 3) & 7) : (ino->mode & 7);
-    }
-    if ((mask & 4) && !(perm & 4))
-        return -1;
-    if ((mask & 2) && !(perm & 2))
-        return -1;
-    if ((mask & 1) && !(perm & 1))
-        return -1;
-    return 0;
-}
-
 /* A path can hold at most one component per two bytes ("/x"). */
 #define EFS_WALK_MAX_COMPS 2048
 /* Below this depth a path costs so few round trips that the extra RPC on a
@@ -920,13 +895,12 @@ static int lookup_access_ok(const struct efs_inode *ino, uid_t uid, gid_t gid,
 
 /* Resolve comp[0 .. ncomp-2] -- the leaf's ancestor chain -- with batched
  * LOOKUP_PATH calls of up to 64 components each. On EFS_OK *parent is the
- * leaf's parent and *idx is ncomp-1. EFS_ERR_ACCES/EFS_ERR_INVAL fail the
- * whole lookup; any other return means "could not batch" and the caller
+ * leaf's parent and *idx is ncomp-1. Any other return means "could not
+ * batch" and the caller
  * does the per-component walk, so a batch miss can never change an answer.
  */
-static int walk_batch_ancestors(char *const *comp, size_t ncomp, int do_x,
-                                uid_t uid, gid_t gid, const gid_t *groups,
-                                int ngroups, efs_ino_t *parent, size_t *idx)
+static int walk_batch_ancestors(char *const *comp, size_t ncomp,
+                                efs_ino_t *parent, size_t *idx)
 {
     efs_ino_t cur = EFS_ROOT_INO;
     size_t done = 0;
@@ -959,25 +933,6 @@ static int walk_batch_ancestors(char *const *comp, size_t ncomp, int do_x,
         if (r.ancestor_count != n - 1)
             return EFS_ERR_NOT_FOUND;
 
-        if (do_x) {
-            for (uint32_t a = 0; a <= r.ancestor_count; a++) {
-                struct efs_inode t;
-                memset(&t, 0, sizeof(t));
-                if (a < r.ancestor_count) {
-                    t.ino = r.ancestors[a].ino;
-                    t.mode = r.ancestors[a].mode;
-                    t.uid = r.ancestors[a].uid;
-                    t.gid = r.ancestors[a].gid;
-                } else {
-                    t = r.inode; /* this chunk's terminal dir */
-                }
-                if (!efs_mode_is_dir(t.mode))
-                    return EFS_ERR_INVAL;
-                if (t.ino != EFS_ROOT_INO &&
-                    lookup_access_ok(&t, uid, gid, groups, ngroups, 1) != 0)
-                    return EFS_ERR_ACCES;
-            }
-        }
         cur = r.inode.ino;
         done += n;
     }
@@ -987,8 +942,7 @@ static int walk_batch_ancestors(char *const *comp, size_t ncomp, int do_x,
     return EFS_OK;
 }
 
-static int lookup_walk(const char *path, struct efs_inode *out, int do_x,
-                       uid_t uid, gid_t gid, const gid_t *groups, int ngroups)
+static int lookup_walk(const char *path, struct efs_inode *out)
 {
     if (!path || path[0] != '/')
         return EFS_ERR_INVAL;
@@ -1040,10 +994,7 @@ static int lookup_walk(const char *path, struct efs_inode *out, int do_x,
     int rc = EFS_ERR_NOT_FOUND;
     i = 0;
     if (ncomp > EFS_WALK_BATCH_MIN) {
-        int brc = walk_batch_ancestors(comp, ncomp, do_x, uid, gid, groups,
-                                       ngroups, &parent, &i);
-        if (brc == EFS_ERR_ACCES || brc == EFS_ERR_INVAL)
-            return brc;
+        int brc = walk_batch_ancestors(comp, ncomp, &parent, &i);
         if (brc != EFS_OK) {
             parent = EFS_ROOT_INO;
             i = 0;
@@ -1058,13 +1009,6 @@ static int lookup_walk(const char *path, struct efs_inode *out, int do_x,
             rc = (lrc == EFS_ERR_NOT_FOUND) ? EFS_ERR_NOT_FOUND : lrc;
             break;
         }
-        if (do_x && more) {
-            if (!efs_mode_is_dir(child.mode))
-                return EFS_ERR_INVAL;
-            if (child.ino != EFS_ROOT_INO &&
-                lookup_access_ok(&child, uid, gid, groups, ngroups, 1) != 0)
-                return EFS_ERR_ACCES;
-        }
         adopt_rpc_inode(&child);
         overlay_local_size(&child, more);
         parent = child.ino;
@@ -1077,7 +1021,7 @@ static int lookup_walk(const char *path, struct efs_inode *out, int do_x,
 
 int efs_client_lookup(const char *path, struct efs_inode *out)
 {
-    return lookup_walk(path, out, 0, 0, 0, NULL, 0);
+    return lookup_walk(path, out);
 }
 
 efs_ino_t efs_client_create(efs_ino_t parent, const char *name, uint32_t mode,

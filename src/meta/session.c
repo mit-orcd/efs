@@ -201,6 +201,39 @@ int efs_session_register(struct efs_kv *kv, const uint8_t uuid[EFS_OPID_UUID_LEN
     return store_rec(kv, uuid, &r);
 }
 
+int efs_session_register_establish(struct efs_kv *kv,
+    const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch,uint32_t shard)
+{
+    if(!kv || !uuid || !epoch || shard>=EFS_SESSION_BITS)return EFS_ERR_INVAL;
+    struct efs_session_rec r;struct efs_sess_local loc={0};
+    int rc=load_rec(kv,uuid,&r);
+    if(rc)return rc;
+    /* Unlike REGISTER's old-epoch idempotence during fencing, admitting a
+     * previously absent floor always requires current ACTIVE authority. */
+    if(r.state==EFS_SESSION_FENCING)return epoch==r.epoch?EFS_ERR_BUSY:EFS_ERR_STALE;
+    if(r.state!=EFS_SESSION_ACTIVE)return EFS_ERR_PROTO;
+    if(epoch!=r.epoch)return EFS_ERR_STALE;
+    rc=load_local(kv,shard,uuid,&loc);
+    if(rc!=EFS_OK && rc!=EFS_ERR_NOT_FOUND)return rc;
+    if(epoch<loc.reject_below || epoch<loc.established)return EFS_ERR_STALE;
+    uint8_t keys[2][EFS_KV_KEY_MAX],global[EFS_SESSION_VAL],local[EFS_SESS_LOCAL_VAL];
+    uint32_t lengths[2];
+    rc=sess_key(uuid,keys[0],&lengths[0]);
+    if(!rc)rc=efs_kv_key_sess_local(shard,uuid,keys[1],&lengths[1]);
+    for(unsigned i=0;i<2 && !rc;i++) {
+        rc=efs_txn_key_exclusive(kv,keys[i],lengths[i]);
+        if(!rc)rc=efs_txn_key_guarded(kv,keys[i],lengths[i]);
+    }
+    if(rc)return rc;
+    bit_set(r.touched,shard);pack_rec(global,&r);
+    be32(local,epoch);be32(local+4,loc.reject_below);
+    struct efs_kv_item items[2]={
+        {EFS_KV_PUT,keys[0],lengths[0],global,sizeof(global)},
+        {EFS_KV_PUT,keys[1],lengths[1],local,sizeof(local)}
+    };
+    return efs_kv_batch(kv,items,2);
+}
+
 int efs_session_begin_fence(struct efs_kv *kv,
                             const uint8_t uuid[EFS_OPID_UUID_LEN])
 {

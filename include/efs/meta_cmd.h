@@ -26,6 +26,7 @@
 #define EFS_MD_CMD_PACK_ADMIT 45 /* canonical EFSUPLD1 manifest */
 #define EFS_MD_REQ_PACK_STATUS 46 /* same manifest, fresh authority only */
 #define EFS_MD_CMD_QUERY_POLICY 43 /* expected version:8, mask:4 */
+#define EFS_MD_CMD_APPEND_CATCHUP 52 /* ino/gen/epoch/published EOF + optional REPORT session */
 #define EFS_MD_REQ_QUERY_POLICY 44 /* ReadIndex only, reply index=version/salt=mask */
 #define EFS_MD_CMD_REPORT_PUBLISH 41
 #define EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED 42
@@ -69,6 +70,7 @@
  * Reply salt=1 means this phase is empty; salt=0 means one batch progressed. */
 #define EFS_MD_SESS_LEASE_EDGE_DEFERRED 16 /* staged atomic close obligation */
 #define EFS_MD_SESS_LEASE_PROBE_DEFERRED 17 /* read-only matching identity domain */
+#define EFS_MD_SESS_REGISTER_ESTABLISH 19 /* atomic admission, same Raft group only */
 #define EFS_MD_SESS_LEASE_LOCK_NEXT 14
 #define EFS_MD_SESS_LEASE_LOCK_BATCH 15
 #define EFS_MD_SESS_STORAGE_FENCE 18 /* RPC only: uuid/floor, seal every configured storage member */
@@ -152,5 +154,9 @@
  * selection/admission refused before any cleanup command was proposed.
  * An ordinary BUSY (including an uncertain submitted batch) has no marker. */
 #define EFS_MD_SESSION_CLEANUP_RETRY_SALT 2ull
+/* SESSION_APPEND_NEXT uses a distinct certificate for its read-only
+ * admission/authority/selection refusal, before transaction callbacks.
+ * It never certifies a completion or retirement transaction's BUSY. */
+#define EFS_MD_SESSION_APPEND_RETRY_SALT 3ull
 
 #endif

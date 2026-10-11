@@ -1,0 +1,7 @@
+Assertion failed: (critical_seen && data_seen && probe_seen[0] && probe_seen[1]), function slow_lane_fairness, file test.c, line 589.
+Traceback (most recent call last):
+  File "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd/tests/test_host_flow.py", line 299, in <module>
+    subprocess.run([str(binary)],check=True,timeout=10)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 528, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-host-flow-5rhpvg0p/test']' died with <Signals.SIGABRT: 6>.

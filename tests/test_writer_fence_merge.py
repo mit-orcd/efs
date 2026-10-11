@@ -118,8 +118,8 @@ static void verify(const uint8_t *p) {
     }
 }
 static int steal(uint8_t **copy,uint64_t *bg,struct efs_chunk_entry *obs,int *have) {
-    uint32_t len,off,span;uint64_t seq;int drop;
-    return dcache_steal_dirty_budgeted(1,0,copy,&len,bg,&seq,&off,&span,&drop,obs,have);
+    uint32_t len,off,span;uint64_t seq;
+    return dcache_steal_dirty_budgeted(1,0,copy,&len,bg,&seq,&off,&span,obs,have);
 }
 int main(void) {
     uint8_t *copy;uint64_t bg;struct efs_chunk_entry obs;int have;

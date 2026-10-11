@@ -4,14 +4,16 @@ from pathlib import Path
 import os,subprocess,tempfile,shlex
 root=Path(__file__).resolve().parents[1]
 s=Path(os.environ.get('EFS_SESSION_READ_SOURCE',root/'src/server/raft_host.c')).read_text()
-a=s.index('static int host_session_get_after_group(');b=s.index('/* ESTABLISH must follow',a)
+a=s.index('static int host_session_get_covered(');b=s.index('/* ESTABLISH must follow',a)
 c=r'''
 #include "efs/session.h"
 #include "efs/protocol.h"
+#include "efs/raft.h"
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
 #define HOST_SESS_REG_LEN 26
+#define HOST_SESS_HDR_LEN 18
 struct efs_raft_host {struct efs_kv *kv;};
 static int reads,session_gets,read_error,get_error;
 static struct efs_session_rec current;
@@ -28,16 +30,18 @@ int main(void) {
  uint64_t salt=0;int hint=-1;
  assert(!host_session_get(&h,query,sizeof(query),2,&hint,&salt));
  assert(reads==1&&session_gets==1&&salt==((uint64_t)5|((uint64_t)EFS_SESSION_ACTIVE<<32)|(1ull<<40)));
- reads=session_gets=0;assert(!host_session_get_after_group(&h,query,sizeof(query),2,&hint,&salt,2));assert(!reads&&session_gets==1);
+ reads=session_gets=0;assert(!host_session_get_covered(&h,query,sizeof(query),2,&hint,&salt,1u<<2));assert(!reads&&session_gets==1);
+ reads=session_gets=0;assert(!host_session_get_covered(&h,query,sizeof(query),2,&hint,&salt,1u<<0));assert(reads==1&&session_gets==1);
+ reads=session_gets=0;
  /* The proof is request-local: every ordinary next request reads again. */
- assert(!host_session_get(&h,query,sizeof(query),2,&hint,&salt));assert(reads==1&&session_gets==2);
+ assert(!host_session_get(&h,query,sizeof(query),2,&hint,&salt));assert(reads==1&&session_gets==1);
  reads=session_gets=0;read_error=EFS_ERR_BUSY;salt=99;
- assert(host_session_get_after_group(&h,query,sizeof(query),2,&hint,&salt,0)==EFS_ERR_BUSY);
+ assert(host_session_get_covered(&h,query,sizeof(query),2,&hint,&salt,0)==EFS_ERR_BUSY);
  assert(reads==1&&!session_gets&&salt==99);
  read_error=0;get_error=EFS_ERR_IO;reads=session_gets=0;
- assert(host_session_get_after_group(&h,query,sizeof(query),2,&hint,&salt,2)==EFS_ERR_IO);assert(!reads&&session_gets==1&&salt==99);
+ assert(host_session_get_covered(&h,query,sizeof(query),2,&hint,&salt,1u<<2)==EFS_ERR_IO);assert(!reads&&session_gets==1&&salt==99);
  get_error=0;current.epoch=6;current.state=EFS_SESSION_FENCING;
- assert(!host_session_get_after_group(&h,query,sizeof(query),2,&hint,&salt,2));
+ assert(!host_session_get_covered(&h,query,sizeof(query),2,&hint,&salt,1u<<2));
  assert((uint32_t)salt==6&&(uint8_t)(salt>>32)==EFS_SESSION_FENCING);
  /* Bitmap queries retain their original decoding and bounds. */
  query[18]=0;query[19]=0;query[20]=16;query[21]=0;

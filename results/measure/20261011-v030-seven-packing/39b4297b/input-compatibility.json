@@ -1,0 +1,7 @@
+{
+  "binary_source_commit": "f1c322e1b310c4901b80bd8223703c95c7243191",
+  "fixture_commit": "39b4297b",
+  "checked_production_inputs": 205,
+  "mismatches": [],
+  "live_fixture_sha256": "fd615b7b609605abe6304782d2c6cbdf25f711461675107044f73b8838afd9f6"
+}

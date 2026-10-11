@@ -54,7 +54,6 @@ static struct dcache_ent *dcache_find(uint32_t s,efs_ino_t ino,uint32_t ci) {
 static struct dcache_ent *dcache_find_meta(uint32_t s,efs_ino_t ino,uint32_t ci) { return dcache_find(s,ino,ci); }
 static uint64_t dcache_seq_next(struct dcache_ent *e) { return ++e->snap_seq; }
 static void dcache_set_dirty(struct dcache_ent *e,uint32_t s) { (void)s;e->dirty=1; }
-static void dcache_pin_add(struct dcache_ent *e) { e->pin_held=1; }
 static void dcache_note_dirty_bytes(int64_t bytes) { (void)bytes; }
 static int dcache_trace_on(void) { return 0; }
 void *efs_buf_alloc(uint32_t n) { return malloc(n); }
@@ -174,7 +173,7 @@ static void put_tests(void) {
     assert(dcache_put_now_budgeted(1,0,slot.data,CS,7,1,100,64,NULL)==EFS_ERR_STALE);
     assert(!notes && !dirty_marks && !replacements && !memcmp(&map,&before,sizeof(map)));
     assert(!slot.object_delta_len && slot.object_seq==17);
-    assert(!dcache_flush_keep(1,0,slot.data,CS,0,1,0));
+    dcache_flush_keep(1,0,slot.data,CS,0,1);
     assert(slot.dirty && slot.nrange==1 && slot.data[100]=='N');free(slot.data);
     reset();map=remote;map.ndelta=EFS_CHUNK_DELTA_MAX;add_error=EFS_ERR_NOMEM;
     remote.read_view.count=1;remote.read_view.fence_epoch=6;

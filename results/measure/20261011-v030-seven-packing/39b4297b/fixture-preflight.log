@@ -1,0 +1,3 @@
+background fixture SIGINT/SIGTERM finally cleanup PASS
+namespace fixture: five salts, exact144 distinct participants, shared-shard depth and bounded impossible placement PASS
+GC fixture: stale-zero refusal, all owned inodes, pending-work refusal and scan errors PASS

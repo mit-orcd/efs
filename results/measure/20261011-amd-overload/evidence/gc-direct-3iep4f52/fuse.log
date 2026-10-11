@@ -1,0 +1,11 @@
+2026-10-11T18:53:19.314Z efs-fuse 715b1103-deploy-normal (branch devel-amd, built 2026-10-11T17:25:15Z on amd-395), build=715b1103-deploy-normal: starting export=default mount=/data1/efs/amd-overload-20261011/mnt
+2026-10-11T18:53:19.314Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-11T18:53:19.314Z   node id=1 127.0.0.1:24210
+2026-10-11T18:53:19.314Z   node id=2 127.0.0.1:24211
+2026-10-11T18:53:19.314Z   node id=3 127.0.0.1:24212
+2026-10-11T18:53:19.314Z   node id=4 127.0.0.1:24213
+2026-10-11T18:53:19.314Z fetching metadata...
+2026-10-11T18:53:19.315Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T18:53:19.315Z export id=1 name=default
+2026-10-11T18:53:19.315Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+fusermount3: mount failed: Permission denied

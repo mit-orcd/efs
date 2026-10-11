@@ -1,0 +1,23 @@
+{
+  "source_commit": "d11973815676657e53039615634a9ac4b14c927c",
+  "checked_inputs": 929,
+  "normal_native": "PASS",
+  "fault_native": "PASS",
+  "mounted": "pending",
+  "sha256": {
+    "source-verification.json": "57807544fe851a2a82d1fe1778b5bcc7f303ec0d65f456cd908813327e529523",
+    "fault-binary-sha256.txt": "3a7b64e0a2cd67d2975f3bfbe497684fca732583d8f6ebb79054ff251bac79b8",
+    "source-commit.txt": "17811e7bf03097ae8b1a18498618c2ea972a7264db90c6a155d98df070d2f11f",
+    "normal-native.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "build-and-gates.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "fault-clean.log": "292b1515aebbb509209e0f1084f04d1a10955711d8f1407d1b921e34ba2b591f",
+    "fault-native.log": "e3cd9ac714787e7dd86d9fa7f0c1b53fffb244922bf6a08d83f283aedb4eeb8d",
+    "fault-version.txt": "e6a4f0fa524dd92ad38037abe50446e408c4fbac11eb952c18e5ebae964601b5",
+    "normal-version.txt": "402450f4628f624c5da306bd0d7515db9a87980cfaeb13c8fa4f755345e3fafe",
+    "normal-binary-sha256.txt": "de362aeef3ac80da0e9e07f5bb69d67eca6daf7963d1912440800aaaeb814cdd",
+    "normal-clean.log": "292b1515aebbb509209e0f1084f04d1a10955711d8f1407d1b921e34ba2b591f",
+    "source-inputs.json": "fd16ae3b0d30cac1f00058a8bc0d665216877822274ed5fbb2a5f005c0d607dd",
+    "normal-native.log": "5bc83447e9dd20190cb79ff4dd775e28a4e9b2c1e42ea53c8b09c531c9e0c66a",
+    "fault-native.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  }
+}

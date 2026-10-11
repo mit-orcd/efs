@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Install the W52 candidate only after native and both live gates pass."""
-import hashlib,json,os,signal,socket,subprocess,time,traceback
+import argparse,hashlib,json,os,signal,socket,subprocess,time,traceback
 from pathlib import Path
-base=Path('/data1/efs/devel-nuc-20261011');src=base/'batch-src';dst=Path('/data1/efs/src')
-out=base/'batch-install';out.mkdir(exist_ok=False)
+parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--variant',choices=('batch','clock'),default='batch');args=parser.parse_args()
+base=Path('/data1/efs/devel-nuc-20261011');src=base/(args.variant+'-src');dst=Path('/data1/efs/src')
+out=base/(args.variant+'-install');out.mkdir(exist_ok=False)
 def wait(fn,seconds,label):
     end=time.monotonic()+seconds
     while not fn():
@@ -25,6 +26,13 @@ def start(label):
         rc=subprocess.run(['bash','/data1/efs/w97-latest-20261010/start-preserved.sh'],
             env=env,stdout=log,stderr=subprocess.STDOUT,timeout=360).returncode
     assert rc==0,(label,rc)
+    def listeners():
+        for port in range(17432,17436):
+            try:
+                with socket.create_connection(('127.0.0.1',port),.3):pass
+            except OSError:return False
+        return True
+    wait(listeners,180,label+' actual listeners')
     assert all(os.path.ismount('/data1/efs/'+m) for m in ('mnt','mnt2'))
 def samples():
     prior=json.loads((base/'final-service.json').read_text())['existing_payload_samples_equal_on_both_mounts']
@@ -34,12 +42,16 @@ def samples():
     return prior
 stopped=changed=False
 try:
-    wait(lambda:(base/'batch-live/restore-exit.txt').exists(),14400,'live gate restoration')
-    for relative in ('batch-build/run-exit.txt','batch-live/run-exit.txt',
-        'batch-live/full-direct-exit.txt','batch-live/full-buffered-exit.txt'):
+    def live_restored():
+        for phase in ('build','live'):
+            assert not (base/(args.variant+'-'+phase+'/failure.txt')).exists(),phase+' failed; refuse installation'
+        return (base/(args.variant+'-live/restore-exit.txt')).exists()
+    wait(live_restored,14400,'live gate restoration')
+    for relative in (args.variant+'-build/run-exit.txt',args.variant+'-live/run-exit.txt',
+        args.variant+'-live/full-direct-exit.txt',args.variant+'-live/full-buffered-exit.txt'):
         assert (base/relative).read_text().strip()=='0',relative
-    images=json.loads((base/'batch-build/images.json').read_text());verify_images(src,images)
-    built=json.loads((base/'batch-build/source-sha256.json').read_text())
+    images=json.loads((base/(args.variant+'-build/images.json')).read_text());verify_images(src,images)
+    built=json.loads((base/(args.variant+'-build/source-sha256.json')).read_text())
     core={name:value for name,value in built.items() if name.startswith(('src/','include/')) and Path(name).suffix in ('.c','.h')}
     current={str(p.relative_to(src)):digest(p) for folder in ('src','include') for p in (src/folder).rglob('*') if p.suffix in ('.c','.h')}
     assert current==core,'candidate core changed since clean/native acceptance'
