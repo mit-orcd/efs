@@ -1,0 +1,3 @@
+first recovery mask=1 (A=1)
+B append rc=0; second recovery mask=1 (A+B expected=3)
+exit_code=2

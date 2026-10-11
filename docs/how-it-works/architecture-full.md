@@ -1483,6 +1483,13 @@ across all dimensions. This supersedes the earlier protection ladder. Current
 fixed 2+1 and three-voter metadata groups do not satisfy the four-node target;
 W74/W66 must close the gap. Never infer the accepted design from current code.
 
+### Design proposals
+
+[Scratch expiry and virtual `.efs/` commands](../status/scratch-expiry-interface.md)
+records the preferred `/scratch/.efs/help`, `ls`, `find` and `stats` interface,
+expiry presentation and proposed lifecycle design. Tracked as **W90** (expiry)
+and **W91** (`.efs/` commands); policies were subsequently accepted as D33/D34; implementation and gates remain open.
+
 ### Accepted design follow-up
 
 [D32–D35](../status/accepted-namespace-scratch-20261008.md) settle W84's current transaction
@@ -1791,6 +1798,8 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | meta-scale | **W66** · metadata leadership distribution and topology-independent routing | scalability | open — Oct 10 AMD four-voter host/engine, persistence/failover and staged leadership distribution pass; prolonged preferred-peer loss has no read errors/term churn; default two-group topology unchanged; D36 commit authority/recovery choice, routing/migration and scale remain | [evidence, phases and gates](../status/metadata-scaling.md) |
 | tiny-raft | **W93** · broader durable Raft group commit | performance | closed Oct 10 — AMD + repeated NUC batching, read-tail, atomic recovery, fault and cold gates pass; tuning opt-in | [acceptance](../status/w93-atomic-apply-20261010.md) |
 | tiny-create | **W94** · atomic CREATE plus open lease | performance / lifecycle | partial — retained FUSE CREATE/adoption, sequenced lease edges and cleanup AMD gated; REPORT session fences AMD gated; data-plane/per-publication integration and measured consensus/throughput gate remain open | [work item](#w94) |
+| scratch-expiry | **W90** · scratch-file expiry metadata and safe lifecycle | feature | design accepted D33; opt-in fixed deadlines and safe lifecycle; implementation/gates open | [work item](#w90) · [design](../status/scratch-expiry-interface.md) |
+| virtual-commands | **W91** · directory-local virtual `.efs/` command interface | usability feature | design accepted D34; `.efs/` commands and bounded query paths; implementation/compatibility gates remain | [work item](#w91) · [design](../status/scratch-expiry-interface.md) |
 | tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | partial — tiny/durable/cold/crash/churn gates pass; indexed packing and P4.1 decision remain | [work item](#w95) |
 | tiny-kv | **W96** · bounded KV WAL preallocation | performance experiment | partial — recovery/reservation/fault and final guard cold gates pass; isolated NUC acceptance owed | [work item](#w96) |
 | decisions | **D28** client-death loss policy · **D29** durable publication receipts · **D30** bounded admission/pacing | accepted design | accepted Oct 8: salvage deferred; D29/W88 implementation first, then D30/W23/W89; implementation and acceptance remain open | [contracts and gates](#d28d30--accepted-oct-8-2026) |
@@ -1892,6 +1901,25 @@ after targeted NUC acceptance; W69 correctness passes, with its unidentified
 Spark performance measurement still owed. Grouped open counts are now
 15 unfinished, 11 awaiting gates, three decisions and 18 future features:
 **47 open packages**. Earlier tables remain dated baselines.
+
+
+### Intel follow-ups — W100–W106 (indexed Oct 11, 2026)
+
+This index adds traceable IDs to the Intel acceptance follow-ups; it does not change the existing queue order or accepted design decisions. Existing sustained tiny-file performance remains W97, protection/repair W74/W66, durability W71/W73 and capacity W99.
+
+| ID | Task | Recorded state |
+| --- | --- | --- |
+| [W100](#w100) | Intel2 repeated-write POSIX timeout | Correctness/performance investigation; open. |
+| [W101](#w101) | Complete and verify the Intel two-million-file workload | Operational acceptance; in progress. |
+| [W102](#w102) | Complete Intel2 private peer and GC acceptance | Validation follow-up; blocked by W100 in the full harness. |
+| [W103](#w103) | Investigate intermittent Intel persistence and stats timeouts | Liveness/performance investigation; open. |
+| [W104](#w104) | Decide and gate writable shared mmap support | Feature scope/design follow-up; deferred, currently unsupported by specification. |
+| [W105](#w105) | Stable NFS file handles across EFS client restarts | Gateway acceptance/correctness investigation; open. |
+| [W106](#w106) | RDMA acceptance: AMD software / orcd-test hardware IB/RDMA | Open validation; test placement decided. |
+
+Pending choices retain their existing homes: W99 cache-only pressure escalation and numeric thresholds; W54 additional live-reference GC guard; W66/W74 metadata mechanism under accepted D36. W104 separately records the deferred shared-mmap scope choice. No new D number or policy acceptance is implied.
+
+**RDMA test placement — user instruction, Oct 11, 2026:** All RDMA work is tested on AMD using software RDMA, or on `orcd-test` using hardware IB/RDMA, according to the claim being validated. Keep software and hardware verdicts separate. Intel continues to provide TCP acceptance. This applies to all RDMA gates, including older W-item hardware obligations.
 
 
 ## Appendix 2 — In flight — the current handoff block
@@ -2225,12 +2253,23 @@ W84 sizing and W91 command/script clarifications.
 | --- | --- | --- |
 | D32 / W84 | Current 144-participant limit, no hardcoded directory depth; prompt atomic refusal with diagnostics; larger-operation protocol deferred. | [Contract](../status/accepted-namespace-scratch-20261008.md#d32--w84-bounded-namespace-transactions) |
 | D33 / W90 | Opt-in fixed deadlines, owner renewal within operator limits, singly linked regular files, clock-safe conditional namespace deletion. No universal TTL. | [Contract](../status/accepted-namespace-scratch-20261008.md#d33--w90-opt-in-fixed-scratch-expiry) |
-| D34 / W91 | Opt-in `.efs/` commands, initially readable Python 3 scripts using bounded versioned query paths and immutable results; real names win collisions. | [Contract](../status/accepted-namespace-scratch-20261008.md#d34--w91-directory-local-efs-commands) |
+| D34 / W91 | Opt-in `.efs/` commands, initially readable Python 3 scripts using bounded versioned query paths and immutable results; real names win collisions. User revision: `.efs/find` and `.efs/stats` replace legacy `.find`/`.stats` under W92. | [Contract](../status/accepted-namespace-scratch-20261008.md#d34--w91-directory-local-efs-commands) |
 | D35 / W81 | Sustained directory-local contention plus activity triggers spread, with hysteresis, bounded migration and measured configurable thresholds. | [Contract](../status/accepted-namespace-scratch-20261008.md#d35--w81-sustained-contention-directory-spreading) |
 
 Accepted policy does not establish deployment acceptance. Numeric W81 settings,
 query encoding and other implementation details must satisfy the linked gates;
 configured expiry TTL is an operator choice, not a selected global default.
+
+
+### RDMA test placement — accepted user instruction Oct 11, 2026
+
+All RDMA work is tested either on the AMD cluster with software RDMA or on
+`orcd-test` with hardware InfiniBand/RDMA. Hardware claims require the hardware
+environment; software results remain separately scoped. Intel is the TCP
+acceptance deployment, and its RDMA prerequisites do not block this work.
+This selects test environments, not a new storage/protection contract or an
+acceptance verdict. Track current-code transport validation under
+[W106](#w106) and preserve each related work item's gates.
 
 
 ## Appendix 4 — Work items — long-form text for the open W items and the queue rows
@@ -5043,6 +5082,8 @@ also pass, and normal binaries exclude fault strings. See the
 
 ### W69 · Lookup memo returns pre-mutation stats (queue row 0j)
 
+**Oct 10 Intel directory-binding follow-up:** A creator's cached directory name survived a peer rename: both old and new paths appeared to exist while readdir listed only the new name. Ordinary LOOKUP now obtains authoritative name binding before adopting any inode, including directories. The production lookup fixture and a primed two-host peer case retain failing old-build controls; actual-function checks pass on both Intel Linux hosts. [Repair and limits](../status/intel-peer-directory-cache-20261010.md). This does not close the broader original stale-reply/partition gate.
+
 **Targeted correctness acceptance (Oct 7):** a fault-build real LOOKUP reply
 is held across local fchmod, then released; later stat returns the new mode
 instead of a stale memo. Direct/buffered checks, immediate mutation stats,
@@ -6096,15 +6137,113 @@ small-file namespace, two cold mounts, shard-distributed queries and measured
 node/RPC work. NUC existing data is preserved. No silent limit truncation,
 client-local authoritative stats or rebuild-on-cat acceptance.
 
-Initial baseline: live NUC contains ~20 GiB logical but root `.stats` reports
-all counts/bytes zero; `.find/001.dat` returns the existing file. Existing walk
-silently caps at 65,536 entries and 128 levels. Implementation in progress;
-server index/rollups and large-tree acceptance remain required before closure.
+Commands execute on supported clients with Python 3, operate on their containing
+directory independently of working directory, and use bounded versioned server
+queries. Reading command source must not execute a query. Reuse the implemented
+server catalogs, partitioned name indexes and rollups; do not download a client
+tree or rebuild on command invocation. Background refresh uses change/time N/T
+with source watermarks, truthful age and failure diagnostics, including rename-only
+workloads. Enforce current caller permissions and authorization-safe caching;
+pin immutable per-open results without promising a whole-tree atomic snapshot.
+Expose completeness, accurate errors and explicit resource limits; support safe
+human output, JSON and NUL-safe output for unusual names.
 
-W92 Oct 8, 03:01 EDT: server catalog/RPC/FUSE integration passes private NUC
-virtual, POSIX 216/0/1, peer 64/64 and restart-oracle gates. Production deployment,
-400 GiB load/checksums and loaded/fault/NFS acceptance remain open. See latest
-find/stats checkpoint; never treat the private fixture as deployed acceptance.
+**Acceptance:** real `.efs/find` and `.efs/stats` invocation from two cold mounts,
+different working directories, symlink/noexec cases and unprivileged users;
+mutation/rename/hardlink/size freshness, permissions and revocation, immutable
+multi-read/seek, invalid arguments, output/visit/deadline/memory pressure and
+restart/leader/outage/import recovery. Update virtual-interface and POSIX/peer
+tests to the replacement commands. Verify removal of legacy synthetic interfaces
+without deleting or hiding real user entries. NFS/gateway support requires its
+own credential/path/invocation gates. Expiry filters depend on W90 implementation.
+
+NUC target remains toward 400 GiB real logical payload and a large small-file
+namespace, preserving existing data. Measure node/RPC work, loaded latency and
+RSS; retain checksums and exact builds. No silent truncation or unmeasured
+performance acceptance.
+
+**Historical implementation evidence:** activated on `devel-find-stats` from
+`e86b85ac`; server catalog/RPC/FUSE integration passed private virtual gates,
+POSIX 216/0/1, peer 64/64 and restart-oracle tests. Merged code `c22754236b38`
+was deployed to NUC Oct 8; both mounts passed stats and write/fsync/peer-read/find
+smoke checks using the legacy interfaces. This is reusable engine evidence,
+not acceptance of `.efs/find` or `.efs/stats`. Replacement command implementation,
+large-tree/load/checksum and remaining fault/gateway gates stay open.
+
+
+<a id="w90"></a>
+
+### W90 · Scratch-file expiry metadata and safe lifecycle
+
+**Policy accepted Oct 8 (D33):** opt-in fixed expiry, no universal TTL, owner renewal within operator limits, singly linked regular files and safe conditional namespace deletion. This supersedes the initial open-policy discussion below; implementation remains open. [Contract](../status/accepted-namespace-scratch-20261008.md#d33--w90-opt-in-fixed-scratch-expiry).
+
+**Class/state:** feature; accepted D33 policy, implementation open. Recorded Oct 8, 2026 at the user's request.
+No universal default retention period is selected. The proposal below is historical; the accepted D33 contract governs.
+[Design and open decisions](../status/scratch-expiry-interface.md#proposed-expiry-metadata-and-policy).
+
+**Scope:** explicit replicated file deadlines, directory-default TTL for new files,
+inspection and authorized renewal/clearing, a durable shard-local deadline index,
+and bounded conditional namespace deletion followed by ordinary GC. Preserve
+POSIX timestamps and open-unlinked lifetime; distinguish due, removed and physically
+reclaimed. Bind expiry to FileID and policy revision so renewal, rename and path
+reuse cannot turn stale work into deletion of a different file. Expose effective
+expiry to W91 and optionally through a defined extended attribute.
+
+**Next:** resolve hard-link and symlink behavior, directory inheritance, policy
+ownership and retention limits, renewal races, clock uncertainty and recovery.
+Audit active namespace/open-reference/GC integration, including W72/W86 and the
+[GC checkpoint](../status/gc-implementation-20261007.md). Age alone never authorizes
+deletion of unpublished fragments; expiry must retain existing authority fences.
+Fixed deadlines and singly linked regular files are proposed initial scope,
+not a settled policy. Do not make clock-based leader leases a dependency.
+
+**Gate:** focused renewal/deletion, path-reuse, rename, hard-link, open-file and
+concurrent-publication tests; clock jumps, leader change, restart, retries and
+offline storage-member fault gates. Bound worker/index resource use, verify
+namespace coherence and physical reclamation independently, and run existing
+POSIX/peer suites. Record build identity and retained evidence before closure.
+
+
+<a id="w91"></a>
+
+### W91 · Directory-local virtual .efs command interface
+
+**Policy accepted Oct 8 (D34):** opt-in `.efs/` commands, initially readable Python 3 scripts with bounded versioned query paths and immutable results. Real entries take precedence; NFS support requires separate gates. This supersedes the initial open-policy discussion below; implementation remains open. [Contract](../status/accepted-namespace-scratch-20261008.md#d34--w91-directory-local-efs-commands).
+
+**Class/state:** usability feature; accepted D34 policy. The Oct 8 proposal below is historical; W92 and its newer evidence govern implemented find/stats commands. Remaining expiry/help/list and compatibility gates retain their separate scope.
+[Interface design](../status/scratch-expiry-interface.md#preferred-user-experience).
+
+```sh
+/scratch/.efs/help
+/scratch/.efs/ls
+/scratch/.efs/find --expires-within 2d
+/scratch/.efs/stats
+```
+
+**Scope:** a synthetic read-only `.efs/` directory containing executable command
+bytes, with commands scoped to the containing directory regardless of current
+working directory. Provide discoverable help, expiry-aware listings, bounded
+find queries and readable statistics. Human output distinguishes never, due,
+pending deletion and unavailable; offer exact timestamps and safe machine output.
+The client OS executes scripts; reading their source must not execute queries.
+Keep structured data/query interfaces separate. `.efs/find` and `.efs/stats`
+replace the legacy synthetic interfaces under W92; compatibility is not required.
+
+**Next:** specify interpreter/platform support, argument/query transport without
+an installed EFS utility, reserved-name collisions, noexec behavior, symlink and
+NFS path resolution, versioning and feature disable semantics. Reuse the
+[virtual-find/stats correctness requirements](../status/virtual-find-stats.md),
+including server-owned indexes/rollups, permission-safe caching, immutable per-open
+snapshots, freshness and explicit limits. W90 supplies expiry metadata; help and
+non-expiry listing/statistics can be designed independently. Do not filter a full
+client-downloaded tree as the implementation of a bounded server query.
+
+**Gate:** real command invocation from different working directories, filenames
+with whitespace/newlines/control characters, argument safety, interpreter/noexec
+and supported gateway clients. Verify unprivileged access, permission changes,
+snapshot coherence/freshness, explicit partial/error outcomes and bounded memory,
+RPC work and runtime. Cover namespace collisions and feature transitions; run
+existing virtual-interface and POSIX/peer checks with exact build evidence.
 
 <a id="w93"></a>
 
@@ -6251,6 +6390,16 @@ new end-to-end batching acceptance. See
 
 **Class/status:** Performance; **closed Oct 10** for bounded follower batching and the recorded AMD/NUC acceptance. Durable ACK ordering, persistence fencing, committed-prefix protection and atomic apply recovery pass fault/cold/POSIX/peer gates. Repeated NUC gains and the larger matched idle-read matrix complete the remaining acceptance. Optional experiments remain off by default; rejected group scheduling/early retirement are not adopted.
 
+**Historical pre-merge devel review (`cde67dca`, Oct 8):** leader proposal holds and disk sync
+coalescing already exist, as do multi-entry follower batches and KV apply holds.
+The remaining target is serial processing across follower requests. Deferring
+sync around `drain_inbox` alone is unsafe because each receive can apply state
+and emit messages before returning; gate visibility/replies and hard-state
+persistence as well as data ACKs. Devel still uses `fsync` and has no Raft
+preallocation; round-7 `fdatasync`/allocation numbers describe an unmerged
+candidate. [Reviewed baseline and order](../status/tiny-file-performance-plan-20261008.md#review-against-devel-oct-8).
+
+
 **Evidence:** NUC round 7, `c22754236b38-tiny-r7`, buffered/TCP. In an eight-second
 instrumented window, n3 pump thread 1746498 completed 1,024 Raft `fdatasync`
 calls totaling 7.394 s (mean 7.22 ms). This is one thread's measured syscall
@@ -6287,6 +6436,16 @@ existing preallocation experiment closes this item.
 
 **Class/status:** Client/server metadata performance; partial implementation. Atomic server ownership, retained client adoption/lease edges and rejected-descriptor cleanup are AMD tested. Full session/data-plane integration and the measured performance acceptance gate remain open.
 
+**Historical pre-merge devel review (`cde67dca`, Oct 8):** the flags-0/separate-HOLD observation
+still applies. CREATE reply reuse is also absent from devel. The existing
+hold flag is atomic only on the ordinary CREATE-command path: first-use
+cross-group HASHED/SPLITTING lanes use a namespace transaction followed by a
+separate lease proposal, while early opid replay bypasses that second step.
+Add interruption/replay at that boundary, both directory paths, and post-create
+GETATTR/FUSE-reply cleanup to the gates. Existing per-inode edge locks do not
+alone prove safe CREATE lease adoption. [Review](../status/tiny-file-performance-plan-20261008.md#review-against-devel-oct-8).
+
+
 **Original evidence (before the Oct 9 client integration):** `efs_fuse_create_at` passes flags 0 to CREATE, then
 `efs_open_acquire` sends a separate HOLD for the first local open. The protocol
 and server already recognize `EFS_CREATE_F_HOLD`. Round 7 generator `openat`
@@ -6319,6 +6478,15 @@ open latency as a measured saving.
 
 **Implementation update (Oct 8):** Independent tiny geometry, durable cohort latency, retained/cold/process-crash experiments and production churn are tested. An independent indexed-packing protocol and any production-format decision remain open.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
+
+**Pre-merge devel review (`cde67dca`, Oct 8):** extend the existing independent
+`storage_principles.c` file/container, read/write/delete and persistence suite;
+do not recreate it. Its parser accepts only 4-KiB-multiple payloads. Model
+1–512-byte logical files separately from export-sized physical fragments,
+checksum tails, zero suppression and production ancestor-directory barriers.
+Measure every record's time to its durable batch completion; current per-op
+latency includes the barrier only on the boundary operation. Mixed churn and
+cold-recovery experiments remain required. [Review](../status/tiny-file-performance-plan-20261008.md#review-against-devel-oct-8).
 
 **Class/status:** Storage performance experiment; partial implementation. Tiny logical/physical geometry, durable cohort timing, retained/cold/crash principles and production churn are tested. Independent indexed packing and any production layout selection remain P4.1 work; no migration is activated.
 
@@ -6359,6 +6527,17 @@ equivalent protocol, or deploy a layout by wiping the preserved test stores.
 **Implementation update (Oct 8):** EOF-tail repair, detectable interior-damage refusal, sticky failures and bounded reservation are tested. The final guard passes full Linux/live cold/POSIX/peer/GC gates. Quiet NUC two-device performance acceptance remains open while an unrelated million-file generator runs.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
+**Pre-merge devel review (`cde67dca`, Oct 8): recovery correctness comes first.** Neither
+Raft nor KV preallocation from the experimental build is in devel. WAL replay
+stops at an invalid tail but does not repair it or return the valid EOF; the
+next open appends behind it. A production-WAL reproduction recovered A,
+accepted/synced B after the bad tail, then recovered only A on the next replay.
+Fix or reject the tail before new appends and add repeated-restart gates before
+preallocation. This is proven at the WAL layer; cluster-level recovery/data-loss
+consequences still need testing. Existing WAL group commit/holds must be
+preserved. [Reproducer](../../results/measure/20261008-w93-w96-review/README.md)
+and [review](../status/tiny-file-performance-plan-20261008.md#review-against-devel-oct-8).
+
 **Class/status:** Metadata storage performance; implemented with final gates pending. EOF-tail repair, detectable interior-damage refusal, sticky failures and bounded logical-EOF reservation are tested. Final guard live cold/POSIX/peer gates pass; isolated NUC two-device performance acceptance remains open.
 
 **Evidence:** the loaded n3 KV WAL sync mean was 12.1 ms before round 7 and
@@ -6389,6 +6568,8 @@ or present the Raft improvement as measured KV acceptance.
 <a id="w97"></a>
 
 ### W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
+
+**Oct 11 Intel resume follow-up:** A large-directory inventory could cycle indefinitely because READDIR discarded a source-only continuation when its name was empty. The actual callback now preserves that source; old-source regressions fail and both native Intel regressions pass. The deployed wire probe reaches EOF with 92,557 entries in 1.580 seconds, and full FUSE enumeration returns the same count in 1.183 seconds. This repairs enumeration termination, not sustained write latency; W97 remains open. [Cursor repair and limits](../status/intel-readdir-source-cursor-20261011.md).
 
 **Oct 10 matched three-node drive test:** same frozen `6b8f05acb484` engine,
 20 minutes per drive, true three-voter groups, preserved regular cluster stopped.
@@ -6737,6 +6918,97 @@ remains separate implementation work.
 **Gate:** constrained-capacity tests for every topology, shared writers, byte/
 inode/quota pressure, cold restart, acknowledged-data integrity and recovery.
 See [policy and pending details](../status/storage-pressure-read-only-20261009.md).
+
+
+### Intel follow-ups indexed Oct 11, 2026
+
+These IDs track the previously unnumbered Intel follow-ups. They do not duplicate W97, W74/W66, W71/W73 or W99, and do not approve new feature scope or settle pending policy choices. Evidence baseline: [Intel deployment acceptance](../status/intel-deployment-acceptance-20261011.md).
+
+<a id="w100"></a>
+
+### W100 · Intel2 repeated-write POSIX timeout
+
+**Class/state:** Correctness/performance investigation; open.
+
+**Evidence/current state:** The deployed Intel build passes 213/214 private core cases on two unchanged attempts. `mtime_monotonic_many_writes` exceeds the original 30-second limit while the production tiny-file writer is active. Production core passes 214/214. Harness overlap is not necessary for the private failure; its cause remains unproved.
+
+**Remaining action:** Capture per-operation write/close/stat timing and server persistence/queue evidence, isolate the cause, and implement a causal repair. W52/W53/W97 are related investigations, not established diagnoses.
+
+**Gate:** Repeat the unchanged private case and full core suite under the concurrent production workload, retaining the 30-second limit, exact payload checks and original failure evidence.
+
+<a id="w101"></a>
+
+### W101 · Complete and verify the Intel two-million-file workload
+
+**Class/state:** Operational acceptance; in progress.
+
+**Evidence/current state:** Intel1 completed exactly 1,000,000 total files with exit 0. At 2026-10-11T02:45:11Z, Intel2 reported 551,734/1,000,000 total files and an active writer. This is a dated observation, not a live status guarantee.
+
+**Remaining action:** Let the existing locked Intel2 resume job reach its total target, check terminal status and strict inventory, and verify preserved payload samples. Do not create another million on Intel1 or discard existing files.
+
+**Gate:** Both jobs terminate successfully at 1,000,000 total files per host; strict inventories and immutable sample size/SHA256 checks pass. Counts alone do not establish payload integrity.
+
+<a id="w102"></a>
+
+### W102 · Complete Intel2 private peer and GC acceptance
+
+**Class/state:** Validation follow-up; blocked by W100 in the full harness.
+
+**Evidence/current state:** Both Intel2 private attempts stop after the 213/214 core verdict; later peer and post-POSIX GC gates are NOTRUN. Production wired peer passes 66/66, but does not substitute for these private gates.
+
+**Remaining action:** Exercise independent remaining gates while preserving the failing aggregate verdict if needed; after W100 is repaired, repeat the entire unchanged private harness. Retain code/build identity and individual verdicts.
+
+**Gate:** Full Intel2 private core, peer, reclamation, quota, cold restart and fencing gates pass without skipping or masking the W100 failure.
+
+<a id="w103"></a>
+
+### W103 · Investigate intermittent Intel persistence and stats timeouts
+
+**Class/state:** Liveness/performance investigation; open.
+
+**Evidence/current state:** Intel1 initially timed out at the 60-second many-files persistence preparation limit and the 30-second virt_stats_readable limit. Unchanged repeats passed. The stats repeat used an available older snapshot with a BUSY refresh warning; no causal repair or universal freshness guarantee is established.
+
+**Remaining action:** Correlate storage, queue and query refresh timings; obtain bounded reproducible evidence and fix any demonstrated cause. Persistence relates to W53/W97; command snapshot semantics remain W91/W92.
+
+**Gate:** Repeated unchanged-limit cold persistence and command tests under representative load, retaining original failures and reporting snapshot age/refresh errors honestly.
+
+<a id="w104"></a>
+
+### W104 · Decide and gate writable shared mmap support
+
+**Class/state:** Feature scope/design follow-up; deferred, currently unsupported by specification.
+
+**Evidence/current state:** The POSIX extras suite intentionally skips writable shared mmap. This is not a newly established regression, and assigning this number does not authorize changing the current support contract.
+
+**Remaining action:** Record whether writable shared mmap is required. If selected, specify dirty-page publication, synchronization, peer coherence, error propagation and durability before implementation; otherwise document the explicit deferred support boundary.
+
+**Gate:** For implemented support, real shared mappings pass publication, concurrent peer, synchronization and cold-byte tests. Until then retain the explicit unsupported skip.
+
+<a id="w105"></a>
+
+### W105 · Stable NFS file handles across EFS client restarts
+
+**Class/state:** Gateway acceptance/correctness investigation; open.
+
+**Evidence/current state:** The product-gap record retains an Oct 5 macOS NFS cached-entry rename EIO after gateway restart while other operations remained usable. The mechanism is unproved; broader NFS evidence does not close restart/file-handle acceptance.
+
+**Remaining action:** Trace kernel export/decode, inode generation and gateway lifetime; reproduce and repair the demonstrated restart behavior. Preserve existing payloads and separate native FUSE from NFS verdicts.
+
+**Gate:** Named macOS and Linux NFS clients retain cached handles across a cold EFS gateway restart, with stat/read/readdir/create/rename and exact preserved-byte checks.
+
+<a id="w106"></a>
+
+### W106 · RDMA acceptance on AMD software RDMA and orcd-test hardware IB/RDMA
+
+**Class/state:** Transport validation; open. Test placement decided by the user Oct 11, 2026.
+
+**Governing test policy:** All RDMA work is tested on the AMD cluster using software RDMA, or on `orcd-test` using hardware InfiniBand/RDMA. Select the environment appropriate to the claim; software acceptance does not establish hardware acceptance. This policy applies to RDMA gates throughout the backlog, not just W106.
+
+**Evidence/current state:** AMD software-RXE functional evidence already exists; current-code distributed and hardware acceptance must retain their own named gates. Intel remains the TCP acceptance deployment. Its 5 Gb/s links and absence of exposed RDMA devices/software modules do not block RDMA testing on the designated environments.
+
+**Remaining action:** Run relevant current-code software RDMA gates on AMD and hardware IB/RDMA gates on `orcd-test`, retaining actual transport/device, code/build, topology and per-suite verdict evidence. Intel RDMA enablement or NIC/package changes are not part of this task.
+
+**Gate:** Actual cross-host RDMA connection/device evidence plus unchanged POSIX, peer, direct-I/O, persistence and fault gates on the designated environment. Report AMD software and `orcd-test` hardware verdicts separately; neither TCP nor software-only results close hardware-specific obligations.
 
 
 ## Appendix 5 — Naming

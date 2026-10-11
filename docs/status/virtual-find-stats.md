@@ -256,3 +256,12 @@ independent oracle. Same-parent name binding and canonical path rendering defect
 were fixed. Main NUC is **not yet deployed**; its old stats/walk behavior remains.
 See the latest checkpoint and query-rpc evidence for explicit budgets, aggregate
 permission policy, retained failures and pending loaded/scale/fault/NFS gates.
+
+## Related interface proposal
+
+[Scratch expiry and virtual `.efs/` commands](scratch-expiry-interface.md)
+tracks [W90](../backlog/work-items.md#w90) expiry and
+[W91](../backlog/work-items.md#w91), the user's preference for directory-local executable `help`, `ls`,
+`find` and `stats` under `.efs/`. It proposes retaining the existing readable
+interfaces initially and sharing permission-safe server snapshots/queries.
+The new interface is not implemented and does not close the gates above.

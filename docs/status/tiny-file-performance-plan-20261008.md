@@ -1,27 +1,108 @@
 # Tiny-file performance follow-up — W93–W96
 
-**Current implementation (Oct 8):** The review below describes the pre-merge baseline. W93 batching/fault fixes, W94 atomic server leases, W95 tiny principles/durable timing, and W96 tail repair/reservation are now implemented and tested in focused portions. Client adoption, churn/recovery experiments and remaining performance acceptance are still open. [Current checkpoint](w93-w96-implementation-20261008.md).
+**Historical implementation checkpoint (Oct 8):** The review below describes the pre-merge baseline. W93 batching/fault fixes, W94 atomic server leases, W95 tiny principles/durable timing, and W96 tail repair/reservation are now implemented and tested in focused portions. Client adoption, churn/recovery experiments and remaining performance acceptance are still open. [Current checkpoint](w93-w96-implementation-20261008.md).
 
+
+**Current status:** W93 closed Oct 10 under [its final acceptance](w93-atomic-apply-20261010.md); W94–W96 retain separate obligations in the work queue. The review and WAL failure below describe the dated pre-merge source, not current defects.
 
 Registered Oct 8, 2026 after seven NUC profiling/implementation rounds.
 All four items are **open investigations/experiments**, not completed fixes.
-The current experimental deployment is `c22754236b38-tiny-r7` on
-`devel-find-stats`; source changes remain uncommitted in the isolated
-`efs-find-stats` worktree. These documents do not mean the devel checkout
-contains or has accepted that candidate.
+The round-7 experimental code and its retained evidence were committed as
+`e6926d85` and merged into `devel` as `d4e70492` on Oct 8. The import includes
+CREATE reply reuse, WAL/Raft `fdatasync`, already-durable Raft barrier avoidance,
+and bounded Linux Raft preallocation. These are now part of devel; this does
+not close W93–W96 or fix the W96 invalid-tail recovery defect.
 
-| W | Scope | Next action |
+The source review below deliberately records the **pre-merge** `cde67dca`
+baseline. Its statements that those optimizations were absent/unmerged are
+historical and superseded by the import above. Focused merged AMD Linux
+Raft-store/core, KV-LSM, CREATE, tail-parser and open-lease regressions passed;
+no new live-cluster deployment or performance comparison is claimed.
+
+## Review against devel, Oct 8
+
+Reviewed committed `devel` at `cde67dca` (production source unchanged from
+`e1f44cc2` by the documentation merge). The unrelated working-tree W90–W92
+edits are not implementation evidence. This is a source review and a local
+WAL recovery reproduction; no new cluster performance results are claimed.
+
+| W | What devel already has | Corrected remaining work |
 |---|---|---|
-| [W93](../backlog/work-items.md#w93) | Broader durable Raft group commit | Attribute barriers and test bounded batching across queued requests. |
-| [W94](../backlog/work-items.md#w94) | Atomic CREATE plus open lease | Remove the separate HOLD round while proving lease-adoption races safe. |
-| [W95](../backlog/work-items.md#w95) | Tiny-file data persistence and packing | Compare independent storage principles in efs-bench; refine P4.1. |
-| [W96](../backlog/work-items.md#w96) | KV WAL preallocation | Adapt logical EOF/recovery correctly, then measure the KV workload. |
+| [W93](../backlog/work-items.md#w93) | Leader proposal holds, disk sync coalescing, multi-entry follower AppendEntries batching, and KV apply holds. | Measure the remaining serialized follower request barriers; design bounded cross-request durability/visibility gating. |
+| [W94](../backlog/work-items.md#w94) | CREATE/HOLD flag and first-open/last-close lease serialization, but FUSE still creates with flags 0 then acquires HOLD. | Audit replay and hashed-directory lease atomicity, then prove safe client adoption. CREATE reply reuse is a separate unmerged precursor. |
+| [W95](../backlog/work-items.md#w95) | Independent file/container read/write/delete principles with persistence modes, plus durable production PUTs. | Extend the existing experiments for sub-4-KiB logical payloads, physical fragment geometry, durable completion latency and sustained churn. |
+| [W96](../backlog/work-items.md#w96) | KV WAL group commit and holds; O_APPEND; no KV or Raft preallocation in this branch. | Fix recovery-tail handling first, then measure bounded reservation without confusing allocation, logical EOF and durability. |
 
-W93 and W94 are the recommended first priorities within this set. W96 is a
-narrower storage experiment; W95's format/packing alternatives need more design
-and recovery work. This records a proposal, not a promise of a particular rate.
-W90 is scratch expiry, W91 is `.efs/` command infrastructure, and W92 is
-`.efs/find`/`.efs/stats`; their scopes and acceptance remain separate.
+**Priority correction:** fix and gate the W96 recovery prerequisite below
+before storage-performance changes. Then scope W94's reply reuse and atomic
+lease work, and measure W93's follower barrier cost before choosing a batching
+protocol. W95 can proceed independently with the benchmark owner; KV
+preallocation remains an experiment after recovery is correct. All four
+packages remain open. W90–W92 retain their existing scopes.
+
+### Baseline and code findings
+
+1. **The round-7 candidate is not the devel baseline.**
+   [Raft log](../../src/raft/raft_log.c) and [KV WAL](../../src/kv/kv_wal.c)
+   still call `fsync`; neither contains the candidate's allocation logic.
+   [CREATE](../../src/client/efs_fuse.c) still uses `lookup_fill` after
+   `efs_fuse_create_at`, which obtains attributes through the ordinary path;
+   `efs_client_create_result` discards the returned inode after staging it.
+   Reusing the CREATE reply is not present. The subsequent devel deadline
+   fixes do not implement any of W93–W96. The old NUC numbers describe the
+   experimental source patch, not measured current-develop performance.
+2. **W93 must extend existing batching.** `host_propose` already uses shared
+   disk holds, quiet local append and a bounded yield loop before release;
+   `raft.c:on_ae_req` batches entries within one received request.
+   `drain_inbox` still processes requests serially. Its receiver applies
+   committed entries and emits replies before returning, so wrapping the
+   inbox in a larger disk hold alone is unsafe: persistence dependencies
+   must cover application/read visibility, successful replies and hard-state
+   messages, including mixed groups, duplicates, conflicting tails and term
+   changes. Preserve existing durable-byte/index tracking.
+3. **W94's flag is not universally atomic.** The ordinary CREATE command can
+   include the hold. First-use cross-group HASHED/SPLITTING directory lanes
+   instead call `host_hashed_create_txn`, then issue a separate lease proposal.
+   The earlier `host_opid_replay` return bypasses that post-create lease step.
+   Test a retry after the namespace transaction commits but before the lease
+   proposal completes; the existing flag is not proof of an atomic replayable
+   CREATE/open operation. Client `open_edge_mu` protects known-inode local
+   opens/closes, but does not itself cover a CREATE reply before adoption.
+   Also close local/server resources if post-create attribute lookup or the
+   FUSE reply fails. Test ordinary and first-use cross-group paths separately.
+4. **W95 has substantial benchmark infrastructure already.**
+   [storage_principles.c](../../src/bench/storage_principles.c) implements the
+   file/container and persistence comparisons; its payload parser currently
+   rejects nonmultiples of 4096, so 1–512-byte logical files need an explicit
+   workload model. The production span writer still encodes export-sized
+   fragment bodies (64 KiB at default geometry), with 32-byte buffered or
+   4-KiB direct checksum tails. Count zero-fragment suppression and actual PUTs
+   rather than inferring three physical writes per application write.
+   Production `finish_fragment_put` syncs the body and every ancestor directory;
+   the principle driver syncs its worker directory, so document that geometry
+   difference. Batch-mode operation latency includes sync only at a batch
+   boundary; it does not measure each earlier record's time to durable completion.
+   Add that measurement before claiming durable p99 improvement, plus mixed
+   churn and cold-recovery experiments. Keep the engines independent.
+5. **W96 has a correctness prerequisite, reproduced locally.**
+   `kv_wal_replay` stops at an invalid/truncated record without repairing the
+   tail or returning the valid byte end; `kv_wal_open` then appends at physical
+   EOF. The LSM open path invokes exactly replay followed by open. A focused
+   production-WAL reproduction writes and syncs A, injects an invalid tail,
+   replays A, successfully appends/syncs B, then replays only A on the next
+   recovery. This establishes a WAL recovery defect; it does not establish
+   end-to-end cluster data loss, since Raft/rebuild behavior needs its own gate.
+   Repair/reject the tail before accepting new records and test the second
+   restart. Exercise short writes, allocation failure, reset/compaction and
+   concurrency as well. If reservation extends file size, explicit logical
+   offsets and recovery-tail handling are mandatory; merely changing the
+   allocation call or retaining O_APPEND behind an extended EOF is insufficient.
+   [Reproducer and observed output](../../results/measure/20261008-w93-w96-review/README.md).
+
+Functional production gates continue on AMD direct-I/O/TCP by default.
+Reproduce the NUC per-device performance comparisons separately on equivalent
+storage placement. Broader transport/I/O coverage belongs at the batch boundary
+or where a change specifically affects that mode.
 
 ## Measured starting point
 

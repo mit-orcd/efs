@@ -3861,15 +3861,113 @@ small-file namespace, two cold mounts, shard-distributed queries and measured
 node/RPC work. NUC existing data is preserved. No silent limit truncation,
 client-local authoritative stats or rebuild-on-cat acceptance.
 
-Initial baseline: live NUC contains ~20 GiB logical but root `.stats` reports
-all counts/bytes zero; `.find/001.dat` returns the existing file. Existing walk
-silently caps at 65,536 entries and 128 levels. Implementation in progress;
-server index/rollups and large-tree acceptance remain required before closure.
+Commands execute on supported clients with Python 3, operate on their containing
+directory independently of working directory, and use bounded versioned server
+queries. Reading command source must not execute a query. Reuse the implemented
+server catalogs, partitioned name indexes and rollups; do not download a client
+tree or rebuild on command invocation. Background refresh uses change/time N/T
+with source watermarks, truthful age and failure diagnostics, including rename-only
+workloads. Enforce current caller permissions and authorization-safe caching;
+pin immutable per-open results without promising a whole-tree atomic snapshot.
+Expose completeness, accurate errors and explicit resource limits; support safe
+human output, JSON and NUL-safe output for unusual names.
 
-W92 Oct 8, 03:01 EDT: server catalog/RPC/FUSE integration passes private NUC
-virtual, POSIX 216/0/1, peer 64/64 and restart-oracle gates. Production deployment,
-400 GiB load/checksums and loaded/fault/NFS acceptance remain open. See latest
-find/stats checkpoint; never treat the private fixture as deployed acceptance.
+**Acceptance:** real `.efs/find` and `.efs/stats` invocation from two cold mounts,
+different working directories, symlink/noexec cases and unprivileged users;
+mutation/rename/hardlink/size freshness, permissions and revocation, immutable
+multi-read/seek, invalid arguments, output/visit/deadline/memory pressure and
+restart/leader/outage/import recovery. Update virtual-interface and POSIX/peer
+tests to the replacement commands. Verify removal of legacy synthetic interfaces
+without deleting or hiding real user entries. NFS/gateway support requires its
+own credential/path/invocation gates. Expiry filters depend on W90 implementation.
+
+NUC target remains toward 400 GiB real logical payload and a large small-file
+namespace, preserving existing data. Measure node/RPC work, loaded latency and
+RSS; retain checksums and exact builds. No silent truncation or unmeasured
+performance acceptance.
+
+**Historical implementation evidence:** activated on `devel-find-stats` from
+`e86b85ac`; server catalog/RPC/FUSE integration passed private virtual gates,
+POSIX 216/0/1, peer 64/64 and restart-oracle tests. Merged code `c22754236b38`
+was deployed to NUC Oct 8; both mounts passed stats and write/fsync/peer-read/find
+smoke checks using the legacy interfaces. This is reusable engine evidence,
+not acceptance of `.efs/find` or `.efs/stats`. Replacement command implementation,
+large-tree/load/checksum and remaining fault/gateway gates stay open.
+
+
+<a id="w90"></a>
+
+## W90 · Scratch-file expiry metadata and safe lifecycle
+
+**Policy accepted Oct 8 (D33):** opt-in fixed expiry, no universal TTL, owner renewal within operator limits, singly linked regular files and safe conditional namespace deletion. This supersedes the initial open-policy discussion below; implementation remains open. [Contract](../status/accepted-namespace-scratch-20261008.md#d33--w90-opt-in-fixed-scratch-expiry).
+
+**Class/state:** feature; accepted D33 policy, implementation open. Recorded Oct 8, 2026 at the user's request.
+No universal default retention period is selected. The proposal below is historical; the accepted D33 contract governs.
+[Design and open decisions](../status/scratch-expiry-interface.md#proposed-expiry-metadata-and-policy).
+
+**Scope:** explicit replicated file deadlines, directory-default TTL for new files,
+inspection and authorized renewal/clearing, a durable shard-local deadline index,
+and bounded conditional namespace deletion followed by ordinary GC. Preserve
+POSIX timestamps and open-unlinked lifetime; distinguish due, removed and physically
+reclaimed. Bind expiry to FileID and policy revision so renewal, rename and path
+reuse cannot turn stale work into deletion of a different file. Expose effective
+expiry to W91 and optionally through a defined extended attribute.
+
+**Next:** resolve hard-link and symlink behavior, directory inheritance, policy
+ownership and retention limits, renewal races, clock uncertainty and recovery.
+Audit active namespace/open-reference/GC integration, including W72/W86 and the
+[GC checkpoint](../status/gc-implementation-20261007.md). Age alone never authorizes
+deletion of unpublished fragments; expiry must retain existing authority fences.
+Fixed deadlines and singly linked regular files are proposed initial scope,
+not a settled policy. Do not make clock-based leader leases a dependency.
+
+**Gate:** focused renewal/deletion, path-reuse, rename, hard-link, open-file and
+concurrent-publication tests; clock jumps, leader change, restart, retries and
+offline storage-member fault gates. Bound worker/index resource use, verify
+namespace coherence and physical reclamation independently, and run existing
+POSIX/peer suites. Record build identity and retained evidence before closure.
+
+
+<a id="w91"></a>
+
+## W91 · Directory-local virtual .efs command interface
+
+**Policy accepted Oct 8 (D34):** opt-in `.efs/` commands, initially readable Python 3 scripts with bounded versioned query paths and immutable results. Real entries take precedence; NFS support requires separate gates. This supersedes the initial open-policy discussion below; implementation remains open. [Contract](../status/accepted-namespace-scratch-20261008.md#d34--w91-directory-local-efs-commands).
+
+**Class/state:** usability feature; accepted D34 policy. The Oct 8 proposal below is historical; W92 and its newer evidence govern implemented find/stats commands. Remaining expiry/help/list and compatibility gates retain their separate scope.
+[Interface design](../status/scratch-expiry-interface.md#preferred-user-experience).
+
+```sh
+/scratch/.efs/help
+/scratch/.efs/ls
+/scratch/.efs/find --expires-within 2d
+/scratch/.efs/stats
+```
+
+**Scope:** a synthetic read-only `.efs/` directory containing executable command
+bytes, with commands scoped to the containing directory regardless of current
+working directory. Provide discoverable help, expiry-aware listings, bounded
+find queries and readable statistics. Human output distinguishes never, due,
+pending deletion and unavailable; offer exact timestamps and safe machine output.
+The client OS executes scripts; reading their source must not execute queries.
+Keep structured data/query interfaces separate. `.efs/find` and `.efs/stats`
+replace the legacy synthetic interfaces under W92; compatibility is not required.
+
+**Next:** specify interpreter/platform support, argument/query transport without
+an installed EFS utility, reserved-name collisions, noexec behavior, symlink and
+NFS path resolution, versioning and feature disable semantics. Reuse the
+[virtual-find/stats correctness requirements](../status/virtual-find-stats.md),
+including server-owned indexes/rollups, permission-safe caching, immutable per-open
+snapshots, freshness and explicit limits. W90 supplies expiry metadata; help and
+non-expiry listing/statistics can be designed independently. Do not filter a full
+client-downloaded tree as the implementation of a bounded server query.
+
+**Gate:** real command invocation from different working directories, filenames
+with whitespace/newlines/control characters, argument safety, interpreter/noexec
+and supported gateway clients. Verify unprivileged access, permission changes,
+snapshot coherence/freshness, explicit partial/error outcomes and bounded memory,
+RPC work and runtime. Cover namespace collisions and feature transitions; run
+existing virtual-interface and POSIX/peer checks with exact build evidence.
 
 <a id="w93"></a>
 
@@ -4016,6 +4114,16 @@ new end-to-end batching acceptance. See
 
 **Class/status:** Performance; **closed Oct 10** for bounded follower batching and the recorded AMD/NUC acceptance. Durable ACK ordering, persistence fencing, committed-prefix protection and atomic apply recovery pass fault/cold/POSIX/peer gates. Repeated NUC gains and the larger matched idle-read matrix complete the remaining acceptance. Optional experiments remain off by default; rejected group scheduling/early retirement are not adopted.
 
+**Historical pre-merge devel review (`cde67dca`, Oct 8):** leader proposal holds and disk sync
+coalescing already exist, as do multi-entry follower batches and KV apply holds.
+The remaining target is serial processing across follower requests. Deferring
+sync around `drain_inbox` alone is unsafe because each receive can apply state
+and emit messages before returning; gate visibility/replies and hard-state
+persistence as well as data ACKs. Devel still uses `fsync` and has no Raft
+preallocation; round-7 `fdatasync`/allocation numbers describe an unmerged
+candidate. [Reviewed baseline and order](../status/tiny-file-performance-plan-20261008.md#review-against-devel-oct-8).
+
+
 **Evidence:** NUC round 7, `c22754236b38-tiny-r7`, buffered/TCP. In an eight-second
 instrumented window, n3 pump thread 1746498 completed 1,024 Raft `fdatasync`
 calls totaling 7.394 s (mean 7.22 ms). This is one thread's measured syscall
@@ -4052,6 +4160,16 @@ existing preallocation experiment closes this item.
 
 **Class/status:** Client/server metadata performance; partial implementation. Atomic server ownership, retained client adoption/lease edges and rejected-descriptor cleanup are AMD tested. Full session/data-plane integration and the measured performance acceptance gate remain open.
 
+**Historical pre-merge devel review (`cde67dca`, Oct 8):** the flags-0/separate-HOLD observation
+still applies. CREATE reply reuse is also absent from devel. The existing
+hold flag is atomic only on the ordinary CREATE-command path: first-use
+cross-group HASHED/SPLITTING lanes use a namespace transaction followed by a
+separate lease proposal, while early opid replay bypasses that second step.
+Add interruption/replay at that boundary, both directory paths, and post-create
+GETATTR/FUSE-reply cleanup to the gates. Existing per-inode edge locks do not
+alone prove safe CREATE lease adoption. [Review](../status/tiny-file-performance-plan-20261008.md#review-against-devel-oct-8).
+
+
 **Original evidence (before the Oct 9 client integration):** `efs_fuse_create_at` passes flags 0 to CREATE, then
 `efs_open_acquire` sends a separate HOLD for the first local open. The protocol
 and server already recognize `EFS_CREATE_F_HOLD`. Round 7 generator `openat`
@@ -4084,6 +4202,15 @@ open latency as a measured saving.
 
 **Implementation update (Oct 8):** Independent tiny geometry, durable cohort latency, retained/cold/process-crash experiments and production churn are tested. An independent indexed-packing protocol and any production-format decision remain open.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
+
+**Pre-merge devel review (`cde67dca`, Oct 8):** extend the existing independent
+`storage_principles.c` file/container, read/write/delete and persistence suite;
+do not recreate it. Its parser accepts only 4-KiB-multiple payloads. Model
+1–512-byte logical files separately from export-sized physical fragments,
+checksum tails, zero suppression and production ancestor-directory barriers.
+Measure every record's time to its durable batch completion; current per-op
+latency includes the barrier only on the boundary operation. Mixed churn and
+cold-recovery experiments remain required. [Review](../status/tiny-file-performance-plan-20261008.md#review-against-devel-oct-8).
 
 **Class/status:** Storage performance experiment; partial implementation. Tiny logical/physical geometry, durable cohort timing, retained/cold/crash principles and production churn are tested. Independent indexed packing and any production layout selection remain P4.1 work; no migration is activated.
 
@@ -4123,6 +4250,17 @@ equivalent protocol, or deploy a layout by wiping the preserved test stores.
 
 **Implementation update (Oct 8):** EOF-tail repair, detectable interior-damage refusal, sticky failures and bounded reservation are tested. The final guard passes full Linux/live cold/POSIX/peer/GC gates. Quiet NUC two-device performance acceptance remains open while an unrelated million-file generator runs.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
+
+**Pre-merge devel review (`cde67dca`, Oct 8): recovery correctness comes first.** Neither
+Raft nor KV preallocation from the experimental build is in devel. WAL replay
+stops at an invalid tail but does not repair it or return the valid EOF; the
+next open appends behind it. A production-WAL reproduction recovered A,
+accepted/synced B after the bad tail, then recovered only A on the next replay.
+Fix or reject the tail before new appends and add repeated-restart gates before
+preallocation. This is proven at the WAL layer; cluster-level recovery/data-loss
+consequences still need testing. Existing WAL group commit/holds must be
+preserved. [Reproducer](../../results/measure/20261008-w93-w96-review/README.md)
+and [review](../status/tiny-file-performance-plan-20261008.md#review-against-devel-oct-8).
 
 **Class/status:** Metadata storage performance; implemented with final gates pending. EOF-tail repair, detectable interior-damage refusal, sticky failures and bounded logical-EOF reservation are tested. Final guard live cold/POSIX/peer gates pass; isolated NUC two-device performance acceptance remains open.
 

@@ -124,8 +124,8 @@ restart/leader change, fair progress, rates/tails and RSS on a named build.
 
 ## Implementation order and status
 
-W84 limit/refusal contract first; existing virtual-interface correctness, then
-W91 commands, W90 expiry, and W81 alongside metadata-scaling measurements.
+W84 limit/refusal contract first; W91 command infrastructure and W92 replacement
+find/stats correctness together, then W90 expiry, with W81 alongside metadata-scaling measurements.
 This ordering does not cancel the authorized replay/readiness package or its
 dependency gates. All four designs are accepted; code and acceptance remain
 separate, and this documentation change closes no implementation package.

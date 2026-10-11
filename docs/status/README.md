@@ -12,6 +12,13 @@ across all dimensions. This supersedes the earlier protection ladder. Current
 fixed 2+1 and three-voter metadata groups do not satisfy the four-node target;
 W74/W66 must close the gap. Never infer the accepted design from current code.
 
+## Design proposals
+
+[Scratch expiry and virtual `.efs/` commands](scratch-expiry-interface.md)
+records the preferred `/scratch/.efs/help`, `ls`, `find` and `stats` interface,
+expiry presentation and proposed lifecycle design. Tracked as **W90** (expiry)
+and **W91** (`.efs/` commands); policies were subsequently accepted as D33/D34; implementation and gates remain open.
+
 ## Accepted design follow-up
 
 [D32–D35](accepted-namespace-scratch-20261008.md) settle W84's current transaction
@@ -320,6 +327,8 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | meta-scale | **W66** · metadata leadership distribution and topology-independent routing | scalability | open — Oct 10 AMD four-voter host/engine, persistence/failover and staged leadership distribution pass; prolonged preferred-peer loss has no read errors/term churn; default two-group topology unchanged; D36 commit authority/recovery choice, routing/migration and scale remain | [evidence, phases and gates](metadata-scaling.md) |
 | tiny-raft | **W93** · broader durable Raft group commit | performance | closed Oct 10 — AMD + repeated NUC batching, read-tail, atomic recovery, fault and cold gates pass; tuning opt-in | [acceptance](w93-atomic-apply-20261010.md) |
 | tiny-create | **W94** · atomic CREATE plus open lease | performance / lifecycle | partial — retained FUSE CREATE/adoption, sequenced lease edges and cleanup AMD gated; REPORT session fences AMD gated; data-plane/per-publication integration and measured consensus/throughput gate remain open | [work item](../backlog/work-items.md#w94) |
+| scratch-expiry | **W90** · scratch-file expiry metadata and safe lifecycle | feature | design accepted D33; opt-in fixed deadlines and safe lifecycle; implementation/gates open | [work item](../backlog/work-items.md#w90) · [design](scratch-expiry-interface.md) |
+| virtual-commands | **W91** · directory-local virtual `.efs/` command interface | usability feature | design accepted D34; `.efs/` commands and bounded query paths; implementation/compatibility gates remain | [work item](../backlog/work-items.md#w91) · [design](scratch-expiry-interface.md) |
 | tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | partial — tiny/durable/cold/crash/churn gates pass; indexed packing and P4.1 decision remain | [work item](../backlog/work-items.md#w95) |
 | tiny-kv | **W96** · bounded KV WAL preallocation | performance experiment | partial — recovery/reservation/fault and final guard cold gates pass; isolated NUC acceptance owed | [work item](../backlog/work-items.md#w96) |
 | decisions | **D28** client-death loss policy · **D29** durable publication receipts · **D30** bounded admission/pacing | accepted design | accepted Oct 8: salvage deferred; D29/W88 implementation first, then D30/W23/W89; implementation and acceptance remain open | [contracts and gates](decisions.md#d28d30--accepted-oct-8-2026) |
