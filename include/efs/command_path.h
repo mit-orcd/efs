@@ -122,8 +122,11 @@ static inline int efs_command_path_parse_v4(const char *name,struct efs_msg_quer
     out->filters.flags=(uint32_t)(values[2]>>32);out->filters.kind=(uint32_t)values[2];
     out->filters.min_size=values[3];out->filters.max_size=values[4];
     out->filters.after_ns=values[5];out->filters.before_ns=values[6];
-    if (out->base.operation!=EFS_QUERY_FIND && out->base.operation!=EFS_QUERY_LS) return EFS_ERR_INVAL;
+    if (out->base.operation>EFS_QUERY_LS) return EFS_ERR_INVAL;
     if (out->base.match>3 || out->limit>10000 || !efs_query_filters_valid(&out->filters)) return EFS_ERR_INVAL;
+    if (out->base.operation==EFS_QUERY_STATS && (n!=64 || out->cursor || out->limit>1 ||
+        out->filters.flags || out->filters.kind || out->filters.min_size || out->filters.max_size ||
+        out->filters.after_ns || out->filters.before_ns)) return EFS_ERR_INVAL;
     for (unsigned i=64;i<n;i++) {
         if (!raw[i] || raw[i]=='/') return EFS_ERR_INVAL;
         out->base.term[i-64]=(char)raw[i];

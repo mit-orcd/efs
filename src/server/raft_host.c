@@ -8987,12 +8987,18 @@ static int query_consume(void *ctx,const struct efs_server_query_view *view,int 
                 char text[1024];
                 int n=snprintf(text,sizeof(text),
                     "\"stats\":{\"imm_files\":%llu,\"imm_dirs\":%llu,\"imm_bytes\":%llu,\"imm_tmin\":%llu,\"imm_tmax\":%llu,"
-                    "\"tree_files\":%llu,\"tree_dirs\":%llu,\"tree_bytes\":%llu,\"tree_tmin\":%llu,\"tree_tmax\":%llu}}",
+                    "\"tree_files\":%llu,\"tree_dirs\":%llu,\"tree_bytes\":%llu,\"tree_tmin\":%llu,\"tree_tmax\":%llu}",
                     (unsigned long long)stats.imm_files,(unsigned long long)stats.imm_dirs,
                     (unsigned long long)stats.imm_bytes,(unsigned long long)stats.imm_tmin,(unsigned long long)stats.imm_tmax,
                     (unsigned long long)stats.tree_files,(unsigned long long)stats.tree_dirs,
                     (unsigned long long)stats.tree_bytes,(unsigned long long)stats.tree_tmin,(unsigned long long)stats.tree_tmax);
                 rc=n<0 || (size_t)n>=sizeof(text) ? EFS_ERR_OVERFLOW : query_append(q,text,(size_t)n);
+                if (!rc && q->page) {
+                    char tail[192];
+                    n=snprintf(tail,sizeof(tail),",\"page\":{\"token\":\"%llu\",\"cursor\":\"0\",\"more\":false,\"more_confirmed\":false}}",
+                        (unsigned long long)q->page_token);
+                    rc=n<0 || (size_t)n>=sizeof(tail) ? EFS_ERR_OVERFLOW : query_append(q,tail,(size_t)n);
+                } else if (!rc) rc=query_append(q,"}",1);
             }
         } else if (!rc) {
             rc=query_append(q,"\"entries\":[",11);
@@ -9130,7 +9136,7 @@ int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void
     if (out) *out=NULL;
     if (!g_host || !g_host->query_enabled) return EFS_ERR_NOT_FOUND;
     if (!req || !out || !len || req->base.version!=EFS_QUERY_PAGE_VERSION ||
-        !req->base.root || req->base.operation<EFS_QUERY_FIND || req->base.operation>EFS_QUERY_LS ||
+        !req->base.root || req->base.operation>EFS_QUERY_LS ||
         req->base.ngroups>EFS_QUERY_GROUPS || req->base.match>EFS_NAME_CONTAINS || req->limit>10000 ||
         (!req->token && (!req->limit || req->cursor)) || req->cursor>(UINT64_C(4096)<<32) ||
         req->base.max_output<16384 || req->base.max_output>EFS_QUERY_MAX_OUTPUT ||
@@ -9138,6 +9144,9 @@ int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void
         !memchr(req->base.term,0,sizeof(req->base.term)) || strlen(req->base.term)>120 ||
         strchr(req->base.term,'/') || !efs_query_filters_valid(&req->filters) ||
         (!req->base.term[0] && req->base.match!=EFS_NAME_PREFIX && req->base.match!=EFS_NAME_CONTAINS)) return EFS_ERR_INVAL;
+    if (req->base.operation==EFS_QUERY_STATS && (req->base.term[0] || req->cursor || req->limit>1 ||
+        req->filters.flags || req->filters.kind || req->filters.min_size || req->filters.max_size ||
+        req->filters.after_ns || req->filters.before_ns)) return EFS_ERR_INVAL;
     int policy_rc=host_query_policy_operation(req->base.operation);
     if(policy_rc && req->limit)return policy_rc;
     int created=0;
