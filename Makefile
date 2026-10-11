@@ -357,6 +357,7 @@ test: all
 	python3 tests/test_put_ticket_owner.py
 	python3 tests/test_put_identity.py
 	python3 tests/test_create_request.py
+	python3 tests/test_retained_create_authority.py
 	python3 tests/test_pending_create_cleanup.py
 	python3 tests/test_mount_identity_rpc.py
 	python3 tests/test_pending_create_command.py

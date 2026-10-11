@@ -966,3 +966,30 @@ private four-daemon buffered/TCP cold/peer gate passes all eight races, all
 iteration's handoff took 232.6 seconds; these private runs demonstrate
 correctness, not isolated native performance acceptance. Evidence:
 append-authority-unit.txt and append-authority-cold-wire.txt.
+
+Installed 82f9b88c still fails both unchanged 20-second native cases. An
+isolated 80-append diagnostic completes in 25.93 s (OPEN 2.82 s, flush/CLOSE
+20.40 s, STAT 2.37 s). The isolated 160-file/eight-thread CREATE diagnostic
+completes and verifies every byte in 34.34 s, with mean OPEN 1.11 s and
+mean close/writeback 84.75 ms across concurrent callers. Evidence:
+native-append-authority-two.txt, mtime-paired-stages.txt and
+create-paired-stages.txt. Native acceptance remains open.
+
+The next CREATE candidate carries only this RPC's fresh parent/dentry group
+boundaries through initial receipt lookup and submission admission. All
+rows/epochs/local floors are still read and checked; uncovered groups and
+ordinary/forwarded calls still require fresh authority. Coverage resets
+after mutation, so terminal receipt proof always crosses a new ReadIndex.
+New actual helper tests cover absent/negative/exact receipts, lost attribute
+rows retaining FileID, uncovered/failing authority and post-submit refusal.
+Existing client retained identity/cancellation and namespace floor tests
+pass locally. Mac cold concurrent CREATE gates follow.
+
+Retained CREATE coverage candidate passes Mac Linux production-helper/
+identity/namespace fencing gates and local ASAN/UBSAN. Its private four-daemon
+buffered/TCP gate passes 1,024 unique files from 16 workers, exact cold bytes,
+1,024 genuine EEXIST checks and 16 name replacements. Accompanying hardlink/
+open-unlink, injected deletion failure/retry, cold fold reads, physically
+empty inventory, zero quota and late-PUT fences all pass; owned fixtures
+drain normally (exit 0). Evidence: create-authority-build-unit.txt and
+create-authority-cold-wire.txt. Native timing acceptance follows rollout.

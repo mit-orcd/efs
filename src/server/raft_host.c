@@ -11178,7 +11178,7 @@ static void host_opid_reply_ino(struct efs_raft_host *h, efs_ino_t parent,
 static void host_create(efs_ino_t parent, const char *name, uint32_t mode,
                              uint32_t uid, uint32_t gid, uint32_t flags,
                              uint64_t owner, const struct efs_opid_req *q,
-                             uint32_t expected_shard, int pinned_route,
+                             uint32_t expected_shard, int pinned_route, uint8_t covered,
                              struct efs_msg_inode_reply *out)
 {
     struct efs_raft_host *h = g_host;
@@ -11233,7 +11233,8 @@ static void host_create(efs_ino_t parent, const char *name, uint32_t mode,
                         need, 2);
         return;
     }
-    rc = host_read_index(h, pg, &hint);
+    rc = (covered&(1u<<pg))?EFS_OK:host_read_index(h, pg, &hint);
+    if(rc==EFS_OK)covered|=(uint8_t)(1u<<pg);
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, parent, &prow);
     if (rc == EFS_OK && !S_ISDIR(prow.mode))
@@ -11255,9 +11256,10 @@ static void host_create(efs_ino_t parent, const char *name, uint32_t mode,
                             out, need, nn);
             return;
         }
-        if (dg != pg) {
+        if (!(covered&(1u<<dg))) {
             int hh = -1;
             rc = host_read_index(h, dg, &hh);
+            if(rc==EFS_OK)covered|=(uint8_t)(1u<<dg);
             if (rc != EFS_OK)
                 hint = hh;
         }
@@ -11266,12 +11268,12 @@ static void host_create(efs_ino_t parent, const char *name, uint32_t mode,
         if (pending) {
             int registered=0;
             efs_ino_t route=dsh?dsh:4096;
-            rc=host_append_session_admit(h,route,q,&hint,&registered);
+            rc=host_append_session_admit_covered(h,route,q,&hint,&registered,covered);
             if (rc==EFS_OK && !registered) rc=EFS_ERR_BUSY;
             if (rc!=EFS_OK) {set_inode_rc(out,rc,hint);return;}
         }
         struct efs_opid_reply rep;
-        int admitted=host_namespace_session_admit(h,dsh,q,&hint);
+        int admitted=host_namespace_session_admit_covered(h,dsh,q,&hint,covered);
         int hit=admitted==EFS_OK?host_opid_replay(h,dsh,q,&rep):admitted;
 
         if (hit < 0) {
@@ -11346,7 +11348,7 @@ void server_raft_host_create(efs_ino_t parent,const char *name,uint32_t mode,
     uint32_t uid,uint32_t gid,uint32_t flags,uint64_t owner,
     const struct efs_opid_req *q,struct efs_msg_inode_reply *out)
 {
-    host_create(parent,name,mode,uid,gid,flags,owner,q,0,0,out);
+    host_create(parent,name,mode,uid,gid,flags,owner,q,0,0,0,out);
 }
 
 static void host_retained_create_forward(struct efs_raft_host *h,
@@ -11368,9 +11370,11 @@ static void host_retained_create_forward(struct efs_raft_host *h,
 
 static int host_retained_create_proof(struct efs_raft_host *h,
     const struct efs_msg_create_retained *request,
-    struct efs_msg_create_retained_reply *out,int *hint)
+    struct efs_msg_create_retained_reply *out,int *hint,uint8_t *covered)
 {
-    int rc=host_read_index(h,efs_raft_shard_group(out->shard),hint);
+    uint8_t group=efs_raft_shard_group(out->shard);
+    int rc=(*covered&(1u<<group))?EFS_OK:host_read_index(h,group,hint);
+    if(rc==EFS_OK)*covered|=(uint8_t)(1u<<group);
     if(rc!=EFS_OK)return rc;
     struct efs_opid_reply receipt;
     int hit=host_opid_replay(h,out->shard,&request->q,&receipt);
@@ -11402,7 +11406,7 @@ void server_raft_host_create_retained(const struct efs_msg_create_retained *requ
        !request->q.id.session_epoch || request->q.ack>=request->q.id.seq ||
        (request->routed && request->shard>=EFS_SESSION_BITS) ||
        (!request->probe && !request->routed))return;
-    uint8_t groups[2];int ng=1;
+    uint8_t groups[2],covered=0;int ng=1;
     groups[0]=efs_raft_shard_group(efs_kv_inode_shard(request->create.parent));
     if(request->routed && request->probe) {
         out->shard=request->shard;out->routed=1;
@@ -11412,6 +11416,7 @@ void server_raft_host_create_retained(const struct efs_msg_create_retained *requ
             host_retained_create_forward(h,request,out,groups,ng);return;
         }
         rc=host_read_index(h,groups[0],&hint);
+        if(rc==EFS_OK)covered|=(uint8_t)(1u<<groups[0]);
         struct efs_meta_row parent;
         if(rc==EFS_OK)rc=efs_meta_apply_get_inode(h->kv,request->create.parent,&parent);
         if(rc==EFS_OK && !S_ISDIR(parent.mode))rc=EFS_ERR_INVAL;
@@ -11427,18 +11432,19 @@ void server_raft_host_create_retained(const struct efs_msg_create_retained *requ
     for(int i=0;i<ng;i++)if(!host_hosts(h,groups[i])) {
         host_retained_create_forward(h,request,out,groups,ng);return;
     }
-    rc=host_retained_create_proof(h,request,out,&hint);
+    rc=host_retained_create_proof(h,request,out,&hint,&covered);
     if(out->known)return;
     if(request->probe || rc!=EFS_ERR_BUSY) {
         set_inode_rc(&out->rpc,rc,hint);return;
     }
     host_create(request->create.parent,request->create.name,request->create.mode,
         request->create.uid,request->create.gid,EFS_CREATE_F_PENDING,0,&request->q,
-        request->shard,1,&out->rpc);
+        request->shard,1,covered,&out->rpc);
     /* Ordinary failure is not terminal proof. Query the retained shard after
      * the mutation, including recorded negative verdicts and lost replies. */
     struct efs_msg_inode_reply submitted=out->rpc;
-    rc=host_retained_create_proof(h,request,out,&hint);
+    covered=0; /* Submission is a mutation boundary: require a fresh proof. */
+    rc=host_retained_create_proof(h,request,out,&hint,&covered);
     if(!out->known)out->rpc=submitted;
 }
 
