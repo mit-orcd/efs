@@ -2,7 +2,8 @@
 
 ## v0.3.0-pre-alpha release integration
 
-[Release checkpoint, priorities and acceptance ledger](v030-pre-alpha-release.md):
+[Release checkpoint, priorities and acceptance ledger](v030-pre-alpha-release.md)
+and [candidate operator notes](../using/v030-candidate.md):
 all agent improvements are being integrated on `release-v0.3.0-pre-alpha`;
 Mac authority/APPEND reconciliation and review pipeline/bounds/recorder fixes
 are included, together with bounded packed receipt retirement. Completed AMD

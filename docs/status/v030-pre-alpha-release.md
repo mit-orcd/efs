@@ -4,6 +4,8 @@ Status: integration in progress; not release accepted, tagged, deployed as a
 release or pushed. User authorization, Oct 11: create an isolated integration
 branch, coordinate all agents, add and test all improvements, prioritize
 small-file packing and code-review findings. Release owner: agent 2 / AMD.
+[Operator-facing candidate notes](../using/v030-candidate.md) summarize included
+changes, opt-in flags, upgrade constraints and unaccepted scopes.
 
 Branch: `release-v0.3.0-pre-alpha`, created from `devel` `48a2719d`.
 Other agents retain their branches and cluster ownership. Shared `devel` and
