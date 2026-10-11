@@ -11828,16 +11828,25 @@ static int host_append_authority(struct efs_raft_host *h,int *hint)
 static int host_session_append_step(struct efs_raft_host *h,const uint8_t *cmd,
     uint32_t clen,uint8_t group,int *hint,uint64_t *empty)
 {
+    *empty=0;
     if(clen!=25)return EFS_ERR_INVAL;
     uint8_t owner[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_LEASE_LOCK_NEXT};
     memcpy(owner+2,cmd+1,24);
     int rc=host_session_cleanup_admit(h,owner,sizeof(owner),group,hint);
     if(rc==EFS_OK)rc=host_append_authority(h,hint);
-    if(rc!=EFS_OK)return rc;
+    if(rc!=EFS_OK) {
+        if(rc==EFS_ERR_BUSY)*empty=EFS_MD_SESSION_APPEND_RETRY_SALT;
+        return rc;
+    }
     efs_ino_t ino;uint64_t generation,offset;unsigned found=0;
     rc=efs_meta_append_session_next(h->kv,rd32be(cmd+21),cmd+1,rd32be(cmd+17),
                                     &ino,&generation,&offset,&found);
-    if(rc!=EFS_OK)return rc;
+    if(rc!=EFS_OK) {
+        /* Selection only reads the floor and reservation rows. No cleanup
+         * transaction has been proposed, so the exact epoch may retry. */
+        if(rc==EFS_ERR_BUSY)*empty=EFS_MD_SESSION_APPEND_RETRY_SALT;
+        return rc;
+    }
     *empty=0;
     struct host_resize_ctx ctx={h,hint};struct efs_txid tx;fill_txid(h,&tx);
     if(!found) {

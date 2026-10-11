@@ -144,5 +144,9 @@
  * selection/admission refused before any cleanup command was proposed.
  * An ordinary BUSY (including an uncertain submitted batch) has no marker. */
 #define EFS_MD_SESSION_CLEANUP_RETRY_SALT 2ull
+/* SESSION_APPEND_NEXT uses a distinct certificate for its read-only
+ * admission/authority/selection refusal, before transaction callbacks.
+ * It never certifies a completion or retirement transaction's BUSY. */
+#define EFS_MD_SESSION_APPEND_RETRY_SALT 3ull
 
 #endif
