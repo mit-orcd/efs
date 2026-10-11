@@ -524,3 +524,13 @@ query and client drain gates, then passed. Live acceptance is pending.
 The prepare-cohort live deep-directory pair also completed normally with 0/2
 PASS (two unchanged 20-second deadline failures, 33.4 seconds including
 cleanup). It is not acceptance and no native improvement is established yet.
+
+Whole MKDIR/RMDIR requests now return a parent-group leader hint before
+session admission or transaction effects when committed membership proves
+that leader hosts both scratch groups. Unknown/self/single-group/removed
+leaders keep normal forwarding; this avoids redirect loops on four-node
+placements. Client retries retain the same operation identity. Routing,
+namespace fencing, transaction resolution, follower redirection, metadata
+retry-budget and shared-log coverage gates pass on the Mac Linux seed. The
+unchanged live deep pair still failed 0/2 (33.1 seconds, normal cleanup).
+This routing correction is not sufficient for native acceptance.

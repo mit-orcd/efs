@@ -12327,6 +12327,24 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
  * nlink++ always; times ride the parent row for LOCAL, the dir-lane stamp
  * (plus a first-use used_shards bit) for HASHED/SPLITTING. dseq bumps on
  * (dsh, lane). A node that does not host a participant group bounces. */
+/* Route before session admission or transaction effects. A parent leader
+ * is useful only when its committed membership also hosts both scratch
+ * groups: redirecting to a single-group voter would bounce back forever.
+ * Unknown configuration/leadership keeps the ordinary forwarding path. */
+static int host_namespace_leader_hint(struct efs_raft_host *h,uint8_t group)
+{
+    int rid=host_local_leader(h,group);
+    if (rid<0 || rid>=h->n || rid==h->raft_id) return -1;
+    pthread_mutex_lock(&h->mu);
+    for (unsigned i=0;i<HOST_NGROUPS;i++) {
+        struct host_group *s=group_slot(h,(uint8_t)(i<<1));
+        uint32_t voters=s ? (s->r ? efs_raft_voters(s->r) : s->voters) : 0;
+        if (!voters || !hosts_group(rid,voters)) {rid=-1;break;}
+    }
+    pthread_mutex_unlock(&h->mu);
+    return rid;
+}
+
 void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
                             uint32_t uid, uint32_t gid,
                             const struct efs_opid_req *q,
@@ -12369,6 +12387,8 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
         mode |= 0755;
     now = now_ns();
     psh = efs_kv_inode_shard(parent);
+    hint=host_namespace_leader_hint(h,efs_raft_shard_group(psh));
+    if (hint>=0) {set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;}
     if (!host_hosts(h, efs_raft_shard_group(psh))) {
         uint8_t need[2];
         need[0] = EFS_RAFT_GROUP_SHARD;
@@ -12661,6 +12681,8 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
     }
     now = now_ns();
     psh = efs_kv_inode_shard(parent);
+    hint=host_namespace_leader_hint(h,efs_raft_shard_group(psh));
+    if (hint>=0) {set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;}
     if (!host_hosts(h, efs_raft_shard_group(psh))) {
         uint8_t need[2];
         need[0] = EFS_RAFT_GROUP_SHARD;
