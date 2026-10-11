@@ -1507,6 +1507,10 @@ unimplemented; unavailable/refusal tests are not lifecycle acceptance.
 
 ### Release correctness review
 
+[Checked address-port parsing](../status/address-parser-20261011.md) fixes signed/overflowing
+and partially numeric ports across six CLI/bootstrap parsers. Exhaustive valid-port
+and malformed-input sanitizer regressions pass; valid host splitting is preserved.
+
 [Benchmark walker mode cleanup](../status/benchmark-walk-mode-20261011.md) removes the
 unselectable private execute-check mode. Before/after owner-RPC batch/fallback
 regressions pass, with public lookup and FUSE permissions unchanged.

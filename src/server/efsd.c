@@ -1,3 +1,4 @@
+#include "../common/parse_host_port.h"
 #include "efs/cli_help.h"
 #include "efs/common.h"
 #include "efs/storage_capacity.h"
@@ -243,16 +244,7 @@ static void stop_perf_recorder(void)
 
 static int parse_host_port(const char *str, char *host, size_t host_len, uint16_t *port)
 {
-    const char *colon = strrchr(str, ':');
-    if (!colon)
-        return -1;
-    size_t hlen = (size_t)(colon - str);
-    if (hlen >= host_len)
-        return -1;
-    memcpy(host, str, hlen);
-    host[hlen] = '\0';
-    *port = (uint16_t)atoi(colon + 1);
-    return 0;
+    return efs_parse_host_port(str, host, host_len, port);
 }
 
 /* Live handler threads (accept path). Used to cap concurrent conns. */
