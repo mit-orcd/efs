@@ -1922,6 +1922,19 @@ Pending choices retain their existing homes: W99 cache-only pressure escalation 
 **RDMA test placement — user instruction, Oct 11, 2026:** All RDMA work is tested on AMD using software RDMA, or on `orcd-test` using hardware IB/RDMA, according to the claim being validated. Keep software and hardware verdicts separate. Intel continues to provide TCP acceptance. This applies to all RDMA gates, including older W-item hardware obligations.
 
 
+### ORCD communication follow-ups — W109/W110
+
+| Item | Assigned cluster | State / next action |
+| --- | --- | --- |
+| [W109](#w109) | orcd-test | Open: correlate metadata apply/query contention with original EBUSY/timeouts; preserve deadlines and full-load gates. |
+| [W110](#w110) | orcd-test | Open: distinguish EFS retries/loss from TCP retransmission and native-IB errors; establish per-op correlation and recovery gates. |
+
+[Capture summary and closure plans](../status/orcd-communication-20261011.md): two EFS TCP
+retransmissions, unchanged IB error counters, 22–50 ms metadata apply waits and
+substantial query-build CPU. No transport root cause or gate closure is claimed.
+W95 packing and W106 broader hardware acceptance remain separate work.
+
+
 ## Appendix 2 — In flight — the current handoff block
 
 *Source: `status/in-flight.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
@@ -7036,6 +7049,45 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 **Remaining action:** Run relevant current-code software RDMA gates on AMD and hardware IB/RDMA gates on `orcd-test`, retaining actual transport/device, code/build, topology and per-suite verdict evidence. Intel RDMA enablement or NIC/package changes are not part of this task.
 
 **Gate:** Actual cross-host RDMA connection/device evidence plus unchanged POSIX, peer, direct-I/O, persistence and fault gates on the designated environment. Report AMD software and `orcd-test` hardware verdicts separately; neither TCP nor software-only results close hardware-specific obligations.
+
+
+<a id="w109"></a>
+
+### W109 · ORCD metadata/query contention under load
+
+**Class/state:** liveness/performance investigation; open.
+**Assigned cluster:** `orcd-test` — native IB/RDMA, direct I/O.
+
+C profiles show substantial query rebuild work (42.96% inclusive on fcstor005);
+fcstor004 logs 15 apply waits of 21.668–50.117 ms. Earlier full-load gates retain
+namespace EBUSY and deep-directory/virtual-query timeouts. A causal connection
+is not yet established. Correlate lookup/writeback timing, Raft authority/apply
+queues, storage durability and query refresh before selecting a repair.
+
+**Gate:** repeat unchanged-limit full native and peer gates under representative
+load with no FAIL/NOTRUN, complete/correct query results and cold preserved
+bytes. Related W66/W92/W23/D30 remain independently open. See
+[evidence and closure plan](../status/orcd-communication-20261011.md).
+
+<a id="w110"></a>
+
+### W110 · ORCD communication-loss diagnosis across EFS, IB and TCP
+
+**Class/state:** transport observability/validation investigation; open.
+**Assigned cluster:** `orcd-test` — native hardware IB/RDMA and TCP side-channel.
+
+Observed two EFS TCP retransmissions without resets/hard network errors, and
+zero growth in selected IB error counters across eleven hosts. These samples
+cannot provide an exact lost-RPC rate or exclude intermittent stalls; historical
+IB totals and host-wide retransmissions are not EFS failure attribution.
+Large frames intentionally use TCP even when RDMA is enabled.
+
+**Remaining action/gate:** correlate request identity/outcome and retry timing
+with endpoint/QP, TCP and IB evidence during a reproduced stall; validate
+ambiguous-request recovery and acknowledged cold bytes with existing fault/
+persistence gates. Use a private TCP comparison if needed; retain W106 broader
+acceptance. Do not confuse EAGAIN, empty polls or retransmission with permanent
+message loss. See [capture and plan](../status/orcd-communication-20261011.md).
 
 
 ## Appendix 5 — Naming
