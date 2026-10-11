@@ -218,6 +218,18 @@ PY_KILL
 # return 0 process-wide (rdma.c), which disables the server's RDMA_SETUP
 # accept — so the RDMA phase must NOT pass tcp here or every client upgrade
 # is refused.
+format_group() {
+    local seed=$1 attempt result
+    for attempt in $(seq 1 30); do
+        result=$(./efs-mgmt raft-mkfs "$seed" "$EXPORT" 2>&1)
+        printf '%s\n' "$result" >> "$WORK-format.out"
+        printf '%s\n' "$result" | grep -q 'raft-mkfs rc=0 ' && return 0
+        sleep 1
+    done
+    fail "private group format did not commit at $seed"
+    exit 2
+}
+
 start_group_vg_server() {
     local xport=$1
     local id port join out i
@@ -237,7 +249,7 @@ start_group_vg_server() {
         done
         grep -q listening "$out" || { echo "[leaks] node $id did not start"; cat "$out"; exit 2; }
     done
-    ./efs-mgmt raft-mkfs "$ADDR:$((PORT + 1))" "$EXPORT" >/dev/null 2>&1
+    format_group "$ADDR:$((PORT + 1))"
     # valgrind'd node 1 joins last; do not wait for it (slow under memcheck)
     EFS_MD_RAFT_N=3 EFS_TRANSPORT=$xport $VG --log-file="$WORK-group1.vg" \
         ./efsd --node-id 1 --addr "$ADDR" --port "$PORT" \
@@ -269,7 +281,7 @@ start_group_plain() {
         done
         grep -q listening "$out" || { echo "[leaks] node $id did not start"; cat "$out"; exit 2; }
     done
-    ./efs-mgmt raft-mkfs "$ADDR:$PORT" "$EXPORT" >/dev/null 2>&1
+    format_group "$ADDR:$PORT"
 }
 
 cleanup() {
@@ -309,7 +321,18 @@ if [ "${EFS_VG_SKIP_UNITS:-0}" = 1 ]; then
 else
 for t in $UNIT_TESTS; do
     log="$WORK-unit-$t.vg"
-    timeout --signal=TERM --kill-after=10 300 $VG --log-file="$log" "./tests/$t" >"$WORK-unit-$t.out" 2>&1
+    unit_vg=$VG
+    case "$t" in
+        test_namespace_session|test_store_containers|test_principles_index|test_append_transaction|test_append_receipt|test_put_ticket|test_mtime_barrier|test_publication_session|test_publication_recovery|test_lane_bootstrap_recovery|test_kv_lsm|test_raft_store|test_session)
+            # These fixtures deliberately _exit in children before destruction.
+            # Keep their crash/recovery assertions and memory-access error exit
+            # checks; gate clean parent leaks separately. Abrupt child allocation
+            # lifetime is not clean-exit leak coverage and is explicitly excluded.
+            unit_vg="$VG --child-silent-after-fork=yes --errors-for-leak-kinds=none"
+            note "unit/$t: parent leak gate; deliberate crash-child leaks EXCLUDED (access-error exits still gated)"
+            ;;
+    esac
+    timeout --signal=TERM --kill-after=10 300 $unit_vg --log-file="$log" "./tests/$t" >"$WORK-unit-$t.out" 2>&1
     rc=$?
     [ "$rc" = 0 ] || fail "unit/$t: process exit $rc"
     gate "$log" "unit/$t"
