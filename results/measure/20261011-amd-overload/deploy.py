@@ -27,7 +27,11 @@ for port in range(17432,17436):
 run(['rsync','-a','--from0','--files-from',proof/'install-source-files.list',str(src)+'/',str(installed)+'/'])
 run(['make','clean'],cwd=installed)
 for name in ['efsd','efs-fuse','efs-mgmt','libefs.a','efs-bench','efs-query','blake3-bench']:
- shutil.copy2(src/name,installed/name)
+ if (src/name).is_file():
+  shutil.copy2(src/name,installed/name)
+ elif (out/(name+'.previous')).is_file():
+  # Optional utilities are not service artifacts; preserve the prior utility.
+  shutil.copy2(out/(name+'.previous'),installed/name)
 records=[]
 for i in range(4):
  root=Path(f'/data1/efs/n{i+1}');assert root.is_dir()

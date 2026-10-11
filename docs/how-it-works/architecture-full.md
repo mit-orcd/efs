@@ -1690,7 +1690,8 @@ candidate, full normal/fault native passes, an ENOSPC control with cold recovery
 and no-refusal 180-second direct/buffered cold/physical passes; ten-minute
 unpaced fairness/recovery gates pass (no refusals, 58.09/53.98-s drain and
 post-pressure cold writes); full admission-enabled 216/67 functional gates pass,
-with retained service deployment/audit next.
+and exact-artifact retained-service deployment/two-client audit pass. The bounded
+AMD overload/admission gate is closed; global W94/W97 and W99 remain open.
 
 [W94/W97 AMD sustained mixed-load follow-up](../status/amd-sustained-20261011.md) retains
 an unpaced private-quota failure, successful quiescent GC progress and an
@@ -6821,7 +6822,11 @@ normal/fault native and both 180-second unpaced cold/physical gates without
 refusals. The admission-off control reproduces ENOSPC but now passes an
 acknowledged-byte cold recovery oracle. Both ten-minute unpaced fairness/recovery
 gates pass without refusals, with 58.09/53.98-s physical drain and post-pressure
-cold writes; full admission-enabled 216/67 functional compatibility passes; no W97 closure or W99 capacity-domain policy is claimed.
+cold writes; full admission-enabled 216/67 functional compatibility and
+exact-artifact retained-service deployment/two-client audit pass. The bounded AMD
+unpaced admission gate is closed. AMD-only admission/20-ms idle defaults are
+explicit, with commands disabled and all normal stores retained. Global W94/W97
+integration/NUC gates and W99 capacity-domain policy remain open.
 [Indexed follow-up](../status/amd-overload-admission-20261011.md).
 
 **Oct11 NUC isolated follow-up:** two eight-minute growing-file repeats outside

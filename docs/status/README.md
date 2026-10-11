@@ -215,7 +215,8 @@ candidate, full normal/fault native passes, an ENOSPC control with cold recovery
 and no-refusal 180-second direct/buffered cold/physical passes; ten-minute
 unpaced fairness/recovery gates pass (no refusals, 58.09/53.98-s drain and
 post-pressure cold writes); full admission-enabled 216/67 functional gates pass,
-with retained service deployment/audit next.
+and exact-artifact retained-service deployment/two-client audit pass. The bounded
+AMD overload/admission gate is closed; global W94/W97 and W99 remain open.
 
 [W94/W97 AMD sustained mixed-load follow-up](amd-sustained-20261011.md) retains
 an unpaced private-quota failure, successful quiescent GC progress and an
