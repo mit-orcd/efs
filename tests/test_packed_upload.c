@@ -17,7 +17,7 @@ void server_raft_host_pack_authority(const uint8_t *p,uint32_t bytes,struct efs_
     struct efs_pack_object object;struct efs_pack_ref refs[EFS_PACK_AUTHORITY_MAX];uint32_t n;
     assert(!efs_pack_upload_decode(p+2,bytes-2,&object,refs,EFS_PACK_AUTHORITY_MAX,&n));
     out->version=p[0];out->group=p[1];out->count=n;efs_hash(p,bytes,out->digest);
-    out->rc=authority_rc;
+    out->rc=cohort_mode==3?EFS_ERR_NET:authority_rc;
     if(cohort_mode==2)out->digest[0]^=1;
     if(race_fence)assert(!server_put_session_fence(&server,expected.ledger.owner.client_uuid,8));
 }
@@ -68,8 +68,15 @@ int main(void)
         authority_rc=EFS_ERR_BUSY;assert(server_packed_upload(&server,frame,bytes)==EFS_ERR_BUSY);
         authority_rc=EFS_ERR_STALE;assert(server_packed_upload(&server,frame,bytes)==EFS_ERR_STALE);
         authority_rc=EFS_ERR_NET;assert(server_packed_upload(&server,frame,bytes)==EFS_ERR_NET);
-        assert(!legacy_calls && !view_calls);authority_rc=0;
-        cohort_mode=2;assert(!server_packed_upload(&server,frame,bytes));assert(legacy_calls==1 && view_calls==2);
+        /* The read-only NET must try fresh legacy admission; its own NET
+         * still propagates without checking FileIDs or writing bytes. */
+        assert(legacy_calls==1 && !view_calls);authority_rc=0;
+        cohort_mode=3;legacy_calls=view_calls=0;
+        assert(!server_packed_upload(&server,frame,bytes));assert(legacy_calls==1 && view_calls==2);
+        phase=EFS_PACK_RECLAIMING;assert(server_packed_upload(&server,frame,bytes)==EFS_ERR_STALE);phase=EFS_PACK_ACTIVE;
+        epoch=1;assert(server_packed_upload(&server,frame,bytes)==EFS_ERR_STALE);epoch=0;
+        cohort_mode=2;legacy_calls=view_calls=0;
+        assert(!server_packed_upload(&server,frame,bytes));assert(legacy_calls==1 && view_calls==2);
         cohort_mode=1;race_fence=1;assert(server_packed_upload(&server,frame,bytes)==EFS_ERR_STALE);
         race_fence=0;cohort_mode=0;
         assert(server.nodes[0].used == fl);
