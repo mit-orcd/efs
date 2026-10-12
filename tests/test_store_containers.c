@@ -13,7 +13,7 @@
 #include <unistd.h>
 static int fault;
 static const char *watched_root;
-static unsigned outside_syncs, root_syncs, directory_syncs, mkdir_calls, mapping_reads;
+static unsigned outside_syncs, root_syncs, directory_syncs, body_syncs, mkdir_calls, mapping_reads;
 static ssize_t container_pread(int fd,void *buf,size_t n,off_t off) {
     struct stat st;assert(!fstat(fd,&st));
     if(st.st_size==4096 && n==4096 && off==0)
@@ -35,6 +35,7 @@ static int container_sync(int fd)
         else if(strncmp(name,watched_root,strlen(watched_root)))outside_syncs++;
     }
     int body=strstr(name,".efs-containers/")&&strstr(name,".dat");
+    if(body)body_syncs++;
     if(fault==1&&body){errno=EIO;return -1;}
     if(fault==2&&S_ISDIR(st.st_mode)){errno=EIO;return -1;}
     int rc=fsync(fd);
@@ -44,7 +45,9 @@ static int container_sync(int fd)
 static int container_punch(int fd,int mode,off_t off,off_t len)
 {
     if(fault==3&&(mode&FALLOC_FL_PUNCH_HOLE)){errno=EIO;return -1;}
-    return fallocate(fd,mode,off,len);
+    int rc=fallocate(fd,mode,off,len);
+    if(!rc && fault==8 && (mode&FALLOC_FL_PUNCH_HOLE))_exit(48);
+    return rc;
 }
 static int container_rename(const char *a,const char *b)
 {
@@ -54,6 +57,20 @@ static int container_renameat(int ad,const char *a,int bd,const char *b)
 {
     int rc=renameat(ad,a,bd,b);if(!rc&&fault==5)_exit(45);return rc;
 }
+static int container_renameat2(int ad,const char *a,int bd,const char *b,unsigned flags)
+{
+    int rc=renameat2(ad,a,bd,b,flags);
+    if(!rc && fault==7)_exit(47);
+    return rc;
+}
+static int container_unlinkat(int fd,const char *path,int flags)
+{
+    int rc=unlinkat(fd,path,flags);
+    if(!rc && fault==9 && strstr(path,".tmp.gc"))_exit(49);
+    return rc;
+}
+#define renameat2 container_renameat2
+#define unlinkat container_unlinkat
 #define pread container_pread
 #define renameat container_renameat
 #define mkdir container_mkdir
@@ -61,6 +78,8 @@ static int container_renameat(int ad,const char *a,int bd,const char *b)
 #define fallocate container_punch
 #define rename container_rename
 #include "../src/server/store_containers.c"
+#undef renameat2
+#undef unlinkat
 #undef pread
 #undef renameat
 #undef mkdir
@@ -82,7 +101,8 @@ static void read_value(efs_ino_t ino,unsigned ci,int expected,int value)
     if(!rc){assert(ok==(efs_ino_is_meta_table(ino)?EFS_STORE_SUM_PRESENT:EFS_STORE_SUM_VERIFIED)&&len==sizeof(data));uint8_t h[32];efs_hash(data,len,h);assert(!memcmp(sum,h,32));
         for(unsigned i=0;i<len;i++)assert(data[i]==(value<0?data[0]:(unsigned)value));}
 }
-static void restart(void){server_storage_engine_close(&server);assert(!server_storage_engine_init(&server));server_init_local_usage(&server);}
+/* A real restart execs a new process and drops thread-local death hints. */
+static void restart(void){__atomic_fetch_add(&inode_gc_epoch,1,__ATOMIC_RELEASE);server_storage_engine_close(&server);assert(!server_storage_engine_init(&server));server_init_local_usage(&server);}
 static void *actor(void *arg)
 {
     efs_tls_chunk_gen=333;efs_tls_write_root=0;
@@ -179,7 +199,29 @@ int main(int argc, char **argv)
         assert(!server_gc_inode(&server,1,4242,9));read_value(4242,0,EFS_ERR_NOT_FOUND,0);write_value(4242,0,60,EFS_ERR_STALE);
         /* Bounded inode orphan cleanup and persistent death fence. */
         efs_tls_chunk_gen=444;for(unsigned ci=0;ci<70;ci++)write_value(777,ci,61,EFS_OK);
+        body_syncs=0;
         int gr;do{gr=server_gc_inode(&server,1,777,9);}while(gr==EFS_ERR_BUSY);assert(gr==EFS_OK);
+        assert(body_syncs==1); /* Seventy punches, one durable segment barrier. */
+        for(int failed=1;failed<=3;failed++){
+            efs_ino_t ino=8000+failed;efs_tls_chunk_gen=555;
+            for(unsigned ci=0;ci<20;ci++)write_value(ino,ci,65,EFS_OK);
+            uint64_t held=server.nodes[0].used;
+            fault=failed;assert(server_gc_inode(&server,1,ino,9)==EFS_ERR_IO);fault=0;
+            assert(server.nodes[0].used==held); /* no physical success charged early */
+            do{gr=server_gc_inode(&server,1,ino,9);}while(gr==EFS_ERR_BUSY);assert(gr==EFS_OK);
+            assert(server.nodes[0].used==held-20*EFS_FRAGMENT_SIZE);
+            write_value(ino,21,66,EFS_ERR_STALE);
+        }
+        for(int stage=7;stage<=9;stage++){
+            efs_ino_t ino=9000+stage;efs_tls_chunk_gen=666;
+            for(unsigned ci=0;ci<20;ci++)write_value(ino,ci,67,EFS_OK);
+            pid_t child=fork();assert(child>=0);
+            if(!child){fault=stage;server_gc_inode(&server,1,ino,9);_exit(1);}
+            int status;assert(waitpid(child,&status,0)==child && WIFEXITED(status) && WEXITSTATUS(status)==40+stage);
+            restart();
+            do{gr=server_gc_inode(&server,1,ino,9);}while(gr==EFS_ERR_BUSY);assert(gr==EFS_OK);
+            read_value(ino,0,EFS_ERR_NOT_FOUND,0);write_value(ino,21,68,EFS_ERR_STALE);
+        }
         restart();write_value(777,71,61,EFS_ERR_STALE);
         /* A large variable fragment and full-segment rollover use another container. */
         struct target *full=server.container_targets[0];

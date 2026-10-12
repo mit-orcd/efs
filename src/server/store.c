@@ -884,10 +884,33 @@ static int inode_death_set(struct efsd_server *s, efs_export_id_t eid, efs_ino_t
     pthread_mutex_unlock(mu);
     return rc;
 }
+static void gc_account_removed(struct efsd_server *s,uint64_t count,
+                               uint64_t payload,uint64_t stored_bytes)
+{
+    if(!count)return;
+    pthread_mutex_lock(&s->lock);
+    struct efs_node *ln=server_local_node(s);
+    if(ln)ln->used=ln->used>=payload?ln->used-payload:0;
+    pthread_mutex_unlock(&s->lock);
+    server_usage_mark_dirty(s);
+    __atomic_fetch_add(&s->gc_removed_fragments,count,__ATOMIC_RELAXED);
+    __atomic_fetch_add(&s->gc_removed_file_bytes,stored_bytes,__ATOMIC_RELAXED);
+    __atomic_fetch_add(&s->gc_removed_payload_bytes,payload,__ATOMIC_RELAXED);
+    __atomic_store_n(&s->gc_last_delete_us,gc_clock_us(),__ATOMIC_RELAXED);
+}
 /* Bounded physical orphan sweep, called only after Raft-confirmed lane
  * sweeps. These bodies include losing CAS attempts absent from chunk rows. */
 static int gc_dead_directory(struct efsd_server *s, const char *path, unsigned *left, unsigned depth)
 {
+    if(s->storage_engine && depth==1){
+        uint64_t count,payload,bytes;
+        int rc=server_container_gc_directory(s,path,left,&count,&payload,&bytes);
+        gc_account_removed(s,count,payload,bytes);
+        if(rc)return rc;
+        if(rmdir(path) && errno!=ENOENT)return EFS_ERR_IO;
+        return fragment_parent_sync(s,path);
+    }
+
     int dfd = open(path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
     if (dfd < 0)
         return errno == ENOENT ? fragment_parent_sync(s, path) : EFS_ERR_IO;
@@ -942,21 +965,7 @@ static int gc_dead_directory(struct efsd_server *s, const char *path, unsigned *
             (*left)--;
             if (!s->storage_engine && fragment_payload_bytes((uint64_t)st.st_size, &payload) != EFS_OK)
                 payload = (uint64_t)st.st_size;
-            pthread_mutex_lock(&s->lock);
-            struct efs_node *ln = server_local_node(s);
-            if (ln)
-                ln->used = ln->used >= payload ? ln->used - payload : 0;
-            pthread_mutex_unlock(&s->lock);
-            server_usage_mark_dirty(s);
-            __atomic_fetch_add(&s->gc_removed_fragments, 1, __ATOMIC_RELAXED);
-            __atomic_fetch_add(&s->gc_removed_file_bytes, stored_bytes,
-                               __ATOMIC_RELAXED);
-            __atomic_fetch_add(&s->gc_removed_payload_bytes, payload, __ATOMIC_RELAXED);
-            struct timespec ts;
-            clock_gettime(CLOCK_MONOTONIC, &ts);
-            __atomic_store_n(&s->gc_last_delete_us,
-                             (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000,
-                             __ATOMIC_RELAXED);
+            gc_account_removed(s,1,payload,stored_bytes);
         } else {
             rc = EFS_ERR_IO;
             break;
