@@ -2259,10 +2259,9 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
         # exactly 144 participants using the production hash, then retain the
         # original 145-ancestor refusal and both coordinator-death oracles.
         used={mount.stat().st_ino & 0xfff}
-        if a.namespace_max_fault:
-            placement_status=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port}'],capture_output=True,text=True).stdout
-            match=re.search(r'root=1 salt=(\d+)',placement_status);assert match,placement_status
-            mkdir_salt=int(match.group(1))
+        placement_status=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port}'],capture_output=True,text=True).stdout
+        match=re.search(r'root=1 salt=(\d+)',placement_status);assert match,placement_status
+        mkdir_salt=int(match.group(1))
         def selected_directory(parent,prefix,fresh):
             result=run([attrs_helper,'choose',str(parent.stat().st_ino),str(mkdir_salt),prefix,'fresh' if fresh else 'member'],input=' '.join(map(str,sorted(used))),capture_output=True,text=True).stdout.split()
             assert len(result)==2,result
@@ -2272,16 +2271,13 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
             assert path.stat().st_ino & 0xfff == shard,'predicted mkdir placement differs from actual inode'
             used.add(shard);placements.append({'name':name,'shard':shard,'fresh':fresh})
             return path
-        if a.namespace_max_fault:moving=selected_directory(mount,'max-moving',True)
-        else:moving=mount/'max-moving';moving.mkdir()
+        moving=selected_directory(mount,'max-moving',True)
         last=moving;elapsed=None
         for index in range(144):
-            if a.namespace_max_fault:
-                # Root + source + 142 fresh ancestry shards = 144. The next
-                # two ancestors reuse a participant: the last still exceeds
-                # the independent ancestry bound, not the participant bound.
-                folder=selected_directory(folder,f'max-{index}',index<142)
-            else:folder=folder/f'max-{index}';folder.mkdir()
+            # Root + source + 142 fresh ancestry shards = 144. The next
+            # two ancestors reuse a participant: the last still exceeds
+            # the independent ancestry bound, not the participant bound.
+            folder=selected_directory(folder,f'max-{index}',index<142)
             chain.append(folder)
             unchanged=lambda path: tuple(getattr(path.stat(),field) for field in
                 ('st_ino','st_mode','st_uid','st_gid','st_nlink','st_mtime_ns','st_ctime_ns'))
@@ -2314,9 +2310,9 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
             'authoritative_unchanged_before_and_after_restart':True},indent=2))
         recovered=mount/'max-recovered';os.rename(last,recovered)
         assert recovered.stat().st_ino==saved
+        assert len(used)==144,used
+        (work/'namespace-max-placement.json').write_text(json.dumps({'export_salt':mkdir_salt,'participants':sorted(used),'placements':placements,'distinct_participants':len(used)},indent=2))
         if a.namespace_max_fault:
-            assert len(used)==144,used
-            (work/'namespace-max-placement.json').write_text(json.dumps({'export_salt':mkdir_salt,'participants':sorted(used),'placements':placements,'distinct_participants':len(used)},indent=2))
             outcomes=[]
             destination=chain[-2]/'moved'
             for stage in ('prepare','commit'):

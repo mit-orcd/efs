@@ -518,6 +518,7 @@ test: all
 	python3 tests/test_efs_commands.py
 	python3 tests/test_namespace_bounds.py
 	python3 tests/test_namespace_fixture.py
+	python3 tests/test_namespace_envelope_fixture.py
 	python3 tests/test_gc_fixture_drain.py
 	python3 tests/test_rename_budget.py
 	./tests/test_namespace_session
