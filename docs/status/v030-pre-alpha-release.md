@@ -524,3 +524,11 @@ PASS; fault/mounted83 remain NOTRUN. NUCf4b594fa confirms preserved f52 service
 restoration and old ba73 direct20k cold/physical PASS; repaired101 native failed
 documentation-bundle links, not equivalent to merged-source acceptance. Both
 documentation/evidence descendants are now integrated.
+
+Bounded review of diagnostic d485afbf finds no added correctness defect; keys
+are length-checked, page traces precede session release and all return/fence/
+ownership behavior remains. Initial query_lock writer acquisition for lag/pending
+update is not timed; a stall there can occur before any capture event. Synchronous
+fprintf, including lock-held events, perturbs diagnostic latency. Preserve this
+source/results first; add that missing discriminator only if evidence requires
+it. Instrumented timing is never quiet acceptance.

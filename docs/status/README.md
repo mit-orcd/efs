@@ -683,4 +683,6 @@ and [Mac boundary review](mac-query-stage-disposition-20261012.md) support separ
 opt-in stage instrumentation (capture/authority/transaction/import, pending shard/kind,
 build/checkpoint/publication lock and request root/generation). Focused normal,
 trace-enabled and sanitizer regressions pass; new full frozen gates precede one
-diagnostic run. No additional correctness fix is proven yet.
+diagnostic run. No additional correctness fix is proven yet. Diagnostic review notes initial
+lag-update writer lock is unmeasured and tracing perturbs latency; keep separate
+quiet acceptance.
