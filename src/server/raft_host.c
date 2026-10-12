@@ -10442,6 +10442,57 @@ static int host_repair_write_read(struct efs_raft_host *h,uint8_t group,
     pthread_mutex_unlock(&h->mu);return rc;
 }
 
+/* Trusted local coordinator only, deliberately absent from handler dispatch.
+ * Public/forwarded generic tag55 continues to be refused. DATA/SEAL can only
+ * be recorded from a receipt returned by the exact target operation; encoding
+ * alone is not a proof. Lost proposal replies leave debt and require retry. */
+int server_raft_host_repair_record(unsigned op,const struct efs_repair_job *j,
+                                  uint32_t arg,const uint8_t *receipt,uint32_t n)
+{
+    struct efs_raft_host *h=g_host;uint8_t cmd[EFS_REPAIR_COMMAND_BYTES];
+    if(!h || !h->running || !j)return EFS_ERR_INVAL;
+    if(op<EFS_REPAIR_OP_ADMIT || op>EFS_REPAIR_OP_RETIRE ||
+       j->state!=EFS_REPAIR_ADMITTED || j->flags || j->span_off || j->span_len ||
+       (op!=EFS_REPAIR_OP_SEAL && op!=EFS_REPAIR_OP_RETIRE && arg) ||
+       (op==EFS_REPAIR_OP_SEAL && arg!=j->epoch+1u) ||
+       (op==EFS_REPAIR_OP_RETIRE && arg>1))return EFS_ERR_INVAL;
+    int rc=efs_repair_job_encode(j,cmd+2);if(rc)return rc;
+    if(op==EFS_REPAIR_OP_DATA || op==EFS_REPAIR_OP_SEAL){
+        rc=efs_repair_receipt_verify(j,op==EFS_REPAIR_OP_DATA?EFS_REPAIR_RECEIPT_DATA:EFS_REPAIR_RECEIPT_SEAL,receipt,n);
+        if(rc)return rc;
+    }else if(receipt || n)return EFS_ERR_INVAL;
+    if(op==EFS_REPAIR_OP_ADMIT){
+        struct efs_msg_inode_writer_view q={j->ino,j->inode_gen,j->ci,0};
+        struct efs_msg_inode_writer_view_reply view;server_raft_host_writer_view(&q,&view);
+        if(view.status==EFS_INODE_RPC_NOT_PRIMARY)return EFS_ERR_NOT_PRIMARY;
+        if(view.status==EFS_INODE_RPC_BUSY)return EFS_ERR_BUSY;
+        if(view.status==EFS_INODE_RPC_NOT_FOUND || view.status==EFS_INODE_RPC_STALE)return EFS_ERR_STALE;
+        if(view.status!=EFS_INODE_RPC_OK)return EFS_ERR_IO;
+        rc=efs_writer_view_reply_valid(&q,&view);if(rc)return rc;
+    }
+    uint8_t group=efs_raft_shard_group(efs_kv_lane_shard(j->ino,j->ci%EFS_META_LANES));
+    int hint=-1;rc=host_read_index(h,group,&hint);if(rc)return rc;
+    pthread_mutex_lock(&h->mu);struct host_group *g=group_slot(h,group);
+    if(!g || !g->r || efs_raft_role(g->r)!=EFS_RAFT_LEADER)rc=EFS_ERR_NOT_PRIMARY;
+    else if((op==EFS_REPAIR_OP_ADMIT || op==EFS_REPAIR_OP_DATA) &&
+            (efs_raft_term(g->r)>UINT32_MAX-1ull || efs_raft_term(g->r)!=j->epoch ||
+             !h->s || h->s->id!=j->owner))rc=EFS_ERR_STALE;
+    else if(op==EFS_REPAIR_OP_ADMIT){
+        struct efs_repair_job current;uint8_t encoded[EFS_REPAIR_JOB_BYTES];
+        rc=efs_repair_capture(h->kv,j,&current);
+        if(!rc)rc=efs_repair_job_encode(&current,encoded);
+        if(!rc && memcmp(encoded,cmd+2,sizeof(encoded)))rc=EFS_ERR_STALE;
+    }else if(op==EFS_REPAIR_OP_DATA)rc=efs_repair_write_authority(h->kv,j);
+    else if(op==EFS_REPAIR_OP_SEAL)rc=efs_repair_seal_authority(h->kv,j);
+    else if(op==EFS_REPAIR_OP_CANCEL){struct efs_repair_job current;rc=efs_repair_get(h->kv,j,&current);}
+    pthread_mutex_unlock(&h->mu);if(rc)return rc;
+    cmd[0]=EFS_MD_CMD_REPAIR_JOB;cmd[1]=(uint8_t)op;wr32be(cmd+2+EFS_REPAIR_JOB_BYTES,arg);
+    /* The committed entry term is the final ADMIT/DATA fence. A leadership
+     * change before proposal cannot grant stale ownership; a forwarded55 is
+     * refused by the public path instead of becoming an untrusted mutation. */
+    return host_propose_wait_idx(h,group,cmd,sizeof(cmd),&hint,NULL);
+}
+
 void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
                              struct efs_msg_raft_mkfs_reply *out)
 {
