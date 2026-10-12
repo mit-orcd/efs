@@ -1,0 +1,89 @@
+[
+  {
+    "name": "containers-direct-r1",
+    "engine": "containers",
+    "io": "direct",
+    "repeat": 1,
+    "status": "PASS",
+    "phases": [
+      {
+        "phase": "create",
+        "workers": 4,
+        "operations": 256,
+        "bytes": 134217728,
+        "wall_s": 67.50080637999997,
+        "MiB_s": 1.8962736427090376,
+        "ops_s": 3.7925472854180753,
+        "p99_ms": 1924.458154000149,
+        "max_ms": 1971.8636009999955,
+        "errors": 0,
+        "integrity": false
+      },
+      {
+        "phase": "read",
+        "workers": 4,
+        "operations": 256,
+        "bytes": 134217728,
+        "wall_s": 11.492822307000097,
+        "MiB_s": 11.137386151183875,
+        "ops_s": 22.27477230236775,
+        "p99_ms": 362.365981000039,
+        "max_ms": 372.9830010001933,
+        "errors": 0,
+        "integrity": true
+      },
+      {
+        "phase": "churn",
+        "workers": 4,
+        "operations": 256,
+        "bytes": 33554432,
+        "wall_s": 23.614843288000202,
+        "MiB_s": 1.3550799219684293,
+        "ops_s": 10.840639375747434,
+        "p99_ms": 575.8813290001399,
+        "max_ms": 584.0180019999934,
+        "errors": 0,
+        "integrity": false
+      },
+      {
+        "phase": "verify",
+        "workers": 4,
+        "operations": 256,
+        "bytes": 134217728,
+        "wall_s": 11.009651404999886,
+        "MiB_s": 11.626162835807001,
+        "ops_s": 23.252325671614003,
+        "p99_ms": 450.59303099992576,
+        "max_ms": 474.63535500014586,
+        "errors": 0,
+        "integrity": true
+      },
+      {
+        "phase": "restart-verify",
+        "workers": 4,
+        "operations": 256,
+        "bytes": 134217728,
+        "wall_s": 12.661690186999977,
+        "MiB_s": 10.109234873825951,
+        "ops_s": 20.218469747651902,
+        "p99_ms": 411.2174269998832,
+        "max_ms": 434.0003679999427,
+        "errors": 0,
+        "integrity": true
+      },
+      {
+        "phase": "restart-delete",
+        "workers": 4,
+        "operations": 256,
+        "bytes": 0,
+        "wall_s": 10.452226111999835,
+        "MiB_s": 0.0,
+        "ops_s": 24.492390162330622,
+        "p99_ms": 340.2232539999659,
+        "max_ms": 428.43809200007854,
+        "errors": 0,
+        "integrity": false
+      }
+    ]
+  }
+]
