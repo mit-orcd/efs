@@ -1475,7 +1475,7 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-**Mac live qualification:** release baseline ac8cf2d7 passed peer67/67 and 26/27 orderly-cold persistence cases; four-job native remains FAIL (206/216 baseline, 205/216 unexercised candidate diagnostic). Fresh-store ac8cf2d7 also fails ten original-budget cases (206/216); deployment artifact-copy fix committed in cluster scripts. No protocol candidate retained. [Results and durability-I/O investigation](../status/mac-v032-posix-20261012.md).
+**Mac live qualification:** original-budget gates remain open. Existing atomic single-append completion now passes the isolated 80-append timeout (14.4 seconds); candidate native four-job result is 208/216, requiring an uncontended rerun. Fresh-store persistence prepare remains 26/27; the serial 500-file case exceeds 60 seconds. Unexercised bootstrap/namespace candidates removed; bounded background close-retirement batching is under test. [Results and durability-I/O investigation](../status/mac-v032-posix-20261012.md).
 
 **Current release integration:** `release-v0.3.2-pre-alpha` merges reviewed ORCD evidence9fc5e024 into v0.3.1. Product/test inputs unchanged. AMD TCP/direct and TCP/buffered PASS; independently reviewed ORCD nativeRDMA/direct two core rounds1512/1512 and peer67/67 per round, native/fault/sanitizers/cold/physicalGC PASS. Tested SHAs remain15e2a531 AMD and40f4509d ORCD; the merge itself was not remotely executed. Packing/containers/.efs/repair remain disabled. No push/tag/deployment. [v0.3.2 review and coverage](../status/v032-integration-review-20261012.md).
 

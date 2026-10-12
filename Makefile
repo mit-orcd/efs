@@ -501,6 +501,7 @@ test: all
 	python3 tests/test_append_prepare_batch.py
 	python3 tests/test_meta_cmd_namespace.py
 	python3 tests/test_append_catchup_host.py
+	python3 tests/test_append_single_host.py
 	./tests/test_meta_apply
 	./tests/test_retained_namespace_audit
 	./tests/test_lane_bootstrap_recovery
@@ -524,6 +525,7 @@ test: all
 	python3 tests/test_feature_discovery_status.py
 	python3 tests/test_close_inspector_scope.py
 	python3 tests/test_close_retire_fastpath.py
+	python3 tests/test_close_retire_batch.py
 	python3 tests/test_store_tls.py
 	python3 tests/test_report_session_admission.py
 	python3 tests/test_namespace_owner_once.py

@@ -7713,6 +7713,11 @@ static int close_step_scan_cb(void *user,const uint8_t *key,uint32_t len,
     memcpy(scan->identity[scan->n++],value,length);
     return scan->n==8;
 }
+/* Submit the bounded independent RETIRE set together; each result remains
+ * an exact-entry verdict, including BUSY rows that need cleanup. */
+static void host_gc_close_retire_batch(struct efs_raft_host *,uint8_t,
+    const efs_ino_t *,const uint8_t [8][EFS_CLOSE_STEP_VALUE],unsigned,int *);
+
 static void host_gc_close_step_pass(struct efs_raft_host *h,uint8_t group,uint32_t anchor)
 {
     int gi=gc_gi(group);
@@ -7728,6 +7733,9 @@ static void host_gc_close_step_pass(struct efs_raft_host *h,uint8_t group,uint32
     else if(scan.n) {
         memcpy(h->close_step_cursor[gi],scan.last,11);h->close_step_cursor_len[gi]=11;
     }
+    int results[8];
+    if (!h->gc_running) return;
+    host_gc_close_retire_batch(h,group,scan.ino,scan.identity,scan.n,results);
     for(uint32_t i=0;i<scan.n && h->gc_running;i++) {
         uint8_t cmd[46]={EFS_MD_CMD_CLOSE_STEP};
         wr64be(cmd+1,scan.ino[i]);memcpy(cmd+9,scan.identity[i],EFS_CLOSE_STEP_VALUE);
@@ -7736,7 +7744,7 @@ static void host_gc_close_step_pass(struct efs_raft_host *h,uint8_t group,uint32
          * proposal plus dual-group append ReadIndexes for every such close.
          * BUSY retains the existing bounded cleanup path and every barrier. */
         cmd[45]=EFS_CLOSE_STEP_RETIRE;
-        rc=host_gc_propose(h,group,cmd,sizeof(cmd));
+        rc=results[i];
         if(rc!=EFS_ERR_BUSY)continue;
         cmd[45]=EFS_CLOSE_STEP_LOCKS;
         rc=host_gc_propose(h,group,cmd,sizeof(cmd));
@@ -12699,6 +12707,31 @@ static int host_prep_async(struct efs_raft_host *h, uint32_t shard, int kind,
 /* Commutative parts (§7.2). `ref` NULL = propose and wait (host_prep
  * style); non-NULL = propose only, caller waits with host_wait_refs
  * (host_prep_async style). */
+static void host_gc_close_retire_batch(struct efs_raft_host *h,uint8_t group,
+    const efs_ino_t *ino,const uint8_t identities[8][EFS_CLOSE_STEP_VALUE],
+    unsigned n,int *results)
+{
+    if(!n)return;
+    struct host_idx_ref refs[8];
+    struct host_command_cohort cohort;
+    int rc=EFS_OK;
+    host_command_cohort_begin(&cohort,h);
+    for(unsigned i=0;i<n && rc==EFS_OK;i++) {
+        uint8_t cmd[46]={EFS_MD_CMD_CLOSE_STEP};
+        wr64be(cmd+1,ino[i]);memcpy(cmd+9,identities[i],EFS_CLOSE_STEP_VALUE);
+        cmd[45]=EFS_CLOSE_STEP_RETIRE;refs[i].group=group;
+        rc=host_command_cohort_add(h,&refs[i],cmd,sizeof(cmd),NULL);
+    }
+    rc=host_command_cohort_end(&cohort,rc,NULL);
+    for(unsigned i=0;i<n;i++) {
+        int one=rc==EFS_OK?host_wait_verdict(h,group,refs[i].idx,refs[i].term,NULL):rc;
+        results[i]=one;
+        if(one!=EFS_OK && one!=EFS_ERR_BUSY)
+            __atomic_fetch_add(&h->s->gc_reap_errors,1,__ATOMIC_RELAXED);
+    }
+}
+
+
 static int host_prep_raw(struct efs_raft_host *h, uint32_t shard, int kind,
                          const struct efs_txid *t, const struct efs_txn_parts *p,
                          const uint8_t *key, uint32_t klen, const uint8_t *pay,
@@ -16505,6 +16538,50 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
 /* One inode-group completion proposal marks every caught-up reservation.
  * Lane barriers are separate authorities: retire them with one guarded
  * cross-shard transaction, never mutate foreign shards in the inode log. */
+/* The existing atomic completion applies all captured single-shard effects
+ * in one WAL record. Use it for one fully published owned reservation only;
+ * foreign lanes, multiple reservations and follower coordinators retain the
+ * catch-up plus transaction path. No payload or FileID is inferred. */
+static int host_complete_single_append(struct efs_raft_host *h,efs_ino_t ino,
+    uint64_t published,const struct efs_meta_row *row,
+    const struct efs_opid *owner,int *hint,int *handled)
+{
+    *handled=0;
+    if(!owner || !owner->session_epoch)return EFS_OK;
+    uint8_t group=efs_raft_shard_group(efs_kv_inode_shard(ino));
+    pthread_mutex_lock(&h->mu);
+    struct efs_raft *r=group_raft(h,group);
+    uint32_t voters=r?efs_raft_voters(r):0;
+    int leader=r && efs_raft_role(r)==EFS_RAFT_LEADER && voters && (voters&(voters-1));
+    pthread_mutex_unlock(&h->mu);
+    if(!leader)return EFS_OK;
+    uint64_t offset=0,length=0;uint32_t count=1;
+    int rc=efs_meta_apply_append_open(h->kv,ino,&offset,&length,&count);
+    if(rc)return rc;
+    if(count!=1 || !length || offset>UINT64_MAX-length || offset+length>published)
+        return EFS_OK;
+    rc=efs_meta_append_completion_atomic_eligible(h->kv,ino,offset);
+    if(rc!=1)return rc<0?rc:EFS_OK;
+    uint8_t key[EFS_KV_KEY_MAX],value[48];uint32_t kl=0,vl=sizeof(value);
+    rc=efs_kv_key_append_rsv(efs_kv_inode_shard(ino),ino,row->generation,offset,key,&kl);
+    if(!rc)rc=efs_kv_get(h->kv,key,kl,value,&vl);
+    if(rc)return rc==EFS_ERR_NOT_FOUND?EFS_ERR_BUSY:rc;
+    if(vl!=sizeof(value) || rd64be(value)!=offset)
+        return EFS_ERR_PROTO;
+    if(rd64be(value+8)!=length)return EFS_ERR_BUSY;
+    if(memcmp(value+16,owner->client_uuid,16) || rd32be(value+32)!=owner->session_epoch)
+        return EFS_OK;
+    uint8_t cmd[EFS_MD_APPEND_COMPLETE_ATOMIC_LEN]={EFS_MD_CMD_APPEND_COMPLETE_ATOMIC};
+    wr64be(cmd+1,ino);wr64be(cmd+9,row->generation);wr64be(cmd+17,offset);
+    memcpy(cmd+25,owner->client_uuid,16);wr32be(cmd+41,owner->session_epoch);
+    wr64be(cmd+45,row->content_epoch);memcpy(cmd+53,value,sizeof(value));
+    uint64_t index=0,term=0;
+    *handled=1;
+    rc=host_propose_mode(h,group,cmd,sizeof(cmd),&index,&term,hint,1);
+    if(!rc)rc=host_wait_verdict(h,group,index,term,hint);
+    return rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
+}
+
 static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
                                   uint64_t sz, const struct efs_opid *session, int *hint)
 {
@@ -16520,6 +16597,11 @@ static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
     rc=efs_meta_apply_append_state(h->kv,ino,&watermark,NULL,&open);
     if(rc!=EFS_OK)return rc;
     if(open) {
+        if(open==1) {
+            int handled=0;
+            rc=host_complete_single_append(h,ino,sz,&row,session,hint,&handled);
+            if(rc || handled)return rc;
+        }
         if(open>EFS_META_APPEND_CATCHUP_MAX)return EFS_ERR_OVERFLOW;
         uint8_t cmd[58]={EFS_MD_CMD_APPEND_CATCHUP};
         wr64be(cmd+1,ino);wr64be(cmd+9,row.generation);

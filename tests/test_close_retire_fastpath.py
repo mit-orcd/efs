@@ -32,6 +32,10 @@ static int host_gc_propose(struct efs_raft_host*h,uint8_t g,const uint8_t*cmd,ui
 static int host_close_append_step(struct efs_raft_host*h,efs_ino_t ino,const uint8_t*identity){
  (void)h;assert(ino==42&&rd64be(identity)==1);append_calls++;return append_rc;
 }
+static void host_gc_close_retire_batch(struct efs_raft_host*h,uint8_t g,const efs_ino_t*ino,
+ const uint8_t identities[8][EFS_CLOSE_STEP_VALUE],unsigned n,int*results){
+ for(unsigned i=0;i<n;i++) {uint8_t cmd[46]={EFS_MD_CMD_CLOSE_STEP};wr64be(cmd+1,ino[i]);memcpy(cmd+9,identities[i],EFS_CLOSE_STEP_VALUE);cmd[45]=EFS_CLOSE_STEP_RETIRE;results[i]=host_gc_propose(h,g,cmd,sizeof(cmd));}
+}
 '''+s[a:b]+r'''
 static void run(int first,int locks,int append){
  struct stats stats={0};struct efs_raft_host h={.s=&stats,.gc_running=1};

@@ -92,6 +92,10 @@ static int efs_meta_apply_append_catchup(void *kv,efs_ino_t ino,uint64_t gen,uin
  if(owner)assert(owner->client_uuid[0]==42&&owner->session_epoch==3);
  apply_calls++;return metadata_error;
 }
+static int host_complete_single_append(struct efs_raft_host *h,efs_ino_t ino,uint64_t sz,
+ const struct efs_meta_row *row,const struct efs_opid *owner,int *hint,int *handled){
+ (void)h;(void)ino;(void)sz;(void)row;(void)owner;(void)hint;*handled=0;return 0;
+}
 ''' + pressure + function('host_resolve_caught_up') + '\n' + function('apply_append_catchup_cmd') + r'''
 static void reset(void){
  watermark=80000;remaining=20000;completed=proposals=retirements=authorities=apply_calls=0;
