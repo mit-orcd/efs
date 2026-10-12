@@ -12,6 +12,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <stdio.h>
 #define PACK_WRITERS 16u
 #define PACK_PUBLISH_WORKERS 4u
 #define PACK_PUBLISH_STACK_BYTES (256u << 10)
@@ -68,6 +69,22 @@ static uint32_t pack_capability_members;
 static uint64_t pack_capability_checked;
 static int pack_capability_batch;
 static int pack_batch_peer_unsupported(void);
+/* Opt-in phase evidence only; never changes ownership or retry decisions. */
+static uint64_t pack_profile_start(void)
+{
+    const char *v=getenv("EFS_PACK_PROF");
+    if(!v || strcmp(v,"1"))return 0;
+    struct timespec ts;clock_gettime(CLOCK_MONOTONIC,&ts);
+    return (uint64_t)ts.tv_sec*1000000000ull+(uint64_t)ts.tv_nsec;
+}
+static void pack_profile_end(const char *phase,uint64_t start,uint32_t group,uint32_t count,int rc)
+{
+    if(!start)return;
+    struct timespec ts;clock_gettime(CLOCK_MONOTONIC,&ts);
+    uint64_t end=(uint64_t)ts.tv_sec*1000000000ull+(uint64_t)ts.tv_nsec;
+    fprintf(stderr,"PACK-PROF phase=%s group=%u count=%u us=%llu rc=%d\n",
+        phase,group,count,(unsigned long long)((end-start)/1000),rc);
+}
 static uint64_t pack_now(void)
 {
     struct timespec t;if(clock_gettime(CLOCK_MONOTONIC,&t))return 0;
@@ -404,7 +421,9 @@ static int pack_progress(struct pack_context *p)
         p->built=1;
     }
     if(p->put_mask!=7) {
-        rc=pack_command(p,EFS_MD_CMD_PACK_ADMIT);if(rc)return rc;
+        uint64_t admit_start=pack_profile_start();
+        rc=pack_command(p,EFS_MD_CMD_PACK_ADMIT);
+        pack_profile_end("admit",admit_start,p->cohort.group,p->cohort.count,rc);if(rc)return rc;
         size_t manifest;
         rc=efs_pack_upload_encode(&p->object,p->cohort.refs,p->cohort.count,
             p->wire+EFS_PACKED_PUT_HEADER,sizeof(p->wire)-EFS_PACKED_PUT_HEADER,&manifest);if(rc)return rc;
@@ -413,19 +432,22 @@ static int pack_progress(struct pack_context *p)
             if(p->put_mask&(1u<<fi))continue;
             if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
             efs_put_upload_wr32(p->wire+4,fi);efs_node_id_t node=p->object.nodes[fi];
-            struct efs_conn *c=efs_client_conn_get(node);if(!c)return EFS_ERR_NET;
+            uint64_t put_start=pack_profile_start();
+            struct efs_conn *c=efs_client_conn_get(node);if(!c){pack_profile_end("put",put_start,p->cohort.group,p->cohort.count,EFS_ERR_NET);return EFS_ERR_NET;}
             uint8_t type=0;void *raw=NULL;uint32_t n=0;
             if(efs_conn_send_msg_parts(c,EFS_MSG_PUT_PACKED,p->wire,EFS_PACKED_PUT_HEADER+(uint32_t)manifest,
                  p->fragments[fi],(uint32_t)p->cohort.geometry/2) || efs_conn_recv_msg(c,&type,&raw,&n)) {
-                free(raw);efs_client_conn_drop(node,c);return EFS_ERR_NET;
+                free(raw);efs_client_conn_drop(node,c);pack_profile_end("put",put_start,p->cohort.group,p->cohort.count,EFS_ERR_NET);return EFS_ERR_NET;
             }
             efs_client_conn_release(node,c);
             rc=type==EFS_MSG_PUT_PACKED_REPLY && n==4?(int32_t)efs_put_upload_rd32(raw):EFS_ERR_PROTO;
-            free(raw);if(rc)return rc;
+            free(raw);pack_profile_end("put",put_start,p->cohort.group,p->cohort.count,rc);if(rc)return rc;
             p->put_mask|=1u<<fi;
         }
     }
-    rc=pack_publish_cohort(p);if(rc)return rc;
+    uint64_t publish_start=pack_profile_start();
+    rc=pack_publish_cohort(p);
+    pack_profile_end("publish-load",publish_start,p->cohort.group,p->cohort.count,rc);if(rc)return rc;
     return EFS_OK;
 }
 static int pack_flush_group(unsigned gi,int force)
