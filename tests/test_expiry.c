@@ -47,6 +47,12 @@ static void inheritance_gates(void)
  struct failure f={kv};const struct efs_kv_ops ops={.get=fault_get,.scan_prefix=fault_scan,.batch=fault_batch};struct efs_kv failed={&ops,&f};
  assert(efs_meta_apply_create_expiring(&failed,&at,1,S_IFREG|0600,"failed",&no_expiry)==EFS_ERR_IO);
  struct efs_meta_dentry dent;assert(efs_meta_apply_lookup(kv,1,"failed",&dent)==EFS_ERR_NOT_FOUND);
+ assert(!efs_meta_apply_rename(kv,1,"first",1,"renamed",2*NS));
+ assert(!efs_expiry_get(kv,first,1,&record));assert(record.deadline_ns==3*NS && record.revision==2 && !strcmp(record.name,"renamed"));
+ struct efs_expiry_due due={.deadline_ns=3*NS,.ino=first,.generation=1,.revision=1,.parent=1,.name="first"};
+ assert(efs_meta_apply_expire(kv,1,"renamed",4*NS,&due)==EFS_ERR_STALE);
+ due.revision=2;assert(!efs_meta_apply_expire(kv,1,"renamed",4*NS,&due));
+ assert(!efs_meta_apply_reap_done(kv,first,1));assert(!efs_expiry_get(kv,first,1,&record));assert(!record.revision);
  assert(!efs_meta_apply_check(kv));efs_kv_mem_free(kv);
 }
 static void namespace_gates(void)

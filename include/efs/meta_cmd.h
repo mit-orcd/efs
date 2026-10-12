@@ -27,6 +27,9 @@
 #define EFS_MD_REQ_PACK_STATUS 46 /* same manifest, fresh authority only */
 /* Exact single-shard APPEND image envelope; no replica-local EOF selection. */
 #define EFS_MD_APPEND_COMPLETE_ATOMIC_LEN 101u
+#define EFS_MD_REQ_EXPIRY_CLOCK 63 /* local clock health only */
+#define EFS_MD_REQ_EXPIRY_CLOCK_RESET 64 /* local operator uid4; no namespace mutation */
+#define EFS_MD_REQ_EXPIRY_DELETE 65 /* guarded due FileID/name; receiver owns clock */
 #define EFS_MD_CMD_CREATE_REFUSAL 62 /* shard4 + existing op-id trailer; EEXIST receipt */
 #define EFS_MD_CMD_EXPIRY_POLICY 58 /* root/gen/uid/expected/TTL/max/flags:46 */
 #define EFS_MD_CMD_EXPIRY_RENEW 59 /* ino/gen/uid/expected/leader-now/deadline:45 */

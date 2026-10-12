@@ -40,6 +40,7 @@ struct efs_expiry_page {
     uint8_t more;
 };
 struct efs_expiry_clock { uint64_t wall, mono; uint8_t initialized, healthy, uncertain; };
+void efs_expiry_index_key(uint64_t ino,uint64_t gen,uint64_t deadline,uint8_t out[EFS_EXPIRY_INDEX_BYTES]);
 void efs_expiry_policy_key(uint64_t root,uint64_t gen,uint8_t out[EFS_EXPIRY_KEY_BYTES]);
 void efs_expiry_record_key(uint64_t ino,uint64_t gen,uint8_t out[EFS_EXPIRY_KEY_BYTES]);
 int efs_expiry_policy_decode(const uint8_t *,uint32_t,struct efs_expiry_policy *);

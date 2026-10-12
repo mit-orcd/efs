@@ -41,6 +41,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <sys/timex.h>
 #include <unistd.h>
 #include "efs/rdma.h"
 
@@ -386,6 +387,10 @@ struct efs_raft_host {
     pthread_t query_tid;
     int query_running,query_started,query_error,query_enabled;
     int expiry_enabled;
+    struct efs_expiry_clock expiry_clock;
+    uint8_t expiry_resume[HOST_NGROUPS][EFS_EXPIRY_INDEX_BYTES];
+    uint8_t expiry_resuming[HOST_NGROUPS];
+    uint64_t expiry_removed,expiry_refused,expiry_errors;
     uint64_t query_deadline_ms;
     uint32_t query_cancel_checks; /* Owned by the query publisher thread. */
     struct efs_server_query_view query_view;
@@ -591,6 +596,7 @@ static void unpack_opid_trailer(const uint8_t *p, struct efs_opid_req *q)
 }
 
 static uint64_t now_ns(void);
+static int host_expiry_renew_txn(struct efs_raft_host *,const uint8_t *,int *);
 static void host_stop_senders(struct efs_raft_host *h);
 static void host_rec_mark(struct efs_raft_host *h, uint32_t shard);
 
@@ -8738,6 +8744,71 @@ static unsigned host_gc_packed_idle(unsigned ordinary, int capped, int deleted)
 }
 
 
+static int host_expiry_clock_read(struct efs_raft_host *h,uint64_t *wall)
+{
+    struct timex tx;memset(&tx,0,sizeof(tx));int state=adjtimex(&tx);
+    pthread_mutex_lock(&h->mu);
+    struct timespec mono;int clock_rc=clock_gettime(CLOCK_MONOTONIC,&mono);
+    uint64_t m=clock_rc?0:(uint64_t)mono.tv_sec*1000000000ull+mono.tv_nsec;
+    uint64_t w=now_ns();int kernel_ok=state>=0 && state!=TIME_ERROR &&
+                                       !(tx.status&(STA_UNSYNC|STA_CLOCKERR)) && !clock_rc;
+#if EFS_FAULTS
+    const char *fault=getenv("EFS_FAULT_EXPIRY_CLOCK_FILE");
+    if(fault && access(fault,F_OK)==0)kernel_ok=0;
+#endif
+    int healthy=efs_expiry_clock_sample(&h->expiry_clock,w,m);
+    if(!kernel_ok){h->expiry_clock.uncertain=1;h->expiry_clock.healthy=0;healthy=0;}
+    pthread_mutex_unlock(&h->mu);if(wall)*wall=w;return healthy;
+}
+
+static int host_expiry_delete(struct efs_raft_host *h,uint8_t group,
+                               const struct efs_expiry_due *due)
+{
+    size_t n=strnlen(due->name,sizeof(due->name));
+    if(!due->parent || !n || n==sizeof(due->name))return EFS_ERR_PROTO;
+    uint8_t cmd[42+EFS_MAX_NAME]={EFS_MD_REQ_EXPIRY_DELETE};
+    wr64be(cmd+1,due->parent);wr64be(cmd+9,due->ino);wr64be(cmd+17,due->generation);
+    wr64be(cmd+25,due->revision);wr64be(cmd+33,due->deadline_ns);cmd[41]=(uint8_t)n;
+    memcpy(cmd+42,due->name,n);
+    struct efs_msg_raft_mkfs_reply reply;
+    uint8_t need[2];host_need_both(need);int rc;
+    pthread_mutex_lock(&h->mu);int capable=host_hosts_all(h,need,2);
+    int peer=capable?-1:host_pick_peer(h,need,2,-1);pthread_mutex_unlock(&h->mu);
+    if(capable) {
+        uint8_t payload[1+sizeof(cmd)];payload[0]=group;memcpy(payload+1,cmd,42+n);
+        server_raft_host_submit(payload,(uint32_t)(43+n),&reply);rc=EFS_OK;
+    } else if(peer>=0)rc=host_rpc_submit(h,peer,group,cmd,(uint32_t)(42+n),&reply,1000);
+    else return EFS_ERR_NOT_PRIMARY;
+    return rc?rc:reply.rc;
+}
+
+static void host_gc_expiry_pass(struct efs_raft_host *h,uint8_t group,uint32_t anchor)
+{
+    if(!h->expiry_enabled)return;
+    uint64_t wall=0;if(!host_expiry_clock_read(h,&wall))return;
+    int hint=-1,rc=host_read_index(h,group,&hint);if(rc!=EFS_OK)return;
+    unsigned slot=group>>1;struct efs_expiry_page page;
+    rc=efs_expiry_due_page(h->kv,anchor,wall,h->expiry_resuming[slot]?h->expiry_resume[slot]:NULL,&page);
+    if(rc!=EFS_OK){__atomic_fetch_add(&h->expiry_errors,1,__ATOMIC_RELAXED);return;}
+    if(!page.count){h->expiry_resuming[slot]=0;return;}
+    struct timespec begin;clock_gettime(CLOCK_MONOTONIC,&begin);
+    for(unsigned i=0;i<page.count && i<8 && h->gc_running;i++) {
+        if(!host_expiry_clock_read(h,&wall))return;
+        rc=host_expiry_delete(h,group,&page.rows[i]);
+        if(rc==EFS_OK)__atomic_fetch_add(&h->expiry_removed,1,__ATOMIC_RELAXED);
+        else if(rc==EFS_ERR_BUSY || rc==EFS_ERR_STALE || rc==EFS_ERR_NOT_FOUND ||
+                rc==EFS_ERR_NOT_PRIMARY || rc==EFS_ERR_NO_QUORUM)
+            __atomic_fetch_add(&h->expiry_refused,1,__ATOMIC_RELAXED);
+        else __atomic_fetch_add(&h->expiry_errors,1,__ATOMIC_RELAXED);
+        efs_expiry_index_key(page.rows[i].ino,page.rows[i].generation,
+                            page.rows[i].deadline_ns,h->expiry_resume[slot]);
+        h->expiry_resuming[slot]=1;
+        struct timespec end;clock_gettime(CLOCK_MONOTONIC,&end);
+        int64_t elapsed=(int64_t)(end.tv_sec-begin.tv_sec)*1000000000ll+end.tv_nsec-begin.tv_nsec;
+        if(elapsed>=50000000ll)break;
+    }
+}
+
 static void *host_gc_thread(void *arg)
 {
     struct efs_raft_host *h = arg;
@@ -8786,6 +8857,7 @@ static void *host_gc_thread(void *arg)
             ta = now_us_();
             __atomic_store_n(&h->s->gc_group, h->g[g].group, __ATOMIC_RELAXED);
             __atomic_store_n(&h->s->gc_stage, 3, __ATOMIC_RELAXED);
+            host_gc_expiry_pass(h,h->g[g].group,anchor);
             host_gc_close_step_pass(h, h->g[g].group, anchor);
             host_gc_close_pass(h, h->g[g].group, anchor);
             host_gc_orphan_pass(h, h->g[g].group, anchor);
@@ -10746,6 +10818,43 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         if(!rc)out->salt=current.ledger.phase|((uint64_t)current.ledger.fence_acks<<32);
         return;
     }
+    if(clen && (cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK || cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK_RESET)) {
+        if(clen!=(cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK?1u:5u)) {out->rc=EFS_ERR_INVAL;return;}
+        if(cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK_RESET && (!h->expiry_enabled || rd32be(cmd+1))) {
+            out->rc=EFS_ERR_ACCES;return;
+        }
+        pthread_mutex_lock(&h->mu);
+        if(cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK_RESET)efs_expiry_clock_reset(&h->expiry_clock);
+        out->index=h->expiry_clock.healthy|((uint64_t)h->expiry_clock.uncertain<<1)|((uint64_t)h->expiry_enabled<<2);
+        out->salt=h->expiry_clock.wall;out->term=h->expiry_clock.mono;
+        pthread_mutex_unlock(&h->mu);out->rc=EFS_OK;return;
+    }
+    if(clen && cmd[0]==EFS_MD_REQ_EXPIRY_DELETE) {
+        if(!h->expiry_enabled){out->rc=EFS_ERR_ACCES;return;}
+        if(clen<43 || !cmd[41] || clen!=42u+cmd[41] ||
+           memchr(cmd+42,0,cmd[41]) || memchr(cmd+42,'/',cmd[41])) {
+            out->rc=EFS_ERR_INVAL;return;
+        }
+        struct efs_expiry_due due={.parent=rd64be(cmd+1),.ino=rd64be(cmd+9),
+             .generation=rd64be(cmd+17),.revision=rd64be(cmd+25),.deadline_ns=rd64be(cmd+33)};
+        memcpy(due.name,cmd+42,cmd[41]);
+        if(group!=efs_raft_shard_group(efs_kv_inode_shard(due.ino))) {out->rc=EFS_ERR_INVAL;return;}
+        uint64_t now=0;
+        if(!host_expiry_clock_read(h,&now) || due.deadline_ns>now){out->rc=EFS_ERR_BUSY;return;}
+        uint8_t both[2];host_need_both(both);
+        if(!host_hosts_all(h,both,2)){out->rc=EFS_ERR_NOT_PRIMARY;return;}
+        struct efs_msg_inode_reply result;server_raft_host_expire(due.parent,due.name,now,&due,&result);
+        switch(result.status) {
+        case EFS_INODE_RPC_OK:out->rc=EFS_OK;break;
+        case EFS_INODE_RPC_STALE:out->rc=EFS_ERR_STALE;break;
+        case EFS_INODE_RPC_NOT_FOUND:out->rc=EFS_ERR_NOT_FOUND;break;
+        case EFS_INODE_RPC_NOT_PRIMARY:out->rc=EFS_ERR_NOT_PRIMARY;break;
+        case EFS_INODE_RPC_BUSY:out->rc=EFS_ERR_BUSY;break;
+        case EFS_INODE_RPC_INVAL:out->rc=EFS_ERR_INVAL;break;
+        default:out->rc=EFS_ERR_IO;break;
+        }
+        out->leader_hint=result.primary_id?(int)result.primary_id-1:-1;return;
+    }
     if(clen && (cmd[0]==EFS_MD_CMD_EXPIRY_POLICY || cmd[0]==EFS_MD_CMD_EXPIRY_RENEW ||
                  cmd[0]==EFS_MD_REQ_EXPIRY_POLICY || cmd[0]==EFS_MD_REQ_EXPIRY_RECORD)) {
         if(!h->expiry_enabled){out->rc=EFS_ERR_ACCES;return;}
@@ -10756,13 +10865,15 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             out->rc=EFS_ERR_INVAL;return;
         }
         struct host_view view;host_view_get(h,group,&view);
-        if(!view.has || view.role!=EFS_RAFT_LEADER) {
-            out->rc=EFS_ERR_NOT_PRIMARY;out->leader_hint=view.has?view.leader:-1;return;
-        }
         if(cmd[0]==EFS_MD_CMD_EXPIRY_RENEW) {
-            uint8_t leader_command[45];memcpy(leader_command,cmd,sizeof(leader_command));
-            wr64be(leader_command+29,now_ns());
-            rc=host_propose_wait_idx(h,group,leader_command,sizeof(leader_command),&hint,&idx);
+            uint8_t both[2];host_need_both(both);
+            if(!host_hosts_all(h,both,2)) {
+                pthread_mutex_lock(&h->mu);int peer=host_pick_peer(h,both,2,-1);pthread_mutex_unlock(&h->mu);
+                out->rc=EFS_ERR_NOT_PRIMARY;out->leader_hint=peer;return;
+            }
+            rc=host_expiry_renew_txn(h,cmd,&hint);
+        } else if(!view.has || view.role!=EFS_RAFT_LEADER) {
+            out->rc=EFS_ERR_NOT_PRIMARY;out->leader_hint=view.has?view.leader:-1;return;
         } else if(cmd[0]==EFS_MD_CMD_EXPIRY_POLICY)
             rc=host_propose_wait_idx(h,group,cmd,clen,&hint,&idx);
         else rc=EFS_OK;
@@ -12555,7 +12666,7 @@ static int host_expiry_collect(struct efs_raft_host *h,efs_ino_t parent,
         if(rc==EFS_OK)rc=efs_meta_apply_get_inode(h->kv,parent,&row);
         if(rc==EFS_OK)rc=efs_txn_ver_get(h->kv,v->pver_key,v->pver_len,&after);
         if(rc!=EFS_OK)return rc;
-        if(after!=v->pver)return EFS_ERR_STALE;
+        if(after!=v->pver)return EFS_ERR_BUSY;
         if(!S_ISDIR(row.mode) || !row.nlink)return EFS_ERR_NOT_FOUND;
         efs_expiry_policy_key(parent,row.generation,v->policy_key);
         v->policy_len=sizeof(v->policy_value);
@@ -13848,6 +13959,84 @@ static int host_dent_drop_prep(struct efs_raft_host *h, uint32_t sh,
  * exclusive; dest dentry, child inode, alloc, dseq, and dir-lane ride
  * the dest shard. Parent mtime/ctime stay on the dir-lane (not the
  * home row). */
+static int host_expiry_renew_txn(struct efs_raft_host *h,const uint8_t *cmd,int *hint)
+{
+    efs_ino_t ino=rd64be(cmd+1);uint64_t gen=rd64be(cmd+9),expected=rd64be(cmd+21);
+    uint32_t uid=rd32be(cmd+17);uint64_t deadline=rd64be(cmd+37),now=0;
+    if(!host_expiry_clock_read(h,&now))return EFS_ERR_BUSY;
+    uint32_t ish=efs_kv_inode_shard(ino);int rc=host_read_index(h,efs_raft_shard_group(ish),hint);
+    struct efs_meta_row row;struct efs_expiry_record old,renewed;
+    struct efs_expiry_policy policy;struct efs_expiry_change change;
+    uint8_t ik[EFS_KV_KEY_MAX],iv[EFS_META_INO_BYTES],pk[EFS_EXPIRY_KEY_BYTES],pv[EFS_EXPIRY_POLICY_BYTES];
+    uint8_t before[EFS_EXPIRY_RECORD_BYTES];uint32_t il=0,in=sizeof(iv),pn=sizeof(pv),bn=sizeof(before);
+    if(rc==EFS_OK)rc=efs_kv_key_inode(ish,ino,ik,&il);
+    if(rc==EFS_OK)rc=efs_kv_get(h->kv,ik,il,iv,&in);
+    if(rc==EFS_OK)rc=efs_meta_unpack_inode(iv,in,&row);
+    if(rc!=EFS_OK)return rc;
+    if(row.generation!=gen)return EFS_ERR_STALE;
+    if(!row.nlink)return EFS_ERR_NOT_FOUND;
+    rc=efs_expiry_get(h->kv,ino,gen,&old);if(rc!=EFS_OK)return rc;
+    if(!old.revision)return EFS_ERR_NODATA;
+    if(old.revision!=expected)return EFS_ERR_STALE;
+    uint32_t psh=efs_kv_inode_shard(old.root),anchor=efs_kv_anchor_shard(ish);
+    rc=host_read_index(h,efs_raft_shard_group(psh),hint);
+    efs_expiry_policy_key(old.root,old.root_generation,pk);
+    if(rc==EFS_OK)rc=efs_kv_get(h->kv,pk,sizeof(pk),pv,&pn);
+    if(rc==EFS_OK)rc=efs_expiry_policy_decode(pv,pn,&policy);
+    if(rc==EFS_OK)rc=efs_expiry_renew(&old,&policy,uid,row.uid,row.nlink,row.mode,now,deadline,&renewed);
+    if(rc==EFS_OK)rc=efs_expiry_plan(h->kv,ino,gen,expected,&renewed,&change);
+    if(rc==EFS_OK)rc=efs_kv_get(h->kv,change.record_key,EFS_EXPIRY_KEY_BYTES,before,&bn);
+    if(rc!=EFS_OK)return rc;
+    if(bn!=sizeof(before) || rd64be(before+8)!=expected || rd64be(before)!=old.deadline_ns)
+        return EFS_ERR_STALE;
+    /* A cleared deadline can be hard-linked and its original name removed.
+     * Never reactivate a deadline using a stale canonical name. Capture both
+     * migration locations and hold their exact images in the same decision. */
+    struct efs_meta_row parent_row,bound_row;struct efs_meta_dentry dent;
+    struct efs_meta_dentry_drop binding;
+    if(!old.parent || !old.name[0])return EFS_ERR_STALE;
+    uint32_t bpsh=efs_kv_inode_shard(old.parent);
+    rc=host_read_index(h,efs_raft_shard_group(bpsh),hint);
+    if(rc==EFS_OK)rc=efs_meta_apply_get_inode(h->kv,old.parent,&parent_row);
+    uint32_t bdsh=rc==EFS_OK?efs_kv_dentry_shard(old.parent,old.name,parent_row.layout):bpsh;
+    if(rc==EFS_OK)rc=host_read_index(h,efs_raft_shard_group(bdsh),hint);
+    if(rc==EFS_OK)rc=efs_meta_apply_resolve_tx(h->kv,old.parent,old.name,host_txn_coord,h,&dent,&bound_row);
+    if(rc==EFS_OK && (bound_row.ino!=ino || bound_row.generation!=gen))rc=EFS_ERR_STALE;
+    if(rc==EFS_OK)rc=efs_meta_capture_dentry_drop(h->kv,&parent_row,old.parent,old.name,&dent,&binding);
+    if(rc!=EFS_OK)return rc;
+    struct efs_txn_parts parts={0};struct efs_txid tx;
+    rc=host_parts_add(&parts,ish);
+    if(rc==EFS_OK)rc=host_parts_add(&parts,psh);
+    if(rc==EFS_OK && binding.del_loc)rc=host_parts_add(&parts,binding.psh);
+    if(rc==EFS_OK && (binding.put_tomb || binding.del_hash))rc=host_parts_add(&parts,binding.hsh);
+    if(rc==EFS_OK && (old.deadline_ns || deadline))rc=host_parts_add(&parts,anchor);
+    if(rc!=EFS_OK)return rc;
+    fill_txid(h,&tx);
+    rc=EFS_OK;
+    if(binding.del_loc)rc=host_prep_value(h,binding.psh,&tx,&parts,binding.k_loc,binding.kl,
+        binding.loc_value,binding.loc_len,binding.loc_len==EFS_TXN_ABSENT?EFS_TXN_DEL:EFS_TXN_PUT,
+        binding.loc_len==EFS_TXN_ABSENT?NULL:binding.loc_value,
+        binding.loc_len==EFS_TXN_ABSENT?0:binding.loc_len,hint);
+    if(rc==EFS_OK && (binding.put_tomb || binding.del_hash))rc=host_prep_value(h,binding.hsh,&tx,&parts,binding.k_hash,binding.kh,
+        binding.hash_value,binding.hash_len,binding.hash_len==EFS_TXN_ABSENT?EFS_TXN_DEL:EFS_TXN_PUT,
+        binding.hash_len==EFS_TXN_ABSENT?NULL:binding.hash_value,
+        binding.hash_len==EFS_TXN_ABSENT?0:binding.hash_len,hint);
+    if(rc==EFS_OK)rc=host_prep_value(h,ish,&tx,&parts,ik,il,iv,in,EFS_TXN_PUT,iv,in,hint);
+    if(rc==EFS_OK)rc=host_prep_value(h,psh,&tx,&parts,pk,sizeof(pk),pv,pn,EFS_TXN_PUT,pv,pn,hint);
+    if(rc==EFS_OK)rc=host_prep_value(h,ish,&tx,&parts,change.record_key,EFS_EXPIRY_KEY_BYTES,
+                       before,sizeof(before),EFS_TXN_PUT,change.value,EFS_EXPIRY_RECORD_BYTES,hint);
+    if(rc==EFS_OK && old.deadline_ns && old.deadline_ns!=deadline)
+        rc=host_prep_value(h,anchor,&tx,&parts,change.old_index,EFS_EXPIRY_INDEX_BYTES,
+                           before,sizeof(before),EFS_TXN_DEL,NULL,0,hint);
+    if(rc==EFS_OK && deadline)
+        rc=host_prep_value(h,anchor,&tx,&parts,change.new_index,EFS_EXPIRY_INDEX_BYTES,
+                           old.deadline_ns==deadline?before:NULL,
+                           old.deadline_ns==deadline?sizeof(before):EFS_TXN_ABSENT,
+                           EFS_TXN_PUT,change.value,EFS_EXPIRY_RECORD_BYTES,hint);
+    if(rc!=EFS_OK){(void)host_drop_parts(h,&tx,&parts,hint);return rc;}
+    return host_txn_commit(h,&tx,&parts,efs_txn_coordinator(&tx,&parts),hint);
+}
+
 static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
                                   const char *name, uint32_t mode,
                                   const struct efs_meta_attrs *at,
@@ -14023,9 +14212,13 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
                                         hint);
             }
         }
-        if (rc != EFS_OK)
-            (void)host_drop_parts(h, &t, &parts, hint);
-        else {
+        if (rc != EFS_OK) {
+            int aborted=host_drop_parts(h,&t,&parts,hint);
+            /* Allocation/policy/dentry image contention is a retryable birth
+             * collection conflict, not a revoked FileID. Only certify this
+             * after ABORT resolution; never translate uncertain COMMIT. */
+            if(birth && rc==EFS_ERR_STALE && aborted==EFS_OK)rc=EFS_ERR_BUSY;
+        } else {
             coord = efs_txn_coordinator(&t, &parts);
             rc = host_txn_commit(h, &t, &parts, coord, hint);
         }
@@ -16149,6 +16342,9 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     struct efs_meta_row prow, dprow, row, nrow;
     struct efs_meta_dentry dent, ndent;
     struct efs_meta_stat st;
+    struct efs_expiry_change expiry_move;
+    uint8_t expiry_before[EFS_EXPIRY_RECORD_BYTES];
+    uint32_t expiry_bytes=sizeof(expiry_before),expiry_anchor=0;
     struct efs_txid t;
     struct efs_txn_parts parts;
     struct host_pver_guard gv[EFS_TXN_NAMESPACE_MAX_PART];
@@ -16566,6 +16762,21 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
             stamp_dst = 0;
         two_dseq = !(ssh == dsh && s_lane == d_lane);
     }
+    if(rc==EFS_OK && !is_dir) {
+        struct efs_expiry_record expiry;
+        rc=efs_expiry_get(h->kv,row.ino,row.generation,&expiry);
+        if(rc==EFS_OK && expiry.revision && row.nlink==1) {
+            if(expiry.parent!=old_parent || strcmp(expiry.name,old_name))rc=EFS_ERR_STALE;
+            uint64_t revision=expiry.revision,deadline=expiry.deadline_ns;
+            expiry.parent=new_parent;memset(expiry.name,0,sizeof(expiry.name));
+            memcpy(expiry.name,new_name,strlen(new_name)+1);
+            if(rc==EFS_OK)rc=efs_expiry_plan(h->kv,row.ino,row.generation,revision,&expiry,&expiry_move);
+            if(rc==EFS_OK)rc=efs_kv_get(h->kv,expiry_move.record_key,EFS_EXPIRY_KEY_BYTES,expiry_before,&expiry_bytes);
+            if(rc==EFS_OK && (expiry_bytes!=sizeof(expiry_before) || rd64be(expiry_before+8)!=revision ||
+                rd64be(expiry_before)!=deadline))rc=EFS_ERR_STALE;
+            if(rc==EFS_OK)expiry_anchor=efs_kv_anchor_shard(ish);
+        }
+    }
     memset(&parts, 0, sizeof(parts));
     if (rc == EFS_OK)
         rc = host_parts_add(&parts, ssh);
@@ -16581,6 +16792,7 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         rc = host_parts_add(&parts, nsh);
     if (rc == EFS_OK && xist && !xdir && !xput)
         rc = host_parts_add(&parts, ash);
+    if(rc==EFS_OK && expiry_anchor)rc=host_parts_add(&parts,expiry_anchor);
     for (i = 0; i < nxd && rc == EFS_OK; i++)
         rc = host_parts_add(&parts, xdseq[i].shard);
     if (rc == EFS_OK && is_dir) {
@@ -16654,7 +16866,15 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         fill_txid(h, &t);
         for (i = 0; i < parts.n && rc == EFS_OK; i++) {
             uint32_t sh = parts.shard[i];
-            rc = host_dent_drop_prep(h, sh, &drop, &t, &parts, &hint);
+            if(rc==EFS_OK && expiry_anchor && sh==ish)
+                rc=host_prep_value(h,sh,&t,&parts,expiry_move.record_key,EFS_EXPIRY_KEY_BYTES,
+                     expiry_before,sizeof(expiry_before),EFS_TXN_PUT,
+                     expiry_move.value,EFS_EXPIRY_RECORD_BYTES,&hint);
+            if(rc==EFS_OK && expiry_anchor && sh==expiry_anchor && rd64be(expiry_before))
+                rc=host_prep_value(h,sh,&t,&parts,expiry_move.new_index,EFS_EXPIRY_INDEX_BYTES,
+                     expiry_before,sizeof(expiry_before),EFS_TXN_PUT,
+                     expiry_move.value,EFS_EXPIRY_RECORD_BYTES,&hint);
+            if(rc==EFS_OK)rc = host_dent_drop_prep(h, sh, &drop, &t, &parts, &hint);
             if (rc == EFS_OK && dest_del_loc && sh == dpsh)
                 rc = host_prep(h, dpsh, EFS_TXN_EXCL, &t, &parts, k_dloc, kdl,
                                dloc_ver, EFS_TXN_DEL, NULL, 0, &hint);

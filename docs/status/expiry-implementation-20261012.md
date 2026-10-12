@@ -7,19 +7,19 @@ benchmark fixture/evidence path names remain unchanged.
 
 ## Current verdict
 
-**Implementation in progress; full expiry acceptance NOTRUN.** The first
-foundation adds durable operator policy, FileID/deadline revision sidecars,
-an ordered disk-backed deadline index and bounded 64-row pagination. Renewal
-replaces the old index entry atomically. Clock drift/backwards movement latches
-uncertainty until explicit reset; destructive activation remains absent.
+**Implementation in progress; full expiry acceptance not yet passed.** W90 now
+has operator policy controls, guarded inherited CREATE deadlines, cross-group
+owner renewal and conditional deletion, rename-safe bindings, hard-link
+exclusion, and ordinary REAP cleanup of deadline metadata. `EFS_EXPIRY` defaults
+off independently of `.efs`.
 
-A conditional single-group metadata apply combines namespace unlink, ordinary
-ORPHAN/REAP state and deadline/index retirement in one batch. It verifies
-FileID, deadline and revision under serialized apply. Cross-group expiry is
-explicitly refused by this helper and needs its own guarded transaction.
-Replica apply receives committed time and does not read its own wall clock.
-These primitives are not yet connected to live policy control, inheritance,
-renewal RPCs or a worker. They do not activate expiry or change ordinary creates.
+The active worker uses a disk-backed deadline index: at most 64 rows per page,
+eight deletion attempts per pass, and a 50-ms elapsed check between operations.
+A single transaction may exceed that interval while awaiting its existing RPC
+and durability deadlines; this is not a hard 50-ms wall-time guarantee.
+Kernel `adjtimex` synchronization state and wall/monotonic drift gate deletion.
+Uncertainty latches until explicit operator reset. Replicas apply committed
+conditional namespace decisions and never independently compare local clocks.
 
 ## Foundation verification
 
@@ -58,12 +58,11 @@ Use NUC with TCP, direct I/O, FILES storage, `EFS_COMMANDS=0`,
 Verify actual daemon/client environments and mapped executable hashes.
 Private test stores belong under `/data1/efs`; leave unrelated services alone.
 
-Remaining implementation: authenticated-in-the-existing-client-trust-model
-operator/owner control, effective directory policy inheritance atomically
-materialized at CREATE, hard-link refusal including races, cross-group
-conditional deletion, bounded worker with trustworthy clock checks,
-rename-safe name location and metadata cleanup at ordinary reclamation.
-Do not authorize deletion from a stale query catalog or a path-only lookup.
+Integration is implemented; qualification and fault coverage remain in progress.
+Control uses the existing trusted-client UID model, not authenticated transport.
+Only born-expiring files have renewal records; enabling a deadline on legacy
+files without such a record is currently refused with NODATA. This limitation
+must remain explicit when evaluating W90 closure.
 
 Remaining acceptance: live inheritance/authorization, renewal versus deletion,
 rename/path reuse, hard links, open-FD data access, clock uncertainty/jumps,
@@ -110,27 +109,19 @@ External log `/home/efs/expiry-foundation-70ba0424-gates.log`, SHA256
 Raw per-case and runtime evidence remains in the two private harness roots.
 All four process environments and executable hashes were inspected.
 
-## Integration checkpoint (still NOT fully qualified)
+## Live integration checkpoint (not final acceptance)
 
-The next staged changes add `EFS_EXPIRY=1` operator control, versioned
-`efs-mgmt expiry-policy` and `efs-mgmt expiry` requests, leader-selected renewal
-time, and inherited birth transactions with guarded ancestry/policy snapshots.
-Default remains off. These controls use the existing trusted-client management
-protocol; this is not authenticated transport or protection against a forged
-client UID. Policy mutation requires UID 0; renewal checks current inode owner,
-generation, links, retention and live namespace state at apply.
+A dirty integration build on NUC passed fixed/future-only policy, authorization,
+owner renewal and stale revision refusal, active hard-link refusal, rename/path
+reuse, disabled-subtree inheritance, namespace removal, physical reclamation,
+and continued read/write/fsync through an expired open descriptor. Core POSIX
+passed 216/216 in 24.6 seconds. Peer and final cleanup verdicts are still pending.
+Raw evidence: `/home/efs/expiry-integration-gates.log`; fixture
+`/data1/efs/expiry-integration/gc-direct-u31m8j3x`. This build reports `unknown`
+and is preliminary evidence only, not a committed-source acceptance identity.
 
-Birth transactions store a bounded name binding in the deadline record/index,
-so future worker passes need no directory scan. Conditional cross-group delete
-now stages exact revision/deadline CAS and normal inode/dentry/REAP changes;
-it is not connected to a worker yet. LINK has an expiry-record CAS exclusion.
-The staged CREATE path uses an absent-value dentry guard and retains durable
-EEXIST receipts to preserve O_EXCL/retry behavior.
-
-Applied-state tests now also pass explicit owner renewal, policy disablement,
-ancestry inheritance, atomic birth failure, and transaction intent exclusion.
-Live tests of this newer integration remain NOTRUN. Remaining work includes
-cross-group renewal, rename binding updates, manual deletion/reclamation
-cleanup, clock-health-controlled worker activation, and the full expiry matrix.
-The `EFS_EXPIRY` capability currently enables control and guarded births, not
-automatic deletion. Do not mistake the first baseline for an expiry gate pass.
+The committed `--expiry` harness extends the lifecycle matrix with cold restart,
+concurrent publication, offline storage/rejoin and 144-file deadline pagination.
+`--expiry-clock-fault` additionally requires a fault-enabled daemon and verifies
+latched clock uncertainty plus explicit operator recovery, without changing the
+host clock. Exact committed-source rebuild and rerun remain required.

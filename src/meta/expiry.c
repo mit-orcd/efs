@@ -9,7 +9,7 @@ void efs_expiry_policy_key(uint64_t root,uint64_t gen,uint8_t out[EFS_EXPIRY_KEY
 {key(out,efs_kv_inode_shard(root),EFS_KV_KIND_EXPIRY_POLICY,root,gen);}
 void efs_expiry_record_key(uint64_t ino,uint64_t gen,uint8_t out[EFS_EXPIRY_KEY_BYTES])
 {key(out,efs_kv_inode_shard(ino),EFS_KV_KIND_EXPIRY,ino,gen);}
-static void index_key(uint8_t *p,uint64_t ino,uint64_t gen,uint64_t deadline)
+void efs_expiry_index_key(uint64_t ino,uint64_t gen,uint64_t deadline,uint8_t *p)
 {uint32_t sh=efs_kv_anchor_shard(efs_kv_inode_shard(ino));p[0]=(uint8_t)(sh>>8);p[1]=(uint8_t)sh;p[2]=EFS_KV_KIND_EXPIRY_INDEX;put64(p+3,deadline);put64(p+11,ino);put64(p+19,gen);}
 int efs_expiry_policy_decode(const uint8_t *v,uint32_t n,struct efs_expiry_policy *p)
 {
@@ -73,8 +73,8 @@ int efs_expiry_plan(struct efs_kv *kv,uint64_t ino,uint64_t gen,uint64_t expecte
     rc=efs_txn_key_guarded(kv,c->record_key,19);if(rc)return rc;
     put64(c->value,r->deadline_ns);put64(c->value+8,expected+1);put64(c->value+16,r->root);put64(c->value+24,r->root_generation);put64(c->value+32,r->policy_revision);put64(c->value+40,r->max_ns);c->value[48]=r->allow_clear;put64(c->value+56,r->parent);memcpy(c->value+64,r->name,strlen(r->name));
     c->items[c->count++]=(struct efs_kv_item){EFS_KV_PUT,c->record_key,19,c->value,EFS_EXPIRY_RECORD_BYTES};
-    if(old.deadline_ns){index_key(c->old_index,ino,gen,old.deadline_ns);c->items[c->count++]=(struct efs_kv_item){EFS_KV_DEL,c->old_index,27,NULL,0};}
-    if(r->deadline_ns){index_key(c->new_index,ino,gen,r->deadline_ns);c->items[c->count++]=(struct efs_kv_item){EFS_KV_PUT,c->new_index,27,c->value,EFS_EXPIRY_RECORD_BYTES};}
+    if(old.deadline_ns && old.deadline_ns!=r->deadline_ns){efs_expiry_index_key(ino,gen,old.deadline_ns,c->old_index);c->items[c->count++]=(struct efs_kv_item){EFS_KV_DEL,c->old_index,27,NULL,0};}
+    if(r->deadline_ns){efs_expiry_index_key(ino,gen,r->deadline_ns,c->new_index);c->items[c->count++]=(struct efs_kv_item){EFS_KV_PUT,c->new_index,27,c->value,EFS_EXPIRY_RECORD_BYTES};}
     return EFS_OK;
 }
 int efs_expiry_materialize(const struct efs_expiry_policy *p,uint64_t root,uint64_t gen,uint64_t now,struct efs_expiry_record *r)

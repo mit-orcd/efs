@@ -101,6 +101,8 @@ class PosixPhaseCollector:
 
 
 p = argparse.ArgumentParser(description=__doc__)
+p.add_argument('--expiry-clock-fault',action='store_true',help='expiry clock-health pause/reset gate; requires a fault-enabled daemon')
+p.add_argument('--expiry',action='store_true',help='expiry lifecycle before normal reclamation/POSIX gates; explicit TCP/direct/files only')
 p.add_argument('--peer-mkdir-race-only',action='store_true',help='64 competing peer mkdir races in an isolated cluster, then cold namespace verification')
 p.add_argument('--peer-open-contention-only',action='store_true',help='twenty concurrent append/OPEN races, full peer POSIX, exact cold bytes and physical cleanup only')
 p.add_argument('--append-truncate-only',action='store_true',help='run eight peer append/truncate races, a concurrent append handoff check, cold-remount repeats and physical cleanup only')
@@ -261,6 +263,10 @@ for path in sorted(inputs):
                       for name in ('efsd','efs-fuse','efs-mgmt')},
 },indent=2))
 env = dict(os.environ, EFS_MD_RAFT_N='4', EFS_TRANSPORT=a.transport)
+if a.expiry:
+    assert a.mode=='direct' and a.transport=='tcp' and a.disable_efs_commands
+    env.update(EFS_EXPIRY='1',EFS_PACKED_WRITES='0')
+    if a.expiry_clock_fault:env['EFS_FAULT_EXPIRY_CLOCK_FILE']=str(work/'expiry-clock-uncertain')
 if a.replication_pressure:
     assert a.tiny_sustained_seconds>=120, 'pressure requires a sustained recovery window'
     assert not (a.storage_session_fence_fault or a.put_barrier_fault or a.kv_wal_persistence_only or a.compactor_pressure)
@@ -376,6 +382,7 @@ def start(prefer_single_host=False):
         root.mkdir(exist_ok=True)
         log=open(work/f'n{i+1}.log','ab');handles.append(log)
         cmd=[a.server_binary or source/'efsd','--node-id',str(i+1),'--addr','127.0.0.1','--port',str(a.port+i),'--storage',root,'--quota',a.fixture_quota or ('16G' if (a.ior_binary or a.gc_bulk_gib) else ('4G' if a.compactor_pressure else '1G')),'--'+('direct-io' if a.mode=='direct' else 'no-direct-io')]
+        if a.expiry:cmd += ['--storage-engine','files']
         if a.fixture_quota == '0':
             quota_arg = cmd.index('--quota');del cmd[quota_arg:quota_arg+2]
         if a.storage_roots==2:
@@ -584,6 +591,18 @@ try:
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.expiry:
+        from expiry_lifecycle import exercise
+        def expiry_restart():
+            unmount();stop(crash=True);start();mount_client()
+        def expiry_offline():
+            proc=servers[3];proc.kill();proc.wait(timeout=10)
+            def rejoin():
+                log=open(work/'n4.log','ab');handles.append(log)
+                servers[3]=subprocess.Popen(proc.args,env=env,stdout=log,stderr=log)
+                time.sleep(3)
+            return rejoin
+        exercise(mount,a.port,work,wait,files,expiry_restart,expiry_offline,a.expiry_clock_fault)
     if a.ordinary_overwrite_only:
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
         peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)

@@ -2918,7 +2918,8 @@ int efs_meta_apply_rename(struct efs_kv *kv, efs_ino_t src_parent,
     uint8_t k_pver[EFS_KV_KEY_MAX], v_pver[8];
     uint32_t ksl = 0, ksh = 0, kd = 0, ki = 0, ksp = 0, kdp = 0;
     uint32_t ksln = 0, kdln = 0, kss = 0, kds = 0, kpv = 0;
-    struct efs_kv_item it[14];
+    struct efs_kv_item it[16];
+    struct efs_expiry_change expiry_change;int expiry_move=0;
     uint32_t n = 0, dsh;
     int rc, same_dir, is_dir, touch_src = 0, stamp_src = 0, touch_dst = 0,
         stamp_dst = 0;
@@ -2954,6 +2955,19 @@ int efs_meta_apply_rename(struct efs_kv *kv, efs_ino_t src_parent,
     if (rc != EFS_ERR_NOT_FOUND)
         return rc;
 
+    if(S_ISREG(row.mode)) {
+        struct efs_expiry_record expiry;
+        rc=efs_expiry_get(kv,row.ino,row.generation,&expiry);
+        if(rc!=EFS_OK)return rc;
+        if(expiry.revision && row.nlink==1) {
+            if(expiry.parent!=src_parent || strcmp(expiry.name,src_name))return EFS_ERR_STALE;
+            expiry.parent=dst_parent;memset(expiry.name,0,sizeof(expiry.name));
+            memcpy(expiry.name,dst_name,strlen(dst_name)+1);
+            rc=efs_expiry_plan(kv,row.ino,row.generation,expiry.revision,&expiry,&expiry_change);
+            if(rc!=EFS_OK)return rc;
+            expiry_move=1;
+        }
+    }
     same_dir = src_parent == dst_parent;
     if (is_dir && !same_dir) {
         if (sprow.nlink < 3)
@@ -3117,6 +3131,10 @@ int efs_meta_apply_rename(struct efs_kv *kv, efs_ino_t src_parent,
         it[n].val = v_ddseq;
         it[n].vlen = 8;
         n++;
+    }
+    if(expiry_move) {
+        if(n+expiry_change.count>sizeof(it)/sizeof(it[0]))return EFS_ERR_OVERFLOW;
+        for(uint32_t i=0;i<expiry_change.count;i++)it[n++]=expiry_change.items[i];
     }
     return meta_write_batch(kv, it, n);
 }
@@ -6349,7 +6367,8 @@ int efs_meta_apply_reap_batch(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
 int efs_meta_apply_reap_done(struct efs_kv *kv, efs_ino_t ino, uint64_t gen)
 {
     struct efs_meta_row row;
-    struct efs_kv_item it[4];
+    struct efs_kv_item it[6];
+    struct efs_expiry_change expiry_change;
     uint8_t k_reap[EFS_KV_KEY_MAX], k_cur[EFS_KV_KEY_MAX];
     uint8_t k_ino[EFS_KV_KEY_MAX], k_xa[EFS_KV_KEY_MAX];
     uint32_t kr = 0, kc = 0, ki = 0, kxa = 0, n = 0;
@@ -6454,6 +6473,20 @@ int efs_meta_apply_reap_done(struct efs_kv *kv, efs_ino_t ino, uint64_t gen)
         if (rc != EFS_OK)
             return rc;
         n += (uint32_t)xa;
+    }
+    if(drop_row || efs_meta_apply_get_inode(kv,ino,&row)==EFS_ERR_NOT_FOUND) {
+        struct efs_expiry_record expiry;
+        rc=efs_expiry_get(kv,ino,gen,&expiry);
+        if(rc!=EFS_OK)return rc;
+        if(expiry.revision) {
+            expiry.deadline_ns=0;
+            rc=efs_expiry_plan(kv,ino,gen,expiry.revision,&expiry,&expiry_change);
+            if(rc!=EFS_OK)return rc;
+            expiry_change.items[0].op=EFS_KV_DEL;
+            expiry_change.items[0].val=NULL;expiry_change.items[0].vlen=0;
+            if(n+expiry_change.count>sizeof(it)/sizeof(it[0]))return EFS_ERR_OVERFLOW;
+            for(uint32_t i=0;i<expiry_change.count;i++)it[n++]=expiry_change.items[i];
+        }
     }
     return meta_write_batch(kv, it, n);
 }
