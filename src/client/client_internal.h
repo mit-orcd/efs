@@ -371,7 +371,6 @@ int efs_client_pull_chunks_range(efs_ino_t ino, uint32_t start_ci,
  * has no row for (caller zeroes (end - start + 7) / 8 bytes). */
 int efs_client_pull_chunks_range_absent(efs_ino_t ino, uint32_t start_ci,
                                         uint32_t end_ci, uint8_t *absent);
-int efs_dcache_replay_stale(efs_ino_t ino, uint32_t ci);
 int efs_client_rpc_unlink(efs_export_id_t export_id, efs_ino_t parent,
                           const char *name, int is_dir);
 int efs_client_rpc_rename_at(efs_export_id_t export_id, efs_ino_t old_parent,
@@ -472,7 +471,6 @@ int efs_client_note_meta_change(int force);
  * used to block every FUSE flush on REPORT_CHUNKS (unlink-storm create
  * ran at ~4 files/s). posix2 still sees the report: B starts only after
  * A's SSH step returns, which is far longer than one async REPORT. */
-void efs_client_kick_meta_flush(void);
 void efs_client_stop_meta_flush(void);
 
 /* Decoded-chunk cache for sub-chunk reads and RMW. */
@@ -714,8 +712,6 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
 int efs_client_rpc_query_snapshot(const struct efs_msg_query_snapshot *req,
                                     struct efs_msg_query_snapshot_reply *reply,char **text);
 
-int efs_client_rpc_query_snapshot_v3(const struct efs_msg_query_snapshot_v3 *req,
-                                    struct efs_msg_query_snapshot_reply *reply,char **text);
 
 int efs_client_rpc_query_snapshot_v4(const struct efs_msg_query_snapshot_v4 *req,
                                     struct efs_msg_query_snapshot_reply *reply,char **text);

@@ -32,6 +32,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include "../common/recorder_stop.h"
+#include "../common/recorder_start.h"
 #include <sys/statvfs.h>
 #include <poll.h>
 #include <time.h>
@@ -6798,58 +6799,9 @@ static void numa_pin_startup(const char *host, uint16_t port)
             node, ncpu, hca, mrc == 0 ? "preferred" : strerror(errno));
 }
 
-static int mkdir_p(const char *path)
-{
-    char tmp[8192];
-    strncpy(tmp, path, sizeof(tmp) - 1);
-    tmp[sizeof(tmp) - 1] = '\0';
-
-    for (char *p = tmp + 1; *p; p++) {
-        if (*p == '/') {
-            *p = '\0';
-            mkdir(tmp, 0755);
-            *p = '/';
-        }
-    }
-    return mkdir(tmp, 0755);
-}
-
 static pid_t g_perf_pid = -1;
 static int g_perf_want;           /* --perf given; start after the fork */
 static char g_perf_path[512];
-
-static pid_t start_perf_recorder(pid_t target, const char *perf_path)
-{
-    char perf_dir[8192];
-    strncpy(perf_dir, perf_path, sizeof(perf_dir) - 1);
-    perf_dir[sizeof(perf_dir) - 1] = '\0';
-    char *slash = strrchr(perf_dir, '/');
-    if (slash) {
-        *slash = '\0';
-        mkdir_p(perf_dir);
-    }
-
-    pid_t pid = fork();
-    if (pid < 0) {
-        perror("fork perf");
-        return -1;
-    }
-    if (pid == 0) {
-        char pid_str[32];
-        snprintf(pid_str, sizeof(pid_str), "%d", (int)target);
-        /* -g uses frame pointers (binaries are built with
-         * -fno-omit-frame-pointer) so perf report can show call stacks. */
-        execlp("perf", "perf", "record", "-g", "-F", "999", "-p", pid_str, "-o",
-               perf_path, NULL);
-        perror("exec perf");
-        _exit(1);
-    }
-    return pid;
-}
-
-static pid_t g_strace_pid = -1;
-static int g_strace_want;         /* --strace given; start after the fork */
-static char g_strace_path[512];
 
 /* --strace: `strace -f -tt -T -o <path> -p <pid>` on the daemon. ptrace
  * stops every syscall of every thread, so this is for one client and a
@@ -6857,48 +6809,9 @@ static char g_strace_path[512];
  * number. Needs kernel.yama.ptrace_scope=0 (runtime on the test hosts).
  * EFS_STRACE_EXPR narrows it, e.g. "trace=fsync,writev,recvfrom,futex"
  * (passed as -e). */
-static pid_t start_strace_recorder(pid_t target, const char *path)
-{
-    char dir[8192];
-    strncpy(dir, path, sizeof(dir) - 1);
-    dir[sizeof(dir) - 1] = '\0';
-    char *slash = strrchr(dir, '/');
-    if (slash) {
-        *slash = '\0';
-        mkdir_p(dir);
-    }
-
-    pid_t pid = fork();
-    if (pid < 0) {
-        perror("fork strace");
-        return -1;
-    }
-    if (pid == 0) {
-        char pid_str[32];
-        snprintf(pid_str, sizeof(pid_str), "%d", (int)target);
-        const char *expr = getenv("EFS_STRACE_EXPR");
-        const char *av[16];
-        int n = 0;
-        av[n++] = "strace";
-        av[n++] = "-f";
-        av[n++] = "-tt";
-        av[n++] = "-T";
-        av[n++] = "-qq";
-        av[n++] = "-o";
-        av[n++] = path;
-        av[n++] = "-p";
-        av[n++] = pid_str;
-        if (expr && *expr) {
-            av[n++] = "-e";
-            av[n++] = expr;
-        }
-        av[n] = NULL;
-        execvp("strace", (char *const *)av);
-        perror("exec strace");
-        _exit(1);
-    }
-    return pid;
-}
+static pid_t g_strace_pid = -1;
+static int g_strace_want;         /* --strace given; start after the fork */
+static char g_strace_path[512];
 
 /* SIGTERM makes perf finalize perf.data and strace detach; wait up to
  * ~5 s, then SIGKILL. */
@@ -7424,7 +7337,7 @@ static int efs_fuse_bench_run(const char *kind, double time_sec)
     }
     pid_t bench_perf = -1;
     if (g_perf_want) {
-        bench_perf = start_perf_recorder(getpid(), g_perf_path);
+        bench_perf = efs_start_perf_recorder(getpid(), g_perf_path);
         if (bench_perf < 0)
             fprintf(stderr, "Warning: could not start perf; continuing\n");
     }
@@ -7775,7 +7688,7 @@ static int efs_fuse_main_mt(int argc, char *argv[])
      * process under -f). Attach the recorder to it; the parent above has
      * already been excluded. */
     if (g_perf_want) {
-        g_perf_pid = start_perf_recorder(getpid(), g_perf_path);
+        g_perf_pid = efs_start_perf_recorder(getpid(), g_perf_path);
         if (g_perf_pid < 0)
             fprintf(stderr, "Warning: could not start perf recorder; continuing without profiling\n");
         else
@@ -7783,7 +7696,7 @@ static int efs_fuse_main_mt(int argc, char *argv[])
         fflush(stderr);
     }
     if (g_strace_want) {
-        g_strace_pid = start_strace_recorder(getpid(), g_strace_path);
+        g_strace_pid = efs_start_strace_recorder(getpid(), g_strace_path);
         if (g_strace_pid < 0)
             fprintf(stderr, "Warning: could not start strace; continuing without it\n");
         else

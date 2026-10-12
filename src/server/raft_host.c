@@ -13213,54 +13213,9 @@ static int host_append_execute_batched(struct efs_raft_host *h,
                       efs_meta_execute_append(plan,t,&host_append_reserve_ops,&batch);
 }
 
-/* Normal completion/pruning use immutable captured images just like reserve.
+/* Pruning uses immutable captured images just like reserve.
  * Last-close cleanup deliberately keeps its synchronous first PREP: it checks
  * outstanding leases only after that obligation is actually installed. */
-static int host_append_complete_batched(struct efs_raft_host *h,efs_ino_t ino,
-    uint64_t offset,const struct efs_opid *session,const struct efs_txid *t,int *hint)
-{
-    if(host_command_capture)return EFS_ERR_BUSY;
-    if(session) {
-        uint8_t group=efs_raft_shard_group(efs_kv_inode_shard(ino));
-        pthread_mutex_lock(&h->mu);
-        struct efs_raft *r=group_raft(h,group);
-        uint32_t voters=r?efs_raft_voters(r):0;
-        int local=r && (voters & (voters-1)) && efs_raft_role(r)==EFS_RAFT_LEADER;
-        pthread_mutex_unlock(&h->mu);
-        if(local) {
-            int eligible=efs_meta_append_completion_atomic_eligible(h->kv,ino,offset);
-            if(eligible<0)return eligible;
-            if(eligible) {
-                struct efs_meta_row row;
-                int rc=efs_meta_apply_get_inode(h->kv,ino,&row);
-                if(rc!=EFS_OK)return rc;
-                uint8_t cmd[EFS_MD_APPEND_COMPLETE_ATOMIC_LEN]={EFS_MD_CMD_APPEND_COMPLETE_ATOMIC};
-                uint8_t key[EFS_KV_KEY_MAX];uint32_t kl,n=48;
-                rc=efs_kv_key_append_rsv(efs_kv_inode_shard(ino),ino,row.generation,offset,key,&kl);
-                if(rc==EFS_OK)rc=efs_kv_get(h->kv,key,kl,cmd+53,&n);
-                if(rc!=EFS_OK)return rc==EFS_ERR_NOT_FOUND?EFS_ERR_BUSY:rc;
-                if(n!=48)return EFS_ERR_PROTO;
-                wr64be(cmd+1,ino);wr64be(cmd+9,row.generation);wr64be(cmd+17,offset);
-                memcpy(cmd+25,session->client_uuid,16);wr32be(cmd+41,session->session_epoch);
-                wr64be(cmd+45,row.content_epoch);
-                uint64_t index=0,term=0;
-                rc=host_propose_mode(h,group,cmd,sizeof(cmd),&index,&term,hint,1);
-                return rc==EFS_OK?host_wait_verdict(h,group,index,term,hint):rc;
-            }
-        }
-    }
-    struct host_append_batch c={.base={h,hint}};
-    const struct efs_meta_append_ops ops={host_append_batch_prepare,
-        host_append_batch_decide,host_append_batch_resolve};
-    host_command_cohort_begin(&c.cohort,h);
-    int rc=session?efs_meta_finish_append_owned(h->kv,ino,offset,
-                     EFS_META_APPEND_COMPLETED,session,t,&ops,&c):
-                   efs_meta_finish_append(h->kv,ino,offset,
-                     EFS_META_APPEND_COMPLETED,t,&ops,&c);
-    if(host_command_capture==&c.cohort)
-        (void)host_command_cohort_end(&c.cohort,EFS_ERR_BUSY,hint);
-    return rc;
-}
 static int host_append_prune_batched(struct efs_raft_host *h,efs_ino_t ino,
     const struct efs_txid *t,int *hint,unsigned *removed)
 {

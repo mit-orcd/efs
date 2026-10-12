@@ -440,6 +440,7 @@ test: all
 	python3 tests/test_rollup_allocation_failure.py
 	python3 tests/test_rollup_budget.py
 	python3 tests/test_recorder_stop.py
+	python3 tests/test_recorder_start.py
 	python3 tests/test_address_parser.py
 	python3 tests/test_publication_writeback.py
 	python3 tests/test_lane_bootstrap_export.py
@@ -643,6 +644,7 @@ test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	python3 tests/test_rollup_allocation_failure.py
 	python3 tests/test_rollup_budget.py
 	python3 tests/test_recorder_stop.py
+	python3 tests/test_recorder_start.py
 	python3 tests/test_address_parser.py
 	python3 tests/test_publication_writeback.py
 	python3 tests/test_lane_bootstrap_export.py
@@ -876,3 +878,6 @@ tests/faults/repair_request: tests/faults/repair_request.c $(LIB)
 
 tests/test_repair_worker: tests/test_repair_worker.c src/server/repair_worker.c $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< src/server/repair_worker.c $(LIB) $(LDFLAGS)
+
+# Profiler launches and child retirement share one implementation.
+src/server/efsd.o src/client/efs_fuse.o src/client/efs_bench.o: src/common/recorder_start.h src/common/recorder_stop.h

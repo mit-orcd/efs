@@ -2205,11 +2205,6 @@ void efs_client_stop_meta_flush(void)
         (void)efs_client_report_dirty_ino(0, 1);
 }
 
-void efs_client_kick_meta_flush(void)
-{
-    meta_flush_enqueue(0);
-}
-
 int efs_client_note_meta_change(int force)
 {
     const char *skip = getenv("EFS_SKIP_META_FLUSH");
@@ -6449,11 +6444,6 @@ static int report_replay_stale(efs_ino_t ino)
      * staging table and the next REPORT republished never-PUT gens. */
     (void)ino;
     return EFS_OK;
-}
-
-int efs_dcache_replay_stale(efs_ino_t ino, uint32_t ci)
-{
-    return dcache_replay_stale_ex(ino, ci, 0);
 }
 
 /* The host has no row for this chunk (the repull said so): the table's

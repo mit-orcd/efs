@@ -27,6 +27,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include "../common/recorder_stop.h"
+#include "../common/recorder_start.h"
 #include <time.h>
 #include <unistd.h>
 
@@ -47,44 +48,6 @@ static void usage(const char *prog)
 }
 
 static pid_t g_perf_pid = -1;
-
-static int mkdir_p(const char *path)
-{
-    char tmp[4096];
-    strncpy(tmp, path, sizeof(tmp) - 1);
-    tmp[sizeof(tmp) - 1] = '\0';
-    for (char *p = tmp + 1; *p; p++) {
-        if (*p == '/') {
-            *p = '\0';
-            mkdir(tmp, 0755);
-            *p = '/';
-        }
-    }
-    return mkdir(tmp, 0755);
-}
-
-static pid_t start_perf_recorder(pid_t target, const char *perf_path)
-{
-    char perf_dir[4096];
-    strncpy(perf_dir, perf_path, sizeof(perf_dir) - 1);
-    perf_dir[sizeof(perf_dir) - 1] = '\0';
-    char *slash = strrchr(perf_dir, '/');
-    if (slash) {
-        *slash = '\0';
-        mkdir_p(perf_dir);
-    }
-    pid_t pid = fork();
-    if (pid < 0)
-        return -1;
-    if (pid == 0) {
-        char pid_str[32];
-        snprintf(pid_str, sizeof(pid_str), "%d", (int)target);
-        execlp("perf", "perf", "record", "-g", "-F", "999", "-p", pid_str, "-o",
-               perf_path, NULL);
-        _exit(1);
-    }
-    return pid;
-}
 
 static void stop_perf_recorder(void)
 {
@@ -987,7 +950,7 @@ static int run_meta_bench(const char *seed, const char *export_name,
         else
             snprintf(perf_path, sizeof(perf_path),
                      "/tmp/efs-bench-perf-%d/perf.data", (int)getpid());
-        g_perf_pid = start_perf_recorder(getpid(), perf_path);
+        g_perf_pid = efs_start_perf_recorder(getpid(), perf_path);
         if (g_perf_pid < 0)
             fprintf(stderr, "Warning: could not start perf; continuing\n");
         else
@@ -1357,7 +1320,7 @@ int main(int argc, char **argv)
         else
             snprintf(perf_path, sizeof(perf_path), "/tmp/efs-bench-perf-%d/perf.data",
                      (int)getpid());
-        g_perf_pid = start_perf_recorder(getpid(), perf_path);
+        g_perf_pid = efs_start_perf_recorder(getpid(), perf_path);
         if (g_perf_pid < 0)
             fprintf(stderr, "Warning: could not start perf; continuing\n");
         else
