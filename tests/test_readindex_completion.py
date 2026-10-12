@@ -36,7 +36,12 @@ int main(void){
  assert(!host_view_covers(&v,51,11,9)); /* later committed bytes */
  assert(!host_view_covers(&v,50,11,8));
  v=view(&r,49);assert(!host_view_covers(&v,50,11,9)); /* own apply parked */
- r.quorum=1;v=view(&r,59);assert(!host_view_covers(&v,60,12,9));
+ r.quorum=1;v=view(&r,50);
+ /* Newer completed quorum must not move an older admitted waiter's apply
+  * target from50 to60 when its own valid quorum already applied at50. */
+ assert(host_view_covers(&v,50,11,9));
+ assert(!host_view_covers(&v,51,11,9) && !host_view_covers(&v,50,12,9));
+ v=view(&r,59);assert(!host_view_covers(&v,60,12,9));
  v=view(&r,60);assert(host_view_covers(&v,60,12,9));
  v.has=0;assert(!host_view_covers(&v,60,12,9));v.has=1;
  assert(!host_view_covers(&v,60,13,9)); /* next arrival cannot reuse */
