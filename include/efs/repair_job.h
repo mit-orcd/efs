@@ -43,6 +43,7 @@ int efs_repair_record_seal(struct efs_kv *, const struct efs_repair_job *, uint3
 int efs_repair_retire(struct efs_kv *, const struct efs_repair_job *, int cancelled);
 /* Mandatory future GC integration point. BUSY until EVERY matching active
  * job has a committed terminal target seal; absence never proves a target
- * receipt. This predicate is not wired into live GC yet. */
+ * receipt. The object predicate also fences historical FileID generations. */
 int efs_repair_gc_ready(struct efs_kv *, efs_ino_t, uint64_t, uint32_t, uint64_t);
+int efs_repair_gc_object_ready(struct efs_kv *, efs_ino_t, uint32_t, uint64_t);
 #endif
