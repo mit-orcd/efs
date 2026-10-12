@@ -1,0 +1,9 @@
+# posix-suite host=nuc mnt=/tmp/efs-focus-2-0_k2j20f 2026-10-12T14:23:30Z
+# suite=core
+# select	dir_deep_nesting
+# select	dir_deep_nesting_beyond_64
+test	result	detail
+dir_deep_nesting	PASS	
+dir_deep_nesting_beyond_64	PASS	
+# summary pass=2 fail=0 skip=0 notrun=0 total=2 dur=1.6
+# complete

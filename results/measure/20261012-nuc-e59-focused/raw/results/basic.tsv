@@ -1,0 +1,7 @@
+# posix-suite host=nuc mnt=/data1/efs/mnt 2026-10-12T14:23:32Z
+# suite=core
+# select	basic_write_read
+test	result	detail
+basic_write_read	PASS	
+# summary pass=1 fail=0 skip=0 notrun=0 total=1 dur=0.1
+# complete
