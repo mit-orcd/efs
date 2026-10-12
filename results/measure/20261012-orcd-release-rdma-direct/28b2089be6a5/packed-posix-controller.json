@@ -1,0 +1,4 @@
+{
+  "suite": "packed-posix",
+  "transcript": "packing concurrent POSIX client 6 exit=1\nUnmounting /tmp/efs-pack-client-2-290wdi31\nERROR: still mounted: /tmp/efs-pack-client-2-290wdi31\nStop did not detach; mutation admission resumed. Use stop --force-discard only to accept loss.\nTraceback (most recent call last):\n  File \"/tmp/efs/tests/live/gc_reclamation.py\", line 658, in <module>\n    run([source/'scripts/client.sh','stop',target]);proc.wait(timeout=15);target.rmdir()\n  File \"/tmp/efs/tests/live/gc_reclamation.py\", line 321, in run\n    return subprocess.run([str(x) for x in args], check=True, timeout=kwargs.pop(\"timeout\",60), env=kwargs.pop(\"env\",env), **kwargs)\n  File \"/usr/lib64/python3.9/subprocess.py\", line 528, in run\n    raise CalledProcessError(retcode, process.args,\nsubprocess.CalledProcessError: Command '['/tmp/efs/scripts/client.sh', 'stop', '/tmp/efs-pack-client-2-290wdi31']' returned non-zero exit status 1.\nsuite-exit=1"
+}

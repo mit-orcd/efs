@@ -1,0 +1,24 @@
+2026-10-12T04:12:14.273Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:50:46Z on fcstor006), build=28b2089be6a5-release-normal: starting export=default mount=/tmp/efs-pack-client-2-290wdi31
+2026-10-12T04:12:14.273Z efs: numa pin node=0 cpus=12 (hca mlx5_2) mempolicy=preferred
+2026-10-12T04:12:14.273Z Discovered 4 cluster nodes from 127.0.0.1:20550
+2026-10-12T04:12:14.273Z   node id=1 127.0.0.1:20550
+2026-10-12T04:12:14.273Z   node id=2 127.0.0.1:20551
+2026-10-12T04:12:14.273Z   node id=3 127.0.0.1:20552
+2026-10-12T04:12:14.273Z   node id=4 127.0.0.1:20553
+2026-10-12T04:12:14.273Z fetching metadata...
+2026-10-12T04:12:14.274Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T04:12:14.274Z export id=1 name=default
+2026-10-12T04:12:14.274Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T04:12:14.275Z efs-fuse: workers max=10 idle=10
+2026-10-12T04:12:14.277Z fuse serving
+2026-10-12T04:12:14.532Z efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 4 recv + up to 32 lazy send slots, 84 KiB each)
+2026-10-12T04:12:16.156Z efs: RDMA zero-copy send active (type=6 hdr=80 payload=65536)
+2026-10-12T04:12:16.383Z efs: read hole ino=7493 ci=1 holes=1
+2026-10-12T04:12:16.560Z fsync-split ino=5588 flush_ms=126 report_ms=0 rc=0
+2026-10-12T04:12:17.924Z efs: rename_at 3732/a -> 3732/b rc=-12 after 1 tries
+2026-10-12T04:12:29.046Z fsync-split ino=6353 flush_ms=141 report_ms=0 rc=0
+2026-10-12T04:12:29.049Z fsync-split ino=4929 flush_ms=137 report_ms=0 rc=0
+2026-10-12T04:12:35.114Z efs: read hole ino=7795 ci=0 holes=3
+2026-10-12T04:12:39.250Z efs: read hole ino=11768 ci=1 holes=12
+2026-10-12T04:12:50.765Z efs: read hole ino=17703 ci=0 holes=13
+2026-10-12T04:12:54.533Z efs: read hole ino=6524 ci=0 holes=14

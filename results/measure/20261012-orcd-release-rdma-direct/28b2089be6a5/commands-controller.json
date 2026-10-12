@@ -1,0 +1,4 @@
+{
+  "suite": "commands",
+  "transcript": "bounded identity exhaustion and sequential release/FORGET recovery PASS\nefs_commands: PASS (focused command gates; large-scale/fault/NFS acceptance remains)\nserver type/size/time filters AND together; ns boundaries and folded stat/owner fields PASS\nsort directions/ties, directories first, UTC/relative dates, sizes, paths and control escaping PASS\nfilters precede output limits while candidate-visit bounds remain enforced PASS\nfiltered result permission denial, immutable fd and peer size convergence PASS\nexpiry unavailable and unsupported args refused PASS (no expiry deletion/renewal claim)\nefs_command_options: PASS\nenabled command trees GC drained PASS\nenabled command tree quota zero PASS\nenabled command physical cleanup PASS\nenabled two-mount command/options, permissions, immutable output and physical cleanup PASS\nsuite-exit=0"
+}

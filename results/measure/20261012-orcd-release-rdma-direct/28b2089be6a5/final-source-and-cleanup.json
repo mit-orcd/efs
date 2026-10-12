@@ -1,0 +1,115 @@
+[
+  {
+    "host": "fcstor003",
+    "inputs": 1588,
+    "mismatches": [],
+    "owned_test_processes": [],
+    "mounts": [],
+    "prior_source_retained": true,
+    "binaries_retained": "efsd: OK\nefs-fuse: OK\nefs-mgmt: OK\nlibefs.a: OK"
+  },
+  {
+    "host": "fcstor004",
+    "inputs": 1588,
+    "mismatches": [],
+    "owned_test_processes": [],
+    "mounts": [],
+    "prior_source_retained": true,
+    "binaries_retained": "efsd: OK\nefs-fuse: OK\nefs-mgmt: OK\nlibefs.a: OK"
+  },
+  {
+    "host": "fcstor005",
+    "inputs": 1588,
+    "mismatches": [],
+    "owned_test_processes": [],
+    "mounts": [],
+    "prior_source_retained": true,
+    "binaries_retained": "efsd: OK\nefs-fuse: OK\nefs-mgmt: OK\nlibefs.a: OK"
+  },
+  {
+    "host": "fcstor006",
+    "inputs": 1588,
+    "mismatches": [],
+    "owned_test_processes": [],
+    "mounts": [],
+    "prior_source_retained": true,
+    "binaries_retained": "efsd: OK\nefs-fuse: OK\nefs-mgmt: OK\nlibefs.a: OK"
+  },
+  {
+    "host": "fcstor007",
+    "inputs": 1588,
+    "mismatches": [],
+    "owned_test_processes": [],
+    "mounts": [
+      "/tmp/efs-mount"
+    ],
+    "prior_source_retained": true,
+    "binaries_retained": "efsd: OK\nefs-fuse: OK\nefs-mgmt: OK\nlibefs.a: OK"
+  },
+  {
+    "host": "fcstor008",
+    "inputs": 1588,
+    "mismatches": [],
+    "owned_test_processes": [],
+    "mounts": [
+      "/tmp/efs-mount"
+    ],
+    "prior_source_retained": true,
+    "binaries_retained": "efsd: OK\nefs-fuse: OK\nefs-mgmt: OK\nlibefs.a: OK"
+  },
+  {
+    "host": "fcstor009",
+    "inputs": 1588,
+    "mismatches": [],
+    "owned_test_processes": [],
+    "mounts": [
+      "/tmp/efs-mount"
+    ],
+    "prior_source_retained": true,
+    "binaries_retained": "efsd: OK\nefs-fuse: OK\nefs-mgmt: OK\nlibefs.a: OK"
+  },
+  {
+    "host": "fcstor010",
+    "inputs": 1588,
+    "mismatches": [],
+    "owned_test_processes": [],
+    "mounts": [
+      "/tmp/efs-mount"
+    ],
+    "prior_source_retained": true,
+    "binaries_retained": "efsd: OK\nefs-fuse: OK\nefs-mgmt: OK\nlibefs.a: OK"
+  },
+  {
+    "host": "fcstor011",
+    "inputs": 1588,
+    "mismatches": [],
+    "owned_test_processes": [],
+    "mounts": [
+      "/tmp/efs-mount"
+    ],
+    "prior_source_retained": true,
+    "binaries_retained": "efsd: OK\nefs-fuse: OK\nefs-mgmt: OK\nlibefs.a: OK"
+  },
+  {
+    "host": "fcstor012",
+    "inputs": 1588,
+    "mismatches": [],
+    "owned_test_processes": [],
+    "mounts": [
+      "/tmp/efs-mount"
+    ],
+    "prior_source_retained": true,
+    "binaries_retained": "efsd: OK\nefs-fuse: OK\nefs-mgmt: OK\nlibefs.a: OK"
+  },
+  {
+    "host": "fcstor013",
+    "inputs": 1588,
+    "mismatches": [],
+    "owned_test_processes": [],
+    "mounts": [
+      "/tmp/efs-mount"
+    ],
+    "prior_source_retained": true,
+    "binaries_retained": "efsd: OK\nefs-fuse: OK\nefs-mgmt: OK\nlibefs.a: OK"
+  }
+]

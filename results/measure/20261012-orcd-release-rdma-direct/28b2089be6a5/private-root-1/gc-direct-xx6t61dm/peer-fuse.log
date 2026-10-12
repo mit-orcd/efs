@@ -1,0 +1,27 @@
+2026-10-12T04:12:13.177Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:50:46Z on fcstor006), build=28b2089be6a5-release-normal: starting export=default mount=/data1/01/efs-orcd-release-28b2089be6a5-private/gc-direct-xx6t61dm/peer
+2026-10-12T04:12:13.177Z efs: numa pin node=0 cpus=12 (hca mlx5_2) mempolicy=preferred
+2026-10-12T04:12:13.177Z Discovered 4 cluster nodes from 127.0.0.1:20550
+2026-10-12T04:12:13.177Z   node id=1 127.0.0.1:20550
+2026-10-12T04:12:13.177Z   node id=2 127.0.0.1:20551
+2026-10-12T04:12:13.177Z   node id=3 127.0.0.1:20552
+2026-10-12T04:12:13.177Z   node id=4 127.0.0.1:20553
+2026-10-12T04:12:13.177Z fetching metadata...
+2026-10-12T04:12:13.177Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T04:12:13.177Z export id=1 name=default
+2026-10-12T04:12:13.177Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T04:12:13.179Z efs-fuse: workers max=10 idle=10
+2026-10-12T04:12:13.181Z fuse serving
+2026-10-12T04:12:13.436Z efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 4 recv + up to 32 lazy send slots, 84 KiB each)
+2026-10-12T04:12:15.856Z efs: RDMA zero-copy send active (type=6 hdr=80 payload=65536)
+2026-10-12T04:12:16.278Z fsync-split ino=6972 flush_ms=111 report_ms=0 rc=0
+2026-10-12T04:12:16.379Z efs: read hole ino=6925 ci=1 holes=1
+2026-10-12T04:12:18.111Z efs: rename_at 1068/a -> 1068/b rc=-12 after 1 tries
+2026-10-12T04:12:29.374Z fsync-split ino=12537 flush_ms=173 report_ms=0 rc=0
+2026-10-12T04:12:29.527Z fsync-split ino=7113 flush_ms=132 report_ms=0 rc=0
+2026-10-12T04:12:35.411Z efs: read hole ino=7243 ci=1 holes=3
+2026-10-12T04:12:38.477Z fsync-split ino=9984 flush_ms=135 report_ms=0 rc=0
+2026-10-12T04:12:39.812Z efs: read hole ino=14272 ci=1 holes=12
+2026-10-12T04:12:40.342Z fsync-split ino=15271 flush_ms=132 report_ms=0 rc=0
+2026-10-12T04:12:52.253Z efs: read hole ino=25071 ci=0 holes=13
+2026-10-12T04:12:53.563Z fsync-split ino=13310 flush_ms=109 report_ms=0 rc=0
+2026-10-12T04:12:55.393Z efs: read hole ino=17748 ci=0 holes=14

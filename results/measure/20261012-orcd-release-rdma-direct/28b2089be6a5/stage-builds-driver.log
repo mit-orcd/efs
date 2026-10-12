@@ -1,0 +1,10 @@
+{"host": "fcstor003", "result": "PASS", "output": "source.tar.gz: OK\nstage-build-PASS"}
+{"host": "fcstor004", "result": "PASS", "output": "source.tar.gz: OK\nstage-build-PASS"}
+{"host": "fcstor005", "result": "PASS", "output": "source.tar.gz: OK\nstage-build-PASS"}
+{"host": "fcstor007", "result": "PASS", "output": "source.tar.gz: OK\nstage-build-PASS"}
+{"host": "fcstor008", "result": "PASS", "output": "source.tar.gz: OK\nstage-build-PASS"}
+{"host": "fcstor009", "result": "PASS", "output": "source.tar.gz: OK\nstage-build-PASS"}
+{"host": "fcstor010", "result": "PASS", "output": "source.tar.gz: OK\nstage-build-PASS"}
+{"host": "fcstor011", "result": "PASS", "output": "source.tar.gz: OK\nstage-build-PASS"}
+{"host": "fcstor012", "result": "PASS", "output": "source.tar.gz: OK\nstage-build-PASS"}
+{"host": "fcstor013", "result": "PASS", "output": "source.tar.gz: OK\nstage-build-PASS"}

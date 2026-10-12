@@ -1,0 +1,53 @@
+2026-10-12T04:02:35.828Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:50:46Z on fcstor006), build=28b2089be6a5-release-normal: starting export=default mount=/data1/01/efs-orcd-release-28b2089be6a5-private/gc-direct-jb9ayync/peer
+2026-10-12T04:02:35.828Z efs: numa pin node=0 cpus=12 (hca mlx5_2) mempolicy=preferred
+2026-10-12T04:02:35.828Z Discovered 4 cluster nodes from 127.0.0.1:20510
+2026-10-12T04:02:35.828Z   node id=1 127.0.0.1:20510
+2026-10-12T04:02:35.828Z   node id=2 127.0.0.1:20511
+2026-10-12T04:02:35.828Z   node id=3 127.0.0.1:20512
+2026-10-12T04:02:35.828Z   node id=4 127.0.0.1:20513
+2026-10-12T04:02:35.828Z fetching metadata...
+2026-10-12T04:02:35.829Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T04:02:35.829Z export id=1 name=default
+2026-10-12T04:02:35.829Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T04:02:35.830Z efs-fuse: workers max=10 idle=10
+2026-10-12T04:02:35.832Z fuse serving
+2026-10-12T04:02:35.860Z efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 4 recv + up to 32 lazy send slots, 84 KiB each)
+2026-10-12T04:02:35.877Z efs: RDMA zero-copy send active (type=6 hdr=80 payload=65536)
+2026-10-12T04:03:44.057Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:50:46Z on fcstor006), build=28b2089be6a5-release-normal: starting export=default mount=/data1/01/efs-orcd-release-28b2089be6a5-private/gc-direct-jb9ayync/peer
+2026-10-12T04:03:44.057Z efs: numa pin node=0 cpus=12 (hca mlx5_2) mempolicy=preferred
+2026-10-12T04:03:44.057Z Discovered 4 cluster nodes from 127.0.0.1:20510
+2026-10-12T04:03:44.057Z   node id=1 127.0.0.1:20510
+2026-10-12T04:03:44.057Z   node id=2 127.0.0.1:20511
+2026-10-12T04:03:44.057Z   node id=3 127.0.0.1:20512
+2026-10-12T04:03:44.057Z   node id=4 127.0.0.1:20513
+2026-10-12T04:03:44.057Z fetching metadata...
+2026-10-12T04:03:44.058Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T04:03:44.058Z export id=1 name=default
+2026-10-12T04:03:44.058Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T04:03:44.059Z efs-fuse: workers max=10 idle=10
+2026-10-12T04:03:44.061Z fuse serving
+2026-10-12T04:03:44.322Z efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 4 recv + up to 32 lazy send slots, 84 KiB each)
+2026-10-12T04:03:44.686Z efs: RDMA zero-copy send active (type=6 hdr=80 payload=65536)
+2026-10-12T04:03:48.091Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-12T04:03:48.096Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-12T04:03:48.109Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=8
+2026-10-12T04:03:48.124Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=8
+2026-10-12T04:03:48.139Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=6
+2026-10-12T04:03:48.151Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-12T04:03:48.169Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=5
+2026-10-12T04:03:48.184Z fsync-split ino=7959 flush_ms=108 report_ms=0 rc=0
+2026-10-12T04:03:48.206Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-12T04:03:48.209Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-12T04:03:48.215Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-12T04:03:48.224Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-12T04:03:48.233Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-12T04:03:48.350Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-12T04:03:48.356Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=4
+2026-10-12T04:03:48.362Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-12T04:03:50.332Z efs: read hole ino=5090 ci=0 holes=1
+2026-10-12T04:03:50.350Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-12T04:03:50.353Z efs: report rec ino=7826 ci=0 rejected unowned staging observation nodes=2,3,4 (putid miss, n=1)
+2026-10-12T04:03:50.370Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=0
+2026-10-12T04:03:50.414Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-12T04:03:55.846Z efs: read hole ino=7473 ci=0 holes=2
+2026-10-12T04:03:55.935Z efs: rename_at 1339/x -> 1339/z rc=-3 after 1 tries
