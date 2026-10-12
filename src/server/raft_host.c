@@ -58,7 +58,7 @@
  * bounce RPCs keep the long budget. */
 #define HOST_SEND_IO_MS    250
 #define HOST_INBOX_MAX     256
-#define HOST_INBOX_SLICE_MAX 1
+#define HOST_INBOX_SLICE_MAX 8
 #define HOST_INBOX_BYTES   (32ull << 20)
 #define HOST_OUTBOX_BYTES  (16ull << 20)
 #define HOST_FRAME_MAX     (EFS_WIRE_RAFT_MAX_CMD + EFS_WIRE_RAFT_HDR_LEN + 12u)
@@ -6118,10 +6118,7 @@ static void host_inbox_order(const struct host_inbox_item *local, unsigned n,
     }
 }
 
-/* Publish progress after each FIFO frame. With zero FUSE entry cache time,
- * deep path creation serially performs thousands of authoritative LOOKUPs;
- * batching eight durable receives hid ready proofs behind unrelated I/O.
- * Process a bounded FIFO prefix before publishing apply/read progress. A
+/* Process a bounded FIFO prefix before publishing apply/read progress. A
  * follower's durable receive can block, so draining the whole admitted inbox
  * holds h->mu and hides completed read proofs for hundreds of milliseconds.
  * Queued tails remain ahead of new arrivals. Only the taken prefix is charged
