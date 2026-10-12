@@ -1,0 +1,30 @@
+[
+  {
+    "client": 0,
+    "returncode": 0
+  },
+  {
+    "client": 1,
+    "returncode": 0
+  },
+  {
+    "client": 2,
+    "returncode": 0
+  },
+  {
+    "client": 3,
+    "returncode": 0
+  },
+  {
+    "client": 4,
+    "returncode": 0
+  },
+  {
+    "client": 5,
+    "returncode": 0
+  },
+  {
+    "client": 6,
+    "returncode": 0
+  }
+]

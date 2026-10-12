@@ -1,0 +1,142 @@
+[
+  {
+    "client": 0,
+    "command": [
+      "python3",
+      "/data1/efs/amd-release-final-1e3a4638-20261012/source/tests/posix/posix_suite.py",
+      "/tmp/efs-amd-final1e3a-ordinary/deep-mnt0",
+      "--suite",
+      "core",
+      "--jobs",
+      "16",
+      "--timeout-s",
+      "30",
+      "--tag",
+      "deep0",
+      "--results",
+      "/data1/efs/amd-release-final-1e3a4638-ordinary-20261012/evidence/deep-0.tsv"
+    ],
+    "seconds": 52.894,
+    "returncode": 1
+  },
+  {
+    "client": 1,
+    "command": [
+      "python3",
+      "/data1/efs/amd-release-final-1e3a4638-20261012/source/tests/posix/posix_suite.py",
+      "/tmp/efs-amd-final1e3a-ordinary/deep-mnt1",
+      "--suite",
+      "core",
+      "--jobs",
+      "16",
+      "--timeout-s",
+      "30",
+      "--tag",
+      "deep1",
+      "--results",
+      "/data1/efs/amd-release-final-1e3a4638-ordinary-20261012/evidence/deep-1.tsv"
+    ],
+    "seconds": 53.144,
+    "returncode": 1
+  },
+  {
+    "client": 2,
+    "command": [
+      "python3",
+      "/data1/efs/amd-release-final-1e3a4638-20261012/source/tests/posix/posix_suite.py",
+      "/tmp/efs-amd-final1e3a-ordinary/deep-mnt2",
+      "--suite",
+      "core",
+      "--jobs",
+      "16",
+      "--timeout-s",
+      "30",
+      "--tag",
+      "deep2",
+      "--results",
+      "/data1/efs/amd-release-final-1e3a4638-ordinary-20261012/evidence/deep-2.tsv"
+    ],
+    "seconds": 53.244,
+    "returncode": 1
+  },
+  {
+    "client": 3,
+    "command": [
+      "python3",
+      "/data1/efs/amd-release-final-1e3a4638-20261012/source/tests/posix/posix_suite.py",
+      "/tmp/efs-amd-final1e3a-ordinary/deep-mnt3",
+      "--suite",
+      "core",
+      "--jobs",
+      "16",
+      "--timeout-s",
+      "30",
+      "--tag",
+      "deep3",
+      "--results",
+      "/data1/efs/amd-release-final-1e3a4638-ordinary-20261012/evidence/deep-3.tsv"
+    ],
+    "seconds": 47.999,
+    "returncode": 1
+  },
+  {
+    "client": 4,
+    "command": [
+      "python3",
+      "/data1/efs/amd-release-final-1e3a4638-20261012/source/tests/posix/posix_suite.py",
+      "/tmp/efs-amd-final1e3a-ordinary/deep-mnt4",
+      "--suite",
+      "core",
+      "--jobs",
+      "16",
+      "--timeout-s",
+      "30",
+      "--tag",
+      "deep4",
+      "--results",
+      "/data1/efs/amd-release-final-1e3a4638-ordinary-20261012/evidence/deep-4.tsv"
+    ],
+    "seconds": 49.088,
+    "returncode": 1
+  },
+  {
+    "client": 5,
+    "command": [
+      "python3",
+      "/data1/efs/amd-release-final-1e3a4638-20261012/source/tests/posix/posix_suite.py",
+      "/tmp/efs-amd-final1e3a-ordinary/deep-mnt5",
+      "--suite",
+      "core",
+      "--jobs",
+      "16",
+      "--timeout-s",
+      "30",
+      "--tag",
+      "deep5",
+      "--results",
+      "/data1/efs/amd-release-final-1e3a4638-ordinary-20261012/evidence/deep-5.tsv"
+    ],
+    "seconds": 53.142,
+    "returncode": 1
+  },
+  {
+    "client": 6,
+    "command": [
+      "python3",
+      "/data1/efs/amd-release-final-1e3a4638-20261012/source/tests/posix/posix_suite.py",
+      "/tmp/efs-amd-final1e3a-ordinary/deep-mnt6",
+      "--suite",
+      "core",
+      "--jobs",
+      "16",
+      "--timeout-s",
+      "30",
+      "--tag",
+      "deep6",
+      "--results",
+      "/data1/efs/amd-release-final-1e3a4638-ordinary-20261012/evidence/deep-6.tsv"
+    ],
+    "seconds": 53.243,
+    "returncode": 1
+  }
+]

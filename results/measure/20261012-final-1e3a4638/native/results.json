@@ -1,0 +1,141 @@
+[
+  {
+    "name": "normal-build",
+    "command": [
+      "make",
+      "-j8",
+      "EFS_GIT_ID=1e3a46384e897a47751871b15e82ead86c9d0abd",
+      "EFS_GIT_BRANCH=release-v0.3.0-pre-alpha",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "all"
+    ],
+    "cwd": "/data1/efs/amd-release-final-1e3a4638-20261012/source",
+    "commit": "1e3a46384e897a47751871b15e82ead86c9d0abd",
+    "exit": 0,
+    "duration_seconds": 9.530336380004883
+  },
+  {
+    "name": "normal-native",
+    "command": [
+      "make",
+      "EFS_GIT_ID=1e3a46384e897a47751871b15e82ead86c9d0abd",
+      "EFS_GIT_BRANCH=release-v0.3.0-pre-alpha",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "test"
+    ],
+    "cwd": "/data1/efs/amd-release-final-1e3a4638-20261012/source",
+    "commit": "1e3a46384e897a47751871b15e82ead86c9d0abd",
+    "exit": 0,
+    "duration_seconds": 90.90762662887573
+  },
+  {
+    "name": "early-ack-raft",
+    "command": [
+      "./tests/test_raft"
+    ],
+    "cwd": "/data1/efs/amd-release-final-1e3a4638-20261012/source",
+    "commit": "1e3a46384e897a47751871b15e82ead86c9d0abd",
+    "exit": 0,
+    "duration_seconds": 0.007230520248413086
+  },
+  {
+    "name": "fault-clean",
+    "command": [
+      "make",
+      "EFS_GIT_ID=1e3a46384e897a47751871b15e82ead86c9d0abd",
+      "EFS_GIT_BRANCH=release-v0.3.0-pre-alpha",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "clean"
+    ],
+    "cwd": "/data1/efs/amd-release-final-1e3a4638-20261012/fault-source",
+    "commit": "1e3a46384e897a47751871b15e82ead86c9d0abd",
+    "exit": 0,
+    "duration_seconds": 0.03320598602294922
+  },
+  {
+    "name": "fault-build",
+    "command": [
+      "make",
+      "-j8",
+      "EFS_GIT_ID=1e3a46384e897a47751871b15e82ead86c9d0abd",
+      "EFS_GIT_BRANCH=release-v0.3.0-pre-alpha",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "EFS_FAULTS=1",
+      "all"
+    ],
+    "cwd": "/data1/efs/amd-release-final-1e3a4638-20261012/fault-source",
+    "commit": "1e3a46384e897a47751871b15e82ead86c9d0abd",
+    "exit": 0,
+    "duration_seconds": 9.523338556289673
+  },
+  {
+    "name": "fault-native",
+    "command": [
+      "make",
+      "EFS_GIT_ID=1e3a46384e897a47751871b15e82ead86c9d0abd",
+      "EFS_GIT_BRANCH=release-v0.3.0-pre-alpha",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "EFS_FAULTS=1",
+      "test"
+    ],
+    "cwd": "/data1/efs/amd-release-final-1e3a4638-20261012/fault-source",
+    "commit": "1e3a46384e897a47751871b15e82ead86c9d0abd",
+    "exit": 0,
+    "duration_seconds": 90.42704319953918
+  },
+  {
+    "name": "san-test_host_inbox",
+    "command": [
+      "python3",
+      "tests/test_host_inbox.py"
+    ],
+    "cwd": "/data1/efs/amd-release-final-1e3a4638-20261012/source",
+    "commit": "1e3a46384e897a47751871b15e82ead86c9d0abd",
+    "exit": 0,
+    "duration_seconds": 0.13734149932861328
+  },
+  {
+    "name": "san-test_readindex_operation",
+    "command": [
+      "python3",
+      "tests/test_readindex_operation.py"
+    ],
+    "cwd": "/data1/efs/amd-release-final-1e3a4638-20261012/source",
+    "commit": "1e3a46384e897a47751871b15e82ead86c9d0abd",
+    "exit": 0,
+    "duration_seconds": 0.09806966781616211
+  },
+  {
+    "name": "san-test_lookup_read_group",
+    "command": [
+      "python3",
+      "tests/test_lookup_read_group.py"
+    ],
+    "cwd": "/data1/efs/amd-release-final-1e3a4638-20261012/source",
+    "commit": "1e3a46384e897a47751871b15e82ead86c9d0abd",
+    "exit": 0,
+    "duration_seconds": 0.09189677238464355
+  },
+  {
+    "name": "san-test_readindex_pair",
+    "command": [
+      "python3",
+      "tests/test_readindex_pair.py"
+    ],
+    "cwd": "/data1/efs/amd-release-final-1e3a4638-20261012/source",
+    "commit": "1e3a46384e897a47751871b15e82ead86c9d0abd",
+    "exit": 0,
+    "duration_seconds": 0.12365579605102539
+  },
+  {
+    "name": "san-test_readindex_remote_pair",
+    "command": [
+      "python3",
+      "tests/test_readindex_remote_pair.py"
+    ],
+    "cwd": "/data1/efs/amd-release-final-1e3a4638-20261012/source",
+    "commit": "1e3a46384e897a47751871b15e82ead86c9d0abd",
+    "exit": 0,
+    "duration_seconds": 0.11483359336853027
+  }
+]

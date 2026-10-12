@@ -6,7 +6,7 @@
 
 ## v0.3.0-pre-alpha release integration
 
-Current solo final-source freeze: **1e3a46384e897a47751871b15e82ead86c9d0abd**, reviewed qualification fixes merged into release branch. Exact-source native/fault/sanitizer then heavy live qualification RUNNING on AMD; not accepted. Diagnostic tracing excluded. [Final-source ledger](v030-tcp-direct-qualification-20261012.md).
+Current solo final-source freeze: **1e3a46384e897a47751871b15e82ead86c9d0abd**, reviewed qualification fixes merged into release branch. Exact-source qualification completed: native/fault/sanitizers PASS; ordinary core1505/1512PASS,7deep-directorytimeoutsFAIL; peer67/67,7clientstops andordinarycold/reclamationPASS. Not accepted. [Final report](v030-final-qualification-1e3a4638-20261012.md). Diagnostic tracing excluded. [Final-source ledger](v030-tcp-direct-qualification-20261012.md).
 
 Latest execution identity: **e59e815fab2916340baad585dc08712ed182b7ea**; files/TCP/direct, both commands flags0. AMD heavy and Intel directory deadlines remain FAIL; native/sanitizers and focused ordinary I/O/NUC checks PASS. Isolated packing-phase diagnostic7ef prerequisites PASS; live-retry1 PASS14/14 and7stops; broad phase diagnostic retry1 FAIL278.320s, cold bytes PASS; root continues solo after Intel/NUC stop (heartbeat paused). Preserved118 compilation and initial7ef output-directory failures; it is not a qualification candidate. [Current ledger](v030-tcp-direct-qualification-20261012.md) governs over historical checkpoints below.
 

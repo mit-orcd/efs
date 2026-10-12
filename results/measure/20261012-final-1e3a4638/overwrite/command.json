@@ -1,0 +1,38 @@
+{
+  "source": "1e3a46384e897a47751871b15e82ead86c9d0abd",
+  "cwd": "/data1/efs/amd-release-final-1e3a4638-20261012/source",
+  "command": [
+    "python3",
+    "-u",
+    "tests/live/gc_reclamation.py",
+    "--mode",
+    "direct",
+    "--transport",
+    "tcp",
+    "--root",
+    "/data1/efs/amd-release-final-1e3a4638-overwrite-20261012",
+    "--root",
+    "/data1/efs/amd-release-final-1e3a4638-overwrite-20261012",
+    "--port",
+    "34760",
+    "--mount",
+    "/tmp/efs-amd-pack-isolated-1e3a46384e897a47751871b15e82ead86c9d0abd-mnt",
+    "--peer-mount",
+    "/tmp/efs-amd-pack-isolated-1e3a46384e897a47751871b15e82ead86c9d0abd-peer",
+    "--disable-efs-commands",
+    "--ordinary-overwrite-only",
+    "--fixture-quota",
+    "4G",
+    "--server-binary",
+    "/data1/efs/amd-release-final-1e3a4638-20261012/source/efsd",
+    "--client-binary",
+    "/data1/efs/amd-release-final-1e3a4638-20261012/source/efs-fuse"
+  ],
+  "environment": {
+    "EFS_PACKED_WRITES": "0",
+    "EFS_RAFT_FLOW": "0",
+    "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+    "EFS_RAFT_GROUP_DRAIN": "0"
+  },
+  "scope": "isolated two-client packed lifecycle physical deletion; .efs disabled; not full broad acceptance"
+}

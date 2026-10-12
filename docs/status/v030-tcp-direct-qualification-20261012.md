@@ -176,3 +176,7 @@ Root alone exports all24,334regular tracked files with SHA256 manifest and runs 
 ## User excludes packing from alpha
 
 [Binding scope update](v030-packing-exclusion-20261012.md): small-file packing excluded; ordinaryfiles/TCP/direct with PACKED_WRITES0 and both commands flags0 is now required. Queued final1e3a broad packing and isolated packing controllers cancelled before live startup; original launchers retained. Native/fault/sanitizers continue on frozen1e3a; incidental bundled packing checks are not separate required coverage. Previous packing failures are retained but no longer alpha blockers; deep/names failures require ordinary-files reproduction before exclusion or closure. Root prepares ordinary-files live qualification on the same frozen source. No other agents, tag or push.
+
+## Final integrated source verdict, ordinary-files scope
+
+[Final report](v030-final-qualification-1e3a4638-20261012.md): frozen1e3a normal/fault/native/earlyACK/fiveaffectedsanitizers PASS. Ordinaryfiles7client core1505PASS/7FAIL, all failures dir_deep_nesting30s; peer67/67 and7gracefulstopsPASS. Isolatedordinaryoverwrite primary/peer/cold/physical/queuedrainPASS. Packing0 andbothcommands0 verified on all actual processes.24,334source inputs unchanged,89evidencefilesverified,privatefixturesstopped. Notaccepted: deep-directory concurrency remains a blocker. No otheragents/tag/push.

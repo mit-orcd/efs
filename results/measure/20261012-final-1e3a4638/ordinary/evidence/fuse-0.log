@@ -1,0 +1,105 @@
+2026-10-12T15:38:19.581Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T15:33:40Z on amd-395), build=1e3a46384e897a47751871b15e82ead86c9d0abd: starting export=default mount=/tmp/efs-amd-final1e3a-ordinary/deep-mnt0
+2026-10-12T15:38:19.581Z Discovered 4 cluster nodes from 127.0.0.1:34780
+2026-10-12T15:38:19.581Z   node id=1 127.0.0.1:34780
+2026-10-12T15:38:19.581Z   node id=2 127.0.0.1:34781
+2026-10-12T15:38:19.581Z   node id=3 127.0.0.1:34782
+2026-10-12T15:38:19.581Z   node id=4 127.0.0.1:34783
+2026-10-12T15:38:19.581Z fetching metadata...
+2026-10-12T15:38:19.581Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T15:38:19.581Z export id=1 name=default
+2026-10-12T15:38:19.581Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T15:38:19.584Z efs-fuse: workers max=10 idle=10
+2026-10-12T15:38:19.585Z fuse serving
+2026-10-12T15:38:20.933Z efs: read hole ino=5805 ci=1 holes=1
+2026-10-12T15:38:22.137Z efs: rename_at 304/a -> 304/b rc=-12 after 1 tries
+2026-10-12T15:38:25.060Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=8
+2026-10-12T15:38:25.089Z efs: report rec ino=6128 ci=0 rejected unowned staging observation nodes=1,2,3 (putid miss, n=1)
+2026-10-12T15:38:32.267Z efs: read hole ino=24679 ci=0 holes=4
+2026-10-12T15:38:32.267Z efs: read hole ino=24679 ci=1 holes=3
+2026-10-12T15:38:33.810Z efs: read hole ino=5148 ci=1 holes=12
+2026-10-12T15:38:37.240Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=5
+2026-10-12T15:38:37.337Z efs: report rec ino=7450 ci=0 rejected unowned staging observation nodes=1,2,3 (putid miss, n=2)
+2026-10-12T15:38:39.642Z efs: read hole ino=4627 ci=0 holes=13
+2026-10-12T15:38:43.574Z efs: read hole ino=7352 ci=0 holes=14
+2026-10-12T15:38:57.166Z dcache-pressure live=36175872 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=72376 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:38:57.175Z dcache-pressure live=33816576 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:38:57.280Z dcache-pressure live=33554432 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:38:57.501Z dcache-pressure live=34471936 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:38:57.711Z dcache-pressure live=33947648 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:38:58.018Z dcache-pressure live=34471936 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:38:58.346Z dcache-pressure live=34209792 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=1992 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:38:58.657Z dcache-pressure live=34078720 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=1328 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:38:58.909Z dcache-pressure live=33554432 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:38:59.173Z dcache-pressure live=33816576 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:38:59.460Z dcache-pressure live=34340864 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:38:59.735Z dcache-pressure live=34209792 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=1328 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:39:00.003Z dcache-pressure live=34340864 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=1992 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:39:01.737Z dcache-pressure live=134086656 reserved=0 backing=134217728 limit=335544320 request=5242880 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=high-water
+2026-10-12T15:39:01.746Z dcache-pressure live=34340864 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=4648 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:39:01.883Z dcache-pressure live=36962304 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=4648 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:39:01.990Z dcache-pressure live=34734080 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=3320 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:39:02.100Z dcache-pressure live=33816576 reserved=0 backing=134217728 limit=335544320 request=5242880 metadata=5312 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=high-water
+2026-10-12T15:39:02.281Z dcache-pressure live=34209792 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=1992 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:39:02.511Z dcache-pressure live=33816576 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=3320 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:39:02.730Z dcache-pressure live=34340864 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=3320 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:39:02.923Z dcache-pressure live=34340864 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=3320 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:39:03.144Z dcache-pressure live=33816576 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=4648 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:39:03.400Z dcache-pressure live=33816576 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=1992 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:39:03.624Z dcache-pressure live=33685504 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=3320 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:39:03.898Z dcache-pressure live=34209792 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=7968 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:39:04.310Z fsync-split ino=5250 flush_ms=163 report_ms=0 rc=0
+2026-10-12T15:39:06.558Z dcache-pressure live=134086656 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=2656 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T15:39:11.664Z efs: rmdir ino=4120 local table lists child 'd39' — asking the server
+2026-10-12T15:39:14.168Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=4
+2026-10-12T15:39:14.172Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-12T15:39:14.179Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-12T15:39:14.188Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-12T15:39:14.224Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-12T15:39:14.228Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-12T15:39:14.233Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-12T15:39:14.333Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=6
+2026-10-12T15:39:14.339Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-12T15:39:14.347Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-12T15:39:14.359Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=6
+2026-10-12T15:39:14.377Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=8
+2026-10-12T15:39:14.393Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=3
+2026-10-12T15:39:14.410Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=4
+2026-10-12T15:39:14.428Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-12T15:39:14.446Z fsync-split ino=9261 flush_ms=128 report_ms=0 rc=0
+2026-10-12T15:39:14.510Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=4
+2026-10-12T15:39:14.516Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-12T15:39:14.572Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-12T15:39:14.577Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-12T15:39:14.583Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-12T15:39:14.638Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-12T15:39:14.682Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-12T15:39:14.686Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-12T15:39:14.693Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-12T15:39:14.790Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-12T15:39:14.795Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-12T15:39:14.803Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-12T15:39:15.203Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-12T15:39:15.206Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-12T15:39:15.212Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-12T15:39:15.220Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-12T15:39:15.231Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-12T15:39:15.247Z efs: report rec ino=9261 ci=17 rejected unowned staging observation nodes=2,3,4 (putid miss, n=3)
+2026-10-12T15:39:15.265Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=8
+2026-10-12T15:39:15.273Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=3
+2026-10-12T15:39:15.280Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=3
+2026-10-12T15:39:15.290Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-12T15:39:15.301Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=3
+2026-10-12T15:39:15.380Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=4
+2026-10-12T15:39:15.386Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-12T15:39:15.514Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=6
+2026-10-12T15:39:15.520Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-12T15:39:15.526Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-12T15:39:15.535Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-12T15:39:15.546Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-12T15:39:15.558Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-12T15:39:15.655Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=4
+2026-10-12T15:39:15.660Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-12T15:39:15.666Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-12T15:39:15.673Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-12T15:39:15.683Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-12T15:39:20.814Z efs: read hole ino=5516 ci=0 holes=15
