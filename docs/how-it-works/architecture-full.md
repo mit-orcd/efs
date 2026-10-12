@@ -2173,6 +2173,8 @@ Intel03 also reports EIO/EBUSY in fsync/basic I/O cases; classification pending 
 
 Qualification STOP checkpoint: newer human stop reported by Intel; no further launches/fixes pending resume.03bd remains unaccepted with seven-client and hard I/O blockers. [Ledger](../status/v030-tcp-direct-qualification-20261012.md).
 
+Latest alpha scope: `.efs` commands/stats/find and derived query-cache service excluded; explicitly disable client/server command flags. WITHOUT-query acceptance NOTRUN; ordinary-I/O/deep-path blockers remain. [Scope](../status/v030-release-scope-20261012.md). [Review of Mac evidence4764dada](../status/mac-container-evidence-review-20261012.md): useful older-source container evidence, excluded from alpha qualification. Work remains stopped.
+
 
 ## Appendix 2 — In flight — the current handoff block
 

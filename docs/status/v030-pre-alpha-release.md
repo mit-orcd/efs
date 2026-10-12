@@ -1,7 +1,6 @@
 # v0.3.0-pre-alpha integration and acceptance
 
-Status: narrowed qualification RESUMED; committed branch reconciliation complete, qualification incomplete. Not release accepted, tagged, deployed as a
-release or pushed. User authorization, Oct 11: create an isolated integration
+Status: qualification STOPPED/checkpointed; incomplete and unaccepted. Planned alpha scope is TCP/direct I/O/files with `.efs` disabled; containers and dedicated repair/recovery deferred. Nothing tagged or pushed. User authorization, Oct 11: create an isolated integration
 branch, coordinate all agents, add and test all improvements, prioritize
 small-file packing and code-review findings. Release owner: agent 2 / AMD.
 [Operator-facing candidate notes](../using/v030-candidate.md) summarize included
@@ -16,14 +15,7 @@ America/New_York; no schedule or push is created by this checkpoint.
 
 ## Current authoritative checkpoint
 
-Execution RESUMED on common candidate52bcfd35 for all three clusters under the subsequent start instruction. The [October12 scope decision](v030-release-scope-20261012.md)
-limits qualification to TCP/direct I/O/files. Containers and dedicated repair/
-recovery gates are deferred; their failures/gaps remain open. Packing/query
-progress, applicable direct-I/O correctness and final merged-source qualification
-remain required. Latest documentation/evidence checkpoint before this scope
-update is affbd1b6; implementation2b216427 full normal/fault nativePASS at exact
-94bd2e52. Private read-progressa9f158ce and experimental NUC repair stages remain
-excluded. See the [current execution ledger](amd-all-suites-20261011.md).
+Current pending frozen candidate is `03bd89fb7de56c2c6af44ab3bd26c54caf4b8274`. Qualification remains stopped. The latest human decision excludes `.efs` features from the planned alpha; clients and daemons must disable the interface and query-cache work explicitly. [Scope and gate contract](v030-release-scope-20261012.md) and [source-specific results](v030-tcp-direct-qualification-20261012.md) govern. AMD native gates pass, but broad live tests with `.efs` enabled failed; they do not qualify the new disabled-feature scope. Deep paths, ordinary I/O refusals and packing acceptance remain unresolved.
 
 The source410/frozen28 and multi-mode rollout statements below are historical;
 older passes do not qualify the next merged candidate. No resumption, push, tag

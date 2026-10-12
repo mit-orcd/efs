@@ -697,3 +697,5 @@ Final `03bd89fb` live verdict: Intel and NUC seven-client FAIL. NUC data/cold/ph
 Intel03 also reports EIO/EBUSY in fsync/basic I/O cases; classification pending from retained logs. These remain explicit release blockers alongside deadlines. [Ledger](v030-tcp-direct-qualification-20261012.md).
 
 Qualification STOP checkpoint: newer human stop reported by Intel; no further launches/fixes pending resume.03bd remains unaccepted with seven-client and hard I/O blockers. [Ledger](v030-tcp-direct-qualification-20261012.md).
+
+Latest alpha scope: `.efs` commands/stats/find and derived query-cache service excluded; explicitly disable client/server command flags. WITHOUT-query acceptance NOTRUN; ordinary-I/O/deep-path blockers remain. [Scope](v030-release-scope-20261012.md). [Review of Mac evidence4764dada](mac-container-evidence-review-20261012.md): useful older-source container evidence, excluded from alpha qualification. Work remains stopped.

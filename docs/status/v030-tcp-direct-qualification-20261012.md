@@ -102,3 +102,7 @@ Intel03 hard-error follow-up: owner also reports client1 fsync_reopen_visible EI
 ## Stop checkpoint
 
 Intel reports a newer direct human instruction: “Document, commit, and stop.” Root stops new launches/fixes and disables progress heartbeat pending explicit human resume. Candidate remains03bd89fb and unaccepted; native PASS, seven-client FAIL, Intel EIO/EBUSY classification unresolved. NUC fixtures already stopped; AMD native controller finished. Intel will retain completed deep diagnostic and stop. Root created isolated branch/worktree fix-release-readdir-fence at03bd for review, with no implementation edits or deployment. Code inspection found READDIR repeats its directory-group ReadIndex before lane checks; request-local reuse is a possible follow-up, not an implemented or measured fix.
+
+## Alpha scope update: `.efs` excluded
+
+Latest human decision removes `.efs` from this alpha: clients EFS_COMMANDS=0 and daemons EFS_COMMANDS_SERVER=0, query-specific cases excluded explicitly, packed writes retained. Previous WITH-query failures remain historical failures; feature-disabled live acceptance NOTRUN. Deep paths and ordinary EIO/EBUSY/flush/packing checks remain required. See [scope contract](v030-release-scope-20261012.md) and [Mac evidence review](mac-container-evidence-review-20261012.md). No launches resumed.

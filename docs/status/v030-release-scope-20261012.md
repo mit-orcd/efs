@@ -11,13 +11,13 @@ older passes to a new source. Existing inactive repair prerequisites already
 integrated need not be removed, but unintegrated experimental repair stages are
 excluded from the release plan and activation remains disabled.
 
-Small-file packing and query progress remain release priorities. Four planning
+Small-file packing remains a release priority. `.efs` features are excluded from this alpha; query progress is deferred. Four planning
 gate groups remain; this is not an exact command count:
 
 | Gate group | Owner / cluster | Required coverage |
 | --- | --- | --- |
 | 1 — Read-progress safety | AMD | Actual Raft/context-fence regressions, fresh-arrival and own-apply checks, affected sanitizers and integration review. |
-| 2 — Packing/query acceptance | Intel | TCP/direct I/O, original-budget seven-client workload, stats/find, deep paths and packed writes. No competing build/profile workload during quiet acceptance. |
+| 2 — Packing acceptance | Intel | TCP/direct I/O, original-budget seven-client workload, deep paths and packed writes, with `.efs` disabled and query cases explicitly excluded. No competing build/profile workload during quiet acceptance. |
 | 3 — Files correctness and reclamation | NUC | TCP/direct I/O/files core POSIX, concurrent/peer, packing mutations, deletion/GC and physical reclamation using an unconfounded oracle. |
 | 4 — Final merged qualification | AMD | Freeze accepted merged source, full normal/fault native suites and final affected sanitizer checks; reconcile Intel/NUC live results at that exact freeze. |
 
@@ -92,3 +92,9 @@ Current common candidate **def46109909c793e58ae2c453c5de537cdb2c627** supersedes
 2bf only to correct its second native extractor fixture. Implementation unchanged;
 fullnative2bf failures preserved. All owners received def for source-identical
 qualification. Do not substitute earlier sourcepasses for these reruns.
+
+## Subsequent user decision: exclude `.efs` from this alpha
+
+The human says “remove .efs features from this alpha tag”. The planned v0.3.0-pre-alpha excludes the virtual `.efs` command/query interface, including stats/find, and its disk-backed derived query-cache service. Qualification/deployment must set **EFS_COMMANDS=0** on FUSE clients and **EFS_COMMANDS_SERVER=0** on every daemon. Explicit server configuration is necessary: the current server enables query work when the variable is absent. Keep implementation/history for later releases; this decision does not close query work items or authorize deletion of unrelated correctness code.
+
+Remove `.efs` cases from this alpha's acceptance matrix with explicit excluded/not-qualified labels; do not relabel old failures as PASS. The current mounted packing harness automatically enables both command variables, so its future alpha recipe must be adapted to disable them while preserving packed writes, seven clients/jobs16,4G quota,30/75/180s applicable deadlines, peer checks, acknowledged bytes and physical reclamation. Existing WITH-query broad failures do not establish WITHOUT-query acceptance. Deep-directory, ordinary POSIX, EIO/EBUSY, flush and packing correctness remain blockers pending clean feature-disabled qualification. Work remains stopped except this authorized scope/documentation review; no testing restart, push or tag. Current pending candidate03bd89fb is unaccepted.

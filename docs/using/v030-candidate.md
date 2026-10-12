@@ -88,3 +88,7 @@ remain required. A focused regression pass alone does not close the live gate.
 All voting servers must support durable tags53 and54 before new APPEND commands are
 admitted. Retained stores containing new commands cannot roll back to older
 binaries. General cross-shard APPEND retains ordered guards and tag52 completion.
+
+## Current alpha capability scope
+
+The planned v0.3.0-pre-alpha targets files storage over TCP with direct I/O. `.efs` commands, stats/find and the derived query-cache service are excluded: configure FUSE with `EFS_COMMANDS=0` and every daemon with `EFS_COMMANDS_SERVER=0`. Containers and dedicated repair/recovery remain unqualified. Candidate acceptance is incomplete; no release tag or push has been made.
