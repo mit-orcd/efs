@@ -14,6 +14,9 @@ code = r'''
 #include <string.h>
 #include <stdio.h>
 struct efs_raft_host {struct efs_kv *kv;};
+struct host_view {int has,leader;};
+static void host_view_get(struct efs_raft_host *h,uint8_t g,struct host_view *v){(void)h;v->has=1;v->leader=g+1;}
+
 struct host_txn_read_context {struct efs_raft_host *host;int unhosted_coordinator;};
 static struct efs_meta_row row;
 static int calls[3], read_fail, inode_fail, unhosted, coordinator,pair_fail,hint_empty;
@@ -45,7 +48,7 @@ int main(void) {
   * still require authority, even if their activation followed that fence. */
  assert(!host_read_inode_lanes_covered(&h,1,&hint,1));assert(!calls[0] && calls[2]==1);
  memset(calls,0,sizeof(calls));
- assert(!host_read_inode_lanes_covered(&h,1,&hint,5));assert(!calls[0] && !calls[2]);
+ assert(!host_read_inode_lanes_covered(&h,1,&hint,5));assert(!calls[0] && !calls[2] && hint==1);
  /* The next independent request must establish both fresh group fences. */
  assert(!host_read_inode_lanes(&h,1,&hint));assert(calls[0]==1 && calls[2]==1);
  memset(calls,0,sizeof(calls));hint_empty=1;
