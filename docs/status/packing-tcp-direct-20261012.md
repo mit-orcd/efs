@@ -148,3 +148,22 @@ PASS for their scope. Next: bounded original-workload phase/RPC diagnostics with
 packing enabled and both command flags off; distinguish creation, fsync and
 recursive cleanup before changing product scheduling or ownership. No deadline
 increase, reduced concurrency or stale authority reuse is justified.
+
+## Bounded receive-batch experiment (not accepted)
+
+The same-source instrumented run `gc-direct-856vxbp0` passes1512 core checks,
+67 peer checks, cold bytes and physical drain. It remains diagnostic rather
+than quiet acceptance. Seven bounded deep-case records show directory creation
+19.059–19.962s, leaf write0.242–0.445s and recursive cleanup1.292–1.470s;
+total21.054–22.011s. Representative leader LOOKUP averages1831us, of which
+1768us is parent ReadIndex and32us KV work; full-run counters are not causal
+per-case measurements. These observations point to metadata read/progress under
+packing load, not a proven cohort fsync bottleneck. No cached proof/TTL change.
+
+Candidate experiment increases the existing bounded FIFO prefix32→64 while
+retaining the256-frame inbox, byte credits, ordering boundaries, durability and
+fresh read-proof admission. Hypothesis: amortize durability/progress cycles
+under extra packing metadata traffic. This can worsen single-cycle latency;
+keep only after focused inbox/read safety checks and improved repeated quiet
+full workload results. Restore32 if benefit is not demonstrated. No production
+rollout or release qualification transfer is authorized by this experiment.
