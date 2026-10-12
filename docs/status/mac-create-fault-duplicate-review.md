@@ -1,0 +1,7 @@
+# Mac duplicate CREATE fault-hook review
+
+Manager/AMD assigned bounded review of proposed central delta, outside frozen executingc2 inputs. Only the second EFS_FAULTS retained-specific block is removed from create_request_rpc. The common rpc_fault_create_reply hook is byte-unchanged and runs through rpc_send_recv_owner transport receive before retained parsing. Normal production framing/identity/receipt/adoption behavior is unchanged.
+
+Exact proposed inode_rpc.c SHA2563ceee8a18b996e4fe9ecc5a9e5d7a4e44f2851c0e0f31651eb45a216c85657bf; proposed testSHA666ada08e2c01f264cbfe96498b349cb370eeae6ff150b91f98665b687581edd. Separate private review directory `/data1/efs-unit-tests/mac-c2bfb9e9-full-q6r3Rs/create-fault-review`. Actual common-hook legacy/retained loss/BUSY/success and UUID/epoch/sequence/request/inode/generation/shard mismatch refusal, probe/ACK controls PASS normal and ASan/UBSan. New structural guard rejects oldc2 at intended duplicate injection assertion. This negative is a retained-function guard, separate from the actual common-hook executions.
+
+No mounted fix acceptance or production replay-safety bug closure claimed. Intel must rerun strict three-stage mounted gate on the next shared candidate. Oldc2 mounted failure remains valid evidence of duplicate fault injection; tests are not relaxed to permit six stages. Frozen c2 source and installed Mac stores/service remain untouched. AMD and manager informed. Raw evidence identities in the common-candidate full-gate evidence index.
