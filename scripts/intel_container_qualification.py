@@ -6,7 +6,7 @@ Outputs stay below the supplied local artifact directory, outside Git.
 """
 import argparse,concurrent.futures,json,shlex,subprocess,time,uuid
 from pathlib import Path
-p=argparse.ArgumentParser(description=__doc__);p.add_argument('gate',choices=['core','peer','mmap','concurrent','lifecycle-create','lifecycle-read','lifecycle-churn','lifecycle-verify','lifecycle-cold','lifecycle-delete','tiny-create','tiny-cold','directory']);p.add_argument('--run-id',default=uuid.uuid4().hex[:12],help='unique evidence and namespace suffix');p.add_argument('--base',default='/data1/efs/bench/container-3173be61-20261012');p.add_argument('--output',type=Path,required=True);a=p.parse_args();a.output.mkdir(parents=True,exist_ok=True)
+p=argparse.ArgumentParser(description=__doc__);p.add_argument('gate',choices=['core','peer','mmap','concurrent','lifecycle-create','lifecycle-read','lifecycle-churn','lifecycle-verify','lifecycle-cold','lifecycle-delete','tiny-create','tiny-cold','directory','restart']);p.add_argument('--run-id',default=uuid.uuid4().hex[:12],help='unique evidence and namespace suffix');p.add_argument('--base',default='/data1/efs/bench/container-3173be61-20261012');p.add_argument('--output',type=Path,required=True);a=p.parse_args();a.output.mkdir(parents=True,exist_ok=True)
 assert a.run_id and all(c.isalnum() or c in '-_' for c in a.run_id),'invalid run id'
 s=a.base+'/src';remoteout=a.base+'/artifacts';rows=[]
 def run(host,index,name,argv,timeout):
@@ -16,6 +16,19 @@ def run(host,index,name,argv,timeout):
   try:r=subprocess.run(['ssh',host,shlex.join(cmd)],stdout=f,stderr=subprocess.STDOUT,timeout=timeout+30);rc=r.returncode
   except subprocess.TimeoutExpired:rc=124
  row={'name':name,'host':host,'argv':argv,'returncode':rc,'seconds':round(time.monotonic()-start,3),'status':'PASS' if rc==0 else 'FAIL'};print(json.dumps(row),flush=True);return row
+if a.gate=='restart':
+ # A cluster-wide phase barrier preserves quorum until EVERY client drains.
+ for action,timeout in [('stop-clients',400),('stop-servers',60),('start',30),('mount',90)]:
+  jobs=[]
+  for index,host in enumerate(['intel1_efs','intel2_efs']):
+   argv=['python3',a.base+'/intel_container_node.py',action,'--base',a.base,'--host-index',str(index)]
+   if action=='mount':argv+=['--clients',str(4 if index==0 else 3)]
+   jobs.append((host,index,'restart-'+action+'-intel'+str(index+1)+'-'+a.run_id,argv,timeout))
+  with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:phase=list(pool.map(lambda j:run(*j),jobs))
+  rows+=phase
+  (a.output/'restart-summary.json').write_text(json.dumps(rows,indent=2))
+  if any(r['returncode'] for r in phase):raise SystemExit(1)
+ raise SystemExit(0)
 jobs=[]
 for index,host in enumerate(['intel1_efs','intel2_efs']):
  m=a.base+'/mnt0';name=a.gate+'-intel'+str(index+1)+'-'+a.run_id

@@ -5,6 +5,12 @@ from pathlib import Path
 p=argparse.ArgumentParser(description=__doc__);p.add_argument('action',choices=['build','proof','start','mount','stop-clients','stop-servers','run','inventory']);p.add_argument('--base',type=Path,required=True);p.add_argument('--host-index',type=int,choices=[0,1],required=True);p.add_argument('--command');p.add_argument('--source-commit');p.add_argument('--clients',type=int,default=2,choices=range(1,8));a=p.parse_args()
 b=a.base.resolve();assert b.parent==Path('/data1/efs/bench') and b.name.startswith('container-') and os.getuid()!=0
 s=b/'src';out=b/'artifacts';out.mkdir(exist_ok=True)
+def mounted(path):
+ # stat/ismount can return false on disconnected or temporarily unservable FUSE.
+ for line in Path('/proc/self/mountinfo').read_text().splitlines():
+  name=re.sub(r'\\([0-7]{3})',lambda m:chr(int(m[1],8)),line.split()[4])
+  if name==str(path):return True
+ return False
 env={k:v for k,v in os.environ.items() if not k.startswith('EFS_')};env.update(EFS_MD_RAFT_N='4',EFS_TRANSPORT='tcp',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_PACKED_WRITES='0')
 def actual(pid):
  q=Path('/proc')/str(pid);return {'pid':pid,'argv':[x.decode() for x in (q/'cmdline').read_bytes().split(b'\0') if x], 'start':(q/'stat').read_text().rsplit(')',1)[1].split()[19], 'environment':[x.decode() for x in (q/'environ').read_bytes().split(b'\0') if x.startswith(b'EFS_')]}
@@ -49,10 +55,13 @@ elif a.action=='mount':
  rows=json.loads((out/'clients.json').read_text()) if (out/'clients.json').exists() else [];seed=['10.0.0.209:27432','10.0.0.207:27432'][a.host_index]
  # Existing stopped clients may be remounted; live clients retain their identities.
  for i in range(a.clients):
-  if i<len(rows) and os.path.ismount(b/('mnt%d'%i)):continue
-  m=b/('mnt%d'%i);m.mkdir(exist_ok=True);assert not os.path.ismount(m)
+  if i<len(rows) and mounted(b/('mnt%d'%i)):
+   row=actual(rows[i]['pid']);assert row['argv']==rows[i]['argv'] and row['start']==rows[i]['start'],'stale client identity'
+   assert hashlib.sha256((Path('/proc')/str(row['pid'])/'exe').read_bytes()).digest()==hashlib.sha256((s/'efs-fuse').read_bytes()).digest(),'drain old client before rebuilding'
+   continue
+  m=b/('mnt%d'%i);m.mkdir(exist_ok=True);assert not mounted(m)
   row=launch([str(s/'efs-fuse'),seed,'fs',str(m),'-f'],'client%d'%i);end=time.monotonic()+40
-  while not os.path.ismount(m):
+  while not mounted(m):
    assert time.monotonic()<end,'mount timeout';time.sleep(.1)
   if i<len(rows):rows[i]=row
   else:rows.append(row)
@@ -60,9 +69,11 @@ elif a.action=='mount':
 elif a.action=='stop-clients':
  for row in json.loads((out/'clients.json').read_text()):
   m=Path(row['argv'][3]);assert m.parent==b
-  if os.path.ismount(m):subprocess.run([str(s/'scripts/client.sh'),'stop',str(m)],env=env,cwd=s,check=True,timeout=75)
+  if mounted(m):subprocess.run([str(s/'scripts/client.sh'),'stop',str(m)],env=env,cwd=s,check=True,timeout=75)
  print('clients graceful PASS')
 elif a.action=='stop-servers':
+ clients=json.loads((out/'clients.json').read_text()) if (out/'clients.json').exists() else []
+ assert not any(mounted(Path(r['argv'][3])) for r in clients),'stop clients on BOTH hosts before stopping daemons'
  for row in json.loads((out/'servers.json').read_text()):stop(row)
  print('servers graceful PASS')
 elif a.action=='run':
