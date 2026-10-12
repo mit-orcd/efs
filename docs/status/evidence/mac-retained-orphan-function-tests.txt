@@ -1,0 +1,44 @@
+source=/Users/mike/Documents/Codex/2026-10-05/how-x20/work/devel-mac/src/meta/query_disk.c sanitizer=False
+query-disk: unlinked directory preflight ino=4091 parent=2098 nlink=2
+query-disk: unlinked directory preflight ino=4091 parent=2098 nlink=2
+query-disk: unlinked directory preflight ino=4091 parent=2098 nlink=2
+retained4091/parent2098/replaced8187: actual preflight refuses, pending/cancel inconclusive, immutable old snapshot and new repair/backlink controls PASS
+exit=0
+source=/Users/mike/Documents/Codex/2026-10-05/how-x20/work/devel-mac/src/meta/query_disk.c sanitizer=True
+query-disk: unlinked directory preflight ino=4091 parent=2098 nlink=2
+query-disk: unlinked directory preflight ino=4091 parent=2098 nlink=2
+query-disk: unlinked directory preflight ino=4091 parent=2098 nlink=2
+retained4091/parent2098/replaced8187: actual preflight refuses, pending/cancel inconclusive, immutable old snapshot and new repair/backlink controls PASS
+exit=0
+source=/private/tmp/efs-mac-cut-review-b239dc7d/src/meta/query_disk.c sanitizer=False
+query-disk: unlinked directory preflight ino=4091 parent=2098 nlink=2
+query-disk: unlinked directory preflight ino=4091 parent=2098 nlink=2
+query-disk: unlinked directory preflight ino=4091 parent=2098 nlink=2
+retained4091/parent2098/replaced8187: actual preflight refuses, pending/cancel inconclusive, immutable old snapshot and new repair/backlink controls PASS
+exit=0
+source=/private/tmp/efs-mac-cut-review-b239dc7d/src/meta/query_disk.c sanitizer=True
+query-disk: unlinked directory preflight ino=4091 parent=2098 nlink=2
+query-disk: unlinked directory preflight ino=4091 parent=2098 nlink=2
+query-disk: unlinked directory preflight ino=4091 parent=2098 nlink=2
+retained4091/parent2098/replaced8187: actual preflight refuses, pending/cancel inconclusive, immutable old snapshot and new repair/backlink controls PASS
+exit=0
+source=/private/tmp/efs-orphan-unsafe-suppress.c sanitizer=False
+query-disk: unlinked directory preflight ino=4091 parent=2098 nlink=2
+Assertion failed: (orphan_preflight(&retained,&failure,NULL,NULL)==EFS_ERR_IO && failure.directory==4091), function main, file probe.c, line 105.
+Traceback (most recent call last):
+  File "/Users/mike/Documents/Codex/2026-10-05/how-x20/work/devel-mac/tests/test_query_retained_orphan.py", line 69, in <module>
+    subprocess.run([str(binary)],check=True,timeout=10)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 528, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-retained-orphan-3uvq64x4/probe']' died with <Signals.SIGABRT: 6>.
+exit=1
+source=/private/tmp/efs-orphan-unsafe-suppress.c sanitizer=True
+query-disk: unlinked directory preflight ino=4091 parent=2098 nlink=2
+Assertion failed: (orphan_preflight(&retained,&failure,NULL,NULL)==EFS_ERR_IO && failure.directory==4091), function main, file probe.c, line 105.
+Traceback (most recent call last):
+  File "/Users/mike/Documents/Codex/2026-10-05/how-x20/work/devel-mac/tests/test_query_retained_orphan.py", line 69, in <module>
+    subprocess.run([str(binary)],check=True,timeout=10)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 528, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-retained-orphan-ecnjn8o9/probe']' died with <Signals.SIGABRT: 6>.
+exit=1
