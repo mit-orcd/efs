@@ -206,3 +206,32 @@ workload, with bounded deep-case phase tracing. Earlier creation consumed19–20
 while the leaf write consumed less than0.5s; fresh metadata ReadIndex waits
 remain the leading measured suspect. Diagnostic instrumentation is not quiet
 acceptance. Preserve deadlines, concurrency and read authority.
+
+
+## Baseline CPU diagnostic after discarded trial
+
+Run `gc-direct-991q63kx` used the unchanged bdbb237b baseline32 product/binaries,
+packing enabled and both command flags zero, seven clients/jobs16,4G per-node
+fixture, TCP/direct. Three client suites failed (2,4,5), each on dir_deep_nesting at30s (1509/1512 passed); peer67/67, acknowledged
+cold bytes, physical fragment reclamation and metadata queue drain passed.
+The owned fixture exited1 and cleaned its processes/mounts. This instrumented
+run is diagnostic, not quiet acceptance; raw data remains external.
+
+Reproduce the seven-client command above with `EFS_POSIX_PHASE_TRACE=1`,
+`EFS_PACK_PROF=1`, `EFS_RPC_PROF=1`, `EFS_READ_PROF=1`. Once all seven private
+FUSE clients mount, attach only the four fixture daemon PIDs:
+`perf record -F 199 -g --call-graph dwarf,8192 -p PID1,PID2,PID3,PID4
+-o /outside-git/packing.data -- sleep 35`; then
+`perf report --stdio --no-children --percent-limit 1 -i /outside-git/packing.data`.
+Do not attach normal services or run another fixture simultaneously.
+
+44,456 samples included222 lost samples/16 lost chunks, so percentages are
+approximate and profiling perturbs acceptance timing. Self CPU: memmove7.82%,
+kv_mtab_pos1.92%, merge_scan1.74%, CRC1.52%. The sampled memmove stack reaches
+kv_mtab_set through committed LSM batch/apply and Raft receive. Inclusive kernel
+cost includes futex13.66% and writev8.77%; inclusive figures overlap ancestors
+and must not be summed. The current sorted memtable shifts entry/prefix arrays
+for each inserted key while holding the metadata mutex. This is a measured
+optimization target, not proof of the timeout cause or justification to weaken
+fresh ReadIndex admission. Next: measure/reduce insertion movement with exact
+ordering/atomic-batch/failure regressions, then rerun quiet original budgets.
