@@ -407,3 +407,102 @@ ordinary files remain unchanged. Every receiving RPC still establishes its
 own fresh ReadIndex and discovers/rechecks dentry, inode and lane authority.
 Native membership/self/unknown/files controls and per-RPC freshness checks
 PASS. This is a candidate, not a loaded acceptance claim.
+
+
+### Routing candidate mounted result (76bb4376)
+
+The exact780-input manifest and correct full-SHA build metadata match on both
+hosts; native complete buffered/direct container, shared durability/GC/
+overwrite, routing and per-RPC freshness controls PASS. The initial build used
+a non-repository make variable and reported an unknown version; it was discarded
+and clean-rebuilt with `EFS_GIT_ID`, `EFS_GIT_DESCRIBE`, and `EFS_GIT_BRANCH`
+before any deployment. Only those corrected binaries were launched.
+
+Fresh seven-client full gate: **1491/1512 PASS,21 FAIL,0 SKIP/NOTRUN**:
+all seven deep60, deep100 and crazy-directory cases exceed unchanged30s.
+This is the original blocker set, not closure. Observed full-run exit times
+including cleanup131–144s are source/history-specific, not a matched
+performance or throughput claim. Bounded group drain and diagnostic flags
+are off; eight writers and20ms capped-progress GC yield remain explicit.
+
+Immediate physical gate **FAIL at180.010s**. Initial ordinary mappings:
+28075,28095,28220,28129; final179.168s:1395,1360,1420,1401, with roughly
+95–99MB container allocation per node. The earlier103.741s pass on eed87ad9
+remains valid for its smaller21366/19792/21289/19703 backlog; it does not
+qualify this source or larger workload. No deadline extension, delayed observer,
+restart or concurrent build/test was used to relabel this failed gate.
+
+
+### Shared barriers and pinned shared ancestry (7761affa candidate)
+
+`7761affaed630fb96c81cde5961af1111d039144` changes only the experimental
+container backend and its actual-backend native regression. Runtime segment
+barriers detach a bounded-by-caller cohort after completed writes/punches and
+before starting fsync. Later arrivals need their next barrier; there is no
+assembly timer, background task, ACK shortcut or cross-request read coverage.
+Each stack waiter receives its own cohort result before returning. A failed
+cohort cannot inherit later success, while a new retry remains permitted.
+Uncached segments, mapping-file publication, directory barriers, busy-bit
+retirement and startup reconciliation retain their prior durability rules.
+
+The ancestry cache now retains all successfully sealed ancestors (at most16
+transient pins per call) and uses a fixed LRU descriptor budget of128 across
+the target set. New siblings can stop after syncing an already-sealed shared
+ancestor; their containing/newly changed directories still sync. Successful
+full ancestry barriers are required before inserting any pins. Failure,
+removed/recreated directories and inode reuse cannot create a false hit.
+Ordinary files do not use this container cache or segment barrier path.
+
+Native complete buffered/direct container harness PASS on both Intel hosts.
+Deterministic16-caller barrier test observes exactly two fsyncs: one captured
+before the15 later completed writes, then one covering those15; verifies
+independent failed/late-success results, full-cohort failure, new retry and
+actual bytes. Sibling/cache-churn regression verifies3 versus repeated-root
+barriers, a hot shared parent across more leaves than cache capacity, and
+bounded retained descriptors. Existing quota, GC, crash and corruption checks
+remain intact. Independent-fsync negative control aborts134 at the bounded
+pending-cohort assertion; single-leaf-cache negative control aborts134 at the
+sibling ancestry assertion. Intel1 direct ASan/UBSan with leak detection and
+halt-on-error PASS (backend/store instrumented, linked common/writer normal).
+Native success is not mounted-load or physical-deadline acceptance; exact
+committed candidate builds and live reruns follow.
+
+
+### Loaded cohort experiment retired; fresh-probe candidate (df29de98)
+
+Exact `7761affa` seven-client core: **1449/1512 PASS,63 FAIL**. All seven
+clients timeout on the same nine cases (deep60/deep100, many-files, crazy
+roundtrip/directories, concurrent create/append/create-unlink and many-write
+mtime); write/readdir passes. Immediate physical reclamation **PASS106.287s**
+(last zero snapshot106.263s), initial mappings22388/22353/22394/22435,
+all four nodes zero ordinary mappings and zero allocated body bytes within the
+unchanged180s observer, with mounted empty exports and no overlapping work.
+The observed load regression is not a successful directory fix. Source/workload
+histories differ, so this does not isolate a causal performance attribution.
+
+`b2379df2` retires the new segment-fsync cohort implementation and its feature-
+specific native tests. Ordinary independent segment barriers are restored;
+per-inode multi-fragment GC still retains its verified single-segment barrier
+batch. Shared pinned ancestry/LRU correction and sibling/churn/fault/bounds
+regressions remain. Complete native container buffered/direct and shared
+storage durability/GC/overwrite controls PASS on both hosts after restoration.
+The experiment and its passed/failed evidence remain in Git history above.
+
+`df29de986661fbc81243cf015285499a297e748c` changes only containers' fresh-
+context empty read-probe host scheduling. If the existing Raft mutex is
+available, the unchanged core may send a current-term heartbeat vote while
+queued work exists. Its known-leader, durable-prefix, boot, term, membership,
+storage-failure and unfinished-log filters all remain. Such a request ALWAYS
+returns to the ordered inbox when work is pending, even if the core reported
+it fully accounted; no commit/apply, entry durability, transport credits,
+configuration or replication bookkeeping can be consumed/reordered early.
+Zero-context heartbeats and ordinary files retain their former pending-work
+path. Fresh RPC admission/round and local applied-prefix barriers remain.
+A queued higher-term/config frame has made no durable promise; processing it
+still invalidates later old-term proofs normally. No age-based authority is used.
+
+Actual Raft/disk/simulator tests and actual host helper, admitted-completion,
+publication and pair regressions PASS on both hosts. Host negative control
+using the former blocking fails at the new pending-probe assertion; Intel1
+ASan/UBSan actual host extractor PASS. Exact-source live qualification is still
+required; this is a candidate, not closure of the21 directory timeouts.
