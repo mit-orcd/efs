@@ -1,5 +1,11 @@
 # Project status — current work and index
 
+[ORCD real 400 GiB command gate](orcd-efs-400g-20261012.md) is running on
+`devel-efs`, RDMA/direct/files with commands enabled and packing/containers
+disabled. Full writes, resource/latency measurements and cold complete payload/
+export verification are required; no full-size PASS yet. The requested stats
+`--human-readable` option passes 30 native command cases; live rollout is pending.
+
 [devel-efs scope and outstanding items](devel-efs-20261012.md) records the new
 release-v0.3.2-based branch, the original four-item scope (expiry deferred) and the requested ORCD
 RDMA/direct-I/O profile with commands enabled and containers/packing disabled.
