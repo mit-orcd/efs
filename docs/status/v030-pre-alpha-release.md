@@ -464,3 +464,9 @@ NUC ordered reservation guards, tag52 catch-up charging and all NUC/Mac regressi
 cases; only eligible completion uses tag54. All voters must understand53/54 before
 admitting these commands; old binaries are unsafe rollback targets. New frozen
 merged full AMD qualification and both-mode pressure are pending.
+
+Latest `02b9918b` packing gate fails both modes (direct six209/4/1/7, one210/3/1/7;
+buffered seven209/4/1/7), cold/GC NOTRUN after busy extra-client stop, restore0.
+Frozen `d26e6874` full merged AMD qualification is active after correcting an
+imported Mac fixture mismatch in `6819c127`. [Manager handoff](v030-amd-handoff-20261012.md)
+records the missing Mac client adoption prerequisite and exact pending gates.
