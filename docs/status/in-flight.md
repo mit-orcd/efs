@@ -3,7 +3,7 @@
 [Status index](README.md) · [Decisions](decisions.md) ·
 [Architecture](../how-it-works/architecture.md)
 
-**Current state:** the human authorized AMD to run all test suites and report all issues on frozen `28b2089b`. See [AMD execution ledger](amd-all-suites-20261011.md). This resumes isolated AMD testing only; other release owners remain stopped. No code fix, rollout to installed stores, tag, promotion or push follows from this qualification request. The [earlier release stop checkpoint](v030-stop-checkpoint-20261011.md) remains historical; [current release index](README.md#v030-pre-alpha-release-integration) records the new authority.
+**Current state:** direct human reply on October 12 authorizes resumed packing/repair fixes and affected testing. Intel owns packing, NUC repair, AMD review/integration on `release-v0.3.0-pre-alpha` and affected tests. Preserve frozen `28b2089b` failures and prior stop checkpoints. Do not automatically restart the unfinished original matrix. No push, tag, promotion or default repair activation. See [execution ledger](amd-all-suites-20261011.md).
 
 ## Superseded assignments and evidence (before human stop)
 
@@ -213,3 +213,6 @@ Human-authorized three-way qualification split: AMD remaining direct/overload/RX
 Subsequent human authority permits packing-timeout and repair-gap implementation fixes on separate frozen28-based worktrees, review/integration into release-v0.3.0-pre-alpha and affected reruns. Intel owns packing, NUC repair, AMD integration. Earlier testing-only prohibition is superseded for these fixes; no push/tag/promotion authorization.
 
 **Latest stop checkpoint:** automatic approval review reports a newer all-chat document/commit/stop instruction and rejected further Intel continuation coordination. AMD has no owned screens/test processes and both original mounts are restored. Intel is stopping; NUC notified to stop launches, restore and checkpoint. Packing/repair fixes and affected fixed-source reruns remain incomplete. Do not restart automatically.
+
+
+**Latest authority — October 12:** human explicitly replied “Resume fixes and affected testing.” This supersedes the preceding stop for coordinated fixes and affected reruns. Both owners acknowledged. Intel investigates completed-read-round starvation; NUC submitted corrected inactive journal checkpoint `8af41a1e`, pending AMD review. Actual repaired-fragment/cold/second-loss proof remains required.

@@ -8,7 +8,7 @@ Isolated source `/data1/efs/release-v030-28b2089b`; evidence `/data1/efs/release
 
 ## Execution ledger
 
-**Current checkpoint: STOPPED.** Automatic approval review reported a newer human instruction to document, commit and stop all chats, and rejected further Intel coordination. No new tests or implementation work are launched. AMD owned fixtures/screens are gone and both original mounts are restored. Intel is checkpointing; NUC was notified to stop launches and restore service. The completed and incomplete evidence below remains source-specific.
+**Current checkpoint: fixes and affected testing RESUMED.** The October 12 direct human reply, “Resume fixes and affected testing,” supersedes the all-chat stop for packing/repair work and affected reruns. Intel and NUC have acknowledged the restart. AMD reviews and integrates logical fixes before testing an exact new candidate. The historical stop, restored services, original failures and incomplete matrix remain evidence; no whole-matrix restart, push, tag or promotion is authorized.
 
 Before stop: Full normal and fault-enabled Make suites PASS (242 Python recipe executions each, plus native C binaries and architecture gates). Twenty focused sanitizer regressions and two fully sanitized real-LSM tests PASS; integrated CREATE and common CREATE fault sanitizers PASS. Nine standalone root Python regressions PASS in both requested environments; the separately defined FUSE worker test is queued. Direct TCP GC/POSIX and ordinary overwrite cold gates PASS. Direct integrity, cache, session/lease cleanup and CREATE lifecycle gates also PASS. Shutdown/recovery is running; other live verdicts remain pending. A launch or queued case is not a pass. Every independent follow-on gate records its exact command, source, duration, exit code and log in `all-gates.jsonl`.
 
@@ -103,3 +103,10 @@ Additional frozen NUC issue: container/direct core `mtime_monotonic_many_writes`
 Remaining Intel/NUC matrix cases must be recorded as stopped/notrun by their final ledgers. Original Mac NFS, large-capacity and external-tool obligations remain notrun. A future explicit resume must re-confirm the candidate, finish reviewed implementation, integrate logical fixes and rerun affected original-deadline tests; no automatic continuation is scheduled.
 
 NUC final owner stop checkpoint received: qualification `68901f73` on private qualification-nuc-28b2089b preserves unchanged frozen28 inputs. Container/direct core **209 PASS / 7 FAIL / 0 SKIP of216** under original budgets. Peer was interrupted by controlled stop; remaining buffered-engine cases and W97 slowdown comparison NOTRUN. Private daemons/mounts cleaned; original startup required retained-process idempotent follow-up, whose exit0 after-proof verifies five installed images, four mapped daemons, two mounts and36 payload samples. Repair WIP `54e0f5d7` preserves inactive journal, four blocking review issues, WAL-shim failure and no restored-protection oracle; explicitly **not accepted, integrated or activated**. NUC has stopped and restored service.
+
+
+## Explicit resumed fix work — October 12, 2026
+
+Intel is testing a possible completed-read-round starvation mechanism: an already admitted waiter may miss quorum completion when a newer round replaces the visible state. This is a hypothesis pending regression and original-deadline live acceptance. Fresh admission, term/configuration changes, storage failures and local apply progress must remain enforced.
+
+NUC correction checkpoint `8af41a1e` follows unaccepted journal WIP `54e0f5d7`. Owner reports checked hash framing, inactive public submission refusal, actual host apply business/error progress regressions and real WAL fault recovery tests. AMD independent review/integration remains pending. This is an inactive journal prerequisite; no physical repair or restored-protection acceptance is claimed.
