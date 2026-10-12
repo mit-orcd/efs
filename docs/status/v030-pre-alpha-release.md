@@ -470,3 +470,18 @@ buffered seven209/4/1/7), cold/GC NOTRUN after busy extra-client stop, restore0.
 Frozen `d26e6874` full merged AMD qualification is active after correcting an
 imported Mac fixture mismatch in `6819c127`. [Manager handoff](v030-amd-handoff-20261012.md)
 records the missing Mac client adoption prerequisite and exact pending gates.
+
+### Latest frozen merged qualification d26e6874
+
+Complete AMD normal/fault native `all test` and sixteen focused ASan/UBSan gates
+PASS; all1,469 frozen source/linked inputs remain unchanged. [Native results and
+normal/fault binary identities](../../results/measure/20261012-v030-merged-native/d26e6874/acceptance-summary.json)
+include33 retrieved hash-verified artifacts. Both direct/buffered ordinary
+overwrite gates pass all four primary/peer/cold exact SHA256 oracles and physical/
+queue cleanup, restore0; [raw both-mode evidence](../../results/measure/20261012-v030-ordinary-overwrite/d26e6874/).
+Original seven-client/jobs16 packing pressure is still running. No release acceptance.
+
+Frozen Mac/ORCD/review/NUC owner ancestry and evidence are reconciled; root core
+and actual live fixture match d26. Only NUC measure promotion recipes additionally
+require ordinary gates before acceptance. The missing Mac client combined adoption
+prerequisite is assigned separately; it is not silently certified by server ancestry.

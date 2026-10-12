@@ -12,85 +12,101 @@
     "mac": {
       "branch": "devel-mac",
       "frozen_tip": "51b67e96b6b235ad7c0bc2bfa603c62c2c1a598f",
-      "tip_is_ancestor": false,
+      "tip_is_ancestor": true,
       "nonancestor_commits": [
         {
           "commit": "51b67e96b6b235ad7c0bc2bfa603c62c2c1a598f",
           "subject": "Record passing Mac native POSIX and atomic completion qualification",
-          "disposition": "held",
-          "reason": "Awaiting manager frozen owner handoff inventory; original committed docs/evidence preserved on owner tip, not treated as accepted."
+          "disposition": "integrated",
+          "reason": "Frozen submitted original commit is now a release ancestor; duplicated W112/read guard and live fixture resolved retaining tested root implementation; original docs/evidence preserved.",
+          "previous_disposition": "held"
         }
       ]
     },
     "nuc": {
       "branch": "devel-nuc",
-      "frozen_tip": "101598d2f2d0ce9ac99ab59f840130f3c8f0e218",
-      "tip_is_ancestor": false,
+      "frozen_tip": "e0ec9208dab076d4a2d1374a3413accdbb33c63d",
+      "tip_is_ancestor": true,
       "nonancestor_commits": [
         {
           "commit": "7598c8f08eb973ce58fdc18b1075cf849919db6d",
           "subject": "Clarify that the W52 tag45 draft was superseded before admission",
-          "disposition": "held",
-          "reason": "Awaiting manager frozen owner handoff inventory; original committed docs/evidence preserved on owner tip, not treated as accepted."
+          "disposition": "integrated",
+          "reason": "Frozen submitted original commit is now a release ancestor; duplicated W112/read guard and live fixture resolved retaining tested root implementation; original docs/evidence preserved.",
+          "previous_disposition": "held"
         },
         {
           "commit": "63c9cb15c4b0b386f9ef6396e9a946ac70cf50b6",
           "subject": "Exclude duplicate private Raft store logs from current evidence copies",
-          "disposition": "held",
-          "reason": "Awaiting manager frozen owner handoff inventory; original committed docs/evidence preserved on owner tip, not treated as accepted."
+          "disposition": "integrated",
+          "reason": "Frozen submitted original commit is now a release ancestor; duplicated W112/read guard and live fixture resolved retaining tested root implementation; original docs/evidence preserved.",
+          "previous_disposition": "held"
         },
         {
           "commit": "db412ceb54c7406637118038b5a26239880d7242",
           "subject": "Hold NUC promotion until shared stale full overwrite corruption is repaired",
-          "disposition": "held",
-          "reason": "Awaiting manager frozen owner handoff inventory; original committed docs/evidence preserved on owner tip, not treated as accepted."
+          "disposition": "integrated",
+          "reason": "Frozen submitted original commit is now a release ancestor; duplicated W112/read guard and live fixture resolved retaining tested root implementation; original docs/evidence preserved.",
+          "previous_disposition": "held"
         },
         {
           "commit": "627958bdd9c95e5cf22a304d7d21110ae4d26fa1",
           "subject": "W112 preserve accepted full-overwrite bytes during STALE replay",
-          "disposition": "equivalent",
+          "disposition": "integrated",
           "release_commit": "fdfbd9c4da070b5b32d9d2d66e5b9441eb607220",
-          "reason": "Equivalent independently cherry-picked review or minimal W112 implementation; original branch retained pending frozen-tip ancestry merge.",
-          "stable_patch_id_equal": true
+          "reason": "Frozen submitted original commit is now a release ancestor; duplicated W112/read guard and live fixture resolved retaining tested root implementation; original docs/evidence preserved.",
+          "stable_patch_id_equal": true,
+          "previous_disposition": "equivalent"
         },
         {
           "commit": "444cd4f0fd2177761572b86ee99d714615aacb5f",
           "subject": "Port isolated W112 ordinary overwrite warm peer cold and physical gates",
-          "disposition": "held",
-          "reason": "NUC-port ordinary live fixture overlaps root02b9918b; reconcile complete fixture coverage during frozen-tip merge, preserve NUC prerequisites. Root exact both-mode gate already qualifies W112."
+          "disposition": "integrated",
+          "reason": "Frozen submitted original commit is now a release ancestor; duplicated W112/read guard and live fixture resolved retaining tested root implementation; original docs/evidence preserved.",
+          "previous_disposition": "held"
         },
         {
           "commit": "101598d2f2d0ce9ac99ab59f840130f3c8f0e218",
           "subject": "Require both mode ordinary overwrite cold gates before NUC promotion",
-          "disposition": "held",
-          "reason": "Awaiting manager frozen owner handoff inventory; original committed docs/evidence preserved on owner tip, not treated as accepted."
+          "disposition": "integrated",
+          "reason": "Frozen submitted original commit is now a release ancestor; duplicated W112/read guard and live fixture resolved retaining tested root implementation; original docs/evidence preserved.",
+          "previous_disposition": "held"
+        },
+        {
+          "commit": "e0ec9208dab076d4a2d1374a3413accdbb33c63d",
+          "subject": "Freeze NUC source acceptance and running jobs for release manager handoff",
+          "disposition": "integrated",
+          "reason": "Frozen NUC manager handoff merged with stricter ordinary overwrite promotion prerequisites retained."
         }
       ]
     },
     "orcd": {
       "branch": "devel-orcd",
       "frozen_tip": "bc15451909c77ec04180639db6c069bb34ee3fa0",
-      "tip_is_ancestor": false,
+      "tip_is_ancestor": true,
       "nonancestor_commits": [
         {
           "commit": "4fe291b0218bc37cd964c925ecebcea4df93e99f",
           "subject": "W112 preserve accepted full-overwrite bytes during STALE replay",
-          "disposition": "equivalent",
+          "disposition": "integrated",
           "release_commit": "fdfbd9c4da070b5b32d9d2d66e5b9441eb607220",
-          "reason": "Equivalent independently cherry-picked review or minimal W112 implementation; original branch retained pending frozen-tip ancestry merge.",
-          "stable_patch_id_equal": true
+          "reason": "Frozen submitted original commit is now a release ancestor; duplicated W112/read guard and live fixture resolved retaining tested root implementation; original docs/evidence preserved.",
+          "stable_patch_id_equal": true,
+          "previous_disposition": "equivalent"
         },
         {
           "commit": "83cff8043ab0d9f03506dd55572e57cb33398d52",
           "subject": "Stop expired read routing retries and retain exact merged deployment gates",
-          "disposition": "held",
-          "reason": "Read routing guard/native loop regression implemented6819c127; independent source ancestry and additional ORCD exact-source evidence remain to reconcile. Do not duplicate guard/test or perturb d26 qualification."
+          "disposition": "integrated",
+          "reason": "Frozen submitted original commit is now a release ancestor; duplicated W112/read guard and live fixture resolved retaining tested root implementation; original docs/evidence preserved.",
+          "previous_disposition": "held"
         },
         {
           "commit": "bc15451909c77ec04180639db6c069bb34ee3fa0",
           "subject": "Document frozen ORCD source, deployed identity and unfinished stability gates",
-          "disposition": "held",
-          "reason": "Awaiting manager frozen owner handoff inventory; original committed docs/evidence preserved on owner tip, not treated as accepted."
+          "disposition": "integrated",
+          "reason": "Frozen submitted original commit is now a release ancestor; duplicated W112/read guard and live fixture resolved retaining tested root implementation; original docs/evidence preserved.",
+          "previous_disposition": "held"
         }
       ]
     },
@@ -103,63 +119,71 @@
     "code-review": {
       "branch": "devel-code-review",
       "frozen_tip": "d3efd6643ec93405ef6f2f66fd8b882069449e98",
-      "tip_is_ancestor": false,
+      "tip_is_ancestor": true,
       "nonancestor_commits": [
         {
           "commit": "6307ca635fd238ac99fb524bf2ed8f3c2f15ed6f",
           "subject": "review: reproduce silent old-peer authority timeout and test fresh legacy fallback",
-          "disposition": "equivalent",
+          "disposition": "integrated",
           "release_commit": "c3ed5c4d6f8ae4e0d257657871b035a904fb3bb7",
-          "reason": "Equivalent independently cherry-picked review or minimal W112 implementation; original branch retained pending frozen-tip ancestry merge.",
-          "stable_patch_id_equal": true
+          "reason": "Frozen submitted original commit is now a release ancestor; duplicated W112/read guard and live fixture resolved retaining tested root implementation; original docs/evidence preserved.",
+          "stable_patch_id_equal": true,
+          "previous_disposition": "equivalent"
         },
         {
           "commit": "ba33c3f12b9156af12828ee352e3c5da3e7e9866",
           "subject": "review: record bounded merged authority and batch disposition for 9c65c893",
-          "disposition": "equivalent",
+          "disposition": "integrated",
           "release_commit": "9ad1c735d76373c8c941d09d3b854af9a0c4dd35",
-          "reason": "Equivalent independently cherry-picked review or minimal W112 implementation; original branch retained pending frozen-tip ancestry merge.",
-          "stable_patch_id_equal": true
+          "reason": "Frozen submitted original commit is now a release ancestor; duplicated W112/read guard and live fixture resolved retaining tested root implementation; original docs/evidence preserved.",
+          "stable_patch_id_equal": true,
+          "previous_disposition": "equivalent"
         },
         {
           "commit": "858db9cf80b270adaeeb8be654e8c014880f4522",
           "subject": "review: record bounded query retry and page barrier disposition",
-          "disposition": "equivalent",
+          "disposition": "integrated",
           "release_commit": "a7442eac825baf24514971808143249a9cee71c6",
-          "reason": "Equivalent independently cherry-picked review or minimal W112 implementation; original branch retained pending frozen-tip ancestry merge.",
-          "stable_patch_id_equal": true
+          "reason": "Frozen submitted original commit is now a release ancestor; duplicated W112/read guard and live fixture resolved retaining tested root implementation; original docs/evidence preserved.",
+          "stable_patch_id_equal": true,
+          "previous_disposition": "equivalent"
         },
         {
           "commit": "a1700b6412d99f94132bf774700d755c01f79970",
           "subject": "review: independently reproduce W112 and verify full overwrite replay boundaries",
-          "disposition": "equivalent",
+          "disposition": "integrated",
           "release_commit": "3f73f69cd7132cbdacd1bc48520301067ef6610e",
-          "reason": "Equivalent independently cherry-picked review or minimal W112 implementation; original branch retained pending frozen-tip ancestry merge.",
-          "stable_patch_id_equal": true
+          "reason": "Frozen submitted original commit is now a release ancestor; duplicated W112/read guard and live fixture resolved retaining tested root implementation; original docs/evidence preserved.",
+          "stable_patch_id_equal": true,
+          "previous_disposition": "equivalent"
         },
         {
           "commit": "67687dce402f124fcfbb977641ac0f49fc84971a",
           "subject": "review: reproduce inherited read retry deadline overrun and provide scoped guard",
-          "disposition": "equivalent",
+          "disposition": "integrated",
           "release_commit": "add022cb1d82695aad259a8fa4146297928f4b84",
-          "reason": "Equivalent independently cherry-picked review or minimal W112 implementation; original branch retained pending frozen-tip ancestry merge.",
-          "stable_patch_id_equal": true
+          "reason": "Frozen submitted original commit is now a release ancestor; duplicated W112/read guard and live fixture resolved retaining tested root implementation; original docs/evidence preserved.",
+          "stable_patch_id_equal": true,
+          "previous_disposition": "equivalent"
         },
         {
           "commit": "5ddd2047af746acd5983309cbf5da56abfeb01f1",
           "subject": "review: record bounded tag54 append completion safety disposition",
-          "disposition": "equivalent",
+          "disposition": "integrated",
           "release_commit": "40fa182b558dcc304cbdda82f0e0b6ea4f6d17a6",
-          "reason": "Equivalent independently cherry-picked review or minimal W112 implementation; original branch retained pending frozen-tip ancestry merge.",
-          "stable_patch_id_equal": true
+          "reason": "Frozen submitted original commit is now a release ancestor; duplicated W112/read guard and live fixture resolved retaining tested root implementation; original docs/evidence preserved.",
+          "stable_patch_id_equal": true,
+          "previous_disposition": "equivalent"
         },
         {
           "commit": "d3efd6643ec93405ef6f2f66fd8b882069449e98",
           "subject": "coordination: freeze five-chat handoff contract and release reconciliation inventory",
-          "disposition": "held",
-          "reason": "Awaiting manager frozen owner handoff inventory; original committed docs/evidence preserved on owner tip, not treated as accepted."
+          "disposition": "integrated",
+          "reason": "Frozen submitted original commit is now a release ancestor; duplicated W112/read guard and live fixture resolved retaining tested root implementation; original docs/evidence preserved.",
+          "previous_disposition": "held"
         }
       ]
     }
-  }
+  },
+  "latest_ancestry_reconciliation_head": "a34155975878afb74571b17fe8626e98e9734a0e"
 }

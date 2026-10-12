@@ -1,0 +1,13 @@
+{
+  "source": "d26e6874",
+  "gates": {
+    "fault-native": 0,
+    "normal-native": 0,
+    "sanitizers": 0,
+    "build-and-gates": 0
+  },
+  "inputs": 1469,
+  "mismatches": [],
+  "scope": "full make all test, normal and EFS_FAULTS=1; sixteen ASan/UBSan focused gates; mounted qualification separate",
+  "release_accepted": false
+}

@@ -1507,10 +1507,11 @@ both-mode primary/peer/cold/cleanup gates pass at `02b9918b`.
 Independent authority review NET fallback is implemented with normal and
 ASan/UBSan actual-caller regressions; semantic refusals and fresh guards remain.
 [AMD frozen integration handoff](../status/v030-amd-handoff-20261012.md) records `d26e6874`,
-full fault PASS/normal active, [per-owner commit reconciliation](../status/v030-owner-commit-reconciliation.json), compatibility and the missing Mac client adoption prerequisite.
+full normal/fault plus sixteen sanitizers and both-mode ordinary cold-byte PASS at d26e6874, [per-owner commit reconciliation](../status/v030-owner-commit-reconciliation.json), compatibility and the missing Mac client adoption prerequisite.
 Latest Mac tag54 completion and ORCD follower-read deadline/proof checkpoints
 are integrated with the independent inherited-deadline retry repair; full merged
-AMD qualification is pending. ORCD packing timeouts remain
+AMD full normal/fault plus sixteen sanitizers PASS at `d26e6874`; both-mode
+ordinary immediate/cold/cleanup PASS, original pressure pending. ORCD packing timeouts remain
 a release blocker. Small-file packing and code-review correctness have priority. Branch checkpoints
 are not final release acceptance. Shared devel/main and pushes remain unchanged
 until a frozen merged candidate passes its recorded gates.
