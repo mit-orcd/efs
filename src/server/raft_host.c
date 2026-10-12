@@ -342,8 +342,6 @@ struct host_waiter {
     pthread_cond_t cv;
     uint64_t idx;   /* wake once the group's applied >= idx */
     uint64_t seen;  /* any=1: wake once the group's view stamp != seen */
-    uint64_t round, term; /* any=2: fresh read admission */
-    uint8_t notified; /* one signal until the sleeper reacquires cv_mu */
     uint8_t group;
     uint8_t active;
     uint8_t any;
@@ -3384,11 +3382,10 @@ static int host_view_wait_apply(const struct host_view *v, uint64_t want,
  * predicate false (that order is what rules out a lost wakeup). any=0:
  * wake when the group's applied >= idx (or the replica goes away); any=1:
  * wake when the group's view stamp moves past `seen`. Falls back to the
- * shared applied_cv when all slots are busy. any=2 wakes for fresh read
- * progress, rather than unrelated commits. Returns with cv_mu held. */
+ * shared applied_cv when all slots are busy. Returns with cv_mu held. */
 static void host_waiter_sleep(struct efs_raft_host *h, uint8_t group, int any,
                               uint64_t idx, uint64_t seen,
-                              const struct timespec *end, uint64_t round, uint64_t term)
+                              const struct timespec *end)
 {
     uint32_t i, n = HOST_WAITERS;
     struct host_waiter *w = NULL;
@@ -3411,9 +3408,6 @@ static void host_waiter_sleep(struct efs_raft_host *h, uint8_t group, int any,
     w->any = (uint8_t)any;
     w->idx = idx;
     w->seen = seen;
-    w->round = round;
-    w->term = term;
-    w->notified = 0;
     w->active = 1;
     pthread_cond_timedwait(&w->cv, &h->cv_mu, end);
     w->active = 0;
@@ -3431,30 +3425,17 @@ static void host_waiters_wake(struct efs_raft_host *h)
         struct host_group *g;
         int wake;
 
-        if (!w->active || w->notified)
+        if (!w->active)
             continue;
         g = group_slot(h, w->group);
         if (!g || !V_LOAD(g->v_has))
             wake = 1;
-        else if (w->any == 2) {
-            struct host_view v;
-            host_view_get(h, w->group, &v);
-            /* A commit moving while an admitted round is pending cannot
-             * complete this read. Wake on a usable proof, invalidation, or
-             * completion of an older round so this waiter can start its own.
-             * Coverage is still checked again by the handler under cv_mu. */
-            wake = !v.has || v.role != EFS_RAFT_LEADER || v.term != w->term ||
-                   host_view_covers(&v, w->idx, w->round, w->term) ||
-                   (!v.read_pending &&
-                    !host_view_wait_apply(&v, w->idx, w->round, w->term));
-        } else if (w->any)
+        else if (w->any)
             wake = V_LOAD(g->v_stamp) != w->seen;
         else
             wake = V_LOAD(g->v_applied) >= w->idx;
-        if (wake) {
-            w->notified = 1;
+        if (wake)
             pthread_cond_signal(&w->cv);
-        }
     }
     if (h->cv_overflow)
         pthread_cond_broadcast(&h->applied_cv);
@@ -4129,7 +4110,7 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             (v.read_pending || host_view_wait_apply(&v, want, round, admitted_term)) &&
             !host_view_covers(&v, want, round, admitted_term)) {
             uint64_t s0 = now_us_();
-            host_waiter_sleep(h, group, 2, want, v.stamp, &end, round, admitted_term);
+            host_waiter_sleep(h, group, 1, 0, v.stamp, &end);
             s0 = now_us_() - s0;
             if (s0 > 20000)
                 fprintf(stderr, "raft-host: read-sleep us=%llu group=%u "
@@ -4219,7 +4200,7 @@ static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
         host_view_get(h, group, &v);
         if (v.has && v.applied < idx) {
             uint64_t s0 = now_us_();
-            host_waiter_sleep(h, group, 0, idx, 0, &end, 0, 0);
+            host_waiter_sleep(h, group, 0, idx, 0, &end);
             s0 = now_us_() - s0;
             if (s0 > 20000)
                 fprintf(stderr, "raft-host: apply-sleep us=%llu group=%u "
@@ -17457,7 +17438,7 @@ static int host_publication_committed(struct efs_raft_host *h, uint8_t group,
         host_view_get(h,group,&v);
         if (v.has && v.role==EFS_RAFT_LEADER && v.term==term &&
             !(v.read_done && v.read_round>=round && v.read_index>=want))
-            host_waiter_sleep(h,group,1,0,v.stamp,&end,0,0);
+            host_waiter_sleep(h,group,1,0,v.stamp,&end);
         pthread_mutex_unlock(&h->cv_mu);
     }
     uint8_t digest[EFS_HASH_SIZE];
