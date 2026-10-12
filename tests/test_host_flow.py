@@ -161,7 +161,11 @@ static void admission(void)
 {
  struct efs_raft_host*h=host();g_host=h;struct efs_raft_flow_reply f;
  uint32_t len;uint8_t*p=frame(3,0,1,&len);
- for(int i=0;i<64;i++)assert(server_raft_host_inbox(p,len,&f)==EFS_OK);
+ for(int i=0;i<64;i++){
+  h->inbox[i].read_noted=1;
+  assert(server_raft_host_inbox(p,len,&f)==EFS_OK);
+  assert(!h->inbox[i].read_noted); /* reused admission slot is fresh */
+ }
  assert(f.pressure&&h->inbox_work_n==64);
  assert(server_raft_host_inbox(p,len,&f)==EFS_ERR_BUSY);
  /* Detached accepted work remains charged until processing AND KV durability. */

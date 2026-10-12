@@ -150,6 +150,7 @@ struct host_inbox_item {
     uint8_t *buf;
     uint32_t len;
     uint64_t queued_us; /* Opt-in monotonic observation; never admission state. */
+    int read_noted; /* Early vote only; normal recv/credits remain owed. */
 };
 
 /* One queued outbound raft message (encoded wire bytes, heap-owned). */
@@ -6769,6 +6770,44 @@ static int host_checkpoint_stop(struct host_checkpoint_worker *w)
     w->started=0;return rc;
 }
 
+/* Called by the sole inbox consumer with h->mu held. A network trylock
+ * failure must not hide an otherwise eligible fresh vote behind unrelated
+ * durable receive work. Snapshot bounded headers without removing frames;
+ * the unchanged core checks term/boot/voters/leader/persisted prefix. Every
+ * frame still enters normal recv in order and retains its admission credits. */
+static void host_container_pending_reads(struct efs_raft_host *h)
+{
+    struct pending_read {uint8_t p[EFS_WIRE_RAFT_HDR_LEN];uint8_t *identity;int slot;};
+    struct pending_read frames[HOST_INBOX_MAX];unsigned n=0;uint8_t published=0;
+    if(!h->s || !h->s->storage_engine)return;
+    pthread_mutex_lock(&h->inbox_mu);
+    for(int i=0;i<h->inbox_n && i<HOST_INBOX_MAX;i++){
+        struct host_inbox_item *item=&h->inbox[i];
+        if(item->read_noted || item->len!=EFS_WIRE_RAFT_HDR_LEN ||
+           (item->buf[0]!=EFS_RAFT_MSG_AE_REQ && item->buf[0]!=EFS_RAFT_MSG_AE_REP) ||
+           !rd64be(item->buf+28))continue;
+        memcpy(frames[n].p,item->buf,EFS_WIRE_RAFT_HDR_LEN);
+        frames[n].identity=item->buf;frames[n++].slot=i;
+    }
+    pthread_mutex_unlock(&h->inbox_mu);
+    for(unsigned i=0;i<n;i++){
+        struct efs_raft_msg msg;
+        if(efs_wire_raft_decode(frames[i].p,EFS_WIRE_RAFT_HDR_LEN,&msg,NULL,0)!=EFS_OK)continue;
+        struct efs_raft *r=group_raft(h,msg.group);
+        if(!efs_raft_read_control(r,&msg))continue;
+        pthread_mutex_lock(&h->inbox_mu);
+        int slot=frames[i].slot;
+        if(slot<h->inbox_n && h->inbox[slot].buf==frames[i].identity)h->inbox[slot].read_noted=1;
+        pthread_mutex_unlock(&h->inbox_mu);
+        if(msg.type==EFS_RAFT_MSG_AE_REP){
+            published|=(uint8_t)(1u<<msg.group);BO_COUNT(BO_READ_CONTROL_REPLY);
+        }else BO_COUNT(BO_READ_CONTROL_REQUEST);
+    }
+    for(unsigned i=0;i<HOST_NGROUPS;i++)
+        if(published&(1u<<h->g[i].group))host_publish_group(h,h->g[i].group);
+    if(published)host_waiters_wake(h);
+}
+
 static void *host_pump(void *arg)
 {
     struct efs_raft_host *h = arg;
@@ -6810,6 +6849,7 @@ static void *host_pump(void *arg)
                     (void)efs_raft_step_down(g->r);
             }
         }
+        host_container_pending_reads(h);
         /* One AppendEntries for everything appended since the last
          * send. Proposers only raise the send ceiling; doing the send
          * under their lock shipped a single entry and the next mkdir
@@ -8253,9 +8293,9 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
             cmd[17] = (uint8_t)lane;
             if (host_hosts(h,efs_raft_shard_group(lshard))) {
                 uint32_t indices[EFS_META_SWEEP_BATCH_MAX], n;
+                if(host_container_gc_lane_empty(h,c.ino[i],c.gen[i],(uint8_t)lane,&empty_covered))continue;
                 lrc=efs_meta_lane_sweep_select(h->kv,c.ino[i],c.gen[i],(uint8_t)lane,indices,&n);
                 if (lrc != EFS_OK) { lanes_ok=0; break; }
-                if(!n && host_container_gc_lane_empty(h,c.ino[i],c.gen[i],(uint8_t)lane,&empty_covered))continue;
                 cmd[0] = EFS_MD_CMD_LANE_SWEEP_BATCH;
                 cmd[18] = (uint8_t)n;
                 for (uint32_t j=0; j<n; j++) wr32be(cmd+19+4*j,indices[j]);
@@ -10283,6 +10323,7 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen,
     if (h->inbox_bytes>h->inbox_bytes_hi) h->inbox_bytes_hi=h->inbox_bytes;
     h->inbox[h->inbox_n].buf=copy; h->inbox[h->inbox_n].len=plen;
     h->inbox[h->inbox_n].queued_us=BO_ON() ? efs_batch_obs_now_us() : 0;
+    h->inbox[h->inbox_n].read_noted=0;
     h->inbox_n++;
     if (h->flow_enabled) {
         h->inbox_work_n++; h->inbox_work_bytes+=plen;
