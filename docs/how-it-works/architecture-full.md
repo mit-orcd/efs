@@ -2197,6 +2197,8 @@ Humanclarification explicitly resumes qualification/diagnostics. Intel targetedR
 
 IntelRPCdiagnosticevidence integrated; genericprofiler excludesmanualpackedpublication/PUTsteps. Flush bottleneck attribution remainsincomplete; root reviewing exactphases. [Ledger](../status/v030-tcp-direct-qualification-20261012.md).
 
+Isolated11859810 opt-in pack-phase diagnosis preparing on AMD Linux; build/focusedprerequisites guard launch. Acceptance freeze remains e59, no passclaim. [Ledger](../status/v030-tcp-direct-qualification-20261012.md).
+
 
 ## Appendix 2 — In flight — the current handoff block
 

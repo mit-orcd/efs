@@ -721,3 +721,5 @@ E59 AMD nativePASS/fullFAIL. Corrected Intel actualworker evidence points toward
 Humanclarification explicitly resumes qualification/diagnostics. Intel targetedRPC/readtiming run dispatched on frozene59; ordinarydurability/deadlines unchanged. [Ledger](v030-tcp-direct-qualification-20261012.md).
 
 IntelRPCdiagnosticevidence integrated; genericprofiler excludesmanualpackedpublication/PUTsteps. Flush bottleneck attribution remainsincomplete; root reviewing exactphases. [Ledger](v030-tcp-direct-qualification-20261012.md).
+
+Isolated11859810 opt-in pack-phase diagnosis preparing on AMD Linux; build/focusedprerequisites guard launch. Acceptance freeze remains e59, no passclaim. [Ledger](v030-tcp-direct-qualification-20261012.md).
