@@ -52,3 +52,10 @@ a=s.index('void server_raft_host_append(');b=s.index('\n}',a)
 assert s[a:b].index('host_leader_cover_pick')<s[a:b].index('pthread_mutex_trylock(lock)')
 a=s.index('void server_raft_host_create_retained(');b=s.index('\n}',a)
 assert s[a:b].index('host_leader_cover_pick')<s[a:b].index('host_retained_create_proof')
+
+a=s.index('void server_raft_host_report(');b=s.index('/* Register first-touch participants',a)
+assert s[a:b].index('host_leader_cover_pick')<s[a:b].index('rc = host_read_index')
+assert 'if(session && count==1)' in s[a:b] and 'host_need_both(both)' in s[a:b]
+# The tested helper acquires the non-recursive host mutex itself. REPORT must
+# call it before authority without holding that mutex (live fsync regression).
+assert 'pthread_mutex_lock(&h->mu)' not in s[a:b]

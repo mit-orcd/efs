@@ -2706,7 +2706,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
      * never a reason to re-apply the same index. */
     ret = (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
            cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP ||
-           cmd[0] == EFS_MD_CMD_RMDIR || cmd[0] == EFS_MD_CMD_APPEND_ATOMIC || cmd[0] == EFS_MD_CMD_APPEND_RSV ||
+           cmd[0] == EFS_MD_CMD_RMDIR || cmd[0] == EFS_MD_CMD_APPEND_COMPLETE_ATOMIC || cmd[0] == EFS_MD_CMD_APPEND_ATOMIC || cmd[0] == EFS_MD_CMD_APPEND_RSV ||
            cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_APPEND_CATCHUP ||
            cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_PUBLISH ||
            cmd[0] == EFS_MD_CMD_REPORT_PUBLISH ||
@@ -2752,7 +2752,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
          cmd[0] == EFS_MD_CMD_PUBLISH || cmd[0] == EFS_MD_CMD_PUBLICATION ||
          cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE ||
          (cmd[0] == EFS_MD_CMD_APPEND_RSV && clen == HOST_APPEND_RSV_LEN) ||
-         cmd[0] == EFS_MD_CMD_APPEND_ATOMIC ||
+         cmd[0] == EFS_MD_CMD_APPEND_COMPLETE_ATOMIC || cmd[0] == EFS_MD_CMD_APPEND_ATOMIC ||
          (cmd[0] == EFS_MD_CMD_LOCK && clen >= HOST_LOCK_LEN)) &&
         (rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM))
         ret = rc;
@@ -3169,6 +3169,13 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return apply_activate_lane_cmd(h, cmd, clen, index, group);
     if (cmd[0] == EFS_MD_CMD_LANE_FENCE)
         return apply_lane_fence_cmd(h, cmd, clen, index);
+    if(cmd[0]==EFS_MD_CMD_APPEND_COMPLETE_ATOMIC) {
+        if(clen!=EFS_MD_APPEND_COMPLETE_ATOMIC_LEN || group!=efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd+1))))
+            return EFS_ERR_INVAL;
+        struct efs_opid owner={.session_epoch=rd32be(cmd+41)};
+        memcpy(owner.client_uuid,cmd+25,16);
+        return efs_meta_apply_append_complete_atomic(h->kv,rd64be(cmd+1),rd64be(cmd+9),rd64be(cmd+17),&owner,rd64be(cmd+45),cmd+53);
+    }
     if (cmd[0] == EFS_MD_CMD_APPEND_ATOMIC)
         return apply_append_atomic_cmd(h,cmd,clen,group);
     if (cmd[0] == EFS_MD_CMD_APPEND_RSV)
@@ -4267,6 +4274,7 @@ static uint64_t host_pressure_command_charge(const uint8_t *cmd, uint32_t n)
         work=host_pressure_rows_charge((n==38 || n==58) && rd32be(cmd+33)>0 &&
             rd32be(cmd+33)<=EFS_META_APPEND_CATCHUP_MAX ? rd32be(cmd+33)+1 :
             EFS_META_APPEND_CATCHUP_MAX+1,1,48);break;
+    case EFS_MD_CMD_APPEND_COMPLETE_ATOMIC:
     case EFS_MD_CMD_APPEND_ATOMIC:
         work=sizeof(struct efs_meta_append_plan)+host_pressure_rows_charge(2*(EFS_META_LANES+5),1,EFS_OPID_VAL_MAX);
         break;
@@ -4292,6 +4300,7 @@ static uint64_t host_pressure_command_charge(const uint8_t *cmd, uint32_t n)
 static int host_pressure_recovery(const uint8_t *cmd, uint32_t n)
 {
     if (!cmd || !n || n > (256u<<10)) return 0;
+    if(cmd[0]==EFS_MD_CMD_APPEND_COMPLETE_ATOMIC && n==EFS_MD_APPEND_COMPLETE_ATOMIC_LEN)return 1;
     if(cmd[0]==EFS_MD_CMD_SESSION && n==EFS_MD_SESS_LEASE_EDGE_LEN &&
        cmd[1]==EFS_MD_SESS_LEASE_EDGE_DEFERRED &&
        !(rd32be(cmd+54)&EFS_LEASE_EDGE_OPEN))return 1;
@@ -12861,6 +12870,51 @@ static int host_append_execute_batched(struct efs_raft_host *h,
 /* Normal completion/pruning use immutable captured images just like reserve.
  * Last-close cleanup deliberately keeps its synchronous first PREP: it checks
  * outstanding leases only after that obligation is actually installed. */
+static int host_append_complete_batched(struct efs_raft_host *h,efs_ino_t ino,
+    uint64_t offset,const struct efs_opid *session,const struct efs_txid *t,int *hint)
+{
+    if(host_command_capture)return EFS_ERR_BUSY;
+    if(session) {
+        uint8_t group=efs_raft_shard_group(efs_kv_inode_shard(ino));
+        pthread_mutex_lock(&h->mu);
+        struct efs_raft *r=group_raft(h,group);
+        uint32_t voters=r?efs_raft_voters(r):0;
+        int local=r && (voters & (voters-1)) && efs_raft_role(r)==EFS_RAFT_LEADER;
+        pthread_mutex_unlock(&h->mu);
+        if(local) {
+            int eligible=efs_meta_append_completion_atomic_eligible(h->kv,ino,offset);
+            if(eligible<0)return eligible;
+            if(eligible) {
+                struct efs_meta_row row;
+                int rc=efs_meta_apply_get_inode(h->kv,ino,&row);
+                if(rc!=EFS_OK)return rc;
+                uint8_t cmd[EFS_MD_APPEND_COMPLETE_ATOMIC_LEN]={EFS_MD_CMD_APPEND_COMPLETE_ATOMIC};
+                uint8_t key[EFS_KV_KEY_MAX];uint32_t kl,n=48;
+                rc=efs_kv_key_append_rsv(efs_kv_inode_shard(ino),ino,row.generation,offset,key,&kl);
+                if(rc==EFS_OK)rc=efs_kv_get(h->kv,key,kl,cmd+53,&n);
+                if(rc!=EFS_OK)return rc==EFS_ERR_NOT_FOUND?EFS_ERR_BUSY:rc;
+                if(n!=48)return EFS_ERR_PROTO;
+                wr64be(cmd+1,ino);wr64be(cmd+9,row.generation);wr64be(cmd+17,offset);
+                memcpy(cmd+25,session->client_uuid,16);wr32be(cmd+41,session->session_epoch);
+                wr64be(cmd+45,row.content_epoch);
+                uint64_t index=0,term=0;
+                rc=host_propose_mode(h,group,cmd,sizeof(cmd),&index,&term,hint,1);
+                return rc==EFS_OK?host_wait_verdict(h,group,index,term,hint):rc;
+            }
+        }
+    }
+    struct host_append_batch c={.base={h,hint}};
+    const struct efs_meta_append_ops ops={host_append_batch_prepare,
+        host_append_batch_decide,host_append_batch_resolve};
+    host_command_cohort_begin(&c.cohort,h);
+    int rc=session?efs_meta_finish_append_owned(h->kv,ino,offset,
+                     EFS_META_APPEND_COMPLETED,session,t,&ops,&c):
+                   efs_meta_finish_append(h->kv,ino,offset,
+                     EFS_META_APPEND_COMPLETED,t,&ops,&c);
+    if(host_command_capture==&c.cohort)
+        (void)host_command_cohort_end(&c.cohort,EFS_ERR_BUSY,hint);
+    return rc;
+}
 static int host_append_prune_batched(struct efs_raft_host *h,efs_ino_t ino,
     const struct efs_txid *t,int *hint,unsigned *removed)
 {
@@ -16686,6 +16740,16 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
                             need, nn);
             return;
         }
+    }
+    /* A one-file REPORT can finish its append on the inode primary. Route
+     * before publication only if that primary hosts the complete authority
+     * domain; a single-group primary would otherwise bounce back here. */
+    if(session && count==1) {
+        uint8_t both[2];host_need_both(both);
+        /* The routing helper owns h->mu; callers must not lock it again. */
+        int preferred=host_leader_cover_pick(h,
+            efs_raft_shard_group(efs_kv_inode_shard(recs[0].ino)),both,2);
+        if(preferred>=0){set_inode_rc(out,EFS_ERR_NOT_PRIMARY,preferred);return;}
     }
     /* One ReadIndex per touched group for the whole batch (§8 amortize).
      * A per-rec ReadIndex is a quorum round each and times out a 2g

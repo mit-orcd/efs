@@ -9119,6 +9119,20 @@ writes share an inode.
   All daemons must understand this command before it is admitted; older binaries
   cannot replay its entries. It does not change existing stored row formats.
 
+  Published, registered append completion may use `APPEND_COMPLETE_ATOMIC`
+  (command 54) when every active lane and completion dependency belongs to
+  the inode shard. Its fixed body identifies inode, generation, reservation
+  offset, reporting session UUID/epoch, content epoch and immutable reservation bytes. It allocates no offset. Serialized
+  apply uses the existing completion collector, rechecks generation, local
+  session floor and every intent/shared guard, then writes owned replacement
+  images and predicate versions in one KV batch. Out-of-order completion
+  still stops at the first unresolved range; DONE replay has no new effect.
+  Missing active lanes refuse authority. A lane activation crossing shards
+  between eligibility and apply returns BUSY with no effect; the unchanged
+  REPORT retry uses normal coordinated completion. Local multi-voter
+  leadership is required; follower coordinators retain the transaction path.
+  All replicas must understand command 54 before admission.
+
   **Validating EOF once is not enough — the barrier must outlive the
   reservation.** POSIX couples EOF determination and the append write into
   one atomic step, so no intervening modification may fall between them.

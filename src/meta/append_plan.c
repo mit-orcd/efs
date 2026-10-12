@@ -688,6 +688,7 @@ int efs_meta_append_atomic_decode(const uint8_t *in,uint32_t length,
 struct append_atomic_context {
     struct efs_kv *kv;uint32_t shard,count;int replay;
     struct efs_kv_item items[2*(EFS_META_LANES+5)];
+    struct efs_meta_append_image images[EFS_META_LANES+5];
     uint8_t versions[EFS_META_LANES+5][8],version_keys[EFS_META_LANES+5][EFS_KV_KEY_MAX];
 };
 static int append_atomic_prepare(void *user,const struct efs_txid *tx,
@@ -695,7 +696,8 @@ static int append_atomic_prepare(void *user,const struct efs_txid *tx,
 {
     struct append_atomic_context *c=user;uint8_t current[EFS_OPID_VAL_MAX];uint32_t n=sizeof(current);
     (void)tx;
-    if(parts->n!=1 || parts->shard[0]!=c->shard || im->klen<3 ||
+    if(parts->n!=1 || parts->shard[0]!=c->shard)return EFS_ERR_BUSY;
+    if(im->klen<3 ||
        (((uint32_t)im->key[0]<<8)|im->key[1])!=c->shard || c->count>=2*(EFS_META_LANES+5))
         return EFS_ERR_INVAL;
     if(c->replay)return EFS_OK;
@@ -720,7 +722,12 @@ static int append_atomic_prepare(void *user,const struct efs_txid *tx,
     rc=efs_kv_key_ver(im->key,im->klen,c->version_keys[slot],&key_length);
     if(rc!=EFS_OK)return rc;
     append_atomic_put(c->versions[slot],version+1,8);
-    c->items[c->count++]=(struct efs_kv_item){EFS_KV_PUT,im->key,im->klen,im->value,im->new_len};
+    /* Completion emits temporary images. Own the bytes until the final batch,
+     * just as reservation's persistent plan owns its original images. */
+    c->images[slot]=*im;
+    const struct efs_meta_append_image *saved=&c->images[slot];
+    c->items[c->count++]=(struct efs_kv_item){saved->op==EFS_TXN_DEL?EFS_KV_DEL:EFS_KV_PUT,
+        saved->key,saved->klen,saved->value,saved->new_len};
     c->items[c->count++]=(struct efs_kv_item){EFS_KV_PUT,c->version_keys[slot],key_length,c->versions[slot],8};
     return EFS_OK;
 }
@@ -759,4 +766,70 @@ int efs_meta_apply_append_atomic(struct efs_kv *kv,const struct efs_meta_append_
     struct efs_txid tx={{0}};
     const struct efs_meta_append_ops ops={append_atomic_prepare,append_atomic_decide,append_atomic_resolve};
     return efs_meta_execute_append_owned(kv,p,q,&tx,&ops,&c);
+}
+
+/* Completion never allocates an offset. Its original reservation is fixed;
+ * every frontier/lane dependency must be in this one log's logical shard.
+ * The collector and atomic adapter reuse the normal completion rules. */
+static int append_completion_domain(struct efs_kv *kv,const struct efs_meta_row *row)
+{
+    uint32_t shard=efs_kv_inode_shard(row->ino);
+    for(unsigned lane=0;lane<EFS_META_LANES;lane++) {
+        if(!(row->active_lanes & (UINT64_C(1)<<lane)))continue;
+        if(efs_kv_lane_shard(row->ino,(uint8_t)lane)!=shard)return 0;
+        uint8_t key[EFS_KV_KEY_MAX],value[EFS_OPID_VAL_MAX];uint32_t kl,n=sizeof(value);
+        int rc=efs_kv_key_lane(shard,row->ino,row->generation,(uint8_t)lane,key,&kl);
+        if(rc==EFS_OK)rc=efs_kv_get(kv,key,kl,value,&n);
+        if(rc==EFS_ERR_NOT_FOUND)return EFS_ERR_BUSY; /* missing active lane is no authority */
+        if(rc!=EFS_OK)return rc;
+    }
+    return 1;
+}
+int efs_meta_append_completion_atomic_eligible(struct efs_kv *kv,efs_ino_t ino,uint64_t offset)
+{
+    if(!kv || !ino)return EFS_ERR_INVAL;
+    struct efs_meta_row row;
+    int rc=efs_meta_apply_get_inode(kv,ino,&row);
+    if(rc!=EFS_OK)return rc;
+    rc=append_completion_domain(kv,&row);
+    if(rc!=1)return rc;
+    struct finish_capture c={.base=kv};
+    const struct efs_kv_ops capture_ops={.get=finish_get,.scan_prefix=finish_scan,.scan_from=finish_scan_from};
+    struct efs_kv capture={.ops=&capture_ops,.ctx=&c};
+    rc=efs_meta_collect_append_completion(&capture,ino,offset,
+        EFS_META_APPEND_COMPLETED,finish_batch,&c);
+    if(rc==EFS_OK) {
+        uint32_t shard=efs_kv_inode_shard(ino);
+        rc=1;
+        for(uint32_t i=0;i<c.count;i++)
+            if((((uint32_t)c.images[i].key[0]<<8)|c.images[i].key[1])!=shard){rc=0;break;}
+    }
+    finish_free(&c);return rc;
+}
+int efs_meta_apply_append_complete_atomic(struct efs_kv *kv,efs_ino_t ino,uint64_t generation,
+    uint64_t offset,const struct efs_opid *id,uint64_t content_epoch,const uint8_t reservation[48])
+{
+    struct efs_opid_req q={0};if(id)q.id=*id;q.id.seq=1;
+    if(!kv || !ino || !generation || !id || !reservation || !id->session_epoch || !efs_opid_req_valid(&q))return EFS_ERR_INVAL;
+    int rc=efs_session_accept(kv,efs_kv_inode_shard(ino),id->client_uuid,id->session_epoch);
+    if(rc!=EFS_OK)return rc;
+    struct efs_meta_row row;
+    rc=efs_meta_apply_get_inode(kv,ino,&row);
+    if(rc!=EFS_OK)return rc;
+    if(row.generation!=generation || row.content_epoch!=content_epoch)return EFS_ERR_STALE;
+    uint8_t key[EFS_KV_KEY_MAX],value[48];uint32_t kl,n=sizeof(value);
+    rc=efs_kv_key_append_rsv(efs_kv_inode_shard(ino),ino,generation,offset,key,&kl);
+    if(rc==EFS_OK)rc=efs_kv_get(kv,key,kl,value,&n);
+    if(rc==EFS_ERR_NOT_FOUND)return EFS_ERR_STALE;
+    if(rc!=EFS_OK)return rc;
+    if(n!=48 || value[44]>1 || reservation[44]>1)return EFS_ERR_PROTO;
+    /* DONE may prove this same reservation completed after a lost reply.
+     * Every immutable byte must still match: offset reuse is a new identity. */
+    if(memcmp(value,reservation,44) || memcmp(value+45,reservation+45,3))return EFS_ERR_STALE;
+    rc=append_completion_domain(kv,&row);
+    if(rc!=1)return rc==0?EFS_ERR_BUSY:rc;
+    struct append_atomic_context c={.kv=kv,.shard=efs_kv_inode_shard(ino)};
+    struct efs_txid tx={{0}};
+    const struct efs_meta_append_ops ops={append_atomic_prepare,append_atomic_decide,append_atomic_resolve};
+    return efs_meta_finish_append_owned(kv,ino,offset,EFS_META_APPEND_COMPLETED,id,&tx,&ops,&c);
 }
