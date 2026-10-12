@@ -742,9 +742,9 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
                           !e->leader_mask?"standby: no local leader group":"running";
         format_bytes(e->namespace_bytes,bytes,sizeof(bytes));
         printf("Expiry worker: %s\nClock: %s%s\nConfirmed namespace removals: %llu files; %s observed logical bytes\n"
-               "Counters: since process start; refused/retry=%llu errors=%llu passes=%llu\n",state,
+               "Counters: since process start; size_unknown=%llu refused/retry=%llu errors=%llu passes=%llu\n",state,
                e->healthy?"healthy":"not healthy",e->uncertain?" (operator reset required)":"",
-               (unsigned long long)e->removed_files,bytes,(unsigned long long)e->refused,
+               (unsigned long long)e->removed_files,bytes,(unsigned long long)e->size_unknown_files,(unsigned long long)e->refused,
                (unsigned long long)e->errors,(unsigned long long)e->passes);
         if(e->last_delete_age_ms==UINT64_MAX)printf("Last successful removal: none in this process\n");
         else {expiry_duration(e->last_delete_age_ms*1000000ull,age,sizeof(age));printf("Last successful removal: %s ago\n",age);}
@@ -788,11 +788,11 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
                           (!e->healthy || e->uncertain)?"paused_clock":!e->leader_mask?"standby":"running";
         printf("expiry_state=%s expiry_available=%u expiry_enabled=%u expiry_clock_healthy=%u expiry_clock_uncertain=%u "
                "expiry_leader_mask=%u expired_files=%llu expired_namespace_bytes=%llu "
-               "expiry_refused=%llu expiry_errors=%llu expiry_passes=%llu "
+               "expired_size_unknown_files=%llu expiry_refused=%llu expiry_errors=%llu expiry_passes=%llu "
                "expiry_last_pass_age_ms=%llu expiry_last_delete_age_ms=%llu scope=since_process_start\n",state,
                e->available,e->enabled,e->healthy,e->uncertain,e->leader_mask,
                (unsigned long long)e->removed_files,(unsigned long long)e->namespace_bytes,
-               (unsigned long long)e->refused,(unsigned long long)e->errors,(unsigned long long)e->passes,
+               (unsigned long long)e->size_unknown_files,(unsigned long long)e->refused,(unsigned long long)e->errors,(unsigned long long)e->passes,
                (unsigned long long)e->last_pass_age_ms,(unsigned long long)e->last_delete_age_ms);
         for(unsigned i=0;i<2;i++)printf("expiry_group=%u expiry_sampled=%u overdue_lower_bound=%llu "
                "overdue_capped=%u expiry_sample_age_ms=%llu\n",i*2,(e->sampled_mask>>i)&1,

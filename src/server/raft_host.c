@@ -391,7 +391,7 @@ struct efs_raft_host {
     struct efs_expiry_clock expiry_clock;
     uint8_t expiry_resume[HOST_NGROUPS][EFS_EXPIRY_INDEX_BYTES];
     uint8_t expiry_resuming[HOST_NGROUPS];
-    uint64_t expiry_removed,expiry_refused,expiry_errors,expiry_namespace_bytes;
+    uint64_t expiry_removed,expiry_refused,expiry_errors,expiry_namespace_bytes,expiry_size_unknown;
     uint64_t expiry_passes,expiry_last_pass_us,expiry_last_delete_us;
     uint64_t expiry_due[2],expiry_sample_us[2];
     uint32_t expiry_capped[2],expiry_sampled_mask;
@@ -11335,6 +11335,7 @@ void server_raft_host_expiry_status(struct efs_expiry_status *out)
 #define EXP_LOAD(f) __atomic_load_n(&h->expiry_##f,__ATOMIC_RELAXED)
 #define EXP_AGE(v) ((v)?(now>=(v)?(now-(v))/1000:0):UINT64_MAX)
     out->removed_files=EXP_LOAD(removed);out->namespace_bytes=EXP_LOAD(namespace_bytes);
+    out->size_unknown_files=EXP_LOAD(size_unknown);
     out->refused=EXP_LOAD(refused);out->errors=EXP_LOAD(errors);out->passes=EXP_LOAD(passes);
     t=EXP_LOAD(last_pass_us);out->last_pass_age_ms=EXP_AGE(t);
     t=EXP_LOAD(last_delete_us);out->last_delete_age_ms=EXP_AGE(t);
@@ -15073,6 +15074,7 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
     struct efs_meta_row prow, row;
     struct efs_meta_dentry dent;
     struct efs_meta_stat st;
+    uint64_t expired_size=UINT64_MAX;
     struct efs_txid t;
     struct efs_txn_parts parts;
     struct efs_meta_dentry_drop drop;
@@ -15204,6 +15206,15 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
     }
     if (rc == EFS_OK && !put_ino)
         rc = efs_txn_ver_get(h->kv, k_ino, ki, &iver);
+    if(rc==EFS_OK && expiry) {
+        /* Best-effort telemetry only: do not fail a safe expiry because a
+         * concurrent publisher prevents a stable size collect. Lane EOFs,
+         * not base_size alone, determine logical length. */
+        struct efs_meta_stat observed;int telemetry_hint=-1;
+        if(host_read_inode_lanes(h,row.ino,&telemetry_hint)==EFS_OK &&
+           efs_meta_apply_getattr(h->kv,row.ino,host_txn_coord,h,&observed)==EFS_OK)
+            expired_size=observed.size;
+    }
     if (rc == EFS_OK) {
         memset(&parts, 0, sizeof(parts));
         rc = host_parts_add(&parts, dsh);
@@ -15293,7 +15304,8 @@ unlink_done:
     if (rc == EFS_OK) {
         if(expiry) {
             __atomic_fetch_add(&h->expiry_removed,1,__ATOMIC_RELAXED);
-            __atomic_fetch_add(&h->expiry_namespace_bytes,row.size,__ATOMIC_RELAXED);
+            if(expired_size==UINT64_MAX)__atomic_fetch_add(&h->expiry_size_unknown,1,__ATOMIC_RELAXED);
+            else __atomic_fetch_add(&h->expiry_namespace_bytes,expired_size,__ATOMIC_RELAXED);
             __atomic_store_n(&h->expiry_last_delete_us,now_us_(),__ATOMIC_RELAXED);
         }
         if (!last)

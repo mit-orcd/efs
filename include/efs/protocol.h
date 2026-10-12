@@ -238,7 +238,7 @@ struct efs_gc_io_stats {
  * metadata bytes observed at deletion, never physical reclaimed bytes. */
 struct efs_expiry_status {
     uint32_t available, enabled, healthy, uncertain, leader_mask, sampled_mask;
-    uint64_t removed_files, namespace_bytes, refused, errors, passes;
+    uint64_t removed_files, namespace_bytes, size_unknown_files, refused, errors, passes;
     uint64_t last_pass_age_ms, last_delete_age_ms;
     uint64_t due_lower_bound[2], sample_age_ms[2];
     uint32_t due_capped[2];
