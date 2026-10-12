@@ -10865,7 +10865,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         }
         struct host_view view;host_view_get(h,group,&view);
         if(!view.has || view.role!=EFS_RAFT_LEADER) {
-            out->rc=EFS_ERR_NOT_PRIMARY;out->leader_hint=view.has?view.leader:-1;return;
+            out->rc=EFS_ERR_NOT_PRIMARY;out->leader_hint=view.has?view.leader:host_pick_peer(h,&group,1,-1);return;
         }
         struct efs_meta_row row;rc=host_read_index(h,group,&hint);
         if(rc==EFS_OK)rc=efs_meta_apply_get_inode(h->kv,rd64be(cmd+1),&row);
@@ -10897,7 +10897,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             rc=cmd[0]==EFS_MD_REQ_EXPIRY_ENABLE?host_expiry_enable_txn(h,cmd,&hint):
                                                   host_expiry_renew_txn(h,cmd,&hint);
         } else if(!view.has || view.role!=EFS_RAFT_LEADER) {
-            out->rc=EFS_ERR_NOT_PRIMARY;out->leader_hint=view.has?view.leader:-1;return;
+            out->rc=EFS_ERR_NOT_PRIMARY;out->leader_hint=view.has?view.leader:host_pick_peer(h,&group,1,-1);return;
         } else if(cmd[0]==EFS_MD_CMD_EXPIRY_POLICY)
             rc=host_propose_wait_idx(h,group,cmd,clen,&hint,&idx);
         else rc=EFS_OK;

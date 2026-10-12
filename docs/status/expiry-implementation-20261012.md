@@ -205,3 +205,19 @@ authoritative generation, UID, mode and link count for policy/deadline controls.
 Policy/deadline reads reject a stale generation instead of presenting absence
 as a disabled policy/deadline. The final source will rerun normal and clock-fault
 matrices; W90 closure is reserved for those results.
+
+## Inspection redirect fix
+
+`539290f6` normal fixture found a real control-path error: `expiry-id` sent to
+n1 could not follow group 2 because the seed hosts only group 0 and returned
+NOT_PRIMARY without a target. Policy/deadline inspection had the same path.
+Non-hosted expiry control now supplies a peer that hosts the target group;
+the CLI follows explicit non-applied redirects using advertised addresses.
+The failing FileID gate/raw log `/home/efs/expiry-539290f6-normal-gates.log`
+is retained; final qualification is being rerun after the redirect fix.
+
+The release reference advanced concurrently to `ac8cf2d7` during this work.
+This branch deliberately retains the original verified release snapshot
+`3a41493591dcede820700db7d934da9dc10f07ee`; no unrelated concurrent release
+cleanup was merged or reverted. Reproduce by the recorded source IDs, not a
+moving release reference.
