@@ -5171,3 +5171,17 @@ software repaired. No drive setting change is authorized by this split.
 **Related:** W97 replication feedback, W93 group commit, W95 tiny-payload
 layout, W96 KV WAL allocation, W53 mixed-write tails and W99 capacity policy.
 See the [current status and evidence index](../status/w111-nuc-persistence-investigation-20261011.md).
+
+
+### W112 — ordinary full overwrite loses acknowledged bytes on STALE replay
+
+**Priority:** release correctness blocker. **Cluster:** AMD/TCP, direct and buffered.
+**Owner:** release integration; coordinate with NUC/writeback owner.
+
+At d9d39acc a fsynced512-byte file overwritten with262,160 bytes reports
+successful fsync/close, but the old first chunk survives on primary, peers and
+cold restart. Actual-code regression fails; bounded full-ownership replay fix
+is implemented, qualification pending. Keep partial-write ownership and fresh
+publication/fence observations. Close only after full merged normal/fault,
+sanitisers and both-mode exact immediate/cold/live gates pass.
+[Evidence and closure scope](../status/w112-full-overwrite-replay-20261012.md).

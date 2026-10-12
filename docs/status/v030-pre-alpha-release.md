@@ -414,3 +414,26 @@ these efforts are coordinated. Original30s case budgets and all authority,
 import and transaction fences remain required. The implementation is integrated in `be8169d4`; production-function
 recapture/page regressions pass normally and under ASan/UBSan. Full merged
 AMD qualification and same quiet pressure gates are next.
+
+### d9d39acc qualification, buffered improvement and W112
+
+The bounded query candidate passes full merged AMD normal/fault `all test` and
+ten sanitizer gates; all1,330 inputs are unchanged and27 retrieved native
+artifacts verify byte-for-byte. [Exact full gates](../../results/measure/20261011-v030-merged-native/d9d39acc/acceptance-summary.json).
+Independent [query safety review](../reviews/query-cut-retry-20261011.md) finds
+no additional concrete defect within its bounded scope.
+
+Buffered seven-client/jobs16 now passes every client220/0/1/0, exact cold
+mixed bytes, physical packed reclamation within180s and metadata queue drain.
+Direct still fails: six209/4/1/7 and one210/3/1/7, with directory/query cases
+and later cold/GC NOTRUN. [Raw modes and phases](../../results/measure/20261011-v030-seven-packing/d9d39acc/acceptance-summary.json).
+Normal mounts restore successfully.
+
+Ordinary-write pressure controls pass all seven suites in both modes on the
+same binaries/jobs16/30s limits, with explicit create/read-only warm-up. These
+are case-only controls, not cold/GC or identical mixed-mutation warm-up proof.
+The initial helper-import failure is not an I/O result. Mixed-mutation OFF
+controls instead expose [W112](w112-full-overwrite-replay-20261012.md): ordinary
+full overwrite loses first-chunk bytes despite successful fsync, including
+cold reads. It blocks release independently of packing timeouts. A bounded
+actual-code repair and focused regressions pass; full/live qualification is next.

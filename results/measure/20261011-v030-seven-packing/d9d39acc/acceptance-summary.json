@@ -1,0 +1,274 @@
+{
+  "source": "d9d39acc",
+  "clients": 7,
+  "jobs_per_client": 16,
+  "flow": 0,
+  "cases_timeout_s": 30,
+  "physical_gc_timeout_s": 180,
+  "release_accepted": false,
+  "modes": {
+    "direct": {
+      "exit": 1,
+      "clients": [
+        {
+          "file": "direct/gc-direct-3pa3wt08/posix-client-0.tsv",
+          "pass": 209,
+          "fail": 4,
+          "skip": 1,
+          "notrun": 7,
+          "total": 221,
+          "dur": 45.2,
+          "failed_cases": [
+            "dir_deep_nesting",
+            "dir_many_files",
+            "virt_stats_readable",
+            "virt_find_query"
+          ],
+          "notrun_cases": [
+            "truncate_big_ftruncate_honest",
+            "truncate_big_o_trunc_honest",
+            "dir_mkdir_umask",
+            "attr_umask_respected",
+            "perm_dir_no_x_search",
+            "err_chdir_into_file",
+            "chdir_dotdot_after_mkdir"
+          ]
+        },
+        {
+          "file": "direct/gc-direct-3pa3wt08/posix-client-1.tsv",
+          "pass": 209,
+          "fail": 4,
+          "skip": 1,
+          "notrun": 7,
+          "total": 221,
+          "dur": 45.2,
+          "failed_cases": [
+            "dir_deep_nesting",
+            "dir_many_files",
+            "virt_stats_readable",
+            "virt_find_query"
+          ],
+          "notrun_cases": [
+            "truncate_big_ftruncate_honest",
+            "truncate_big_o_trunc_honest",
+            "dir_mkdir_umask",
+            "attr_umask_respected",
+            "perm_dir_no_x_search",
+            "err_chdir_into_file",
+            "chdir_dotdot_after_mkdir"
+          ]
+        },
+        {
+          "file": "direct/gc-direct-3pa3wt08/posix-client-2.tsv",
+          "pass": 210,
+          "fail": 3,
+          "skip": 1,
+          "notrun": 7,
+          "total": 221,
+          "dur": 45.8,
+          "failed_cases": [
+            "dir_deep_nesting",
+            "virt_stats_readable",
+            "virt_find_query"
+          ],
+          "notrun_cases": [
+            "truncate_big_ftruncate_honest",
+            "truncate_big_o_trunc_honest",
+            "dir_mkdir_umask",
+            "attr_umask_respected",
+            "perm_dir_no_x_search",
+            "err_chdir_into_file",
+            "chdir_dotdot_after_mkdir"
+          ]
+        },
+        {
+          "file": "direct/gc-direct-3pa3wt08/posix-client-3.tsv",
+          "pass": 209,
+          "fail": 4,
+          "skip": 1,
+          "notrun": 7,
+          "total": 221,
+          "dur": 44.6,
+          "failed_cases": [
+            "dir_deep_nesting",
+            "dir_many_files",
+            "virt_stats_readable",
+            "virt_find_query"
+          ],
+          "notrun_cases": [
+            "truncate_big_ftruncate_honest",
+            "truncate_big_o_trunc_honest",
+            "dir_mkdir_umask",
+            "attr_umask_respected",
+            "perm_dir_no_x_search",
+            "err_chdir_into_file",
+            "chdir_dotdot_after_mkdir"
+          ]
+        },
+        {
+          "file": "direct/gc-direct-3pa3wt08/posix-client-4.tsv",
+          "pass": 209,
+          "fail": 4,
+          "skip": 1,
+          "notrun": 7,
+          "total": 221,
+          "dur": 45.1,
+          "failed_cases": [
+            "dir_deep_nesting",
+            "dir_many_files",
+            "virt_stats_readable",
+            "virt_find_query"
+          ],
+          "notrun_cases": [
+            "truncate_big_ftruncate_honest",
+            "truncate_big_o_trunc_honest",
+            "dir_mkdir_umask",
+            "attr_umask_respected",
+            "perm_dir_no_x_search",
+            "err_chdir_into_file",
+            "chdir_dotdot_after_mkdir"
+          ]
+        },
+        {
+          "file": "direct/gc-direct-3pa3wt08/posix-client-5.tsv",
+          "pass": 209,
+          "fail": 4,
+          "skip": 1,
+          "notrun": 7,
+          "total": 221,
+          "dur": 45.2,
+          "failed_cases": [
+            "dir_deep_nesting",
+            "dir_many_files",
+            "virt_stats_readable",
+            "virt_find_query"
+          ],
+          "notrun_cases": [
+            "truncate_big_ftruncate_honest",
+            "truncate_big_o_trunc_honest",
+            "dir_mkdir_umask",
+            "attr_umask_respected",
+            "perm_dir_no_x_search",
+            "err_chdir_into_file",
+            "chdir_dotdot_after_mkdir"
+          ]
+        },
+        {
+          "file": "direct/gc-direct-3pa3wt08/posix-client-6.tsv",
+          "pass": 209,
+          "fail": 4,
+          "skip": 1,
+          "notrun": 7,
+          "total": 221,
+          "dur": 45.2,
+          "failed_cases": [
+            "dir_deep_nesting",
+            "dir_many_files",
+            "virt_stats_readable",
+            "virt_find_query"
+          ],
+          "notrun_cases": [
+            "truncate_big_ftruncate_honest",
+            "truncate_big_o_trunc_honest",
+            "dir_mkdir_umask",
+            "attr_umask_respected",
+            "perm_dir_no_x_search",
+            "err_chdir_into_file",
+            "chdir_dotdot_after_mkdir"
+          ]
+        }
+      ],
+      "cold_bytes": "NOTRUN",
+      "physical_gc": "NOTRUN",
+      "metadata_queue_drain": "NOTRUN"
+    },
+    "buffered": {
+      "exit": 0,
+      "clients": [
+        {
+          "file": "buffered/gc-buffered-fsjdji8r/posix-client-0.tsv",
+          "pass": 220,
+          "fail": 0,
+          "skip": 1,
+          "notrun": 0,
+          "total": 221,
+          "dur": 49.4,
+          "failed_cases": [],
+          "notrun_cases": []
+        },
+        {
+          "file": "buffered/gc-buffered-fsjdji8r/posix-client-1.tsv",
+          "pass": 220,
+          "fail": 0,
+          "skip": 1,
+          "notrun": 0,
+          "total": 221,
+          "dur": 49.5,
+          "failed_cases": [],
+          "notrun_cases": []
+        },
+        {
+          "file": "buffered/gc-buffered-fsjdji8r/posix-client-2.tsv",
+          "pass": 220,
+          "fail": 0,
+          "skip": 1,
+          "notrun": 0,
+          "total": 221,
+          "dur": 46.2,
+          "failed_cases": [],
+          "notrun_cases": []
+        },
+        {
+          "file": "buffered/gc-buffered-fsjdji8r/posix-client-3.tsv",
+          "pass": 220,
+          "fail": 0,
+          "skip": 1,
+          "notrun": 0,
+          "total": 221,
+          "dur": 49.8,
+          "failed_cases": [],
+          "notrun_cases": []
+        },
+        {
+          "file": "buffered/gc-buffered-fsjdji8r/posix-client-4.tsv",
+          "pass": 220,
+          "fail": 0,
+          "skip": 1,
+          "notrun": 0,
+          "total": 221,
+          "dur": 49.4,
+          "failed_cases": [],
+          "notrun_cases": []
+        },
+        {
+          "file": "buffered/gc-buffered-fsjdji8r/posix-client-5.tsv",
+          "pass": 220,
+          "fail": 0,
+          "skip": 1,
+          "notrun": 0,
+          "total": 221,
+          "dur": 46.5,
+          "failed_cases": [],
+          "notrun_cases": []
+        },
+        {
+          "file": "buffered/gc-buffered-fsjdji8r/posix-client-6.tsv",
+          "pass": 220,
+          "fail": 0,
+          "skip": 1,
+          "notrun": 0,
+          "total": 221,
+          "dur": 49.7,
+          "failed_cases": [],
+          "notrun_cases": []
+        }
+      ],
+      "cold_bytes": "PASS",
+      "physical_gc": "PASS",
+      "metadata_queue_drain": "PASS"
+    }
+  },
+  "restore_exit": 0,
+  "round_exit": 1,
+  "verified_artifacts": 42
+}

@@ -46,6 +46,7 @@ p.add_argument('--root', action='append', default=[])
 p.add_argument('--mount', type=Path, help='existing empty, unmounted path allowed by host FUSE policy')
 p.add_argument('--peer-mount', type=Path, help='existing empty, unmounted second policy-allowed mount')
 p.add_argument('--packing-clients',type=int,choices=(2,7),default=2,help='two or seven mounted clients for the isolated packing gate')
+p.add_argument('--ordinary-overwrite-only',action='store_true',help='ordinary span-to-full overwrite, immediate primary/peer bytes, cold restart and physical cleanup')
 p.add_argument('--mounted-packing-only', action='store_true', help='opt-in mounted tiny coalescing, mixed mutation, peer/cold hashes, POSIX and physical packed reclamation')
 p.add_argument('--posix', action='store_true')
 p.add_argument('--posix-jobs', type=int, default=4, help='parallel POSIX cases (default: 4); each case retains its own concurrent writers')
@@ -200,6 +201,7 @@ if a.replication_pressure:
     subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-shared','-fPIC',source/'tests/live/raft_slow_sync.c','-ldl','-o',run_preload],check=True)
     env.update(LD_PRELOAD=str(run_preload),EFS_TEST_RAFT_SLOW_FILE=str(work/'raft-slow-armed'))
 if a.mounted_packing_only:env.update(EFS_PACKED_WRITES='1',EFS_COMMANDS='1',EFS_COMMANDS_SERVER='1')
+if a.ordinary_overwrite_only:env['EFS_PACKED_WRITES']='0'
 if a.efs_commands_only:env.update(EFS_COMMANDS='1',EFS_COMMANDS_SERVER='1',EFS_QUERY_TEST_PORT=str(a.port))
 if a.storage_session_fence_fault:
     assert a.guarded_leases and not (a.put_barrier_fault or a.kv_wal_persistence_only or a.compactor_pressure), 'certificate fault must own its preload'
@@ -502,6 +504,37 @@ try:
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.ordinary_overwrite_only:
+        peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
+        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+        wait(lambda:os.path.ismount(peer_mount),'ordinary overwrite peer mounted',40)
+        expected={};inodes=[];checks=[]
+        bodies=[b'ordinary-growth:'+bytes(range(256))*1024,b'full:'+bytes(range(256))*511+b'Z'*251,bytes(131072),b'partial replacement'*17]
+        assert len(bodies[1])==131072
+        for i,body in enumerate(bodies):
+            name='ordinary-overwrite-'+str(i);path=mount/name;old=hashlib.sha256(name.encode()).digest()*16
+            with path.open('xb',buffering=0) as fd:
+                assert fd.write(old)==len(old);os.fsync(fd.fileno());inodes.append(os.fstat(fd.fileno()).st_ino)
+            assert (peer_mount/name).read_bytes()==old
+            with path.open('r+b',buffering=0) as fd:
+                assert fd.write(body)==len(body);os.fsync(fd.fileno())
+            # Partial replacement retains the untouched suffix; full/growth
+            # owns the whole new image. Every check opens a new description.
+            expected[name]=body+old[len(body):] if len(body)<len(old) else body
+            own=path.read_bytes();other=(peer_mount/name).read_bytes()
+            checks.append({'name':name,'bytes':len(expected[name]),'expected_sha256':hashlib.sha256(expected[name]).hexdigest(),'primary_sha256':hashlib.sha256(own).hexdigest(),'peer_sha256':hashlib.sha256(other).hexdigest()})
+            (work/'ordinary-overwrite.json').write_text(json.dumps(checks,indent=2))
+            assert own==expected[name] and other==expected[name],checks[-1]
+        run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
+        unmount();stop(crash=True);start();mount_client()
+        for check in checks:
+            got=(mount/check['name']).read_bytes();check['cold_sha256']=hashlib.sha256(got).hexdigest()
+            assert got==expected[check['name']],check
+        (work/'ordinary-overwrite.json').write_text(json.dumps(checks,indent=2))
+        for name in expected:(mount/name).unlink()
+        wait(lambda:physically_drained(inodes),'ordinary overwrite physical fragments and queues drained',180)
+        print('ordinary span-to-full overwrite: primary/peer/cold exact bytes and physical cleanup PASS',flush=True)
+        raise SystemExit(0)
     if a.mounted_packing_only:
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
         peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)

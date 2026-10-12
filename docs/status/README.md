@@ -23,7 +23,12 @@ Bounded transport batching, whole-cohort authority143/144 and Mac tag53/CREATE
 adoption/routing are integrated; full merged AMD normal/fault native and eight sanitizer gates pass at
 `cfa103dc`; quiet seven-client/jobs16 mounted qualification fails both modes (directory
 and stats/find timeouts; cold/GC NOTRUN). Normal mount restoration passes.
-Bounded query-cut/barrier fixes and coherent-catalog starvation are next.
+Bounded query-cut/barrier candidate `d9d39acc` passes full merged normal/fault
+native and ten sanitizer gates; buffered seven-client/jobs16 cold/GC acceptance
+passes. Direct packing remains blocked; ordinary pressure controls pass both
+modes. [W112](w112-full-overwrite-replay-20261012.md) records newly reproduced
+acknowledged ordinary overwrite loss through cold restart; bounded repair
+and full/live qualification are in progress.
 Independent authority review NET fallback is implemented with normal and
 ASan/UBSan actual-caller regressions; semantic refusals and fresh guards remain.
 ORCD packing timeouts remain
@@ -170,6 +175,7 @@ its closure is independent of W111.
 |---|---|---|
 | W97 AMD data-GC overload/admission | Closed: direct/buffered unpaced, cold recovery, physical drain and deployed service audit pass | [Closure](amd-overload-admission-20261011.md) |
 | W97 replication-inbox feedback | Open: sustained receiver-feedback/queue/catch-up acceptance | [W97](../backlog/work-items.md#w97) |
+| W112 ordinary full-overwrite STALE replay | Open release correctness blocker: first chunk reverts to old bytes despite successful fsync; bounded fix/live gates pending | [Status](w112-full-overwrite-replay-20261012.md) |
 | W111 NUC persistence latency | Open: isolate filesystem, block queue and device/cache effects | [W111](../backlog/work-items.md#w111) · [Status](w111-nuc-persistence-investigation-20261011.md) |
 
 
