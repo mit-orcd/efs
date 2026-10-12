@@ -1174,3 +1174,35 @@ the isolated REPORT caller-lock correction; its actual routing/cohort helper
 regressions pass again afterward. The final metadata adapter passes cold
 mem/LSM and ASAN/UBSAN, including epoch and reservation offset-reuse binding.
 Ready for a qualified normal Mac rollout and unchanged native 216 acceptance.
+
+Committed e798c2aa normally rolled to all three Mac daemons and gateway,
+installed stores retained, buffered/TCP with 10 GiB/node quotas. Runtime
+status reports 3/3 identical devel-mac versions. Both groups' original
+20-second mtime and concurrent CREATE cases pass: mtime totals 14.5/16.5
+seconds; CREATE totals 24.5/24.2 including cleanup outside the case body.
+No timeout or assertion changes. Evidence: atomic-completion-status.txt,
+native-completion-both-groups.txt (exit 0). Complete unchanged native 216
+(JOBS=1 scheduling, internal concurrency retained) is now running;
+previous 214/216 full-suite failure remains evidence until it passes.
+
+
+Final acceptance: unchanged full native POSIX on installed Mac buffered/TCP
+passes 216/216, zero failures/skips/notrun, 617.0 seconds. Local baseline also
+passes 216/216 (27.8 seconds); baseline comparison verdict PASS with zero
+EFS bugs, none incomplete or non-equivalent. JOBS=1 is scheduling only;
+all original internal concurrent writers and 20/30/75/120/180-second case
+budgets remain. Both former 20-second failures pass in the full run, and all
+seven serial cases pass. Exit 0, native-completion-full-j1.txt;
+saved raw native-completion-efs.tsv and native-completion-baseline.tsv.
+Cluster scripts' result directory:
+/Users/mike/git/cluster/results/20261011-195002-posix.hX69rV.
+
+Installed code remains e798c2aa (devel-mac), all three daemons active with
+identical runtime versions; gateway mount healthy, installed stores retained,
+private owned gate processes/mounts absent. Test-fixture repair is 51215bb4.
+Full Linux unit/doc gate, new adapter ASAN/UBSAN, original-budget both-group
+native cases, eight private cold peer races, exact 800-record handoff and
+physical cleanup all passed. Earlier failures remain recorded above.
+This closes this Mac native ReadIndex/durability acceptance phase; retained
+query-orphan freshness investigation and wider W66/release/other-cluster
+qualification remain separate open work. No push or merge performed.
