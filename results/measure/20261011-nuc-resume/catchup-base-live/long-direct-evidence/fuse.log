@@ -1,0 +1,26 @@
+2026-10-11T22:53:23.417Z efs-fuse ba73f304-w52-nuc (branch devel-nuc, built 2026-10-11T22:03:30Z on nuc), build=ba73f304-w52-nuc: starting export=default mount=/data1/efs/mnt
+2026-10-11T22:53:23.418Z Discovered 4 cluster nodes from 127.0.0.1:26590
+2026-10-11T22:53:23.418Z   node id=1 127.0.0.1:26590
+2026-10-11T22:53:23.418Z   node id=2 127.0.0.1:26591
+2026-10-11T22:53:23.418Z   node id=3 127.0.0.1:26592
+2026-10-11T22:53:23.418Z   node id=4 127.0.0.1:26593
+2026-10-11T22:53:23.418Z fetching metadata...
+2026-10-11T22:53:23.418Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-11T22:53:23.418Z export id=1 name=default
+2026-10-11T22:53:23.418Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-11T22:53:23.420Z efs-fuse: workers max=10 idle=10
+2026-10-11T22:53:23.424Z fuse serving
+2026-10-12T00:25:38.421Z fsync-split ino=4097 flush_ms=284 report_ms=0 rc=0
+2026-10-12T00:31:35.260Z efs-fuse ba73f304-w52-nuc (branch devel-nuc, built 2026-10-11T22:03:30Z on nuc), build=ba73f304-w52-nuc: starting export=default mount=/data1/efs/mnt
+2026-10-12T00:31:35.261Z Discovered 4 cluster nodes from 127.0.0.1:26590
+2026-10-12T00:31:35.261Z   node id=1 127.0.0.1:26590
+2026-10-12T00:31:35.261Z   node id=2 127.0.0.1:26591
+2026-10-12T00:31:35.261Z   node id=3 127.0.0.1:26592
+2026-10-12T00:31:35.261Z   node id=4 127.0.0.1:26593
+2026-10-12T00:31:35.261Z fetching metadata...
+2026-10-12T00:31:35.261Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T00:31:35.261Z export id=1 name=default
+2026-10-12T00:31:35.261Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-12T00:31:35.265Z efs-fuse: workers max=10 idle=10
+2026-10-12T00:31:35.267Z fuse serving
+2026-10-12T00:31:37.562Z inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=2049690

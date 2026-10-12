@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/data1/efs/devel-nuc-20261011/nuc_catchup_live_20261011.py", line 109, in <module>
+    assert codes['full-' + mode] == 0, (mode, codes)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ('buffered', {'full-direct': 0, 'long-direct': 0, 'full-buffered': -2})

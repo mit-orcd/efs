@@ -1,0 +1,206 @@
+Evidence directory: /data1/efs/gc-direct-dly7jx6q
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=2591221288438263058
+client serving PASS
+append burst peer mounted PASS
+append burst 885 / 20000 elapsed 30.016
+append burst 1204 / 20000 elapsed 60.019
+append burst 1453 / 20000 elapsed 90.112
+append burst 1708 / 20000 elapsed 120.251
+append burst 1903 / 20000 elapsed 150.322
+append burst 2064 / 20000 elapsed 180.337
+append burst 2226 / 20000 elapsed 210.366
+append burst 2392 / 20000 elapsed 240.435
+append burst 2538 / 20000 elapsed 270.572
+append burst 2644 / 20000 elapsed 300.588
+append burst 2746 / 20000 elapsed 330.71
+append burst 2849 / 20000 elapsed 360.715
+append burst 2949 / 20000 elapsed 391.117
+append burst 3053 / 20000 elapsed 421.613
+append burst 3156 / 20000 elapsed 451.749
+append burst 3254 / 20000 elapsed 481.881
+append burst 3357 / 20000 elapsed 511.967
+append burst 3451 / 20000 elapsed 542.084
+append burst 3556 / 20000 elapsed 572.336
+append burst 3653 / 20000 elapsed 602.397
+append burst 3756 / 20000 elapsed 632.642
+append burst 3860 / 20000 elapsed 662.676
+append burst 3964 / 20000 elapsed 693.327
+append burst 4067 / 20000 elapsed 723.45
+append burst 4173 / 20000 elapsed 753.812
+append burst 4272 / 20000 elapsed 783.833
+append burst 4366 / 20000 elapsed 813.96
+append burst 4465 / 20000 elapsed 844.075
+append burst 4564 / 20000 elapsed 874.504
+append burst 4666 / 20000 elapsed 904.604
+append burst 4768 / 20000 elapsed 934.935
+append burst 4869 / 20000 elapsed 964.962
+append burst 4973 / 20000 elapsed 995.03
+append burst 5074 / 20000 elapsed 1025.061
+append burst 5172 / 20000 elapsed 1055.112
+append burst 5272 / 20000 elapsed 1085.247
+append burst 5373 / 20000 elapsed 1115.426
+append burst 5474 / 20000 elapsed 1146.058
+append burst 5575 / 20000 elapsed 1176.523
+append burst 5678 / 20000 elapsed 1206.678
+append burst 5771 / 20000 elapsed 1236.784
+append burst 5873 / 20000 elapsed 1266.804
+append burst 5978 / 20000 elapsed 1296.872
+append burst 6081 / 20000 elapsed 1327.028
+append burst 6181 / 20000 elapsed 1357.208
+append burst 6277 / 20000 elapsed 1387.305
+append burst 6378 / 20000 elapsed 1417.647
+append burst 6478 / 20000 elapsed 1447.852
+append burst 6581 / 20000 elapsed 1478.046
+append burst 6680 / 20000 elapsed 1508.104
+append burst 6780 / 20000 elapsed 1538.674
+append burst 6883 / 20000 elapsed 1568.91
+append burst 6983 / 20000 elapsed 1599.428
+append burst 7082 / 20000 elapsed 1629.493
+append burst 7183 / 20000 elapsed 1659.915
+append burst 7285 / 20000 elapsed 1689.921
+append burst 7388 / 20000 elapsed 1720.493
+append burst 7490 / 20000 elapsed 1750.839
+append burst 7591 / 20000 elapsed 1780.937
+append burst 7692 / 20000 elapsed 1810.953
+append burst 7793 / 20000 elapsed 1841.005
+append burst 7893 / 20000 elapsed 1871.244
+append burst 7995 / 20000 elapsed 1901.48
+append burst 8094 / 20000 elapsed 1931.659
+append burst 8193 / 20000 elapsed 1961.821
+append burst 8293 / 20000 elapsed 1992.472
+append burst 8394 / 20000 elapsed 2022.585
+append burst 8498 / 20000 elapsed 2052.677
+append burst 8597 / 20000 elapsed 2082.703
+append burst 8700 / 20000 elapsed 2112.93
+append burst 8797 / 20000 elapsed 2143.21
+append burst 8899 / 20000 elapsed 2173.86
+append burst 9004 / 20000 elapsed 2204.632
+append burst 9101 / 20000 elapsed 2234.886
+append burst 9202 / 20000 elapsed 2265.474
+append burst 9307 / 20000 elapsed 2295.549
+append burst 9406 / 20000 elapsed 2325.554
+append burst 9508 / 20000 elapsed 2355.663
+append burst 9604 / 20000 elapsed 2385.775
+append burst 9699 / 20000 elapsed 2415.944
+append burst 9796 / 20000 elapsed 2445.97
+append burst 9897 / 20000 elapsed 2476.13
+append burst 9995 / 20000 elapsed 2506.296
+append burst 10096 / 20000 elapsed 2536.495
+append burst 10200 / 20000 elapsed 2566.725
+append burst 10300 / 20000 elapsed 2596.843
+append burst 10400 / 20000 elapsed 2627.042
+append burst 10497 / 20000 elapsed 2657.05
+append burst 10596 / 20000 elapsed 2687.187
+append burst 10698 / 20000 elapsed 2717.249
+append burst 10796 / 20000 elapsed 2747.403
+append burst 10897 / 20000 elapsed 2777.417
+append burst 10996 / 20000 elapsed 2807.473
+append burst 11098 / 20000 elapsed 2837.683
+append burst 11194 / 20000 elapsed 2867.947
+append burst 11296 / 20000 elapsed 2898.185
+append burst 11392 / 20000 elapsed 2928.571
+append burst 11497 / 20000 elapsed 2959.04
+append burst 11595 / 20000 elapsed 2989.666
+append burst 11695 / 20000 elapsed 3019.725
+append burst 11794 / 20000 elapsed 3049.769
+append burst 11899 / 20000 elapsed 3079.799
+append burst 12000 / 20000 elapsed 3110.071
+append burst 12096 / 20000 elapsed 3140.138
+append burst 12193 / 20000 elapsed 3170.231
+append burst 12293 / 20000 elapsed 3200.249
+append burst 12391 / 20000 elapsed 3230.271
+append burst 12486 / 20000 elapsed 3260.526
+append burst 12586 / 20000 elapsed 3290.807
+append burst 12686 / 20000 elapsed 3320.929
+append burst 12782 / 20000 elapsed 3350.944
+append burst 12883 / 20000 elapsed 3381.479
+append burst 12986 / 20000 elapsed 3411.798
+append burst 13086 / 20000 elapsed 3442.251
+append burst 13183 / 20000 elapsed 3472.281
+append burst 13284 / 20000 elapsed 3502.335
+append burst 13380 / 20000 elapsed 3532.363
+append burst 13479 / 20000 elapsed 3562.565
+append burst 13580 / 20000 elapsed 3592.623
+append burst 13682 / 20000 elapsed 3622.798
+append burst 13785 / 20000 elapsed 3652.992
+append burst 13883 / 20000 elapsed 3683.042
+append burst 13982 / 20000 elapsed 3713.057
+append burst 14082 / 20000 elapsed 3743.077
+append burst 14184 / 20000 elapsed 3773.615
+append burst 14282 / 20000 elapsed 3803.759
+append burst 14379 / 20000 elapsed 3833.771
+append burst 14478 / 20000 elapsed 3863.958
+append burst 14579 / 20000 elapsed 3894.251
+append burst 14680 / 20000 elapsed 3924.466
+append burst 14781 / 20000 elapsed 3954.485
+append burst 14882 / 20000 elapsed 3984.757
+append burst 14980 / 20000 elapsed 4014.98
+append burst 15078 / 20000 elapsed 4044.984
+append burst 15180 / 20000 elapsed 4075.068
+append burst 15281 / 20000 elapsed 4105.596
+append burst 15381 / 20000 elapsed 4135.607
+append burst 15478 / 20000 elapsed 4165.864
+append burst 15580 / 20000 elapsed 4196.293
+append burst 15680 / 20000 elapsed 4226.33
+append burst 15781 / 20000 elapsed 4256.383
+append burst 15883 / 20000 elapsed 4286.516
+append burst 15981 / 20000 elapsed 4316.778
+append burst 16083 / 20000 elapsed 4346.794
+append burst 16185 / 20000 elapsed 4377.443
+append burst 16286 / 20000 elapsed 4407.561
+append burst 16383 / 20000 elapsed 4438.111
+append burst 16484 / 20000 elapsed 4468.207
+append burst 16583 / 20000 elapsed 4498.351
+append burst 16685 / 20000 elapsed 4528.452
+append burst 16779 / 20000 elapsed 4558.495
+append burst 16878 / 20000 elapsed 4588.59
+append burst 16981 / 20000 elapsed 4618.676
+append burst 17079 / 20000 elapsed 4648.917
+append burst 17186 / 20000 elapsed 4679.023
+append burst 17283 / 20000 elapsed 4709.135
+append burst 17387 / 20000 elapsed 4739.71
+append burst 17486 / 20000 elapsed 4769.779
+append burst 17586 / 20000 elapsed 4800.062
+append burst 17688 / 20000 elapsed 4830.081
+append burst 17785 / 20000 elapsed 4860.19
+append burst 17884 / 20000 elapsed 4890.436
+append burst 17985 / 20000 elapsed 4920.571
+append burst 18085 / 20000 elapsed 4950.773
+append burst 18183 / 20000 elapsed 4981.157
+append burst 18285 / 20000 elapsed 5011.362
+append burst 18382 / 20000 elapsed 5041.362
+append burst 18482 / 20000 elapsed 5071.437
+append burst 18581 / 20000 elapsed 5101.531
+append burst 18679 / 20000 elapsed 5131.647
+append burst 18780 / 20000 elapsed 5161.942
+append burst 18879 / 20000 elapsed 5192.138
+append burst 18975 / 20000 elapsed 5222.522
+append burst 19076 / 20000 elapsed 5252.56
+append burst 19174 / 20000 elapsed 5282.672
+append burst 19272 / 20000 elapsed 5312.694
+append burst 19373 / 20000 elapsed 5342.792
+append burst 19469 / 20000 elapsed 5372.917
+append burst 19569 / 20000 elapsed 5403.35
+append burst 19670 / 20000 elapsed 5433.43
+append burst 19771 / 20000 elapsed 5463.981
+append burst 19870 / 20000 elapsed 5494.262
+append burst 19967 / 20000 elapsed 5524.509
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 140692 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 140672 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+append burst physical fragments empty PASS
+append burst GC drained PASS
+append burst quota zero PASS
+append burst exact peer/cold blocks, final fsync and zero physical/quota PASS
