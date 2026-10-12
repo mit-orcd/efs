@@ -59,3 +59,13 @@ Current assignments:
 - Intel: preserved old 0ae tests continue; ordinary namespace failure is proven fixture participant placement (145 versus 144), not production guard failure. Test-only repair and exact salted native witness are integrated; repaired live acceptance remains pending. Finish old controllers and restoration, then prepare a separate frozen-candidate window without inheriting old PASS.
 
 Acceptance requires complete original-budget native, fault, mounted/cold/physical and resource-accounting evidence on a coherent frozen candidate. A build, documentation merge or modeled scheduling oracle is not mounted release acceptance.
+
+## User-directed stop — 2026-10-11
+
+Mike instructed all agents to document their status, commit and stop. Stop instructions were sent to all five coding chats; no new tests, builds, diagnostics, deployments or merges are authorized. Active fixtures must stop through safe drain/cleanup and restore prior services without discarding acknowledged writes. The manager heartbeat `coordinate-efs-stable-release-candidate` is PAUSED. Resume requires a new human instruction.
+
+The last common candidate is `410afed433b6da093bdc2acf37bec253ddbd586c`, containing the reviewed duplicate CREATE fault-hook correction. Corrected archive v2 SHA256 is `e5685d586e1de93335d1ff339f22cb24ba64600949980b3386e1b07f556d732e`; input manifest SHA256 `8939a4e679f5a431e4fb72a76248abc1867b5ec45a19fdf3d1e7c921f0b7bee6` contains 1,563 files; the 52-directory manifest is unchanged. The original 1,558-file archive omitted five linked evidence JSON files; preserve documentation-gate setup failures. Candidate code and Git ID are unchanged by packaging correction.
+
+Release acceptance remains incomplete. Confirmed query deadline failures persist; the previous c2 diagnostic passed deep-directory phases but failed stats/find requests. Mac c2 original mounted POSIX ended 199/216 PASS with 17 timeouts; downstream peer/policy/failover/cold gates were NOTRUN. The retained Mac inode4091 inconsistency has no proven creating writer or complete ownership/repair proof. The duplicate CREATE fault hook is fixed in 410 but fresh strict mounted three-stage/cold/ownership acceptance remains pending. Current native/fault/sanitizer and W52/W112/GC/concurrency checks are owner-specific and must be documented as PASS/FAIL/STOPPED/NOTRUN, without inheriting earlier revisions or claiming a stable release.
+
+Each owner was asked to commit exact source/runtime/config identity, results and raw failures, dirty work, controller/fixture inventory, restoration proof, open blockers and restart steps on its own branch. The manager will collect stop checkpoints without resuming work or merging them into the release. No main promotion, push or tag occurred.
