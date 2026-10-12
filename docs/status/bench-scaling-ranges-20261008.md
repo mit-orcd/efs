@@ -1,4 +1,4 @@
-# W90: storage scaling and overlapping ranges — October 8, 2026
+# W113: storage scaling and overlapping ranges — October 8, 2026
 
 **Scope:** independent benchmark work on `devel-bench`, xorinox_efs private
 `/data1/efs/bench/w90-20261008` fixtures. No production EFS backend, services,
@@ -37,9 +37,12 @@ and authoritative retirement before punch/reuse. The
 [candidate recovery sketch](../backlog/storage-engine-v2.md#candidate-range-ownership-and-index-recovery-plan)
 is a proposal, not implemented distributed authority. A durable index, bounded
 replay and crash/fault/restart gates are required before backend integration.
-W90 evidence does not close W44, W71, W75 or W87.
+W113 evidence does not close W44, W71, W75 or W87.
 
 **Operator documentation:** [churn](../how-it-works/storage-churn.md),
-[shared ranges](../how-it-works/storage-ranges.md). W90 remains open for broader
+[shared ranges](../how-it-works/storage-ranges.md). W113 remains open for broader
 lifetime/workload distributions and production acceptance; this laboratory
 follow-up does not promote a storage format.
+
+Numbering correction (Oct 12): this benchmark is W113. Historical `w90-*`
+fixture and evidence paths retain their names; W90 denotes scratch expiry.

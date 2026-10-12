@@ -1951,7 +1951,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | nuc-storage-engine | **P4.1** · bare-metal NUC files/containers A/B | storage validation | 8 cases + full native suite pass; 64 daemon launches verified; installed services preserved; group-2 versus group-0 inode placement splits rates and blocks engine ranking | [checkpoint](../status/nuc-storage-engine-ab-20261008.md) |
 | storage-engine-modules | **P4.1** · built-in engine modules | architecture enhancement proposal | documented, not implemented; shared coordination plus opaque physical-engine contexts; estimated 18–34 hours; dynamic loading deferred | [proposal](../status/storage-engine-modules-proposal-20261008.md) |
 | container-engine | **P4.1** · experimental daemon files/containers selector and VM A/B | storage feature | implemented experimentally on `devel-storage-engine`; 16 VM A/B cases and full Linux suite pass; files remains default; read-index waits limit read-speed attribution | [checkpoint](../status/container-engine-20261008.md) |
-| bench-churn | **W90** · independent steady-state storage churn benchmark | benchmark enhancement | implemented on `devel-bench`; functional gates pass; initial matched 50/80/95-percent evidence; 64 KiB scaling, shared ranges and five profiling rounds recorded; bounded punch batching retained; merged into isolated `devel-storage-engine`; matched simulator comparison validated; 8 longer cases favor punch at 95%/QD4 (same-device roots); no production changes | [work item](#w90) · [ranges](../status/bench-scaling-ranges-20261008.md) · [profiles](../status/bench-perf-five-rounds-20261008.md) · [comparison](../status/bench-layout-comparison-20261008.md) |
+| bench-churn | **W113** · independent steady-state storage churn benchmark | benchmark enhancement | implemented on `devel-bench`; functional gates pass; initial matched 50/80/95-percent evidence; 64 KiB scaling, shared ranges and five profiling rounds recorded; bounded punch batching retained; merged into isolated `devel-storage-engine`; matched simulator comparison validated; 8 longer cases favor punch at 95%/QD4 (same-device roots); no production changes | [work item](#w113) · [ranges](../status/bench-scaling-ranges-20261008.md) · [profiles](../status/bench-perf-five-rounds-20261008.md) · [comparison](../status/bench-layout-comparison-20261008.md) |
 | P4.1–P4.4 | fragment on-disk layout (**wipe**), W40 FUSE write copy, RDMA zero-copy receive, 9-client scaling | performance | deferred until P3's numbers | [full text](#p4--deferred-until-p3s-numbers-long-one-is-a-wipe) |
 | meta-scale | **W66** · metadata leadership distribution and topology-independent routing | scalability | open — Oct 10 AMD unhosted namespace-coordinator read routing repaired and direct/buffered 128-race cold gates pass ([checkpoint](../status/amd-non-rdma-20261010.md#w66--unresolved-namespace-coordinator-routing)); four-voter host/engine, persistence/failover and staged leadership distribution pass; prolonged preferred-peer loss has no read errors/term churn; default two-group topology unchanged; D36 commit authority/recovery choice, routing/migration and scale remain | [evidence, phases and gates](../status/metadata-scaling.md) |
 | tiny-raft | **W93** · broader durable Raft group commit | performance | closed Oct 10 — AMD + repeated NUC batching, read-tail, atomic recovery, fault and cold gates pass; tuning opt-in | [acceptance](../status/w93-atomic-apply-20261010.md) |
@@ -6604,13 +6604,15 @@ reclaimed. Bind expiry to FileID and policy revision so renewal, rename and path
 reuse cannot turn stale work into deletion of a different file. Expose effective
 expiry to W91 and optionally through a defined extended attribute.
 
-**Next:** resolve hard-link and symlink behavior, directory inheritance, policy
-ownership and retention limits, renewal races, clock uncertainty and recovery.
-Audit active namespace/open-reference/GC integration, including W72/W86 and the
-[GC checkpoint](../status/gc-implementation-20261007.md). Age alone never authorizes
-deletion of unpublished fragments; expiry must retain existing authority fences.
-Fixed deadlines and singly linked regular files are proposed initial scope,
-not a settled policy. Do not make clock-based leader leases a dependency.
+**Implementation branch (Oct 12):** `devel-expiry`, based on
+`release-v0.3.2-pre-alpha` at `3a41493591dcede820700db7d934da9dc10f07ee`.
+Implement accepted D33 policy; hard links to expiring files and enabling expiry
+on multiply linked files are refused. Symlink and recursive directory expiry
+remain outside initial scope. Audit namespace/open-reference/GC integration,
+including W72/W86 and the [GC checkpoint](../status/gc-implementation-20261007.md).
+Age alone never authorizes deletion of unpublished fragments. Test on NUC with
+TCP, direct I/O, FILES storage, `.efs` disabled, no containers and no packing.
+Implementation and acceptance gates remain open until recorded evidence passes.
 
 **Gate:** focused renewal/deletion, path-reuse, rename, hard-link, open-file and
 concurrent-publication tests; clock jumps, leader change, restart, retries and
@@ -7272,9 +7274,9 @@ mixed large-writer/tiny-close tails.
 remove required persistence, grow queues without bounds, wipe existing stores,
 or declare the system hardware-bound from busy percentages or sync timings.
 
-<a id="w90"></a>
+<a id="w113"></a>
 
-### W90 · Independent steady-state storage churn benchmark
+### W113 · Independent steady-state storage churn benchmark
 
 **Class/state:** benchmark enhancement; implemented Oct 8, 2026 on `devel-bench`,
 starting from `53be1da7f190`. Functional gates pass; initial same-device
@@ -10693,7 +10695,7 @@ measure the fraction of wall time waiting.
 
 ### Independent mixed storage churn
 
-The [W90 storage churn guide](storage-churn.md) documents 1 GiB container versus
+The [W113 storage churn guide](storage-churn.md) documents 1 GiB container versus
 small-file comparisons, matched persistence, bounded 50/80/95-percent model
 occupancy, verification and result interpretation. This is an independent
 benchmark with a volatile index, not production GC or a recovery acceptance gate.

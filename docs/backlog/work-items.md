@@ -4031,13 +4031,15 @@ reclaimed. Bind expiry to FileID and policy revision so renewal, rename and path
 reuse cannot turn stale work into deletion of a different file. Expose effective
 expiry to W91 and optionally through a defined extended attribute.
 
-**Next:** resolve hard-link and symlink behavior, directory inheritance, policy
-ownership and retention limits, renewal races, clock uncertainty and recovery.
-Audit active namespace/open-reference/GC integration, including W72/W86 and the
-[GC checkpoint](../status/gc-implementation-20261007.md). Age alone never authorizes
-deletion of unpublished fragments; expiry must retain existing authority fences.
-Fixed deadlines and singly linked regular files are proposed initial scope,
-not a settled policy. Do not make clock-based leader leases a dependency.
+**Implementation branch (Oct 12):** `devel-expiry`, based on
+`release-v0.3.2-pre-alpha` at `3a41493591dcede820700db7d934da9dc10f07ee`.
+Implement accepted D33 policy; hard links to expiring files and enabling expiry
+on multiply linked files are refused. Symlink and recursive directory expiry
+remain outside initial scope. Audit namespace/open-reference/GC integration,
+including W72/W86 and the [GC checkpoint](../status/gc-implementation-20261007.md).
+Age alone never authorizes deletion of unpublished fragments. Test on NUC with
+TCP, direct I/O, FILES storage, `.efs` disabled, no containers and no packing.
+Implementation and acceptance gates remain open until recorded evidence passes.
 
 **Gate:** focused renewal/deletion, path-reuse, rename, hard-link, open-file and
 concurrent-publication tests; clock jumps, leader change, restart, retries and
@@ -4699,9 +4701,9 @@ mixed large-writer/tiny-close tails.
 remove required persistence, grow queues without bounds, wipe existing stores,
 or declare the system hardware-bound from busy percentages or sync timings.
 
-<a id="w90"></a>
+<a id="w113"></a>
 
-## W90 · Independent steady-state storage churn benchmark
+## W113 · Independent steady-state storage churn benchmark
 
 **Class/state:** benchmark enhancement; implemented Oct 8, 2026 on `devel-bench`,
 starting from `53be1da7f190`. Functional gates pass; initial same-device
