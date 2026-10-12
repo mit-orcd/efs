@@ -719,3 +719,5 @@ Newe59 NUC21/21focused deep/readdir PASS evidence integrated; Intel70/70I/O PASS
 E59 AMD nativePASS/fullFAIL. Corrected Intel actualworker evidence points toward flush/context-exit costs, not measuredREADDIRdelay. Additionaldiagnostic rejected byautomaticapproval citingnewerstop; humanclarificationpending, no newlaunch. [Ledger](v030-tcp-direct-qualification-20261012.md).
 
 Humanclarification explicitly resumes qualification/diagnostics. Intel targetedRPC/readtiming run dispatched on frozene59; ordinarydurability/deadlines unchanged. [Ledger](v030-tcp-direct-qualification-20261012.md).
+
+IntelRPCdiagnosticevidence integrated; genericprofiler excludesmanualpackedpublication/PUTsteps. Flush bottleneck attribution remainsincomplete; root reviewing exactphases. [Ledger](v030-tcp-direct-qualification-20261012.md).

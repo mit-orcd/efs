@@ -2195,6 +2195,8 @@ E59 AMD nativePASS/fullFAIL. Corrected Intel actualworker evidence points toward
 
 Humanclarification explicitly resumes qualification/diagnostics. Intel targetedRPC/readtiming run dispatched on frozene59; ordinarydurability/deadlines unchanged. [Ledger](../status/v030-tcp-direct-qualification-20261012.md).
 
+IntelRPCdiagnosticevidence integrated; genericprofiler excludesmanualpackedpublication/PUTsteps. Flush bottleneck attribution remainsincomplete; root reviewing exactphases. [Ledger](../status/v030-tcp-direct-qualification-20261012.md).
+
 
 ## Appendix 2 — In flight — the current handoff block
 
