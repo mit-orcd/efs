@@ -1,0 +1,79 @@
+[
+  {
+    "command": [
+      "./tests/test_raft"
+    ],
+    "returncode": 0
+  },
+  {
+    "command": [
+      "env",
+      "EFS_TEST_EARLY_READ_ACK=1",
+      "./tests/test_raft"
+    ],
+    "returncode": 0
+  },
+  {
+    "command": [
+      "python3",
+      "tests/test_readindex_completion.py"
+    ],
+    "returncode": 0
+  },
+  {
+    "command": [
+      "python3",
+      "tests/test_readindex_publish.py"
+    ],
+    "returncode": 0
+  },
+  {
+    "command": [
+      "python3",
+      "tests/test_readindex_pair.py"
+    ],
+    "returncode": 0
+  },
+  {
+    "command": [
+      "python3",
+      "tests/test_readindex_remote_pair.py"
+    ],
+    "returncode": 0
+  },
+  {
+    "command": [
+      "python3",
+      "tests/test_readindex_operation.py"
+    ],
+    "returncode": 1
+  },
+  {
+    "command": [
+      "python3",
+      "tests/test_lookup_read_group.py"
+    ],
+    "returncode": 0
+  },
+  {
+    "command": [
+      "python3",
+      "tests/test_read_control_host.py"
+    ],
+    "returncode": 0
+  },
+  {
+    "command": [
+      "python3",
+      "tests/test_host_read_deadline.py"
+    ],
+    "returncode": 0
+  },
+  {
+    "command": [
+      "python3",
+      "tests/test_read_retry_budget.py"
+    ],
+    "returncode": 0
+  }
+]
