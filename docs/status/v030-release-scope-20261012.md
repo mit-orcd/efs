@@ -79,3 +79,10 @@ Common candidate now frozen at
 this same SHA. It combines corrected admitted-read proof with applied-floor
 retention; scheduler17 and unintegrated experimental repair stages are excluded.
 Candidate is for qualification, not yet release accepted.
+
+
+Subsequent common candidate **2bf7e257e2a36d7f8779b770c8eca3d967ab5835**
+supersedes52 for affected reruns, adding only successful inode-group hint
+correction/regression. Earlier52 passes/failures remain source-specific. All
+owners notified. Seven-client comparisons match4Gfixturequota; all deadlines
+unchanged. Latest results belong to the [current ledger](v030-tcp-direct-qualification-20261012.md).
