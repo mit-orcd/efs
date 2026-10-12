@@ -1,0 +1,19 @@
+2026-10-12T04:06:03.256Z storage-engine=files direct_io=on
+2026-10-12T04:06:03.256Z Data GC admission: disabled
+2026-10-12T04:06:03.256Z Storage quota: explicit 1.00 GiB (safe maximum 4.78 TiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T04:06:03.265Z efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 4 recv + up to 32 lazy send slots, 84 KiB each)
+2026-10-12T04:06:03.266Z Joined cluster with 4 nodes
+2026-10-12T04:06:03.267Z heartbeat: enabled (2000 ms interval)
+2026-10-12T04:06:03.269Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:06:03.269Z raft-host: up raft_id=3 n=4 boot=7478896670637843 salt=4049696619262617264 g0=off g2=hosted
+2026-10-12T04:06:03.269Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:50:46Z on fcstor006), build=28b2089be6a5-release-normal: node 4 listening on 127.0.0.1:20543, storage=/data1/02/efs-orcd-release-28b2089be6a5-private/gc-direct-wo0u5dt6/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T04:06:03.277Z efsd: RDMA transport up on mlx5_2 port 1 (lid 2160)
+2026-10-12T04:06:05.267Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=995 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:06:06.868Z store: put O_DIRECT zero-copy (payload+digest writev) len=65536
+2026-10-12T04:06:06.873Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=907 p50_us=907 max_us=907 wdisk ops=1 bytes=65536 errors=0 avg_us=705 p50_us=705 max_us=705
+2026-10-12T04:06:08.272Z kv-obs: mt_bytes=1959 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:06:09.531Z raft-host: applied session index=12 kind=1 shard=0 ino=0
+2026-10-12T04:06:11.877Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=7 bytes=458752 errors=0 avg_us=555 p50_us=494 max_us=907 wdisk ops=7 bytes=458752 errors=0 avg_us=481 p50_us=449 max_us=705
+2026-10-12T04:06:13.275Z kv-obs: mt_bytes=4265 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:06:16.878Z iostats: get ops=8 bytes=524288 errors=0 avg_us=99 p50_us=88 max_us=133 put ops=24 bytes=1572864 errors=0 avg_us=538 p50_us=494 max_us=907 wdisk ops=24 bytes=1572864 errors=0 avg_us=484 p50_us=440 max_us=705
+2026-10-12T04:06:18.279Z kv-obs: mt_bytes=4232 l0_bytes=0 l0=0 l1=0

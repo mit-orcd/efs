@@ -1,0 +1,5 @@
+{
+  "reason": "efs-mgmt informational VERSION contains branch/version; runtime EFS_BUILD_ID appears in daemon and FUSE, not management binary",
+  "previous_check": "refused before any drain/installation",
+  "replacement": "management binary SHA256 retained from verified exact source build; daemon/client require exact Build ID"
+}

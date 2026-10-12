@@ -1,0 +1,9 @@
+{
+  "seed": 101,
+  "transport": "tcp",
+  "integrate": true,
+  "mode": "direct",
+  "replay": "bash tests/faults/run_faults.sh /tmp/efs-fault-release-28b2089be6a5 --mode direct --integrate",
+  "live_cluster": "not used; ports 19810 and 19820 are refused",
+  "repair": "gap"
+}

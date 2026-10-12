@@ -1,0 +1,73 @@
+{
+  "total": {
+    "PASS": 1447,
+    "NOTRUN": 49,
+    "FAIL": 44,
+    "SKIP": 7
+  },
+  "clients": [
+    {
+      "file": "private-root-1/gc-direct-xx6t61dm/posix-client-0.tsv",
+      "counts": {
+        "PASS": 206,
+        "NOTRUN": 7,
+        "FAIL": 7,
+        "SKIP": 1
+      }
+    },
+    {
+      "file": "private-root-1/gc-direct-xx6t61dm/posix-client-1.tsv",
+      "counts": {
+        "PASS": 205,
+        "NOTRUN": 7,
+        "FAIL": 8,
+        "SKIP": 1
+      }
+    },
+    {
+      "file": "private-root-1/gc-direct-xx6t61dm/posix-client-2.tsv",
+      "counts": {
+        "PASS": 206,
+        "NOTRUN": 7,
+        "FAIL": 7,
+        "SKIP": 1
+      }
+    },
+    {
+      "file": "private-root-1/gc-direct-xx6t61dm/posix-client-3.tsv",
+      "counts": {
+        "PASS": 208,
+        "NOTRUN": 7,
+        "FAIL": 5,
+        "SKIP": 1
+      }
+    },
+    {
+      "file": "private-root-1/gc-direct-xx6t61dm/posix-client-4.tsv",
+      "counts": {
+        "PASS": 208,
+        "NOTRUN": 7,
+        "FAIL": 5,
+        "SKIP": 1
+      }
+    },
+    {
+      "file": "private-root-1/gc-direct-xx6t61dm/posix-client-5.tsv",
+      "counts": {
+        "PASS": 207,
+        "NOTRUN": 7,
+        "FAIL": 6,
+        "SKIP": 1
+      }
+    },
+    {
+      "file": "private-root-1/gc-direct-xx6t61dm/posix-client-6.tsv",
+      "counts": {
+        "PASS": 207,
+        "NOTRUN": 7,
+        "FAIL": 6,
+        "SKIP": 1
+      }
+    }
+  ]
+}

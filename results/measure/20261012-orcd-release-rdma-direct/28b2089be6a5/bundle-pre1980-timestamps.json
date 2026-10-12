@@ -1,0 +1,11 @@
+{
+  "source": "28b2089be6a5df835cc7bb46b9c2a9e2f10df190",
+  "branch": "release-v0.3.0-pre-alpha",
+  "inputs": 1588,
+  "dirs": 2209,
+  "sha256": {
+    "source.tar.gz": "439e55370fd8e7f5b39621eea62a6993acc36a04cd08e34d99b65776f9d185ba",
+    "inputs.json": "f60d4dedb73eaec15c7747ca647f9d683ffdacf781be4a495df2982ac45bae32",
+    "dirs.json": "b04a04de58a760370e03ddd4160f95f52bd0cbfc3ef77af96a92ea48e3066914"
+  }
+}
