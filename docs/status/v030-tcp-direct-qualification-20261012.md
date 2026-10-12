@@ -6,7 +6,7 @@ waives old-binary/data preservation and backward-compatibility efforts. AMD,
 Intel and NUC were notified and owners acknowledged. Identified EFS stores may
 be wiped where easier; test evidence and unrelated services remain protected.
 
-Current centrally frozen candidate is **def46109909c793e58ae2c453c5de537cdb2c627**
+Previous centrally frozen candidate was **def46109909c793e58ae2c453c5de537cdb2c627**
 on qualification-v030-tcp-direct. It adds a test-only operation-extractor mock to
 reviewed2bf leader-hint correction. All owners received exact def for renewed
 native/affected sanitizer/live gates. Source implementation is identical to2bf,
@@ -84,3 +84,7 @@ All results below identify frozen `def46109909c793e58ae2c453c5de537cdb2c627`; ca
 | Seven-client/jobs16, explicit 4G, original deadlines | NUC | FAIL: all seven deep-nesting 30s deadlines, plus client5 stats deadline. Six clients 219 PASS/1 FAIL/1 SKIP; client5 218/2/1. Peer 67/67, cold hashes, physical packing reclamation and metadata queue drain PASS independently. No ENOSPC failures. |
 
 Intel's labelled diagnostic measures receiver inbox/pump delays (roughly 11–37ms mean inbox ages; drain peaks around 390–445ms), with sampled TCP_NODELAY enabled and wire round trips around 53–74us. These measurements motivate a bounded FIFO receiver-drain investigation; they do not prove an accepted fix. Intel is authorized to propose a narrow scheduling change with focused regressions, preserving durability, ordering and fresh read barriers. NUC holds further launches pending central review and a new common freeze. No budgets changed, no push/tag/promotion or deferred work.
+
+## New central freeze: bounded inbox slices
+
+Current frozen candidate is **03bd89fb7de56c2c6af44ab3bd26c54caf4b8274** on qualification-v030-tcp-direct. Reviewed Intel logical fix 6b097303 takes at most eight FIFO inbox frames per pump cycle, keeps older retained frames ahead of arrivals, charges only processed bytes/frames to unchanged durability retirement, and polls without sleeping while retained work exists. Existing receive, term/configuration, read admission and durability paths remain unchanged. This bounds frame count, not elapsed time; individual large frames and extra sync overhead remain risks to measure. Actual helper ordering/accounting/backlog tests and operation/LOOKUP regressions PASS locally; owner reports sanitizer and negative mutants PASS/fail as intended. Full native and live acceptance NOTRUN on this new source. Intel and NUC must finish old diagnostic/evidence cleanup before renewed same-source 4G original-budget tests. AMD runs full normal/fault and affected sanitizer gates. No acceptance inferred from def passes.
