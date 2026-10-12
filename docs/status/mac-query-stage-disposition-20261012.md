@@ -1,0 +1,23 @@
+# Query starvation stage disposition
+
+Manager-assigned bounded source/evidence diagnosis; no deployment, release worktree edit, production repair or new live test. Sources inspected: frozen Mac e798c2aa, exact release d26e6874, ORCD disposition 1bee6f43. These source identities are distinct; prior mounted gates are not transferable.
+
+## What is established
+
+ORCD's same-source e5a385530223 packing ON full wave failed deep nesting, many files, stats and find on all seven clients; subsequent OFF wave passed. Sequential namespace history remains a confounder. Later bbe failures moved between directory and query cases. Instantaneously free query/page slots do not prove sustained capacity, but a leak was not observed there. The retained publication gap is 42.195 seconds, followed by an 8.015-second build. None of these measurements labels the rejecting stage for an individual failed request.
+
+Release host_query_source_once pins under host mutex, collects the pinned transaction revision, obtains a fresh group pair barrier, rechecks capability/import generations and compares current transaction revision. It explicitly returns transaction_changed only for a revision mismatch. host_query_source retries that case up to four captures; this does not resolve pending transactions. Ordinary atomic metadata writes do not advance the transaction fence. Existing test_query_catalog.c tests ordinary-write noninvalidation, transaction marker invalidation, immutable captured revision, pending refusal and preservation of the old catalog. Do not weaken those guards.
+
+The disk raw_build checks INTENT/GUARD/REDUCE prefixes before building each changed shard. Its pending callback returns BUSY without retaining marker kind or identity. The existing query-disk raw shard/rc log can locate a raw-build refusal if the complete daemon logs are retained; BUSY alone still cannot distinguish pending state from cancellation. The supplied timing logs contain publication/refresh summaries, not a sufficient pending-stage observation. efs_query_build_failure stores an orphan directory only, not a general failure-stage label.
+
+After building/checkpointing, host_query_main takes the query publication write lock before swapping the catalog. Query consumers borrow the old view under the read lock and perform fresh auth/binding work there. A completed candidate waiting for that lock is a separate hypothesis; no supplied observation measures the wait. Query serving also has its own pair barrier and root/ancestry checks; publisher activity alone cannot diagnose their wait or binding mismatch.
+
+The refresh error log throttles identical errors for 30 seconds. BUSY/NOT_PRIMARY/STALE keep the normal two-second retry interval; a failed build resets last_attempt at completion. The observed log gap must not be called a 30-second BUSY backoff.
+
+## Smallest next discriminator
+
+AMD has offered to implement bounded opt-in stage diagnostics on its exact frozen release candidate. Keep that ownership to avoid alternate instrumentation; ORCD confirms it has no overlapping instrumentation running. Record one summarized refresh attempt with monotonic start/end and cut-attempt count, pin/barrier durations and rc, before/after transaction revisions, import-refusal flag, and build stage. At raw pending refusal record only shard, marker kind and a bounded identity digest/counter; no user payload or paths. Record candidate-complete and publication-lock-acquired timestamps to separate builder work from publication wait. Collect request root inode/operation, retained catalog generation and the barrier/auth/binding refusal stage only for bounded failing request summaries.
+
+Use a separate instrumented original-budget seven-client/jobs16 pressure run on the manager-approved exact source, preserving mode/source identities and complete existing query-disk logs. A same-source ON/OFF control is still required. If capture collisions dominate, correlate captured/live revisions and barrier duration before proposing coherent-cut changes. If pending refusal dominates, identify marker lifecycle age/participant and resolution progress before changing builder behavior. If build/lock delay dominates, use phase timings to select a specific repair. Foreground CREATE/LOOKUP directory timeouts need a separate waiter/admission/proposal discriminator, not automatic attribution to the query builder.
+
+Any eventual repair needs a negative control reproducing the demonstrated stage and quiet full-pressure acceptance with unchanged budgets. Existing evidence supports no safe production fix yet. No IDs reserved, no authority/import/transaction/receipt/durability fences relaxed. Mac native 216/216 remains the previous native gate, not seven-client packing acceptance.
