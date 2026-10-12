@@ -1,0 +1,2 @@
+2026-10-12T14:17:46.096Z storage-engine=files direct_io=off
+2026-10-12T14:17:46.096Z repair store identity unavailable rc=-14; trusted local EFS_REPAIR_INIT_STORE=1 setup required for unbound roots

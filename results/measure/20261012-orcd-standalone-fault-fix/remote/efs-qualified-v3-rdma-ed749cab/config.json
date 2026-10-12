@@ -1,0 +1,22 @@
+{
+  "seed": 101,
+  "transport": "rdma",
+  "rdma_device": "mlx5_2",
+  "integrate": true,
+  "mode": "direct",
+  "replay_argv": [
+    "bash",
+    "tests/faults/run_faults.sh",
+    "/tmp/efs-qualified-v3-rdma-ed749cab",
+    "--mode",
+    "direct",
+    "--transport",
+    "rdma",
+    "--rdma-device",
+    "mlx5_2",
+    "--integrate",
+    "--repair-experiment"
+  ],
+  "live_cluster": "not used; ports 19810 and 19820 are refused",
+  "repair": "experimental ordinary base role"
+}

@@ -1,0 +1,10 @@
+{
+  "seed": 101,
+  "transport": "rdma",
+  "rdma_device": "mlx5_2",
+  "integrate": true,
+  "mode": "direct",
+  "replay": "bash tests/faults/run_faults.sh /tmp/efs-fault-fix-rdma-results-20261012 --mode direct --integrate",
+  "live_cluster": "not used; ports 19810 and 19820 are refused",
+  "repair": "gap"
+}

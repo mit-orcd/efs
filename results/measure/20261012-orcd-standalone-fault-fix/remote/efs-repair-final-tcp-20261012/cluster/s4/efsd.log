@@ -1,0 +1,51 @@
+2026-10-12T13:56:32.477Z storage-engine=files direct_io=on
+2026-10-12T13:56:32.477Z Repair: experimental missing-base FILES manual coordinator; automatic repair disabled
+2026-10-12T13:56:32.477Z Data GC admission: disabled
+2026-10-12T13:56:32.478Z Storage quota: explicit 1.00 GiB (safe maximum 240.98 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T13:56:32.478Z Joined cluster with 4 nodes
+2026-10-12T13:56:32.479Z heartbeat: enabled (2000 ms interval)
+2026-10-12T13:56:32.480Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T13:56:32.480Z raft-host: up raft_id=3 n=4 boot=7768122589416683 salt=15491599795633687075 g0=off g2=hosted
+2026-10-12T13:56:32.480Z efsd (no git metadata, branch unknown, built 2026-10-12T13:53:53Z on fcstor006), build=orcd-repair-final-wip: node 4 listening on 127.0.0.1:24747, storage=/tmp/efs-repair-final-tcp-20261012/cluster/s4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T13:56:33.992Z raft-host: applied session index=3 kind=1 shard=0 ino=0
+2026-10-12T13:56:34.479Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=996 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T13:56:34.549Z raft-host: applied session index=5 kind=1 shard=0 ino=0
+2026-10-12T13:56:35.205Z store: put O_DIRECT bounce copy (buf align=3104 len=65536)
+2026-10-12T13:56:35.210Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=797 p50_us=797 max_us=797 wdisk ops=1 bytes=65536 errors=0 avg_us=656 p50_us=656 max_us=656
+2026-10-12T13:56:36.862Z raft-host: applied session index=9 kind=1 shard=0 ino=0
+2026-10-12T13:56:36.998Z storage-engine=files direct_io=on
+2026-10-12T13:56:36.999Z Repair: experimental missing-base FILES manual coordinator; automatic repair disabled
+2026-10-12T13:56:36.999Z Data GC admission: disabled
+2026-10-12T13:56:36.999Z Loaded 4 persisted cluster node(s) from /tmp/efs-repair-final-tcp-20261012/cluster/s4/meta/cluster_nodes.bin
+2026-10-12T13:56:36.999Z   persisted node 1: 127.0.0.1:24744
+2026-10-12T13:56:36.999Z   persisted node 2: 127.0.0.1:24745
+2026-10-12T13:56:36.999Z   persisted node 3: 127.0.0.1:24746
+2026-10-12T13:56:36.999Z   persisted node 4: 127.0.0.1:24747
+2026-10-12T13:56:36.999Z Storage quota: explicit 1.00 GiB (safe maximum 240.97 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T13:56:37.000Z Joined cluster with 4 nodes
+2026-10-12T13:56:37.000Z heartbeat: enabled (2000 ms interval)
+2026-10-12T13:56:37.002Z kv-obs: mt_bytes=3427 l0_bytes=0 l0=0 l1=0
+2026-10-12T13:56:37.002Z raft-host: up raft_id=3 n=4 boot=7775415101521456 salt=5807809570729062657 g0=off g2=hosted
+2026-10-12T13:56:37.002Z efsd (no git metadata, branch unknown, built 2026-10-12T13:53:53Z on fcstor006), build=orcd-repair-final-wip: node 4 listening on 127.0.0.1:24747, storage=/tmp/efs-repair-final-tcp-20261012/cluster/s4 (1 paths, stripe=none), used=65536, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T13:56:39.001Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=995 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T13:56:45.637Z raft-host: applied session index=12 kind=1 shard=0 ino=0
+2026-10-12T13:56:45.754Z raft-host: applied session index=14 kind=1 shard=0 ino=0
+2026-10-12T13:56:46.088Z raft-host: applied session index=16 kind=1 shard=0 ino=0
+2026-10-12T13:56:46.407Z raft-host: applied session index=18 kind=1 shard=0 ino=0
+2026-10-12T13:56:46.833Z storage-engine=files direct_io=on
+2026-10-12T13:56:46.833Z Repair: experimental missing-base FILES manual coordinator; automatic repair disabled
+2026-10-12T13:56:46.833Z Data GC admission: disabled
+2026-10-12T13:56:46.833Z Loaded 4 persisted cluster node(s) from /tmp/efs-repair-final-tcp-20261012/cluster/s4/meta/cluster_nodes.bin
+2026-10-12T13:56:46.833Z   persisted node 1: 127.0.0.1:24744
+2026-10-12T13:56:46.833Z   persisted node 2: 127.0.0.1:24745
+2026-10-12T13:56:46.833Z   persisted node 3: 127.0.0.1:24746
+2026-10-12T13:56:46.833Z   persisted node 4: 127.0.0.1:24747
+2026-10-12T13:56:46.833Z Storage quota: explicit 1.00 GiB (safe maximum 240.98 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T13:56:46.834Z Joined cluster with 4 nodes
+2026-10-12T13:56:46.834Z heartbeat: enabled (2000 ms interval)
+2026-10-12T13:56:46.836Z kv-obs: mt_bytes=7823 l0_bytes=0 l0=0 l1=0
+2026-10-12T13:56:46.836Z raft-host: up raft_id=3 n=4 boot=7775415101521457 salt=14721689955978751214 g0=off g2=hosted
+2026-10-12T13:56:46.836Z efsd (no git metadata, branch unknown, built 2026-10-12T13:53:53Z on fcstor006), build=orcd-repair-final-wip: node 4 listening on 127.0.0.1:24747, storage=/tmp/efs-repair-final-tcp-20261012/cluster/s4 (1 paths, stripe=none), used=65536, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T13:56:47.550Z store: put O_DIRECT bounce copy (buf align=3104 len=65536)
+2026-10-12T13:56:47.553Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=961 p50_us=961 max_us=961 wdisk ops=1 bytes=65536 errors=0 avg_us=827 p50_us=827 max_us=827
+2026-10-12T13:56:47.753Z raft-host: applied session index=21 kind=1 shard=0 ino=0

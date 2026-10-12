@@ -1,0 +1,188 @@
+{"op": "raft-mkfs", "rc": 1, "stderr": "", "stdout": "raft-mkfs rc=-15 leader_hint=-1 index=0 salt=7133923694637832639\n"}
+{"op": "raft-mkfs", "rc": 0, "stderr": "", "stdout": "raft-mkfs rc=0 leader_hint=2 index=2 salt=7133923694637832639\n"}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1846545, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1846574, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1846604, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1846635, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-a-4.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-a", "op": "transport", "pid": 1846702, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-b-5.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-b", "op": "transport", "pid": 1846720, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.015267147682607174, "name": "lost-1", "op": "fsync", "rc": 0}
+{"durable": true, "name": "lost-1", "op": "fsync-result", "rc": 0, "sha256": "0306ac262fa86b2ffa251b701f39b67985de4c8fde437b7cea41f32f8ebf820d"}
+{"elapsed_s": 0.16350570414215326, "name": "lost-1", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-1", "op": "read-result", "sha256": "0306ac262fa86b2ffa251b701f39b67985de4c8fde437b7cea41f32f8ebf820d", "size": 4096}
+{"elapsed_s": 0.015260393731296062, "name": "new-1", "op": "fsync", "rc": 0}
+{"durable": true, "name": "new-1", "op": "fsync-result", "rc": 0, "sha256": "d3f03d097e126b52cad6b51934b68300de2215bc6b92b369dd907df4c9b9705b"}
+{"elapsed_s": 0.16349699813872576, "name": "new-1", "op": "read", "rc": 0}
+{"errno": null, "name": "new-1", "op": "read-result", "sha256": "d3f03d097e126b52cad6b51934b68300de2215bc6b92b369dd907df4c9b9705b", "size": 4096}
+{"log_offset": 1294, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1846747, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1846574, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1846604, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1846635, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-a-11.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-a", "op": "transport", "pid": 1846784, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-b-12.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-b", "op": "transport", "pid": 1846802, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.015265272930264473, "name": "lost-1", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-1", "op": "read-result", "sha256": "0306ac262fa86b2ffa251b701f39b67985de4c8fde437b7cea41f32f8ebf820d", "size": 4096}
+{"elapsed_s": 0.1134026050567627, "name": "lost-2", "op": "fsync", "rc": 0}
+{"durable": true, "name": "lost-2", "op": "fsync-result", "rc": 0, "sha256": "466ec03da21e833d93f85e2cc72468d042a28fc95a3013f74b5150c621e2d5a4"}
+{"elapsed_s": 1.3148375805467367, "name": "lost-2", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-2", "op": "read-result", "sha256": "466ec03da21e833d93f85e2cc72468d042a28fc95a3013f74b5150c621e2d5a4", "size": 4096}
+{"elapsed_s": 0.015257960185408592, "name": "new-2", "op": "fsync", "rc": 0}
+{"durable": true, "name": "new-2", "op": "fsync-result", "rc": 0, "sha256": "4c855d5af6329493ca1d01ccadf67e4d038bfd71e59e32643d7a26c61b32795a"}
+{"elapsed_s": 0.015257710590958595, "name": "new-2", "op": "read", "rc": 0}
+{"errno": null, "name": "new-2", "op": "read-result", "sha256": "4c855d5af6329493ca1d01ccadf67e4d038bfd71e59e32643d7a26c61b32795a", "size": 4096}
+{"log_offset": 1294, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1846747, "transport": "tcp", "uverbs": []}
+{"log_offset": 1676, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1846842, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1846604, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1846635, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-a-19.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-a", "op": "transport", "pid": 1846879, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-b-20.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-b", "op": "transport", "pid": 1846907, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.16350357979536057, "name": "lost-2", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-2", "op": "read-result", "sha256": "466ec03da21e833d93f85e2cc72468d042a28fc95a3013f74b5150c621e2d5a4", "size": 4096}
+{"elapsed_s": 0.1134417774155736, "name": "lost-3", "op": "fsync", "rc": 0}
+{"durable": true, "name": "lost-3", "op": "fsync-result", "rc": 0, "sha256": "b83d91b609846568fca9b7075e37a616c1603db67aac898f32c021ea14efef1e"}
+{"elapsed_s": 1.565116091631353, "name": "lost-3", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-3", "op": "read-result", "sha256": "b83d91b609846568fca9b7075e37a616c1603db67aac898f32c021ea14efef1e", "size": 4096}
+{"elapsed_s": 0.015264691784977913, "name": "new-3", "op": "fsync", "rc": 0}
+{"durable": true, "name": "new-3", "op": "fsync-result", "rc": 0, "sha256": "488b7cf7204036fc132bf8ea52158e6f57c91de1f350b739e0cbf4a9789232d8"}
+{"elapsed_s": 0.01523803174495697, "name": "new-3", "op": "read", "rc": 0}
+{"errno": null, "name": "new-3", "op": "read-result", "sha256": "488b7cf7204036fc132bf8ea52158e6f57c91de1f350b739e0cbf4a9789232d8", "size": 4096}
+{"log_offset": 1294, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1846747, "transport": "tcp", "uverbs": []}
+{"log_offset": 1676, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1846842, "transport": "tcp", "uverbs": []}
+{"log_offset": 2312, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1846950, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1846635, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-a-27.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-a", "op": "transport", "pid": 1846989, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-b-28.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-b", "op": "transport", "pid": 1847017, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.1134458752349019, "name": "lost-3", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-3", "op": "read-result", "sha256": "b83d91b609846568fca9b7075e37a616c1603db67aac898f32c021ea14efef1e", "size": 4096}
+{"elapsed_s": 0.11344134714454412, "name": "lost-4", "op": "fsync", "rc": 0}
+{"durable": true, "name": "lost-4", "op": "fsync-result", "rc": 0, "sha256": "2515c5161e4cddbdd725fb7da2a3e4f65cf944d7ef698dda738da1e6b0f6e6ee"}
+{"elapsed_s": 0.015265554189682007, "name": "lost-4", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-4", "op": "read-result", "sha256": "2515c5161e4cddbdd725fb7da2a3e4f65cf944d7ef698dda738da1e6b0f6e6ee", "size": 4096}
+{"elapsed_s": 0.864330424927175, "name": "new-4", "op": "fsync", "rc": 0}
+{"durable": true, "name": "new-4", "op": "fsync-result", "rc": 0, "sha256": "7adf1193f481fcd086304fdfef54f08566aa22a481d2ac973a5d335cad8fd502"}
+{"elapsed_s": 0.01526322029531002, "name": "new-4", "op": "read", "rc": 0}
+{"errno": null, "name": "new-4", "op": "read-result", "sha256": "7adf1193f481fcd086304fdfef54f08566aa22a481d2ac973a5d335cad8fd502", "size": 4096}
+{"log_offset": 1294, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1846747, "transport": "tcp", "uverbs": []}
+{"log_offset": 1676, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1846842, "transport": "tcp", "uverbs": []}
+{"log_offset": 2312, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1846950, "transport": "tcp", "uverbs": []}
+{"log_offset": 2199, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1847048, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-a-35.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-a", "op": "transport", "pid": 1847084, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-b-36.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-b", "op": "transport", "pid": 1847102, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.015266315080225468, "name": "lost-4", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-4", "op": "read-result", "sha256": "2515c5161e4cddbdd725fb7da2a3e4f65cf944d7ef698dda738da1e6b0f6e6ee", "size": 4096}
+{"elapsed_s": 0.01527615450322628, "name": "cor-0", "op": "fsync", "rc": 0}
+{"durable": true, "name": "cor-0", "op": "fsync-result", "rc": 0, "sha256": "dfc960fb4f0400eb12e38b29803da63fb12d681a516e2b949880e757c2e4639f"}
+{"elapsed_s": 0.01526158582419157, "name": "cor-0", "op": "read", "rc": 0}
+{"errno": null, "name": "cor-0", "op": "read-result", "sha256": "dfc960fb4f0400eb12e38b29803da63fb12d681a516e2b949880e757c2e4639f", "size": 4096}
+{"elapsed_s": 0.015258200466632843, "name": "cor-1", "op": "fsync", "rc": 0}
+{"durable": true, "name": "cor-1", "op": "fsync-result", "rc": 0, "sha256": "bf76845067fe55b51acb378204acdf81832f1eca6d420727f564ac980b971bc8"}
+{"elapsed_s": 0.015261856839060783, "name": "cor-1", "op": "read", "rc": 0}
+{"errno": null, "name": "cor-1", "op": "read-result", "sha256": "bf76845067fe55b51acb378204acdf81832f1eca6d420727f564ac980b971bc8", "size": 4096}
+{"elapsed_s": 0.015261535532772541, "name": "cor-2", "op": "fsync", "rc": 0}
+{"durable": true, "name": "cor-2", "op": "fsync-result", "rc": 0, "sha256": "638214f0e446b5b1dfee29177683e79258ed46bde38c24027e27b8f90cc736d1"}
+{"elapsed_s": 0.015260915271937847, "name": "cor-2", "op": "read", "rc": 0}
+{"errno": null, "name": "cor-2", "op": "read-result", "sha256": "638214f0e446b5b1dfee29177683e79258ed46bde38c24027e27b8f90cc736d1", "size": 4096}
+{"elapsed_s": 0.015258701518177986, "name": "nosum", "op": "fsync", "rc": 0}
+{"durable": true, "name": "nosum", "op": "fsync-result", "rc": 0, "sha256": "2c9740f7a09ed4b2498a44496910f58eb826e96a98c4b0580cbbb129b531a395"}
+{"elapsed_s": 0.015263088978827, "name": "nosum", "op": "read", "rc": 0}
+{"errno": null, "name": "nosum", "op": "read-result", "sha256": "2c9740f7a09ed4b2498a44496910f58eb826e96a98c4b0580cbbb129b531a395", "size": 4096}
+{"elapsed_s": 0.015261547639966011, "name": "after-fsync", "op": "fsync", "rc": 0}
+{"durable": true, "name": "after-fsync", "op": "fsync-result", "rc": 0, "sha256": "5e8ce3f71a69a062894aad9a2961258fbc21009eb8d707e37f28eccb5cc858d4"}
+{"elapsed_s": 0.015262097120285034, "name": "after-fsync", "op": "read", "rc": 0}
+{"errno": null, "name": "after-fsync", "op": "read-result", "sha256": "5e8ce3f71a69a062894aad9a2961258fbc21009eb8d707e37f28eccb5cc858d4", "size": 4096}
+{"elapsed_s": 0.015262048691511154, "name": "before-fsync", "op": "read", "rc": 0}
+{"errno": null, "name": "before-fsync", "op": "read-result", "sha256": null, "size": 0}
+{"log_offset": 1294, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1846747, "transport": "tcp", "uverbs": []}
+{"log_offset": 1676, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1846842, "transport": "tcp", "uverbs": []}
+{"log_offset": 2312, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1846950, "transport": "tcp", "uverbs": []}
+{"log_offset": 2199, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1847048, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-a-51.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-a", "op": "transport", "pid": 1847158, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-b-52.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-b", "op": "transport", "pid": 1847176, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.03132299333810806, "name": "repair-role-0", "op": "fsync", "rc": 0}
+{"durable": true, "name": "repair-role-0", "op": "fsync-result", "rc": 0, "sha256": "69112cfb7e1181f1ff5468a045cc7c9f2b2ccc3ed4179adcbd8cc1fbcb55dfab"}
+{"log_offset": 1294, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1846747, "transport": "tcp", "uverbs": []}
+{"log_offset": 1676, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1846842, "transport": "tcp", "uverbs": []}
+{"log_offset": 2312, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1846950, "transport": "tcp", "uverbs": []}
+{"log_offset": 2199, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1847048, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-a-54.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-a", "op": "transport", "pid": 1847216, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-b-55.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-b", "op": "transport", "pid": 1847237, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.01526656560599804, "name": "repair-role-0", "op": "read", "rc": 0}
+{"errno": null, "name": "repair-role-0", "op": "read-result", "sha256": "69112cfb7e1181f1ff5468a045cc7c9f2b2ccc3ed4179adcbd8cc1fbcb55dfab", "size": 131072}
+{"node_id": 1, "op": "repair-request", "rc": 1, "stderr": "", "stdout": "repair ino=61441 object=10985327964449085046 role=0 rc=-15 transport=tcp\n"}
+{"node_id": 2, "op": "repair-request", "rc": 0, "stderr": "", "stdout": "repair ino=61441 object=10985327964449085046 role=0 rc=0 transport=tcp\n"}
+{"log_offset": 4135, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1847269, "transport": "tcp", "uverbs": []}
+{"log_offset": 4615, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1847299, "transport": "tcp", "uverbs": []}
+{"log_offset": 5070, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1847329, "transport": "tcp", "uverbs": []}
+{"log_offset": 3709, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1847360, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-repair-cold-a-61.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-repair-cold-a", "op": "transport", "pid": 1847400, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-repair-cold-b-62.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-repair-cold-b", "op": "transport", "pid": 1847436, "transport": "tcp", "uverbs": []}
+{"log_offset": 4135, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1847269, "transport": "tcp", "uverbs": []}
+{"log_offset": 4615, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1847299, "transport": "tcp", "uverbs": []}
+{"log_offset": 5070, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1847329, "transport": "tcp", "uverbs": []}
+{"log_offset": 3709, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1847360, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-a-63.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-a", "op": "transport", "pid": 1847456, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-b-64.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-b", "op": "transport", "pid": 1847474, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.1635044915601611, "name": "repair-role-0", "op": "read", "rc": 0}
+{"errno": null, "name": "repair-role-0", "op": "read-result", "sha256": "69112cfb7e1181f1ff5468a045cc7c9f2b2ccc3ed4179adcbd8cc1fbcb55dfab", "size": 131072}
+{"log_offset": 4135, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1847269, "transport": "tcp", "uverbs": []}
+{"log_offset": 4615, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1847299, "transport": "tcp", "uverbs": []}
+{"log_offset": 5070, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1847329, "transport": "tcp", "uverbs": []}
+{"log_offset": 3709, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1847360, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-a-66.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-a", "op": "transport", "pid": 1847505, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-b-67.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-b", "op": "transport", "pid": 1847523, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.031327301636338234, "name": "repair-role-1", "op": "fsync", "rc": 0}
+{"durable": true, "name": "repair-role-1", "op": "fsync-result", "rc": 0, "sha256": "4ec0ce36006aed7a2e26790bed805420fe87cb42450db5c78f6c74ff474fbc61"}
+{"log_offset": 4135, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1847269, "transport": "tcp", "uverbs": []}
+{"log_offset": 4615, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1847299, "transport": "tcp", "uverbs": []}
+{"log_offset": 5070, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1847329, "transport": "tcp", "uverbs": []}
+{"log_offset": 3709, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1847360, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-a-69.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-a", "op": "transport", "pid": 1847563, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-b-70.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-b", "op": "transport", "pid": 1847581, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.015264101326465607, "name": "repair-role-1", "op": "read", "rc": 0}
+{"errno": null, "name": "repair-role-1", "op": "read-result", "sha256": "4ec0ce36006aed7a2e26790bed805420fe87cb42450db5c78f6c74ff474fbc61", "size": 131072}
+{"node_id": 1, "op": "repair-request", "rc": 0, "stderr": "", "stdout": "repair ino=65537 object=1880563723028556258 role=1 rc=0 transport=tcp\n"}
+{"log_offset": 6643, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1847612, "transport": "tcp", "uverbs": []}
+{"log_offset": 6582, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1847642, "transport": "tcp", "uverbs": []}
+{"log_offset": 7045, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1847672, "transport": "tcp", "uverbs": []}
+{"log_offset": 5439, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1847703, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-repair-cold-a-76.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-repair-cold-a", "op": "transport", "pid": 1847745, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-repair-cold-b-77.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-repair-cold-b", "op": "transport", "pid": 1847780, "transport": "tcp", "uverbs": []}
+{"log_offset": 6643, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1847612, "transport": "tcp", "uverbs": []}
+{"log_offset": 6582, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1847642, "transport": "tcp", "uverbs": []}
+{"log_offset": 7045, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1847672, "transport": "tcp", "uverbs": []}
+{"log_offset": 5439, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1847703, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-a-78.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-a", "op": "transport", "pid": 1847800, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-b-79.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-b", "op": "transport", "pid": 1847818, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.2135910801589489, "name": "repair-role-1", "op": "read", "rc": 0}
+{"errno": null, "name": "repair-role-1", "op": "read-result", "sha256": "4ec0ce36006aed7a2e26790bed805420fe87cb42450db5c78f6c74ff474fbc61", "size": 131072}
+{"log_offset": 6643, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1847612, "transport": "tcp", "uverbs": []}
+{"log_offset": 6582, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1847642, "transport": "tcp", "uverbs": []}
+{"log_offset": 7045, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1847672, "transport": "tcp", "uverbs": []}
+{"log_offset": 5439, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1847703, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-a-81.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-a", "op": "transport", "pid": 1847850, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-b-82.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-b", "op": "transport", "pid": 1847868, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.03132348507642746, "name": "repair-role-2", "op": "fsync", "rc": 0}
+{"durable": true, "name": "repair-role-2", "op": "fsync-result", "rc": 0, "sha256": "e2aba731d102fd3994ebb75d33fc0f66da9b8f1da38bf4c06c164b3bbeea071b"}
+{"log_offset": 6643, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1847612, "transport": "tcp", "uverbs": []}
+{"log_offset": 6582, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1847642, "transport": "tcp", "uverbs": []}
+{"log_offset": 7045, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1847672, "transport": "tcp", "uverbs": []}
+{"log_offset": 5439, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1847703, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-a-84.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-a", "op": "transport", "pid": 1847908, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-b-85.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-b", "op": "transport", "pid": 1847926, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.015265674330294132, "name": "repair-role-2", "op": "read", "rc": 0}
+{"errno": null, "name": "repair-role-2", "op": "read-result", "sha256": "e2aba731d102fd3994ebb75d33fc0f66da9b8f1da38bf4c06c164b3bbeea071b", "size": 131072}
+{"node_id": 1, "op": "repair-request", "rc": 0, "stderr": "", "stdout": "repair ino=69633 object=16605459070921437265 role=2 rc=0 transport=tcp\n"}
+{"log_offset": 8944, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1847957, "transport": "tcp", "uverbs": []}
+{"log_offset": 8556, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1847987, "transport": "tcp", "uverbs": []}
+{"log_offset": 9019, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1848017, "transport": "tcp", "uverbs": []}
+{"log_offset": 7153, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1848048, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-repair-cold-a-91.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-repair-cold-a", "op": "transport", "pid": 1848088, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-repair-cold-b-92.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-repair-cold-b", "op": "transport", "pid": 1848132, "transport": "tcp", "uverbs": []}
+{"log_offset": 8944, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1847957, "transport": "tcp", "uverbs": []}
+{"log_offset": 8556, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1847987, "transport": "tcp", "uverbs": []}
+{"log_offset": 9019, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1848017, "transport": "tcp", "uverbs": []}
+{"log_offset": 7153, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1848048, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-a-93.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-a", "op": "transport", "pid": 1848152, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/fuse-b-94.log", "mount": "/tmp/efs-repair-fixed-tcp-3-20261012/cluster/mnt-b", "op": "transport", "pid": 1848170, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.015234405174851418, "name": "repair-role-2", "op": "read", "rc": 0}
+{"errno": null, "name": "repair-role-2", "op": "read-result", "sha256": "e2aba731d102fd3994ebb75d33fc0f66da9b8f1da38bf4c06c164b3bbeea071b", "size": 131072}

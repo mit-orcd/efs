@@ -1,0 +1,90 @@
+{
+  "commit": "ed749cab212768137a32ee8d3a2b80fa79744215",
+  "branch": "fix-orcd-fault-repair-rdma",
+  "host": "fcstor006",
+  "gates": {
+    "fault-native": {
+      "status": "PASS",
+      "exit": 0,
+      "log": "remote/efs-qualified-v3-fault-native.log"
+    },
+    "normal-native": {
+      "status": "PASS",
+      "exit": 0,
+      "log": "remote/efs-qualified-v3-normal-native.log"
+    },
+    "rdma": {
+      "status": "PASS",
+      "exit": 0,
+      "log": "remote/efs-qualified-v3-rdma.log",
+      "pass_rows": 23,
+      "repair_roles": [
+        0,
+        1,
+        2
+      ],
+      "transport_proofs": 102,
+      "mode": "direct",
+      "results": "remote/efs-qualified-v3-rdma-ed749cab/results.jsonl"
+    },
+    "tcp": {
+      "status": "PASS",
+      "exit": 0,
+      "log": "remote/efs-qualified-v3-tcp.log",
+      "pass_rows": 23,
+      "repair_roles": [
+        0,
+        1,
+        2
+      ],
+      "transport_proofs": 102,
+      "mode": "direct",
+      "results": "remote/efs-qualified-v3-tcp-ed749cab/results.jsonl"
+    }
+  },
+  "worker_asan_ubsan": "PASS",
+  "wire_policy": "PASS",
+  "source_proof": {
+    "commit": "ed749cab212768137a32ee8d3a2b80fa79744215",
+    "checked_inputs": 1059,
+    "mismatches": [],
+    "status": "PASS"
+  },
+  "cleanup": {
+    "host": "fcstor006",
+    "uid": 246111,
+    "owned_processes": [],
+    "owned_mounts": [],
+    "status": "PASS"
+  },
+  "installed_preservation": {
+    "status": "PASS",
+    "hosts": 11,
+    "unchanged_fields": [
+      "pid",
+      "exe_sha256",
+      "args",
+      "uid"
+    ],
+    "source": "8b7391b3f3edcf9fc99440d9aad3c240325acb83",
+    "experimental_repair": "disabled"
+  },
+  "scope": "default-off experimental missing ordinary base role, same target/incarnation; not automatic or comprehensive recovery",
+  "remaining": [
+    "packed objects",
+    "delta spans",
+    "containers",
+    "spare relocation",
+    "empty replacement",
+    "existing damaged-role replacement",
+    "automatic repair",
+    "interrupted-job leader takeover",
+    "comprehensive pending GC/late writer overlap"
+  ],
+  "prior_failures_preserved": [
+    "short-write delta refused",
+    "old shared-pool TCP source connection unavailable",
+    "1970 archive timestamps rejected by ZIP fixtures",
+    "omitted historical evidence broke documentation links"
+  ]
+}

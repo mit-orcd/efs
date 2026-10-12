@@ -1,0 +1,4 @@
+
+fault harness self-test: pass
+fault suite {'PASS': 19, 'GAP': 2}
+SUITE_EXIT=2

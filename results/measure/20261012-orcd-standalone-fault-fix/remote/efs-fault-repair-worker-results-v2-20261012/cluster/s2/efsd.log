@@ -1,0 +1,115 @@
+2026-10-12T13:48:31.134Z storage-engine=files direct_io=on
+2026-10-12T13:48:31.135Z Repair: experimental missing-base FILES receiver; no automatic repair worker
+2026-10-12T13:48:31.135Z Data GC admission: disabled
+2026-10-12T13:48:31.135Z Storage quota: explicit 1.00 GiB (safe maximum 241.21 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T13:48:31.153Z efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 4 recv + up to 32 lazy send slots, 84 KiB each)
+2026-10-12T13:48:31.154Z Joined cluster with 2 nodes
+2026-10-12T13:48:31.154Z heartbeat: enabled (2000 ms interval)
+2026-10-12T13:48:31.156Z raft-host: up raft_id=1 n=4 boot=7787660136579750 salt=3746426745658506096 g0=hosted g2=hosted
+2026-10-12T13:48:31.156Z efsd (no git metadata, branch unknown, built 2026-10-12T13:47:16Z on fcstor006), build=orcd-repair-worker-wip: node 2 listening on 127.0.0.1:24745, storage=/tmp/efs-fault-repair-worker-results-v2-20261012/cluster/s2 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T13:48:31.156Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T13:48:31.198Z efsd: RDMA transport up on mlx5_2 port 1 (lid 2160)
+2026-10-12T13:48:31.659Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=404
+2026-10-12T13:48:32.134Z raft-host: applied session index=3 kind=1 shard=0 ino=0
+2026-10-12T13:48:32.194Z store: put O_DIRECT zero-copy (payload+digest writev) len=65536
+2026-10-12T13:48:32.195Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=1133 p50_us=1133 max_us=1133 wdisk ops=1 bytes=65536 errors=0 avg_us=993 p50_us=993 max_us=993
+2026-10-12T13:48:32.871Z raft-host: applied session index=5 kind=1 shard=0 ino=0
+2026-10-12T13:48:33.155Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=996 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T13:48:33.580Z raft-host: applied session index=7 kind=1 shard=0 ino=0
+2026-10-12T13:48:33.663Z query-restore: rc=-3 backend=disk
+2026-10-12T13:48:33.672Z query-publish: generation=1 g0=23 g2=8 rebuilt=4096 refolded=3 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=11 root_rc=0 files=2 dirs=0 logical=8192
+2026-10-12T13:48:33.746Z raft-host: applied session index=9 kind=1 shard=0 ino=0
+2026-10-12T13:48:34.233Z storage-engine=files direct_io=on
+2026-10-12T13:48:34.233Z Repair: experimental missing-base FILES receiver; no automatic repair worker
+2026-10-12T13:48:34.233Z Data GC admission: disabled
+2026-10-12T13:48:34.233Z Loaded 4 persisted cluster node(s) from /tmp/efs-fault-repair-worker-results-v2-20261012/cluster/s2/meta/cluster_nodes.bin
+2026-10-12T13:48:34.233Z   persisted node 1: 127.0.0.1:24744
+2026-10-12T13:48:34.233Z   persisted node 2: 127.0.0.1:24745
+2026-10-12T13:48:34.233Z   persisted node 3: 127.0.0.1:24746
+2026-10-12T13:48:34.233Z   persisted node 4: 127.0.0.1:24747
+2026-10-12T13:48:34.233Z Storage quota: explicit 1.00 GiB (safe maximum 241.20 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T13:48:34.243Z efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 4 recv + up to 32 lazy send slots, 84 KiB each)
+2026-10-12T13:48:34.244Z Joined cluster with 4 nodes
+2026-10-12T13:48:34.245Z heartbeat: enabled (2000 ms interval)
+2026-10-12T13:48:34.246Z raft-host: up raft_id=1 n=4 boot=7788909965518431 salt=16699062402874454728 g0=hosted g2=hosted
+2026-10-12T13:48:34.246Z efsd (no git metadata, branch unknown, built 2026-10-12T13:47:16Z on fcstor006), build=orcd-repair-worker-wip: node 2 listening on 127.0.0.1:24745, storage=/tmp/efs-fault-repair-worker-results-v2-20261012/cluster/s2 (1 paths, stripe=none), used=196608, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T13:48:34.246Z kv-obs: mt_bytes=9448 l0_bytes=0 l0=0 l1=0
+2026-10-12T13:48:34.255Z efsd: RDMA transport up on mlx5_2 port 1 (lid 2160)
+2026-10-12T13:48:34.354Z query-catchup: rc=0 backend=disk
+2026-10-12T13:48:34.354Z query-restore: rc=0 backend=disk
+2026-10-12T13:48:34.354Z query-publish: generation=1 g0=40 g2=10 rebuilt=1 refolded=3 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=8 root_rc=0 files=4 dirs=0 logical=16384
+2026-10-12T13:48:34.504Z raft-host: applied session index=11 kind=1 shard=0 ino=0
+2026-10-12T13:48:34.559Z iostats: get ops=1 bytes=65536 errors=0 avg_us=657 p50_us=657 max_us=657 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T13:48:34.620Z raft-host: applied session index=44 kind=1 shard=0 ino=0
+2026-10-12T13:48:34.630Z store: put O_DIRECT zero-copy (payload+digest writev) len=65536
+2026-10-12T13:48:36.245Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=995 passes=2 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T13:48:36.661Z query-publish: generation=2 g0=59 g2=13 rebuilt=1 refolded=3 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=5 root_rc=0 files=6 dirs=0 logical=20480
+2026-10-12T13:48:37.633Z raft-host: applied session index=14 kind=1 shard=0 ino=0
+2026-10-12T13:48:37.651Z raft-host: applied session index=16 kind=1 shard=0 ino=0
+2026-10-12T13:48:37.972Z raft-host: applied session index=18 kind=1 shard=0 ino=0
+2026-10-12T13:48:37.990Z raft-host: applied session index=85 kind=1 shard=0 ino=0
+2026-10-12T13:48:38.257Z raft-host: applied session index=118 kind=1 shard=0 ino=0
+2026-10-12T13:48:38.506Z raft-host: applied session index=20 kind=1 shard=0 ino=0
+2026-10-12T13:48:38.694Z raft-host: applied session index=138 kind=1 shard=0 ino=0
+2026-10-12T13:48:38.847Z storage-engine=files direct_io=on
+2026-10-12T13:48:38.847Z Repair: experimental missing-base FILES receiver; no automatic repair worker
+2026-10-12T13:48:38.847Z Data GC admission: disabled
+2026-10-12T13:48:38.847Z Loaded 4 persisted cluster node(s) from /tmp/efs-fault-repair-worker-results-v2-20261012/cluster/s2/meta/cluster_nodes.bin
+2026-10-12T13:48:38.847Z   persisted node 1: 127.0.0.1:24744
+2026-10-12T13:48:38.847Z   persisted node 2: 127.0.0.1:24745
+2026-10-12T13:48:38.847Z   persisted node 3: 127.0.0.1:24746
+2026-10-12T13:48:38.847Z   persisted node 4: 127.0.0.1:24747
+2026-10-12T13:48:38.847Z Storage quota: explicit 1.00 GiB (safe maximum 241.20 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T13:48:38.866Z efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 4 recv + up to 32 lazy send slots, 84 KiB each)
+2026-10-12T13:48:38.866Z Joined cluster with 4 nodes
+2026-10-12T13:48:38.867Z heartbeat: enabled (2000 ms interval)
+2026-10-12T13:48:38.869Z kv-obs: mt_bytes=34313 l0_bytes=0 l0=0 l1=0
+2026-10-12T13:48:38.869Z raft-host: up raft_id=1 n=4 boot=7788909965518432 salt=6958250709350208960 g0=hosted g2=hosted
+2026-10-12T13:48:38.869Z efsd (no git metadata, branch unknown, built 2026-10-12T13:47:16Z on fcstor006), build=orcd-repair-worker-wip: node 2 listening on 127.0.0.1:24745, storage=/tmp/efs-fault-repair-worker-results-v2-20261012/cluster/s2 (1 paths, stripe=none), used=851968, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T13:48:38.911Z efsd: RDMA transport up on mlx5_2 port 1 (lid 2160)
+2026-10-12T13:48:39.371Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=401
+2026-10-12T13:48:39.915Z raft-host: applied session index=148 kind=1 shard=0 ino=0
+2026-10-12T13:48:39.920Z iostats: get ops=1 bytes=0 errors=1 avg_us=46 p50_us=46 max_us=46 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T13:48:40.129Z raft-host: applied session index=23 kind=1 shard=0 ino=0
+2026-10-12T13:48:40.144Z store: put O_DIRECT zero-copy (payload+digest writev) len=65536
+2026-10-12T13:48:40.319Z raft-host: applied session index=25 kind=1 shard=0 ino=0
+2026-10-12T13:48:40.512Z storage-engine=files direct_io=on
+2026-10-12T13:48:40.512Z Repair: experimental missing-base FILES receiver; no automatic repair worker
+2026-10-12T13:48:40.512Z Data GC admission: disabled
+2026-10-12T13:48:40.512Z Loaded 4 persisted cluster node(s) from /tmp/efs-fault-repair-worker-results-v2-20261012/cluster/s2/meta/cluster_nodes.bin
+2026-10-12T13:48:40.512Z   persisted node 1: 127.0.0.1:24744
+2026-10-12T13:48:40.512Z   persisted node 2: 127.0.0.1:24745
+2026-10-12T13:48:40.512Z   persisted node 3: 127.0.0.1:24746
+2026-10-12T13:48:40.512Z   persisted node 4: 127.0.0.1:24747
+2026-10-12T13:48:40.513Z Storage quota: explicit 1.00 GiB (safe maximum 241.20 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T13:48:40.531Z efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 4 recv + up to 32 lazy send slots, 84 KiB each)
+2026-10-12T13:48:40.531Z Joined cluster with 4 nodes
+2026-10-12T13:48:40.532Z heartbeat: enabled (2000 ms interval)
+2026-10-12T13:48:40.534Z kv-obs: mt_bytes=39602 l0_bytes=0 l0=0 l1=0
+2026-10-12T13:48:40.534Z raft-host: up raft_id=1 n=4 boot=7791873749459755 salt=8858112579498251301 g0=hosted g2=hosted
+2026-10-12T13:48:40.534Z efsd (no git metadata, branch unknown, built 2026-10-12T13:47:16Z on fcstor006), build=orcd-repair-worker-wip: node 2 listening on 127.0.0.1:24745, storage=/tmp/efs-fault-repair-worker-results-v2-20261012/cluster/s2 (1 paths, stripe=none), used=851968, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T13:48:40.576Z efsd: RDMA transport up on mlx5_2 port 1 (lid 2160)
+2026-10-12T13:48:41.038Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=403
+2026-10-12T13:48:41.423Z raft-host: applied session index=170 kind=1 shard=0 ino=0
+2026-10-12T13:48:41.429Z iostats: get ops=1 bytes=65536 errors=0 avg_us=724 p50_us=724 max_us=724 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T13:48:41.632Z raft-host: applied session index=179 kind=1 shard=0 ino=0
+2026-10-12T13:48:41.646Z store: put O_DIRECT zero-copy (payload+digest writev) len=65536
+2026-10-12T13:48:41.812Z raft-host: applied session index=186 kind=1 shard=0 ino=0
+2026-10-12T13:48:41.975Z storage-engine=files direct_io=on
+2026-10-12T13:48:41.975Z Repair: experimental missing-base FILES receiver; no automatic repair worker
+2026-10-12T13:48:41.975Z Data GC admission: disabled
+2026-10-12T13:48:41.975Z Loaded 4 persisted cluster node(s) from /tmp/efs-fault-repair-worker-results-v2-20261012/cluster/s2/meta/cluster_nodes.bin
+2026-10-12T13:48:41.975Z   persisted node 1: 127.0.0.1:24744
+2026-10-12T13:48:41.975Z   persisted node 2: 127.0.0.1:24745
+2026-10-12T13:48:41.975Z   persisted node 3: 127.0.0.1:24746
+2026-10-12T13:48:41.975Z   persisted node 4: 127.0.0.1:24747
+2026-10-12T13:48:41.976Z Storage quota: explicit 1.00 GiB (safe maximum 241.20 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T13:48:41.994Z efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 4 recv + up to 32 lazy send slots, 84 KiB each)
+2026-10-12T13:48:41.995Z Joined cluster with 4 nodes
+2026-10-12T13:48:41.996Z heartbeat: enabled (2000 ms interval)
+2026-10-12T13:48:41.997Z kv-obs: mt_bytes=44855 l0_bytes=0 l0=0 l1=0
+2026-10-12T13:48:41.997Z raft-host: up raft_id=1 n=4 boot=7792259817252884 salt=14493958065850569770 g0=hosted g2=hosted
+2026-10-12T13:48:41.997Z efsd (no git metadata, branch unknown, built 2026-10-12T13:47:16Z on fcstor006), build=orcd-repair-worker-wip: node 2 listening on 127.0.0.1:24745, storage=/tmp/efs-fault-repair-worker-results-v2-20261012/cluster/s2 (1 paths, stripe=none), used=917504, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T13:48:42.039Z efsd: RDMA transport up on mlx5_2 port 1 (lid 2160)
+2026-10-12T13:48:42.500Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=402
+2026-10-12T13:48:42.779Z raft-host: applied session index=196 kind=1 shard=0 ino=0

@@ -1,0 +1,124 @@
+2026-10-12T14:17:23.407Z storage-engine=files direct_io=on
+2026-10-12T14:17:23.408Z Repair: experimental missing-base FILES manual coordinator; automatic repair disabled
+2026-10-12T14:17:23.408Z Data GC admission: disabled
+2026-10-12T14:17:23.408Z Storage quota: explicit 1.00 GiB (safe maximum 240.11 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T14:17:23.409Z heartbeat: enabled (2000 ms interval)
+2026-10-12T14:17:23.410Z raft-host: up raft_id=0 n=4 boot=8157830608773985 salt=9494734269840986614 g0=hosted g2=off
+2026-10-12T14:17:23.410Z efsd (no git metadata, branch unknown, built 2026-10-12T14:15:02Z on fcstor006), build=ed749cab2127: node 1 listening on 127.0.0.1:24740, storage=/tmp/efs-qualified-v3-rdma-ed749cab/cluster/s1 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T14:17:23.410Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:17:23.477Z efsd: RDMA transport up on mlx5_2 port 1 (lid 2160)
+2026-10-12T14:17:23.522Z efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 4 recv + up to 32 lazy send slots, 84 KiB each)
+2026-10-12T14:17:24.479Z store: put O_DIRECT zero-copy (payload+digest writev) len=65536
+2026-10-12T14:17:24.480Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=1198 p50_us=1198 max_us=1198 wdisk ops=1 bytes=65536 errors=0 avg_us=990 p50_us=990 max_us=990
+2026-10-12T14:17:25.053Z storage-engine=files direct_io=on
+2026-10-12T14:17:25.053Z Repair: experimental missing-base FILES manual coordinator; automatic repair disabled
+2026-10-12T14:17:25.053Z Data GC admission: disabled
+2026-10-12T14:17:25.053Z Loaded 4 persisted cluster node(s) from /tmp/efs-qualified-v3-rdma-ed749cab/cluster/s1/meta/cluster_nodes.bin
+2026-10-12T14:17:25.053Z   persisted node 1: 127.0.0.1:24740
+2026-10-12T14:17:25.053Z   persisted node 2: 127.0.0.1:24741
+2026-10-12T14:17:25.053Z   persisted node 3: 127.0.0.1:24742
+2026-10-12T14:17:25.053Z   persisted node 4: 127.0.0.1:24743
+2026-10-12T14:17:25.053Z Storage quota: explicit 1.00 GiB (safe maximum 240.11 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T14:17:25.053Z Trying to rejoin via persisted peer 127.0.0.1:24741 (node 2)...
+2026-10-12T14:17:25.063Z efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 4 recv + up to 32 lazy send slots, 84 KiB each)
+2026-10-12T14:17:25.063Z Joined cluster with 4 nodes
+2026-10-12T14:17:25.063Z Rejoined cluster via 127.0.0.1:24741
+2026-10-12T14:17:25.064Z heartbeat: enabled (2000 ms interval)
+2026-10-12T14:17:25.066Z kv-obs: mt_bytes=1775 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:17:25.066Z raft-host: up raft_id=0 n=4 boot=8157830608773986 salt=8840787796592635733 g0=hosted g2=off
+2026-10-12T14:17:25.066Z efsd (no git metadata, branch unknown, built 2026-10-12T14:15:02Z on fcstor006), build=ed749cab2127: node 1 listening on 127.0.0.1:24740, storage=/tmp/efs-qualified-v3-rdma-ed749cab/cluster/s1 (1 paths, stripe=none), used=65536, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T14:17:25.100Z efsd: RDMA transport up on mlx5_2 port 1 (lid 2160)
+2026-10-12T14:17:25.379Z iostats: get ops=1 bytes=65536 errors=0 avg_us=776 p50_us=776 max_us=776 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T14:17:25.551Z store: put O_DIRECT zero-copy (payload+digest writev) len=65536
+2026-10-12T14:17:27.064Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=995 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T14:17:27.732Z raft-host: applied session index=43 kind=1 shard=0 ino=0
+2026-10-12T14:17:29.668Z raft-host: applied session index=61 kind=1 shard=0 ino=0
+2026-10-12T14:17:30.068Z kv-obs: mt_bytes=13967 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:17:30.383Z iostats: get ops=9 bytes=589824 errors=0 avg_us=622 p50_us=565 max_us=776 put ops=6 bytes=393216 errors=0 avg_us=781 p50_us=788 max_us=907 wdisk ops=6 bytes=393216 errors=0 avg_us=691 p50_us=693 max_us=749
+2026-10-12T14:17:31.368Z raft-host: applied session index=127 kind=1 shard=0 ino=0
+2026-10-12T14:17:31.403Z Repair manual: ino=61441 role=0 phase=capture rc=-15; no debt is discarded
+2026-10-12T14:17:31.510Z storage-engine=files direct_io=on
+2026-10-12T14:17:31.510Z Repair: experimental missing-base FILES manual coordinator; automatic repair disabled
+2026-10-12T14:17:31.510Z Data GC admission: disabled
+2026-10-12T14:17:31.510Z Loaded 4 persisted cluster node(s) from /tmp/efs-qualified-v3-rdma-ed749cab/cluster/s1/meta/cluster_nodes.bin
+2026-10-12T14:17:31.510Z   persisted node 1: 127.0.0.1:24740
+2026-10-12T14:17:31.510Z   persisted node 2: 127.0.0.1:24741
+2026-10-12T14:17:31.510Z   persisted node 3: 127.0.0.1:24742
+2026-10-12T14:17:31.510Z   persisted node 4: 127.0.0.1:24743
+2026-10-12T14:17:31.511Z Storage quota: explicit 1.00 GiB (safe maximum 240.10 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T14:17:31.511Z Trying to rejoin via persisted peer 127.0.0.1:24741 (node 2)...
+2026-10-12T14:17:31.511Z Cannot connect to peer 127.0.0.1:24741
+2026-10-12T14:17:31.511Z Failed to rejoin via 127.0.0.1:24741
+2026-10-12T14:17:31.511Z Trying to rejoin via persisted peer 127.0.0.1:24742 (node 3)...
+2026-10-12T14:17:31.511Z Cannot connect to peer 127.0.0.1:24742
+2026-10-12T14:17:31.511Z Failed to rejoin via 127.0.0.1:24742
+2026-10-12T14:17:31.511Z Trying to rejoin via persisted peer 127.0.0.1:24743 (node 4)...
+2026-10-12T14:17:31.511Z Cannot connect to peer 127.0.0.1:24743
+2026-10-12T14:17:31.511Z Failed to rejoin via 127.0.0.1:24743
+2026-10-12T14:17:31.511Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-12T14:17:31.511Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-12T14:17:31.511Z heartbeat: enabled (2000 ms interval)
+2026-10-12T14:17:31.513Z kv-obs: mt_bytes=23157 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:17:31.513Z raft-host: up raft_id=0 n=4 boot=8160978851595189 salt=3946803656630533417 g0=hosted g2=off
+2026-10-12T14:17:31.513Z efsd (no git metadata, branch unknown, built 2026-10-12T14:15:02Z on fcstor006), build=ed749cab2127: node 1 listening on 127.0.0.1:24740, storage=/tmp/efs-qualified-v3-rdma-ed749cab/cluster/s1 (1 paths, stripe=none), used=851968, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T14:17:31.580Z efsd: RDMA transport up on mlx5_2 port 1 (lid 2160)
+2026-10-12T14:17:31.625Z efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 4 recv + up to 32 lazy send slots, 84 KiB each)
+2026-10-12T14:17:32.761Z raft-host: applied session index=150 kind=1 shard=0 ino=0
+2026-10-12T14:17:32.766Z iostats: get ops=1 bytes=65536 errors=0 avg_us=623 p50_us=623 max_us=623 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T14:17:33.297Z raft-host: applied session index=160 kind=1 shard=0 ino=0
+2026-10-12T14:17:33.331Z Repair manual: ino=65537 role=1 phase=capture rc=-15; no debt is discarded
+2026-10-12T14:17:33.419Z storage-engine=files direct_io=on
+2026-10-12T14:17:33.419Z Repair: experimental missing-base FILES manual coordinator; automatic repair disabled
+2026-10-12T14:17:33.419Z Data GC admission: disabled
+2026-10-12T14:17:33.419Z Loaded 4 persisted cluster node(s) from /tmp/efs-qualified-v3-rdma-ed749cab/cluster/s1/meta/cluster_nodes.bin
+2026-10-12T14:17:33.419Z   persisted node 1: 127.0.0.1:24740
+2026-10-12T14:17:33.419Z   persisted node 2: 127.0.0.1:24741
+2026-10-12T14:17:33.419Z   persisted node 3: 127.0.0.1:24742
+2026-10-12T14:17:33.419Z   persisted node 4: 127.0.0.1:24743
+2026-10-12T14:17:33.419Z Storage quota: explicit 1.00 GiB (safe maximum 240.10 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T14:17:33.419Z Trying to rejoin via persisted peer 127.0.0.1:24741 (node 2)...
+2026-10-12T14:17:33.419Z Cannot connect to peer 127.0.0.1:24741
+2026-10-12T14:17:33.419Z Failed to rejoin via 127.0.0.1:24741
+2026-10-12T14:17:33.419Z Trying to rejoin via persisted peer 127.0.0.1:24742 (node 3)...
+2026-10-12T14:17:33.419Z Cannot connect to peer 127.0.0.1:24742
+2026-10-12T14:17:33.419Z Failed to rejoin via 127.0.0.1:24742
+2026-10-12T14:17:33.419Z Trying to rejoin via persisted peer 127.0.0.1:24743 (node 4)...
+2026-10-12T14:17:33.419Z Cannot connect to peer 127.0.0.1:24743
+2026-10-12T14:17:33.419Z Failed to rejoin via 127.0.0.1:24743
+2026-10-12T14:17:33.419Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-12T14:17:33.419Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-12T14:17:33.420Z heartbeat: enabled (2000 ms interval)
+2026-10-12T14:17:33.422Z kv-obs: mt_bytes=27383 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:17:33.422Z raft-host: up raft_id=0 n=4 boot=8161945176605734 salt=11263366886924697711 g0=hosted g2=off
+2026-10-12T14:17:33.422Z efsd (no git metadata, branch unknown, built 2026-10-12T14:15:02Z on fcstor006), build=ed749cab2127: node 1 listening on 127.0.0.1:24740, storage=/tmp/efs-qualified-v3-rdma-ed749cab/cluster/s1 (1 paths, stripe=none), used=851968, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T14:17:33.489Z efsd: RDMA transport up on mlx5_2 port 1 (lid 2160)
+2026-10-12T14:17:33.533Z efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 4 recv + up to 32 lazy send slots, 84 KiB each)
+2026-10-12T14:17:34.673Z raft-host: applied session index=174 kind=1 shard=0 ino=0
+2026-10-12T14:17:34.885Z raft-host: applied session index=179 kind=1 shard=0 ino=0
+2026-10-12T14:17:35.104Z Repair manual: ino=69633 role=2 phase=capture rc=-15; no debt is discarded
+2026-10-12T14:17:35.191Z storage-engine=files direct_io=on
+2026-10-12T14:17:35.191Z Repair: experimental missing-base FILES manual coordinator; automatic repair disabled
+2026-10-12T14:17:35.191Z Data GC admission: disabled
+2026-10-12T14:17:35.191Z Loaded 4 persisted cluster node(s) from /tmp/efs-qualified-v3-rdma-ed749cab/cluster/s1/meta/cluster_nodes.bin
+2026-10-12T14:17:35.191Z   persisted node 1: 127.0.0.1:24740
+2026-10-12T14:17:35.191Z   persisted node 2: 127.0.0.1:24741
+2026-10-12T14:17:35.191Z   persisted node 3: 127.0.0.1:24742
+2026-10-12T14:17:35.191Z   persisted node 4: 127.0.0.1:24743
+2026-10-12T14:17:35.192Z Storage quota: explicit 1.00 GiB (safe maximum 240.10 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T14:17:35.192Z Trying to rejoin via persisted peer 127.0.0.1:24741 (node 2)...
+2026-10-12T14:17:35.192Z Cannot connect to peer 127.0.0.1:24741
+2026-10-12T14:17:35.192Z Failed to rejoin via 127.0.0.1:24741
+2026-10-12T14:17:35.192Z Trying to rejoin via persisted peer 127.0.0.1:24742 (node 3)...
+2026-10-12T14:17:35.192Z Cannot connect to peer 127.0.0.1:24742
+2026-10-12T14:17:35.192Z Failed to rejoin via 127.0.0.1:24742
+2026-10-12T14:17:35.192Z Trying to rejoin via persisted peer 127.0.0.1:24743 (node 4)...
+2026-10-12T14:17:35.192Z Cannot connect to peer 127.0.0.1:24743
+2026-10-12T14:17:35.192Z Failed to rejoin via 127.0.0.1:24743
+2026-10-12T14:17:35.192Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-12T14:17:35.192Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-12T14:17:35.192Z heartbeat: enabled (2000 ms interval)
+2026-10-12T14:17:35.194Z kv-obs: mt_bytes=31573 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:17:35.194Z raft-host: up raft_id=0 n=4 boot=8161945176605735 salt=3466166946802152843 g0=hosted g2=off
+2026-10-12T14:17:35.194Z efsd (no git metadata, branch unknown, built 2026-10-12T14:15:02Z on fcstor006), build=ed749cab2127: node 1 listening on 127.0.0.1:24740, storage=/tmp/efs-qualified-v3-rdma-ed749cab/cluster/s1 (1 paths, stripe=none), used=851968, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T14:17:35.261Z efsd: RDMA transport up on mlx5_2 port 1 (lid 2160)
+2026-10-12T14:17:35.306Z efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 4 recv + up to 32 lazy send slots, 84 KiB each)

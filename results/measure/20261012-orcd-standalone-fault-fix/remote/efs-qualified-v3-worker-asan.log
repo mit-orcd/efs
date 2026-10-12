@@ -1,0 +1,19 @@
+Repair manual: ino=9 role=0 phase=source read rc=-10; no debt is discarded
+Repair manual: ino=9 role=0 phase=source read rc=-10; no debt is discarded
+Repair peer: node=1 type=147 send=0 recv=-1 reply=148 bytes=0 kind=0 errno=0
+Repair manual: ino=9 role=0 phase=target data rc=-1; no debt is discarded
+Repair manual: ino=9 role=0 phase=commit data receipt rc=-7; no debt is discarded
+Repair manual: ino=9 role=0 phase=commit data receipt rc=-1; no debt is discarded
+Repair manual: ino=9 role=1 phase=source read rc=-10; no debt is discarded
+Repair manual: ino=9 role=1 phase=source read rc=-10; no debt is discarded
+Repair peer: node=2 type=147 send=0 recv=-1 reply=148 bytes=0 kind=0 errno=0
+Repair manual: ino=9 role=1 phase=target data rc=-1; no debt is discarded
+Repair manual: ino=9 role=1 phase=commit data receipt rc=-7; no debt is discarded
+Repair manual: ino=9 role=1 phase=commit data receipt rc=-1; no debt is discarded
+Repair manual: ino=9 role=2 phase=source read rc=-10; no debt is discarded
+Repair manual: ino=9 role=2 phase=source read rc=-10; no debt is discarded
+Repair peer: node=3 type=147 send=0 recv=-1 reply=148 bytes=0 kind=0 errno=0
+Repair manual: ino=9 role=2 phase=target data rc=-1; no debt is discarded
+Repair manual: ino=9 role=2 phase=commit data receipt rc=-7; no debt is discarded
+Repair manual: ino=9 role=2 phase=commit data receipt rc=-1; no debt is discarded
+actual repair worker: all roles, default refusal, poisoned/truncated source before admission, lost target reply, misbound receipt and DATA commit failure preserve debt/no terminal ACK PASS

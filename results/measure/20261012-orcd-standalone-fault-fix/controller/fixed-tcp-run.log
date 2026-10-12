@@ -1,0 +1,9 @@
+TCP_DIAG_1=0
+fault harness self-test: pass
+fault suite {'PASS': 23}
+TCP_DIAG_2=0
+fault harness self-test: pass
+fault suite {'PASS': 23}
+TCP_DIAG_3=0
+fault harness self-test: pass
+fault suite {'PASS': 23}

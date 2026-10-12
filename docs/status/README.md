@@ -1,5 +1,7 @@
 # Project status — current work and index
 
+[Isolated ORCD standalone fault/repair fixes](orcd-standalone-fault-fix-20261012.md) track the subsequent explicit user request, separate from release qualification.
+
 ## v0.3.0-pre-alpha release integration
 
 **Execution STOPPED**, confirmed by the human's October12 “Document, commit, and stop” reply. [Accepted release scope](v030-release-scope-20261012.md): **TCP/direct I/O/files engine**. Containers, buffered/RDMA and dedicated repair/recovery qualification are deferred and no longer release blockers; their gaps remain open. Four planning gate groups remain: read-progress fix safety/sanitizers, seven-client packing/query acceptance, direct-I/O files POSIX/peer/mutation/GC, and final frozen merged-source native/fault/affected live qualification. This is not an exact invocation count.
