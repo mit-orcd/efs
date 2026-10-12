@@ -12,7 +12,7 @@ commits, failures and remaining gates. No push has occurred.
   are included. Concurrent ORCD directory/query timeouts remain unresolved.
 - Mac request-local authority reuse and combined session registration are
   reconciled with ordered APPEND reservation guards and NUC's tag52 completion.
-  Eligible single-shard APPEND now includes Mac's durable tag53 path, CREATE
+  Eligible single-shard APPEND now includes Mac's durable tag53 reservation and tag54 completion paths, CREATE
   adoption and coverage-aware leader routing; merged acceptance is pending.
   Whole-cohort packed authority and fresh legacy fallback are also integrated.
 - Code-review repairs cover rollup allocation ownership and retained-capacity
@@ -81,6 +81,6 @@ a capped page and actual local physical deletion; blocked, idle and fence-only
 passes retain normal backoff. All durable member fences/ACKs and work budgets
 remain required. A focused regression pass alone does not close the live gate.
 
-All voting servers must support durable tag53 before new APPEND commands are
+All voting servers must support durable tags53 and54 before new APPEND commands are
 admitted. Retained stores containing new commands cannot roll back to older
 binaries. General cross-shard APPEND retains ordered guards and tag52 completion.

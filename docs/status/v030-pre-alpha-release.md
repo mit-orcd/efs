@@ -448,3 +448,19 @@ passes ownership boundary probes. [W112 closure](w112-full-overwrite-replay-2026
 is limited to that reproduced defect. Direct seven-client/jobs16 pressure still
 fails; this is not release acceptance. New ORCD follower-read deadline and
 Mac append completion checkpoints require reconciliation and full qualification.
+
+### Read deadline review and latest Mac reconciliation
+
+`b1632feb` integrates bounded read-only forwarded RPC waits through pool/connect/
+TCP and RDMA receive handling, and fixed reusable helpers for independent hosted
+group proofs. Independent review `67687dce` reproduces continued routing retries
+after an inherited100ms scope expires; a read-only loop guard and actual-wrapper/
+loop regression now stop expired attempts. Mutation uncertainty handling remains
+unchanged. [Review and retained baseline probe](../reviews/read-deadlines-20261011/README.md).
+
+Mac `e798c2aa` adds eligible single-shard durable tag54 append completion and
+coverage routing without recursive host mutex acquisition. Merge conflicts retain
+NUC ordered reservation guards, tag52 catch-up charging and all NUC/Mac regression
+cases; only eligible completion uses tag54. All voters must understand53/54 before
+admitting these commands; old binaries are unsafe rollback targets. New frozen
+merged full AMD qualification and both-mode pressure are pending.

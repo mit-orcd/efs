@@ -3647,6 +3647,9 @@ static int host_remote_cmd_impl(struct efs_raft_host *h, uint8_t group,
      * forwards. Each retry re-reads the local replica's leader view. */
     host_deadline_us(&end, (long)HOST_READ_TRIES * HOST_TICK_US);
     for (;;) {
+        /* Inherited read scope bounds routing retries; mutations keep their
+         * existing uncertainty handling. */
+        if(!clen && !efs_net_remaining_ms(1))return EFS_ERR_BUSY;
         rid = prefer_rid;
         if (rid < 0 || rid == h->raft_id || rid == skip)
             rid = host_local_leader(h, group);

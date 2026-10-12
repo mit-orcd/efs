@@ -354,6 +354,7 @@ test: all
 	python3 tests/test_readindex_operation.py
 	python3 tests/test_readindex_pair.py
 	python3 tests/test_readindex_remote_pair.py
+	python3 tests/test_read_retry_budget.py
 	python3 tests/test_host_read_deadline.py
 	python3 tests/test_peer_pool_deadline.py
 	python3 tests/test_lookup_group_plan.py

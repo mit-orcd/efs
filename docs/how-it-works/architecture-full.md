@@ -1506,7 +1506,9 @@ acknowledged ordinary overwrite loss: full normal/fault, eleven sanitizer and
 both-mode primary/peer/cold/cleanup gates pass at `02b9918b`.
 Independent authority review NET fallback is implemented with normal and
 ASan/UBSan actual-caller regressions; semantic refusals and fresh guards remain.
-ORCD packing timeouts remain
+Latest Mac tag54 completion and ORCD follower-read deadline/proof checkpoints
+are integrated with the independent inherited-deadline retry repair; full merged
+AMD qualification is pending. ORCD packing timeouts remain
 a release blocker. Small-file packing and code-review correctness have priority. Branch checkpoints
 are not final release acceptance. Shared devel/main and pushes remain unchanged
 until a frozen merged candidate passes its recorded gates.
