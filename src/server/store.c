@@ -2180,8 +2180,9 @@ int server_repair_file_atomic(struct efsd_server *s,struct efs_export *ex,
                              const uint8_t *data,uint32_t len,const uint8_t sum[EFS_HASH_SIZE])
 {
 #ifdef EFS_BENCH_BUILD
+    (void)s;(void)ex;(void)ino;(void)ci;(void)fi;(void)object;(void)data;(void)len;(void)sum;
     return EFS_ERR_INVAL;
-#endif
+#else
     if(!s || !ex || s->storage_engine || s->storage_path_count!=1 ||
        !efs_chunk_size_valid(ex->chunk_size) || ex->id!=1 || efs_ino_is_meta_table(ino) ||
        ino<=EFS_ROOT_INO || !object || fi>=EFS_NUM_FRAGMENTS || !data || !sum ||
@@ -2249,6 +2250,7 @@ out:
     }
     if(reserved)server_usage_mark_dirty(s);
     pthread_mutex_unlock(mu);pthread_rwlock_unlock(im);return rc;
+#endif
 }
 
 #define EFS_NODES_MAGIC "EFSN"
