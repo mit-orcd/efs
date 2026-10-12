@@ -658,3 +658,36 @@ pump negative control aborts at the accepted-vote assertion; local extractor
 ASan/UBSan PASS. Exact782-input native builds and live qualification follow.
 The directory gate is still open; ae5a's cold/physical successes do not qualify
 this new runtime.
+
+
+### Queued read-vote qualification and placement follow-up (2026-10-12)
+
+Exact source `c3bcffd1a91c9c5dac5f4f730d2f5b03f6ebcc78`, 782 matching
+tracked build inputs, private preserved four-node Intel stores, TCP/direct,
+4G/node, eight writers, 20ms progressing-GC yield; `.efs`, expiry dates and
+packing disabled. Seven simultaneous 16-job clients retain all original
+30-second directory budgets: **1493/1512 PASS, 19 FAIL**. Deep60 and crazy
+directories timed out on all seven clients; deep100 timed out on five.
+Immediate 180-second physical reclamation **FAIL** at 180.003s; last sample
+179.072s retained 460/461/477/492 mappings and
+32038912/32108544/33222656/34271232 allocated container bytes on nodes 1–4.
+This does not close either requested loaded gate.
+
+Two-host quiet core **432/432 PASS**; peer **134/134 PASS**; private mmap
+PASS, shared-writable mmap ENODEV remains the documented skip. Lifecycle
+256 files, 512KiB, four workers, read/churn/warm hashes PASS; tiny-file
+300 durable generations per host PASS, followed by globally phased graceful
+restart, cold lifecycle and both-host tiny hashes/deletes PASS. Final physical
+observer is still running; its verdict will be recorded separately.
+
+Read-only post-restart Raft status shows both metadata groups led by Raft
+peer 2 (server node 3, Intel2), with committed voter masks group0=0x7 and
+group2=0xe. The next private-fixture candidate enables the existing opt-in
+`EFS_METADATA_BALANCE=1`: its actual-voter preference selects server node1
+for group0 and node3 for group2, spreading leadership across physical hosts.
+`--metadata-balance 0` preserves the previous diagnostic fixture configuration.
+The existing two-second settling grace, target durable catch-up refusal,
+30-second cross-term backoff and quorum checks remain unchanged. Native
+production balancing-policy extraction PASS locally. No production service,
+ordinary-file default, test concurrency, deadline or preserved store is changed.
+Placement is a hypothesis until fresh loaded and immediate physical tests pass.
