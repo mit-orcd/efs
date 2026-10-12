@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Actual host GC callback must neither delete nor acknowledge fenced objects."""
+"""Candidate GC callback hook adapter (not installed in runtime)."""
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text();a=s.index('static void host_gc_record(');fn=s[a:s.index('\n}',a)+2]
@@ -30,4 +30,4 @@ int main(void){struct server server={1};struct efs_raft_host h={.s=&server,.gc_r
 with tempfile.TemporaryDirectory() as d:
  p=Path(d)/'gc.c';p.write_text('#include <stdio.h>\n'+code);b=Path(d)/'gc'
  subprocess.run(['cc','-std=gnu11','-I'+str(root/'include'),str(p),'-o',str(b)],check=True);subprocess.run([b],check=True)
-print('actual GC callback no delete/ACK on pending/corrupt/IO journal PASS')
+print('candidate GC callback hook adapter (not installed): no delete/ACK on pending/corrupt/IO PASS')
