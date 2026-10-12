@@ -1,0 +1,7 @@
+test: /tmp/efs-fold-jb5cpyzs/test.c:636: replay_tests: Assertion `sent[i]=='N'' failed.
+Traceback (most recent call last):
+  File "/data1/efs/nuc-b239-qualification/san-source/tests/test_fold_observation.py", line 218, in <module>
+    subprocess.run([str(path.with_suffix(""))], check=True)
+  File "/usr/lib64/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/tmp/efs-fold-jb5cpyzs/test']' died with <Signals.SIGABRT: 6>.
