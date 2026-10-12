@@ -47,6 +47,7 @@ int efs_repair_retire(struct efs_kv *, const struct efs_repair_job *, int cancel
  * job has a committed terminal target seal; absence never proves a target
  * receipt. The object predicate also fences historical FileID generations. */
 int efs_repair_gc_ready(struct efs_kv *, efs_ino_t, uint64_t, uint32_t, uint64_t);
+int efs_repair_gc_inode_ready(struct efs_kv *,efs_ino_t);
 int efs_repair_gc_object_ready(struct efs_kv *, efs_ino_t, uint32_t, uint64_t);
 #define EFS_REPAIR_RECEIPT_BYTES 132u
 #define EFS_REPAIR_RECEIPT_DATA 1u

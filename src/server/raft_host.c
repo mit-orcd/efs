@@ -7419,8 +7419,25 @@ out:
 /* Reap markers are the durable retry ledger for unreferenced PUT bodies too.
  * All members must install a death fence and finish their bounded inventory
  * before REAP_DONE removes that ledger. Never use the live-inode collector. */
+/* Experimental target-side proof before physical deletion. Whole inode GC
+ * covers both lane groups; unhosted/stale authority is never absence proof. */
+int server_raft_host_repair_gc_ready(efs_ino_t ino,uint32_t ci,uint64_t object)
+{
+    struct efs_raft_host *h=g_host;if(!h || !h->running || !h->s || !h->s->repair_experiment)return EFS_ERR_ACCES;
+    uint8_t groups[2]={EFS_RAFT_GROUP_SHARD,EFS_RAFT_GROUP_SHARD2};unsigned count=2;
+    if(object){groups[0]=efs_raft_shard_group(efs_kv_lane_shard(ino,ci%EFS_META_LANES));count=1;}
+    for(unsigned i=0;i<count;i++){
+        if(!host_hosts(h,groups[i]))return EFS_ERR_BUSY;
+        int hint=-1,rc=host_read_index(h,groups[i],&hint);if(rc)return rc;
+    }
+    pthread_mutex_lock(&h->mu);
+    int rc=object?efs_repair_gc_object_ready(h->kv,ino,ci,object):efs_repair_gc_inode_ready(h->kv,ino);
+    pthread_mutex_unlock(&h->mu);return rc;
+}
+
 static int host_gc_inode_nodes(struct efs_raft_host *h, efs_ino_t ino, uint64_t gen)
 {
+    if(h->s->repair_experiment){int rc=server_raft_host_repair_gc_ready(ino,0,0);if(rc)return rc;}
     struct efs_node nodes[EFS_MAX_NODES];
     struct efs_conn *pending[EFS_MAX_NODES] = {0};
     int status[EFS_MAX_NODES];
@@ -8020,6 +8037,13 @@ static void host_gc_record(struct efs_raft_host *h, struct efs_export *ex,
     gen = rd64be(key + 11);
     lane = key[19];
     ci = rd32be(key + 20);
+    if(h->s->repair_experiment){
+        /* ADMIT rejects an already queued GC key in the same serialized
+         * lane apply. Once this key exists no later admission can race this
+         * unlocked physical delete after the bounded debt check. */
+        pthread_mutex_lock(&h->mu);int blocked=efs_repair_gc_object_ready(h->kv,ino,ci,gen);pthread_mutex_unlock(&h->mu);
+        if(blocked)return;
+    }
     for (fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
         int rc;
 
