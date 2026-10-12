@@ -1,0 +1,14 @@
+parallel 10 tests jobs=16 (serial 0 after)
+pass basic_dup_write                 
+pass basic_write_read                
+pass basic_chunk_boundary            
+pass basic_seek_cur_past_eof_write   
+pass basic_rdwr_no_reopen            
+pass basic_oappend_flag              
+pass basic_append                    
+pass fsync_write                     
+pass fsync_reopen_visible            
+pass fsync_then_fstat_size           
+============================================================
+POSIX suite: 10/10 pass, 0 fail, 0 skip, 0 notrun  (5.3s)
+wrote /data1/efs/intel-ecdc-focused-20261012/evidence/live/deep-1.tsv
