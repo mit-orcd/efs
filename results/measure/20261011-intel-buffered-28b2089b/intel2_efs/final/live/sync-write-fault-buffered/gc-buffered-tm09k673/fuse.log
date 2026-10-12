@@ -1,0 +1,1623 @@
+2026-10-12T04:15:12.420Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:24Z on intel2), build=28b2089b-release-fault: starting export=default mount=/tmp/efs-intel-28b2089b-intel2_efs/mnt
+2026-10-12T04:15:12.421Z Discovered 4 cluster nodes from 127.0.0.1:34210
+2026-10-12T04:15:12.421Z   node id=1 127.0.0.1:34210
+2026-10-12T04:15:12.421Z   node id=2 127.0.0.1:34211
+2026-10-12T04:15:12.421Z   node id=3 127.0.0.1:34212
+2026-10-12T04:15:12.421Z   node id=4 127.0.0.1:34213
+2026-10-12T04:15:12.421Z fetching metadata...
+2026-10-12T04:15:12.422Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T04:15:12.422Z export id=1 name=default
+2026-10-12T04:15:12.422Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T04:15:12.428Z efs-fuse: workers max=10 idle=10
+2026-10-12T04:15:12.438Z fuse serving
+2026-10-12T04:15:12.865Z dcache ino=4097 ci=0 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=1 r=[0,46)
+2026-10-12T04:15:22.420Z efs-fuse fsync: network error (efs_rc=-6) ino=0 off=0 len=0
+2026-10-12T04:15:22.420Z sync-write ino=4097 bytes=46 datasync=0 rc=-5
+2026-10-12T04:15:22.423Z dcache ino=4097 ci=0 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=2 r=[0,46)
+2026-10-12T04:15:31.976Z efs-fuse flush-meta: network error (efs_rc=-6) ino=4097 off=0 len=0
+2026-10-12T04:15:32.229Z dcache ino=4097 ci=0 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=3 r=[0,46)
+2026-10-12T04:15:41.781Z efs-fuse flush-meta: network error (efs_rc=-6) ino=4097 off=0 len=0
+2026-10-12T04:15:42.035Z dcache ino=4097 ci=0 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=4 r=[0,46)
+2026-10-12T04:15:43.600Z put_fragments ino=4097 chunk=0: only 1/3 peers live, clearing down-marks and re-probing
+2026-10-12T04:15:43.607Z dcache ino=4097 ci=0 put-record obj=adac11c261b2b614 seq=4 | dirty=0 hb=0 bg=0 obj=adac11c261b2b614 oseq=4 sseq=4 r=[0,46)
+2026-10-12T04:15:43.607Z dcache ino=4097 ci=0 install len=131072 seq=4 | dirty=0 hb=0 bg=0 obj=adac11c261b2b614 oseq=4 sseq=4 r=[0,46)
+2026-10-12T04:15:43.611Z report ino=4097 ci=0 only=4097 sync=1 rc=0
+2026-10-12T04:15:43.611Z report-irec ino=4097 size=46 only=4097 sync=1 rc=0
+2026-10-12T04:15:47.116Z release ino=4097 begin
+2026-10-12T04:15:47.123Z release ino=4097 rc=0
+2026-10-12T04:15:47.277Z dcache ino=8193 ci=0 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=5 r=[0,46)
+2026-10-12T04:15:56.831Z efs-fuse fsync: network error (efs_rc=-6) ino=0 off=0 len=0
+2026-10-12T04:15:56.831Z sync-write ino=8193 bytes=46 datasync=1 rc=-5
+2026-10-12T04:15:56.833Z dcache ino=8193 ci=0 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=6 r=[0,46)
+2026-10-12T04:16:06.384Z efs-fuse flush-meta: network error (efs_rc=-6) ino=8193 off=0 len=0
+2026-10-12T04:16:06.637Z dcache ino=8193 ci=0 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=7 r=[0,46)
+2026-10-12T04:16:16.189Z efs-fuse flush-meta: network error (efs_rc=-6) ino=8193 off=0 len=0
+2026-10-12T04:16:16.442Z dcache ino=8193 ci=0 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=8 r=[0,46)
+2026-10-12T04:16:18.005Z put_fragments ino=8193 chunk=0 nodes=1,2,3 attempt 1 failed: no quorum (efs_rc=-8) — retrying
+2026-10-12T04:16:18.147Z dcache ino=8193 ci=0 put-record obj=63783f66db9d7fc4 seq=8 | dirty=0 hb=0 bg=0 obj=63783f66db9d7fc4 oseq=8 sseq=8 r=[0,46)
+2026-10-12T04:16:18.147Z dcache ino=8193 ci=0 install len=131072 seq=8 | dirty=0 hb=0 bg=0 obj=63783f66db9d7fc4 oseq=8 sseq=8 r=[0,46)
+2026-10-12T04:16:18.152Z report ino=8193 ci=0 only=8193 sync=1 rc=0
+2026-10-12T04:16:18.152Z report-irec ino=8193 size=46 only=8193 sync=1 rc=0
+2026-10-12T04:16:21.656Z release ino=8193 begin
+2026-10-12T04:16:21.662Z release ino=8193 rc=0
+2026-10-12T04:16:21.738Z report-irec ino=1 size=0 only=0 sync=1 rc=0
+2026-10-12T04:16:26.092Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:24Z on intel2), build=28b2089b-release-fault: starting export=default mount=/tmp/efs-intel-28b2089b-intel2_efs/mnt
+2026-10-12T04:16:26.093Z Discovered 4 cluster nodes from 127.0.0.1:34210
+2026-10-12T04:16:26.094Z   node id=1 127.0.0.1:34210
+2026-10-12T04:16:26.094Z   node id=2 127.0.0.1:34211
+2026-10-12T04:16:26.094Z   node id=3 127.0.0.1:34212
+2026-10-12T04:16:26.094Z   node id=4 127.0.0.1:34213
+2026-10-12T04:16:26.094Z fetching metadata...
+2026-10-12T04:16:26.094Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T04:16:26.094Z export id=1 name=default
+2026-10-12T04:16:26.094Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T04:16:26.098Z efs-fuse: workers max=10 idle=10
+2026-10-12T04:16:26.109Z fuse serving
+2026-10-12T04:16:26.386Z release ino=4097 begin
+2026-10-12T04:16:26.389Z release ino=4097 rc=0
+2026-10-12T04:16:26.402Z release ino=8193 begin
+2026-10-12T04:16:26.405Z release ino=8193 rc=0
+2026-10-12T04:16:26.728Z dcache ino=12289 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=1 r=
+2026-10-12T04:16:26.736Z dcache ino=12289 ci=0 put-record obj=49ab5ab79d40549c seq=1 | dirty=0 hb=1 bg=ffffffffffffffff obj=49ab5ab79d40549c oseq=1 sseq=1 r=
+2026-10-12T04:16:26.736Z dcache ino=12289 ci=0 install len=131072 seq=1 | dirty=0 hb=1 bg=ffffffffffffffff obj=49ab5ab79d40549c oseq=1 sseq=1 r=
+2026-10-12T04:16:26.740Z report ino=12289 ci=0 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.740Z report-irec ino=12289 size=131072 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.763Z dcache ino=12289 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=1 sseq=2 r=[0,4096)
+2026-10-12T04:16:26.769Z dcache ino=12289 ci=0 put-record obj=6a8e10a8eab27f98 seq=2 | dirty=0 hb=1 bg=ffffffffffffffff obj=6a8e10a8eab27f98 oseq=2 sseq=2 r=[0,4096)
+2026-10-12T04:16:26.769Z dcache ino=12289 ci=0 install len=131072 seq=2 | dirty=0 hb=1 bg=ffffffffffffffff obj=6a8e10a8eab27f98 oseq=2 sseq=2 r=[0,4096)
+2026-10-12T04:16:26.772Z report ino=12289 ci=0 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.772Z report-irec ino=12289 size=131072 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.784Z dcache ino=12289 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=2 sseq=3 r=[0,4096)
+2026-10-12T04:16:26.792Z dcache ino=12289 ci=0 put-record obj=5bed524f5d84d75f seq=3 | dirty=0 hb=1 bg=ffffffffffffffff obj=5bed524f5d84d75f oseq=3 sseq=3 r=[0,4096)
+2026-10-12T04:16:26.792Z dcache ino=12289 ci=0 install len=131072 seq=3 | dirty=0 hb=1 bg=ffffffffffffffff obj=5bed524f5d84d75f oseq=3 sseq=3 r=[0,4096)
+2026-10-12T04:16:26.796Z dcache ino=12289 ci=0 stale-class committed=6a8e10a8eab27f98 ours=5bed524f5d84d75f done=0 base=ffffffffffffffff
+2026-10-12T04:16:26.796Z dcache ino=12289 ci=0 snap-replay | dirty=0 hb=1 bg=ffffffffffffffff obj=5bed524f5d84d75f oseq=3 sseq=4 r=[0,4096)
+2026-10-12T04:16:26.798Z dcache ino=12289 ci=0 replay committed=6a8e10a8eab27f98 fetch_rc=0 nrange=1 absent=0
+2026-10-12T04:16:26.803Z dcache ino=12289 ci=0 put-record obj=78ab38edd28673b1 seq=4 | dirty=0 hb=1 bg=ffffffffffffffff obj=78ab38edd28673b1 oseq=4 sseq=4 r=[0,4096)
+2026-10-12T04:16:26.803Z dcache ino=12289 ci=0 install len=131072 seq=4 | dirty=0 hb=1 bg=ffffffffffffffff obj=78ab38edd28673b1 oseq=4 sseq=4 r=[0,4096)
+2026-10-12T04:16:26.803Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=7
+2026-10-12T04:16:26.809Z report ino=12289 ci=0 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.809Z report-irec ino=12289 size=131072 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.821Z dcache ino=12289 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=4 sseq=5 r=[0,4096)
+2026-10-12T04:16:26.827Z dcache ino=12289 ci=0 put-record obj=badb93c0e58a7be3 seq=5 | dirty=0 hb=1 bg=ffffffffffffffff obj=badb93c0e58a7be3 oseq=5 sseq=5 r=[0,4096)
+2026-10-12T04:16:26.827Z dcache ino=12289 ci=0 install len=131072 seq=5 | dirty=0 hb=1 bg=ffffffffffffffff obj=badb93c0e58a7be3 oseq=5 sseq=5 r=[0,4096)
+2026-10-12T04:16:26.830Z dcache ino=12289 ci=0 stale-class committed=78ab38edd28673b1 ours=badb93c0e58a7be3 done=0 base=ffffffffffffffff
+2026-10-12T04:16:26.830Z dcache ino=12289 ci=0 snap-replay | dirty=0 hb=1 bg=ffffffffffffffff obj=badb93c0e58a7be3 oseq=5 sseq=6 r=[0,4096)
+2026-10-12T04:16:26.831Z dcache ino=12289 ci=0 replay committed=78ab38edd28673b1 fetch_rc=0 nrange=1 absent=0
+2026-10-12T04:16:26.836Z dcache ino=12289 ci=0 put-record obj=eeb612a5487c1457 seq=6 | dirty=0 hb=1 bg=ffffffffffffffff obj=eeb612a5487c1457 oseq=6 sseq=6 r=[0,4096)
+2026-10-12T04:16:26.837Z dcache ino=12289 ci=0 install len=131072 seq=6 | dirty=0 hb=1 bg=ffffffffffffffff obj=eeb612a5487c1457 oseq=6 sseq=6 r=[0,4096)
+2026-10-12T04:16:26.837Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=7
+2026-10-12T04:16:26.842Z report ino=12289 ci=0 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.842Z report-irec ino=12289 size=131072 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.854Z dcache ino=12289 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=6 sseq=7 r=[0,4096)
+2026-10-12T04:16:26.859Z dcache ino=12289 ci=0 put-record obj=f77a7edbf69cd20c seq=7 | dirty=0 hb=1 bg=ffffffffffffffff obj=f77a7edbf69cd20c oseq=7 sseq=7 r=[0,4096)
+2026-10-12T04:16:26.859Z dcache ino=12289 ci=0 install len=131072 seq=7 | dirty=0 hb=1 bg=ffffffffffffffff obj=f77a7edbf69cd20c oseq=7 sseq=7 r=[0,4096)
+2026-10-12T04:16:26.862Z dcache ino=12289 ci=0 stale-class committed=eeb612a5487c1457 ours=f77a7edbf69cd20c done=0 base=ffffffffffffffff
+2026-10-12T04:16:26.862Z dcache ino=12289 ci=0 snap-replay | dirty=0 hb=1 bg=ffffffffffffffff obj=f77a7edbf69cd20c oseq=7 sseq=8 r=[0,4096)
+2026-10-12T04:16:26.864Z dcache ino=12289 ci=0 replay committed=eeb612a5487c1457 fetch_rc=0 nrange=1 absent=0
+2026-10-12T04:16:26.869Z dcache ino=12289 ci=0 put-record obj=86120e508482d82b seq=8 | dirty=0 hb=1 bg=ffffffffffffffff obj=86120e508482d82b oseq=8 sseq=8 r=[0,4096)
+2026-10-12T04:16:26.869Z dcache ino=12289 ci=0 install len=131072 seq=8 | dirty=0 hb=1 bg=ffffffffffffffff obj=86120e508482d82b oseq=8 sseq=8 r=[0,4096)
+2026-10-12T04:16:26.869Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=7
+2026-10-12T04:16:26.874Z report ino=12289 ci=0 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.874Z report-irec ino=12289 size=131072 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.887Z dcache ino=12289 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=8 sseq=9 r=[0,4096)
+2026-10-12T04:16:26.893Z dcache ino=12289 ci=0 put-record obj=22ddff3cace45e72 seq=9 | dirty=0 hb=1 bg=ffffffffffffffff obj=22ddff3cace45e72 oseq=9 sseq=9 r=[0,4096)
+2026-10-12T04:16:26.893Z dcache ino=12289 ci=0 install len=131072 seq=9 | dirty=0 hb=1 bg=ffffffffffffffff obj=22ddff3cace45e72 oseq=9 sseq=9 r=[0,4096)
+2026-10-12T04:16:26.897Z dcache ino=12289 ci=0 stale-class committed=86120e508482d82b ours=22ddff3cace45e72 done=0 base=ffffffffffffffff
+2026-10-12T04:16:26.897Z dcache ino=12289 ci=0 snap-replay | dirty=0 hb=1 bg=ffffffffffffffff obj=22ddff3cace45e72 oseq=9 sseq=10 r=[0,4096)
+2026-10-12T04:16:26.898Z dcache ino=12289 ci=0 replay committed=86120e508482d82b fetch_rc=0 nrange=1 absent=0
+2026-10-12T04:16:26.904Z dcache ino=12289 ci=0 put-record obj=206f05325636933b seq=10 | dirty=0 hb=1 bg=ffffffffffffffff obj=206f05325636933b oseq=10 sseq=10 r=[0,4096)
+2026-10-12T04:16:26.904Z dcache ino=12289 ci=0 install len=131072 seq=10 | dirty=0 hb=1 bg=ffffffffffffffff obj=206f05325636933b oseq=10 sseq=10 r=[0,4096)
+2026-10-12T04:16:26.904Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=7
+2026-10-12T04:16:26.910Z report ino=12289 ci=0 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.910Z report-irec ino=12289 size=131072 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.921Z dcache ino=12289 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=10 sseq=11 r=[0,4096)
+2026-10-12T04:16:26.927Z dcache ino=12289 ci=0 put-record obj=b09fd076a83f9ee5 seq=11 | dirty=0 hb=1 bg=ffffffffffffffff obj=b09fd076a83f9ee5 oseq=11 sseq=11 r=[0,4096)
+2026-10-12T04:16:26.927Z dcache ino=12289 ci=0 install len=131072 seq=11 | dirty=0 hb=1 bg=ffffffffffffffff obj=b09fd076a83f9ee5 oseq=11 sseq=11 r=[0,4096)
+2026-10-12T04:16:26.930Z dcache ino=12289 ci=0 stale-class committed=206f05325636933b ours=b09fd076a83f9ee5 done=0 base=ffffffffffffffff
+2026-10-12T04:16:26.930Z dcache ino=12289 ci=0 snap-replay | dirty=0 hb=1 bg=ffffffffffffffff obj=b09fd076a83f9ee5 oseq=11 sseq=12 r=[0,4096)
+2026-10-12T04:16:26.931Z dcache ino=12289 ci=0 replay committed=206f05325636933b fetch_rc=0 nrange=1 absent=0
+2026-10-12T04:16:26.937Z dcache ino=12289 ci=0 put-record obj=87b425e660f3d9c9 seq=12 | dirty=0 hb=1 bg=ffffffffffffffff obj=87b425e660f3d9c9 oseq=12 sseq=12 r=[0,4096)
+2026-10-12T04:16:26.937Z dcache ino=12289 ci=0 install len=131072 seq=12 | dirty=0 hb=1 bg=ffffffffffffffff obj=87b425e660f3d9c9 oseq=12 sseq=12 r=[0,4096)
+2026-10-12T04:16:26.937Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=7
+2026-10-12T04:16:26.942Z report ino=12289 ci=0 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.942Z report-irec ino=12289 size=131072 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.954Z dcache ino=12289 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=12 sseq=13 r=[0,4096)
+2026-10-12T04:16:26.959Z dcache ino=12289 ci=0 put-record obj=a0738483529e0e41 seq=13 | dirty=0 hb=1 bg=ffffffffffffffff obj=a0738483529e0e41 oseq=13 sseq=13 r=[0,4096)
+2026-10-12T04:16:26.959Z dcache ino=12289 ci=0 install len=131072 seq=13 | dirty=0 hb=1 bg=ffffffffffffffff obj=a0738483529e0e41 oseq=13 sseq=13 r=[0,4096)
+2026-10-12T04:16:26.963Z dcache ino=12289 ci=0 stale-class committed=87b425e660f3d9c9 ours=a0738483529e0e41 done=0 base=ffffffffffffffff
+2026-10-12T04:16:26.963Z dcache ino=12289 ci=0 snap-replay | dirty=0 hb=1 bg=ffffffffffffffff obj=a0738483529e0e41 oseq=13 sseq=14 r=[0,4096)
+2026-10-12T04:16:26.964Z dcache ino=12289 ci=0 replay committed=87b425e660f3d9c9 fetch_rc=0 nrange=1 absent=0
+2026-10-12T04:16:26.969Z dcache ino=12289 ci=0 put-record obj=7888a14585fd9f79 seq=14 | dirty=0 hb=1 bg=ffffffffffffffff obj=7888a14585fd9f79 oseq=14 sseq=14 r=[0,4096)
+2026-10-12T04:16:26.969Z dcache ino=12289 ci=0 install len=131072 seq=14 | dirty=0 hb=1 bg=ffffffffffffffff obj=7888a14585fd9f79 oseq=14 sseq=14 r=[0,4096)
+2026-10-12T04:16:26.969Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=6
+2026-10-12T04:16:26.975Z report ino=12289 ci=0 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.975Z report-irec ino=12289 size=131072 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.987Z dcache ino=12289 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=14 sseq=15 r=[0,4096)
+2026-10-12T04:16:26.993Z dcache ino=12289 ci=0 put-record obj=e11cc597de29075a seq=15 | dirty=0 hb=1 bg=ffffffffffffffff obj=e11cc597de29075a oseq=15 sseq=15 r=[0,4096)
+2026-10-12T04:16:26.993Z dcache ino=12289 ci=0 install len=131072 seq=15 | dirty=0 hb=1 bg=ffffffffffffffff obj=e11cc597de29075a oseq=15 sseq=15 r=[0,4096)
+2026-10-12T04:16:26.997Z dcache ino=12289 ci=0 stale-class committed=7888a14585fd9f79 ours=e11cc597de29075a done=0 base=ffffffffffffffff
+2026-10-12T04:16:26.997Z dcache ino=12289 ci=0 snap-replay | dirty=0 hb=1 bg=ffffffffffffffff obj=e11cc597de29075a oseq=15 sseq=16 r=[0,4096)
+2026-10-12T04:16:26.998Z dcache ino=12289 ci=0 replay committed=7888a14585fd9f79 fetch_rc=0 nrange=1 absent=0
+2026-10-12T04:16:27.004Z dcache ino=12289 ci=0 put-record obj=50ce1ae4bd2c8d39 seq=16 | dirty=0 hb=1 bg=ffffffffffffffff obj=50ce1ae4bd2c8d39 oseq=16 sseq=16 r=[0,4096)
+2026-10-12T04:16:27.004Z dcache ino=12289 ci=0 install len=131072 seq=16 | dirty=0 hb=1 bg=ffffffffffffffff obj=50ce1ae4bd2c8d39 oseq=16 sseq=16 r=[0,4096)
+2026-10-12T04:16:27.004Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=7
+2026-10-12T04:16:27.009Z report ino=12289 ci=0 only=12289 sync=1 rc=0
+2026-10-12T04:16:27.009Z report-irec ino=12289 size=131072 only=12289 sync=1 rc=0
+2026-10-12T04:16:27.022Z dcache ino=12289 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=16 sseq=17 r=[0,4096)
+2026-10-12T04:16:27.028Z dcache ino=12289 ci=0 put-record obj=1cf5d106ff814c1c seq=17 | dirty=0 hb=1 bg=ffffffffffffffff obj=1cf5d106ff814c1c oseq=17 sseq=17 r=[0,4096)
+2026-10-12T04:16:27.028Z dcache ino=12289 ci=0 install len=131072 seq=17 | dirty=0 hb=1 bg=ffffffffffffffff obj=1cf5d106ff814c1c oseq=17 sseq=17 r=[0,4096)
+2026-10-12T04:16:27.032Z dcache ino=12289 ci=0 stale-class committed=50ce1ae4bd2c8d39 ours=1cf5d106ff814c1c done=0 base=ffffffffffffffff
+2026-10-12T04:16:27.032Z dcache ino=12289 ci=0 snap-replay | dirty=0 hb=1 bg=ffffffffffffffff obj=1cf5d106ff814c1c oseq=17 sseq=18 r=[0,4096)
+2026-10-12T04:16:27.033Z dcache ino=12289 ci=0 replay committed=50ce1ae4bd2c8d39 fetch_rc=0 nrange=1 absent=0
+2026-10-12T04:16:27.038Z dcache ino=12289 ci=0 put-record obj=d3b279d38187c67d seq=18 | dirty=0 hb=1 bg=ffffffffffffffff obj=d3b279d38187c67d oseq=18 sseq=18 r=[0,4096)
+2026-10-12T04:16:27.038Z dcache ino=12289 ci=0 install len=131072 seq=18 | dirty=0 hb=1 bg=ffffffffffffffff obj=d3b279d38187c67d oseq=18 sseq=18 r=[0,4096)
+2026-10-12T04:16:27.038Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=6
+2026-10-12T04:16:27.044Z report ino=12289 ci=0 only=12289 sync=1 rc=0
+2026-10-12T04:16:27.044Z report-irec ino=12289 size=131072 only=12289 sync=1 rc=0
+2026-10-12T04:16:27.055Z dcache ino=12289 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=18 sseq=19 r=[0,4096)
+2026-10-12T04:16:27.062Z dcache ino=12289 ci=0 put-record obj=fd5aae9b3b9e259d seq=19 | dirty=0 hb=1 bg=ffffffffffffffff obj=fd5aae9b3b9e259d oseq=19 sseq=19 r=[0,4096)
+2026-10-12T04:16:27.062Z dcache ino=12289 ci=0 install len=131072 seq=19 | dirty=0 hb=1 bg=ffffffffffffffff obj=fd5aae9b3b9e259d oseq=19 sseq=19 r=[0,4096)
+2026-10-12T04:16:27.066Z dcache ino=12289 ci=0 stale-class committed=b06b8a2df33b1295 ours=fd5aae9b3b9e259d done=0 base=ffffffffffffffff
+2026-10-12T04:16:27.066Z dcache ino=12289 ci=0 snap-replay | dirty=0 hb=1 bg=ffffffffffffffff obj=fd5aae9b3b9e259d oseq=19 sseq=20 r=[0,4096)
+2026-10-12T04:16:27.066Z dcache ino=12289 ci=0 replay committed=b06b8a2df33b1295 fetch_rc=0 nrange=1 absent=0
+2026-10-12T04:16:27.072Z dcache ino=12289 ci=0 put-record obj=f924ca5f7c102ae5 seq=20 | dirty=0 hb=1 bg=ffffffffffffffff obj=f924ca5f7c102ae5 oseq=20 sseq=20 r=[0,4096)
+2026-10-12T04:16:27.072Z dcache ino=12289 ci=0 install len=131072 seq=20 | dirty=0 hb=1 bg=ffffffffffffffff obj=f924ca5f7c102ae5 oseq=20 sseq=20 r=[0,4096)
+2026-10-12T04:16:27.072Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=6
+2026-10-12T04:16:27.080Z report ino=12289 ci=0 only=12289 sync=1 rc=0
+2026-10-12T04:16:27.080Z report-irec ino=12289 size=131072 only=12289 sync=1 rc=0
+2026-10-12T04:16:27.092Z efs: report rec ino=12289 ci=0 rejected unowned staging observation nodes=1,2,3 (putid miss, n=1)
+2026-10-12T04:16:27.092Z report-irec ino=12289 size=131072 only=12289 sync=1 rc=0
+2026-10-12T04:16:27.093Z release ino=12289 begin
+2026-10-12T04:16:27.098Z release ino=12289 rc=0
+2026-10-12T04:16:27.475Z dcache ino=16385 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=21 r=
+2026-10-12T04:16:27.476Z dcache ino=16385 ci=1 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=22 r=
+2026-10-12T04:16:27.477Z dcache ino=16385 ci=2 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=23 r=
+2026-10-12T04:16:27.477Z dcache ino=16385 ci=3 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=24 r=
+2026-10-12T04:16:27.478Z dcache ino=16385 ci=4 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=25 r=
+2026-10-12T04:16:27.478Z dcache ino=16385 ci=6 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=26 r=
+2026-10-12T04:16:27.479Z dcache ino=16385 ci=5 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=27 r=
+2026-10-12T04:16:27.479Z dcache ino=16385 ci=7 patch off=128112 len=2960 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:27.481Z dcache ino=16385 ci=9 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=28 r=
+2026-10-12T04:16:27.481Z dcache ino=16385 ci=8 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=29 r=
+2026-10-12T04:16:27.482Z dcache ino=16385 ci=11 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=30 r=
+2026-10-12T04:16:27.482Z dcache ino=16385 ci=10 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=31 r=
+2026-10-12T04:16:27.482Z dcache ino=16385 ci=14 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=32 r=
+2026-10-12T04:16:27.482Z dcache ino=16385 ci=13 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=33 r=
+2026-10-12T04:16:27.482Z dcache ino=16385 ci=12 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=34 r=
+2026-10-12T04:16:27.483Z dcache ino=16385 ci=15 patch off=128112 len=2960 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:27.483Z dcache ino=16385 ci=0 put-record obj=573e8c98d7f7ee16 seq=21 | dirty=0 hb=1 bg=ffffffffffffffff obj=573e8c98d7f7ee16 oseq=21 sseq=21 r=
+2026-10-12T04:16:27.483Z dcache ino=16385 ci=0 install len=131072 seq=21 | dirty=0 hb=1 bg=ffffffffffffffff obj=573e8c98d7f7ee16 oseq=21 sseq=21 r=
+2026-10-12T04:16:27.484Z dcache ino=16385 ci=1 put-record obj=b93151fcdbcc8e9c seq=22 | dirty=0 hb=1 bg=ffffffffffffffff obj=b93151fcdbcc8e9c oseq=22 sseq=22 r=
+2026-10-12T04:16:27.484Z dcache ino=16385 ci=1 install len=131072 seq=22 | dirty=0 hb=1 bg=ffffffffffffffff obj=b93151fcdbcc8e9c oseq=22 sseq=22 r=
+2026-10-12T04:16:27.484Z dcache ino=16385 ci=16 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=35 r=
+2026-10-12T04:16:27.485Z dcache ino=16385 ci=18 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=36 r=
+2026-10-12T04:16:27.485Z dcache ino=16385 ci=17 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=37 r=
+2026-10-12T04:16:27.485Z dcache ino=16385 ci=19 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=38 r=
+2026-10-12T04:16:27.485Z dcache ino=16385 ci=20 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=39 r=
+2026-10-12T04:16:27.485Z dcache ino=16385 ci=21 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=40 r=
+2026-10-12T04:16:27.486Z dcache ino=16385 ci=22 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=41 r=
+2026-10-12T04:16:27.486Z dcache ino=16385 ci=23 patch off=128112 len=2960 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:27.487Z dcache ino=16385 ci=24 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=42 r=
+2026-10-12T04:16:27.488Z dcache ino=16385 ci=25 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=43 r=
+2026-10-12T04:16:27.488Z dcache ino=16385 ci=27 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=44 r=
+2026-10-12T04:16:27.488Z dcache ino=16385 ci=26 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=45 r=
+2026-10-12T04:16:27.488Z dcache ino=16385 ci=29 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=46 r=
+2026-10-12T04:16:27.488Z dcache ino=16385 ci=31 patch off=128112 len=2960 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:27.488Z dcache ino=16385 ci=28 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=47 r=
+2026-10-12T04:16:27.488Z dcache ino=16385 ci=30 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=48 r=
+2026-10-12T04:16:27.489Z dcache ino=16385 ci=6 put-record obj=8783916b8cb403e1 seq=26 | dirty=0 hb=1 bg=ffffffffffffffff obj=8783916b8cb403e1 oseq=26 sseq=26 r=
+2026-10-12T04:16:27.489Z dcache ino=16385 ci=6 install len=131072 seq=26 | dirty=0 hb=1 bg=ffffffffffffffff obj=8783916b8cb403e1 oseq=26 sseq=26 r=
+2026-10-12T04:16:27.489Z dcache ino=16385 ci=3 put-record obj=302c8b1cf8b278b4 seq=24 | dirty=0 hb=1 bg=ffffffffffffffff obj=302c8b1cf8b278b4 oseq=24 sseq=24 r=
+2026-10-12T04:16:27.489Z dcache ino=16385 ci=3 install len=131072 seq=24 | dirty=0 hb=1 bg=ffffffffffffffff obj=302c8b1cf8b278b4 oseq=24 sseq=24 r=
+2026-10-12T04:16:27.489Z dcache ino=16385 ci=34 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=49 r=
+2026-10-12T04:16:27.489Z dcache ino=16385 ci=33 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=50 r=
+2026-10-12T04:16:27.489Z dcache ino=16385 ci=36 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=51 r=
+2026-10-12T04:16:27.489Z dcache ino=16385 ci=35 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=52 r=
+2026-10-12T04:16:27.489Z dcache ino=16385 ci=38 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=53 r=
+2026-10-12T04:16:27.490Z dcache ino=16385 ci=37 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=54 r=
+2026-10-12T04:16:27.490Z dcache ino=16385 ci=39 patch off=128112 len=2960 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:27.490Z dcache ino=16385 ci=32 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=55 r=
+2026-10-12T04:16:27.490Z dcache ino=16385 ci=2 put-record obj=d39c506952f372ce seq=23 | dirty=0 hb=1 bg=ffffffffffffffff obj=d39c506952f372ce oseq=23 sseq=23 r=
+2026-10-12T04:16:27.490Z dcache ino=16385 ci=2 install len=131072 seq=23 | dirty=0 hb=1 bg=ffffffffffffffff obj=d39c506952f372ce oseq=23 sseq=23 r=
+2026-10-12T04:16:27.490Z dcache ino=16385 ci=40 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=56 r=
+2026-10-12T04:16:27.490Z dcache ino=16385 ci=41 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=57 r=
+2026-10-12T04:16:27.490Z dcache ino=16385 ci=42 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=58 r=
+2026-10-12T04:16:27.490Z dcache ino=16385 ci=43 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=59 r=
+2026-10-12T04:16:27.490Z dcache ino=16385 ci=44 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=60 r=
+2026-10-12T04:16:27.490Z dcache ino=16385 ci=45 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=61 r=
+2026-10-12T04:16:27.491Z dcache ino=16385 ci=46 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=62 r=
+2026-10-12T04:16:27.491Z dcache ino=16385 ci=47 patch off=128112 len=2960 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:27.492Z dcache ino=16385 ci=55 patch off=128112 len=2960 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:27.493Z dcache ino=16385 ci=5 put-record obj=6d36e654952c7e67 seq=27 | dirty=0 hb=1 bg=ffffffffffffffff obj=6d36e654952c7e67 oseq=27 sseq=27 r=
+2026-10-12T04:16:27.493Z dcache ino=16385 ci=5 install len=131072 seq=27 | dirty=0 hb=1 bg=ffffffffffffffff obj=6d36e654952c7e67 oseq=27 sseq=27 r=
+2026-10-12T04:16:27.493Z dcache ino=16385 ci=61 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=63 r=
+2026-10-12T04:16:27.493Z dcache ino=16385 ci=52 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=64 r=
+2026-10-12T04:16:27.493Z dcache ino=16385 ci=63 patch off=128112 len=2960 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:27.493Z dcache ino=16385 ci=60 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=65 r=
+2026-10-12T04:16:27.493Z dcache ino=16385 ci=51 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=66 r=
+2026-10-12T04:16:27.493Z dcache ino=16385 ci=54 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=67 r=
+2026-10-12T04:16:27.493Z dcache ino=16385 ci=53 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=68 r=
+2026-10-12T04:16:27.493Z dcache ino=16385 ci=62 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=69 r=
+2026-10-12T04:16:27.493Z dcache ino=16385 ci=57 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=70 r=
+2026-10-12T04:16:27.493Z dcache ino=16385 ci=48 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=71 r=
+2026-10-12T04:16:27.493Z dcache ino=16385 ci=56 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=72 r=
+2026-10-12T04:16:27.493Z dcache ino=16385 ci=64 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=73 r=
+2026-10-12T04:16:27.493Z dcache ino=16385 ci=65 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=74 r=
+2026-10-12T04:16:27.493Z dcache ino=16385 ci=66 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=75 r=
+2026-10-12T04:16:27.494Z dcache ino=16385 ci=68 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=76 r=
+2026-10-12T04:16:27.494Z dcache ino=16385 ci=59 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=77 r=
+2026-10-12T04:16:27.494Z dcache ino=16385 ci=50 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=78 r=
+2026-10-12T04:16:27.494Z dcache ino=16385 ci=69 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=79 r=
+2026-10-12T04:16:27.494Z dcache ino=16385 ci=70 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=80 r=
+2026-10-12T04:16:27.494Z dcache ino=16385 ci=49 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=81 r=
+2026-10-12T04:16:27.494Z dcache ino=16385 ci=67 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=82 r=
+2026-10-12T04:16:27.494Z dcache ino=16385 ci=4 put-record obj=d9fffd4aab9f5018 seq=25 | dirty=0 hb=1 bg=ffffffffffffffff obj=d9fffd4aab9f5018 oseq=25 sseq=25 r=
+2026-10-12T04:16:27.494Z dcache ino=16385 ci=4 install len=131072 seq=25 | dirty=0 hb=1 bg=ffffffffffffffff obj=d9fffd4aab9f5018 oseq=25 sseq=25 r=
+2026-10-12T04:16:27.494Z dcache ino=16385 ci=71 patch off=128112 len=2960 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:27.494Z dcache ino=16385 ci=58 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=83 r=
+2026-10-12T04:16:27.494Z dcache ino=16385 ci=7 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=84 r=[0,131072)
+2026-10-12T04:16:27.495Z dcache ino=16385 ci=15 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=85 r=[0,131072)
+2026-10-12T04:16:27.495Z dcache ino=16385 ci=23 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=86 r=[0,131072)
+2026-10-12T04:16:27.495Z dcache ino=16385 ci=31 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=87 r=[0,131072)
+2026-10-12T04:16:27.496Z dcache ino=16385 ci=39 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=88 r=[0,131072)
+2026-10-12T04:16:27.496Z dcache ino=16385 ci=47 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=89 r=[0,131072)
+2026-10-12T04:16:27.496Z dcache ino=16385 ci=55 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=90 r=[0,131072)
+2026-10-12T04:16:27.497Z dcache ino=16385 ci=63 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=91 r=[0,131072)
+2026-10-12T04:16:27.497Z dcache ino=16385 ci=71 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=92 r=[0,131072)
+2026-10-12T04:16:27.498Z dcache ino=16385 ci=19 put-record obj=e0922f806638813f seq=38 | dirty=0 hb=1 bg=ffffffffffffffff obj=e0922f806638813f oseq=38 sseq=38 r=
+2026-10-12T04:16:27.498Z dcache ino=16385 ci=19 install len=131072 seq=38 | dirty=0 hb=1 bg=ffffffffffffffff obj=e0922f806638813f oseq=38 sseq=38 r=
+2026-10-12T04:16:27.498Z dcache ino=16385 ci=12 put-record obj=a36c6178a52dc864 seq=34 | dirty=0 hb=1 bg=ffffffffffffffff obj=a36c6178a52dc864 oseq=34 sseq=34 r=
+2026-10-12T04:16:27.498Z dcache ino=16385 ci=22 put-record obj=30004385d66583aa seq=41 | dirty=0 hb=1 bg=ffffffffffffffff obj=30004385d66583aa oseq=41 sseq=41 r=
+2026-10-12T04:16:27.498Z dcache ino=16385 ci=22 install len=131072 seq=41 | dirty=0 hb=1 bg=ffffffffffffffff obj=30004385d66583aa oseq=41 sseq=41 r=
+2026-10-12T04:16:27.498Z dcache ino=16385 ci=12 install len=131072 seq=34 | dirty=0 hb=1 bg=ffffffffffffffff obj=a36c6178a52dc864 oseq=34 sseq=34 r=
+2026-10-12T04:16:27.499Z dcache ino=16385 ci=13 put-record obj=8f5b0b5337cdd466 seq=33 | dirty=0 hb=1 bg=ffffffffffffffff obj=8f5b0b5337cdd466 oseq=33 sseq=33 r=
+2026-10-12T04:16:27.499Z dcache ino=16385 ci=13 install len=131072 seq=33 | dirty=0 hb=1 bg=ffffffffffffffff obj=8f5b0b5337cdd466 oseq=33 sseq=33 r=
+2026-10-12T04:16:27.503Z dcache ino=16385 ci=24 put-record obj=9714ae5da9d0f7b0 seq=42 | dirty=0 hb=1 bg=ffffffffffffffff obj=9714ae5da9d0f7b0 oseq=42 sseq=42 r=
+2026-10-12T04:16:27.503Z dcache ino=16385 ci=24 install len=131072 seq=42 | dirty=0 hb=1 bg=ffffffffffffffff obj=9714ae5da9d0f7b0 oseq=42 sseq=42 r=
+2026-10-12T04:16:27.510Z dcache ino=16385 ci=40 put-record obj=f6ccc493117539bb seq=56 | dirty=0 hb=1 bg=ffffffffffffffff obj=f6ccc493117539bb oseq=56 sseq=56 r=
+2026-10-12T04:16:27.510Z dcache ino=16385 ci=40 install len=131072 seq=56 | dirty=0 hb=1 bg=ffffffffffffffff obj=f6ccc493117539bb oseq=56 sseq=56 r=
+2026-10-12T04:16:27.511Z dcache ino=16385 ci=42 put-record obj=7dd6e734c377bd15 seq=58 | dirty=0 hb=1 bg=ffffffffffffffff obj=7dd6e734c377bd15 oseq=58 sseq=58 r=
+2026-10-12T04:16:27.511Z dcache ino=16385 ci=42 install len=131072 seq=58 | dirty=0 hb=1 bg=ffffffffffffffff obj=7dd6e734c377bd15 oseq=58 sseq=58 r=
+2026-10-12T04:16:27.515Z dcache ino=16385 ci=14 put-record obj=fbc8b8dfde1ee794 seq=32 | dirty=0 hb=1 bg=ffffffffffffffff obj=fbc8b8dfde1ee794 oseq=32 sseq=32 r=
+2026-10-12T04:16:27.520Z dcache ino=16385 ci=17 put-record obj=bd5428a2f1916942 seq=37 | dirty=0 hb=1 bg=ffffffffffffffff obj=bd5428a2f1916942 oseq=37 sseq=37 r=
+2026-10-12T04:16:27.520Z dcache ino=16385 ci=10 put-record obj=12ae199445a8bfdb seq=31 | dirty=0 hb=1 bg=ffffffffffffffff obj=12ae199445a8bfdb oseq=31 sseq=31 r=
+2026-10-12T04:16:27.521Z dcache ino=16385 ci=46 put-record obj=2fabd21cf3a60f6d seq=62 | dirty=0 hb=1 bg=ffffffffffffffff obj=2fabd21cf3a60f6d oseq=62 sseq=62 r=
+2026-10-12T04:16:27.521Z dcache ino=16385 ci=8 put-record obj=3348690c6a09ab96 seq=29 | dirty=0 hb=1 bg=ffffffffffffffff obj=3348690c6a09ab96 oseq=29 sseq=29 r=
+2026-10-12T04:16:27.526Z dcache ino=16385 ci=9 put-record obj=73d927ffa03d7238 seq=28 | dirty=0 hb=1 bg=ffffffffffffffff obj=73d927ffa03d7238 oseq=28 sseq=28 r=
+2026-10-12T04:16:27.526Z dcache ino=16385 ci=9 install len=131072 seq=28 | dirty=0 hb=1 bg=ffffffffffffffff obj=73d927ffa03d7238 oseq=28 sseq=28 r=
+2026-10-12T04:16:27.526Z dcache ino=16385 ci=8 install len=131072 seq=29 | dirty=0 hb=1 bg=ffffffffffffffff obj=3348690c6a09ab96 oseq=29 sseq=29 r=
+2026-10-12T04:16:27.531Z dcache ino=16385 ci=68 put-record obj=24be156b22836a92 seq=76 | dirty=0 hb=1 bg=ffffffffffffffff obj=24be156b22836a92 oseq=76 sseq=76 r=
+2026-10-12T04:16:27.531Z dcache ino=16385 ci=18 put-record obj=4585f6d361ff98eb seq=36 | dirty=0 hb=1 bg=ffffffffffffffff obj=4585f6d361ff98eb oseq=36 sseq=36 r=
+2026-10-12T04:16:27.531Z dcache ino=16385 ci=28 put-record obj=faab3b56ab371c49 seq=47 | dirty=0 hb=1 bg=ffffffffffffffff obj=faab3b56ab371c49 oseq=47 sseq=47 r=
+2026-10-12T04:16:27.531Z dcache ino=16385 ci=53 put-record obj=b6690e9cdeaeb8e7 seq=68 | dirty=0 hb=1 bg=ffffffffffffffff obj=b6690e9cdeaeb8e7 oseq=68 sseq=68 r=
+2026-10-12T04:16:27.531Z dcache ino=16385 ci=32 put-record obj=7b6c951364a9daa3 seq=55 | dirty=0 hb=1 bg=ffffffffffffffff obj=7b6c951364a9daa3 oseq=55 sseq=55 r=
+2026-10-12T04:16:27.536Z dcache ino=16385 ci=59 put-record obj=cf5a767db8c37f70 seq=77 | dirty=0 hb=1 bg=ffffffffffffffff obj=cf5a767db8c37f70 oseq=77 sseq=77 r=
+2026-10-12T04:16:27.537Z dcache ino=16385 ci=62 put-record obj=ab4b30f85a313a10 seq=69 | dirty=0 hb=1 bg=ffffffffffffffff obj=ab4b30f85a313a10 oseq=69 sseq=69 r=
+2026-10-12T04:16:27.540Z dcache ino=16385 ci=65 put-record obj=ae0baac9c6c2779a seq=74 | dirty=0 hb=1 bg=ffffffffffffffff obj=ae0baac9c6c2779a oseq=74 sseq=74 r=
+2026-10-12T04:16:27.542Z dcache ino=16385 ci=29 put-record obj=56b47a30c073415 seq=46 | dirty=0 hb=1 bg=ffffffffffffffff obj=56b47a30c073415 oseq=46 sseq=46 r=
+2026-10-12T04:16:27.542Z dcache ino=16385 ci=69 put-record obj=4d7b966db09885ed seq=79 | dirty=0 hb=1 bg=ffffffffffffffff obj=4d7b966db09885ed oseq=79 sseq=79 r=
+2026-10-12T04:16:27.547Z dcache ino=16385 ci=66 put-record obj=cf3036c60bab299c seq=75 | dirty=0 hb=1 bg=ffffffffffffffff obj=cf3036c60bab299c oseq=75 sseq=75 r=
+2026-10-12T04:16:27.547Z dcache ino=16385 ci=49 put-record obj=cb7c57b611bb480c seq=81 | dirty=0 hb=1 bg=ffffffffffffffff obj=cb7c57b611bb480c oseq=81 sseq=81 r=
+2026-10-12T04:16:27.553Z dcache ino=16385 ci=58 put-record obj=f86752d57f6eee49 seq=83 | dirty=0 hb=1 bg=ffffffffffffffff obj=f86752d57f6eee49 oseq=83 sseq=83 r=
+2026-10-12T04:16:27.553Z dcache ino=16385 ci=48 put-record obj=25992782355e2452 seq=71 | dirty=0 hb=1 bg=ffffffffffffffff obj=25992782355e2452 oseq=71 sseq=71 r=
+2026-10-12T04:16:27.558Z dcache ino=16385 ci=67 put-record obj=fcf55a241453e603 seq=82 | dirty=0 hb=1 bg=ffffffffffffffff obj=fcf55a241453e603 oseq=82 sseq=82 r=
+2026-10-12T04:16:27.558Z dcache ino=16385 ci=56 put-record obj=50f9b0cad01fdb03 seq=72 | dirty=0 hb=1 bg=ffffffffffffffff obj=50f9b0cad01fdb03 oseq=72 sseq=72 r=
+2026-10-12T04:16:27.558Z dcache ino=16385 ci=30 put-record obj=6844e21a2f12643 seq=48 | dirty=0 hb=1 bg=ffffffffffffffff obj=6844e21a2f12643 oseq=48 sseq=48 r=
+2026-10-12T04:16:27.563Z dcache ino=16385 ci=26 put-record obj=7ebf8738291bfdb4 seq=45 | dirty=0 hb=1 bg=ffffffffffffffff obj=7ebf8738291bfdb4 oseq=45 sseq=45 r=
+2026-10-12T04:16:27.564Z dcache ino=16385 ci=27 put-record obj=d1919d553d4a9437 seq=44 | dirty=0 hb=1 bg=ffffffffffffffff obj=d1919d553d4a9437 oseq=44 sseq=44 r=
+2026-10-12T04:16:27.564Z dcache ino=16385 ci=70 put-record obj=a36a0c126b677c25 seq=80 | dirty=0 hb=1 bg=ffffffffffffffff obj=a36a0c126b677c25 oseq=80 sseq=80 r=
+2026-10-12T04:16:27.569Z dcache ino=16385 ci=37 put-record obj=e7a69bb4a13d1b59 seq=54 | dirty=0 hb=1 bg=ffffffffffffffff obj=e7a69bb4a13d1b59 oseq=54 sseq=54 r=
+2026-10-12T04:16:27.569Z dcache ino=16385 ci=57 put-record obj=598e51789649681b seq=70 | dirty=0 hb=1 bg=ffffffffffffffff obj=598e51789649681b oseq=70 sseq=70 r=
+2026-10-12T04:16:27.573Z dcache ino=16385 ci=71 put-record obj=e83641751276780 seq=92 | dirty=0 hb=0 bg=0 obj=e83641751276780 oseq=92 sseq=92 r=[0,131072)
+2026-10-12T04:16:27.574Z dcache ino=16385 ci=64 put-record obj=4b8c755f47803f24 seq=73 | dirty=0 hb=1 bg=ffffffffffffffff obj=4b8c755f47803f24 oseq=73 sseq=73 r=
+2026-10-12T04:16:27.574Z dcache ino=16385 ci=39 put-record obj=3fd7bf37579e9408 seq=88 | dirty=0 hb=0 bg=0 obj=3fd7bf37579e9408 oseq=88 sseq=88 r=[0,131072)
+2026-10-12T04:16:27.574Z dcache ino=16385 ci=50 put-record obj=51e6924085eb9109 seq=78 | dirty=0 hb=1 bg=ffffffffffffffff obj=51e6924085eb9109 oseq=78 sseq=78 r=
+2026-10-12T04:16:27.575Z dcache ino=16385 ci=11 put-record obj=8b689a3e6fe7fcd3 seq=30 | dirty=0 hb=1 bg=ffffffffffffffff obj=8b689a3e6fe7fcd3 oseq=30 sseq=30 r=
+2026-10-12T04:16:27.575Z dcache ino=16385 ci=11 install len=131072 seq=30 | dirty=0 hb=1 bg=ffffffffffffffff obj=8b689a3e6fe7fcd3 oseq=30 sseq=30 r=
+2026-10-12T04:16:27.575Z dcache ino=16385 ci=10 install len=131072 seq=31 | dirty=0 hb=1 bg=ffffffffffffffff obj=12ae199445a8bfdb oseq=31 sseq=31 r=
+2026-10-12T04:16:27.575Z dcache ino=16385 ci=14 install len=131072 seq=32 | dirty=0 hb=1 bg=ffffffffffffffff obj=fbc8b8dfde1ee794 oseq=32 sseq=32 r=
+2026-10-12T04:16:27.580Z dcache ino=16385 ci=25 put-record obj=ca6f8cbd808f4649 seq=43 | dirty=0 hb=1 bg=ffffffffffffffff obj=ca6f8cbd808f4649 oseq=43 sseq=43 r=
+2026-10-12T04:16:27.580Z dcache ino=16385 ci=25 install len=131072 seq=43 | dirty=0 hb=1 bg=ffffffffffffffff obj=ca6f8cbd808f4649 oseq=43 sseq=43 r=
+2026-10-12T04:16:27.580Z dcache ino=16385 ci=44 put-record obj=5dcbcc249531b476 seq=60 | dirty=0 hb=1 bg=ffffffffffffffff obj=5dcbcc249531b476 oseq=60 sseq=60 r=
+2026-10-12T04:16:27.580Z dcache ino=16385 ci=27 install len=131072 seq=44 | dirty=0 hb=1 bg=ffffffffffffffff obj=d1919d553d4a9437 oseq=44 sseq=44 r=
+2026-10-12T04:16:27.580Z dcache ino=16385 ci=26 install len=131072 seq=45 | dirty=0 hb=1 bg=ffffffffffffffff obj=7ebf8738291bfdb4 oseq=45 sseq=45 r=
+2026-10-12T04:16:27.580Z dcache ino=16385 ci=29 install len=131072 seq=46 | dirty=0 hb=1 bg=ffffffffffffffff obj=56b47a30c073415 oseq=46 sseq=46 r=
+2026-10-12T04:16:27.580Z dcache ino=16385 ci=28 install len=131072 seq=47 | dirty=0 hb=1 bg=ffffffffffffffff obj=faab3b56ab371c49 oseq=47 sseq=47 r=
+2026-10-12T04:16:27.580Z dcache ino=16385 ci=30 install len=131072 seq=48 | dirty=0 hb=1 bg=ffffffffffffffff obj=6844e21a2f12643 oseq=48 sseq=48 r=
+2026-10-12T04:16:27.584Z dcache ino=16385 ci=63 put-record obj=bf5990cd1f0ffeb9 seq=91 | dirty=0 hb=0 bg=0 obj=bf5990cd1f0ffeb9 oseq=91 sseq=91 r=[0,131072)
+2026-10-12T04:16:27.584Z dcache ino=16385 ci=47 put-record obj=97074452eea70980 seq=89 | dirty=0 hb=0 bg=0 obj=97074452eea70980 oseq=89 sseq=89 r=[0,131072)
+2026-10-12T04:16:27.584Z dcache ino=16385 ci=21 put-record obj=36d3cff280f58fb3 seq=40 | dirty=0 hb=1 bg=ffffffffffffffff obj=36d3cff280f58fb3 oseq=40 sseq=40 r=
+2026-10-12T04:16:27.584Z dcache ino=16385 ci=20 put-record obj=c6ddf8b04f3957f3 seq=39 | dirty=0 hb=1 bg=ffffffffffffffff obj=c6ddf8b04f3957f3 oseq=39 sseq=39 r=
+2026-10-12T04:16:27.584Z dcache ino=16385 ci=20 install len=131072 seq=39 | dirty=0 hb=1 bg=ffffffffffffffff obj=c6ddf8b04f3957f3 oseq=39 sseq=39 r=
+2026-10-12T04:16:27.584Z dcache ino=16385 ci=21 install len=131072 seq=40 | dirty=0 hb=1 bg=ffffffffffffffff obj=36d3cff280f58fb3 oseq=40 sseq=40 r=
+2026-10-12T04:16:27.587Z dcache ino=16385 ci=55 put-record obj=21b896e41e8b40cb seq=90 | dirty=0 hb=0 bg=0 obj=21b896e41e8b40cb oseq=90 sseq=90 r=[0,131072)
+2026-10-12T04:16:27.588Z dcache ino=16385 ci=45 put-record obj=e755c638ed80a820 seq=61 | dirty=0 hb=1 bg=ffffffffffffffff obj=e755c638ed80a820 oseq=61 sseq=61 r=
+2026-10-12T04:16:27.588Z dcache ino=16385 ci=34 put-record obj=6346836ffac20f02 seq=49 | dirty=0 hb=1 bg=ffffffffffffffff obj=6346836ffac20f02 oseq=49 sseq=49 r=
+2026-10-12T04:16:27.589Z dcache ino=16385 ci=35 put-record obj=a955689e242a35f0 seq=52 | dirty=0 hb=1 bg=ffffffffffffffff obj=a955689e242a35f0 oseq=52 sseq=52 r=
+2026-10-12T04:16:27.589Z dcache ino=16385 ci=54 put-record obj=96985fc9f0bbe7d seq=67 | dirty=0 hb=1 bg=ffffffffffffffff obj=96985fc9f0bbe7d oseq=67 sseq=67 r=
+2026-10-12T04:16:27.589Z dcache ino=16385 ci=51 put-record obj=3646293bb494c477 seq=66 | dirty=0 hb=1 bg=ffffffffffffffff obj=3646293bb494c477 oseq=66 sseq=66 r=
+2026-10-12T04:16:27.592Z dcache ino=16385 ci=36 put-record obj=38603a8ede6aaf97 seq=51 | dirty=0 hb=1 bg=ffffffffffffffff obj=38603a8ede6aaf97 oseq=51 sseq=51 r=
+2026-10-12T04:16:27.597Z dcache ino=16385 ci=33 put-record obj=773594bcd7b1d59b seq=50 | dirty=0 hb=1 bg=ffffffffffffffff obj=773594bcd7b1d59b oseq=50 sseq=50 r=
+2026-10-12T04:16:27.597Z dcache ino=16385 ci=52 put-record obj=44bfed6d432362d7 seq=64 | dirty=0 hb=1 bg=ffffffffffffffff obj=44bfed6d432362d7 oseq=64 sseq=64 r=
+2026-10-12T04:16:27.597Z dcache ino=16385 ci=38 put-record obj=2153467c653bf3dd seq=53 | dirty=0 hb=1 bg=ffffffffffffffff obj=2153467c653bf3dd oseq=53 sseq=53 r=
+2026-10-12T04:16:27.597Z dcache ino=16385 ci=34 install len=131072 seq=49 | dirty=0 hb=1 bg=ffffffffffffffff obj=6346836ffac20f02 oseq=49 sseq=49 r=
+2026-10-12T04:16:27.597Z dcache ino=16385 ci=33 install len=131072 seq=50 | dirty=0 hb=1 bg=ffffffffffffffff obj=773594bcd7b1d59b oseq=50 sseq=50 r=
+2026-10-12T04:16:27.597Z dcache ino=16385 ci=36 install len=131072 seq=51 | dirty=0 hb=1 bg=ffffffffffffffff obj=38603a8ede6aaf97 oseq=51 sseq=51 r=
+2026-10-12T04:16:27.597Z dcache ino=16385 ci=35 install len=131072 seq=52 | dirty=0 hb=1 bg=ffffffffffffffff obj=a955689e242a35f0 oseq=52 sseq=52 r=
+2026-10-12T04:16:27.597Z dcache ino=16385 ci=38 install len=131072 seq=53 | dirty=0 hb=1 bg=ffffffffffffffff obj=2153467c653bf3dd oseq=53 sseq=53 r=
+2026-10-12T04:16:27.597Z dcache ino=16385 ci=37 install len=131072 seq=54 | dirty=0 hb=1 bg=ffffffffffffffff obj=e7a69bb4a13d1b59 oseq=54 sseq=54 r=
+2026-10-12T04:16:27.598Z dcache ino=16385 ci=32 install len=131072 seq=55 | dirty=0 hb=1 bg=ffffffffffffffff obj=7b6c951364a9daa3 oseq=55 sseq=55 r=
+2026-10-12T04:16:27.600Z dcache ino=16385 ci=23 put-record obj=1a1d8999779be7e seq=86 | dirty=0 hb=0 bg=0 obj=1a1d8999779be7e oseq=86 sseq=86 r=[0,131072)
+2026-10-12T04:16:27.600Z dcache ino=16385 ci=31 put-record obj=f912b8abe3adee8d seq=87 | dirty=0 hb=0 bg=0 obj=f912b8abe3adee8d oseq=87 sseq=87 r=[0,131072)
+2026-10-12T04:16:27.602Z dcache ino=16385 ci=16 put-record obj=dc43c0b6970f3ec6 seq=35 | dirty=0 hb=1 bg=ffffffffffffffff obj=dc43c0b6970f3ec6 oseq=35 sseq=35 r=
+2026-10-12T04:16:27.603Z dcache ino=16385 ci=16 install len=131072 seq=35 | dirty=0 hb=1 bg=ffffffffffffffff obj=dc43c0b6970f3ec6 oseq=35 sseq=35 r=
+2026-10-12T04:16:27.603Z dcache ino=16385 ci=18 install len=131072 seq=36 | dirty=0 hb=1 bg=ffffffffffffffff obj=4585f6d361ff98eb oseq=36 sseq=36 r=
+2026-10-12T04:16:27.603Z dcache ino=16385 ci=17 install len=131072 seq=37 | dirty=0 hb=1 bg=ffffffffffffffff obj=bd5428a2f1916942 oseq=37 sseq=37 r=
+2026-10-12T04:16:27.604Z dcache ino=16385 ci=43 put-record obj=b687d3df0dc4493f seq=59 | dirty=0 hb=1 bg=ffffffffffffffff obj=b687d3df0dc4493f oseq=59 sseq=59 r=
+2026-10-12T04:16:27.604Z dcache ino=16385 ci=41 put-record obj=6df12b857de878af seq=57 | dirty=0 hb=1 bg=ffffffffffffffff obj=6df12b857de878af oseq=57 sseq=57 r=
+2026-10-12T04:16:27.604Z dcache ino=16385 ci=41 install len=131072 seq=57 | dirty=0 hb=1 bg=ffffffffffffffff obj=6df12b857de878af oseq=57 sseq=57 r=
+2026-10-12T04:16:27.604Z dcache ino=16385 ci=43 install len=131072 seq=59 | dirty=0 hb=1 bg=ffffffffffffffff obj=b687d3df0dc4493f oseq=59 sseq=59 r=
+2026-10-12T04:16:27.604Z dcache ino=16385 ci=44 install len=131072 seq=60 | dirty=0 hb=1 bg=ffffffffffffffff obj=5dcbcc249531b476 oseq=60 sseq=60 r=
+2026-10-12T04:16:27.604Z dcache ino=16385 ci=45 install len=131072 seq=61 | dirty=0 hb=1 bg=ffffffffffffffff obj=e755c638ed80a820 oseq=61 sseq=61 r=
+2026-10-12T04:16:27.604Z dcache ino=16385 ci=7 put-record obj=2e5d0ee9720d280c seq=84 | dirty=0 hb=0 bg=0 obj=2e5d0ee9720d280c oseq=84 sseq=84 r=[0,131072)
+2026-10-12T04:16:27.604Z dcache ino=16385 ci=46 install len=131072 seq=62 | dirty=0 hb=1 bg=ffffffffffffffff obj=2fabd21cf3a60f6d oseq=62 sseq=62 r=
+2026-10-12T04:16:27.607Z dcache ino=16385 ci=60 put-record obj=655e0a4fe51efcd4 seq=65 | dirty=0 hb=1 bg=ffffffffffffffff obj=655e0a4fe51efcd4 oseq=65 sseq=65 r=
+2026-10-12T04:16:27.612Z dcache ino=16385 ci=61 put-record obj=55bc6a9097e0831d seq=63 | dirty=0 hb=1 bg=ffffffffffffffff obj=55bc6a9097e0831d oseq=63 sseq=63 r=
+2026-10-12T04:16:27.612Z dcache ino=16385 ci=61 install len=131072 seq=63 | dirty=0 hb=1 bg=ffffffffffffffff obj=55bc6a9097e0831d oseq=63 sseq=63 r=
+2026-10-12T04:16:27.612Z dcache ino=16385 ci=52 install len=131072 seq=64 | dirty=0 hb=1 bg=ffffffffffffffff obj=44bfed6d432362d7 oseq=64 sseq=64 r=
+2026-10-12T04:16:27.612Z dcache ino=16385 ci=60 install len=131072 seq=65 | dirty=0 hb=1 bg=ffffffffffffffff obj=655e0a4fe51efcd4 oseq=65 sseq=65 r=
+2026-10-12T04:16:27.612Z dcache ino=16385 ci=15 put-record obj=10c82419371089c1 seq=85 | dirty=0 hb=0 bg=0 obj=10c82419371089c1 oseq=85 sseq=85 r=[0,131072)
+2026-10-12T04:16:27.612Z dcache ino=16385 ci=51 install len=131072 seq=66 | dirty=0 hb=1 bg=ffffffffffffffff obj=3646293bb494c477 oseq=66 sseq=66 r=
+2026-10-12T04:16:27.612Z dcache ino=16385 ci=7 install len=131072 seq=84 | dirty=0 hb=0 bg=0 obj=2e5d0ee9720d280c oseq=84 sseq=84 r=[0,131072)
+2026-10-12T04:16:27.612Z dcache ino=16385 ci=54 install len=131072 seq=67 | dirty=0 hb=1 bg=ffffffffffffffff obj=96985fc9f0bbe7d oseq=67 sseq=67 r=
+2026-10-12T04:16:27.612Z dcache ino=16385 ci=15 install len=131072 seq=85 | dirty=0 hb=0 bg=0 obj=10c82419371089c1 oseq=85 sseq=85 r=[0,131072)
+2026-10-12T04:16:27.612Z dcache ino=16385 ci=53 install len=131072 seq=68 | dirty=0 hb=1 bg=ffffffffffffffff obj=b6690e9cdeaeb8e7 oseq=68 sseq=68 r=
+2026-10-12T04:16:27.612Z dcache ino=16385 ci=23 install len=131072 seq=86 | dirty=0 hb=0 bg=0 obj=1a1d8999779be7e oseq=86 sseq=86 r=[0,131072)
+2026-10-12T04:16:27.612Z dcache ino=16385 ci=62 install len=131072 seq=69 | dirty=0 hb=1 bg=ffffffffffffffff obj=ab4b30f85a313a10 oseq=69 sseq=69 r=
+2026-10-12T04:16:27.612Z dcache ino=16385 ci=31 install len=131072 seq=87 | dirty=0 hb=0 bg=0 obj=f912b8abe3adee8d oseq=87 sseq=87 r=[0,131072)
+2026-10-12T04:16:27.612Z dcache ino=16385 ci=39 install len=131072 seq=88 | dirty=0 hb=0 bg=0 obj=3fd7bf37579e9408 oseq=88 sseq=88 r=[0,131072)
+2026-10-12T04:16:27.612Z dcache ino=16385 ci=57 install len=131072 seq=70 | dirty=0 hb=1 bg=ffffffffffffffff obj=598e51789649681b oseq=70 sseq=70 r=
+2026-10-12T04:16:27.612Z dcache ino=16385 ci=47 install len=131072 seq=89 | dirty=0 hb=0 bg=0 obj=97074452eea70980 oseq=89 sseq=89 r=[0,131072)
+2026-10-12T04:16:27.612Z dcache ino=16385 ci=48 install len=131072 seq=71 | dirty=0 hb=1 bg=ffffffffffffffff obj=25992782355e2452 oseq=71 sseq=71 r=
+2026-10-12T04:16:27.612Z dcache ino=16385 ci=55 install len=131072 seq=90 | dirty=0 hb=0 bg=0 obj=21b896e41e8b40cb oseq=90 sseq=90 r=[0,131072)
+2026-10-12T04:16:27.612Z dcache ino=16385 ci=56 install len=131072 seq=72 | dirty=0 hb=1 bg=ffffffffffffffff obj=50f9b0cad01fdb03 oseq=72 sseq=72 r=
+2026-10-12T04:16:27.612Z dcache ino=16385 ci=63 install len=131072 seq=91 | dirty=0 hb=0 bg=0 obj=bf5990cd1f0ffeb9 oseq=91 sseq=91 r=[0,131072)
+2026-10-12T04:16:27.612Z dcache ino=16385 ci=64 install len=131072 seq=73 | dirty=0 hb=1 bg=ffffffffffffffff obj=4b8c755f47803f24 oseq=73 sseq=73 r=
+2026-10-12T04:16:27.612Z dcache ino=16385 ci=71 install len=131072 seq=92 | dirty=0 hb=0 bg=0 obj=e83641751276780 oseq=92 sseq=92 r=[0,131072)
+2026-10-12T04:16:27.612Z dcache ino=16385 ci=65 install len=131072 seq=74 | dirty=0 hb=1 bg=ffffffffffffffff obj=ae0baac9c6c2779a oseq=74 sseq=74 r=
+2026-10-12T04:16:27.613Z dcache ino=16385 ci=66 install len=131072 seq=75 | dirty=0 hb=1 bg=ffffffffffffffff obj=cf3036c60bab299c oseq=75 sseq=75 r=
+2026-10-12T04:16:27.613Z dcache ino=16385 ci=68 install len=131072 seq=76 | dirty=0 hb=1 bg=ffffffffffffffff obj=24be156b22836a92 oseq=76 sseq=76 r=
+2026-10-12T04:16:27.613Z dcache ino=16385 ci=59 install len=131072 seq=77 | dirty=0 hb=1 bg=ffffffffffffffff obj=cf5a767db8c37f70 oseq=77 sseq=77 r=
+2026-10-12T04:16:27.613Z dcache ino=16385 ci=50 install len=131072 seq=78 | dirty=0 hb=1 bg=ffffffffffffffff obj=51e6924085eb9109 oseq=78 sseq=78 r=
+2026-10-12T04:16:27.613Z dcache ino=16385 ci=69 install len=131072 seq=79 | dirty=0 hb=1 bg=ffffffffffffffff obj=4d7b966db09885ed oseq=79 sseq=79 r=
+2026-10-12T04:16:27.613Z dcache ino=16385 ci=70 install len=131072 seq=80 | dirty=0 hb=1 bg=ffffffffffffffff obj=a36a0c126b677c25 oseq=80 sseq=80 r=
+2026-10-12T04:16:27.613Z dcache ino=16385 ci=49 install len=131072 seq=81 | dirty=0 hb=1 bg=ffffffffffffffff obj=cb7c57b611bb480c oseq=81 sseq=81 r=
+2026-10-12T04:16:27.613Z dcache ino=16385 ci=67 install len=131072 seq=82 | dirty=0 hb=1 bg=ffffffffffffffff obj=fcf55a241453e603 oseq=82 sseq=82 r=
+2026-10-12T04:16:27.613Z dcache ino=16385 ci=58 install len=131072 seq=83 | dirty=0 hb=1 bg=ffffffffffffffff obj=f86752d57f6eee49 oseq=83 sseq=83 r=
+2026-10-12T04:16:27.907Z report ino=16385 ci=0 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=1 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=6 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=3 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=2 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=5 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=4 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=19 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=12 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=22 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=13 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=24 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=40 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=42 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=14 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=17 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=10 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=46 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=8 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=9 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=68 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=18 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=28 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=53 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=32 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=59 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=62 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=65 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=29 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=69 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=66 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=49 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=58 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=48 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=67 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=56 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=30 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=26 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=27 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=70 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=37 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=57 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=71 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=64 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=39 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=50 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=11 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=25 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=44 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=63 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=47 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=21 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=20 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=55 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=45 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=34 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=35 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=54 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=51 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=36 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=33 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=52 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=38 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=23 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=31 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=16 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=43 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=41 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=7 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=60 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=61 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report ino=16385 ci=15 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z report-irec ino=16385 size=9437184 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.907Z dcache ino=16385 ci=71 to-rdcache len=131072 | dirty=0 hb=1 bg=e83641751276780 obj=e83641751276780 oseq=92 sseq=92 r=
+2026-10-12T04:16:27.907Z dcache ino=16385 ci=39 to-rdcache len=131072 | dirty=0 hb=1 bg=3fd7bf37579e9408 obj=3fd7bf37579e9408 oseq=88 sseq=88 r=
+2026-10-12T04:16:27.907Z dcache ino=16385 ci=63 to-rdcache len=131072 | dirty=0 hb=1 bg=bf5990cd1f0ffeb9 obj=bf5990cd1f0ffeb9 oseq=91 sseq=91 r=
+2026-10-12T04:16:27.907Z dcache ino=16385 ci=47 to-rdcache len=131072 | dirty=0 hb=1 bg=97074452eea70980 obj=97074452eea70980 oseq=89 sseq=89 r=
+2026-10-12T04:16:27.907Z dcache ino=16385 ci=55 to-rdcache len=131072 | dirty=0 hb=1 bg=21b896e41e8b40cb obj=21b896e41e8b40cb oseq=90 sseq=90 r=
+2026-10-12T04:16:27.907Z dcache ino=16385 ci=23 to-rdcache len=131072 | dirty=0 hb=1 bg=1a1d8999779be7e obj=1a1d8999779be7e oseq=86 sseq=86 r=
+2026-10-12T04:16:27.907Z dcache ino=16385 ci=31 to-rdcache len=131072 | dirty=0 hb=1 bg=f912b8abe3adee8d obj=f912b8abe3adee8d oseq=87 sseq=87 r=
+2026-10-12T04:16:27.907Z dcache ino=16385 ci=7 to-rdcache len=131072 | dirty=0 hb=1 bg=2e5d0ee9720d280c obj=2e5d0ee9720d280c oseq=84 sseq=84 r=
+2026-10-12T04:16:27.907Z dcache ino=16385 ci=15 to-rdcache len=131072 | dirty=0 hb=1 bg=10c82419371089c1 obj=10c82419371089c1 oseq=85 sseq=85 r=
+2026-10-12T04:16:27.907Z fsync-split ino=16385 flush_ms=413 report_ms=0 rc=0
+2026-10-12T04:16:27.917Z dcache ino=16385 ci=1 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=22 sseq=93 r=[3928,3940)
+2026-10-12T04:16:27.923Z dcache ino=16385 ci=1 put-record obj=47bbe3cbf6392ea2 seq=93 | dirty=0 hb=1 bg=ffffffffffffffff obj=47bbe3cbf6392ea2 oseq=93 sseq=93 r=[3928,3940)
+2026-10-12T04:16:27.923Z dcache ino=16385 ci=1 install len=131072 seq=93 | dirty=0 hb=1 bg=ffffffffffffffff obj=47bbe3cbf6392ea2 oseq=93 sseq=93 r=[3928,3940)
+2026-10-12T04:16:27.926Z report ino=16385 ci=1 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.926Z report-irec ino=16385 size=9437184 only=16385 sync=1 rc=0
+2026-10-12T04:16:27.926Z release ino=16385 begin
+2026-10-12T04:16:27.979Z release ino=16385 rc=0
+2026-10-12T04:16:28.023Z release ino=16385 begin
+2026-10-12T04:16:28.076Z release ino=16385 rc=0
+2026-10-12T04:16:28.082Z dcache ino=20481 ci=0 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=94 r=[0,10000)
+2026-10-12T04:16:28.088Z dcache ino=20481 ci=0 put-record obj=7977022915011a20 seq=94 | dirty=0 hb=0 bg=0 obj=7977022915011a20 oseq=94 sseq=94 r=[0,10000)
+2026-10-12T04:16:28.088Z dcache ino=20481 ci=0 install len=131072 seq=94 | dirty=0 hb=0 bg=0 obj=7977022915011a20 oseq=94 sseq=94 r=[0,10000)
+2026-10-12T04:16:28.091Z report ino=20481 ci=0 only=20481 sync=1 rc=0
+2026-10-12T04:16:28.091Z report-irec ino=20481 size=10000 only=20481 sync=1 rc=0
+2026-10-12T04:16:28.094Z dcache ino=20481 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=94 sseq=95 r=
+2026-10-12T04:16:28.099Z dcache ino=20481 ci=0 put-record obj=377965e80268337e seq=95 | dirty=0 hb=1 bg=ffffffffffffffff obj=377965e80268337e oseq=95 sseq=95 r=
+2026-10-12T04:16:28.099Z dcache ino=20481 ci=0 install len=131072 seq=95 | dirty=0 hb=1 bg=ffffffffffffffff obj=377965e80268337e oseq=95 sseq=95 r=
+2026-10-12T04:16:28.102Z report ino=20481 ci=0 only=20481 sync=1 rc=0
+2026-10-12T04:16:28.102Z report-irec ino=20481 size=131072 only=20481 sync=1 rc=0
+2026-10-12T04:16:28.109Z release ino=20481 begin
+2026-10-12T04:16:28.115Z release ino=20481 rc=0
+2026-10-12T04:16:28.122Z release ino=20481 begin
+2026-10-12T04:16:28.127Z release ino=20481 rc=0
+2026-10-12T04:16:28.644Z dcache ino=24577 ci=0 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=96 r=[0,10000)
+2026-10-12T04:16:28.650Z dcache ino=24577 ci=0 put-record obj=e482129766814949 seq=96 | dirty=0 hb=0 bg=0 obj=e482129766814949 oseq=96 sseq=96 r=[0,10000)
+2026-10-12T04:16:28.650Z dcache ino=24577 ci=0 install len=131072 seq=96 | dirty=0 hb=0 bg=0 obj=e482129766814949 oseq=96 sseq=96 r=[0,10000)
+2026-10-12T04:16:28.654Z report ino=24577 ci=0 only=24577 sync=1 rc=0
+2026-10-12T04:16:28.654Z report-irec ino=24577 size=10000 only=24577 sync=1 rc=0
+2026-10-12T04:16:28.655Z dcache ino=24577 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=96 sseq=97 r=
+2026-10-12T04:16:28.661Z dcache ino=24577 ci=0 put-record obj=2b4e4b8c586c91cc seq=97 | dirty=0 hb=1 bg=ffffffffffffffff obj=2b4e4b8c586c91cc oseq=97 sseq=97 r=
+2026-10-12T04:16:28.661Z dcache ino=24577 ci=0 install len=131072 seq=97 | dirty=0 hb=1 bg=ffffffffffffffff obj=2b4e4b8c586c91cc oseq=97 sseq=97 r=
+2026-10-12T04:16:28.664Z report ino=24577 ci=0 only=24577 sync=1 rc=0
+2026-10-12T04:16:28.664Z report-irec ino=24577 size=131072 only=24577 sync=1 rc=0
+2026-10-12T04:16:28.671Z release ino=24577 begin
+2026-10-12T04:16:28.673Z release ino=24577 rc=0
+2026-10-12T04:16:28.679Z release ino=24577 begin
+2026-10-12T04:16:28.682Z release ino=24577 rc=0
+2026-10-12T04:16:29.706Z dcache ino=28673 ci=0 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=98 r=[0,10000)
+2026-10-12T04:16:29.713Z dcache ino=28673 ci=0 put-record obj=4218b4c2d75760a9 seq=98 | dirty=0 hb=0 bg=0 obj=4218b4c2d75760a9 oseq=98 sseq=98 r=[0,10000)
+2026-10-12T04:16:29.713Z dcache ino=28673 ci=0 install len=131072 seq=98 | dirty=0 hb=0 bg=0 obj=4218b4c2d75760a9 oseq=98 sseq=98 r=[0,10000)
+2026-10-12T04:16:29.718Z report ino=28673 ci=0 only=28673 sync=1 rc=0
+2026-10-12T04:16:29.718Z report-irec ino=28673 size=10000 only=28673 sync=1 rc=0
+2026-10-12T04:16:29.720Z dcache ino=28673 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=98 sseq=99 r=
+2026-10-12T04:16:29.726Z dcache ino=28673 ci=0 put-record obj=ef04f8f46cb641a0 seq=99 | dirty=0 hb=1 bg=ffffffffffffffff obj=ef04f8f46cb641a0 oseq=99 sseq=99 r=
+2026-10-12T04:16:29.726Z dcache ino=28673 ci=0 install len=131072 seq=99 | dirty=0 hb=1 bg=ffffffffffffffff obj=ef04f8f46cb641a0 oseq=99 sseq=99 r=
+2026-10-12T04:16:29.730Z report ino=28673 ci=0 only=28673 sync=1 rc=0
+2026-10-12T04:16:29.730Z report-irec ino=28673 size=131072 only=28673 sync=1 rc=0
+2026-10-12T04:16:29.737Z release ino=28673 begin
+2026-10-12T04:16:29.740Z release ino=28673 rc=0
+2026-10-12T04:16:29.746Z release ino=28673 begin
+2026-10-12T04:16:29.749Z release ino=28673 rc=0
+2026-10-12T04:16:30.772Z dcache ino=32769 ci=0 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=100 r=[0,10000)
+2026-10-12T04:16:30.779Z dcache ino=32769 ci=0 put-record obj=2bf61e6d9c40eb1c seq=100 | dirty=0 hb=0 bg=0 obj=2bf61e6d9c40eb1c oseq=100 sseq=100 r=[0,10000)
+2026-10-12T04:16:30.779Z dcache ino=32769 ci=0 install len=131072 seq=100 | dirty=0 hb=0 bg=0 obj=2bf61e6d9c40eb1c oseq=100 sseq=100 r=[0,10000)
+2026-10-12T04:16:30.783Z report ino=32769 ci=0 only=32769 sync=1 rc=0
+2026-10-12T04:16:30.783Z report-irec ino=32769 size=10000 only=32769 sync=1 rc=0
+2026-10-12T04:16:30.786Z dcache ino=32769 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=100 sseq=101 r=
+2026-10-12T04:16:30.793Z dcache ino=32769 ci=0 put-record obj=80a288a20c7f1c40 seq=101 | dirty=0 hb=1 bg=ffffffffffffffff obj=80a288a20c7f1c40 oseq=101 sseq=101 r=
+2026-10-12T04:16:30.794Z dcache ino=32769 ci=0 install len=131072 seq=101 | dirty=0 hb=1 bg=ffffffffffffffff obj=80a288a20c7f1c40 oseq=101 sseq=101 r=
+2026-10-12T04:16:30.796Z report ino=32769 ci=0 only=32769 sync=1 rc=0
+2026-10-12T04:16:30.796Z report-irec ino=32769 size=131072 only=32769 sync=1 rc=0
+2026-10-12T04:16:30.804Z release ino=32769 begin
+2026-10-12T04:16:30.806Z release ino=32769 rc=0
+2026-10-12T04:16:30.812Z release ino=32769 begin
+2026-10-12T04:16:30.814Z release ino=32769 rc=0
+2026-10-12T04:16:31.828Z dcache ino=36865 ci=0 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=102 r=[0,10000)
+2026-10-12T04:16:31.835Z dcache ino=36865 ci=0 put-record obj=29b0bebb945333ca seq=102 | dirty=0 hb=0 bg=0 obj=29b0bebb945333ca oseq=102 sseq=102 r=[0,10000)
+2026-10-12T04:16:31.835Z dcache ino=36865 ci=0 install len=131072 seq=102 | dirty=0 hb=0 bg=0 obj=29b0bebb945333ca oseq=102 sseq=102 r=[0,10000)
+2026-10-12T04:16:31.838Z report ino=36865 ci=0 only=36865 sync=1 rc=0
+2026-10-12T04:16:31.838Z report-irec ino=36865 size=10000 only=36865 sync=1 rc=0
+2026-10-12T04:16:31.840Z dcache ino=36865 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=102 sseq=103 r=
+2026-10-12T04:16:31.844Z dcache ino=36865 ci=0 put-record obj=37a38ac35333fe8c seq=103 | dirty=0 hb=1 bg=ffffffffffffffff obj=37a38ac35333fe8c oseq=103 sseq=103 r=
+2026-10-12T04:16:31.844Z dcache ino=36865 ci=0 install len=131072 seq=103 | dirty=0 hb=1 bg=ffffffffffffffff obj=37a38ac35333fe8c oseq=103 sseq=103 r=
+2026-10-12T04:16:31.847Z report ino=36865 ci=0 only=36865 sync=1 rc=0
+2026-10-12T04:16:31.847Z report-irec ino=36865 size=131072 only=36865 sync=1 rc=0
+2026-10-12T04:16:31.851Z release ino=36865 begin
+2026-10-12T04:16:31.854Z release ino=36865 rc=0
+2026-10-12T04:16:31.860Z release ino=36865 begin
+2026-10-12T04:16:31.862Z release ino=36865 rc=0
+2026-10-12T04:16:32.885Z dcache ino=40961 ci=0 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=104 r=[0,10000)
+2026-10-12T04:16:32.891Z dcache ino=40961 ci=0 put-record obj=f4e0631c2f2a02f2 seq=104 | dirty=0 hb=0 bg=0 obj=f4e0631c2f2a02f2 oseq=104 sseq=104 r=[0,10000)
+2026-10-12T04:16:32.891Z dcache ino=40961 ci=0 install len=131072 seq=104 | dirty=0 hb=0 bg=0 obj=f4e0631c2f2a02f2 oseq=104 sseq=104 r=[0,10000)
+2026-10-12T04:16:32.894Z report ino=40961 ci=0 only=40961 sync=1 rc=0
+2026-10-12T04:16:32.894Z report-irec ino=40961 size=10000 only=40961 sync=1 rc=0
+2026-10-12T04:16:32.896Z dcache ino=40961 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=104 sseq=105 r=
+2026-10-12T04:16:32.901Z dcache ino=40961 ci=0 put-record obj=8c02bf3ff41df318 seq=105 | dirty=0 hb=1 bg=ffffffffffffffff obj=8c02bf3ff41df318 oseq=105 sseq=105 r=
+2026-10-12T04:16:32.901Z dcache ino=40961 ci=0 install len=131072 seq=105 | dirty=0 hb=1 bg=ffffffffffffffff obj=8c02bf3ff41df318 oseq=105 sseq=105 r=
+2026-10-12T04:16:32.904Z report ino=40961 ci=0 only=40961 sync=1 rc=0
+2026-10-12T04:16:32.904Z report-irec ino=40961 size=131072 only=40961 sync=1 rc=0
+2026-10-12T04:16:32.908Z release ino=40961 begin
+2026-10-12T04:16:32.910Z release ino=40961 rc=0
+2026-10-12T04:16:32.916Z release ino=40961 begin
+2026-10-12T04:16:32.918Z release ino=40961 rc=0
+2026-10-12T04:16:33.946Z dcache ino=45057 ci=0 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=106 r=[0,10000)
+2026-10-12T04:16:33.954Z dcache ino=45057 ci=0 put-record obj=4cdcf98cf02427b3 seq=106 | dirty=0 hb=0 bg=0 obj=4cdcf98cf02427b3 oseq=106 sseq=106 r=[0,10000)
+2026-10-12T04:16:33.954Z dcache ino=45057 ci=0 install len=131072 seq=106 | dirty=0 hb=0 bg=0 obj=4cdcf98cf02427b3 oseq=106 sseq=106 r=[0,10000)
+2026-10-12T04:16:33.957Z report ino=45057 ci=0 only=45057 sync=1 rc=0
+2026-10-12T04:16:33.957Z report-irec ino=45057 size=10000 only=45057 sync=1 rc=0
+2026-10-12T04:16:33.960Z dcache ino=45057 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=106 sseq=107 r=
+2026-10-12T04:16:33.966Z dcache ino=45057 ci=0 put-record obj=8bd0022c8fe72a60 seq=107 | dirty=0 hb=1 bg=ffffffffffffffff obj=8bd0022c8fe72a60 oseq=107 sseq=107 r=
+2026-10-12T04:16:33.966Z dcache ino=45057 ci=0 install len=131072 seq=107 | dirty=0 hb=1 bg=ffffffffffffffff obj=8bd0022c8fe72a60 oseq=107 sseq=107 r=
+2026-10-12T04:16:33.969Z report ino=45057 ci=0 only=45057 sync=1 rc=0
+2026-10-12T04:16:33.969Z report-irec ino=45057 size=131072 only=45057 sync=1 rc=0
+2026-10-12T04:16:33.975Z release ino=45057 begin
+2026-10-12T04:16:33.979Z release ino=45057 rc=0
+2026-10-12T04:16:33.987Z release ino=45057 begin
+2026-10-12T04:16:33.989Z release ino=45057 rc=0
+2026-10-12T04:16:35.265Z dcache ino=49153 ci=0 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=108 r=[0,10000)
+2026-10-12T04:16:35.272Z dcache ino=49153 ci=0 put-record obj=72a6bdb137b73404 seq=108 | dirty=0 hb=0 bg=0 obj=72a6bdb137b73404 oseq=108 sseq=108 r=[0,10000)
+2026-10-12T04:16:35.272Z dcache ino=49153 ci=0 install len=131072 seq=108 | dirty=0 hb=0 bg=0 obj=72a6bdb137b73404 oseq=108 sseq=108 r=[0,10000)
+2026-10-12T04:16:35.276Z report ino=49153 ci=0 only=49153 sync=1 rc=0
+2026-10-12T04:16:35.276Z report-irec ino=49153 size=10000 only=49153 sync=1 rc=0
+2026-10-12T04:16:35.278Z dcache ino=49153 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=108 sseq=109 r=
+2026-10-12T04:16:35.284Z dcache ino=49153 ci=0 put-record obj=9257065f261925ae seq=109 | dirty=0 hb=1 bg=ffffffffffffffff obj=9257065f261925ae oseq=109 sseq=109 r=
+2026-10-12T04:16:35.284Z dcache ino=49153 ci=0 install len=131072 seq=109 | dirty=0 hb=1 bg=ffffffffffffffff obj=9257065f261925ae oseq=109 sseq=109 r=
+2026-10-12T04:16:35.288Z report ino=49153 ci=0 only=49153 sync=1 rc=0
+2026-10-12T04:16:35.288Z report-irec ino=49153 size=131072 only=49153 sync=1 rc=0
+2026-10-12T04:16:35.292Z release ino=49153 begin
+2026-10-12T04:16:35.295Z release ino=49153 rc=0
+2026-10-12T04:16:35.302Z release ino=49153 begin
+2026-10-12T04:16:35.305Z release ino=49153 rc=0
+2026-10-12T04:16:36.329Z dcache ino=53249 ci=0 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=110 r=[0,10000)
+2026-10-12T04:16:36.335Z dcache ino=53249 ci=0 put-record obj=57c2bfe122a2141b seq=110 | dirty=0 hb=0 bg=0 obj=57c2bfe122a2141b oseq=110 sseq=110 r=[0,10000)
+2026-10-12T04:16:36.335Z dcache ino=53249 ci=0 install len=131072 seq=110 | dirty=0 hb=0 bg=0 obj=57c2bfe122a2141b oseq=110 sseq=110 r=[0,10000)
+2026-10-12T04:16:36.338Z report ino=53249 ci=0 only=53249 sync=1 rc=0
+2026-10-12T04:16:36.338Z report-irec ino=53249 size=10000 only=53249 sync=1 rc=0
+2026-10-12T04:16:36.340Z dcache ino=53249 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=110 sseq=111 r=
+2026-10-12T04:16:36.346Z dcache ino=53249 ci=0 put-record obj=52b135f9e46829e3 seq=111 | dirty=0 hb=1 bg=ffffffffffffffff obj=52b135f9e46829e3 oseq=111 sseq=111 r=
+2026-10-12T04:16:36.346Z dcache ino=53249 ci=0 install len=131072 seq=111 | dirty=0 hb=1 bg=ffffffffffffffff obj=52b135f9e46829e3 oseq=111 sseq=111 r=
+2026-10-12T04:16:36.349Z report ino=53249 ci=0 only=53249 sync=1 rc=0
+2026-10-12T04:16:36.349Z report-irec ino=53249 size=131072 only=53249 sync=1 rc=0
+2026-10-12T04:16:36.353Z release ino=53249 begin
+2026-10-12T04:16:36.356Z release ino=53249 rc=0
+2026-10-12T04:16:36.364Z release ino=53249 begin
+2026-10-12T04:16:36.367Z release ino=53249 rc=0
+2026-10-12T04:16:37.421Z dcache ino=57345 ci=0 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=112 r=[0,10000)
+2026-10-12T04:16:37.428Z dcache ino=57345 ci=0 put-record obj=c8ee584f0751b905 seq=112 | dirty=0 hb=0 bg=0 obj=c8ee584f0751b905 oseq=112 sseq=112 r=[0,10000)
+2026-10-12T04:16:37.428Z dcache ino=57345 ci=0 install len=131072 seq=112 | dirty=0 hb=0 bg=0 obj=c8ee584f0751b905 oseq=112 sseq=112 r=[0,10000)
+2026-10-12T04:16:37.432Z report ino=57345 ci=0 only=57345 sync=1 rc=0
+2026-10-12T04:16:37.432Z report-irec ino=57345 size=10000 only=57345 sync=1 rc=0
+2026-10-12T04:16:37.436Z dcache ino=57345 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=112 sseq=113 r=
+2026-10-12T04:16:37.442Z dcache ino=57345 ci=0 put-record obj=ff89cecdac4a245f seq=113 | dirty=0 hb=1 bg=ffffffffffffffff obj=ff89cecdac4a245f oseq=113 sseq=113 r=
+2026-10-12T04:16:37.442Z dcache ino=57345 ci=0 install len=131072 seq=113 | dirty=0 hb=1 bg=ffffffffffffffff obj=ff89cecdac4a245f oseq=113 sseq=113 r=
+2026-10-12T04:16:37.446Z report ino=57345 ci=0 only=57345 sync=1 rc=0
+2026-10-12T04:16:37.446Z report-irec ino=57345 size=131072 only=57345 sync=1 rc=0
+2026-10-12T04:16:37.450Z release ino=57345 begin
+2026-10-12T04:16:37.453Z release ino=57345 rc=0
+2026-10-12T04:16:37.458Z release ino=57345 begin
+2026-10-12T04:16:37.460Z release ino=57345 rc=0
+2026-10-12T04:16:38.486Z dcache ino=61441 ci=0 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=114 r=[0,10000)
+2026-10-12T04:16:38.493Z dcache ino=61441 ci=0 put-record obj=3389bf80e5f40b32 seq=114 | dirty=0 hb=0 bg=0 obj=3389bf80e5f40b32 oseq=114 sseq=114 r=[0,10000)
+2026-10-12T04:16:38.493Z dcache ino=61441 ci=0 install len=131072 seq=114 | dirty=0 hb=0 bg=0 obj=3389bf80e5f40b32 oseq=114 sseq=114 r=[0,10000)
+2026-10-12T04:16:38.496Z report ino=61441 ci=0 only=61441 sync=1 rc=0
+2026-10-12T04:16:38.496Z report-irec ino=61441 size=10000 only=61441 sync=1 rc=0
+2026-10-12T04:16:38.498Z dcache ino=61441 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=114 sseq=115 r=
+2026-10-12T04:16:38.504Z dcache ino=61441 ci=0 put-record obj=12c300aad06b8a28 seq=115 | dirty=0 hb=1 bg=ffffffffffffffff obj=12c300aad06b8a28 oseq=115 sseq=115 r=
+2026-10-12T04:16:38.504Z dcache ino=61441 ci=0 install len=131072 seq=115 | dirty=0 hb=1 bg=ffffffffffffffff obj=12c300aad06b8a28 oseq=115 sseq=115 r=
+2026-10-12T04:16:38.508Z report ino=61441 ci=0 only=61441 sync=1 rc=0
+2026-10-12T04:16:38.508Z report-irec ino=61441 size=131072 only=61441 sync=1 rc=0
+2026-10-12T04:16:38.514Z release ino=61441 begin
+2026-10-12T04:16:38.517Z release ino=61441 rc=0
+2026-10-12T04:16:38.523Z release ino=61441 begin
+2026-10-12T04:16:38.527Z release ino=61441 rc=0
+2026-10-12T04:16:39.551Z dcache ino=65537 ci=0 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=116 r=[0,10000)
+2026-10-12T04:16:39.558Z dcache ino=65537 ci=0 put-record obj=8ab51f9a831aa10 seq=116 | dirty=0 hb=0 bg=0 obj=8ab51f9a831aa10 oseq=116 sseq=116 r=[0,10000)
+2026-10-12T04:16:39.558Z dcache ino=65537 ci=0 install len=131072 seq=116 | dirty=0 hb=0 bg=0 obj=8ab51f9a831aa10 oseq=116 sseq=116 r=[0,10000)
+2026-10-12T04:16:39.561Z report ino=65537 ci=0 only=65537 sync=1 rc=0
+2026-10-12T04:16:39.561Z report-irec ino=65537 size=10000 only=65537 sync=1 rc=0
+2026-10-12T04:16:39.564Z dcache ino=65537 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=116 sseq=117 r=
+2026-10-12T04:16:39.570Z dcache ino=65537 ci=0 put-record obj=8d43b1e7d4fa27dc seq=117 | dirty=0 hb=1 bg=ffffffffffffffff obj=8d43b1e7d4fa27dc oseq=117 sseq=117 r=
+2026-10-12T04:16:39.570Z dcache ino=65537 ci=0 install len=131072 seq=117 | dirty=0 hb=1 bg=ffffffffffffffff obj=8d43b1e7d4fa27dc oseq=117 sseq=117 r=
+2026-10-12T04:16:39.573Z report ino=65537 ci=0 only=65537 sync=1 rc=0
+2026-10-12T04:16:39.573Z report-irec ino=65537 size=131072 only=65537 sync=1 rc=0
+2026-10-12T04:16:39.578Z release ino=65537 begin
+2026-10-12T04:16:39.582Z release ino=65537 rc=0
+2026-10-12T04:16:39.590Z release ino=65537 begin
+2026-10-12T04:16:39.592Z release ino=65537 rc=0
+2026-10-12T04:16:40.874Z dcache ino=69633 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=118 r=
+2026-10-12T04:16:40.874Z dcache ino=69633 ci=2 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=119 r=
+2026-10-12T04:16:40.874Z dcache ino=69633 ci=1 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=120 r=
+2026-10-12T04:16:40.874Z dcache ino=69633 ci=4 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=121 r=
+2026-10-12T04:16:40.874Z dcache ino=69633 ci=5 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=122 r=
+2026-10-12T04:16:40.875Z dcache ino=69633 ci=3 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=123 r=
+2026-10-12T04:16:40.875Z dcache ino=69633 ci=6 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=124 r=
+2026-10-12T04:16:40.875Z dcache ino=69633 ci=7 patch off=128112 len=2960 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:40.876Z dcache ino=69633 ci=9 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=125 r=
+2026-10-12T04:16:40.876Z dcache ino=69633 ci=8 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=126 r=
+2026-10-12T04:16:40.876Z dcache ino=69633 ci=11 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=127 r=
+2026-10-12T04:16:40.876Z dcache ino=69633 ci=10 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=128 r=
+2026-10-12T04:16:40.876Z dcache ino=69633 ci=14 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=129 r=
+2026-10-12T04:16:40.876Z dcache ino=69633 ci=13 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=130 r=
+2026-10-12T04:16:40.876Z dcache ino=69633 ci=12 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=131 r=
+2026-10-12T04:16:40.877Z dcache ino=69633 ci=15 patch off=128112 len=2960 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:40.878Z dcache ino=69633 ci=16 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=132 r=
+2026-10-12T04:16:40.878Z dcache ino=69633 ci=18 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=133 r=
+2026-10-12T04:16:40.878Z dcache ino=69633 ci=20 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=135 r=
+2026-10-12T04:16:40.878Z dcache ino=69633 ci=17 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=134 r=
+2026-10-12T04:16:40.878Z dcache ino=69633 ci=19 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=136 r=
+2026-10-12T04:16:40.879Z dcache ino=69633 ci=23 patch off=128112 len=2960 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:40.879Z dcache ino=69633 ci=22 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=137 r=
+2026-10-12T04:16:40.879Z dcache ino=69633 ci=21 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=138 r=
+2026-10-12T04:16:40.879Z dcache ino=69633 ci=24 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=139 r=
+2026-10-12T04:16:40.879Z dcache ino=69633 ci=25 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=140 r=
+2026-10-12T04:16:40.879Z dcache ino=69633 ci=26 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=141 r=
+2026-10-12T04:16:40.880Z dcache ino=69633 ci=27 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=142 r=
+2026-10-12T04:16:40.880Z dcache ino=69633 ci=28 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=143 r=
+2026-10-12T04:16:40.880Z dcache ino=69633 ci=29 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=144 r=
+2026-10-12T04:16:40.880Z dcache ino=69633 ci=30 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=145 r=
+2026-10-12T04:16:40.880Z dcache ino=69633 ci=31 patch off=128112 len=2960 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:40.881Z dcache ino=69633 ci=32 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=146 r=
+2026-10-12T04:16:40.881Z dcache ino=69633 ci=33 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=147 r=
+2026-10-12T04:16:40.881Z dcache ino=69633 ci=34 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=148 r=
+2026-10-12T04:16:40.881Z dcache ino=69633 ci=36 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=149 r=
+2026-10-12T04:16:40.881Z dcache ino=69633 ci=35 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=150 r=
+2026-10-12T04:16:40.881Z dcache ino=69633 ci=39 patch off=128112 len=2960 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:40.882Z dcache ino=69633 ci=38 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=151 r=
+2026-10-12T04:16:40.882Z dcache ino=69633 ci=37 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=152 r=
+2026-10-12T04:16:40.882Z dcache ino=69633 ci=40 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=153 r=
+2026-10-12T04:16:40.882Z dcache ino=69633 ci=41 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=154 r=
+2026-10-12T04:16:40.882Z dcache ino=69633 ci=42 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=155 r=
+2026-10-12T04:16:40.882Z dcache ino=69633 ci=43 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=156 r=
+2026-10-12T04:16:40.882Z dcache ino=69633 ci=45 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=157 r=
+2026-10-12T04:16:40.882Z dcache ino=69633 ci=44 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=158 r=
+2026-10-12T04:16:40.882Z dcache ino=69633 ci=46 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=159 r=
+2026-10-12T04:16:40.883Z dcache ino=69633 ci=47 patch off=128112 len=2960 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:40.884Z dcache ino=69633 ci=0 put-record obj=d52bfdd5f2405bb9 seq=118 | dirty=0 hb=1 bg=ffffffffffffffff obj=d52bfdd5f2405bb9 oseq=118 sseq=118 r=
+2026-10-12T04:16:40.885Z dcache ino=69633 ci=5 put-record obj=b9dbf7ecfd22fbdc seq=122 | dirty=0 hb=1 bg=ffffffffffffffff obj=b9dbf7ecfd22fbdc oseq=122 sseq=122 r=
+2026-10-12T04:16:40.885Z dcache ino=69633 ci=5 install len=131072 seq=122 | dirty=0 hb=1 bg=ffffffffffffffff obj=b9dbf7ecfd22fbdc oseq=122 sseq=122 r=
+2026-10-12T04:16:40.885Z dcache ino=69633 ci=48 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=160 r=
+2026-10-12T04:16:40.885Z dcache ino=69633 ci=51 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=161 r=
+2026-10-12T04:16:40.885Z dcache ino=69633 ci=52 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=162 r=
+2026-10-12T04:16:40.885Z dcache ino=69633 ci=53 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=163 r=
+2026-10-12T04:16:40.885Z dcache-pressure live=33816576 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T04:16:40.885Z dcache ino=69633 ci=54 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=164 r=
+2026-10-12T04:16:40.885Z dcache ino=69633 ci=50 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=165 r=
+2026-10-12T04:16:40.885Z dcache ino=69633 ci=49 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=166 r=
+2026-10-12T04:16:40.888Z dcache ino=69633 ci=1 put-record obj=a4ce5c886014bb0e seq=120 | dirty=0 hb=1 bg=ffffffffffffffff obj=a4ce5c886014bb0e oseq=120 sseq=120 r=
+2026-10-12T04:16:40.890Z dcache ino=69633 ci=6 put-record obj=2ee540a7fe6ef11 seq=124 | dirty=0 hb=1 bg=ffffffffffffffff obj=2ee540a7fe6ef11 oseq=124 sseq=124 r=
+2026-10-12T04:16:40.890Z dcache ino=69633 ci=6 install len=131072 seq=124 | dirty=0 hb=1 bg=ffffffffffffffff obj=2ee540a7fe6ef11 oseq=124 sseq=124 r=
+2026-10-12T04:16:40.891Z dcache ino=69633 ci=55 patch off=128112 len=2960 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:40.891Z dcache ino=69633 ci=3 put-record obj=b7458af3dadb47c4 seq=123 | dirty=0 hb=1 bg=ffffffffffffffff obj=b7458af3dadb47c4 oseq=123 sseq=123 r=
+2026-10-12T04:16:40.891Z dcache ino=69633 ci=3 install len=131072 seq=123 | dirty=0 hb=1 bg=ffffffffffffffff obj=b7458af3dadb47c4 oseq=123 sseq=123 r=
+2026-10-12T04:16:40.892Z dcache ino=69633 ci=56 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=167 r=
+2026-10-12T04:16:40.892Z dcache ino=69633 ci=57 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=168 r=
+2026-10-12T04:16:40.892Z dcache ino=69633 ci=59 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=169 r=
+2026-10-12T04:16:40.892Z dcache ino=69633 ci=60 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=170 r=
+2026-10-12T04:16:40.892Z dcache ino=69633 ci=58 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=171 r=
+2026-10-12T04:16:40.892Z dcache ino=69633 ci=61 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=172 r=
+2026-10-12T04:16:40.892Z dcache ino=69633 ci=62 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=173 r=
+2026-10-12T04:16:40.892Z dcache ino=69633 ci=63 patch off=128112 len=2960 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:40.893Z dcache ino=69633 ci=71 patch off=128112 len=2960 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:40.893Z dcache ino=69633 ci=7 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=174 r=[0,131072)
+2026-10-12T04:16:40.894Z dcache ino=69633 ci=15 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=175 r=[0,131072)
+2026-10-12T04:16:40.895Z dcache ino=69633 ci=23 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=176 r=[0,131072)
+2026-10-12T04:16:40.895Z dcache ino=69633 ci=31 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=177 r=[0,131072)
+2026-10-12T04:16:40.896Z dcache ino=69633 ci=39 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=178 r=[0,131072)
+2026-10-12T04:16:40.896Z dcache ino=69633 ci=47 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=179 r=[0,131072)
+2026-10-12T04:16:40.897Z dcache ino=69633 ci=55 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=180 r=[0,131072)
+2026-10-12T04:16:40.897Z dcache ino=69633 ci=63 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=181 r=[0,131072)
+2026-10-12T04:16:40.897Z dcache ino=69633 ci=64 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=182 r=
+2026-10-12T04:16:40.897Z dcache ino=69633 ci=65 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=183 r=
+2026-10-12T04:16:40.897Z dcache ino=69633 ci=66 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=184 r=
+2026-10-12T04:16:40.897Z dcache ino=69633 ci=67 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=185 r=
+2026-10-12T04:16:40.898Z dcache ino=69633 ci=68 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=186 r=
+2026-10-12T04:16:40.898Z dcache ino=69633 ci=69 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=187 r=
+2026-10-12T04:16:40.898Z dcache ino=69633 ci=70 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=188 r=
+2026-10-12T04:16:40.898Z dcache ino=69633 ci=71 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=189 r=[0,131072)
+2026-10-12T04:16:40.898Z dcache ino=69633 ci=4 put-record obj=2330d86ce06d5cb seq=121 | dirty=0 hb=1 bg=ffffffffffffffff obj=2330d86ce06d5cb oseq=121 sseq=121 r=
+2026-10-12T04:16:40.899Z dcache ino=69633 ci=10 put-record obj=e827adbf4cbcc015 seq=128 | dirty=0 hb=1 bg=ffffffffffffffff obj=e827adbf4cbcc015 oseq=128 sseq=128 r=
+2026-10-12T04:16:40.905Z dcache ino=69633 ci=2 put-record obj=1c337bebd15b50ba seq=119 | dirty=0 hb=1 bg=ffffffffffffffff obj=1c337bebd15b50ba oseq=119 sseq=119 r=
+2026-10-12T04:16:40.905Z dcache ino=69633 ci=0 install len=131072 seq=118 | dirty=0 hb=1 bg=ffffffffffffffff obj=d52bfdd5f2405bb9 oseq=118 sseq=118 r=
+2026-10-12T04:16:40.905Z dcache ino=69633 ci=2 install len=131072 seq=119 | dirty=0 hb=1 bg=ffffffffffffffff obj=1c337bebd15b50ba oseq=119 sseq=119 r=
+2026-10-12T04:16:40.905Z dcache ino=69633 ci=1 install len=131072 seq=120 | dirty=0 hb=1 bg=ffffffffffffffff obj=a4ce5c886014bb0e oseq=120 sseq=120 r=
+2026-10-12T04:16:40.906Z dcache ino=69633 ci=14 put-record obj=2a904b5fd2b763d5 seq=129 | dirty=0 hb=1 bg=ffffffffffffffff obj=2a904b5fd2b763d5 oseq=129 sseq=129 r=
+2026-10-12T04:16:40.906Z dcache ino=69633 ci=4 install len=131072 seq=121 | dirty=0 hb=1 bg=ffffffffffffffff obj=2330d86ce06d5cb oseq=121 sseq=121 r=
+2026-10-12T04:16:40.911Z dcache ino=69633 ci=20 put-record obj=64e11b4988df712f seq=135 | dirty=0 hb=1 bg=ffffffffffffffff obj=64e11b4988df712f oseq=135 sseq=135 r=
+2026-10-12T04:16:40.911Z dcache ino=69633 ci=20 install len=131072 seq=135 | dirty=0 hb=1 bg=ffffffffffffffff obj=64e11b4988df712f oseq=135 sseq=135 r=
+2026-10-12T04:16:40.911Z dcache ino=69633 ci=12 put-record obj=2164017176cdf37c seq=131 | dirty=0 hb=1 bg=ffffffffffffffff obj=2164017176cdf37c oseq=131 sseq=131 r=
+2026-10-12T04:16:40.911Z dcache ino=69633 ci=30 put-record obj=2f5435061da600d2 seq=145 | dirty=0 hb=1 bg=ffffffffffffffff obj=2f5435061da600d2 oseq=145 sseq=145 r=
+2026-10-12T04:16:40.911Z dcache ino=69633 ci=30 install len=131072 seq=145 | dirty=0 hb=1 bg=ffffffffffffffff obj=2f5435061da600d2 oseq=145 sseq=145 r=
+2026-10-12T04:16:40.915Z dcache ino=69633 ci=13 put-record obj=ef71c9cbeaf3bf45 seq=130 | dirty=0 hb=1 bg=ffffffffffffffff obj=ef71c9cbeaf3bf45 oseq=130 sseq=130 r=
+2026-10-12T04:16:40.915Z dcache ino=69633 ci=43 put-record obj=27447050233d5c9 seq=156 | dirty=0 hb=1 bg=ffffffffffffffff obj=27447050233d5c9 oseq=156 sseq=156 r=
+2026-10-12T04:16:40.920Z dcache ino=69633 ci=38 put-record obj=d4ef2d595ad6f2c4 seq=151 | dirty=0 hb=1 bg=ffffffffffffffff obj=d4ef2d595ad6f2c4 oseq=151 sseq=151 r=
+2026-10-12T04:16:40.921Z dcache ino=69633 ci=46 put-record obj=5f4d7730d0c1979b seq=159 | dirty=0 hb=1 bg=ffffffffffffffff obj=5f4d7730d0c1979b oseq=159 sseq=159 r=
+2026-10-12T04:16:40.921Z dcache ino=69633 ci=41 put-record obj=b748ff577c20773c seq=154 | dirty=0 hb=1 bg=ffffffffffffffff obj=b748ff577c20773c oseq=154 sseq=154 r=
+2026-10-12T04:16:40.924Z dcache ino=69633 ci=37 put-record obj=3446d4169e40e074 seq=152 | dirty=0 hb=1 bg=ffffffffffffffff obj=3446d4169e40e074 oseq=152 sseq=152 r=
+2026-10-12T04:16:40.925Z dcache ino=69633 ci=45 put-record obj=81ca8883c8ff8dde seq=157 | dirty=0 hb=1 bg=ffffffffffffffff obj=81ca8883c8ff8dde oseq=157 sseq=157 r=
+2026-10-12T04:16:40.929Z dcache ino=69633 ci=54 put-record obj=33b4484ef8ea3597 seq=164 | dirty=0 hb=1 bg=ffffffffffffffff obj=33b4484ef8ea3597 oseq=164 sseq=164 r=
+2026-10-12T04:16:40.930Z dcache ino=69633 ci=44 put-record obj=5a17b5a74b92d8ad seq=158 | dirty=0 hb=1 bg=ffffffffffffffff obj=5a17b5a74b92d8ad oseq=158 sseq=158 r=
+2026-10-12T04:16:40.930Z dcache ino=69633 ci=50 put-record obj=1f92c0e038d14a25 seq=165 | dirty=0 hb=1 bg=ffffffffffffffff obj=1f92c0e038d14a25 oseq=165 sseq=165 r=
+2026-10-12T04:16:40.934Z dcache ino=69633 ci=8 put-record obj=22d4ccea3b211e5c seq=126 | dirty=0 hb=1 bg=ffffffffffffffff obj=22d4ccea3b211e5c oseq=126 sseq=126 r=
+2026-10-12T04:16:40.934Z dcache ino=69633 ci=71 put-record obj=72d19371259c22d3 seq=189 | dirty=0 hb=0 bg=0 obj=72d19371259c22d3 oseq=189 sseq=189 r=[0,131072)
+2026-10-12T04:16:40.938Z dcache ino=69633 ci=49 put-record obj=49e84962169ec956 seq=166 | dirty=0 hb=1 bg=ffffffffffffffff obj=49e84962169ec956 oseq=166 sseq=166 r=
+2026-10-12T04:16:40.938Z dcache ino=69633 ci=58 put-record obj=6319978ae2ff2bdd seq=171 | dirty=0 hb=1 bg=ffffffffffffffff obj=6319978ae2ff2bdd oseq=171 sseq=171 r=
+2026-10-12T04:16:40.938Z dcache ino=69633 ci=58 install len=131072 seq=171 | dirty=0 hb=1 bg=ffffffffffffffff obj=6319978ae2ff2bdd oseq=171 sseq=171 r=
+2026-10-12T04:16:40.939Z dcache ino=69633 ci=69 put-record obj=e43310df4970452 seq=187 | dirty=0 hb=1 bg=ffffffffffffffff obj=e43310df4970452 oseq=187 sseq=187 r=
+2026-10-12T04:16:40.939Z dcache ino=69633 ci=11 put-record obj=5fda1c81289c73ed seq=127 | dirty=0 hb=1 bg=ffffffffffffffff obj=5fda1c81289c73ed oseq=127 sseq=127 r=
+2026-10-12T04:16:40.943Z dcache ino=69633 ci=47 put-record obj=55ff5ec53400b69e seq=179 | dirty=0 hb=0 bg=0 obj=55ff5ec53400b69e oseq=179 sseq=179 r=[0,131072)
+2026-10-12T04:16:40.943Z dcache ino=69633 ci=65 put-record obj=556bb2e4bc555d04 seq=183 | dirty=0 hb=1 bg=ffffffffffffffff obj=556bb2e4bc555d04 oseq=183 sseq=183 r=
+2026-10-12T04:16:40.943Z dcache ino=69633 ci=66 put-record obj=351ce5338b948b51 seq=184 | dirty=0 hb=1 bg=ffffffffffffffff obj=351ce5338b948b51 oseq=184 sseq=184 r=
+2026-10-12T04:16:40.947Z dcache ino=69633 ci=70 put-record obj=e58b0c48ef7a6ddb seq=188 | dirty=0 hb=1 bg=ffffffffffffffff obj=e58b0c48ef7a6ddb oseq=188 sseq=188 r=
+2026-10-12T04:16:40.947Z dcache ino=69633 ci=67 put-record obj=87ecf3dd44546b0e seq=185 | dirty=0 hb=1 bg=ffffffffffffffff obj=87ecf3dd44546b0e oseq=185 sseq=185 r=
+2026-10-12T04:16:40.947Z dcache ino=69633 ci=21 put-record obj=35628d948e5b246d seq=138 | dirty=0 hb=1 bg=ffffffffffffffff obj=35628d948e5b246d oseq=138 sseq=138 r=
+2026-10-12T04:16:40.948Z dcache ino=69633 ci=63 put-record obj=e4197fa71f12b5ae seq=181 | dirty=0 hb=0 bg=0 obj=e4197fa71f12b5ae oseq=181 sseq=181 r=[0,131072)
+2026-10-12T04:16:40.951Z dcache ino=69633 ci=55 put-record obj=78a9efcb6525748d seq=180 | dirty=0 hb=0 bg=0 obj=78a9efcb6525748d oseq=180 sseq=180 r=[0,131072)
+2026-10-12T04:16:40.951Z dcache ino=69633 ci=68 put-record obj=8b8f8f63d9a01ae7 seq=186 | dirty=0 hb=1 bg=ffffffffffffffff obj=8b8f8f63d9a01ae7 oseq=186 sseq=186 r=
+2026-10-12T04:16:40.951Z dcache ino=69633 ci=64 put-record obj=d32b70d3f5d8b9bb seq=182 | dirty=0 hb=1 bg=ffffffffffffffff obj=d32b70d3f5d8b9bb oseq=182 sseq=182 r=
+2026-10-12T04:16:40.957Z dcache ino=69633 ci=9 put-record obj=1283115f33526f23 seq=125 | dirty=0 hb=1 bg=ffffffffffffffff obj=1283115f33526f23 oseq=125 sseq=125 r=
+2026-10-12T04:16:40.957Z dcache ino=69633 ci=9 install len=131072 seq=125 | dirty=0 hb=1 bg=ffffffffffffffff obj=1283115f33526f23 oseq=125 sseq=125 r=
+2026-10-12T04:16:40.957Z dcache ino=69633 ci=17 put-record obj=a5cedd1bf613844c seq=134 | dirty=0 hb=1 bg=ffffffffffffffff obj=a5cedd1bf613844c oseq=134 sseq=134 r=
+2026-10-12T04:16:40.957Z dcache ino=69633 ci=8 install len=131072 seq=126 | dirty=0 hb=1 bg=ffffffffffffffff obj=22d4ccea3b211e5c oseq=126 sseq=126 r=
+2026-10-12T04:16:40.957Z dcache ino=69633 ci=11 install len=131072 seq=127 | dirty=0 hb=1 bg=ffffffffffffffff obj=5fda1c81289c73ed oseq=127 sseq=127 r=
+2026-10-12T04:16:40.957Z dcache ino=69633 ci=10 install len=131072 seq=128 | dirty=0 hb=1 bg=ffffffffffffffff obj=e827adbf4cbcc015 oseq=128 sseq=128 r=
+2026-10-12T04:16:40.957Z dcache ino=69633 ci=14 install len=131072 seq=129 | dirty=0 hb=1 bg=ffffffffffffffff obj=2a904b5fd2b763d5 oseq=129 sseq=129 r=
+2026-10-12T04:16:40.958Z dcache ino=69633 ci=13 install len=131072 seq=130 | dirty=0 hb=1 bg=ffffffffffffffff obj=ef71c9cbeaf3bf45 oseq=130 sseq=130 r=
+2026-10-12T04:16:40.958Z dcache ino=69633 ci=12 install len=131072 seq=131 | dirty=0 hb=1 bg=ffffffffffffffff obj=2164017176cdf37c oseq=131 sseq=131 r=
+2026-10-12T04:16:40.963Z dcache ino=69633 ci=29 put-record obj=a40e0f9eabb41bad seq=144 | dirty=0 hb=1 bg=ffffffffffffffff obj=a40e0f9eabb41bad oseq=144 sseq=144 r=
+2026-10-12T04:16:40.963Z dcache ino=69633 ci=26 put-record obj=99ec1d8420a65458 seq=141 | dirty=0 hb=1 bg=ffffffffffffffff obj=99ec1d8420a65458 oseq=141 sseq=141 r=
+2026-10-12T04:16:40.963Z dcache ino=69633 ci=34 put-record obj=42bb75b4b850212a seq=148 | dirty=0 hb=1 bg=ffffffffffffffff obj=42bb75b4b850212a oseq=148 sseq=148 r=
+2026-10-12T04:16:40.963Z dcache ino=69633 ci=51 put-record obj=8b1511822ba7638c seq=161 | dirty=0 hb=1 bg=ffffffffffffffff obj=8b1511822ba7638c oseq=161 sseq=161 r=
+2026-10-12T04:16:40.968Z dcache ino=69633 ci=48 put-record obj=6d5121c0cb5b300c seq=160 | dirty=0 hb=1 bg=ffffffffffffffff obj=6d5121c0cb5b300c oseq=160 sseq=160 r=
+2026-10-12T04:16:40.973Z dcache ino=69633 ci=53 put-record obj=dc6f19e03a36269b seq=163 | dirty=0 hb=1 bg=ffffffffffffffff obj=dc6f19e03a36269b oseq=163 sseq=163 r=
+2026-10-12T04:16:40.973Z dcache ino=69633 ci=60 put-record obj=cc9948a51861fc7b seq=170 | dirty=0 hb=1 bg=ffffffffffffffff obj=cc9948a51861fc7b oseq=170 sseq=170 r=
+2026-10-12T04:16:40.973Z dcache ino=69633 ci=42 put-record obj=d8f3ac253e9a7a82 seq=155 | dirty=0 hb=1 bg=ffffffffffffffff obj=d8f3ac253e9a7a82 oseq=155 sseq=155 r=
+2026-10-12T04:16:40.973Z dcache ino=69633 ci=42 install len=131072 seq=155 | dirty=0 hb=1 bg=ffffffffffffffff obj=d8f3ac253e9a7a82 oseq=155 sseq=155 r=
+2026-10-12T04:16:40.973Z dcache ino=69633 ci=43 install len=131072 seq=156 | dirty=0 hb=1 bg=ffffffffffffffff obj=27447050233d5c9 oseq=156 sseq=156 r=
+2026-10-12T04:16:40.973Z dcache ino=69633 ci=45 install len=131072 seq=157 | dirty=0 hb=1 bg=ffffffffffffffff obj=81ca8883c8ff8dde oseq=157 sseq=157 r=
+2026-10-12T04:16:40.973Z dcache ino=69633 ci=44 install len=131072 seq=158 | dirty=0 hb=1 bg=ffffffffffffffff obj=5a17b5a74b92d8ad oseq=158 sseq=158 r=
+2026-10-12T04:16:40.973Z dcache ino=69633 ci=46 install len=131072 seq=159 | dirty=0 hb=1 bg=ffffffffffffffff obj=5f4d7730d0c1979b oseq=159 sseq=159 r=
+2026-10-12T04:16:40.978Z dcache ino=69633 ci=19 put-record obj=970d75ea5ec17dd2 seq=136 | dirty=0 hb=1 bg=ffffffffffffffff obj=970d75ea5ec17dd2 oseq=136 sseq=136 r=
+2026-10-12T04:16:40.979Z dcache ino=69633 ci=36 put-record obj=fb8eb7c6b8b79378 seq=149 | dirty=0 hb=1 bg=ffffffffffffffff obj=fb8eb7c6b8b79378 oseq=149 sseq=149 r=
+2026-10-12T04:16:40.979Z dcache ino=69633 ci=34 install len=131072 seq=148 | dirty=0 hb=1 bg=ffffffffffffffff obj=42bb75b4b850212a oseq=148 sseq=148 r=
+2026-10-12T04:16:40.979Z dcache ino=69633 ci=36 install len=131072 seq=149 | dirty=0 hb=1 bg=ffffffffffffffff obj=fb8eb7c6b8b79378 oseq=149 sseq=149 r=
+2026-10-12T04:16:40.985Z dcache ino=69633 ci=22 put-record obj=236f28a7e46d4421 seq=137 | dirty=0 hb=1 bg=ffffffffffffffff obj=236f28a7e46d4421 oseq=137 sseq=137 r=
+2026-10-12T04:16:40.985Z dcache ino=69633 ci=19 install len=131072 seq=136 | dirty=0 hb=1 bg=ffffffffffffffff obj=970d75ea5ec17dd2 oseq=136 sseq=136 r=
+2026-10-12T04:16:40.985Z dcache ino=69633 ci=22 install len=131072 seq=137 | dirty=0 hb=1 bg=ffffffffffffffff obj=236f28a7e46d4421 oseq=137 sseq=137 r=
+2026-10-12T04:16:40.985Z dcache ino=69633 ci=61 put-record obj=2421f2a13e409744 seq=172 | dirty=0 hb=1 bg=ffffffffffffffff obj=2421f2a13e409744 oseq=172 sseq=172 r=
+2026-10-12T04:16:40.986Z dcache ino=69633 ci=21 install len=131072 seq=138 | dirty=0 hb=1 bg=ffffffffffffffff obj=35628d948e5b246d oseq=138 sseq=138 r=
+2026-10-12T04:16:40.986Z dcache ino=69633 ci=52 put-record obj=a7f5ee12231d79e7 seq=162 | dirty=0 hb=1 bg=ffffffffffffffff obj=a7f5ee12231d79e7 oseq=162 sseq=162 r=
+2026-10-12T04:16:40.986Z dcache ino=69633 ci=48 install len=131072 seq=160 | dirty=0 hb=1 bg=ffffffffffffffff obj=6d5121c0cb5b300c oseq=160 sseq=160 r=
+2026-10-12T04:16:40.986Z dcache ino=69633 ci=51 install len=131072 seq=161 | dirty=0 hb=1 bg=ffffffffffffffff obj=8b1511822ba7638c oseq=161 sseq=161 r=
+2026-10-12T04:16:40.986Z dcache ino=69633 ci=52 install len=131072 seq=162 | dirty=0 hb=1 bg=ffffffffffffffff obj=a7f5ee12231d79e7 oseq=162 sseq=162 r=
+2026-10-12T04:16:40.986Z dcache ino=69633 ci=53 install len=131072 seq=163 | dirty=0 hb=1 bg=ffffffffffffffff obj=dc6f19e03a36269b oseq=163 sseq=163 r=
+2026-10-12T04:16:40.986Z dcache ino=69633 ci=54 install len=131072 seq=164 | dirty=0 hb=1 bg=ffffffffffffffff obj=33b4484ef8ea3597 oseq=164 sseq=164 r=
+2026-10-12T04:16:40.986Z dcache ino=69633 ci=50 install len=131072 seq=165 | dirty=0 hb=1 bg=ffffffffffffffff obj=1f92c0e038d14a25 oseq=165 sseq=165 r=
+2026-10-12T04:16:40.986Z dcache ino=69633 ci=49 install len=131072 seq=166 | dirty=0 hb=1 bg=ffffffffffffffff obj=49e84962169ec956 oseq=166 sseq=166 r=
+2026-10-12T04:16:40.991Z dcache ino=69633 ci=62 put-record obj=b92da889c16b72ac seq=173 | dirty=0 hb=1 bg=ffffffffffffffff obj=b92da889c16b72ac oseq=173 sseq=173 r=
+2026-10-12T04:16:40.991Z dcache ino=69633 ci=23 put-record obj=9c8bb37fe1583b60 seq=176 | dirty=0 hb=0 bg=0 obj=9c8bb37fe1583b60 oseq=176 sseq=176 r=[0,131072)
+2026-10-12T04:16:40.996Z dcache ino=69633 ci=25 put-record obj=a8e7bb37531bc7f8 seq=140 | dirty=0 hb=1 bg=ffffffffffffffff obj=a8e7bb37531bc7f8 oseq=140 sseq=140 r=
+2026-10-12T04:16:40.996Z dcache ino=69633 ci=56 put-record obj=31404c54c7cd28b0 seq=167 | dirty=0 hb=1 bg=ffffffffffffffff obj=31404c54c7cd28b0 oseq=167 sseq=167 r=
+2026-10-12T04:16:40.996Z dcache ino=69633 ci=28 put-record obj=a0c2ea00fbb2e702 seq=143 | dirty=0 hb=1 bg=ffffffffffffffff obj=a0c2ea00fbb2e702 oseq=143 sseq=143 r=
+2026-10-12T04:16:40.996Z dcache ino=69633 ci=18 put-record obj=bcb57f98defeb427 seq=133 | dirty=0 hb=1 bg=ffffffffffffffff obj=bcb57f98defeb427 oseq=133 sseq=133 r=
+2026-10-12T04:16:40.999Z dcache ino=69633 ci=59 put-record obj=c020a6723e3c6c3b seq=169 | dirty=0 hb=1 bg=ffffffffffffffff obj=c020a6723e3c6c3b oseq=169 sseq=169 r=
+2026-10-12T04:16:41.002Z dcache ino=69633 ci=31 put-record obj=afa8c700673c4ad6 seq=177 | dirty=0 hb=0 bg=0 obj=afa8c700673c4ad6 oseq=177 sseq=177 r=[0,131072)
+2026-10-12T04:16:41.002Z dcache ino=69633 ci=40 put-record obj=277c31485c915647 seq=153 | dirty=0 hb=1 bg=ffffffffffffffff obj=277c31485c915647 oseq=153 sseq=153 r=
+2026-10-12T04:16:41.002Z dcache ino=69633 ci=40 install len=131072 seq=153 | dirty=0 hb=1 bg=ffffffffffffffff obj=277c31485c915647 oseq=153 sseq=153 r=
+2026-10-12T04:16:41.002Z dcache ino=69633 ci=41 install len=131072 seq=154 | dirty=0 hb=1 bg=ffffffffffffffff obj=b748ff577c20773c oseq=154 sseq=154 r=
+2026-10-12T04:16:41.005Z dcache ino=69633 ci=39 put-record obj=d6462ffabda47330 seq=178 | dirty=0 hb=0 bg=0 obj=d6462ffabda47330 oseq=178 sseq=178 r=[0,131072)
+2026-10-12T04:16:41.006Z dcache ino=69633 ci=33 put-record obj=e6a99db2c02b8842 seq=147 | dirty=0 hb=1 bg=ffffffffffffffff obj=e6a99db2c02b8842 oseq=147 sseq=147 r=
+2026-10-12T04:16:41.006Z dcache ino=69633 ci=16 put-record obj=a8d1100db575465a seq=132 | dirty=0 hb=1 bg=ffffffffffffffff obj=a8d1100db575465a oseq=132 sseq=132 r=
+2026-10-12T04:16:41.006Z dcache ino=69633 ci=57 put-record obj=15458550b938dd32 seq=168 | dirty=0 hb=1 bg=ffffffffffffffff obj=15458550b938dd32 oseq=168 sseq=168 r=
+2026-10-12T04:16:41.007Z dcache ino=69633 ci=16 install len=131072 seq=132 | dirty=0 hb=1 bg=ffffffffffffffff obj=a8d1100db575465a oseq=132 sseq=132 r=
+2026-10-12T04:16:41.007Z dcache ino=69633 ci=56 install len=131072 seq=167 | dirty=0 hb=1 bg=ffffffffffffffff obj=31404c54c7cd28b0 oseq=167 sseq=167 r=
+2026-10-12T04:16:41.007Z dcache ino=69633 ci=18 install len=131072 seq=133 | dirty=0 hb=1 bg=ffffffffffffffff obj=bcb57f98defeb427 oseq=133 sseq=133 r=
+2026-10-12T04:16:41.007Z dcache ino=69633 ci=17 install len=131072 seq=134 | dirty=0 hb=1 bg=ffffffffffffffff obj=a5cedd1bf613844c oseq=134 sseq=134 r=
+2026-10-12T04:16:41.007Z dcache ino=69633 ci=57 install len=131072 seq=168 | dirty=0 hb=1 bg=ffffffffffffffff obj=15458550b938dd32 oseq=168 sseq=168 r=
+2026-10-12T04:16:41.007Z dcache ino=69633 ci=59 install len=131072 seq=169 | dirty=0 hb=1 bg=ffffffffffffffff obj=c020a6723e3c6c3b oseq=169 sseq=169 r=
+2026-10-12T04:16:41.007Z dcache ino=69633 ci=60 install len=131072 seq=170 | dirty=0 hb=1 bg=ffffffffffffffff obj=cc9948a51861fc7b oseq=170 sseq=170 r=
+2026-10-12T04:16:41.007Z dcache ino=69633 ci=61 install len=131072 seq=172 | dirty=0 hb=1 bg=ffffffffffffffff obj=2421f2a13e409744 oseq=172 sseq=172 r=
+2026-10-12T04:16:41.007Z dcache ino=69633 ci=27 put-record obj=12e815a0135b6cda seq=142 | dirty=0 hb=1 bg=ffffffffffffffff obj=12e815a0135b6cda oseq=142 sseq=142 r=
+2026-10-12T04:16:41.007Z dcache ino=69633 ci=62 install len=131072 seq=173 | dirty=0 hb=1 bg=ffffffffffffffff obj=b92da889c16b72ac oseq=173 sseq=173 r=
+2026-10-12T04:16:41.007Z dcache ino=69633 ci=27 install len=131072 seq=142 | dirty=0 hb=1 bg=ffffffffffffffff obj=12e815a0135b6cda oseq=142 sseq=142 r=
+2026-10-12T04:16:41.007Z dcache ino=69633 ci=28 install len=131072 seq=143 | dirty=0 hb=1 bg=ffffffffffffffff obj=a0c2ea00fbb2e702 oseq=143 sseq=143 r=
+2026-10-12T04:16:41.007Z dcache ino=69633 ci=29 install len=131072 seq=144 | dirty=0 hb=1 bg=ffffffffffffffff obj=a40e0f9eabb41bad oseq=144 sseq=144 r=
+2026-10-12T04:16:41.011Z dcache ino=69633 ci=24 put-record obj=6a0afabc81fb0d54 seq=139 | dirty=0 hb=1 bg=ffffffffffffffff obj=6a0afabc81fb0d54 oseq=139 sseq=139 r=
+2026-10-12T04:16:41.011Z dcache ino=69633 ci=24 install len=131072 seq=139 | dirty=0 hb=1 bg=ffffffffffffffff obj=6a0afabc81fb0d54 oseq=139 sseq=139 r=
+2026-10-12T04:16:41.011Z dcache ino=69633 ci=25 install len=131072 seq=140 | dirty=0 hb=1 bg=ffffffffffffffff obj=a8e7bb37531bc7f8 oseq=140 sseq=140 r=
+2026-10-12T04:16:41.011Z dcache ino=69633 ci=26 install len=131072 seq=141 | dirty=0 hb=1 bg=ffffffffffffffff obj=99ec1d8420a65458 oseq=141 sseq=141 r=
+2026-10-12T04:16:41.012Z dcache ino=69633 ci=15 put-record obj=eea39f7a1772ebb3 seq=175 | dirty=0 hb=0 bg=0 obj=eea39f7a1772ebb3 oseq=175 sseq=175 r=[0,131072)
+2026-10-12T04:16:41.013Z dcache ino=69633 ci=32 put-record obj=f908e2483db47320 seq=146 | dirty=0 hb=1 bg=ffffffffffffffff obj=f908e2483db47320 oseq=146 sseq=146 r=
+2026-10-12T04:16:41.013Z dcache ino=69633 ci=32 install len=131072 seq=146 | dirty=0 hb=1 bg=ffffffffffffffff obj=f908e2483db47320 oseq=146 sseq=146 r=
+2026-10-12T04:16:41.013Z dcache ino=69633 ci=33 install len=131072 seq=147 | dirty=0 hb=1 bg=ffffffffffffffff obj=e6a99db2c02b8842 oseq=147 sseq=147 r=
+2026-10-12T04:16:41.013Z dcache ino=69633 ci=7 put-record obj=73ae410d4824ea41 seq=174 | dirty=0 hb=0 bg=0 obj=73ae410d4824ea41 oseq=174 sseq=174 r=[0,131072)
+2026-10-12T04:16:41.013Z dcache ino=69633 ci=35 put-record obj=62942b989106513c seq=150 | dirty=0 hb=1 bg=ffffffffffffffff obj=62942b989106513c oseq=150 sseq=150 r=
+2026-10-12T04:16:41.013Z dcache ino=69633 ci=7 install len=131072 seq=174 | dirty=0 hb=0 bg=0 obj=73ae410d4824ea41 oseq=174 sseq=174 r=[0,131072)
+2026-10-12T04:16:41.014Z dcache ino=69633 ci=35 install len=131072 seq=150 | dirty=0 hb=1 bg=ffffffffffffffff obj=62942b989106513c oseq=150 sseq=150 r=
+2026-10-12T04:16:41.014Z dcache ino=69633 ci=38 install len=131072 seq=151 | dirty=0 hb=1 bg=ffffffffffffffff obj=d4ef2d595ad6f2c4 oseq=151 sseq=151 r=
+2026-10-12T04:16:41.014Z dcache ino=69633 ci=15 install len=131072 seq=175 | dirty=0 hb=0 bg=0 obj=eea39f7a1772ebb3 oseq=175 sseq=175 r=[0,131072)
+2026-10-12T04:16:41.014Z dcache ino=69633 ci=37 install len=131072 seq=152 | dirty=0 hb=1 bg=ffffffffffffffff obj=3446d4169e40e074 oseq=152 sseq=152 r=
+2026-10-12T04:16:41.014Z dcache ino=69633 ci=23 install len=131072 seq=176 | dirty=0 hb=0 bg=0 obj=9c8bb37fe1583b60 oseq=176 sseq=176 r=[0,131072)
+2026-10-12T04:16:41.014Z dcache ino=69633 ci=31 install len=131072 seq=177 | dirty=0 hb=0 bg=0 obj=afa8c700673c4ad6 oseq=177 sseq=177 r=[0,131072)
+2026-10-12T04:16:41.014Z dcache ino=69633 ci=39 install len=131072 seq=178 | dirty=0 hb=0 bg=0 obj=d6462ffabda47330 oseq=178 sseq=178 r=[0,131072)
+2026-10-12T04:16:41.014Z dcache ino=69633 ci=47 install len=131072 seq=179 | dirty=0 hb=0 bg=0 obj=55ff5ec53400b69e oseq=179 sseq=179 r=[0,131072)
+2026-10-12T04:16:41.014Z dcache ino=69633 ci=55 install len=131072 seq=180 | dirty=0 hb=0 bg=0 obj=78a9efcb6525748d oseq=180 sseq=180 r=[0,131072)
+2026-10-12T04:16:41.014Z dcache ino=69633 ci=63 install len=131072 seq=181 | dirty=0 hb=0 bg=0 obj=e4197fa71f12b5ae oseq=181 sseq=181 r=[0,131072)
+2026-10-12T04:16:41.014Z dcache ino=69633 ci=64 install len=131072 seq=182 | dirty=0 hb=1 bg=ffffffffffffffff obj=d32b70d3f5d8b9bb oseq=182 sseq=182 r=
+2026-10-12T04:16:41.014Z dcache ino=69633 ci=65 install len=131072 seq=183 | dirty=0 hb=1 bg=ffffffffffffffff obj=556bb2e4bc555d04 oseq=183 sseq=183 r=
+2026-10-12T04:16:41.014Z dcache ino=69633 ci=66 install len=131072 seq=184 | dirty=0 hb=1 bg=ffffffffffffffff obj=351ce5338b948b51 oseq=184 sseq=184 r=
+2026-10-12T04:16:41.014Z dcache ino=69633 ci=67 install len=131072 seq=185 | dirty=0 hb=1 bg=ffffffffffffffff obj=87ecf3dd44546b0e oseq=185 sseq=185 r=
+2026-10-12T04:16:41.014Z dcache ino=69633 ci=68 install len=131072 seq=186 | dirty=0 hb=1 bg=ffffffffffffffff obj=8b8f8f63d9a01ae7 oseq=186 sseq=186 r=
+2026-10-12T04:16:41.014Z dcache ino=69633 ci=69 install len=131072 seq=187 | dirty=0 hb=1 bg=ffffffffffffffff obj=e43310df4970452 oseq=187 sseq=187 r=
+2026-10-12T04:16:41.015Z dcache ino=69633 ci=70 install len=131072 seq=188 | dirty=0 hb=1 bg=ffffffffffffffff obj=e58b0c48ef7a6ddb oseq=188 sseq=188 r=
+2026-10-12T04:16:41.015Z dcache ino=69633 ci=71 install len=131072 seq=189 | dirty=0 hb=0 bg=0 obj=72d19371259c22d3 oseq=189 sseq=189 r=[0,131072)
+2026-10-12T04:16:41.032Z report ino=69633 ci=0 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=5 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=1 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=6 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=3 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=4 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=10 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=2 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=14 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=20 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=12 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=30 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=13 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=43 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=38 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=46 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=41 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=37 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=45 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=54 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=44 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=50 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=8 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=71 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=49 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=58 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=69 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=11 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=47 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=65 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=66 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=70 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=67 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=21 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=63 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=55 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=68 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=64 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=9 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=17 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=29 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=26 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=34 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=51 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=48 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=53 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=60 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=42 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=19 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=36 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=22 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=61 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=52 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=62 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=23 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=25 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=56 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=28 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=18 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=59 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=31 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=40 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=39 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=33 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=16 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=57 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=27 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=24 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=15 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=32 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=7 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report ino=69633 ci=35 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z report-irec ino=69633 size=9437184 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.032Z dcache ino=69633 ci=71 to-rdcache len=131072 | dirty=0 hb=1 bg=72d19371259c22d3 obj=72d19371259c22d3 oseq=189 sseq=189 r=
+2026-10-12T04:16:41.032Z dcache ino=69633 ci=47 to-rdcache len=131072 | dirty=0 hb=1 bg=55ff5ec53400b69e obj=55ff5ec53400b69e oseq=179 sseq=179 r=
+2026-10-12T04:16:41.032Z dcache ino=69633 ci=63 to-rdcache len=131072 | dirty=0 hb=1 bg=e4197fa71f12b5ae obj=e4197fa71f12b5ae oseq=181 sseq=181 r=
+2026-10-12T04:16:41.032Z dcache ino=69633 ci=55 to-rdcache len=131072 | dirty=0 hb=1 bg=78a9efcb6525748d obj=78a9efcb6525748d oseq=180 sseq=180 r=
+2026-10-12T04:16:41.032Z dcache ino=69633 ci=23 to-rdcache len=131072 | dirty=0 hb=1 bg=9c8bb37fe1583b60 obj=9c8bb37fe1583b60 oseq=176 sseq=176 r=
+2026-10-12T04:16:41.032Z dcache ino=69633 ci=31 to-rdcache len=131072 | dirty=0 hb=1 bg=afa8c700673c4ad6 obj=afa8c700673c4ad6 oseq=177 sseq=177 r=
+2026-10-12T04:16:41.032Z dcache ino=69633 ci=39 to-rdcache len=131072 | dirty=0 hb=1 bg=d6462ffabda47330 obj=d6462ffabda47330 oseq=178 sseq=178 r=
+2026-10-12T04:16:41.032Z dcache ino=69633 ci=15 to-rdcache len=131072 | dirty=0 hb=1 bg=eea39f7a1772ebb3 obj=eea39f7a1772ebb3 oseq=175 sseq=175 r=
+2026-10-12T04:16:41.033Z dcache ino=69633 ci=7 to-rdcache len=131072 | dirty=0 hb=1 bg=73ae410d4824ea41 obj=73ae410d4824ea41 oseq=174 sseq=174 r=
+2026-10-12T04:16:41.033Z fsync-split ino=69633 flush_ms=139 report_ms=0 rc=0
+2026-10-12T04:16:41.985Z dcache ino=69633 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=118 sseq=190 r=[100,110)
+2026-10-12T04:16:41.992Z dcache ino=69633 ci=0 put-record obj=f72115de2b9a3d96 seq=190 | dirty=0 hb=1 bg=ffffffffffffffff obj=f72115de2b9a3d96 oseq=190 sseq=190 r=[100,110)
+2026-10-12T04:16:41.992Z dcache ino=69633 ci=0 install len=131072 seq=190 | dirty=0 hb=1 bg=ffffffffffffffff obj=f72115de2b9a3d96 oseq=190 sseq=190 r=[100,110)
+2026-10-12T04:16:41.995Z report ino=69633 ci=0 only=69633 sync=1 rc=0
+2026-10-12T04:16:41.995Z report-irec ino=69633 size=9437184 only=69633 sync=1 rc=0
+2026-10-12T04:16:42.001Z release ino=69633 begin
+2026-10-12T04:16:42.005Z release ino=69633 rc=0
+2026-10-12T04:16:43.313Z dcache ino=73729 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=191 r=
+2026-10-12T04:16:43.313Z dcache ino=73729 ci=2 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=192 r=
+2026-10-12T04:16:43.313Z dcache ino=73729 ci=1 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=193 r=
+2026-10-12T04:16:43.313Z dcache ino=73729 ci=5 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=194 r=
+2026-10-12T04:16:43.313Z dcache ino=73729 ci=4 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=195 r=
+2026-10-12T04:16:43.313Z dcache ino=73729 ci=6 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=196 r=
+2026-10-12T04:16:43.313Z dcache ino=73729 ci=3 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=197 r=
+2026-10-12T04:16:43.313Z dcache ino=73729 ci=7 patch off=130800 len=272 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:43.314Z dcache ino=73729 ci=9 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=198 r=
+2026-10-12T04:16:43.316Z dcache ino=73729 ci=8 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=199 r=
+2026-10-12T04:16:43.316Z dcache ino=73729 ci=11 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=200 r=
+2026-10-12T04:16:43.316Z dcache ino=73729 ci=10 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=201 r=
+2026-10-12T04:16:43.316Z dcache ino=73729 ci=14 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=202 r=
+2026-10-12T04:16:43.316Z dcache ino=73729 ci=13 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=203 r=
+2026-10-12T04:16:43.316Z dcache ino=73729 ci=12 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=204 r=
+2026-10-12T04:16:43.316Z dcache ino=73729 ci=15 patch off=130800 len=272 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:43.317Z dcache ino=73729 ci=16 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=205 r=
+2026-10-12T04:16:43.317Z dcache ino=73729 ci=18 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=206 r=
+2026-10-12T04:16:43.317Z dcache ino=73729 ci=17 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=207 r=
+2026-10-12T04:16:43.317Z dcache ino=73729 ci=19 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=208 r=
+2026-10-12T04:16:43.317Z dcache ino=73729 ci=20 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=209 r=
+2026-10-12T04:16:43.317Z dcache ino=73729 ci=22 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=210 r=
+2026-10-12T04:16:43.317Z dcache ino=73729 ci=21 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=211 r=
+2026-10-12T04:16:43.317Z dcache ino=73729 ci=23 patch off=130800 len=272 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:43.318Z dcache ino=73729 ci=24 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=212 r=
+2026-10-12T04:16:43.318Z dcache ino=73729 ci=25 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=213 r=
+2026-10-12T04:16:43.318Z dcache ino=73729 ci=27 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=214 r=
+2026-10-12T04:16:43.318Z dcache ino=73729 ci=28 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=216 r=
+2026-10-12T04:16:43.318Z dcache ino=73729 ci=26 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=215 r=
+2026-10-12T04:16:43.318Z dcache ino=73729 ci=29 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=217 r=
+2026-10-12T04:16:43.318Z dcache ino=73729 ci=30 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=218 r=
+2026-10-12T04:16:43.318Z dcache ino=73729 ci=31 patch off=130800 len=272 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:43.319Z dcache ino=73729 ci=32 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=219 r=
+2026-10-12T04:16:43.319Z dcache ino=73729 ci=33 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=220 r=
+2026-10-12T04:16:43.319Z dcache ino=73729 ci=34 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=221 r=
+2026-10-12T04:16:43.319Z dcache ino=73729 ci=36 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=222 r=
+2026-10-12T04:16:43.319Z dcache ino=73729 ci=35 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=223 r=
+2026-10-12T04:16:43.319Z dcache ino=73729 ci=38 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=224 r=
+2026-10-12T04:16:43.319Z dcache ino=73729 ci=37 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=225 r=
+2026-10-12T04:16:43.319Z dcache ino=73729 ci=39 patch off=130800 len=272 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:43.320Z dcache ino=73729 ci=43 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=226 r=
+2026-10-12T04:16:43.320Z dcache ino=73729 ci=47 patch off=130800 len=272 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:43.320Z dcache ino=73729 ci=42 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=227 r=
+2026-10-12T04:16:43.320Z dcache ino=73729 ci=45 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=228 r=
+2026-10-12T04:16:43.320Z dcache ino=73729 ci=44 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=229 r=
+2026-10-12T04:16:43.320Z dcache ino=73729 ci=46 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=230 r=
+2026-10-12T04:16:43.320Z dcache ino=73729 ci=41 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=231 r=
+2026-10-12T04:16:43.321Z dcache ino=73729 ci=40 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=232 r=
+2026-10-12T04:16:43.321Z dcache ino=73729 ci=48 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=233 r=
+2026-10-12T04:16:43.321Z dcache ino=73729 ci=50 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=234 r=
+2026-10-12T04:16:43.321Z dcache ino=73729 ci=51 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=235 r=
+2026-10-12T04:16:43.321Z dcache ino=73729 ci=52 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=236 r=
+2026-10-12T04:16:43.321Z dcache ino=73729 ci=54 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=237 r=
+2026-10-12T04:16:43.321Z dcache ino=73729 ci=53 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=238 r=
+2026-10-12T04:16:43.321Z dcache ino=73729 ci=49 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=239 r=
+2026-10-12T04:16:43.321Z dcache ino=73729 ci=55 patch off=130800 len=272 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:43.323Z dcache ino=73729 ci=63 patch off=130800 len=272 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:43.324Z dcache ino=73729 ci=71 patch off=130800 len=272 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:16:43.324Z dcache ino=73729 ci=7 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=240 r=[0,131072)
+2026-10-12T04:16:43.325Z dcache ino=73729 ci=15 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=241 r=[0,131072)
+2026-10-12T04:16:43.325Z dcache ino=73729 ci=23 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=242 r=[0,131072)
+2026-10-12T04:16:43.325Z dcache ino=73729 ci=31 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=243 r=[0,131072)
+2026-10-12T04:16:43.326Z dcache ino=73729 ci=39 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=244 r=[0,131072)
+2026-10-12T04:16:43.326Z dcache ino=73729 ci=47 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=245 r=[0,131072)
+2026-10-12T04:16:43.326Z dcache ino=73729 ci=55 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=246 r=[0,131072)
+2026-10-12T04:16:43.327Z dcache ino=73729 ci=56 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=247 r=
+2026-10-12T04:16:43.327Z dcache ino=73729 ci=57 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=248 r=
+2026-10-12T04:16:43.327Z dcache ino=73729 ci=58 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=249 r=
+2026-10-12T04:16:43.327Z dcache ino=73729 ci=59 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=250 r=
+2026-10-12T04:16:43.327Z dcache ino=73729 ci=60 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=251 r=
+2026-10-12T04:16:43.327Z dcache ino=73729 ci=61 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=252 r=
+2026-10-12T04:16:43.327Z dcache ino=73729 ci=62 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=253 r=
+2026-10-12T04:16:43.327Z dcache ino=73729 ci=63 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=254 r=[0,131072)
+2026-10-12T04:16:43.327Z dcache ino=73729 ci=64 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=255 r=
+2026-10-12T04:16:43.327Z dcache ino=73729 ci=65 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=256 r=
+2026-10-12T04:16:43.327Z dcache ino=73729 ci=66 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=257 r=
+2026-10-12T04:16:43.327Z dcache ino=73729 ci=67 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=258 r=
+2026-10-12T04:16:43.327Z dcache ino=73729 ci=68 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=259 r=
+2026-10-12T04:16:43.327Z dcache ino=73729 ci=69 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=260 r=
+2026-10-12T04:16:43.327Z dcache ino=73729 ci=70 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=261 r=
+2026-10-12T04:16:43.328Z dcache ino=73729 ci=71 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=262 r=[0,131072)
+2026-10-12T04:16:43.329Z dcache ino=73729 ci=2 put-record obj=b30007709b916b25 seq=192 | dirty=0 hb=1 bg=ffffffffffffffff obj=b30007709b916b25 oseq=192 sseq=192 r=
+2026-10-12T04:16:43.331Z dcache ino=73729 ci=6 put-record obj=a254c765744c02e9 seq=196 | dirty=0 hb=1 bg=ffffffffffffffff obj=a254c765744c02e9 oseq=196 sseq=196 r=
+2026-10-12T04:16:43.331Z dcache ino=73729 ci=6 install len=131072 seq=196 | dirty=0 hb=1 bg=ffffffffffffffff obj=a254c765744c02e9 oseq=196 sseq=196 r=
+2026-10-12T04:16:43.332Z dcache ino=73729 ci=1 put-record obj=67003aa27296d585 seq=193 | dirty=0 hb=1 bg=ffffffffffffffff obj=67003aa27296d585 oseq=193 sseq=193 r=
+2026-10-12T04:16:43.332Z dcache ino=73729 ci=3 put-record obj=2edb0eeb90568a3d seq=197 | dirty=0 hb=1 bg=ffffffffffffffff obj=2edb0eeb90568a3d oseq=197 sseq=197 r=
+2026-10-12T04:16:43.332Z dcache ino=73729 ci=2 install len=131072 seq=192 | dirty=0 hb=1 bg=ffffffffffffffff obj=b30007709b916b25 oseq=192 sseq=192 r=
+2026-10-12T04:16:43.332Z dcache ino=73729 ci=1 install len=131072 seq=193 | dirty=0 hb=1 bg=ffffffffffffffff obj=67003aa27296d585 oseq=193 sseq=193 r=
+2026-10-12T04:16:43.332Z dcache ino=73729 ci=3 install len=131072 seq=197 | dirty=0 hb=1 bg=ffffffffffffffff obj=2edb0eeb90568a3d oseq=197 sseq=197 r=
+2026-10-12T04:16:43.337Z dcache ino=73729 ci=5 put-record obj=9c0b164926419faa seq=194 | dirty=0 hb=1 bg=ffffffffffffffff obj=9c0b164926419faa oseq=194 sseq=194 r=
+2026-10-12T04:16:43.337Z dcache ino=73729 ci=5 install len=131072 seq=194 | dirty=0 hb=1 bg=ffffffffffffffff obj=9c0b164926419faa oseq=194 sseq=194 r=
+2026-10-12T04:16:43.339Z dcache ino=73729 ci=10 put-record obj=50dac1aa84f99cf9 seq=201 | dirty=0 hb=1 bg=ffffffffffffffff obj=50dac1aa84f99cf9 oseq=201 sseq=201 r=
+2026-10-12T04:16:43.343Z dcache ino=73729 ci=9 put-record obj=6a1cc0c1fc130e29 seq=198 | dirty=0 hb=1 bg=ffffffffffffffff obj=6a1cc0c1fc130e29 oseq=198 sseq=198 r=
+2026-10-12T04:16:43.343Z dcache ino=73729 ci=9 install len=131072 seq=198 | dirty=0 hb=1 bg=ffffffffffffffff obj=6a1cc0c1fc130e29 oseq=198 sseq=198 r=
+2026-10-12T04:16:43.345Z dcache ino=73729 ci=12 put-record obj=973dfa9738cbe351 seq=204 | dirty=0 hb=1 bg=ffffffffffffffff obj=973dfa9738cbe351 oseq=204 sseq=204 r=
+2026-10-12T04:16:43.345Z dcache ino=73729 ci=14 put-record obj=3e3a70a72f2b3022 seq=202 | dirty=0 hb=1 bg=ffffffffffffffff obj=3e3a70a72f2b3022 oseq=202 sseq=202 r=
+2026-10-12T04:16:43.345Z dcache ino=73729 ci=11 put-record obj=24ff0f441601f4b5 seq=200 | dirty=0 hb=1 bg=ffffffffffffffff obj=24ff0f441601f4b5 oseq=200 sseq=200 r=
+2026-10-12T04:16:43.351Z dcache ino=73729 ci=24 put-record obj=e702aa681e1281e1 seq=212 | dirty=0 hb=1 bg=ffffffffffffffff obj=e702aa681e1281e1 oseq=212 sseq=212 r=
+2026-10-12T04:16:43.351Z dcache ino=73729 ci=24 install len=131072 seq=212 | dirty=0 hb=1 bg=ffffffffffffffff obj=e702aa681e1281e1 oseq=212 sseq=212 r=
+2026-10-12T04:16:43.356Z dcache ino=73729 ci=19 put-record obj=2aeff90c673f9cb seq=208 | dirty=0 hb=1 bg=ffffffffffffffff obj=2aeff90c673f9cb oseq=208 sseq=208 r=
+2026-10-12T04:16:43.358Z dcache ino=73729 ci=30 put-record obj=5e6b3cb1e982ec75 seq=218 | dirty=0 hb=1 bg=ffffffffffffffff obj=5e6b3cb1e982ec75 oseq=218 sseq=218 r=
+2026-10-12T04:16:43.358Z dcache ino=73729 ci=28 put-record obj=b1151827a7739475 seq=216 | dirty=0 hb=1 bg=ffffffffffffffff obj=b1151827a7739475 oseq=216 sseq=216 r=
+2026-10-12T04:16:43.358Z dcache ino=73729 ci=36 put-record obj=4648758b6cb8b34a seq=222 | dirty=0 hb=1 bg=ffffffffffffffff obj=4648758b6cb8b34a oseq=222 sseq=222 r=
+2026-10-12T04:16:43.364Z dcache ino=73729 ci=37 put-record obj=f32790fe01023e09 seq=225 | dirty=0 hb=1 bg=ffffffffffffffff obj=f32790fe01023e09 oseq=225 sseq=225 r=
+2026-10-12T04:16:43.368Z dcache ino=73729 ci=35 put-record obj=14a4ffed7dfe1b44 seq=223 | dirty=0 hb=1 bg=ffffffffffffffff obj=14a4ffed7dfe1b44 oseq=223 sseq=223 r=
+2026-10-12T04:16:43.370Z dcache ino=73729 ci=33 put-record obj=df926f9e16859a73 seq=220 | dirty=0 hb=1 bg=ffffffffffffffff obj=df926f9e16859a73 oseq=220 sseq=220 r=
+2026-10-12T04:16:43.370Z dcache ino=73729 ci=33 install len=131072 seq=220 | dirty=0 hb=1 bg=ffffffffffffffff obj=df926f9e16859a73 oseq=220 sseq=220 r=
+2026-10-12T04:16:43.370Z dcache ino=73729 ci=40 put-record obj=c51524ce9084603c seq=232 | dirty=0 hb=1 bg=ffffffffffffffff obj=c51524ce9084603c oseq=232 sseq=232 r=
+2026-10-12T04:16:43.370Z dcache ino=73729 ci=41 put-record obj=e0db14b5c18c31fc seq=231 | dirty=0 hb=1 bg=ffffffffffffffff obj=e0db14b5c18c31fc oseq=231 sseq=231 r=
+2026-10-12T04:16:43.370Z dcache ino=73729 ci=38 put-record obj=f7d84b94c3a06a72 seq=224 | dirty=0 hb=1 bg=ffffffffffffffff obj=f7d84b94c3a06a72 oseq=224 sseq=224 r=
+2026-10-12T04:16:43.375Z dcache ino=73729 ci=49 put-record obj=3fc86dd811214179 seq=239 | dirty=0 hb=1 bg=ffffffffffffffff obj=3fc86dd811214179 oseq=239 sseq=239 r=
+2026-10-12T04:16:43.382Z dcache ino=73729 ci=59 put-record obj=5ea0e95785367464 seq=250 | dirty=0 hb=1 bg=ffffffffffffffff obj=5ea0e95785367464 oseq=250 sseq=250 r=
+2026-10-12T04:16:43.382Z dcache ino=73729 ci=57 put-record obj=c5be7bd36090b8e2 seq=248 | dirty=0 hb=1 bg=ffffffffffffffff obj=c5be7bd36090b8e2 oseq=248 sseq=248 r=
+2026-10-12T04:16:43.382Z dcache ino=73729 ci=56 put-record obj=e4c9822b675af286 seq=247 | dirty=0 hb=1 bg=ffffffffffffffff obj=e4c9822b675af286 oseq=247 sseq=247 r=
+2026-10-12T04:16:43.388Z dcache ino=73729 ci=55 put-record obj=5df8280d5b24eb9e seq=246 | dirty=0 hb=0 bg=0 obj=5df8280d5b24eb9e oseq=246 sseq=246 r=[0,131072)
+2026-10-12T04:16:43.388Z dcache ino=73729 ci=62 put-record obj=4c2f027e80ba5541 seq=253 | dirty=0 hb=1 bg=ffffffffffffffff obj=4c2f027e80ba5541 oseq=253 sseq=253 r=
+2026-10-12T04:16:43.395Z dcache ino=73729 ci=61 put-record obj=4e99ab347eb1a79e seq=252 | dirty=0 hb=1 bg=ffffffffffffffff obj=4e99ab347eb1a79e oseq=252 sseq=252 r=
+2026-10-12T04:16:43.395Z dcache ino=73729 ci=58 put-record obj=6db02f2d449eb830 seq=249 | dirty=0 hb=1 bg=ffffffffffffffff obj=6db02f2d449eb830 oseq=249 sseq=249 r=
+2026-10-12T04:16:43.395Z dcache ino=73729 ci=67 put-record obj=4c5c15e0be170195 seq=258 | dirty=0 hb=1 bg=ffffffffffffffff obj=4c5c15e0be170195 oseq=258 sseq=258 r=
+2026-10-12T04:16:43.397Z dcache ino=73729 ci=64 put-record obj=22a710cd2a30330c seq=255 | dirty=0 hb=1 bg=ffffffffffffffff obj=22a710cd2a30330c oseq=255 sseq=255 r=
+2026-10-12T04:16:43.401Z dcache ino=73729 ci=63 put-record obj=ffc4342dc53b9a4 seq=254 | dirty=0 hb=0 bg=0 obj=ffc4342dc53b9a4 oseq=254 sseq=254 r=[0,131072)
+2026-10-12T04:16:43.401Z dcache ino=73729 ci=70 put-record obj=8da5f1efc159b112 seq=261 | dirty=0 hb=1 bg=ffffffffffffffff obj=8da5f1efc159b112 oseq=261 sseq=261 r=
+2026-10-12T04:16:43.401Z dcache ino=73729 ci=60 put-record obj=6f5bb6a4e2dce1d1 seq=251 | dirty=0 hb=1 bg=ffffffffffffffff obj=6f5bb6a4e2dce1d1 oseq=251 sseq=251 r=
+2026-10-12T04:16:43.406Z dcache ino=73729 ci=69 put-record obj=9ef81071aa9637a1 seq=260 | dirty=0 hb=1 bg=ffffffffffffffff obj=9ef81071aa9637a1 oseq=260 sseq=260 r=
+2026-10-12T04:16:43.406Z dcache ino=73729 ci=66 put-record obj=6edec68157a020d0 seq=257 | dirty=0 hb=1 bg=ffffffffffffffff obj=6edec68157a020d0 oseq=257 sseq=257 r=
+2026-10-12T04:16:43.406Z dcache ino=73729 ci=65 put-record obj=1b074da1cd684acb seq=256 | dirty=0 hb=1 bg=ffffffffffffffff obj=1b074da1cd684acb oseq=256 sseq=256 r=
+2026-10-12T04:16:43.408Z dcache ino=73729 ci=68 put-record obj=b2725a38a263670f seq=259 | dirty=0 hb=1 bg=ffffffffffffffff obj=b2725a38a263670f oseq=259 sseq=259 r=
+2026-10-12T04:16:43.412Z dcache ino=73729 ci=0 put-record obj=9218042dafdd6828 seq=191 | dirty=0 hb=1 bg=ffffffffffffffff obj=9218042dafdd6828 oseq=191 sseq=191 r=
+2026-10-12T04:16:43.414Z dcache ino=73729 ci=18 put-record obj=79616d464fa08dbc seq=206 | dirty=0 hb=1 bg=ffffffffffffffff obj=79616d464fa08dbc oseq=206 sseq=206 r=
+2026-10-12T04:16:43.418Z dcache ino=73729 ci=8 put-record obj=dd5fc842bd725206 seq=199 | dirty=0 hb=1 bg=ffffffffffffffff obj=dd5fc842bd725206 oseq=199 sseq=199 r=
+2026-10-12T04:16:43.418Z dcache ino=73729 ci=17 put-record obj=d08579cc02901be3 seq=207 | dirty=0 hb=1 bg=ffffffffffffffff obj=d08579cc02901be3 oseq=207 sseq=207 r=
+2026-10-12T04:16:43.418Z dcache ino=73729 ci=8 install len=131072 seq=199 | dirty=0 hb=1 bg=ffffffffffffffff obj=dd5fc842bd725206 oseq=199 sseq=199 r=
+2026-10-12T04:16:43.418Z dcache ino=73729 ci=11 install len=131072 seq=200 | dirty=0 hb=1 bg=ffffffffffffffff obj=24ff0f441601f4b5 oseq=200 sseq=200 r=
+2026-10-12T04:16:43.418Z dcache ino=73729 ci=10 install len=131072 seq=201 | dirty=0 hb=1 bg=ffffffffffffffff obj=50dac1aa84f99cf9 oseq=201 sseq=201 r=
+2026-10-12T04:16:43.419Z dcache ino=73729 ci=14 install len=131072 seq=202 | dirty=0 hb=1 bg=ffffffffffffffff obj=3e3a70a72f2b3022 oseq=202 sseq=202 r=
+2026-10-12T04:16:43.420Z dcache ino=73729 ci=4 put-record obj=d70eecf8b2d2e1ea seq=195 | dirty=0 hb=1 bg=ffffffffffffffff obj=d70eecf8b2d2e1ea oseq=195 sseq=195 r=
+2026-10-12T04:16:43.420Z dcache ino=73729 ci=0 install len=131072 seq=191 | dirty=0 hb=1 bg=ffffffffffffffff obj=9218042dafdd6828 oseq=191 sseq=191 r=
+2026-10-12T04:16:43.420Z dcache ino=73729 ci=4 install len=131072 seq=195 | dirty=0 hb=1 bg=ffffffffffffffff obj=d70eecf8b2d2e1ea oseq=195 sseq=195 r=
+2026-10-12T04:16:43.425Z dcache ino=73729 ci=21 put-record obj=98d93032cd4b9fb3 seq=211 | dirty=0 hb=1 bg=ffffffffffffffff obj=98d93032cd4b9fb3 oseq=211 sseq=211 r=
+2026-10-12T04:16:43.430Z dcache ino=73729 ci=34 put-record obj=7ce9fecc2434d9ae seq=221 | dirty=0 hb=1 bg=ffffffffffffffff obj=7ce9fecc2434d9ae oseq=221 sseq=221 r=
+2026-10-12T04:16:43.431Z dcache ino=73729 ci=29 put-record obj=cde0824d8f6a5a74 seq=217 | dirty=0 hb=1 bg=ffffffffffffffff obj=cde0824d8f6a5a74 oseq=217 sseq=217 r=
+2026-10-12T04:16:43.432Z dcache ino=73729 ci=16 put-record obj=caaf3a94aa72692b seq=205 | dirty=0 hb=1 bg=ffffffffffffffff obj=caaf3a94aa72692b oseq=205 sseq=205 r=
+2026-10-12T04:16:43.433Z dcache ino=73729 ci=16 install len=131072 seq=205 | dirty=0 hb=1 bg=ffffffffffffffff obj=caaf3a94aa72692b oseq=205 sseq=205 r=
+2026-10-12T04:16:43.433Z dcache ino=73729 ci=18 install len=131072 seq=206 | dirty=0 hb=1 bg=ffffffffffffffff obj=79616d464fa08dbc oseq=206 sseq=206 r=
+2026-10-12T04:16:43.433Z dcache ino=73729 ci=17 install len=131072 seq=207 | dirty=0 hb=1 bg=ffffffffffffffff obj=d08579cc02901be3 oseq=207 sseq=207 r=
+2026-10-12T04:16:43.433Z dcache ino=73729 ci=19 install len=131072 seq=208 | dirty=0 hb=1 bg=ffffffffffffffff obj=2aeff90c673f9cb oseq=208 sseq=208 r=
+2026-10-12T04:16:43.436Z dcache ino=73729 ci=46 put-record obj=89dd00264b36d691 seq=230 | dirty=0 hb=1 bg=ffffffffffffffff obj=89dd00264b36d691 oseq=230 sseq=230 r=
+2026-10-12T04:16:43.437Z dcache ino=73729 ci=42 put-record obj=7d32c421b5b3d978 seq=227 | dirty=0 hb=1 bg=ffffffffffffffff obj=7d32c421b5b3d978 oseq=227 sseq=227 r=
+2026-10-12T04:16:43.439Z dcache ino=73729 ci=47 put-record obj=877a0a6649216469 seq=245 | dirty=0 hb=0 bg=0 obj=877a0a6649216469 oseq=245 sseq=245 r=[0,131072)
+2026-10-12T04:16:43.441Z dcache ino=73729 ci=45 put-record obj=611b0317b800ee7d seq=228 | dirty=0 hb=1 bg=ffffffffffffffff obj=611b0317b800ee7d oseq=228 sseq=228 r=
+2026-10-12T04:16:43.441Z dcache ino=73729 ci=54 put-record obj=7c1f4dd037e5da2c seq=237 | dirty=0 hb=1 bg=ffffffffffffffff obj=7c1f4dd037e5da2c oseq=237 sseq=237 r=
+2026-10-12T04:16:43.443Z dcache ino=73729 ci=71 put-record obj=c1557217cf8ae26f seq=262 | dirty=0 hb=0 bg=0 obj=c1557217cf8ae26f oseq=262 sseq=262 r=[0,131072)
+2026-10-12T04:16:43.446Z dcache ino=73729 ci=44 put-record obj=106a06d5a1e5ff23 seq=229 | dirty=0 hb=1 bg=ffffffffffffffff obj=106a06d5a1e5ff23 oseq=229 sseq=229 r=
+2026-10-12T04:16:43.446Z dcache ino=73729 ci=53 put-record obj=82df8c3c4562803d seq=238 | dirty=0 hb=1 bg=ffffffffffffffff obj=82df8c3c4562803d oseq=238 sseq=238 r=
+2026-10-12T04:16:43.448Z dcache ino=73729 ci=27 put-record obj=b4a195f13bbdd7dc seq=214 | dirty=0 hb=1 bg=ffffffffffffffff obj=b4a195f13bbdd7dc oseq=214 sseq=214 r=
+2026-10-12T04:16:43.452Z dcache ino=73729 ci=22 put-record obj=5ce9a2bcbe865af3 seq=210 | dirty=0 hb=1 bg=ffffffffffffffff obj=5ce9a2bcbe865af3 oseq=210 sseq=210 r=
+2026-10-12T04:16:43.454Z dcache ino=73729 ci=20 put-record obj=cd4a19b5c7fedb80 seq=209 | dirty=0 hb=1 bg=ffffffffffffffff obj=cd4a19b5c7fedb80 oseq=209 sseq=209 r=
+2026-10-12T04:16:43.454Z dcache ino=73729 ci=20 install len=131072 seq=209 | dirty=0 hb=1 bg=ffffffffffffffff obj=cd4a19b5c7fedb80 oseq=209 sseq=209 r=
+2026-10-12T04:16:43.454Z dcache ino=73729 ci=22 install len=131072 seq=210 | dirty=0 hb=1 bg=ffffffffffffffff obj=5ce9a2bcbe865af3 oseq=210 sseq=210 r=
+2026-10-12T04:16:43.454Z dcache ino=73729 ci=21 install len=131072 seq=211 | dirty=0 hb=1 bg=ffffffffffffffff obj=98d93032cd4b9fb3 oseq=211 sseq=211 r=
+2026-10-12T04:16:43.456Z dcache ino=73729 ci=32 put-record obj=838688b8661c27eb seq=219 | dirty=0 hb=1 bg=ffffffffffffffff obj=838688b8661c27eb oseq=219 sseq=219 r=
+2026-10-12T04:16:43.456Z dcache ino=73729 ci=13 put-record obj=f23fccec41f78a21 seq=203 | dirty=0 hb=1 bg=ffffffffffffffff obj=f23fccec41f78a21 oseq=203 sseq=203 r=
+2026-10-12T04:16:43.456Z dcache ino=73729 ci=32 install len=131072 seq=219 | dirty=0 hb=1 bg=ffffffffffffffff obj=838688b8661c27eb oseq=219 sseq=219 r=
+2026-10-12T04:16:43.456Z dcache ino=73729 ci=13 install len=131072 seq=203 | dirty=0 hb=1 bg=ffffffffffffffff obj=f23fccec41f78a21 oseq=203 sseq=203 r=
+2026-10-12T04:16:43.456Z dcache ino=73729 ci=34 install len=131072 seq=221 | dirty=0 hb=1 bg=ffffffffffffffff obj=7ce9fecc2434d9ae oseq=221 sseq=221 r=
+2026-10-12T04:16:43.456Z dcache ino=73729 ci=12 install len=131072 seq=204 | dirty=0 hb=1 bg=ffffffffffffffff obj=973dfa9738cbe351 oseq=204 sseq=204 r=
+2026-10-12T04:16:43.456Z dcache ino=73729 ci=36 install len=131072 seq=222 | dirty=0 hb=1 bg=ffffffffffffffff obj=4648758b6cb8b34a oseq=222 sseq=222 r=
+2026-10-12T04:16:43.456Z dcache ino=73729 ci=35 install len=131072 seq=223 | dirty=0 hb=1 bg=ffffffffffffffff obj=14a4ffed7dfe1b44 oseq=223 sseq=223 r=
+2026-10-12T04:16:43.456Z dcache ino=73729 ci=38 install len=131072 seq=224 | dirty=0 hb=1 bg=ffffffffffffffff obj=f7d84b94c3a06a72 oseq=224 sseq=224 r=
+2026-10-12T04:16:43.456Z dcache ino=73729 ci=37 install len=131072 seq=225 | dirty=0 hb=1 bg=ffffffffffffffff obj=f32790fe01023e09 oseq=225 sseq=225 r=
+2026-10-12T04:16:43.458Z dcache ino=73729 ci=51 put-record obj=9993f5cb73438586 seq=235 | dirty=0 hb=1 bg=ffffffffffffffff obj=9993f5cb73438586 oseq=235 sseq=235 r=
+2026-10-12T04:16:43.458Z dcache ino=73729 ci=48 put-record obj=d9bb7c87e8391e31 seq=233 | dirty=0 hb=1 bg=ffffffffffffffff obj=d9bb7c87e8391e31 oseq=233 sseq=233 r=
+2026-10-12T04:16:43.458Z dcache ino=73729 ci=31 put-record obj=11e26016719e7c26 seq=243 | dirty=0 hb=0 bg=0 obj=11e26016719e7c26 oseq=243 sseq=243 r=[0,131072)
+2026-10-12T04:16:43.460Z dcache ino=73729 ci=52 put-record obj=88a1f42ea8b8e86f seq=236 | dirty=0 hb=1 bg=ffffffffffffffff obj=88a1f42ea8b8e86f oseq=236 sseq=236 r=
+2026-10-12T04:16:43.462Z dcache ino=73729 ci=43 put-record obj=357298027c039db4 seq=226 | dirty=0 hb=1 bg=ffffffffffffffff obj=357298027c039db4 oseq=226 sseq=226 r=
+2026-10-12T04:16:43.462Z dcache ino=73729 ci=43 install len=131072 seq=226 | dirty=0 hb=1 bg=ffffffffffffffff obj=357298027c039db4 oseq=226 sseq=226 r=
+2026-10-12T04:16:43.462Z dcache ino=73729 ci=42 install len=131072 seq=227 | dirty=0 hb=1 bg=ffffffffffffffff obj=7d32c421b5b3d978 oseq=227 sseq=227 r=
+2026-10-12T04:16:43.462Z dcache ino=73729 ci=45 install len=131072 seq=228 | dirty=0 hb=1 bg=ffffffffffffffff obj=611b0317b800ee7d oseq=228 sseq=228 r=
+2026-10-12T04:16:43.462Z dcache ino=73729 ci=44 install len=131072 seq=229 | dirty=0 hb=1 bg=ffffffffffffffff obj=106a06d5a1e5ff23 oseq=229 sseq=229 r=
+2026-10-12T04:16:43.462Z dcache ino=73729 ci=46 install len=131072 seq=230 | dirty=0 hb=1 bg=ffffffffffffffff obj=89dd00264b36d691 oseq=230 sseq=230 r=
+2026-10-12T04:16:43.462Z dcache ino=73729 ci=41 install len=131072 seq=231 | dirty=0 hb=1 bg=ffffffffffffffff obj=e0db14b5c18c31fc oseq=231 sseq=231 r=
+2026-10-12T04:16:43.462Z dcache ino=73729 ci=40 install len=131072 seq=232 | dirty=0 hb=1 bg=ffffffffffffffff obj=c51524ce9084603c oseq=232 sseq=232 r=
+2026-10-12T04:16:43.464Z dcache ino=73729 ci=50 put-record obj=1556227c0641ee01 seq=234 | dirty=0 hb=1 bg=ffffffffffffffff obj=1556227c0641ee01 oseq=234 sseq=234 r=
+2026-10-12T04:16:43.464Z dcache ino=73729 ci=48 install len=131072 seq=233 | dirty=0 hb=1 bg=ffffffffffffffff obj=d9bb7c87e8391e31 oseq=233 sseq=233 r=
+2026-10-12T04:16:43.464Z dcache ino=73729 ci=50 install len=131072 seq=234 | dirty=0 hb=1 bg=ffffffffffffffff obj=1556227c0641ee01 oseq=234 sseq=234 r=
+2026-10-12T04:16:43.464Z dcache ino=73729 ci=51 install len=131072 seq=235 | dirty=0 hb=1 bg=ffffffffffffffff obj=9993f5cb73438586 oseq=235 sseq=235 r=
+2026-10-12T04:16:43.464Z dcache ino=73729 ci=52 install len=131072 seq=236 | dirty=0 hb=1 bg=ffffffffffffffff obj=88a1f42ea8b8e86f oseq=236 sseq=236 r=
+2026-10-12T04:16:43.464Z dcache ino=73729 ci=54 install len=131072 seq=237 | dirty=0 hb=1 bg=ffffffffffffffff obj=7c1f4dd037e5da2c oseq=237 sseq=237 r=
+2026-10-12T04:16:43.465Z dcache ino=73729 ci=53 install len=131072 seq=238 | dirty=0 hb=1 bg=ffffffffffffffff obj=82df8c3c4562803d oseq=238 sseq=238 r=
+2026-10-12T04:16:43.465Z dcache ino=73729 ci=49 install len=131072 seq=239 | dirty=0 hb=1 bg=ffffffffffffffff obj=3fc86dd811214179 oseq=239 sseq=239 r=
+2026-10-12T04:16:43.467Z dcache ino=73729 ci=15 put-record obj=838556eaa541a244 seq=241 | dirty=0 hb=0 bg=0 obj=838556eaa541a244 oseq=241 sseq=241 r=[0,131072)
+2026-10-12T04:16:43.467Z dcache ino=73729 ci=26 put-record obj=e31f44ba7ce68be2 seq=215 | dirty=0 hb=1 bg=ffffffffffffffff obj=e31f44ba7ce68be2 oseq=215 sseq=215 r=
+2026-10-12T04:16:43.467Z dcache ino=73729 ci=25 put-record obj=c0e2ce5e90487c48 seq=213 | dirty=0 hb=1 bg=ffffffffffffffff obj=c0e2ce5e90487c48 oseq=213 sseq=213 r=
+2026-10-12T04:16:43.467Z dcache ino=73729 ci=26 install len=131072 seq=215 | dirty=0 hb=1 bg=ffffffffffffffff obj=e31f44ba7ce68be2 oseq=215 sseq=215 r=
+2026-10-12T04:16:43.467Z dcache ino=73729 ci=25 install len=131072 seq=213 | dirty=0 hb=1 bg=ffffffffffffffff obj=c0e2ce5e90487c48 oseq=213 sseq=213 r=
+2026-10-12T04:16:43.467Z dcache ino=73729 ci=29 install len=131072 seq=217 | dirty=0 hb=1 bg=ffffffffffffffff obj=cde0824d8f6a5a74 oseq=217 sseq=217 r=
+2026-10-12T04:16:43.467Z dcache ino=73729 ci=27 install len=131072 seq=214 | dirty=0 hb=1 bg=ffffffffffffffff obj=b4a195f13bbdd7dc oseq=214 sseq=214 r=
+2026-10-12T04:16:43.467Z dcache ino=73729 ci=28 install len=131072 seq=216 | dirty=0 hb=1 bg=ffffffffffffffff obj=b1151827a7739475 oseq=216 sseq=216 r=
+2026-10-12T04:16:43.467Z dcache ino=73729 ci=30 install len=131072 seq=218 | dirty=0 hb=1 bg=ffffffffffffffff obj=5e6b3cb1e982ec75 oseq=218 sseq=218 r=
+2026-10-12T04:16:43.470Z dcache ino=73729 ci=23 put-record obj=2c504207a82d2058 seq=242 | dirty=0 hb=0 bg=0 obj=2c504207a82d2058 oseq=242 sseq=242 r=[0,131072)
+2026-10-12T04:16:43.470Z dcache ino=73729 ci=39 put-record obj=d445f6ea4f9ab1fb seq=244 | dirty=0 hb=0 bg=0 obj=d445f6ea4f9ab1fb oseq=244 sseq=244 r=[0,131072)
+2026-10-12T04:16:43.471Z dcache ino=73729 ci=7 put-record obj=d880236ea32fd02f seq=240 | dirty=0 hb=0 bg=0 obj=d880236ea32fd02f oseq=240 sseq=240 r=[0,131072)
+2026-10-12T04:16:43.471Z dcache ino=73729 ci=7 install len=131072 seq=240 | dirty=0 hb=0 bg=0 obj=d880236ea32fd02f oseq=240 sseq=240 r=[0,131072)
+2026-10-12T04:16:43.471Z dcache ino=73729 ci=15 install len=131072 seq=241 | dirty=0 hb=0 bg=0 obj=838556eaa541a244 oseq=241 sseq=241 r=[0,131072)
+2026-10-12T04:16:43.471Z dcache ino=73729 ci=23 install len=131072 seq=242 | dirty=0 hb=0 bg=0 obj=2c504207a82d2058 oseq=242 sseq=242 r=[0,131072)
+2026-10-12T04:16:43.471Z dcache ino=73729 ci=31 install len=131072 seq=243 | dirty=0 hb=0 bg=0 obj=11e26016719e7c26 oseq=243 sseq=243 r=[0,131072)
+2026-10-12T04:16:43.471Z dcache ino=73729 ci=39 install len=131072 seq=244 | dirty=0 hb=0 bg=0 obj=d445f6ea4f9ab1fb oseq=244 sseq=244 r=[0,131072)
+2026-10-12T04:16:43.471Z dcache ino=73729 ci=47 install len=131072 seq=245 | dirty=0 hb=0 bg=0 obj=877a0a6649216469 oseq=245 sseq=245 r=[0,131072)
+2026-10-12T04:16:43.471Z dcache ino=73729 ci=55 install len=131072 seq=246 | dirty=0 hb=0 bg=0 obj=5df8280d5b24eb9e oseq=246 sseq=246 r=[0,131072)
+2026-10-12T04:16:43.471Z dcache ino=73729 ci=56 install len=131072 seq=247 | dirty=0 hb=1 bg=ffffffffffffffff obj=e4c9822b675af286 oseq=247 sseq=247 r=
+2026-10-12T04:16:43.471Z dcache ino=73729 ci=57 install len=131072 seq=248 | dirty=0 hb=1 bg=ffffffffffffffff obj=c5be7bd36090b8e2 oseq=248 sseq=248 r=
+2026-10-12T04:16:43.471Z dcache ino=73729 ci=58 install len=131072 seq=249 | dirty=0 hb=1 bg=ffffffffffffffff obj=6db02f2d449eb830 oseq=249 sseq=249 r=
+2026-10-12T04:16:43.471Z dcache ino=73729 ci=59 install len=131072 seq=250 | dirty=0 hb=1 bg=ffffffffffffffff obj=5ea0e95785367464 oseq=250 sseq=250 r=
+2026-10-12T04:16:43.471Z dcache ino=73729 ci=60 install len=131072 seq=251 | dirty=0 hb=1 bg=ffffffffffffffff obj=6f5bb6a4e2dce1d1 oseq=251 sseq=251 r=
+2026-10-12T04:16:43.471Z dcache ino=73729 ci=61 install len=131072 seq=252 | dirty=0 hb=1 bg=ffffffffffffffff obj=4e99ab347eb1a79e oseq=252 sseq=252 r=
+2026-10-12T04:16:43.471Z dcache ino=73729 ci=62 install len=131072 seq=253 | dirty=0 hb=1 bg=ffffffffffffffff obj=4c2f027e80ba5541 oseq=253 sseq=253 r=
+2026-10-12T04:16:43.471Z dcache ino=73729 ci=63 install len=131072 seq=254 | dirty=0 hb=0 bg=0 obj=ffc4342dc53b9a4 oseq=254 sseq=254 r=[0,131072)
+2026-10-12T04:16:43.471Z dcache ino=73729 ci=64 install len=131072 seq=255 | dirty=0 hb=1 bg=ffffffffffffffff obj=22a710cd2a30330c oseq=255 sseq=255 r=
+2026-10-12T04:16:43.471Z dcache ino=73729 ci=65 install len=131072 seq=256 | dirty=0 hb=1 bg=ffffffffffffffff obj=1b074da1cd684acb oseq=256 sseq=256 r=
+2026-10-12T04:16:43.471Z dcache ino=73729 ci=66 install len=131072 seq=257 | dirty=0 hb=1 bg=ffffffffffffffff obj=6edec68157a020d0 oseq=257 sseq=257 r=
+2026-10-12T04:16:43.471Z dcache ino=73729 ci=67 install len=131072 seq=258 | dirty=0 hb=1 bg=ffffffffffffffff obj=4c5c15e0be170195 oseq=258 sseq=258 r=
+2026-10-12T04:16:43.472Z dcache ino=73729 ci=68 install len=131072 seq=259 | dirty=0 hb=1 bg=ffffffffffffffff obj=b2725a38a263670f oseq=259 sseq=259 r=
+2026-10-12T04:16:43.472Z dcache ino=73729 ci=69 install len=131072 seq=260 | dirty=0 hb=1 bg=ffffffffffffffff obj=9ef81071aa9637a1 oseq=260 sseq=260 r=
+2026-10-12T04:16:43.472Z dcache ino=73729 ci=70 install len=131072 seq=261 | dirty=0 hb=1 bg=ffffffffffffffff obj=8da5f1efc159b112 oseq=261 sseq=261 r=
+2026-10-12T04:16:43.472Z dcache ino=73729 ci=71 install len=131072 seq=262 | dirty=0 hb=0 bg=0 obj=c1557217cf8ae26f oseq=262 sseq=262 r=[0,131072)
+2026-10-12T04:16:43.487Z report ino=73729 ci=2 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=6 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=1 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=3 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=5 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=10 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=9 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=12 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=14 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=11 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=24 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=19 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=30 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=28 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=36 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=37 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=35 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=33 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=40 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=41 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=38 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=49 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=59 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=57 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=56 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=55 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=62 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=61 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=58 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=67 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=64 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=63 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=70 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=60 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=69 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=66 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=65 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=68 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=0 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=18 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=8 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=17 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=4 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=21 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=34 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=29 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=16 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=46 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=42 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=47 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=45 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=54 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=71 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=44 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=53 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=27 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=22 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=20 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=32 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=13 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=51 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=48 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=31 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=52 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=43 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=50 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=15 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=26 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=25 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=23 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=39 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report ino=73729 ci=7 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z report-irec ino=73729 size=9437184 only=73729 sync=1 rc=0
+2026-10-12T04:16:43.487Z dcache ino=73729 ci=55 to-rdcache len=131072 | dirty=0 hb=1 bg=5df8280d5b24eb9e obj=5df8280d5b24eb9e oseq=246 sseq=246 r=
+2026-10-12T04:16:43.487Z dcache ino=73729 ci=63 to-rdcache len=131072 | dirty=0 hb=1 bg=ffc4342dc53b9a4 obj=ffc4342dc53b9a4 oseq=254 sseq=254 r=
+2026-10-12T04:16:43.487Z dcache ino=73729 ci=47 to-rdcache len=131072 | dirty=0 hb=1 bg=877a0a6649216469 obj=877a0a6649216469 oseq=245 sseq=245 r=
+2026-10-12T04:16:43.487Z dcache ino=73729 ci=71 to-rdcache len=131072 | dirty=0 hb=1 bg=c1557217cf8ae26f obj=c1557217cf8ae26f oseq=262 sseq=262 r=
+2026-10-12T04:16:43.487Z dcache ino=73729 ci=31 to-rdcache len=131072 | dirty=0 hb=1 bg=11e26016719e7c26 obj=11e26016719e7c26 oseq=243 sseq=243 r=
+2026-10-12T04:16:43.487Z dcache ino=73729 ci=15 to-rdcache len=131072 | dirty=0 hb=1 bg=838556eaa541a244 obj=838556eaa541a244 oseq=241 sseq=241 r=
+2026-10-12T04:16:43.487Z dcache ino=73729 ci=23 to-rdcache len=131072 | dirty=0 hb=1 bg=2c504207a82d2058 obj=2c504207a82d2058 oseq=242 sseq=242 r=
+2026-10-12T04:16:43.487Z dcache ino=73729 ci=39 to-rdcache len=131072 | dirty=0 hb=1 bg=d445f6ea4f9ab1fb obj=d445f6ea4f9ab1fb oseq=244 sseq=244 r=
+2026-10-12T04:16:43.487Z dcache ino=73729 ci=7 to-rdcache len=131072 | dirty=0 hb=1 bg=d880236ea32fd02f obj=d880236ea32fd02f oseq=240 sseq=240 r=
+2026-10-12T04:16:43.487Z fsync-split ino=73729 flush_ms=163 report_ms=0 rc=0
+2026-10-12T04:16:43.492Z release ino=73729 begin
+2026-10-12T04:16:43.545Z release ino=73729 rc=0
+2026-10-12T04:16:46.679Z report-irec ino=1 size=0 only=0 sync=1 rc=0
+2026-10-12T04:16:59.644Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:24Z on intel2), build=28b2089b-release-fault: starting export=default mount=/tmp/efs-intel-28b2089b-intel2_efs/mnt
+2026-10-12T04:16:59.645Z Discovered 4 cluster nodes from 127.0.0.1:34210
+2026-10-12T04:16:59.645Z   node id=1 127.0.0.1:34210
+2026-10-12T04:16:59.645Z   node id=2 127.0.0.1:34211
+2026-10-12T04:16:59.645Z   node id=3 127.0.0.1:34212
+2026-10-12T04:16:59.645Z   node id=4 127.0.0.1:34213
+2026-10-12T04:16:59.646Z fetching metadata...
+2026-10-12T04:16:59.646Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T04:16:59.646Z export id=1 name=default
+2026-10-12T04:16:59.646Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T04:16:59.650Z efs-fuse: workers max=10 idle=10
+2026-10-12T04:16:59.659Z fuse serving
+2026-10-12T04:16:59.973Z release ino=16385 begin
+2026-10-12T04:16:59.981Z release ino=12289 begin
+2026-10-12T04:16:59.983Z release ino=12289 rc=0
+2026-10-12T04:17:00.026Z release ino=16385 rc=0
+2026-10-12T04:17:00.766Z dcache ino=77825 ci=0 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=1 r=
+2026-10-12T04:17:00.766Z dcache ino=77825 ci=2 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=2 r=
+2026-10-12T04:17:00.767Z dcache ino=77825 ci=1 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=3 r=
+2026-10-12T04:17:00.767Z dcache ino=77825 ci=3 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=4 r=
+2026-10-12T04:17:00.768Z dcache ino=77825 ci=4 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=5 r=
+2026-10-12T04:17:00.768Z dcache ino=77825 ci=5 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=6 r=
+2026-10-12T04:17:00.768Z dcache ino=77825 ci=6 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=7 r=
+2026-10-12T04:17:00.769Z dcache ino=77825 ci=7 patch off=129728 len=1344 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:17:00.771Z dcache ino=77825 ci=9 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=8 r=
+2026-10-12T04:17:00.771Z dcache ino=77825 ci=8 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=9 r=
+2026-10-12T04:17:00.771Z dcache ino=77825 ci=10 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=10 r=
+2026-10-12T04:17:00.772Z dcache ino=77825 ci=11 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=11 r=
+2026-10-12T04:17:00.772Z dcache ino=77825 ci=13 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=12 r=
+2026-10-12T04:17:00.772Z dcache ino=77825 ci=14 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=13 r=
+2026-10-12T04:17:00.772Z dcache ino=77825 ci=12 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=14 r=
+2026-10-12T04:17:00.772Z dcache ino=77825 ci=15 patch off=129728 len=1344 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:17:00.773Z dcache ino=77825 ci=16 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=15 r=
+2026-10-12T04:17:00.773Z dcache ino=77825 ci=18 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=16 r=
+2026-10-12T04:17:00.773Z dcache ino=77825 ci=17 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=17 r=
+2026-10-12T04:17:00.774Z dcache ino=77825 ci=19 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=18 r=
+2026-10-12T04:17:00.774Z dcache ino=77825 ci=20 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=19 r=
+2026-10-12T04:17:00.774Z dcache ino=77825 ci=22 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=20 r=
+2026-10-12T04:17:00.774Z dcache ino=77825 ci=21 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=21 r=
+2026-10-12T04:17:00.774Z dcache ino=77825 ci=23 patch off=129728 len=1344 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:17:00.775Z dcache ino=77825 ci=25 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=22 r=
+2026-10-12T04:17:00.775Z dcache ino=77825 ci=24 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=23 r=
+2026-10-12T04:17:00.775Z dcache ino=77825 ci=27 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=24 r=
+2026-10-12T04:17:00.775Z dcache ino=77825 ci=26 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=25 r=
+2026-10-12T04:17:00.775Z dcache ino=77825 ci=29 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=26 r=
+2026-10-12T04:17:00.775Z dcache ino=77825 ci=28 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=27 r=
+2026-10-12T04:17:00.776Z dcache ino=77825 ci=30 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=28 r=
+2026-10-12T04:17:00.776Z dcache ino=77825 ci=31 patch off=129728 len=1344 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:17:00.776Z dcache ino=77825 ci=32 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=29 r=
+2026-10-12T04:17:00.776Z dcache ino=77825 ci=33 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=30 r=
+2026-10-12T04:17:00.776Z dcache ino=77825 ci=34 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=31 r=
+2026-10-12T04:17:00.776Z dcache ino=77825 ci=35 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=32 r=
+2026-10-12T04:17:00.777Z dcache ino=77825 ci=36 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=33 r=
+2026-10-12T04:17:00.777Z dcache ino=77825 ci=37 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=34 r=
+2026-10-12T04:17:00.777Z dcache ino=77825 ci=39 patch off=129728 len=1344 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:17:00.777Z dcache ino=77825 ci=47 patch off=129728 len=1344 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:17:00.778Z dcache ino=77825 ci=55 patch off=129728 len=1344 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:17:00.779Z dcache ino=77825 ci=63 patch off=129728 len=1344 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:17:00.779Z dcache ino=77825 ci=71 patch off=129728 len=1344 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,131072)
+2026-10-12T04:17:00.779Z dcache ino=77825 ci=7 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=35 r=[0,131072)
+2026-10-12T04:17:00.780Z dcache ino=77825 ci=3 put-record obj=818ebee4de5795b3 seq=4 | dirty=0 hb=1 bg=ffffffffffffffff obj=818ebee4de5795b3 oseq=4 sseq=4 r=
+2026-10-12T04:17:00.780Z dcache ino=77825 ci=3 install len=131072 seq=4 | dirty=0 hb=1 bg=ffffffffffffffff obj=818ebee4de5795b3 oseq=4 sseq=4 r=
+2026-10-12T04:17:00.780Z dcache ino=77825 ci=61 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=36 r=
+2026-10-12T04:17:00.780Z dcache ino=77825 ci=52 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=37 r=
+2026-10-12T04:17:00.780Z dcache ino=77825 ci=70 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=38 r=
+2026-10-12T04:17:00.780Z dcache ino=77825 ci=43 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=39 r=
+2026-10-12T04:17:00.780Z dcache ino=77825 ci=69 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=40 r=
+2026-10-12T04:17:00.780Z dcache ino=77825 ci=60 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=41 r=
+2026-10-12T04:17:00.780Z dcache ino=77825 ci=51 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=42 r=
+2026-10-12T04:17:00.780Z dcache ino=77825 ci=42 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=43 r=
+2026-10-12T04:17:00.780Z dcache ino=77825 ci=45 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=44 r=
+2026-10-12T04:17:00.780Z dcache ino=77825 ci=54 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=45 r=
+2026-10-12T04:17:00.780Z dcache ino=77825 ci=64 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=46 r=
+2026-10-12T04:17:00.780Z dcache ino=77825 ci=53 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=47 r=
+2026-10-12T04:17:00.780Z dcache ino=77825 ci=44 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=48 r=
+2026-10-12T04:17:00.780Z dcache ino=77825 ci=62 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=49 r=
+2026-10-12T04:17:00.780Z dcache ino=77825 ci=38 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=50 r=
+2026-10-12T04:17:00.780Z dcache ino=77825 ci=57 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=51 r=
+2026-10-12T04:17:00.780Z dcache ino=77825 ci=48 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=52 r=
+2026-10-12T04:17:00.780Z dcache ino=77825 ci=66 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=53 r=
+2026-10-12T04:17:00.780Z dcache ino=77825 ci=46 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=54 r=
+2026-10-12T04:17:00.780Z dcache ino=77825 ci=65 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=55 r=
+2026-10-12T04:17:00.780Z dcache ino=77825 ci=56 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=56 r=
+2026-10-12T04:17:00.781Z dcache ino=77825 ci=0 put-record obj=ba64e77c6dff5b65 seq=1 | dirty=0 hb=1 bg=ffffffffffffffff obj=ba64e77c6dff5b65 oseq=1 sseq=1 r=
+2026-10-12T04:17:00.781Z dcache ino=77825 ci=0 install len=131072 seq=1 | dirty=0 hb=1 bg=ffffffffffffffff obj=ba64e77c6dff5b65 oseq=1 sseq=1 r=
+2026-10-12T04:17:00.781Z dcache ino=77825 ci=68 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=57 r=
+2026-10-12T04:17:00.781Z dcache ino=77825 ci=41 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=58 r=
+2026-10-12T04:17:00.781Z dcache ino=77825 ci=59 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=59 r=
+2026-10-12T04:17:00.781Z dcache ino=77825 ci=15 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=61 r=[0,131072)
+2026-10-12T04:17:00.782Z dcache ino=77825 ci=50 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=60 r=
+2026-10-12T04:17:00.782Z dcache ino=77825 ci=49 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=62 r=
+2026-10-12T04:17:00.782Z dcache ino=77825 ci=40 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=63 r=
+2026-10-12T04:17:00.782Z dcache ino=77825 ci=67 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=64 r=
+2026-10-12T04:17:00.782Z dcache ino=77825 ci=58 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=65 r=
+2026-10-12T04:17:00.784Z dcache ino=77825 ci=23 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=66 r=[0,131072)
+2026-10-12T04:17:00.784Z dcache ino=77825 ci=8 put-record obj=9d07c4eec47c24 seq=9 | dirty=0 hb=1 bg=ffffffffffffffff obj=9d07c4eec47c24 oseq=9 sseq=9 r=
+2026-10-12T04:17:00.784Z dcache ino=77825 ci=8 install len=131072 seq=9 | dirty=0 hb=1 bg=ffffffffffffffff obj=9d07c4eec47c24 oseq=9 sseq=9 r=
+2026-10-12T04:17:00.787Z dcache ino=77825 ci=12 put-record obj=31f99e9d744e33f2 seq=14 | dirty=0 hb=1 bg=ffffffffffffffff obj=31f99e9d744e33f2 oseq=14 sseq=14 r=
+2026-10-12T04:17:00.787Z dcache ino=77825 ci=12 install len=131072 seq=14 | dirty=0 hb=1 bg=ffffffffffffffff obj=31f99e9d744e33f2 oseq=14 sseq=14 r=
+2026-10-12T04:17:00.788Z dcache ino=77825 ci=19 put-record obj=f9177aac3eaeaaf4 seq=18 | dirty=0 hb=1 bg=ffffffffffffffff obj=f9177aac3eaeaaf4 oseq=18 sseq=18 r=
+2026-10-12T04:17:00.788Z dcache ino=77825 ci=19 install len=131072 seq=18 | dirty=0 hb=1 bg=ffffffffffffffff obj=f9177aac3eaeaaf4 oseq=18 sseq=18 r=
+2026-10-12T04:17:00.790Z dcache ino=77825 ci=31 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=67 r=[0,131072)
+2026-10-12T04:17:00.790Z dcache ino=77825 ci=39 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=68 r=[0,131072)
+2026-10-12T04:17:00.791Z dcache ino=77825 ci=32 put-record obj=b3a07ebc04df0715 seq=29 | dirty=0 hb=1 bg=ffffffffffffffff obj=b3a07ebc04df0715 oseq=29 sseq=29 r=
+2026-10-12T04:17:00.791Z dcache ino=77825 ci=32 install len=131072 seq=29 | dirty=0 hb=1 bg=ffffffffffffffff obj=b3a07ebc04df0715 oseq=29 sseq=29 r=
+2026-10-12T04:17:00.791Z dcache ino=77825 ci=47 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=69 r=[0,131072)
+2026-10-12T04:17:00.791Z dcache ino=77825 ci=55 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=70 r=[0,131072)
+2026-10-12T04:17:00.792Z dcache ino=77825 ci=63 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=71 r=[0,131072)
+2026-10-12T04:17:00.792Z dcache ino=77825 ci=71 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=72 r=[0,131072)
+2026-10-12T04:17:00.796Z dcache ino=77825 ci=13 put-record obj=3f0627b0b2ccd513 seq=12 | dirty=0 hb=1 bg=ffffffffffffffff obj=3f0627b0b2ccd513 oseq=12 sseq=12 r=
+2026-10-12T04:17:00.797Z dcache ino=77825 ci=1 put-record obj=c31d3e49f5b4d8ff seq=3 | dirty=0 hb=1 bg=ffffffffffffffff obj=c31d3e49f5b4d8ff oseq=3 sseq=3 r=
+2026-10-12T04:17:00.805Z dcache ino=77825 ci=17 put-record obj=d4a66f99838fc0d seq=17 | dirty=0 hb=1 bg=ffffffffffffffff obj=d4a66f99838fc0d oseq=17 sseq=17 r=
+2026-10-12T04:17:00.805Z dcache ino=77825 ci=5 put-record obj=5409be98fb48b376 seq=6 | dirty=0 hb=1 bg=ffffffffffffffff obj=5409be98fb48b376 oseq=6 sseq=6 r=
+2026-10-12T04:17:00.805Z dcache ino=77825 ci=21 put-record obj=7306c1e10281b0ca seq=21 | dirty=0 hb=1 bg=ffffffffffffffff obj=7306c1e10281b0ca oseq=21 sseq=21 r=
+2026-10-12T04:17:00.806Z dcache ino=77825 ci=6 put-record obj=c8a7f74143aa22d1 seq=7 | dirty=0 hb=1 bg=ffffffffffffffff obj=c8a7f74143aa22d1 oseq=7 sseq=7 r=
+2026-10-12T04:17:00.807Z dcache ino=77825 ci=24 put-record obj=819c032079abd391 seq=23 | dirty=0 hb=1 bg=ffffffffffffffff obj=819c032079abd391 oseq=23 sseq=23 r=
+2026-10-12T04:17:00.816Z dcache ino=77825 ci=42 put-record obj=262052e69be1582d seq=43 | dirty=0 hb=1 bg=ffffffffffffffff obj=262052e69be1582d oseq=43 sseq=43 r=
+2026-10-12T04:17:00.816Z dcache ino=77825 ci=14 put-record obj=2264bdd0052b7b12 seq=13 | dirty=0 hb=1 bg=ffffffffffffffff obj=2264bdd0052b7b12 oseq=13 sseq=13 r=
+2026-10-12T04:17:00.816Z dcache ino=77825 ci=27 put-record obj=11bd49991f82d31b seq=24 | dirty=0 hb=1 bg=ffffffffffffffff obj=11bd49991f82d31b oseq=24 sseq=24 r=
+2026-10-12T04:17:00.816Z dcache ino=77825 ci=2 put-record obj=b6f2e04bf2d264aa seq=2 | dirty=0 hb=1 bg=ffffffffffffffff obj=b6f2e04bf2d264aa oseq=2 sseq=2 r=
+2026-10-12T04:17:00.816Z dcache ino=77825 ci=2 install len=131072 seq=2 | dirty=0 hb=1 bg=ffffffffffffffff obj=b6f2e04bf2d264aa oseq=2 sseq=2 r=
+2026-10-12T04:17:00.817Z dcache ino=77825 ci=1 install len=131072 seq=3 | dirty=0 hb=1 bg=ffffffffffffffff obj=c31d3e49f5b4d8ff oseq=3 sseq=3 r=
+2026-10-12T04:17:00.817Z dcache ino=77825 ci=64 put-record obj=edeeba99ee5a8f8b seq=46 | dirty=0 hb=1 bg=ffffffffffffffff obj=edeeba99ee5a8f8b oseq=46 sseq=46 r=
+2026-10-12T04:17:00.817Z dcache ino=77825 ci=70 put-record obj=9aefe5cab9a5d349 seq=38 | dirty=0 hb=1 bg=ffffffffffffffff obj=9aefe5cab9a5d349 oseq=38 sseq=38 r=
+2026-10-12T04:17:00.821Z dcache ino=77825 ci=29 put-record obj=364e2e66f022bcda seq=26 | dirty=0 hb=1 bg=ffffffffffffffff obj=364e2e66f022bcda oseq=26 sseq=26 r=
+2026-10-12T04:17:00.826Z dcache ino=77825 ci=43 put-record obj=d858927734810246 seq=39 | dirty=0 hb=1 bg=ffffffffffffffff obj=d858927734810246 oseq=39 sseq=39 r=
+2026-10-12T04:17:00.826Z dcache ino=77825 ci=60 put-record obj=de74b5957987860f seq=41 | dirty=0 hb=1 bg=ffffffffffffffff obj=de74b5957987860f oseq=41 sseq=41 r=
+2026-10-12T04:17:00.827Z dcache ino=77825 ci=54 put-record obj=9c8a39eb26051577 seq=45 | dirty=0 hb=1 bg=ffffffffffffffff obj=9c8a39eb26051577 oseq=45 sseq=45 r=
+2026-10-12T04:17:00.832Z dcache ino=77825 ci=38 put-record obj=8e96f00ceddf24fb seq=50 | dirty=0 hb=1 bg=ffffffffffffffff obj=8e96f00ceddf24fb oseq=50 sseq=50 r=
+2026-10-12T04:17:00.836Z dcache ino=77825 ci=57 put-record obj=9dc61ac589c65c8b seq=51 | dirty=0 hb=1 bg=ffffffffffffffff obj=9dc61ac589c65c8b oseq=51 sseq=51 r=
+2026-10-12T04:17:00.842Z dcache ino=77825 ci=69 put-record obj=1bd0e3ae45fa03c7 seq=40 | dirty=0 hb=1 bg=ffffffffffffffff obj=1bd0e3ae45fa03c7 oseq=40 sseq=40 r=
+2026-10-12T04:17:00.842Z dcache ino=77825 ci=46 put-record obj=ed97a862bd4f246b seq=54 | dirty=0 hb=1 bg=ffffffffffffffff obj=ed97a862bd4f246b oseq=54 sseq=54 r=
+2026-10-12T04:17:00.843Z dcache ino=77825 ci=51 put-record obj=447b319706b2fc90 seq=42 | dirty=0 hb=1 bg=ffffffffffffffff obj=447b319706b2fc90 oseq=42 sseq=42 r=
+2026-10-12T04:17:00.848Z dcache ino=77825 ci=48 put-record obj=cc11382ec14c2000 seq=52 | dirty=0 hb=1 bg=ffffffffffffffff obj=cc11382ec14c2000 oseq=52 sseq=52 r=
+2026-10-12T04:17:00.848Z dcache ino=77825 ci=65 put-record obj=c25071b21fa9d94d seq=55 | dirty=0 hb=1 bg=ffffffffffffffff obj=c25071b21fa9d94d oseq=55 sseq=55 r=
+2026-10-12T04:17:00.848Z dcache ino=77825 ci=53 put-record obj=33d87d9ffa96b03d seq=47 | dirty=0 hb=1 bg=ffffffffffffffff obj=33d87d9ffa96b03d oseq=47 sseq=47 r=
+2026-10-12T04:17:00.848Z dcache ino=77825 ci=45 put-record obj=c8fcf72dd042d5e1 seq=44 | dirty=0 hb=1 bg=ffffffffffffffff obj=c8fcf72dd042d5e1 oseq=44 sseq=44 r=
+2026-10-12T04:17:00.853Z dcache ino=77825 ci=68 put-record obj=b4d5a9c404f16f43 seq=57 | dirty=0 hb=1 bg=ffffffffffffffff obj=b4d5a9c404f16f43 oseq=57 sseq=57 r=
+2026-10-12T04:17:00.853Z dcache ino=77825 ci=56 put-record obj=e9ddaaebb61f88a8 seq=56 | dirty=0 hb=1 bg=ffffffffffffffff obj=e9ddaaebb61f88a8 oseq=56 sseq=56 r=
+2026-10-12T04:17:00.853Z dcache ino=77825 ci=66 put-record obj=864561568900f56b seq=53 | dirty=0 hb=1 bg=ffffffffffffffff obj=864561568900f56b oseq=53 sseq=53 r=
+2026-10-12T04:17:00.859Z dcache ino=77825 ci=41 put-record obj=3f0ca8d0a6b62ba9 seq=58 | dirty=0 hb=1 bg=ffffffffffffffff obj=3f0ca8d0a6b62ba9 oseq=58 sseq=58 r=
+2026-10-12T04:17:00.861Z dcache ino=77825 ci=59 put-record obj=10c4240e1c1f1e4e seq=59 | dirty=0 hb=1 bg=ffffffffffffffff obj=10c4240e1c1f1e4e oseq=59 sseq=59 r=
+2026-10-12T04:17:00.861Z dcache ino=77825 ci=62 put-record obj=5a0cfbfa08739b06 seq=49 | dirty=0 hb=1 bg=ffffffffffffffff obj=5a0cfbfa08739b06 oseq=49 sseq=49 r=
+2026-10-12T04:17:00.865Z dcache ino=77825 ci=22 put-record obj=8c3130f6ded65a9d seq=20 | dirty=0 hb=1 bg=ffffffffffffffff obj=8c3130f6ded65a9d oseq=20 sseq=20 r=
+2026-10-12T04:17:00.866Z dcache ino=77825 ci=4 put-record obj=7cbb5e059f74d441 seq=5 | dirty=0 hb=1 bg=ffffffffffffffff obj=7cbb5e059f74d441 oseq=5 sseq=5 r=
+2026-10-12T04:17:00.866Z dcache ino=77825 ci=16 put-record obj=d9381a0af387c0f7 seq=15 | dirty=0 hb=1 bg=ffffffffffffffff obj=d9381a0af387c0f7 oseq=15 sseq=15 r=
+2026-10-12T04:17:00.866Z dcache ino=77825 ci=4 install len=131072 seq=5 | dirty=0 hb=1 bg=ffffffffffffffff obj=7cbb5e059f74d441 oseq=5 sseq=5 r=
+2026-10-12T04:17:00.866Z dcache ino=77825 ci=5 install len=131072 seq=6 | dirty=0 hb=1 bg=ffffffffffffffff obj=5409be98fb48b376 oseq=6 sseq=6 r=
+2026-10-12T04:17:00.866Z dcache ino=77825 ci=6 install len=131072 seq=7 | dirty=0 hb=1 bg=ffffffffffffffff obj=c8a7f74143aa22d1 oseq=7 sseq=7 r=
+2026-10-12T04:17:00.867Z dcache ino=77825 ci=39 put-record obj=521708dad19dd1c7 seq=68 | dirty=0 hb=0 bg=0 obj=521708dad19dd1c7 oseq=68 sseq=68 r=[0,131072)
+2026-10-12T04:17:00.870Z dcache ino=77825 ci=44 put-record obj=c85d95c94bcf7aca seq=48 | dirty=0 hb=1 bg=ffffffffffffffff obj=c85d95c94bcf7aca oseq=48 sseq=48 r=
+2026-10-12T04:17:00.873Z dcache ino=77825 ci=63 put-record obj=e035baa46a7fdeb5 seq=71 | dirty=0 hb=0 bg=0 obj=e035baa46a7fdeb5 oseq=71 sseq=71 r=[0,131072)
+2026-10-12T04:17:00.875Z dcache ino=77825 ci=10 put-record obj=a0047333bd9adc7f seq=10 | dirty=0 hb=1 bg=ffffffffffffffff obj=a0047333bd9adc7f oseq=10 sseq=10 r=
+2026-10-12T04:17:00.875Z dcache ino=77825 ci=9 put-record obj=6d851ff9223091d seq=8 | dirty=0 hb=1 bg=ffffffffffffffff obj=6d851ff9223091d oseq=8 sseq=8 r=
+2026-10-12T04:17:00.875Z dcache ino=77825 ci=9 install len=131072 seq=8 | dirty=0 hb=1 bg=ffffffffffffffff obj=6d851ff9223091d oseq=8 sseq=8 r=
+2026-10-12T04:17:00.875Z dcache ino=77825 ci=10 install len=131072 seq=10 | dirty=0 hb=1 bg=ffffffffffffffff obj=a0047333bd9adc7f oseq=10 sseq=10 r=
+2026-10-12T04:17:00.875Z dcache ino=77825 ci=61 put-record obj=50d97708a3413210 seq=36 | dirty=0 hb=1 bg=ffffffffffffffff obj=50d97708a3413210 oseq=36 sseq=36 r=
+2026-10-12T04:17:00.877Z dcache ino=77825 ci=55 put-record obj=834fa81b42a13b3e seq=70 | dirty=0 hb=0 bg=0 obj=834fa81b42a13b3e oseq=70 sseq=70 r=[0,131072)
+2026-10-12T04:17:00.880Z dcache ino=77825 ci=30 put-record obj=fed5e2e0cf13f3d4 seq=28 | dirty=0 hb=1 bg=ffffffffffffffff obj=fed5e2e0cf13f3d4 oseq=28 sseq=28 r=
+2026-10-12T04:17:00.880Z dcache ino=77825 ci=40 put-record obj=487796fbe5bdb051 seq=63 | dirty=0 hb=1 bg=ffffffffffffffff obj=487796fbe5bdb051 oseq=63 sseq=63 r=
+2026-10-12T04:17:00.881Z dcache ino=77825 ci=71 put-record obj=e7089b0e33e6f6a2 seq=72 | dirty=0 hb=0 bg=0 obj=e7089b0e33e6f6a2 oseq=72 sseq=72 r=[0,131072)
+2026-10-12T04:17:00.884Z dcache ino=77825 ci=52 put-record obj=e54d0b94a389ee05 seq=37 | dirty=0 hb=1 bg=ffffffffffffffff obj=e54d0b94a389ee05 oseq=37 sseq=37 r=
+2026-10-12T04:17:00.884Z dcache ino=77825 ci=25 put-record obj=cbb01202abaafdae seq=22 | dirty=0 hb=1 bg=ffffffffffffffff obj=cbb01202abaafdae oseq=22 sseq=22 r=
+2026-10-12T04:17:00.884Z dcache ino=77825 ci=25 install len=131072 seq=22 | dirty=0 hb=1 bg=ffffffffffffffff obj=cbb01202abaafdae oseq=22 sseq=22 r=
+2026-10-12T04:17:00.884Z dcache ino=77825 ci=24 install len=131072 seq=23 | dirty=0 hb=1 bg=ffffffffffffffff obj=819c032079abd391 oseq=23 sseq=23 r=
+2026-10-12T04:17:00.884Z dcache ino=77825 ci=27 install len=131072 seq=24 | dirty=0 hb=1 bg=ffffffffffffffff obj=11bd49991f82d31b oseq=24 sseq=24 r=
+2026-10-12T04:17:00.886Z dcache ino=77825 ci=11 put-record obj=6394c1e968f46ba8 seq=11 | dirty=0 hb=1 bg=ffffffffffffffff obj=6394c1e968f46ba8 oseq=11 sseq=11 r=
+2026-10-12T04:17:00.886Z dcache ino=77825 ci=11 install len=131072 seq=11 | dirty=0 hb=1 bg=ffffffffffffffff obj=6394c1e968f46ba8 oseq=11 sseq=11 r=
+2026-10-12T04:17:00.886Z dcache ino=77825 ci=13 install len=131072 seq=12 | dirty=0 hb=1 bg=ffffffffffffffff obj=3f0627b0b2ccd513 oseq=12 sseq=12 r=
+2026-10-12T04:17:00.886Z dcache ino=77825 ci=14 install len=131072 seq=13 | dirty=0 hb=1 bg=ffffffffffffffff obj=2264bdd0052b7b12 oseq=13 sseq=13 r=
+2026-10-12T04:17:00.889Z dcache ino=77825 ci=18 put-record obj=253c1114ffd8ff28 seq=16 | dirty=0 hb=1 bg=ffffffffffffffff obj=253c1114ffd8ff28 oseq=16 sseq=16 r=
+2026-10-12T04:17:00.889Z dcache ino=77825 ci=37 put-record obj=916147056671b04e seq=34 | dirty=0 hb=1 bg=ffffffffffffffff obj=916147056671b04e oseq=34 sseq=34 r=
+2026-10-12T04:17:00.889Z dcache ino=77825 ci=58 put-record obj=78a298a8d1b5998d seq=65 | dirty=0 hb=1 bg=ffffffffffffffff obj=78a298a8d1b5998d oseq=65 sseq=65 r=
+2026-10-12T04:17:00.889Z dcache ino=77825 ci=16 install len=131072 seq=15 | dirty=0 hb=1 bg=ffffffffffffffff obj=d9381a0af387c0f7 oseq=15 sseq=15 r=
+2026-10-12T04:17:00.889Z dcache ino=77825 ci=18 install len=131072 seq=16 | dirty=0 hb=1 bg=ffffffffffffffff obj=253c1114ffd8ff28 oseq=16 sseq=16 r=
+2026-10-12T04:17:00.889Z dcache ino=77825 ci=17 install len=131072 seq=17 | dirty=0 hb=1 bg=ffffffffffffffff obj=d4a66f99838fc0d oseq=17 sseq=17 r=
+2026-10-12T04:17:00.890Z dcache ino=77825 ci=67 put-record obj=8016ebdcaac855a1 seq=64 | dirty=0 hb=1 bg=ffffffffffffffff obj=8016ebdcaac855a1 oseq=64 sseq=64 r=
+2026-10-12T04:17:00.893Z dcache ino=77825 ci=28 put-record obj=4dd8fdc589a12261 seq=27 | dirty=0 hb=1 bg=ffffffffffffffff obj=4dd8fdc589a12261 oseq=27 sseq=27 r=
+2026-10-12T04:17:00.893Z dcache ino=77825 ci=28 install len=131072 seq=27 | dirty=0 hb=1 bg=ffffffffffffffff obj=4dd8fdc589a12261 oseq=27 sseq=27 r=
+2026-10-12T04:17:00.893Z dcache ino=77825 ci=30 install len=131072 seq=28 | dirty=0 hb=1 bg=ffffffffffffffff obj=fed5e2e0cf13f3d4 oseq=28 sseq=28 r=
+2026-10-12T04:17:00.897Z dcache ino=77825 ci=33 put-record obj=b97d674622e1e135 seq=30 | dirty=0 hb=1 bg=ffffffffffffffff obj=b97d674622e1e135 oseq=30 sseq=30 r=
+2026-10-12T04:17:00.897Z dcache ino=77825 ci=36 put-record obj=79aca3fee47541be seq=33 | dirty=0 hb=1 bg=ffffffffffffffff obj=79aca3fee47541be oseq=33 sseq=33 r=
+2026-10-12T04:17:00.901Z dcache ino=77825 ci=47 put-record obj=cf3fa7269083ba35 seq=69 | dirty=0 hb=0 bg=0 obj=cf3fa7269083ba35 oseq=69 sseq=69 r=[0,131072)
+2026-10-12T04:17:00.901Z dcache ino=77825 ci=49 put-record obj=5d91c1a5b81fe4c seq=62 | dirty=0 hb=1 bg=ffffffffffffffff obj=5d91c1a5b81fe4c oseq=62 sseq=62 r=
+2026-10-12T04:17:00.901Z dcache ino=77825 ci=49 install len=131072 seq=62 | dirty=0 hb=1 bg=ffffffffffffffff obj=5d91c1a5b81fe4c oseq=62 sseq=62 r=
+2026-10-12T04:17:00.901Z dcache ino=77825 ci=40 install len=131072 seq=63 | dirty=0 hb=1 bg=ffffffffffffffff obj=487796fbe5bdb051 oseq=63 sseq=63 r=
+2026-10-12T04:17:00.901Z dcache ino=77825 ci=67 install len=131072 seq=64 | dirty=0 hb=1 bg=ffffffffffffffff obj=8016ebdcaac855a1 oseq=64 sseq=64 r=
+2026-10-12T04:17:00.901Z dcache ino=77825 ci=58 install len=131072 seq=65 | dirty=0 hb=1 bg=ffffffffffffffff obj=78a298a8d1b5998d oseq=65 sseq=65 r=
+2026-10-12T04:17:00.903Z dcache ino=77825 ci=31 put-record obj=56574dae40371627 seq=67 | dirty=0 hb=0 bg=0 obj=56574dae40371627 oseq=67 sseq=67 r=[0,131072)
+2026-10-12T04:17:00.904Z dcache ino=77825 ci=50 put-record obj=349f07be040487d6 seq=60 | dirty=0 hb=1 bg=ffffffffffffffff obj=349f07be040487d6 oseq=60 sseq=60 r=
+2026-10-12T04:17:00.904Z dcache ino=77825 ci=61 install len=131072 seq=36 | dirty=0 hb=1 bg=ffffffffffffffff obj=50d97708a3413210 oseq=36 sseq=36 r=
+2026-10-12T04:17:00.904Z dcache ino=77825 ci=52 install len=131072 seq=37 | dirty=0 hb=1 bg=ffffffffffffffff obj=e54d0b94a389ee05 oseq=37 sseq=37 r=
+2026-10-12T04:17:00.904Z dcache ino=77825 ci=70 install len=131072 seq=38 | dirty=0 hb=1 bg=ffffffffffffffff obj=9aefe5cab9a5d349 oseq=38 sseq=38 r=
+2026-10-12T04:17:00.904Z dcache ino=77825 ci=43 install len=131072 seq=39 | dirty=0 hb=1 bg=ffffffffffffffff obj=d858927734810246 oseq=39 sseq=39 r=
+2026-10-12T04:17:00.904Z dcache ino=77825 ci=69 install len=131072 seq=40 | dirty=0 hb=1 bg=ffffffffffffffff obj=1bd0e3ae45fa03c7 oseq=40 sseq=40 r=
+2026-10-12T04:17:00.904Z dcache ino=77825 ci=60 install len=131072 seq=41 | dirty=0 hb=1 bg=ffffffffffffffff obj=de74b5957987860f oseq=41 sseq=41 r=
+2026-10-12T04:17:00.904Z dcache ino=77825 ci=51 install len=131072 seq=42 | dirty=0 hb=1 bg=ffffffffffffffff obj=447b319706b2fc90 oseq=42 sseq=42 r=
+2026-10-12T04:17:00.904Z dcache ino=77825 ci=42 install len=131072 seq=43 | dirty=0 hb=1 bg=ffffffffffffffff obj=262052e69be1582d oseq=43 sseq=43 r=
+2026-10-12T04:17:00.904Z dcache ino=77825 ci=45 install len=131072 seq=44 | dirty=0 hb=1 bg=ffffffffffffffff obj=c8fcf72dd042d5e1 oseq=44 sseq=44 r=
+2026-10-12T04:17:00.904Z dcache ino=77825 ci=54 install len=131072 seq=45 | dirty=0 hb=1 bg=ffffffffffffffff obj=9c8a39eb26051577 oseq=45 sseq=45 r=
+2026-10-12T04:17:00.904Z dcache ino=77825 ci=64 install len=131072 seq=46 | dirty=0 hb=1 bg=ffffffffffffffff obj=edeeba99ee5a8f8b oseq=46 sseq=46 r=
+2026-10-12T04:17:00.904Z dcache ino=77825 ci=53 install len=131072 seq=47 | dirty=0 hb=1 bg=ffffffffffffffff obj=33d87d9ffa96b03d oseq=47 sseq=47 r=
+2026-10-12T04:17:00.904Z dcache ino=77825 ci=44 install len=131072 seq=48 | dirty=0 hb=1 bg=ffffffffffffffff obj=c85d95c94bcf7aca oseq=48 sseq=48 r=
+2026-10-12T04:17:00.904Z dcache ino=77825 ci=62 install len=131072 seq=49 | dirty=0 hb=1 bg=ffffffffffffffff obj=5a0cfbfa08739b06 oseq=49 sseq=49 r=
+2026-10-12T04:17:00.904Z dcache ino=77825 ci=38 install len=131072 seq=50 | dirty=0 hb=1 bg=ffffffffffffffff obj=8e96f00ceddf24fb oseq=50 sseq=50 r=
+2026-10-12T04:17:00.904Z dcache ino=77825 ci=57 install len=131072 seq=51 | dirty=0 hb=1 bg=ffffffffffffffff obj=9dc61ac589c65c8b oseq=51 sseq=51 r=
+2026-10-12T04:17:00.904Z dcache ino=77825 ci=48 install len=131072 seq=52 | dirty=0 hb=1 bg=ffffffffffffffff obj=cc11382ec14c2000 oseq=52 sseq=52 r=
+2026-10-12T04:17:00.904Z dcache ino=77825 ci=66 install len=131072 seq=53 | dirty=0 hb=1 bg=ffffffffffffffff obj=864561568900f56b oseq=53 sseq=53 r=
+2026-10-12T04:17:00.904Z dcache ino=77825 ci=46 install len=131072 seq=54 | dirty=0 hb=1 bg=ffffffffffffffff obj=ed97a862bd4f246b oseq=54 sseq=54 r=
+2026-10-12T04:17:00.905Z dcache ino=77825 ci=65 install len=131072 seq=55 | dirty=0 hb=1 bg=ffffffffffffffff obj=c25071b21fa9d94d oseq=55 sseq=55 r=
+2026-10-12T04:17:00.905Z dcache ino=77825 ci=56 install len=131072 seq=56 | dirty=0 hb=1 bg=ffffffffffffffff obj=e9ddaaebb61f88a8 oseq=56 sseq=56 r=
+2026-10-12T04:17:00.905Z dcache ino=77825 ci=68 install len=131072 seq=57 | dirty=0 hb=1 bg=ffffffffffffffff obj=b4d5a9c404f16f43 oseq=57 sseq=57 r=
+2026-10-12T04:17:00.905Z dcache ino=77825 ci=41 install len=131072 seq=58 | dirty=0 hb=1 bg=ffffffffffffffff obj=3f0ca8d0a6b62ba9 oseq=58 sseq=58 r=
+2026-10-12T04:17:00.905Z dcache ino=77825 ci=59 install len=131072 seq=59 | dirty=0 hb=1 bg=ffffffffffffffff obj=10c4240e1c1f1e4e oseq=59 sseq=59 r=
+2026-10-12T04:17:00.905Z dcache ino=77825 ci=50 install len=131072 seq=60 | dirty=0 hb=1 bg=ffffffffffffffff obj=349f07be040487d6 oseq=60 sseq=60 r=
+2026-10-12T04:17:00.905Z dcache ino=77825 ci=35 put-record obj=696eab317baee049 seq=32 | dirty=0 hb=1 bg=ffffffffffffffff obj=696eab317baee049 oseq=32 sseq=32 r=
+2026-10-12T04:17:00.906Z dcache ino=77825 ci=26 put-record obj=93b0aa7a08fbc025 seq=25 | dirty=0 hb=1 bg=ffffffffffffffff obj=93b0aa7a08fbc025 oseq=25 sseq=25 r=
+2026-10-12T04:17:00.906Z dcache ino=77825 ci=26 install len=131072 seq=25 | dirty=0 hb=1 bg=ffffffffffffffff obj=93b0aa7a08fbc025 oseq=25 sseq=25 r=
+2026-10-12T04:17:00.906Z dcache ino=77825 ci=29 install len=131072 seq=26 | dirty=0 hb=1 bg=ffffffffffffffff obj=364e2e66f022bcda oseq=26 sseq=26 r=
+2026-10-12T04:17:00.908Z dcache ino=77825 ci=20 put-record obj=a8e4a8a889bddc09 seq=19 | dirty=0 hb=1 bg=ffffffffffffffff obj=a8e4a8a889bddc09 oseq=19 sseq=19 r=
+2026-10-12T04:17:00.908Z dcache ino=77825 ci=20 install len=131072 seq=19 | dirty=0 hb=1 bg=ffffffffffffffff obj=a8e4a8a889bddc09 oseq=19 sseq=19 r=
+2026-10-12T04:17:00.908Z dcache ino=77825 ci=22 install len=131072 seq=20 | dirty=0 hb=1 bg=ffffffffffffffff obj=8c3130f6ded65a9d oseq=20 sseq=20 r=
+2026-10-12T04:17:00.908Z dcache ino=77825 ci=21 install len=131072 seq=21 | dirty=0 hb=1 bg=ffffffffffffffff obj=7306c1e10281b0ca oseq=21 sseq=21 r=
+2026-10-12T04:17:00.910Z dcache ino=77825 ci=23 put-record obj=27a0b774cc423212 seq=66 | dirty=0 hb=0 bg=0 obj=27a0b774cc423212 oseq=66 sseq=66 r=[0,131072)
+2026-10-12T04:17:00.910Z dcache ino=77825 ci=34 put-record obj=bc8e826f5e615b59 seq=31 | dirty=0 hb=1 bg=ffffffffffffffff obj=bc8e826f5e615b59 oseq=31 sseq=31 r=
+2026-10-12T04:17:00.910Z dcache ino=77825 ci=33 install len=131072 seq=30 | dirty=0 hb=1 bg=ffffffffffffffff obj=b97d674622e1e135 oseq=30 sseq=30 r=
+2026-10-12T04:17:00.910Z dcache ino=77825 ci=34 install len=131072 seq=31 | dirty=0 hb=1 bg=ffffffffffffffff obj=bc8e826f5e615b59 oseq=31 sseq=31 r=
+2026-10-12T04:17:00.910Z dcache ino=77825 ci=35 install len=131072 seq=32 | dirty=0 hb=1 bg=ffffffffffffffff obj=696eab317baee049 oseq=32 sseq=32 r=
+2026-10-12T04:17:00.910Z dcache ino=77825 ci=36 install len=131072 seq=33 | dirty=0 hb=1 bg=ffffffffffffffff obj=79aca3fee47541be oseq=33 sseq=33 r=
+2026-10-12T04:17:00.910Z dcache ino=77825 ci=37 install len=131072 seq=34 | dirty=0 hb=1 bg=ffffffffffffffff obj=916147056671b04e oseq=34 sseq=34 r=
+2026-10-12T04:17:00.914Z dcache ino=77825 ci=15 put-record obj=3dce3838a28ae027 seq=61 | dirty=0 hb=0 bg=0 obj=3dce3838a28ae027 oseq=61 sseq=61 r=[0,131072)
+2026-10-12T04:17:00.915Z dcache ino=77825 ci=7 put-record obj=2b443a495017a893 seq=35 | dirty=0 hb=0 bg=0 obj=2b443a495017a893 oseq=35 sseq=35 r=[0,131072)
+2026-10-12T04:17:00.915Z dcache ino=77825 ci=7 install len=131072 seq=35 | dirty=0 hb=0 bg=0 obj=2b443a495017a893 oseq=35 sseq=35 r=[0,131072)
+2026-10-12T04:17:00.915Z dcache ino=77825 ci=15 install len=131072 seq=61 | dirty=0 hb=0 bg=0 obj=3dce3838a28ae027 oseq=61 sseq=61 r=[0,131072)
+2026-10-12T04:17:00.916Z dcache ino=77825 ci=23 install len=131072 seq=66 | dirty=0 hb=0 bg=0 obj=27a0b774cc423212 oseq=66 sseq=66 r=[0,131072)
+2026-10-12T04:17:00.916Z dcache ino=77825 ci=31 install len=131072 seq=67 | dirty=0 hb=0 bg=0 obj=56574dae40371627 oseq=67 sseq=67 r=[0,131072)
+2026-10-12T04:17:00.916Z dcache ino=77825 ci=39 install len=131072 seq=68 | dirty=0 hb=0 bg=0 obj=521708dad19dd1c7 oseq=68 sseq=68 r=[0,131072)
+2026-10-12T04:17:00.916Z dcache ino=77825 ci=47 install len=131072 seq=69 | dirty=0 hb=0 bg=0 obj=cf3fa7269083ba35 oseq=69 sseq=69 r=[0,131072)
+2026-10-12T04:17:00.916Z dcache ino=77825 ci=55 install len=131072 seq=70 | dirty=0 hb=0 bg=0 obj=834fa81b42a13b3e oseq=70 sseq=70 r=[0,131072)
+2026-10-12T04:17:00.916Z dcache ino=77825 ci=63 install len=131072 seq=71 | dirty=0 hb=0 bg=0 obj=e035baa46a7fdeb5 oseq=71 sseq=71 r=[0,131072)
+2026-10-12T04:17:00.916Z dcache ino=77825 ci=71 install len=131072 seq=72 | dirty=0 hb=0 bg=0 obj=e7089b0e33e6f6a2 oseq=72 sseq=72 r=[0,131072)
+2026-10-12T04:17:01.224Z report ino=77825 ci=3 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=0 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=8 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=12 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=19 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=32 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=13 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=1 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=17 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=5 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=21 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=6 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=24 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=42 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=14 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=27 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=2 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=64 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=70 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=29 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=43 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=60 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=54 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=38 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=57 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=69 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=46 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=51 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=48 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=65 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=53 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=45 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=68 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=56 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=66 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=41 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=59 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=62 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=22 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=4 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=16 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=39 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=44 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=63 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=10 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=9 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=61 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=55 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=30 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=40 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=71 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=52 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=25 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=11 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=18 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=37 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=58 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=67 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=28 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=33 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=36 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=47 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=49 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=31 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=50 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=35 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=26 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=20 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=23 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=34 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=15 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report ino=77825 ci=7 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z report-irec ino=77825 size=9437184 only=77825 sync=1 rc=0
+2026-10-12T04:17:01.224Z dcache ino=77825 ci=39 to-rdcache len=131072 | dirty=0 hb=1 bg=521708dad19dd1c7 obj=521708dad19dd1c7 oseq=68 sseq=68 r=
+2026-10-12T04:17:01.224Z dcache ino=77825 ci=63 to-rdcache len=131072 | dirty=0 hb=1 bg=e035baa46a7fdeb5 obj=e035baa46a7fdeb5 oseq=71 sseq=71 r=
+2026-10-12T04:17:01.224Z dcache ino=77825 ci=55 to-rdcache len=131072 | dirty=0 hb=1 bg=834fa81b42a13b3e obj=834fa81b42a13b3e oseq=70 sseq=70 r=
+2026-10-12T04:17:01.224Z dcache ino=77825 ci=71 to-rdcache len=131072 | dirty=0 hb=1 bg=e7089b0e33e6f6a2 obj=e7089b0e33e6f6a2 oseq=72 sseq=72 r=
+2026-10-12T04:17:01.224Z dcache ino=77825 ci=47 to-rdcache len=131072 | dirty=0 hb=1 bg=cf3fa7269083ba35 obj=cf3fa7269083ba35 oseq=69 sseq=69 r=
+2026-10-12T04:17:01.224Z dcache ino=77825 ci=31 to-rdcache len=131072 | dirty=0 hb=1 bg=56574dae40371627 obj=56574dae40371627 oseq=67 sseq=67 r=
+2026-10-12T04:17:01.224Z dcache ino=77825 ci=23 to-rdcache len=131072 | dirty=0 hb=1 bg=27a0b774cc423212 obj=27a0b774cc423212 oseq=66 sseq=66 r=
+2026-10-12T04:17:01.224Z dcache ino=77825 ci=15 to-rdcache len=131072 | dirty=0 hb=1 bg=3dce3838a28ae027 obj=3dce3838a28ae027 oseq=61 sseq=61 r=
+2026-10-12T04:17:01.224Z dcache ino=77825 ci=7 to-rdcache len=131072 | dirty=0 hb=1 bg=2b443a495017a893 obj=2b443a495017a893 oseq=35 sseq=35 r=
+2026-10-12T04:17:01.224Z fsync-split ino=77825 flush_ms=445 report_ms=0 rc=0
+2026-10-12T04:17:01.230Z release ino=77825 begin
+2026-10-12T04:17:01.283Z release ino=77825 rc=0
+2026-10-12T04:17:04.314Z report-irec ino=1 size=0 only=0 sync=1 rc=0
+2026-10-12T04:17:16.545Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:24Z on intel2), build=28b2089b-release-fault: starting export=default mount=/tmp/efs-intel-28b2089b-intel2_efs/mnt
+2026-10-12T04:17:16.546Z Discovered 4 cluster nodes from 127.0.0.1:34210
+2026-10-12T04:17:16.546Z   node id=1 127.0.0.1:34210
+2026-10-12T04:17:16.546Z   node id=2 127.0.0.1:34211
+2026-10-12T04:17:16.546Z   node id=3 127.0.0.1:34212
+2026-10-12T04:17:16.546Z   node id=4 127.0.0.1:34213
+2026-10-12T04:17:16.546Z fetching metadata...
+2026-10-12T04:17:16.546Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T04:17:16.546Z export id=1 name=default
+2026-10-12T04:17:16.546Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T04:17:16.549Z efs-fuse: workers max=10 idle=10
+2026-10-12T04:17:16.558Z fuse serving

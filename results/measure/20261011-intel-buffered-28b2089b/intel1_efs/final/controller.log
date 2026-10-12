@@ -1,0 +1,15 @@
+2026-10-12T03:49:17Z gc-posix-buffered START
+2026-10-12T03:53:53Z gc-posix-buffered PASS 0
+2026-10-12T03:53:53Z packing-seven-buffered START
+2026-10-12T04:01:08Z packing-seven-buffered FAIL 1
+2026-10-12T04:01:08Z ordinary-overwrite-buffered START
+2026-10-12T04:01:26Z ordinary-overwrite-buffered PASS 0
+2026-10-12T04:01:26Z query-buffered START
+2026-10-12T04:02:55Z query-buffered PASS 0
+2026-10-12T04:02:55Z large-delta-buffered START
+2026-10-12T04:03:46Z large-delta-buffered PASS 0
+2026-10-12T04:03:46Z peer-mkdir-race-only-buffered START
+2026-10-12T04:04:34Z peer-mkdir-race-only-buffered PASS 0
+2026-10-12T04:04:34Z peer-open-contention-only-buffered START
+2026-10-12T04:15:39Z peer-open-contention-only-buffered PASS 0
+CONTROLLER_FINISHED {"before_processes": [], "before_mounts": [], "remaining_processes": [], "remaining_mounts": [], "idle": true, "source_post": {"normal": {"files": 21738, "mismatches": [], "all_match": true}, "fault": {"files": 21738, "mismatches": [], "all_match": true}}, "finished_utc": "2026-10-12T04:15:48Z"}

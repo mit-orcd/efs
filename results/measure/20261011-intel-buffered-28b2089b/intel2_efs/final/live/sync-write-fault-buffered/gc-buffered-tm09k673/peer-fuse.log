@@ -1,0 +1,66 @@
+2026-10-12T04:16:26.435Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:24Z on intel2), build=28b2089b-release-fault: starting export=default mount=/tmp/efs-intel-28b2089b-intel2_efs/peer
+2026-10-12T04:16:26.436Z Discovered 4 cluster nodes from 127.0.0.1:34210
+2026-10-12T04:16:26.436Z   node id=1 127.0.0.1:34210
+2026-10-12T04:16:26.436Z   node id=2 127.0.0.1:34211
+2026-10-12T04:16:26.436Z   node id=3 127.0.0.1:34212
+2026-10-12T04:16:26.436Z   node id=4 127.0.0.1:34213
+2026-10-12T04:16:26.436Z fetching metadata...
+2026-10-12T04:16:26.437Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T04:16:26.437Z export id=1 name=default
+2026-10-12T04:16:26.437Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T04:16:26.440Z efs-fuse: workers max=10 idle=10
+2026-10-12T04:16:26.449Z fuse serving
+2026-10-12T04:16:26.773Z dcache ino=12289 ci=0 snap-copy | dirty=1 hb=1 bg=49ab5ab79d40549c obj=0 oseq=0 sseq=1 r=[4096,8192)
+2026-10-12T04:16:26.780Z dcache ino=12289 ci=0 put-record obj=7397f04499ab4bbd seq=1 | dirty=0 hb=1 bg=6a8e10a8eab27f98 obj=7397f04499ab4bbd oseq=1 sseq=1 r=[4096,8192)
+2026-10-12T04:16:26.780Z dcache ino=12289 ci=0 install len=131072 seq=1 | dirty=0 hb=1 bg=6a8e10a8eab27f98 obj=7397f04499ab4bbd oseq=1 sseq=1 r=[4096,8192)
+2026-10-12T04:16:26.784Z report ino=12289 ci=0 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.784Z report-irec ino=12289 size=131072 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.811Z dcache ino=12289 ci=0 snap-copy | dirty=1 hb=1 bg=6a8e10a8eab27f98 obj=0 oseq=1 sseq=2 r=[4096,8192)
+2026-10-12T04:16:26.817Z dcache ino=12289 ci=0 put-record obj=56c8fb3a8bb2c84a seq=2 | dirty=0 hb=1 bg=78ab38edd28673b1 obj=56c8fb3a8bb2c84a oseq=2 sseq=2 r=[4096,8192)
+2026-10-12T04:16:26.817Z dcache ino=12289 ci=0 install len=131072 seq=2 | dirty=0 hb=1 bg=78ab38edd28673b1 obj=56c8fb3a8bb2c84a oseq=2 sseq=2 r=[4096,8192)
+2026-10-12T04:16:26.820Z report ino=12289 ci=0 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.820Z report-irec ino=12289 size=131072 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.844Z dcache ino=12289 ci=0 snap-copy | dirty=1 hb=1 bg=78ab38edd28673b1 obj=0 oseq=2 sseq=3 r=[4096,8192)
+2026-10-12T04:16:26.850Z dcache ino=12289 ci=0 put-record obj=48fb415fda6f390f seq=3 | dirty=0 hb=1 bg=eeb612a5487c1457 obj=48fb415fda6f390f oseq=3 sseq=3 r=[4096,8192)
+2026-10-12T04:16:26.850Z dcache ino=12289 ci=0 install len=131072 seq=3 | dirty=0 hb=1 bg=eeb612a5487c1457 obj=48fb415fda6f390f oseq=3 sseq=3 r=[4096,8192)
+2026-10-12T04:16:26.853Z report ino=12289 ci=0 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.853Z report-irec ino=12289 size=131072 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.876Z dcache ino=12289 ci=0 snap-copy | dirty=1 hb=1 bg=eeb612a5487c1457 obj=0 oseq=3 sseq=4 r=[4096,8192)
+2026-10-12T04:16:26.883Z dcache ino=12289 ci=0 put-record obj=823bbc5042550832 seq=4 | dirty=0 hb=1 bg=86120e508482d82b obj=823bbc5042550832 oseq=4 sseq=4 r=[4096,8192)
+2026-10-12T04:16:26.883Z dcache ino=12289 ci=0 install len=131072 seq=4 | dirty=0 hb=1 bg=86120e508482d82b obj=823bbc5042550832 oseq=4 sseq=4 r=[4096,8192)
+2026-10-12T04:16:26.886Z report ino=12289 ci=0 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.886Z report-irec ino=12289 size=131072 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.911Z dcache ino=12289 ci=0 snap-copy | dirty=1 hb=1 bg=86120e508482d82b obj=0 oseq=4 sseq=5 r=[4096,8192)
+2026-10-12T04:16:26.917Z dcache ino=12289 ci=0 put-record obj=a1b15d7d5ced7483 seq=5 | dirty=0 hb=1 bg=206f05325636933b obj=a1b15d7d5ced7483 oseq=5 sseq=5 r=[4096,8192)
+2026-10-12T04:16:26.917Z dcache ino=12289 ci=0 install len=131072 seq=5 | dirty=0 hb=1 bg=206f05325636933b obj=a1b15d7d5ced7483 oseq=5 sseq=5 r=[4096,8192)
+2026-10-12T04:16:26.920Z report ino=12289 ci=0 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.920Z report-irec ino=12289 size=131072 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.944Z dcache ino=12289 ci=0 snap-copy | dirty=1 hb=1 bg=206f05325636933b obj=0 oseq=5 sseq=6 r=[4096,8192)
+2026-10-12T04:16:26.950Z dcache ino=12289 ci=0 put-record obj=1177f355a34d3d7 seq=6 | dirty=0 hb=1 bg=87b425e660f3d9c9 obj=1177f355a34d3d7 oseq=6 sseq=6 r=[4096,8192)
+2026-10-12T04:16:26.950Z dcache ino=12289 ci=0 install len=131072 seq=6 | dirty=0 hb=1 bg=87b425e660f3d9c9 obj=1177f355a34d3d7 oseq=6 sseq=6 r=[4096,8192)
+2026-10-12T04:16:26.954Z report ino=12289 ci=0 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.954Z report-irec ino=12289 size=131072 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.976Z dcache ino=12289 ci=0 snap-copy | dirty=1 hb=1 bg=87b425e660f3d9c9 obj=0 oseq=6 sseq=7 r=[4096,8192)
+2026-10-12T04:16:26.983Z dcache ino=12289 ci=0 put-record obj=345a67248fdbb265 seq=7 | dirty=0 hb=1 bg=7888a14585fd9f79 obj=345a67248fdbb265 oseq=7 sseq=7 r=[4096,8192)
+2026-10-12T04:16:26.983Z dcache ino=12289 ci=0 install len=131072 seq=7 | dirty=0 hb=1 bg=7888a14585fd9f79 obj=345a67248fdbb265 oseq=7 sseq=7 r=[4096,8192)
+2026-10-12T04:16:26.986Z report ino=12289 ci=0 only=12289 sync=1 rc=0
+2026-10-12T04:16:26.986Z report-irec ino=12289 size=131072 only=12289 sync=1 rc=0
+2026-10-12T04:16:27.010Z dcache ino=12289 ci=0 snap-copy | dirty=1 hb=1 bg=7888a14585fd9f79 obj=0 oseq=7 sseq=8 r=[4096,8192)
+2026-10-12T04:16:27.018Z dcache ino=12289 ci=0 put-record obj=7b1bf97e09299933 seq=8 | dirty=0 hb=1 bg=50ce1ae4bd2c8d39 obj=7b1bf97e09299933 oseq=8 sseq=8 r=[4096,8192)
+2026-10-12T04:16:27.018Z dcache ino=12289 ci=0 install len=131072 seq=8 | dirty=0 hb=1 bg=50ce1ae4bd2c8d39 obj=7b1bf97e09299933 oseq=8 sseq=8 r=[4096,8192)
+2026-10-12T04:16:27.021Z report ino=12289 ci=0 only=12289 sync=1 rc=0
+2026-10-12T04:16:27.021Z report-irec ino=12289 size=131072 only=12289 sync=1 rc=0
+2026-10-12T04:16:27.045Z dcache ino=12289 ci=0 snap-copy | dirty=1 hb=1 bg=50ce1ae4bd2c8d39 obj=0 oseq=8 sseq=9 r=[4096,8192)
+2026-10-12T04:16:27.051Z dcache ino=12289 ci=0 put-record obj=b06b8a2df33b1295 seq=9 | dirty=0 hb=1 bg=d3b279d38187c67d obj=b06b8a2df33b1295 oseq=9 sseq=9 r=[4096,8192)
+2026-10-12T04:16:27.051Z dcache ino=12289 ci=0 install len=131072 seq=9 | dirty=0 hb=1 bg=d3b279d38187c67d obj=b06b8a2df33b1295 oseq=9 sseq=9 r=[4096,8192)
+2026-10-12T04:16:27.055Z report ino=12289 ci=0 only=12289 sync=1 rc=0
+2026-10-12T04:16:27.055Z report-irec ino=12289 size=131072 only=12289 sync=1 rc=0
+2026-10-12T04:16:27.055Z dcache ino=12289 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=b06b8a2df33b1295 obj=b06b8a2df33b1295 oseq=9 sseq=9 r=
+2026-10-12T04:16:27.080Z dcache ino=12289 ci=0 snap-copy | dirty=1 hb=1 bg=b06b8a2df33b1295 obj=0 oseq=9 sseq=10 r=[4096,8192)
+2026-10-12T04:16:27.088Z dcache ino=12289 ci=0 put-record obj=4c482020d820099e seq=10 | dirty=0 hb=1 bg=f924ca5f7c102ae5 obj=4c482020d820099e oseq=10 sseq=10 r=[4096,8192)
+2026-10-12T04:16:27.088Z dcache ino=12289 ci=0 install len=131072 seq=10 | dirty=0 hb=1 bg=f924ca5f7c102ae5 obj=4c482020d820099e oseq=10 sseq=10 r=[4096,8192)
+2026-10-12T04:16:27.092Z report ino=12289 ci=0 only=12289 sync=1 rc=0
+2026-10-12T04:16:27.092Z report-irec ino=12289 size=131072 only=12289 sync=1 rc=0
+2026-10-12T04:16:27.092Z dcache ino=12289 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=4c482020d820099e obj=4c482020d820099e oseq=10 sseq=10 r=
+2026-10-12T04:16:27.093Z release ino=12289 begin
+2026-10-12T04:16:27.098Z release ino=12289 rc=0

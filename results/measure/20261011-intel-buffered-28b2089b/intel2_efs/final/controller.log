@@ -1,0 +1,35 @@
+2026-10-12T03:49:18Z create-retry-buffered START
+2026-10-12T03:50:29Z create-retry-buffered PASS 0
+2026-10-12T03:50:29Z create-adopt-negative-buffered START
+2026-10-12T03:51:39Z create-adopt-negative-buffered PASS 0
+2026-10-12T03:51:39Z create-adopt-reply-loss-buffered START
+2026-10-12T03:52:47Z create-adopt-reply-loss-buffered PASS 0
+2026-10-12T03:52:47Z fuse-reply-failure-buffered START
+2026-10-12T03:53:51Z fuse-reply-failure-buffered PASS 0
+2026-10-12T03:53:51Z put-barrier-buffered START
+2026-10-12T03:55:08Z put-barrier-buffered PASS 0
+2026-10-12T03:55:08Z kv-wal-buffered START
+2026-10-12T03:55:26Z kv-wal-buffered PASS 0
+2026-10-12T03:55:26Z transaction-apply-buffered START
+2026-10-12T03:56:36Z transaction-apply-buffered PASS 0
+2026-10-12T03:56:36Z compactor-buffered START
+2026-10-12T04:08:29Z compactor-buffered PASS 0
+2026-10-12T04:08:29Z lookup-buffered START
+2026-10-12T04:09:34Z lookup-buffered PASS 0
+2026-10-12T04:09:34Z put-reply-buffered START
+2026-10-12T04:10:38Z put-reply-buffered PASS 0
+2026-10-12T04:10:38Z storage-session-fence-buffered START
+2026-10-12T04:12:47Z storage-session-fence-buffered PASS 0
+2026-10-12T04:12:47Z publication-pressure-buffered START
+2026-10-12T04:13:58Z publication-pressure-buffered PASS 0
+2026-10-12T04:13:58Z drain-pressure-buffered START
+2026-10-12T04:15:08Z drain-pressure-buffered PASS 0
+2026-10-12T04:15:08Z sync-write-fault-buffered START
+2026-10-12T04:17:23Z sync-write-fault-buffered PASS 0
+2026-10-12T04:17:23Z stop-dirty-buffered START
+2026-10-12T04:19:02Z stop-dirty-buffered PASS 0
+2026-10-12T04:19:02Z namespace-boundary-fault-buffered START
+2026-10-12T04:21:08Z namespace-boundary-fault-buffered PASS 0
+2026-10-12T04:21:08Z namespace-max-fault-buffered START
+2026-10-12T04:25:04Z namespace-max-fault-buffered PASS 0
+CONTROLLER_FINISHED {"before_processes": [], "before_mounts": [], "remaining_processes": [], "remaining_mounts": [], "idle": true, "source_post": {"normal": {"files": 21738, "mismatches": [], "all_match": true}, "fault": {"files": 21738, "mismatches": [], "all_match": true}}, "finished_utc": "2026-10-12T04:25:14Z"}

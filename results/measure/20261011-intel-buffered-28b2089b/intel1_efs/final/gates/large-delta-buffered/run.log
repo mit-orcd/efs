@@ -1,0 +1,18 @@
+fixture=/tmp/efs-intel-28b2089b-intel1_efs/large-delta-buffered ports=24804-24807 mode=buffered transport=tcp
+raft-mkfs rc=0 leader_hint=3 index=2 salt=11102589956867102596
+initial complete-group catalogs PASS
+raft-create status=0 primary=3 parent=1 name=file-0 ino=4097 mode=0100644 nlink=1
+raft-create status=0 primary=3 parent=1 name=file-1 ino=8193 mode=0100644 nlink=1
+raft-create status=0 primary=3 parent=1 name=file-2 ino=12289 mode=0100644 nlink=1
+raft-create status=0 primary=3 parent=1 name=file-3 ino=16385 mode=0100644 nlink=1
+quiet metadata refresh and partial-host refusal PASS
+v1 RPC stats/find, unchanged publication, redirects and explicit errors PASS
+v2 command JSON stats/find/ls, immutable catalog identity and explicit limits PASS
+v3 type/size predicates, canonical fields and explicit limits PASS
+FUSE/query mutation and independent peer oracle gates PASS
+two-mount virtual interface gates PASS
+two-mount command display, sorting, server filters and timestamp oracles PASS
+bounded display, streaming export, pinned generation and permissions PASS
+restart oracle root_rc=0 files=758 dirs=7 logical=2451
+restart catalog restore/rebuild from persisted metadata PASS
+query_publication: PASS (smoke only)

@@ -1,0 +1,94 @@
+2026-10-12T03:53:55.223Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:24Z on intel2), build=28b2089b-release-fault: starting export=default mount=/tmp/efs-intel-28b2089b-intel2_efs/mnt
+2026-10-12T03:53:55.225Z Discovered 4 cluster nodes from 127.0.0.1:34210
+2026-10-12T03:53:55.225Z   node id=1 127.0.0.1:34210
+2026-10-12T03:53:55.225Z   node id=2 127.0.0.1:34211
+2026-10-12T03:53:55.225Z   node id=3 127.0.0.1:34212
+2026-10-12T03:53:55.225Z   node id=4 127.0.0.1:34213
+2026-10-12T03:53:55.225Z fetching metadata...
+2026-10-12T03:53:55.225Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:53:55.226Z export id=1 name=default
+2026-10-12T03:53:55.226Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:53:55.230Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:53:55.239Z fuse serving
+2026-10-12T03:53:55.525Z put_fragments ino=4097 chunk=0 nodes=1,2,3 attempt 1 failed: no quorum (efs_rc=-8) — retrying
+2026-10-12T03:53:55.652Z put_fragments ino=4097 chunk=0 nodes=1,2,3 attempt 2 failed: no quorum (efs_rc=-8) — retrying
+2026-10-12T03:53:55.867Z put_fragments ino=4097 chunk=0 nodes=1,2,3 attempt 3 failed: no quorum (efs_rc=-8) — retrying
+2026-10-12T03:53:56.302Z put_fragments ino=4097 chunk=0 nodes=1,2,3 attempt 4 failed: no quorum (efs_rc=-8) — giving up
+2026-10-12T03:53:56.302Z efs-fuse fsync: no quorum (efs_rc=-8) ino=4097 off=0 len=0
+2026-10-12T03:53:56.306Z put_fragments ino=4097 chunk=0 nodes=1,2,3 attempt 1 failed: no quorum (efs_rc=-8) — retrying
+2026-10-12T03:53:56.417Z put_fragments ino=4097 chunk=0 nodes=1,2,3 attempt 2 failed: no quorum (efs_rc=-8) — retrying
+2026-10-12T03:53:56.635Z put_fragments ino=4097 chunk=0 nodes=1,2,3 attempt 3 failed: no quorum (efs_rc=-8) — retrying
+2026-10-12T03:53:57.051Z put_fragments ino=4097 chunk=0 nodes=1,2,3 attempt 4 failed: no quorum (efs_rc=-8) — giving up
+2026-10-12T03:53:57.051Z efs-fuse flush-meta: no quorum (efs_rc=-8) ino=4097 off=0 len=0
+2026-10-12T03:53:57.106Z put_fragments ino=8193 chunk=0 nodes=1,2,3 attempt 1 failed: no quorum (efs_rc=-8) — retrying
+2026-10-12T03:53:57.247Z put_fragments ino=8193 chunk=0 nodes=1,2,3 attempt 2 failed: no quorum (efs_rc=-8) — retrying
+2026-10-12T03:53:57.485Z put_fragments ino=8193 chunk=0 nodes=1,2,3 attempt 3 failed: no quorum (efs_rc=-8) — retrying
+2026-10-12T03:53:57.912Z put_fragments ino=8193 chunk=0 nodes=1,2,3 attempt 4 failed: no quorum (efs_rc=-8) — giving up
+2026-10-12T03:53:57.912Z efs-fuse fsync: no quorum (efs_rc=-8) ino=8193 off=0 len=0
+2026-10-12T03:53:57.920Z put_fragments ino=8193 chunk=0 nodes=1,2,3 attempt 1 failed: no quorum (efs_rc=-8) — retrying
+2026-10-12T03:53:58.061Z put_fragments ino=8193 chunk=0 nodes=1,2,3 attempt 2 failed: no quorum (efs_rc=-8) — retrying
+2026-10-12T03:53:58.311Z put_fragments ino=8193 chunk=0 nodes=1,2,3 attempt 3 failed: no quorum (efs_rc=-8) — retrying
+2026-10-12T03:53:58.724Z put_fragments ino=8193 chunk=0 nodes=1,2,3 attempt 4 failed: no quorum (efs_rc=-8) — giving up
+2026-10-12T03:53:58.724Z efs-fuse flush-meta: no quorum (efs_rc=-8) ino=8193 off=0 len=0
+2026-10-12T03:53:58.782Z put_fragments ino=12289 chunk=0 nodes=1,2,3 attempt 1 failed: no quorum (efs_rc=-8) — retrying
+2026-10-12T03:53:58.923Z put_fragments ino=12289 chunk=0 nodes=1,2,3 attempt 2 failed: no quorum (efs_rc=-8) — retrying
+2026-10-12T03:53:59.145Z put_fragments ino=12289 chunk=0 nodes=1,2,3 attempt 3 failed: no quorum (efs_rc=-8) — retrying
+2026-10-12T03:53:59.560Z put_fragments ino=12289 chunk=0 nodes=1,2,3 attempt 4 failed: no quorum (efs_rc=-8) — giving up
+2026-10-12T03:53:59.560Z efs-fuse fsync: no quorum (efs_rc=-8) ino=12289 off=0 len=0
+2026-10-12T03:53:59.569Z put_fragments ino=12289 chunk=0 nodes=1,2,3 attempt 1 failed: no quorum (efs_rc=-8) — retrying
+2026-10-12T03:53:59.710Z put_fragments ino=12289 chunk=0 nodes=1,2,3 attempt 2 failed: no quorum (efs_rc=-8) — retrying
+2026-10-12T03:53:59.956Z put_fragments ino=12289 chunk=0 nodes=1,2,3 attempt 3 failed: no quorum (efs_rc=-8) — retrying
+2026-10-12T03:54:00.386Z put_fragments ino=12289 chunk=0 nodes=1,2,3 attempt 4 failed: no quorum (efs_rc=-8) — giving up
+2026-10-12T03:54:00.386Z efs-fuse flush-meta: no quorum (efs_rc=-8) ino=12289 off=0 len=0
+2026-10-12T03:54:04.751Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:24Z on intel2), build=28b2089b-release-fault: starting export=default mount=/tmp/efs-intel-28b2089b-intel2_efs/mnt
+2026-10-12T03:54:04.752Z Discovered 4 cluster nodes from 127.0.0.1:34210
+2026-10-12T03:54:04.752Z   node id=1 127.0.0.1:34210
+2026-10-12T03:54:04.752Z   node id=2 127.0.0.1:34211
+2026-10-12T03:54:04.752Z   node id=3 127.0.0.1:34212
+2026-10-12T03:54:04.752Z   node id=4 127.0.0.1:34213
+2026-10-12T03:54:04.752Z fetching metadata...
+2026-10-12T03:54:04.752Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:54:04.752Z export id=1 name=default
+2026-10-12T03:54:04.752Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:54:04.758Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:54:04.767Z fuse serving
+2026-10-12T03:54:05.449Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=6
+2026-10-12T03:54:05.481Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=7
+2026-10-12T03:54:05.510Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=6
+2026-10-12T03:54:05.539Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=6
+2026-10-12T03:54:05.569Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=6
+2026-10-12T03:54:05.598Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=6
+2026-10-12T03:54:05.627Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=7
+2026-10-12T03:54:05.657Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=6
+2026-10-12T03:54:05.686Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=6
+2026-10-12T03:54:05.701Z efs: report rec ino=20481 ci=0 rejected unowned staging observation nodes=1,2,3 (putid miss, n=1)
+2026-10-12T03:54:06.567Z fsync-split ino=24577 flush_ms=468 report_ms=0 rc=0
+2026-10-12T03:54:24.454Z dcache-pressure live=34865152 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T03:54:24.609Z fsync-split ino=77825 flush_ms=145 report_ms=0 rc=0
+2026-10-12T03:54:27.116Z fsync-split ino=81921 flush_ms=159 report_ms=0 rc=0
+2026-10-12T03:54:43.545Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:24Z on intel2), build=28b2089b-release-fault: starting export=default mount=/tmp/efs-intel-28b2089b-intel2_efs/mnt
+2026-10-12T03:54:43.546Z Discovered 4 cluster nodes from 127.0.0.1:34210
+2026-10-12T03:54:43.546Z   node id=1 127.0.0.1:34210
+2026-10-12T03:54:43.546Z   node id=2 127.0.0.1:34211
+2026-10-12T03:54:43.546Z   node id=3 127.0.0.1:34212
+2026-10-12T03:54:43.546Z   node id=4 127.0.0.1:34213
+2026-10-12T03:54:43.546Z fetching metadata...
+2026-10-12T03:54:43.546Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:54:43.546Z export id=1 name=default
+2026-10-12T03:54:43.546Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:54:43.552Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:54:43.560Z fuse serving
+2026-10-12T03:54:44.695Z dcache-pressure live=34603008 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T03:54:45.110Z fsync-split ino=86017 flush_ms=412 report_ms=0 rc=0
+2026-10-12T03:55:01.272Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:24Z on intel2), build=28b2089b-release-fault: starting export=default mount=/tmp/efs-intel-28b2089b-intel2_efs/mnt
+2026-10-12T03:55:01.274Z Discovered 4 cluster nodes from 127.0.0.1:34210
+2026-10-12T03:55:01.274Z   node id=1 127.0.0.1:34210
+2026-10-12T03:55:01.274Z   node id=2 127.0.0.1:34211
+2026-10-12T03:55:01.274Z   node id=3 127.0.0.1:34212
+2026-10-12T03:55:01.274Z   node id=4 127.0.0.1:34213
+2026-10-12T03:55:01.274Z fetching metadata...
+2026-10-12T03:55:01.274Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:55:01.274Z export id=1 name=default
+2026-10-12T03:55:01.274Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:55:01.280Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:55:01.289Z fuse serving
