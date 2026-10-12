@@ -2,7 +2,7 @@
 """Unprivileged private Intel container fixture actions; raw evidence stays outside Git."""
 import argparse,hashlib,json,os,re,signal,socket,subprocess,time
 from pathlib import Path
-p=argparse.ArgumentParser(description=__doc__);p.add_argument('action',choices=['build','proof','start','mount','stop-clients','stop-servers','run','inventory']);p.add_argument('--base',type=Path,required=True);p.add_argument('--host-index',type=int,choices=[0,1],required=True);p.add_argument('--command');p.add_argument('--source-commit');p.add_argument('--gc-backlog-idle-ms',type=int,default=20,choices=range(20,1001),help='fair yield after capped GC work makes physical progress; idle/blocked passes keep 1s backoff');p.add_argument('--writers',type=int,default=8,choices=range(1,33),help='private container writer slots per daemon; metadata/helper threads are separate');p.add_argument('--clients',type=int,default=2,choices=range(1,8));a=p.parse_args()
+p=argparse.ArgumentParser(description=__doc__);p.add_argument('action',choices=['build','proof','start','mount','stop-clients','stop-servers','run','inventory']);p.add_argument('--base',type=Path,required=True);p.add_argument('--host-index',type=int,choices=[0,1],required=True);p.add_argument('--command');p.add_argument('--source-commit');p.add_argument('--diagnostics',action='store_true',help='enable bounded existing RPC/read/Raft counters for diagnostic runs');p.add_argument('--gc-backlog-idle-ms',type=int,default=20,choices=range(20,1001),help='fair yield after capped GC work makes physical progress; idle/blocked passes keep 1s backoff');p.add_argument('--writers',type=int,default=8,choices=range(1,33),help='private container writer slots per daemon; metadata/helper threads are separate');p.add_argument('--clients',type=int,default=2,choices=range(1,8));a=p.parse_args()
 b=a.base.resolve();assert b.parent==Path('/data1/efs/bench') and b.name.startswith('container-') and os.getuid()!=0
 s=b/'src';out=b/'artifacts';out.mkdir(exist_ok=True)
 def mounted(path):
@@ -12,6 +12,7 @@ def mounted(path):
   if name==str(path):return True
  return False
 env={k:v for k,v in os.environ.items() if not k.startswith('EFS_')};env.update(EFS_MD_RAFT_N='4',EFS_TRANSPORT='tcp',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_PACKED_WRITES='0',EFS_GC_BACKLOG_IDLE_MS=str(a.gc_backlog_idle_ms))
+if a.diagnostics:env.update(EFS_RPC_PROF='1',EFS_READ_PROF='1',EFS_RAFT_OBS='1')
 def actual(pid):
  q=Path('/proc')/str(pid);return {'pid':pid,'argv':[x.decode() for x in (q/'cmdline').read_bytes().split(b'\0') if x], 'start':(q/'stat').read_text().rsplit(')',1)[1].split()[19], 'environment':[x.decode() for x in (q/'environ').read_bytes().split(b'\0') if x.startswith(b'EFS_')]}
 def launch(cmd,name):
