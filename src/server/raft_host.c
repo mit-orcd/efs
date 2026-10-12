@@ -11138,6 +11138,16 @@ int server_raft_host_active(void)
     return h && h->running;
 }
 
+/* Container qualification keeps fresh metadata proofs on a known dual-group
+ * leader when available. A follower would otherwise proxy each component's
+ * proof before serving LOOKUP/GETATTR. This is routing only: the recipient
+ * still admits a new ReadIndex and rechecks all inode/dentry/lane authority. */
+static int host_namespace_leader_hint(struct efs_raft_host *,uint8_t);
+static int host_container_read_leader_hint(struct efs_raft_host *h,uint8_t group)
+{
+    return h->s && h->s->storage_engine ? host_namespace_leader_hint(h,group) : -1;
+}
+
 void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)
 {
     struct efs_raft_host *h = g_host;
@@ -11161,6 +11171,8 @@ void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)
 
     {
         uint8_t ig = efs_raft_shard_group(efs_kv_inode_shard(ino));
+        hint=host_container_read_leader_hint(h,ig);
+        if(hint>=0){set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;}
         if (!host_hosts(h, ig)) {
             if (prof)
                 __atomic_fetch_add(&g_read_prof.ga_fwd, 1, __ATOMIC_RELAXED);
@@ -11674,6 +11686,8 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
 
     psh = efs_kv_inode_shard(parent);
     pg = efs_raft_shard_group(psh);
+    hint=host_container_read_leader_hint(h,pg);
+    if(hint>=0){set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;}
     if (!host_hosts(h, pg)) {
         uint8_t need[2];
         need[0] = pg;
