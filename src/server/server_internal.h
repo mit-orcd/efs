@@ -138,6 +138,7 @@ int server_put_session_fence(struct efsd_server *, const uint8_t uuid[16],
 struct efs_repair_job;
 /* Trusted local coordinator only; not an RPC endpoint. */
 int server_raft_host_repair_gc_ready(efs_ino_t,uint32_t,uint64_t);
+int server_raft_host_repair_gc_inode_local_ready(efs_ino_t);
 int server_raft_host_repair_record(unsigned,const struct efs_repair_job *,uint32_t,const uint8_t *,uint32_t);
 int server_repair_receive(struct efsd_server *,const uint8_t *,uint32_t,int seal,uint8_t *receipt);
 int server_repair_activation(struct efsd_server *,int trusted_create);
@@ -300,6 +301,9 @@ void efs_iostats_dump(int force);
 
 /* Append local storage roots without restart. csv is comma-separated
  * absolute paths. Existing roots are skipped. count_out is the new total. */
+int server_gc_inode_checked(struct efsd_server *,efs_export_id_t,efs_ino_t,uint64_t,
+                            int (*authority)(void *,efs_ino_t),void *context);
+int server_repair_gc_inode(struct efsd_server *,efs_export_id_t,efs_ino_t,uint64_t);
 int server_gc_inode(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
                      uint64_t generation);
 void server_gc_status(struct efsd_server *s, struct efs_msg_gc_status_reply *out);

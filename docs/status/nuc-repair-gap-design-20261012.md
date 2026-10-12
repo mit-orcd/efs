@@ -165,3 +165,44 @@ Only when the explicit repair experiment is enabled, actual fragment-GC callback
 Whole-inode readiness covers both group anchors and all matching FileID/object/role/lane debt, bounded at128 jobs per anchor. One sealed role cannot release another pending lane. The coordinator checks both hosted groups through fresh ReadIndex before whole-inode physical RPCs; experimental target-side GC_FRAGMENT/GC_INODE repeats hosted authority/debt proof before storage deletion. Unhosted/failed proof or scan corruption/errors retain data and do not ACK. Default callbacks perform no repair scan, and target checks are behind the startup-fixed flag. The previous candidate injection adapter is replaced by an actual installed experimental callback/helper extraction and added to native test recipes.
 
 Exact module memory/real-LSM/cold/WAL gates and both-anchor debt regression pass. Actual extracted callback/helper adapter proves default zero debt scans, pending/corrupt/IO refusal before delete/ACK and failed/unhosted authority refusal. ReadIndex and physical storage remain adapters here. Complete private daemon build passes. Evidence: `gc/`. Real concurrent GC/late-writer/seal races, manual coordinator149 and physical restored-role/cold/second-loss acceptance are still NOTRUN; no general W74 protection closure, full W52/W112 or W97 acceptance is inferred.
+
+
+### Stop checkpoint: whole-inode GC correction after 737ef0b6
+
+Manager review found two defects in the initial experimental whole-inode hook:
+its unlocked debt proof permitted a later ADMIT before physical deletion, and
+moving ReadIndex under inode WR introduced a possible session-stripe/apply lock
+cycle. The correction performs fresh ReadIndex before acquiring inode WR, then
+rechecks both hosted journal anchors under that physical guard with a
+**nonblocking** host-mutex acquisition. Contention returns BUSY. No Raft wait or
+blocking host-mutex acquisition occurs under inode WR. Persistent inode death
+and physical deletion remain inside that guard; later DATA acquires inode RD,
+observes death, and returns STALE without a receipt. Default GC retains the
+original null-callback path and performs no repair scans.
+
+Affected testing on isolated NUC sources based on 737ef0b6, build identifier
+`737ef0b6-inode-nonblocking-wip`: full efsd build, actual FILES receiver,
+actual store GC, default all-member fanout, and experimental host adapter PASS.
+New physical inode race passes buffered and direct: GC holds the real inode WR
+guard; actual receiver DATA cannot resurrect the deleted inode or return DATA
+receipt; actual persistent death and subsequent target SEAL succeed. Metadata
+and ReadIndex remain explicit adapter stubs. Host adapter proves contended
+host mutex returns BUSY without ReadIndex or journal scan. This is **not** a
+quorum-level ordinary PUT + SESSION_FENCE_LOC + GC overlap gate, nor a complete
+ADMIT/cancel/debt cleanup acceptance test. Those remain required.
+
+Raw evidence is in `results/measure/20261012-repair-journal/` with
+`inode-nonblocking-*` filenames. The cosmetic misleading-indentation warning
+in the new test was corrected locally after the recorded successful execution;
+no subsequent execution was launched under the coordinated stop.
+
+A manager-relayed newer human instruction to document, commit, and stop ended
+this stage. No manual opcode149 worker was exposed; experimental defaults stay
+off. No production restart/deploy or original-store mutation occurred.
+Full W52 and both-mode W112 qualification remain incomplete. W97 sustained
+comparison remains NOT RUN; there is no measured slowdown-reduction claim.
+Real repaired-role verification, cold daemon/client restart, loss of another
+original survivor, actual leader takeover, receipt-loss retries, and distributed
+GC/late-writer/debt cleanup gates are still open. The unaccepted experimental
+scope is only ordinary three-node single-root FILES 2+1 same-target repair;
+packed/spare/container/span/2+2/D36 remain unsupported.

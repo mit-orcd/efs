@@ -7435,6 +7435,20 @@ int server_raft_host_repair_gc_ready(efs_ino_t ino,uint32_t ci,uint64_t object)
     pthread_mutex_unlock(&h->mu);return rc;
 }
 
+/* Called under the physical inode WR guard after an unlocked fresh ReadIndex.
+ * Never wait for h->mu: its owner may be applying a session fence whose PUT
+ * owns a storage stripe and is waiting for this inode guard. BUSY is retry. */
+int server_raft_host_repair_gc_inode_local_ready(efs_ino_t ino)
+{
+    struct efs_raft_host *h=g_host;
+    if(!h || !h->running || !h->s || !h->s->repair_experiment)return EFS_ERR_ACCES;
+    if(!host_hosts(h,EFS_RAFT_GROUP_SHARD) || !host_hosts(h,EFS_RAFT_GROUP_SHARD2))return EFS_ERR_BUSY;
+    if(pthread_mutex_trylock(&h->mu))return EFS_ERR_BUSY;
+    int rc=efs_repair_gc_inode_ready(h->kv,ino);
+    pthread_mutex_unlock(&h->mu);
+    return rc;
+}
+
 static int host_gc_inode_nodes(struct efs_raft_host *h, efs_ino_t ino, uint64_t gen)
 {
     if(h->s->repair_experiment){int rc=server_raft_host_repair_gc_ready(ino,0,0);if(rc)return rc;}
@@ -7478,7 +7492,7 @@ static int host_gc_inode_nodes(struct efs_raft_host *h, efs_ino_t ino, uint64_t 
     }
     for (uint32_t i = 0; i < count; i++)
         if (nodes[i].id == h->s->id)
-            status[i] = server_gc_inode(h->s, 1, ino, gen);
+            status[i] = h->s->repair_experiment?server_repair_gc_inode(h->s,1,ino,gen):server_gc_inode(h->s,1,ino,gen);
     for (uint32_t i = 0; i < count; i++) {
         struct efs_conn *pc = pending[i];
         if (pc) {

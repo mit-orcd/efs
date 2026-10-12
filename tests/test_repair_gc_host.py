@@ -4,6 +4,7 @@ from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text();a=s.index('static void host_gc_record(');fn=s[a:s.index('\n}',a)+2]
 a=s.index('int server_raft_host_repair_gc_ready(');proof=s[a:s.index('\n}',a)+2]
+a=s.index('int server_raft_host_repair_gc_inode_local_ready(');local=s[a:s.index('\n}',a)+2]
 code=r'''
 #include "efs/repair_job.h"
 #include <assert.h>
@@ -25,7 +26,7 @@ int efs_meta_unpack_gc(const uint8_t *v,uint32_t n,uint32_t *nodes,uint8_t *ack,
 int efs_repair_gc_object_ready(struct efs_kv *kv,efs_ino_t ino,uint32_t ci,uint64_t obj){(void)kv;assert(ino==9&&ci==7&&obj==101);scans++;return barrier;}
 static int host_gc_local_del(struct efs_raft_host *h,struct efs_export *ex,efs_ino_t ino,uint32_t ci,uint32_t fi,uint64_t gen,const uint8_t *sum){(void)h;(void)ex;(void)ino;(void)ci;(void)fi;(void)gen;(void)sum;removed++;return 0;}
 static int host_gc_remote_del(struct efs_raft_host *h,uint32_t node,uint32_t ex,efs_ino_t ino,uint32_t ci,uint32_t fi,uint64_t gen,const uint8_t *sum){(void)h;(void)node;(void)ex;(void)ino;(void)ci;(void)fi;(void)gen;(void)sum;removed++;return 0;}
-'''+proof+fn+r'''
+'''+proof+local+fn+r'''
 int main(void){struct server server={1,1};struct efs_raft_host h={.s=&server,.gc_running=1,.running=1};pthread_mutex_init(&h.mu,NULL);g_host=&h;struct efs_export ex={1};uint8_t key[24]={0},val[128]={0};key[10]=9;key[18]=101;key[23]=7;struct efs_gc_ack_item ack[128];int n=0;
  server.repair_experiment=0;barrier=EFS_ERR_BUSY;host_gc_record(&h,&ex,key,val,ack,&n);assert(removed==3&&n==3&&!scans);assert(server_raft_host_repair_gc_ready(9,7,101)==EFS_ERR_ACCES&&!reads);
  removed=n=0;server.repair_experiment=1;
@@ -34,6 +35,12 @@ int main(void){struct server server={1,1};struct efs_raft_host h={.s=&server,.gc
  barrier=EFS_ERR_BUSY;assert(server_raft_host_repair_gc_ready(9,0,0)==EFS_ERR_BUSY&&scans==1);scans=0;
  int failures[]={EFS_ERR_BUSY,EFS_ERR_PROTO,EFS_ERR_IO,EFS_ERR_NOMEM};
  for(unsigned i=0;i<4;i++){barrier=failures[i];host_gc_record(&h,&ex,key,val,ack,&n);assert(!removed&&!n);}
+ int old_reads=reads,old_scans=scans;
+ pthread_mutex_lock(&h.mu);assert(server_raft_host_repair_gc_inode_local_ready(9)==EFS_ERR_BUSY);pthread_mutex_unlock(&h.mu);
+ assert(reads==old_reads&&scans==old_scans);
+ barrier=EFS_ERR_BUSY;assert(server_raft_host_repair_gc_inode_local_ready(9)==EFS_ERR_BUSY);
+ assert(reads==old_reads&&scans==old_scans+1);
+ owns=1;assert(server_raft_host_repair_gc_inode_local_ready(9)==EFS_ERR_BUSY);owns=5;
  barrier=0;host_gc_record(&h,&ex,key,val,ack,&n);assert(removed==3&&n==3);return 0;}
 '''
 with tempfile.TemporaryDirectory() as d:
