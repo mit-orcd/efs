@@ -73,6 +73,7 @@ static struct efs_raft_msg *msg_copy_deep(const struct efs_raft_msg *src)
 struct app {
     int n;
     int park_apply;
+    uint64_t apply_limit;
     unsigned pressure_mask;
     struct efs_raft *owner;
     uint64_t pending_limit;
@@ -267,7 +268,7 @@ static int apply_cmd(void *app, uint64_t index, uint64_t term, const uint8_t *cm
                      uint32_t clen)
 {
     struct app *a = app;
-    if (a->park_apply) return EFS_ERR_BUSY;
+    if (a->park_apply || (a->apply_limit && index > a->apply_limit)) return EFS_ERR_BUSY;
     (void)index;
     (void)term;
     a->n++;
@@ -429,10 +430,19 @@ static void test_replicate_and_readindex(void)
     CHECK(efs_raft_read_current(n.r[lid]), "fresh quorum covers new commit");
     {
         uint64_t completed = efs_raft_read_round(n.r[lid]);
+        uint64_t proof_round=0, proof_index=0;
+        CHECK(efs_raft_read_proven(n.r[lid],&proof_round,&proof_index) && proof_round==completed && proof_index>=idx,"current fresh quorum exposed");
         struct efs_raft_msg delayed = {0};
         for (i = 0; i < 3; i++)
             n.drop[i] = (i != lid);
         CHECK(efs_raft_read_begin(n.r[lid]) == EFS_OK, "partitioned leader begins fresh read");
+        CHECK(efs_raft_read_proven(n.r[lid],&proof_round,&proof_index) &&
+              proof_round==completed && proof_index>=idx,
+              "late admitted waiter retains completed proof during next pending round");
+        CHECK(proof_round < efs_raft_read_round(n.r[lid]),
+              "old proof cannot satisfy newer pre-send admission");
+        CHECK(!efs_raft_read_proven(n.r[lid],NULL,&proof_index),"invalid proof output refused");
+
         delayed.type = EFS_RAFT_MSG_AE_REP;
         delayed.to = lid;
         delayed.term = efs_raft_term(n.r[lid]);
@@ -446,9 +456,12 @@ static void test_replicate_and_readindex(void)
             CHECK(efs_raft_recv(n.r[lid], &delayed) == EFS_OK, "old completed-round reply");
         }
         CHECK(!efs_raft_read_ready(n.r[lid]), "partition cannot reuse completed authority");
+        CHECK(efs_raft_step_down(n.r[lid])==EFS_OK,"same-term voluntary role transition");
+        CHECK(!efs_raft_read_proven(n.r[lid],&proof_round,&proof_index),"same-term stepdown forgets retained proof");
         delayed.term++;
         CHECK(efs_raft_recv(n.r[lid], &delayed) == EFS_OK, "higher term fences read");
         CHECK(!efs_raft_read_done(n.r[lid]), "stepped-down leader has no read authority");
+        CHECK(!efs_raft_read_proven(n.r[lid],&proof_round,&proof_index) && !proof_round && !proof_index,"higher term invalidates retained proof");
     }
     CHECK(!efs_raft_read_pending(n.r[0] == n.r[lid] ? n.r[1] : n.r[0]),
           "follower never reports a pending round");
@@ -488,6 +501,13 @@ static void test_read_quorum_before_apply(void)
         CHECK(efs_raft_read_control(n.r[leader],&old)==2,"early read ACK noted with apply parked");}
     CHECK(efs_raft_read_quorum(n.r[leader]) && !efs_raft_read_ready(n.r[leader]),
           "early quorum never bypasses required apply");
+    uint64_t retained_round=efs_raft_read_round(n.r[leader]),retained_index=0,got_round=0;
+    CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"new round supersedes quorum with own apply parked");
+    CHECK(efs_raft_read_proven(n.r[leader],&got_round,&retained_index) &&
+          got_round==retained_round && retained_index==index &&
+          efs_raft_applied(n.r[leader])<retained_index,
+          "retained quorum still cannot grant unapplied KV authority");
+    CHECK(!efs_raft_read_quorum(n.r[leader]),"retained proof is not current raw quorum");
     for(int i=0;i<3;i++)n.drop[i]=0;
     elect(&n,4);
     CHECK(efs_raft_read_quorum(n.r[leader]),"fresh quorum proof independent of apply");
@@ -499,6 +519,50 @@ static void test_read_quorum_before_apply(void)
           "release permits authoritative reads");
     old.term++;old.from=(leader+1)%3;(void)efs_raft_recv(n.r[leader],&old);
     CHECK(!efs_raft_read_quorum(n.r[leader]),"stepdown invalidates proof authority");
+    for(int i=0;i<3;i++){efs_raft_free(n.r[i]);efs_raft_mem_free(store[i]);}
+}
+
+/* Newer completed quorums cannot move an admitted reader's own-apply target
+ * forever. Exercise actual Raft, bounded apply and repeated write/read bursts. */
+static void test_read_applied_floor(void)
+{
+    struct net n={.n=3};struct app app[3]={0};struct efs_raft_store *store[3];
+    struct efs_raft_cfg cfg={0};cfg.n=3;cfg.send=send_now;cfg.net=&n;
+    cfg.apply=apply_cmd;cfg.heartbeat_ticks=1;
+    for(int i=0;i<3;i++){
+        store[i]=efs_raft_mem_create();cfg.id=i;cfg.store=store[i];cfg.store_ctx=store[i];
+        cfg.election_ticks=4+i*4;cfg.app=&app[i];n.r[i]=efs_raft_new(&cfg);
+    }
+    CHECK(elect(&n,20)==1,"apply-floor fixture elects");
+    int leader=leader_id(&n);uint64_t first=0,round=0,got=0,idx=0,last=0;
+    app[leader].park_apply=1;
+    uint8_t cmd='F';(void)efs_raft_propose(n.r[leader],&cmd,1,&first);elect(&n,4);
+    CHECK(first && efs_raft_commit(n.r[leader])>=first,"floor committed");
+    CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"floor proof begins");
+    elect(&n,2);round=efs_raft_read_round(n.r[leader]);
+    CHECK(efs_raft_read_quorum(n.r[leader]),"floor quorum while apply parked");
+    CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"retain first unfinished floor");
+    for(int j=0;j<12;j++){
+        cmd=(uint8_t)('a'+j);(void)efs_raft_propose(n.r[leader],&cmd,1,&last);elect(&n,2);
+        CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"burst fresh proof");elect(&n,2);
+        CHECK(efs_raft_read_quorum(n.r[leader]),"burst quorum completes");
+    }
+    CHECK(last>first && efs_raft_applied(n.r[leader])<first,"later writes remain unapplied");
+    app[leader].park_apply=0;app[leader].apply_limit=first;elect(&n,2);
+    CHECK(efs_raft_applied(n.r[leader])==first,"apply reaches only original floor");
+    CHECK(efs_raft_read_proven(n.r[leader],&got,&idx) && got==round && idx==first,
+          "newer quorums preserve applied original proof");
+    uint64_t fresh=efs_raft_read_round(n.r[leader])+1;
+    CHECK(got<fresh && idx<last,"fresh arrival and newer bytes cannot reuse floor");
+    CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"rollover promotes original applied proof");
+    elect(&n,2);
+    CHECK(efs_raft_read_proven(n.r[leader],&got,&idx) && got==round && idx==first,
+          "applied floor survives new unfinished record");
+    app[leader].apply_limit=0;elect(&n,2);
+    CHECK(efs_raft_read_proven(n.r[leader],&got,&idx) && got>=fresh && idx>=last,
+          "fresh arrival completes after its own apply");
+    CHECK(efs_raft_step_down(n.r[leader])==EFS_OK,"floor role invalidation");
+    CHECK(!efs_raft_read_proven(n.r[leader],&got,&idx),"both bounded records invalidated");
     for(int i=0;i<3;i++){efs_raft_free(n.r[i]);efs_raft_mem_free(store[i]);}
 }
 
@@ -663,6 +727,8 @@ static void test_readindex_control(void)
     for(int i=0;i<3;i++)n.drop[i]=(i!=leader);
     CHECK(efs_raft_change(n.r[leader],7u&~(1u<<((leader+2)%3)))==EFS_OK,
           "control fixture has pending joint configuration");
+    uint64_t proof_round=0,proof_index=0;
+    CHECK(!efs_raft_read_proven(n.r[leader],&proof_round,&proof_index),"configuration change invalidates retained proof");
     CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"joint read begins normal quorum round");
     reply.last_log_index=efs_raft_read_round(n.r[leader]);
     CHECK(!efs_raft_read_control(n.r[leader],&reply),"pending joint configuration stays on pump");
@@ -2465,6 +2531,7 @@ int main(void)
     test_note_durable_without_apply();
     test_readindex_control();
     test_read_quorum_before_apply();
+    test_read_applied_floor();
     test_pressure_quorum_and_owned_backlog();
     test_follower_apply_retry();
     test_recv_batch();
