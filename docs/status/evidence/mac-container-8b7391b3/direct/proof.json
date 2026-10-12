@@ -1,0 +1,41 @@
+{
+  "source": "8b7391b3f3edcf9fc99440d9aad3c240325acb83",
+  "runtime_id": "8b7391b3-mac-container",
+  "source_input_count": 756,
+  "source_input_changes": [],
+  "mode": "containers/direct/TCP",
+  "native_storage_gates": "PASS",
+  "container_store_TU_ASan_UBSan": "PASS (shared lib/writer objects not instrumented)",
+  "actual_payload_O_DIRECT": [
+    {
+      "pid": 11022,
+      "path": "/data1/efs/bench/mac-container-8b7391b3-direct-20261012/containers-direct-r1/store/.efs-containers/0000000000000000.dat",
+      "flags": "0o2700002",
+      "O_DIRECT": true
+    }
+  ],
+  "live_storage_gate": "PASS",
+  "physical_inventory": [
+    {
+      "data_records": 0,
+      "logical_bytes": 0,
+      "record_allocated": 0,
+      "container_allocated": 0
+    },
+    {
+      "data_records": 0,
+      "logical_bytes": 0,
+      "record_allocated": 0,
+      "container_allocated": 0
+    },
+    {
+      "data_records": 0,
+      "logical_bytes": 0,
+      "record_allocated": 0,
+      "container_allocated": 0
+    }
+  ],
+  "installed_service_unchanged": true,
+  "raw_evidence": "/Users/mike/Documents/Codex/2026-10-05/how-x20/results/mac-container-8b7391b3/live-direct",
+  "production_source_changes": []
+}

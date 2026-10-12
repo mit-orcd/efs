@@ -1,0 +1,2 @@
+store: put O_DIRECT zero-copy (payload+digest writev) len=65536
+store GC: two roots, buffered/direct format switch, quota recount, checksum protection, syscall failures and idempotent deletion PASS

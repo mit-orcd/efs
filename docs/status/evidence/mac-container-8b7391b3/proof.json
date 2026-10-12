@@ -1,0 +1,39 @@
+{
+  "source": "8b7391b3f3edcf9fc99440d9aad3c240325acb83",
+  "branch": "mac-container-8b7391b3",
+  "source_input_count": 756,
+  "source_input_manifest_sha256": "32183d261a51e237f0666054e43724cb2255b7942a2baf1989bff29dcb9fb722",
+  "runtime_id": "8b7391b3-mac-container",
+  "runtime_sha256": {
+    "efsd": "e7f3df7f06e25a96aaea14964bd63e4dca55d6ac072a653bd8a40a593b7de64b",
+    "efs-fuse": "d9a775e47c18c4e605796af5cb14654aab5c33c1fd5ebc66a872ff85c9622e8a",
+    "efs-mgmt": "25faf05dd5fc10ac741eeb5e089d05685815b781ee03d9b0fde6cbbcc7b22231"
+  },
+  "native_gates": "PASS",
+  "container_store_TU_ASan_UBSan": "PASS; shared lib/writer objects not instrumented",
+  "live_buffered_tcp": "PASS",
+  "initial_harness_setup": "FAIL NOT_PRIMARY before payload; membership-before-election race",
+  "production_changes": [],
+  "release_branch_mutations": [],
+  "physical_gc_per_node": [
+    {
+      "data_records": 0,
+      "logical_bytes": 0,
+      "record_allocated": 0,
+      "container_allocated": 0
+    },
+    {
+      "data_records": 0,
+      "logical_bytes": 0,
+      "record_allocated": 0,
+      "container_allocated": 0
+    },
+    {
+      "data_records": 0,
+      "logical_bytes": 0,
+      "record_allocated": 0,
+      "container_allocated": 0
+    }
+  ],
+  "raw_evidence_path": "/Users/mike/Documents/Codex/2026-10-05/how-x20/results/mac-container-8b7391b3"
+}

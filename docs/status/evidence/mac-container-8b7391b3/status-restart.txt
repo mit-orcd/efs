@@ -1,0 +1,16 @@
+Cluster nodes (3):
+  node 1: 192.168.2.11:27432  up  used=68.31 MiB  quota=2.00 GiB (3.3%)  storage(1):
+      /data1/efs/bench/mac-container-8b7391b3-ready-20261012/containers-buffered-r1/store
+  node 2: 192.168.2.12:27432  up  used=68.31 MiB  quota=2.00 GiB (3.3%)  storage(1):
+      /data1/efs/bench/mac-container-8b7391b3-ready-20261012/containers-buffered-r1/store
+  node 3: 192.168.2.13:27432  up  used=68.31 MiB  quota=2.00 GiB (3.3%)  storage(1):
+      /data1/efs/bench/mac-container-8b7391b3-ready-20261012/containers-buffered-r1/store
+Usable (2+1 logical): used=136.62 MiB  free=3.87 GiB  capacity=4.00 GiB (3.3%; filesystem capacity)
+Usable bytes: used=143261696 free=4151705600 capacity=4294967296
+Cluster state: OK (3 up, 0 down)
+Versions: efsd 8b7391b3 (branch mac-container-8b7391b3) — 3/3 identical
+Node 192.168.2.11:27432 state: active
+Heal:
+  node 1: idle
+  node 2: idle
+  node 3: idle
