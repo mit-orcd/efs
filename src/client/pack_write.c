@@ -422,7 +422,7 @@ static int pack_put_one(void *context,uint32_t fi)
     }
     efs_client_conn_release(node,c);
     int rc=type==EFS_MSG_PUT_PACKED_REPLY && n==4?(int32_t)efs_put_upload_rd32(raw):EFS_ERR_PROTO;
-    free(raw);if(rc)pack_profile_end("put",put_start,p->cohort.group,p->cohort.count,rc);return rc;
+    free(raw);pack_profile_end("put",put_start,p->cohort.group,p->cohort.count,rc);if(rc)return rc;
     __atomic_fetch_or(&p->put_mask,1u<<fi,__ATOMIC_RELAXED);return EFS_OK;
 }
 static int pack_publish_cohort(struct pack_context *p)
@@ -452,3 +452,212 @@ static int pack_progress(struct pack_context *p)
         rc=efs_pack_upload_encode(&p->object,p->cohort.refs,p->cohort.count,
             p->wire+EFS_PACKED_PUT_HEADER,sizeof(p->wire)-EFS_PACKED_PUT_HEADER,&manifest);if(rc)return rc;
         efs_put_upload_wr32(p->wire,g_client.export_id);efs_put_upload_wr32(p->wire+8,(uint32_t)manifest);
+        struct pack_put_run run={p,EFS_PACKED_PUT_HEADER+(uint32_t)manifest};
+        rc=pack_parallel(p,EFS_NUM_FRAGMENTS,pack_put_one,&run);if(rc)return rc;
+    }
+    uint64_t publish_start=pack_profile_start();
+    rc=pack_publish_cohort(p);
+    pack_profile_end("publish-load",publish_start,p->cohort.group,p->cohort.count,rc);if(rc)return rc;
+    return EFS_OK;
+}
+static int pack_flush_group(unsigned gi,int force)
+{
+    pthread_mutex_lock(&pack_mu);
+    struct pack_context *p=pack_groups[gi];
+    if(!p || !p->cohort.count){pthread_mutex_unlock(&pack_mu);return EFS_OK;}
+    if(p->busy || p->stack_busy){pthread_mutex_unlock(&pack_mu);return EFS_ERR_BUSY;}
+    uint64_t now=pack_now();
+    if(!force && (now<p->retry_after || !efs_pack_cohort_due(&p->cohort,now,0))) {
+        pthread_mutex_unlock(&pack_mu);return EFS_OK;
+    }
+    p->busy=1;pthread_mutex_unlock(&pack_mu);
+    int rc=pack_progress(p);
+    pthread_mutex_lock(&pack_mu);p->last_error=rc;p->busy=0;p->retry_after=pack_now()+10000000;
+    if(!rc) {
+        struct pack_retirement *r=pack_retirements[gi];
+        if(r->active)rc=EFS_ERR_BUSY;
+        else {
+            r->object=p->object;r->group=p->cohort.group;r->count=p->cohort.count;r->batch=p->batch;
+            memcpy(r->refs,p->cohort.refs,r->count*sizeof(r->refs[0]));
+            for(uint32_t i=0;i<r->count;i++)r->acks[i]=p->writers[i].acks;
+            r->active=1;r->last_error=EFS_OK;
+        }
+    }
+    if(!rc) {
+        uint32_t group=p->cohort.group;
+        memset(p,0,sizeof(*p));(void)efs_pack_cohort_init(&p->cohort,group,PACK_WRITERS,PACK_DELAY_NS);
+    }
+    pthread_mutex_unlock(&pack_mu);return rc;
+}
+static void *pack_worker(void *unused)
+{
+    (void)unused;
+    while(__atomic_load_n(&pack_running,__ATOMIC_ACQUIRE)) {
+        for(unsigned gi=0;gi<2;gi++) {
+            efs_client_rpc_set_deadline_ms(pack_now()/1000000+8000);
+            (void)pack_retire_group(gi);(void)pack_flush_group(gi,0);efs_client_rpc_set_deadline_ms(0);
+        }
+        usleep(1000);
+    }
+    return NULL;
+}
+static int pack_start(void)
+{
+    pthread_mutex_lock(&pack_mu);
+    if(!pack_started) {
+        __atomic_store_n(&pack_running,1,__ATOMIC_RELEASE);
+        if(pthread_create(&pack_tid,NULL,pack_worker,NULL)) {
+            __atomic_store_n(&pack_running,0,__ATOMIC_RELEASE);pthread_mutex_unlock(&pack_mu);return EFS_ERR_NOMEM;
+        }
+        pack_started=1;
+    }
+    pthread_mutex_unlock(&pack_mu);return EFS_OK;
+}
+/* Caller serializes this FileID against ordinary writes, flush and truncate.
+ * NOT_FOUND means no byte was accepted and the ordinary path may proceed. */
+int efs_client_pack_write(efs_ino_t ino,uint64_t off,uint32_t len,const uint8_t *data)
+{
+    if(!efs_client_pack_enabled() || off || !len || len>EFS_PACK_MAX_PAYLOAD ||
+        (g_client.export.chunk_size ? g_client.export.chunk_size : EFS_DEFAULT_CHUNK_SIZE)!=EFS_MIN_CHUNK_SIZE)return EFS_ERR_NOT_FOUND;
+    struct efs_inode inode;
+    pthread_mutex_lock(&g_client.idx_mu);int found=efs_export_get_inode(&g_client.export,ino,&inode);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    if(found || inode.size || !S_ISREG(inode.mode) || efs_dcache_ino_pinned(ino))return EFS_ERR_NOT_FOUND;
+    int rc=pack_start();if(rc)return rc;
+    uint32_t members;rc=pack_capabilities(&members);if(rc)return rc;
+    /* GETCHUNKS already reads current inode authority and returns its exact
+     * FileID. Use that same fresh observation to prove an absent base instead
+     * of making a separate generation-discovery WRITER_VIEW round trip. */
+    struct efs_chunk_rec base_rec;uint32_t count=1;uint64_t gen=0;
+    rc=efs_client_rpc_getchunks_fileid(g_client.export_id,ino,0,0,&base_rec,&count,&gen);if(rc)return rc;
+    if(!gen)return EFS_ERR_PROTO;
+    if(count)return EFS_ERR_NOT_FOUND;
+    struct efs_msg_lane_writer_view_reply view;
+    rc=efs_client_rpc_lane_writer_view(ino,gen,0,EFS_MIN_CHUNK_SIZE,&view);
+    if(rc==EFS_ERR_NOT_FOUND)rc=efs_client_rpc_lane_bootstrap(g_client.export_id,ino,gen,0,EFS_MIN_CHUNK_SIZE,&view);
+    if(rc)return rc;
+    /* A size-zero inode after truncate is not a fresh lane. Its fence and
+     * retained cache identity require the ordinary reconstruction path. */
+    if(view.view.authority_epoch || view.view.history.count)return EFS_ERR_NOT_FOUND;
+    struct efs_opid identity;rc=efs_client_publication_id(1,&identity);if(rc)return rc;
+    rc=efs_client_rpc_publication_session(efs_kv_lane_shard(ino,0),&identity);if(rc)return rc;
+    unsigned gi=efs_raft_shard_group(efs_kv_lane_shard(ino,0))==0?0:1;
+    for(;;) {
+        pthread_mutex_lock(&pack_mu);struct pack_context *p=pack_groups[gi];
+        if(!p) {
+            p=efs_buf_metadata_alloc(sizeof(*p));
+            if(!p){pthread_mutex_unlock(&pack_mu);return EFS_ERR_NOMEM;}
+            struct pack_retirement *r=efs_buf_metadata_alloc(sizeof(*r));
+            if(!r){efs_buf_metadata_free(p,sizeof(*p));pthread_mutex_unlock(&pack_mu);return EFS_ERR_NOMEM;}
+            memset(r,0,sizeof(*r));pack_retirements[gi]=r;
+            memset(p,0,sizeof(*p));efs_pack_cohort_init(&p->cohort,gi?2:0,PACK_WRITERS,PACK_DELAY_NS);pack_groups[gi]=p;
+        }
+        if(p->busy || p->cohort.sealed || p->cohort.count==PACK_WRITERS || pack_ack_credits==2*PACK_WRITERS) {
+            pthread_mutex_unlock(&pack_mu);rc=pack_flush_group(gi,1);
+            if(rc!=EFS_OK && rc!=EFS_ERR_BUSY)return rc;
+            rc=pack_retire_group(gi);
+            if(rc!=EFS_OK && rc!=EFS_ERR_BUSY)return rc;
+            if(pack_pause())return EFS_ERR_BUSY;
+            continue;
+        }
+        if(!p->cohort.count) {
+            p->members=members;p->batch=pack_capability_batch;rc=efs_client_put_id(&p->cohort.owner);
+            if(rc){pthread_mutex_unlock(&pack_mu);return rc;}
+            p->busy=1;
+            pthread_mutex_unlock(&pack_mu);
+            rc=efs_client_rpc_publication_session(gi?2:1,&p->cohort.owner);
+            pthread_mutex_lock(&pack_mu);
+            p->busy=0;
+            if(rc){pthread_mutex_unlock(&pack_mu);return rc;}
+        }
+        struct pack_writer *w=&p->writers[p->cohort.count];
+        /* Cache admission accounts presence under the directory/index locks.
+         * Reserve this context, then release the scheduler lock before any
+         * cache operation, including private-candidate failure cleanup. */
+        p->busy=1;pack_ack_credits++;
+        pthread_mutex_unlock(&pack_mu);
+        rc=efs_client_publication_admit_write(&w->acks,ino,gen,0,&view,0,data,len);
+        struct efs_msg_inode_getchunks_reply *base=NULL;
+        if(!rc) {
+            base=efs_buf_metadata_alloc(sizeof(*base));if(!base)rc=EFS_ERR_NOMEM;
+            else {memset(base,0,sizeof(*base));base->ino=ino;base->generation=gen;
+                rc=efs_dcache_snapshot_publication(ino,gen,0,&view,base,&w->plan,p->snapshot,EFS_MIN_CHUNK_SIZE);}
+        }
+        if(base)efs_buf_metadata_free(base,sizeof(*base));
+        if(!rc) {
+            w->object=efs_meta_candidate_gen(identity.client_uuid,identity.session_epoch,w->plan.cache_sequence,0,0);w->len=len;
+            rc=efs_dcache_begin_publication(ino,gen,0,&w->plan,w->object);
+            if(!rc) {
+                struct efs_pack_record record={ino,gen,w->plan.publish_epoch,w->object,len,p->snapshot};
+                pthread_mutex_lock(&pack_mu);
+                rc=efs_pack_cohort_offer(&p->cohort,&record,w->plan.cache_sequence,pack_now());
+                pthread_mutex_unlock(&pack_mu);
+            }
+        }
+        if(rc) {
+            /* Pre-accept failure: no PUT/admission send and no application
+             * success. The private candidate alone may be abandoned. */
+            if(w->acks)(void)efs_dcache_abort_pack_admission(ino,gen);
+            if(w->acks)(void)efs_client_publication_ack_free(w->acks);
+            memset(w,0,sizeof(*w));
+            pthread_mutex_lock(&pack_mu);p->busy=0;pack_ack_credits--;pthread_mutex_unlock(&pack_mu);return rc;
+        }
+        /* The accepted snapshot stays reserved until its size is visible. */
+        efs_dcache_note_packed_size(ino,len);
+        pthread_mutex_lock(&pack_mu);p->busy=0;pthread_mutex_unlock(&pack_mu);
+        return EFS_OK;
+    }
+}
+static int pack_flush_run(efs_ino_t ino)
+{
+    for(;;) {
+        int pending=0;unsigned gi=0;
+        pthread_mutex_lock(&pack_mu);
+        for(unsigned g=0;g<2 && !pending;g++) {
+            struct pack_context *p=pack_groups[g];if(!p)continue;
+            for(uint32_t i=0;i<p->cohort.count;i++)if(p->cohort.records[i].ino==ino && !__atomic_load_n(&p->writers[i].done,__ATOMIC_ACQUIRE)){pending=1;gi=g;break;}
+        }
+        pthread_mutex_unlock(&pack_mu);if(!pending)return EFS_OK;
+        int rc=pack_flush_group(gi,0);
+        if(rc!=EFS_OK && rc!=EFS_ERR_BUSY)return rc;
+        if(pack_pause())return EFS_ERR_BUSY;
+    }
+}
+int efs_client_pack_flush(efs_ino_t ino)
+{
+    if(!efs_client_pack_enabled())return EFS_OK;
+    uint64_t previous=efs_client_rpc_deadline_ms();
+    if(!previous)efs_client_rpc_set_deadline_ms(pack_now()/1000000+8000);
+    int rc=pack_flush_run(ino);efs_client_rpc_set_deadline_ms(previous);return rc;
+}
+static int pack_drain_run(void)
+{
+    for(unsigned gi=0;gi<2;gi++) {
+        int rc=pack_retire_group(gi);if(rc)return rc;
+        rc=pack_flush_group(gi,1);if(rc)return rc;
+        rc=pack_retire_group(gi);if(rc)return rc;
+    }
+    return EFS_OK;
+}
+int efs_client_pack_drain(void)
+{
+    if(!efs_client_pack_enabled())return EFS_OK;
+    uint64_t previous=efs_client_rpc_deadline_ms();
+    if(!previous)efs_client_rpc_set_deadline_ms(pack_now()/1000000+8000);
+    int rc=pack_drain_run();
+    efs_client_rpc_set_deadline_ms(previous);
+    return rc;
+}
+void efs_client_pack_stop(void)
+{
+    pthread_mutex_lock(&pack_mu);int started=pack_started;
+    __atomic_store_n(&pack_running,0,__ATOMIC_RELEASE);pthread_mutex_unlock(&pack_mu);
+    if(started)pthread_join(pack_tid,NULL);
+    for(unsigned gi=0;gi<2;gi++)if(pack_groups[gi] && !pack_groups[gi]->cohort.count) {
+        efs_buf_metadata_free(pack_groups[gi],sizeof(*pack_groups[gi]));pack_groups[gi]=NULL;
+    }
+    for(unsigned gi=0;gi<2;gi++)if(pack_retirements[gi] && !pack_retirements[gi]->active) {
+        efs_buf_metadata_free(pack_retirements[gi],sizeof(*pack_retirements[gi]));pack_retirements[gi]=NULL;
+    }
+    pack_started=0;
+}

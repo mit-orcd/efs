@@ -9124,7 +9124,7 @@ static void *host_query_thread(void *ctx)
 {
     struct efs_raft_host *h=ctx;
     uint64_t published[4096]={0},current[4096],first_dirty=0,last_attempt=0;
-    int failed=0,last_error=0;uint64_t last_error_log=0,work_completed=0;
+    int failed=0,last_error=0,cut_retry=0;uint64_t last_error_log=0,work_completed=0;
     struct efs_query_build_failure build_failure={0};
     uint64_t catalog_bytes=HOST_QUERY_BYTES;
     const char *backend=getenv("EFS_QUERY_BACKEND");
@@ -9154,11 +9154,12 @@ static void *host_query_thread(void *ctx)
         usleep(100000);
         query_page_sweep(0);
         uint64_t policy_version;uint32_t policy_mask;
-        if(efs_query_policy_get(h->kv,&policy_version,&policy_mask) || !policy_mask)continue;
+        if(efs_query_policy_get(h->kv,&policy_version,&policy_mask) || !policy_mask) {cut_retry=0;continue;}
         uint64_t now=query_mono_ms(),dirty=0;
         if (now-last_attempt<200) continue;
         int rc=efs_kv_lsm_metadata_revisions(h->kv,current,4096);
         if (rc) {
+            cut_retry=0;
             pthread_rwlock_wrlock(&h->query_lock);
             h->query_error=rc;
             pthread_rwlock_unlock(&h->query_lock);
@@ -9190,7 +9191,7 @@ static void *host_query_thread(void *ctx)
         }
         pthread_rwlock_unlock(&h->query_lock);
         if(lag_lock_ms)efs_query_stage_trace("lag-lock",0,lag_lock_ms,0,0);
-        if (!efs_query_refresh_due(now,first_dirty,last_attempt,dirty,initial,failed,
+        if (!efs_query_refresh_due_reason(now,first_dirty,last_attempt,dirty,initial,failed,cut_retry,
                                    HOST_QUERY_N,HOST_QUERY_T_MS)) continue;
         last_attempt=now;
         struct efs_kv_lsm_snapshot *source=NULL;
@@ -9205,6 +9206,7 @@ static void *host_query_thread(void *ctx)
         uint64_t source_start=work_enabled?query_mono_ms():0;
         rc=host_query_source(h,&source,&view,revisions,import_generation,&final_transaction_changed,work_enabled?&work:NULL);
         uint64_t capture_done=query_mono_ms();
+        cut_retry=efs_query_refresh_cut_retry(rc,final_transaction_changed,capture_done-now);
         if(work_enabled){work.capture_ms=capture_done-now;work.source_ms=capture_done-source_start;
             work.changed=final_transaction_changed;
             /* Eligibility is a historical experiment label, NEVER a scheduling input. */
