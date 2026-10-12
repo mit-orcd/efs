@@ -5,6 +5,7 @@
 int server_storage_engine_init(struct efsd_server *s);
 int server_storage_files_attach(struct efsd_server *s, const char *root, unsigned index);
 void server_storage_engine_close(struct efsd_server *s);
+int server_container_sync_parents(struct efsd_server *s, const char *path);
 int server_container_metadata_path(const char *relative);
 int server_storage_root_mode(const char *root);
 int server_container_get(struct efsd_server *s, const char *path, uint8_t *data,

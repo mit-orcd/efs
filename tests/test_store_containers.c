@@ -13,7 +13,7 @@
 #include <unistd.h>
 static int fault;
 static const char *watched_root;
-static unsigned outside_syncs, root_syncs, mkdir_calls, mapping_reads;
+static unsigned outside_syncs, root_syncs, directory_syncs, mkdir_calls, mapping_reads;
 static ssize_t container_pread(int fd,void *buf,size_t n,off_t off) {
     struct stat st;assert(!fstat(fd,&st));
     if(st.st_size==4096 && n==4096 && off==0)
@@ -30,6 +30,7 @@ static int container_sync(int fd)
     char p[64],name[8192];snprintf(p,sizeof(p),"/proc/self/fd/%d",fd);
     ssize_t n=readlink(p,name,sizeof(name)-1);assert(n>=0);name[n]=0;
     if(watched_root && S_ISDIR(st.st_mode)) {
+        directory_syncs++;
         if(!strcmp(name,watched_root))root_syncs++;
         else if(strncmp(name,watched_root,strlen(watched_root)))outside_syncs++;
     }
@@ -109,12 +110,28 @@ int main(int argc, char **argv)
         /* Idempotent same identity is charged once; replacement uses a fresh extent. */
         int cached_fd=((struct target*)server.container_targets[0])->data_fds[0];assert(cached_fd>=0);
         assert(!!(fcntl(cached_fd,F_GETFL)&O_DIRECT)==direct);
-        watched_root=server.storage_paths[0];outside_syncs=root_syncs=mkdir_calls=0;
+        watched_root=server.storage_paths[0];outside_syncs=root_syncs=directory_syncs=mkdir_calls=0;
         write_value(42,0,18,EFS_OK);assert(server.nodes[0].used==EFS_FRAGMENT_SIZE);
-        assert(!outside_syncs && root_syncs && !mkdir_calls);watched_root=NULL;
+        assert(!outside_syncs && !root_syncs && directory_syncs==1 && !mkdir_calls);watched_root=NULL;
         assert(((struct target*)server.container_targets[0])->data_fds[0]==cached_fd);
         /* One validated mapping serves quota admission and old-extent retirement. */
         mapping_reads=0;write_value(42,0,18,EFS_OK);assert(mapping_reads==1);
+        /* A failed ancestry barrier never seeds a hit. A pinned, removed
+         * directory must not match its replacement, even at the same path. */
+        char cache_dir[8192],cache_file[8192];
+        snprintf(cache_dir,sizeof(cache_dir),"%s/cache-proof",server.storage_paths[0]);
+        snprintf(cache_file,sizeof(cache_file),"%s/item",cache_dir);
+        assert(!mkdir(cache_dir,0755));
+        struct target *cache_target=target_at(&server,cache_file);
+        fault=2;assert(parents_at(cache_file,cache_target)==EFS_ERR_IO);fault=0;
+        watched_root=server.storage_paths[0];outside_syncs=root_syncs=directory_syncs=0;
+        assert(!parents_at(cache_file,cache_target));assert(root_syncs==1);
+        root_syncs=directory_syncs=0;
+        assert(!parents_at(cache_file,cache_target));assert(!root_syncs && directory_syncs==1);
+        assert(!rmdir(cache_dir));assert(!mkdir(cache_dir,0755));
+        root_syncs=directory_syncs=0;
+        assert(!parents_at(cache_file,cache_target));assert(root_syncs==1);
+        assert(!rmdir(cache_dir));watched_root=NULL;
         /* A nonce collision must fail without altering the existing temp/map. */
         char collision_path[8192],collision_tmp[8192];
         server_fragment_path(&server,&ex,42,0,0,collision_path,sizeof(collision_path));
@@ -179,9 +196,9 @@ int main(int argc, char **argv)
         full=server.container_targets[0];full->cursor_seg=CACHED_SEGS;full->cursor_block=0;
         /* New segment publication must keep the initialized root's durability
          * boundary, including segments outside the descriptor cache. */
-        watched_root=server.storage_paths[0];outside_syncs=root_syncs=0;
+        watched_root=server.storage_paths[0];outside_syncs=root_syncs=directory_syncs=0;
         efs_tls_chunk_gen=889;write_value(901,0,78,EFS_OK);
-        assert(!outside_syncs && root_syncs);watched_root=NULL;
+        assert(!outside_syncs && directory_syncs);watched_root=NULL;
         read_value(901,0,EFS_OK,78);
         restart();read_value(901,0,EFS_OK,78);memset(data,78,sizeof(data));efs_hash(data,sizeof(data),sum);
         assert(!server_delete_fragment_if_sum(&server,&ex,901,0,0,sum));

@@ -19,8 +19,10 @@
 #define BLOCKS (SEG_BYTES/PAGE)
 #define MAX_SEGS 1024u
 #define CACHED_SEGS 8u
+#define DURABLE_DIRS 256u
 struct target {
-    pthread_mutex_t mu;
+    pthread_mutex_t mu, durable_mu;
+    struct { int fd; dev_t dev; ino_t ino; } durable[DURABLE_DIRS];
     char root[4096], dir[8192];
     int lockfd, rootfd, failed;
     int direct_io, data_fds[CACHED_SEGS];
@@ -62,6 +64,31 @@ static int barrier(int fd){
     while(r&&errno==EINTR);
     return r?EFS_ERR_IO:EFS_OK;
 }
+/* A pinned directory descriptor prevents inode-number reuse from turning a
+ * cache hit into a durability guess. Entries are admitted only after the full
+ * ancestry barrier succeeds. GC may remove directories: a newly created one
+ * cannot match the pinned, unlinked inode. Collisions simply evict a hint. */
+static unsigned durable_slot(const struct stat *st)
+{
+    return (unsigned)((uint64_t)st->st_ino ^ (uint64_t)st->st_dev) % DURABLE_DIRS;
+}
+static int durable_known(struct target *t, const struct stat *st)
+{
+    unsigned i=durable_slot(st);
+    pthread_mutex_lock(&t->durable_mu);
+    int known=t->durable[i].fd>=0 && t->durable[i].dev==st->st_dev &&
+              t->durable[i].ino==st->st_ino;
+    pthread_mutex_unlock(&t->durable_mu);
+    return known;
+}
+static void durable_remember(struct target *t,int fd,const struct stat *st)
+{
+    unsigned i=durable_slot(st);
+    pthread_mutex_lock(&t->durable_mu);
+    if(t->durable[i].fd>=0)close(t->durable[i].fd);
+    t->durable[i].fd=fd;t->durable[i].dev=st->st_dev;t->durable[i].ino=st->st_ino;
+    pthread_mutex_unlock(&t->durable_mu);
+}
 /* Startup makes the root path durable. Runtime publication must sync every
  * directory below it and the root itself, but never unrelated ancestors. */
 static int parents_at(const char *path, struct target *t)
@@ -77,24 +104,42 @@ static int parents_at(const char *path, struct target *t)
     if(!slash)return EFS_ERR_IO;
     if(slash==p)slash[1]=0;
     else *slash=0;
+    int retained=-1;
+    struct stat retained_st={0};
     for(;;){
         int is_root=t && !strcmp(p,t->root);
         int fd=is_root?t->rootfd:t?openat(t->rootfd,p+strlen(t->root)+1,O_RDONLY|O_DIRECTORY|O_CLOEXEC):open(p,O_RDONLY|O_DIRECTORY|O_CLOEXEC);
-        int rc=EFS_OK;
+        int rc=EFS_OK, known=0;
         if(fd<0){
-            if(errno!=ENOENT)return EFS_ERR_IO;
+            if(errno!=ENOENT){rc=EFS_ERR_IO;goto failed;}
         }
         else{
+            struct stat st;
+            if(t && !is_root){
+                if(fstat(fd,&st)){close(fd);rc=EFS_ERR_IO;goto failed;}
+                known=durable_known(t,&st);
+                if(!known && retained<0){
+                    retained=fcntl(fd,F_DUPFD_CLOEXEC,0);
+                    retained_st=st;
+                }
+            }
+            /* A hit elides only unchanged ancestry. The namespace operation's
+             * containing directory still needs a fresh barrier on EVERY call. */
             rc=barrier(fd);
             if(!is_root && close(fd))rc=EFS_ERR_IO;
-            if(rc)return rc;
+            if(rc)goto failed;
         }
-        if(!strcmp(p,"/") || (root && !strcmp(p,root)))break;
+        if(known || !strcmp(p,"/") || (root && !strcmp(p,root)))break;
         slash=strrchr(p,'/');
-        if(!slash)return EFS_ERR_IO;
+        if(!slash){rc=EFS_ERR_IO;goto failed;}
         if(slash==p)slash[1]=0;
         else *slash=0;
+        continue;
+failed:
+        if(retained>=0)close(retained);
+        return rc;
     }
+    if(retained>=0)durable_remember(t,retained,&retained_st);
     return EFS_OK;
 }
 static int parents(const char *path) { return parents_at(path, NULL); }
@@ -193,6 +238,13 @@ static struct target *target_at(struct efsd_server *s,const char *path)
         if(!strncmp(path,t->root,n)&&path[n]=='/')return t;
     }
     return NULL;
+}
+/* Container deployments share the same durable physical hierarchy for their
+ * buffered metadata fragments. Files deployments retain their existing path. */
+int server_container_sync_parents(struct efsd_server *s,const char *path)
+{
+    struct target *t=target_at(s,path);
+    return t?parents_at(path,t):EFS_ERR_IO;
 }
 static void segpath(struct target *t,unsigned seg,char path[8192]){
     snprintf(path,8192,"%s/%016x.dat",t->dir,seg);
@@ -637,6 +689,8 @@ int server_storage_engine_init(struct efsd_server *s)
         t->direct_io=s->direct_io;
         for(unsigned j=0;j<CACHED_SEGS;j++)t->data_fds[j]=-1;
         pthread_mutex_init(&t->mu,NULL);
+        pthread_mutex_init(&t->durable_mu,NULL);
+        for(unsigned j=0;j<DURABLE_DIRS;j++)t->durable[j].fd=-1;
         if (!realpath(s->storage_paths[i], t->root)) goto fail;
         if (strlen(t->root) >= sizeof(s->storage_paths[i])) goto fail;
         strcpy(s->storage_paths[i], t->root);
@@ -694,6 +748,8 @@ void server_storage_engine_close(struct efsd_server *s)
         if(t->rootfd>=0)close(t->rootfd);
         if(t->lockfd>=0)close(t->lockfd);
         for(unsigned j=0;j<MAX_SEGS;j++)free(t->bits[j]);
+        for(unsigned j=0;j<DURABLE_DIRS;j++)if(t->durable[j].fd>=0)close(t->durable[j].fd);
+        pthread_mutex_destroy(&t->durable_mu);
         pthread_mutex_destroy(&t->mu);
         free(t);
         s->container_targets[i]=NULL;

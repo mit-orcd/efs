@@ -1149,6 +1149,7 @@ static int finish_shard_write(int fd, size_t bytes, int sync_write, int direct)
  * Unknown/uninitialized roots retain the full ancestry barrier. */
 static int sync_fragment_parents(struct efsd_server *s, const char *path)
 {
+    if (s && s->storage_engine) return server_container_sync_parents(s,path);
     char parent[8192], root[EFS_MAX_PATH] = {0};
     size_t n = strlen(path);
     if (!n || n >= sizeof(parent)) return EFS_ERR_INVAL;
