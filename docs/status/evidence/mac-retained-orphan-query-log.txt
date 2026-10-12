@@ -1,0 +1,15 @@
+2026-10-12T01:27:10.932Z query-restore: rc=-3 backend=disk
+2026-10-12T01:27:13.010Z query-restore: rc=-3 backend=disk
+2026-10-12T01:27:15.051Z query-restore: rc=-3 backend=disk
+2026-10-12T01:27:17.122Z query-restore: rc=-3 backend=disk
+2026-10-12T01:27:19.157Z query-restore: rc=-3 backend=disk
+2026-10-12T01:27:21.210Z query-restore: rc=-3 backend=disk
+2026-10-12T01:27:23.258Z query-restore: rc=-3 backend=disk
+2026-10-12T01:27:25.301Z query-restore: rc=-3 backend=disk
+2026-10-12T01:27:27.342Z query-restore: rc=-3 backend=disk
+2026-10-12T01:27:29.384Z query-restore: rc=-3 backend=disk
+2026-10-12T01:27:31.434Z query-restore: rc=-3 backend=disk
+2026-10-12T01:27:33.493Z query-restore: rc=-3 backend=disk
+2026-10-12T01:27:35.534Z query-restore: rc=-3 backend=disk
+2026-10-12T01:27:35.536Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=11
+2026-10-12T01:27:37.575Z query-restore: rc=-3 backend=disk

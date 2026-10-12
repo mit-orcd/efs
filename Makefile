@@ -490,6 +490,7 @@ test: all
 	python3 tests/test_query_capture_retry.py
 	python3 tests/test_query_page_barriers.py
 	python3 tests/test_query_stats_snapshot.py
+	python3 tests/test_query_retained_orphan.py
 	python3 tests/test_query_callback_affinity.py
 	python3 tests/test_feature_poll_deadline.py
 	python3 tests/test_feature_discovery_status.py
