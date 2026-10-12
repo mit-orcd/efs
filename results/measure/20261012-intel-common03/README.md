@@ -1,0 +1,5 @@
+# Intel common03bd89fb quiet TCP/direct acceptance
+
+Exact03bd89fb7de56c2c6af44ab3bd26c54caf4b8274,23318trackedregularinputs before/afterMATCH; productbuild+13focusedchecksPASS includingactualinboxnormal/ASanUBSan. Quiet7/jobs16/4G, original30/75/180 budgets: FAIL146s atclient3gracefulteardown. All7POSIXsuitesfail. Newhardrefusals includeclient1fsync_reopen_visibleEIO,client4basic_write_readEIO,client6basic_seek_cur_past_eof_writeEBUSY. Broad directory/path/concurrent/.efs timeouts also remain. No data-loss inference from errno alone. Mostclientruntimes114–120s versus~92sdef; eight-messagebudget maytrade throughputforfairness, no improvementclaim. Peer/cold/physical dependentgatesNOTRUN.
+
+Privatecontroller13:12:45UTCidle, no remainingprivateprocesses/mounts, all23318postsourceinputsMATCH.53rawfilesSHA256/size verified; completeexpectedinputmanifestretainedhere. Source/binaryidentity inbuild/command/result records. Originalfailedstores/testtrees retained. Candidate notaccepted or deployedtoproduction. Nextboundeddiagnostic selectsoriginal60-leveltestonly7mounts/30s and timesphase/syscallwork; itwillnotcountasquiet/fullPOSIXacceptance.
