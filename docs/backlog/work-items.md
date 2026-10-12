@@ -5175,13 +5175,14 @@ See the [current status and evidence index](../status/w111-nuc-persistence-inves
 
 ### W112 — ordinary full overwrite loses acknowledged bytes on STALE replay
 
-**Priority:** release correctness blocker. **Cluster:** AMD/TCP, direct and buffered.
+**Status:** closed at `02b9918b` for the reproduced canonical full-overwrite replay defect. **Cluster:** AMD/TCP, direct and buffered.
 **Owner:** release integration; coordinate with NUC/writeback owner.
 
 At d9d39acc a fsynced512-byte file overwritten with262,160 bytes reports
 successful fsync/close, but the old first chunk survives on primary, peers and
 cold restart. Actual-code regression fails; bounded full-ownership replay fix
-is implemented, qualification pending. Keep partial-write ownership and fresh
+passes complete normal/fault native, eleven sanitizer gates and both-mode exact
+primary/peer/cold bytes plus physical cleanup; input and binary identities are retained. Keep partial-write ownership and fresh
 publication/fence observations. Close only after full merged normal/fault,
 sanitisers and both-mode exact immediate/cold/live gates pass.
 [Evidence and closure scope](../status/w112-full-overwrite-replay-20261012.md).

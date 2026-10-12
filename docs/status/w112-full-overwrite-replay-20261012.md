@@ -1,7 +1,7 @@
 # W112 — acknowledged ordinary full-overwrite loss on STALE replay
 
-Status: open release correctness blocker; bounded fix implemented, full merged
-and live qualification pending. Cluster: AMD, isolated four-daemon TCP fixtures,
+Status: closed for the reproduced canonical full-overwrite STALE replay defect;
+repair and full merged/live qualification pass at `02b9918b`. Cluster: AMD, isolated four-daemon TCP fixtures,
 both direct and buffered storage. Production stores/binaries unchanged.
 
 ## Reproduction and byte evidence
@@ -40,7 +40,7 @@ regression and existing peer-byte/tombstone/race/error tests pass normally and
 with ASan/UBSan. A new `--ordinary-overwrite-only` live fixture covers former
 512-byte spans becoming a full chunk, two chunks plus a tail, full zero bytes
 and a partial replacement, immediate primary/peer reads, cold bytes and
-physical cleanup. Its Linux both-mode qualification is pending.
+physical cleanup. Its Linux both-mode qualification passes at `02b9918b`.
 
 ## Closure gates
 
@@ -49,3 +49,19 @@ native and sanitizer gates, and retain exact source/binary/configuration
 identity. Review the canonical ownership boundary independently. Packing
 jobs16/direct and other owners' unfinished acceptance remain separate release
 blockers even after this repair. No push, tag or promotion.
+
+## Qualified closure checkpoint
+
+At frozen `02b9918b`, complete AMD Linux normal and EFS_FAULTS=1 `make all test`
+and eleven ASan/UBSan gates pass. All 1,335 source/linked-evidence inputs remain
+unchanged. Both direct and buffered ordinary-overwrite runs pass every exact
+primary, warmed-peer and cold SHA256 oracle for all four cases, then physical
+fragment and metadata queue cleanup; normal mounts restore successfully.
+[Full gates, binary identities and raw both-mode evidence](../../results/measure/20261012-v030-overwrite-qualified/02b9918b/acceptance-summary.json)
+include 41 retrieved artifacts verified against their SHA256 manifest.
+
+Independent [boundary review](../reviews/w112-overwrite-20261011/README.md)
+reproduces the old-source failure and passes fixed generation/fence, partial
+range and retained-span probes normally and under sanitizers. This closes the
+reproduced ownership defect; it does not certify unrelated writeback paths or
+packing load acceptance. Direct seven-client/jobs16 still fails separately.

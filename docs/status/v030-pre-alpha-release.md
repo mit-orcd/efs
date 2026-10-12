@@ -437,3 +437,14 @@ controls instead expose [W112](w112-full-overwrite-replay-20261012.md): ordinary
 full overwrite loses first-chunk bytes despite successful fsync, including
 cold reads. It blocks release independently of packing timeouts. A bounded
 actual-code repair and focused regressions pass; full/live qualification is next.
+
+### W112 qualified; packing pressure remains open
+
+Frozen `02b9918b` passes complete AMD normal/fault native and eleven sanitizer
+gates with all1,335 source/linked inputs unchanged. Both ordinary-overwrite
+modes pass exact primary/peer/cold bytes for all four cases, physical cleanup
+and normal mount restoration. Independent review reproduces baseline loss and
+passes ownership boundary probes. [W112 closure](w112-full-overwrite-replay-20261012.md)
+is limited to that reproduced defect. Direct seven-client/jobs16 pressure still
+fails; this is not release acceptance. New ORCD follower-read deadline and
+Mac append completion checkpoints require reconciliation and full qualification.

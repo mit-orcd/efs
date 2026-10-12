@@ -26,9 +26,9 @@ and stats/find timeouts; cold/GC NOTRUN). Normal mount restoration passes.
 Bounded query-cut/barrier candidate `d9d39acc` passes full merged normal/fault
 native and ten sanitizer gates; buffered seven-client/jobs16 cold/GC acceptance
 passes. Direct packing remains blocked; ordinary pressure controls pass both
-modes. [W112](w112-full-overwrite-replay-20261012.md) records newly reproduced
-acknowledged ordinary overwrite loss through cold restart; bounded repair
-and full/live qualification are in progress.
+modes. [W112](w112-full-overwrite-replay-20261012.md) records the repaired
+acknowledged ordinary overwrite loss: full normal/fault, eleven sanitizer and
+both-mode primary/peer/cold/cleanup gates pass at `02b9918b`.
 Independent authority review NET fallback is implemented with normal and
 ASan/UBSan actual-caller regressions; semantic refusals and fresh guards remain.
 ORCD packing timeouts remain
@@ -175,7 +175,7 @@ its closure is independent of W111.
 |---|---|---|
 | W97 AMD data-GC overload/admission | Closed: direct/buffered unpaced, cold recovery, physical drain and deployed service audit pass | [Closure](amd-overload-admission-20261011.md) |
 | W97 replication-inbox feedback | Open: sustained receiver-feedback/queue/catch-up acceptance | [W97](../backlog/work-items.md#w97) |
-| W112 ordinary full-overwrite STALE replay | Open release correctness blocker: first chunk reverts to old bytes despite successful fsync; bounded fix/live gates pending | [Status](w112-full-overwrite-replay-20261012.md) |
+| W112 ordinary full-overwrite STALE replay | Closed reproduced canonical overwrite replay defect: full normal/fault, eleven sanitizers and both-mode exact immediate/cold/cleanup gates PASS at 02b9918b | [Status](w112-full-overwrite-replay-20261012.md) |
 | W111 NUC persistence latency | Open: isolate filesystem, block queue and device/cache effects | [W111](../backlog/work-items.md#w111) · [Status](w111-nuc-persistence-investigation-20261011.md) |
 
 
