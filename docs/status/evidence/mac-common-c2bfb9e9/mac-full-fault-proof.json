@@ -1,0 +1,14 @@
+{
+  "candidate": "c2bfb9e9a281aae33dfaa01689e61866ccf60af8",
+  "gate": "full make test fault",
+  "exit": 0,
+  "verified_inputs": 1557,
+  "verified_directories": 52,
+  "binaries": {
+    "efsd": "6e13249f4603cf68d465cc805c50b5750d23da80830e817934d420c93934ff11",
+    "efs-fuse": "b725513dbdd41fa18049c445ee8a5c0156698cce6a50f4c79bd27582583c7d4a",
+    "efs-mgmt": "86f2ba23de34b3285c277a206288235db7cbc4ae456d5955ae4797bf28dbf621",
+    "libefs.a": "17fe101383f69a610449b7fcf3f9e78dff3cd4e076dda7040916b69e649d5d08"
+  },
+  "installed_service": "active"
+}
