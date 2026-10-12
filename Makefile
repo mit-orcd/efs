@@ -355,6 +355,7 @@ test: all
 	python3 tests/test_lookup_replacement.py
 	python3 tests/test_lookup_read_group.py
 	python3 tests/test_readindex_operation.py
+	python3 tests/test_readindex_completion.py
 	python3 tests/test_readindex_pair.py
 	python3 tests/test_readindex_remote_pair.py
 	python3 tests/test_read_retry_budget.py

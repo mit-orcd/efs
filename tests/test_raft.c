@@ -429,10 +429,19 @@ static void test_replicate_and_readindex(void)
     CHECK(efs_raft_read_current(n.r[lid]), "fresh quorum covers new commit");
     {
         uint64_t completed = efs_raft_read_round(n.r[lid]);
+        uint64_t proof_round=0, proof_index=0;
+        CHECK(efs_raft_read_proven(n.r[lid],&proof_round,&proof_index) && proof_round==completed && proof_index>=idx,"current fresh quorum exposed");
         struct efs_raft_msg delayed = {0};
         for (i = 0; i < 3; i++)
             n.drop[i] = (i != lid);
         CHECK(efs_raft_read_begin(n.r[lid]) == EFS_OK, "partitioned leader begins fresh read");
+        CHECK(efs_raft_read_proven(n.r[lid],&proof_round,&proof_index) &&
+              proof_round==completed && proof_index>=idx,
+              "late admitted waiter retains completed proof during next pending round");
+        CHECK(proof_round < efs_raft_read_round(n.r[lid]),
+              "old proof cannot satisfy newer pre-send admission");
+        CHECK(!efs_raft_read_proven(n.r[lid],NULL,&proof_index),"invalid proof output refused");
+
         delayed.type = EFS_RAFT_MSG_AE_REP;
         delayed.to = lid;
         delayed.term = efs_raft_term(n.r[lid]);
@@ -446,9 +455,12 @@ static void test_replicate_and_readindex(void)
             CHECK(efs_raft_recv(n.r[lid], &delayed) == EFS_OK, "old completed-round reply");
         }
         CHECK(!efs_raft_read_ready(n.r[lid]), "partition cannot reuse completed authority");
+        CHECK(efs_raft_step_down(n.r[lid])==EFS_OK,"same-term voluntary role transition");
+        CHECK(!efs_raft_read_proven(n.r[lid],&proof_round,&proof_index),"same-term stepdown forgets retained proof");
         delayed.term++;
         CHECK(efs_raft_recv(n.r[lid], &delayed) == EFS_OK, "higher term fences read");
         CHECK(!efs_raft_read_done(n.r[lid]), "stepped-down leader has no read authority");
+        CHECK(!efs_raft_read_proven(n.r[lid],&proof_round,&proof_index) && !proof_round && !proof_index,"higher term invalidates retained proof");
     }
     CHECK(!efs_raft_read_pending(n.r[0] == n.r[lid] ? n.r[1] : n.r[0]),
           "follower never reports a pending round");
@@ -663,6 +675,8 @@ static void test_readindex_control(void)
     for(int i=0;i<3;i++)n.drop[i]=(i!=leader);
     CHECK(efs_raft_change(n.r[leader],7u&~(1u<<((leader+2)%3)))==EFS_OK,
           "control fixture has pending joint configuration");
+    uint64_t proof_round=0,proof_index=0;
+    CHECK(!efs_raft_read_proven(n.r[leader],&proof_round,&proof_index),"configuration change invalidates retained proof");
     CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"joint read begins normal quorum round");
     reply.last_log_index=efs_raft_read_round(n.r[leader]);
     CHECK(!efs_raft_read_control(n.r[leader],&reply),"pending joint configuration stays on pump");

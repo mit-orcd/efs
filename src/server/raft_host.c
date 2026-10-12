@@ -309,6 +309,7 @@ struct host_group {
      * taken by a handler only to mutate raft (propose, read_begin). */
     uint64_t v_seq; /* odd while publishing; protects the entire read predicate */
     uint64_t v_commit, v_applied, v_read_index, v_read_round, v_term;
+    uint64_t v_proven_index, v_proven_round;
     int v_has;          /* 1 when a local replica exists */
     int v_role, v_leader;
     int v_read_pending, v_read_done;
@@ -3250,7 +3251,7 @@ static void host_publish_view(struct efs_raft_host *h, int gi)
     struct host_group *g = &h->g[gi];
     struct efs_raft *r = g->r;
 
-    uint64_t commit, applied, term, ridx, round;
+    uint64_t commit, applied, term, ridx, round, proven_index, proven_round;
     int role, leader, rpend, rdone, changed;
 
     __atomic_add_fetch(&g->v_seq, 1, __ATOMIC_SEQ_CST);
@@ -3258,6 +3259,9 @@ static void host_publish_view(struct efs_raft_host *h, int gi)
         if (V_LOAD(g->v_has))
             V_STORE(g->v_stamp, V_LOAD(g->v_stamp) + 1);
         V_STORE(g->v_has, 0);
+        V_STORE(g->v_read_done, 0);
+        V_STORE(g->v_proven_round, 0);
+        V_STORE(g->v_proven_index, 0);
         __atomic_add_fetch(&g->v_seq, 1, __ATOMIC_RELEASE);
         return;
     }
@@ -3269,13 +3273,15 @@ static void host_publish_view(struct efs_raft_host *h, int gi)
     ridx = efs_raft_read_index(r);
     round = efs_raft_read_round(r);
     rpend = efs_raft_read_pending(r);
-    rdone = efs_raft_read_quorum(r);
+    rdone = efs_raft_read_proven(r, &proven_round, &proven_index);
     changed = !V_LOAD(g->v_has) || V_LOAD(g->v_commit) != commit ||
               V_LOAD(g->v_applied) != applied || V_LOAD(g->v_term) != term ||
               V_LOAD(g->v_role) != role || V_LOAD(g->v_leader) != leader ||
               V_LOAD(g->v_read_index) != ridx || V_LOAD(g->v_read_round) != round ||
               V_LOAD(g->v_read_pending) != rpend ||
-              V_LOAD(g->v_read_done) != rdone;
+              V_LOAD(g->v_read_done) != rdone ||
+              V_LOAD(g->v_proven_round) != proven_round ||
+              V_LOAD(g->v_proven_index) != proven_index;
     V_STORE(g->v_commit, commit);
     V_STORE(g->v_applied, applied);
     V_STORE(g->v_term, term);
@@ -3285,6 +3291,8 @@ static void host_publish_view(struct efs_raft_host *h, int gi)
     V_STORE(g->v_read_round, round);
     V_STORE(g->v_read_pending, rpend);
     V_STORE(g->v_read_done, rdone);
+    V_STORE(g->v_proven_round, proven_round);
+    V_STORE(g->v_proven_index, proven_index);
     V_STORE(g->v_has, 1);
     /* Stamp last: a waiter that read the new stamp has the new fields. */
     if (changed)
@@ -3304,6 +3312,7 @@ static void host_publish_group(struct efs_raft_host *h, uint8_t group)
 struct host_view {
     int has, role, leader, read_pending, read_done;
     uint64_t commit, applied, read_index, read_round, term;
+    uint64_t proven_index, proven_round;
     uint64_t stamp; /* wake generation from the same coherent publish */
 };
 
@@ -3327,6 +3336,8 @@ retry:
     v->applied = V_LOAD(g->v_applied);
     v->read_index = V_LOAD(g->v_read_index);
     v->read_round = V_LOAD(g->v_read_round);
+    v->proven_round = V_LOAD(g->v_proven_round);
+    v->proven_index = V_LOAD(g->v_proven_index);
     v->term = V_LOAD(g->v_term);
     v->role = V_LOAD(g->v_role);
     v->leader = V_LOAD(g->v_leader);
@@ -3341,8 +3352,8 @@ static int host_view_covers(const struct host_view *v, uint64_t want,
                             uint64_t round, uint64_t term)
 {
     return v->has && v->role == EFS_RAFT_LEADER && v->read_done &&
-           v->read_round >= round && v->term == term &&
-           v->read_index >= want && v->applied >= v->read_index;
+           v->proven_round >= round && v->term == term &&
+           v->proven_index >= want && v->applied >= v->proven_index;
 }
 
 /* Sleep until the pump wakes this waiter or `end` passes. cv_mu HELD by

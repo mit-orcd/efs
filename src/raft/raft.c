@@ -72,6 +72,8 @@ struct efs_raft {
     uint32_t hb_elapsed;
     uint32_t heartbeat_ticks;
     uint64_t read_index, read_round;
+    uint64_t read_proven_index, read_proven_round, read_proven_term;
+    uint32_t read_proven_cfg_old, read_proven_cfg_new;
     uint32_t read_cfg_old, read_cfg_new;
     unsigned read_acks;
     int read_in_flight;
@@ -216,10 +218,17 @@ static int is_cfg_cmd(const uint8_t *cmd, uint32_t clen)
     return 0;
 }
 
+static void read_proof_forget(struct efs_raft *r)
+{
+    r->read_proven_round = r->read_proven_index = r->read_proven_term = 0;
+    r->read_proven_cfg_old = r->read_proven_cfg_new = 0;
+}
+
 static void fence_storage(struct efs_raft *r)
 {
     r->storage_failed = 1;
     r->commit_index = r->last_applied;
+    read_proof_forget(r);
     r->role = EFS_RAFT_FOLLOWER;
     r->leader = -1;
     r->allow_campaign = 0;
@@ -271,6 +280,11 @@ static void install_log_cfg(struct efs_raft *r, const uint8_t *cmd,
     if (!is_cfg_cmd(cmd, clen))
         return;
     a = rd32(cmd + 1);
+    b = cmd[0] == EFS_RAFT_CMD_JOINT ? rd32(cmd + 5) : 0;
+    if (a != r->log_old || b != r->log_new) {
+        read_proof_forget(r);
+        r->read_in_flight = 0;
+    }
     if (cmd[0] == EFS_RAFT_CMD_JOINT) {
         b = rd32(cmd + 5);
         r->log_old = a;
@@ -289,6 +303,8 @@ static int reload_cfg_from_log(struct efs_raft *r)
 {
     uint64_t last_i = 0, last_t = 0, idx;
 
+    read_proof_forget(r);
+    r->read_in_flight = 0;
     r->log_old = r->app_old;
     r->log_new = r->app_new;
     r->joint_idx = 0;
@@ -364,6 +380,7 @@ static int maybe_step_down(struct efs_raft *r, uint64_t term)
         return 0;
     r->current_term = term;
     r->voted_for = -1;
+    read_proof_forget(r);
     r->role = EFS_RAFT_FOLLOWER;
     r->leader = -1;
     r->vote_bits = 0;
@@ -376,6 +393,7 @@ static int maybe_step_down(struct efs_raft *r, uint64_t term)
 static void maybe_leave(struct efs_raft *r)
 {
     if (r->role == EFS_RAFT_LEADER && !in_app_cfg(r, r->id)) {
+        read_proof_forget(r);
         r->role = EFS_RAFT_FOLLOWER;
         r->leader = -1;
         r->vote_bits = 0;
@@ -1070,11 +1088,13 @@ static int become_leader(struct efs_raft *r)
     int rc;
 
     if (r->admit && r->admit(r->app, NULL, 0, EFS_RAFT_ADMIT_LEAD) != EFS_OK) {
+        read_proof_forget(r);
         r->role = EFS_RAFT_FOLLOWER;
         r->leader = -1;
         reset_election(r);
         return EFS_OK;
     }
+    read_proof_forget(r);
     r->role = EFS_RAFT_LEADER;
     r->leader = r->id;
     r->read_in_flight = 0;
@@ -1128,6 +1148,7 @@ static int start_election(struct efs_raft *r)
     }
     r->current_term++;
     r->voted_for = (int32_t)r->id;
+    read_proof_forget(r);
     r->role = EFS_RAFT_CANDIDATE;
     r->leader = -1;
     r->vote_bits = 1u << r->id;
@@ -1219,6 +1240,7 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
         m.success = 0;
         return send_msg(r, &m);
     }
+    read_proof_forget(r);
     r->role = EFS_RAFT_FOLLOWER;
     r->leader = in->from;
     reset_election(r);
@@ -1483,6 +1505,8 @@ static int snap_installed(struct efs_raft *r, struct efs_raft_msg *m,
         return rc;
     }
     if (take_cfg) {
+        read_proof_forget(r);
+        r->read_in_flight = 0;
         r->last_applied = incl;
         r->app_old = r->log_old = cfg_old;
         r->app_new = r->log_new = cfg_new;
@@ -1537,6 +1561,7 @@ static int on_snap_req(struct efs_raft *r, const struct efs_raft_msg *in)
         m.match_index = last_i;
         return send_msg(r, &m);
     }
+    read_proof_forget(r);
     r->role = EFS_RAFT_FOLLOWER;
     r->leader = in->from;
     reset_election(r);
@@ -1694,6 +1719,7 @@ struct efs_raft *efs_raft_new(const struct efs_raft_cfg *cfg)
     r->id = cfg->id;
     r->group = cfg->group;
     r->boot_id = cfg->boot_id ? cfg->boot_id : 1;
+    read_proof_forget(r);
     r->role = EFS_RAFT_FOLLOWER;
     r->leader = -1;
     r->voted_for = -1;
@@ -2394,6 +2420,7 @@ int efs_raft_step_down(struct efs_raft *r)
         return EFS_ERR_INVAL;
     if (r->role == EFS_RAFT_FOLLOWER)
         return EFS_OK;
+    read_proof_forget(r);
     r->role = EFS_RAFT_FOLLOWER;
     r->leader = -1;
     r->vote_bits = 0;
@@ -2447,6 +2474,16 @@ int efs_raft_read_begin(struct efs_raft *r)
         return EFS_ERR_NOT_PRIMARY;
     if (r->read_round == UINT64_MAX)
         return EFS_ERR_BUSY;
+    /* Keep the completed proof for readers admitted before its send. A new
+     * round must not erase their completion while they wait to be scheduled.
+     * New arrivals still require read_round+1 and cannot use this proof. */
+    if (efs_raft_read_quorum(r)) {
+        r->read_proven_index = r->read_index;
+        r->read_proven_round = r->read_round;
+        r->read_proven_term = r->current_term;
+        r->read_proven_cfg_old = r->read_cfg_old;
+        r->read_proven_cfg_new = r->read_cfg_new;
+    }
     r->read_round++;
     r->read_cfg_old = r->log_old;
     r->read_cfg_new = r->log_new;
@@ -2567,6 +2604,23 @@ int efs_raft_read_quorum(const struct efs_raft *r)
     /* The same own-term commitment required by normal ReadIndex. */
     return log_term((struct efs_raft *)r,r->commit_index,&term)==EFS_OK &&
            term==r->current_term;
+}
+
+int efs_raft_read_proven(const struct efs_raft *r, uint64_t *round,
+                          uint64_t *index)
+{
+    if (!round || !index) return 0;
+    *round = *index = 0;
+    if (!r || r->storage_failed || r->role != EFS_RAFT_LEADER) return 0;
+    if (efs_raft_read_quorum(r)) {
+        *round = r->read_round; *index = r->read_index;
+        return 1;
+    }
+    if (!r->read_proven_round || r->read_proven_term != r->current_term ||
+        r->read_proven_cfg_old != r->log_old ||
+        r->read_proven_cfg_new != r->log_new) return 0;
+    *round = r->read_proven_round; *index = r->read_proven_index;
+    return 1;
 }
 
 int efs_raft_read_done(const struct efs_raft *r)
