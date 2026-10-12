@@ -1,0 +1,52 @@
+{
+  "nodes": [
+    {
+      "host": "fcstor003",
+      "fragments": [
+        "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1824/3951/3516/8901/5897/880559459502520734/1"
+      ],
+      "fences": [
+        {
+          "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/18243951351689015897/880559459502520734",
+          "magic": "EFSDEAD1",
+          "bytes": 64,
+          "valid_identity": true
+        }
+      ]
+    },
+    {
+      "host": "fcstor004",
+      "fragments": [
+        "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1824/3951/3516/8901/5897/880559459502520734/2"
+      ],
+      "fences": [
+        {
+          "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/18243951351689015897/880559459502520734",
+          "magic": "EFSDEAD1",
+          "bytes": 64,
+          "valid_identity": true
+        }
+      ]
+    },
+    {
+      "host": "fcstor005",
+      "fragments": [],
+      "fences": [
+        {
+          "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/18243951351689015897/880559459502520734",
+          "magic": "EFSDEAD1",
+          "bytes": 64,
+          "valid_identity": true
+        }
+      ]
+    },
+    {
+      "host": "fcstor006",
+      "fragments": [
+        "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1824/3951/3516/8901/5897/880559459502520734/0"
+      ],
+      "fences": []
+    }
+  ],
+  "total": 3
+}

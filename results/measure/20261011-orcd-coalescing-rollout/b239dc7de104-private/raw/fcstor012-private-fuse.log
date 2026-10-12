@@ -1,0 +1,42 @@
+2026-10-12T01:35:36.974Z efs-fuse: legacy export label 'fs' is ignored; mounting the single export 'default' (id=1)
+2026-10-12T01:35:36.974Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T01:26:12Z on fcstor012), build=b239dc7d-release-normal: starting export=default mount=/tmp/efs-b239-mount
+2026-10-12T01:35:36.975Z Discovered 4 cluster nodes from 172.16.223.57:19842
+2026-10-12T01:35:36.975Z   node id=1 172.16.223.57:19842
+2026-10-12T01:35:36.975Z   node id=2 172.16.223.58:19842
+2026-10-12T01:35:36.975Z   node id=3 172.16.223.59:19842
+2026-10-12T01:35:36.975Z   node id=4 172.16.223.60:19842
+2026-10-12T01:35:36.975Z fetching metadata...
+2026-10-12T01:35:36.975Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T01:35:36.975Z export id=1 name=default
+2026-10-12T01:35:36.975Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T01:35:36.975Z efs-fuse daemon pid=2693355
+2026-10-12T01:35:36.977Z efs-fuse: workers max=10 idle=10
+2026-10-12T01:35:36.979Z fuse serving
+2026-10-12T01:39:48.793Z efs-fuse: legacy export label 'fs' is ignored; mounting the single export 'default' (id=1)
+2026-10-12T01:39:48.793Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T01:26:12Z on fcstor012), build=b239dc7d-release-normal: starting export=default mount=/tmp/efs-b239-mount
+2026-10-12T01:39:48.794Z Discovered 4 cluster nodes from 172.16.223.57:19842
+2026-10-12T01:39:48.794Z   node id=1 172.16.223.57:19842
+2026-10-12T01:39:48.794Z   node id=2 172.16.223.58:19842
+2026-10-12T01:39:48.794Z   node id=3 172.16.223.59:19842
+2026-10-12T01:39:48.794Z   node id=4 172.16.223.60:19842
+2026-10-12T01:39:48.794Z fetching metadata...
+2026-10-12T01:39:48.794Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T01:39:48.794Z export id=1 name=default
+2026-10-12T01:39:48.794Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T01:39:48.794Z efs-fuse daemon pid=2693846
+2026-10-12T01:39:48.796Z efs-fuse: workers max=10 idle=10
+2026-10-12T01:39:48.798Z fuse serving
+2026-10-12T01:44:00.093Z efs-fuse: legacy export label 'fs' is ignored; mounting the single export 'default' (id=1)
+2026-10-12T01:44:00.093Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T01:26:12Z on fcstor012), build=b239dc7d-release-normal: starting export=default mount=/tmp/efs-b239-mount
+2026-10-12T01:44:00.094Z Discovered 4 cluster nodes from 172.16.223.57:19842
+2026-10-12T01:44:00.094Z   node id=1 172.16.223.57:19842
+2026-10-12T01:44:00.094Z   node id=2 172.16.223.58:19842
+2026-10-12T01:44:00.094Z   node id=3 172.16.223.59:19842
+2026-10-12T01:44:00.094Z   node id=4 172.16.223.60:19842
+2026-10-12T01:44:00.094Z fetching metadata...
+2026-10-12T01:44:00.094Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T01:44:00.094Z export id=1 name=default
+2026-10-12T01:44:00.094Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T01:44:00.094Z efs-fuse daemon pid=2694364
+2026-10-12T01:44:00.096Z efs-fuse: workers max=10 idle=10
+2026-10-12T01:44:00.098Z fuse serving

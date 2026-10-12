@@ -1,0 +1,582 @@
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -Dfsync=efs_index_test_fsync -Dpwrite=efs_index_test_pwrite -Dreaddir=efs_index_test_readdir -c -o tests/principles_index_fault.o src/bench/principles_index.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o tests/test_put_ticket.o tests/test_put_ticket.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -o tests/test_bench_latency tests/test_bench_latency.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -o tests/test_writer_routing tests/test_writer_routing.c -lpthread
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -o tests/test_fence_view tests/test_fence_view.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -o tests/test_reply_buffers tests/test_reply_buffers.c -lpthread
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -o tests/test_bufpool tests/test_bufpool.c src/common/common.c -lpthread
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -Isrc/sim -c -o src/sim/sim.o src/sim/sim.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -Isrc/sim -c -o src/sim/sim_raft.o src/sim/sim_raft.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -Isrc/sim -c -o src/sim/sim_ctrl.o src/sim/sim_ctrl.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -Isrc/sim -c -o src/sim/sim_txn.o src/sim/sim_txn.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -Isrc/sim -c -o src/sim/sim_ns.o src/sim/sim_ns.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -Isrc/sim -c -o src/sim/sim_sess.o src/sim/sim_sess.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -Isrc/sim -c -o src/sim/sim_dir.o src/sim/sim_dir.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -Isrc/sim -c -o src/sim/sim_lock.o src/sim/sim_lock.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -Isrc/sim -c -o src/sim/sim_disk.o src/sim/sim_disk.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o tests/test_query_delta.o tests/test_query_delta.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -o tests/test_small_segment tests/test_small_segment.c src/data/erasure.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/admission.o src/common/admission.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/append_plan.o src/meta/append_plan.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/publication.o src/common/publication.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/publication_ack.o src/common/publication_ack.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/common.o src/common/common.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/packed_segment.o src/common/packed_segment.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/packed_reader.o src/common/packed_reader.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/pack_cohort.o src/common/pack_cohort.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/pack_ledger.o src/common/pack_ledger.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/log_ts.o src/common/log_ts.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/batch_obs.o src/common/batch_obs.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/version.o src/common/version.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/protocol.o src/common/protocol.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/wire/wire.o src/wire/wire.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/erasure.o src/data/erasure.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/store_mem.o src/data/store_mem.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/transport_loop.o src/data/transport_loop.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/transport_conn.o src/data/transport_conn.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_mem.o src/kv/kv_mem.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_key.o src/kv/kv_key.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_lsm.o src/kv/kv_lsm.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_compact.o src/kv/kv_compact.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_wal.o src/kv/kv_wal.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_seg.o src/kv/kv_seg.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_snap.o src/kv/kv_snap.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/query_catalog.o src/meta/query_catalog.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/query_disk.o src/meta/query_disk.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/query_policy.o src/meta/query_policy.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/name_index.o src/meta/name_index.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/metadata.o src/meta/metadata.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/meta_apply.o src/meta/meta_apply.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/pack_mapping.o src/meta/pack_mapping.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/pack_admission.o src/meta/pack_admission.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/txn.o src/meta/txn.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/session.o src/meta/session.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/put_ticket.o src/meta/put_ticket.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/lock.o src/meta/lock.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/dir_layout.o src/meta/dir_layout.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/dir_spread.o src/meta/dir_spread.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/sim/opid.o src/sim/opid.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft.o src/raft/raft.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft_mem.o src/raft/raft_mem.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft_disk.o src/raft/raft_disk.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft_log.o src/raft/raft_log.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/placement.o src/common/placement.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/checksum.o src/common/checksum.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/network.o src/common/network.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/rdma.o src/common/rdma.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o deps/blake3/blake3.o deps/blake3/blake3.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o deps/blake3/blake3_portable.o deps/blake3/blake3_portable.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o deps/blake3/blake3_dispatch.o deps/blake3/blake3_dispatch.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -msse2 -c -o deps/blake3/blake3_sse2.o deps/blake3/blake3_sse2.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -msse4.1 -c -o deps/blake3/blake3_sse41.o deps/blake3/blake3_sse41.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -mavx2 -maes -c -o deps/blake3/blake3_avx2.o deps/blake3/blake3_avx2.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -mavx512f -mavx512vl -c -o deps/blake3/blake3_avx512.o deps/blake3/blake3_avx512.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/client.o src/client/client.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/ops.o src/client/ops.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/read.o src/client/read.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/write.o src/client/write.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/bufpool.o src/client/bufpool.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/writer_state.o src/client/writer_state.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/publication_ack_owner.o src/client/publication_ack_owner.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/publication_writeback.o src/client/publication_writeback.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/pack_write.o src/client/pack_write.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/put_ticket_owner.o src/client/put_ticket_owner.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/put_upload.o src/client/put_upload.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/inode_rpc.o src/client/inode_rpc.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/stage_evict.o src/client/stage_evict.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/node_cache.o src/client/node_cache.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/packed_upload.o src/server/packed_upload.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/put_fence.o src/server/put_fence.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/put_upload.o src/server/put_upload.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/efsd.o src/server/efsd.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/store.o src/server/store.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/store_nvme.o src/server/store_nvme.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/store_containers.o src/server/store_containers.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/handler.o src/server/handler.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/cluster.o src/server/cluster.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/peer_pool.o src/server/peer_pool.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/writer.o src/server/writer.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/iostats.o src/server/iostats.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/thread.o src/server/thread.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/raft_host.o src/server/raft_host.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -I/home/erbmi1/orcd/scratch/efs/orcd-test/deps/libfuse/include/fuse3  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/efs_fuse.o src/client/efs_fuse.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/efs_bench.o src/client/efs_bench.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/bench/bench_local.o src/bench/bench_local.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/bench/blake3_bench.o src/bench/blake3_bench.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/bench/io_bench.o src/bench/io_bench.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/bench/storage_principles.o src/bench/storage_principles.c
+src/server/raft_host.c:12948:12: warning: ‘host_append_complete_batched’ defined but not used [-Wunused-function]
+12948 | static int host_append_complete_batched(struct efs_raft_host *h,efs_ino_t ino,
+      |            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/bench/principles_index.o src/bench/principles_index.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/bench/storage_churn.o src/bench/storage_churn.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/bench/storage_ranges.o src/bench/storage_ranges.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -DEFS_BENCH_BUILD -ffunction-sections -fdata-sections -c -o src/bench/store.o src/server/store.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -DEFS_BENCH_BUILD -ffunction-sections -fdata-sections -c -o src/bench/store_nvme.o src/server/store_nvme.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -DEFS_BENCH_BUILD -ffunction-sections -fdata-sections -c -o src/bench/store_containers.o src/server/store_containers.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -DEFS_BENCH_BUILD -ffunction-sections -fdata-sections -c -o src/bench/writer.o src/server/writer.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -DEFS_BENCH_BUILD -ffunction-sections -fdata-sections -c -o src/bench/iostats.o src/server/iostats.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -DEFS_BENCH_BUILD -ffunction-sections -fdata-sections -c -o src/bench/thread.o src/server/thread.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/mgmt/efs_mgmt.o src/mgmt/efs_mgmt.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/query/efs_query.o src/query/efs_query.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o tests/test_txn_resolve_faults.o tests/test_txn_resolve_faults.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o tests/test_namespace_session.o tests/test_namespace_session.c
+ar rcs libefs.a src/common/admission.o src/meta/append_plan.o src/common/publication.o src/common/publication_ack.o src/common/common.o src/common/packed_segment.o src/common/packed_reader.o src/common/pack_cohort.o src/common/pack_ledger.o src/common/log_ts.o src/common/batch_obs.o src/common/version.o src/common/protocol.o src/wire/wire.o src/data/erasure.o src/data/store_mem.o src/data/transport_loop.o src/data/transport_conn.o src/kv/kv_mem.o src/kv/kv_key.o src/kv/kv_lsm.o src/kv/kv_compact.o src/kv/kv_wal.o src/kv/kv_seg.o src/kv/kv_snap.o src/meta/query_catalog.o src/meta/query_disk.o src/meta/query_policy.o src/meta/name_index.o src/meta/metadata.o src/meta/meta_apply.o src/meta/pack_mapping.o src/meta/pack_admission.o src/meta/txn.o src/meta/session.o src/meta/put_ticket.o src/meta/lock.o src/meta/dir_layout.o src/meta/dir_spread.o src/sim/opid.o src/raft/raft.o src/raft/raft_mem.o src/raft/raft_disk.o src/raft/raft_log.o src/common/placement.o src/common/checksum.o src/common/network.o src/common/rdma.o deps/blake3/blake3.o deps/blake3/blake3_portable.o deps/blake3/blake3_dispatch.o deps/blake3/blake3_sse2.o deps/blake3/blake3_sse41.o deps/blake3/blake3_avx2.o deps/blake3/blake3_avx512.o src/client/client.o src/client/ops.o src/client/read.o src/client/write.o src/client/bufpool.o src/client/writer_state.o src/client/publication_ack_owner.o src/client/publication_writeback.o src/client/pack_write.o src/client/put_ticket_owner.o src/client/put_upload.o src/client/inode_rpc.o src/client/stage_evict.o src/client/node_cache.o
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -o efs-query src/query/efs_query.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_query_policy tests/test_query_policy.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_query_refresh tests/test_query_refresh.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -lpthread -lm -ldl -libverbs -o tests/test_txn_resolve_faults tests/test_txn_resolve_faults.o libefs.a 
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -o tests/test_namespace_session tests/test_namespace_session.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_admission tests/test_admission.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -ffunction-sections -fdata-sections -Wl,--gc-sections -o tests/test_store_containers tests/test_store_containers.c src/bench/writer.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_principles_index_fault tests/test_principles_index_fault.c tests/principles_index_fault.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_principles_index tests/test_principles_index.c src/bench/principles_index.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_query_catalog tests/test_query_catalog.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_name_index tests/test_name_index.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_append_transaction tests/test_append_transaction.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -ffunction-sections -fdata-sections -Wl,--gc-sections -o tests/test_store_durability tests/test_store_durability.c src/bench/writer.o src/bench/store_containers.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_append_receipt tests/test_append_receipt.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -o tests/test_put_ticket tests/test_put_ticket.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -ffunction-sections -fdata-sections -Wl,--gc-sections -o tests/test_store_gc tests/test_store_gc.c src/bench/writer.o src/bench/store_containers.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -ffunction-sections -fdata-sections -Wl,--gc-sections -o tests/test_store_overwrite tests/test_store_overwrite.c src/bench/writer.o src/bench/store_containers.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_kv_snapshot_tail tests/test_kv_snapshot_tail.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_kv_seg_index tests/test_kv_seg_index.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_mtime_barrier tests/test_mtime_barrier.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_publication_session tests/test_publication_session.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_publication_ack tests/test_publication_ack.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_publication_recovery tests/test_publication_recovery.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_lane_bootstrap_recovery tests/test_lane_bootstrap_recovery.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_erasure tests/test_erasure.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_placement tests/test_placement.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_rdma_xprt tests/test_rdma_xprt.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_wire tests/test_wire.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_data tests/test_data.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_kv tests/test_kv.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_kv_lsm tests/test_kv_lsm.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_raft_store tests/test_raft_store.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_meta_apply tests/test_meta_apply.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_raft tests/test_raft.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_sim tests/test_sim.c src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_txn tests/test_txn.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_session tests/test_session.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_lock tests/test_lock.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_stage_evict tests/test_stage_evict.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_conn_fd tests/test_conn_fd.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_query_disk tests/test_query_disk.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -o tests/test_query_delta tests/test_query_delta.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_query_disk_io tests/test_query_disk_io.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -o tests/test_pack_cohort tests/test_pack_cohort.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_packed_reader tests/test_packed_reader.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_packed_publication tests/test_packed_publication.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -ffunction-sections -fdata-sections -Wl,--gc-sections -o tests/test_packed_upload tests/test_packed_upload.c src/bench/writer.o src/bench/store_containers.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_pack_admission tests/test_pack_admission.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_pack_snapshot tests/test_pack_snapshot.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_pack_mapping tests/test_pack_mapping.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_packed_metadata tests/test_packed_metadata.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -o tests/test_packed_segment tests/test_packed_segment.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -ffunction-sections -fdata-sections -Wl,--gc-sections -o tests/test_packed_store tests/test_packed_store.c src/bench/writer.o src/bench/store_containers.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -o tests/test_pack_ledger tests/test_pack_ledger.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -o tests/test_pack_ledger_recovery tests/test_pack_ledger_recovery.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -o tests/test_kv_reader_gate tests/test_kv_reader_gate.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I/home/erbmi1/orcd/scratch/efs/orcd-test/deps/libfuse/include/fuse3  -o efs-fuse src/client/efs_fuse.o libefs.a -lpthread -lm -ldl -libverbs -L/home/erbmi1/orcd/scratch/efs/orcd-test/deps/libfuse/lib -lfuse3 -lpthread  -Wl,-rpath,/home/erbmi1/orcd/scratch/efs/orcd-test/deps/libfuse/lib
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -Wl,--gc-sections -o efs-bench src/client/efs_bench.o src/bench/bench_local.o src/bench/blake3_bench.o src/bench/io_bench.o src/bench/storage_principles.o src/bench/principles_index.o src/bench/storage_churn.o src/bench/storage_ranges.o src/bench/store.o src/bench/store_nvme.o src/bench/store_containers.o src/bench/writer.o src/bench/iostats.o src/bench/thread.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -o efs-mgmt src/mgmt/efs_mgmt.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:21:50Z"'  -Iinclude -Isrc/common -Ideps/blake3 -o efsd src/server/packed_upload.o src/server/put_fence.o src/server/put_upload.o src/server/efsd.o src/server/store.o src/server/store_nvme.o src/server/store_containers.o src/server/handler.o src/server/cluster.o src/server/peer_pool.o src/server/writer.o src/server/iostats.o src/server/thread.o src/server/raft_host.o libefs.a -lpthread -lm -ldl -libverbs
+python3 tests/faults/test_create_retry_fault.py
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=1 seq=42 ino=512 identical=1
+test-create-retry: stage=2 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=1 seq=42 ino=512 identical=1
+test-create-retry: stage=2 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+CREATE fault hook: retained/legacy loss, BUSY, same durable identity and changed-identity refusal PASS
+python3 tests/faults/test_append_cleanup_retry.py
+APPEND cleanup: readonly certificate, immutable identity, transaction/transport ambiguity refused, exact empty/progress verdict PASS
+make tests/test_put_storage_fence
+make[1]: Entering directory '/tmp/efs-orcd-unit-b239dc7de104'
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:22:04Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_put_storage_fence tests/test_put_storage_fence.c libefs.a -lpthread -lm -ldl -libverbs
+make[1]: Leaving directory '/tmp/efs-orcd-unit-b239dc7de104'
+./tests/test_put_storage_fence
+storage session fence: full UUID, monotonic cold floor, guarded-write ordering, file/directory sync failures and corrupt-certificate rejection PASS
+python3 tests/test_storage_fence_members.py
+storage-fence: member=4 floor=2 check=1 transport unavailable
+storage revocation: every member, exact UUID/floor, offline refusal, changed roster and duplicate identity rejection PASS
+python3 tests/test_storage_fence_retry.py
+storage barrier retry: unchanged identity, bounded BUSY, EIO refusal and prior deadline restoration PASS
+python3 tests/test_session_finish_retry.py
+raft-session status=0 rc=0 primary=0 op=fence ssh=7 shard=1 epoch=5 state=1 touched=1 index=0
+session FINISH: BUSY retries keep UUID/epoch, one BEGIN, both cleanup stages PASS
+make tests/test_put_upload_server
+make[1]: Entering directory '/tmp/efs-orcd-unit-b239dc7de104'
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:22:05Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_put_upload_server tests/test_put_upload_server.c libefs.a -lpthread -lm -ldl -libverbs
+make[1]: Leaving directory '/tmp/efs-orcd-unit-b239dc7de104'
+./tests/test_put_upload_server
+ticketed PUT receiver: exact frame/checksum/FileID, ADMITTED-only authority, IO retention, exact retry and revoke-before-store floor PASS
+make tests/test_put_upload_client
+make[1]: Entering directory '/tmp/efs-orcd-unit-b239dc7de104'
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"b239dc7de104"' -DEFS_VERSION='"b239dc7de104"' -DEFS_GIT_BRANCH='"frozen-orcd-b239"' -DEFS_BUILD_TIME='"2026-10-12T01:22:05Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_put_upload_client tests/test_put_upload_client.c libefs.a -lpthread -lm -ldl -libverbs
+make[1]: Leaving directory '/tmp/efs-orcd-unit-b239dc7de104'
+./tests/test_put_upload_client
+ticketed PUT client: immutable fragments, ADMITTED-only fresh probe, bounded inherited deadline, lost reply drop and exact retry PASS
+python3 tests/test_applied_interval.py
+applied interval: bounded cadence/tail, durable record, immediate error retry, shutdown force PASS
+python3 tests/test_cursor_checkpoint.py
+cursor checkpoint: validated captured prefix, successful barrier only, later writes and no-op fallback PASS
+./tests/test_store_containers
+storage-engine: incompatible, busy or corrupt root; refusing startup
+containers: retained old extent after punch/sync failure
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+containers: retained old extent after punch/sync failure
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+containers: buffered/direct, multi-root, quota, same-range concurrency, conditional/inode GC, restart, crash boundaries and corruption PASS
+python3 tests/test_lookup_errno.py
+FUSE LOOKUP: IO/network/quorum errors stay IO, BUSY/memory/access preserved, only actual absence ENOENT PASS
+python3 tests/test_storage_capacity.py
+filesystem capacity: duplicate roots, quota bounds, reserves, occupancy and failed inventory PASS
+python3 tests/test_status_version.py
+status identity: timestamps/hosts ignored; commit, branch, dirty and unknown preserved PASS
+python3 tests/test_create_credentials.py
+FUSE creation credentials: parent setgid inheritance, directory-only bit, distinct caller groups internal context and refused mkdir verdicts PASS
+python3 tests/test_permission_groups.py
+Permission groups: large membership, bounds, changed lists and API/allocation failures PASS
+python3 tests/test_chown_permissions.py
+Chown permissions: nonowners refused even for unchanged IDs; owner groups, root and internal calls PASS
+python3 tests/test_readdir_collection.py
+4096 unique names plus duplicate shard pages: 7148 name comparisons
+Readdir collection: first duplicate retained, bounded comparisons, collisions, hidden names, allocation failures and overflow PASS
+python3 tests/test_readdir_source_cursor.py
+Server READDIR: source-only empty-name cursors survive exact/full/partial page boundaries;129 unique entries and EOF PASS
+python3 tests/test_access_permissions.py
+Access permissions: all 512 modes, all masks, owner/primary/supplementary/other/root classes PASS
+python3 tests/test_rename_flags.py
+Rename flags: unsupported flags refused before any mutation; ordinary success/errors preserved PASS
+python3 tests/test_attribute_authority_errno.py
+OPEN/CHOWN/LINK: only actual absence ENOENT; unavailable authority, permissions and mutation errors preserved PASS
+python3 tests/test_read_errno.py
+FUSE READ: allocation ENOMEM, typed failures, successful bytes and alignment preserved PASS
+python3 tests/test_opendir_authority_errno.py
+OPENDIR preserves authority errno, allocates no handle on failure, and balances successful handles PASS
+python3 tests/test_xattr_names.py
+Xattr names: empty user namespace refused before RPC; ordinary names, size boundary, errors and balanced callbacks PASS
+python3 tests/test_unlink_authority_errno.py
+UNLINK/RMDIR: namespace overflow, permission, memory and authority refusal remain distinct; bounded emptiness retry PASS
+python3 tests/test_fallocate_errno.py
+FALLOCATE: positive errno replies, flush/stat failure preserved, no mutation on refusal and balanced request cleanup PASS
+python3 tests/test_virtual_export_handles.py
+virtual export handles: FORGET recovery, immutable version/size, open/lookup pins, bounded 64-slot recycling PASS
+python3 tests/test_fuse_open_reply.py
+FUSE CREATE/OPEN: rejected replies and failed reply construction release exactly once PASS
+python3 tests/test_fuse_lease_retention.py
+CREATE adoption/competing OPEN barrier: one lease, two descriptors, last-close ownership PASS
+FUSE ambiguous OPEN/CLOSE: retained ownership, reopen barrier and clean-stop retry PASS
+python3 tests/test_inode_lock_stripes.py
+inode locks: same-shard files spread across all three production tables; stable same-file exclusion and concurrent initialization PASS
+python3 tests/test_create_admission_wait.py
+CREATE admission: capacity recovery, inherited deadline, retained identity and terminal errors PASS
+python3 tests/test_lookup_replacement.py
+LOOKUP replacement: missing captured inode retryable locally and forwarded; true absence and IO preserved PASS
+python3 tests/test_lookup_read_group.py
+LOOKUP fresh quorum reuse: same-request same-group only; pending transactions, other groups, absent hosts and hard errors preserved PASS
+python3 tests/test_readindex_operation.py
+operation ReadIndex: per-RPC fences, new lanes, directory shards and uncertainty PASS
+python3 tests/test_readindex_pair.py
+ReadIndex pair: pre-send fresh admissions, pending rounds, independent requests, routing, overflow and failures PASS
+python3 tests/test_readindex_remote_pair.py
+remote pair: concurrent independent proofs, inherited budgets, bounded persistent stacks, saturation/init fallback, hard refusal and joined host/stack lifetime PASS
+remote pair: concurrent independent proofs, inherited budgets, bounded persistent stacks, saturation/init fallback, hard refusal and joined host/stack lifetime PASS
+remote pair: concurrent independent proofs, inherited budgets, bounded persistent stacks, saturation/init fallback, hard refusal and joined host/stack lifetime PASS
+python3 tests/test_read_retry_budget.py
+inherited100ms: elapsed=100 expired_RPC_attempts=0 status=-13
+read retry loop: inherited/no-peer/already-expired budgets stop without expired RPC attempts; unscoped400ms and scope restoration PASS
+python3 tests/test_host_read_deadline.py
+read scope: one absolute400ms budget, shorter inherited/expired budgets, restoration, semantic/hard refusal and unchanged mutation uncertainty PASS
+forwarded RPC: TCP/RDMA receive limits, previous timeout restoration, large-frame ownership, lost/short/wrong replies drop connections and refuse authority PASS
+python3 tests/test_peer_pool_deadline.py
+peer pool: scoped wait12ms, unchanged unscoped5s, expired refusal, retained slot ownership and live checkout/release PASS
+python3 tests/test_lookup_group_plan.py
+lookup planning: stale/unlinked/corrupt hints yield only scheduling groups; no authority or reply bytes PASS
+python3 tests/test_lookup_path_authority.py
+path authority: 64 ancestors/two fresh fences, next RPC, routing, IO and bounds PASS
+python3 tests/test_read_control_host.py
+read control host: busy mutex, pending order, frame refusal and reply bookkeeping PASS
+python3 tests/test_prepare_cohort.py
+command cohort: eight-entry bound, cross-group ordering, identities, role/fsync failure, remote boundaries and 144-part durable-decision/finisher gates PASS
+python3 tests/test_append_cohort.py
+append cohort: captured identities, bounded batches, verdict-before-COMMIT, pre-decision ABORT, ambiguous COMMIT and TLS cleanup PASS
+python3 tests/test_atomic_append_host.py
+atomic append host: same-group apply, exact offset, malformed/refused/error propagation and role-change local-only submission PASS
+python3 tests/test_host_cover_route.py
+leader routing: full committed coverage, three/four-node layouts, membership changes, missing/self leaders and single-group loop refusal PASS
+python3 tests/test_namespace_leader_route.py
+namespace leader routing: dual-group membership, unknown/removed/single-group leaders and self fallback PASS
+python3 tests/test_namespace_admission_rounds.py
+namespace admission: fresh local/remote authority, absent owner, ACTIVE/touched shortcuts, stale/fenced/error rejection and final durable floor PASS
+python3 tests/test_session_combined_group.py
+combined admission: exact length, owner/local group, shard limits, apply routing and audible logical verdicts PASS
+python3 tests/test_namespace_authority.py
+namespace authority: local request reuse, independent/default/remote fresh rounds, new groups and unchanged owner state/error checks PASS
+python3 tests/test_w23_samples.py
+......
+----------------------------------------------------------------------
+Ran 6 tests in 0.001s
+
+OK
+python3 tests/test_read_verify.py
+parallel GET: valid zero/nonzero and corrupt zero/nonzero replies PASS
+python3 tests/test_opid_admission.py
+opid-admission: BUSY oldest=1 next=17 live=16 window=16
+opid-admission: BUSY oldest=1 next=17 live=16 window=16
+opid-admission: BUSY oldest=1 next=17 live=16 window=16
+opid-admission: BUSY oldest=1 next=17 live=16 window=16
+opid-admission: BUSY oldest=1 next=17 live=16 window=16
+opid-admission: BUSY oldest=1 next=17 live=15 window=16
+opid-admission: BUSY oldest=18 next=34 live=16 window=16
+opid-admission: BUSY oldest=18 next=34 live=16 window=16
+opid-admission: BUSY oldest=18 next=34 live=16 window=16
+opid-admission: BUSY oldest=18 next=34 live=16 window=16
+opid-admission: BUSY oldest=35 next=51 live=1 window=16
+opid-admission: BUSY oldest=52 next=68 live=16 window=16
+16 simultaneous production identity owners: unique slots/sequences, saturation refuses four mutations, released admission recovers PASS
+namespace admission: waits before allocation, exact one identity, inherited deadline sends nothing PASS
+namespace opid saturation: four mutations send nothing, released admission keeps watermark, sequence overflow refused PASS
+python3 tests/test_server_processes.py
+Stopped efsd for storage /tmp/efs-owner-d_w7tuj_/store (if any)
+Stale daemon identity for PID 1674740; process retained
+Stopped efsd for storage /tmp/efs-owner-d_w7tuj_/store (if any)
+Invalid PID record /tmp/efs-owner-d_w7tuj_/store/log/efsd.pid; no process signaled
+Stopped efsd for storage /tmp/efs-owner-d_w7tuj_/store (if any)
+Invalid PID record /tmp/efs-owner-d_w7tuj_/store/log/efsd.pid; no process signaled
+Stopped efsd for storage /tmp/efs-owner-d_w7tuj_/store (if any)
+Stale daemon identity for PID 1674733; process retained
+Stopped efsd for storage /tmp/efs-owner-d_w7tuj_/store (if any)
+Stale daemon identity for PID 1674734; process retained
+Stopped efsd for storage /tmp/efs-owner-d_w7tuj_/store (if any)
+Stale daemon identity for PID 1674734; process retained
+Stopped efsd for storage /tmp/efs-owner-d_w7tuj_/other (if any)
+Stopping owned efsd PID 1674734 (storage /tmp/efs-owner-d_w7tuj_/store)
+Stopped efsd for storage /tmp/efs-owner-d_w7tuj_/store (if any)
+Stale daemon identity for PID 1674783; process retained
+Stale daemon identity for PID 1674733; process retained
+Stopping owned perf PID 1674783 (perf /tmp/efs-owner-d_w7tuj_/efsd.data)
+Evidence: /tmp/efs-wrapper-start-e06d2q4b
+wrapper real start/stop: invalid unrelated process retained PASS
+wrapper real start/stop: unrelated unrelated process retained PASS
+wrapper real start/stop: dead unrelated process retained PASS
+perf wrapper: unrelated/wrong-output processes retained; owned recorder flushed with SIGINT PASS
+server wrapper: invalid/reused/wrong-storage/stale-start PIDs retained; matching daemon gracefully stopped PASS
+python3 tests/test_mgmt_session_routing.py
+management session routing: advertised leader, exact retries, bounded loop and ambiguous transport PASS
+python3 tests/test_session_admission.py
+session cleanup global barrier, empty phase, local refusal, exact packing and malformed bounds PASS
+session ESTABLISH: authoritative ACTIVE/REGISTER, fencing, routes and failed reads PASS
+python3 tests/test_close_effects.py
+close effects: prepared lock/append BUSY persists obligation, IO retains it, resolution drains PASS
+python3 tests/test_session_cleanup_cli.py
+session server: admission-only retry certificate; no submitted-batch certificate PASS
+session CLI: bounded batches, explicit empty proof, ambiguity stops, deadline and work budget PASS
+python3 tests/test_session_fence_finish.py
+session fence incomplete: phase=participant-floor epoch=2 rc=-13
+session fence incomplete: phase=finish epoch=2 rc=-13
+session fence incomplete: phase=finish epoch=2 rc=-14
+raft-session status=0 rc=0 primary=2 op=fence ssh=31 shard=1 epoch=2 state=1 touched=1 index=0
+raft-session status=3 rc=-13 primary=2 op=fence ssh=31 shard=1 epoch=2 state=2 touched=1 index=0
+raft-session status=3 rc=-13 primary=2 op=fence ssh=31 shard=1 epoch=2 state=2 touched=1 index=0
+raft-session status=3 rc=-14 primary=2 op=fence ssh=31 shard=1 epoch=2 state=2 touched=1 index=0
+Session fence CLI: exact epoch participant and FINISH barriers; BUSY/STALE never report completion or start cleanup PASS
+python3 tests/test_publication_host.py
+publication host: lane-only authority, apply-ring loss, terminal recovery and unknown PASS
+python3 tests/test_txn_read_authority.py
+transaction coordinator: failed quorum authority never becomes decision absence PASS
+python3 tests/test_publication_rpc.py
+publication RPC: exact identity, lane routing, redirects, bounded retries, unknown and lost reply PASS
+python3 tests/test_publication_batch_rpc.py
+publication batch RPC: 16-record bound, exact frame/digests/locators, partial verdicts, no omitted success, redirect/deadline/lost reply, retirement and invalid stream rejection PASS
+python3 tests/test_publication_session_rpc.py
+publication session RPC: ordered admission, redirects, bounded retries, ambiguity, fences and deadline PASS
+python3 tests/test_publication_session_reuse.py
+publication session reuse: fresh owner and local floor, missing establishment fallback, revocation/read/IO refusal and next-RPC recheck PASS
+python3 tests/test_lease_edge_rpc.py
+lease RPC: immutable body, stored verdict proof, unknown probe, ambiguity, redirects and deadline PASS
+python3 tests/test_lease_request.py
+opid-admission: BUSY oldest=8 next=24 live=16 window=16
+retained sequenced lease: immutable retries, unknown probe, pinned ACK, durable negative proof and capacity PASS
+python3 tests/test_identity_revocation.py
+authoritative revocation proof: newer ACTIVE only; FENCING, missing, transport and malformed views remain unresolved PASS
+python3 tests/test_put_ticket_rpc.py
+PUT ticket RPC: immutable retries, pure probe, exact state, revoked/body-error refusal, redirects and deadlines PASS
+python3 tests/test_put_ticket_owner.py
+retained PUT owner: budget-before-send, immutable manifest, lost admission replies, fresh probes, exact membership and revocation retention PASS
+python3 tests/test_put_identity.py
+PUT identities: 8192 concurrent mount-wide unique sequences, namespace ACK isolation and no-wrap exhaustion PASS
+python3 tests/test_create_request.py
+retained CREATE: immutable body/identity, unrouted BUSY, pure probe, admission ambiguity, cancellation barrier, exact proof and pinned routing PASS
+python3 tests/test_retained_create_authority.py
+retained CREATE authority: covered missing/negative/exact receipts, durable FileID, storage failure and fresh post-mutation refusal PASS
+python3 tests/test_pending_create_cleanup.py
+FUSE pending CREATE cleanup: bounded admission, unattempted cancel, unknown proof retention, old-close barrier, immutable token retry and negative proof PASS
+python3 tests/test_mount_identity_rpc.py
+mount identity RPC: full UUID/epoch, admission before grants, release/query without registration and revoked refusal PASS
+python3 tests/test_pending_create_command.py
+pending CREATE command: full UUID/epoch/token, strict truncation/identity rejection and historical lease replay PASS
+python3 tests/test_lock_apply_verdict.py
+lock apply: audible business verdicts, advancing conflicts and retained IO/NOMEM replay PASS
+python3 tests/test_applied_cursor.py
+applied cursor: atomic proof, legacy upgrade and strict recovery refusal PASS
+python3 tests/test_tiny_fragment_audit.py
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.002s
+
+OK
+python3 tests/test_bench_cli.py
+benchmark CLI: ownership, parsing and scratch protection PASS
+python3 tests/test_bench_profile.py
+.Generating reports for 5 profiles, up to 2 parallel jobs
+[reports 1/5] 0: OK
+[reports 2/5] 1: OK
+[reports 3/5] 2: OK
+[reports 4/5] 3: OK
+[reports 5/5] 4: OK
+....Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+[1/2] data-buffered-w0-qd1
+[2/2] data-direct-w0-qd1
+Generating reports for 2 profiles, up to 4 parallel jobs
+[reports 1/2] data-buffered-w0-qd1: FAIL
+[reports 2/2] data-direct-w0-qd1: FAIL
+Results and analysis: /tmp/profile test wumu_1r5/output/ANALYSIS.md
+Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+..Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+[1/2] data-buffered-w0-qd1
+[2/2] data-direct-w0-qd1
+Generating reports for 2 profiles, up to 4 parallel jobs
+[reports 1/2] data-buffered-w0-qd1: OK
+[reports 2/2] data-direct-w0-qd1: OK
+Results and analysis: /tmp/profile test p64_9wu6/output/ANALYSIS.md
+Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+..Reports unavailable: missing: perf.data missing
+Generating reports for 0 profiles, up to 4 parallel jobs
+.......Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+[1/2] data-buffered-w0-qd1
+[2/2] data-direct-w0-qd1
+Generating reports for 2 profiles, up to 4 parallel jobs
+[reports 1/2] data-direct-w0-qd1: FAIL
+[reports 2/2] data-buffered-w0-qd1: FAIL
+Results and analysis: /tmp/profile test njm5h7v5/output/ANALYSIS.md
+Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+....
+----------------------------------------------------------------------
+Ran 20 tests in 3.001s
+
+OK
+Results and analysis: /tmp/tmpyg01twys/ANALYSIS.md
+./tests/test_principles_index
+indexed principles: 18 crash points, conditional identity, 4800 churn operations, cold bytes/quota/physical GC and corrupt-evidence refusal PASS
+./tests/test_principles_index_fault
+indexed fault gates: four publication barriers, ten short-write/ENOSPC boundaries, sticky failure, read-only recovery, inventory errors and GC-sync failure PASS
+python3 tests/test_storage_principles.py
+.............
+----------------------------------------------------------------------
+Ran 13 tests in 0.827s
+
+OK
+python3 tests/test_bench_ranges.py
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.005s
+
+OK
+python3 tests/test_storage_ranges.py
+......
+----------------------------------------------------------------------
+Ran 6 tests in 5.705s
+
+OK
+python3 tests/test_storage_churn.py
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 11.641s
+
+OK
+python3 tests/test_bench_churn.py
+........
+----------------------------------------------------------------------
+Ran 8 tests in 0.209s
+
+OK
+python3 docs/check-architecture.py
+ok    regen-diff: architecture-full.md + architecture.html are current
+FAIL  links: every internal link resolves
+      status/in-flight.md:20: link target does not exist: ../../results/measure/20261011-orcd-packed-integration/
+      status/devel-nuc-closure-20261010.md:136: link target does not exist: ../../results/measure/20261010-devel-nuc/
+      status/efs-command-followups-20261008.md:6: link target does not exist: ../../results/measure/20261008-efs-followups
+      status/efs-command-options-20261008.md:52: link target does not exist: ../../results/measure/20261008-efs-command-options
+      status/efs-command-pages-20261009.md:125: link target does not exist: ../../results/measure/20261009-command-pages
+      status/efs-command-performance-20261008.md:64: link target does not exist: ../../results/measure/20261008-efs-command-perf
+      status/efs-command-policy-20261008.md:68: link target does not exist: ../../results/measure/20261008-efs-policy
+      status/efs-commands-20261008.md:103: link target does not exist: ../../results/measure/20261008-efs-commands
+      status/find-output-overflow-20261009.md:95: link target does not exist: ../../results/measure/20261009-find-output-overflow
+      status/find-stats-refresh-cpu-20261009.md:170: link target does not exist: ../../results/measure/20261009-node2-query-cpu
+      status/find-stats-refresh-cpu-20261009.md:324: link target does not exist: ../../results/measure/20261009-catalog-incremental
+      status/help-format-20261008.md:35: link target does not exist: ../../results/measure/20261008-help-format
+      status/nuc-gate-closure-20261009.md:128: link target does not exist: ../../results/measure/20261009-nuc-w73-w64
+      status/nuc-tiny-file-create-20261008.md:120: link target does not exist: ../../results/measure/20261008-nuc-tiny-create/round-6
+      status/nuc-w52-w97-resume-20261011.md:82: link target does not exist: ../../results/measure/20261011-nuc-resume/catchup-base-live/
+      status/nuc-w52-w97-resume-20261011.md:677: link target does not exist: ../../results/measure/20261011-nuc-resume/catchup-focused/
+      status/nuc-w52-w97-resume-20261011.md:697: link target does not exist: ../../results/measure/20261011-nuc-resume/catchup-tag45-superseded/catchup-base-build/
+      status/nuc-w52-w97-resume-20261011.md:706: link target does not exist: ../../results/measure/20261011-nuc-resume/catchup-tag45-superseded/catchup-controllers/
+      status/nuc-w52-w97-resume-20261011.md:722: link target does not exist: ../../results/measure/20261011-nuc-resume/catchup-tag45-superseded/catchup-root-build/
+      status/nuc-w52-w97-resume-20261011.md:754: link target does not exist: ../../results/measure/20261011-nuc-resume/catchup-base-build/
+      status/nuc-w52-w97-resume-20261011.md:755: link target does not exist: ../../results/measure/20261011-nuc-resume/catchup-root-build/
+      status/orcd-tiny-packing-20261011.md:331: link target does not exist: ../../results/measure/20261011-orcd-packed-metadata/
+      status/orcd-tiny-packing-20261011.md:406: link target does not exist: ../../results/measure/20261011-orcd-packed-integration/
+      status/query-cache-closure-20261010.md:94: link target does not exist: ../../results/measure/20261010-w92-closure/scale-pilot
+      status/query-cache-closure-20261010.md:203: link target does not exist: ../../results/measure/20261010-w92-closure/scale-10m-v4
+      status/query-cache-closure-20261010.md:211: link target does not exist: ../../results/measure/20261010-w92-closure/scale-10m-v5
+      status/query-cache-closure-20261010.md:456: link target does not exist: ../../results/measure/20261010-w92-closure/scale-10m-bounded-v3
+      status/query-cache-closure-20261010.md:633: link target does not exist: ../../results/measure/20261010-w92-closure/cold-kernel-and-concurrent-10m
+      status/query-cache-closure-20261010.md:735: link target does not exist: ../../results/measure/20261010-w92-closure/full-stat-oracle
+      status/query-cache-closure-20261010.md:772: link target does not exist: ../../results/measure/20261010-w92-closure/mac-nfs
+      status/query-cache-closure-20261010.md:808: link target does not exist: ../../results/measure/20261010-w92-closure/named-1434aa83
+      status/query-cache-closure-20261010.md:854: link target does not exist: ../../results/measure/20261010-w92-closure/build-phase-native
+      status/query-cache-closure-20261010.md:861: link target does not exist: ../../results/measure/20261010-w92-closure/build-phase-native
+      status/query-cache-closure-20261010.md:898: link target does not exist: ../../results/measure/20261010-w92-closure/named-cdc13b88
+      status/query-cache-closure-20261010.md:937: link target does not exist: ../../results/measure/20261010-w92-closure/buffered-merge
+      status/query-cache-closure-20261010.md:988: link target does not exist: ../../results/measure/20261010-w92-closure/scale-reuse-handoff
+      status/query-cache-closure-20261010.md:1022: link target does not exist: ../../results/measure/20261010-w92-closure/raw-batching
+      status/query-cache-closure-20261010.md:1082: link target does not exist: ../../results/measure/20261010-w92-closure/raw-batching
+      status/query-cache-incremental-20261010.md:10: link target does not exist: ../../results/measure/20261010-w92-incremental
+      status/query-cache-incremental-20261010.md:118: link target does not exist: ../../results/measure/20261010-w92-incremental
+      status/v030-pre-alpha-release.md:481: link target does not exist: ../../results/measure/20261012-v030-ordinary-overwrite/d26e6874/
+      status/v030-query-stage-diagnostic-20261012.md:12: link target does not exist: ../../results/measure/20261012-v030-ordinary-overwrite/d485afbf/
+      status/w112-full-overwrite-replay-20261012.md:19: link target does not exist: ../../results/measure/20261012-w112-overwrite/audit/
+      status/w112-full-overwrite-replay-20261012.md:20: link target does not exist: ../../results/measure/20261012-w112-overwrite/trace/
+      status/w93-w96-implementation-20261008.md:366: link target does not exist: ../../results/measure/20261008-w93-w96-review/w94-guarded-wire
+ok    invariant-refs: I-references name §4 invariants
+ok    op-matrix-sections: §6 names existing sections
+ok    single-home: normative tables / invariants / formulas defined once
+
+architecture doc gate: 1/5 checks failed
+make: *** [Makefile:409: test] Error 1

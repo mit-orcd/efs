@@ -1,0 +1,265 @@
+2026-10-12T01:35:04.509Z storage-engine=files direct_io=on
+2026-10-12T01:35:04.509Z Data GC admission: disabled
+2026-10-12T01:35:04.509Z Storage quota: automatic 28.67 TiB (safe maximum 28.67 TiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T01:35:04.513Z Joined cluster with 3 nodes
+2026-10-12T01:35:04.515Z heartbeat: enabled (2000 ms interval)
+2026-10-12T01:35:04.517Z raft-host: up raft_id=2 n=4 boot=6421359029905980 salt=9366849955012218731 g0=hosted g2=hosted
+2026-10-12T01:35:04.517Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T01:25:07Z on fcstor005), build=b239dc7d-release-normal: node 3 listening on 172.16.223.59:19842, storage=/data1/01/efs-orcd-b239-private,/data1/02/efs-orcd-b239-private,/data1/03/efs-orcd-b239-private,/data1/04/efs-orcd-b239-private,/data1/05/efs-orcd-b239-private,/data1/06/efs-orcd-b239-private (6 paths, stripe=leastq), used=0, quota=31518640847772, direct_io=on, writers=20 shared
+2026-10-12T01:35:04.517Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:35:05.018Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=402
+2026-10-12T01:35:06.515Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=995 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:35:07.035Z query-restore: rc=-3 backend=disk
+2026-10-12T01:35:07.042Z query-publish: generation=1 g0=1 g2=1 rebuilt=4096 refolded=0 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=22 root_rc=-3 files=0 dirs=0 logical=0
+2026-10-12T01:35:22.517Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=954 passes=18 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:35:27.859Z query-publish: generation=2 g0=3 g2=2 rebuilt=2 refolded=1 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=4 root_rc=0 files=0 dirs=0 logical=0
+2026-10-12T01:35:29.531Z kv-obs: mt_bytes=506 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:35:38.518Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=913 passes=34 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:35:54.520Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=871 passes=50 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:36:03.170Z raft-host: applied session index=4 kind=1 shard=0 ino=0
+2026-10-12T01:36:03.250Z store: put O_DIRECT bounce copy (buf align=4017 len=4096)
+2026-10-12T01:36:03.251Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=5089 errors=0 avg_us=1720 p50_us=1720 max_us=1720 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:36:03.292Z query-publish: generation=3 g0=13 g2=242 rebuilt=2 refolded=27 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=10 root_rc=0 files=25 dirs=1 logical=10752
+2026-10-12T01:36:04.552Z kv-obs: mt_bytes=146908 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:36:05.298Z query-publish: generation=4 g0=13 g2=753 rebuilt=1 refolded=44 edge_reused=0 bytes=3858492 pin_ms=1 build_ms=5 root_rc=0 files=64 dirs=1 logical=32768
+2026-10-12T01:36:08.252Z iostats: get ops=33 bytes=135168 errors=0 avg_us=313 p50_us=94 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:36:09.554Z kv-obs: mt_bytes=145468 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:36:10.521Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=830 passes=66 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:36:13.254Z iostats: get ops=33 bytes=135168 errors=0 avg_us=313 p50_us=94 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:36:14.558Z kv-obs: mt_bytes=144892 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:36:18.257Z iostats: get ops=33 bytes=135168 errors=0 avg_us=313 p50_us=94 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:36:23.260Z iostats: get ops=33 bytes=135168 errors=0 avg_us=313 p50_us=94 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:36:26.522Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=788 passes=82 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:36:28.264Z iostats: get ops=33 bytes=135168 errors=0 avg_us=313 p50_us=94 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:36:33.268Z iostats: get ops=66 bytes=270336 errors=0 avg_us=212 p50_us=77 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:36:33.601Z raft-host: applied session index=938 kind=1 shard=0 ino=0
+2026-10-12T01:36:34.569Z kv-obs: mt_bytes=153734 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:36:34.762Z raft-host: applied session index=1077 kind=1 shard=0 ino=0
+2026-10-12T01:36:35.823Z raft-host: applied session index=14 kind=1 shard=0 ino=0
+2026-10-12T01:36:37.020Z raft-host: applied session index=1353 kind=1 shard=0 ino=0
+2026-10-12T01:36:38.196Z raft-host: applied session index=1500 kind=1 shard=0 ino=0
+2026-10-12T01:36:38.268Z iostats: get ops=214 bytes=876544 errors=0 avg_us=151 p50_us=76 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:36:39.330Z raft-host: applied session index=16 kind=1 shard=0 ino=0
+2026-10-12T01:36:39.573Z kv-obs: mt_bytes=188542 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:36:42.524Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=747 passes=98 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:36:42.526Z query-publish: generation=5 g0=17 g2=1798 rebuilt=1 refolded=1 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=6 root_rc=0 files=63 dirs=1 logical=32256
+2026-10-12T01:36:43.272Z iostats: get ops=264 bytes=1081344 errors=0 avg_us=146 p50_us=79 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:36:44.575Z kv-obs: mt_bytes=188232 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:36:48.273Z iostats: get ops=396 bytes=1622016 errors=0 avg_us=132 p50_us=71 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:36:49.577Z kv-obs: mt_bytes=188196 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:36:53.275Z iostats: get ops=495 bytes=2027520 errors=0 avg_us=126 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:36:54.581Z kv-obs: mt_bytes=187332 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:36:58.275Z iostats: get ops=495 bytes=2027520 errors=0 avg_us=126 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:36:58.525Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=705 passes=114 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:36:59.582Z kv-obs: mt_bytes=185928 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:37:03.277Z iostats: get ops=495 bytes=2027520 errors=0 avg_us=126 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:37:08.281Z iostats: get ops=495 bytes=2027520 errors=0 avg_us=126 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:37:13.285Z iostats: get ops=495 bytes=2027520 errors=0 avg_us=126 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:37:14.526Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=663 passes=130 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:37:14.590Z kv-obs: mt_bytes=183762 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:37:15.452Z query-publish: generation=6 g0=17 g2=2825 rebuilt=1 refolded=1 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=5 root_rc=0 files=57 dirs=1 logical=29184
+2026-10-12T01:37:16.527Z heartbeat: node 4 (172.16.223.60:19842) unresponsive — marked down for 30s
+2026-10-12T01:37:18.289Z iostats: get ops=495 bytes=2027520 errors=0 avg_us=126 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:37:23.290Z iostats: get ops=495 bytes=2027520 errors=0 avg_us=126 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:37:28.292Z iostats: get ops=495 bytes=2027520 errors=0 avg_us=126 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:37:30.528Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=622 passes=146 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:37:33.293Z iostats: get ops=495 bytes=2027520 errors=0 avg_us=126 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:37:38.294Z iostats: get ops=495 bytes=2027520 errors=0 avg_us=126 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:37:43.295Z iostats: get ops=495 bytes=2027520 errors=0 avg_us=126 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:37:46.529Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=581 passes=162 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:37:46.529Z heartbeat: node 4 (172.16.223.60:19842) unresponsive — marked down for 30s
+2026-10-12T01:37:48.296Z iostats: get ops=495 bytes=2027520 errors=0 avg_us=126 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:37:53.298Z iostats: get ops=495 bytes=2027520 errors=0 avg_us=126 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:37:56.682Z query-publish: generation=7 g0=17 g2=3074 rebuilt=1 refolded=0 edge_reused=0 bytes=3858492 pin_ms=1 build_ms=5 root_rc=0 files=57 dirs=1 logical=29184
+2026-10-12T01:37:58.299Z iostats: get ops=528 bytes=2162688 errors=0 avg_us=124 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:37:59.598Z kv-obs: mt_bytes=185569 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:38:02.531Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=540 passes=178 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:38:03.300Z iostats: get ops=627 bytes=2568192 errors=0 avg_us=121 p50_us=73 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:38:08.300Z iostats: get ops=696 bytes=2850816 errors=0 avg_us=119 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:38:09.602Z kv-obs: mt_bytes=185281 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:38:13.300Z iostats: get ops=726 bytes=2973696 errors=0 avg_us=119 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:38:14.602Z kv-obs: mt_bytes=184093 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:38:18.301Z iostats: get ops=726 bytes=2973696 errors=0 avg_us=119 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:38:18.533Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=498 passes=194 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:38:19.605Z kv-obs: mt_bytes=183517 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:38:23.305Z iostats: get ops=726 bytes=2973696 errors=0 avg_us=119 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:38:28.310Z iostats: get ops=726 bytes=2973696 errors=0 avg_us=119 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:38:33.314Z iostats: get ops=726 bytes=2973696 errors=0 avg_us=119 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:38:34.534Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=457 passes=210 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:38:38.318Z iostats: get ops=726 bytes=2973696 errors=0 avg_us=119 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:38:43.323Z iostats: get ops=726 bytes=2973696 errors=0 avg_us=119 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:38:48.327Z iostats: get ops=726 bytes=2973696 errors=0 avg_us=119 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:38:50.535Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=416 passes=226 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:38:53.331Z iostats: get ops=726 bytes=2973696 errors=0 avg_us=119 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:38:58.335Z iostats: get ops=726 bytes=2973696 errors=0 avg_us=119 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:39:03.339Z iostats: get ops=726 bytes=2973696 errors=0 avg_us=119 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:39:06.537Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=374 passes=242 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:39:08.343Z iostats: get ops=726 bytes=2973696 errors=0 avg_us=119 p50_us=72 max_us=2397 put ops=7 bytes=35365 errors=0 avg_us=1387 p50_us=1385 max_us=1774 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:39:12.537Z heartbeat: node 1 (172.16.223.57:19842) unresponsive — marked down for 30s
+2026-10-12T01:39:39.603Z storage-engine=files direct_io=on
+2026-10-12T01:39:39.603Z Data GC admission: disabled
+2026-10-12T01:39:39.603Z Loaded 4 persisted cluster node(s) from /data1/01/efs-orcd-b239-private/meta/cluster_nodes.bin
+2026-10-12T01:39:39.603Z   persisted node 1: 172.16.223.57:19842
+2026-10-12T01:39:39.603Z   persisted node 2: 172.16.223.58:19842
+2026-10-12T01:39:39.603Z   persisted node 3: 172.16.223.59:19842
+2026-10-12T01:39:39.603Z   persisted node 4: 172.16.223.60:19842
+2026-10-12T01:39:39.604Z Storage quota: automatic 28.67 TiB (safe maximum 28.67 TiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T01:39:39.608Z Joined cluster with 4 nodes
+2026-10-12T01:39:39.610Z heartbeat: enabled (2000 ms interval)
+2026-10-12T01:39:39.619Z raft-host: up raft_id=2 n=4 boot=6426066151018915 salt=14205786903200383099 g0=hosted g2=hosted
+2026-10-12T01:39:39.619Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T01:25:07Z on fcstor005), build=b239dc7d-release-normal: node 3 listening on 172.16.223.59:19842, storage=/data1/01/efs-orcd-b239-private,/data1/02/efs-orcd-b239-private,/data1/03/efs-orcd-b239-private,/data1/04/efs-orcd-b239-private,/data1/05/efs-orcd-b239-private,/data1/06/efs-orcd-b239-private (6 paths, stripe=leastq), used=28672, quota=31518636751260, direct_io=on, writers=20 shared
+2026-10-12T01:39:39.619Z kv-obs: mt_bytes=183517 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:39:40.121Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=402
+2026-10-12T01:39:41.610Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=988 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:39:42.126Z query-catchup: rc=0 backend=disk
+2026-10-12T01:39:42.126Z query-restore: rc=0 backend=disk
+2026-10-12T01:39:42.126Z query-publish: generation=1 g0=19 g2=4004 rebuilt=0 refolded=0 edge_reused=0 bytes=3858492 pin_ms=1 build_ms=4 root_rc=0 files=57 dirs=1 logical=29184
+2026-10-12T01:39:44.700Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=72 emit=1 tomb=71 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:39:45.770Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=84 emit=12 tomb=72 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:39:46.840Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=72 emit=1 tomb=71 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:39:47.911Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=84 emit=12 tomb=72 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:39:48.981Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=72 emit=1 tomb=71 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:39:50.051Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=84 emit=12 tomb=72 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:39:51.121Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=394 emit=1 tomb=393 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:39:52.191Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=84 emit=12 tomb=72 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:39:52.325Z raft-host: applied session index=20 kind=1 shard=0 ino=0
+2026-10-12T01:39:52.350Z iostats: get ops=1 bytes=4096 errors=0 avg_us=236 p50_us=236 max_us=236 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:39:53.267Z raft-host: gc-pass ms=73 orphan=5 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=16 emit=9 tomb=7 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:39:53.673Z raft-host: applied session index=4128 kind=1 shard=0 ino=0
+2026-10-12T01:39:54.342Z raft-host: gc-pass ms=73 orphan=5 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=29 emit=21 tomb=8 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:39:54.624Z kv-obs: mt_bytes=197871 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:39:55.099Z raft-host: applied session index=4253 kind=1 shard=0 ino=0
+2026-10-12T01:39:55.418Z raft-host: gc-pass ms=73 orphan=5 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=17 emit=10 tomb=7 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:39:56.480Z raft-host: applied session index=22 kind=1 shard=0 ino=0
+2026-10-12T01:39:56.494Z raft-host: gc-pass ms=73 orphan=5 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=29 emit=20 tomb=9 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:39:57.355Z iostats: get ops=132 bytes=540672 errors=0 avg_us=115 p50_us=86 max_us=248 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:39:57.570Z raft-host: gc-pass ms=73 orphan=5 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=17 emit=10 tomb=7 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:39:57.612Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=42 passes=18 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:39:57.857Z raft-host: applied session index=24 kind=1 shard=0 ino=0
+2026-10-12T01:39:58.646Z raft-host: gc-pass ms=73 orphan=5 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=30 emit=21 tomb=9 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:39:59.278Z raft-host: applied session index=4632 kind=1 shard=0 ino=0
+2026-10-12T01:39:59.627Z kv-obs: mt_bytes=223339 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:39:59.722Z raft-host: gc-pass ms=73 orphan=5 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=23 emit=10 tomb=13 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:40:00.774Z raft-host: applied session index=26 kind=1 shard=0 ino=0
+2026-10-12T01:40:00.792Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=22 emit=13 tomb=9 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:40:01.868Z raft-host: gc-pass ms=73 orphan=5 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=16 emit=9 tomb=7 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:40:02.357Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:40:02.944Z raft-host: gc-pass ms=73 orphan=5 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=29 emit=20 tomb=9 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:40:04.020Z raft-host: gc-pass ms=73 orphan=5 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=17 emit=9 tomb=8 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:40:04.631Z kv-obs: mt_bytes=228770 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:40:05.096Z raft-host: gc-pass ms=73 orphan=5 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=29 emit=20 tomb=9 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:40:06.172Z raft-host: gc-pass ms=73 orphan=5 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=17 emit=9 tomb=8 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:40:07.248Z raft-host: gc-pass ms=73 orphan=5 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=30 emit=20 tomb=10 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:40:07.357Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:40:08.323Z raft-host: gc-pass ms=73 orphan=5 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=23 emit=9 tomb=14 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:40:09.394Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=22 emit=13 tomb=9 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:40:09.635Z kv-obs: mt_bytes=227582 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:40:10.464Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=72 emit=1 tomb=71 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:40:11.534Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=84 emit=12 tomb=72 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:40:12.361Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:40:12.605Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=72 emit=1 tomb=71 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:40:13.614Z gc-health: stage=6 group=2 elapsed_ms=6 last_pass_age_ms=1009 passes=32 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:40:13.675Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=84 emit=12 tomb=72 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:40:14.745Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=72 emit=1 tomb=71 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:40:15.815Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=84 emit=12 tomb=72 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:40:16.885Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=72 emit=1 tomb=71 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:40:17.361Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:40:17.955Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=84 emit=12 tomb=72 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:40:22.362Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:40:27.365Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:40:29.615Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=629 passes=48 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:40:32.366Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:40:37.366Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:40:42.366Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:40:45.617Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=586 passes=64 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:40:47.367Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:40:52.367Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:40:57.372Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:41:01.618Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=544 passes=80 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:41:02.372Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:41:07.372Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:41:12.375Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:41:17.376Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:41:17.620Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=501 passes=96 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:41:22.376Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:41:27.376Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:41:32.376Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:41:33.621Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=459 passes=112 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:41:37.376Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:41:42.376Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:41:47.272Z raft-host: gc-pass ms=72 orphan=0 reap=72 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=101 segs=0 keys=130 emit=66 tomb=64 reap_scan=0 reap_sweep=23 reap_fence=33 reap_done=15
+2026-10-12T01:41:47.324Z query-publish: generation=2 g0=27 g2=5050 rebuilt=1 refolded=1 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=21 root_rc=0 files=0 dirs=1 logical=0
+2026-10-12T01:41:47.379Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:41:48.399Z raft-host: gc-pass ms=124 orphan=68 reap=55 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=80 segs=0 keys=166 emit=62 tomb=104 reap_scan=0 reap_sweep=18 reap_fence=24 reap_done=12
+2026-10-12T01:41:49.623Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=221 passes=128 sampled=2 pending=0,0 reap=0,0 removed=3 file_bytes=24576 payload_bytes=12288 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:41:49.649Z kv-obs: mt_bytes=207109 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:41:50.430Z query-publish: generation=3 g0=27 g2=5170 rebuilt=1 refolded=0 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=5 root_rc=0 files=0 dirs=1 logical=0
+2026-10-12T01:41:50.473Z raft-host: gc-pass ms=68 orphan=68 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=0 keys=141 emit=6 tomb=135 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:41:52.379Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:41:54.650Z kv-obs: mt_bytes=204331 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:41:57.380Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:42:02.380Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:42:05.624Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=110 passes=144 sampled=2 pending=0,0 reap=0,0 removed=7 file_bytes=57344 payload_bytes=28672 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:42:07.381Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:42:12.382Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:42:17.383Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:42:21.626Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=68 passes=160 sampled=2 pending=0,0 reap=0,0 removed=7 file_bytes=57344 payload_bytes=28672 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:42:22.384Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:42:27.384Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:42:32.385Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:42:37.386Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:42:37.628Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=27 passes=176 sampled=2 pending=0,0 reap=0,0 removed=7 file_bytes=57344 payload_bytes=28672 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:42:42.387Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:42:47.387Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:42:52.388Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:42:53.630Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=987 passes=191 sampled=2 pending=0,0 reap=0,0 removed=7 file_bytes=57344 payload_bytes=28672 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:42:57.389Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:43:02.389Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:43:07.389Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:43:09.631Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=946 passes=207 sampled=2 pending=0,0 reap=0,0 removed=7 file_bytes=57344 payload_bytes=28672 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:43:12.390Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:43:17.391Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:43:22.392Z iostats: get ops=231 bytes=946176 errors=0 avg_us=115 p50_us=81 max_us=294 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:43:49.449Z storage-engine=files direct_io=on
+2026-10-12T01:43:49.449Z Data GC admission: disabled
+2026-10-12T01:43:49.449Z Loaded 4 persisted cluster node(s) from /data1/01/efs-orcd-b239-private/meta/cluster_nodes.bin
+2026-10-12T01:43:49.449Z   persisted node 1: 172.16.223.57:19842
+2026-10-12T01:43:49.449Z   persisted node 2: 172.16.223.58:19842
+2026-10-12T01:43:49.449Z   persisted node 3: 172.16.223.59:19842
+2026-10-12T01:43:49.449Z   persisted node 4: 172.16.223.60:19842
+2026-10-12T01:43:49.450Z Storage quota: automatic 28.67 TiB (safe maximum 28.67 TiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T01:43:49.454Z Joined cluster with 4 nodes
+2026-10-12T01:43:49.456Z heartbeat: enabled (2000 ms interval)
+2026-10-12T01:43:49.467Z kv-obs: mt_bytes=204331 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:43:49.467Z raft-host: up raft_id=2 n=4 boot=6426066151018916 salt=11331966450987233485 g0=hosted g2=hosted
+2026-10-12T01:43:49.467Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T01:25:07Z on fcstor005), build=b239dc7d-release-normal: node 3 listening on 172.16.223.59:19842, storage=/data1/01/efs-orcd-b239-private,/data1/02/efs-orcd-b239-private,/data1/03/efs-orcd-b239-private,/data1/04/efs-orcd-b239-private,/data1/05/efs-orcd-b239-private,/data1/06/efs-orcd-b239-private (6 paths, stripe=leastq), used=0, quota=31518635647388, direct_io=on, writers=20 shared
+2026-10-12T01:43:49.571Z query-catchup: rc=0 backend=disk
+2026-10-12T01:43:49.571Z query-restore: rc=0 backend=disk
+2026-10-12T01:43:49.572Z query-publish: generation=1 g0=28 g2=5209 rebuilt=0 refolded=0 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=4 root_rc=0 files=0 dirs=1 logical=0
+2026-10-12T01:43:51.457Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=986 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:44:07.467Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=954 passes=18 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:44:23.469Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=913 passes=34 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:44:39.470Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=871 passes=50 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:44:50.716Z raft-host: applied session index=29 kind=1 shard=0 ino=0
+2026-10-12T01:44:50.742Z store: put O_DIRECT bounce copy (buf align=3501 len=4096)
+2026-10-12T01:44:50.743Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=4573 errors=0 avg_us=1097 p50_us=1097 max_us=1097 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T01:44:51.818Z raft-host: applied session index=82 kind=1 shard=0 ino=0
+2026-10-12T01:44:52.817Z query-publish: generation=2 g0=96 g2=5209 rebuilt=2 refolded=6 edge_reused=0 bytes=3858492 pin_ms=1 build_ms=6 root_rc=0 files=4 dirs=2 logical=2048
+2026-10-12T01:44:52.925Z raft-host: applied session index=98 kind=1 shard=0 ino=0
+2026-10-12T01:44:54.500Z kv-obs: mt_bytes=219441 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:44:55.025Z query-publish: generation=3 g0=163 g2=5211 rebuilt=3 refolded=4 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=6 root_rc=0 files=4 dirs=2 logical=524816
+2026-10-12T01:44:55.472Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=830 passes=66 sampled=0 pending=0,0 reap=0,0 removed=2 file_bytes=16384 payload_bytes=8192 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:44:55.744Z iostats: get ops=9 bytes=282624 errors=0 avg_us=168 p50_us=163 max_us=250 put ops=9 bytes=406935 errors=0 avg_us=708 p50_us=671 max_us=1097 wdisk ops=6 bytes=393216 errors=0 avg_us=585 p50_us=699 max_us=759
+2026-10-12T01:44:59.504Z kv-obs: mt_bytes=219297 l0_bytes=0 l0=0 l1=0
+2026-10-12T01:45:00.748Z iostats: get ops=9 bytes=282624 errors=0 avg_us=168 p50_us=163 max_us=250 put ops=9 bytes=406935 errors=0 avg_us=708 p50_us=671 max_us=1097 wdisk ops=6 bytes=393216 errors=0 avg_us=585 p50_us=699 max_us=759
+2026-10-12T01:45:05.752Z iostats: get ops=9 bytes=282624 errors=0 avg_us=168 p50_us=163 max_us=250 put ops=9 bytes=406935 errors=0 avg_us=708 p50_us=671 max_us=1097 wdisk ops=6 bytes=393216 errors=0 avg_us=585 p50_us=699 max_us=759
+2026-10-12T01:45:10.755Z iostats: get ops=9 bytes=282624 errors=0 avg_us=168 p50_us=163 max_us=250 put ops=9 bytes=406935 errors=0 avg_us=708 p50_us=671 max_us=1097 wdisk ops=6 bytes=393216 errors=0 avg_us=585 p50_us=699 max_us=759
+2026-10-12T01:45:11.473Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=789 passes=82 sampled=0 pending=0,0 reap=0,0 removed=2 file_bytes=16384 payload_bytes=8192 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:45:15.755Z iostats: get ops=9 bytes=282624 errors=0 avg_us=168 p50_us=163 max_us=250 put ops=9 bytes=406935 errors=0 avg_us=708 p50_us=671 max_us=1097 wdisk ops=6 bytes=393216 errors=0 avg_us=585 p50_us=699 max_us=759
+2026-10-12T01:45:20.759Z iostats: get ops=9 bytes=282624 errors=0 avg_us=168 p50_us=163 max_us=250 put ops=9 bytes=406935 errors=0 avg_us=708 p50_us=671 max_us=1097 wdisk ops=6 bytes=393216 errors=0 avg_us=585 p50_us=699 max_us=759
+2026-10-12T01:45:25.763Z iostats: get ops=9 bytes=282624 errors=0 avg_us=168 p50_us=163 max_us=250 put ops=9 bytes=406935 errors=0 avg_us=708 p50_us=671 max_us=1097 wdisk ops=6 bytes=393216 errors=0 avg_us=585 p50_us=699 max_us=759
+2026-10-12T01:45:27.474Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=748 passes=98 sampled=0 pending=0,0 reap=0,0 removed=2 file_bytes=16384 payload_bytes=8192 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T01:45:27.797Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=1 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=199 segs=0 keys=2552 emit=807 tomb=1745 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:45:28.867Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=8 emit=1 tomb=7 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:45:29.937Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=1 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=204 segs=0 keys=2688 emit=807 tomb=1881 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T01:45:30.767Z iostats: get ops=9 bytes=282624 errors=0 avg_us=168 p50_us=163 max_us=250 put ops=9 bytes=406935 errors=0 avg_us=708 p50_us=671 max_us=1097 wdisk ops=6 bytes=393216 errors=0 avg_us=585 p50_us=699 max_us=759
+2026-10-12T01:45:31.007Z raft-host: gc-pass ms=67 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=202 segs=0 keys=149 emit=1 tomb=148 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0

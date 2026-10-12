@@ -1,0 +1,691 @@
+[
+  {
+    "nodes": [
+      {
+        "host": "fcstor003",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/13723427990345096104/7887289488269498719",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor004",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/13723427990345096104/7887289488269498719",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor005",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/13723427990345096104/7887289488269498719",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor006",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/13723427990345096104/7887289488269498719",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      }
+    ],
+    "total": 0
+  },
+  {
+    "nodes": [
+      {
+        "host": "fcstor003",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/12074503591809894260/3317482776722449294",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor004",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/12074503591809894260/3317482776722449294",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor005",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/12074503591809894260/3317482776722449294",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor006",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/12074503591809894260/3317482776722449294",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      }
+    ],
+    "total": 0
+  },
+  {
+    "nodes": [
+      {
+        "host": "fcstor003",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/9991809887578272235/10296149513521780621",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor004",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/9991809887578272235/10296149513521780621",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor005",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/9991809887578272235/10296149513521780621",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor006",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/9991809887578272235/10296149513521780621",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      }
+    ],
+    "total": 0
+  },
+  {
+    "nodes": [
+      {
+        "host": "fcstor003",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/7991348295054275093/17119454307765098498",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor004",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/7991348295054275093/17119454307765098498",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor005",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/7991348295054275093/17119454307765098498",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor006",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/7991348295054275093/17119454307765098498",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      }
+    ],
+    "total": 0
+  },
+  {
+    "nodes": [
+      {
+        "host": "fcstor003",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/18253393857773648749/16307376152719276400",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor004",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/18253393857773648749/16307376152719276400",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor005",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/18253393857773648749/16307376152719276400",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor006",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/18253393857773648749/16307376152719276400",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      }
+    ],
+    "total": 0
+  },
+  {
+    "nodes": [
+      {
+        "host": "fcstor003",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/16694664177367169444/2424663244006296736",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor004",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/16694664177367169444/2424663244006296736",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor005",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/16694664177367169444/2424663244006296736",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor006",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/16694664177367169444/2424663244006296736",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      }
+    ],
+    "total": 0
+  },
+  {
+    "nodes": [
+      {
+        "host": "fcstor003",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/14264053354545738108/16983678304315863801",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor004",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/14264053354545738108/16983678304315863801",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor005",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/14264053354545738108/16983678304315863801",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor006",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/14264053354545738108/16983678304315863801",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      }
+    ],
+    "total": 0
+  },
+  {
+    "nodes": [
+      {
+        "host": "fcstor003",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/1947140135452207880/10003335675681578602",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor004",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/1947140135452207880/10003335675681578602",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor005",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/1947140135452207880/10003335675681578602",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor006",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/1947140135452207880/10003335675681578602",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      }
+    ],
+    "total": 0
+  },
+  {
+    "nodes": [
+      {
+        "host": "fcstor003",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/13690076747317359269/8040794482630214828",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor004",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/13690076747317359269/8040794482630214828",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor005",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/13690076747317359269/8040794482630214828",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor006",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/13690076747317359269/8040794482630214828",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      }
+    ],
+    "total": 0
+  },
+  {
+    "nodes": [
+      {
+        "host": "fcstor003",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/11019407246628982611/7363079470318850892",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor004",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/11019407246628982611/7363079470318850892",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor005",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/11019407246628982611/7363079470318850892",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor006",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/11019407246628982611/7363079470318850892",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      }
+    ],
+    "total": 0
+  },
+  {
+    "nodes": [
+      {
+        "host": "fcstor003",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/17553641313049798292/4013790042889712171",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor004",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/17553641313049798292/4013790042889712171",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor005",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/17553641313049798292/4013790042889712171",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor006",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/17553641313049798292/4013790042889712171",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      }
+    ],
+    "total": 0
+  },
+  {
+    "nodes": [
+      {
+        "host": "fcstor003",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/9112282279285584949/4136022131917832342",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor004",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/9112282279285584949/4136022131917832342",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor005",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/9112282279285584949/4136022131917832342",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor006",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/9112282279285584949/4136022131917832342",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      }
+    ],
+    "total": 0
+  },
+  {
+    "nodes": [
+      {
+        "host": "fcstor003",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/18243951351689015897/880559459502520734",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor004",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/18243951351689015897/880559459502520734",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor005",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/18243951351689015897/880559459502520734",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      },
+      {
+        "host": "fcstor006",
+        "fragments": [],
+        "fences": [
+          {
+            "path": "/data1/01/efs-orcd-b239-private/meta/pack-fences-v1/1/18243951351689015897/880559459502520734",
+            "magic": "EFSDEAD1",
+            "bytes": 64,
+            "valid_identity": true
+          }
+        ]
+      }
+    ],
+    "total": 0
+  }
+]
