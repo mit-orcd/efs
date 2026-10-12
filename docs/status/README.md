@@ -1,5 +1,7 @@
 # Project status — current work and index
 
+**Latest alpha scope:** ordinary files/TCP/direct only, `EFS_PACKED_WRITES=0`, `EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`. Small-file packing is excluded alongside containers, `.efs`, RDMA, buffered and dedicated repair/recovery. Earlier packing qualification requirements below are historical. [Binding packing exclusion](v030-packing-exclusion-20261012.md).
+
 **Standing testing scope:** containers are experimental and excluded from required tests and release gates. Use files for required qualification; container-only investigation requires explicit new user authorization. [Binding policy](container-testing-policy-20261012.md).
 
 ## v0.3.0-pre-alpha release integration

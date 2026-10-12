@@ -11,17 +11,16 @@ older passes to a new source. Existing inactive repair prerequisites already
 integrated need not be removed, but unintegrated experimental repair stages are
 excluded from the release plan and activation remains disabled.
 
-Small-file packing remains a release priority. `.efs` features are excluded from this alpha; query progress is deferred. Four planning
-gate groups remain; this is not an exact command count:
+Small-file packing and `.efs` features are excluded from this alpha. Use `EFS_PACKED_WRITES=0`, client `EFS_COMMANDS=0` and daemon `EFS_COMMANDS_SERVER=0`. [Latest packing decision](v030-packing-exclusion-20261012.md) supersedes historical packing assignments below. Root alone runs the following required gate groups:
 
 | Gate group | Owner / cluster | Required coverage |
 | --- | --- | --- |
-| 1 — Read-progress safety | AMD | Actual Raft/context-fence regressions, fresh-arrival and own-apply checks, affected sanitizers and integration review. |
-| 2 — Packing acceptance | Intel | TCP/direct I/O, original-budget seven-client workload, deep paths and packed writes, with `.efs` disabled and query cases explicitly excluded. No competing build/profile workload during quiet acceptance. |
-| 3 — Files correctness and reclamation | NUC | TCP/direct I/O/files core POSIX, concurrent/peer, packing mutations, deletion/GC and physical reclamation using an unconfounded oracle. |
-| 4 — Final merged qualification | AMD | Freeze accepted merged source, full normal/fault native suites and final affected sanitizer checks; reconcile Intel/NUC live results at that exact freeze. |
+| Read-progress safety | Root / AMD | Actual Raft/context-fence regressions, fresh arrivals, own-apply checks and affected sanitizers. |
+| Ordinary files correctness | Root / AMD | Core POSIX, seven-client concurrency, deep paths, ordinary writes/fsync/reopen, peer behavior and clean teardown; packing disabled. |
+| Ordinary durability/reclamation | Root / AMD | Acknowledged ordinary bytes after cold restart and ordinary deletion/reclamation using an unconfounded oracle. |
+| Final merged qualification | Root / AMD | One frozen merged source, normal/fault native, affected sanitizers and in-scope live results. |
 
-## Common source and parallel execution contract
+## Historical common-source and parallel execution contract
 
 All three agents start from release baseline
 `8b7391b3f3edcf9fc99440d9aad3c240325acb83` on `release-v0.3.0-pre-alpha`.

@@ -1,5 +1,7 @@
 # v0.3.0-pre-alpha integration and acceptance
 
+**Latest alpha scope:** ordinary files/TCP/direct only, `EFS_PACKED_WRITES=0`, `EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`. Small-file packing is excluded alongside containers, `.efs`, RDMA, buffered and dedicated repair/recovery. Earlier packing qualification requirements below are historical. [Binding packing exclusion](v030-packing-exclusion-20261012.md).
+
 Status: qualification STOPPED/checkpointed; incomplete and unaccepted. Planned alpha scope is TCP/direct I/O/files with `.efs` disabled; containers and dedicated repair/recovery deferred. Nothing tagged or pushed. User authorization, Oct 11: create an isolated integration
 branch, coordinate all agents, add and test all improvements, prioritize
 small-file packing and code-review findings. Release owner: agent 2 / AMD.

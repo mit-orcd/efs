@@ -1475,6 +1475,10 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**Latest alpha scope:** ordinary files/TCP/direct only, `EFS_PACKED_WRITES=0`, `EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`. Small-file packing is excluded alongside containers, `.efs`, RDMA, buffered and dedicated repair/recovery. Earlier packing qualification requirements below are historical. [Binding packing exclusion](../status/v030-packing-exclusion-20261012.md).
+
+**Standing testing scope:** containers are experimental and excluded from required tests and release gates. Use files for required qualification; container-only investigation requires explicit new user authorization. [Binding policy](../status/container-testing-policy-20261012.md).
+
 ### v0.3.0-pre-alpha release integration
 
 Current solo final-source freeze: **1e3a46384e897a47751871b15e82ead86c9d0abd**, reviewed qualification fixes merged into release branch. Exact-source native/fault/sanitizer then heavy live qualification RUNNING on AMD; not accepted. Diagnostic tracing excluded. [Final-source ledger](../status/v030-tcp-direct-qualification-20261012.md).
@@ -2441,6 +2445,8 @@ fix, before execution. [Freeze/dependency contract](../status/v030-release-scope
 
 *Source: `status/decisions.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**Accepted October 12, 2026 — container testing scope:** the container backend remains experimental; all container-specific testing, comparison and qualification is excluded from required work, including future releases, until explicitly reauthorized by the user. Files and files-backed packing tests remain required. [Binding policy](../status/container-testing-policy-20261012.md).
+
 **Decided means the design was accepted; it does not mean implementation or
 acceptance is complete. Preserve accepted choices and check their current work
 items before implementation. ASK rows remain unresolved design choices.**
@@ -2631,6 +2637,8 @@ acceptance verdict. Track current-code transport validation under
 ## Appendix 4 — Work items — long-form text for the open W items and the queue rows
 
 *Source: `backlog/work-items.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan (status blocks) + historical evidence (dated record).**
+
+**Standing container scope:** container-backend work and all container-specific testing/benchmarks/qualification below are experimental reference, not required tasks or release blockers. Resume only with explicit new user authorization. Files-backed packing and shared files correctness remain in scope. [Binding policy](../status/container-testing-policy-20261012.md).
 
 Companion to [the status page](#appendix-1--status--the-task-right-now-and-the-work-queue). The status page holds the queue,
 the plan and the decisions; this page holds the full text of the open
