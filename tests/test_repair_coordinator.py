@@ -5,7 +5,7 @@ ReadIndex, writer authority and proposal execution are adapters, not quorum proo
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text();a=s.index('int server_raft_host_repair_record(');fn=s[a:s.index('\n}',a)+2]
+s=(root/'src/server/raft_host.c').read_text();a=s.index('int server_raft_host_repair_record(');fn=s[a:s.index('\n}',a)+2];a=s.index('int server_raft_host_repair_prepare(');prepare=s[a:s.index('\n}',a)+2]
 code=r'''
 #include "efs/repair_job.h"
 #include "efs/meta_cmd.h"
@@ -27,7 +27,7 @@ static int host_read_index(struct efs_raft_host *h,uint8_t g,int *hint){(void)h;
 static void wr32be(uint8_t *b,uint32_t v){b[0]=v>>24;b[1]=v>>16;b[2]=v>>8;b[3]=v;}
 void server_raft_host_writer_view(const struct efs_msg_inode_writer_view *q,struct efs_msg_inode_writer_view_reply *r){memset(r,0,sizeof(*r));r->status=EFS_INODE_RPC_OK;r->ino=q->ino;r->generation=q->generation;r->chunk_index=q->chunk_index;}
 static int host_propose_wait_idx(struct efs_raft_host *h,uint8_t g,const uint8_t *cmd,uint32_t n,int *hint,uint64_t *idx){(void)hint;(void)idx;proposals++;if(proposal_rc)return proposal_rc;int rc=efs_repair_apply_command_term(h->kv,g,entry_term?entry_term:term,cmd,n);return !rc&&lost_reply?EFS_ERR_BUSY:rc;}
-'''+fn+r'''
+'''+prepare+fn+r'''
 int main(void){
  struct efs_kv *kv=efs_kv_mem_create();assert(kv);struct server node={1,1};struct efs_raft_host h={.kv=kv,.running=1,.s=&node};pthread_mutex_init(&h.mu,NULL);g_host=&h;group_slot_value.r=(void*)&h;
  struct efs_meta_attrs at={0,0,1};efs_ino_t ino;assert(!efs_meta_apply_init(kv,1));assert(!efs_meta_apply_create_file(kv,&at,EFS_ROOT_INO,S_IFREG|0644,"coordinator",&ino));
@@ -38,7 +38,13 @@ int main(void){
  role=EFS_RAFT_FOLLOWER;assert(server_raft_host_repair_record(EFS_REPAIR_OP_ADMIT,&j,0,NULL,0)==EFS_ERR_NOT_PRIMARY&&!proposals);role=EFS_RAFT_LEADER;
  node.id=2;assert(server_raft_host_repair_record(EFS_REPAIR_OP_ADMIT,&j,0,NULL,0)==EFS_ERR_STALE&&!proposals);node.id=1;
  entry_term=2;assert(server_raft_host_repair_record(EFS_REPAIR_OP_ADMIT,&j,0,NULL,0)==EFS_ERR_STALE);assert(efs_repair_get(kv,&j,&got)==EFS_ERR_NOT_FOUND);entry_term=0;
+ struct efs_repair_job prepared;uint8_t state,flags;
+ assert(!server_raft_host_repair_prepare(&j,&prepared,&state,&flags)&&!state&&!flags);
+ assert(prepared.owner==1&&prepared.epoch==1);
+ role=EFS_RAFT_FOLLOWER;assert(server_raft_host_repair_prepare(&j,&prepared,&state,&flags)==EFS_ERR_NOT_PRIMARY);role=EFS_RAFT_LEADER;
  lost_reply=1;assert(server_raft_host_repair_record(EFS_REPAIR_OP_ADMIT,&j,0,NULL,0)==EFS_ERR_BUSY);assert(!efs_repair_get(kv,&j,&got));assert(efs_repair_gc_ready(kv,ino,row.generation,0,101)==EFS_ERR_BUSY);lost_reply=0;
+ assert(!server_raft_host_repair_prepare(&j,&prepared,&state,&flags)&&state==EFS_REPAIR_ADMITTED&&!flags);
+ term=2;assert(server_raft_host_repair_prepare(&j,&prepared,&state,&flags)==EFS_ERR_STALE);term=1;
  assert(!server_raft_host_repair_record(EFS_REPAIR_OP_ADMIT,&j,0,NULL,0));
  uint8_t receipt[EFS_REPAIR_RECEIPT_BYTES];assert(!efs_repair_receipt_encode(&j,EFS_REPAIR_RECEIPT_SEAL,receipt));int before=proposals;assert(server_raft_host_repair_record(EFS_REPAIR_OP_SEAL,&j,2,receipt,sizeof(receipt))==EFS_ERR_BUSY&&proposals==before);
  assert(!efs_repair_receipt_encode(&j,EFS_REPAIR_RECEIPT_DATA,receipt));receipt[68]^=1;before=reads;assert(server_raft_host_repair_record(EFS_REPAIR_OP_DATA,&j,0,receipt,sizeof(receipt))==EFS_ERR_PROTO&&reads==before);receipt[68]^=1;

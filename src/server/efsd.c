@@ -503,7 +503,7 @@ int main(int argc, char **argv)
         if (rr!=EFS_OK) {
             fprintf(stderr,"repair store identity unavailable rc=%d; trusted local EFS_REPAIR_INIT_STORE=1 setup required for unbound roots\n",rr);return 1;
         }
-        fprintf(stderr,"Repair: experimental missing-base FILES receiver; no automatic repair worker\n");
+        fprintf(stderr,"Repair: experimental missing-base FILES manual coordinator; automatic repair disabled\n");
     }
 
     const char *data_pressure = getenv("EFS_DATA_GC_ADMISSION");

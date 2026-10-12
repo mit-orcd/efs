@@ -46,7 +46,7 @@ def start(name,extra=None,failure=False):
 def envelope(build=None,version=256):return struct.pack('>I',version)+(build or a.build_id).encode().ljust(48,b'\0')
 try:
  start('default')
- assert rc(rpc(145))==-16 and rc(rpc(147))==-16
+ assert rc(rpc(145))==-16 and rc(rpc(147))==-16 and rc(rpc(149))==-16
  assert not (root/'meta/repair-store').exists();stop()
  start('init-without-experiment',{'EFS_REPAIR_INIT_STORE':'1'},failure=True);assert not (root/'meta/repair-store').exists()
  start('experiment-unbound',{'EFS_REPAIR_EXPERIMENT':'1'},failure=True);assert not (root/'meta/repair-store').exists()
@@ -54,6 +54,8 @@ try:
  assert rc(rpc(145))==-7;assert rc(rpc(145,envelope('different-build')))==-7;assert rc(rpc(145,envelope(version=0)))==-7
  reply=rpc(145,envelope());assert rc(reply)==0 and struct.unpack('>II',reply[4:12])==(1,1) and any(reply[12:28]) and reply[28:].rstrip(b'\0').decode()==a.build_id
  store_id=reply[12:28].hex()
+ for body in (b'',envelope('different-build'),envelope()):
+  assert rc(rpc(149,body))==-7
  for body,error in ((b'',-7),(envelope('different-build')+b'\1',-7),(envelope()+b'\0',-5),(envelope()+b'\1',-5)):
   reply=rpc(147,body);assert rc(reply)==error and not any(reply[4:]),(rc(reply),error)
  stop();start('experiment-cold',{'EFS_REPAIR_EXPERIMENT':'1'});reply=rpc(145,envelope());assert rc(reply)==0 and reply[12:28].hex()==store_id;stop()

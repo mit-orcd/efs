@@ -413,6 +413,20 @@ send_reply:
             if(!rc){efs_put_upload_wr32(reply+4,1);efs_put_upload_wr32(reply+8,g_server->id);strncpy((char *)reply+28,EFS_BUILD_ID,EFS_BUILD_ID_LEN-1);}
             efs_conn_send_msg(conn,EFS_MSG_REPAIR_STORE_ID_REPLY,reply,sizeof(reply));break;
         }
+        case EFS_MSG_REPAIR_REQUEST: {
+            uint8_t reply[4]={0};int rc=EFS_ERR_ACCES;
+            const uint8_t *request=payload;uint32_t header=4+EFS_BUILD_ID_LEN;
+            if(g_server->repair_experiment && server_raft_host_active()) {
+                struct efs_repair_job selector;
+                if(payload_len!=header+EFS_REPAIR_JOB_BYTES ||
+                   efs_put_upload_rd32(request)!=EFS_VERSION_PACK ||
+                   strncmp((const char *)request+4,EFS_BUILD_ID,EFS_BUILD_ID_LEN))rc=EFS_ERR_PROTO;
+                else {rc=efs_repair_job_decode(request+header,EFS_REPAIR_JOB_BYTES,&selector);
+                    if(!rc)rc=server_repair_run(g_server,&selector);}
+            }
+            efs_put_upload_wr32(reply,(uint32_t)rc);
+            efs_conn_send_msg(conn,EFS_MSG_REPAIR_REQUEST_REPLY,reply,sizeof(reply));break;
+        }
         case EFS_MSG_REPAIR_TARGET: {
             uint8_t reply[4+EFS_REPAIR_RECEIPT_BYTES]={0};int rc=EFS_ERR_ACCES;
             const uint8_t *request=payload;uint32_t header=4+EFS_BUILD_ID_LEN;

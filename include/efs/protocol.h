@@ -206,7 +206,7 @@ enum efs_msg_type {
     EFS_MSG_REPAIR_STORE_ID_REPLY = 146,
     EFS_MSG_REPAIR_TARGET = 147,
     EFS_MSG_REPAIR_TARGET_REPLY = 148,
-    EFS_MSG_REPAIR_REQUEST = 149, /* reserved: manual coordinator not yet wired */
+    EFS_MSG_REPAIR_REQUEST = 149, /* default-off experimental selector; no caller data/receipts */
     EFS_MSG_REPAIR_REQUEST_REPLY = 150,
 };
 

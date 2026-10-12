@@ -139,6 +139,8 @@ struct efs_repair_job;
 /* Trusted local coordinator only; not an RPC endpoint. */
 int server_raft_host_repair_gc_ready(efs_ino_t,uint32_t,uint64_t);
 int server_raft_host_repair_gc_inode_local_ready(efs_ino_t);
+int server_raft_host_repair_prepare(const struct efs_repair_job *,struct efs_repair_job *,uint8_t *,uint8_t *);
+int server_repair_run(struct efsd_server *,const struct efs_repair_job *);
 int server_raft_host_repair_record(unsigned,const struct efs_repair_job *,uint32_t,const uint8_t *,uint32_t);
 int server_repair_receive(struct efsd_server *,const uint8_t *,uint32_t,int seal,uint8_t *receipt);
 int server_repair_activation(struct efsd_server *,int trusted_create);

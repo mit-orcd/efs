@@ -10480,6 +10480,36 @@ static int host_repair_write_read(struct efs_raft_host *h,uint8_t group,
     pthread_mutex_unlock(&h->mu);return rc;
 }
 
+/* Capture only on the current lane leader. Pending jobs retain their exact
+ * canonical owner/term/store; a new leader cannot silently forget old debt. */
+int server_raft_host_repair_prepare(const struct efs_repair_job *selector,
+    struct efs_repair_job *out,uint8_t *state,uint8_t *flags)
+{
+    struct efs_raft_host *h=g_host;
+    if(!h || !h->running || !h->s || !h->s->repair_experiment)return EFS_ERR_ACCES;
+    if(!selector || !out || !state || !flags || selector->span_off || selector->span_len ||
+       selector->state!=EFS_REPAIR_ADMITTED || selector->flags)return EFS_ERR_INVAL;
+    struct efs_repair_job q=*selector,current;int hint=-1;
+    uint8_t group=efs_raft_shard_group(efs_kv_lane_shard(q.ino,q.ci%EFS_META_LANES));
+    int rc=host_read_index(h,group,&hint);if(rc)return rc;
+    pthread_mutex_lock(&h->mu);struct host_group *g=group_slot(h,group);
+    *state=*flags=0;
+    if(!g || !g->r || efs_raft_role(g->r)!=EFS_RAFT_LEADER)rc=EFS_ERR_NOT_PRIMARY;
+    else if(efs_raft_term(g->r)>UINT32_MAX-1ull)rc=EFS_ERR_STALE;
+    else {
+        q.owner=h->s->id;q.epoch=(uint32_t)efs_raft_term(g->r);
+        rc=efs_repair_capture(h->kv,&q,&current);
+        if(!rc){
+            struct efs_repair_job old;
+            rc=efs_repair_get(h->kv,&current,&old);
+            if(rc==EFS_ERR_NOT_FOUND)rc=0;
+            else if(!rc){*state=old.state;*flags=old.flags;}
+            if(!rc)*out=current;
+        }
+    }
+    pthread_mutex_unlock(&h->mu);return rc;
+}
+
 /* Trusted local coordinator only, deliberately absent from handler dispatch.
  * Public/forwarded generic tag55 continues to be refused. DATA/SEAL can only
  * be recorded from a receipt returned by the exact target operation; encoding
