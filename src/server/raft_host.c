@@ -193,6 +193,7 @@ struct host_outbox {
      * heartbeat. Depth is npri + nent, capped at HOST_OUTBOX_MAX. */
     int npri;
     int nent;
+    uint64_t read_probe_context[HOST_NGROUPS],read_probe_term[HOST_NGROUPS],read_probe_boot[HOST_NGROUPS];
     int preserve_read; /* containers: keep read contexts and replication ACKs distinct */
     uint64_t queued_bytes, queued_bytes_hi;
     struct host_outbox_item pri[HOST_OUTBOX_MAX];
@@ -1125,6 +1126,30 @@ static int host_send_ready(void *net, int peer, uint8_t group)
     return ready;
 }
 
+/* A fresh container read need not wait for a newly sent data window to
+ * become durable on its follower. Queue one bounded prefix-zero vote probe
+ * per peer/group/context alongside, never instead of, the original frame.
+ * The core still validates current term/boot/voters and the leader's own
+ * applied ReadIndex; class 1 grants no replication progress/window credit.
+ * This shares the existing priority lane and its byte/count bounds. */
+static void host_container_read_probe(struct host_outbox *tx,const uint8_t *p,uint32_t len)
+{
+    if(!tx->preserve_read || len<EFS_WIRE_RAFT_HDR_LEN || p[0]!=EFS_RAFT_MSG_AE_REQ)return;
+    int gi=efs_raft_flow_group(p[1]);
+    uint64_t read=efs_raft_flow_rd64(p+28),term=efs_raft_flow_rd64(p+12),boot=efs_raft_flow_rd64(p+20);
+    if(gi<0 || !read || (tx->read_probe_term[gi]==term && tx->read_probe_boot[gi]==boot &&
+                       read<=tx->read_probe_context[gi]))return;
+    if(tx->npri+tx->nent>=HOST_OUTBOX_MAX || tx->queued_bytes>HOST_OUTBOX_BYTES-EFS_WIRE_RAFT_HDR_LEN)return;
+    uint8_t *probe=malloc(EFS_WIRE_RAFT_HDR_LEN);if(!probe)return;
+    efs_raft_flow_probe(probe,p);
+    tx->pri[tx->npri++]=(struct host_outbox_item){probe,EFS_WIRE_RAFT_HDR_LEN};
+    tx->queued_bytes+=EFS_WIRE_RAFT_HDR_LEN;
+    if(tx->queued_bytes>tx->queued_bytes_hi)tx->queued_bytes_hi=tx->queued_bytes;
+    tx->st_enq++;
+    if((uint32_t)(tx->npri+tx->nent)>tx->st_hi)tx->st_hi=(uint32_t)(tx->npri+tx->nent);
+    tx->read_probe_context[gi]=read;tx->read_probe_term[gi]=term;tx->read_probe_boot[gi]=boot;
+}
+
 static int host_send(void *net, const struct efs_raft_msg *msg)
 {
     struct efs_raft_host *h = net;
@@ -1269,6 +1294,7 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
             }
         }
     }
+    host_container_read_probe(tx,heap,len);
     pthread_cond_signal(&tx->cv);
     pthread_mutex_unlock(&h->outbox_mu);
     host_wire_taken(msg);

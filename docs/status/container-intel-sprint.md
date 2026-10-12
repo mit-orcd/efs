@@ -691,3 +691,34 @@ The existing two-second settling grace, target durable catch-up refusal,
 production balancing-policy extraction PASS locally. No production service,
 ordinary-file default, test concurrency, deadline or preserved store is changed.
 Placement is a hypothesis until fresh loaded and immediate physical tests pass.
+
+
+### Bounded container read-probe candidate
+
+Balanced exact `be506447328c0b0c8d92af39fbfbfe24aa867b8b` has matching
+782 tracked inputs and both-host native backend (buffered/direct), durability,
+GC, overwrite, metadata apply, Raft/store/simulation and balancing controls
+PASS. Build uses `make -j4 EFS_GIT_ID=<SHA> EFS_GIT_DESCRIBE=<SHA>
+EFS_GIT_BRANCH=devel-container`. The initial command used an incorrect target
+path and then an unsupported extra backend argument; corrected commands
+passed before deployment. No result from either setup error is acceptance.
+Verified group0 leader node1/Intel1 and group2 node3/Intel2 before load;
+unchanged concurrent gate **1448/1512 PASS,64 FAIL**: eight cases all seven
+(deep60/deep100/manyfiles/crazy roundtrip/crazy dirs/concurrent creates/appends/
+create-unlink), write-readdir five, mtime three. This placement is not a fix.
+Immediate physical and remaining functional gates are running. Prior c3 final
+quiet physical observer completed **PASS65.388s**; it does not replace its
+failed immediate full-load physical observer.
+
+The next product candidate adds one bounded priority prefix-zero read vote per
+peer/group/fresh context alongside a successfully queued original container
+AE frame. It uses the existing escape-probe wire class and unchanged core
+term/boot/current voter/leader/config guards, request admission and leader
+applied ReadIndex barrier. The original frame remains queued, and the vote
+class cannot retire a data window or advance replication progress. Queue
+count/byte caps and allocation refusal keep the additional probe optional;
+context/term/boot tracking suppresses repeats. Ordinary-file outboxes are
+unchanged. Actual helper regression, outbox and host-flow controls PASS
+locally; helper ASan/UBSan PASS. Removing the helper produces the expected
+assertion/SIGABRT negative control. Both-host compilation/native and exact
+live qualification remain required before any closure claim.
