@@ -722,3 +722,29 @@ unchanged. Actual helper regression, outbox and host-flow controls PASS
 locally; helper ASan/UBSan PASS. Removing the helper produces the expected
 assertion/SIGABRT negative control. Both-host compilation/native and exact
 live qualification remain required before any closure claim.
+
+
+Balanced be506447 qualification completed: quiet core **430/432 PASS**,
+**2 deep60 timeouts**, peer134/134 PASS, private mmap PASS/shared-write
+ENODEV skips, lifecycle create/read/churn/warm/cold hashes PASS, both-host
+tiny warm/cold hashes and delete PASS; global graceful restart PASS; final
+physical reclamation **PASS10.145s**. Immediate post-full reclamation
+**PASS114.138s**, all four zero at114.131s, initial mappings
+24545/24773/24544/24825 and allocated bodies
+1698246656/1720942592/1698455552/1724784640 bytes. This does not
+qualify the next source and does not compensate for64 full-load failures.
+Both-host exact binary hashes are retained outside Git in
+`artifacts/container-20261012/balancebe-deploy/*-proof.log`; Intel1 efsd
+SHA256 `36062853bb8f4b6e2b1e22bc29331f0c4a6b7d35f680b7ed28a998f727b9d86d`,
+FUSE `b555b6da79b32625561dcb003190a64c7c4a9ca5423bcaaf31cd05813938168c`.
+
+Priority read-probe exact candidate is
+`209c1f8b26a22947a90c9b6de53583b20e1a978e` (783 tracked build inputs).
+Companion outbox retention includes AE_REQ prev-index/term in bytes44–59,
+so a same-context matched-tail probe cannot overwrite a prefix-zero escape
+probe. AE_REP match-prefix retention, class/context/term/boot checks and
+ordinary-file behavior remain unchanged. Native extraction distinguishes
+both request prefix fields and retains vote eviction at capacity. Exact
+both-host native compilation/controls are in progress; no live acceptance
+claim is made yet. Configuration remains balanced to isolate this product
+change against the immediately preceding placement result.
