@@ -135,7 +135,7 @@ SIGKILL exit, then applies the same cold-neighbour and physical-reclamation
 oracles. It is valid only with `--mounted-packing-only`. Add this option to the
 focused reproduction above, using fresh roots and unused ports. This tests
 process-crash recovery after acknowledgements; it does not simulate power loss,
-mid-flight failures or missing-node repair. New crash gate qualification pending.
+mid-flight failures or missing-node repair. The additional gate passed on the verified 951f417d experiment; this is process-crash evidence, not quiet workload qualification.
 
 ## Repeatability failure: qualification remains open
 
@@ -167,3 +167,42 @@ under extra packing metadata traffic. This can worsen single-cycle latency;
 keep only after focused inbox/read safety checks and improved repeated quiet
 full workload results. Restore32 if benefit is not demonstrated. No production
 rollout or release qualification transfer is authorized by this experiment.
+
+
+## Experiment verdict: discard 64-frame batching
+
+Verified candidate `951f417d5ef80b15d9b57b1603ce39f531acd204` passed normal
+native tests, eight inbox/read-authority ASan/UBSan gates and the additional
+acknowledged-fsync SIGKILL/cold/physical-reclamation gate. Its first quiet
+seven-client run failed: clients3 and5 exceeded the original30-second
+`dir_deep_nesting` budget (1510/1512 core checks passed). Peer67/67,
+cold bytes and physical/metadata drain passed independently. Planned quiet
+repeats2/3 were NOTRUN after that failure. Per-client suite durations49.4–53.0s
+show no demonstrated improvement. Restore the32-frame limit; retain the crash
+test. Packing remains unqualified.
+
+Deployment verification mattered: an old documentation-target archive also
+contained source files and initially overwrote the experiment. Those native
+results are excluded from candidate qualification. Re-extract the candidate
+archive last, verify all779 code/test/build inputs against its Git snapshot,
+then clean-build. The corrected input manifest aggregate SHA256 was
+`0552d52daa2b8cd4a2a07b79eb640c9a229a63826b4e8e7b13d81c4df4072354`;
+corrected daemon SHA256 was
+`e5752a86ae2cef740647d60ae5315fe295798a435a2b660bc4811029edd7c288`.
+Raw logs and manifests remain outside Git under the AMD qualification directory.
+
+Reproduce using the commands above at951f417d: run `make clean`, identified
+build and `make test`; run the focused fixture with
+`--packing-crash-after-fsync`, then the seven-client fixture on fresh roots and
+ports. For sanitizer tests which treat CC as one executable, use a compiler
+wrapper invoking `/usr/bin/gcc -fsanitize=address,undefined
+-fno-omit-frame-pointer -g "$@"`; set both CC to the wrapper and put its `cc`
+name first in PATH. Gates: host_inbox, readindex_completion, readindex_publish,
+readindex_operation, readindex_pair, readindex_remote_pair, read_admission and
+session_read_proof. Restore normal compiler settings before live testing.
+
+Next diagnostic: profile the baseline32 daemon CPU during the same seven-client
+workload, with bounded deep-case phase tracing. Earlier creation consumed19–20s
+while the leaf write consumed less than0.5s; fresh metadata ReadIndex waits
+remain the leading measured suspect. Diagnostic instrumentation is not quiet
+acceptance. Preserve deadlines, concurrency and read authority.
