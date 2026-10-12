@@ -353,6 +353,9 @@ test: all
 	python3 tests/test_lookup_read_group.py
 	python3 tests/test_readindex_operation.py
 	python3 tests/test_readindex_pair.py
+	python3 tests/test_readindex_remote_pair.py
+	python3 tests/test_host_read_deadline.py
+	python3 tests/test_peer_pool_deadline.py
 	python3 tests/test_lookup_group_plan.py
 	python3 tests/test_lookup_path_authority.py
 	python3 tests/test_read_control_host.py
@@ -753,6 +756,7 @@ tests/test_put_upload_client: tests/test_put_upload_client.c src/client/put_uplo
 	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ $< $(LIB) $(LDFLAGS)
 # Publication coalescing is shared by the real worker and its policy gate.
 src/server/raft_host.o tests/test_query_refresh: src/server/query_refresh.h src/server/query_export_lease.h
+src/server/raft_host.o: src/server/read_index_pair_remote.h
 
 # Ticket wire changes must rebuild both endpoints and their actual handler.
 src/client/put_upload.o src/server/put_upload.o src/server/handler.o: include/efs/put_upload.h include/efs/put_ticket.h

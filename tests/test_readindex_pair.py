@@ -6,6 +6,7 @@ root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_
 a=s.index('static int host_read_index_pair(');b=s.index('\n}',a)+2
 code=r'''
 #include "efs/common.h"
+#include "efs/network.h"
 #include <stdint.h>
 #include <pthread.h>
 #include <assert.h>
@@ -16,6 +17,9 @@ struct efs_raft_host {pthread_mutex_t mu;struct efs_raft core[3];int absent;};
 struct host_read_admission {uint64_t want,round,term;};
 static int begun,waits,scalar,kicks,published,wait_error;
 static uint64_t expected[3];
+static __thread uint64_t deadline;
+uint64_t efs_net_deadline_ms(void){return deadline;}
+void efs_net_set_deadline_ms(uint64_t value){deadline=value;}
 static struct efs_raft *group_raft(struct efs_raft_host*h,uint8_t g){assert(g==0 || g==2);return h->absent==g+1?NULL:&h->core[g];}
 static int efs_raft_role(struct efs_raft*r){return r->role;}
 static uint64_t efs_raft_read_round(struct efs_raft*r){return r->round;}
@@ -25,14 +29,14 @@ static int efs_raft_read_pending(struct efs_raft*r){return r->pending;}
 static int efs_raft_read_begin(struct efs_raft*r){begun++;if(r->fail)return r->fail;r->round++;r->pending=1;return 0;}
 static void host_publish_group(struct efs_raft_host*h,uint8_t g){(void)h;(void)g;published++;}
 static void host_pump_kick(struct efs_raft_host*h){(void)h;kicks++;}
-static int host_read_index(struct efs_raft_host*h,uint8_t g,int*hint){(void)h;(void)g;(void)hint;scalar++;return wait_error;}
+static int host_read_index(struct efs_raft_host*h,uint8_t g,int*hint){(void)h;(void)g;(void)hint;__atomic_add_fetch(&scalar,1,__ATOMIC_RELAXED);return wait_error;}
 static int host_read_index_admitted(struct efs_raft_host*h,uint8_t g,int*hint,const struct host_read_admission*a){
  (void)hint;assert(a->round==expected[g]+1 && a->term==h->core[g].term && a->want==h->core[g].commit);
  /* Both rounds must already be pending before the first wait. Their old
   * contexts are less than the captured minimum eligible round. */
  assert(h->core[0].pending && h->core[2].pending);waits++;return wait_error;
 }
-''' + s[a:b]+r'''
+''' + (root/'src/server/read_index_pair_remote.h').read_text() + s[a:b]+r'''
 static void host_need_both(uint8_t groups[2]){groups[0]=0;groups[1]=2;}
 static int host_hosts(struct efs_raft_host*h,uint8_t g){return h->absent!=g+1;}
 static int host_pick_peer(struct efs_raft_host*h,const uint8_t*g,unsigned n,int avoid){(void)h;assert(g[0]==0 && g[1]==2 && n==2 && avoid==-1);return 7;}

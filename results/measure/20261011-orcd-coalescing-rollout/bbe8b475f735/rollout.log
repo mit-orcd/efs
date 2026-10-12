@@ -1,0 +1,141 @@
+bbe8b475f735 713 tracked build/gate sources match committed snapshot; full Linux log preserved
+
+
+
+
+
+Unmounting /tmp/efs-mount
+Retiring drained efs-fuse PID 1732262 for /tmp/efs-mount
+Unmounted /tmp/efs-mount
+Unmounting /tmp/efs-mount
+Retiring drained efs-fuse PID 2730852 for /tmp/efs-mount
+Unmounted /tmp/efs-mount
+Unmounting /tmp/efs-mount
+Retiring drained efs-fuse PID 2574308 for /tmp/efs-mount
+Unmounted /tmp/efs-mount
+Unmounting /tmp/efs-mount
+Retiring drained efs-fuse PID 2276473 for /tmp/efs-mount
+Unmounted /tmp/efs-mount
+Unmounting /tmp/efs-mount
+Retiring drained efs-fuse PID 2512157 for /tmp/efs-mount
+Unmounted /tmp/efs-mount
+Unmounting /tmp/efs-mount
+Retiring drained efs-fuse PID 2685907 for /tmp/efs-mount
+Unmounted /tmp/efs-mount
+Unmounting /tmp/efs-mount
+Retiring drained efs-fuse PID 2588183 for /tmp/efs-mount
+Unmounted /tmp/efs-mount
+fcstor003: stopped
+fcstor004: stopped
+fcstor005: stopped
+fcstor006: stopped
+== build fcstor003
+== build fcstor005
+== build fcstor004
+fcstor003: build passed
+fcstor005: build passed
+fcstor004: build passed
+== build fcstor007
+== build fcstor006
+== build fcstor008
+fcstor007: build passed
+fcstor008: build passed
+== build fcstor009
+== build fcstor010
+fcstor009: build passed
+fcstor010: build passed
+== build fcstor011
+== build fcstor012
+fcstor011: build passed
+fcstor012: build passed
+== build fcstor013
+fcstor013: build passed
+fcstor006: build passed
+fcstor003: installed bbe8b475f735, previous source retained at /tmp/efs-before-orcd-test-bbe8b475f735
+fcstor004: installed bbe8b475f735, previous source retained at /tmp/efs-before-orcd-test-bbe8b475f735
+fcstor005: installed bbe8b475f735, previous source retained at /tmp/efs-before-orcd-test-bbe8b475f735
+fcstor006: installed bbe8b475f735, previous source retained at /tmp/efs-before-orcd-test-bbe8b475f735
+fcstor007: installed bbe8b475f735, previous source retained at /tmp/efs-before-orcd-test-bbe8b475f735
+fcstor008: installed bbe8b475f735, previous source retained at /tmp/efs-before-orcd-test-bbe8b475f735
+fcstor009: installed bbe8b475f735, previous source retained at /tmp/efs-before-orcd-test-bbe8b475f735
+fcstor010: installed bbe8b475f735, previous source retained at /tmp/efs-before-orcd-test-bbe8b475f735
+fcstor011: installed bbe8b475f735, previous source retained at /tmp/efs-before-orcd-test-bbe8b475f735
+fcstor012: installed bbe8b475f735, previous source retained at /tmp/efs-before-orcd-test-bbe8b475f735
+fcstor013: installed bbe8b475f735, previous source retained at /tmp/efs-before-orcd-test-bbe8b475f735
+fcstor003: directories prepared
+fcstor004: directories prepared
+fcstor005: directories prepared
+fcstor006: directories prepared
+fcstor007: directories prepared
+fcstor008: directories prepared
+fcstor010: directories prepared
+fcstor011: directories prepared
+fcstor009: directories prepared
+fcstor012: directories prepared
+fcstor013: directories prepared
+fcstor003: started
+fcstor004: started
+fcstor005: started
+fcstor006: started
+Daemons started. For new stores run init-export once, then mount.
+Cluster nodes (4):
+  node 1: 172.16.223.57:17432  up  used=152.03 MiB  quota=28.69 TiB (0.0%)  storage(6):
+      /data1/01/efs-orcd-test-erbmi1
+      /data1/02/efs-orcd-test-erbmi1
+      /data1/03/efs-orcd-test-erbmi1
+      /data1/04/efs-orcd-test-erbmi1
+      /data1/05/efs-orcd-test-erbmi1
+      /data1/06/efs-orcd-test-erbmi1
+  node 2: 172.16.223.58:17432  up  used=153.30 MiB  quota=28.67 TiB (0.0%)  storage(6):
+      /data1/01/efs-orcd-test-erbmi1
+      /data1/02/efs-orcd-test-erbmi1
+      /data1/03/efs-orcd-test-erbmi1
+      /data1/04/efs-orcd-test-erbmi1
+      /data1/05/efs-orcd-test-erbmi1
+      /data1/06/efs-orcd-test-erbmi1
+  node 3: 172.16.223.59:17432  up  used=151.91 MiB  quota=28.67 TiB (0.0%)  storage(6):
+      /data1/01/efs-orcd-test-erbmi1
+      /data1/02/efs-orcd-test-erbmi1
+      /data1/03/efs-orcd-test-erbmi1
+      /data1/04/efs-orcd-test-erbmi1
+      /data1/05/efs-orcd-test-erbmi1
+      /data1/06/efs-orcd-test-erbmi1
+  node 4: 172.16.223.60:17432  up  used=152.29 MiB  quota=28.69 TiB (0.0%)  storage(6):
+      /data1/01/efs-orcd-test-erbmi1
+      /data1/02/efs-orcd-test-erbmi1
+      /data1/03/efs-orcd-test-erbmi1
+      /data1/04/efs-orcd-test-erbmi1
+      /data1/05/efs-orcd-test-erbmi1
+      /data1/06/efs-orcd-test-erbmi1
+Usable (2+1 logical): used=406.35 MiB  free=76.47 TiB  capacity=76.47 TiB (0.0%; filesystem capacity)
+Usable bytes: used=426090496 free=84080977862730 capacity=84081403953226
+Cluster state: OK (4 up, 0 down)
+Versions: efsd v0.2.2-pre-alpha-437-gbbe8b475 (branch devel-orcd) — 4/4 identical
+Node 172.16.223.57:17432 state: active
+Heal:
+  node 1: idle
+  node 2: idle
+  node 3: idle
+  node 4: idle
+Stop with: scripts/client.sh stop /tmp/efs-mount
+Logging efs-fuse to /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor007/efs-fuse.log
+Mounted /tmp/efs-mount
+Stop with: scripts/client.sh stop /tmp/efs-mount
+Logging efs-fuse to /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor008/efs-fuse.log
+Mounted /tmp/efs-mount
+Stop with: scripts/client.sh stop /tmp/efs-mount
+Logging efs-fuse to /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor009/efs-fuse.log
+Mounted /tmp/efs-mount
+Stop with: scripts/client.sh stop /tmp/efs-mount
+Logging efs-fuse to /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor010/efs-fuse.log
+Mounted /tmp/efs-mount
+Stop with: scripts/client.sh stop /tmp/efs-mount
+Logging efs-fuse to /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor011/efs-fuse.log
+Mounted /tmp/efs-mount
+Stop with: scripts/client.sh stop /tmp/efs-mount
+Logging efs-fuse to /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor012/efs-fuse.log
+Mounted /tmp/efs-mount
+Stop with: scripts/client.sh stop /tmp/efs-mount
+Logging efs-fuse to /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor013/efs-fuse.log
+Mounted /tmp/efs-mount
+Verified rollout finished bbe8b475f7351a09348379387e9255b55ea8e82a
