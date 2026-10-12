@@ -114,3 +114,5 @@ Current frozen source **ecdc8c6034b610a2bf69e7a79664d8a5e990de84**. Explicit dis
 ## Feature-disabled split: focused owner results
 
 Intel exactecdc focused ordinary I/O/seek/fsync/reopen **70/70 PASS** (10 original cases on7simultaneous clients, jobs16,30s); all7graceful client stops PASS. [Integrated evidence](../../results/measure/20261012-intel-ecdc-focused/README.md). Actual4daemon/7client config and23,318source inputs verified. Private local fixture, reduced scope; daemon cleanup is not an independent graceful acceptance, and no causal `.efs` attribution is established. NUC reports focused deep60/100depth **14/14 PASS**, config/hidden `.efs`/basic I/O/fsyncedpeer/rename/unlink and cleanup PASS; owner evidence commit pending. AMD native controller finished; full seven-client core packing acceptance RUNNING. Focused passes do not replace heavy acceptance.
+
+NUC owner commitd97214e7 reviewed/integrated with [exact-source report](nuc-release-ecdc-focused-20261012.md) and raw evidence. Focused14/14 and config/basic/peer/cleanup PASS retained; no duplicate launch.

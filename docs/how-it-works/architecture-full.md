@@ -2179,6 +2179,8 @@ RESUMED by direct human instruction: frozen `ecdc8c6034b610a2bf69e7a79664d8a5e99
 
 Frozenecdc split progress: Intel focused70/70 I/O+client stops PASS (evidence integrated); NUC focused14/14 deep+config/peer/cleanup PASS (evidence pending). AMD heavy seven-client qualification RUNNING. [Ledger](../status/v030-tcp-direct-qualification-20261012.md).
 
+NUCecdc focused evidence integrated: [report](../status/nuc-release-ecdc-focused-20261012.md),14/14 deep checks plus disabled-feature/configuration/basic/peer/cleanup PASS. Reduced workload; AMD full acceptance still separate.
+
 
 ## Appendix 2 — In flight — the current handoff block
 
