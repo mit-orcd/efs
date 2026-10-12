@@ -69,7 +69,8 @@ try:
         return True
     wait(ready, 86400, 'full private acceptance')
     live = base / 'catchup-base-live'
-    for name in ('full-direct', 'full-buffered', 'long-direct', 'long-buffered', 'restore'):
+    for name in ('ordinary-direct', 'ordinary-buffered', 'full-direct', 'full-buffered',
+                 'long-direct', 'long-buffered', 'restore'):
         assert (live / (name + '-exit.txt')).read_text().strip() == '0'
     images = json.loads((base / 'catchup-base-build/images.json').read_text())
     expected = json.loads((base / 'catchup-base-build/provenance.json').read_text())['core_sha256']
