@@ -1,0 +1,247 @@
+[
+  {
+    "client": "syscalls-0",
+    "pid": "2313188",
+    "completed_seconds": {
+      "mkdir": 0.108274339,
+      "unlink": 0.9313816980000004,
+      "open": 0.0015612549999999999,
+      "rmdir": 0.15249117299999998,
+      "listdir": 0.000125751
+    },
+    "pending": [],
+    "last": [
+      {
+        "event": "end",
+        "seq": 57,
+        "op": "rmdir",
+        "ns": 80279727735457,
+        "duration_ns": 72040609
+      },
+      {
+        "event": "begin",
+        "seq": 58,
+        "op": "listdir",
+        "path": "/proc/self/fd",
+        "ns": 80279728873692
+      },
+      {
+        "event": "end",
+        "seq": 58,
+        "op": "listdir",
+        "ns": 80279728999241,
+        "duration_ns": 125751
+      }
+    ]
+  },
+  {
+    "client": "syscalls-1",
+    "pid": "2313191",
+    "completed_seconds": {
+      "mkdir": 0.065397805,
+      "unlink": 0.6274186050000001,
+      "open": 0.0014072079999999999,
+      "rmdir": 0.164390029,
+      "listdir": 0.000154571
+    },
+    "pending": [],
+    "last": [
+      {
+        "event": "end",
+        "seq": 58,
+        "op": "rmdir",
+        "ns": 80279472598782,
+        "duration_ns": 49681723
+      },
+      {
+        "event": "begin",
+        "seq": 59,
+        "op": "listdir",
+        "path": "/proc/self/fd",
+        "ns": 80279501078819
+      },
+      {
+        "event": "end",
+        "seq": 59,
+        "op": "listdir",
+        "ns": 80279501232863,
+        "duration_ns": 154571
+      }
+    ]
+  },
+  {
+    "client": "syscalls-2",
+    "pid": "2313192",
+    "completed_seconds": {
+      "mkdir": 0.100056912,
+      "unlink": 0.728434087,
+      "open": 0.001123553,
+      "rmdir": 0.142877492,
+      "listdir": 0.000128171
+    },
+    "pending": [],
+    "last": [
+      {
+        "event": "end",
+        "seq": 57,
+        "op": "rmdir",
+        "ns": 80279617658405,
+        "duration_ns": 79476017
+      },
+      {
+        "event": "begin",
+        "seq": 58,
+        "op": "listdir",
+        "path": "/proc/self/fd",
+        "ns": 80279628036227
+      },
+      {
+        "event": "end",
+        "seq": 58,
+        "op": "listdir",
+        "ns": 80279628164159,
+        "duration_ns": 128171
+      }
+    ]
+  },
+  {
+    "client": "syscalls-3",
+    "pid": "2313196",
+    "completed_seconds": {
+      "mkdir": 0.034541382,
+      "unlink": 1.036115048,
+      "open": 0.001697508,
+      "rmdir": 0.244988972,
+      "listdir": 0.000187014
+    },
+    "pending": [],
+    "last": [
+      {
+        "event": "end",
+        "seq": 60,
+        "op": "rmdir",
+        "ns": 80279534827948,
+        "duration_ns": 24993559
+      },
+      {
+        "event": "begin",
+        "seq": 61,
+        "op": "listdir",
+        "path": "/proc/self/fd",
+        "ns": 80279540671245
+      },
+      {
+        "event": "end",
+        "seq": 61,
+        "op": "listdir",
+        "ns": 80279540857976,
+        "duration_ns": 187014
+      }
+    ]
+  },
+  {
+    "client": "syscalls-4",
+    "pid": "2313195",
+    "completed_seconds": {
+      "mkdir": 0.11296551,
+      "unlink": 0.715806277,
+      "open": 0.00128345,
+      "rmdir": 0.44743680900000005,
+      "listdir": 0.000143725
+    },
+    "pending": [],
+    "last": [
+      {
+        "event": "end",
+        "seq": 68,
+        "op": "rmdir",
+        "ns": 80280035845590,
+        "duration_ns": 79303715
+      },
+      {
+        "event": "begin",
+        "seq": 69,
+        "op": "listdir",
+        "path": "/proc/self/fd",
+        "ns": 80280042298840
+      },
+      {
+        "event": "end",
+        "seq": 69,
+        "op": "listdir",
+        "ns": 80280042442328,
+        "duration_ns": 143725
+      }
+    ]
+  },
+  {
+    "client": "syscalls-5",
+    "pid": "2313197",
+    "completed_seconds": {
+      "mkdir": 0.050702001,
+      "unlink": 1.020691396,
+      "open": 0.0008873759999999999,
+      "rmdir": 0.257266364,
+      "listdir": 0.00038989
+    },
+    "pending": [],
+    "last": [
+      {
+        "event": "end",
+        "seq": 63,
+        "op": "rmdir",
+        "ns": 80279422714428,
+        "duration_ns": 31962661
+      },
+      {
+        "event": "begin",
+        "seq": 64,
+        "op": "listdir",
+        "path": "/proc/self/fd",
+        "ns": 80279465566777
+      },
+      {
+        "event": "end",
+        "seq": 64,
+        "op": "listdir",
+        "ns": 80279465955951,
+        "duration_ns": 389890
+      }
+    ]
+  },
+  {
+    "client": "syscalls-6",
+    "pid": "2313198",
+    "completed_seconds": {
+      "mkdir": 0.065329219,
+      "unlink": 0.5779433490000001,
+      "open": 0.002024981,
+      "rmdir": 0.15754230200000002,
+      "listdir": 0.000335828
+    },
+    "pending": [],
+    "last": [
+      {
+        "event": "end",
+        "seq": 60,
+        "op": "rmdir",
+        "ns": 80279120433673,
+        "duration_ns": 22834967
+      },
+      {
+        "event": "begin",
+        "seq": 61,
+        "op": "listdir",
+        "path": "/proc/self/fd",
+        "ns": 80279131959798
+      },
+      {
+        "event": "end",
+        "seq": 61,
+        "op": "listdir",
+        "ns": 80279132294636,
+        "duration_ns": 335828
+      }
+    ]
+  }
+]

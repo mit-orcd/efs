@@ -1,0 +1,12 @@
+2026-10-12T14:26:19.538Z efs-fuse (no git metadata, branch qualification-v030-tcp-direct, built 2026-10-12T14:22:36Z on intel1), build=e59e815fab2916340baad585dc08712ed182b7ea: starting export=default mount=/tmp/efs-intel-e59-dir-diag-20261012-intel1_efs/deep-mnt1
+2026-10-12T14:26:19.539Z Discovered 4 cluster nodes from 127.0.0.1:34510
+2026-10-12T14:26:19.539Z   node id=1 127.0.0.1:34510
+2026-10-12T14:26:19.539Z   node id=2 127.0.0.1:34511
+2026-10-12T14:26:19.539Z   node id=3 127.0.0.1:34512
+2026-10-12T14:26:19.539Z   node id=4 127.0.0.1:34513
+2026-10-12T14:26:19.539Z fetching metadata...
+2026-10-12T14:26:19.540Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T14:26:19.540Z export id=1 name=default
+2026-10-12T14:26:19.540Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T14:26:19.543Z efs-fuse: workers max=10 idle=10
+2026-10-12T14:26:19.553Z fuse serving

@@ -1,0 +1,3 @@
+Unmounting /tmp/efs-intel-e59-dir-diag-20261012-intel1_efs/deep-mnt1
+Retiring drained efs-fuse PID 2313083 for /tmp/efs-intel-e59-dir-diag-20261012-intel1_efs/deep-mnt1
+Unmounted /tmp/efs-intel-e59-dir-diag-20261012-intel1_efs/deep-mnt1
