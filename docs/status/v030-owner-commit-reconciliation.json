@@ -1,5 +1,5 @@
 {
-  "audited_release_head": "15ff4de794d19833a0704b01420f66fa9f21cae1",
+  "audited_release_head": "acaed0ae0e11eafeb4f17058a4daba546b4241ee",
   "frozen_amd_test_source": "410afed433b6da093bdc2acf37bec253ddbd586c",
   "scope": "every nonancestor commit of frozen owner tips; integrated ancestor history retained in Git",
   "owners": {
@@ -197,7 +197,7 @@
       ]
     }
   },
-  "latest_ancestry_reconciliation_head": "15ff4de794d19833a0704b01420f66fa9f21cae1",
+  "latest_ancestry_reconciliation_head": "acaed0ae0e11eafeb4f17058a4daba546b4241ee",
   "frozen_owner_handoffs": {
     "amd": "f1babb1ceac859c700507aa17b042eab3f6c4237",
     "mac": "51b67e96b6b235ad7c0bc2bfa603c62c2c1a598f",
@@ -209,7 +209,7 @@
   "all_frozen_handoffs_are_ancestors": true,
   "held_commits_within_frozen_handoffs": [],
   "held_scope": [
-    "All branch tips known at15ff4de7 were integrated. New post-audit devel-intel documentation/evidence checkpoint aaaeaa38 is not integrated; no uncommitted owner edits imported.",
+    "All currently known branch and detached-worktree tips are integrated; no uncommitted owner edits imported.",
     "Qualification incomplete, execution stopped; no promotion/push/tag."
   ],
   "post_freeze_evidence_checkpoints": {
@@ -269,7 +269,7 @@
     },
     "devel-intel": {
       "commit": "aaaeaa38f77003865e17e5be34efc3e6a0ff9fe4",
-      "is_ancestor": false
+      "is_ancestor": true
     },
     "devel-mac": {
       "commit": "f3359da53b0bead5e439c6dcd29df789ff0f0f80",
@@ -292,11 +292,11 @@
       "is_ancestor": true
     },
     "release-v0.3.0-pre-alpha": {
-      "commit": "15ff4de794d19833a0704b01420f66fa9f21cae1",
+      "commit": "acaed0ae0e11eafeb4f17058a4daba546b4241ee",
       "is_ancestor": true
     }
   },
-  "branch_only_stop_checkpoint": {
+  "latest_intel_stop_checkpoint": {
     "commit": "aaaeaa38f77003865e17e5be34efc3e6a0ff9fe4",
     "branch": "devel-intel",
     "source": "410afed4/v2",
@@ -306,6 +306,7 @@
       6
     ],
     "fault_sanitizer_mounted": "NOTRUN",
-    "integrated": false
+    "integrated": true,
+    "merge_commit": "acaed0ae0e11eafeb4f17058a4daba546b4241ee"
   }
 }
