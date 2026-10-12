@@ -283,7 +283,7 @@ static int segment_create(struct target *t,unsigned seg)
     if(close(fd))rc=EFS_ERR_IO;
     if(!rc&&link(tmp,path))rc=EFS_ERR_IO;
     unlink(tmp);
-    if(!rc)rc=parents(path);
+    if(!rc)rc=parents_at(path,t);
     if(!rc){
         t->bits[seg]=calloc(1,BLOCKS/8);
         if(!t->bits[seg])rc=EFS_ERR_NOMEM;

@@ -177,7 +177,12 @@ int main(int argc, char **argv)
         assert(!server_delete_fragment_if_sum(&server,&ex,900,0,0,large_sum));free(large);free(large_read);
         /* A segment outside the descriptor cache retains per-operation I/O. */
         full=server.container_targets[0];full->cursor_seg=CACHED_SEGS;full->cursor_block=0;
-        efs_tls_chunk_gen=889;write_value(901,0,78,EFS_OK);read_value(901,0,EFS_OK,78);
+        /* New segment publication must keep the initialized root's durability
+         * boundary, including segments outside the descriptor cache. */
+        watched_root=server.storage_paths[0];outside_syncs=root_syncs=0;
+        efs_tls_chunk_gen=889;write_value(901,0,78,EFS_OK);
+        assert(!outside_syncs && root_syncs);watched_root=NULL;
+        read_value(901,0,EFS_OK,78);
         restart();read_value(901,0,EFS_OK,78);memset(data,78,sizeof(data));efs_hash(data,sizeof(data),sum);
         assert(!server_delete_fragment_if_sum(&server,&ex,901,0,0,sum));
         /* Short payloads preserve zeroed alignment padding after copy changes. */
