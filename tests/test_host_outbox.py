@@ -83,6 +83,11 @@ int main(void){
  tx.pri[1]=(struct host_outbox_item){probe,80};tx.npri++;tx.queued_bytes+=80;
  fresh=malloc(80);memcpy(fresh,probe,80);fresh[35]=21;
  assert(!outbox_pri_replace(&tx,heartbeat,fresh,80));free(fresh);
+ /* A matched-tail heartbeat must not overwrite the prefix-zero escape. */
+ for(unsigned field=0;field<2;field++) {
+  new=malloc(80);memcpy(new,probe,80);new[field?59:51]=9;
+  assert(!outbox_pri_replace(&tx,heartbeat,new,80));free(new);
+ }
  new=frame(1,1,30,80);
  assert(outbox_pri_replace(&tx,heartbeat,new,80));
  assert(tx.pri[0].buf==new && tx.pri[1].buf==probe && tx.queued_bytes==160);

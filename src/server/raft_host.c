@@ -1061,7 +1061,8 @@ static int outbox_pri_replace(struct host_outbox *tx,
            (buf[0]==EFS_RAFT_MSG_AE_REQ || buf[0]==EFS_RAFT_MSG_AE_REP) &&
            (memcmp(tx->pri[i].buf+2,buf+2,2) ||
             memcmp(tx->pri[i].buf+12,buf+12,24) ||
-            memcmp(tx->pri[i].buf+68,buf+68,8)))continue;
+            memcmp(tx->pri[i].buf+68,buf+68,8) ||
+            (buf[0]==EFS_RAFT_MSG_AE_REQ && memcmp(tx->pri[i].buf+44,buf+44,16))))continue;
         if (len > HOST_OUTBOX_BYTES - (tx->queued_bytes-tx->pri[i].len))
             return 0;
         tx->queued_bytes -= tx->pri[i].len;
