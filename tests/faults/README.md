@@ -3,18 +3,22 @@
 This suite keeps simulator and real-process evidence separate. Defaults remain
 TCP and buffered I/O; select direct I/O and RDMA explicitly.
 
-Default integration reports `repair_restores_protection` as **GAP** because
-repair stays disabled. Explicit `--repair-experiment` qualifies a bounded manual
-repair path for ordinary base chunks on single-root FILES. It initializes only
-the fixture's disposable roots. The activation latch makes those roots refuse a
-later ordinary/default-off startup; do not use it on existing mounted stores.
+Repair is mandatory in every integration run; no `--repair-experiment` option
+is needed or accepted. The harness activates the bounded manual repair path
+only in its own disposable single-root FILES daemons, refuses a nonempty fixture
+root, and initializes store identities only on their first startup. Cold
+restarts reopen those identities with initialization disabled. Repair flags
+are not added to the caller or client environment. The deployed daemon's
+activation guard remains unchanged; running this suite does not enable repair
+on an existing cluster.
 
 The simulator exercises a synchronous repair model for every role, checking
 identity-bound authoritative digests and exact reads after a second corruption.
 That model does not establish physical durability or quorum receipts. Real
 integration removes a physical role, proves degraded reads do not heal it,
 invokes the actual coordinator, verifies replacement bytes/checksum, cold
-restarts every daemon/client, removes another original role, and verifies exact
+restarts every daemon/client without reinitialization, rechecks all three
+physical roles and unchanged store identities, removes another original role, and verifies exact
 bytes from a fresh peer. It repeats this for roles 0/1/2.
 
 The coordinator accepts a selector, captures current leader/term and metadata,
@@ -41,17 +45,16 @@ EFS_FAULT_BIN=/path/to/build bash tests/faults/run_faults.sh /tmp/efs-fault-tcp 
     --integrate --mode direct
 ```
 
-Native RDMA plus experimental repair, on a machine with an active HCA:
+Native RDMA plus mandatory repair, on a machine with an active HCA:
 
 ```sh
 EFS_FAULT_BIN=/path/to/build bash tests/faults/run_faults.sh /tmp/efs-fault-rdma \
-    --integrate --mode direct --transport rdma --rdma-device mlx5_2 \
-    --repair-experiment
+    --integrate --mode direct --transport rdma --rdma-device mlx5_2
 ```
 
-Without `--integrate`, integration is `not_run`. The default disabled-repair
-integration remains exit 2 with its named GAP. The explicit experimental fixture
-must have no FAIL, GAP or not_run to return exit 0. `make test` runs worker and
+Without `--integrate`, integration is `not_run` and returns exit 2. Every
+integration run must execute real repair and have no FAIL, GAP or not_run to
+return exit 0. `make test` runs worker and
 receipt regressions but does not launch private FUSE processes.
 
 RDMA requires live uverbs descriptors and a successful connection log from the

@@ -6,7 +6,8 @@ Two layers:
   integration  four efsd processes and two FUSE clients, selected transport, disposable
                storage. Simulator success is not this layer.
 
-Repair is a gap. A readable file is not reported as fully protected.
+Ordinary missing-role repair is mandatory. A readable file alone is not
+reported as fully protected.
 
 This process only signals PIDs it started. It refuses ports 19810 and
 19820 and any storage path under /data1.
@@ -21,6 +22,7 @@ import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -215,6 +217,22 @@ def transport_env(transport="tcp", device=None):
     return env
 
 
+def fixture_env(transport="tcp", device=None, initialize=None):
+    """Keep repair activation inside owned daemon processes, never the caller.
+
+    initialize=None is a client/driver; False reopens an initialized store.
+    Existing stores are never initialized by Cluster.start().
+    """
+    env = transport_env(transport, device)
+    env.pop("EFS_REPAIR_EXPERIMENT", None)
+    env.pop("EFS_REPAIR_INIT_STORE", None)
+    env["EFS_PACKED_WRITES"] = "0"  # matrix qualifies ordinary base fragments
+    if initialize is not None:
+        env["EFS_REPAIR_EXPERIMENT"] = "1"
+        env["EFS_REPAIR_INIT_STORE"] = "1" if initialize else "0"
+    return env
+
+
 def wait_port(port, timeout):
     assert_safe_port(port)
     deadline = time.monotonic() + timeout
@@ -291,6 +309,7 @@ class Server(object):
         self.transport = transport
         self.device = device
         self.proc = None
+        self.initialized = False
         self.log_path = os.path.join(storage, "efsd.log")
 
     def argv(self):
@@ -309,11 +328,13 @@ class Server(object):
         self.log_offset = os.path.getsize(self.log_path) if os.path.exists(self.log_path) else 0
         log = open(self.log_path, "ab")
         self.proc = track(subprocess.Popen(
-            self.argv(), stdout=log, stderr=log, env=transport_env(self.transport, self.device),
+            self.argv(), stdout=log, stderr=log,
+            env=fixture_env(self.transport, self.device, initialize=not self.initialized),
             start_new_session=True, cwd=os.path.dirname(self.binary) or None))
         wait_port(self.port, 10)
         if self.proc.poll() is not None:
             raise RuntimeError("efsd node %s exited during start" % self.node_id)
+        self.initialized = True
 
     def stop(self):
         if self.proc is None:
@@ -362,7 +383,9 @@ class Cluster(object):
         return os.path.join(self.binary_dir, "efs-mgmt")
 
     def start(self):
-        for name in ("efsd", "efs-fuse", "efs-mgmt"):
+        if os.listdir(self.work):
+            raise RuntimeError("refusing to initialize nonempty fixture root %s" % self.work)
+        for name in ("efsd", "efs-fuse", "efs-mgmt", "tests/faults/repair_request"):
             path = os.path.join(self.binary_dir, name)
             if not os.path.isfile(path) or not os.access(path, os.X_OK):
                 raise RuntimeError("missing binary %s" % path)
@@ -372,15 +395,15 @@ class Cluster(object):
             storage = os.path.join(self.work, "s%d" % (i + 1))
             join = None if i == 0 else seed
             srv = Server(i + 1, port, storage, join, self.efsd(), self.mode, self.transport, self.device)
-            srv.start()
             self.servers.append(srv)
+            srv.start()
         self.journal = Journal(os.path.join(self.work, "journal.jsonl"))
         # A listening socket precedes joining/election. Retry only the
         # idempotent initialization of this newly owned disposable cluster.
         deadline = time.monotonic() + 30
         while True:
             rc, out, err = run_cmd(
-                [self.mgmt(), "raft-mkfs", seed], timeout=20, env=transport_env(self.transport, self.device))
+                [self.mgmt(), "raft-mkfs", seed], timeout=20, env=fixture_env(self.transport, self.device))
             self.journal.record("raft-mkfs", rc=rc, stdout=out[-400:], stderr=err[-400:])
             if rc == 0:
                 break
@@ -399,7 +422,7 @@ class Cluster(object):
         seed = "127.0.0.1:%d" % self.servers[0].port
         proc = track(subprocess.Popen(
             [self.fuse(), seed, EXPORT, path, "-f"],
-            stdout=log, stderr=log, env=transport_env(self.transport, self.device),
+            stdout=log, stderr=log, env=fixture_env(self.transport, self.device),
             start_new_session=True))
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
@@ -439,7 +462,7 @@ class Cluster(object):
     def leader_node_id(self):
         addr = "127.0.0.1:%d" % self.servers[0].port
         rc, out, err = run_cmd(
-            [self.mgmt(), "raft-status", addr], timeout=10, env=transport_env(self.transport, self.device))
+            [self.mgmt(), "raft-status", addr], timeout=10, env=fixture_env(self.transport, self.device))
         if rc != 0:
             raise RuntimeError("raft-status failed: %s" % err[-200:])
         for line in out.splitlines():
@@ -872,7 +895,7 @@ def case_repair(cluster, seed):
                        "127.0.0.1", str(srv.port), str(inode), str(obj), str(ci),
                        str(fi), str(payload_len)]
             rc, out, error = run_cmd(command, timeout=60,
-                env=transport_env(cluster.transport, cluster.device))
+                env=fixture_env(cluster.transport, cluster.device))
             cluster.journal.record("repair-request", node_id=srv.node_id, rc=rc,
                                    stdout=out, stderr=error)
             if rc == 0:
@@ -883,6 +906,8 @@ def case_repair(cluster, seed):
         restored = open(path, "rb").read()
         if restored[:payload_len+32] != original[:payload_len+32]:
             raise RuntimeError("physical restored role/checksum differs")
+        identities = {srv.node_id: sha256(open(os.path.join(srv.storage, "meta", "repair-store"), "rb").read())
+                      for srv in cluster.servers}
         # Stop all processes, retain stores, and start cold before the second
         # independent physical loss. No writer/client cache can supply data.
         for mount, proc, _log in cluster.mounts:
@@ -896,6 +921,20 @@ def case_repair(cluster, seed):
         for label in ("repair-cold-a", "repair-cold-b"):
             cluster.mount(label)
         cluster.check_transport()
+        for srv in cluster.servers:
+            identity = sha256(open(os.path.join(srv.storage, "meta", "repair-store"), "rb").read())
+            if identity != identities[srv.node_id]:
+                raise RuntimeError("cold restart changed target store incarnation")
+            env = open("/proc/%d/environ" % srv.proc.pid, "rb").read().split(b"\0")
+            if b"EFS_REPAIR_INIT_STORE=0" not in env:
+                raise RuntimeError("cold restart attempted store initialization")
+        if any(not os.path.isfile(p) for p in fragments.values()):
+            raise RuntimeError("cold restart did not retain three physical roles")
+        if open(path, "rb").read()[:payload_len+32] != original[:payload_len+32]:
+            raise RuntimeError("cold repaired fragment/checksum differs")
+        cluster.journal.record("repair-cold-protection", role=fi,
+                               store_identity_sha256=identities, physical_roles=3,
+                               initialization=False)
         second = (fi+1)%3
         os.unlink(fragments[second])
         cluster.reset_clients()
@@ -904,19 +943,11 @@ def case_repair(cluster, seed):
             raise RuntimeError("cold second-loss bytes failed role %d" % fi)
         results.append(row("repair_restores_protection", "PASS", role=fi,
             readable=True, repaired=True, protected=True,
-            detail="experimental ordinary base role physically restored and hashed; cold all-daemon/client restart then another original role lost; exact peer bytes",
+            protection_checked="after cold restart, before second loss",
+            detail="ordinary base role physically restored and hashed; cold all-daemon/client restart then another original role lost; exact peer bytes",
             expected_sha256=sha256(data), actual_sha256=sha256(got),
             restored_payload_sha256=sha256(restored[:payload_len])))
     return results
-
-
-def case_repair_gap(cluster=None, seed=None):
-    return [row(
-        "repair_restores_protection", "GAP",
-        readable=None, repaired=False, protected=False,
-        detail="no fragment repair; a successful read of a 2-of-3 chunk "
-               "does not restore protection, and restarting a node does not "
-               "rebuild fragments it lost")]
 
 
 def integrate(work, binary_dir, seed, mode="buffered", transport="tcp", device=None):
@@ -933,7 +964,7 @@ def integrate(work, binary_dir, seed, mode="buffered", transport="tcp", device=N
             build = m.group(1)
         for fn in (case_one_server_lost, case_corrupt_one,
                    case_missing_checksum, case_crash_fsync,
-                   case_repair if os.environ.get("EFS_REPAIR_EXPERIMENT") == "1" else case_repair_gap):
+                   case_repair):
             t0 = time.monotonic()
             try:
                 part = fn(cluster, seed)
@@ -1081,9 +1112,43 @@ def self_test():
             os.kill(other.pid, signal.SIGKILL)
             other.wait(timeout=5)
 
-    gap = case_repair_gap()[0]
-    if gap["status"] != "GAP" or gap["repaired"] is not False:
-        fails.append("repair case was not a gap")
+    with tempfile.TemporaryDirectory(prefix="efs-fault-safety-") as root:
+        sentinel = os.path.join(root, "existing-store")
+        with open(sentinel, "wb") as fp:
+            fp.write(b"preserve")
+        cluster = Cluster(root, "/missing/binaries")
+        try:
+            cluster.start()
+            fails.append("nonempty fixture root accepted")
+        except RuntimeError as exc:
+            if "nonempty fixture root" not in str(exc):
+                fails.append("existing fixture was not refused before binary/start checks")
+        finally:
+            cluster.close()
+        if open(sentinel, "rb").read() != b"preserve" or cluster.servers:
+            fails.append("existing fixture touched")
+
+    inherited = dict(os.environ)
+    try:
+        os.environ["EFS_REPAIR_EXPERIMENT"] = "0"
+        os.environ["EFS_REPAIR_INIT_STORE"] = "1"
+        os.environ["EFS_PACKED_WRITES"] = "1"
+        first = fixture_env(initialize=True)
+        cold = fixture_env(initialize=False)
+        client = fixture_env()
+        if (first.get("EFS_REPAIR_EXPERIMENT") != "1" or
+                first.get("EFS_REPAIR_INIT_STORE") != "1" or
+                cold.get("EFS_REPAIR_EXPERIMENT") != "1" or
+                cold.get("EFS_REPAIR_INIT_STORE") != "0" or
+                "EFS_REPAIR_EXPERIMENT" in client or
+                "EFS_REPAIR_INIT_STORE" in client or
+                client.get("EFS_PACKED_WRITES") != "0"):
+            fails.append("fixture activation leaked or cold restart reinitialized store")
+        if os.environ["EFS_REPAIR_EXPERIMENT"] != "0":
+            fails.append("fixture mutated caller environment")
+    finally:
+        os.environ.clear()
+        os.environ.update(inherited)
 
     if fails:
         for msg in fails:
@@ -1103,25 +1168,18 @@ def main(argv):
                         help="private integration daemon storage mode (default: buffered)")
     parser.add_argument("--transport", choices=("tcp", "rdma"), default="tcp")
     parser.add_argument("--rdma-device", default=None)
-    parser.add_argument("--repair-experiment", action="store_true",
-                        help="initialize only owned fixture roots and test experimental ordinary base repair")
     parser.add_argument("--seed", type=int, default=101)
     args = parser.parse_args(argv)
     if args.self_test:
         return self_test()
     if not args.out:
         parser.error("--out is required")
-    if args.repair_experiment:
-        os.environ["EFS_REPAIR_EXPERIMENT"] = "1"
-        os.environ["EFS_REPAIR_INIT_STORE"] = "1"
-        os.environ["EFS_PACKED_WRITES"] = "0"
-    else:
-        os.environ.pop("EFS_REPAIR_EXPERIMENT", None)
-        os.environ.pop("EFS_REPAIR_INIT_STORE", None)
     os.makedirs(args.out, exist_ok=True)
     assert_safe_storage(args.out)
+    if os.listdir(args.out):
+        parser.error("output directory must be empty; existing evidence/stores are preserved")
     results_path = os.path.join(args.out, "results.jsonl")
-    sim_bin = os.path.join(HERE, "fault_sim")
+    sim_bin = repo_bin("tests/faults/fault_sim")
     rows = []
     with open(results_path, "w", encoding="utf-8") as fp:
         config = {
@@ -1131,12 +1189,12 @@ def main(argv):
             "integrate": args.integrate,
             "mode": args.mode,
             "replay_argv": ["bash", "tests/faults/run_faults.sh", args.out,
-                            "--mode", args.mode, "--transport", args.transport]
+                            "--mode", args.mode, "--transport", args.transport,
+                            "--seed", str(args.seed)]
                            + (["--rdma-device", args.rdma_device] if args.rdma_device else [])
-                           + (["--integrate"] if args.integrate else [])
-                           + (["--repair-experiment"] if args.repair_experiment else []),
+                           + (["--integrate"] if args.integrate else []),
             "live_cluster": "not used; ports 19810 and 19820 are refused",
-            "repair": "experimental ordinary base role" if args.repair_experiment else "disabled: integration gap",
+            "repair": "mandatory ordinary base role; owned fixture stores only",
         }
         open(os.path.join(args.out, "config.json"), "w").write(
             json.dumps(config, indent=2) + "\n")
