@@ -39,3 +39,7 @@ All **28,065 regular tracked source inputs** matched before and after testing. N
 [Raw evidence](../../results/measure/20261012-v031-15e2a531/README.md). No push, tag or main/devel promotion. No passing result is claimed for excluded containers, packing, .efs, RDMA, buffered or dedicated repair/recovery. Historical failed/excluded experiments remain preserved and source-labelled.
 
 The all-branch snapshot excludes uncommitted work and the existing generated-document stash (not a branch tip). No stash was applied or dropped.
+
+## Additional user-requested TCP/buffered rerun
+
+[Buffered report](v031-buffered-qualification-20261012.md): same frozen **15e2a5310df1dd0fd4e307a9508c95d513d14672**, ordinary files with packing/.efs/experimentalrepair disabled, full normal/fault native and sanitizers PASS, core1512/1512, deep7/7, peer67/67, seven stops and ordinary cold/reclamation PASS. Explicit4G fixtures and original deadlines unchanged. Initial disk-headroom startup refusals retained; completed private build/store cleanup restored headroom before fresh passing retries. No code changes, pushes or tags. This later request adds mode-specific buffered validation to the original direct-I/O qualification; it does not qualify other excluded features.

@@ -1,0 +1,40 @@
+{
+  "source": "15e2a5310df1dd0fd4e307a9508c95d513d14672",
+  "cwd": "/data1/efs/amd-v031-buffered-15e2a531-20261012/source",
+  "command": [
+    "python3",
+    "-u",
+    "tests/live/gc_reclamation.py",
+    "--mode",
+    "buffered",
+    "--transport",
+    "tcp",
+    "--root",
+    "/data1/efs/amd-v031-buffered-15e2a531-20261012-overwrite-retry1",
+    "--root",
+    "/data1/efs/amd-v031-buffered-15e2a531-20261012-overwrite-retry1",
+    "--port",
+    "25320",
+    "--mount",
+    "/tmp/efs-amd-buffered-retry1-isolated-15e2a5310df1dd0fd4e307a9508c95d513d14672-mnt",
+    "--peer-mount",
+    "/tmp/efs-amd-buffered-retry1-isolated-15e2a5310df1dd0fd4e307a9508c95d513d14672-peer",
+    "--disable-efs-commands",
+    "--ordinary-overwrite-only",
+    "--fixture-quota",
+    "4G",
+    "--server-binary",
+    "/data1/efs/amd-v031-buffered-15e2a531-20261012/source/efsd",
+    "--client-binary",
+    "/data1/efs/amd-v031-buffered-15e2a531-20261012/source/efs-fuse"
+  ],
+  "environment": {
+    "EFS_REPAIR_EXPERIMENT": "0",
+    "EFS_REPAIR_INIT_STORE": "0",
+    "EFS_PACKED_WRITES": "0",
+    "EFS_RAFT_FLOW": "0",
+    "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+    "EFS_RAFT_GROUP_DRAIN": "0"
+  },
+  "scope": "ordinary overwrite, cold restart and physical deletion; .efs disabled; not full broad acceptance"
+}

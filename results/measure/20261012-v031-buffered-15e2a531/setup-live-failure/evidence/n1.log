@@ -1,0 +1,3 @@
+2026-10-12T17:52:05.699Z storage-engine=files direct_io=off
+2026-10-12T17:52:05.699Z Data GC admission: disabled
+2026-10-12T17:52:05.699Z Storage quota 4.00 GiB exceeds safe maximum 2.99 GiB; refusing startup

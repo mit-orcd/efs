@@ -1,0 +1,3 @@
+Unmounting /tmp/efs-amd-v031-buffered-retry1-15e2a531/deep-mnt6
+Retiring drained efs-fuse PID 2139631 for /tmp/efs-amd-v031-buffered-retry1-15e2a531/deep-mnt6
+Unmounted /tmp/efs-amd-v031-buffered-retry1-15e2a531/deep-mnt6

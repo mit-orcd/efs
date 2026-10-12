@@ -1,0 +1,35 @@
+2026-10-12T17:55:51.394Z storage-engine=files direct_io=off
+2026-10-12T17:55:51.394Z Data GC admission: disabled
+2026-10-12T17:55:51.394Z Storage quota: explicit 4.00 GiB (safe maximum 5.63 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T17:55:51.397Z Joined cluster with 2 nodes
+2026-10-12T17:55:51.398Z heartbeat: enabled (2000 ms interval)
+2026-10-12T17:55:51.400Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-12T17:55:51.400Z raft-host: up raft_id=1 n=4 boot=9238096840889000 salt=8061568039167748862 g0=hosted g2=hosted
+2026-10-12T17:55:51.400Z efsd v0.3.1-pre-alpha-candidate (branch release-v0.3.1-pre-alpha, built 2026-10-12T17:48:05Z on amd-395), build=15e2a5310df1dd0fd4e307a9508c95d513d14672: node 2 listening on 127.0.0.1:25321, storage=/data1/efs/amd-v031-buffered-15e2a531-20261012-overwrite-retry2/gc-buffered-qq_fvxek/n2 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-12T17:55:51.400Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T17:55:53.398Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=985 passes=2 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T17:55:55.673Z raft-host: applied session index=3 kind=1 shard=0 ino=0
+2026-10-12T17:55:55.678Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=1178 p50_us=1178 max_us=1178 wdisk ops=1 bytes=65536 errors=0 avg_us=1090 p50_us=1090 max_us=1090
+2026-10-12T17:55:55.679Z raft-host: applied session index=5 kind=1 shard=0 ino=0
+2026-10-12T17:55:55.686Z raft-host: applied session index=7 kind=1 shard=0 ino=0
+2026-10-12T17:55:56.534Z storage-engine=files direct_io=off
+2026-10-12T17:55:56.534Z Data GC admission: disabled
+2026-10-12T17:55:56.534Z Loaded 4 persisted cluster node(s) from /data1/efs/amd-v031-buffered-15e2a531-20261012-overwrite-retry2/gc-buffered-qq_fvxek/n2/meta/cluster_nodes.bin
+2026-10-12T17:55:56.534Z   persisted node 1: 127.0.0.1:25320
+2026-10-12T17:55:56.534Z   persisted node 2: 127.0.0.1:25321
+2026-10-12T17:55:56.534Z   persisted node 3: 127.0.0.1:25322
+2026-10-12T17:55:56.534Z   persisted node 4: 127.0.0.1:25323
+2026-10-12T17:55:56.535Z Storage quota: explicit 4.00 GiB (safe maximum 5.62 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T17:55:56.536Z Joined cluster with 4 nodes
+2026-10-12T17:55:56.538Z heartbeat: enabled (2000 ms interval)
+2026-10-12T17:55:56.539Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-12T17:55:56.539Z raft-host: up raft_id=1 n=4 boot=9238096840889001 salt=5415709795903444268 g0=hosted g2=hosted
+2026-10-12T17:55:56.539Z efsd v0.3.1-pre-alpha-candidate (branch release-v0.3.1-pre-alpha, built 2026-10-12T17:48:05Z on amd-395), build=15e2a5310df1dd0fd4e307a9508c95d513d14672: node 2 listening on 127.0.0.1:25321, storage=/data1/efs/amd-v031-buffered-15e2a531-20261012-overwrite-retry2/gc-buffered-qq_fvxek/n2 (1 paths, stripe=none), used=786432, quota=4294967296, direct_io=off, writers=28 shared
+2026-10-12T17:55:56.539Z kv-obs: mt_bytes=9264 l0_bytes=0 l0=0 l1=0
+2026-10-12T17:55:57.321Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T17:55:58.538Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=983 passes=2 sampled=0 pending=0,0 reap=0,0 removed=4 file_bytes=262272 payload_bytes=262144 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T17:56:00.558Z raft-host: applied session index=68 kind=1 shard=0 ino=0
+2026-10-12T17:56:01.539Z kv-obs: mt_bytes=8988 l0_bytes=0 l0=0 l1=0
+2026-10-12T17:56:02.323Z iostats: get ops=3 bytes=196608 errors=0 avg_us=62 p50_us=40 max_us=111 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T17:56:06.543Z kv-obs: mt_bytes=8876 l0_bytes=0 l0=0 l1=0
+2026-10-12T17:56:07.324Z iostats: get ops=3 bytes=196608 errors=0 avg_us=62 p50_us=40 max_us=111 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0

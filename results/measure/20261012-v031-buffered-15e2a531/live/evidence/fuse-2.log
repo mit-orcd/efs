@@ -1,0 +1,48 @@
+2026-10-12T17:53:37.965Z efs-fuse v0.3.1-pre-alpha-candidate (branch release-v0.3.1-pre-alpha, built 2026-10-12T17:48:05Z on amd-395), build=15e2a5310df1dd0fd4e307a9508c95d513d14672: starting export=default mount=/tmp/efs-amd-v031-buffered-retry1-15e2a531/deep-mnt2
+2026-10-12T17:53:37.966Z Discovered 4 cluster nodes from 127.0.0.1:25300
+2026-10-12T17:53:37.966Z   node id=1 127.0.0.1:25300
+2026-10-12T17:53:37.966Z   node id=2 127.0.0.1:25301
+2026-10-12T17:53:37.966Z   node id=3 127.0.0.1:25302
+2026-10-12T17:53:37.966Z   node id=4 127.0.0.1:25303
+2026-10-12T17:53:37.966Z fetching metadata...
+2026-10-12T17:53:37.966Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T17:53:37.966Z export id=1 name=default
+2026-10-12T17:53:37.966Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T17:53:37.969Z efs-fuse: workers max=10 idle=10
+2026-10-12T17:53:37.970Z fuse serving
+2026-10-12T17:53:39.160Z efs: read hole ino=6763 ci=1 holes=1
+2026-10-12T17:53:39.757Z efs: rename_at 3310/a -> 3310/b rc=-12 after 1 tries
+2026-10-12T17:53:41.720Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=4 replay_ms=6
+2026-10-12T17:53:41.736Z efs: report rec ino=4542 ci=0 rejected unowned staging observation nodes=1,2,3 (putid miss, n=1)
+2026-10-12T17:53:45.875Z efs: read hole ino=6631 ci=1 holes=3
+2026-10-12T17:53:48.595Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=5
+2026-10-12T17:53:48.757Z efs: report rec ino=8068 ci=0 rejected unowned staging observation nodes=1,2,3 (putid miss, n=2)
+2026-10-12T17:53:50.518Z efs: read hole ino=7589 ci=0 holes=13
+2026-10-12T17:53:52.582Z efs: read hole ino=10632 ci=0 holes=14
+2026-10-12T17:54:03.071Z dcache-pressure live=36175872 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=73040 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T17:54:03.083Z dcache-pressure live=36044800 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T17:54:03.341Z dcache-pressure live=33554432 reserved=0 backing=67108864 limit=335544320 request=5242880 metadata=1992 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=high-water
+2026-10-12T17:54:03.507Z dcache-pressure live=34209792 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T17:54:03.683Z dcache-pressure live=33685504 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=1328 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T17:54:03.859Z dcache-pressure live=34078720 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T17:54:04.085Z dcache-pressure live=34209792 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T17:54:04.361Z dcache-pressure live=34471936 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=1328 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T17:54:04.674Z dcache-pressure live=33554432 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T17:54:04.919Z dcache-pressure live=34209792 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T17:54:05.139Z dcache-pressure live=34209792 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=1328 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T17:54:05.312Z dcache-pressure live=33816576 reserved=0 backing=67108864 limit=335544320 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T17:54:05.709Z fsync-split ino=5954 flush_ms=161 report_ms=0 rc=0
+2026-10-12T17:54:07.031Z dcache-pressure live=134086656 reserved=0 backing=134217728 limit=335544320 request=5242880 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=high-water
+2026-10-12T17:54:07.044Z dcache-pressure live=34340864 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=5312 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T17:54:07.290Z dcache-pressure live=36306944 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=7968 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T17:54:07.461Z dcache-pressure live=37224448 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=5312 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T17:54:07.625Z dcache-pressure live=35127296 reserved=0 backing=134217728 limit=335544320 request=5242880 metadata=5312 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=high-water
+2026-10-12T17:54:07.795Z dcache-pressure live=34471936 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=8632 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T17:54:07.995Z dcache-pressure live=34996224 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=7968 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T17:54:08.112Z dcache-pressure live=34471936 reserved=0 backing=134217728 limit=335544320 request=5242880 metadata=5312 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=high-water
+2026-10-12T17:54:08.200Z dcache-pressure live=33947648 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=9960 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T17:54:08.336Z dcache-pressure live=33685504 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=9960 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T17:54:08.491Z dcache-pressure live=34471936 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=6640 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T17:54:08.618Z dcache-pressure live=33947648 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=5976 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water
+2026-10-12T17:54:08.738Z dcache-pressure live=35520512 reserved=0 backing=134217728 limit=335544320 request=5242880 metadata=5312 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=high-water
+2026-10-12T17:54:10.585Z dcache-pressure live=134086656 reserved=0 backing=134217728 limit=335544320 request=1572864 metadata=3984 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=high-water

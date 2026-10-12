@@ -1,0 +1,15 @@
+Evidence directory: /data1/efs/amd-v031-buffered-15e2a531-20261012-overwrite/gc-buffered-zmsirz_7
+Traceback (most recent call last):
+  File "/data1/efs/amd-v031-buffered-15e2a531-20261012/source/tests/live/gc_reclamation.py", line 584, in <module>
+    start()
+    ~~~~~^^
+  File "/data1/efs/amd-v031-buffered-15e2a531-20261012/source/tests/live/gc_reclamation.py", line 412, in start
+    wait(listening,f'node {i+1} listening',30)
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data1/efs/amd-v031-buffered-15e2a531-20261012/source/tests/live/gc_reclamation.py", line 360, in wait
+    if predicate():
+       ~~~~~~~~~^^
+  File "/data1/efs/amd-v031-buffered-15e2a531-20261012/source/tests/live/gc_reclamation.py", line 408, in listening
+    if servers[-1].poll() is not None:raise AssertionError('daemon exited')
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: daemon exited
