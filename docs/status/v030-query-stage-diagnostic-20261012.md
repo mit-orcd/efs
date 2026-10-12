@@ -123,3 +123,28 @@ Mac review `aaf6a3e8` and ORCD review `79adbf22` are integrated. Typed transacti
 The follow-up source captures typed activity and applied vectors under the host mutex, then emits after releasing it. Initial lag writer-lock timing is captured at acquisition and emitted after unlocking, only for waits of at least one millisecond. This removes routine zero-wait records and logging under these locks without changing refusals, fences or retry budgets. Other synchronous trace sites still perturb timing; instrumented results are diagnostic evidence only. Foreground admission/proposal attribution remains uninstrumented. Actual capture-helper normal and ASan/UBSan checks pass; full Linux real-LSM and merged native gates remain required before the single original-budget diagnostic.
 
 Frozen `57748bb5` full fault-enabled Linux run stopped at the new root-refusal extraction fixture: GCC `-Werror=misleading-indentation` rejected an unbraced one-line else followed by return. This is a fixture compile failure; normal/sanitizer/mounted gates did not execute and controllers exited without borrowing mounts. Explicit braces repair the fixture without changing production source. Preserve the failed run and qualify the new frozen identity.
+
+## Second frozen AMD diagnostic: 95d3f1b1
+
+The repaired fixture candidate passed full normal and fault-enabled `make all test`, seventeen focused ASan/UBSan scripts, and a separately rebuilt fully sanitized real-LSM catalog test. All 1,506 staged inputs remained unchanged; normal mounted binaries/library retained their recorded hashes. [Native evidence](../../results/measure/20261012-v030-merged-native/95d3f1b1/acceptance-summary.json). The earlier `57748bb5` fixture compile failure is retained separately, not relabeled as a pass.
+
+Both direct and buffered ordinary overwrite prerequisites passed all four primary/peer/cold byte checks and physical fragment/queue drain; round and mount restoration exited zero. [Ordinary raw evidence](../../results/measure/20261012-v030-ordinary-overwrite/95d3f1b1/mounted/progress.log).
+
+One instrumented direct seven-client/jobs16 run then reproduced the original-budget failure. Every client reports 209 PASS, 4 FAIL, 1 mmap SKIP, 7 NOTRUN, lasting 44.6–45.1 seconds. Deep nesting and stats timed out; many-files was terminated and find remained blocked behind the stats worker. These are not four independent 30-second timeouts. Busy extra-client teardown aborted the fixture; cold packing/GC were NOTRUN. Round exit 1, normal mount restoration exit 0; no detached jobs remained. [Stage summary](../../results/measure/20261012-v030-query-stage-diagnostic/95d3f1b1/direct/stage-summary.json). All 37 native, 13 ordinary and 28 diagnostic artifacts were retrieved and hash verified, excluding binaries/store data.
+
+| Observation | n2 | n3 |
+|---|---:|---:|
+| Transaction-cut mismatch BUSY | 72 | 73 |
+| Complete capture BUSY | 19 (includes one authority failure) | 17 |
+| INTENT PUT/DEL changed samples | 68 / 61 | 72 / 71 |
+| DECISION PUT changed samples | 61 | 72 |
+| Root catalog-absence BUSY | 390 | 334 |
+| Root live-read/parent/binding/expiry leaf failures | 0 | 0 |
+| Successful checkpoint total-attempt maximum | 9,115 ms | 9,558 ms |
+| Retained generation 2 → 3 publication gap | 47.961 s | 47.497 s |
+| Initial lag lock waits at least 1 ms | 0 | 0 |
+| Late publication lock maximum | 0 ms | 0 ms |
+
+All root leaf refusals cover fourteen requested roots, each itself absent from retained generation 2 while the fresh transaction-aware inode read succeeded; leaf lookup duration is at most 3 ms. This directly explains these query refusals, not the foreground deep-nesting timeout or the entire pressure failure. No pending-record callback was logged. GUARD and REDUCE PUT/DEL activity also changed; aggregate counters cannot identify a specific transaction, namespace operation, participant coverage or durable acknowledgement. Counter samples and their deltas are diagnostic hints with the peer-reviewed sampling limits. A one-millisecond initial lock event occurred on unhosted n4, not the capable publishers; absent events mean below measurement resolution. Nested wrapper errors are not additional failures.
+
+The source remains diagnostic-only. Quiet packing acceptance is blocked. A safe next hypothesis is to improve opportunities for a fresh coherent cut after cheap pre-build contention while preserving every post-pin authority/import/transaction check and the four-cut bound; separate costly build/checkpoint failure backoff remains necessary. Any scheduling remedy must first have a baseline-failing controlled oracle and bounded peer review. Foreground admission/proposal attribution still requires its own discriminator. No further unchanged live pressure run is warranted.

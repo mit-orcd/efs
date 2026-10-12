@@ -538,3 +538,7 @@ it. Instrumented timing is never quiet acceptance.
 pressure budgets. d485 full normal/fault/sixteen sanitizers and ordinary exact
 both-mode cold/cleanup PASS, instrumented pressure FAIL/restored0; no additional
 fix or quiet ON/OFF acceptance. Mac/ORCD now own bounded design/admission analysis.
+
+### Second diagnostic checkpoint, 95d3f1b1
+
+[Exact evidence](v030-query-stage-diagnostic-20261012.md#second-frozen-amd-diagnostic-95d3f1b1) records full normal/fault/17 focused sanitizer/real-LSM sanitizer PASS and both-mode ordinary overwrite PASS on unchanged inputs. One instrumented direct seven-client run remains failing. Fourteen roots absent from retained generation 2 explain the logged query refusals; 145 cut mismatches and 47–48 second publication gaps are measured. Foreground deep-nesting causation remains unresolved. Cold packing/GC NOTRUN, mounts restored, no jobs, no release acceptance. Intel's newly diagnosed older-source namespace fixture incorrectly crossed the participant bound before its ancestry oracle; its test-only repair requires separate integration/qualification, never retroactive acceptance.

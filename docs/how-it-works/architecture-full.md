@@ -2183,6 +2183,8 @@ Release diagnostic update: peer reviews `aaf6a3e8` / `79adbf22` integrated; cut 
 
 AMD `57748bb5` validation stopped on the new root test fixture indentation warning; mounted gates did not start. Fixture corrected, fresh frozen validation required; see [diagnostic record](../status/v030-query-stage-diagnostic-20261012.md).
 
+Release `95d3f1b1`: full normal/fault suites, 17 focused sanitizers and fully sanitized LSM catalog PASS; both-mode ordinary overwrite/cold/physical prerequisites PASS. One instrumented packing run still FAIL: retained roots absent, 145 transaction-cut collisions, 47–48 s publication gap; cold packing/GC NOTRUN, mounts restored. [Exact evidence and limits](../status/v030-query-stage-diagnostic-20261012.md#second-frozen-amd-diagnostic-95d3f1b1). No push or release acceptance.
+
 
 ## Appendix 2 — In flight — the current handoff block
 
