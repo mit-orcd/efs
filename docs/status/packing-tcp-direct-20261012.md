@@ -13,12 +13,20 @@ independently of inherited command-enabled environment. Its summary records the
 packing and command flags. Physical packing, mutation, peer, cold-byte and
 reclamation assertions and original deadlines remain unchanged.
 
-Current checkpoint: contiguous-range memtable insertion improves the isolated AMD
-benchmark and passes native/sanitized LSM safety gates. Source0dde0e22 passes
-1512/1512 core and67/67 peer checks, but full lifecycle FAILS at orderly shutdown.
-The reaper stop-boundary correction is implemented and awaits a new frozen-source
-run. Packing remains unqualified. Older results below retain exact source and
-scope; lower-layer passes alone do not establish mounted acceptance.
+Current tested source: **0dcce384fa442479070a31464777f104c1fe7829**.
+Memtable insertion optimization and GC shutdown correction pass normal/fault
+native, fully instrumented LSM/model/GC safety gates, focused orderly packing
+and acknowledged-fsync crash/cold/reclamation gates on AMD. The isolated insertion
+benchmark improves 13.8x; this is not an end-to-end throughput claim.
+
+Full seven-client packing remains **FAIL**: clients 2 and 6 exceed the unchanged
+30s deep-directory deadline (1510/1512 core PASS; peer67/67 PASS). All four
+daemons then stop cleanly within 20s. That full run's cold restart is **NOTRUN**
+after an explicit 4G reserve refusal, separately from the core timeout failures.
+Fresh focused cold/crash gates subsequently PASS after generated-build cleanup.
+No timeouts, quotas or storage reserve rules were weakened. Historical failed
+candidates below are retained; later documentation-only commits do not change
+the tested product/test inputs.
 
 ## Reproduction
 
@@ -117,7 +125,7 @@ The first live attempt failed before serving because its generated `/data1`
 mount path was denied. The retry uses permitted private `/tmp` mount paths.
 
 An earlier seven-client attempt passed all1512 core and67 peer checks but could
-not restart with its explicit4G quota: the startup guard reported safe maximum
+not restart with its explicit 4G quota: the startup guard reported safe maximum
 1.97GiB. It does not certify cold recovery. A cleanup attempt first refused
 because expected manifests were absent; no storage was removed by that attempt.
 Only eight inactive storage roots (`evidence/n1` through `n4`) from two completed
@@ -212,7 +220,7 @@ acceptance. Preserve deadlines, concurrency and read authority.
 ## Baseline CPU diagnostic after discarded trial
 
 Run `gc-direct-991q63kx` used the unchanged bdbb237b baseline32 product/binaries,
-packing enabled and both command flags zero, seven clients/jobs16,4G per-node
+packing enabled and both command flags zero, seven clients/jobs 16,4G per-node
 fixture, TCP/direct. Three client suites failed (2,4,5), each on dir_deep_nesting at30s (1509/1512 passed); peer67/67, acknowledged
 cold bytes, physical fragment reclamation and metadata queue drain passed.
 The owned fixture exited1 and cleaned its processes/mounts. This instrumented
@@ -274,7 +282,7 @@ commands0/server0. TCP is selected by EFS_TRANSPORT, not a command-line token.
 
 Refinement: avoid comparing/dereferencing every unrelated old key in the merge.
 Binary-search the untouched prefix and move each intervening contiguous range
-once; ranges do not overlap with later source prefixes. The model, all26
+once; ranges do not overlap with later source prefixes. The model, all 26
 allocation refusals and ASan/UBSan checks still pass locally. AMD qualification
 of this refinement is pending; earlier gates do not transfer to the new source.
 Use `python3 tests/measure/kv_mtab_insert.py --keys 20000 --batches 1000
@@ -289,8 +297,8 @@ Exact source `0dde0e2240259c16e80cdc044e8fb2990f314c58`: normal native and fully
 compiled/linked ASan/UBSan LSM/model gates PASS. Verified779 inputs, aggregate
 SHA256 `9fdd2a372107a3d3c69456298828bd662cbb6b1b12ee7a737c9694105c3cdc16`.
 Five alternating AMD microbenchmark pairs: sequential median0.028021222s,
-batch median0.002087781s (13.42x) for20000 existing keys plus1000 front batches
-of16 zero-byte-value keys. This is insertion cost, not cluster throughput.
+batch median0.002087781s (13.42x) for 20000 existing keys plus1000 front batches
+of 16 zero-byte-value keys. This is insertion cost, not cluster throughput.
 
 Quiet fixture `gc-direct-tx79i4x9`: core1512/1512 PASS, peer67/67 PASS; whole
 run FAIL because node2 exceeded unchanged20s orderly shutdown. Cold/reclamation,
@@ -309,3 +317,110 @@ local/remote lane boundary with OK/BUSY outcomes and subsequent marker replay;
 existing GC verdict test also rejects proposals after stop. Local normal and
 ASan/UBSan PASS; AMD integration at the new source is pending. Deadlines remain
 30s core/20s shutdown/180s physical and metadata drain.
+
+
+## Final integrated AMD checkpoint
+
+Exact executed source `0dcce384fa442479070a31464777f104c1fe7829` includes the
+contiguous-range merge and GC cancellation correction. Verified 780 source,
+test and dependency inputs; aggregate SHA256
+`5558865f42b9e8e8fcb3065b1624658403b75712a9810b36c7372390d126d09f`.
+Harness product-source digest
+`bdd097e8ecb1e0e28c7b16488459a95b2fea1361f9f745345c6b4072848cda6f`.
+Normal binaries rechecked unchanged after testing:
+
+| Executable | SHA256 |
+| --- | --- |
+| efsd | f76027879f6307c83ef24d6c938bc830e4eb8af737b24471e482be17228126ab |
+| efs-fuse | 3e2f53b7bd151db62c285662efa5c728514a0c8b73d9866cdd03b50b72ead139 |
+| efs-mgmt | 68d78b5b777bf255fb917154a907c568e788ab7bae6c6364ad447ea4ad1712ed |
+
+Same AMD395/kernel7.0.0-38/GCC15.2 environment, four private daemon processes
+on one host, files/TCP/direct,4G per node, packing1/commands0/server0/repair0.
+Seven-client workload: jobs 16 per client, original 30s core cases;20s daemon
+shutdown;180s physical and metadata drain. No profiler or competing build in
+quiet measurement. Focused durability workloads use two FUSE clients and64
+concurrently fsynced512-byte files plus ordinary growth/truncate/unlink.
+
+| Gate on final tested source | Verdict |
+| --- | --- |
+| Full normal native `make test` | PASS |
+| Full fault native `make EFS_FAULTS=1 test` | PASS |
+| Fully instrumented/linked ASan/UBSan `test_kv_lsm` | PASS |
+| Memtable model/all 26 allocation refusals, sanitizer | PASS |
+| GC lane cancellation and local/forwarded verdict sanitizers | PASS |
+| Quiet seven-client core | FAIL: 1510/1512, deep-directory clients2/6 timeout30s |
+| Quiet peer suite | PASS: 67/67 |
+| Quiet all-four orderly shutdown under retained GC backlog | PASS:status zero within 20s; no forced kill |
+| That full run's cold/reclamation | NOTRUN:4G quota exceeded safe max3.91G at restart |
+| Planned quiet repeats2/3 | NOTRUN after first failed full run |
+| Fresh focused orderly packed/ordinary mutations, cold bytes, physical/metadata drain | PASS (`gc-direct-25rcqk55`) |
+| Fresh all-four SIGKILL after fsync/client drain, cold bytes and physical/metadata drain | PASS (`gc-direct-tgeq4otc`) |
+
+Quiet failed fixture `gc-direct-mb5oi_tr` remains externally with its failure
+logs and runtime stores. Its full lifecycle is not accepted. Successful focused
+reports explicitly record TCP/direct and packing1/commands0/server0. Crash
+acceptance covers process death after acknowledgements; power loss, missing-node
+repair and multi-host networking remain outside this task. Broader W95 format,
+migration and matched end-to-end performance acceptance are not closed.
+
+Five alternating isolated insertion pairs on this final source:
+
+| Method | Median seconds | Min–max seconds |
+| --- | ---: | ---: |
+| Original sequential insertion |0.028853582|0.027963574–0.041234950|
+| Contiguous batch ranges |0.002086209|0.002082502–0.003035597|
+
+Median ratio 13.8x for 20000 existing keys and 1000 front batches of 16 zero-value
+keys. This removes repeated suffix movement; it does not prove that insertion
+was the sole source of mounted latency. The remaining deep-directory blocker
+needs fresh metadata ReadIndex/progress/GC scheduling measurements at this
+source, with the same budgets and no authority/TTL shortcuts.
+
+### Reproduce final checks
+
+Check out the exact SHA above. In separate normal/fault/sanitizer source
+checkouts (avoid mixing instrumented objects):
+
+```sh
+make clean
+make -j8 EFS_GIT_ID=0dcce384fa44 EFS_GIT_DESCRIBE=0dcce384 EFS_GIT_BRANCH=devel
+make EFS_GIT_ID=0dcce384fa44 EFS_GIT_DESCRIBE=0dcce384 EFS_GIT_BRANCH=devel test
+python3 tests/measure/kv_mtab_insert.py --keys 20000 --batches 1000 --batch-size 16 --repeats 5
+# Separate fault checkout: clean; same build/test commands with EFS_FAULTS=1.
+```
+
+For the sanitized checkout, use a single executable compiler wrapper which
+executes `gcc -fsanitize=address,undefined -fno-omit-frame-pointer -g "$@"`.
+`make clean; make -j8 CC=/absolute/path/to/wrapper tests/test_kv_lsm`, then run
+`./tests/test_kv_lsm` with `ASAN_OPTIONS=detect_leaks=1:abort_on_error=1` and
+`UBSAN_OPTIONS=halt_on_error=1`. With CC set to that wrapper, run
+`tests/test_kv_mtab_batch.py`, `tests/test_gc_reap_shutdown.py` and
+`tests/test_gc_verdict.py` under the same sanitizer options. The instrumented
+LSM library is linked into its test, not just the test translation unit.
+
+Use the focused live reproduction above with the normal binaries; use fresh
+unused ports35260 (orderly) and35270 (add `--packing-crash-after-fsync`). For
+seven clients use35210 plus `--posix --packing-clients 7 --posix-jobs 16`.
+Ensure enough free filesystem capacity for the unchanged4G quota at both start
+and cold restart. Harness-created roots are fresh and retained; `finally`
+cleans owned processes/mounts. Inspect status-zero shutdown and exit verdicts.
+Never classify the expected reproduced full-workload failure as PASS because
+independent lower-layer checks pass. No old-binary compatibility work is needed.
+
+Raw outputs, manifests and input maps are external on AMD under
+`/data1/efs/packing-qualification-20261012/`, prefixes `final-*`; fixture reports
+are under `/data1/efs/packing-qualification/root-a/gc-direct-*`. No raw capture
+is committed. Useful integrity hashes:
+
+- full quiet failure log: `b0be87f16cb551a3cc57fe3a718dff17b2ec7ad8f4d8c46d74e52ef4bc85a952`
+- focused orderly log: `bf55be245fc7c8a0a55749a5f2ea70e6e4bfb48811151a6810509944ddf77eb6`
+- focused crash log: `417f5ef022eefb21225b036a7212266163f42ee76805a249f9596e1a4cc252ba`
+- normal native log: `10275f3f95c995b2f098cc7947b80de7869377c098bca6e782ce4a3c297aaa8f`
+- fault native log: `03b707afcb14ba3132be102c19696c20f9ef106b521b4d9cb137f78c229b6fe3`
+
+Cleanup removed only generated builds from completed private checkouts and
+runtime stores of two earlier verified PASS fixtures, retaining their logs,
+manifests and reports plus all failed/current stores. No normal service or
+unrelated path changed. All owned qualification screens/processes are stopped;
+no push, tag or main/release promotion.
