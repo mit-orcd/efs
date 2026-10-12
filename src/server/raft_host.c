@@ -18081,7 +18081,11 @@ void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
         }
     }
     if (rc == EFS_OK)
-        rc = host_read_inode_lanes(h, parent, &hint);
+        /* The successful first fence belongs to this RPC. Reread the row
+         * transactionally and fence newly discovered lane groups, without
+         * issuing a second fresh round for the already-fenced inode group. */
+        rc = host_read_inode_lanes_covered(h, parent, &hint,
+                  (uint8_t)(1u << efs_raft_shard_group(efs_kv_inode_shard(parent))));
     /* Resume from the client's cookie: (src, name) is the exact KV scan
      * position. The scan is name-ordered, so this is stable and complete —
      * an ino filter would skip entries (name order != ino order). */
