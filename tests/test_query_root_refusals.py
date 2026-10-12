@@ -44,7 +44,8 @@ static int run(unsigned deadline){struct efs_msg_query_snapshot req={.root=42};s
  struct query_request q={.h=&h,.req=&req,.view=&view,.deadline=deadline,.auth=auth};
  struct efs_meta_row *row=NULL;clock_ms=100;reads=0;
  int rc=query_auth_dir(&q,42,5,&row);if(!rc)assert(row&&row->ino==42&&q.auth_count==1);
- else assert(!row);return rc;}
+ else {assert(!row);}
+ return rc;}
 int main(void){
  assert(!run(1000)&&reads==4);
  cached_rc=EFS_ERR_NOT_FOUND;assert(run(1000)==EFS_ERR_BUSY&&reads==2);

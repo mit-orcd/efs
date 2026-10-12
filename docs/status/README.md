@@ -705,3 +705,5 @@ lag-lock timing. [Definition and pending qualification](v030-query-stage-diagnos
 No fence filtering, source promotion or quiet acceptance.
 
 Release diagnostic update: peer reviews `aaf6a3e8` / `79adbf22` integrated; cut activity and nonzero initial lag-lock events now emit after unlock. [Diagnostic limits and pending gates](v030-query-stage-diagnostic-20261012.md#reviewed-diagnostic-freeze-preparation). Packing pressure acceptance remains blocked.
+
+AMD `57748bb5` validation stopped on the new root test fixture indentation warning; mounted gates did not start. Fixture corrected, fresh frozen validation required; see [diagnostic record](v030-query-stage-diagnostic-20261012.md).
