@@ -50,6 +50,12 @@ static int command(struct efs_kv *kv,const struct efs_repair_job *j,unsigned op,
     for(unsigned i=0;i<4;i++)cmd[2+EFS_REPAIR_JOB_BYTES+i]=(uint8_t)(arg>>(24-8*i));
     return efs_repair_apply_command(kv,group,cmd,sizeof(cmd));
 }
+static int term_command(struct efs_kv *kv,const struct efs_repair_job *j,unsigned op,unsigned group,uint64_t term)
+{
+    uint8_t cmd[EFS_REPAIR_COMMAND_BYTES]={EFS_MD_CMD_REPAIR_JOB,op};
+    assert(!efs_repair_job_encode(j,cmd+2));
+    return efs_repair_apply_command_term(kv,group,term,cmd,sizeof(cmd));
+}
 static void journal(struct efs_kv *kv,int lsm)
 {
     efs_ino_t ino=create(kv);struct efs_repair_job j=capture(kv,ino,101,17),got;
@@ -69,6 +75,9 @@ static void journal(struct efs_kv *kv,int lsm)
     assert(efs_repair_admit(kv,&j)==EFS_ERR_STALE);
     assert(efs_repair_get(kv,&j,&got)==EFS_ERR_NOT_FOUND);
     assert(!efs_kv_del(kv,gk,gkl));
+    assert(term_command(kv,&j,EFS_REPAIR_OP_ADMIT,group,0)==EFS_ERR_STALE);
+    assert(term_command(kv,&j,EFS_REPAIR_OP_ADMIT,group,2)==EFS_ERR_STALE);
+    assert(term_command(kv,&j,EFS_REPAIR_OP_ADMIT,group,UINT64_MAX)==EFS_ERR_STALE);
     fail(kv,lsm);assert(command(kv,&j,EFS_REPAIR_OP_ADMIT,0,group)==EFS_ERR_IO);
     assert(efs_repair_get(kv,&j,&got)==EFS_ERR_NOT_FOUND);
     assert(!command(kv,&j,EFS_REPAIR_OP_ADMIT,0,group));assert(!efs_repair_admit(kv,&j));
@@ -86,6 +95,8 @@ static void journal(struct efs_kv *kv,int lsm)
     assert(efs_repair_gc_object_ready(kv,ino,0,101)==EFS_ERR_BUSY);
     assert(efs_repair_retire(kv,&j,0)==EFS_ERR_BUSY);
     assert(efs_repair_record_seal(kv,&j,1)==EFS_ERR_STALE);
+    assert(term_command(kv,&j,EFS_REPAIR_OP_DATA,group,2)==EFS_ERR_STALE);
+    assert(!efs_repair_get(kv,&j,&got) && !got.flags);
     fail(kv,lsm);assert(efs_repair_record_data(kv,&j)==EFS_ERR_IO);
     assert(!efs_repair_get(kv,&j,&got) && !got.flags);
     assert(!efs_repair_record_data(kv,&j));
@@ -98,7 +109,7 @@ static void journal(struct efs_kv *kv,int lsm)
     assert(efs_repair_retire(kv,&j,1)==EFS_ERR_STALE);
     assert(efs_repair_admit(kv,&j)==EFS_ERR_STALE);
     assert(efs_repair_admit(kv,&conflict)==EFS_OK); /* fresh UUID, same live object */
-    assert(!efs_repair_cancel(kv,&conflict));assert(efs_repair_retire(kv,&conflict,1)==EFS_ERR_BUSY);
+    assert(!term_command(kv,&conflict,EFS_REPAIR_OP_CANCEL,group,2));assert(efs_repair_retire(kv,&conflict,1)==EFS_ERR_BUSY);
     assert(efs_repair_gc_ready(kv,ino,j.inode_gen,0,101)==EFS_ERR_BUSY);
     assert(!efs_repair_record_seal(kv,&conflict,2));assert(!efs_repair_retire(kv,&conflict,1));
     assert(!efs_repair_retire(kv,&conflict,1));assert(efs_repair_admit(kv,&conflict)==EFS_ERR_STALE);

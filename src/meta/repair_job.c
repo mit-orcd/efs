@@ -273,3 +273,18 @@ int efs_repair_apply_command(struct efs_kv *kv,uint32_t group,const uint8_t *cmd
     default:return EFS_ERR_PROTO;
     }
 }
+
+/* Every replica validates the committed entry term, not its current leader's
+ * term. Old committed entries remain replayable after an election. Cancel and
+ * terminal cleanup may deliberately operate on a previous owner's job. */
+int efs_repair_apply_command_term(struct efs_kv *kv,uint32_t group,uint64_t term,
+                                 const uint8_t *cmd,uint32_t n)
+{
+    if(!cmd || n!=EFS_REPAIR_COMMAND_BYTES)return EFS_ERR_PROTO;
+    if(cmd[1]==EFS_REPAIR_OP_ADMIT || cmd[1]==EFS_REPAIR_OP_DATA){
+        struct efs_repair_job j;int rc=efs_repair_job_decode(cmd+2,EFS_REPAIR_JOB_BYTES,&j);
+        if(rc)return rc;
+        if(!term || term>UINT32_MAX-1ull || term!=j.epoch)return EFS_ERR_STALE;
+    }
+    return efs_repair_apply_command(kv,group,cmd,n);
+}

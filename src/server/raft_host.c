@@ -3172,7 +3172,7 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
     if (cmd[0] == EFS_MD_CMD_LANE_FENCE)
         return apply_lane_fence_cmd(h, cmd, clen, index);
     if(cmd[0]==EFS_MD_CMD_REPAIR_JOB)
-        return efs_repair_apply_command(h->kv,group,cmd,clen);
+        return efs_repair_apply_command_term(h->kv,group,term,cmd,clen);
     if(cmd[0]==EFS_MD_CMD_APPEND_COMPLETE_ATOMIC) {
         if(clen!=EFS_MD_APPEND_COMPLETE_ATOMIC_LEN || group!=efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd+1))))
             return EFS_ERR_INVAL;
@@ -10427,6 +10427,21 @@ static int host_storage_fence_members(struct efs_raft_host *h,const uint8_t uuid
  * leader; an unhosted node forwards a non-empty command to a voter.
  * Session GET (sub=0) is a ReadIndex, not a
  * log command: salt carries epoch + state + touched-bit (10.5c-35a). */
+/* Fresh proof must be local authoritative leader proof. A follower's cached
+ * view can lag a remote proof and must never grant an old owner new writes. */
+static int host_repair_write_read(struct efs_raft_host *h,uint8_t group,
+                                  const struct efs_repair_job *j,int *hint)
+{
+    int rc=host_read_index(h,group,hint);if(rc)return rc;
+    pthread_mutex_lock(&h->mu);
+    struct host_group *g=group_slot(h,group);
+    if(!g || !g->r || efs_raft_role(g->r)!=EFS_RAFT_LEADER)rc=EFS_ERR_NOT_PRIMARY;
+    else if(efs_raft_term(g->r)>UINT32_MAX-1ull || efs_raft_term(g->r)!=j->epoch ||
+            !h->s || h->s->id!=j->owner)rc=EFS_ERR_STALE;
+    else rc=efs_repair_write_authority(h->kv,j);
+    pthread_mutex_unlock(&h->mu);return rc;
+}
+
 void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
                              struct efs_msg_raft_mkfs_reply *out)
 {
@@ -10466,10 +10481,11 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         if(!host_hosts(h,group)) {
             rc=host_remote_cmd(h,group,cmd,clen,out,-1);if(rc)out->rc=rc;return;
         }
-        /* ReadIndex waits for this replica's own apply before journal/source
-         * reads. This returns permission only, never a durable target receipt. */
-        rc=host_read_index(h,group,&hint);
-        if(!rc)rc=efs_repair_write_authority(h->kv,&expected);
+        pthread_mutex_lock(&h->mu);struct host_group *g=group_slot(h,group);
+        int local_leader=g && g->r && efs_raft_role(g->r)==EFS_RAFT_LEADER;
+        pthread_mutex_unlock(&h->mu);
+        if(!local_leader){rc=host_remote_cmd(h,group,cmd,clen,out,-1);if(rc)out->rc=rc;return;}
+        rc=host_repair_write_read(h,group,&expected,&hint);
         out->rc=rc;out->leader_hint=hint;return;
     }
     if(clen && cmd[0]==EFS_MD_REQ_PACK_GC_VIEW) {

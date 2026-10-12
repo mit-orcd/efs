@@ -14,6 +14,7 @@
 #define EFS_REPAIR_OP_CANCEL 3u
 #define EFS_REPAIR_OP_SEAL 4u
 #define EFS_REPAIR_OP_RETIRE 5u
+int efs_repair_apply_command_term(struct efs_kv *,uint32_t group,uint64_t term,const uint8_t *,uint32_t);
 int efs_repair_apply_command(struct efs_kv *, uint32_t group, const uint8_t *, uint32_t);
 #define EFS_REPAIR_PENDING_MAX 128u
 #define EFS_REPAIR_ADMITTED 1u
