@@ -67,11 +67,16 @@ static int source_hash(struct efs_kv *kv,const struct efs_repair_job *j,uint8_t 
     uint8_t bytes[8192];uint32_t used=0;
     for(unsigned i=0;i<3;i++){
         rc=efs_txn_key_exclusive(kv,keys[i],lens[i]);if(rc)return rc;
+        /* Reserve key framing and value length before any append/subtraction. */
+        if(lens[i]>EFS_KV_KEY_MAX || used>sizeof(bytes) ||
+           sizeof(bytes)-used<8u || lens[i]>sizeof(bytes)-used-8u)
+            return EFS_ERR_OVERFLOW;
         w32(bytes+used,lens[i]);used+=4;memcpy(bytes+used,keys[i],lens[i]);used+=lens[i];
         uint32_t n=sizeof(bytes)-used-4;
         rc=efs_kv_get(kv,keys[i],lens[i],bytes+used+4,&n);
         if(rc==EFS_ERR_NOT_FOUND && i==2){rc=EFS_OK;n=0;}
         if(rc)return rc;
+        if(n>sizeof(bytes)-used-4u)return EFS_ERR_OVERFLOW;
         w32(bytes+used,n);used+=4+n;
     }
     efs_hash(bytes,used,out);return EFS_OK;

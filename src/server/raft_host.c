@@ -2706,7 +2706,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
      * and LANE_FENCE now return their apply rc as the verdict instead of
      * swallowing it as OK; a non-OK verdict is a reply to the proposer,
      * never a reason to re-apply the same index. */
-    ret = (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
+    ret = (cmd[0] == EFS_MD_CMD_REPAIR_JOB || cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
            cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP ||
            cmd[0] == EFS_MD_CMD_RMDIR || cmd[0] == EFS_MD_CMD_APPEND_COMPLETE_ATOMIC || cmd[0] == EFS_MD_CMD_APPEND_ATOMIC || cmd[0] == EFS_MD_CMD_APPEND_RSV ||
            cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_APPEND_CATCHUP ||
@@ -2743,7 +2743,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         ret = EFS_OK;
     /* Storage failure must retry this entry on every replica, rather than
      * advance a follower past cleanup it did not durably perform. */
-    if ((cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
+    if ((cmd[0] == EFS_MD_CMD_REPAIR_JOB || cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
          cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP ||
          cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_REAP_BATCH ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
@@ -10453,7 +10453,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     clen = plen - 1;
     /* Only the local verified GC coordinator may emit mutation proofs.
      * Public/forwarded control cannot supply a fabricated member ACK. */
-    if(clen && (cmd[0]==EFS_MD_CMD_PACK_GC_ACK || cmd[0]==EFS_MD_CMD_PACK_CANCEL || cmd[0]==EFS_MD_CMD_PACK_GC_RETIRE)) {
+    if(clen && (cmd[0]==EFS_MD_CMD_REPAIR_JOB || cmd[0]==EFS_MD_CMD_PACK_GC_ACK || cmd[0]==EFS_MD_CMD_PACK_CANCEL || cmd[0]==EFS_MD_CMD_PACK_GC_RETIRE)) {
         out->rc=EFS_ERR_ACCES;return;
     }
     if(clen && cmd[0]==EFS_MD_REQ_PACK_GC_VIEW) {

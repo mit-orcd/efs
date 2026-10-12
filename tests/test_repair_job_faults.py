@@ -16,7 +16,7 @@ int fdatasync(int fd){
  if(marker && !access(marker,F_OK)){
   char link[64],path[8192];snprintf(link,sizeof(link),"/proc/self/fd/%d",fd);
   ssize_t n=readlink(link,path,sizeof(path)-1);
-  if(n>0){path[n]=0;if(strstr(path,"/wal.log")){errno=EIO;return -1;}}
+  if(n>0){path[n]=0;if(n>=4 && !strcmp(path+n-4,"/wal")){errno=EIO;return -1;}}
  }
  return real(fd);
 }

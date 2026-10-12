@@ -1,0 +1,11 @@
+fenced source rc=-14
+fenced source rc=-14
+kv-compact: start l0=1 inputs=1 range=1 l0only=0
+kv-compact: end bytes=790 ms=15 l0=0 l1=1 rc=0
+test_repair_job: tests/test_repair_job.c:156: sync_faults: Assertion `efs_repair_get(kv,&j,&got)==EFS_ERR_NOT_FOUND' failed.
+Traceback (most recent call last):
+  File "/home/efs/nuc-repair-28-stage1/tests/test_repair_job_faults.py", line 27, in <module>
+    subprocess.run([root/'tests/test_repair_job'],env=dict(os.environ,LD_PRELOAD=str(lib),EFS_REPAIR_SYNC_MARKER=str(Path(d)/'armed')),check=True,timeout=90)
+  File "/usr/lib64/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '[PosixPath('/home/efs/nuc-repair-28-stage1/tests/test_repair_job')]' died with <Signals.SIGABRT: 6>.

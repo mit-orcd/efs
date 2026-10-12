@@ -463,6 +463,8 @@ test: all
 	./tests/test_put_ticket
 	./tests/test_repair_job
 	python3 tests/test_repair_job_faults.py
+	python3 tests/test_repair_host.py
+	python3 tests/test_repair_source_bounds.py
 	./tests/test_store_gc
 	./tests/test_store_gc unlimited
 	./tests/test_writer_routing

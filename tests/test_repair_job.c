@@ -152,9 +152,20 @@ static void sync_faults(void)
         }
         int status;assert(waitpid(pid,&status,0)==pid && WIFEXITED(status) && !WEXITSTATUS(status));assert(!unlink(marker));
         kv=efs_kv_lsm_open(path,NULL);assert(kv);struct efs_repair_job got;
-        if(retirement){assert(!efs_repair_get(kv,&j,&got) && got.state==EFS_REPAIR_SEALED);assert(!efs_repair_retire(kv,&j,1));assert(efs_repair_admit(kv,&j)==EFS_ERR_STALE);}
-        else {assert(efs_repair_get(kv,&j,&got)==EFS_ERR_NOT_FOUND);assert(!efs_repair_admit(kv,&j));}
-        efs_kv_lsm_close(kv);printf("repair WAL sync EIO %s: failed mutation not acknowledged, old debt/floor recovered PASS\n",retirement?"retirement":"admission");
+        /* EIO is an ambiguous durability outcome: replay may retain the atomic
+         * old state OR the complete new state, never a lost-debt/no-floor gap. */
+        int recovered=efs_repair_get(kv,&j,&got);
+        if(retirement){
+            if(recovered==EFS_OK)assert(got.state==EFS_REPAIR_SEALED);
+            else {assert(recovered==EFS_ERR_NOT_FOUND);assert(efs_repair_admit(kv,&j)==EFS_ERR_STALE);}
+            assert(!efs_repair_retire(kv,&j,1));assert(efs_repair_admit(kv,&j)==EFS_ERR_STALE);
+        } else {
+            assert(recovered==EFS_OK || recovered==EFS_ERR_NOT_FOUND);
+            if(recovered==EFS_OK)assert(got.state==EFS_REPAIR_ADMITTED);
+            assert(!efs_repair_admit(kv,&j));
+            assert(efs_repair_gc_ready(kv,ino,j.inode_gen,0,101)==EFS_ERR_BUSY);
+        }
+        efs_kv_lsm_close(kv);printf("repair WAL sync EIO %s: failed mutation not acknowledged, atomic debt/floor outcome recovered PASS\n",retirement?"retirement":"admission");
     }
 }
 int main(void)
