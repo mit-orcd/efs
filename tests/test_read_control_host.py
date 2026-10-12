@@ -15,10 +15,12 @@ void efs_batch_obs_count(enum efs_batch_counter k){(void)k;}
 #include <pthread.h>
 #include <assert.h>
 #include <stdio.h>
-struct efs_raft_host {pthread_mutex_t mu,inbox_mu;int inbox_n;};
+struct efsd_server {int storage_engine;};
+struct efs_raft_host {pthread_mutex_t mu,inbox_mu;int inbox_n;struct efsd_server *s;};
 static int result,calls,published,woken,decode_fail;
+static uint64_t read_context;
 int efs_wire_raft_decode(const uint8_t *p,uint32_t n,struct efs_raft_msg *m,uint8_t *b,uint32_t z) {
- (void)n;(void)b;(void)z;m->group=0;m->type=p[0];return decode_fail?EFS_ERR_PROTO:EFS_OK;
+ (void)n;(void)b;(void)z;m->group=0;m->type=p[0];m->last_log_index=read_context;return decode_fail?EFS_ERR_PROTO:EFS_OK;
 }
 static struct efs_raft *group_raft(struct efs_raft_host *h,uint8_t g){(void)h;(void)g;return NULL;}
 int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *m){(void)r;(void)m;calls++;return result;}
@@ -51,6 +53,20 @@ int main(void) {
  result=0;assert(!host_read_control(&h,p,sizeof(p)) && calls==8 && published==4);
  p[0]=EFS_RAFT_MSG_AE_REQ;result=1;
  assert(!host_read_control(&h,p,sizeof(p)) && calls==8 && h.inbox_n==1);
+ /* Only container fresh-context probes can note an early vote behind
+  * queued work. EVERY such request remains queued for normal recv: even
+  * a fully accounted core result must not consume/reorder replication. */
+ struct efsd_server server={0};h.s=&server;read_context=42;
+ assert(!host_read_control(&h,p,sizeof(p)) && calls==8 && h.inbox_n==1);
+ server.storage_engine=1;read_context=0;
+ assert(!host_read_control(&h,p,sizeof(p)) && calls==8 && h.inbox_n==1);
+ read_context=42;
+ assert(!host_read_control(&h,p,sizeof(p)) && calls==9 && h.inbox_n==1);
+ result=2;assert(!host_read_control(&h,p,sizeof(p)) && calls==10 && h.inbox_n==1);
+ result=0;assert(!host_read_control(&h,p,sizeof(p)) && calls==11 && h.inbox_n==1);
+ assert(published==4 && woken==4);
+ pthread_mutex_lock(&h.mu);assert(!host_read_control(&h,p,sizeof(p)) && calls==11);
+ pthread_mutex_unlock(&h.mu);
  h.inbox_n=0;
  assert(!pthread_mutex_trylock(&h.mu));pthread_mutex_unlock(&h.mu);
  assert(!pthread_mutex_trylock(&h.inbox_mu));pthread_mutex_unlock(&h.inbox_mu);

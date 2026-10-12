@@ -10160,8 +10160,10 @@ void server_raft_host_stop(void)
 /* The pump's off-lock durability tail need not park a fresh quorum ACK.
  * Try the existing mutex only. With pending inbox work, replies may note
  * current-term read quorum but MUST still enter normal recv for ordered
- * replication bookkeeping. Requests stay behind pending work. No commit,
- * apply, storage promise or membership change occurs on this path. */
+ * replication bookkeeping. Container fresh-context requests may note a
+ * heartbeat vote while work is pending, but MUST still enter ordered recv.
+ * The core requires a known current-term leader and matching durable prefix;
+ * no commit, apply, storage promise or membership change occurs here. */
 static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n)
 {
     struct efs_raft_msg msg;
@@ -10174,13 +10176,16 @@ static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n
     pthread_mutex_lock(&h->inbox_mu);
     int pending=h->inbox_n;
     pthread_mutex_unlock(&h->inbox_mu);
-    if (!pending || msg.type==EFS_RAFT_MSG_AE_REP) {
+    int container_probe=h->s && h->s->storage_engine &&
+        msg.type==EFS_RAFT_MSG_AE_REQ && msg.last_log_index;
+    if (!pending || msg.type==EFS_RAFT_MSG_AE_REP || container_probe) {
         struct efs_raft *r=group_raft(h,msg.group);
         handled=efs_raft_read_control(r,&msg);
         /* A pure read vote does not reorder commit/apply or replication.
          * Queued higher-term/config frames have made no durable promise yet;
          * the core's current boot/term/config and own apply checks still rule.
-         * Pending work forbids consuming even an accounted reply. */
+         * Pending work forbids consuming any frame, even an accounted
+         * reply or a container probe whose early vote was already sent. */
         if(pending && handled==1)handled=2;
         if (handled && msg.type==EFS_RAFT_MSG_AE_REQ) BO_COUNT(BO_READ_CONTROL_REQUEST);
         if (handled && msg.type==EFS_RAFT_MSG_AE_REP) BO_COUNT(BO_READ_CONTROL_REPLY);
