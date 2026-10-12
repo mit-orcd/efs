@@ -881,3 +881,13 @@ Actual production function tests cover budgets, pool ownership, TCP/RDMA
 receive limits, helper saturation, partial initialization and joined callback
 lifetime. Focused local ASan/UBSan passes; full Linux and mounted qualification
 of this candidate is still required.
+
+Independent review `67687dce` reproduced another budget violation in the first
+follower candidate: transport waits stopped, but the routing loop continued
+until its separate 400 ms retry limit after an inherited 100 ms budget expired.
+The actual wrapper-plus-loop regression fails before correction. A read-only
+expiry check at the loop head stops new routing/RPC attempts after that budget;
+mutations retain their existing replay path. The regression covers transport
+failure, no peer, already-expired scope, ordinary unscoped 400 ms behavior and
+unchanged mutation uncertainty. It passes normal and local ASan/UBSan after
+the narrow guard. Full Linux and mounted acceptance must use this correction.

@@ -1,0 +1,8 @@
+Assertion failed: (rc==EFS_ERR_BUSY&&now_ms==10100&&!expired_calls&&deadline==10100), function main, file test.c, line 107.
+inherited100ms: elapsed=400 expired_RPC_attempts=61 status=-13
+Traceback (most recent call last):
+  File "/Users/mike/Documents/Codex/2026-10-08/efs/work/devel-orcd/tests/test_read_retry_budget.py", line 48, in <module>
+    subprocess.run([str(exe)],check=True,timeout=10)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 528, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-read-retry-mxq0b1il/test']' died with <Signals.SIGABRT: 6>.
