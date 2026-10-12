@@ -23,7 +23,7 @@ source = '#define HOST_LOCK_LEN '+lock_len+'\n#define HOST_APPEND_RSV_LEN '+appe
 #define EFS_RAFT_LEADER 1
 struct efs_raft {int leader;};
 struct server {uint64_t gc_sweep_errors,gc_reap_errors,gc_ack_errors;};
-struct efs_raft_host {pthread_mutex_t mu;struct efs_raft r;struct server *s;struct efs_kv *kv;};
+struct efs_raft_host {int gc_running;pthread_mutex_t mu;struct efs_raft r;struct server *s;struct efs_kv *kv;};
 static int verdict, waits, forwards, durable;
 static struct efs_raft *group_raft(struct efs_raft_host*h,uint8_t g){(void)g;return &h->r;}
 static int efs_raft_role(struct efs_raft*r){return r->leader;}
@@ -55,7 +55,7 @@ int main(void){
  assert(core_result(EFS_MD_CMD_SESSION,EFS_ERR_BUSY,3)==EFS_OK);
  assert(core_result(EFS_MD_CMD_SESSION,EFS_ERR_IO,3)==EFS_ERR_IO);
  assert(core_result(EFS_MD_CMD_SESSION,EFS_ERR_NOMEM,3)==EFS_ERR_NOMEM);
- struct server s={0};struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.s=&s,.r={1}};
+ struct server s={0};struct efs_raft_host h={.gc_running=1,.mu=PTHREAD_MUTEX_INITIALIZER,.s=&s,.r={1}};
  uint8_t resolved[38]={EFS_MD_CMD_APPEND_RES};resolved[8]=42;resolved[16]=7;resolved[17]=1;
  int resolve_values[]={EFS_OK,EFS_ERR_BUSY,EFS_ERR_IO,EFS_ERR_NOMEM,EFS_ERR_PROTO};
  for(unsigned i=0;i<sizeof(resolve_values)/sizeof(resolve_values[0]);i++){
@@ -125,6 +125,10 @@ int main(void){
  assert(core_result(EFS_MD_CMD_APPEND_RSV,EFS_ERR_BUSY,53)==EFS_OK);
  assert(core_result(EFS_MD_CMD_APPEND_RSV,EFS_ERR_IO,45)==EFS_OK);
  verdict=0;durable=EFS_ERR_IO;assert(host_gc_propose(&h,0,cmd,18)==EFS_ERR_IO);
+ __atomic_store_n(&h.gc_running,0,__ATOMIC_RELEASE);
+ int stopped_waits=waits,stopped_forwards=forwards;
+ assert(host_gc_propose(&h,0,cmd,18)==EFS_ERR_BUSY);
+ assert(waits==stopped_waits && forwards==stopped_forwards);
  puts("GC apply decoders and durable local/forwarded verdict propagation PASS");
 }
 '''

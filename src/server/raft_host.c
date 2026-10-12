@@ -7648,6 +7648,8 @@ static int host_bg_propose(struct efs_raft_host *h, uint8_t group,
 static int host_gc_propose(struct efs_raft_host *h, uint8_t group,
                            const uint8_t *cmd, uint32_t clen)
 {
+    if (!__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE))
+        return EFS_ERR_BUSY;
     int rc = host_bg_propose(h, group, cmd, clen, 1);
     if (rc != EFS_OK && !(rc == EFS_ERR_BUSY && (cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH || cmd[0] == EFS_MD_CMD_REAP_BATCH || cmd[0] == EFS_MD_REQ_SWEEP_NEXT || cmd[0] == EFS_MD_CMD_CLOSE_STEP))) {
         uint64_t *counter = (cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH || cmd[0] == EFS_MD_REQ_SWEEP_NEXT) ? &h->s->gc_sweep_errors :
@@ -7728,7 +7730,7 @@ static void host_gc_close_step_pass(struct efs_raft_host *h,uint8_t group,uint32
     else if(scan.n) {
         memcpy(h->close_step_cursor[gi],scan.last,11);h->close_step_cursor_len[gi]=11;
     }
-    for(uint32_t i=0;i<scan.n && h->gc_running;i++) {
+    for(uint32_t i=0;i<scan.n && __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE);i++) {
         uint8_t cmd[46]={EFS_MD_CMD_CLOSE_STEP};
         wr64be(cmd+1,scan.ino[i]);memcpy(cmd+9,scan.identity[i],EFS_CLOSE_STEP_VALUE);
         /* RETIRE atomically checks identity, leases, locks and append rows.
@@ -7763,7 +7765,7 @@ static void host_gc_close_pass(struct efs_raft_host *h,uint8_t group,uint32_t an
     }
     if(!rc)*len=0;
     else if(scan.last_len){memcpy(cursor,scan.last,scan.last_len);*len=scan.last_len;}
-    for(uint32_t i=0;i<scan.count && h->gc_running;i++) {
+    for(uint32_t i=0;i<scan.count && __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE);i++) {
         uint8_t cmd[17]={EFS_MD_CMD_CLOSE_CLEANUP};
         wr64be(cmd+1,scan.ino[i]);wr64be(cmd+9,scan.gen[i]);
         (void)host_gc_propose(h,group,cmd,sizeof(cmd));
@@ -7792,7 +7794,7 @@ static void host_gc_orphan_pass(struct efs_raft_host *h, uint8_t group, uint32_t
         } else if (scan.last_len) {
             memcpy(cursor,scan.last,scan.last_len); *len=scan.last_len;
         }
-        for (uint32_t i=0;i<scan.count && h->gc_running;i++) {
+        for (uint32_t i=0;i<scan.count && __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE);i++) {
             uint8_t cmd[17]={EFS_MD_CMD_ORPHAN_REAP};
             wr64be(cmd+1,scan.ino[i]);wr64be(cmd+9,scan.gen[i]);
             (void)host_gc_propose(h,group,cmd,sizeof(cmd));
@@ -8067,7 +8069,7 @@ static void host_txn_recover_pass(struct efs_raft_host *h)
     if (!lead[0] && !lead[1])
         return;
     for (shard = 0; shard <= EFS_KV_SHARD_MASK && done < HOST_REC_SHARDS &&
-                    h->gc_running && h->running; shard++) {
+                    __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) && h->running; shard++) {
         uint64_t mark;
 
         if (!lead[(shard & 1u) ? 0 : 1])
@@ -8082,7 +8084,7 @@ static void host_txn_recover_pass(struct efs_raft_host *h)
         n = 0;
         if (efs_txn_scan_pending(h->kv, shard, recs, HOST_REC_MAX, &n) != EFS_OK)
             continue; /* mark stays; retried next pass */
-        for (i = 0; i < n && h->gc_running && h->running; i++) {
+        for (i = 0; i < n && __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) && h->running; i++) {
             uint64_t born = txid_ns(&recs[i].t);
 
             if (born > now || now - born < HOST_REC_AGE_NS)
@@ -8136,7 +8138,7 @@ static void host_gc_record(struct efs_raft_host *h, struct efs_export *ex,
 
         if (ack_bits & (1u << fi))
             continue;
-        if (*nack >= GC_ACK_MAX || !h->gc_running)
+        if (*nack >= GC_ACK_MAX || !__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE))
             return;
         if (nodes[fi] == h->s->id)
             rc = host_gc_local_del(h, ex, ino, ci, (uint32_t)fi, gen,
@@ -8200,7 +8202,7 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
         __atomic_store_n(&h->s->gc_first_reap[gi], first, __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_first_seen_us[gi], first ? efs_iostats_now_us() : 0, __ATOMIC_RELAXED);
     }
-    for (i = 0; i < c.n && h->gc_running && h->running; i++) {
+    for (i = 0; i < c.n && __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) && h->running; i++) {
         uint8_t cmd[18 + 32 * EFS_META_REAP_BATCH_MAX];
         int lanes_ok = 1;
         int lrc = 0, drc = 0;
@@ -8208,6 +8210,12 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
         started = now_us_();
         for (lane = 0; lane < EFS_META_LANES; lane++) {
             uint32_t lshard;
+
+            /* One inode may span all64 lanes. Stop between proposals instead
+             * of consuming64 apply timeouts after the peers have stopped.
+             * The durable reap marker retains all unfinished work. */
+            if (!__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE))
+                return;
 
             if (!(c.lanes[i] & (1ull << lane)))
                 continue;
@@ -8239,6 +8247,8 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
             }
         }
         times->sweep += now_us_() - started;
+        if (!__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE))
+            return;
         if (!lanes_ok) {
             if (env_on("EFS_GC_DBG"))
                 fprintf(stderr, "raft-host: gc reap ino=%llu lane_sweep rc=%d (retry)\n",
@@ -8379,14 +8389,14 @@ static int host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
                 g_gc_cur_len[gi] = 0;
                 wrapped = 1;
             }
-            if (!wrapped || !h->gc_running) {
+            if (!wrapped || !__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE)) {
                 /* An empty scan that started at the prefix head covers
                  * the anchor; if a wrap preceded it the pair covered it
                  * too. Nothing was emitted either way, so a drifted
                  * watermark (derives only ever overshoot) clamps back to
                  * zero and the next pass is a peek. A note that raced
                  * the scans changed the count and zero_if declines. */
-                if (!recs && h->gc_running &&
+                if (!recs && __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) &&
                     efs_meta_gc_pending_zero_if(anchor, pend) &&
                     env_on("EFS_GC_DBG"))
                     fprintf(stderr, "raft-host: gc watermark group=%u anchor=%u drained\n",
@@ -8399,7 +8409,7 @@ static int host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
             __atomic_fetch_add(&h->s->gc_missing_exports, 1, __ATOMIC_RELAXED);
             break;
         }
-        for (i = 0; i < c.n && h->gc_running && h->running; i++) {
+        for (i = 0; i < c.n && __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) && h->running; i++) {
             /* Room for one whole record's acks, so a record is never
              * split across two entries (the apply folds a record's
              * fragments within one batch). */
@@ -8421,7 +8431,7 @@ static int host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
          * applies; a rescan from the cursor starts after them. Stop
          * when the scan was not full, the budget is spent, or the
          * host is going down; otherwise yield the KV lock and rescan. */
-        if (!c.full || !h->gc_running || !h->running)
+        if (!c.full || !__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) || !h->running)
             break;
         if (now_us_() - t0 > GC_FRAG_BUDGET_US) {
             budget_capped = 1;
@@ -8509,7 +8519,7 @@ static void host_snap_export_pass(struct efs_raft_host *h)
 {
     int gi;
 
-    for (gi = 0; gi < HOST_NGROUPS && h->gc_running; gi++) {
+    for (gi = 0; gi < HOST_NGROUPS && __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE); gi++) {
         struct efs_kv_lsm_view *view;
         char path[EFS_MAX_PATH];
         uint64_t incl, t0;
@@ -8578,7 +8588,7 @@ static void host_snap_import_pass(struct efs_raft_host *h)
 {
     int gi;
 
-    for (gi = 0; gi < HOST_NGROUPS && h->gc_running; gi++) {
+    for (gi = 0; gi < HOST_NGROUPS && __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE); gi++) {
         char path[EFS_MAX_PATH], local[EFS_MAX_PATH];
         struct efs_kv_lsm_view *view = NULL;
         uint64_t incl, gen, t0;
@@ -8718,7 +8728,7 @@ static void *host_gc_thread(void *arg)
     struct efs_raft_host *h = arg;
     int g;
 
-    while (h->gc_running) {
+    while (__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE)) {
         uint64_t t0, t_orphan = 0, t_reap = 0, t_frag = 0, t_spread, t_rec, t_all;
         struct efs_kv_scan_stats sc_frag, sc_all;
         struct reap_times reap_times = {0};
@@ -8734,7 +8744,7 @@ static void *host_gc_thread(void *arg)
         memset(&sc_frag, 0, sizeof(sc_frag));
         efs_kv_lsm_scan_stats(NULL, 1);
         t0 = now_us_();
-        for (g = 0; g < HOST_NGROUPS && h->gc_running; g++) {
+        for (g = 0; g < HOST_NGROUPS && __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE); g++) {
             uint32_t anchor;
             int lead = 0;
             uint64_t ta;
@@ -8852,7 +8862,7 @@ static void *host_gc_thread(void *arg)
         /* Idle/blocked passes wait 1s; progressing packed backlog yields 20ms.
          * Sleep in 20ms slices so shutdown is prompt.
          * A snapshot export queued by the pump starts on the next slice. */
-        for (g = 0; g < (int)((idle_ms + 19) / 20) && h->gc_running; g++) {
+        for (g = 0; g < (int)((idle_ms + 19) / 20) && __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE); g++) {
             host_snap_export_pass(h);
             host_snap_import_pass(h);
             usleep(20 * 1000);
@@ -10012,15 +10022,15 @@ int server_raft_host_start(struct efsd_server *s)
      * EFS_GC_DISABLE is an operational escape hatch (A/B, emergencies):
      * with it the metadata side still writes reap markers/GC records,
      * they just are never driven to fragment deletes. */
-    h->gc_running = 1;
+    __atomic_store_n(&h->gc_running, 1, __ATOMIC_RELEASE);
     if (env_on("EFS_GC_DISABLE")) {
         fprintf(stderr, "raft-host: GC reaper DISABLED (EFS_GC_DISABLE); "
                 "unlinked fragments will leak\n");
-        h->gc_running = 0;
+        __atomic_store_n(&h->gc_running, 0, __ATOMIC_RELEASE);
     } else if (efsd_pthread_create(&h->gc_tid, host_gc_thread, h) != 0) {
         fprintf(stderr, "raft-host: GC reaper thread failed; "
                 "unlinked fragments will leak\n");
-        h->gc_running = 0;
+        __atomic_store_n(&h->gc_running, 0, __ATOMIC_RELEASE);
     } else {
         h->gc_started = 1;
     }
@@ -10083,7 +10093,7 @@ void server_raft_host_stop(void)
     pthread_rwlock_destroy(&h->query_lock);
     /* Stop the GC reaper first: an in-flight host_propose_wait needs the
      * pump alive to apply, and its peer RPCs need the conn pool. */
-    h->gc_running = 0;
+    __atomic_store_n(&h->gc_running, 0, __ATOMIC_RELEASE);
     if (h->gc_started)
         pthread_join(h->gc_tid, NULL);
     pthread_mutex_lock(&h->fin_mu);

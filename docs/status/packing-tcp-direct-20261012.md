@@ -13,11 +13,12 @@ independently of inherited command-enabled environment. Its summary records the
 packing and command flags. Physical packing, mutation, peer, cold-byte and
 reclamation assertions and original deadlines remain unchanged.
 
-Tested candidate: **bdbb237bcd1e4e11aa1ab3eb6fb2fceb10070a6b**, fixture isolation only; no packing product change. First full quiet lifecycle PASS; fault native and nine focused sanitizers PASS; second quiet lifecycle FAIL (two original-budget deep-directory timeouts).
-Older mounted packing failures are source-specific. The newer 32-frame receive
-batch fixed ordinary deep-path qualification with packing disabled; its effect
-on packing remains unverified. Lower-layer packing, decoder, admission, retry,
-publication and ledger tests do not establish mounted acceptance.
+Current checkpoint: contiguous-range memtable insertion improves the isolated AMD
+benchmark and passes native/sanitized LSM safety gates. Source0dde0e22 passes
+1512/1512 core and67/67 peer checks, but full lifecycle FAILS at orderly shutdown.
+The reaper stop-boundary correction is implemented and awaits a new frozen-source
+run. Packing remains unqualified. Older results below retain exact source and
+scope; lower-layer passes alone do not establish mounted acceptance.
 
 ## Reproduction
 
@@ -280,3 +281,31 @@ Use `python3 tests/measure/kv_mtab_insert.py --keys 20000 --batches 1000
 --batch-size 16 --repeats 5` for an isolated, alternating sequential/batch
 comparison. This measures memtable insertion only (zero-byte values), not
 end-to-end packing throughput or latency. Raw outputs stay outside Git.
+
+
+### Contiguous-range candidate: core PASS, shutdown FAIL
+
+Exact source `0dde0e2240259c16e80cdc044e8fb2990f314c58`: normal native and fully
+compiled/linked ASan/UBSan LSM/model gates PASS. Verified779 inputs, aggregate
+SHA256 `9fdd2a372107a3d3c69456298828bd662cbb6b1b12ee7a737c9694105c3cdc16`.
+Five alternating AMD microbenchmark pairs: sequential median0.028021222s,
+batch median0.002087781s (13.42x) for20000 existing keys plus1000 front batches
+of16 zero-byte-value keys. This is insertion cost, not cluster throughput.
+
+Quiet fixture `gc-direct-tx79i4x9`: core1512/1512 PASS, peer67/67 PASS; whole
+run FAIL because node2 exceeded unchanged20s orderly shutdown. Cold/reclamation,
+subsequent quiet repeats, crash and final fault-native gate NOTRUN by the runner;
+cleanup stopped all owned processes. Actual four daemon/seven client environments
+verified packing1/commands0/server0/EFS_TRANSPORT=tcp; daemon flags direct/4G.
+
+Node2's reap_sweep consumed26111ms while issuing repeated400ms apply waits after
+peers stopped. The outer inode loop checked gc_running, but the inner64-lane
+loop continued after cancellation. Fix: synchronize all GC stop flag accesses,
+check cancellation between lane proposals and before finalization, and refuse
+new GC proposals after stop. Keep the pump/peer pool alive for the existing
+in-flight operation; do not delete unfinished durable markers or weaken ACKs.
+Regression `python3 tests/test_gc_reap_shutdown.py` tests cancellation at every
+local/remote lane boundary with OK/BUSY outcomes and subsequent marker replay;
+existing GC verdict test also rejects proposals after stop. Local normal and
+ASan/UBSan PASS; AMD integration at the new source is pending. Deadlines remain
+30s core/20s shutdown/180s physical and metadata drain.
