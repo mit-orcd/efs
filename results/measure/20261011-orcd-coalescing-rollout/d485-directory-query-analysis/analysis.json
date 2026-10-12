@@ -1,0 +1,488 @@
+{
+  "source": "d485afbffc3585d628574beaf98f190b90d469f1",
+  "scope": "read-only analysis of committed instrumented evidence, no new run",
+  "inputs": {
+    "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/release-v0.3.0-pre-alpha/results/measure/20261012-v030-query-stage-diagnostic/d485afbf/direct/gc-direct-3j9zzdm2/n2-query-stages.log": {
+      "sha256": "3a91e6a6e076dda64e1018f155af379ed3e0992cb38e7e3e3834f762308b1820"
+    },
+    "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/release-v0.3.0-pre-alpha/results/measure/20261012-v030-query-stage-diagnostic/d485afbf/direct/gc-direct-3j9zzdm2/n3-query-stages.log": {
+      "sha256": "0d98cb103ae144900060da599f366fcd094b8e93b269e3c09f58db138b976dc7"
+    }
+  },
+  "nodes": {
+    "n2": {
+      "transaction_mismatch_count": 71,
+      "capture_BUSY": 18,
+      "root_authority_count": 378,
+      "nested_page_consume_counts_match_per_root_generation": true,
+      "root_retries": [
+        {
+          "root": 11175,
+          "generation": 2,
+          "count": 27,
+          "first": "2026-10-12T00:47:30.509Z",
+          "last": "2026-10-12T00:48:00.368Z",
+          "span_seconds": 29.859
+        },
+        {
+          "root": 13488,
+          "generation": 2,
+          "count": 27,
+          "first": "2026-10-12T00:47:30.863Z",
+          "last": "2026-10-12T00:48:00.701Z",
+          "span_seconds": 29.838
+        },
+        {
+          "root": 1469,
+          "generation": 2,
+          "count": 27,
+          "first": "2026-10-12T00:47:30.887Z",
+          "last": "2026-10-12T00:48:00.680Z",
+          "span_seconds": 29.793
+        },
+        {
+          "root": 15783,
+          "generation": 2,
+          "count": 27,
+          "first": "2026-10-12T00:47:30.617Z",
+          "last": "2026-10-12T00:48:00.487Z",
+          "span_seconds": 29.87
+        },
+        {
+          "root": 2090,
+          "generation": 2,
+          "count": 27,
+          "first": "2026-10-12T00:47:31.028Z",
+          "last": "2026-10-12T00:48:00.893Z",
+          "span_seconds": 29.865
+        },
+        {
+          "root": 2270,
+          "generation": 2,
+          "count": 27,
+          "first": "2026-10-12T00:47:30.515Z",
+          "last": "2026-10-12T00:48:00.390Z",
+          "span_seconds": 29.875
+        },
+        {
+          "root": 3713,
+          "generation": 2,
+          "count": 27,
+          "first": "2026-10-12T00:47:30.951Z",
+          "last": "2026-10-12T00:48:00.782Z",
+          "span_seconds": 29.831
+        },
+        {
+          "root": 3896,
+          "generation": 2,
+          "count": 27,
+          "first": "2026-10-12T00:47:30.626Z",
+          "last": "2026-10-12T00:48:00.487Z",
+          "span_seconds": 29.861
+        },
+        {
+          "root": 4014,
+          "generation": 2,
+          "count": 27,
+          "first": "2026-10-12T00:47:30.744Z",
+          "last": "2026-10-12T00:48:00.578Z",
+          "span_seconds": 29.834
+        },
+        {
+          "root": 5226,
+          "generation": 2,
+          "count": 27,
+          "first": "2026-10-12T00:47:31.127Z",
+          "last": "2026-10-12T00:48:00.976Z",
+          "span_seconds": 29.849
+        },
+        {
+          "root": 6074,
+          "generation": 2,
+          "count": 27,
+          "first": "2026-10-12T00:47:30.754Z",
+          "last": "2026-10-12T00:48:00.637Z",
+          "span_seconds": 29.883
+        },
+        {
+          "root": 7254,
+          "generation": 2,
+          "count": 27,
+          "first": "2026-10-12T00:47:30.249Z",
+          "last": "2026-10-12T00:48:00.106Z",
+          "span_seconds": 29.857
+        },
+        {
+          "root": 7314,
+          "generation": 2,
+          "count": 27,
+          "first": "2026-10-12T00:47:30.555Z",
+          "last": "2026-10-12T00:48:00.401Z",
+          "span_seconds": 29.846
+        },
+        {
+          "root": 878,
+          "generation": 2,
+          "count": 27,
+          "first": "2026-10-12T00:47:30.561Z",
+          "last": "2026-10-12T00:48:00.424Z",
+          "span_seconds": 29.863
+        }
+      ],
+      "generation2_to3_publication_gap_seconds": 46.915,
+      "publication_records": [
+        "2026-10-12T00:47:12.711Z query-publish: generation=1 g0=1 g2=1 rebuilt=4096 refolded=0 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=7 root_rc=-3 files=0 dirs=0 logical=0",
+        "2026-10-12T00:47:14.722Z query-publish: generation=2 g0=604 g2=7 rebuilt=3 refolded=66 edge_reused=0 bytes=3858492 pin_ms=1 build_ms=7 root_rc=0 files=64 dirs=1 logical=32768",
+        "2026-10-12T00:48:01.637Z query-publish: generation=3 g0=73171 g2=57803 rebuilt=2516 refolded=7877 edge_reused=0 bytes=6316092 pin_ms=6 build_ms=10072 root_rc=0 files=4699 dirs=3315 logical=123925309",
+        "2026-10-12T00:48:02.056Z query-publish: generation=4 g0=81104 g2=62837 rebuilt=32 refolded=934 edge_reused=0 bytes=3858492 pin_ms=3 build_ms=319 root_rc=0 files=5510 dirs=3315 logical=123926127"
+      ],
+      "pending_record_count": 0
+    },
+    "n3": {
+      "transaction_mismatch_count": 75,
+      "capture_BUSY": 18,
+      "root_authority_count": 336,
+      "nested_page_consume_counts_match_per_root_generation": true,
+      "root_retries": [
+        {
+          "root": 11175,
+          "generation": 2,
+          "count": 24,
+          "first": "2026-10-12T00:47:30.568Z",
+          "last": "2026-10-12T00:48:01.169Z",
+          "span_seconds": 30.601
+        },
+        {
+          "root": 13488,
+          "generation": 2,
+          "count": 24,
+          "first": "2026-10-12T00:47:30.929Z",
+          "last": "2026-10-12T00:48:01.502Z",
+          "span_seconds": 30.573
+        },
+        {
+          "root": 1469,
+          "generation": 2,
+          "count": 24,
+          "first": "2026-10-12T00:47:30.949Z",
+          "last": "2026-10-12T00:48:01.480Z",
+          "span_seconds": 30.531
+        },
+        {
+          "root": 15783,
+          "generation": 2,
+          "count": 24,
+          "first": "2026-10-12T00:47:30.684Z",
+          "last": "2026-10-12T00:48:01.288Z",
+          "span_seconds": 30.604
+        },
+        {
+          "root": 2090,
+          "generation": 2,
+          "count": 24,
+          "first": "2026-10-12T00:47:31.098Z",
+          "last": "2026-10-12T00:48:01.693Z",
+          "span_seconds": 30.595
+        },
+        {
+          "root": 2270,
+          "generation": 2,
+          "count": 24,
+          "first": "2026-10-12T00:47:30.579Z",
+          "last": "2026-10-12T00:48:01.191Z",
+          "span_seconds": 30.612
+        },
+        {
+          "root": 3713,
+          "generation": 2,
+          "count": 24,
+          "first": "2026-10-12T00:47:31.020Z",
+          "last": "2026-10-12T00:48:01.583Z",
+          "span_seconds": 30.563
+        },
+        {
+          "root": 3896,
+          "generation": 2,
+          "count": 24,
+          "first": "2026-10-12T00:47:30.687Z",
+          "last": "2026-10-12T00:48:01.288Z",
+          "span_seconds": 30.601
+        },
+        {
+          "root": 4014,
+          "generation": 2,
+          "count": 24,
+          "first": "2026-10-12T00:47:30.804Z",
+          "last": "2026-10-12T00:48:01.379Z",
+          "span_seconds": 30.575
+        },
+        {
+          "root": 5226,
+          "generation": 2,
+          "count": 24,
+          "first": "2026-10-12T00:47:31.190Z",
+          "last": "2026-10-12T00:48:01.776Z",
+          "span_seconds": 30.586
+        },
+        {
+          "root": 6074,
+          "generation": 2,
+          "count": 24,
+          "first": "2026-10-12T00:47:30.817Z",
+          "last": "2026-10-12T00:48:01.438Z",
+          "span_seconds": 30.621
+        },
+        {
+          "root": 7254,
+          "generation": 2,
+          "count": 24,
+          "first": "2026-10-12T00:47:30.313Z",
+          "last": "2026-10-12T00:48:00.907Z",
+          "span_seconds": 30.594
+        },
+        {
+          "root": 7314,
+          "generation": 2,
+          "count": 24,
+          "first": "2026-10-12T00:47:30.619Z",
+          "last": "2026-10-12T00:48:01.202Z",
+          "span_seconds": 30.583
+        },
+        {
+          "root": 878,
+          "generation": 2,
+          "count": 24,
+          "first": "2026-10-12T00:47:30.621Z",
+          "last": "2026-10-12T00:48:01.225Z",
+          "span_seconds": 30.604
+        }
+      ],
+      "generation2_to3_publication_gap_seconds": 48.816,
+      "publication_records": [
+        "2026-10-12T00:47:10.908Z query-publish: generation=1 g0=0 g2=0 rebuilt=4096 refolded=0 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=359 root_rc=-3 files=0 dirs=0 logical=0",
+        "2026-10-12T00:47:14.629Z query-publish: generation=2 g0=371 g2=5 rebuilt=3 refolded=44 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=9 root_rc=0 files=42 dirs=1 logical=17920",
+        "2026-10-12T00:48:03.445Z query-publish: generation=3 g0=76416 g2=59405 rebuilt=2516 refolded=8258 edge_reused=0 bytes=6316092 pin_ms=0 build_ms=8950 root_rc=0 files=5051 dirs=3315 logical=123925662"
+      ],
+      "pending_record_count": 0
+    }
+  },
+  "clients": {
+    "posix-client-0.tsv": {
+      "sha256": "2abc870a10a8962e27b1fe687ddcad33395b787bb55b76e2d13ed9423ad2a3e7",
+      "counts": {
+        "PASS": 209,
+        "NOTRUN": 7,
+        "FAIL": 4,
+        "SKIP": 1
+      },
+      "failures": [
+        [
+          "dir_deep_nesting",
+          "FAIL",
+          "timeout after 30s"
+        ],
+        [
+          "dir_many_files",
+          "FAIL",
+          "worker killed by signal 15"
+        ],
+        [
+          "virt_stats_readable",
+          "FAIL",
+          "timeout after 30s; worker group still alive"
+        ],
+        [
+          "virt_find_query",
+          "FAIL",
+          "worker group still alive after virt_stats_readable"
+        ]
+      ]
+    },
+    "posix-client-1.tsv": {
+      "sha256": "1b7dcafce1d6c5871810a481473467256b33b9fdfa8432e44ac28ef0f9104bcf",
+      "counts": {
+        "PASS": 209,
+        "NOTRUN": 7,
+        "FAIL": 4,
+        "SKIP": 1
+      },
+      "failures": [
+        [
+          "dir_deep_nesting",
+          "FAIL",
+          "timeout after 30s"
+        ],
+        [
+          "dir_many_files",
+          "FAIL",
+          "worker killed by signal 15"
+        ],
+        [
+          "virt_stats_readable",
+          "FAIL",
+          "timeout after 30s; worker group still alive"
+        ],
+        [
+          "virt_find_query",
+          "FAIL",
+          "worker group still alive after virt_stats_readable"
+        ]
+      ]
+    },
+    "posix-client-2.tsv": {
+      "sha256": "1a55c5b49d22e822b01966e1f204ecbdb53b3d0e5cde8ed65221d37e2aaeed1c",
+      "counts": {
+        "PASS": 209,
+        "NOTRUN": 7,
+        "FAIL": 4,
+        "SKIP": 1
+      },
+      "failures": [
+        [
+          "dir_deep_nesting",
+          "FAIL",
+          "timeout after 30s"
+        ],
+        [
+          "dir_many_files",
+          "FAIL",
+          "worker killed by signal 15"
+        ],
+        [
+          "virt_stats_readable",
+          "FAIL",
+          "timeout after 30s; worker group still alive"
+        ],
+        [
+          "virt_find_query",
+          "FAIL",
+          "worker group still alive after virt_stats_readable"
+        ]
+      ]
+    },
+    "posix-client-3.tsv": {
+      "sha256": "c56edcb7023bbaad47b362d03313bd138b56bb625fb13cd43c1ff022fd035a85",
+      "counts": {
+        "PASS": 209,
+        "NOTRUN": 7,
+        "FAIL": 4,
+        "SKIP": 1
+      },
+      "failures": [
+        [
+          "dir_deep_nesting",
+          "FAIL",
+          "timeout after 30s"
+        ],
+        [
+          "dir_many_files",
+          "FAIL",
+          "worker killed by signal 15"
+        ],
+        [
+          "virt_stats_readable",
+          "FAIL",
+          "timeout after 30s; worker group still alive"
+        ],
+        [
+          "virt_find_query",
+          "FAIL",
+          "worker group still alive after virt_stats_readable"
+        ]
+      ]
+    },
+    "posix-client-4.tsv": {
+      "sha256": "538c97c0262631918044ec337bf65effe1021aef598af56a71d36709a88c7435",
+      "counts": {
+        "PASS": 209,
+        "NOTRUN": 7,
+        "FAIL": 4,
+        "SKIP": 1
+      },
+      "failures": [
+        [
+          "dir_deep_nesting",
+          "FAIL",
+          "timeout after 30s"
+        ],
+        [
+          "dir_many_files",
+          "FAIL",
+          "worker killed by signal 15"
+        ],
+        [
+          "virt_stats_readable",
+          "FAIL",
+          "timeout after 30s; worker group still alive"
+        ],
+        [
+          "virt_find_query",
+          "FAIL",
+          "worker group still alive after virt_stats_readable"
+        ]
+      ]
+    },
+    "posix-client-5.tsv": {
+      "sha256": "6da512198a6a1fa95db12dafa839398d47bf2ca7591dccb61ea484b0e96607c4",
+      "counts": {
+        "PASS": 209,
+        "NOTRUN": 7,
+        "FAIL": 4,
+        "SKIP": 1
+      },
+      "failures": [
+        [
+          "dir_deep_nesting",
+          "FAIL",
+          "timeout after 30s"
+        ],
+        [
+          "dir_many_files",
+          "FAIL",
+          "worker killed by signal 15"
+        ],
+        [
+          "virt_stats_readable",
+          "FAIL",
+          "timeout after 30s; worker group still alive"
+        ],
+        [
+          "virt_find_query",
+          "FAIL",
+          "worker group still alive after virt_stats_readable"
+        ]
+      ]
+    },
+    "posix-client-6.tsv": {
+      "sha256": "8742ec7446d0f3d16af42d3009e2cba25c2da77335ebf5bc319b326093b573e3",
+      "counts": {
+        "PASS": 209,
+        "NOTRUN": 7,
+        "FAIL": 4,
+        "SKIP": 1
+      },
+      "failures": [
+        [
+          "dir_deep_nesting",
+          "FAIL",
+          "timeout after 30s"
+        ],
+        [
+          "dir_many_files",
+          "FAIL",
+          "worker killed by signal 15"
+        ],
+        [
+          "virt_stats_readable",
+          "FAIL",
+          "timeout after 30s; worker group still alive"
+        ],
+        [
+          "virt_find_query",
+          "FAIL",
+          "worker group still alive after virt_stats_readable"
+        ]
+      ]
+    }
+  }
+}
