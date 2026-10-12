@@ -248,3 +248,162 @@ packed writes set to0; `.efs` is absent from both serving private mounts.
 Production daemon PIDs5945/5953 and10086/10094, clients6602/10331,
 400G quotas,17432/17433 and `/data1/efs/mnt` remain in place. Only one
 private cross-host client mount remains per host.
+
+
+## Resumed container-only investigation — candidate 73b1f915
+
+The user authorized continued repair of the directory and physical reclamation
+failures with the same Intel container/TCP/direct configuration and disabled
+commands, scratch expiry dates and packing. Candidate
+`73b1f915f52088e7ebc57e478b564cd4d664ea8f` adds a bounded physical-directory
+ancestry cache scoped to container deployments, including their buffered
+metadata fragments. A cache entry retains a directory FD to prevent inode
+reuse; only a successful full ancestry barrier admits it. Each operation still
+syncs its containing directory. Removal/recreation cannot reuse the pinned
+identity, failed barriers do not admit hints, and eviction falls back to full
+barriers. Files-engine behavior, RPC budgets, admission and authority are
+unchanged. No cache hit is used as proof of namespace or payload authority.
+
+The extended actual-backend native regression PASS on both Intel hosts,
+including failed directory-sync retries, removal/recreation, multi-root,
+concurrent same-range writes, quota, cold recovery, inode GC and corruption.
+The previous fc2d2015 implementation aborts the new repeated-write barrier
+assertion (negative-control exit134). Intel1 ASan/UBSan direct backend regression
+PASS, leak detection enabled; linked common/writer objects are not all
+instrumented. Both hosts' native default direct/buffered control plus shared
+store durability/GC/overwrite controls PASS. Live runtime remains direct only.
+
+A repeated previous-source seven-client baseline retained14 failures (depth60
+and crazy directories on all7 clients); depth100 passed this repeat. This is
+not a clean performance comparison: staging compilation/native checks overlapped
+part of that baseline. Original21 failures and all original30-second budgets
+remain retained. One private candidate start raced the previous Intel2 graceful
+stop and was refused by the exclusive storage lock. The pending stop finished;
+startup was retried only after source proof, and all4 nodes then reported
+73b1f915. The committed readiness-aware helper is installed on both hosts.
+Candidate live acceptance and fresh physical reclamation are pending below.
+
+Retained-backlog diagnostic on73b1f915 reached zero ordinary mapping records
+and zero allocated container bytes on all4 nodes at160.48s (observer return
+160.49s), within the original180s. Initial observed records per node were
+19820,19685,19624,19528. This is a retained-backlog diagnostic, not fresh
+qualification: recovery and some draining preceded the observer, and native
+controls overlapped part of it. Fresh seven-client workload and subsequent
+quiescent physical gate are required before closing the prior failure.
+
+
+Cache-only73b1f915 fresh full gate:1472/1512 PASS,40 FAIL,0 SKIP/NOTRUN. Additional timeout cases appeared; the ancestry cache is
+not an established latency remedy. Its later post-suite observer reached zero
+at97.02s, but started several minutes after cleanup while the next candidate
+was being prepared, with overlapping staging/native work. This delayed,
+confounded observation does not close the physical deadline gate.
+
+Candidate `eed87ad926dfcbdb3daf38ceab962f2d16c364c4` adds bounded container-only
+inode retirement batches under the existing exclusive inode guard and durable
+death fence. The existing128-object budget is retained. A snapshot avoids
+readdir/rename double visits. Each validated mapping is renamed without
+replacement to `.tmp.gc`; the containing directory is made durable before
+punching. All touched segments receive durable barriers before retirement names
+are removed and synced; only then are ranges reusable and quota/counters
+updated. In-process punch/barrier failures retain retryable mapping identities.
+Startup reconciles non-authoritative temporaries as before. Failed final
+unlink/barrier outcomes conservatively quarantine allocation until startup.
+No expiry, age-based reclamation, authority relaxation or deadline changes.
+The ancestry hint budget is now128 descriptors across the fixed target set.
+
+Both Intel hosts' direct native tests and default direct/buffered controls plus
+shared durability/GC/overwrite controls PASS. Intel1 ASan/UBSan direct PASS
+with the same linked-object instrumentation limit. Two preceding-code native
+negative controls abort:70-fragment collection requires70 segment barriers
+instead of1, and failed segment-barrier retry cannot fully reconcile quota.
+Both pass on the candidate. Native fault tests cover segment/namespace/punch
+failure and in-process retry; crash boundaries after retirement rename,
+after punching, and after retirement unlink recover safely with persistent
+inode death and no late PUT admission. The native same-process restart helper
+invalidates its test-only thread-local death epoch to model an actual new
+process; production lifetime/epoch behavior is unchanged.
+
+The four-node candidate was cleanly deployed with two-host drain/stop/start/
+mount phase barriers;780 inputs per host match the manifest and all live
+versions agree. Fresh seven-client qualification is underway with no staging
+build or native workload overlap. Quiescent physical observation must follow
+that fresh cleanup before any additional workload or restart.
+
+The two-writer eed87ad9 full gate also FAILS:1462/1512 PASS,50 timeouts,
+0 SKIP/NOTRUN. Ten seconds of syscall tracing on node2 occurred only after
+failures were already reported; this diagnostic overlap prevents a clean
+throughput comparison, and no passing acceptance is claimed. Its unchanged
+physical gate starts immediately after all7 controllers finish cleanup, with
+no subsequent workload, build, native test or daemon restart overlapping.
+Initial records24999,25093,24949,25022/node, allocated bytes1740857344,
+1746780160,1737371648,1741901824. Verdict follows below.
+
+The storage trace retains2037 completed segment writes in10s, with2037 segment
+barriers and4107 mapping-file/directory barriers. Mean segment and mapping
+barrier durations were about2ms; traced latency is instrumented diagnostic
+context. Uninstrumented cumulative node2 PUT duration around60ms versus disk
+service around8ms suggests queuing/other handoff work, not device service
+alone. This is not proof that every directory timeout has the same cause.
+Helper acee1609 makes writer slots explicit, with8 per private daemon for the
+next isolated configuration trial instead of the fixture's hard-coded2. Core
+case concurrency, all original30/75/180s budgets, quotas, transport, I/O and
+feature flags are unchanged. Runtime source and binary hashes remain eed87ad9.
+
+Fresh eed87ad9 two-writer/1000ms physical gate FAIL: observer180.009s,
+last179.920s, ordinary records287,319,321,283 and allocated container bytes
+19918848,22077440,22290432,19570688. No deadline extension or later-convergence
+PASS is claimed. This is materially different workload history from the earlier
+10k residual; the50 namespace timeouts prevent a matched throughput conclusion.
+
+Private fixture e25b6fce sets the existing `EFS_GC_BACKLOG_IDLE_MS=20` option
+and8 writer slots per daemon. The progress selector requires a capped pass and
+an increased physical-removal counter, retains the128-object/32-marker/200ms
+work budgets and20ms fair yield, and keeps1000ms idle/blocked backoff. This is
+explicit container-fixture configuration, not a files-engine default or new
+expiry/reclamation-authority rule. A fresh full workload and immediate180s
+physical gate must pass in the same configuration. Reproduce the previous
+configuration with helper start `--writers 2 --gc-backlog-idle-ms 1000`, using
+the same cluster-wide drain/stop/start/mount phase barriers.
+
+
+### Fresh eight-writer/20ms backlog qualification and diagnostics
+
+Runtime `eed87ad926dfcbdb3daf38ceab962f2d16c364c4`, fixture `e25b6fce`,
+seven concurrent exports at jobs16: **1448/1512 PASS,64 FAIL,0 SKIP**.
+The same nine cases failed on all seven clients: deep60/deep100, many-files,
+crazy roundtrip/directories, concurrent create/append/create-unlink, and
+mtime-many-writes; write/readdir failed on one. Original30/75/180s case
+budgets remain unchanged. These failures do not close the original21-timeout
+blocker and show that writer/backlog configuration alone is insufficient.
+
+The controller started the unchanged180s physical observer immediately after
+all seven workloads and cleanup exited, with no competing build, native test,
+restart or workload during observation. Initial ordinary mappings were21366,
+19792,21289,19703 on n1..n4. **PASS at103.741s:** every node reached zero
+ordinary mappings and zero allocated container body bytes. All observed
+private exports were mounted and empty. This is a fresh, in-limit physical
+reclamation result, unlike delayed/confounded earlier observations.
+
+Diagnostic-only `b4333b54` enables existing RPC/read/Raft counters. Its loaded
+run and bounded20s CPU recording are not acceptance/performance comparators.
+Counters locate most LOOKUP latency in fresh parent ReadIndex authority:
+n2 about17.0ms versus roughly0.1ms KV access; leader proofs about7–8ms,
+remote proofs about16.5ms. Client pool checkout is negligible and measured
+transport round trips are submillisecond. No cache expiry, stale proof reuse,
+authority shortcut or test deadline change is justified by those counters.
+
+Existing opt-in bounded `EFS_RAFT_GROUP_DRAIN=1` was tried with the same
+runtime/eight writers/20ms configuration after native inbox ordering,
+receive-overlap and publication controls passed. Full mounted run:
+**1447/1512 PASS,65 FAIL** (same nine cases all seven; write/readdir two).
+The trial is rejected as a timeout remedy and the temporary helper switch was
+removed; the subsequent candidate restores default group-drain configuration.
+
+Container-only routing candidate `76bb437657204dd6d2c63c379687e472aa6aaf7c`
+redirects LOOKUP/GETATTR from a follower to a known inode/parent leader only
+when committed membership proves that leader hosts both metadata groups.
+Unknown, single-group, removed and self leaders preserve existing paths;
+ordinary files remain unchanged. Every receiving RPC still establishes its
+own fresh ReadIndex and discovers/rechecks dentry, inode and lane authority.
+Native membership/self/unknown/files controls and per-RPC freshness checks
+PASS. This is a candidate, not a loaded acceptance claim.
