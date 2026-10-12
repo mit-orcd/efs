@@ -1301,12 +1301,64 @@ int efs_meta_apply_peek_alloc(struct efs_kv *kv, uint32_t shard, efs_ino_t *next
     return EFS_OK;
 }
 
+/* Resolve nearest explicit policy under one participant's log. This staged
+ * helper refuses another group's ancestors, rather than reading follower
+ * state as policy authority. Cross-group inheritance needs a guarded txn. */
+int efs_meta_apply_create_refusal(struct efs_kv *kv,uint32_t shard,
+                                  const struct efs_opid_req *q)
+{
+    if(!q || !efs_opid_req_valid(q) || !opid_hosted(&q->id) ||
+       shard>EFS_KV_SHARD_MASK)return EFS_ERR_INVAL;
+    struct efs_opid_reply reply;int rc=efs_meta_apply_opid_probe(kv,shard,&q->id,&reply);
+    if(rc<0)return rc;
+    if(rc)return reply.rc;
+    rc=efs_session_accept(kv,shard,q->id.client_uuid,q->id.session_epoch);
+    if(rc!=EFS_OK)return rc;
+    uint8_t k[EFS_KV_KEY_MAX],v[EFS_OPID_VAL_MAX];struct efs_kv_item item;
+    memset(&reply,0,sizeof(reply));reply.rc=EFS_ERR_EXIST;
+    rc=opid_item(kv,shard,q,&reply,k,v,&item);
+    if(rc<0)return rc;
+    if(rc!=1)return EFS_ERR_BUSY;
+    rc=meta_write_batch(kv,&item,1);return rc==EFS_OK?EFS_ERR_EXIST:rc;
+}
+
+static int expiry_local_default(struct efs_kv *kv, efs_ino_t parent,
+                                 uint8_t group, uint64_t now,
+                                 struct efs_expiry_record *out)
+{
+    efs_ino_t seen[EFS_META_PATH_MAX];uint32_t count=0;
+    memset(out,0,sizeof(*out));
+    while(parent) {
+        if(count==EFS_META_PATH_MAX)return EFS_ERR_OVERFLOW;
+        for(uint32_t i=0;i<count;i++)if(seen[i]==parent)return EFS_ERR_IO;
+        seen[count++]=parent;
+        if(efs_raft_shard_group(efs_kv_inode_shard(parent))!=group)
+            return EFS_ERR_INVAL;
+        struct efs_meta_row row;struct efs_expiry_policy policy;
+        uint8_t k[EFS_KV_KEY_MAX];uint32_t kn=0;
+        int rc=efs_kv_key_inode(efs_kv_inode_shard(parent),parent,k,&kn);
+        if(rc==EFS_OK)rc=efs_txn_key_busy(kv,k,kn);
+        if(rc==EFS_OK)rc=efs_meta_apply_get_inode(kv,parent,&row);
+        if(rc!=EFS_OK)return rc;
+        if(!S_ISDIR(row.mode) || !row.nlink)return EFS_ERR_NOT_FOUND;
+        efs_expiry_policy_key(parent,row.generation,k);
+        rc=efs_txn_key_busy(kv,k,EFS_EXPIRY_KEY_BYTES);
+        if(rc==EFS_OK)rc=efs_expiry_policy_get(kv,parent,row.generation,&policy);
+        if(rc!=EFS_OK)return rc;
+        if(policy.revision)
+            return efs_expiry_materialize(&policy,parent,row.generation,now,out);
+        if(parent==EFS_ROOT_INO)return EFS_OK;
+        parent=row.parent;
+    }
+    return EFS_ERR_IO;
+}
+
 static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
                              efs_ino_t parent, uint32_t mode,
                              const char *name, const struct efs_opid_req *q,
                              int from_log, efs_ino_t want_ino, int want_layout,
                              const uint8_t *lease_uuid, uint32_t lease_epoch,
-                             uint64_t lease_token, efs_ino_t *out)
+                             uint64_t lease_token, int expiry_enabled, efs_ino_t *out)
 {
     struct efs_meta_dentry dent;
     struct efs_meta_row row, parent_row;
@@ -1316,7 +1368,10 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
     uint8_t v_dent[DENT_VAL], v_ino[INO_VAL], v_alloc[ALLOC_VAL];
     uint8_t v_opid[EFS_OPID_VAL_MAX];
     uint32_t kd = 0, ki = 0, ka = 0;
-    struct efs_kv_item it[10];
+    struct efs_kv_item it[14];
+    struct efs_expiry_change expiry_change;
+    struct efs_expiry_record expiry_record;
+    int has_expiry=0;
     uint8_t k_lease[EFS_KV_KEY_MAX], lease_one = 1;
     uint8_t lease_pending[EFS_LEASE_PENDING_VALUE_LEN];
     uint32_t lease_len = 0;
@@ -1451,6 +1506,18 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
     dent.ino = ino;
     dent.generation = row.generation;
     dent.type = mode & S_IFMT;
+    if(expiry_enabled && S_ISREG(mode)) {
+        rc=expiry_local_default(kv,parent,efs_raft_shard_group(shard),
+                                 at->now,&expiry_record);
+        if(rc!=EFS_OK)return rc;
+        if(expiry_record.deadline_ns) {
+            expiry_record.parent=parent;
+            memcpy(expiry_record.name,name,strlen(name)+1);
+            rc=efs_expiry_plan(kv,ino,row.generation,0,&expiry_record,&expiry_change);
+            if(rc!=EFS_OK)return rc;
+            has_expiry=1;
+        }
+    }
     pack_inode(v_ino, &row);
     pack_dentry(v_dent, &dent);
     be64(v_alloc, next);
@@ -1575,6 +1642,10 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
                          lease_token ? EFS_LEASE_PENDING_VALUE_LEN : 1};
     }
 
+    if(has_expiry) {
+        if(n+expiry_change.count>sizeof(it)/sizeof(it[0]))return EFS_ERR_OVERFLOW;
+        for(uint32_t i=0;i<expiry_change.count;i++)it[n++]=expiry_change.items[i];
+    }
     rc = meta_write_batch(kv, it, n);
     if (rc != EFS_OK)
         return rc;
@@ -1587,7 +1658,7 @@ int efs_meta_apply_create_file(struct efs_kv *kv, const struct efs_meta_attrs *a
                                efs_ino_t parent, uint32_t mode,
                                const char *name, efs_ino_t *out)
 {
-    return create_file_batch(kv, at, parent, mode, name, NULL, 0, 0, -1, NULL, 0, 0, out);
+    return create_file_batch(kv, at, parent, mode, name, NULL, 0, 0, -1, NULL, 0, 0, 0, out);
 }
 
 int efs_meta_apply_create_file_op(struct efs_kv *kv, const struct efs_opid *op,
@@ -1601,14 +1672,14 @@ int efs_meta_apply_create_file_op(struct efs_kv *kv, const struct efs_opid *op,
         return EFS_ERR_INVAL;
     memset(&q, 0, sizeof(q));
     q.id = *op;
-    return create_file_batch(kv, at, parent, mode, name, &q, 0, 0, -1, NULL, 0, 0, out);
+    return create_file_batch(kv, at, parent, mode, name, &q, 0, 0, -1, NULL, 0, 0, 0, out);
 }
 
 int efs_meta_apply_create_file_log(struct efs_kv *kv, const struct efs_meta_attrs *at,
                                    efs_ino_t parent, uint32_t mode,
                                    const char *name, efs_ino_t *out)
 {
-    return create_file_batch(kv, at, parent, mode, name, NULL, 1, 0, -1, NULL, 0, 0, out);
+    return create_file_batch(kv, at, parent, mode, name, NULL, 1, 0, -1, NULL, 0, 0, 0, out);
 }
 
 int efs_meta_apply_create_file_log_op(struct efs_kv *kv,
@@ -1619,7 +1690,7 @@ int efs_meta_apply_create_file_log_op(struct efs_kv *kv,
                                       efs_ino_t *out)
 {
     return create_file_batch(kv, at, parent, mode, name, q, 1, ino,
-                             ino ? layout : -1, NULL, 0, 0, out);
+                             ino ? layout : -1, NULL, 0, 0, 0, out);
 }
 
 int efs_meta_apply_create_file_log_at(struct efs_kv *kv, const struct efs_meta_attrs *at,
@@ -1630,7 +1701,7 @@ int efs_meta_apply_create_file_log_at(struct efs_kv *kv, const struct efs_meta_a
     if (!ino)
         return EFS_ERR_INVAL;
     return create_file_batch(kv, at, parent, mode, name, NULL, 1, ino,
-                             (int)layout, NULL, 0, 0, out);
+                             (int)layout, NULL, 0, 0, 0, out);
 }
 
 /* Namespace, inode, replay verdict and initial lease share one KV batch.
@@ -1644,7 +1715,7 @@ int efs_meta_apply_create_file_log_lease(struct efs_kv *kv,
                                          efs_ino_t *out)
 {
     return create_file_batch(kv, at, parent, mode, name, q, 1, ino,
-                             ino ? layout : -1, uuid, epoch, 0, out);
+                             ino ? layout : -1, uuid, epoch, 0, 0, out);
 }
 
 /* Pending ownership: identity and token come from the same durable CREATE
@@ -1663,7 +1734,15 @@ int efs_meta_apply_create_file_log_pending(struct efs_kv *kv,
         memcmp(q->id.client_uuid, uuid, EFS_OPID_UUID_LEN) != 0)
         return EFS_ERR_INVAL;
     return create_file_batch(kv, at, parent, mode, name, q, 1, ino,
-                             ino ? layout : -1, uuid, epoch, q->id.seq, out);
+                             ino ? layout : -1, uuid, epoch, q->id.seq, 0, out);
+}
+
+int efs_meta_apply_create_expiring(struct efs_kv *kv,
+                                     const struct efs_meta_attrs *at,
+                                     efs_ino_t parent,uint32_t mode,
+                                     const char *name,efs_ino_t *out)
+{
+    return create_file_batch(kv,at,parent,mode,name,NULL,0,0,-1,NULL,0,0,1,out);
 }
 
 static int mkdir_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
@@ -2265,6 +2344,53 @@ static int apply_orphan_unlink(struct efs_kv *kv, efs_ino_t parent,
     return meta_write_batch(kv,it,n);
 }
 
+int efs_meta_apply_expiry_policy(struct efs_kv *kv, efs_ino_t root,
+                                 uint64_t gen, uint32_t caller_uid,
+                                 uint64_t expected,
+                                 const struct efs_expiry_policy *policy)
+{
+    struct efs_meta_row row;
+    int rc=efs_meta_apply_get_inode(kv,root,&row);
+    if(rc!=EFS_OK)return rc;
+    if(row.generation!=gen)return EFS_ERR_STALE;
+    if(!S_ISDIR(row.mode))return EFS_ERR_INVAL;
+    return efs_expiry_policy_set(kv,root,gen,caller_uid,expected,policy);
+}
+
+int efs_meta_apply_expiry_renew(struct efs_kv *kv, efs_ino_t ino,
+                                uint64_t gen, uint32_t caller_uid,
+                                uint64_t expected, uint64_t now,
+                                uint64_t deadline)
+{
+    struct efs_meta_row row;
+    struct efs_expiry_record old,renewed;
+    struct efs_expiry_policy policy;
+    struct efs_expiry_change change;
+    uint8_t inode_key[EFS_KV_KEY_MAX];uint32_t inode_len=0;
+    int rc=efs_meta_apply_get_inode(kv,ino,&row);
+    if(rc!=EFS_OK)return rc;
+    if(row.generation!=gen)return EFS_ERR_STALE;
+    if(!row.nlink)return EFS_ERR_NOT_FOUND;
+    rc=efs_kv_key_inode(efs_kv_inode_shard(ino),ino,inode_key,&inode_len);
+    if(rc==EFS_OK)rc=efs_txn_key_busy(kv,inode_key,inode_len);
+    if(rc!=EFS_OK)return rc;
+    rc=efs_expiry_get(kv,ino,gen,&old);
+    if(rc!=EFS_OK)return rc;
+    if(!old.revision)return EFS_ERR_NODATA;
+    if(old.revision!=expected)return EFS_ERR_STALE;
+    if(efs_raft_shard_group(efs_kv_inode_shard(ino))!=
+       efs_raft_shard_group(efs_kv_inode_shard(old.root)))return EFS_ERR_INVAL;
+    uint8_t policy_key[EFS_EXPIRY_KEY_BYTES];
+    efs_expiry_policy_key(old.root,old.root_generation,policy_key);
+    rc=efs_txn_key_busy(kv,policy_key,sizeof(policy_key));
+    if(rc==EFS_OK)rc=efs_expiry_policy_get(kv,old.root,old.root_generation,&policy);
+    if(rc==EFS_OK)rc=efs_expiry_renew(&old,&policy,caller_uid,row.uid,
+                                      row.nlink,row.mode,now,deadline,&renewed);
+    if(rc==EFS_OK)rc=efs_expiry_plan(kv,ino,gen,expected,&renewed,&change);
+    if(rc!=EFS_OK)return rc;
+    return meta_write_batch(kv,change.items,change.count);
+}
+
 static int unlink_batch(struct efs_kv *kv, efs_ino_t parent, const char *name,
                              uint64_t now, const struct efs_opid_req *q,
                              const struct efs_expiry_due *expiry)
@@ -2323,7 +2449,8 @@ static int unlink_batch(struct efs_kv *kv, efs_ino_t parent, const char *name,
         if (rc != EFS_OK) return rc;
         if (!current.deadline_ns || current.deadline_ns > now ||
             current.deadline_ns != expiry->deadline_ns ||
-            current.revision != expiry->revision) return EFS_ERR_STALE;
+            current.revision != expiry->revision || current.parent!=parent ||
+            strcmp(current.name,name)) return EFS_ERR_STALE;
         /* Tombstone the revision in the namespace decision. Delayed renewal
          * must also verify the live inode, not resurrect a retired FileID. */
         current.deadline_ns = 0;
@@ -2566,6 +2693,10 @@ int efs_meta_apply_link(struct efs_kv *kv, efs_ino_t src_parent, const char *src
         return rc;
     if (S_ISDIR(row.mode))
         return EFS_ERR_INVAL;
+    struct efs_expiry_record expiry;
+    rc=efs_expiry_get(kv,row.ino,row.generation,&expiry);
+    if(rc!=EFS_OK)return rc;
+    if(expiry.deadline_ns)return EFS_ERR_INVAL;
     rc = efs_meta_apply_get_inode(kv, dst_parent, &dprow);
     if (rc != EFS_OK)
         return rc;

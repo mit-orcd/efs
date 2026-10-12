@@ -27,6 +27,11 @@
 #define EFS_MD_REQ_PACK_STATUS 46 /* same manifest, fresh authority only */
 /* Exact single-shard APPEND image envelope; no replica-local EOF selection. */
 #define EFS_MD_APPEND_COMPLETE_ATOMIC_LEN 101u
+#define EFS_MD_CMD_CREATE_REFUSAL 62 /* shard4 + existing op-id trailer; EEXIST receipt */
+#define EFS_MD_CMD_EXPIRY_POLICY 58 /* root/gen/uid/expected/TTL/max/flags:46 */
+#define EFS_MD_CMD_EXPIRY_RENEW 59 /* ino/gen/uid/expected/leader-now/deadline:45 */
+#define EFS_MD_REQ_EXPIRY_POLICY 60 /* root/gen:17; fresh revision/TTL/max */
+#define EFS_MD_REQ_EXPIRY_RECORD 61 /* ino/gen:17; fresh revision/deadline/root */
 #define EFS_MD_REQ_REPAIR_SEAL_AUTHORITY 57 /* ReadIndex-only exact eligible job; no seal receipt */
 #define EFS_MD_REQ_REPAIR_WRITE_AUTHORITY 56 /* ReadIndex-only canonical job; never a data receipt */
 #define EFS_MD_CMD_REPAIR_JOB 55 /* staged: op1, canonical job260, arg4; no RPC/worker admission */

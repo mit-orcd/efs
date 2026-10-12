@@ -589,6 +589,12 @@ struct efs_meta_path_hop {
 int efs_meta_apply_lookup_path(struct efs_kv *kv, efs_ino_t start,
                                const char *path, struct efs_meta_path_hop *hops,
                                uint32_t cap, uint32_t *n);
+/* Staged one-group CREATE: materialize effective fixed policy and index in
+ * the namespace batch. Ordinary CREATE wrappers remain expiry-disabled. */
+int efs_meta_apply_create_refusal(struct efs_kv *,uint32_t shard,const struct efs_opid_req *);
+int efs_meta_apply_create_expiring(struct efs_kv *,const struct efs_meta_attrs *,
+                                     efs_ino_t parent,uint32_t mode,
+                                     const char *name,efs_ino_t *out);
 int efs_meta_apply_create_file(struct efs_kv *kv, const struct efs_meta_attrs *at,
                                efs_ino_t parent, uint32_t mode,
                                const char *name, efs_ino_t *out);
@@ -646,6 +652,16 @@ int efs_meta_apply_mkdir_log_op(struct efs_kv *kv, const struct efs_meta_attrs *
                                 const struct efs_opid_req *q, efs_ino_t *out);
 /* UNLINK / RMDIR with an op-id: replay answers the recorded OK (reply
  * ino = the removed inode; extra = nlink after, unlink only). */
+/* Single-group policy/renewal applies. The root and file policy must be on
+ * this participant's group; cross-group callers need guarded transactions. */
+int efs_meta_apply_expiry_policy(struct efs_kv *, efs_ino_t root,
+                                 uint64_t gen, uint32_t caller_uid,
+                                 uint64_t expected,
+                                 const struct efs_expiry_policy *);
+int efs_meta_apply_expiry_renew(struct efs_kv *, efs_ino_t ino,
+                                uint64_t gen, uint32_t caller_uid,
+                                uint64_t expected, uint64_t committed_now,
+                                uint64_t deadline);
 /* Conditional one-group expiry apply; caller supplies a committed leader
  * clock decision. This never reads a replica wall clock or deletes fragments. */
 int efs_meta_apply_expire(struct efs_kv *, efs_ino_t parent, const char *name,

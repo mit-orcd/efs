@@ -1211,6 +1211,49 @@ static int cmd_commands_policy(int argc,char **argv)
     return rc?1:0;
 }
 
+static int expiry_u64(const char *text,uint64_t *out)
+{
+    char *end=NULL;errno=0;unsigned long long n=strtoull(text,&end,10);
+    if(errno || !text[0] || text[0]=='-' || *end)return -1;
+    *out=n;return 0;
+}
+
+static int cmd_expiry(int argc,char **argv,int policy)
+{
+    int get=argc>=2 && !strcmp(argv[1],"get");
+    int mutate=argc>=2 && !strcmp(argv[1],policy?"set":"renew");
+    if((get && argc!=4) || (mutate && argc!=(policy?8:6)) || (!get && !mutate)) {
+        fprintf(stderr,"Usage:\n  efs-mgmt expiry-policy NODE:PORT get ROOT_INO GENERATION\n"
+                       "  efs-mgmt expiry-policy NODE:PORT set ROOT_INO GENERATION EXPECTED_REV TTL_NS MAX_NS FLAGS\n"
+                       "  efs-mgmt expiry NODE:PORT get FILE_INO GENERATION\n"
+                       "  efs-mgmt expiry NODE:PORT renew FILE_INO GENERATION EXPECTED_REV DEADLINE_NS\n"
+                       "\nExpiry is default-off (server EFS_EXPIRY=1 enables control).\n"
+                       "FLAGS: bit 0 enables future-file defaults; bit 1 permits owner clearing.\n"
+                       "Set requires operator uid 0. Renewal requires current ownership.\n"
+                       "TTL/max/deadline use integer nanoseconds; zero deadline requests clearing.\n");
+        return 1;
+    }
+    char host[64];uint16_t port;uint64_t n[6]={0};
+    if(parse_host_port(argv[0],host,sizeof(host),&port))return 1;
+    for(int i=2;i<argc;i++)if(expiry_u64(argv[i],&n[i-2]))return 1;
+    if(!n[0] || !n[1] || (policy && mutate && n[5]>3))return 1;
+    uint8_t payload[47]={0};payload[0]=efs_raft_shard_group(efs_kv_inode_shard(n[0]));
+    payload[1]=policy?(get?EFS_MD_REQ_EXPIRY_POLICY:EFS_MD_CMD_EXPIRY_POLICY):
+                      (get?EFS_MD_REQ_EXPIRY_RECORD:EFS_MD_CMD_EXPIRY_RENEW);
+    wr64be_mgmt(payload+2,n[0]);wr64be_mgmt(payload+10,n[1]);uint32_t length=18;
+    if(mutate) {
+        wr32be_mgmt(payload+18,(uint32_t)geteuid());wr64be_mgmt(payload+22,n[2]);
+        if(policy) {wr64be_mgmt(payload+30,n[3]);wr64be_mgmt(payload+38,n[4]);payload[46]=(uint8_t)n[5];length=47;}
+        else {wr64be_mgmt(payload+38,n[3]);length=46;}
+    }
+    struct efs_msg_raft_mkfs_reply reply;int rc=sess_rpc(host,port,payload,length,&reply);
+    printf("expiry%s rc=%d revision=%llu %s=%llu %s=%llu leader_hint=%d\n",
+           policy?"-policy":"",rc,(unsigned long long)reply.index,
+           policy?"ttl_ns":"deadline_ns",(unsigned long long)reply.salt,
+           policy?"max_ns":"root_ino",(unsigned long long)reply.term,reply.leader_hint);
+    return rc?1:0;
+}
+
 /* Repeating this exact monotonic certificate barrier cannot reopen a session.
  * A cold peer pool can temporarily reject a configured storage member; retain
  * the UUID/epoch and cap the entire retry sequence, including socket waits. */
@@ -2552,6 +2595,8 @@ int main(int argc, char **argv)
         return cmd_gc_status(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-status") == 0)
         return cmd_raft_status(argc - 2, argv + 2);
+    if (strcmp(cmd,"expiry-policy")==0)return cmd_expiry(argc-2,argv+2,1);
+    if (strcmp(cmd,"expiry")==0)return cmd_expiry(argc-2,argv+2,0);
     if (strcmp(cmd, "commands-policy") == 0)
         return cmd_commands_policy(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-mkfs") == 0)

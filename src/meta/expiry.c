@@ -5,17 +5,17 @@ static void put64(uint8_t *p,uint64_t n) {for(unsigned i=0;i<8;i++)p[7-i]=(uint8
 static uint64_t get64(const uint8_t *p) {uint64_t n=0;for(unsigned i=0;i<8;i++)n=(n<<8)|p[i];return n;}
 static void key(uint8_t *p,uint32_t shard,uint8_t kind,uint64_t ino,uint64_t gen)
 { p[0]=(uint8_t)(shard>>8);p[1]=(uint8_t)shard;p[2]=kind;put64(p+3,ino);put64(p+11,gen); }
+void efs_expiry_policy_key(uint64_t root,uint64_t gen,uint8_t out[EFS_EXPIRY_KEY_BYTES])
+{key(out,efs_kv_inode_shard(root),EFS_KV_KIND_EXPIRY_POLICY,root,gen);}
+void efs_expiry_record_key(uint64_t ino,uint64_t gen,uint8_t out[EFS_EXPIRY_KEY_BYTES])
+{key(out,efs_kv_inode_shard(ino),EFS_KV_KIND_EXPIRY,ino,gen);}
 static void index_key(uint8_t *p,uint64_t ino,uint64_t gen,uint64_t deadline)
 {uint32_t sh=efs_kv_anchor_shard(efs_kv_inode_shard(ino));p[0]=(uint8_t)(sh>>8);p[1]=(uint8_t)sh;p[2]=EFS_KV_KIND_EXPIRY_INDEX;put64(p+3,deadline);put64(p+11,ino);put64(p+19,gen);}
-int efs_expiry_policy_get(struct efs_kv *kv,uint64_t root,uint64_t gen,struct efs_expiry_policy *p)
+int efs_expiry_policy_decode(const uint8_t *v,uint32_t n,struct efs_expiry_policy *p)
 {
-    if(!p || !root || !gen)return EFS_ERR_INVAL;
-    memset(p,0,sizeof(*p));uint8_t k[19],v[40];uint32_t n=sizeof(v);
-    key(k,efs_kv_inode_shard(root),EFS_KV_KIND_EXPIRY_POLICY,root,gen);
-    int rc=efs_kv_get(kv,k,sizeof(k),v,&n);
-    if(rc==EFS_ERR_NOT_FOUND)return EFS_OK;
-    if(rc)return rc;
-    if(n!=sizeof(v) || v[28]>1 || v[29]>1)return EFS_ERR_PROTO;
+    if(!v || !p)return EFS_ERR_INVAL;
+    memset(p,0,sizeof(*p));
+    if(n!=EFS_EXPIRY_POLICY_BYTES || v[28]>1 || v[29]>1)return EFS_ERR_PROTO;
     for(unsigned i=30;i<40;i++)if(v[i])return EFS_ERR_PROTO;
     p->revision=get64(v);p->ttl_ns=get64(v+8);p->max_ns=get64(v+16);
     p->owner_uid=((uint32_t)v[24]<<24)|((uint32_t)v[25]<<16)|((uint32_t)v[26]<<8)|v[27];
@@ -23,14 +23,25 @@ int efs_expiry_policy_get(struct efs_kv *kv,uint64_t root,uint64_t gen,struct ef
     if(!p->revision || p->ttl_ns>p->max_ns || (p->enabled && !p->ttl_ns))return EFS_ERR_PROTO;
     return EFS_OK;
 }
+int efs_expiry_policy_get(struct efs_kv *kv,uint64_t root,uint64_t gen,struct efs_expiry_policy *p)
+{
+    if(!p || !root || !gen)return EFS_ERR_INVAL;
+    memset(p,0,sizeof(*p));uint8_t k[19],v[40];uint32_t n=sizeof(v);
+    efs_expiry_policy_key(root,gen,k);
+    int rc=efs_kv_get(kv,k,sizeof(k),v,&n);
+    if(rc==EFS_ERR_NOT_FOUND)return EFS_OK;
+    if(rc)return rc;
+    return efs_expiry_policy_decode(v,n,p);
+}
 int efs_expiry_policy_set(struct efs_kv *kv,uint64_t root,uint64_t gen,uint32_t uid,uint64_t expected,const struct efs_expiry_policy *p)
 {
     if(uid)return EFS_ERR_ACCES;
     if(!p || p->enabled>1 || p->allow_clear>1 || p->ttl_ns>p->max_ns || (p->enabled && !p->ttl_ns) || expected==UINT64_MAX)return EFS_ERR_INVAL;
     struct efs_expiry_policy old;int rc=efs_expiry_policy_get(kv,root,gen,&old);if(rc)return rc;
     if(old.revision!=expected)return EFS_ERR_STALE;
-    uint8_t k[19],v[40]={0};key(k,efs_kv_inode_shard(root),EFS_KV_KIND_EXPIRY_POLICY,root,gen);
+    uint8_t k[19],v[40]={0};efs_expiry_policy_key(root,gen,k);
     rc=efs_txn_key_busy(kv,k,sizeof(k));if(rc)return rc;
+    rc=efs_txn_key_guarded(kv,k,sizeof(k));if(rc)return rc;
     put64(v,expected+1);put64(v+8,p->ttl_ns);put64(v+16,p->max_ns);
     v[24]=(uint8_t)(p->owner_uid>>24);v[25]=(uint8_t)(p->owner_uid>>16);v[26]=(uint8_t)(p->owner_uid>>8);v[27]=(uint8_t)p->owner_uid;
     v[28]=p->enabled;v[29]=p->allow_clear;
@@ -39,25 +50,31 @@ int efs_expiry_policy_set(struct efs_kv *kv,uint64_t root,uint64_t gen,uint32_t 
 int efs_expiry_get(struct efs_kv *kv,uint64_t ino,uint64_t gen,struct efs_expiry_record *r)
 {
     if(!r || !ino || !gen)return EFS_ERR_INVAL;
-    memset(r,0,sizeof(*r));uint8_t k[19],v[56];uint32_t n=sizeof(v);
-    key(k,efs_kv_inode_shard(ino),EFS_KV_KIND_EXPIRY,ino,gen);
+    memset(r,0,sizeof(*r));uint8_t k[19],v[EFS_EXPIRY_RECORD_BYTES];uint32_t n=sizeof(v);
+    efs_expiry_record_key(ino,gen,k);
     int rc=efs_kv_get(kv,k,sizeof(k),v,&n);if(rc==EFS_ERR_NOT_FOUND)return EFS_OK;if(rc)return rc;
     if(n!=sizeof(v) || v[48]>1)return EFS_ERR_PROTO;
     for(unsigned i=49;i<56;i++)if(v[i])return EFS_ERR_PROTO;
     r->deadline_ns=get64(v);r->revision=get64(v+8);r->root=get64(v+16);r->root_generation=get64(v+24);r->policy_revision=get64(v+32);r->max_ns=get64(v+40);r->allow_clear=v[48];
+    r->parent=get64(v+56);memcpy(r->name,v+64,EFS_MAX_NAME);
+    if(!memchr(r->name,0,sizeof(r->name)) || strchr(r->name,'/') ||
+       (!!r->parent != !!r->name[0]))return EFS_ERR_PROTO;
     return r->revision && r->root && r->root_generation && r->policy_revision && r->max_ns ? EFS_OK:EFS_ERR_PROTO;
 }
 int efs_expiry_plan(struct efs_kv *kv,uint64_t ino,uint64_t gen,uint64_t expected,const struct efs_expiry_record *r,struct efs_expiry_change *c)
 {
     if(!r || !c || expected==UINT64_MAX || !r->root || !r->root_generation || !r->policy_revision || !r->max_ns || r->allow_clear>1)return EFS_ERR_INVAL;
+    if(strnlen(r->name,sizeof(r->name))==sizeof(r->name) || strchr(r->name,'/') ||
+       (!!r->parent != !!r->name[0]))return EFS_ERR_INVAL;
     memset(c,0,sizeof(*c));struct efs_expiry_record old;int rc=efs_expiry_get(kv,ino,gen,&old);if(rc)return rc;
     if(old.revision!=expected)return EFS_ERR_STALE;
-    key(c->record_key,efs_kv_inode_shard(ino),EFS_KV_KIND_EXPIRY,ino,gen);
+    efs_expiry_record_key(ino,gen,c->record_key);
     rc=efs_txn_key_busy(kv,c->record_key,19);if(rc)return rc;
-    put64(c->value,r->deadline_ns);put64(c->value+8,expected+1);put64(c->value+16,r->root);put64(c->value+24,r->root_generation);put64(c->value+32,r->policy_revision);put64(c->value+40,r->max_ns);c->value[48]=r->allow_clear;
-    c->items[c->count++]=(struct efs_kv_item){EFS_KV_PUT,c->record_key,19,c->value,56};
+    rc=efs_txn_key_guarded(kv,c->record_key,19);if(rc)return rc;
+    put64(c->value,r->deadline_ns);put64(c->value+8,expected+1);put64(c->value+16,r->root);put64(c->value+24,r->root_generation);put64(c->value+32,r->policy_revision);put64(c->value+40,r->max_ns);c->value[48]=r->allow_clear;put64(c->value+56,r->parent);memcpy(c->value+64,r->name,strlen(r->name));
+    c->items[c->count++]=(struct efs_kv_item){EFS_KV_PUT,c->record_key,19,c->value,EFS_EXPIRY_RECORD_BYTES};
     if(old.deadline_ns){index_key(c->old_index,ino,gen,old.deadline_ns);c->items[c->count++]=(struct efs_kv_item){EFS_KV_DEL,c->old_index,27,NULL,0};}
-    if(r->deadline_ns){index_key(c->new_index,ino,gen,r->deadline_ns);c->items[c->count++]=(struct efs_kv_item){EFS_KV_PUT,c->new_index,27,c->value+8,8};}
+    if(r->deadline_ns){index_key(c->new_index,ino,gen,r->deadline_ns);c->items[c->count++]=(struct efs_kv_item){EFS_KV_PUT,c->new_index,27,c->value,EFS_EXPIRY_RECORD_BYTES};}
     return EFS_OK;
 }
 int efs_expiry_materialize(const struct efs_expiry_policy *p,uint64_t root,uint64_t gen,uint64_t now,struct efs_expiry_record *r)
@@ -80,13 +97,18 @@ int efs_expiry_renew(const struct efs_expiry_record *old,const struct efs_expiry
 struct page_ctx {struct efs_expiry_page *page;uint64_t now;};
 static int due(void *user,const uint8_t *k,uint32_t kn,const uint8_t *v,uint32_t vn)
 {
-    struct page_ctx *c=user;if(kn!=27 || vn!=8 || !get64(v))return EFS_ERR_PROTO;
-    uint64_t deadline=get64(k+3);if(deadline>c->now)return 1;
+    struct page_ctx *c=user;if(kn!=27 || vn!=EFS_EXPIRY_RECORD_BYTES || !get64(v+8))return EFS_ERR_PROTO;
+    uint64_t deadline=get64(k+3);if(deadline!=get64(v))return EFS_ERR_PROTO;
+    if(deadline>c->now)return 1;
     if(!deadline || !get64(k+11) || !get64(k+19) ||
        efs_kv_anchor_shard(efs_kv_inode_shard(get64(k+11)))!=k[1])return EFS_ERR_PROTO;
     if(c->page->count==EFS_EXPIRY_PAGE_MAX){c->page->more=1;return 1;}
     struct efs_expiry_due *r=&c->page->rows[c->page->count++];
-    *r=(struct efs_expiry_due){deadline,get64(k+11),get64(k+19),get64(v)};
+    *r=(struct efs_expiry_due){.deadline_ns=deadline,.ino=get64(k+11),
+        .generation=get64(k+19),.revision=get64(v+8),.parent=get64(v+56)};
+    memcpy(r->name,v+64,EFS_MAX_NAME);
+    if(!memchr(r->name,0,sizeof(r->name)) || strchr(r->name,'/') ||
+       (!!r->parent != !!r->name[0]))return EFS_ERR_PROTO;
     memcpy(c->page->resume,k,27);return EFS_OK;
 }
 int efs_expiry_due_page(struct efs_kv *kv,uint32_t anchor,uint64_t now,const uint8_t *after,struct efs_expiry_page *page)

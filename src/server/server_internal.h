@@ -439,6 +439,12 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
  * fence-view/cache and epoch-preserving publication integration first. */
 int server_raft_host_logical_resize(efs_ino_t ino, uint64_t size, uint64_t now,
                                     int *leader_hint);
+struct efs_expiry_due;
+/* Staged conditional transaction. Not connected to RPC or a live worker. */
+void server_raft_host_expire(efs_ino_t parent,const char *name,
+                             uint64_t committed_now,
+                             const struct efs_expiry_due *,
+                             struct efs_msg_inode_reply *);
 void server_raft_host_xattr(efs_ino_t ino, uint8_t op, uint32_t flags,
                             const uint8_t *name, uint16_t nlen,
                             const uint8_t *val, uint32_t vlen,

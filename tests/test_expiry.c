@@ -1,6 +1,7 @@
 #include "efs/expiry.h"
 #include "efs/meta_apply.h"
 #include "efs/session.h"
+#include "efs/txn.h"
 #include "efs/kv_lsm.h"
 #include <assert.h>
 #include <stdio.h>
@@ -19,15 +20,62 @@ static int fault_scan(void *ctx,const uint8_t *k,uint32_t n,
 {return efs_kv_scan_prefix(((struct failure *)ctx)->base,k,n,cb,u);}
 static int fault_batch(void *ctx,const struct efs_kv_item *it,uint32_t n)
 {(void)ctx;(void)it;(void)n;return EFS_ERR_IO;}
+static void inheritance_gates(void)
+{
+ struct efs_kv *kv=efs_kv_mem_create();assert(kv);assert(!efs_meta_apply_init(kv,NS));
+ struct efs_meta_attrs at={123,123,NS};efs_ino_t no_expiry,first,second,child=0;
+ assert(!efs_meta_apply_create_expiring(kv,&at,1,S_IFREG|0600,"default-off",&no_expiry));
+ struct efs_expiry_record record;assert(!efs_expiry_get(kv,no_expiry,1,&record));assert(!record.revision);
+ struct efs_expiry_policy p={.ttl_ns=2*NS,.max_ns=20*NS,.enabled=1};
+ assert(!efs_meta_apply_expiry_policy(kv,1,1,0,0,&p));
+ assert(!efs_meta_apply_create_expiring(kv,&at,1,S_IFREG|0600,"first",&first));
+ assert(!efs_expiry_get(kv,first,1,&record));assert(record.deadline_ns==3*NS && record.policy_revision==1);
+ p.ttl_ns=4*NS;assert(!efs_meta_apply_expiry_policy(kv,1,1,0,1,&p));
+ assert(!efs_meta_apply_create_expiring(kv,&at,1,S_IFREG|0600,"second",&second));
+ assert(!efs_expiry_get(kv,second,1,&record));assert(record.deadline_ns==5*NS && record.policy_revision==2);
+ assert(!efs_expiry_get(kv,first,1,&record));assert(record.deadline_ns==3*NS);
+ for(unsigned i=0;i<100 && !child;i++) {
+   char name[32];snprintf(name,sizeof(name),"child-%u",i);efs_ino_t ino;
+   assert(!efs_meta_apply_mkdir(kv,&at,1,S_IFDIR|0700,name,&ino));if(ino&1)child=ino;
+ }
+ assert(child);efs_ino_t inherited;
+ assert(!efs_meta_apply_create_expiring(kv,&at,child,S_IFREG|0600,"inherited",&inherited));
+ assert(!efs_expiry_get(kv,inherited,1,&record));assert(record.root==1 && record.deadline_ns==5*NS);
+ p.enabled=0;assert(!efs_meta_apply_expiry_policy(kv,child,1,0,0,&p));
+ assert(!efs_meta_apply_create_expiring(kv,&at,child,S_IFREG|0600,"disabled-subtree",&no_expiry));
+ assert(!efs_expiry_get(kv,no_expiry,1,&record));assert(!record.revision);
+ struct failure f={kv};const struct efs_kv_ops ops={.get=fault_get,.scan_prefix=fault_scan,.batch=fault_batch};struct efs_kv failed={&ops,&f};
+ assert(efs_meta_apply_create_expiring(&failed,&at,1,S_IFREG|0600,"failed",&no_expiry)==EFS_ERR_IO);
+ struct efs_meta_dentry dent;assert(efs_meta_apply_lookup(kv,1,"failed",&dent)==EFS_ERR_NOT_FOUND);
+ assert(!efs_meta_apply_check(kv));efs_kv_mem_free(kv);
+}
 static void namespace_gates(void)
 {
  struct efs_kv *kv=efs_kv_mem_create();assert(kv);assert(!efs_meta_apply_init(kv,NS));
  struct efs_meta_attrs at={123,123,NS};efs_ino_t ino;
  assert(!efs_meta_apply_create_file(kv,&at,1,S_IFREG|0600,"a",&ino));
- struct efs_expiry_record r={.deadline_ns=2*NS,.root=1,.root_generation=1,.policy_revision=1,.max_ns=20*NS};
+ struct efs_expiry_policy policy={.ttl_ns=NS,.max_ns=20*NS,.enabled=1};
+ assert(efs_meta_apply_expiry_policy(kv,1,1,123,0,&policy)==EFS_ERR_ACCES);
+ assert(!efs_meta_apply_expiry_policy(kv,1,1,0,0,&policy));
+ assert(efs_meta_apply_expiry_policy(kv,ino,1,0,0,&policy)==EFS_ERR_INVAL);
+ struct efs_expiry_record r={.deadline_ns=2*NS,.root=1,.root_generation=1,.policy_revision=1,.max_ns=20*NS,.parent=1,.name="a"};
  apply(kv,ino,0,&r);
- struct efs_expiry_due due={2*NS,ino,1,1};
+ assert(efs_meta_apply_expiry_renew(kv,ino,1,456,1,NS,3*NS)==EFS_ERR_ACCES);
+ assert(efs_meta_apply_expiry_renew(kv,ino,2,123,1,NS,3*NS)==EFS_ERR_STALE);
+
+ struct efs_expiry_due due={.deadline_ns=2*NS,.ino=ino,.generation=1,.revision=1,.parent=1,.name="a"};
  assert(efs_meta_apply_expire(kv,1,"a",NS,&due)==EFS_ERR_STALE);
+ assert(efs_meta_apply_link(kv,1,"a",1,"forbidden-link",NS)==EFS_ERR_INVAL);
+ uint8_t record_key[19];efs_expiry_record_key(ino,1,record_key);
+ uint8_t record_value[EFS_EXPIRY_RECORD_BYTES];uint32_t record_length=sizeof(record_value);
+ assert(!efs_kv_get(kv,record_key,19,record_value,&record_length));
+ struct efs_txid tx={{1}};struct efs_txn_parts parts={.n=1,.shard={1}};
+ assert(!efs_txn_prepare_excl_value(kv,&tx,&parts,record_key,19,record_value,sizeof(record_value),EFS_TXN_PUT,record_value,sizeof(record_value)));
+ struct efs_expiry_change blocked;
+ assert(efs_expiry_plan(kv,ino,1,1,&r,&blocked)==EFS_ERR_BUSY);
+ assert(efs_meta_apply_expire(kv,1,"a",4*NS,&due)==EFS_ERR_BUSY);
+ assert(!efs_txn_drop(kv,&tx,1));
+
  r.deadline_ns=3*NS;apply(kv,ino,1,&r);
  assert(efs_meta_apply_expire(kv,1,"a",4*NS,&due)==EFS_ERR_STALE);
  due.deadline_ns=3*NS;due.revision=2;
@@ -42,14 +90,25 @@ static void namespace_gates(void)
  assert(efs_meta_apply_lookup(kv,1,"a",&dent)==EFS_ERR_NOT_FOUND);
  assert(!efs_meta_apply_get_inode(kv,ino,&row));assert(!row.nlink);
  assert(!efs_expiry_get(kv,ino,1,&r));assert(r.revision==3 && !r.deadline_ns);
+ assert(efs_meta_apply_expiry_renew(kv,ino,1,123,3,4*NS,5*NS)==EFS_ERR_NOT_FOUND);
+
  struct efs_expiry_page page;assert(!efs_expiry_due_page(kv,1,4*NS,NULL,&page));assert(!page.count);
  efs_ino_t replacement;assert(!efs_meta_apply_create_file(kv,&at,1,S_IFREG|0600,"a",&replacement));assert(replacement!=ino);
  assert(efs_meta_apply_expire(kv,1,"a",4*NS,&due)==EFS_ERR_STALE);
  assert(!efs_meta_apply_lookup(kv,1,"a",&dent));assert(dent.ino==replacement);
+ r=(struct efs_expiry_record){.deadline_ns=5*NS,.root=1,.root_generation=1,.policy_revision=1,.max_ns=20*NS};
+ apply(kv,replacement,0,&r);
+ assert(!efs_meta_apply_expiry_renew(kv,replacement,1,123,1,4*NS,6*NS));
+ assert(!efs_expiry_get(kv,replacement,1,&r));assert(r.revision==2 && r.deadline_ns==6*NS);
+ assert(efs_meta_apply_expiry_renew(kv,replacement,1,123,1,4*NS,7*NS)==EFS_ERR_STALE);
+ policy.enabled=0;assert(!efs_meta_apply_expiry_policy(kv,1,1,0,1,&policy));
+ assert(efs_meta_apply_expiry_renew(kv,replacement,1,123,2,4*NS,7*NS)==EFS_ERR_ACCES);
+
  assert(!efs_meta_apply_check(kv));efs_kv_mem_free(kv);
 }
 int main(void)
 {
+ inheritance_gates();
  namespace_gates();
  char path[]="/tmp/efs-expiry-XXXXXX";assert(mkdtemp(path));
  struct efs_kv *kv=efs_kv_lsm_open(path,NULL);assert(kv);

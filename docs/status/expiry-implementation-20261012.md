@@ -71,3 +71,66 @@ restart/leader changes, retries, concurrent publication and offline members;
 separate namespace removal and physical reclamation; bounded worker resources;
 full POSIX core and peer suites. W90 stays open until these pass with exact
 source/build IDs and reproducible evidence.
+
+## First committed-source live baseline
+
+Commit `70ba0424` (foundation, before live integration) passed on NUC with four
+1-GiB-quota nodes, TCP/direct I/O, FILES default, `.efs` and packing disabled.
+Stores were private under `/data1/efs/expiry-foundation-70ba0424/`, with both
+policy-approved mounts. Core POSIX: **216/216, 0 failures** (21.8 seconds).
+Peer POSIX: **67/67, 0 failures** (11.6 seconds). Graceful shutdown/restart,
+ordinary open-unlinked reclamation, late PUT fencing, zero quotas after cleanup
+and empty physical fragment inventories passed. No expiry worker was active;
+this is regression evidence, not full expiry acceptance.
+
+Reproduce from that commit on NUC:
+
+```sh
+env EFS_PACKED_WRITES=0 EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_TRANSPORT=tcp \
+  python3 tests/live/gc_reclamation.py --mode direct --transport tcp \
+  --disable-efs-commands \
+  --root /data1/efs/expiry-foundation-70ba0424 \
+  --root /data1/efs/expiry-foundation-70ba0424 \
+  --mount /data1/efs/mnt --peer-mount /data1/efs/mnt2 --posix --posix-jobs 4 --port 24410
+```
+
+Prerequisites: native Linux/FUSE build, existing empty unmounted mount points,
+existing root parent, free ports 24410–24413 and sufficient physical space.
+Harness owns unique directories/processes, retains external evidence and stops
+its clients/nodes. Do not run another fixture on these mounts/ports concurrently.
+Normal build command used `EFS_GIT_ID=70ba0424 EFS_GIT_BRANCH=devel-expiry
+EFS_GIT_DESCRIBE=70ba0424 make -j4 EFS_FAULTS=0 all tests/test_expiry tests/test_meta_apply`.
+
+Actual mapped daemon SHA256:
+`66817489de0205029524a4c69b2b222f6d99306ffa2ed76d0cb73b3de752d408`.
+FUSE: `7a9d8463cf67601eb549a8053cb33634ed698158b4752bb1844a413f4c4883c2`.
+Management: `b6a019c8cdf18979685d813c57f3aba1416723ec2ad5a41243e28faef3265c90`.
+External log `/home/efs/expiry-foundation-70ba0424-gates.log`, SHA256
+`eca21a48be290a8e790de1bb01866bd3875feae4a1919b1c76fc983cacb034fa`.
+Raw per-case and runtime evidence remains in the two private harness roots.
+All four process environments and executable hashes were inspected.
+
+## Integration checkpoint (still NOT fully qualified)
+
+The next staged changes add `EFS_EXPIRY=1` operator control, versioned
+`efs-mgmt expiry-policy` and `efs-mgmt expiry` requests, leader-selected renewal
+time, and inherited birth transactions with guarded ancestry/policy snapshots.
+Default remains off. These controls use the existing trusted-client management
+protocol; this is not authenticated transport or protection against a forged
+client UID. Policy mutation requires UID 0; renewal checks current inode owner,
+generation, links, retention and live namespace state at apply.
+
+Birth transactions store a bounded name binding in the deadline record/index,
+so future worker passes need no directory scan. Conditional cross-group delete
+now stages exact revision/deadline CAS and normal inode/dentry/REAP changes;
+it is not connected to a worker yet. LINK has an expiry-record CAS exclusion.
+The staged CREATE path uses an absent-value dentry guard and retains durable
+EEXIST receipts to preserve O_EXCL/retry behavior.
+
+Applied-state tests now also pass explicit owner renewal, policy disablement,
+ancestry inheritance, atomic birth failure, and transaction intent exclusion.
+Live tests of this newer integration remain NOTRUN. Remaining work includes
+cross-group renewal, rename binding updates, manual deletion/reclamation
+cleanup, clock-health-controlled worker activation, and the full expiry matrix.
+The `EFS_EXPIRY` capability currently enables control and guarded births, not
+automatic deletion. Do not mistake the first baseline for an expiry gate pass.

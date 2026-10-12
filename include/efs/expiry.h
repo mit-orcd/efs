@@ -6,7 +6,7 @@
  * serialization. The caller must honor transaction intents and combine these
  * items with namespace creation/deletion in the same atomic decision. */
 #define EFS_EXPIRY_POLICY_BYTES 40u
-#define EFS_EXPIRY_RECORD_BYTES 56u
+#define EFS_EXPIRY_RECORD_BYTES 320u
 #define EFS_EXPIRY_KEY_BYTES 19u
 #define EFS_EXPIRY_INDEX_BYTES 27u
 #define EFS_EXPIRY_PAGE_MAX 64u
@@ -19,6 +19,8 @@ struct efs_expiry_record {
     uint64_t deadline_ns, revision, root, root_generation, policy_revision;
     uint64_t max_ns;
     uint8_t allow_clear;
+    uint64_t parent;
+    char name[EFS_MAX_NAME];
 };
 struct efs_expiry_change {
     struct efs_kv_item items[3];
@@ -28,7 +30,8 @@ struct efs_expiry_change {
     uint32_t count;
 };
 struct efs_expiry_due {
-    uint64_t deadline_ns, ino, generation, revision;
+    uint64_t deadline_ns, ino, generation, revision, parent;
+    char name[EFS_MAX_NAME];
 };
 struct efs_expiry_page {
     struct efs_expiry_due rows[EFS_EXPIRY_PAGE_MAX];
@@ -37,6 +40,9 @@ struct efs_expiry_page {
     uint8_t more;
 };
 struct efs_expiry_clock { uint64_t wall, mono; uint8_t initialized, healthy, uncertain; };
+void efs_expiry_policy_key(uint64_t root,uint64_t gen,uint8_t out[EFS_EXPIRY_KEY_BYTES]);
+void efs_expiry_record_key(uint64_t ino,uint64_t gen,uint8_t out[EFS_EXPIRY_KEY_BYTES]);
+int efs_expiry_policy_decode(const uint8_t *,uint32_t,struct efs_expiry_policy *);
 int efs_expiry_policy_get(struct efs_kv *, uint64_t root, uint64_t gen,
                           struct efs_expiry_policy *);
 int efs_expiry_policy_set(struct efs_kv *, uint64_t root, uint64_t gen,
