@@ -6,7 +6,7 @@ Outputs stay below the supplied local artifact directory, outside Git.
 """
 import argparse,concurrent.futures,json,shlex,subprocess,time,uuid
 from pathlib import Path
-p=argparse.ArgumentParser(description=__doc__);p.add_argument('gate',choices=['core','peer','mmap','concurrent','lifecycle-create','lifecycle-read','lifecycle-churn','lifecycle-verify','lifecycle-cold','lifecycle-delete','tiny-create','tiny-cold','directory','restart']);p.add_argument('--run-id',default=uuid.uuid4().hex[:12],help='unique evidence and namespace suffix');p.add_argument('--base',default='/data1/efs/bench/container-3173be61-20261012');p.add_argument('--output',type=Path,required=True);a=p.parse_args();a.output.mkdir(parents=True,exist_ok=True)
+p=argparse.ArgumentParser(description=__doc__);p.add_argument('gate',choices=['core','peer','mmap','concurrent','lifecycle-create','lifecycle-read','lifecycle-churn','lifecycle-verify','lifecycle-cold','lifecycle-delete','tiny-create','tiny-cold','directory','restart','reclaim']);p.add_argument('--run-id',default=uuid.uuid4().hex[:12],help='unique evidence and namespace suffix');p.add_argument('--base',default='/data1/efs/bench/container-3173be61-20261012');p.add_argument('--output',type=Path,required=True);a=p.parse_args();a.output.mkdir(parents=True,exist_ok=True)
 assert a.run_id and all(c.isalnum() or c in '-_' for c in a.run_id),'invalid run id'
 s=a.base+'/src';remoteout=a.base+'/artifacts';rows=[]
 def run(host,index,name,argv,timeout):
@@ -16,6 +16,21 @@ def run(host,index,name,argv,timeout):
   try:r=subprocess.run(['ssh',host,shlex.join(cmd)],stdout=f,stderr=subprocess.STDOUT,timeout=timeout+30);rc=r.returncode
   except subprocess.TimeoutExpired:rc=124
  row={'name':name,'host':host,'argv':argv,'returncode':rc,'seconds':round(time.monotonic()-start,3),'status':'PASS' if rc==0 else 'FAIL'};print(json.dumps(row),flush=True);return row
+if a.gate=='reclaim':
+ def inventory(pair):
+  index,host=pair
+  cmd=['python3',a.base+'/intel_container_node.py','inventory','--base',a.base,'--host-index',str(index)]
+  return {'host':host,'nodes':json.loads(subprocess.check_output(['ssh',host,shlex.join(cmd)],text=True,timeout=15))}
+ begin=time.monotonic();deadline=begin+180;history=[];passed=False
+ while time.monotonic()<deadline:
+  with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:snapshot=list(pool.map(inventory,enumerate(['intel1_efs','intel2_efs'])))
+  elapsed=time.monotonic()-begin;history.append({'seconds':round(elapsed,3),'hosts':snapshot})
+  passed=elapsed<=180 and all(n['inventory']['data_records']==0 and n['inventory']['container_allocated']==0 for h in snapshot for n in h['nodes'])
+  (a.output/('reclaim-'+a.run_id+'-history.json')).write_text(json.dumps(history,indent=2))
+  if passed:break
+  time.sleep(min(1,max(0,deadline-time.monotonic())))
+ print(json.dumps({'gate':'reclaim','status':'PASS' if passed else 'FAIL','seconds':round(time.monotonic()-begin,3),'last':history[-1] if history else None}),flush=True)
+ raise SystemExit(0 if passed else 1)
 if a.gate=='restart':
  # A cluster-wide phase barrier preserves quorum until EVERY client drains.
  for action,timeout in [('stop-clients',400),('stop-servers',60),('start',30),('mount',90)]:
