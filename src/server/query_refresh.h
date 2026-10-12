@@ -38,4 +38,23 @@ static inline int efs_query_refresh_due(uint64_t now,uint64_t pending_since,
     if(dirty<trigger && now-pending_since<interval)return 0;
     return !last_attempt || now-last_attempt>=interval;
 }
+
+/* A rejected coherent-cut capture does no disk build. Give short captures a
+ * bounded chance to find a quiet cut, without accelerating authority/import
+ * refusals or expensive captures. This is scheduling only: every attempt
+ * retains fresh pin/proofs/fences, the four-cut bound and original deadline. */
+#define EFS_QUERY_CUT_RETRY_MS 200u
+static inline int efs_query_refresh_cut_retry(int rc,int transaction_changed,uint64_t capture_ms)
+{
+    return rc==EFS_ERR_BUSY && transaction_changed && capture_ms<EFS_QUERY_CUT_RETRY_MS;
+}
+static inline int efs_query_refresh_due_reason(uint64_t now,uint64_t pending_since,
+    uint64_t last_attempt,uint64_t dirty,int initial,int failed,int cut_retry,
+    uint64_t trigger,uint64_t interval)
+{
+    if(cut_retry && failed && (dirty || initial) && last_attempt)
+        return now-last_attempt>=EFS_QUERY_CUT_RETRY_MS;
+    return efs_query_refresh_due(now,pending_since,last_attempt,dirty,initial,failed,trigger,interval);
+}
+
 #endif

@@ -2185,6 +2185,8 @@ AMD `57748bb5` validation stopped on the new root test fixture indentation warni
 
 Release `95d3f1b1`: full normal/fault suites, 17 focused sanitizers and fully sanitized LSM catalog PASS; both-mode ordinary overwrite/cold/physical prerequisites PASS. One instrumented packing run still FAIL: retained roots absent, 145 transaction-cut collisions, 47–48 s publication gap; cold packing/GC NOTRUN, mounts restored. [Exact evidence and limits](../status/v030-query-stage-diagnostic-20261012.md#second-frozen-amd-diagnostic-95d3f1b1). No push or release acceptance.
 
+A local cut-only retry proposal now has baseline-fail/candidate-pass and unsafe-all-BUSY negative controls, preserving transaction/authority/import fences and existing budgets. It increases proof load and is not deployed or accepted. [Policy and evidence](../status/v030-query-stage-diagnostic-20261012.md#local-scheduling-remedy-proposal-not-deployed). Reviewed Intel namespace fixture repair is integrated, repaired live qualification NOTRUN.
+
 
 ## Appendix 2 — In flight — the current handoff block
 

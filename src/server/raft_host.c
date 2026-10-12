@@ -8946,12 +8946,16 @@ static int host_query_source_once(struct efs_raft_host *h,struct efs_kv_lsm_snap
  * and transaction fence. The existing build deadline and four-cut bound
  * prevent a busy namespace from monopolizing the background worker. */
 static int host_query_source(struct efs_raft_host *h,struct efs_kv_lsm_snapshot **source,
-                              struct efs_server_query_view *view,uint64_t *revisions,uint64_t *import_generation)
+                              struct efs_server_query_view *view,uint64_t *revisions,uint64_t *import_generation,
+                              int *final_transaction_changed)
 {
+    *final_transaction_changed=0;
     for(unsigned attempt=0;;attempt++) {
         int changed=0;
         int rc=host_query_source_once(h,source,view,revisions,import_generation,&changed);
-        if(!changed || attempt==3 || query_mono_ms()>=h->query_deadline_ms)return rc;
+        if(!changed || attempt==3 || query_mono_ms()>=h->query_deadline_ms) {
+            *final_transaction_changed=changed;return rc;
+        }
     }
 }
 /* Disk builders stream bounded scratch independently of foreground RPC
@@ -8984,7 +8988,7 @@ static void *host_query_thread(void *ctx)
 {
     struct efs_raft_host *h=ctx;
     uint64_t published[4096]={0},current[4096],first_dirty=0,last_attempt=0;
-    int failed=0,last_error=0;uint64_t last_error_log=0;
+    int failed=0,last_error=0,cut_retry=0;uint64_t last_error_log=0;
     struct efs_query_build_failure build_failure={0};
     uint64_t catalog_bytes=HOST_QUERY_BYTES;
     const char *backend=getenv("EFS_QUERY_BACKEND");
@@ -9014,11 +9018,12 @@ static void *host_query_thread(void *ctx)
         usleep(100000);
         query_page_sweep(0);
         uint64_t policy_version;uint32_t policy_mask;
-        if(efs_query_policy_get(h->kv,&policy_version,&policy_mask) || !policy_mask)continue;
+        if(efs_query_policy_get(h->kv,&policy_version,&policy_mask) || !policy_mask) {cut_retry=0;continue;}
         uint64_t now=query_mono_ms(),dirty=0;
         if (now-last_attempt<200) continue;
         int rc=efs_kv_lsm_metadata_revisions(h->kv,current,4096);
         if (rc) {
+            cut_retry=0;
             pthread_rwlock_wrlock(&h->query_lock);
             h->query_error=rc;
             pthread_rwlock_unlock(&h->query_lock);
@@ -9050,7 +9055,7 @@ static void *host_query_thread(void *ctx)
         }
         pthread_rwlock_unlock(&h->query_lock);
         if(lag_lock_ms)efs_query_stage_trace("lag-lock",0,lag_lock_ms,0,0);
-        if (!efs_query_refresh_due(now,first_dirty,last_attempt,dirty,initial,failed,
+        if (!efs_query_refresh_due_reason(now,first_dirty,last_attempt,dirty,initial,failed,cut_retry,
                                    HOST_QUERY_N,HOST_QUERY_T_MS)) continue;
         last_attempt=now;
         struct efs_kv_lsm_snapshot *source=NULL;
@@ -9058,8 +9063,10 @@ static void *host_query_thread(void *ctx)
         uint64_t revisions[4096],import_generation[HOST_NGROUPS];
         h->query_deadline_ms=now+HOST_QUERY_BUILD_MS;
         h->query_cancel_checks=0;
-        rc=host_query_source(h,&source,&view,revisions,import_generation);
+        int final_transaction_changed=0;
+        rc=host_query_source(h,&source,&view,revisions,import_generation,&final_transaction_changed);
         uint64_t capture_done=query_mono_ms();
+        cut_retry=efs_query_refresh_cut_retry(rc,final_transaction_changed,capture_done-now);
         const char *refresh_stage="capture";
         struct efs_query_catalog *candidate=NULL;
         uint64_t watermark[4]={view.applied[0],view.applied[1],view.terms[0],view.terms[1]};
