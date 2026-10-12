@@ -707,3 +707,5 @@ Frozenecdc split progress: Intel focused70/70 I/O+client stops PASS (evidence in
 NUCecdc focused evidence integrated: [report](nuc-release-ecdc-focused-20261012.md),14/14 deep checks plus disabled-feature/configuration/basic/peer/cleanup PASS. Reduced workload; AMD full acceptance still separate.
 
 10:04 EDT ecdc: AMD native/sanitizers PASS, full .efs-disabled seven-core FAIL on deep/names deadlines; cold bytes PASS, globalphysicalempty timeout requires live-object attribution. Intel/NUC focused PASS retained. [Ledger](v030-tcp-direct-qualification-20261012.md).
+
+AMD bounded labelledecdc broad diagnostic running; isolatedREADDIR5e035dcd review pending, not deployed. Acceptance remains failed. [Ledger](v030-tcp-direct-qualification-20261012.md).
