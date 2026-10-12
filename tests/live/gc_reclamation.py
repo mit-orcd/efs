@@ -267,7 +267,11 @@ if a.replication_pressure:
     run_preload=work/'raft-slow-sync.so'
     subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-shared','-fPIC',source/'tests/live/raft_slow_sync.c','-ldl','-o',run_preload],check=True)
     env.update(LD_PRELOAD=str(run_preload),EFS_TEST_RAFT_SLOW_FILE=str(work/'raft-slow-armed'))
-if a.mounted_packing_only:env.update(EFS_PACKED_WRITES='1',EFS_COMMANDS='1',EFS_COMMANDS_SERVER='1')
+# Packing qualification is independent of the optional command/query service.
+# Force core POSIX even when a caller inherited commands-enabled environment.
+if a.mounted_packing_only:
+    env.update(EFS_PACKED_WRITES='1',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0')
+    a.disable_efs_commands=True
 if a.ordinary_overwrite_only:env['EFS_PACKED_WRITES']='0'
 if a.efs_commands_only:env.update(EFS_COMMANDS='1',EFS_COMMANDS_SERVER='1',EFS_QUERY_TEST_PORT=str(a.port))
 if a.disable_efs_commands:
@@ -686,6 +690,8 @@ try:
         wait(drained,'mounted packing metadata queues drained',180)
         report={'cold_verified':True,'physical_packed_empty':True,'failures':failures,
                 'source_sha256':digest.hexdigest(),'clients':a.packing_clients,'mode':a.mode,'transport':a.transport,
+                'packed_writes':env['EFS_PACKED_WRITES'],'commands':env.get('EFS_COMMANDS'),
+                'commands_server':env.get('EFS_COMMANDS_SERVER'),
                 'restart':'orderly; four status-zero daemons, no forced kill'}
         (work/'mounted-packing.json').write_text(json.dumps(report,indent=2))
         assert not failures,failures
