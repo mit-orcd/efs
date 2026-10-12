@@ -26,3 +26,9 @@ Production source/stores/certificates were not replaced or wiped. Retained fixtu
 ## Resume steps, only after human authorization
 
 Review source-specific owner checkpoint/raw failures. Requalify strict fixed CREATE three-stage/cold/token ownership on the same frozen 410/v2 candidate after prerequisites. Run the peer-reviewed smallest query-root transcript with original deadlines and honest observation labels, not another broad unchanged pressure run. Correlate the Mac normal mounted RPC/group/session/resource failures; implement only a proved true defect with actual-function negative controls. Keep all five owners on one reviewed immutable source and retain no-push status until release gates and human scheduling approval.
+
+## User-authorized branch reconciliation after stop
+
+The human subsequently authorized merging all repository commits into `release-v0.3.0-pre-alpha`. Eight missing commits were merged from devel-code-review (`b713a7c6`), devel-mac (`f3359da5`), devel-nuc (`8f9adb9a`, including `49770ec2`/`5845cb67`) and devel-orcd (`3cf6f69c`, including `71eee9c8`/`6fde3539`). All merges were conflict-free. Every local and remote-tracking branch tip is now an ancestor of the integration HEAD; all listed detached worktree commits were already included. This reconciles committed work, not uncommitted edits in other agents' worktrees.
+
+The merged delta changes only documentation and raw evidence (580 paths), with no source/build/test implementation changes. Architecture/documentation gates pass all five checks. Earlier test results remain source-specific, and execution stays stopped: no deployments, cluster tests, push, tag or main promotion were performed as part of reconciliation. The code execution candidate remains 410afed4/v2; the integration HEAD includes later evidence/checkpoints. Resume testing requires further human direction.
