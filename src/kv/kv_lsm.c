@@ -202,31 +202,16 @@ int kv_mtab_set(struct kv_mtab *m, uint8_t op, const uint8_t *key,
     return EFS_OK;
 }
 
-/* Prepare all replacements before touching the committed table. A Raft apply
- * batch commonly inserts many keys near the front of a large table: merging
- * once avoids shifting the same suffix for every new key. Single-item writes
- * retain their cheaper insertion/update path. Caller serializes visibility. */
-int kv_mtab_batch(struct kv_mtab *m, const struct efs_kv_item *items, uint32_t n)
+/* Transfer a prepared sorted batch. Capacity failure leaves both tables
+ * untouched; successful transfer consumes the source entries. */
+int kv_mtab_merge(struct kv_mtab *m, struct kv_mtab *pending)
 {
-    struct kv_mtab pending = {0};
     uint32_t added = 0, total, i;
     int rc = EFS_OK;
-
-    if (n == 1)
-        return kv_mtab_set(m, items[0].op == EFS_KV_PUT ? KV_OP_PUT : KV_OP_DEL,
-                           items[0].key, items[0].klen, items[0].val, items[0].vlen);
-    for (i = 0; i < n; i++) {
-        rc = kv_mtab_set(&pending,
-                        items[i].op == EFS_KV_PUT ? KV_OP_PUT : KV_OP_DEL,
-                        items[i].key, items[i].klen, items[i].val, items[i].vlen);
-        if (rc != EFS_OK)
-            goto out;
-    }
-    /* The temporary table also collapses duplicate keys in original order:
-     * the last operation wins, including PUT/DEL/PUT sequences. */
-    for (i = 0; i < pending.n; i++) {
+    if(m==pending)return EFS_ERR_INVAL;
+    for (i = 0; i < pending->n; i++) {
         int found;
-        (void)kv_mtab_pos(m, pending.e[i]->key, pending.e[i]->klen, &found);
+        (void)kv_mtab_pos(m, pending->e[i]->key, pending->e[i]->klen, &found);
         added += !found;
     }
     if (added > UINT32_MAX - m->n) {
@@ -257,20 +242,20 @@ int kv_mtab_batch(struct kv_mtab *m, const struct efs_kv_item *items, uint32_t n
     }
     if (!added) {
         /* Update-only batches need no whole-table walk or pointer movement. */
-        for (i = 0; i < pending.n; i++) {
+        for (i = 0; i < pending->n; i++) {
             int found;
-            struct kv_ent *e = pending.e[i];
+            struct kv_ent *e = pending->e[i];
             uint32_t at = kv_mtab_pos(m, e->key, e->klen, &found);
             m->bytes -= m->e[at]->vlen;
             m->bytes += e->vlen;
             ent_free(m->e[at]);
             m->e[at] = e;
-            pending.e[i] = NULL;
+            pending->e[i] = NULL;
         }
     } else {
-        uint32_t old = m->n, next = pending.n, dest = total;
+        uint32_t old = m->n, next = pending->n, dest = total;
         while (next) {
-            struct kv_ent *e = pending.e[next - 1];
+            struct kv_ent *e = pending->e[next - 1];
             struct kv_mtab prefix = *m;
             int found;
             /* Only the untouched prefix remains searchable. Find the entire
@@ -295,11 +280,35 @@ int kv_mtab_batch(struct kv_mtab *m, const struct efs_kv_item *items, uint32_t n
             --next;
             --dest;
             m->e[dest] = e;
-            m->pfx[dest] = pending.pfx[next];
-            pending.e[next] = NULL;
+            m->pfx[dest] = pending->pfx[next];
+            pending->e[next] = NULL;
         }
         m->n = total;
     }
+    kv_mtab_clear(pending);
+out:
+    return rc;
+}
+
+/* Prepare replacements atomically, collapsing duplicate keys in input order.
+ * The owned sorted batch then merges with each old run moved at most once. */
+int kv_mtab_batch(struct kv_mtab *m, const struct efs_kv_item *items, uint32_t n)
+{
+    struct kv_mtab pending = {0};
+    uint32_t i;
+    int rc = EFS_OK;
+
+    if (n == 1)
+        return kv_mtab_set(m, items[0].op == EFS_KV_PUT ? KV_OP_PUT : KV_OP_DEL,
+                           items[0].key, items[0].klen, items[0].val, items[0].vlen);
+    for (i = 0; i < n; i++) {
+        rc = kv_mtab_set(&pending,
+                        items[i].op == EFS_KV_PUT ? KV_OP_PUT : KV_OP_DEL,
+                        items[i].key, items[i].klen, items[i].val, items[i].vlen);
+        if (rc != EFS_OK)
+            goto out;
+    }
+    rc = kv_mtab_merge(m, &pending);
 out:
     kv_mtab_clear(&pending);
     return rc;
@@ -625,12 +634,17 @@ static int lookup_mt(struct kv_lsm *l, const uint8_t *key, uint32_t klen,
                      struct kv_buf *out, uint8_t *op)
 {
     int found;
-    uint32_t at = kv_mtab_pos(&l->mt, key, klen, &found);
+    const struct kv_mtab *mt = &l->pending_mt;
+    uint32_t at = kv_mtab_pos(mt, key, klen, &found);
+    if(!found) {
+        mt = &l->mt;
+        at = kv_mtab_pos(mt, key, klen, &found);
+    }
 
     if (!found)
         return EFS_ERR_NOT_FOUND;
-    *op = l->mt.e[at]->op;
-    return kv_buf_set(out, l->mt.e[at]->val, l->mt.e[at]->vlen);
+    *op = mt->e[at]->op;
+    return kv_buf_set(out, mt->e[at]->val, mt->e[at]->vlen);
 }
 
 struct lsm_view {
@@ -829,12 +843,12 @@ static int merge_scan(struct kv_lsm *l, int private_read,
                                 const uint8_t *val, uint32_t vlen),
                       void *user)
 {
-    struct msrc stack_src[KV_LSM_MAX_SEGS * 2 + 2];
+    struct msrc stack_src[KV_LSM_MAX_SEGS * 2 + 3];
     struct msrc *src = stack_src;
     const uint8_t *seek = slen ? start : prefix;
     uint32_t seek_len = slen ? slen : plen;
-    uint32_t nsrc = 0, i, cap = KV_LSM_MAX_SEGS * 2 + 2;
-    uint32_t need = l->n_l0 + l->n_l1 + 1 + apply_staging(l);
+    uint32_t nsrc = 0, i, cap = KV_LSM_MAX_SEGS * 2 + 3;
+    uint32_t need = l->n_l0 + l->n_l1 + 1 + (l->pending_mt.n != 0) + apply_staging(l);
     int src_heap = 0;
     int rc = EFS_OK;
 
@@ -842,7 +856,7 @@ static int merge_scan(struct kv_lsm *l, int private_read,
     if (private_read) {
         /* Size only relevant sources. The old allocation used every source
          * segment even for a point/prefix lookup and grew with the namespace. */
-        need=1;
+        need=1+(l->pending_mt.n!=0);
         for(i=0;i<l->n_l0+l->n_l1;i++){
             struct seg_slot *sl=i<l->n_l0?&l->l0[i]:&l->l1[i-l->n_l0];
             int excluded=0;
@@ -866,6 +880,14 @@ static int merge_scan(struct kv_lsm *l, int private_read,
         if (seek_len) {
             int found;
             src[nsrc].mi = kv_mtab_pos(&apply_scope.mt, seek, seek_len, &found);
+        }
+        nsrc++;
+    }
+    if(l->pending_mt.n) {
+        src[nsrc].mt = &l->pending_mt;
+        if(seek_len) {
+            int found;
+            src[nsrc].mi=kv_mtab_pos(&l->pending_mt,seek,seek_len,&found);
         }
         nsrc++;
     }
@@ -1023,7 +1045,12 @@ static int lsm_batch_committed(void *ctx, const struct efs_kv_item *items, uint3
         l->io_failed = 1;
     rc = arc;
     if (rc == EFS_OK)
-        rc = kv_mtab_batch(&l->mt, items, n);
+        rc = kv_mtab_batch(&l->pending_mt, items, n);
+    /* Bound insertion work to a small sorted delta instead of shifting the
+     * large committed table every Raft entry. WAL/apply order and visibility
+     * still share this mutex; buffered entries are newer scan/get sources. */
+    if(rc==EFS_OK && (l->pending_mt.n >= 1024 || l->pending_mt.bytes >= (256u<<10)))
+        rc=kv_mtab_merge(&l->mt,&l->pending_mt);
     /* The record is durable already. Refuse further writes after any failed
      * RAM apply; cold replay remains the source of truth. */
     if (rc != EFS_OK)
@@ -1194,6 +1221,7 @@ static void lsm_destroy(void *ctx)
     l->l1 = NULL;
     l->l1_cap = 0;
     kv_mtab_clear(&l->mt);
+    kv_mtab_clear(&l->pending_mt);
     kv_buf_free(&l->scratch);
     pthread_cond_destroy(&l->compact_cv);
     pthread_cond_destroy(&l->cv);
@@ -1337,7 +1365,7 @@ static int lsm_flush(struct efs_kv *kv, int wait)
     /* A flush emits at most one L0 file per key[0]. Counting those runs
      * walks the memtable. The raft pump calls this on every snapshot
      * open; refuse before the walk when a full memtable cannot fit. */
-    if (!wait && l->mt.n > 0 && kv_l0_bytes(l) >= KV_LSM_L0_BYTES) {
+    if (!wait && (l->mt.n || l->pending_mt.n) && kv_l0_bytes(l) >= KV_LSM_L0_BYTES) {
         if (l->compact_started) {
             l->compact_req = 1;
             pthread_cond_signal(&l->compact_cv);
@@ -1449,7 +1477,7 @@ int efs_kv_lsm_stats(struct efs_kv *kv, struct efs_kv_lsm_stats *out)
     if (l->magic != KV_LSM_MAGIC)
         return EFS_ERR_INVAL;
     pthread_mutex_lock(&l->mu);
-    out->mt_bytes = l->mt.bytes;
+    out->mt_bytes = kv_memtable_bytes(l);
     out->l0_bytes = kv_l0_bytes(l);
     out->n_l0 = l->n_l0;
     out->n_l1 = l->n_l1;
@@ -1503,7 +1531,7 @@ int efs_kv_lsm_pressure(struct efs_kv *kv, struct efs_kv_lsm_pressure *out)
         return EFS_ERR_INVAL;
     memset(&p, 0, sizeof(p));
     pthread_mutex_lock(&l->mu);
-    p.shape.mt_bytes = l->mt.bytes;
+    p.shape.mt_bytes = kv_memtable_bytes(l);
     p.shape.l0_bytes = kv_l0_bytes(l);
     p.shape.n_l0 = l->n_l0;
     p.shape.n_l1 = l->n_l1;
@@ -1717,7 +1745,9 @@ int efs_kv_lsm_snapshot_pin(struct efs_kv *kv, uint64_t mt_limit,
     uint64_t slots=(uint64_t)l->n_l0+l->n_l1;
     uint64_t arrays=(slots?slots:1)*(sizeof(*s->pinned)+sizeof(*s->input.l0));
     if(slots>UINT32_MAX || sizeof(*s)>mt_limit || arrays>mt_limit-sizeof(*s) ||
-       l->mt.bytes>mt_limit-sizeof(*s)-arrays){rc=EFS_ERR_BUSY;goto unlock;}
+       kv_memtable_bytes(l)>mt_limit-sizeof(*s)-arrays){rc=EFS_ERR_BUSY;goto unlock;}
+    rc=kv_mtab_merge(&l->mt,&l->pending_mt);
+    if(rc!=EFS_OK)goto unlock;
     count=l->n_l0+l->n_l1;
     s->pinned=calloc(count ? count : 1,sizeof(*s->pinned));
     s->input.l0=calloc(count ? count : 1,sizeof(*s->input.l0));

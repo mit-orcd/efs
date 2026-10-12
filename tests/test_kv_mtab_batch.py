@@ -80,6 +80,23 @@ int main(void) {
   kv_mtab_clear(&a);kv_mtab_clear(&b);if(!rc)break;
  }
  assert(failures>20);
+
+ /* Owned insertion buffers retain both tables on capacity refusal. */
+ for(long fail=0;fail<3;fail++) {
+  struct kv_mtab pending={0},saved={0};
+  for(unsigned i=0;i<64;i++) {uint8_t k=(uint8_t)(i*2);
+   assert(!kv_mtab_set(&a,KV_OP_PUT,&k,1,(uint8_t *)"old",3));
+   assert(!kv_mtab_set(&b,KV_OP_PUT,&k,1,(uint8_t *)"old",3));}
+  for(unsigned i=0;i<12;i++) {uint8_t k=(uint8_t)i;
+   assert(!kv_mtab_set(&pending,KV_OP_PUT,&k,1,(uint8_t *)"new",3));
+   assert(!kv_mtab_set(&saved,KV_OP_PUT,&k,1,(uint8_t *)"new",3));}
+  allocations=0;refuse=fail;int rc=kv_mtab_merge(&a,&pending);refuse=-1;
+  if(rc){assert(rc==EFS_ERR_NOMEM);equal(&a,&b);equal(&pending,&saved);}
+  else {for(unsigned i=0;i<saved.n;i++) {struct kv_ent *e=saved.e[i];
+   assert(!kv_mtab_set(&b,e->op,e->key,e->klen,e->val,e->vlen));}
+   equal(&a,&b);assert(!pending.n && !pending.bytes && !pending.e && !pending.pfx);}
+  kv_mtab_clear(&a);kv_mtab_clear(&b);kv_mtab_clear(&pending);kv_mtab_clear(&saved);
+ }
  /* A batch at the front must not shift the large suffix once per key. */
  for(unsigned i=0;i<4096;i++) {
   uint8_t k[4]={1,(uint8_t)(i>>8),(uint8_t)i,0};
@@ -94,6 +111,25 @@ int main(void) {
  moved=0;
  for(unsigned i=0;i<16;i++)assert(!kv_mtab_set(&b,KV_OP_PUT,keys[i],2,NULL,0));
  assert(batch<=moved/16);equal(&a,&b);
+ kv_mtab_clear(&a);kv_mtab_clear(&b);
+ /* Broadly distributed insertions, comparing per-entry and buffered merges. */
+ struct kv_mtab delta={0};uint8_t broad[32][4];struct efs_kv_item inserts[32];
+ for(unsigned i=0;i<8192;i++){unsigned k=i*2;uint8_t kb[4]={0,0,(uint8_t)(k>>8),(uint8_t)k};
+  assert(!kv_mtab_set(&a,KV_OP_PUT,kb,4,NULL,0));
+  assert(!kv_mtab_set(&b,KV_OP_PUT,kb,4,NULL,0));}
+ size_t ordinary=0,buffered=0;
+ for(unsigned r=0;r<128;r++) {
+  for(unsigned j=0;j<32;j++){unsigned k=(next()%8192)*2+1;
+   broad[j][0]=broad[j][1]=0;broad[j][2]=(uint8_t)(k>>8);broad[j][3]=(uint8_t)k;
+   inserts[j]=(struct efs_kv_item){EFS_KV_PUT,broad[j],4,NULL,0};}
+  moved=0;assert(!kv_mtab_batch(&a,inserts,32));ordinary+=moved;
+  moved=0;assert(!kv_mtab_batch(&delta,inserts,32));
+  if(delta.n>=1024)assert(!kv_mtab_merge(&b,&delta));
+  buffered+=moved;
+ }
+ moved=0;assert(!kv_mtab_merge(&b,&delta));buffered+=moved;
+ equal(&a,&b);assert(buffered<ordinary/4);
+ printf("distributed insertions: pointer/prefix bytes moved %zu -> %zu PASS\n",ordinary,buffered);
  kv_mtab_clear(&a);kv_mtab_clear(&b);
  printf("memtable batch: 2000 mixed binary-key model batches, %u allocation refusals, bounded suffix movement PASS\n",failures);
 }

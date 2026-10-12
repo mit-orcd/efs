@@ -210,6 +210,7 @@ struct kv_lsm {
     struct efs_kv_lsm_cfg cfg;
     struct kv_wal *wal;
     struct kv_mtab mt;
+    struct kv_mtab pending_mt; /* bounded, newer insertion buffer; l->mu */
     struct seg_slot *l0;
     uint32_t n_l0;
     uint32_t l0_cap;
@@ -261,6 +262,12 @@ struct msrc {
     uint8_t op;
     int done;
 };
+
+static inline uint64_t kv_memtable_bytes(const struct kv_lsm *l)
+{
+    return l->mt.bytes + l->pending_mt.bytes;
+}
+int kv_mtab_merge(struct kv_mtab *to, struct kv_mtab *from);
 
 void kv_seg_path(const struct kv_lsm *l, int level, uint64_t seq, char *out,
                  size_t n);

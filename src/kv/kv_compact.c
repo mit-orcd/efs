@@ -71,6 +71,8 @@ int kv_flush_locked(struct kv_lsm *l)
     int cur = -1, prev = -1;
     int rc = EFS_OK;
 
+    rc=kv_mtab_merge(&l->mt,&l->pending_mt);
+    if(rc!=EFS_OK)return rc;
     if (l->mt.n == 0)
         return EFS_OK;
     if (kv_l0_bytes(l) >= KV_LSM_L0_BYTES)
@@ -847,7 +849,7 @@ int kv_maybe_flush_locked(struct kv_lsm *l)
     uint32_t l0max = l->cfg.l0_max ? l->cfg.l0_max : KV_LSM_L0_DEFAULT;
     int rc;
 
-    if (l->mt.bytes < mmax)
+    if (kv_memtable_bytes(l) < mmax)
         return EFS_OK;
     /* The only stall left: L0 is at the engine cap, so the writer waits
      * until the compactor publishes. That is 16x behind (l0_max is 4);
@@ -975,7 +977,7 @@ static void *compactor_main(void *arg)
         /* Writes deferred at the L0 byte cap remain in the memtable. Once
          * the merge frees capacity, flush them even if no new write arrives.
          * Otherwise an idle follower retains the oversized table/WAL forever. */
-        if (rc == EFS_OK && l->mt.bytes >=
+        if (rc == EFS_OK && kv_memtable_bytes(l) >=
                 (l->cfg.memtable_max ? l->cfg.memtable_max : KV_LSM_MEM_DEFAULT))
             rc = kv_maybe_flush_locked(l);
         if (rc != EFS_OK && rc != EFS_ERR_BUSY)
