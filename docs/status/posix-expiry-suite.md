@@ -68,3 +68,37 @@ Inspect retained logs before deleting only the generated fixture directories;
 never remove an existing user store or force-discard pending writes.
 
 [Implementation and full qualification](expiry-implementation-20261012.md).
+
+## NUC entry-point validation — October 12, 2026
+
+**PASS:** committed runner source
+`5b41b8d3` invoked through `bash tests/run_tests.sh posix expiry`, with the
+exact native fault-enabled daemon/client/management binaries from
+`0e975936ce3c4496883fa9ee192aa20c34439853`. No C sources changed between these
+commits; [binary SHA256 identities](expiry-implementation-20261012.md#final-qualification--pass)
+are the fault column of the preceding qualification. The wrapper source and
+companion scripts came from a clean archive of the runner commit.
+
+The clock-fault command above was used with root
+`/data1/efs/expiry-posix-runner-5b41b8d3` repeated twice. Four private 1-GiB-quota
+nodes, two mounts, XFS, TCP/direct I/O, FILES storage, `.efs` disabled, no
+containers/packing; core concurrency four. All expiry lifecycle/fault gates,
+ordinary physical GC, cold empty inventory, drained queues and zero quotas
+passed. Core POSIX **216/216, 0 fail/skip/notrun (24.4s)**; peer
+**67/67, 0 fail (13.0s)**. Orchestrator returned zero. Both mounts and owned
+processes stopped; existing user data preserved.
+
+Runner self-test and shell syntax checks pass. Separate launcher checks verified
+forced configuration despite conflicting inherited environment, nonzero child
+exit propagation, root creation, and rejection of missing/invalid arguments.
+The first `42abd400` launch failed before starting any cluster because its new
+storage parent did not exist; `5b41b8d3` adds parent creation and the full rerun
+passes. Both `--suite expiry` and `--suite=expiry` reach the new suite.
+
+Retained evidence on NUC:
+`/home/efs/expiry-posix-runner-5b41b8d3.log`, SHA256
+`730ac46b3e83ddb0b7764de0de0be5dff62c2afd19f9c532f028f7af8a180974`;
+fixture `/data1/efs/expiry-posix-runner-5b41b8d3/gc-direct-oszl7ahi/`
+contains manifest, actual runtime proof, named expiry verdicts and POSIX TSVs.
+These raw artifacts are outside Git. This validates runner integration, not
+additional large-scale capacity or a broader expiry policy than D33.
