@@ -110,3 +110,7 @@ Latest human decision removes `.efs` from this alpha: clients EFS_COMMANDS=0 and
 ## Human-authorized resume and new freeze
 
 Current frozen source **ecdc8c6034b610a2bf69e7a79664d8a5e990de84**. Explicit disabled-feature harness added and syntax-checked; product source unchanged03bd. Resource split AMD heavy full/native, Intel medium focused I/O, NUC light deep/configuration. Owners notified of direct resume; archive/manifests exporting. New-source live acceptance NOTRUN, AMD native launch preparing and broad quiet gate queued behind successful native completion. Existing failures retained.15-minute heartbeat resumes. [Assignment contract](v030-release-scope-20261012.md#resumed-resource-weighted-split).
+
+## Feature-disabled split: focused owner results
+
+Intel exactecdc focused ordinary I/O/seek/fsync/reopen **70/70 PASS** (10 original cases on7simultaneous clients, jobs16,30s); all7graceful client stops PASS. [Integrated evidence](../../results/measure/20261012-intel-ecdc-focused/README.md). Actual4daemon/7client config and23,318source inputs verified. Private local fixture, reduced scope; daemon cleanup is not an independent graceful acceptance, and no causal `.efs` attribution is established. NUC reports focused deep60/100depth **14/14 PASS**, config/hidden `.efs`/basic I/O/fsyncedpeer/rename/unlink and cleanup PASS; owner evidence commit pending. AMD native controller finished; full seven-client core packing acceptance RUNNING. Focused passes do not replace heavy acceptance.

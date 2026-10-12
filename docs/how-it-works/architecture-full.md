@@ -2177,6 +2177,8 @@ Latest alpha scope: `.efs` commands/stats/find and derived query-cache service e
 
 RESUMED by direct human instruction: frozen `ecdc8c6034b610a2bf69e7a79664d8a5e990de84`, `.efs` disabled. AMD heavy full qualification, Intel focused I/O failures, NUC lightweight deep/configuration.15-minute reporting active; new live results pending. [Scope](../status/v030-release-scope-20261012.md).
 
+Frozenecdc split progress: Intel focused70/70 I/O+client stops PASS (evidence integrated); NUC focused14/14 deep+config/peer/cleanup PASS (evidence pending). AMD heavy seven-client qualification RUNNING. [Ledger](../status/v030-tcp-direct-qualification-20261012.md).
+
 
 ## Appendix 2 — In flight — the current handoff block
 
