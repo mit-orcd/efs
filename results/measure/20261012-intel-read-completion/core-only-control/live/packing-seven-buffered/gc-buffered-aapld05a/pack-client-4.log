@@ -1,0 +1,26 @@
+2026-10-12T10:41:53.500Z efs-fuse (no git metadata, branch fix-intel-packing-28b2089b, built 2026-10-12T10:40:39Z on intel1), build=c10a0678-core-only-diagnostic: starting export=default mount=/tmp/efs-intel-pack-core-control-20261012-c-intel1_efs/temp/efs-pack-client-4-u9bvrjl_
+2026-10-12T10:41:53.501Z Discovered 4 cluster nodes from 127.0.0.1:34510
+2026-10-12T10:41:53.501Z   node id=1 127.0.0.1:34510
+2026-10-12T10:41:53.501Z   node id=2 127.0.0.1:34511
+2026-10-12T10:41:53.501Z   node id=3 127.0.0.1:34512
+2026-10-12T10:41:53.501Z   node id=4 127.0.0.1:34513
+2026-10-12T10:41:53.501Z fetching metadata...
+2026-10-12T10:41:53.501Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T10:41:53.501Z export id=1 name=default
+2026-10-12T10:41:53.501Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T10:41:53.506Z efs-fuse: workers max=10 idle=10
+2026-10-12T10:41:53.514Z fuse serving
+2026-10-12T10:41:56.800Z efs: read hole ino=4885 ci=1 holes=1
+2026-10-12T10:41:58.207Z fsync-split ino=4416 flush_ms=377 report_ms=0 rc=0
+2026-10-12T10:42:01.608Z efs: read hole ino=6430 ci=0 holes=2
+2026-10-12T10:42:07.737Z efs: rename_at 2112/a -> 2112/b rc=-12 after 1 tries
+2026-10-12T10:42:51.108Z fsync-split ino=15753 flush_ms=343 report_ms=0 rc=0
+2026-10-12T10:42:51.144Z fsync-split ino=6233 flush_ms=379 report_ms=0 rc=0
+2026-10-12T10:43:11.560Z fsync-split ino=5116 flush_ms=602 report_ms=0 rc=0
+2026-10-12T10:43:11.668Z efs: read hole ino=7315 ci=0 holes=3
+2026-10-12T10:43:11.733Z fsync-split ino=18142 flush_ms=101 report_ms=0 rc=0
+2026-10-12T10:43:15.772Z efs: read hole ino=13308 ci=1 holes=12
+2026-10-12T10:43:18.920Z inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=1450687
+2026-10-12T10:43:18.920Z inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=1451645
+2026-10-12T10:43:20.703Z fsync-split ino=4743 flush_ms=172 report_ms=0 rc=0
+2026-10-12T10:43:23.301Z fsync-split ino=8717 flush_ms=489 report_ms=0 rc=0

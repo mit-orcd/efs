@@ -1,0 +1,174 @@
+{
+  "n4.log": {
+    "hist": {
+      "sync_us": {
+        "n": 11379,
+        "avg_us": 2947.58,
+        "max_us": 78842
+      },
+      "inbox_age_us": {
+        "n": 50070,
+        "avg_us": 9601.1,
+        "max_us": 609963
+      },
+      "pump_lock_us": {
+        "n": 30425,
+        "avg_us": 0.34,
+        "max_us": 217
+      },
+      "pump_drain_us": {
+        "n": 30425,
+        "avg_us": 1214.76,
+        "max_us": 606082
+      },
+      "kv_release_us": {
+        "n": 30425,
+        "avg_us": 1007.82,
+        "max_us": 81534
+      },
+      "applied_persist_us": {
+        "n": 9951,
+        "avg_us": 1.08,
+        "max_us": 4055
+      }
+    },
+    "tcp_samples": 96,
+    "tcp_not_one": [],
+    "sender_tail": [
+      "2026-10-12T12:58:56.135Z raft-obs: tx->1 enq=54127 drop=0 sent=37778 fail=0 hi=1 rtt_avg=72us get_avg=0us get_max=0ms",
+      "2026-10-12T12:59:01.135Z raft-obs: tx->1 enq=56943 drop=0 sent=39784 fail=0 hi=1 rtt_avg=73us get_avg=0us get_max=0ms",
+      "2026-10-12T12:59:06.138Z raft-obs: tx->1 enq=57271 drop=0 sent=40065 fail=0 hi=1 rtt_avg=73us get_avg=0us get_max=0ms"
+    ],
+    "admitted_timeout_count": 0,
+    "publication_timeout_count": 0
+  },
+  "n1.log": {
+    "hist": {
+      "sync_us": {
+        "n": 18423,
+        "avg_us": 2865.38,
+        "max_us": 77061
+      },
+      "inbox_age_us": {
+        "n": 81828,
+        "avg_us": 1472.51,
+        "max_us": 248304
+      },
+      "pump_lock_us": {
+        "n": 64123,
+        "avg_us": 46.4,
+        "max_us": 74072
+      },
+      "pump_drain_us": {
+        "n": 64123,
+        "avg_us": 44.58,
+        "max_us": 239528
+      },
+      "kv_release_us": {
+        "n": 64123,
+        "avg_us": 739.76,
+        "max_us": 77511
+      },
+      "applied_persist_us": {
+        "n": 15596,
+        "avg_us": 0.7,
+        "max_us": 2653
+      }
+    },
+    "tcp_samples": 128,
+    "tcp_not_one": [],
+    "sender_tail": [
+      "2026-10-12T12:59:00.830Z raft-obs: tx->2 enq=63649 drop=0 sent=63370 fail=0 hi=8 rtt_avg=56us get_avg=0us get_max=0ms",
+      "2026-10-12T12:59:05.834Z raft-obs: tx->1 enq=67334 drop=0 sent=67066 fail=0 hi=10 rtt_avg=55us get_avg=0us get_max=0ms",
+      "2026-10-12T12:59:05.834Z raft-obs: tx->2 enq=64018 drop=0 sent=63739 fail=0 hi=8 rtt_avg=56us get_avg=0us get_max=0ms"
+    ],
+    "admitted_timeout_count": 16,
+    "publication_timeout_count": 0
+  },
+  "n3.log": {
+    "hist": {
+      "sync_us": {
+        "n": 27693,
+        "avg_us": 2670.46,
+        "max_us": 82473
+      },
+      "inbox_age_us": {
+        "n": 114046,
+        "avg_us": 35572.17,
+        "max_us": 460719
+      },
+      "pump_lock_us": {
+        "n": 8360,
+        "avg_us": 31.18,
+        "max_us": 19232
+      },
+      "pump_drain_us": {
+        "n": 8360,
+        "avg_us": 9572.83,
+        "max_us": 445353
+      },
+      "kv_release_us": {
+        "n": 8360,
+        "avg_us": 1730.22,
+        "max_us": 76990
+      },
+      "applied_persist_us": {
+        "n": 3460,
+        "avg_us": 3.19,
+        "max_us": 4635
+      }
+    },
+    "tcp_samples": 128,
+    "tcp_not_one": [],
+    "sender_tail": [
+      "2026-10-12T12:59:16.418Z raft-obs: tx->0 enq=63781 drop=0 sent=41005 fail=13 hi=1 rtt_avg=59us get_avg=0us get_max=0ms",
+      "2026-10-12T12:59:16.418Z raft-obs: tx->1 enq=52075 drop=0 sent=33606 fail=27 hi=1 rtt_avg=57us get_avg=0us get_max=0ms",
+      "2026-10-12T12:59:16.418Z raft-obs: tx->3 enq=14 drop=0 sent=0 fail=14 hi=1 rtt_avg=0us get_avg=0us get_max=0ms"
+    ],
+    "admitted_timeout_count": 0,
+    "publication_timeout_count": 0
+  },
+  "n2.log": {
+    "hist": {
+      "sync_us": {
+        "n": 29585,
+        "avg_us": 2658.01,
+        "max_us": 76963
+      },
+      "inbox_age_us": {
+        "n": 138842,
+        "avg_us": 10988.43,
+        "max_us": 402363
+      },
+      "pump_lock_us": {
+        "n": 14094,
+        "avg_us": 125.14,
+        "max_us": 76095
+      },
+      "pump_drain_us": {
+        "n": 14094,
+        "avg_us": 4051.56,
+        "max_us": 390315
+      },
+      "kv_release_us": {
+        "n": 14094,
+        "avg_us": 2370.38,
+        "max_us": 81327
+      },
+      "applied_persist_us": {
+        "n": 8054,
+        "avg_us": 1.5,
+        "max_us": 3955
+      }
+    },
+    "tcp_samples": 128,
+    "tcp_not_one": [],
+    "sender_tail": [
+      "2026-10-12T12:59:10.950Z raft-obs: tx->0 enq=67105 drop=0 sent=42755 fail=6 hi=1 rtt_avg=76us get_avg=0us get_max=0ms",
+      "2026-10-12T12:59:10.950Z raft-obs: tx->2 enq=52262 drop=0 sent=51935 fail=99 hi=10 rtt_avg=59us get_avg=0us get_max=0ms",
+      "2026-10-12T12:59:10.950Z raft-obs: tx->3 enq=55018 drop=0 sent=54655 fail=93 hi=9 rtt_avg=63us get_avg=0us get_max=0ms"
+    ],
+    "admitted_timeout_count": 18,
+    "publication_timeout_count": 0
+  }
+}

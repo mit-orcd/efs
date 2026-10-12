@@ -1,0 +1,51 @@
+Evidence directory: /data1/efs/intel-pack-completion-20261012-b/evidence/live/packing-seven-buffered/gc-buffered-i2_2niab
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=4682156476028266002
+client serving PASS
+packing peer mounted PASS
+packing extra client 2 mounted PASS
+packing extra client 3 mounted PASS
+packing extra client 4 mounted PASS
+packing extra client 5 mounted PASS
+packing extra client 6 mounted PASS
+packing concurrent POSIX client 4 exit=1
+packing concurrent POSIX client 2 exit=1
+packing concurrent POSIX client 6 exit=1
+packing concurrent POSIX client 3 exit=1
+packing concurrent POSIX client 0 exit=1
+packing concurrent POSIX client 1 exit=1
+packing concurrent POSIX client 5 exit=1
+Unmounting /tmp/efs-intel-pack-completion-20261012-b-intel1_efs/temp/efs-pack-client-2-t_wq0g7x
+Retiring drained efs-fuse PID 2266820 for /tmp/efs-intel-pack-completion-20261012-b-intel1_efs/temp/efs-pack-client-2-t_wq0g7x
+Unmounted /tmp/efs-intel-pack-completion-20261012-b-intel1_efs/temp/efs-pack-client-2-t_wq0g7x
+Unmounting /tmp/efs-intel-pack-completion-20261012-b-intel1_efs/temp/efs-pack-client-3-nozhm3rt
+Retiring drained efs-fuse PID 2266836 for /tmp/efs-intel-pack-completion-20261012-b-intel1_efs/temp/efs-pack-client-3-nozhm3rt
+Unmounted /tmp/efs-intel-pack-completion-20261012-b-intel1_efs/temp/efs-pack-client-3-nozhm3rt
+Unmounting /tmp/efs-intel-pack-completion-20261012-b-intel1_efs/temp/efs-pack-client-4-yj6snhk1
+Retiring drained efs-fuse PID 2266851 for /tmp/efs-intel-pack-completion-20261012-b-intel1_efs/temp/efs-pack-client-4-yj6snhk1
+Unmounted /tmp/efs-intel-pack-completion-20261012-b-intel1_efs/temp/efs-pack-client-4-yj6snhk1
+efs-fuse: stop control refused or unavailable (1); mount retained
+Traceback (most recent call last):
+  File "/data1/efs/intel-pack-completion-20261012-b/normal/tests/live/gc_reclamation.py", line 658, in <module>
+    run([source/'scripts/client.sh','stop',target]);proc.wait(timeout=15);target.rmdir()
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data1/efs/intel-pack-completion-20261012-b/normal/tests/live/gc_reclamation.py", line 321, in run
+    return subprocess.run([str(x) for x in args], check=True, timeout=kwargs.pop("timeout",60), env=kwargs.pop("env",env), **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.12/subprocess.py", line 550, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.12/subprocess.py", line 1209, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.12/subprocess.py", line 2141, in _communicate
+    self.wait(timeout=self._remaining_time(endtime))
+  File "/usr/lib64/python3.12/subprocess.py", line 1264, in wait
+    return self._wait(timeout=timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.12/subprocess.py", line 2045, in _wait
+    raise TimeoutExpired(self.args, timeout)
+subprocess.TimeoutExpired: Command '['/data1/efs/intel-pack-completion-20261012-b/normal/scripts/client.sh', 'stop', '/tmp/efs-intel-pack-completion-20261012-b-intel1_efs/temp/efs-pack-client-5-cq4ejvpf']' timed out after 59.99997623200761 seconds

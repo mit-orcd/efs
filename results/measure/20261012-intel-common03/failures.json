@@ -1,0 +1,163 @@
+[
+  {
+    "client": "posix-client-0",
+    "failures": [
+      "dir_readdir_listing\tFAIL\ttimeout after 30s",
+      "dir_deep_nesting\tFAIL\ttimeout after 30s",
+      "dir_many_files\tFAIL\ttimeout after 75s",
+      "dir_readdir_while_unlink\tFAIL\ttimeout after 30s",
+      "names_crazy_roundtrip\tFAIL\ttimeout after 30s",
+      "names_near_path_max\tFAIL\ttimeout after 30s",
+      "names_near_path_max_dir\tFAIL\ttimeout after 30s",
+      "names_control_and_high_bytes\tFAIL\ttimeout after 30s",
+      "names_crazy_dirs\tFAIL\ttimeout after 30s",
+      "dir_deep_nesting_beyond_64\tFAIL\ttimeout after 30s",
+      "content_random_roundtrip\tFAIL\ttimeout after 30s",
+      "concurrent_creates_same_dir\tFAIL\ttimeout after 30s",
+      "concurrent_appends\tFAIL\tworker killed by signal 15",
+      "concurrent_appends_two_proc\tFAIL\ttimeout after 30s",
+      "concurrent_create_unlink_two_proc\tFAIL\ttimeout after 30s",
+      "concurrent_write_and_readdir\tFAIL\ttimeout after 30s",
+      "virt_stats_readable\tFAIL\ttimeout after 30s; worker group still alive",
+      "virt_find_query\tFAIL\tworker group still alive after virt_stats_readable"
+    ]
+  },
+  {
+    "client": "posix-client-1",
+    "failures": [
+      "fsync_reopen_visible\tFAIL\tOSError: [Errno 5] Input/output error",
+      "dir_readdir_listing\tFAIL\ttimeout after 30s",
+      "dir_deep_nesting\tFAIL\ttimeout after 30s",
+      "dir_many_files\tFAIL\ttimeout after 75s",
+      "dir_readdir_while_unlink\tFAIL\ttimeout after 30s",
+      "names_crazy_roundtrip\tFAIL\ttimeout after 30s",
+      "names_near_path_max\tFAIL\ttimeout after 30s",
+      "names_near_path_max_dir\tFAIL\ttimeout after 30s",
+      "names_control_and_high_bytes\tFAIL\ttimeout after 30s",
+      "names_crazy_dirs\tFAIL\ttimeout after 30s",
+      "dir_deep_nesting_beyond_64\tFAIL\ttimeout after 30s",
+      "content_random_roundtrip\tFAIL\ttimeout after 30s",
+      "concurrent_creates_same_dir\tFAIL\ttimeout after 30s",
+      "concurrent_appends\tFAIL\tworker killed by signal 15",
+      "concurrent_appends_two_proc\tFAIL\ttimeout after 30s",
+      "concurrent_create_unlink_two_proc\tFAIL\ttimeout after 30s",
+      "concurrent_write_and_readdir\tFAIL\ttimeout after 30s",
+      "virt_stats_readable\tFAIL\ttimeout after 30s; worker group still alive",
+      "virt_find_query\tFAIL\tworker group still alive after virt_stats_readable"
+    ]
+  },
+  {
+    "client": "posix-client-2",
+    "failures": [
+      "dir_readdir_listing\tFAIL\ttimeout after 30s",
+      "dir_deep_nesting\tFAIL\ttimeout after 30s",
+      "dir_many_files\tFAIL\ttimeout after 75s",
+      "dir_readdir_while_unlink\tFAIL\ttimeout after 30s",
+      "names_crazy_roundtrip\tFAIL\ttimeout after 30s",
+      "names_near_path_max\tFAIL\ttimeout after 30s",
+      "names_near_path_max_dir\tFAIL\ttimeout after 30s",
+      "names_control_and_high_bytes\tFAIL\ttimeout after 30s",
+      "names_crazy_dirs\tFAIL\ttimeout after 30s",
+      "dir_deep_nesting_beyond_64\tFAIL\ttimeout after 30s",
+      "content_random_roundtrip\tFAIL\ttimeout after 30s",
+      "concurrent_creates_same_dir\tFAIL\ttimeout after 30s",
+      "concurrent_appends\tFAIL\tworker killed by signal 15",
+      "concurrent_appends_two_proc\tFAIL\ttimeout after 30s",
+      "concurrent_create_unlink_two_proc\tFAIL\ttimeout after 30s",
+      "concurrent_write_and_readdir\tFAIL\ttimeout after 30s",
+      "virt_stats_readable\tFAIL\ttimeout after 30s; worker group still alive",
+      "virt_find_query\tFAIL\tworker group still alive after virt_stats_readable"
+    ]
+  },
+  {
+    "client": "posix-client-3",
+    "failures": [
+      "dir_readdir_listing\tFAIL\ttimeout after 30s",
+      "dir_deep_nesting\tFAIL\ttimeout after 30s",
+      "dir_many_files\tFAIL\ttimeout after 75s",
+      "dir_readdir_while_unlink\tFAIL\ttimeout after 30s",
+      "names_crazy_roundtrip\tFAIL\ttimeout after 30s",
+      "names_near_path_max\tFAIL\ttimeout after 30s",
+      "names_near_path_max_dir\tFAIL\ttimeout after 30s",
+      "names_path_too_long\tFAIL\ttimeout after 30s",
+      "names_control_and_high_bytes\tFAIL\ttimeout after 30s",
+      "names_crazy_dirs\tFAIL\ttimeout after 30s",
+      "dir_deep_nesting_beyond_64\tFAIL\ttimeout after 30s",
+      "content_random_roundtrip\tFAIL\ttimeout after 30s",
+      "concurrent_creates_same_dir\tFAIL\ttimeout after 30s",
+      "concurrent_appends\tFAIL\tworker killed by signal 15",
+      "concurrent_appends_two_proc\tFAIL\ttimeout after 30s",
+      "concurrent_create_unlink_two_proc\tFAIL\ttimeout after 30s",
+      "concurrent_write_and_readdir\tFAIL\ttimeout after 30s",
+      "virt_stats_readable\tFAIL\ttimeout after 30s; worker group still alive",
+      "virt_find_query\tFAIL\tworker group still alive after virt_stats_readable"
+    ]
+  },
+  {
+    "client": "posix-client-4",
+    "failures": [
+      "basic_write_read\tFAIL\tOSError: [Errno 5] Input/output error",
+      "dir_readdir_listing\tFAIL\ttimeout after 30s",
+      "dir_deep_nesting\tFAIL\ttimeout after 30s",
+      "dir_many_files\tFAIL\ttimeout after 75s",
+      "dir_readdir_while_unlink\tFAIL\ttimeout after 30s",
+      "names_crazy_roundtrip\tFAIL\ttimeout after 30s",
+      "names_near_path_max\tFAIL\ttimeout after 30s",
+      "names_near_path_max_dir\tFAIL\ttimeout after 30s",
+      "names_control_and_high_bytes\tFAIL\ttimeout after 30s",
+      "names_crazy_dirs\tFAIL\ttimeout after 30s",
+      "dir_deep_nesting_beyond_64\tFAIL\ttimeout after 30s",
+      "content_random_roundtrip\tFAIL\ttimeout after 30s",
+      "concurrent_creates_same_dir\tFAIL\ttimeout after 30s; worker group still alive",
+      "concurrent_appends\tFAIL\tworker killed by signal 15",
+      "concurrent_appends_two_proc\tFAIL\tworker killed by signal 15",
+      "concurrent_create_unlink_two_proc\tFAIL\tworker killed by signal 15",
+      "concurrent_write_and_readdir\tFAIL\tworker killed by signal 15",
+      "virt_stats_readable\tFAIL\tworker group still alive after concurrent_creates_same_dir",
+      "virt_find_query\tFAIL\tworker group still alive after concurrent_creates_same_dir"
+    ]
+  },
+  {
+    "client": "posix-client-5",
+    "failures": [
+      "dir_readdir_listing\tFAIL\ttimeout after 30s",
+      "dir_deep_nesting\tFAIL\ttimeout after 30s",
+      "dir_many_files\tFAIL\tworker group still alive after dir_readdir_while_unlink",
+      "dir_readdir_while_unlink\tFAIL\ttimeout after 30s; worker group still alive",
+      "perm_dir_readonly_mutate\tFAIL\tworker killed by signal 15",
+      "names_crazy_roundtrip\tFAIL\tworker killed by signal 15",
+      "names_dash_prefix_terminal\tFAIL\tworker killed by signal 15",
+      "names_near_path_max\tFAIL\tworker killed by signal 15",
+      "names_near_path_max_dir\tFAIL\tworker killed by signal 15",
+      "names_path_too_long\tFAIL\tworker killed by signal 15",
+      "names_control_and_high_bytes\tFAIL\tworker killed by signal 15",
+      "names_unicode_nfc_nfd_coexist\tFAIL\tworker killed by signal 15"
+    ]
+  },
+  {
+    "client": "posix-client-6",
+    "failures": [
+      "basic_seek_cur_past_eof_write\tFAIL\tOSError: [Errno 16] Device or resource busy",
+      "dir_readdir_listing\tFAIL\ttimeout after 30s",
+      "dir_deep_nesting\tFAIL\ttimeout after 30s",
+      "dir_many_files\tFAIL\ttimeout after 75s",
+      "dir_readdir_while_unlink\tFAIL\ttimeout after 30s",
+      "names_crazy_roundtrip\tFAIL\ttimeout after 30s",
+      "names_near_path_max\tFAIL\tOSError: [Errno 5] Input/output error: '/tmp/efs-intel-common03-20261012-intel1_efs/temp/efs-pack-client-6-fclt_8qu/posix-intel1-pack-6-ek88a4m2/names_near_path_max/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'",
+      "names_near_path_max_dir\tFAIL\ttimeout after 30s",
+      "names_control_and_high_bytes\tFAIL\ttimeout after 30s",
+      "names_crazy_dirs\tFAIL\ttimeout after 30s",
+      "dir_deep_nesting_beyond_64\tFAIL\ttimeout after 30s",
+      "content_random_roundtrip\tFAIL\ttimeout after 30s",
+      "concurrent_creates_same_dir\tFAIL\ttimeout after 30s",
+      "concurrent_appends\tFAIL\tworker killed by signal 15",
+      "concurrent_appends_two_proc\tFAIL\ttimeout after 30s",
+      "concurrent_create_unlink_two_proc\tFAIL\ttimeout after 30s",
+      "concurrent_write_and_readdir\tFAIL\ttimeout after 30s",
+      "virt_stats_readable\tFAIL\ttimeout after 30s; worker group still alive",
+      "virt_find_query\tFAIL\tworker killed by signal 15",
+      "st_ino_unique_hardlink_same\tFAIL\tworker killed by signal 15",
+      "rename_empty_over_empty_dir\tFAIL\tworker killed by signal 15"
+    ]
+  }
+]

@@ -1,0 +1,64 @@
+2026-10-12T13:19:14.815Z storage-engine=files direct_io=on
+2026-10-12T13:19:14.815Z Data GC admission: experimental
+2026-10-12T13:19:14.816Z Storage quota: explicit 4.00 GiB (safe maximum 485.99 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T13:19:14.823Z Joined cluster with 3 nodes
+2026-10-12T13:19:14.828Z heartbeat: enabled (2000 ms interval)
+2026-10-12T13:19:14.840Z raft-host: up raft_id=2 n=4 boot=9922490861047798 salt=3541180296486686872 g0=hosted g2=hosted
+2026-10-12T13:19:14.840Z efsd (no git metadata, branch qualification-v030-tcp-direct, built 2026-10-12T13:08:55Z on intel1), build=03bd89fb7de56c2c6af44ab3bd26c54caf4b8274: node 3 listening on 127.0.0.1:34512, storage=/data1/efs/intel-common03-deep-20261012/evidence/live/n3 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=4 shared
+2026-10-12T13:19:14.840Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T13:19:15.292Z query-restore: rc=-3 backend=disk
+2026-10-12T13:19:15.322Z query-publish: generation=1 g0=1 g2=0 rebuilt=4096 refolded=0 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=380 root_rc=-3 files=0 dirs=0 logical=0
+2026-10-12T13:19:16.828Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=982 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T13:19:19.842Z kv-obs: mt_bytes=506 l0_bytes=0 l0=0 l1=0
+2026-10-12T13:19:20.441Z raft-host: applied session index=3 kind=1 shard=0 ino=0
+2026-10-12T13:19:20.449Z raft-host: applied session index=4 kind=1 shard=0 ino=0
+2026-10-12T13:19:20.454Z raft-host: applied session index=3 kind=1 shard=0 ino=0
+2026-10-12T13:19:20.460Z raft-host: applied session index=4 kind=1 shard=0 ino=0
+2026-10-12T13:19:20.494Z raft-host: applied session index=16 kind=1 shard=0 ino=0
+2026-10-12T13:19:20.512Z raft-host: applied session index=9 kind=1 shard=0 ino=0
+2026-10-12T13:19:20.516Z raft-host: applied session index=10 kind=1 shard=0 ino=0
+2026-10-12T13:19:20.974Z raft-host: apply-sleep us=20492 group=0 idx=99 applied=93
+2026-10-12T13:19:21.029Z raft-host: apply-sleep us=23446 group=0 idx=113 applied=107
+2026-10-12T13:19:21.029Z query-refresh: rc=-13 cap_mib=256 initial=0 elapsed_ms=101
+2026-10-12T13:19:23.125Z raft-host: apply-sleep us=91606 group=0 idx=505 applied=489
+2026-10-12T13:19:23.135Z raft-host: apply-sleep us=99920 group=2 idx=494 applied=475
+2026-10-12T13:19:23.239Z raft-host: apply-sleep us=102793 group=0 idx=523 applied=505
+2026-10-12T13:19:23.243Z raft-host: apply-sleep us=104707 group=2 idx=519 applied=498
+2026-10-12T13:19:23.327Z raft-host: apply-sleep us=81825 group=0 idx=539 applied=523
+2026-10-12T13:19:23.332Z raft-host: apply-sleep us=86084 group=2 idx=534 applied=519
+2026-10-12T13:19:23.387Z raft-host: apply-sleep us=54542 group=2 idx=541 applied=534
+2026-10-12T13:19:23.408Z raft-host: apply-sleep us=74596 group=0 idx=552 applied=539
+2026-10-12T13:19:24.846Z kv-obs: mt_bytes=245976 l0_bytes=0 l0=0 l1=0
+2026-10-12T13:19:29.268Z query-publish: generation=2 g0=836 g2=832 rebuilt=247 refolded=253 edge_reused=0 bytes=3858492 pin_ms=1 build_ms=3858 root_rc=0 files=0 dirs=252 logical=0
+2026-10-12T13:19:29.854Z kv-obs: mt_bytes=452526 l0_bytes=0 l0=0 l1=0
+2026-10-12T13:19:29.861Z store: put O_DIRECT bounce copy (buf align=3517 len=4096)
+2026-10-12T13:19:29.871Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=4573 errors=0 avg_us=16520 p50_us=16520 max_us=16520 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T13:19:29.917Z raft-host: gc-pass ms=7 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T13:19:30.995Z raft-host: apply-sleep us=27735 group=0 idx=1519 applied=1516
+2026-10-12T13:19:31.040Z raft-host: apply-sleep us=36803 group=2 idx=1530 applied=1524
+2026-10-12T13:19:32.832Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=904 passes=18 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T13:19:33.504Z raft-host: apply-sleep us=245432 group=2 idx=1944 applied=1902
+2026-10-12T13:19:33.531Z query-publish: generation=3 g0=1347 g2=1352 rebuilt=160 refolded=162 edge_reused=0 bytes=3858492 pin_ms=1 build_ms=4163 root_rc=0 files=0 dirs=407 logical=0
+2026-10-12T13:19:33.637Z raft-host: apply-sleep us=182746 group=0 idx=1945 applied=1902
+2026-10-12T13:19:33.833Z raft-host: apply-sleep us=158765 group=2 idx=2026 applied=1988
+2026-10-12T13:19:33.841Z raft-host: apply-sleep us=162434 group=0 idx=1996 applied=1954
+2026-10-12T13:19:34.038Z raft-host: apply-sleep us=187785 group=0 idx=2049 applied=1998
+2026-10-12T13:19:34.053Z raft-host: apply-sleep us=195682 group=2 idx=2075 applied=2027
+2026-10-12T13:19:34.276Z raft-host: apply-sleep us=213325 group=2 idx=2129 applied=2075
+2026-10-12T13:19:34.288Z raft-host: apply-sleep us=222841 group=0 idx=2103 applied=2053
+2026-10-12T13:19:34.512Z raft-host: apply-sleep us=218864 group=2 idx=2177 applied=2132
+2026-10-12T13:19:34.519Z raft-host: apply-sleep us=221826 group=0 idx=2153 applied=2105
+2026-10-12T13:19:34.520Z query-refresh: rc=-13 cap_mib=256 initial=0 elapsed_ms=855
+2026-10-12T13:19:34.784Z raft-host: apply-sleep us=205039 group=2 idx=2244 applied=2184
+2026-10-12T13:19:34.858Z kv-obs: mt_bytes=508742 l0_bytes=0 l0=0 l1=0
+2026-10-12T13:19:34.875Z iostats: get ops=3 bytes=12288 errors=0 avg_us=3318 p50_us=3287 max_us=3689 put ops=6 bytes=27438 errors=0 avg_us=24760 p50_us=16520 max_us=83888 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T13:19:35.002Z raft-host: apply-sleep us=186986 group=0 idx=2261 applied=2217
+2026-10-12T13:19:35.380Z raft-host: apply-sleep us=186598 group=0 idx=2345 applied=2301
+2026-10-12T13:19:35.948Z raft-host: gc-pass ms=5 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T13:19:36.095Z raft-host: apply-sleep us=126208 group=2 idx=2532 applied=2501
+2026-10-12T13:19:36.618Z raft-host: apply-sleep us=105192 group=0 idx=2596 applied=2572
+2026-10-12T13:19:36.632Z raft-host: apply-sleep us=102259 group=2 idx=2621 applied=2608
+2026-10-12T13:19:36.635Z raft-host: apply-sleep us=105709 group=0 idx=2600 applied=2575
+2026-10-12T13:19:36.716Z raft-host: apply-sleep us=72569 group=2 idx=2639 applied=2621
+2026-10-12T13:19:36.721Z raft-host: apply-sleep us=73210 group=0 idx=2617 applied=2601
+2026-10-12T13:19:37.321Z query-publish: generation=4 g0=2621 g2=2641 rebuilt=414 refolded=2 edge_reused=0 bytes=3858492 pin_ms=1 build_ms=799 root_rc=0 files=0 dirs=2 logical=0

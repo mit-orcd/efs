@@ -1,0 +1,26 @@
+{
+  "source": "77fabfbc541564dd4d59919ed769926772035860",
+  "command": [
+    "make",
+    "-j4",
+    "EFS_FAULTS=0",
+    "EFS_GIT_ID=77fabfbc-completion-normal",
+    "EFS_GIT_BRANCH=fix-intel-packing-28b2089b",
+    "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+    "efsd",
+    "efs-fuse",
+    "efs-mgmt",
+    "efs-query",
+    "efs-bench",
+    "libefs.a"
+  ],
+  "binaries": {
+    "efsd": "1e34ee9326b95ae8389f6d64f3c0d6aba581741e1cd8fd5bb0fe3fa31e63ba58",
+    "efs-fuse": "2abef150fd8af597a00024adb48e198f23144309633ecc1ca1b4a53addfddeb5",
+    "efs-mgmt": "5917b0bcd6603b9af47fbba2390a0ef8d782b351cbb6b52d5f57fef580ab9cac",
+    "efs-query": "68cba6966dd52b4e7f68788dc3ce90bfd44a34ecbe3888f2047c3ca153410f13",
+    "efs-bench": "5e7cfb7e1cfee6130684875a7e5fcf1ca11d9aac55d052dd1cbd37fceef53e0e",
+    "libefs.a": "d688425fa50058fd5ca6bfe2773232c2dd6017f28f29d3549a20f05895acbfd8"
+  },
+  "version": "efsd v0.3.0-pre-alpha-candidate (branch fix-intel-packing-28b2089b, built 2026-10-12T10:25:09Z on intel1)\n"
+}

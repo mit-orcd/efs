@@ -1,0 +1,24 @@
+2026-10-12T10:31:00.780Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:16Z on intel1), build=28b2089b-release-normal: starting export=default mount=/tmp/efs-intel-pack-frozen-control-20261012-a-intel1_efs/temp/efs-pack-client-2-hrq8_33y
+2026-10-12T10:31:00.781Z Discovered 4 cluster nodes from 127.0.0.1:34510
+2026-10-12T10:31:00.781Z   node id=1 127.0.0.1:34510
+2026-10-12T10:31:00.781Z   node id=2 127.0.0.1:34511
+2026-10-12T10:31:00.781Z   node id=3 127.0.0.1:34512
+2026-10-12T10:31:00.781Z   node id=4 127.0.0.1:34513
+2026-10-12T10:31:00.781Z fetching metadata...
+2026-10-12T10:31:00.782Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T10:31:00.782Z export id=1 name=default
+2026-10-12T10:31:00.782Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T10:31:00.785Z efs-fuse: workers max=10 idle=10
+2026-10-12T10:31:00.792Z fuse serving
+2026-10-12T10:31:03.966Z efs: read hole ino=7398 ci=1 holes=1
+2026-10-12T10:31:05.753Z fsync-split ino=4703 flush_ms=531 report_ms=0 rc=0
+2026-10-12T10:31:07.900Z efs: read hole ino=5857 ci=0 holes=2
+2026-10-12T10:31:13.931Z efs: rename_at 3999/a -> 3999/b rc=-12 after 1 tries
+2026-10-12T10:31:31.799Z fsync-split ino=13473 flush_ms=179 report_ms=0 rc=0
+2026-10-12T10:31:55.994Z fsync-split ino=13802 flush_ms=445 report_ms=0 rc=0
+2026-10-12T10:31:55.995Z fsync-split ino=13274 flush_ms=479 report_ms=0 rc=0
+2026-10-12T10:32:17.318Z fsync-split ino=83163 flush_ms=643 report_ms=0 rc=0
+2026-10-12T10:32:17.821Z efs: read hole ino=15928 ci=0 holes=3
+2026-10-12T10:32:21.229Z efs: read hole ino=5595 ci=1 holes=12
+2026-10-12T10:32:26.829Z fsync-split ino=14380 flush_ms=363 report_ms=0 rc=0
+2026-10-12T10:32:27.554Z fsync-split ino=6654 flush_ms=564 report_ms=0 rc=0

@@ -1,0 +1,26 @@
+{
+  "command": [
+    "make",
+    "-j4",
+    "EFS_FAULTS=0",
+    "EFS_GIT_ID=28b2089b-completion-WIP",
+    "EFS_GIT_BRANCH=fix-intel-packing-28b2089b",
+    "efsd",
+    "efs-fuse",
+    "efs-mgmt",
+    "efs-query",
+    "efs-bench",
+    "libefs.a",
+    "tests/test_raft"
+  ],
+  "returncode": 0,
+  "binaries": {
+    "efsd": "7219fd0700b63e0a10f2dcd0b178eaacb5a0ee5009644ad325fa20a1d3c57364",
+    "efs-fuse": "6a8e27df16b62db4017795f6d9983c6e7aad955a2bbed74dd7915db0324a329d",
+    "efs-mgmt": "a5d320e64bd56d8bf7a79ed191d9c60d190c6b36820e2d4f90470fb2748810c4",
+    "efs-query": "a6398cc9e4965ac15a16f5618ab88d20311eabe1924719ae7911cdb38209f14b",
+    "efs-bench": "840d6523787db895143e6eb4ec12131e822994e3d6724fa84c09ebf1caec221f",
+    "libefs.a": "648565bddccce0fcf14bca0bcbbc56bbd8850ddc8ac7d7ca55a446f8dceee400"
+  },
+  "version": "efsd (no git metadata, branch fix-intel-packing-28b2089b, built 2026-10-12T10:22:37Z on intel1)\n"
+}

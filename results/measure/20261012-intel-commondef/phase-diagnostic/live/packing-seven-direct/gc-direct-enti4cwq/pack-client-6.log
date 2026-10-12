@@ -1,0 +1,75 @@
+2026-10-12T12:57:28.916Z efs-fuse (no git metadata, branch qualification-v030-tcp-direct, built 2026-10-12T12:52:49Z on intel1), build=def46109909c793e58ae2c453c5de537cdb2c627: starting export=default mount=/tmp/efs-intel-commondef-diag-20261012-intel1_efs/temp/efs-pack-client-6-9xy4nm07
+2026-10-12T12:57:28.917Z intel-tcp-diag pid=2297222 kind=outbound fd=3 port=34510 nodelay=1 get_rc=0 mono_ns=74916525841508
+2026-10-12T12:57:28.917Z Discovered 4 cluster nodes from 127.0.0.1:34510
+2026-10-12T12:57:28.917Z   node id=1 127.0.0.1:34510
+2026-10-12T12:57:28.917Z   node id=2 127.0.0.1:34511
+2026-10-12T12:57:28.917Z   node id=3 127.0.0.1:34512
+2026-10-12T12:57:28.917Z   node id=4 127.0.0.1:34513
+2026-10-12T12:57:28.917Z fetching metadata...
+2026-10-12T12:57:28.917Z intel-tcp-diag pid=2297222 kind=outbound fd=3 port=34510 nodelay=1 get_rc=0 mono_ns=74916526429457
+2026-10-12T12:57:28.917Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T12:57:28.917Z export id=1 name=default
+2026-10-12T12:57:28.917Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T12:57:28.922Z efs-fuse: workers max=10 idle=10
+2026-10-12T12:57:28.930Z fuse serving
+2026-10-12T12:57:29.163Z intel-tcp-diag pid=2297222 kind=outbound fd=7 port=34511 nodelay=1 get_rc=0 mono_ns=74916772551581
+2026-10-12T12:57:30.179Z intel-tcp-diag pid=2297222 kind=outbound fd=8 port=34511 nodelay=1 get_rc=0 mono_ns=74917788751447
+2026-10-12T12:57:30.206Z intel-tcp-diag pid=2297222 kind=outbound fd=9 port=34511 nodelay=1 get_rc=0 mono_ns=74917815180712
+2026-10-12T12:57:30.207Z intel-tcp-diag pid=2297222 kind=outbound fd=10 port=34511 nodelay=1 get_rc=0 mono_ns=74917816250658
+2026-10-12T12:57:30.209Z intel-tcp-diag pid=2297222 kind=outbound fd=11 port=34511 nodelay=1 get_rc=0 mono_ns=74917818206100
+2026-10-12T12:57:30.210Z intel-tcp-diag pid=2297222 kind=outbound fd=12 port=34511 nodelay=1 get_rc=0 mono_ns=74917818852969
+2026-10-12T12:57:30.234Z intel-tcp-diag pid=2297222 kind=outbound fd=13 port=34511 nodelay=1 get_rc=0 mono_ns=74917842841586
+2026-10-12T12:57:30.256Z intel-tcp-diag pid=2297222 kind=outbound fd=14 port=34511 nodelay=1 get_rc=0 mono_ns=74917864994334
+2026-10-12T12:57:30.317Z intel-tcp-diag pid=2297222 kind=outbound fd=15 port=34511 nodelay=1 get_rc=0 mono_ns=74917925971305
+2026-10-12T12:57:30.543Z intel-tcp-diag pid=2297222 kind=outbound fd=16 port=34510 nodelay=1 get_rc=0 mono_ns=74918151940644
+2026-10-12T12:57:30.716Z intel-tcp-diag pid=2297222 kind=outbound fd=17 port=34510 nodelay=1 get_rc=0 mono_ns=74918325616634
+2026-10-12T12:57:30.797Z intel-tcp-diag pid=2297222 kind=outbound fd=18 port=34512 nodelay=1 get_rc=0 mono_ns=74918406619998
+2026-10-12T12:57:30.797Z intel-tcp-diag pid=2297222 kind=outbound fd=19 port=34513 nodelay=1 get_rc=0 mono_ns=74918406717202
+2026-10-12T12:57:30.918Z intel-tcp-diag pid=2297222 kind=outbound fd=20 port=34510 nodelay=1 get_rc=0 mono_ns=74918526817800
+2026-10-12T12:57:31.869Z intel-tcp-diag pid=2297222 kind=outbound fd=21 port=34513 nodelay=1 get_rc=0 mono_ns=74919477901779
+2026-10-12T12:57:32.207Z intel-tcp-diag pid=2297222 kind=outbound fd=22 port=34510 nodelay=1 get_rc=0 mono_ns=74919816701684
+2026-10-12T12:57:32.238Z intel-tcp-diag pid=2297222 kind=outbound fd=23 port=34510 nodelay=1 get_rc=0 mono_ns=74919847596916
+2026-10-12T12:57:32.964Z intel-tcp-diag pid=2297222 kind=outbound fd=24 port=34511 nodelay=1 get_rc=0 mono_ns=74920573593495
+2026-10-12T12:57:32.964Z fsync-split ino=5277 flush_ms=289 report_ms=0 rc=0
+2026-10-12T12:57:33.103Z intel-tcp-diag pid=2297222 kind=outbound fd=25 port=34511 nodelay=1 get_rc=0 mono_ns=74920712651621
+2026-10-12T12:57:33.438Z efs: read hole ino=4876 ci=1 holes=1
+2026-10-12T12:57:33.438Z intel-tcp-diag pid=2297222 kind=outbound fd=26 port=34510 nodelay=1 get_rc=0 mono_ns=74921047357652
+2026-10-12T12:57:33.550Z intel-tcp-diag pid=2297222 kind=outbound fd=27 port=34512 nodelay=1 get_rc=0 mono_ns=74921159644647
+2026-10-12T12:57:33.551Z intel-tcp-diag pid=2297222 kind=outbound fd=28 port=34512 nodelay=1 get_rc=0 mono_ns=74921160153216
+2026-10-12T12:57:33.560Z intel-tcp-diag pid=2297222 kind=outbound fd=29 port=34510 nodelay=1 get_rc=0 mono_ns=74921169059482
+2026-10-12T12:57:35.687Z efs: read hole ino=6919 ci=0 holes=2
+2026-10-12T12:57:40.528Z efs: rename_at 765/a -> 765/b rc=-12 after 1 tries
+2026-10-12T12:57:55.518Z fsync-split ino=4859 flush_ms=112 report_ms=0 rc=0
+2026-10-12T12:58:06.356Z inode-rpc: slow-ok type=45 attempts=3 saw_busy=1 status=0 us=1251177
+2026-10-12T12:58:10.495Z intel-tcp-diag pid=2297222 kind=outbound fd=30 port=34513 nodelay=1 get_rc=0 mono_ns=74958104119279
+2026-10-12T12:58:10.495Z intel-tcp-diag pid=2297222 kind=outbound fd=31 port=34513 nodelay=1 get_rc=0 mono_ns=74958104118639
+2026-10-12T12:58:10.508Z intel-tcp-diag pid=2297222 kind=outbound fd=32 port=34510 nodelay=1 get_rc=0 mono_ns=74958116959673
+2026-10-12T12:58:10.508Z intel-tcp-diag pid=2297222 kind=outbound fd=33 port=34511 nodelay=1 get_rc=0 mono_ns=74958117071152
+2026-10-12T12:58:10.508Z intel-tcp-diag pid=2297222 kind=outbound fd=34 port=34511 nodelay=1 get_rc=0 mono_ns=74958117386829
+2026-10-12T12:58:10.508Z intel-tcp-diag pid=2297222 kind=outbound fd=36 port=34512 nodelay=1 get_rc=0 mono_ns=74958117622850
+2026-10-12T12:58:10.509Z intel-tcp-diag pid=2297222 kind=outbound fd=35 port=34512 nodelay=1 get_rc=0 mono_ns=74958117408421
+2026-10-12T12:58:10.509Z intel-tcp-diag pid=2297222 kind=outbound fd=37 port=34510 nodelay=1 get_rc=0 mono_ns=74958118053259
+2026-10-12T12:58:10.509Z intel-tcp-diag pid=2297222 kind=outbound fd=39 port=34513 nodelay=1 get_rc=0 mono_ns=74958118123480
+2026-10-12T12:58:10.509Z intel-tcp-diag pid=2297222 kind=outbound fd=38 port=34513 nodelay=1 get_rc=0 mono_ns=74958118153203
+2026-10-12T12:58:10.509Z intel-tcp-diag pid=2297222 kind=outbound fd=40 port=34511 nodelay=1 get_rc=0 mono_ns=74958118173405
+2026-10-12T12:58:10.509Z intel-tcp-diag pid=2297222 kind=outbound fd=41 port=34510 nodelay=1 get_rc=0 mono_ns=74958118176929
+2026-10-12T12:58:10.509Z intel-tcp-diag pid=2297222 kind=outbound fd=42 port=34512 nodelay=1 get_rc=0 mono_ns=74958118252424
+2026-10-12T12:58:10.509Z intel-tcp-diag pid=2297222 kind=outbound fd=43 port=34510 nodelay=1 get_rc=0 mono_ns=74958118378836
+2026-10-12T12:58:10.509Z intel-tcp-diag pid=2297222 kind=outbound fd=44 port=34511 nodelay=1 get_rc=0 mono_ns=74958118488781
+2026-10-12T12:58:12.747Z intel-tcp-diag pid=2297222 kind=outbound fd=45 port=34513 nodelay=1 get_rc=0 mono_ns=74960356498056
+2026-10-12T12:58:12.747Z intel-tcp-diag pid=2297222 kind=outbound fd=46 port=34513 nodelay=1 get_rc=0 mono_ns=74960356498063
+2026-10-12T12:58:12.747Z intel-tcp-diag pid=2297222 kind=outbound fd=47 port=34513 nodelay=1 get_rc=0 mono_ns=74960356557938
+2026-10-12T12:58:12.747Z intel-tcp-diag pid=2297222 kind=outbound fd=48 port=34513 nodelay=1 get_rc=0 mono_ns=74960356582869
+2026-10-12T12:58:12.747Z intel-tcp-diag pid=2297222 kind=outbound fd=49 port=34513 nodelay=1 get_rc=0 mono_ns=74960356582759
+2026-10-12T12:58:12.747Z intel-tcp-diag pid=2297222 kind=outbound fd=51 port=34512 nodelay=1 get_rc=0 mono_ns=74960356604191
+2026-10-12T12:58:12.747Z intel-tcp-diag pid=2297222 kind=outbound fd=50 port=34512 nodelay=1 get_rc=0 mono_ns=74960356629252
+2026-10-12T12:58:12.747Z intel-tcp-diag pid=2297222 kind=outbound fd=53 port=34512 nodelay=1 get_rc=0 mono_ns=74960356633818
+2026-10-12T12:58:12.747Z intel-tcp-diag pid=2297222 kind=outbound fd=52 port=34513 nodelay=1 get_rc=0 mono_ns=74960356636451
+2026-10-12T12:58:18.196Z fsync-split ino=9328 flush_ms=278 report_ms=0 rc=0
+2026-10-12T12:58:19.228Z fsync-split ino=4504 flush_ms=386 report_ms=0 rc=0
+2026-10-12T12:58:37.783Z fsync-split ino=5185 flush_ms=437 report_ms=0 rc=0
+2026-10-12T12:58:38.565Z efs: read hole ino=7442 ci=2 holes=3
+2026-10-12T12:58:40.848Z efs: read hole ino=6801 ci=1 holes=12
+2026-10-12T12:58:43.902Z fsync-split ino=8784 flush_ms=523 report_ms=0 rc=0
+2026-10-12T12:58:43.947Z fsync-split ino=5254 flush_ms=491 report_ms=0 rc=0
+2026-10-12T12:58:45.996Z fsync-split ino=4548 flush_ms=105 report_ms=0 rc=0
