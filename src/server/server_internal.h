@@ -131,6 +131,13 @@ int server_put_session_fence(struct efsd_server *, const uint8_t uuid[16],
                              uint32_t reject_below);
 
 
+/* Inactive repair-only certificate domain. Authority must be checked before
+ * taking this guard, and GC must wait for committed seal receipt. These are
+ * local storage barriers, never repair admission or durable data receipts. */
+int server_repair_storage_begin(struct efsd_server *, const uint8_t uuid[16],
+                               uint32_t epoch, struct efs_put_storage_guard *);
+int server_repair_storage_seal(struct efsd_server *, const uint8_t uuid[16],uint32_t floor);
+
 /* Get export by id. */
 struct efs_export *server_get_export(struct efsd_server *s, efs_export_id_t id);
 /* Export lifetime for unlocked I/O. Acquire returns the export (or NULL if

@@ -72,3 +72,5 @@ __pycache__/
 /tests/test_query_policy
 
 /tests/test_repair_job
+
+/tests/test_repair_storage_fence

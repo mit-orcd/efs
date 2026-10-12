@@ -16,19 +16,19 @@ static void put_session_init(void)
 {
     for(unsigned i=0;i<PUT_SESSION_STRIPES;i++)pthread_mutex_init(&put_session_mu[i],NULL);
 }
-static int put_session_path(struct efsd_server *s,const uint8_t uuid[16],
+static int storage_fence_path(struct efsd_server *s,int repair,const uint8_t uuid[16],
                              char path[EFS_MAX_PATH+80],pthread_mutex_t **mu)
 {
     if(!s || !uuid || !s->storage_path_count || !s->storage_paths[0][0])return EFS_ERR_INVAL;
     unsigned nonzero=0,hash=0;char hex[33];
     for(unsigned i=0;i<16;i++){nonzero|=uuid[i];hash=hash*33u+uuid[i];snprintf(hex+2*i,3,"%02x",uuid[i]);}
     if(!nonzero)return EFS_ERR_INVAL;
-    int n=snprintf(path,EFS_MAX_PATH+80,"%s/meta/put-session/%s",s->storage_paths[0],hex);
+    int n=snprintf(path,EFS_MAX_PATH+80,"%s/meta/%s/%s",s->storage_paths[0],repair?"repair-job":"put-session",hex);
     if(n<0 || n>=EFS_MAX_PATH+80)return EFS_ERR_INVAL;
     pthread_once(&put_session_once,put_session_init);
     *mu=&put_session_mu[hash%PUT_SESSION_STRIPES];return EFS_OK;
 }
-static int put_session_read(const char *path,const uint8_t uuid[16],uint32_t *floor)
+static int storage_fence_read(const char *path,int repair,const uint8_t uuid[16],uint32_t *floor)
 {
     *floor=0;
     int fd=open(path,O_RDONLY|O_CLOEXEC|O_NOFOLLOW);
@@ -44,7 +44,7 @@ static int put_session_read(const char *path,const uint8_t uuid[16],uint32_t *fl
     if(close(fd))rc=EFS_ERR_IO;
     if(rc!=EFS_OK)return rc;
     efs_hash(b,24,sum);
-    if(memcmp(b,"EPF1",4) || memcmp(b+4,uuid,16) || memcmp(b+24,sum,32))return EFS_ERR_IO;
+    if(memcmp(b,repair?"ERF1":"EPF1",4) || memcmp(b+4,uuid,16) || memcmp(b+24,sum,32))return EFS_ERR_IO;
     *floor=((uint32_t)b[20]<<24)|((uint32_t)b[21]<<16)|((uint32_t)b[22]<<8)|b[23];
     return *floor?EFS_OK:EFS_ERR_IO;
 }
@@ -66,13 +66,13 @@ static int put_session_sync_parents(const char *path)
     }
     return EFS_OK;
 }
-int server_put_session_begin(struct efsd_server *s,const uint8_t uuid[16],
+static int storage_fence_begin(struct efsd_server *s,int repair,const uint8_t uuid[16],
                              uint32_t epoch,struct efs_put_storage_guard *guard)
 {
     if(!epoch || !guard || guard->locked)return EFS_ERR_INVAL;
     char path[EFS_MAX_PATH+80];pthread_mutex_t *mu;
-    int rc=put_session_path(s,uuid,path,&mu);if(rc!=EFS_OK)return rc;
-    pthread_mutex_lock(mu);uint32_t floor=0;rc=put_session_read(path,uuid,&floor);
+    int rc=storage_fence_path(s,repair,uuid,path,&mu);if(rc!=EFS_OK)return rc;
+    pthread_mutex_lock(mu);uint32_t floor=0;rc=storage_fence_read(path,repair,uuid,&floor);
     if(rc==EFS_OK && epoch<floor)rc=EFS_ERR_STALE;
     if(rc==EFS_OK)guard->locked=mu;else pthread_mutex_unlock(mu);
     return rc;
@@ -81,12 +81,12 @@ void server_put_session_end(struct efs_put_storage_guard *guard)
 {
     if(guard && guard->locked){pthread_mutex_t *mu=guard->locked;guard->locked=NULL;pthread_mutex_unlock(mu);}
 }
-int server_put_session_fence(struct efsd_server *s,const uint8_t uuid[16],uint32_t floor)
+static int storage_fence_seal(struct efsd_server *s,int repair,const uint8_t uuid[16],uint32_t floor)
 {
     if(!floor)return EFS_ERR_INVAL;
     char path[EFS_MAX_PATH+80];pthread_mutex_t *mu;
-    int rc=put_session_path(s,uuid,path,&mu);if(rc!=EFS_OK)return rc;
-    pthread_mutex_lock(mu);uint32_t old=0;rc=put_session_read(path,uuid,&old);
+    int rc=storage_fence_path(s,repair,uuid,path,&mu);if(rc!=EFS_OK)return rc;
+    pthread_mutex_lock(mu);uint32_t old=0;rc=storage_fence_read(path,repair,uuid,&old);
     if(rc==EFS_OK && floor>old){
         char dir[EFS_MAX_PATH+80];strcpy(dir,path);*strrchr(dir,'/')=0;
         char *slash=strrchr(dir,'/');*slash=0;
@@ -94,7 +94,7 @@ int server_put_session_fence(struct efsd_server *s,const uint8_t uuid[16],uint32
         *slash='/';if(rc==EFS_OK && mkdir(dir,0755) && errno!=EEXIST)rc=EFS_ERR_IO;
         /* Refuse symlink directories before creating/replacing a certificate. */
         if(rc==EFS_OK)rc=put_session_sync_dir(dir,0);
-        uint8_t b[PUT_SESSION_CERT_BYTES]={0};memcpy(b,"EPF1",4);memcpy(b+4,uuid,16);
+        uint8_t b[PUT_SESSION_CERT_BYTES]={0};memcpy(b,repair?"ERF1":"EPF1",4);memcpy(b+4,uuid,16);
         b[20]=(uint8_t)(floor>>24);b[21]=(uint8_t)(floor>>16);b[22]=(uint8_t)(floor>>8);b[23]=(uint8_t)floor;
         efs_hash(b,24,b+24);
         char tmp[EFS_MAX_PATH+96];int n=snprintf(tmp,sizeof(tmp),"%s.tmp.XXXXXX",path);
@@ -116,3 +116,16 @@ int server_put_session_fence(struct efsd_server *s,const uint8_t uuid[16],uint32
     if(rc==EFS_OK)rc=put_session_sync_parents(path);
     pthread_mutex_unlock(mu);return rc;
 }
+
+/* Independent certificate domains prevent a client session UUID from sealing
+ * a repair job. No receiver/worker is enabled by these local barriers. */
+int server_put_session_begin(struct efsd_server *s,const uint8_t uuid[16],uint32_t epoch,
+                             struct efs_put_storage_guard *guard)
+{return storage_fence_begin(s,0,uuid,epoch,guard);}
+int server_put_session_fence(struct efsd_server *s,const uint8_t uuid[16],uint32_t floor)
+{return storage_fence_seal(s,0,uuid,floor);}
+int server_repair_storage_begin(struct efsd_server *s,const uint8_t uuid[16],uint32_t epoch,
+                               struct efs_put_storage_guard *guard)
+{return storage_fence_begin(s,1,uuid,epoch,guard);}
+int server_repair_storage_seal(struct efsd_server *s,const uint8_t uuid[16],uint32_t floor)
+{return storage_fence_seal(s,1,uuid,floor);}
