@@ -150,3 +150,23 @@ persistence27 and mixed mutation/cold OFF+ON gates; collect matched packing
 throughput plus exact data/parity allocation. Coordinate larger coherent-cut
 and pending-transaction design with Mac rather than weakening snapshot,
 authority, deadlines, admission or durability to force a pass.
+
+## Follow-up during the documentation hold
+
+The manager assigned a frozen-evidence starvation diagnosis without new
+staging/deployments. The disposition is in
+`orcd-query-starvation-disposition-20261012.md`: query/page capacity saturation
+was not observed in the diagnostic capture; coherent-cut/publication refusal
+and follower proof waits remain candidates, without a proven single cause.
+
+The two83 source qualification pipelines have not reported results. Inspection
+shows both are still in snapshot transfer (unit SSH/tar to006 and staged-build
+archive upload to the login host), **before their native/build commands**.
+A read-only remote log fetch timed out after40s. A separate unmultiplexed login
+was refused with `Permission denied (keyboard-interactive)`; the existing
+multiplex master reports alive locally but that is not proof of remote progress.
+No jobs were killed, no fresh source was staged and no deployment was attempted
+in response. Their result remains **NOT RUN / transfer pending**, not PASS or
+a source regression. The live4fe deployment and committed prior passing gates
+remain the last qualified runtime evidence. Manager has been notified; exact
+pending sessions2189/80869 remain available for recovery or final evidence.
