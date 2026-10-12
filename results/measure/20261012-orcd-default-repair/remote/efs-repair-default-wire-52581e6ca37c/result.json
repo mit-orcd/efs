@@ -1,0 +1,6 @@
+{
+  "status": "PASS",
+  "store_uuid": "d3b8726cc858026e0a185ab5b473a6b8",
+  "scope": "real daemon protocol/default-off/incarnation boundary only; no repair or quorum recovery proof",
+  "original_service": "not used or modified"
+}

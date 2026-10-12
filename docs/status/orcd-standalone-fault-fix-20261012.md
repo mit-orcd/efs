@@ -1,5 +1,7 @@
 # Isolated ORCD standalone fault and repair qualification — October 12
 
+**Follow-up:** [Mandatory default suite qualification](orcd-default-repair-20261012.md) supersedes the default-GAP behavior described here. The results below retain their original experimental scope.
+
 The user's subsequent explicit request to fix the standalone fault suite is
 handled on `fix-orcd-fault-repair-rdma`, separately from release qualification.
 Implementation is frozen at `ed749cab212768137a32ee8d3a2b80fa79744215`.
