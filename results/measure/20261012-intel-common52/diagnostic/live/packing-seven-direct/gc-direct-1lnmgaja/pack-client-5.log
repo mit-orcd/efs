@@ -1,0 +1,30 @@
+2026-10-12T12:39:50.408Z efs-fuse (no git metadata, branch qualification-v030-tcp-direct, built 2026-10-12T12:34:29Z on intel1), build=52bcfd3570b0a59076c225caad9157b0825954d8: starting export=default mount=/tmp/efs-intel-common52-diag-20261012-intel1_efs/temp/efs-pack-client-5-l8izw0rm
+2026-10-12T12:39:50.409Z Discovered 4 cluster nodes from 127.0.0.1:34510
+2026-10-12T12:39:50.409Z   node id=1 127.0.0.1:34510
+2026-10-12T12:39:50.409Z   node id=2 127.0.0.1:34511
+2026-10-12T12:39:50.409Z   node id=3 127.0.0.1:34512
+2026-10-12T12:39:50.409Z   node id=4 127.0.0.1:34513
+2026-10-12T12:39:50.409Z fetching metadata...
+2026-10-12T12:39:50.410Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T12:39:50.410Z export id=1 name=default
+2026-10-12T12:39:50.410Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T12:39:50.413Z efs-fuse: workers max=10 idle=10
+2026-10-12T12:39:50.421Z fuse serving
+2026-10-12T12:39:54.901Z fsync-split ino=6959 flush_ms=830 report_ms=0 rc=0
+2026-10-12T12:39:55.046Z efs: read hole ino=4186 ci=1 holes=1
+2026-10-12T12:39:57.026Z efs: read hole ino=4525 ci=0 holes=2
+2026-10-12T12:40:02.009Z efs: rename_at 23/a -> 23/b rc=-12 after 1 tries
+2026-10-12T12:40:17.827Z fsync-split ino=5907 flush_ms=204 report_ms=0 rc=0
+2026-10-12T12:40:27.765Z inode-rpc: slow-ok type=45 attempts=3 saw_busy=1 status=0 us=1034454
+2026-10-12T12:40:34.919Z inode-rpc: slow-ok type=67 attempts=5 saw_busy=1 status=0 us=1842440
+2026-10-12T12:40:41.806Z fsync-split ino=12044 flush_ms=658 report_ms=0 rc=0
+2026-10-12T12:40:41.828Z fsync-split ino=8044 flush_ms=680 report_ms=0 rc=0
+2026-10-12T12:41:02.237Z fsync-split ino=16205 flush_ms=497 report_ms=0 rc=0
+2026-10-12T12:41:02.976Z fsync-split ino=7733 flush_ms=258 report_ms=0 rc=0
+2026-10-12T12:41:03.652Z efs: read hole ino=15886 ci=2 holes=3
+2026-10-12T12:41:03.926Z fsync-split ino=7733 flush_ms=238 report_ms=0 rc=0
+2026-10-12T12:41:07.374Z efs: read hole ino=6193 ci=1 holes=12
+2026-10-12T12:41:11.194Z fsync-split ino=5710 flush_ms=761 report_ms=0 rc=0
+2026-10-12T12:41:11.625Z fsync-split ino=89774 flush_ms=377 report_ms=0 rc=0
+2026-10-12T12:41:21.262Z efs: read hole ino=11236 ci=0 holes=13
+2026-10-12T12:41:24.074Z fsync-split ino=20311 flush_ms=552 report_ms=0 rc=0

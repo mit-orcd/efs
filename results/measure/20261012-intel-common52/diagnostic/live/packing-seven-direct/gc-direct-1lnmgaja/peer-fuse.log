@@ -1,0 +1,28 @@
+2026-10-12T12:39:45.983Z efs-fuse (no git metadata, branch qualification-v030-tcp-direct, built 2026-10-12T12:34:29Z on intel1), build=52bcfd3570b0a59076c225caad9157b0825954d8: starting export=default mount=/tmp/efs-intel-common52-diag-20261012-intel1_efs/peer
+2026-10-12T12:39:45.984Z Discovered 4 cluster nodes from 127.0.0.1:34510
+2026-10-12T12:39:45.984Z   node id=1 127.0.0.1:34510
+2026-10-12T12:39:45.984Z   node id=2 127.0.0.1:34511
+2026-10-12T12:39:45.984Z   node id=3 127.0.0.1:34512
+2026-10-12T12:39:45.984Z   node id=4 127.0.0.1:34513
+2026-10-12T12:39:45.984Z fetching metadata...
+2026-10-12T12:39:45.985Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T12:39:45.985Z export id=1 name=default
+2026-10-12T12:39:45.985Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T12:39:45.988Z efs-fuse: workers max=10 idle=10
+2026-10-12T12:39:45.997Z fuse serving
+2026-10-12T12:39:52.298Z fsync-split ino=5823 flush_ms=326 report_ms=0 rc=0
+2026-10-12T12:39:52.879Z efs: read hole ino=4170 ci=1 holes=1
+2026-10-12T12:39:57.070Z efs: read hole ino=7837 ci=0 holes=2
+2026-10-12T12:40:02.397Z efs: rename_at 1319/a -> 1319/b rc=-12 after 1 tries
+2026-10-12T12:40:17.725Z fsync-split ino=6755 flush_ms=190 report_ms=0 rc=0
+2026-10-12T12:40:27.643Z inode-rpc: slow-ok type=45 attempts=1 saw_busy=0 status=0 us=1028805
+2026-10-12T12:40:40.718Z fsync-split ino=4188 flush_ms=342 report_ms=0 rc=0
+2026-10-12T12:40:40.763Z fsync-split ino=5468 flush_ms=381 report_ms=0 rc=0
+2026-10-12T12:41:02.791Z fsync-split ino=4485 flush_ms=431 report_ms=0 rc=0
+2026-10-12T12:41:02.951Z fsync-split ino=21917 flush_ms=1026 report_ms=0 rc=0
+2026-10-12T12:41:03.719Z fsync-split ino=4485 flush_ms=295 report_ms=0 rc=0
+2026-10-12T12:41:03.924Z efs: read hole ino=4350 ci=3 holes=3
+2026-10-12T12:41:07.066Z efs: read hole ino=7745 ci=1 holes=12
+2026-10-12T12:41:09.995Z fsync-split ino=15582 flush_ms=371 report_ms=0 rc=0
+2026-10-12T12:41:10.346Z fsync-split ino=20094 flush_ms=656 report_ms=0 rc=0
+2026-10-12T12:41:21.347Z efs: read hole ino=17300 ci=0 holes=13

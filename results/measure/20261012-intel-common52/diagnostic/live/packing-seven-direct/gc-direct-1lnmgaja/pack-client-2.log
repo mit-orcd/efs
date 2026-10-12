@@ -1,0 +1,27 @@
+2026-10-12T12:39:49.647Z efs-fuse (no git metadata, branch qualification-v030-tcp-direct, built 2026-10-12T12:34:29Z on intel1), build=52bcfd3570b0a59076c225caad9157b0825954d8: starting export=default mount=/tmp/efs-intel-common52-diag-20261012-intel1_efs/temp/efs-pack-client-2-ng15u20a
+2026-10-12T12:39:49.649Z Discovered 4 cluster nodes from 127.0.0.1:34510
+2026-10-12T12:39:49.649Z   node id=1 127.0.0.1:34510
+2026-10-12T12:39:49.649Z   node id=2 127.0.0.1:34511
+2026-10-12T12:39:49.649Z   node id=3 127.0.0.1:34512
+2026-10-12T12:39:49.649Z   node id=4 127.0.0.1:34513
+2026-10-12T12:39:49.649Z fetching metadata...
+2026-10-12T12:39:49.649Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T12:39:49.649Z export id=1 name=default
+2026-10-12T12:39:49.649Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T12:39:49.653Z efs-fuse: workers max=10 idle=10
+2026-10-12T12:39:49.661Z fuse serving
+2026-10-12T12:39:53.173Z fsync-split ino=6897 flush_ms=460 report_ms=0 rc=0
+2026-10-12T12:39:55.157Z efs: read hole ino=5044 ci=1 holes=1
+2026-10-12T12:39:57.269Z efs: read hole ino=5019 ci=0 holes=2
+2026-10-12T12:40:01.954Z efs: rename_at 321/a -> 321/b rc=-12 after 1 tries
+2026-10-12T12:40:17.437Z fsync-split ino=5221 flush_ms=115 report_ms=0 rc=0
+2026-10-12T12:40:40.015Z fsync-split ino=11062 flush_ms=462 report_ms=0 rc=0
+2026-10-12T12:40:40.016Z fsync-split ino=4622 flush_ms=467 report_ms=0 rc=0
+2026-10-12T12:41:00.435Z efs: read hole ino=10544 ci=0 holes=3
+2026-10-12T12:41:01.492Z fsync-split ino=5051 flush_ms=238 report_ms=0 rc=0
+2026-10-12T12:41:01.593Z fsync-split ino=7023 flush_ms=927 report_ms=0 rc=0
+2026-10-12T12:41:01.864Z fsync-split ino=5051 flush_ms=120 report_ms=0 rc=0
+2026-10-12T12:41:06.042Z efs: read hole ino=6219 ci=1 holes=12
+2026-10-12T12:41:07.997Z fsync-split ino=7312 flush_ms=271 report_ms=0 rc=0
+2026-10-12T12:41:09.351Z fsync-split ino=12372 flush_ms=684 report_ms=0 rc=0
+2026-10-12T12:41:12.519Z fsync-split ino=13422 flush_ms=215 report_ms=0 rc=0
