@@ -1,0 +1,3 @@
+# AMD ecdc disabled-query full workload
+
+Exactecdc8c6034b610a2bf69e7a79664d8a5e990de84. Files/TCP/direct, seven clients/jobs16,4G,core216cases each, query disabled using explicit harness flag. FAIL exit1,281.113s. Clients1–6 214PASS/2FAIL;client0 213PASS/3FAIL; noSKIP/NOTRUN. All deep_nesting and names_crazy_dirs timeout30s;client0 beyond64 timeout30s. Peer completed and acknowledged packed/ordinary cold hashes PASS. Physical packed-empty wait timed out180s before final packing JSON/queue oracle. Timed-out test namespaces can retain live payloads; global empty-store assertion failure alone does not prove GC defect. Preserve retained logs; namespace/object attribution pending.
