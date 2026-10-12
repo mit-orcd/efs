@@ -1475,6 +1475,10 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**Current scope (user decision): repair and recovery for unplanned events are deferred; focus on normal operations, clean shutdown and orderly restart.** Existing durability safeguards and fault-test evidence remain in place. The historical standalone two-repair-GAP/TCP-only item is closed on the isolated fix branch; automatic and packed-segment failure repair remain deferred. [Scope and qualification](../status/orcd-default-repair-20261012.md#current-work-scope--user-decision).
+
+[ORCD mandatory standalone repair qualification](../status/orcd-default-repair-20261012.md) supersedes the earlier default repair GAP for ordinary missing-base roles; release activation and broader W74 remain separate.
+
 [Isolated ORCD standalone fault/repair fixes](../status/orcd-standalone-fault-fix-20261012.md) track the subsequent explicit user request, separate from release qualification.
 
 ### v0.3.0-pre-alpha release integration

@@ -6,6 +6,27 @@ The implementation is frozen at `52581e6ca37c7806b6ec472b062870a4a7f5f282` (on t
 in `ed749cab`). It supersedes the earlier report's default integration GAP;
 that report remains historical evidence for the explicitly selected fixture.
 
+## Current work scope — user decision
+
+The user has deferred repair and recovery work for unplanned events, including
+power loss, abrupt crashes, interrupted repair and failover/leader takeover.
+The current focus is normal operations, clean shutdown and orderly restart.
+Automatic background repair and packed-segment failure repair are deferred under
+this decision. Existing durability safeguards, implemented repair mechanisms,
+fault tests and their evidence remain in place; this scope change does not
+establish new failure-recovery guarantees or disable existing checks.
+
+The historical item **“Standalone fault suite: two repair gaps; this harness
+forces TCP”** is complete within this isolated fix branch: the simulator and
+ordinary-base integration repair cases execute and pass, and the harness
+supports verified native RDMA as well as TCP. All three qualified integration
+configurations pass without `--repair-experiment`. No additional repair
+implementation or failure-recovery qualification is required for that item
+under the current scope. Broader W74 remains deferred, rather than completed.
+These commits have not been promoted to `release-v0.3.0-pre-alpha` or deployed
+to the live ORCD services. Any later promotion requires qualification of that
+merged source and is separate from closing this isolated test item.
+
 ## Behavior
 
 Every standalone integration run now executes real repair, without
