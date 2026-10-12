@@ -192,6 +192,7 @@ struct host_outbox {
      * heartbeat. Depth is npri + nent, capped at HOST_OUTBOX_MAX. */
     int npri;
     int nent;
+    int preserve_read; /* containers: keep read contexts and replication ACKs distinct */
     uint64_t queued_bytes, queued_bytes_hi;
     struct host_outbox_item pri[HOST_OUTBOX_MAX];
     struct host_outbox_item ent[HOST_OUTBOX_MAX];
@@ -1049,6 +1050,16 @@ static int outbox_pri_replace(struct host_outbox *tx,
             continue;
         if (!pred(tx->pri[i].buf, tx->pri[i].len))
             continue;
+        /* An early probe does not retire an entry batch. Nor may a delayed
+         * queued reply erase a newer read round or a different proven prefix.
+         * Keep exact class/status, term/boot/read context and ACK prefix for
+         * containers; otherwise the original bounded enqueue owns the frame.
+         * Votes still evict heartbeats at capacity via the existing path. */
+        if(tx->preserve_read && tx->pri[i].buf[0]==buf[0] &&
+           (buf[0]==EFS_RAFT_MSG_AE_REQ || buf[0]==EFS_RAFT_MSG_AE_REP) &&
+           (memcmp(tx->pri[i].buf+2,buf+2,2) ||
+            memcmp(tx->pri[i].buf+12,buf+12,24) ||
+            memcmp(tx->pri[i].buf+68,buf+68,8)))continue;
         if (len > HOST_OUTBOX_BYTES - (tx->queued_bytes-tx->pri[i].len))
             return 0;
         tx->queued_bytes -= tx->pri[i].len;
@@ -9922,6 +9933,7 @@ int server_raft_host_start(struct efsd_server *s)
         for (i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
             h->tx[i].h = h;
             h->tx[i].peer = i;
+            h->tx[i].preserve_read = s->storage_engine;
             h->tx[i].flow.sequence=(unsigned)i+1;
             pthread_cond_init(&h->tx[i].cv, &attr);
         }
