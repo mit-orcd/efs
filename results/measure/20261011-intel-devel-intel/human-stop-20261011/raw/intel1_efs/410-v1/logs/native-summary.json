@@ -1,0 +1,13 @@
+[
+  {
+    "name": "normal-build",
+    "exit": 0,
+    "seconds": 11.14
+  },
+  {
+    "name": "normal-make-test",
+    "exit": 2,
+    "seconds": null,
+    "recovered_kernel_wait_status": true
+  }
+]

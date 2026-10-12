@@ -17,7 +17,7 @@ Release blockers:
 
 [Superseded release-index narrative](../archive/v030-index-checkpoints-20261011.md) preserves the older source-specific checkpoints removed from this running summary.
 
-Owner stop records: [Mac](mac-common-candidate-c2bfb9e9.md#manager-requested-stop-checkpoint), [NUC](nuc-common-c2-qualification-20261012.md#human-stop-checkpoint), [ORCD](orcd-stop-checkpoint-20261011.md). Intel's committed c2 evidence and failures remain in its [acceptance ledger](intel-deployment-acceptance-20261011.md); a new final410 checkpoint at devel-intel commit aaaeaa38 appeared after the merge audit and is not integrated here: both normal Make suites PASS, fault/sanitizer/mounted NOTRUN. See the consistency review's branch-only evidence note; do not infer current runtime from old prose.
+Owner stop records: [Mac](mac-common-candidate-c2bfb9e9.md#manager-requested-stop-checkpoint), [NUC](nuc-common-c2-qualification-20261012.md#human-stop-checkpoint), [ORCD](orcd-stop-checkpoint-20261011.md). [Intel final stop checkpoint](intel-stop-checkpoint-20261011.md) is now integrated: both410/v2 normal Make suites PASS, partial standalone4/88 and6/88 PASS; fault/sanitizer/mounted NOTRUN. Its [acceptance ledger](intel-deployment-acceptance-20261011.md) preserves earlier c2 failures. No cluster execution is resumed.
 
 [Architecture](../how-it-works/architecture.md) · [agent handoff](in-flight.md) · [decisions](decisions.md) · [work-item details](../backlog/work-items.md) · [operations](../operations/operations.md) · [archive](../archive/README.md).
 

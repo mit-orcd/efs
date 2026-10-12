@@ -1,5 +1,7 @@
 # Intel merged-source qualification plan — 2026-10-12
 
+**Current disposition: HUMAN STOP; both hosts idle.** See the [final checkpoint](intel-stop-checkpoint-20261011.md). All progress statements below are historical; no further launches or deployment are queued.
+
 This is a plan, not merged acceptance or deployment authorization. The [frozen Intel handoff](intel-manager-handoff-20261012.md) identifies `0ae7e480` and its still-running private qualification. Any completed results from that checkpoint remain **old-source evidence** after integration. The manager owns the approved merged SHA, binary identities and Intel cluster window; AMD alone edits and qualifies the release worktree. Intel will not queue a rollout while reconciliation is pending.
 
 ## Admission and evidence rules

@@ -1,0 +1,1 @@
+append admission: slow publication preserves 32-write/one-second batching; failed drain must retry PASS
