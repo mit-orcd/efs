@@ -500,6 +500,13 @@ static void test_read_quorum_before_apply(void)
         CHECK(efs_raft_read_control(n.r[leader],&old)==2,"early read ACK noted with apply parked");}
     CHECK(efs_raft_read_quorum(n.r[leader]) && !efs_raft_read_ready(n.r[leader]),
           "early quorum never bypasses required apply");
+    uint64_t retained_round=efs_raft_read_round(n.r[leader]),retained_index=0,got_round=0;
+    CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"new round supersedes quorum with own apply parked");
+    CHECK(efs_raft_read_proven(n.r[leader],&got_round,&retained_index) &&
+          got_round==retained_round && retained_index==index &&
+          efs_raft_applied(n.r[leader])<retained_index,
+          "retained quorum still cannot grant unapplied KV authority");
+    CHECK(!efs_raft_read_quorum(n.r[leader]),"retained proof is not current raw quorum");
     for(int i=0;i<3;i++)n.drop[i]=0;
     elect(&n,4);
     CHECK(efs_raft_read_quorum(n.r[leader]),"fresh quorum proof independent of apply");
