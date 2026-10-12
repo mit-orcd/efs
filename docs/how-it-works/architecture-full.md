@@ -1956,7 +1956,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | meta-scale | **W66** · metadata leadership distribution and topology-independent routing | scalability | open — Oct 10 AMD unhosted namespace-coordinator read routing repaired and direct/buffered 128-race cold gates pass ([checkpoint](../status/amd-non-rdma-20261010.md#w66--unresolved-namespace-coordinator-routing)); four-voter host/engine, persistence/failover and staged leadership distribution pass; prolonged preferred-peer loss has no read errors/term churn; default two-group topology unchanged; D36 commit authority/recovery choice, routing/migration and scale remain | [evidence, phases and gates](../status/metadata-scaling.md) |
 | tiny-raft | **W93** · broader durable Raft group commit | performance | closed Oct 10 — AMD + repeated NUC batching, read-tail, atomic recovery, fault and cold gates pass; tuning opt-in | [acceptance](../status/w93-atomic-apply-20261010.md) |
 | tiny-create | **W94** · atomic CREATE plus open lease | performance / lifecycle | **Closed Oct 11: CREATE/adoption scope approved by user.** Measured lease/throughput savings, actual allocation/competing-OPEN barriers, both-mode full native/live/fault/cold and sustained admission acceptance pass. Broader production flush/PUT-ticket integration remains W72/W86/W88; no D25 activation | [closure](../status/amd-feedback-integration-20261011.md#w94--createadoption-closed-by-user-scoped-decision) · [work item](#w94) |
-| scratch-expiry | **W90** · scratch-file expiry metadata and safe lifecycle | feature | implementation in progress on `devel-expiry`; foundation passes NUC core 216/216, peer 67/67 and GC; corrected normal matrix passes all lifecycle/GC, core 216/216 and peer 67/67; final FileID inspection and fault-build rerun pending | [work item](#w90) · [design](../status/scratch-expiry-interface.md) · [implementation](../status/expiry-implementation-20261012.md) |
+| scratch-expiry | **W90** · scratch-file expiry metadata and safe lifecycle | feature | closed for D33 initial scope; `0e975936` normal and clock-fault expiry/GC gates PASS on NUC TCP/direct, `.efs` disabled, no containers/packing; each core 216/216 and peer 67/67 | [work item](#w90) · [design](../status/scratch-expiry-interface.md) · [implementation](../status/expiry-implementation-20261012.md) |
 | virtual-commands | **W91** · directory-local virtual `.efs/` command interface | usability feature | design accepted D34; `.efs/` commands and bounded query paths; implementation/compatibility gates remain | [work item](#w91) · [design](../status/scratch-expiry-interface.md) · [implementation](../status/expiry-implementation-20261012.md) |
 | tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | partial — independent indexed packing, publication/GC fault and 24-sample AMD churn gates pass; retained raw-field/index-cost review completed ([review](../status/amd-sustained-20261011.md#w95-retained-amd-experiment-review-completed)); P4.1 production-format and migration decision remain | [work item](#w95) |
 | tiny-kv | **W96** · bounded KV WAL preallocation | performance experiment | Closed Oct11: isolated SATA/NVMe repeated matrix, exact replay/reset/reservation, full native/POSIX/peer/fault/cold and WAL sanitizer gates pass; conditional benefit and SATA tails retained | [closure](../status/devel-nuc-closure-20261010.md) |
@@ -6590,9 +6590,9 @@ large-tree/load/checksum and remaining fault/gateway gates stay open.
 
 ### W90 · Scratch-file expiry metadata and safe lifecycle
 
-**Policy accepted Oct 8 (D33):** opt-in fixed expiry, no universal TTL, owner renewal within operator limits, singly linked regular files and safe conditional namespace deletion. This supersedes the initial open-policy discussion below; implementation remains open. [Contract](../status/accepted-namespace-scratch-20261008.md#d33--w90-opt-in-fixed-scratch-expiry).
+**Policy accepted Oct 8 (D33):** opt-in fixed expiry, no universal TTL, owner renewal within operator limits, singly linked regular files and safe conditional namespace deletion. This supersedes the initial open-policy discussion below; initial implementation closed Oct 12 after both NUC matrices passed. [Contract](../status/accepted-namespace-scratch-20261008.md#d33--w90-opt-in-fixed-scratch-expiry).
 
-**Class/state:** feature; accepted D33 policy, implementation open. Recorded Oct 8, 2026 at the user's request.
+**Class/state:** feature; closed for accepted D33 initial scope, Oct 12, 2026. Recorded Oct 8, 2026 at the user's request.
 No universal default retention period is selected. The proposal below is historical; the accepted D33 contract governs.
 [Design and open decisions](../status/scratch-expiry-interface.md#proposed-expiry-metadata-and-policy).
 
@@ -6612,7 +6612,8 @@ remain outside initial scope. Audit namespace/open-reference/GC integration,
 including W72/W86 and the [GC checkpoint](../status/gc-implementation-20261007.md).
 Age alone never authorizes deletion of unpublished fragments. Test on NUC with
 TCP, direct I/O, FILES storage, `.efs` disabled, no containers and no packing.
-Implementation and acceptance gates remain open until recorded evidence passes.
+Normal and clock-fault matrices at `0e975936` PASS: expiry/recovery/physical GC,
+216/216 core and 67/67 peer tests in each. [Evidence and reproduction](../status/expiry-implementation-20261012.md#final-qualification--pass).
 
 **Gate:** focused renewal/deletion, path-reuse, rename, hard-link, open-file and
 concurrent-publication tests; clock jumps, leader change, restart, retries and

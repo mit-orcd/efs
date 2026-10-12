@@ -7,7 +7,9 @@ benchmark fixture/evidence path names remain unchanged.
 
 ## Current verdict
 
-**Implementation in progress; full expiry acceptance not yet passed.** W90 now
+**PASS — W90 closed for the accepted D33 initial scope.** Final committed source
+`0e975936ce3c4496883fa9ee192aa20c34439853` passed both normal and fault matrices
+on NUC. Historical runs below describe intermediate failures, not the final verdict. W90 now
 has operator policy controls, guarded inherited CREATE deadlines, cross-group
 owner renewal and conditional deletion, rename-safe bindings, hard-link
 exclusion, and ordinary REAP cleanup of deadline metadata. `EFS_EXPIRY` defaults
@@ -51,26 +53,19 @@ Raw build/test logs are external on NUC:
 The local macOS build cannot build the existing Linux `fopencookie` logger;
 the native NUC build is the supported verification environment.
 
-## Required live configuration and remaining gates
+## Required live configuration and acceptance scope
 
 Use NUC with TCP, direct I/O, FILES storage, `EFS_COMMANDS=0`,
 `EFS_COMMANDS_SERVER=0`, `EFS_PACKED_WRITES=0`; no containers or packing.
 Verify actual daemon/client environments and mapped executable hashes.
 Private test stores belong under `/data1/efs`; leave unrelated services alone.
 
-Integration is implemented; qualification and fault coverage remain in progress.
-Control uses the existing trusted-client UID model, not authenticated transport.
-Existing-file enablement now uses an explicit name/FileID request and an
-absent-record CAS, guarded effective policy/ancestry, current owner/type/link
-checks and the same durable index transaction as renewal. Qualification of
-this additional control is pending.
-
-Remaining acceptance: live inheritance/authorization, renewal versus deletion,
-rename/path reuse, hard links, open-FD data access, clock uncertainty/jumps,
-restart/leader changes, retries, concurrent publication and offline members;
-separate namespace removal and physical reclamation; bounded worker resources;
-full POSIX core and peer suites. W90 stays open until these pass with exact
-source/build IDs and reproducible evidence.
+Integration and both full matrices pass. Control uses the existing trusted-client
+UID model, not authenticated transport. Existing-file enablement uses an explicit
+name/FileID request and absent-record CAS, guarded policy/ancestry and current
+owner/type/link checks. Symlink and recursive directory expiry remain deferred
+by D33; W91 presentation is separate and `.efs` was disabled for these gates.
+No universal TTL is selected. Explicit operator policy enables expiry.
 
 ## First committed-source live baseline
 
@@ -239,4 +234,65 @@ an already committed deletion becomes stale, never a deletion of a replacement.
 An explicit n2 coordinator-outage gate complements observed-leader loss.
 Timeout diagnostics preserve the original failed assertion when a node is
 intentionally offline instead of masking it with a gc-status connection error.
-Both full matrices are being rerun after this fix; W90 remains open until then.
+Both full matrices passed after this fix; final qualification is recorded below.
+
+## Final qualification — PASS
+
+Exact source: `0e975936ce3c4496883fa9ee192aa20c34439853`, branch
+`devel-expiry`. Native Linux NUC builds, `-O3 -march=native`, four jobs;
+normal `EFS_FAULTS=0` and fault `EFS_FAULTS=1`. Both unit executables
+`tests/test_expiry` and `tests/test_meta_apply` pass on both builds.
+Four private 1-GiB-quota nodes span two metadata groups on one NUC, XFS,
+TCP/direct I/O, FILES storage, two FUSE mounts, `.efs` disabled, no containers,
+no small-file packing. The live backlog is 144 files; this is correctness and
+bounded-page validation, not a billion-file capacity or hardware-ceiling claim.
+
+| Matrix | Core POSIX | Two-client POSIX | Expiry/recovery/physical GC |
+| --- | --- | --- | --- |
+| Normal | 216/216, 24.2s | 67/67, 12.0s | PASS |
+| Clock fault | 216/216, 24.6s | 67/67, 12.1s | PASS |
+
+Both cover cross-group inheritance, explicit existing-file controls/refusals,
+renewal and stale deletion replay, rename/replacement, open descriptors,
+publication, cold restart, global disable/re-enable catch-up, actual offline
+fragment holder/rejoin, first coordinator outage and observed leader election.
+Final cold inventories are empty, deletion queues drained and quotas zero.
+Clock jumps/drift are unit-tested; the live fault marker simulates unhealthy
+clock state without altering the host clock. Deletion pauses, remains latched
+when the marker disappears, and resumes only after operator reset.
+All owned processes and mounts stopped; existing user data was preserved.
+
+Reproduce on Linux with FUSE installed and permission to mount both paths,
+from the exact source above (use separate build directories for each variant):
+
+```sh
+make -j4 EFS_FAULTS=0 efsd efs-fuse efs-mgmt tests/test_expiry tests/test_meta_apply
+./tests/test_expiry
+./tests/test_meta_apply
+env EFS_PACKED_WRITES=0 EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_TRANSPORT=tcp \
+  python3 tests/live/gc_reclamation.py --expiry --mode direct --transport tcp \
+  --disable-efs-commands --root /data1/efs/expiry-repro-normal \
+  --root /data1/efs/expiry-repro-normal --mount /data1/efs/mnt \
+  --peer-mount /data1/efs/mnt2 --posix --posix-jobs 4 --port 24410
+```
+
+For the fault variant build with `EFS_FAULTS=1`, use a fresh private root and
+add `--expiry-clock-fault`. The harness checks mapped binaries and configuration,
+retains manifests/logs in its generated private directories, and stops its owned
+mounts/processes. Do not reuse paths or ports belonging to a running user cluster.
+
+Raw evidence retained on NUC, outside Git:
+normal `/home/efs/expiry-0e975936-normal-gates.log`, manifest
+`/data1/efs/expiry-0e975936-normal/gc-direct-dqh7wp28/manifest.json`;
+fault `/home/efs/expiry-0e975936-fault-gates.log`, manifest
+`/data1/efs/expiry-0e975936-fault/gc-direct-sjltj44x/manifest.json`.
+Build trees are `/home/efs/devel-expiry-0e975936-normal` and `-fault`.
+
+SHA256 (normal / fault):
+
+| Artifact | Normal | Fault |
+| --- | --- | --- |
+| efsd | `705fc3cfe3ff1c17980f1e7f50626adefae42efe66856ba5c5d743cebf38b8ad` | `5bc83fa3197be727f1ff8e94fc92b57c0365330f84ed5163cbc215ef42ad32d3` |
+| efs-fuse | `dd9b00bf1771aede5efb681826504e0c777e06e6efae31d8a7efd8623aaa31ea` | `5ce485adfb91cc30b76e7532747740e1adbfbc5d393fbcc5da4e635424d1953f` |
+| efs-mgmt | `4fa75a7425b29a1aebdcb9ce6b63b53c7b8842e87f18bece840c3e9e9dcaf6ed` | `07230f17074adfdef7de0bfe65677a8622f646f3adcaef4a83a567ec6817ac2a` |
+| Gate log | `6587b6e2dd0ee6ab127a0055a6fd529353227a25ac66cebba27142af4dabf131` | `e83e0b10c1fa5842ea4bd695001e691cdb9cbf74ad696653efc819c9ea932f2c` |

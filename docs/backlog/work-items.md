@@ -4017,9 +4017,9 @@ large-tree/load/checksum and remaining fault/gateway gates stay open.
 
 ## W90 · Scratch-file expiry metadata and safe lifecycle
 
-**Policy accepted Oct 8 (D33):** opt-in fixed expiry, no universal TTL, owner renewal within operator limits, singly linked regular files and safe conditional namespace deletion. This supersedes the initial open-policy discussion below; implementation remains open. [Contract](../status/accepted-namespace-scratch-20261008.md#d33--w90-opt-in-fixed-scratch-expiry).
+**Policy accepted Oct 8 (D33):** opt-in fixed expiry, no universal TTL, owner renewal within operator limits, singly linked regular files and safe conditional namespace deletion. This supersedes the initial open-policy discussion below; initial implementation closed Oct 12 after both NUC matrices passed. [Contract](../status/accepted-namespace-scratch-20261008.md#d33--w90-opt-in-fixed-scratch-expiry).
 
-**Class/state:** feature; accepted D33 policy, implementation open. Recorded Oct 8, 2026 at the user's request.
+**Class/state:** feature; closed for accepted D33 initial scope, Oct 12, 2026. Recorded Oct 8, 2026 at the user's request.
 No universal default retention period is selected. The proposal below is historical; the accepted D33 contract governs.
 [Design and open decisions](../status/scratch-expiry-interface.md#proposed-expiry-metadata-and-policy).
 
@@ -4039,7 +4039,8 @@ remain outside initial scope. Audit namespace/open-reference/GC integration,
 including W72/W86 and the [GC checkpoint](../status/gc-implementation-20261007.md).
 Age alone never authorizes deletion of unpublished fragments. Test on NUC with
 TCP, direct I/O, FILES storage, `.efs` disabled, no containers and no packing.
-Implementation and acceptance gates remain open until recorded evidence passes.
+Normal and clock-fault matrices at `0e975936` PASS: expiry/recovery/physical GC,
+216/216 core and 67/67 peer tests in each. [Evidence and reproduction](../status/expiry-implementation-20261012.md#final-qualification--pass).
 
 **Gate:** focused renewal/deletion, path-reuse, rename, hard-link, open-file and
 concurrent-publication tests; clock jumps, leader change, restart, retries and
