@@ -210,7 +210,7 @@
   "held_commits_within_frozen_handoffs": [],
   "held_scope": [
     "Any new post-handoff branch commits excluded until submitted/reviewed; frozen tips fixed above.",
-    "Mounted packing direct and buffered fail on d26; cold/GC NOTRUN, restored0, no release acceptance."
+    "Latest b239 quiet original-budget direct packing fails; buffered/cold packing/shared GC NOTRUN. No release promotion or inherited cross-host acceptance."
   ],
   "post_freeze_evidence_checkpoints": {
     "501205b6": "501205b6a7f8b7a48586bb768d172f27e4ec1503",
@@ -233,7 +233,7 @@
     "ce328004": "ce3280047ca53de6ad6988089df96cfd6f64f093"
   },
   "client_adoption_disposition": "Mac46609ad7 exact-source check confirms existing independent combined adoption b9b55cba/718e2dbc/05026d42; no missing feature, keep root bookkeeping, optional alternate pointer representation held.",
-  "diagnostic_source_disposition": "Reviewed cheap final transaction-cut-only retry scheduler; b239 native/live prerequisite qualification underway. Earlier95 full/ordinary pass but instrumented pressure fails; no inherited acceptance.",
+  "diagnostic_source_disposition": "b239 full normal/fault +18focus +sanitizedLSM PASS1517unchanged; ordinarybothmodePASS; quietdirect7/jobs16 FAIL209/4/1/7 allseven, restore0/nojobs, buffered/coldpackingGCNOTRUN. Short retry does not close pressure gate.",
   "next_diagnostic_proposal": "No unchanged pressure repeat; peer-reviewed safe catalog freshness remedy with baseline-failing controlled oracle, plus separate foreground phase discriminator; no fence removal or stale subtree fallback.",
   "latest_frozen_amd_test_source": "b239dc7de104ff8437e49d9333a529790601464c",
   "latest_frozen_amd_input_count": 1517,

@@ -2189,6 +2189,8 @@ A local cut-only retry proposal now has baseline-fail/candidate-pass and unsafe-
 
 Reviewed frozen `b239dc7d` (1,517 verified inputs) handed to NUC/ORCD; AMD full prerequisites and gated quiet packing qualification underway. A separate test-only mixed-cut oracle order correction isolates the safety negative control, without changing executing inputs. [Handoff and qualification scope](../status/v030-query-stage-diagnostic-20261012.md#frozen-qualification-handoff-and-separate-oracle-checkpoint).
 
+Frozen `b239dc7d` full normal/fault, 18 focused sanitizers, fully sanitized LSM and both-mode ordinary overwrite PASS. Its one QUIET direct packing run still FAIL; buffered/cold packing/GC NOTRUN, mounts restored and jobs ended. Shorter cut retry has no demonstrated release-pressure benefit. [Exact quiet evidence and next discriminator](../status/v030-query-stage-diagnostic-20261012.md#reviewed-candidate-quiet-result-b239dc7d-still-blocked). No push, release tag or promotion.
+
 
 ## Appendix 2 — In flight — the current handoff block
 
