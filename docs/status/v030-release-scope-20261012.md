@@ -20,7 +20,9 @@ Small-file packing and `.efs` features are excluded from this alpha. Use `EFS_PA
 | Ordinary durability/reclamation | Root / AMD | Acknowledged ordinary bytes after cold restart and ordinary deletion/reclamation using an unconfounded oracle. |
 | Final merged qualification | Root / AMD | One frozen merged source, normal/fault native, affected sanitizers and in-scope live results. |
 
-## Historical common-source and parallel execution contract
+## Common source and parallel execution contract
+
+Historical assignment record: later root-only and packing-exclusion decisions above supersede the parallel owners and packing requirements in this section.
 
 All three agents start from release baseline
 `8b7391b3f3edcf9fc99440d9aad3c240325acb83` on `release-v0.3.0-pre-alpha`.
