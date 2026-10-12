@@ -18,6 +18,9 @@ code=r'''
 typedef uint64_t efs_ino_t;
 struct efs_meta_row {unsigned mode,layout;uint64_t used_shards,active_lanes;};
 struct efs_raft_host {void *kv;};
+struct host_view {int has,leader;};
+static inline void host_view_get(struct efs_raft_host *h,uint8_t group,struct host_view *v){(void)h;v->has=1;v->leader=group+1;}
+
 static struct efs_meta_row row;
 static unsigned reads[3],inode_reads,unhosted;
 static int read_error,inode_error,coordinator_unhosted,hint_error,pair_error;
@@ -36,11 +39,17 @@ static void host_need_both(uint8_t need[2]){need[0]=0;need[1]=2;}
 static int host_pick_peer(struct efs_raft_host *h,uint8_t *need,int n,int skip){(void)h;assert(need[0]==0&&need[1]==2&&n==2&&skip==-1);return 4;}
 ''' + s[a:b] + r'''
 static void reset(void){reads[0]=reads[2]=inode_reads=unhosted=0;read_error=inode_error=coordinator_unhosted=hint_error=pair_error=0;row=(struct efs_meta_row){.mode=S_IFDIR,.layout=1,.used_shards=15};scheduling_hint=row;}
-int main(void){struct efs_raft_host h={0};int hint;
+int main(void){struct efs_raft_host h={0};int hint;struct host_view view;host_view_get(&h,0,&view);assert(view.leader==1);
  reset();hint=1;assert(!host_read_inode_lanes_covered(&h,1,&hint,1));assert(!reads[0]&&reads[2]==1&&inode_reads==1);
  reset();hint=1;row.used_shards=1;assert(!host_read_inode_lanes_covered(&h,1,&hint,1));assert(!reads[0]&&!reads[2]&&inode_reads==1&&hint==1);
  reset();assert(!host_read_inode_lanes_covered(&h,2,&hint,1));assert(reads[2]==1&&!reads[0]&&inode_reads==1);
  reset();assert(!host_read_inode_lanes(&h,1,&hint));assert(reads[0]==1&&reads[2]==1);
+ /* The paired read leaves group2's leader; successful reply describes group0. */
+ assert(hint==1);
+ reset();hint=3;assert(!host_read_inode_lanes_covered(&h,1,&hint,5));assert(!reads[0]&&!reads[2]&&hint==1);
+ reset();hint=1;assert(!host_read_inode_lanes(&h,2,&hint));assert(hint==3);
+ reset();read_error=EFS_ERR_BUSY;hint=-1;assert(host_read_inode_lanes(&h,1,&hint)==EFS_ERR_BUSY);assert(hint==1);
+
  reset();inode_error=EFS_ERR_BUSY;assert(host_read_inode_lanes_covered(&h,1,&hint,1)==EFS_ERR_BUSY);assert(inode_reads==1&&!reads[0]&&!reads[2]);
  reset();inode_error=EFS_ERR_IO;coordinator_unhosted=1;assert(host_read_inode_lanes_covered(&h,1,&hint,1)==EFS_ERR_NOT_PRIMARY);assert(inode_reads==1&&!reads[0]&&!reads[2]);
  reset();read_error=EFS_ERR_IO;assert(host_read_inode_lanes_covered(&h,1,&hint,1)==EFS_ERR_IO);assert(reads[2]==1);

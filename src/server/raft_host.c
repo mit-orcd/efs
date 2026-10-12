@@ -6012,6 +6012,15 @@ static int host_read_inode_lanes_reuse(struct efs_raft_host *h, efs_ino_t ino,
         }
     }
     *covered = seen;
+    /* Successful inode replies teach the client the inode group's route.
+     * A paired read may leave the other group's hint here, and covered
+     * groups do not perform another read to replace it. Error hints above
+     * still identify the group that refused the request. */
+    if (leader_hint) {
+        struct host_view view;
+        host_view_get(h, ig, &view);
+        *leader_hint = view.has ? view.leader : -1;
+    }
     return EFS_OK;
 }
 static int host_read_inode_lanes_covered(struct efs_raft_host *h, efs_ino_t ino,
