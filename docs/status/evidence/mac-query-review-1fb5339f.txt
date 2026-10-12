@@ -1,0 +1,22 @@
+test_query_root_refusals.py sanitizer=False
+root refusal: cached new root, live TXN, catalog IO, parent/generation, binding missing/TXN/mismatch, expiry and permission retain exact refusal without output PASS
+opt-in root stages: disabled quiet; exact labels, actual leaf durations and root/catalog/inode identity PASS
+exit=0
+test_query_capture_retry.py sanitizer=False
+mixed distributed cut: reject A-only image after B proof, stable complete recapture and ordinary atomic update noninvalidation PASS
+query capture: fresh pin/barriers on each collision, four-cut/deadline bound, import/authority/error refusal and balanced releases PASS
+exit=0
+test_query_page_barriers.py sanitizer=False
+query pages: first-page capture supplies fresh authority once; continuations recheck, failed cuts emit no bytes, fresh permission refusal and close PASS
+exit=0
+test_query_root_refusals.py sanitizer=True
+root refusal: cached new root, live TXN, catalog IO, parent/generation, binding missing/TXN/mismatch, expiry and permission retain exact refusal without output PASS
+opt-in root stages: disabled quiet; exact labels, actual leaf durations and root/catalog/inode identity PASS
+exit=0
+test_query_capture_retry.py sanitizer=True
+mixed distributed cut: reject A-only image after B proof, stable complete recapture and ordinary atomic update noninvalidation PASS
+query capture: fresh pin/barriers on each collision, four-cut/deadline bound, import/authority/error refusal and balanced releases PASS
+exit=0
+test_query_page_barriers.py sanitizer=True
+query pages: first-page capture supplies fresh authority once; continuations recheck, failed cuts emit no bytes, fresh permission refusal and close PASS
+exit=0
