@@ -87,6 +87,8 @@ static int container_unlinkat(int fd,const char *path,int flags)
 #undef fallocate
 #undef rename
 #include "../src/server/store.c"
+static int test_parent_barrier(void *context,int fd)
+{ (void)context;return container_sync(fd)==0?EFS_OK:EFS_ERR_IO; }
 static struct efsd_server server;
 static struct efs_export ex={.id=1,.chunk_size=EFS_DEFAULT_CHUNK_SIZE};
 static void write_value(efs_ino_t ino,unsigned ci,unsigned char value,int expected)
@@ -216,6 +218,21 @@ int main(int argc, char **argv)
         for(unsigned i=0;i<4;i++)assert(!pthread_join(threads[i],NULL));
         efs_tls_chunk_gen=333;read_value(4242,0,EFS_OK,-1);restart();read_value(4242,0,EFS_OK,-1);
         assert(!server_gc_inode(&server,1,4242,9));read_value(4242,0,EFS_ERR_NOT_FOUND,0);write_value(4242,0,60,EFS_ERR_STALE);
+        /* Callback failures cannot seed the shared ancestry proof. */
+        char proof[8192];snprintf(proof,sizeof(proof),"%s/gc-fence-proof/new/page",server.storage_paths[0]);
+        assert(!mkdirs(proof));struct target *proof_target=server.container_targets[0];
+        watched_root=server.storage_paths[0];fault=2;
+        assert(parents_at_sync(proof,proof_target,test_parent_barrier,NULL)==EFS_ERR_IO);
+        fault=0;root_syncs=directory_syncs=0;
+        assert(!parents_at_sync(proof,proof_target,test_parent_barrier,NULL));assert(root_syncs==1);
+        root_syncs=directory_syncs=0;
+        assert(!parents_at_sync(proof,proof_target,test_parent_barrier,NULL));assert(!root_syncs && directory_syncs==1);
+        watched_root=NULL;
+        /* A sealed death-page ancestry needs its containing barrier on retry,
+         * not three independent ancestor barriers; GC accounting remains. */
+        uint64_t fence_barriers=server.gc_io[2].ops;
+        assert(!inode_death_set(&server,1,4242));
+        assert(server.gc_io[2].ops==fence_barriers+1);
         /* Bounded inode orphan cleanup and persistent death fence. */
         efs_tls_chunk_gen=444;for(unsigned ci=0;ci<70;ci++)write_value(777,ci,61,EFS_OK);
         body_syncs=0;

@@ -532,6 +532,8 @@ static int gc_sync_directory(struct efsd_server *s, int fd)
     errno = saved_errno;
     return rc;
 }
+static int gc_parent_barrier(void *context,int fd)
+{ return gc_sync_directory(context,fd)==0?EFS_OK:EFS_ERR_IO; }
 static int gc_unlink_file(struct efsd_server *s, const char *path)
 {
     uint64_t start = gc_clock_us();
@@ -870,9 +872,14 @@ static int inode_death_set(struct efsd_server *s, efs_export_id_t eid, efs_ino_t
     __atomic_fetch_add(&inode_gc_epoch, 1, __ATOMIC_RELEASE);
     /* Repeat all parent syncs even after a previous rename succeeded but
      * its directory sync failed. Newly-created ancestors must survive too. */
-    if (rc == EFS_OK)
+    if (rc == EFS_OK && s->storage_engine)
+        /* One complete ancestry proof seals new directories and retries the
+         * containing-directory barrier. Extra independent ancestor calls
+         * would repeat barriers already covered by the pinned proof. */
+        rc=server_container_sync_parents_with(s,path,gc_parent_barrier,s);
+    else if (rc == EFS_OK)
         rc = fragment_parent_sync(s, path);
-    if (rc == EFS_OK) {
+    if (rc == EFS_OK && !s->storage_engine) {
         char parent[8192];
         strcpy(parent, path);
         *strrchr(parent, '/') = '\0';

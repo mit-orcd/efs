@@ -8175,6 +8175,30 @@ static void host_gc_record(struct efs_raft_host *h, struct efs_export *ex,
 struct reap_times {
     uint64_t scan, sweep, fence, done;
 };
+/* A partial reap retries all originally active lanes. Containers need no
+ * new durable no-op to clear a lane already absent under a fresh group
+ * proof. The unfenced key check is only a scheduling hint; both absence
+ * and an empty source prefix are rechecked after request-local ReadIndex.
+ * Physical inode fencing and final REAP retirement remain mandatory. */
+static int host_container_gc_lane_empty(struct efs_raft_host *h,efs_ino_t ino,
+                                       uint64_t gen,uint8_t lane,uint8_t *covered)
+{
+    uint8_t key[EFS_KV_KEY_MAX],value[1];uint32_t kl,vl=sizeof(value);
+    uint8_t group=efs_raft_shard_group(efs_kv_lane_shard(ino,lane));
+    if(!h->s->storage_engine || !host_hosts(h,group) ||
+       efs_kv_key_lane(efs_kv_lane_shard(ino,lane),ino,gen,lane,key,&kl)!=EFS_OK ||
+       efs_kv_get(h->kv,key,kl,value,&vl)!=EFS_ERR_NOT_FOUND)return 0;
+    if(!(*covered&(1u<<group))){
+        int hint=-1;
+        if(host_read_index(h,group,&hint)!=EFS_OK)return 0;
+        *covered|=(uint8_t)(1u<<group);
+    }
+    vl=sizeof(value);
+    if(efs_kv_get(h->kv,key,kl,value,&vl)!=EFS_ERR_NOT_FOUND)return 0;
+    uint32_t indices[EFS_META_SWEEP_BATCH_MAX],n;
+    return efs_meta_lane_sweep_select(h->kv,ino,gen,lane,indices,&n)==EFS_OK && !n;
+}
+
 static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
                               uint32_t anchor, struct reap_times *times)
 {
@@ -8215,6 +8239,7 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
         uint8_t cmd[18 + 32 * EFS_META_REAP_BATCH_MAX];
         int lanes_ok = 1;
         int lrc = 0, drc = 0;
+        uint8_t empty_covered=0; /* This inode reap attempt only. */
 
         started = now_us_();
         for (lane = 0; lane < EFS_META_LANES; lane++) {
@@ -8230,6 +8255,7 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
                 uint32_t indices[EFS_META_SWEEP_BATCH_MAX], n;
                 lrc=efs_meta_lane_sweep_select(h->kv,c.ino[i],c.gen[i],(uint8_t)lane,indices,&n);
                 if (lrc != EFS_OK) { lanes_ok=0; break; }
+                if(!n && host_container_gc_lane_empty(h,c.ino[i],c.gen[i],(uint8_t)lane,&empty_covered))continue;
                 cmd[0] = EFS_MD_CMD_LANE_SWEEP_BATCH;
                 cmd[18] = (uint8_t)n;
                 for (uint32_t j=0; j<n; j++) wr32be(cmd+19+4*j,indices[j]);

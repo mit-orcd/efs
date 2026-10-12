@@ -103,7 +103,8 @@ done:
 /* Startup seals the root path. Runtime publication syncs the changed
  * namespace and any unknown ancestry to a pinned durability boundary or the
  * root itself, never unrelated ancestors. */
-static int parents_at(const char *path, struct target *t)
+static int parents_at_sync(const char *path, struct target *t,
+                           int (*sync)(void *,int),void *context)
 {
     const char *root=t?t->root:NULL;
     if (root && strcmp(root, "/") &&
@@ -137,7 +138,7 @@ static int parents_at(const char *path, struct target *t)
             }
             /* A hit elides only unchanged ancestry. The namespace operation's
              * containing directory still needs a fresh barrier on EVERY call. */
-            rc=barrier(fd);
+            rc=sync?sync(context,fd):barrier(fd);
             if(!is_root && close(fd))rc=EFS_ERR_IO;
             if(rc)goto failed;
         }
@@ -158,6 +159,8 @@ failed:
     for(unsigned i=retained_n;i>0;i--)durable_remember(t,retained[i-1],&retained_st[i-1]);
     return EFS_OK;
 }
+static int parents_at(const char *path,struct target *t)
+{ return parents_at_sync(path,t,NULL,NULL); }
 static int parents(const char *path) { return parents_at(path, NULL); }
 static int mkdirs(const char *path)
 {
@@ -261,6 +264,14 @@ int server_container_sync_parents(struct efsd_server *s,const char *path)
 {
     struct target *t=target_at(s,path);
     return t?parents_at(path,t):EFS_ERR_IO;
+}
+/* GC uses the same ancestry proof while retaining syscall accounting and
+ * failure propagation through its own directory barrier. */
+int server_container_sync_parents_with(struct efsd_server *s,const char *path,
+                                      int (*sync)(void *,int),void *context)
+{
+    struct target *t=target_at(s,path);
+    return t?parents_at_sync(path,t,sync,context):EFS_ERR_IO;
 }
 static void segpath(struct target *t,unsigned seg,char path[8192]){
     snprintf(path,8192,"%s/%016x.dat",t->dir,seg);
