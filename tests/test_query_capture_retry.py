@@ -3,7 +3,7 @@
 from pathlib import Path
 import os, shlex, subprocess, tempfile, sys
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=Path(os.environ.get('EFS_QUERY_CAPTURE_SOURCE',str(root/'src/server/raft_host.c'))).read_text()
 a=s.index('static int host_query_source_once(')
 b=s.index('/* Disk builders stream bounded scratch',a)
 body=s[a:b]
@@ -24,10 +24,10 @@ struct efs_kv_lsm_snapshot {unsigned serial;int side_a,side_b,ordinary;};
 struct efs_server_query_view {uint64_t boot_id,source_ns,applied[2],terms[2],pin_ms;};
 struct efs_raft_host {pthread_mutex_t mu,snap_mu;void *kv;uint64_t boot_id,query_deadline_ms;
  struct {void *r;uint8_t group;uint64_t import_gen;} g[2];};
-static struct efs_kv_lsm_snapshot pins[4];
+static struct efs_kv_lsm_snapshot pins[16];
 static unsigned captures,releases,barriers,collisions,cohort_fail_after;
-static int capable=1,barrier_rc,revision_rc,import_change,pin_rc,expire;
-static uint64_t clock_ms=100;
+static int capable=1,barrier_rc,revision_rc,import_change,pin_rc,expire,capture_cost;
+static uint64_t clock_ms=100,build_budget=100;
 static int model,live_a=1,live_b,ordinary;
 static uint64_t query_mono_ms(void){return clock_ms;}
 static uint64_t now_ns(void){return 999;}
@@ -35,7 +35,7 @@ static int host_query_capable(struct efs_raft_host *h){(void)h;return capable;}
 static uint64_t efs_raft_applied(void *r){(void)r;return 11;}
 static uint64_t efs_raft_term(void *r){(void)r;return 7;}
 static int efs_kv_lsm_snapshot_pin(void *kv,int budget,struct efs_kv_lsm_snapshot **out)
-{(void)kv;assert(budget==1 && captures<4);pins[captures]=(struct efs_kv_lsm_snapshot){.serial=captures+1,.side_a=live_a,.side_b=live_b,.ordinary=ordinary};*out=&pins[captures++];if(pin_rc)*out=NULL;return pin_rc;}
+{(void)kv;assert(budget==1 && captures<16);pins[captures]=(struct efs_kv_lsm_snapshot){.serial=captures+1,.side_a=live_a,.side_b=live_b,.ordinary=ordinary};*out=&pins[captures++];if(pin_rc)*out=NULL;return pin_rc;}
 static int efs_kv_lsm_snapshot_revisions(struct efs_kv_lsm_snapshot *p,uint64_t *r,unsigned n)
 {assert(p && n==4096);memset(r,0,n*sizeof(*r));r[0]=p->serial;return 0;}
 static int efs_kv_lsm_snapshot_transaction_revision(struct efs_kv_lsm_snapshot *p,uint64_t *out)
@@ -45,7 +45,7 @@ static int efs_kv_lsm_snapshot_transaction_activity(struct efs_kv_lsm_snapshot *
 static int efs_kv_lsm_transaction_activity(void *kv,uint64_t out[8])
 {(void)kv;memset(out,0,8*sizeof(*out));return 0;}
 static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,uint8_t second,int *hint)
-{(void)hint;assert(first==0 && second==2);barriers++;if(cohort_fail_after && captures>=cohort_fail_after)return EFS_ERR_BUSY;
+{(void)hint;assert(first==0 && second==2);barriers++;clock_ms+=(uint64_t)capture_cost;if(cohort_fail_after && captures>=cohort_fail_after)return EFS_ERR_BUSY;
  if(import_change)h->g[1].import_gen++;
  if(model==1)live_b=1; /* missing participant applies after pin */
  if(model==2)ordinary++; /* atomic entry changes no transaction revision */
@@ -57,7 +57,7 @@ static void efs_kv_lsm_snapshot_release(struct efs_kv_lsm_snapshot *p)
 {assert(p && p->serial==captures && releases+1==captures);releases++;}
 '''+body+r'''
 static struct efs_raft_host host;
-static int run(void){captures=releases=barriers=0;clock_ms=100;host.query_deadline_ms=200;
+static int run(void){captures=releases=barriers=0;clock_ms=100;host.query_deadline_ms=100+build_budget;
  struct efs_kv_lsm_snapshot *p=(void*)1;struct efs_server_query_view view;
  uint64_t revisions[4096],imports[2];int final_changed=-1;struct efs_query_capture_work work={0};
  int rc=host_query_source(&host,&p,&view,revisions,imports,&final_changed,&work);
@@ -85,7 +85,11 @@ int main(void){pthread_mutex_init(&host.mu,NULL);pthread_mutex_init(&host.snap_m
 
  assert(!run() && captures==1 && barriers==1);
  collisions=2;assert(!run() && captures==3 && barriers==3);
- collisions=9;assert(run()==EFS_ERR_BUSY && captures==4 && barriers==4);
+ /* A burst of nine overlapping transactions used to force another whole
+  * scheduling interval; the tenth independently proven complete image wins. */
+ collisions=9;assert(!run() && captures==10 && barriers==10);
+ collisions=99;assert(run()==EFS_ERR_BUSY && captures==16 && barriers==16);
+ build_budget=1000;capture_cost=40;assert(run()==EFS_ERR_BUSY && captures==3 && barriers==3);capture_cost=0;build_budget=100;
  cohort_fail_after=2;assert(run()==EFS_ERR_BUSY && captures==2 && barriers==2);cohort_fail_after=0;
  expire=1;assert(run()==EFS_ERR_BUSY && captures==1);expire=0;collisions=0;
  import_change=1;assert(run()==EFS_ERR_BUSY && captures==1);import_change=0;
@@ -93,7 +97,7 @@ int main(void){pthread_mutex_init(&host.mu,NULL);pthread_mutex_init(&host.snap_m
  revision_rc=EFS_ERR_IO;assert(run()==EFS_ERR_IO && captures==1);revision_rc=0;
  capable=0;assert(run()==EFS_ERR_NOT_PRIMARY && !captures && !barriers);capable=1;
  pin_rc=EFS_ERR_NOMEM;assert(run()==EFS_ERR_NOMEM && captures==1 && !barriers);pin_rc=0;
- puts("query capture: fresh pin/barriers on each collision, four-cut/deadline bound, import/authority/error refusal and balanced releases PASS");}
+ puts("query capture: fresh pin/barriers on each collision, attempt/burst-time/build-deadline bounds, import/authority/error refusal and balanced releases PASS");}
 '''
 code='#include "'+str(root/'src/common/query_stage_trace.h')+'"\n'+code
 with tempfile.TemporaryDirectory(prefix='efs-query-capture-') as t:

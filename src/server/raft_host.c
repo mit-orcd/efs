@@ -9079,17 +9079,21 @@ static int host_query_source_once(struct efs_raft_host *h,struct efs_kv_lsm_snap
 /* Namespace mutation can invalidate a cut during its post-capture barriers.
  * Recapture promptly instead of waiting a full refresh interval for each
  * collision. Each attempt owns a new pin and repeats every authority/import
- * and transaction fence. The existing build deadline and four-cut bound
- * prevent a busy namespace from monopolizing the background worker. */
+ * and transaction fence. A short, bounded burst avoids spending most of the
+ * retry interval idle when transaction arrivals invalidate cheap cuts. Both
+ * the original build deadline and a 100ms burst budget bound this worker;
+ * every failed source is released before another pin is acquired. */
 static int host_query_source(struct efs_raft_host *h,struct efs_kv_lsm_snapshot **source,
                               struct efs_server_query_view *view,uint64_t *revisions,uint64_t *import_generation,
                               int *final_transaction_changed,struct efs_query_capture_work *work)
 {
     *final_transaction_changed=0;
+    uint64_t started=query_mono_ms();
     for(unsigned attempt=0;;attempt++) {
         int changed=0;
         int rc=host_query_source_once(h,source,view,revisions,import_generation,&changed,work);
-        if(!changed || attempt==3 || query_mono_ms()>=h->query_deadline_ms) {
+        uint64_t now=query_mono_ms();
+        if(!changed || attempt==15 || now-started>=100 || now>=h->query_deadline_ms) {
             *final_transaction_changed=changed;return rc;
         }
     }

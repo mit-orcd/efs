@@ -42,7 +42,7 @@ static inline int efs_query_refresh_due(uint64_t now,uint64_t pending_since,
 /* A rejected coherent-cut capture does no disk build. Give short captures a
  * bounded chance to find a quiet cut, without accelerating authority/import
  * refusals or expensive captures. This is scheduling only: every attempt
- * retains fresh pin/proofs/fences, the four-cut bound and original deadline. */
+ * retains fresh pin/proofs/fences, the bounded capture burst and original deadline. */
 #define EFS_QUERY_CUT_RETRY_MS 200u
 static inline int efs_query_refresh_cut_retry(int rc,int transaction_changed,uint64_t capture_ms)
 {
