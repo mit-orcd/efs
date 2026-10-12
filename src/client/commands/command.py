@@ -544,7 +544,7 @@ def main(argv=None, script_path=None):
         print(json.dumps(result, ensure_ascii=True, separators=(",", ":")))
     elif command == "stats":
         for key, value in result["stats"].items():
-            text = human_size(value) if args.human_readable and key in ("imm_bytes", "tree_bytes") else str(value)
+            text = human_size(value) if args.human_readable and key in ("imm_bytes", "tree_bytes") else "%d" % value
             print("%s=%s" % (safe_text(key), text))
         print("expiry=unavailable")
     else:

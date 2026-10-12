@@ -546,7 +546,7 @@ static const char efs_command_source[] =
 "        print(json.dumps(result, ensure_ascii=True, separators=(\",\", \":\")))\n"
 "    elif command == \"stats\":\n"
 "        for key, value in result[\"stats\"].items():\n"
-"            text = human_size(value) if args.human_readable and key in (\"imm_bytes\", \"tree_bytes\") else str(value)\n"
+"            text = human_size(value) if args.human_readable and key in (\"imm_bytes\", \"tree_bytes\") else \"%d\" % value\n"
 "            print(\"%s=%s\" % (safe_text(key), text))\n"
 "        print(\"expiry=unavailable\")\n"
 "    else:\n"
