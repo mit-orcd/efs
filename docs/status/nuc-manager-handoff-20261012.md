@@ -164,3 +164,21 @@ native-base/native-root folders. No restart, skip or new live gate is launched.
 The [merged qualification plan](nuc-merged-qualification-plan-20261012.md)
 requires a complete source/evidence archive and full rerun on the manager's
 approved input. Source remains frozen101598d2. No repaired image is deployed.
+
+## Safely idle and ready — 00:40 UTC
+
+Normal preserved restoration passes0. Independent final read-only audit checks
+all five installed image hashes, four mapped daemon and two mapped client
+hashes/configurations, all17432..17435 listeners, both mounts, closed private
+26590..26593 ports, retained `.mkfs-done` and all36 prior payload hashes.
+Installed source remainsf52cd2dd-nuc. Every owned gate/build controller has
+finished or was held; there is no active writer or new-candidate deployment.
+[Final proof and restoration logs](../../results/measure/20261012-nuc-manager-handoff/final-restoration/)
+retain exact processes/paths/config and payloads. Original base recipe run1 is
+expected from the safely superseded empty buffered fixture; restoration0 and
+the completed old direct20k0 remain separate genuine verdicts.
+
+Code is still frozen101598d2; only documentation/raw evidence followed.
+NUC is ready for the manager-approved merged source/hash. No new live/native
+rerun, source installation, performance matrix, shared merge or push proceeds
+until that explicit qualification assignment.
