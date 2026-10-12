@@ -1,0 +1,34 @@
+# Intel merged-source qualification plan — 2026-10-12
+
+This is a plan, not merged acceptance or deployment authorization. The [frozen Intel handoff](intel-manager-handoff-20261012.md) identifies `0ae7e480` and its still-running private qualification. Any completed results from that checkpoint remain **old-source evidence** after integration. The manager owns the approved merged SHA, binary identities and Intel cluster window; AMD alone edits and qualifies the release worktree. Intel will not queue a rollout while reconciliation is pending.
+
+## Admission and evidence rules
+
+Before new Intel jobs, obtain the approved full source SHA and selected runtime configuration, inspect the integration diff against frozen `0ae7e480`, and inventory all build/test inputs. Use a new clean independent checkout and new exclusive evidence paths. Verify source manifests on both hosts before build, record compiler/build flags, capture the five normal binary SHA256 identities once, and keep fault builds separate. Record any intended durable/wire compatibility transition; a changed identity cannot inherit an old candidate's PASS.
+
+Existing private jobs must finish owned cleanup first. Check exact UID/argv and descendants, owned mount state and fixture ports before declaring the hosts safely idle. Production daemons/clients and completed tiny-file wrappers are expected to remain present; idle means no owned qualification workload or retained test mount, not stopping production. Never use a generic process-name kill or replace the immutable tiny payload manifest.
+
+## Prioritized changed-surface gates
+
+All listed gates run TCP with **both direct and buffered storage I/O** on Intel1 and Intel2. These priorities order diagnosis; they do not replace the complete suite or grant acceptance to an unchanged surface.
+
+| Merged change or risk | First focused gates | Required oracle |
+|---|---|---|
+| Session/lease ownership, cleanup or admission | CREATE replay/negative replay, guarded leases and storage-session-fence fault, deferred close, session APPEND, worker allocation/TLS/growth | Exact identity/epoch, typed refusal and ENOMEM, held obligations refuse early close; complete cold recovery and physical reclamation |
+| APPEND reservation/completion, new durable tags | APPEND replay/audit, sync boundary, truncate, twenty peer APPEND/OPEN races, full peer POSIX, namespace-linked cold recovery | Unique exact records, no stale completion, unchanged ambiguity refusal and deadlines; exact cold bytes |
+| Namespace guards, participant packing or apply order | Namespace cycles, 64-lane boundary fault, exact 144 participants and 145-ancestor refusal, both coordinator-death stages, transaction seed/apply retry | Durable PREPARE/COMMIT authority, atomic cold namespace, actual inode placement and unchanged refusal semantics |
+| Raft replay/checkpoint or KV persistence | Applied checkpoint, KV WAL persistence, dirty-stop/WAL-tail recovery, standalone checkpoint-sync fault and same/cross-group publication replay | Applied state never outruns durable KV; unsynced loss model, retained log and original bytes verified after cold restart |
+| GC/packing/retirement | PUT reply/barrier faults, publication/drain pressure, compactor pressure, full physical GC/quota | Actual owned immutable fragments absent; exact retained payloads; unchanged reclamation deadlines |
+| Remote reads, deadlines or query authority | All four partition variants, query RPC/FUSE/failover/load/policy/noexec, `.efs` extras, GET-pair deadline, mixed concurrent POSIX | Fresh authority and typed errors, exact count/bytes, complete options and extras; no warm-cache substitute for cold verification |
+
+Native regression and preceding-code negative control precede any targeted repaired live run. A minimal fix must address the reproduced failing path and preserve refusal, ownership, deadline and cold-byte invariants; retain the original failure and never patch running inputs. New source means a new frozen candidate and qualification identity. Coordinator-death tests use only their owned private fixture processes.
+
+## Complete acceptance after focused diagnosis
+
+Run the merged Makefile/native suite and all standalone test inputs, normal concurrent POSIX with four jobs, peer suites, all enabled `.efs` tests, canonical independent rounds, the full fault/live plan, publication-apply reviews, both-mode standalone cold safety and actual Valgrind checks. Recompute the gate inventory from the approved candidate: the old checkpoint's 110 main gates, 84 supplemental rows, 30 canonical rounds, two apply modes and six cold safety cases are an inventory baseline, not permission to omit newly added merged tests.
+
+Keep exact FAIL, NOTRUN, SKIP and GAP dispositions. In the old fault contract, raw exit 2 is accepted only for exactly 21 distinct identities with 19 PASS and the two named repair GAPs. Reconcile any merged contract change explicitly. Writable mmap ENODEV remains a named W104 SKIP unless implementation and a real successful test change that disposition. Old targeted passes do not close merged packing, ordinary-write, session or compatibility risks.
+
+Only after manager reconciliation and complete qualifying gates may a separate approved production window be considered. That later stage still requires full strict original-tree inventories before/after, unchanged immutable sample SHA checks, four 400G daemons, one opposite-host `.efs` mount per host, exact installed/live binary hashes, concurrent and cold persistence tests in both modes, and the selected final runtime audit. No new million-file tree is needed: the original two jobs completed.
+
+RDMA qualification remains exclusively on AMD software RDMA or `orcd-test` hardware IB/RDMA. Intel results establish TCP behavior only. No merged candidate or cluster window has been approved in this plan.
