@@ -1238,6 +1238,18 @@ static int expiry_u64(const char *text,uint64_t *out)
     *out=n;return 0;
 }
 
+static int cmd_expiry_id(int argc,char **argv)
+{
+    if(argc!=2){fprintf(stderr,"Usage:\n  efs-mgmt expiry-id NODE:PORT INO\n\nInspect the authoritative FileID before setting a policy or deadline.\n");return 1;}
+    char host[64];uint16_t port;uint64_t ino;
+    if(parse_host_port(argv[0],host,sizeof(host),&port) || expiry_u64(argv[1],&ino) || !ino)return 1;
+    uint8_t payload[10]={0,EFS_MD_REQ_EXPIRY_ID};payload[0]=efs_raft_shard_group(efs_kv_inode_shard(ino));
+    wr64be_mgmt(payload+2,ino);struct efs_msg_raft_mkfs_reply r;int rc=sess_rpc(host,port,payload,sizeof(payload),&r);
+    printf("expiry-id rc=%d ino=%llu generation=%llu uid=%u mode=0%o nlink=%llu leader_hint=%d\n",
+        rc,(unsigned long long)ino,(unsigned long long)r.index,(uint32_t)r.salt,(uint32_t)(r.salt>>32),
+        (unsigned long long)r.term,r.leader_hint);return rc?1:0;
+}
+
 static int cmd_expiry_enable(int argc,char **argv)
 {
     if(argc!=6) {
@@ -2641,6 +2653,7 @@ int main(int argc, char **argv)
         return cmd_gc_status(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-status") == 0)
         return cmd_raft_status(argc - 2, argv + 2);
+    if (strcmp(cmd,"expiry-id")==0)return cmd_expiry_id(argc-2,argv+2);
     if (strcmp(cmd,"expiry-enable")==0)return cmd_expiry_enable(argc-2,argv+2);
     if (strcmp(cmd,"expiry-clock")==0)return cmd_expiry_clock(argc-2,argv+2);
     if (strcmp(cmd,"expiry-policy")==0)return cmd_expiry(argc-2,argv+2,1);

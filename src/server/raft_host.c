@@ -10858,6 +10858,20 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         }
         out->leader_hint=result.primary_id?(int)result.primary_id-1:-1;return;
     }
+    if(clen && cmd[0]==EFS_MD_REQ_EXPIRY_ID) {
+        if(!h->expiry_enabled){out->rc=EFS_ERR_ACCES;return;}
+        if(clen!=9 || !rd64be(cmd+1) || group!=efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd+1)))) {
+            out->rc=EFS_ERR_INVAL;return;
+        }
+        struct host_view view;host_view_get(h,group,&view);
+        if(!view.has || view.role!=EFS_RAFT_LEADER) {
+            out->rc=EFS_ERR_NOT_PRIMARY;out->leader_hint=view.has?view.leader:-1;return;
+        }
+        struct efs_meta_row row;rc=host_read_index(h,group,&hint);
+        if(rc==EFS_OK)rc=efs_meta_apply_get_inode(h->kv,rd64be(cmd+1),&row);
+        if(rc==EFS_OK){out->index=row.generation;out->salt=row.uid|((uint64_t)row.mode<<32);out->term=row.nlink;}
+        out->rc=rc;out->leader_hint=hint;return;
+    }
     if(clen && (cmd[0]==EFS_MD_CMD_EXPIRY_POLICY || cmd[0]==EFS_MD_CMD_EXPIRY_RENEW ||
                  cmd[0]==EFS_MD_REQ_EXPIRY_POLICY || cmd[0]==EFS_MD_REQ_EXPIRY_RECORD ||
                  cmd[0]==EFS_MD_REQ_EXPIRY_ENABLE)) {
@@ -10888,6 +10902,11 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             rc=host_propose_wait_idx(h,group,cmd,clen,&hint,&idx);
         else rc=EFS_OK;
         if(rc==EFS_OK)rc=host_read_index(h,group,&hint);
+        if(rc==EFS_OK && (cmd[0]==EFS_MD_REQ_EXPIRY_POLICY || cmd[0]==EFS_MD_REQ_EXPIRY_RECORD)) {
+            struct efs_meta_row row;rc=efs_meta_apply_get_inode(h->kv,rd64be(cmd+1),&row);
+            if(rc==EFS_OK && row.generation!=rd64be(cmd+9))rc=EFS_ERR_STALE;
+            if(rc==EFS_OK && cmd[0]==EFS_MD_REQ_EXPIRY_POLICY && !S_ISDIR(row.mode))rc=EFS_ERR_INVAL;
+        }
         if(rc==EFS_OK && (cmd[0]==EFS_MD_REQ_EXPIRY_POLICY || cmd[0]==EFS_MD_CMD_EXPIRY_POLICY)) {
             struct efs_expiry_policy p;rc=efs_expiry_policy_get(h->kv,rd64be(cmd+1),rd64be(cmd+9),&p);
             if(rc==EFS_OK){out->index=p.revision;out->salt=p.ttl_ns;out->term=p.max_ns;}

@@ -188,3 +188,20 @@ Leader loss similarly chooses an observed leader from all four nodes. These
 fixture failures are retained in `/home/efs/expiry-9e292f84-gates.log`; they are
 not called full passes. The final script also forces inherited policy across
 both metadata groups and hashes the companion lifecycle script in its manifest.
+
+## Corrected normal matrix
+
+Commit `d471b901`, native `EFS_FAULTS=0`, PASS: the full lifecycle matrix,
+including deterministic cross-group policy inheritance/deletion, explicit
+existing-file enablement/refusals, stale-delete replay, replacement survival,
+global disable/re-enable catch-up, observed fragment-holder outage/rejoin and
+observed metadata-leader loss. Core **216/216 (24.7s)**, peer **67/67 (12.3s)**,
+physical-GC gates, final cold empty inventory and zero quotas all pass.
+Raw `/home/efs/expiry-d471b901-normal-gates.log`; exact hashes will be captured
+with the final candidate evidence. The fixture stops owned processes/mounts.
+
+Operator inspection is being finalized: `expiry-id NODE:PORT INO` returns the
+authoritative generation, UID, mode and link count for policy/deadline controls.
+Policy/deadline reads reject a stale generation instead of presenting absence
+as a disabled policy/deadline. The final source will rerun normal and clock-fault
+matrices; W90 closure is reserved for those results.

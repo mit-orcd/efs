@@ -7,6 +7,8 @@ import errno
 import json
 import os
 import socket
+import subprocess
+from pathlib import Path
 import struct
 import time
 
@@ -57,6 +59,11 @@ def exercise(mount,port,work,wait,physical_files,restart,offline,clock_fault=Fal
     base=mount/'expiry-gates';base.mkdir()
     plain=base/'default-off';created(plain);assert record(plain)[1:]==(0,0,0);mark('default-off')
     policy(base,uid=os.getuid(),accepted=(-16,));mark('operator authorization')
+    info=subprocess.run([str(Path(__file__).resolve().parents[2]/'efs-mgmt'),'expiry-id',f'127.0.0.1:{port}',str(base.stat().st_ino)],capture_output=True,text=True,check=True)
+    assert 'generation=1' in info.stdout and 'nlink=2' in info.stdout,info.stdout
+    rpc(60,base.stat().st_ino,gen=2,accepted=(-14,))
+    rpc(61,plain.stat().st_ino,gen=2,accepted=(-14,))
+    mark('authoritative FileID inspection and stale generation reads')
     policy(base,ttl=4)
     born=base/'birth';ino=created(born);_,rev,deadline,root=record(born)
     assert rev==1 and deadline>time.time_ns() and root==base.stat().st_ino
