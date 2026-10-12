@@ -114,3 +114,5 @@ NUC correction checkpoint `8af41a1e` follows unaccepted journal WIP `54e0f5d7`. 
 AMD independent corrected repair-prerequisite review: daemon/tools build, journal memory+LSM+cold/bounded, actual WAL EIO, host business/IO progression and public refusal, source bounds ASan/UBSan **PASS** on owner source `8af41a1e`. Combined corrected prerequisite integrated without accepting broken WIP separately. Physical restored-protection remains GAP; evidence under `results/measure/20261012-repair-review/8af41a1e`.
 
 Separate repair storage-fence prerequisite `ac540d7a`: independent AMD daemon build and existing PUT/new repair guard/certificate tests PASS. Integrated inactive barrier does not close repair GAP.
+
+Expanded full normal/fault native runs on integrated `7a00b2cf` both **FAIL exit2** compiling `tests/test_put_upload_server.c`: its cleanup retained the renamed private `put_session_path` helper. Earlier focused fence builds did not include this existing receiver test. Correct the test to the generalized helper's ordinary PUT domain; retain failed logs and rerun full suites on a new exact candidate.
