@@ -47,6 +47,10 @@ and packing disabled. Operator expiry controls run through `efs-mgmt`, so the
 suite does not require `.efs` commands. `--jobs` controls core POSIX concurrency;
 it does not parallelize restart/fault lifecycle phases.
 
+For sustained two-mount churn/restart validation, add `--soak-seconds 1800`.
+See [inspection/status and soak details](expiry-inspection-soak-20261012.md).
+A single `--root` is accepted and used for both node pairs.
+
 ## Results and cleanup
 
 The harness prints `Evidence directory: ...` beneath a private root. That
