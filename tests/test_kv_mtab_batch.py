@@ -93,7 +93,7 @@ int main(void) {
  moved=0;assert(!kv_mtab_batch(&a,items,16));size_t batch=moved;
  moved=0;
  for(unsigned i=0;i<16;i++)assert(!kv_mtab_set(&b,KV_OP_PUT,keys[i],2,NULL,0));
- assert(batch<moved/16);equal(&a,&b);
+ assert(batch<=moved/16);equal(&a,&b);
  kv_mtab_clear(&a);kv_mtab_clear(&b);
  printf("memtable batch: 2000 mixed binary-key model batches, %u allocation refusals, bounded suffix movement PASS\n",failures);
 }

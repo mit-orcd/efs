@@ -271,24 +271,27 @@ int kv_mtab_batch(struct kv_mtab *m, const struct efs_kv_item *items, uint32_t n
         uint32_t old = m->n, next = pending.n, dest = total;
         while (next) {
             struct kv_ent *e = pending.e[next - 1];
-            int cmp = old ? kv_key_cmp(m->e[old - 1]->key,
-                m->e[old - 1]->klen, e->key, e->klen) : -1;
-            if (cmp > 0) {
-                --old;
-                --dest;
-                m->e[dest] = m->e[old];
-                m->pfx[dest] = m->pfx[old];
-                continue;
+            struct kv_mtab prefix = *m;
+            int found;
+            /* Only the untouched prefix remains searchable. Find the entire
+             * intervening run without dereferencing each unrelated entry. */
+            prefix.n = old;
+            uint32_t at = kv_mtab_pos(&prefix, e->key, e->klen, &found);
+            uint32_t start = at + (uint32_t)found, run = old - start;
+            dest -= run;
+            if (run && dest != start) {
+                memmove(&m->e[dest], &m->e[start], (size_t)run * sizeof(*m->e));
+                memmove(&m->pfx[dest], &m->pfx[start], (size_t)run * sizeof(*m->pfx));
             }
-            if (!cmp) {
-                --old;
-                m->bytes -= m->e[old]->vlen;
+            if (found) {
+                m->bytes -= m->e[at]->vlen;
                 m->bytes += e->vlen;
-                ent_free(m->e[old]);
+                ent_free(m->e[at]);
             } else {
                 m->bytes += e->klen + e->vlen + sizeof(*e) +
                             sizeof(e) + sizeof(*m->pfx);
             }
+            old = at;
             --next;
             --dest;
             m->e[dest] = e;

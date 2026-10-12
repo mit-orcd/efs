@@ -255,3 +255,28 @@ PUT/DEL duplicates, exact bytes/accounting/order, every26 allocation refusals,
 and reduction of repeated suffix movement. The regression is part of `make test`.
 AMD durable LSM/native/fault and live packing qualification are pending at this
 candidate checkpoint; no timeout or authority change, no release promotion.
+
+
+### First merge candidate: safety PASS, quiet packing FAIL
+
+Exact source `43c2f17f4ba478ecf73494ebedfa5875c0f8546a`: full normal/fault
+native PASS, fully compiled-and-linked ASan/UBSan LSM suite PASS, memtable
+model/allocation sanitizer PASS. Verified778 build/test/dependency inputs,
+aggregate SHA256 `efacd22e321c85ad417c7a3325539d8704632423775a3b90297e2ae1ae97b1ad`.
+Daemon SHA256 `88bf4a31a5c24cd75f6561d73f3334f4ebe1a085175675f04599c431f17ec9e5`.
+Quiet fixture `gc-direct-1gdx3sqm` FAIL: all seven deep-directory cases exceeded
+30s (1505/1512 core PASS). Peer67/67, cold bytes, physical packed reclamation
+and metadata queue drain PASS independently. Planned repeats and crash rerun
+NOTRUN after the failure; owned fixture stopped. Four daemon command lines
+confirmed direct I/O/4G and all eleven daemon/client environments had packing1,
+commands0/server0. TCP is selected by EFS_TRANSPORT, not a command-line token.
+
+Refinement: avoid comparing/dereferencing every unrelated old key in the merge.
+Binary-search the untouched prefix and move each intervening contiguous range
+once; ranges do not overlap with later source prefixes. The model, all26
+allocation refusals and ASan/UBSan checks still pass locally. AMD qualification
+of this refinement is pending; earlier gates do not transfer to the new source.
+Use `python3 tests/measure/kv_mtab_insert.py --keys 20000 --batches 1000
+--batch-size 16 --repeats 5` for an isolated, alternating sequential/batch
+comparison. This measures memtable insertion only (zero-byte values), not
+end-to-end packing throughput or latency. Raw outputs stay outside Git.
