@@ -2189,6 +2189,8 @@ AMD bounded labelledecdc broad diagnostic running; isolatedREADDIR5e035dcd revie
 
 Isolatedecdc packing cold/physical/queue **PASS20.095s**; broad deadlines/globalemptyFAIL retained. Newe59 candidate preparing common tests.
 
+Newe59 NUC21/21focused deep/readdir PASS evidence integrated; Intel70/70I/O PASS but listing/names timeout13cases. AMD native/fault progressing,broadqueued. [Ledger](../status/v030-tcp-direct-qualification-20261012.md).
+
 
 ## Appendix 2 — In flight — the current handoff block
 
