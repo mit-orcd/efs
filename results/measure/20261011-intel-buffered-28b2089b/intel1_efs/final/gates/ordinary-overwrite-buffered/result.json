@@ -1,0 +1,73 @@
+{
+  "name": "ordinary-overwrite-buffered",
+  "command": [
+    "python3",
+    "-u",
+    "/data1/efs/intel-qual-28b2089b/normal/tests/live/gc_reclamation.py",
+    "--mode",
+    "buffered",
+    "--transport",
+    "tcp",
+    "--root",
+    "/data1/efs/intel-qual-28b2089b/evidence/live/ordinary-overwrite-buffered",
+    "--root",
+    "/data1/efs/intel-qual-28b2089b/evidence/live/ordinary-overwrite-buffered",
+    "--port",
+    "34210",
+    "--mount",
+    "/tmp/efs-intel-28b2089b-intel1_efs/mnt",
+    "--peer-mount",
+    "/tmp/efs-intel-28b2089b-intel1_efs/peer",
+    "--ordinary-overwrite-only"
+  ],
+  "environment": {
+    "EFS_RAFT_FLOW": "0",
+    "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+    "EFS_RAFT_GROUP_DRAIN": "0",
+    "EFS_RAFT_BATCH_NOOP": "0",
+    "EFS_RAFT_BATCH_OVERLAP": "0",
+    "EFS_TRANSPORT": "tcp",
+    "EFS_DATA_GC_ADMISSION": "1",
+    "EFS_GC_BACKLOG_IDLE_MS": "20",
+    "EFS_CLUSTER_SCRIPTS": "/data1/efs/intel-qual-28b2089b/evidence/cluster-scripts",
+    "TMPDIR": "/tmp/efs-intel-28b2089b-intel1_efs/temp",
+    "EFS_FAULTS": "0",
+    "EFS_GIT_ID": "28b2089b-release-normal",
+    "EFS_GIT_BRANCH": "release-v0.3.0-pre-alpha",
+    "EFS_GIT_DESCRIBE": "v0.3.0-pre-alpha-candidate"
+  },
+  "timeout": 1800,
+  "cwd": "/data1/efs/intel-qual-28b2089b/normal",
+  "variant": "normal",
+  "host": "intel1_efs",
+  "source": "28b2089be6a5df835cc7bb46b9c2a9e2f10df190",
+  "started_utc": "2026-10-12T04:01:08Z",
+  "before_binaries": {
+    "efsd": "a08c199d3b7027c0cbd4a8b3db017e4379c80801dc1e131f0d1b4734bb35193d",
+    "efs-fuse": "982762bcd5814b60e4ee67ce74a5089c2fa2afff4e9641547e0b4365b609e701",
+    "efs-mgmt": "c7f04065aa68dc08a5d8140e7252d41ad9c8ad9d088cd113085abcd45c86e228",
+    "libefs.a": "f86dae5706e65830c1684978d639cd8cb4659ac32cbf27b6039baa247296f47a",
+    "efs-bench": "05cf5a5b0b9ba5ab88c8813e73fbb0f7bb608cba6be4c6fed782be20e5532264",
+    "efs-query": "21852cbfaf650a1021f6186c18b980daf9bfcdffe1562d09def23b8ef5d4257b"
+  },
+  "before_owned_processes": [],
+  "pid": 2226245,
+  "returncode": 0,
+  "seconds": 18.104,
+  "status": "PASS",
+  "after_binaries": {
+    "efsd": "a08c199d3b7027c0cbd4a8b3db017e4379c80801dc1e131f0d1b4734bb35193d",
+    "efs-fuse": "982762bcd5814b60e4ee67ce74a5089c2fa2afff4e9641547e0b4365b609e701",
+    "efs-mgmt": "c7f04065aa68dc08a5d8140e7252d41ad9c8ad9d088cd113085abcd45c86e228",
+    "libefs.a": "f86dae5706e65830c1684978d639cd8cb4659ac32cbf27b6039baa247296f47a",
+    "efs-bench": "05cf5a5b0b9ba5ab88c8813e73fbb0f7bb608cba6be4c6fed782be20e5532264",
+    "efs-query": "21852cbfaf650a1021f6186c18b980daf9bfcdffe1562d09def23b8ef5d4257b"
+  },
+  "cleanup": {
+    "before_processes": [],
+    "before_mounts": [],
+    "remaining_processes": [],
+    "remaining_mounts": [],
+    "idle": true
+  }
+}

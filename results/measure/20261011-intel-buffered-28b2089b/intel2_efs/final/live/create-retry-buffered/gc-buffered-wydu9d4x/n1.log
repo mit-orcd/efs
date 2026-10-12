@@ -1,0 +1,178 @@
+2026-10-12T03:49:18.188Z storage-engine=files direct_io=off
+2026-10-12T03:49:18.188Z Data GC admission: experimental
+2026-10-12T03:49:18.188Z Storage quota: explicit 1.00 GiB (safe maximum 498.38 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T03:49:18.191Z heartbeat: enabled (2000 ms interval)
+2026-10-12T03:49:18.202Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:49:18.202Z raft-host: up raft_id=0 n=4 boot=10030674187998815 salt=6528243629060713759 g0=hosted g2=off
+2026-10-12T03:49:18.202Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:24Z on intel2), build=28b2089b-release-fault: node 1 listening on 127.0.0.1:34210, storage=/data1/efs/intel-qual-28b2089b/evidence/live/create-retry-buffered/gc-buffered-wydu9d4x/n1 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-12T03:49:20.191Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=985 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:49:22.488Z raft-host: applied session index=3 kind=1 shard=0 ino=0
+2026-10-12T03:49:22.650Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=4466 p50_us=4466 max_us=4466 wdisk ops=1 bytes=65536 errors=0 avg_us=3751 p50_us=3751 max_us=3751
+2026-10-12T03:49:23.041Z storage-engine=files direct_io=off
+2026-10-12T03:49:23.041Z Data GC admission: experimental
+2026-10-12T03:49:23.041Z Loaded 4 persisted cluster node(s) from /data1/efs/intel-qual-28b2089b/evidence/live/create-retry-buffered/gc-buffered-wydu9d4x/n1/meta/cluster_nodes.bin
+2026-10-12T03:49:23.041Z   persisted node 1: 127.0.0.1:34210
+2026-10-12T03:49:23.041Z   persisted node 2: 127.0.0.1:34211
+2026-10-12T03:49:23.041Z   persisted node 3: 127.0.0.1:34212
+2026-10-12T03:49:23.041Z   persisted node 4: 127.0.0.1:34213
+2026-10-12T03:49:23.043Z Storage quota: explicit 1.00 GiB (safe maximum 498.37 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T03:49:23.043Z Trying to rejoin via persisted peer 127.0.0.1:34211 (node 2)...
+2026-10-12T03:49:23.043Z Cannot connect to peer 127.0.0.1:34211
+2026-10-12T03:49:23.043Z Failed to rejoin via 127.0.0.1:34211
+2026-10-12T03:49:23.043Z Trying to rejoin via persisted peer 127.0.0.1:34212 (node 3)...
+2026-10-12T03:49:23.043Z Cannot connect to peer 127.0.0.1:34212
+2026-10-12T03:49:23.043Z Failed to rejoin via 127.0.0.1:34212
+2026-10-12T03:49:23.043Z Trying to rejoin via persisted peer 127.0.0.1:34213 (node 4)...
+2026-10-12T03:49:23.043Z Cannot connect to peer 127.0.0.1:34213
+2026-10-12T03:49:23.043Z Failed to rejoin via 127.0.0.1:34213
+2026-10-12T03:49:23.043Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-12T03:49:23.043Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-12T03:49:23.044Z heartbeat: enabled (2000 ms interval)
+2026-10-12T03:49:23.053Z kv-obs: mt_bytes=2918 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:49:23.053Z raft-host: up raft_id=0 n=4 boot=10030674187998816 salt=11624353108014845997 g0=hosted g2=off
+2026-10-12T03:49:23.053Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:24Z on intel2), build=28b2089b-release-fault: node 1 listening on 127.0.0.1:34210, storage=/data1/efs/intel-qual-28b2089b/evidence/live/create-retry-buffered/gc-buffered-wydu9d4x/n1 (1 paths, stripe=none), used=65536, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-12T03:49:24.064Z raft-host: gc-pass ms=7 orphan=7 reap=0 frag=0 spread=0 recover=0 fscans=1 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=7 segs=0 keys=17 emit=16 tomb=1 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T03:49:25.045Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=980 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:49:27.315Z raft-host: applied session index=12 kind=1 shard=0 ino=0
+2026-10-12T03:49:27.331Z iostats: get ops=1 bytes=65536 errors=0 avg_us=701 p50_us=701 max_us=701 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T03:49:27.658Z raft-host: applied session index=21 kind=1 shard=0 ino=0
+2026-10-12T03:49:28.056Z kv-obs: mt_bytes=11424 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:49:28.314Z raft-host: gc-pass ms=234 orphan=47 reap=21 frag=95 spread=0 recover=69 fscans=1 fsegs=0 fkeys=21 femit=21 ftomb=0 scans=199 segs=0 keys=25 emit=25 tomb=0 reap_scan=0 reap_sweep=4 reap_fence=17 reap_done=0
+2026-10-12T03:49:29.074Z raft-host: applied session index=62 kind=1 shard=0 ino=0
+2026-10-12T03:49:29.406Z raft-host: gc-pass ms=87 orphan=11 reap=7 frag=0 spread=0 recover=68 fscans=2 fsegs=0 fkeys=22 femit=0 ftomb=22 scans=200 segs=0 keys=27 emit=2 tomb=25 reap_scan=0 reap_sweep=7 reap_fence=0 reap_done=0
+2026-10-12T03:49:30.495Z raft-host: gc-pass ms=84 orphan=9 reap=6 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=198 segs=0 keys=5 emit=2 tomb=3 reap_scan=0 reap_sweep=5 reap_fence=1 reap_done=0
+2026-10-12T03:49:31.581Z raft-host: gc-pass ms=82 orphan=10 reap=3 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=198 segs=0 keys=5 emit=2 tomb=3 reap_scan=0 reap_sweep=3 reap_fence=0 reap_done=0
+2026-10-12T03:49:32.335Z iostats: get ops=53 bytes=3473408 errors=0 avg_us=244 p50_us=244 max_us=701 put ops=84 bytes=5505024 errors=0 avg_us=16469 p50_us=21054 max_us=45421 wdisk ops=84 bytes=5505024 errors=0 avg_us=7659 p50_us=9211 max_us=12808
+2026-10-12T03:49:32.666Z raft-host: gc-pass ms=81 orphan=9 reap=3 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=198 segs=0 keys=5 emit=2 tomb=3 reap_scan=0 reap_sweep=3 reap_fence=0 reap_done=0
+2026-10-12T03:49:33.058Z kv-obs: mt_bytes=23053 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:49:33.756Z raft-host: gc-pass ms=85 orphan=5 reap=12 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=200 segs=0 keys=5 emit=2 tomb=3 reap_scan=0 reap_sweep=3 reap_fence=5 reap_done=2
+2026-10-12T03:49:34.865Z raft-host: gc-pass ms=105 orphan=10 reap=21 frag=4 spread=0 recover=68 fscans=1 fsegs=0 fkeys=23 femit=2 ftomb=21 scans=201 segs=0 keys=30 emit=6 tomb=24 reap_scan=0 reap_sweep=3 reap_fence=16 reap_done=2
+2026-10-12T03:49:35.996Z raft-host: gc-pass ms=126 orphan=28 reap=26 frag=3 spread=0 recover=68 fscans=1 fsegs=0 fkeys=3 femit=2 ftomb=1 scans=201 segs=0 keys=12 emit=5 tomb=7 reap_scan=0 reap_sweep=4 reap_fence=19 reap_done=2
+2026-10-12T03:49:37.106Z raft-host: gc-pass ms=105 orphan=6 reap=26 frag=3 spread=0 recover=68 fscans=1 fsegs=0 fkeys=3 femit=2 ftomb=1 scans=201 segs=0 keys=14 emit=5 tomb=9 reap_scan=0 reap_sweep=3 reap_fence=19 reap_done=2
+2026-10-12T03:49:37.339Z iostats: get ops=138 bytes=9043968 errors=0 avg_us=144 p50_us=58 max_us=701 put ops=92 bytes=6029312 errors=0 avg_us=15437 p50_us=21054 max_us=45421 wdisk ops=92 bytes=6029312 errors=0 avg_us=7372 p50_us=9211 max_us=12808
+2026-10-12T03:49:38.059Z kv-obs: mt_bytes=26236 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:49:38.239Z raft-host: gc-pass ms=129 orphan=28 reap=28 frag=4 spread=0 recover=68 fscans=1 fsegs=0 fkeys=3 femit=2 ftomb=1 scans=201 segs=0 keys=16 emit=5 tomb=11 reap_scan=0 reap_sweep=6 reap_fence=19 reap_done=2
+2026-10-12T03:49:39.352Z raft-host: gc-pass ms=109 orphan=6 reap=29 frag=4 spread=0 recover=68 fscans=1 fsegs=0 fkeys=3 femit=2 ftomb=1 scans=201 segs=0 keys=18 emit=5 tomb=13 reap_scan=0 reap_sweep=4 reap_fence=21 reap_done=3
+2026-10-12T03:49:40.452Z raft-host: gc-pass ms=96 orphan=2 reap=21 frag=3 spread=0 recover=68 fscans=1 fsegs=0 fkeys=3 femit=2 ftomb=1 scans=201 segs=0 keys=20 emit=5 tomb=15 reap_scan=0 reap_sweep=2 reap_fence=16 reap_done=1
+2026-10-12T03:49:41.050Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=597 passes=17 sampled=1 pending=6,0 reap=1,0 removed=33 file_bytes=2163744 payload_bytes=2162688 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:49:41.560Z raft-host: gc-pass ms=103 orphan=5 reap=24 frag=5 spread=0 recover=68 fscans=1 fsegs=0 fkeys=3 femit=2 ftomb=1 scans=201 segs=0 keys=22 emit=5 tomb=17 reap_scan=0 reap_sweep=2 reap_fence=18 reap_done=2
+2026-10-12T03:49:42.341Z iostats: get ops=146 bytes=9568256 errors=0 avg_us=154 p50_us=62 max_us=701 put ops=100 bytes=6553600 errors=0 avg_us=14487 p50_us=21054 max_us=45421 wdisk ops=100 bytes=6553600 errors=0 avg_us=7043 p50_us=9211 max_us=12808
+2026-10-12T03:49:42.662Z raft-host: gc-pass ms=96 orphan=2 reap=22 frag=3 spread=0 recover=68 fscans=1 fsegs=0 fkeys=3 femit=2 ftomb=1 scans=201 segs=0 keys=24 emit=5 tomb=19 reap_scan=0 reap_sweep=3 reap_fence=16 reap_done=2
+2026-10-12T03:49:43.061Z kv-obs: mt_bytes=29661 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:49:43.768Z raft-host: gc-pass ms=101 orphan=5 reap=23 frag=4 spread=0 recover=68 fscans=1 fsegs=0 fkeys=3 femit=2 ftomb=1 scans=201 segs=0 keys=26 emit=5 tomb=21 reap_scan=0 reap_sweep=3 reap_fence=17 reap_done=2
+2026-10-12T03:49:44.871Z raft-host: gc-pass ms=99 orphan=2 reap=23 frag=4 spread=0 recover=68 fscans=1 fsegs=0 fkeys=3 femit=2 ftomb=1 scans=201 segs=0 keys=28 emit=5 tomb=23 reap_scan=0 reap_sweep=3 reap_fence=18 reap_done=2
+2026-10-12T03:49:45.979Z raft-host: gc-pass ms=104 orphan=6 reap=25 frag=3 spread=0 recover=68 fscans=1 fsegs=0 fkeys=3 femit=2 ftomb=1 scans=201 segs=0 keys=30 emit=5 tomb=25 reap_scan=0 reap_sweep=3 reap_fence=18 reap_done=3
+2026-10-12T03:49:47.090Z raft-host: gc-pass ms=105 orphan=4 reap=26 frag=3 spread=0 recover=71 fscans=1 fsegs=0 fkeys=3 femit=2 ftomb=1 scans=201 segs=0 keys=32 emit=5 tomb=27 reap_scan=0 reap_sweep=3 reap_fence=19 reap_done=2
+2026-10-12T03:49:47.344Z iostats: get ops=154 bytes=10092544 errors=0 avg_us=163 p50_us=67 max_us=701 put ops=162 bytes=10616832 errors=0 avg_us=21421 p50_us=30991 max_us=77761 wdisk ops=162 bytes=10616832 errors=0 avg_us=8077 p50_us=11205 max_us=19674
+2026-10-12T03:49:48.062Z kv-obs: mt_bytes=44818 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:49:48.453Z raft-host: gc-pass ms=359 orphan=16 reap=259 frag=15 spread=0 recover=68 fscans=1 fsegs=0 fkeys=38 femit=37 ftomb=1 scans=232 segs=0 keys=105 emit=76 tomb=29 reap_scan=0 reap_sweep=234 reap_fence=22 reap_done=2
+2026-10-12T03:49:49.803Z raft-host: gc-pass ms=346 orphan=10 reap=255 frag=11 spread=0 recover=68 fscans=1 fsegs=0 fkeys=37 femit=36 ftomb=1 scans=230 segs=0 keys=107 emit=75 tomb=32 reap_scan=0 reap_sweep=237 reap_fence=18 reap_done=0
+2026-10-12T03:49:51.113Z raft-host: gc-pass ms=305 orphan=0 reap=237 frag=0 spread=0 recover=68 fscans=2 fsegs=0 fkeys=119 femit=18 ftomb=101 scans=231 segs=0 keys=189 emit=19 tomb=170 reap_scan=0 reap_sweep=236 reap_fence=0 reap_done=0
+2026-10-12T03:49:52.174Z storage-engine=files direct_io=off
+2026-10-12T03:49:52.174Z Data GC admission: experimental
+2026-10-12T03:49:52.175Z Loaded 4 persisted cluster node(s) from /data1/efs/intel-qual-28b2089b/evidence/live/create-retry-buffered/gc-buffered-wydu9d4x/n1/meta/cluster_nodes.bin
+2026-10-12T03:49:52.175Z   persisted node 1: 127.0.0.1:34210
+2026-10-12T03:49:52.175Z   persisted node 2: 127.0.0.1:34211
+2026-10-12T03:49:52.175Z   persisted node 3: 127.0.0.1:34212
+2026-10-12T03:49:52.175Z   persisted node 4: 127.0.0.1:34213
+2026-10-12T03:49:52.177Z Storage quota: explicit 1.00 GiB (safe maximum 498.36 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T03:49:52.177Z Trying to rejoin via persisted peer 127.0.0.1:34211 (node 2)...
+2026-10-12T03:49:52.177Z Cannot connect to peer 127.0.0.1:34211
+2026-10-12T03:49:52.177Z Failed to rejoin via 127.0.0.1:34211
+2026-10-12T03:49:52.177Z Trying to rejoin via persisted peer 127.0.0.1:34212 (node 3)...
+2026-10-12T03:49:52.177Z Cannot connect to peer 127.0.0.1:34212
+2026-10-12T03:49:52.177Z Failed to rejoin via 127.0.0.1:34212
+2026-10-12T03:49:52.177Z Trying to rejoin via persisted peer 127.0.0.1:34213 (node 4)...
+2026-10-12T03:49:52.177Z Cannot connect to peer 127.0.0.1:34213
+2026-10-12T03:49:52.177Z Failed to rejoin via 127.0.0.1:34213
+2026-10-12T03:49:52.177Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-12T03:49:52.177Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-12T03:49:52.177Z heartbeat: enabled (2000 ms interval)
+2026-10-12T03:49:52.189Z raft-host: up raft_id=0 n=4 boot=10030674187998817 salt=14788600307819679950 g0=hosted g2=off
+2026-10-12T03:49:52.189Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:24Z on intel2), build=28b2089b-release-fault: node 1 listening on 127.0.0.1:34210, storage=/data1/efs/intel-qual-28b2089b/evidence/live/create-retry-buffered/gc-buffered-wydu9d4x/n1 (1 paths, stripe=none), used=7798784, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-12T03:49:52.189Z kv-obs: mt_bytes=50375 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:49:53.465Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T03:49:53.740Z raft-host: gc-pass ms=547 orphan=0 reap=543 frag=3 spread=0 recover=0 fscans=2 fsegs=0 fkeys=236 femit=36 ftomb=200 scans=40 segs=0 keys=824 emit=187 tomb=637 reap_scan=0 reap_sweep=533 reap_fence=10 reap_done=0
+2026-10-12T03:49:54.178Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=438 passes=2 sampled=1 pending=0,0 reap=1,0 removed=55 file_bytes=3606240 payload_bytes=3604480 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:49:55.011Z raft-host: gc-pass ms=266 orphan=0 reap=266 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=37 segs=0 keys=70 emit=1 tomb=69 reap_scan=0 reap_sweep=265 reap_fence=0 reap_done=0
+2026-10-12T03:49:56.222Z raft-host: gc-pass ms=206 orphan=0 reap=206 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=37 segs=0 keys=70 emit=1 tomb=69 reap_scan=0 reap_sweep=205 reap_fence=0 reap_done=0
+2026-10-12T03:49:57.191Z kv-obs: mt_bytes=48359 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:49:57.530Z raft-host: gc-pass ms=305 orphan=0 reap=236 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=229 segs=0 keys=82 emit=1 tomb=81 reap_scan=0 reap_sweep=236 reap_fence=0 reap_done=0
+2026-10-12T03:49:58.468Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T03:49:58.851Z raft-host: gc-pass ms=316 orphan=0 reap=248 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=229 segs=0 keys=70 emit=1 tomb=69 reap_scan=0 reap_sweep=247 reap_fence=0 reap_done=0
+2026-10-12T03:50:00.187Z raft-host: gc-pass ms=332 orphan=0 reap=263 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=229 segs=0 keys=70 emit=1 tomb=69 reap_scan=0 reap_sweep=263 reap_fence=0 reap_done=0
+2026-10-12T03:50:01.497Z raft-host: gc-pass ms=306 orphan=0 reap=237 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=229 segs=0 keys=70 emit=1 tomb=69 reap_scan=0 reap_sweep=237 reap_fence=0 reap_done=0
+2026-10-12T03:50:02.786Z raft-host: gc-pass ms=284 orphan=0 reap=216 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=231 segs=0 keys=70 emit=1 tomb=69 reap_scan=0 reap_sweep=212 reap_fence=1 reap_done=3
+2026-10-12T03:50:03.472Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T03:50:03.859Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=34 emit=0 tomb=34 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T03:50:04.260Z raft-host: applied session index=698 kind=1 shard=0 ino=0
+2026-10-12T03:50:04.971Z raft-host: gc-pass ms=105 orphan=6 reap=24 frag=6 spread=0 recover=68 fscans=1 fsegs=0 fkeys=119 femit=9 ftomb=110 scans=201 segs=0 keys=155 emit=13 tomb=142 reap_scan=0 reap_sweep=3 reap_fence=18 reap_done=2
+2026-10-12T03:50:05.249Z raft-host: applied session index=713 kind=1 shard=0 ino=0
+2026-10-12T03:50:06.298Z raft-host: gc-pass ms=323 orphan=9 reap=233 frag=12 spread=0 recover=68 fscans=1 fsegs=0 fkeys=134 femit=36 ftomb=98 scans=230 segs=0 keys=208 emit=75 tomb=133 reap_scan=0 reap_sweep=211 reap_fence=21 reap_done=0
+2026-10-12T03:50:07.199Z kv-obs: mt_bytes=62923 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:50:07.605Z raft-host: gc-pass ms=302 orphan=0 reap=234 frag=0 spread=0 recover=68 fscans=2 fsegs=0 fkeys=156 femit=37 ftomb=119 scans=231 segs=0 keys=230 emit=38 tomb=192 reap_scan=0 reap_sweep=233 reap_fence=0 reap_done=0
+2026-10-12T03:50:08.475Z iostats: get ops=67 bytes=4390912 errors=0 avg_us=84 p50_us=60 max_us=407 put ops=54 bytes=3538944 errors=0 avg_us=29171 p50_us=29644 max_us=55009 wdisk ops=54 bytes=3538944 errors=0 avg_us=9508 p50_us=10360 max_us=15321
+2026-10-12T03:50:08.934Z raft-host: gc-pass ms=323 orphan=0 reap=254 frag=0 spread=0 recover=68 fscans=2 fsegs=0 fkeys=156 femit=37 ftomb=119 scans=231 segs=0 keys=230 emit=38 tomb=192 reap_scan=0 reap_sweep=254 reap_fence=0 reap_done=0
+2026-10-12T03:50:09.018Z storage-engine=files direct_io=off
+2026-10-12T03:50:09.018Z Data GC admission: experimental
+2026-10-12T03:50:09.018Z Loaded 4 persisted cluster node(s) from /data1/efs/intel-qual-28b2089b/evidence/live/create-retry-buffered/gc-buffered-wydu9d4x/n1/meta/cluster_nodes.bin
+2026-10-12T03:50:09.018Z   persisted node 1: 127.0.0.1:34210
+2026-10-12T03:50:09.018Z   persisted node 2: 127.0.0.1:34211
+2026-10-12T03:50:09.018Z   persisted node 3: 127.0.0.1:34212
+2026-10-12T03:50:09.018Z   persisted node 4: 127.0.0.1:34213
+2026-10-12T03:50:09.020Z Storage quota: explicit 1.00 GiB (safe maximum 498.35 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T03:50:09.020Z Trying to rejoin via persisted peer 127.0.0.1:34211 (node 2)...
+2026-10-12T03:50:09.020Z Cannot connect to peer 127.0.0.1:34211
+2026-10-12T03:50:09.020Z Failed to rejoin via 127.0.0.1:34211
+2026-10-12T03:50:09.020Z Trying to rejoin via persisted peer 127.0.0.1:34212 (node 3)...
+2026-10-12T03:50:09.020Z Cannot connect to peer 127.0.0.1:34212
+2026-10-12T03:50:09.020Z Failed to rejoin via 127.0.0.1:34212
+2026-10-12T03:50:09.020Z Trying to rejoin via persisted peer 127.0.0.1:34213 (node 4)...
+2026-10-12T03:50:09.020Z Cannot connect to peer 127.0.0.1:34213
+2026-10-12T03:50:09.020Z Failed to rejoin via 127.0.0.1:34213
+2026-10-12T03:50:09.020Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-12T03:50:09.020Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-12T03:50:09.021Z heartbeat: enabled (2000 ms interval)
+2026-10-12T03:50:09.039Z kv-obs: mt_bytes=62923 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:50:09.039Z raft-host: up raft_id=0 n=4 boot=10056877882246017 salt=417136771572508943 g0=hosted g2=off
+2026-10-12T03:50:09.039Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:24Z on intel2), build=28b2089b-release-fault: node 1 listening on 127.0.0.1:34210, storage=/data1/efs/intel-qual-28b2089b/evidence/live/create-retry-buffered/gc-buffered-wydu9d4x/n1 (1 paths, stripe=none), used=3538944, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-12T03:50:10.510Z raft-host: gc-pass ms=466 orphan=0 reap=466 frag=0 spread=0 recover=0 fscans=2 fsegs=0 fkeys=310 femit=72 ftomb=238 scans=40 segs=0 keys=1053 emit=273 tomb=780 reap_scan=0 reap_sweep=465 reap_fence=1 reap_done=0
+2026-10-12T03:50:11.021Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=511 passes=2 sampled=1 pending=36,0 reap=1,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:50:11.732Z raft-host: gc-pass ms=218 orphan=0 reap=217 frag=0 spread=0 recover=0 fscans=2 fsegs=0 fkeys=156 femit=37 ftomb=119 scans=39 segs=0 keys=230 emit=38 tomb=192 reap_scan=0 reap_sweep=217 reap_fence=0 reap_done=0
+2026-10-12T03:50:12.972Z raft-host: gc-pass ms=235 orphan=0 reap=235 frag=0 spread=0 recover=0 fscans=2 fsegs=0 fkeys=156 femit=37 ftomb=119 scans=39 segs=0 keys=230 emit=38 tomb=192 reap_scan=0 reap_sweep=234 reap_fence=0 reap_done=0
+2026-10-12T03:50:14.307Z raft-host: gc-pass ms=331 orphan=0 reap=262 frag=0 spread=0 recover=68 fscans=2 fsegs=0 fkeys=156 femit=37 ftomb=119 scans=231 segs=0 keys=242 emit=38 tomb=204 reap_scan=0 reap_sweep=261 reap_fence=0 reap_done=0
+2026-10-12T03:50:15.660Z raft-host: gc-pass ms=348 orphan=0 reap=279 frag=0 spread=0 recover=68 fscans=2 fsegs=0 fkeys=156 femit=37 ftomb=119 scans=231 segs=0 keys=230 emit=38 tomb=192 reap_scan=0 reap_sweep=279 reap_fence=0 reap_done=0
+2026-10-12T03:50:16.942Z raft-host: gc-pass ms=278 orphan=0 reap=209 frag=0 spread=0 recover=68 fscans=2 fsegs=0 fkeys=156 femit=37 ftomb=119 scans=231 segs=0 keys=230 emit=38 tomb=192 reap_scan=0 reap_sweep=209 reap_fence=0 reap_done=0
+2026-10-12T03:50:18.240Z raft-host: gc-pass ms=294 orphan=0 reap=225 frag=0 spread=0 recover=68 fscans=2 fsegs=0 fkeys=156 femit=37 ftomb=119 scans=231 segs=0 keys=230 emit=38 tomb=192 reap_scan=0 reap_sweep=225 reap_fence=0 reap_done=0
+2026-10-12T03:50:19.562Z raft-host: gc-pass ms=317 orphan=0 reap=248 frag=0 spread=0 recover=68 fscans=2 fsegs=0 fkeys=156 femit=37 ftomb=119 scans=231 segs=0 keys=230 emit=38 tomb=192 reap_scan=0 reap_sweep=248 reap_fence=0 reap_done=0
+2026-10-12T03:50:20.927Z raft-host: gc-pass ms=361 orphan=0 reap=286 frag=6 spread=0 recover=68 fscans=2 fsegs=0 fkeys=156 femit=37 ftomb=119 scans=233 segs=0 keys=230 emit=38 tomb=192 reap_scan=0 reap_sweep=267 reap_fence=16 reap_done=2
+2026-10-12T03:50:21.999Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=38 emit=0 tomb=38 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T03:50:23.315Z raft-host: gc-pass ms=312 orphan=0 reap=230 frag=13 spread=0 recover=68 fscans=1 fsegs=0 fkeys=191 femit=36 ftomb=155 scans=232 segs=0 keys=266 emit=73 tomb=193 reap_scan=0 reap_sweep=199 reap_fence=28 reap_done=2
+2026-10-12T03:50:24.028Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T03:50:24.043Z kv-obs: mt_bytes=55071 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:50:24.388Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=39 emit=0 tomb=39 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T03:50:24.809Z storage-engine=files direct_io=off
+2026-10-12T03:50:24.809Z Data GC admission: experimental
+2026-10-12T03:50:24.809Z Loaded 4 persisted cluster node(s) from /data1/efs/intel-qual-28b2089b/evidence/live/create-retry-buffered/gc-buffered-wydu9d4x/n1/meta/cluster_nodes.bin
+2026-10-12T03:50:24.809Z   persisted node 1: 127.0.0.1:34210
+2026-10-12T03:50:24.809Z   persisted node 2: 127.0.0.1:34211
+2026-10-12T03:50:24.809Z   persisted node 3: 127.0.0.1:34212
+2026-10-12T03:50:24.809Z   persisted node 4: 127.0.0.1:34213
+2026-10-12T03:50:24.810Z Storage quota: explicit 1.00 GiB (safe maximum 498.37 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T03:50:24.810Z Trying to rejoin via persisted peer 127.0.0.1:34211 (node 2)...
+2026-10-12T03:50:24.810Z Cannot connect to peer 127.0.0.1:34211
+2026-10-12T03:50:24.810Z Failed to rejoin via 127.0.0.1:34211
+2026-10-12T03:50:24.810Z Trying to rejoin via persisted peer 127.0.0.1:34212 (node 3)...
+2026-10-12T03:50:24.810Z Cannot connect to peer 127.0.0.1:34212
+2026-10-12T03:50:24.810Z Failed to rejoin via 127.0.0.1:34212
+2026-10-12T03:50:24.810Z Trying to rejoin via persisted peer 127.0.0.1:34213 (node 4)...
+2026-10-12T03:50:24.810Z Cannot connect to peer 127.0.0.1:34213
+2026-10-12T03:50:24.810Z Failed to rejoin via 127.0.0.1:34213
+2026-10-12T03:50:24.810Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-12T03:50:24.810Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-12T03:50:24.811Z heartbeat: enabled (2000 ms interval)
+2026-10-12T03:50:24.827Z raft-host: up raft_id=0 n=4 boot=10057625468796939 salt=4520870546586336701 g0=hosted g2=off
+2026-10-12T03:50:24.827Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:24Z on intel2), build=28b2089b-release-fault: node 1 listening on 127.0.0.1:34210, storage=/data1/efs/intel-qual-28b2089b/evidence/live/create-retry-buffered/gc-buffered-wydu9d4x/n1 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-12T03:50:24.827Z kv-obs: mt_bytes=55071 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:50:26.811Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=979 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:50:28.864Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=0 errors=1 avg_us=1263 p50_us=1263 max_us=1263 wdisk ops=1 bytes=65536 errors=1 avg_us=625 p50_us=625 max_us=625

@@ -1,0 +1,34 @@
+{
+  "command": [
+    "make",
+    "-j4",
+    "EFS_FAULTS=0",
+    "EFS_GIT_ID=28b2089b-release-normal",
+    "EFS_GIT_BRANCH=release-v0.3.0-pre-alpha",
+    "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+    "efsd",
+    "efs-fuse",
+    "efs-mgmt",
+    "efs-bench",
+    "efs-query",
+    "libefs.a",
+    "tests/faults/fault_sim"
+  ],
+  "source": "28b2089be6a5df835cc7bb46b9c2a9e2f10df190",
+  "started_utc": "2026-10-12T03:47:13Z",
+  "returncode": 0,
+  "seconds": 11.583437950997904,
+  "binaries": {
+    "efsd": "4de8ec0095a0afeddc2bebffc0d2df718bb043716c2b69ee46c2bfe48411f81d",
+    "efs-fuse": "0fb1d4f40f237a87d0ede74cec2f9b8078333ab21a6933f2abba4ac7a2c836e8",
+    "efs-mgmt": "81277dc9256dc37719eb6a8d7acef008e3940aaaffe3bacc3b25b95c43b8f23a",
+    "efs-bench": "e7b37b8f863d59c395f0b74bdbd0d908c3a3f934e779addbcda00cb84e87dbc8",
+    "efs-query": "e250ab3756040be4cefef39903441c83dd176a1a11a5cb369b19a57743db0cd9",
+    "libefs.a": "cda12c89cdbd782b1090de59a64ed1235255a97848366c4eb913a2aa3a56df12"
+  },
+  "versions": {
+    "efsd": "efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:13Z on intel2)\n",
+    "efs-fuse": "efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:13Z on intel2)\n",
+    "efs-mgmt": "efs-mgmt v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:13Z on intel2)\n"
+  }
+}

@@ -1,0 +1,113 @@
+2026-10-12T04:15:09.145Z storage-engine=files direct_io=off
+2026-10-12T04:15:09.145Z Data GC admission: experimental
+2026-10-12T04:15:09.145Z Storage quota: explicit 1.00 GiB (safe maximum 498.14 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T04:15:09.152Z Joined cluster with 4 nodes
+2026-10-12T04:15:09.156Z heartbeat: enabled (2000 ms interval)
+2026-10-12T04:15:09.170Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:15:09.170Z raft-host: up raft_id=3 n=4 boot=10194200836376872 salt=13501734364161258796 g0=off g2=hosted
+2026-10-12T04:15:09.170Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:24Z on intel2), build=28b2089b-release-fault: node 4 listening on 127.0.0.1:34213, storage=/data1/efs/intel-qual-28b2089b/evidence/live/sync-write-fault-buffered/gc-buffered-u_5p3ncm/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-12T04:15:11.156Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=982 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:15:43.868Z storage-engine=files direct_io=off
+2026-10-12T04:15:43.868Z Data GC admission: experimental
+2026-10-12T04:15:43.868Z Loaded 4 persisted cluster node(s) from /data1/efs/intel-qual-28b2089b/evidence/live/sync-write-fault-buffered/gc-buffered-u_5p3ncm/n4/meta/cluster_nodes.bin
+2026-10-12T04:15:43.868Z   persisted node 1: 127.0.0.1:34210
+2026-10-12T04:15:43.868Z   persisted node 2: 127.0.0.1:34211
+2026-10-12T04:15:43.868Z   persisted node 3: 127.0.0.1:34212
+2026-10-12T04:15:43.868Z   persisted node 4: 127.0.0.1:34213
+2026-10-12T04:15:43.868Z Storage quota: explicit 1.00 GiB (safe maximum 498.13 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T04:15:43.872Z Joined cluster with 4 nodes
+2026-10-12T04:15:43.875Z heartbeat: enabled (2000 ms interval)
+2026-10-12T04:15:43.885Z kv-obs: mt_bytes=130 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:15:43.885Z raft-host: up raft_id=3 n=4 boot=10194200836376873 salt=15929823730371016584 g0=off g2=hosted
+2026-10-12T04:15:43.885Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:24Z on intel2), build=28b2089b-release-fault: node 4 listening on 127.0.0.1:34213, storage=/data1/efs/intel-qual-28b2089b/evidence/live/sync-write-fault-buffered/gc-buffered-u_5p3ncm/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-12T04:15:45.876Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=987 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:16:18.408Z storage-engine=files direct_io=off
+2026-10-12T04:16:18.408Z Data GC admission: experimental
+2026-10-12T04:16:18.408Z Loaded 4 persisted cluster node(s) from /data1/efs/intel-qual-28b2089b/evidence/live/sync-write-fault-buffered/gc-buffered-u_5p3ncm/n4/meta/cluster_nodes.bin
+2026-10-12T04:16:18.408Z   persisted node 1: 127.0.0.1:34210
+2026-10-12T04:16:18.408Z   persisted node 2: 127.0.0.1:34211
+2026-10-12T04:16:18.408Z   persisted node 3: 127.0.0.1:34212
+2026-10-12T04:16:18.408Z   persisted node 4: 127.0.0.1:34213
+2026-10-12T04:16:18.409Z Storage quota: explicit 1.00 GiB (safe maximum 498.13 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T04:16:18.416Z Joined cluster with 4 nodes
+2026-10-12T04:16:18.419Z heartbeat: enabled (2000 ms interval)
+2026-10-12T04:16:18.424Z raft-host: up raft_id=3 n=4 boot=10194200836376874 salt=2220281750057454904 g0=off g2=hosted
+2026-10-12T04:16:18.424Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:24Z on intel2), build=28b2089b-release-fault: node 4 listening on 127.0.0.1:34213, storage=/data1/efs/intel-qual-28b2089b/evidence/live/sync-write-fault-buffered/gc-buffered-u_5p3ncm/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-12T04:16:18.424Z kv-obs: mt_bytes=130 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:16:20.419Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=992 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:16:22.838Z storage-engine=files direct_io=off
+2026-10-12T04:16:22.838Z Data GC admission: experimental
+2026-10-12T04:16:22.838Z Loaded 4 persisted cluster node(s) from /data1/efs/intel-qual-28b2089b/evidence/live/sync-write-fault-buffered/gc-buffered-u_5p3ncm/n4/meta/cluster_nodes.bin
+2026-10-12T04:16:22.838Z   persisted node 1: 127.0.0.1:34210
+2026-10-12T04:16:22.838Z   persisted node 2: 127.0.0.1:34211
+2026-10-12T04:16:22.838Z   persisted node 3: 127.0.0.1:34212
+2026-10-12T04:16:22.838Z   persisted node 4: 127.0.0.1:34213
+2026-10-12T04:16:22.838Z Storage quota: explicit 1.00 GiB (safe maximum 498.13 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T04:16:22.846Z Joined cluster with 4 nodes
+2026-10-12T04:16:22.849Z heartbeat: enabled (2000 ms interval)
+2026-10-12T04:16:22.853Z raft-host: up raft_id=3 n=4 boot=10194200836376875 salt=11604249556637400630 g0=off g2=hosted
+2026-10-12T04:16:22.853Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:24Z on intel2), build=28b2089b-release-fault: node 4 listening on 127.0.0.1:34213, storage=/data1/efs/intel-qual-28b2089b/evidence/live/sync-write-fault-buffered/gc-buffered-u_5p3ncm/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-12T04:16:22.853Z kv-obs: mt_bytes=130 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:16:24.849Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=992 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:16:26.363Z raft-host: applied session index=6 kind=1 shard=0 ino=0
+2026-10-12T04:16:27.142Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T04:16:27.617Z raft-host: applied session index=8 kind=1 shard=0 ino=0
+2026-10-12T04:16:27.857Z kv-obs: mt_bytes=3254 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:16:32.146Z iostats: get ops=112 bytes=7340032 errors=0 avg_us=84 p50_us=46 max_us=509 put ops=55 bytes=3604480 errors=0 avg_us=21133 p50_us=17501 max_us=56126 wdisk ops=55 bytes=3604480 errors=0 avg_us=8336 p50_us=9150 max_us=12088
+2026-10-12T04:16:32.857Z kv-obs: mt_bytes=15125 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:16:37.147Z iostats: get ops=112 bytes=7340032 errors=0 avg_us=84 p50_us=46 max_us=509 put ops=55 bytes=3604480 errors=0 avg_us=21133 p50_us=17501 max_us=56126 wdisk ops=55 bytes=3604480 errors=0 avg_us=8336 p50_us=9150 max_us=12088
+2026-10-12T04:16:40.854Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=923 passes=18 sampled=0 pending=0,0 reap=0,0 removed=3 file_bytes=196704 payload_bytes=196608 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:16:42.147Z iostats: get ops=115 bytes=7536640 errors=0 avg_us=88 p50_us=50 max_us=509 put ops=112 bytes=7340032 errors=0 avg_us=28512 p50_us=37569 max_us=56126 wdisk ops=112 bytes=7340032 errors=0 avg_us=8867 p50_us=9039 max_us=15472
+2026-10-12T04:16:42.857Z kv-obs: mt_bytes=26733 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:16:47.753Z storage-engine=files direct_io=off
+2026-10-12T04:16:47.753Z Data GC admission: experimental
+2026-10-12T04:16:47.753Z Loaded 4 persisted cluster node(s) from /data1/efs/intel-qual-28b2089b/evidence/live/sync-write-fault-buffered/gc-buffered-u_5p3ncm/n4/meta/cluster_nodes.bin
+2026-10-12T04:16:47.753Z   persisted node 1: 127.0.0.1:34210
+2026-10-12T04:16:47.753Z   persisted node 2: 127.0.0.1:34211
+2026-10-12T04:16:47.753Z   persisted node 3: 127.0.0.1:34212
+2026-10-12T04:16:47.753Z   persisted node 4: 127.0.0.1:34213
+2026-10-12T04:16:47.754Z Storage quota: explicit 1.00 GiB (safe maximum 498.12 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T04:16:47.763Z Joined cluster with 4 nodes
+2026-10-12T04:16:47.767Z heartbeat: enabled (2000 ms interval)
+2026-10-12T04:16:47.777Z raft-host: up raft_id=3 n=4 boot=10194200836376876 salt=13289356336994096417 g0=off g2=hosted
+2026-10-12T04:16:47.777Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:24Z on intel2), build=28b2089b-release-fault: node 4 listening on 127.0.0.1:34213, storage=/data1/efs/intel-qual-28b2089b/evidence/live/sync-write-fault-buffered/gc-buffered-u_5p3ncm/n4 (1 paths, stripe=none), used=3538944, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-12T04:16:47.777Z kv-obs: mt_bytes=33877 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:16:49.768Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=987 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:16:52.777Z kv-obs: mt_bytes=29845 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:16:58.500Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T04:17:05.398Z storage-engine=files direct_io=off
+2026-10-12T04:17:05.398Z Data GC admission: experimental
+2026-10-12T04:17:05.399Z Loaded 4 persisted cluster node(s) from /data1/efs/intel-qual-28b2089b/evidence/live/sync-write-fault-buffered/gc-buffered-u_5p3ncm/n4/meta/cluster_nodes.bin
+2026-10-12T04:17:05.399Z   persisted node 1: 127.0.0.1:34210
+2026-10-12T04:17:05.399Z   persisted node 2: 127.0.0.1:34211
+2026-10-12T04:17:05.399Z   persisted node 3: 127.0.0.1:34212
+2026-10-12T04:17:05.399Z   persisted node 4: 127.0.0.1:34213
+2026-10-12T04:17:05.401Z Storage quota: explicit 1.00 GiB (safe maximum 498.13 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T04:17:05.412Z Joined cluster with 4 nodes
+2026-10-12T04:17:05.418Z heartbeat: enabled (2000 ms interval)
+2026-10-12T04:17:05.435Z kv-obs: mt_bytes=43669 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:17:05.435Z raft-host: up raft_id=3 n=4 boot=10194200836376877 salt=401679713782221526 g0=off g2=hosted
+2026-10-12T04:17:05.435Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:24Z on intel2), build=28b2089b-release-fault: node 4 listening on 127.0.0.1:34213, storage=/data1/efs/intel-qual-28b2089b/evidence/live/sync-write-fault-buffered/gc-buffered-u_5p3ncm/n4 (1 paths, stripe=none), used=7077888, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-12T04:17:07.418Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=979 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:17:07.447Z raft-host: gc-pass ms=5 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:17:10.440Z kv-obs: mt_bytes=41621 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:17:10.465Z raft-host: gc-pass ms=6 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:17:14.517Z raft-host: gc-pass ms=33 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:17:15.210Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T04:17:15.440Z kv-obs: mt_bytes=39605 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:17:16.818Z raft-host: applied session index=718 kind=1 shard=0 ino=0
+2026-10-12T04:17:20.123Z storage-engine=files direct_io=off
+2026-10-12T04:17:20.123Z Data GC admission: experimental
+2026-10-12T04:17:20.123Z Loaded 4 persisted cluster node(s) from /data1/efs/intel-qual-28b2089b/evidence/live/sync-write-fault-buffered/gc-buffered-u_5p3ncm/n4/meta/cluster_nodes.bin
+2026-10-12T04:17:20.123Z   persisted node 1: 127.0.0.1:34210
+2026-10-12T04:17:20.123Z   persisted node 2: 127.0.0.1:34211
+2026-10-12T04:17:20.123Z   persisted node 3: 127.0.0.1:34212
+2026-10-12T04:17:20.123Z   persisted node 4: 127.0.0.1:34213
+2026-10-12T04:17:20.124Z Storage quota: explicit 1.00 GiB (safe maximum 498.13 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T04:17:20.134Z Joined cluster with 4 nodes
+2026-10-12T04:17:20.137Z heartbeat: enabled (2000 ms interval)
+2026-10-12T04:17:20.150Z kv-obs: mt_bytes=36640 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:17:20.150Z raft-host: up raft_id=3 n=4 boot=10194200836376878 salt=10384211275683418327 g0=off g2=hosted
+2026-10-12T04:17:20.150Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:47:24Z on intel2), build=28b2089b-release-fault: node 4 listening on 127.0.0.1:34213, storage=/data1/efs/intel-qual-28b2089b/evidence/live/sync-write-fault-buffered/gc-buffered-u_5p3ncm/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-12T04:17:22.137Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=983 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:17:23.425Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=0 errors=1 avg_us=1767 p50_us=1767 max_us=1767 wdisk ops=1 bytes=65536 errors=1 avg_us=1086 p50_us=1086 max_us=1086

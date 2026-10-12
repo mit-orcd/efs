@@ -1,0 +1,24 @@
+[
+  {
+    "stage": "prepare",
+    "barrier": "pid=2387710 parts=66 stage=prepare\n",
+    "coordinator_node": 3,
+    "errors": [],
+    "replacement_inode": 1624,
+    "incoming_inode": 1624,
+    "old_inode": 2766,
+    "transient_read_errno": [],
+    "cold_atomic_namespace": true
+  },
+  {
+    "stage": "commit",
+    "barrier": "pid=2387957 parts=66 stage=commit\n",
+    "coordinator_node": 2,
+    "errors": [],
+    "replacement_inode": 774,
+    "incoming_inode": 774,
+    "old_inode": 2504,
+    "transient_read_errno": [],
+    "cold_atomic_namespace": true
+  }
+]

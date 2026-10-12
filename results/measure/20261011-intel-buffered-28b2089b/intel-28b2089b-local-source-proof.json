@@ -1,0 +1,10 @@
+{
+  "source": "28b2089be6a5df835cc7bb46b9c2a9e2f10df190",
+  "archive_sha256": "2ade76f798a2bbeac2f2647f6bd9b956a939a61126986deefc2c7c458e4f1454",
+  "inputs_sha256": "1e2f0e4350d8ab4507e2329fbd8c84386731e8e1938b4a6a2d897f5e27fb5fec",
+  "files": 21738,
+  "mismatches": [],
+  "seconds": 3.632176083,
+  "manifest_paths_equal_git_tracked_paths": true,
+  "archive_paths_equal_manifest": true
+}
