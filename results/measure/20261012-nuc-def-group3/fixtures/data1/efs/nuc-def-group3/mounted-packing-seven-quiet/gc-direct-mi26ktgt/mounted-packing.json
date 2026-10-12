@@ -1,0 +1,38 @@
+{
+  "cold_verified": true,
+  "physical_packed_empty": true,
+  "failures": [
+    {
+      "gate": "posix-client-0",
+      "returncode": 1
+    },
+    {
+      "gate": "posix-client-1",
+      "returncode": 1
+    },
+    {
+      "gate": "posix-client-2",
+      "returncode": 1
+    },
+    {
+      "gate": "posix-client-3",
+      "returncode": 1
+    },
+    {
+      "gate": "posix-client-4",
+      "returncode": 1
+    },
+    {
+      "gate": "posix-client-5",
+      "returncode": 1
+    },
+    {
+      "gate": "posix-client-6",
+      "returncode": 1
+    }
+  ],
+  "source_sha256": "a40c7c6589870e763c636709e890e05454212f74c47e2fd9430a2a6600f9c5c7",
+  "clients": 7,
+  "mode": "direct",
+  "transport": "tcp"
+}
