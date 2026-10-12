@@ -1,0 +1,22 @@
+2026-10-12T14:23:23.873Z storage-engine=files direct_io=on
+2026-10-12T14:23:23.873Z Data GC admission: disabled
+2026-10-12T14:23:23.873Z Storage quota: explicit 4.00 GiB (safe maximum 48.91 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T14:23:23.875Z Joined cluster with 3 nodes
+2026-10-12T14:23:23.876Z heartbeat: enabled (2000 ms interval)
+2026-10-12T14:23:23.879Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-12T14:23:23.879Z raft-host: up raft_id=2 n=4 boot=2213436518221805 salt=10671722427340132234 g0=hosted g2=hosted
+2026-10-12T14:23:23.879Z efsd e59e815f-frozen (branch qualification-v030-tcp-direct, built 2026-10-12T14:22:33Z on nuc), build=e59e815f-group3-normal: node 3 listening on 127.0.0.1:24412, storage=/data1/efs/nuc-e59-focus/n3 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=4 shared
+2026-10-12T14:23:23.879Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:23:25.876Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=991 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T14:23:28.852Z raft-host: applied session index=3 kind=1 shard=0 ino=0
+2026-10-12T14:23:28.869Z raft-host: applied session index=3 kind=1 shard=0 ino=0
+2026-10-12T14:23:28.880Z kv-obs: mt_bytes=4845 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:23:28.881Z raft-host: applied session index=12 kind=1 shard=0 ino=0
+2026-10-12T14:23:28.888Z raft-host: applied session index=9 kind=1 shard=0 ino=0
+2026-10-12T14:23:28.890Z raft-host: applied session index=11 kind=1 shard=0 ino=0
+2026-10-12T14:23:28.890Z raft-host: applied session index=15 kind=1 shard=0 ino=0
+2026-10-12T14:23:28.893Z raft-host: applied session index=21 kind=1 shard=0 ino=0
+2026-10-12T14:23:29.765Z store: put O_DIRECT bounce copy (buf align=3517 len=4096)
+2026-10-12T14:23:29.766Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=4573 errors=0 avg_us=1428 p50_us=1428 max_us=1428 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T14:23:33.883Z kv-obs: mt_bytes=2159241 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:23:34.767Z iostats: get ops=10 bytes=40960 errors=0 avg_us=849 p50_us=394 max_us=3206 put ops=269 bytes=1230137 errors=0 avg_us=1054 p50_us=945 max_us=3174 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0

@@ -1,0 +1,1 @@
+raft-mkfs rc=0 leader_hint=1 index=2 salt=15259756885699448199

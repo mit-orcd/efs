@@ -1,0 +1,6 @@
+parallel 2 tests jobs=16 (serial 0 after)
+pass dir_deep_nesting_beyond_64      
+pass dir_deep_nesting                
+============================================================
+POSIX suite: 2/2 pass, 0 fail, 0 skip, 0 notrun  (2.2s)
+wrote /home/efs/nuc-e59-focus/results/deep-client-0.tsv

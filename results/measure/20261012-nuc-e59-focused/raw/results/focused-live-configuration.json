@@ -1,0 +1,341 @@
+[
+  {
+    "kind": "efsd",
+    "pid": 505790,
+    "exe": "/home/efs/nuc-e59-focus/source-normal/efsd",
+    "sha256": "96a4df1e24811c35842f88179b09943c06de745e58c8e7b3ef73f07d5141c3cf",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "cmdline": [
+      "/home/efs/nuc-e59-focus/source-normal/efsd",
+      "--node-id",
+      "1",
+      "--addr",
+      "127.0.0.1",
+      "--port",
+      "24410",
+      "--storage",
+      "/data1/efs/nuc-e59-focus/n1",
+      "--quota",
+      "4G",
+      "--storage-engine",
+      "files",
+      "--direct-io",
+      ""
+    ]
+  },
+  {
+    "kind": "efsd",
+    "pid": 505802,
+    "exe": "/home/efs/nuc-e59-focus/source-normal/efsd",
+    "sha256": "96a4df1e24811c35842f88179b09943c06de745e58c8e7b3ef73f07d5141c3cf",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "cmdline": [
+      "/home/efs/nuc-e59-focus/source-normal/efsd",
+      "--node-id",
+      "2",
+      "--addr",
+      "127.0.0.1",
+      "--port",
+      "24411",
+      "--storage",
+      "/data1/efs/nuc-e59-focus/n2",
+      "--quota",
+      "4G",
+      "--storage-engine",
+      "files",
+      "--direct-io",
+      "--join",
+      "127.0.0.1:24410",
+      ""
+    ]
+  },
+  {
+    "kind": "efsd",
+    "pid": 505815,
+    "exe": "/home/efs/nuc-e59-focus/source-normal/efsd",
+    "sha256": "96a4df1e24811c35842f88179b09943c06de745e58c8e7b3ef73f07d5141c3cf",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "cmdline": [
+      "/home/efs/nuc-e59-focus/source-normal/efsd",
+      "--node-id",
+      "3",
+      "--addr",
+      "127.0.0.1",
+      "--port",
+      "24412",
+      "--storage",
+      "/data1/efs/nuc-e59-focus/n3",
+      "--quota",
+      "4G",
+      "--storage-engine",
+      "files",
+      "--direct-io",
+      "--join",
+      "127.0.0.1:24410",
+      ""
+    ]
+  },
+  {
+    "kind": "efsd",
+    "pid": 505829,
+    "exe": "/home/efs/nuc-e59-focus/source-normal/efsd",
+    "sha256": "96a4df1e24811c35842f88179b09943c06de745e58c8e7b3ef73f07d5141c3cf",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "cmdline": [
+      "/home/efs/nuc-e59-focus/source-normal/efsd",
+      "--node-id",
+      "4",
+      "--addr",
+      "127.0.0.1",
+      "--port",
+      "24413",
+      "--storage",
+      "/data1/efs/nuc-e59-focus/n4",
+      "--quota",
+      "4G",
+      "--storage-engine",
+      "files",
+      "--direct-io",
+      "--join",
+      "127.0.0.1:24410",
+      ""
+    ]
+  },
+  {
+    "kind": "efs-fuse",
+    "pid": 505875,
+    "exe": "/home/efs/nuc-e59-focus/source-normal/efs-fuse",
+    "sha256": "5fab2c882f10c61be65425699e06966bf7d3cdcdc3fb6dedd8d6a3d1e75e1d70",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "cmdline": [
+      "/home/efs/nuc-e59-focus/source-normal/efs-fuse",
+      "127.0.0.1:24410",
+      "default",
+      "/data1/efs/mnt",
+      "-f",
+      ""
+    ]
+  },
+  {
+    "kind": "efs-fuse",
+    "pid": 505891,
+    "exe": "/home/efs/nuc-e59-focus/source-normal/efs-fuse",
+    "sha256": "5fab2c882f10c61be65425699e06966bf7d3cdcdc3fb6dedd8d6a3d1e75e1d70",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "cmdline": [
+      "/home/efs/nuc-e59-focus/source-normal/efs-fuse",
+      "127.0.0.1:24410",
+      "default",
+      "/data1/efs/mnt2",
+      "-f",
+      ""
+    ]
+  },
+  {
+    "kind": "efs-fuse",
+    "pid": 505906,
+    "exe": "/home/efs/nuc-e59-focus/source-normal/efs-fuse",
+    "sha256": "5fab2c882f10c61be65425699e06966bf7d3cdcdc3fb6dedd8d6a3d1e75e1d70",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "cmdline": [
+      "/home/efs/nuc-e59-focus/source-normal/efs-fuse",
+      "127.0.0.1:24410",
+      "default",
+      "/tmp/efs-focus-2-0_k2j20f",
+      "-f",
+      ""
+    ]
+  },
+  {
+    "kind": "efs-fuse",
+    "pid": 505921,
+    "exe": "/home/efs/nuc-e59-focus/source-normal/efs-fuse",
+    "sha256": "5fab2c882f10c61be65425699e06966bf7d3cdcdc3fb6dedd8d6a3d1e75e1d70",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "cmdline": [
+      "/home/efs/nuc-e59-focus/source-normal/efs-fuse",
+      "127.0.0.1:24410",
+      "default",
+      "/tmp/efs-focus-3-68x24e_1",
+      "-f",
+      ""
+    ]
+  },
+  {
+    "kind": "efs-fuse",
+    "pid": 505936,
+    "exe": "/home/efs/nuc-e59-focus/source-normal/efs-fuse",
+    "sha256": "5fab2c882f10c61be65425699e06966bf7d3cdcdc3fb6dedd8d6a3d1e75e1d70",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "cmdline": [
+      "/home/efs/nuc-e59-focus/source-normal/efs-fuse",
+      "127.0.0.1:24410",
+      "default",
+      "/tmp/efs-focus-4-anc7fajx",
+      "-f",
+      ""
+    ]
+  },
+  {
+    "kind": "efs-fuse",
+    "pid": 505951,
+    "exe": "/home/efs/nuc-e59-focus/source-normal/efs-fuse",
+    "sha256": "5fab2c882f10c61be65425699e06966bf7d3cdcdc3fb6dedd8d6a3d1e75e1d70",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "cmdline": [
+      "/home/efs/nuc-e59-focus/source-normal/efs-fuse",
+      "127.0.0.1:24410",
+      "default",
+      "/tmp/efs-focus-5-7a2dkd7m",
+      "-f",
+      ""
+    ]
+  },
+  {
+    "kind": "efs-fuse",
+    "pid": 505966,
+    "exe": "/home/efs/nuc-e59-focus/source-normal/efs-fuse",
+    "sha256": "5fab2c882f10c61be65425699e06966bf7d3cdcdc3fb6dedd8d6a3d1e75e1d70",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "cmdline": [
+      "/home/efs/nuc-e59-focus/source-normal/efs-fuse",
+      "127.0.0.1:24410",
+      "default",
+      "/tmp/efs-focus-6-a3n6on99",
+      "-f",
+      ""
+    ]
+  }
+]
