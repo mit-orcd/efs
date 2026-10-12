@@ -1,0 +1,50 @@
+{
+  "utc": "2026-10-12T00:16:27Z",
+  "reason": "W112 durable ordinary full-overwrite corruption; shared retry branch exists in frozen NUC source. Hold only four idle downstream controllers before installation; active base live append gate continues normally.",
+  "controllers": [
+    {
+      "pid": 129782,
+      "command": [
+        "python3",
+        "/data1/efs/devel-nuc-20261011/nuc_catchup_install_20261011.py"
+      ],
+      "children": [],
+      "output_files": [],
+      "timed_or_mutating_work_not_started": true
+    },
+    {
+      "pid": 129783,
+      "command": [
+        "python3",
+        "/data1/efs/devel-nuc-20261011/nuc_catchup_service_cold_20261011.py"
+      ],
+      "children": [],
+      "output_files": [],
+      "timed_or_mutating_work_not_started": true
+    },
+    {
+      "pid": 129784,
+      "command": [
+        "python3",
+        "/data1/efs/devel-nuc-20261011/nuc_catchup_live_20261011.py",
+        "--variant",
+        "catchup-root"
+      ],
+      "children": [],
+      "output_files": [],
+      "timed_or_mutating_work_not_started": true
+    },
+    {
+      "pid": 129785,
+      "command": [
+        "python3",
+        "/data1/efs/devel-nuc-20261011/nuc_catchup_w97_abba_20261011.py"
+      ],
+      "children": [],
+      "output_files": [
+        "/data1/efs/devel-nuc-20261011/catchup-w97-abba/mnt"
+      ],
+      "timed_or_mutating_work_not_started": true
+    }
+  ]
+}

@@ -357,7 +357,6 @@ test: all
 	python3 tests/test_read_retry_budget.py
 	python3 tests/test_host_read_deadline.py
 	python3 tests/test_peer_pool_deadline.py
-	python3 tests/test_read_retry_budget.py
 	python3 tests/test_lookup_group_plan.py
 	python3 tests/test_lookup_path_authority.py
 	python3 tests/test_read_control_host.py

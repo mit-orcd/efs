@@ -102,6 +102,9 @@ try:
               '--root', '/data1/efs', '--root', '/home/efs']
     codes = {}
     for mode in ('direct', 'buffered'):
+        codes['ordinary-' + mode] = run('ordinary-' + mode, ['python3', *common,
+            '--mode', mode, '--fixture-quota', '4G', '--ordinary-overwrite-only'])
+        assert codes['ordinary-' + mode] == 0, (mode, codes)
         codes['full-' + mode] = run('full-' + mode, ['python3', *common, '--mode', mode,
             '--append-burst', '2000', '--fresh-namespace', '--posix', '--continue-posix-failure',
             '--sync-writes', '--sync-write-fault', '--append-sync-boundary', '--append-replay-race',

@@ -1,0 +1,189 @@
+b9b55cba5b9ce141ce71cc0d8a77cf871ec28842 perf(fuse): combine first CREATE lease adoption into one guarded edge
+140c272461651f3a8b1691ca57af74bd721bfa41 Close NUC operator gates W70 W78 W79 W80 with retained evidence
+63271aa6bdcce2fe54b4d44f372b1e659415f2b5 Add separate NUC XFS profiling and exact allocation-control reduction
+dfb8f6b591c5e7cde71eb3163b609b876f4e9b49 fix(report): overlap bounded first-touch session admission waits
+991e254b9c44427f0ddcefa1b211bc54c6f3c43c test(report): require actual first-touch admission overlap
+410d63a460fc3c142c736e5e7a3eebfc0f2565f0 Close W96 with isolated drive matrix and full NUC recovery acceptance
+05026d4264392cb17e79b2b294d668b6c159df0d test(amd): add combined adoption reply-loss and cold cleanup gates
+86a5024799e2a3e7ecfde56d1958a231c54a77ef Preserve advisory features when authoritative discovery is unavailable
+1db1144b79a82e16b93e5778e53392e41563f457 Scope offline close cleanup verdicts to every owned fixture inode
+7a31601a57d0fb40d3dab508dd9cde8a05ade44c Warm allocation profiles past first ring extent conversion
+096c986a5b1fd9cf9357253c1888c72b605ca619 docs: prioritize ORCD production tiny-payload packing under W95
+b11770ed32c0591be1313999b3356ec6d6b6338d feat: stage bounded small-segment EC geometry and allocation audit
+bcea3cdb2e6a170c5f21a6d2cb5e6d114e752b32 Retire empty tiny-file close obligations through the existing atomic barrier
+6fba451a361804df505f4f48936142a8fb27c82b Prepare validated NUC installation with preserved-store checks
+9dc3cf037750ec5b5f4fbd04eea426a38a34bc27 Separate written-extent overwrites from initial ring conversion
+5bea36268a94b886d198e01879d6820555c0c1f2 feat: stage immutable tiny-payload pack format with fenced references
+d09d01e0c00d60b587b7aead9e1961ade1d11aac docs(orcd): assign communication and contention findings to W109/W110
+718e2dbc97e639a1b2cf2f2eb459c91facc39f58 fix(fuse): clean pending CREATE ownership after refused combined adoption
+955c996458cc5cc4c2f0428e303fe86f624dae9f Record repeated lower-layer NVMe slowdown and pending W97 controls
+ad6a2cd8b1151a61b5371920911be9fd42d0ea86 Archive superseded query profiling and Intel deployment checkpoints
+72b1a88fbf0960f95fb4afbd1da1e150c561f357 docs: regenerate architecture after ORCD work-item integration
+329ad2113a43ebfd4f3bdf18348eadf583f7d7c3 test(amd): preserve baseline failures, diagnostics and completed acceptance evidence
+4e246bc5a031b7fd5b06109d59663f00e8e0bb0d docs(status): reconcile AMD closures with current agent handoffs
+617a059746fdd39805f783511743f73aae188972 test(amd): bind A/B evidence to frozen binaries and independent stores
+77b7011c318d1e8fe24a0134be376dce76fe36d2 test(meta): verify coordinator redirects require both actual shard groups
+ebb7ab464985a3b0b95e3e02734511cb4c79dba0 feat: persist immutable packed fragments with explicit direct-I/O geometry
+abdc0b5cc80a50988a1932bfc2e8be471cc9d1a4 test(amd): preserve and verify the exact A/B adoption source difference
+092ce6dd366fd0ef51c7007ec51c09bb8a9f7e86 Reconcile handoff and status indexes with completed NUC gates
+757b0a56d2ed46131946515de45776ab5889e794 fix: resolve owner names in directory-local long listings
+48e615ceb46371e2f31a78fd85a9ae768240c7ae Count XFS background log activity separately from writer tracepoints
+f1c6ce14a73914b4012fed984f06ea0cd33de04e Preserve namespace replay identity while its receipt is materializing
+7c3b48d2b41561ffa79a9d5f11ed53927cf0d07e fix(query): journal large inode deltas without full refold fallback
+e778329ad58d22cefa80df89e39a4c8ff9310f8b Retry transient session reads and exact-floor fences within the existing limit
+2a30c73baae56d36735e0b96933491f20e7dd895 test(amd): verify full source controls and queue clean release-mode regression
+dadbb2efbf1fe91cc6f72ed0e547af8d6dbb9d37 perf(query): merge sorted inode streams during incremental builds
+5a5caee9ceb188f3e35ecf6a4463727c3857515b Stage bounded packed-object lifetime and replay ledger
+1fb7902669fe15938811f93a49c176a77fff71df Retain complete SATA and NVMe allocation matrix with exact verification
+fbafadc1b457f475669394a3f48ae70bf8659ca7 Fence retired packed generations against delayed uploads
+321a8c4dc8ecc576bb75d2cf4fc370d5ab17a74b Verify actual ring writes and preserve separate profiling reruns
+ff5f1c878561a6878bf131298c380e3be50fe786 perf(query): collect removed inode IDs during the first merge pass
+8286a1561dd2033254afa59c5049c1987ad22752 Measure wall-clock syscall waits in allocation profiles
+b8d35eaa2c08e3c08ae4593dc910d6c092d863e5 Persist minimum-reader requirements before packed metadata activation
+ad2e197850f561cccb06af8649c924747b497889 Skip remote Git scans when the deployment supplies verified build identity
+28366043c821de33fd7451a0f646f7780fa56cc3 Keep supplementary syscall wall-time traces separate and identity checked
+7a9eac45ba547fe7d7a07305f159c7fa8c212a62 Preserve retryable fresh-quorum refusal through pending transaction reads
+3b3c71f0b4eb015b24eff2df8d6abbd6f4ccef2f Reuse LOOKUP quorum proof within the same request and Raft group
+346fe2dad69325c7fc43047e748fd63e8223b783 Canonicalize pack ledgers and reuse confirmed reader barriers
+9c7c7a28f7b312e3230a71490d552df349baa3e8 test(client): exercise lost CREATE replies on retained namespace framing
+5d85a77940213eefecdc6ba0374332bdc04f5147 Route pending transaction reads to hosts that own the coordinator group
+9e4f29b0c81793a1be85ec67b64b97d1eb23efad perf(amd): accept four-repeat finite CREATE adoption comparison
+ac6f4ea8930584835368b40bd2ee23b0923da9f7 Batch cold Raft replay reads and refuse destructive recovery on IO errors
+14c6db9d76411c8cd22e480c0194ac7c3aa05ad5 Document XFS log-force contrast with exact profile and tracing limits
+408043b694a5598848d7952c203915313534e04b perf(query): validate exact file stat inputs before refolding
+a87923852253cab2f15ed97dd0559559a8e2b999 Correlate fully written-ring rates with physical block-counter windows
+1b6796ef8e041f5ae34809bc85b05d106836eb90 Cover pending foreign coordinator READDIR forwarding and exact cursors
+eead9498d087192cda5c586c57e6130cc7091b51 Accept explicit written-ring output names and durations in reduction
+e66feefde3eb1f5f59fa1458657658c34205722f Keep session fence completion bound to its captured epoch and barrier budget
+13f099f3e35fcc641de4aa7a9ede7cd47ca117e6 Record slowdown on fully written NVMe extents and block-counter limits
+008faaa0d1bcd3fbbe4e9d37e99e5b1fd4a53d07 Keep cold ticket probes bounded while retrying exact transient refusals
+1658d628fec7e50043c6d5549c07a83802a88d6a Finalize three-hour NUC closures and repeated written-extent latency evidence
+8238f20b05ef38d91cf4421b4e4f7a0590c42b21 Backpressure contended REPORT admission instead of long serial fallback
+12e6592009516687aa66e38bc2cbb65272c0dff8 Bound parallel payload verification in loaded query acceptance
+85f98aeddf6b962eac3bfae76919665b231448c4 Record Intel fixes, native proof and in-progress acceptance ledger
+91b6a63add747bb7920dcdf2b33fa9e84b082ffe Wait for namespace identity capacity within caller deadline
+7bde5f432b6a6c069eeabaa6a753648c481ab4e5 Cancel fixture matrices safely after background launches
+e9c395c7628c7cbaf52c2dedc6b4afa583a08524 test: retry exact session admission on transient BUSY within its deadline
+fe39dce41e0453cd3fb1238f1bf921fe8de909a8 docs: record latest Intel query passes and retain incomplete private acceptance
+6a42a1ea96dd1be870e77fda48dd194c11b9524f docs: archive verified Intel repair notes and retain named contract evidence
+465ae00b2981eab154f45fa854b492d21c064665 Prepare REPORT session owner once per batch while retaining shard fencing
+1eebf1b99f13f1944d476daf03ebed28f7bca027 Reply MKDIR from committed CREATE attributes and validate partition readiness
+777a64c02824131262f38c5ad0a1f7264c0776c7 Check session state through GET after successful readiness CREATE
+1fb9842f59d1db71526d724e46e4b6a5e0d7a2f0 Exercise explicit Intel I/O modes and bound deep-path fixture setup
+8b01353e364accb37e727b599594bb2cac43b1b9 Distinguish running worker groups from zombies in cancellation self-tests
+2f5a56a81a39b6e969214044e4b1bdf1da0e50ff Keep cancellation fallback conservative and update Intel acceptance evidence
+af998ca04d0b43640e466bd504fc936e5065e58c Regenerate architecture views after Intel status reconciliation
+1cc5c3404ad3212df8558466e57f5d9eff888f04 Reuse fresh namespace group proof within one request
+17ce065513ca765b87ffd0959b2073d82929c90c Archive superseded W93 investigation checkpoints
+e07345c3ab63de86554f486496db07947b713053 Reuse same-request APPEND owner quorum proof
+f56328c4c303d8e1356b96e4d74a7f4a9c8e11d8 Record current Intel live failures and pending acceptance
+7e65d132a1a592e9ebab1ae7a31bc8280882d17a Record both-host startup configuration validation
+24975785d437f0ce9a4dc23a190382d62630a802 Group APPEND PREPARE apply waits after ordered guards
+1340995abefd9e72c2c08ca694d2746abe75f94e Include enabled POSIX command extras in query acceptance
+02c13e0b4c99395d05af468179c7d209795514d0 Register existing namespace owners before missing-only bootstrap
+f9ffaa9131009f7dd450abad25de682d45d2fb3d Record exact Intel candidate native coverage and pending live gates
+aba08244900d7bd899311b65f0f0f4013ba55ac8 test(amd): record targeted CREATE fault passes and guarded-lease blocker
+bbbd78f6f8f6854f9d10c479cf955f2a4121fc49 Merge branch 'devel' into devel-orcd
+8c7b516652127a1744ba73ea7279477428f6a20a Merge branch 'devel-amd' into devel-orcd
+4aa0c3f75f2543b0de874eb5b5f82a8b8e9f2ac9 Verify both physical Intel hosts through the portal HTTP response
+3a0fbe5a00ccdc21d670377ac835590338da8988 Merge branch 'devel-intel' into devel-orcd
+5ce1252f1d512e8375d5dd48e8591a74306bd690 Merge branch 'devel-mac' into devel-orcd
+ca9edea3ac6182f53109da3ea19bbde7746fe90a Merge branch 'devel-nuc' into devel-orcd
+c52a464391a685a766ee49aa76a162de58162a81 test: cover quorum reuse with transaction-aware inode readers
+1bd6ed91ab2e0b06fbfdef50068fb6f326e4edd0 Archive preceding Intel candidate observations without closing active gates
+f02c4fae41fecf7b9b604cbb1ad17431faa89ff7 perf(query): skip lookups for validated empty stat families
+e92f53ac20c73d92d970c4483460711296cb1fae Merge commit '48a2719d19fb5a6b0464935c70a967a1f1a86236' into devel-amd
+860ae10caa15a1e7ed3ae5c0def1f0e99521eeb0 Merge commit 'c52a464391a685a766ee49aa76a162de58162a81' into devel-amd
+e29e25acac071404f280c5efec245664e552636e Merge commit '1bd6ed91ab2e0b06fbfdef50068fb6f326e4edd0' into devel-amd
+3b3b0172c587a6942cbbe20c1e3384ffe17c2a95 Merge commit 'f02c4fae41fecf7b9b604cbb1ad17431faa89ff7' into devel-amd
+1bc49eec0a04e5fd58e4f1cdb6167db9b6085a39 Merge current devel into devel-nuc and preserve current closure evidence
+1df4a99be7f6a85528760c4510a8bf3f94e4f337 Merge captured cluster branches into devel-nuc; regenerate architecture
+c3118143b3e121a447b8cc5397b24a727f00abbd Merge commit '3b3b0172c587a6942cbbe20c1e3384ffe17c2a95' into devel-nuc
+dc9421aa6a4d776d3676eec41df6baa7d32a605e Pipeline guarded REPORT append completion prepares and test actual loop refusals
+f2a0094b395e86acfec48de581b36e4e37a42165 Add exact 20000-record append fsync peer and cold acceptance gate
+89e3f1755ab2a910edab96a5c0445829afcd4226 Preserve session admission apply verdicts so fresh mounts bootstrap owners
+fb7ca8932c935dbc09c1e1d2e2609e9bb2491ef7 Gate six first-mutation namespace paths after cold remount without prior OPEN
+5060b4d4e7b3f94049abd34d591a35f333668134 Isolate append burst performance controls with exact cold reclamation gates
+2669064e1de22f7eed88dddb1bb9e97b0c91bce1 Use one capacity snapshot for duplicate-root quota assertions under host writes
+108afa3e1b37d69284b7b78fd26c9af5ab8d8dc3 Advance session admission refusals while retaining durable apply verdicts
+d7b7e7e1c3d0b3e8967c52bf8b32ad473ca72bd7 Record integrated NUC admission failures and bounded W52 experiment honestly
+2b596bcf18288c5dae0cf307b26d47a5321a3007 Measure NUC physical durability request windows on verified written rings
+c93ff0b5002422b48672b7c7c8a097fe941b3d19 Add bounded two-mount append GC acceptance and record all captured tag ancestry
+22c6bcc4e5ce0e2e5998b58d33a938555aeea1c8 Record green direct NUC integration gates and preserve final runtime checks
+fe372f813ab70e1543265e18b29b4d6f72572344 Retain initial failed gates and causal copied-store controls for NUC integration
+ac31f677bb48d26ea31fda14805115b8ee846ff0 Bound append stress launch by measured smoke timing and checkpoint buffered POSIX
+adb1a5d70baab886dc4cae14e7c784d0a9c5fd02 Accept fresh namespace repair through full direct and buffered NUC gates
+b0680bf3c895197942529614b1c6a1baf761d8f5 Reject lost or error block trace windows as latency acceptance
+0355432aacb351f289aab59d0ea3c4ff525d6686 test: retain cleanup for background fixture interrupts
+17427049ccf1c79a624675c92f7fb4167a2e2de8 test: bound NUC drive controls by cleanup budget
+ab4ae8c87902a7c194c4fd9773587bc57d7211b1 test: reject errored block completions at trace boundaries
+a6c4324f888cf93cc02fabec8a76d49ecfea2e6e docs: record incomplete long append gates without speed claims
+43ca80168bf1edbc71db2880e3225773a0d3b0bb test: summarize exact drive controls with trace coverage limits
+3233e51a8037320273c792bfbd580088e12a389b test: reserve NUC cleanup time and avoid killing fixture finally
+0c377bb42359aec9dcf89db6291e61e997c36307 test: rerun final NUC native suite on current test overlay
+658e42a20702938160369c440cd67de28455d516 test: retain final native and superseded idle-plan evidence
+bd767b7e20bb27153792501f7fa313b448bafeb1 test: inventory append lane fanout only on offline KV copies
+c1ca909160b4248b300d05cf8aa6c739c4327e74 test: verify installed runtime through mapped executable identity
+7d8861540bdd12d66ed83fc96cd1830e0b926af0 test: gate enabled commands on isolated two-mount fixtures
+60824bc07163ae6d2b4aadfaa7fe63e4746bea34 test: collect focused command fixture acceptance
+00fd458af255bf4804f3c66dee39da63c94ebfae test: retain NUC integration and drive latency evidence
+4114c6569a594c4e998eb3b8befa3a8ef6111f10 docs: record NUC acceptance and remaining W52 W97 gates
+4afc063c4fc4b9109559a483f74a44fa2e62609d perf: share guarded REPORT completion transactions across bounded reservations
+f54eff338323b2949d0214bbbe221ad87b934a08 test: recover eight owned append completions across all 64 lanes
+efe21c17a2f07f9b03a9c049c4bd3aafba2860ad test: coordinate NUC metadata placement and W52 acceptance gates
+7d6a55ebd4b2d3fed1be014983bc14623aa0a392 test: reduce placement throughput and pooled Raft sync windows
+1ecaf06eb1f83e16c3afe528583e209654c75c60 test: retain deployed NUC phase and staged completion evidence
+43773052a8d1b2cb8c24db269fcb50efea879513 docs: checkpoint deployed NUC W52 W97 continuation
+c0f81930409438dce0ded4c74b8ec63d2f0718eb docs: retain repeated NUC metadata-placement acceptance and limits
+6ab2b6692dd469d7c9418e12bd617eed89bb5f5e test: expose replicated sync cost and serial metadata tail in NUC controls
+5794329bc650dd3bcfb3b3217f72fab734efd1c1 test: retain exact preserved-cluster W52 baseline and append decline
+cd4df71d7fb8d878284bf1c3a9b5594a7e11ee43 test: accept W52 native candidate and serialize preserved-store append gates
+a16e9753d164916af3759c2d42f8e0fb14401a75 test: capture a bounded identified-engine profile during the long append gate
+b0ccb62855d7ba28f6da687f78bcf4cbfc94c74a test: mount and drain the append peer after full-suite cleanup
+d6eb3c2c7d174c0b8cdd238836730a893027aca5 test: resume known peer-fixture failure with exact buffered-gate provenance
+b7d821aaad0c0310756ffb9c7342f1730845e9d5 docs: distinguish queue refusals and retain append fixture failure provenance
+1291010636678295f7a1d2838117fa60f950da83 docs: record NUC drive cache reporting without claiming cache exhaustion
+3bbdd4fc96c46e15e3d6544b336e6ef3d2805380 test: gate SATA NVMe SATA data placement behind exact append acceptance
+fcc5636c539f93d0062b7d4d11db7f2bc1845404 test: reject candidate core drift and record installed test overlays
+efdc3ced90e30871c231ddf28b0a19a57a8cf7cf test: retain corrected buffered W52 sync append and recovery acceptance
+a9c42e9261a278f8b84e1a41312e98c8096c785e test: isolate W97 data placement on the accepted engine with matched profiles
+bb0971e3ff887cf055297a51338dde747d3904ba docs: retain direct append slowdown profile and gated NUC continuation
+826de4c3576a3bf09af6735804aa6ec5a60fdafb fix: align NUC per-file durability counts to observer windows
+f52cd2dd93e43cfd0b2ac7c70d2ade58121b9487 fix: start append burst age after successful publication and retry failed drains
+3e69a7b33be95be76721712c5b6f8fd51ac54ba4 test: gate frozen append clock candidate behind placement and full acceptance
+d72d34331ed7e89aab8adcab4a96a3774adacc7a test: verify append clock build against committed core hashes
+82c763f7a16ebb5a84e0e40b2404075e889db9b1 docs: retain failed direct gate and append publication feedback fix
+65aa10f294962f97e33a5550af28f24562337628 docs: retain SATA-only slowdown and Linux append clock regression
+19cbb11f5a5effd4c43df0a4879fce25c132d1d4 perf: bound fragment namespace barriers at sealed storage roots
+cdcd0f232351388a0d302085d873ea93098b592a docs: retain NVMe data placement and gate root barrier follow-up
+766814c86c7a1a043406e3e0bdde0b44978b0fe7 fix: retain full ancestry barriers for packed fence certificates
+0abe0fecd5e871a3c684e1e8ea53e95aaad14f8c test: preserve quota and documentation fixture retries behind acceptance gates
+d480595d5ec4a0569956950b76aa1575cbcd2214 test: keep documentation evidence inside frozen candidate checkout
+be5cd9212a77bba7406228f6545fa058235530b1 test: gate root barrier acceptance behind exact append cold recovery
+91281a26d06bc4cba9178a009dad3163f42e5aae docs: retain completed placement matrix and direct append acceptance
+2100ff23ac31d5fa5410041a311a09ff62a8410c docs: qualify append timing comparison by leader placement
+0be019d1997c0fb7b34dffb5afe1c5ba088f3b73 docs: quantify surviving append publication batching and remaining fanout
+4b2038d24ebe0184d0bb62d1554347854d38d18b test: surface NUC fixture restoration failures to dependent gates
+156c51f6114d1aff023e3756e8986972f63b1fce test: wait for all recovering NUC listeners before deployment payload checks
+88b38fb9222921dbd28aceb0ba38bf9f51704afc test: verify unchanged NUC deployment after retained startup BUSY
+2f92f2f465fc698dd6dc6bea7cb77b5146b3975b docs: record accepted NUC deployment and resumed long append gates
+32b472c5b062a777b43f9b0ee23337990a34d877 Complete caught-up append reservations in one Raft entry
+9598d03ec2bdfd5e0720d09f08daf8ce1bb2425e Record W52 single-entry completion regressions and acceptance plan
+61f660b1afd6f2f6024acfc204e94eb1969297ca Gate W52 completion deployment and isolate W97 slowdown comparison
+b77fe86718302485ca7f8590f0ea6602259b91e5 Report sampled W97 sync paths alongside repeated slowdown windows
+eb92418d985f953dd3771432fed1d5cb9f1ae32c Record full native acceptance of both matched NUC candidates
+2c5226e3c37849dc05045f2dcbf3f419873e7d16 Require complete matrix and restoration verdict for W97 summaries
+8d233abd8aea5ae0079a7eba2f15fb802e968c5e Document W52 completion wire format and recovery boundaries
+1f1037a6aa001546982defcb4e5e3997d694076f Refresh active NUC acceptance checkpoint and queued phase boundaries
+ba73f3043f6e986ef63518e3657e7409c3777566 Reserve append completion tag52 to avoid packed admission collision
+3538213cfe793dbdb9025c3e0f65cc96eb97149a Retain superseded wire45 evidence separately from tag52 acceptance
+cf28905456d0f2d7a55136abd23d1cbd8d867b87 Record corrected tag52 full native acceptance for matched NUC builds
+a323e1271b11989808ab0da0cb7cba6edae82aa4 Allow prerequisite chains to finish within their unchanged gate budgets
+007a866193fcc99265edcac688738c2d821fc74c Retain preserved 20k cold pass and begin new W52 mounted gates
+75bc93ad106be13e9ee90e90e69c2ed131286b15 Record tag52 direct POSIX peer fault cold and GC acceptance
+7598c8f08eb973ce58fdc18b1075cf849919db6d Clarify that the W52 tag45 draft was superseded before admission
+63c9cb15c4b0b386f9ef6396e9a946ac70cf50b6 Exclude duplicate private Raft store logs from current evidence copies
+db412ceb54c7406637118038b5a26239880d7242 Hold NUC promotion until shared stale full overwrite corruption is repaired
+627958bdd9c95e5cf22a304d7d21110ae4d26fa1 W112 preserve accepted full-overwrite bytes during STALE replay
+444cd4f0fd2177761572b86ee99d714615aacb5f Port isolated W112 ordinary overwrite warm peer cold and physical gates
+101598d2f2d0ce9ac99ab59f840130f3c8f0e218 Require both mode ordinary overwrite cold gates before NUC promotion
