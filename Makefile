@@ -476,6 +476,7 @@ test: all
 	python3 tests/test_repair_job_faults.py
 	python3 tests/test_repair_host.py
 	python3 tests/test_repair_coordinator.py
+	python3 tests/test_repair_gc_host.py
 	python3 tests/test_repair_source_bounds.py
 	./tests/test_store_gc
 	./tests/test_store_gc unlimited
