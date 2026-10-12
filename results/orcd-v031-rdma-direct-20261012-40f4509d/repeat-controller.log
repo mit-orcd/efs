@@ -1,0 +1,68 @@
+fcstor010 pass dir_mkdir_umask                 
+pass attr_umask_respected            
+pass perm_dir_no_x_search            
+pass err_chdir_into_file             
+pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 216/216 pass, 0 fail, 0 skip, 0 notrun  (20.6s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor010/profile-posix-40f4509dff74-repeat1.tsv
+fcstor009 pass dir_mkdir_umask                 
+pass attr_umask_respected            
+pass perm_dir_no_x_search            
+pass err_chdir_into_file             
+pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 216/216 pass, 0 fail, 0 skip, 0 notrun  (20.7s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor009/profile-posix-40f4509dff74-repeat1.tsv
+fcstor012 pass dir_mkdir_umask                 
+pass attr_umask_respected            
+pass perm_dir_no_x_search            
+pass err_chdir_into_file             
+pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 216/216 pass, 0 fail, 0 skip, 0 notrun  (21.0s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor012/profile-posix-40f4509dff74-repeat1.tsv
+fcstor008 pass dir_mkdir_umask                 
+pass attr_umask_respected            
+pass perm_dir_no_x_search            
+pass err_chdir_into_file             
+pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 216/216 pass, 0 fail, 0 skip, 0 notrun  (21.0s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor008/profile-posix-40f4509dff74-repeat1.tsv
+fcstor007 pass dir_mkdir_umask                 
+pass attr_umask_respected            
+pass perm_dir_no_x_search            
+pass err_chdir_into_file             
+pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 216/216 pass, 0 fail, 0 skip, 0 notrun  (21.1s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor007/profile-posix-40f4509dff74-repeat1.tsv
+fcstor011 pass dir_mkdir_umask                 
+pass attr_umask_respected            
+pass perm_dir_no_x_search            
+pass err_chdir_into_file             
+pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 216/216 pass, 0 fail, 0 skip, 0 notrun  (21.1s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor011/profile-posix-40f4509dff74-repeat1.tsv
+fcstor013 pass dir_mkdir_umask                 
+pass attr_umask_respected            
+pass perm_dir_no_x_search            
+pass err_chdir_into_file             
+pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 216/216 pass, 0 fail, 0 skip, 0 notrun  (21.1s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor013/profile-posix-40f4509dff74-repeat1.tsv
+seven-client POSIX completed
+prepared /tmp/efs-mount/profile-peer-40f4509dff74-repeat1 (67 testdirs)
+pass peer_open_rename_fd             
+pass peer_unlink_recreate_old_fd     
+pass peer_concurrent_hardlink        
+pass peer_concurrent_unlink_hardlinks
+pass peer_fcntl_range_conflict       
+pass peer_fcntl_range_adjacent       
+pass peer_mtime_no_regress           
+============================================================
+POSIX 2-client: 67/67 pass, 0 fail  (100.0s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor007/profile-peer-40f4509dff74-repeat1.tsv

@@ -1,0 +1,1 @@
+GC inode fanout: all sends before waits, every member required, failure/BUSY/malformed replies drained PASS
