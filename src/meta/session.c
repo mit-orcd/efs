@@ -1063,7 +1063,12 @@ static int lease_guarded_edge(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
         close_key[2]=EFS_KV_KIND_CLOSE_STEP;
         rc=efs_txn_key_exclusive(kv,close_key,close_len);
         if(rc!=EFS_OK)return rc; /* BUSY is retryable, never record it as success */
-        if(flags&(EFS_LEASE_EDGE_CLOSE|EFS_LEASE_EDGE_CLEAR_PENDING)) {
+        /* OPEN+CLEAR_PENDING transfers the hold to a normal lease; it is
+         * not a last-close event. A later CLOSE or fenced session cleanup
+         * durably creates the obligation. Preserve any older marker, but
+         * do not make GC repeatedly probe a newly adopted, still-open file. */
+        if(!(flags&EFS_LEASE_EDGE_OPEN) &&
+           (flags&(EFS_LEASE_EDGE_CLOSE|EFS_LEASE_EDGE_CLEAR_PENDING))) {
             edge_be64(close_value,gen);memcpy(close_value+8,q->id.client_uuid,16);
             be32(close_value+24,q->id.session_epoch);edge_be64(close_value+28,q->id.seq);
             items[count++]=(struct efs_kv_item){EFS_KV_PUT,close_key,close_len,

@@ -396,6 +396,7 @@ test: all
 	python3 tests/test_publication_session_rpc.py
 	python3 tests/test_publication_session_reuse.py
 	python3 tests/test_lease_edge_rpc.py
+	python3 tests/test_lease_submission_proof.py
 	python3 tests/test_lease_request.py
 	python3 tests/test_identity_revocation.py
 	python3 tests/test_put_ticket_rpc.py

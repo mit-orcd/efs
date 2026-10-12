@@ -610,6 +610,62 @@ static void test_guarded_pending_and_fence(void)
     CHECK(efs_lease_guarded_probe_deferred(kv,ino,2,&q,combined,1,&combined_verdict)==1 && combined_verdict==EFS_ERR_STALE,"later cleanup preserves original negative verdict");
     efs_kv_mem_free(kv);
 }
+static void test_deferred_adoption_no_cleanup(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();uint8_t uuid[16];efs_ino_t ino=0;
+    guarded_session_init(kv,uuid);
+    struct efs_opid_req create=guarded_request(uuid,1,0);
+    CHECK(efs_meta_apply_create_file_log_pending(kv,&g_at,1,S_IFREG|0600,
+        "deferred-adoption",0,-1,&create,uuid,1,&ino)==EFS_OK,"adoption pending file");
+    struct efs_opid_req q=guarded_request(uuid,2,1);
+    unsigned flags=EFS_LEASE_EDGE_OPEN|EFS_LEASE_EDGE_CLEAR_PENDING;
+    const struct efs_kv_ops *saved=kv->ops;struct efs_kv_ops fault_ops=*saved;
+    guarded_batch_original=fault_ops.batch;fault_ops.batch=guarded_batch_fault;
+    kv->ops=&fault_ops;guarded_batch_fail=1;
+    CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,flags,1)==EFS_ERR_IO &&
+          efs_lease_any(kv,ino,1)==1,"failed adoption retains pending ownership");
+    int failed_verdict=999;
+    CHECK(efs_lease_guarded_probe_deferred(kv,ino,1,&q,flags,1,&failed_verdict)==0,
+          "failed adoption records no false receipt");
+    guarded_batch_fail=0;kv->ops=saved;
+    CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,flags,1)==EFS_OK,
+          "adoption transfers pending to normal ownership");
+    uint8_t key[EFS_KV_KEY_MAX],value[EFS_CLOSE_STEP_VALUE];uint32_t len,n=sizeof(value);
+    CHECK(efs_kv_key_reap(efs_kv_anchor_shard(efs_kv_inode_shard(ino)),ino,key,&len)==EFS_OK,"adoption marker key");
+    key[2]=EFS_KV_KIND_CLOSE_STEP;
+    CHECK(efs_kv_get(kv,key,len,value,&n)==EFS_ERR_NOT_FOUND && efs_lease_any(kv,ino,1)==1,
+          "owned adoption owes no last-close cleanup");
+    int verdict=999;
+    CHECK(efs_lease_guarded_probe_deferred(kv,ino,1,&q,flags,1,&verdict)==1 && verdict==EFS_OK,
+          "adoption still has exact lost-reply proof");
+    CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,flags,1)==EFS_OK,
+          "adoption replay does not create a close marker");
+    q.id.seq=3;q.ack=2;
+    CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK,
+          "actual close creates durable cleanup obligation");
+    n=sizeof(value);
+    CHECK(efs_kv_get(kv,key,len,value,&n)==EFS_OK && value[35]==3 && !efs_lease_any(kv,ino,1),
+          "cleanup identity belongs to actual close");
+    CHECK(efs_close_step_apply(kv,ino,value,EFS_CLOSE_STEP_RETIRE)==EFS_OK,
+          "actual empty close retires normally");
+    q.id.seq=4;q.ack=3;
+    CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_OK,
+          "active owner before crash revocation");
+    uint32_t shard=efs_kv_inode_shard(ino),count=0;
+    struct efs_session_cleanup_key keys[EFS_SESSION_CLEANUP_MAX];
+    CHECK(efs_session_fence_local(kv,shard,uuid,2)==EFS_OK &&
+          efs_session_cleanup_select(kv,shard,uuid,1,keys,&count)==EFS_OK && count==1,
+          "durable fence selects the retained normal lease");
+    CHECK(efs_session_cleanup_apply(kv,shard,uuid,1,keys,count)==EFS_OK,
+          "revocation atomically replaces ownership with cleanup");
+    n=sizeof(value);
+    CHECK(efs_kv_get(kv,key,len,value,&n)==EFS_OK && value[28]==255 &&
+          !efs_lease_any(kv,ino,1),"revoked owner still creates its cleanup marker");
+    CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_ERR_STALE,
+          "late adoption cannot reopen after durable revocation");
+    efs_kv_mem_free(kv);
+}
+
 static void test_guarded_retire_missing_authority(void)
 {
     struct efs_kv *kv=efs_kv_mem_create();uint8_t uuid[EFS_OPID_UUID_LEN];efs_ino_t ino=0;
@@ -1271,6 +1327,7 @@ int main(void)
     test_legacy_lease_prepared();
     test_guarded_retire_cold();
     test_deferred_close_identity();
+    test_deferred_adoption_no_cleanup();
     test_bounded_session_cleanup();
     test_pending_create_session_fence();
     test_prepared_owner_fence();

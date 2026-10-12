@@ -7618,15 +7618,15 @@ static int host_bg_propose(struct efs_raft_host *h, uint8_t group,
     pthread_mutex_lock(&h->mu);
     r = group_raft(h, group);
     if (r && efs_raft_role(r) == EFS_RAFT_LEADER) {
-        rc = efs_raft_propose(r, cmd, clen, &idx);
-        if (rc == EFS_OK)
-            term = efs_raft_term(r);
-        if (rc == EFS_OK)
-            rc = host_mark_durable_covered(h, group, r, idx);
         pthread_mutex_unlock(&h->mu);
+        /* Use the ordinary durability path: it acquires the log hold before
+         * h->mu and releases/fsyncs after unlocking. Background reclamation
+         * must not park every ReadIndex and foreground proposer under the
+         * host mutex while its private log fsync runs. Preserve the existing
+         * recovery admission policy and exact settled/verdict wait below. */
+        rc = host_propose_impl(h,group,cmd,clen,&idx,&term,NULL,0);
         if (rc != EFS_OK)
             return rc;
-        host_pump_kick(h);
         /* Recovery's DECIDE ABORT / RESOLVE verdicts decide a txn's fate;
          * they must be OUR entry's verdict, so (idx, term) even when the
          * caller does not want the rc (host_wait_settled). */
@@ -10499,8 +10499,8 @@ static int host_pack_session_cleanup(struct efs_raft_host *h,const uint8_t *cmd,
     return EFS_OK;
 }
 
-/* A result lookup always crosses ReadIndex; seeing a durable verdict locally
- * is insufficient while apply may still owe last-close cleanup. */
+/* An independent result probe crosses fresh ReadIndex; a historical local
+ * receipt alone does not establish current authority or cleanup state. */
 static int host_lease_edge_result(struct efs_raft_host *h,const uint8_t *cmd,
                                    uint32_t clen,uint8_t group,int *hint,uint64_t *known)
 {
@@ -10516,6 +10516,25 @@ static int host_lease_edge_result(struct efs_raft_host *h,const uint8_t *cmd,
         efs_lease_guarded_probe(h->kv,ino,gen,&q,flags,token,&verdict);
     *known=rc==1;
     return rc==1?verdict:(rc==0?EFS_ERR_BUSY:rc);
+}
+
+/* The deferred effect, replay receipt and cleanup obligation share one atomic
+ * apply. A successful exact-entry verdict already proves that submission;
+ * another quorum read can only add latency or turn its committed success
+ * into ambiguity. Independent probes and legacy cleanup retain ReadIndex. */
+static int host_lease_submission_result(struct efs_raft_host *h,const uint8_t *cmd,
+    uint32_t clen,uint8_t group,int *hint,uint64_t *known,int settled)
+{
+    *known=0;
+    if(settled!=EFS_OK)return settled;
+    if(clen>=2 && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_EDGE_DEFERRED) {
+        struct efs_opid_req q;efs_ino_t ino;uint64_t gen,token;unsigned flags;
+        int rc=host_unpack_lease_edge(cmd,clen,&q,&ino,&gen,&flags,&token);
+        if(rc!=EFS_OK)return rc;
+        if(group!=efs_raft_shard_group(efs_kv_inode_shard(ino)))return EFS_ERR_INVAL;
+        *known=1;return EFS_OK;
+    }
+    return host_lease_edge_result(h,cmd,clen,group,hint,known);
 }
 
 static int host_dir_migrate(struct efs_raft_host *h, efs_ino_t dir,
@@ -11059,9 +11078,9 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
          * 2-byte gap per forwarded reserve). It also let a forwarded txn
          * PREP's BUSY/STALE verdict read as OK. */
         rc = host_propose_wait_idx(h, group, cmd, clen, &hint, &idx);
-        if(rc==EFS_OK && clen>=2 && cmd[0]==EFS_MD_CMD_SESSION &&
+        if(clen>=2 && cmd[0]==EFS_MD_CMD_SESSION &&
            (cmd[1]==EFS_MD_SESS_LEASE_EDGE || cmd[1]==EFS_MD_SESS_LEASE_EDGE_DEFERRED))
-            rc=host_lease_edge_result(h,cmd,clen,group,&hint,&salt);
+            rc=host_lease_submission_result(h,cmd,clen,group,&hint,&salt,rc);
     }
     out->salt=salt;
     out->rc = rc;
