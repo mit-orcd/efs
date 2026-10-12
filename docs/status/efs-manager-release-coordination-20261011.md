@@ -14,9 +14,9 @@ Every owner handoff must name exact branch/worktree/HEAD, ordered committed chan
 |---|---|---|
 | efs-coding 1 - mac | 51b67e96; implementation e798c2aa | Clean; native POSIX 216/216 reported, broader query freshness open. Missing f842cd37 client adoption prerequisite requires reconciliation. |
 | efs-coding 2 - amd | handoff f1babb1c; implementation d26e6874 | Sole release editor; isolated full native/sanitizer/ordinary/packing sequence active. |
-| efs-coding 3 - nuc | 101598d2 | Documentation handoff requested; existing 20k write verification may finish safely; no new deployment. |
-| efs-coding 4 - orcd | 83cff804 | Documentation handoff requested; active exact-source builds preserved; mounted failures remain open. |
-| efs-coding 5 - intel | 60c86d88 | Documentation handoff requested; fresh fault matrix active; existing results do not certify new merged source. |
+| efs-coding 3 - nuc | handoff e0ec9208; source 101598d2 | Committed inventory; old 20k primary/peer exact, cold/physical active; no new deployment. |
+| efs-coding 4 - orcd | handoff bc154519; source 83cff804 | Committed inventory; active exact-source builds preserved; mounted failures open. |
+| efs-coding 5 - intel | handoff 6f657ef4; source 0ae7e480 | Committed inventory; automatic rollout disabled, existing fault/cold controllers preserved; complete acceptance pending. |
 
 Known before final reconciliation: AMD and Intel tips are release ancestors. Mac has one evidence-only commit outstanding; NUC six commits; ORCD two commits; review six cherry-picked equivalents. Exact per-commit reconciliation must distinguish true ancestry from equivalent copied implementation and preserve all fixture/docs/evidence inputs. The companion JSON captures an audit snapshot; owner handoffs supersede moving tips.
 
@@ -28,8 +28,14 @@ Known before final reconciliation: AMD and Intel tips are release ancestors. Mac
 4. NUC, after handoff/reconciliation: close exact merged-source append/catchup, 20k, primary/peer/cold, both-mode ordinary overwrite and physical cleanup gates on its owned cluster. Coordinate deployment explicitly with the manager; preserve retained stores/writers.
 5. Intel, after handoff/reconciliation: finish the exact-source fault/cold/canonical matrix and compare required guards with the merged candidate; no claimed promotion from prior revisions. Report remaining gaps and safe qualification recipe before deployment.
 
-Assignments 3–5 are planned until explicitly dispatched after their committed handoffs. The manager independently reviews concrete fixes; optional features/refactors remain deferred. Durable tags 45–54 and authority transport IDs 143/144 retain current allocations; verify canonical namespace and compatible voters before durable admission.
+Assignments 1–5 were explicitly dispatched after their respective committed handoffs. New cluster staging/deployment waits for the reconciled source/hash and manager-approved cluster window; evidence diagnosis and qualification planning can proceed immediately. The manager independently reviews concrete fixes; optional features/refactors remain deferred. Durable tags 45–54 and authority transport IDs 143/144 retain current allocations; verify canonical namespace and compatible voters before durable admission.
 
 ## Acceptance
 
 Prior W112 reproduced byte-loss is repaired and both-mode exact ordinary overwrite/cold/cleanup qualification is reported by AMD; new merged candidates must retain those gates. Packing pressure remains an open blocker and buffered success on an earlier revision is not certification of the latest candidate. Final native, live cold-byte, physical-GC, resource accounting and fault gates must name one exact source/configuration. Until those pass and Mike authorizes promotion, main remains 53be1da7 and no tag or push occurs.
+
+## Handoff completion and current reconciliation
+
+All five committed handoffs received: Mac 51b67e96, AMD f1babb1c, NUC e0ec9208, ORCD bc154519, Intel 6f657ef4. AMD merged Mac, ORCD, review/manager and NUC frozen tips with original ancestry preserved; Intel final handoff was sent for the last merge. Concrete duplicate implementations retain the tested release form; equivalent review commits are recorded with verified stable patch IDs. No commit may disappear without an integrated/equivalent/explicit-held record in the release-owned `v030-owner-commit-reconciliation.json`.
+
+Frozen implementation d26e6874 now has AMD full normal/fault native and sixteen sanitizer PASS; both-mode exact ordinary overwrite primary/peer/cold and physical cleanup PASS. Packing seven/jobs16 is still active. These results are owner reports pending final retrieved artifact assertions and do not prove full release acceptance. The missing Mac client adoption prerequisite remains assigned to Mac for bounded reconciliation, while ORCD diagnoses pressure and NUC/Intel prepare exact merged-source gates. Shared devel/main and deployed production stores remain untouched.
