@@ -58,6 +58,7 @@
  * bounce RPCs keep the long budget. */
 #define HOST_SEND_IO_MS    250
 #define HOST_INBOX_MAX     256
+#define HOST_INBOX_SLICE_MAX 8
 #define HOST_INBOX_BYTES   (32ull << 20)
 #define HOST_OUTBOX_BYTES  (16ull << 20)
 #define HOST_FRAME_MAX     (EFS_WIRE_RAFT_MAX_CMD + EFS_WIRE_RAFT_HDR_LEN + 12u)
@@ -310,9 +311,10 @@ struct host_group {
      * taken by a handler only to mutate raft (propose, read_begin). */
     uint64_t v_seq; /* odd while publishing; protects the entire read predicate */
     uint64_t v_commit, v_applied, v_read_index, v_read_round, v_term;
+    uint64_t v_proven_index, v_proven_round;
     int v_has;          /* 1 when a local replica exists */
     int v_role, v_leader;
-    int v_read_pending, v_read_done;
+    int v_read_pending, v_read_done, v_proven_done;
     uint64_t v_stamp;   /* bumped by every publish that changed a field */
 };
 
@@ -3253,14 +3255,18 @@ static void host_publish_view(struct efs_raft_host *h, int gi)
     struct host_group *g = &h->g[gi];
     struct efs_raft *r = g->r;
 
-    uint64_t commit, applied, term, ridx, round;
-    int role, leader, rpend, rdone, changed;
+    uint64_t commit, applied, term, ridx, round, proven_index, proven_round;
+    int role, leader, rpend, rdone, proven_done, changed;
 
     __atomic_add_fetch(&g->v_seq, 1, __ATOMIC_SEQ_CST);
     if (!r) {
         if (V_LOAD(g->v_has))
             V_STORE(g->v_stamp, V_LOAD(g->v_stamp) + 1);
         V_STORE(g->v_has, 0);
+        V_STORE(g->v_read_done, 0);
+        V_STORE(g->v_proven_done, 0);
+        V_STORE(g->v_proven_round, 0);
+        V_STORE(g->v_proven_index, 0);
         __atomic_add_fetch(&g->v_seq, 1, __ATOMIC_RELEASE);
         return;
     }
@@ -3273,12 +3279,16 @@ static void host_publish_view(struct efs_raft_host *h, int gi)
     round = efs_raft_read_round(r);
     rpend = efs_raft_read_pending(r);
     rdone = efs_raft_read_quorum(r);
+    proven_done = efs_raft_read_proven(r, &proven_round, &proven_index);
     changed = !V_LOAD(g->v_has) || V_LOAD(g->v_commit) != commit ||
               V_LOAD(g->v_applied) != applied || V_LOAD(g->v_term) != term ||
               V_LOAD(g->v_role) != role || V_LOAD(g->v_leader) != leader ||
               V_LOAD(g->v_read_index) != ridx || V_LOAD(g->v_read_round) != round ||
               V_LOAD(g->v_read_pending) != rpend ||
-              V_LOAD(g->v_read_done) != rdone;
+              V_LOAD(g->v_read_done) != rdone ||
+              V_LOAD(g->v_proven_done) != proven_done ||
+              V_LOAD(g->v_proven_round) != proven_round ||
+              V_LOAD(g->v_proven_index) != proven_index;
     V_STORE(g->v_commit, commit);
     V_STORE(g->v_applied, applied);
     V_STORE(g->v_term, term);
@@ -3288,6 +3298,9 @@ static void host_publish_view(struct efs_raft_host *h, int gi)
     V_STORE(g->v_read_round, round);
     V_STORE(g->v_read_pending, rpend);
     V_STORE(g->v_read_done, rdone);
+    V_STORE(g->v_proven_done, proven_done);
+    V_STORE(g->v_proven_round, proven_round);
+    V_STORE(g->v_proven_index, proven_index);
     V_STORE(g->v_has, 1);
     /* Stamp last: a waiter that read the new stamp has the new fields. */
     if (changed)
@@ -3305,8 +3318,9 @@ static void host_publish_group(struct efs_raft_host *h, uint8_t group)
 
 /* Coherent snapshot: round, term and completion must come from one publish. */
 struct host_view {
-    int has, role, leader, read_pending, read_done;
+    int has, role, leader, read_pending, read_done, proven_done;
     uint64_t commit, applied, read_index, read_round, term;
+    uint64_t proven_index, proven_round;
     uint64_t stamp; /* wake generation from the same coherent publish */
 };
 
@@ -3330,11 +3344,14 @@ retry:
     v->applied = V_LOAD(g->v_applied);
     v->read_index = V_LOAD(g->v_read_index);
     v->read_round = V_LOAD(g->v_read_round);
+    v->proven_round = V_LOAD(g->v_proven_round);
+    v->proven_index = V_LOAD(g->v_proven_index);
     v->term = V_LOAD(g->v_term);
     v->role = V_LOAD(g->v_role);
     v->leader = V_LOAD(g->v_leader);
     v->read_pending = V_LOAD(g->v_read_pending);
     v->read_done = V_LOAD(g->v_read_done);
+    v->proven_done = V_LOAD(g->v_proven_done);
     __atomic_thread_fence(__ATOMIC_ACQUIRE);
     if (seq != __atomic_load_n(&g->v_seq, __ATOMIC_ACQUIRE))
         goto retry;
@@ -3343,9 +3360,21 @@ retry:
 static int host_view_covers(const struct host_view *v, uint64_t want,
                             uint64_t round, uint64_t term)
 {
-    return v->has && v->role == EFS_RAFT_LEADER && v->read_done &&
-           v->read_round >= round && v->term == term &&
-           v->read_index >= want && v->applied >= v->read_index;
+    return v->has && v->role == EFS_RAFT_LEADER && v->proven_done &&
+           v->proven_round >= round && v->term == term &&
+           v->proven_index >= want && v->applied >= v->proven_index;
+}
+
+/* A fresh proof needs own apply, not another quorum request. Raw current-round
+ * proof remains separate from the retained completion and is coherently read. */
+static int host_view_wait_apply(const struct host_view *v, uint64_t want,
+                                uint64_t round, uint64_t term)
+{
+    return v->has && v->role == EFS_RAFT_LEADER && v->term == term &&
+        ((v->proven_done && v->proven_round >= round &&
+          v->proven_index >= want && v->applied < v->proven_index) ||
+         (v->read_done && v->read_round >= round &&
+          v->read_index >= want && v->applied < v->read_index));
 }
 
 /* Sleep until the pump wakes this waiter or `end` passes. cv_mu HELD by
@@ -4008,8 +4037,10 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             }
             if (prof)
                 read_prof_add(&g_read_prof.ri_remote_wait, now_us_() - p1);
-            if (rc != EFS_OK)
+            if (rc != EFS_OK) {
+                if (prof) fprintf(stderr,"raft-host: admitted-read-remote group=%u rc=%d leader=%d returned_hint=%d remote_index=%llu term=%llu applied=%llu\n",group,rc,v.leader,rhint,(unsigned long long)ridx,(unsigned long long)v.term,(unsigned long long)v.applied);
                 return rc;
+            }
             if (leader_hint && rhint >= 0)
                 *leader_hint = rhint;
             return EFS_OK;
@@ -4033,8 +4064,10 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             admitted_term = efs_raft_term(r);
             pthread_mutex_unlock(&h->mu);
         }
-        if (v.term != admitted_term)
+        if (v.term != admitted_term) {
+            if (prof) fprintf(stderr,"raft-host: admitted-read-term group=%u admitted_term=%llu term=%llu admitted_round=%llu raw_round=%llu proven_round=%llu role=%d leader=%d\n",group,(unsigned long long)admitted_term,(unsigned long long)v.term,(unsigned long long)round,(unsigned long long)v.read_round,(unsigned long long)v.proven_round,v.role,v.leader);
             return EFS_ERR_NOT_PRIMARY;
+        }
         if (host_view_covers(&v, want, round, admitted_term)) {
             if (prof)
                 read_prof_add(first ? &g_read_prof.ri_leader_covered
@@ -4043,7 +4076,7 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             return EFS_OK;
         }
         first = 0;
-        if (!v.read_pending) {
+        if (!v.read_pending && !host_view_wait_apply(&v, want, round, admitted_term)) {
             /* Begin a round — under h->mu, re-validated against the core
              * (another reader may have begun one since the view). */
             struct efs_raft *r;
@@ -4064,13 +4097,17 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             host_view_get(h, group, &v);
             continue;
         }
-        if (host_past_deadline(&end))
+        if (host_past_deadline(&end)) {
+            if (prof) fprintf(stderr,"raft-host: admitted-read-timeout group=%u want=%llu admitted_round=%llu admitted_term=%llu role=%d leader=%d term=%llu raw_round=%llu raw_index=%llu raw_done=%d pending=%d proven_round=%llu proven_index=%llu proven_done=%d applied=%llu commit=%llu\n",
+                group,(unsigned long long)want,(unsigned long long)round,(unsigned long long)admitted_term,v.role,v.leader,(unsigned long long)v.term,(unsigned long long)v.read_round,(unsigned long long)v.read_index,v.read_done,v.read_pending,(unsigned long long)v.proven_round,(unsigned long long)v.proven_index,v.proven_done,(unsigned long long)v.applied,(unsigned long long)v.commit);
             return EFS_ERR_BUSY;
+        }
         /* read_done lands when heartbeat replies arrive — the pump
          * publishes the view and broadcasts applied_cv each cycle. */
         pthread_mutex_lock(&h->cv_mu);
         host_view_get(h, group, &v);
-        if (v.has && v.role == EFS_RAFT_LEADER && v.read_pending &&
+        if (v.has && v.role == EFS_RAFT_LEADER && v.term == admitted_term &&
+            (v.read_pending || host_view_wait_apply(&v, want, round, admitted_term)) &&
             !host_view_covers(&v, want, round, admitted_term)) {
             uint64_t s0 = now_us_();
             host_waiter_sleep(h, group, 1, 0, v.stamp, &end);
@@ -5976,6 +6013,15 @@ static int host_read_inode_lanes_reuse(struct efs_raft_host *h, efs_ino_t ino,
         }
     }
     *covered = seen;
+    /* Successful inode replies teach the client the inode group's route.
+     * A paired read may leave the other group's hint here, and covered
+     * groups do not perform another read to replace it. Error hints above
+     * still identify the group that refused the request. */
+    if (leader_hint) {
+        struct host_view view;
+        host_view_get(h, ig, &view);
+        *leader_hint = view.has ? view.leader : -1;
+    }
     return EFS_OK;
 }
 static int host_read_inode_lanes_covered(struct efs_raft_host *h, efs_ino_t ino,
@@ -6072,18 +6118,45 @@ static void host_inbox_order(const struct host_inbox_item *local, unsigned n,
     }
 }
 
+/* Process a bounded FIFO prefix before publishing apply/read progress. A
+ * follower's durable receive can block, so draining the whole admitted inbox
+ * holds h->mu and hides completed read proofs for hundreds of milliseconds.
+ * Queued tails remain ahead of new arrivals. Only the taken prefix is charged
+ * to this cycle's existing post-KV durability/credit retirement path. */
+static int host_inbox_take(struct efs_raft_host *h,
+                            struct host_inbox_item *local,
+                            unsigned *done_n, uint64_t *done_bytes)
+{
+    pthread_mutex_lock(&h->inbox_mu);
+    int n=h->inbox_n;
+    if(n>HOST_INBOX_SLICE_MAX)n=HOST_INBOX_SLICE_MAX;
+    *done_n=(unsigned)n;*done_bytes=0;
+    for(int i=0;i<n;i++)*done_bytes+=h->inbox[i].len;
+    memcpy(local,h->inbox,(size_t)n*sizeof(local[0]));
+    h->inbox_n-=n;
+    memmove(h->inbox,h->inbox+n,(size_t)h->inbox_n*sizeof(h->inbox[0]));
+    h->inbox_bytes-=*done_bytes;
+    pthread_mutex_unlock(&h->inbox_mu);
+    return n;
+}
+
+/* A drained eventfd may describe work retained by the previous slice. Do
+ * not wait for another arrival to make that already-admitted tail progress.
+ * An arrival racing an empty check still wakes the existing eventfd poll. */
+static int host_pump_poll_timeout(struct efs_raft_host *h)
+{
+    pthread_mutex_lock(&h->inbox_mu);
+    int pending=h->inbox_n;
+    pthread_mutex_unlock(&h->inbox_mu);
+    return pending ? 0 : HOST_TICK_US/1000;
+}
+
 static void drain_inbox(struct efs_raft_host *h, unsigned *done_n, uint64_t *done_bytes)
 {
     struct host_inbox_item local[HOST_INBOX_MAX];
     int n, i;
 
-    pthread_mutex_lock(&h->inbox_mu);
-    n = h->inbox_n;
-    *done_n=(unsigned)n; *done_bytes=h->inbox_bytes;
-    memcpy(local, h->inbox, (size_t)n * sizeof(local[0]));
-    h->inbox_n = 0;
-    h->inbox_bytes = 0;
-    pthread_mutex_unlock(&h->inbox_mu);
+    n=host_inbox_take(h,local,done_n,done_bytes);
 
     if (h->group_drain && n>1) {
         unsigned order[HOST_INBOX_MAX];
@@ -6879,7 +6952,7 @@ static void *host_pump(void *arg)
         memset(&pfd, 0, sizeof(pfd));
         pfd.fd = h->pump_efd;
         pfd.events = POLLIN;
-        if (poll(&pfd, 1, HOST_TICK_US / 1000) > 0 && (pfd.revents & POLLIN)) {
+        if (poll(&pfd, 1, host_pump_poll_timeout(h)) > 0 && (pfd.revents & POLLIN)) {
             ssize_t drained;
             do { drained = read(h->pump_efd, &sink, sizeof(sink)); }
             while (drained < 0 && errno == EINTR);
@@ -17189,10 +17262,16 @@ static int host_publication_committed(struct efs_raft_host *h, uint8_t group,
     pthread_mutex_unlock(&h->mu);
     for (;;) {
         host_view_get(h,group,&v);*hint=v.leader;
-        if (!v.has || v.role!=EFS_RAFT_LEADER || v.term!=term)
+        if (!v.has || v.role!=EFS_RAFT_LEADER || v.term!=term) {
+            if (read_prof_on()) fprintf(stderr,"raft-host: publication-read-fence group=%u admitted_term=%llu term=%llu admitted_round=%llu raw_round=%llu proven_round=%llu role=%d leader=%d has=%d\n",group,(unsigned long long)term,(unsigned long long)v.term,(unsigned long long)round,(unsigned long long)v.read_round,(unsigned long long)v.proven_round,v.role,v.leader,v.has);
             return EFS_ERR_NOT_PRIMARY;
+        }
         if (v.read_done && v.read_round>=round && v.read_index>=want) break;
-        if (host_past_deadline(&end)) return EFS_ERR_BUSY;
+        if (host_past_deadline(&end)) {
+            if (read_prof_on()) fprintf(stderr,"raft-host: publication-read-timeout group=%u want=%llu admitted_round=%llu admitted_term=%llu role=%d leader=%d term=%llu raw_round=%llu raw_index=%llu raw_done=%d pending=%d proven_round=%llu proven_index=%llu proven_done=%d applied=%llu commit=%llu\n",
+                group,(unsigned long long)want,(unsigned long long)round,(unsigned long long)term,v.role,v.leader,(unsigned long long)v.term,(unsigned long long)v.read_round,(unsigned long long)v.read_index,v.read_done,v.read_pending,(unsigned long long)v.proven_round,(unsigned long long)v.proven_index,v.proven_done,(unsigned long long)v.applied,(unsigned long long)v.commit);
+            return EFS_ERR_BUSY;
+        }
         pthread_mutex_lock(&h->mu);
         r=group_raft(h,group);
         int rc=EFS_OK;
@@ -17863,7 +17942,11 @@ void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
         }
     }
     if (rc == EFS_OK)
-        rc = host_read_inode_lanes(h, parent, &hint);
+        /* The successful first fence belongs to this RPC. Reread the row
+         * transactionally and fence newly discovered lane groups, without
+         * issuing a second fresh round for the already-fenced inode group. */
+        rc = host_read_inode_lanes_covered(h, parent, &hint,
+                  (uint8_t)(1u << efs_raft_shard_group(efs_kv_inode_shard(parent))));
     /* Resume from the client's cookie: (src, name) is the exact KV scan
      * position. The scan is name-ordered, so this is stable and complete —
      * an ino filter would skip entries (name order != ino order). */
