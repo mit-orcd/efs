@@ -1,0 +1,226 @@
+parallel 214 tests jobs=16 (serial 7 after)
+pass basic_empty_file                
+pass basic_chunk_boundary            
+FAIL basic_terminal_cp_cat            OSError: [Errno 5] Input/output error
+pass basic_read_past_eof             
+FAIL basic_overwrite_middle           OSError: [Errno 16] Device or resource busy
+pass basic_oappend_flag              
+pass basic_o_trunc                   
+pass basic_ftruncate_vs_truncate     
+pass basic_pread_pwrite              
+pass basic_write_read                
+pass basic_seek_read                 
+pass fsync_reopen_visible            
+pass trunc_shrink                    
+pass basic_append                    
+pass sparse_write_huge_offset        
+pass basic_seek_end_then_write       
+pass basic_seek_cur_past_eof_write   
+pass sparse_st_blocks                
+pass dir_mkdir_rmdir                 
+FAIL trunc_to_zero                    OSError: [Errno 16] Device or resource busy
+FAIL basic_dd_rw                      cmd 'dd if=src of=f bs=4k count=8 2>/dev/null' failed rc=1: 
+FAIL dir_rename_over_existing         OSError: [Errno 16] Device or resource busy
+FAIL dir_rename_file_over_dir         OSError: [Errno 16] Device or resource busy
+FAIL dir_rename_file                  OSError: [Errno 16] Device or resource busy
+pass dir_mkdir_p_terminal            
+FAIL dir_rename_noreplace             OSError: [Errno 16] Device or resource busy
+FAIL dir_rename_dir_with_contents     OSError: [Errno 16] Device or resource busy
+FAIL dir_rename_symlink               OSError: [Errno 16] Device or resource busy
+FAIL dir_readdir_listing              OSError: [Errno 16] Device or resource busy
+FAIL basic_dup_write                  OSError: [Errno 16] Device or resource busy
+pass basic_rdwr_no_reopen            
+FAIL root_rename_file_old_name_gone   OSError: [Errno 16] Device or resource busy
+pass trunc_grow_sparse               
+pass root_mkdir_rmdir_immediate      
+pass root_rename_dir_old_name_gone   
+pass root_create_unlink_immediate    
+FAIL dir_times_unlink                 OSError: [Errno 16] Device or resource busy
+pass dir_move_into_subdir            
+FAIL dir_rename_dir_over_nonempty     OSError: [Errno 16] Device or resource busy
+FAIL dir_times_link                   OSError: [Errno 5] Input/output error
+FAIL dir_rename_dir_over_file         OSError: [Errno 5] Input/output error
+pass dir_dot_entries                 
+pass root_rename_into_subdir         
+pass dir_chmod_and_create_denied     
+FAIL dir_times_write_no_bump          OSError: [Errno 5] Input/output error
+FAIL dir_hidden_files                 OSError: [Errno 16] Device or resource busy
+FAIL dir_times_create                 OSError: [Errno 16] Device or resource busy
+pass dir_times_mkdir_rmdir           
+pass dir_nlink                       
+pass symlink_dangling                
+pass symlink_absolute                
+pass symlink_create_readlink         
+pass symlink_chain                   
+FAIL symlink_to_dir                   OSError: [Errno 5] Input/output error
+pass hardlink_terminal_ln            
+pass hardlink_unlink_one             
+pass hardlink_basic                  
+FAIL attr_chmod                       OSError: [Errno 16] Device or resource busy
+pass hardlink_rename_one_name        
+pass root_rename_from_subdir         
+pass dir_rename_exchange_preserves_both_files
+pass attr_chown_self                 
+pass hardlink_shared_data            
+pass symlink_unlink_keeps_target     
+pass symlink_chmod_follows           
+pass attr_utimens_ns                 
+pass attr_utimens                    
+pass attr_stat_fields                
+pass attr_touch_terminal             
+pass attr_access                     
+pass attr_ctime_after_chmod          
+pass dir_times_rename                
+FAIL perm_owner_bits_not_group        OSError: [Errno 5] Input/output error
+pass perm_owner_bits_not_other       
+pass perm_fchmod                     
+pass perm_file_write_only            
+FAIL dir_readdir_while_unlink         OSError: [Errno 16] Device or resource busy
+pass perm_file_000_denied            
+FAIL perm_owner_utime_readonly        OSError: [Errno 16] Device or resource busy
+pass symlink_relative_after_parent_rename
+pass perm_file_read_only_ops         
+pass perm_create_mode_000_reopen     
+FAIL perm_sticky_owner_can_unlink     OSError: [Errno 16] Device or resource busy
+pass perm_owner_chmod_restore        
+FAIL perm_exec_denied_no_x            OSError: [Errno 5] Input/output error
+FAIL perm_chown_other_gid_denied      OSError: [Errno 16] Device or resource busy
+FAIL perm_suid_sgid_sticky_stored     OSError: [Errno 16] Device or resource busy
+FAIL perm_dir_no_r_list               OSError: [Errno 16] Device or resource busy
+FAIL perm_dir_readonly_mutate         OSError: [Errno 16] Device or resource busy
+pass perm_access_rwx                 
+FAIL perm_open_fd_survives_chmod      OSError: [Errno 16] Device or resource busy
+FAIL perm_ftruncate_after_chmod       OSError: [Errno 5] Input/output error
+pass perm_exec_allowed_with_x        
+pass perm_chown_other_uid_denied     
+pass names_too_long_component        
+pass names_reserved_dots             
+FAIL perm_setgid_directory_inheritance OSError: [Errno 16] Device or resource busy
+pass perm_dir_wx_no_r                
+FAIL names_crazy_roundtrip            OSError: [Errno 16] Device or resource busy
+pass perm_rename_into_readonly_dir   
+FAIL perm_dir_000_restore             OSError: [Errno 16] Device or resource busy
+FAIL perm_symlink_target_denied       OSError: [Errno 16] Device or resource busy
+FAIL names_control_and_high_bytes     OSError: [Errno 16] Device or resource busy
+pass perm_hardlink_shares_mode       
+FAIL perm_unlink_mode_000_file        OSError: [Errno 5] Input/output error
+FAIL names_unicode_nfc_nfd_coexist    OSError: [Errno 16] Device or resource busy
+FAIL names_crazy_dirs                 OSError: [Errno 16] Device or resource busy
+FAIL content_all_byte_values          OSError: [Errno 16] Device or resource busy
+pass err_mkdir_existing              
+FAIL dir_many_files                   OSError: [Errno 16] Device or resource busy
+FAIL content_random_roundtrip         OSError: [Errno 16] Device or resource busy
+pass err_open_dir_for_write          
+pass err_read_from_dir               
+FAIL err_rmdir_a_file                 OSError: [Errno 16] Device or resource busy
+pass perm_nested_parent_no_x         
+pass err_unlink_nonexistent          
+pass err_hardlink_to_dir             
+pass content_random_overwrite_append 
+pass content_random_large_multichunk 
+FAIL content_nul_and_control          OSError: [Errno 16] Device or resource busy
+pass err_hardlink_nonexistent_src    
+pass err_rename_dir_into_itself      
+pass err_stat_nonexistent            
+FAIL content_whitespace_and_line_endings OSError: [Errno 16] Device or resource busy
+pass err_unlink_a_directory          
+FAIL err_rmdir_nonempty               OSError: [Errno 5] Input/output error
+pass err_rmdir_dot_dotdot            
+pass err_create_excl_existing        
+pass unlink_open_file                
+pass fdatasync_write                 
+pass fsync_write                     
+FAIL dir_deep_nesting                 timeout after 30s
+pass names_dash_prefix_terminal      
+pass flock_basic                     
+pass fsync_dir                       
+FAIL err_create_under_a_file          OSError: [Errno 5] Input/output error
+pass err_write_readonly_file         
+pass statfs_sane                     
+FAIL flock_shared_then_exclusive      OSError: [Errno 16] Device or resource busy
+FAIL flock_two_proc_exclusive         OSError: [Errno 16] Device or resource busy
+FAIL fcntl_byte_range_lock            OSError: [Errno 16] Device or resource busy
+pass names_path_too_long             
+pass fcntl_lock_basic                
+pass err_symlink_loop                
+FAIL concurrent_write_and_readdir     OSError: [Errno 5] Input/output error
+pass concurrent_writes_disjoint      
+SKIP mmap_write_read                  mmap unsupported: [Errno 19] No such device
+pass mmap_private_not_visible        
+pass virt_find_not_a_real_dir        
+FAIL concurrent_create_unlink_two_proc create/unlink child rc=1: Traceback (most recent call last):   File "<string>", line 6, in <module> OSError: [Errno 16] Device or resource busy 
+pass opt_seek_hole_data              
+pass opt_fallocate                   
+pass opt_xattr                       
+pass direct_rmw_4k_in_chunk          
+pass direct_aligned_rdwr             
+FAIL direct_unaligned_einval          OSError: [Errno 5] Input/output error
+pass opt_openat                      
+pass flock_second_fd_exclusive       
+pass writev_readv_chunk_straddle     
+pass opt_copy_file_range             
+pass names_near_path_max_dir         
+FAIL fcntl_setfl_oappend              OSError: [Errno 16] Device or resource busy
+pass packed_then_grow_past_chunk     
+pass zero_length_write               
+pass two_fds_size_mtime              
+pass trunc_open_other_fd             
+pass nlink_after_unlink_open         
+pass o_nofollow                      
+FAIL names_near_path_max              timeout after 30s
+pass o_directory                     
+pass create_excl_two_proc            
+pass fstat_size_after_write          
+FAIL dir_deep_nesting_beyond_64       timeout after 30s
+FAIL trunc_shrink_same_fd             OSError: [Errno 16] Device or resource busy
+pass link_across_dirs                
+pass lstat_symlink_size              
+pass last_link_unlink_other_dir      
+pass st_ino_unique_hardlink_same     
+pass concurrent_overlap_write        
+pass ctime_on_link_rename            
+pass rename_empty_over_empty_dir     
+pass rename_to_self                  
+FAIL case_sensitive_names             OSError: [Errno 5] Input/output error
+pass write_hole_pread_zeros          
+pass chmod_preserves_mtime           
+FAIL access_f_ok_after_unlink         OSError: [Errno 16] Device or resource busy
+pass unlink_recreate_new_ino         
+pass dir_nlink_after_rmdir_child     
+pass unlink_open_then_recreate       
+pass o_append_pwrite_absolute        
+FAIL two_fds_independent_offset       OSError: [Errno 5] Input/output error
+pass creat_existing_dir_eisdir       
+FAIL concurrent_creates_same_dir      timeout after 30s
+pass trailing_slash_on_file          
+pass fsync_then_fstat_size           
+FAIL concurrent_appends_two_proc      timeout after 30s
+pass flock_unlock_on_close           
+pass mkdirat_unlinkat                
+FAIL link_of_symlink                  OSError: [Errno 16] Device or resource busy
+FAIL virt_stats_readable              timeout after 30s; worker group still alive
+FAIL concurrent_appends               worker killed by signal 15
+FAIL virt_find_query                  worker group still alive after virt_stats_readable
+pass hardlink_three_names            
+pass rename_file_over_symlink        
+pass mtime_bumps_on_write            
+FAIL dir_times_bump_on_child_mutation worker killed by signal 15
+FAIL rename_readdir_lookup_consistent OSError: [Errno 5] Input/output error
+pass rename_dir_same_parent          
+FAIL link_of_symlink_follow           worker killed by signal 15
+pass link_of_symlink_dangling        
+pass concurrent_extend_high_then_low 
+FAIL mtime_monotonic_many_writes      OSError: [Errno 5] Input/output error
+pass trunc_zero_then_high_pwrite     
+pass write_beyond_eof_then_seek_end  
+NOTRUN truncate_big_ftruncate_honest    incomplete: timed-out worker still alive
+NOTRUN truncate_big_o_trunc_honest      incomplete: timed-out worker still alive
+NOTRUN dir_mkdir_umask                  incomplete: timed-out worker still alive
+NOTRUN attr_umask_respected             incomplete: timed-out worker still alive
+NOTRUN perm_dir_no_x_search             incomplete: timed-out worker still alive
+NOTRUN err_chdir_into_file              incomplete: timed-out worker still alive
+NOTRUN chdir_dotdot_after_mkdir         incomplete: timed-out worker still alive
+left test tree (a timed-out worker is still alive): /tmp/efs-intel-pack-completion-20261012-a-intel1_efs/temp/efs-pack-client-3-278x2zw1/posix-intel1-pack-3-a1db9fx3
+============================================================
+POSIX suite: 140/221 pass, 73 fail, 1 skip, 7 notrun  (75.5s)
+wrote /data1/efs/intel-pack-completion-20261012-a/evidence/live/packing-seven-buffered/gc-buffered-jeowa_nr/posix-client-3.tsv

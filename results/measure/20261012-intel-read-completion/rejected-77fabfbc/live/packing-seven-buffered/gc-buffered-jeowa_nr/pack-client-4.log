@@ -1,0 +1,50 @@
+2026-10-12T10:25:29.333Z efs-fuse v0.3.0-pre-alpha-candidate (branch fix-intel-packing-28b2089b, built 2026-10-12T10:25:09Z on intel1), build=77fabfbc-completion-normal: starting export=default mount=/tmp/efs-intel-pack-completion-20261012-a-intel1_efs/temp/efs-pack-client-4-t1899pil
+2026-10-12T10:25:29.335Z Discovered 4 cluster nodes from 127.0.0.1:34510
+2026-10-12T10:25:29.335Z   node id=1 127.0.0.1:34510
+2026-10-12T10:25:29.335Z   node id=2 127.0.0.1:34511
+2026-10-12T10:25:29.335Z   node id=3 127.0.0.1:34512
+2026-10-12T10:25:29.335Z   node id=4 127.0.0.1:34513
+2026-10-12T10:25:29.335Z fetching metadata...
+2026-10-12T10:25:29.335Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T10:25:29.335Z export id=1 name=default
+2026-10-12T10:25:29.335Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T10:25:29.338Z efs-fuse: workers max=10 idle=10
+2026-10-12T10:25:29.346Z fuse serving
+2026-10-12T10:25:31.625Z efs: read hole ino=4203 ci=1 holes=1
+2026-10-12T10:25:32.656Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=5344 off=0 len=0
+2026-10-12T10:25:32.942Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=6895 off=0 len=0
+2026-10-12T10:25:33.752Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=5009 off=0 len=0
+2026-10-12T10:25:34.382Z fsync-split ino=6166 flush_ms=2469 report_ms=0 rc=0
+2026-10-12T10:25:35.369Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=6014 off=0 len=0
+2026-10-12T10:25:35.946Z efs: read hole ino=7884 ci=0 holes=2
+2026-10-12T10:25:36.378Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=7703 off=0 len=0
+2026-10-12T10:25:40.853Z efs: rename_at 3510/a -> 3510/b rc=-12 after 1 tries
+2026-10-12T10:25:46.974Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=7541 off=0 len=0
+2026-10-12T10:25:50.283Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=4239 off=0 len=0
+2026-10-12T10:25:53.334Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=6120 off=0 len=0
+2026-10-12T10:25:54.254Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=7929 off=0 len=0
+2026-10-12T10:25:55.103Z fsync-split ino=4944 flush_ms=2599 report_ms=0 rc=0
+2026-10-12T10:25:56.281Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=7730 off=0 len=0
+2026-10-12T10:25:58.380Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=21169 off=0 len=0
+2026-10-12T10:25:59.690Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=15722 off=0 len=0
+2026-10-12T10:26:00.679Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=7502 off=0 len=0
+2026-10-12T10:26:01.193Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=5100 off=0 len=0
+2026-10-12T10:26:02.182Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=26968 off=0 len=0
+2026-10-12T10:26:04.416Z efs-fuse fsync: unknown error (efs_rc=-15) ino=5743 off=0 len=0
+2026-10-12T10:26:06.565Z efs-fuse fsync: unknown error (efs_rc=-15) ino=4151 off=0 len=0
+2026-10-12T10:26:13.738Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=19027 off=0 len=0
+2026-10-12T10:26:15.608Z efs: read hole ino=4925 ci=3 holes=3
+2026-10-12T10:26:20.790Z fsync-split ino=14058 flush_ms=4933 report_ms=0 rc=0
+2026-10-12T10:26:22.451Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=13841 off=0 len=0
+2026-10-12T10:26:23.693Z efs: read hole ino=13010 ci=1 holes=12
+2026-10-12T10:26:25.771Z fsync-split ino=5233 flush_ms=111 report_ms=0 rc=0
+2026-10-12T10:26:26.098Z fsync-split ino=9367 flush_ms=937 report_ms=0 rc=0
+2026-10-12T10:26:27.759Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=7601 off=0 len=0
+2026-10-12T10:26:29.321Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=154572 off=0 len=0
+2026-10-12T10:26:31.104Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=10604 off=0 len=0
+2026-10-12T10:26:31.600Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=6216 off=0 len=0
+2026-10-12T10:26:34.066Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=9785 off=0 len=0
+2026-10-12T10:26:34.535Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=24199 off=0 len=0
+2026-10-12T10:26:36.556Z efs: read hole ino=16101 ci=0 holes=13
+2026-10-12T10:26:39.890Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=6036 off=0 len=0
+2026-10-12T10:26:42.286Z fsync-split ino=4552 flush_ms=814 report_ms=0 rc=0

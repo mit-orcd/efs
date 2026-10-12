@@ -1,0 +1,46 @@
+2026-10-12T10:36:28.688Z efs-fuse (no git metadata, branch fix-intel-packing-28b2089b, built 2026-10-12T10:35:11Z on intel1), build=c10a0678-completion-normal: starting export=default mount=/tmp/efs-intel-pack-completion-20261012-b-intel1_efs/mnt
+2026-10-12T10:36:28.690Z Discovered 4 cluster nodes from 127.0.0.1:34510
+2026-10-12T10:36:28.690Z   node id=1 127.0.0.1:34510
+2026-10-12T10:36:28.690Z   node id=2 127.0.0.1:34511
+2026-10-12T10:36:28.690Z   node id=3 127.0.0.1:34512
+2026-10-12T10:36:28.690Z   node id=4 127.0.0.1:34513
+2026-10-12T10:36:28.690Z fetching metadata...
+2026-10-12T10:36:28.690Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T10:36:28.690Z export id=1 name=default
+2026-10-12T10:36:28.690Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T10:36:28.696Z efs-fuse: workers max=10 idle=10
+2026-10-12T10:36:28.705Z fuse serving
+2026-10-12T10:36:29.528Z fsync-split ino=27375 flush_ms=109 report_ms=0 rc=0
+2026-10-12T10:36:29.543Z fsync-split ino=31471 flush_ms=119 report_ms=0 rc=0
+2026-10-12T10:36:29.661Z fsync-split ino=19183 flush_ms=104 report_ms=0 rc=0
+2026-10-12T10:36:29.662Z fsync-split ino=43759 flush_ms=104 report_ms=0 rc=0
+2026-10-12T10:36:29.672Z fsync-split ino=39663 flush_ms=112 report_ms=0 rc=0
+2026-10-12T10:36:29.687Z fsync-split ino=47855 flush_ms=125 report_ms=0 rc=0
+2026-10-12T10:36:29.798Z fsync-split ino=60143 flush_ms=102 report_ms=0 rc=0
+2026-10-12T10:36:29.802Z fsync-split ino=56047 flush_ms=105 report_ms=0 rc=0
+2026-10-12T10:36:29.806Z fsync-split ino=64239 flush_ms=106 report_ms=0 rc=0
+2026-10-12T10:36:30.016Z fsync-split ino=97007 flush_ms=101 report_ms=0 rc=0
+2026-10-12T10:36:30.016Z fsync-split ino=84719 flush_ms=100 report_ms=0 rc=0
+2026-10-12T10:36:30.588Z fsync-split ino=174831 flush_ms=100 report_ms=0 rc=0
+2026-10-12T10:36:30.592Z fsync-split ino=178927 flush_ms=103 report_ms=0 rc=0
+2026-10-12T10:36:30.719Z fsync-split ino=191215 flush_ms=100 report_ms=0 rc=0
+2026-10-12T10:36:30.724Z fsync-split ino=158447 flush_ms=104 report_ms=0 rc=0
+2026-10-12T10:36:30.839Z fsync-split ino=203503 flush_ms=102 report_ms=0 rc=0
+2026-10-12T10:36:35.295Z efs: read hole ino=5365 ci=1 holes=1
+2026-10-12T10:36:35.641Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=7762 off=0 len=0
+2026-10-12T10:36:37.389Z efs: read hole ino=6802 ci=0 holes=2
+2026-10-12T10:36:41.134Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=12941 off=0 len=0
+2026-10-12T10:36:43.481Z efs: rename_at 1444/a -> 1444/b rc=-12 after 1 tries
+2026-10-12T10:36:44.163Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=36865 off=0 len=0
+2026-10-12T10:36:49.248Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=5234 off=0 len=0
+2026-10-12T10:36:54.318Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=4164 off=0 len=0
+2026-10-12T10:37:06.328Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=14510 off=0 len=0
+2026-10-12T10:37:23.426Z efs: read hole ino=5915 ci=3 holes=3
+2026-10-12T10:37:24.355Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=8138 off=0 len=0
+2026-10-12T10:37:25.437Z fsync-split ino=7464 flush_ms=1944 report_ms=0 rc=0
+2026-10-12T10:37:26.827Z efs: read hole ino=18864 ci=1 holes=12
+2026-10-12T10:37:38.399Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=4482 off=0 len=0
+2026-10-12T10:37:38.534Z efs: read hole ino=17751 ci=0 holes=13
+2026-10-12T10:37:43.731Z fsync-split ino=8318 flush_ms=293 report_ms=0 rc=0
+2026-10-12T10:37:44.630Z efs-fuse flush-meta: unknown error (efs_rc=-15) ino=15564 off=0 len=0
+2026-10-12T10:39:10.503Z efs-fuse: unmount: data flush incomplete (writeback=0 dcache=-14)

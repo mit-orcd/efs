@@ -1,0 +1,25 @@
+2026-10-12T10:41:52.993Z efs-fuse (no git metadata, branch fix-intel-packing-28b2089b, built 2026-10-12T10:40:39Z on intel1), build=c10a0678-core-only-diagnostic: starting export=default mount=/tmp/efs-intel-pack-core-control-20261012-c-intel1_efs/temp/efs-pack-client-2-4m665kwn
+2026-10-12T10:41:52.995Z Discovered 4 cluster nodes from 127.0.0.1:34510
+2026-10-12T10:41:52.995Z   node id=1 127.0.0.1:34510
+2026-10-12T10:41:52.995Z   node id=2 127.0.0.1:34511
+2026-10-12T10:41:52.995Z   node id=3 127.0.0.1:34512
+2026-10-12T10:41:52.995Z   node id=4 127.0.0.1:34513
+2026-10-12T10:41:52.995Z fetching metadata...
+2026-10-12T10:41:52.995Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T10:41:52.995Z export id=1 name=default
+2026-10-12T10:41:52.995Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T10:41:52.998Z efs-fuse: workers max=10 idle=10
+2026-10-12T10:41:53.005Z fuse serving
+2026-10-12T10:41:57.149Z efs: read hole ino=6322 ci=1 holes=1
+2026-10-12T10:41:58.911Z fsync-split ino=6447 flush_ms=532 report_ms=0 rc=0
+2026-10-12T10:42:01.586Z efs: read hole ino=6653 ci=0 holes=2
+2026-10-12T10:42:05.988Z efs: rename_at 3951/a -> 3951/b rc=-12 after 1 tries
+2026-10-12T10:42:23.716Z fsync-split ino=5059 flush_ms=158 report_ms=0 rc=0
+2026-10-12T10:42:41.430Z inode-rpc: slow-ok type=67 attempts=2 saw_busy=1 status=0 us=1678181
+2026-10-12T10:42:50.999Z fsync-split ino=7400 flush_ms=763 report_ms=0 rc=0
+2026-10-12T10:42:51.032Z fsync-split ino=7328 flush_ms=749 report_ms=0 rc=0
+2026-10-12T10:43:09.621Z efs: read hole ino=5646 ci=0 holes=3
+2026-10-12T10:43:10.513Z fsync-split ino=6657 flush_ms=513 report_ms=0 rc=0
+2026-10-12T10:43:13.956Z efs: read hole ino=145093 ci=1 holes=12
+2026-10-12T10:43:17.210Z fsync-split ino=5950 flush_ms=1151 report_ms=0 rc=0
+2026-10-12T10:43:18.521Z fsync-split ino=6922 flush_ms=1692 report_ms=0 rc=0

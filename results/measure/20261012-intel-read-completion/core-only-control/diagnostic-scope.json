@@ -1,0 +1,6 @@
+{
+  "source": "c10a0678 plus original host_view_covers predicate override",
+  "purpose": "isolate core history/invalidation versus use of retained admitted proof",
+  "acceptance": false,
+  "new_retained_completion_tests": "not applicable to intentional original-predicate control; not claimed PASS"
+}

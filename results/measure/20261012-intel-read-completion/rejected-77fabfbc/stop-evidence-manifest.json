@@ -1,0 +1,222 @@
+{
+  "inputs.json": {
+    "size": 3262048,
+    "sha256": "d3ead9cfceceeb4721df79e4abe78d441de009f274e40fb6bd781ebedd5c9a15"
+  },
+  "source-proof.json": {
+    "size": 684,
+    "sha256": "6611c63883956d7a92567dd7d450595b9257beccaccf7e828f16357bb140886f"
+  },
+  "build.log": {
+    "size": 45018,
+    "sha256": "5c4e5a40434f8ccdc3e661f5ea82a7cb05d59c731f861ec7e80ffff6048e5c28"
+  },
+  "build.json": {
+    "size": 927,
+    "sha256": "7e9290b9e8dd5f67ccf9092fb5b195ea6c0f3cf1b313761a869a3480c5fa7c94"
+  },
+  "test-00.log": {
+    "size": 14,
+    "sha256": "6d5a0e475c33ea6abcdf753bbbfa2d556d4b0998d269589838fb7cd8d8e6f40d"
+  },
+  "test-01.log": {
+    "size": 14,
+    "sha256": "6d5a0e475c33ea6abcdf753bbbfa2d556d4b0998d269589838fb7cd8d8e6f40d"
+  },
+  "test-02.log": {
+    "size": 112,
+    "sha256": "81d5523321b5defcf6b270a76add2dc89e2bcdb3f391650c127d8881a07e2fe5"
+  },
+  "test-03.log": {
+    "size": 117,
+    "sha256": "31d40e21196cdcf4a022f37b074783d95c393a1f8913511e8cfd64ad326a487e"
+  },
+  "test-04.log": {
+    "size": 495,
+    "sha256": "e835f0473d8ed758c1929a4a5b0d7e0a44ac53c00ee767ec4ada7fc8f2f0d5d6"
+  },
+  "test-05.log": {
+    "size": 86,
+    "sha256": "3b65ef043d4e3ea8bc2ac9195fef28f1e9ca98ae87bb93cbc5a066bff8af501f"
+  },
+  "test-06.log": {
+    "size": 137,
+    "sha256": "dad5a716b186ca535c94f1950e04542d2579703e2d36fea969a68b9fc77a22b5"
+  },
+  "test-07.log": {
+    "size": 87,
+    "sha256": "4190a315241b158b241787c96802f9e57775eb15140a674596ead08df0d87930"
+  },
+  "test-08.log": {
+    "size": 309,
+    "sha256": "fad757b8f2e87cbad6be652fe6eb8b30752aed96022e58264348d6b194785259"
+  },
+  "test-09.log": {
+    "size": 197,
+    "sha256": "7830e56c8cc80402595840838a10f97afe08c2b456cfccdd57ceca6bc4955a9a"
+  },
+  "native-results.json": {
+    "size": 1095,
+    "sha256": "10c5c36730f4c0b462d09339a7b8cb7eee9636f2c369cb2f1d92b628eb421e9c"
+  },
+  "builds.finished": {
+    "size": 20,
+    "sha256": "2145eeba6fb72e7ab12d875c25d530aff226516074bae23fd53fd6b0f7e0ce4e"
+  },
+  "test-completion-extra.log": {
+    "size": 112,
+    "sha256": "81d5523321b5defcf6b270a76add2dc89e2bcdb3f391650c127d8881a07e2fe5"
+  },
+  "committed-build.log": {
+    "size": 46904,
+    "sha256": "8195583d1e206132d6785d0b6d4958d87368ef2869b88de444051a2af85ce886"
+  },
+  "committed-build.json": {
+    "size": 1005,
+    "sha256": "0d2568f6c8aa58a87528e049f7f28bbd4e5cdb619ed8624f7eb9c7e12bcb6cae"
+  },
+  "controller.log": {
+    "size": 376,
+    "sha256": "b166a1c0216fe81560b4bdcead343dd1f55d1487156023543d2a5cfa01ea16df"
+  },
+  "runner.pid": {
+    "size": 7,
+    "sha256": "c0ac3ce5f9f30d424626fd2cfc0fd1a4b0a60970d235d826d466562a9c926e67"
+  },
+  "all-gates.jsonl": {
+    "size": 4325,
+    "sha256": "9a2d401ba1fbaa18f88ca541364794947745716f6e3d96d9b4074e5978622ad9"
+  },
+  "finished.json": {
+    "size": 280,
+    "sha256": "a6c2f98c8977525f9baf7219ce2ebce6df7ef0998fd7f9950e04c03cb72cfca6"
+  },
+  "stop-request.json": {
+    "size": 155,
+    "sha256": "8d282d3cdb2c5703ac6b83c3243ae02d8fce526977ddd922e7ffe6720ef28ed1"
+  },
+  "gates/packing-seven-buffered-completion/command.json": {
+    "size": 3854,
+    "sha256": "9d2e484b348319521a9948be5816a785f2146aa55e9c6fc7638b60168c10e23d"
+  },
+  "gates/packing-seven-buffered-completion/run.log": {
+    "size": 3487,
+    "sha256": "b6028631a15dcfb8584b38f7ed181e0bc4c02b9bda5630c21dd490f4295ffa74"
+  },
+  "gates/packing-seven-buffered-completion/result.json": {
+    "size": 4610,
+    "sha256": "d359d3b29c349397706dd2ea36af137727667b1f99029ae6d20c5782bf26d6ce"
+  },
+  "gates/packing-seven-buffered-completion/run.exit": {
+    "size": 2,
+    "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/manifest.json": {
+    "size": 4683,
+    "sha256": "10cb9ed036980b1e8669d6bde93cc91bb6ded43ab329ebae8aa7cf9f0eadc1e3"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/n1.log": {
+    "size": 16102,
+    "sha256": "6bf3edb9c77d39c6095b29139ed1eab7c959c42b1910e0639b9882d2a3a7397a"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/n2.log": {
+    "size": 347798,
+    "sha256": "b2fdf143a980e5c03db993fc6933fbf562c533295922d2b98e755efc521d1883"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/n3.log": {
+    "size": 249492,
+    "sha256": "565bcc59013aa4131da753bafe2da6ec6daee7149b37569dd9a176152a892ab0"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/n4.log": {
+    "size": 17378,
+    "sha256": "2910ea06dce28d1422ea15bfcf095c64583f34e4f3b18f684ea3dd9ff2055688"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/fuse.log": {
+    "size": 3324,
+    "sha256": "53f6043e1302ab647aa864dcfb5ba7b99d804d6214ed6250788a368b02a9360d"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/peer-fuse.log": {
+    "size": 4380,
+    "sha256": "1ff50956406f21a33a179b56d2cccf8c88a3aa5be61d0872d115453a23c65124"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/mounted-pack-before.json": {
+    "size": 95,
+    "sha256": "0ac14d0b7f1ed7f8cdbb69db022807e0eba7b8954824e4da6d7c9ef013cbaa4f"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/pack-client-2.log": {
+    "size": 3750,
+    "sha256": "14a01c6957f5689eb5aaa171b152cf7fa400b031e1d9cee47eefb3786a0019b6"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/pack-client-3.log": {
+    "size": 3979,
+    "sha256": "36f3c9ca6fe086b886cd609afd6f3b99637171854aa045ea8ad1f47699c2a518"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/pack-client-4.log": {
+    "size": 4259,
+    "sha256": "0989b157a9b22aad5c32158903e3af2376ac9db4a5d2ddf99d2bd050c97b7815"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/pack-client-5.log": {
+    "size": 2395,
+    "sha256": "d8ff1c32585da8b8c98a34a9031483801a1ef8635efc8a2f9cafce731be172ca"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/pack-client-6.log": {
+    "size": 3411,
+    "sha256": "9c9153e82c7dd2aae91dd0ed7f294e754963df93569b20f7ce52a0bdf4d37654"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/posix-client-0.log": {
+    "size": 14707,
+    "sha256": "fe39131b06dacc484210946f655df4222543b374df9d81a44a67cd82f4a6d650"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/posix-client-1.log": {
+    "size": 13094,
+    "sha256": "3f424e73d40b093ac318848d1ae888990000d39a6e59541ef06028d465d1566f"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/posix-client-2.log": {
+    "size": 13102,
+    "sha256": "8537406587fc0e448e1c787616658a3a455d091c8abf7e37677774bffd643bf5"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/posix-client-3.log": {
+    "size": 12274,
+    "sha256": "b3d1bb4a39867bd08a306e73fbb7d5c4a3e5dacb760befda2564e12a2b69f70d"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/posix-client-4.log": {
+    "size": 12693,
+    "sha256": "49b5318f4e94f9a6fe7aba3536847558b7cf028b003179772bf4f72d21e3bb83"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/posix-client-5.log": {
+    "size": 16249,
+    "sha256": "cb29e1ddf23cfbc171b061373977e749efd4faafb02923961351ffc4417b6f9f"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/posix-client-6.log": {
+    "size": 12515,
+    "sha256": "8ff80fefacebe65d764bb1ea3b81e21100414855fcf8fd64c781ee6e81635cc8"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/posix-client-4.tsv": {
+    "size": 17057,
+    "sha256": "1e1486b515a7f96639ddfed14146fc42ab7735ea26c20b09633e45c8961a4d96"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/posix-client-0.tsv": {
+    "size": 19028,
+    "sha256": "fff0798e2261e996602fd6c8e6e3a658ca3752d693966738f0bf8ebdce48da51"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/posix-client-3.tsv": {
+    "size": 16650,
+    "sha256": "2875a7338e19e4edfaf3f8afb9f7560692d7d2f7158ed4eb848706a82012d9e6"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/posix-client-5.tsv": {
+    "size": 20530,
+    "sha256": "330f3225433b7dec93186e767621a4e46cefa9b9168161fb29dab162b477f538"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/posix-client-1.tsv": {
+    "size": 17444,
+    "sha256": "d8b93b47496c6f7df37389777396c9f48195cf15a9adc69d787fbe2aff7ad573"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/posix-client-6.tsv": {
+    "size": 16884,
+    "sha256": "dd4936c3dfb603cbadd16558de68e03ed5d85d7781ee7ed71265672261678236"
+  },
+  "live/packing-seven-buffered/gc-buffered-jeowa_nr/posix-client-2.tsv": {
+    "size": 17462,
+    "sha256": "cdaa5ea5c653965c86eb5d54d8a6b70010e53e769390279dccab2cb6ba32c0c8"
+  }
+}
