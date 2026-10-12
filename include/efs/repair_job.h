@@ -48,4 +48,10 @@ int efs_repair_retire(struct efs_kv *, const struct efs_repair_job *, int cancel
  * receipt. The object predicate also fences historical FileID generations. */
 int efs_repair_gc_ready(struct efs_kv *, efs_ino_t, uint64_t, uint32_t, uint64_t);
 int efs_repair_gc_object_ready(struct efs_kv *, efs_ino_t, uint32_t, uint64_t);
+#define EFS_REPAIR_RECEIPT_BYTES 132u
+#define EFS_REPAIR_RECEIPT_DATA 1u
+#define EFS_REPAIR_RECEIPT_SEAL 2u
+int efs_repair_receipt_encode(const struct efs_repair_job *,unsigned kind,uint8_t out[EFS_REPAIR_RECEIPT_BYTES]);
+int efs_repair_receipt_verify(const struct efs_repair_job *,unsigned kind,const uint8_t *,uint32_t);
+int efs_repair_seal_authority(struct efs_kv *,const struct efs_repair_job *);
 #endif

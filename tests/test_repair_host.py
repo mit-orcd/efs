@@ -48,6 +48,7 @@ static int host_hosts(struct efs_raft_host *h,uint8_t group){(void)h;(void)group
 static int host_remote_cmd(struct efs_raft_host *h,uint8_t g,const uint8_t *c,uint32_t n,struct efs_msg_raft_mkfs_reply *o,int hint){(void)h;(void)g;(void)c;(void)n;(void)hint;forwards++;o->rc=EFS_ERR_BUSY;return 0;}
 static int host_read_index(struct efs_raft_host *h,uint8_t g,int *hint){(void)h;(void)g;(void)hint;reads++;if(flip_role)role=0;return read_rc;}
 int efs_repair_write_authority(struct efs_kv *kv,const struct efs_repair_job *j){(void)kv;(void)j;authorities++;return authority_rc;}
+int efs_repair_seal_authority(struct efs_kv *kv,const struct efs_repair_job *j){(void)kv;(void)j;authorities++;return authority_rc;}
 '''+fresh+apply+public+r'''
 int main(void){
  struct efs_kv kv={0};struct efs_raft_host h={.kv=&kv,.running=1};struct host_group g={.host=&h};g_host=&h;
@@ -75,6 +76,10 @@ int main(void){
  flip_role=1;server_raft_host_submit(query,sizeof(query),&reply);assert(reply.rc==EFS_ERR_NOT_PRIMARY&&authorities==2);flip_role=0;
  int before_reads=reads;server_raft_host_submit(query,sizeof(query),&reply);assert(reply.rc==EFS_ERR_BUSY&&reads==before_reads&&forwards==2);
  role=EFS_RAFT_LEADER;node.id=2;server_raft_host_submit(query,sizeof(query),&reply);assert(reply.rc==EFS_ERR_STALE&&authorities==2);
+ query[1]=EFS_MD_REQ_REPAIR_SEAL_AUTHORITY;current_term=3;authority_rc=EFS_ERR_BUSY;
+ int old_authorities=authorities;server_raft_host_submit(query,sizeof(query),&reply);assert(reply.rc==EFS_ERR_BUSY&&authorities==old_authorities+1);
+ authority_rc=0;server_raft_host_submit(query,sizeof(query),&reply);assert(!reply.rc&&authorities==old_authorities+2);
+ flip_role=1;server_raft_host_submit(query,sizeof(query),&reply);assert(reply.rc==EFS_ERR_NOT_PRIMARY&&authorities==old_authorities+2);
  assert(cursors==8);return 0;
 }
 '''

@@ -27,6 +27,7 @@
 #define EFS_MD_REQ_PACK_STATUS 46 /* same manifest, fresh authority only */
 /* Exact single-shard APPEND image envelope; no replica-local EOF selection. */
 #define EFS_MD_APPEND_COMPLETE_ATOMIC_LEN 101u
+#define EFS_MD_REQ_REPAIR_SEAL_AUTHORITY 57 /* ReadIndex-only exact eligible job; no seal receipt */
 #define EFS_MD_REQ_REPAIR_WRITE_AUTHORITY 56 /* ReadIndex-only canonical job; never a data receipt */
 #define EFS_MD_CMD_REPAIR_JOB 55 /* staged: op1, canonical job260, arg4; no RPC/worker admission */
 #define EFS_MD_CMD_APPEND_COMPLETE_ATOMIC 54 /* ino/gen/offset/UUID/epoch/content epoch/reservation: 101 bytes */

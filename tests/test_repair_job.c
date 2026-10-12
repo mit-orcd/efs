@@ -95,6 +95,7 @@ static void journal(struct efs_kv *kv,int lsm)
     assert(efs_repair_gc_object_ready(kv,ino,0,101)==EFS_ERR_BUSY);
     assert(efs_repair_retire(kv,&j,0)==EFS_ERR_BUSY);
     assert(efs_repair_record_seal(kv,&j,1)==EFS_ERR_STALE);
+    assert(efs_repair_record_seal(kv,&j,2)==EFS_ERR_BUSY);
     assert(term_command(kv,&j,EFS_REPAIR_OP_DATA,group,2)==EFS_ERR_STALE);
     assert(!efs_repair_get(kv,&j,&got) && !got.flags);
     fail(kv,lsm);assert(efs_repair_record_data(kv,&j)==EFS_ERR_IO);
@@ -164,6 +165,28 @@ static void cold(void)
     assert(!efs_repair_retire(kv,&j,1));efs_kv_lsm_close(kv);
     printf("repair journal cold: admitted debt after abrupt process exit; terminal floor after flush/compaction/reopen PASS\n");
 }
+static void receipt_codec(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();assert(kv);efs_ino_t ino=create(kv);
+    struct efs_repair_job j=capture(kv,ino,101,95),other;
+    uint8_t receipt[EFS_REPAIR_RECEIPT_BYTES];
+    for(unsigned kind=EFS_REPAIR_RECEIPT_DATA;kind<=EFS_REPAIR_RECEIPT_SEAL;kind++){
+        assert(!efs_repair_receipt_encode(&j,kind,receipt));
+        assert(!efs_repair_receipt_verify(&j,kind,receipt,sizeof(receipt)));
+        assert(efs_repair_receipt_verify(&j,kind,receipt,sizeof(receipt)-1)==EFS_ERR_PROTO);
+        other=j;other.target_store[0]++;assert(efs_repair_receipt_verify(&other,kind,receipt,sizeof(receipt))==EFS_ERR_STALE);
+        other=j;other.epoch++;assert(efs_repair_receipt_verify(&other,kind,receipt,sizeof(receipt))==EFS_ERR_STALE);
+        other=j;other.fi=(j.fi+1)%3;assert(efs_repair_receipt_verify(&other,kind,receipt,sizeof(receipt))==EFS_ERR_STALE);
+        other=j;other.owner++;assert(efs_repair_receipt_verify(&other,kind,receipt,sizeof(receipt))==EFS_ERR_STALE);
+        assert(efs_repair_receipt_verify(&j,3-kind,receipt,sizeof(receipt))==EFS_ERR_STALE);
+        receipt[68]^=1;assert(efs_repair_receipt_verify(&j,kind,receipt,sizeof(receipt))==EFS_ERR_PROTO);
+    }
+    assert(!efs_repair_admit(kv,&j));assert(efs_repair_seal_authority(kv,&j)==EFS_ERR_BUSY);
+    assert(!efs_repair_cancel(kv,&j));assert(!efs_repair_seal_authority(kv,&j));
+    assert(!efs_repair_record_seal(kv,&j,j.epoch+1));assert(!efs_repair_seal_authority(kv,&j));
+    assert(!efs_repair_retire(kv,&j,1));assert(efs_repair_seal_authority(kv,&j)==EFS_ERR_NOT_FOUND);
+    efs_kv_mem_free(kv);puts("receipt codec exact context and committed cancel/seal eligibility PASS; encoding is not storage authority");
+}
 static void fenced_liveness(void)
 {
     struct efs_kv *kv=efs_kv_mem_create();assert(kv);efs_ino_t ino=create(kv);
@@ -223,6 +246,6 @@ int main(void)
 {
     struct efs_kv *kv=efs_kv_mem_create();assert(kv);journal(kv,0);efs_kv_mem_free(kv);
     char path[]="/tmp/efs-repair-apply-XXXXXX";assert(mkdtemp(path));
-    kv=efs_kv_lsm_open(path,NULL);assert(kv);journal(kv,1);efs_kv_lsm_close(kv);cold();bounded();fenced_liveness();sync_faults();
+    kv=efs_kv_lsm_open(path,NULL);assert(kv);journal(kv,1);efs_kv_lsm_close(kv);cold();bounded();fenced_liveness();receipt_codec();sync_faults();
     puts("inactive repair-journal prerequisite PASS; physical repair and distributed authority NOTRUN");return 0;
 }
