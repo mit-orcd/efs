@@ -21,7 +21,8 @@ static int valid(const struct efs_repair_job *j)
        (!j->span_len && j->span_off) || (uint64_t)j->span_off+j->span_len>2ull*j->fragment_len ||
        j->state<1 || j->state>3 || (j->flags&~3u) ||
        (j->state==EFS_REPAIR_CANCELLING && !(j->flags&EFS_REPAIR_CANCELLED)) ||
-       (j->state==EFS_REPAIR_ADMITTED && (j->flags&EFS_REPAIR_CANCELLED)))return EFS_ERR_INVAL;
+       (j->state==EFS_REPAIR_ADMITTED && (j->flags&EFS_REPAIR_CANCELLED)) ||
+       (j->state==EFS_REPAIR_SEALED && !j->flags))return EFS_ERR_INVAL;
     for(unsigned i=0;i<3;i++){
         if(!j->nodes[i])return EFS_ERR_INVAL;
         for(unsigned k=0;k<i;k++)if(j->nodes[k]==j->nodes[i])return EFS_ERR_INVAL;
@@ -215,6 +216,7 @@ int efs_repair_record_seal(struct efs_kv *kv,const struct efs_repair_job *j,uint
 {
     struct efs_repair_job old;int rc=load(kv,j,&old);if(rc)return rc;
     if(floor!=j->epoch+1u)return EFS_ERR_STALE;
+    if(!(old.flags&(EFS_REPAIR_DATA_DURABLE|EFS_REPAIR_CANCELLED)))return EFS_ERR_BUSY;
     if(old.state==EFS_REPAIR_SEALED)return EFS_OK;
     old.state=EFS_REPAIR_SEALED;return put(kv,&old);
 }
@@ -288,4 +290,32 @@ int efs_repair_apply_command_term(struct efs_kv *kv,uint32_t group,uint64_t term
         if(!term || term>UINT32_MAX-1ull || term!=j.epoch)return EFS_ERR_STALE;
     }
     return efs_repair_apply_command(kv,group,cmd,n);
+}
+
+/* Receipt encoding is not authority. Only the trusted coordinator may record
+ * it, after receiving it from the exact target's completed storage operation. */
+int efs_repair_receipt_encode(const struct efs_repair_job *j,unsigned kind,
+                              uint8_t out[EFS_REPAIR_RECEIPT_BYTES])
+{
+    if(!out || valid(j) || (kind!=EFS_REPAIR_RECEIPT_DATA && kind!=EFS_REPAIR_RECEIPT_SEAL))return EFS_ERR_INVAL;
+    memset(out,0,EFS_REPAIR_RECEIPT_BYTES);memcpy(out,kind==EFS_REPAIR_RECEIPT_DATA?"ERD1":"ERS1",4);
+    digest(j,out+4);memcpy(out+36,j->target_store,16);
+    w32(out+52,j->epoch+(kind==EFS_REPAIR_RECEIPT_SEAL));w32(out+56,j->nodes[j->fi]);
+    w32(out+60,j->fi);w32(out+64,kind==EFS_REPAIR_RECEIPT_DATA?j->fragment_len:0);
+    memcpy(out+68,j->sums[j->fi],EFS_HASH_SIZE);efs_hash(out,100,out+100);return EFS_OK;
+}
+int efs_repair_receipt_verify(const struct efs_repair_job *j,unsigned kind,
+                              const uint8_t *receipt,uint32_t n)
+{
+    uint8_t expected[EFS_REPAIR_RECEIPT_BYTES],sum[32];
+    if(!receipt || n!=EFS_REPAIR_RECEIPT_BYTES)return EFS_ERR_PROTO;
+    int rc=efs_repair_receipt_encode(j,kind,expected);if(rc)return rc;
+    efs_hash(receipt,100,sum);if(memcmp(sum,receipt+100,32))return EFS_ERR_PROTO;
+    return memcmp(expected,receipt,sizeof(expected))?EFS_ERR_STALE:EFS_OK;
+}
+int efs_repair_seal_authority(struct efs_kv *kv,const struct efs_repair_job *j)
+{
+    if(valid(j) || j->state!=EFS_REPAIR_ADMITTED || j->flags)return EFS_ERR_INVAL;
+    struct efs_repair_job old;int rc=efs_repair_get(kv,j,&old);if(rc)return rc;
+    return (old.flags&(EFS_REPAIR_DATA_DURABLE|EFS_REPAIR_CANCELLED))?EFS_OK:EFS_ERR_BUSY;
 }

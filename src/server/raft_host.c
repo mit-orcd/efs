@@ -10430,15 +10430,15 @@ static int host_storage_fence_members(struct efs_raft_host *h,const uint8_t uuid
 /* Fresh proof must be local authoritative leader proof. A follower's cached
  * view can lag a remote proof and must never grant an old owner new writes. */
 static int host_repair_write_read(struct efs_raft_host *h,uint8_t group,
-                                  const struct efs_repair_job *j,int *hint)
+                                  const struct efs_repair_job *j,int seal,int *hint)
 {
     int rc=host_read_index(h,group,hint);if(rc)return rc;
     pthread_mutex_lock(&h->mu);
     struct host_group *g=group_slot(h,group);
     if(!g || !g->r || efs_raft_role(g->r)!=EFS_RAFT_LEADER)rc=EFS_ERR_NOT_PRIMARY;
-    else if(efs_raft_term(g->r)>UINT32_MAX-1ull || efs_raft_term(g->r)!=j->epoch ||
-            !h->s || h->s->id!=j->owner)rc=EFS_ERR_STALE;
-    else rc=efs_repair_write_authority(h->kv,j);
+    else if(!seal && (efs_raft_term(g->r)>UINT32_MAX-1ull || efs_raft_term(g->r)!=j->epoch ||
+            !h->s || h->s->id!=j->owner))rc=EFS_ERR_STALE;
+    else rc=seal?efs_repair_seal_authority(h->kv,j):efs_repair_write_authority(h->kv,j);
     pthread_mutex_unlock(&h->mu);return rc;
 }
 
@@ -10471,7 +10471,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     if(clen && (cmd[0]==EFS_MD_CMD_REPAIR_JOB || cmd[0]==EFS_MD_CMD_PACK_GC_ACK || cmd[0]==EFS_MD_CMD_PACK_CANCEL || cmd[0]==EFS_MD_CMD_PACK_GC_RETIRE)) {
         out->rc=EFS_ERR_ACCES;return;
     }
-    if(clen && cmd[0]==EFS_MD_REQ_REPAIR_WRITE_AUTHORITY) {
+    if(clen && (cmd[0]==EFS_MD_REQ_REPAIR_WRITE_AUTHORITY || cmd[0]==EFS_MD_REQ_REPAIR_SEAL_AUTHORITY)) {
         struct efs_repair_job expected;
         rc=efs_repair_job_decode(cmd+1,clen-1,&expected);
         if(rc || expected.state!=EFS_REPAIR_ADMITTED || expected.flags ||
@@ -10485,7 +10485,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         int local_leader=g && g->r && efs_raft_role(g->r)==EFS_RAFT_LEADER;
         pthread_mutex_unlock(&h->mu);
         if(!local_leader){rc=host_remote_cmd(h,group,cmd,clen,out,-1);if(rc)out->rc=rc;return;}
-        rc=host_repair_write_read(h,group,&expected,&hint);
+        rc=host_repair_write_read(h,group,&expected,cmd[0]==EFS_MD_REQ_REPAIR_SEAL_AUTHORITY,&hint);
         out->rc=rc;out->leader_hint=hint;return;
     }
     if(clen && cmd[0]==EFS_MD_REQ_PACK_GC_VIEW) {
