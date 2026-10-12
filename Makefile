@@ -372,6 +372,7 @@ test: all
 	python3 tests/test_lookup_group_plan.py
 	python3 tests/test_lookup_path_authority.py
 	python3 tests/test_read_control_host.py
+	python3 tests/test_read_waiters.py
 	python3 tests/test_prepare_cohort.py
 	python3 tests/test_append_cohort.py
 	python3 tests/test_atomic_append_host.py
