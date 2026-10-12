@@ -699,3 +699,5 @@ Intel03 also reports EIO/EBUSY in fsync/basic I/O cases; classification pending 
 Qualification STOP checkpoint: newer human stop reported by Intel; no further launches/fixes pending resume.03bd remains unaccepted with seven-client and hard I/O blockers. [Ledger](v030-tcp-direct-qualification-20261012.md).
 
 Latest alpha scope: `.efs` commands/stats/find and derived query-cache service excluded; explicitly disable client/server command flags. WITHOUT-query acceptance NOTRUN; ordinary-I/O/deep-path blockers remain. [Scope](v030-release-scope-20261012.md). [Review of Mac evidence4764dada](mac-container-evidence-review-20261012.md): useful older-source container evidence, excluded from alpha qualification. Work remains stopped.
+
+RESUMED by direct human instruction: frozen `ecdc8c6034b610a2bf69e7a79664d8a5e990de84`, `.efs` disabled. AMD heavy full qualification, Intel focused I/O failures, NUC lightweight deep/configuration.15-minute reporting active; new live results pending. [Scope](v030-release-scope-20261012.md).

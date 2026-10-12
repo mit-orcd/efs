@@ -2175,6 +2175,8 @@ Qualification STOP checkpoint: newer human stop reported by Intel; no further la
 
 Latest alpha scope: `.efs` commands/stats/find and derived query-cache service excluded; explicitly disable client/server command flags. WITHOUT-query acceptance NOTRUN; ordinary-I/O/deep-path blockers remain. [Scope](../status/v030-release-scope-20261012.md). [Review of Mac evidence4764dada](../status/mac-container-evidence-review-20261012.md): useful older-source container evidence, excluded from alpha qualification. Work remains stopped.
 
+RESUMED by direct human instruction: frozen `ecdc8c6034b610a2bf69e7a79664d8a5e990de84`, `.efs` disabled. AMD heavy full qualification, Intel focused I/O failures, NUC lightweight deep/configuration.15-minute reporting active; new live results pending. [Scope](../status/v030-release-scope-20261012.md).
+
 
 ## Appendix 2 — In flight — the current handoff block
 

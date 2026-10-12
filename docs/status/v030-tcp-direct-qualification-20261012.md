@@ -106,3 +106,7 @@ Intel reports a newer direct human instruction: â€œDocument, commit, and stop.â€
 ## Alpha scope update: `.efs` excluded
 
 Latest human decision removes `.efs` from this alpha: clients EFS_COMMANDS=0 and daemons EFS_COMMANDS_SERVER=0, query-specific cases excluded explicitly, packed writes retained. Previous WITH-query failures remain historical failures; feature-disabled live acceptance NOTRUN. Deep paths and ordinary EIO/EBUSY/flush/packing checks remain required. See [scope contract](v030-release-scope-20261012.md) and [Mac evidence review](mac-container-evidence-review-20261012.md). No launches resumed.
+
+## Human-authorized resume and new freeze
+
+Current frozen source **ecdc8c6034b610a2bf69e7a79664d8a5e990de84**. Explicit disabled-feature harness added and syntax-checked; product source unchanged03bd. Resource split AMD heavy full/native, Intel medium focused I/O, NUC light deep/configuration. Owners notified of direct resume; archive/manifests exporting. New-source live acceptance NOTRUN, AMD native launch preparing and broad quiet gate queued behind successful native completion. Existing failures retained.15-minute heartbeat resumes. [Assignment contract](v030-release-scope-20261012.md#resumed-resource-weighted-split).
