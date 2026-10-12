@@ -1,0 +1,9 @@
+{
+  "source": "95898bf5",
+  "cluster": "amd_efs",
+  "make_all": "FAIL",
+  "exit": 2,
+  "primitive_test": "NOTRUN",
+  "issue": "EFS_BENCH_BUILD parses sync_fragment_parents absent in that configuration; early return does not exclude runtime body",
+  "integrated": false
+}

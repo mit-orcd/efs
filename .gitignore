@@ -74,3 +74,5 @@ __pycache__/
 /tests/test_repair_job
 
 /tests/test_repair_storage_fence
+
+/tests/test_repair_file_atomic
