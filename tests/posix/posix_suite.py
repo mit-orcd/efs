@@ -38,6 +38,7 @@ import mmap
 import os
 import shutil
 import signal
+import socket
 import stat as statmod
 import subprocess
 import sys
@@ -877,17 +878,39 @@ def root_mkdir_rmdir_immediate(mnt):
         _root_cleanup(a)
 
 
+def _deep_phase(event, worker=0):
+    """Best-effort bounded datagram; no wait, fsync, or EFS path access."""
+    target = os.environ.get("EFS_POSIX_PHASE_SOCKET")
+    if not target:
+        return
+    payload = ("test=dir_deep_nesting event=%s pid=%d worker=%d mono_ns=%d client=%s\n" %
+               (event, os.getpid(), worker or os.getpid(), time.monotonic_ns(),
+                os.environ.get("EFS_POSIX_PHASE_CLIENT", "unknown")[:32])).encode()
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as sender:
+            sender.setblocking(False)
+            sender.sendto(payload, target)
+    except OSError:
+        pass  # Missing/full observer must never change the test result.
+
+
 @test
 def dir_deep_nesting(d):
     depth = 60
     parts = ["d%02d" % i for i in range(depth)]
     deep = os.path.join(d, *parts)
+    _deep_phase("create")
     os.makedirs(deep)
+    _deep_phase("leaf-write")
     wr(os.path.join(deep, "leaf"), b"deep")
+    _deep_phase("leaf-read")
     eq(rd(os.path.join(deep, "leaf")), b"deep", "deep file")
     # walk back out
+    _deep_phase("recursive-cleanup")
     shutil.rmtree(os.path.join(d, parts[0]))
+    _deep_phase("absence-check")
     assert not os.path.exists(os.path.join(d, parts[0]))
+    _deep_phase("case-complete")
 
 
 @test
@@ -3824,7 +3847,10 @@ def write_beyond_eof_then_seek_end(d):
 # Runner
 # ==========================================================================
 def invoke(fn, tdir):
+    deep_case = fn.__name__ == "dir_deep_nesting"
+    if deep_case: _deep_phase("setup")
     os.makedirs(tdir, exist_ok=True)
+    if deep_case: _deep_phase("setup-complete")
     try:
         fn(tdir)
     except Fail as e:
@@ -4311,6 +4337,7 @@ def _posix_hold(name):
 
 
 def _worker_main(name, tdir, result_path):
+    if name == "dir_deep_nesting": _deep_phase("worker-entry")
     _posix_hold(name)
     try:
         fns = dict(TESTS)
@@ -5199,6 +5226,7 @@ def main(argv=None):
             [sys.executable, script, "--worker", name, tdir, result],
             start_new_session=True)
         live.append(proc)
+        if name == "dir_deep_nesting": _deep_phase("spawned", proc.pid)
         pidfile = os.environ.get("EFS_POSIX_SPAWN_PID")
         if pidfile:
             with open(pidfile, "a") as f:

@@ -34,6 +34,71 @@ def interrupt_fixture(signum, frame):
 
 signal.signal(signal.SIGTERM, interrupt_fixture)
 
+
+class PosixPhaseCollector:
+    """Bounded native-filesystem observer; case workers only send nonblocking datagrams."""
+    def __init__(self, work, enabled, name="posix-case-phases", limit=128):
+        self.work, self.enabled = Path(work), enabled
+        self.name, self.limit = name, limit
+        self.stop = threading.Event()
+        self.count = self.retained = 0
+        self.errors = []
+        self.started = False
+    def __enter__(self):
+        if not self.enabled:
+            return self
+        self.directory = Path(tempfile.mkdtemp(prefix='efs-phase-', dir='/tmp'))
+        self.path = self.directory/'socket'
+        self.receiver = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        try:
+            self.receiver.bind(str(self.path)); self.receiver.settimeout(0.1)
+            self.output = (self.work/(self.name+'.log')).open('w')
+            def drain():
+                while True:
+                    try:
+                        data = self.receiver.recv(512)
+                    except socket.timeout:
+                        if self.stop.is_set(): break
+                        continue
+                    except OSError as error:
+                        self.errors.append(str(error)); break
+                    self.count += 1
+                    if self.retained < self.limit:
+                        try:
+                            self.output.write(data.decode('ascii').strip()+' received_ns='+str(time.monotonic_ns())+'\n')
+                            self.output.flush(); self.retained += 1
+                        except (OSError, UnicodeError) as error:
+                            self.errors.append(str(error)); break
+            self.thread = threading.Thread(target=drain, daemon=True); self.thread.start()
+            self.started = True
+        except BaseException:
+            self.receiver.close()
+            if hasattr(self, "output"): self.output.close()
+            self.path.unlink(missing_ok=True); self.directory.rmdir()
+            raise
+        return self
+    def environment(self, base, client):
+        result = dict(base)
+        if self.enabled:
+            result['EFS_POSIX_PHASE_SOCKET'] = str(self.path)
+            result['EFS_POSIX_PHASE_CLIENT'] = str(client)
+        return result
+    def __exit__(self, *exception):
+        if not self.started: return
+        self.stop.set(); self.thread.join(timeout=1)
+        self.receiver.close()
+        if self.thread.is_alive():
+            self.errors.append('observer did not drain within one second')
+            # A stuck observer must not block fixture shutdown or case workers.
+        else:
+            self.output.close()
+        self.path.unlink(missing_ok=True); self.directory.rmdir()
+        (self.work/(self.name+'-summary.json')).write_text(json.dumps({
+            'received': self.count, 'retained': self.retained, 'limit': self.limit,
+            'errors': self.errors, 'lost_datagrams_unknown': True,
+            'scope': 'opt-in bounded observations; missing records are unknown, not absent work'}, indent=2))
+
+
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--peer-mkdir-race-only',action='store_true',help='64 competing peer mkdir races in an isolated cluster, then cold namespace verification')
 p.add_argument('--peer-open-contention-only',action='store_true',help='twenty concurrent append/OPEN races, full peer POSIX, exact cold bytes and physical cleanup only')
@@ -247,6 +312,7 @@ else:peer_mount.mkdir()
 handles=[]
 extra_clients=[]
 blocked=None
+query_work_observer=None
 posix_failure=None
 
 def run(args, **kwargs):
@@ -494,6 +560,9 @@ def chunk_state(ino, allow_absent=False):
     raise AssertionError('no authoritative chunk state: '+str(ino))
 
 try:
+    query_work_observer=PosixPhaseCollector(work,env.get('EFS_QUERY_WORK_TRACE')=='1',name='query-capture-work',limit=2048)
+    query_work_observer.__enter__()
+    if query_work_observer.enabled:env['EFS_QUERY_WORK_SOCKET']=str(query_work_observer.path)
     print('Evidence directory: '+str(work),flush=True)
     if a.put_barrier_fault:
         run(['cc','-Wall','-Wextra','-Werror','-shared','-fPIC',source/'tests/live/store_barrier_fault.c','-ldl','-o',work/'store-barrier-fault.so'])
@@ -578,11 +647,12 @@ try:
                 command=['python3',source/'tests/posix/posix_suite.py',target,'--suite','all','--jobs',str(a.posix_jobs),'--timeout-s','30',
                          '--tag','pack-'+str(i),'--results',work/('posix-client-'+str(i)+'.tsv')]
                 with (work/('posix-client-'+str(i)+'.log')).open('wb') as output:
-                    result=subprocess.run(list(map(str,command)),env=env,stdout=output,stderr=subprocess.STDOUT,timeout=600)
+                    result=subprocess.run(list(map(str,command)),env=phase_observer.environment(env,i),stdout=output,stderr=subprocess.STDOUT,timeout=600)
                 print('packing concurrent POSIX client '+str(i)+' exit='+str(result.returncode),flush=True)
                 return {'gate':'posix-client-'+str(i),'returncode':result.returncode}
-            with concurrent.futures.ThreadPoolExecutor(max_workers=a.packing_clients) as pool:
-                failures.extend(r for r in pool.map(concurrent_posix,enumerate(mounts)) if r['returncode'])
+            with PosixPhaseCollector(work, env.get("EFS_POSIX_PHASE_TRACE") == "1") as phase_observer:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=a.packing_clients) as pool:
+                    failures.extend(r for r in pool.map(concurrent_posix,enumerate(mounts)) if r['returncode'])
             for proc,target in extra_clients:
                 run([source/'scripts/client.sh','stop',target]);proc.wait(timeout=15);target.rmdir()
             extra_clients.clear()
@@ -3029,4 +3099,5 @@ finally:
         try:peer.wait(timeout=5)
         except subprocess.TimeoutExpired:peer.kill();peer.wait()
     stop()
+    if query_work_observer:query_work_observer.__exit__(None,None,None)
     for h in handles:h.close()

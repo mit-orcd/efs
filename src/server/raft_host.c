@@ -8876,7 +8876,7 @@ static int host_query_capable(struct efs_raft_host *h)
 }
 static int host_query_source_once(struct efs_raft_host *h,struct efs_kv_lsm_snapshot **source,
                               struct efs_server_query_view *view,uint64_t *revisions,uint64_t *import_generation,
-                              int *transaction_changed)
+                              int *transaction_changed,struct efs_query_capture_work *work)
 {
     uint64_t capture_start=query_mono_ms();
     const char *trace_stage="pin";
@@ -8897,11 +8897,13 @@ static int host_query_source_once(struct efs_raft_host *h,struct efs_kv_lsm_snap
             view->terms[i]=efs_raft_term(h->g[i].r);
         }
         uint64_t started=query_mono_ms();
+        if(work)work->pins++;
         rc=efs_kv_lsm_snapshot_pin(h->kv,HOST_QUERY_MEMTABLE,source);
+        if(work && !rc)work->pins_ok++;
         view->pin_ms=query_mono_ms()-started;
     }
     pthread_mutex_unlock(&h->mu);
-    if (rc) { efs_query_stage_trace(trace_stage,rc,query_mono_ms()-capture_start,0,0);return rc; }
+    if (rc) { if(work)work->reason=trace_stage;efs_query_stage_trace(trace_stage,rc,query_mono_ms()-capture_start,0,0);return rc; }
     trace_stage="snapshot-revisions";
     rc=efs_kv_lsm_snapshot_revisions(*source,revisions,4096);
     uint64_t transaction_before=0,transaction_after=0;
@@ -8913,7 +8915,7 @@ static int host_query_source_once(struct efs_raft_host *h,struct efs_kv_lsm_snap
      * A prepare/resolve/decision after capture changes this fence; pending
      * records already in the image independently refuse catalog construction.
      * Import transitions remain excluded by host_query_capable. */
-    if(!rc) { trace_stage="authority";int hint=-1;rc=host_read_index_pair(h,h->g[0].group,h->g[1].group,&hint); }
+    if(!rc) { trace_stage="authority";if(work)work->pairs++;int hint=-1;rc=host_read_index_pair(h,h->g[0].group,h->g[1].group,&hint); }
     pthread_mutex_lock(&h->mu);
     if (!rc) { trace_stage="import";if(!host_query_capable(h))rc=EFS_ERR_NOT_PRIMARY; }
     pthread_mutex_lock(&h->snap_mu);
@@ -8936,6 +8938,7 @@ static int host_query_source_once(struct efs_raft_host *h,struct efs_kv_lsm_snap
         efs_query_stage_trace("apply-g0",rc,0,view->applied[0],applied_after[0]);
         efs_query_stage_trace("apply-g2",rc,0,view->applied[1],applied_after[1]);
     }
+    if(work)work->reason=trace_stage;
     efs_query_stage_trace(trace_stage,rc,query_mono_ms()-capture_start,transaction_before,transaction_after);
     if (rc) { efs_kv_lsm_snapshot_release(*source);*source=NULL; }
     return rc;
@@ -8947,12 +8950,12 @@ static int host_query_source_once(struct efs_raft_host *h,struct efs_kv_lsm_snap
  * prevent a busy namespace from monopolizing the background worker. */
 static int host_query_source(struct efs_raft_host *h,struct efs_kv_lsm_snapshot **source,
                               struct efs_server_query_view *view,uint64_t *revisions,uint64_t *import_generation,
-                              int *final_transaction_changed)
+                              int *final_transaction_changed,struct efs_query_capture_work *work)
 {
     *final_transaction_changed=0;
     for(unsigned attempt=0;;attempt++) {
         int changed=0;
-        int rc=host_query_source_once(h,source,view,revisions,import_generation,&changed);
+        int rc=host_query_source_once(h,source,view,revisions,import_generation,&changed,work);
         if(!changed || attempt==3 || query_mono_ms()>=h->query_deadline_ms) {
             *final_transaction_changed=changed;return rc;
         }
@@ -8988,7 +8991,7 @@ static void *host_query_thread(void *ctx)
 {
     struct efs_raft_host *h=ctx;
     uint64_t published[4096]={0},current[4096],first_dirty=0,last_attempt=0;
-    int failed=0,last_error=0,cut_retry=0;uint64_t last_error_log=0;
+    int failed=0,last_error=0,cut_retry=0;uint64_t last_error_log=0,work_completed=0;
     struct efs_query_build_failure build_failure={0};
     uint64_t catalog_bytes=HOST_QUERY_BYTES;
     const char *backend=getenv("EFS_QUERY_BACKEND");
@@ -9063,10 +9066,14 @@ static void *host_query_thread(void *ctx)
         uint64_t revisions[4096],import_generation[HOST_NGROUPS];
         h->query_deadline_ms=now+HOST_QUERY_BUILD_MS;
         h->query_cancel_checks=0;
-        int final_transaction_changed=0;
-        rc=host_query_source(h,&source,&view,revisions,import_generation,&final_transaction_changed);
+        int final_transaction_changed=0,work_enabled=efs_query_work_enabled();
+        struct efs_query_capture_work work={0};
+        if(work_enabled){work.dirty=dirty;uint64_t admitted=query_mono_ms();
+            work.spacing_ms=work_completed?admitted-work_completed:0;}
+        rc=host_query_source(h,&source,&view,revisions,import_generation,&final_transaction_changed,work_enabled?&work:NULL);
         uint64_t capture_done=query_mono_ms();
         cut_retry=efs_query_refresh_cut_retry(rc,final_transaction_changed,capture_done-now);
+        if(work_enabled){work.capture_ms=capture_done-now;work.changed=final_transaction_changed;work.fast=cut_retry;work.capture_rc=rc;}
         const char *refresh_stage="capture";
         struct efs_query_catalog *candidate=NULL;
         uint64_t watermark[4]={view.applied[0],view.applied[1],view.terms[0],view.terms[1]};
@@ -9080,8 +9087,10 @@ static void *host_query_thread(void *ctx)
                     fprintf(stderr,"query-catchup: rc=%d backend=disk\n",restored);
                 }
                 if(initial)fprintf(stderr,"query-restore: rc=%d backend=disk\n",restored);
+                uint64_t build_start=work_enabled?query_mono_ms():0;
                 if(restored)rc=efs_query_catalog_build_disk_checked(query_root,source,h->query_view.catalog,
                     catalog_bytes,host_query_disk_cancel,h,&build_failure,&candidate);
+                if(work_enabled && restored)work.build_ms=query_mono_ms()-build_start;
                 if(!rc) {
                     pthread_mutex_lock(&h->mu);
                     if(!host_query_capable(h))rc=EFS_ERR_NOT_PRIMARY;
@@ -9091,10 +9100,14 @@ static void *host_query_thread(void *ctx)
                     pthread_mutex_unlock(&h->snap_mu);
                     pthread_mutex_unlock(&h->mu);
                 }
-                if(!rc) { refresh_stage="checkpoint";rc=efs_query_catalog_checkpoint(candidate,watermark); }
+                if(!rc) { refresh_stage="checkpoint";uint64_t checkpoint_start=work_enabled?query_mono_ms():0;
+                    rc=efs_query_catalog_checkpoint(candidate,watermark);
+                    if(work_enabled)work.checkpoint_ms=query_mono_ms()-checkpoint_start; }
                 /* The long disk build does not extend any request budget. */
                 h->query_deadline_ms=query_mono_ms()+HOST_QUERY_BUILD_MS;
-            } else rc=efs_query_catalog_build(source,h->query_view.catalog,catalog_bytes,host_query_cancel,h,&candidate);
+            } else { uint64_t build_start=work_enabled?query_mono_ms():0;
+                rc=efs_query_catalog_build(source,h->query_view.catalog,catalog_bytes,host_query_cancel,h,&candidate);
+                if(work_enabled)work.build_ms=query_mono_ms()-build_start; }
         } else if(!rc)rc=EFS_ERR_BUSY;
         efs_kv_lsm_snapshot_release(source);
         if(rc && candidate){efs_query_catalog_free(candidate);candidate=NULL;}
@@ -9104,7 +9117,7 @@ static void *host_query_thread(void *ctx)
         struct efs_query_catalog *retired=NULL;
         uint64_t publication_wait=query_mono_ms();
         pthread_rwlock_wrlock(&h->query_lock);
-        efs_query_stage_trace("publication-lock",rc,query_mono_ms()-publication_wait,0,0);
+        uint64_t publication_lock_ms=query_mono_ms()-publication_wait;
         h->query_error=rc;failed=(int)efs_query_refresh_failures((unsigned)failed,last_error,rc);
         /* A failed disk build can itself exceed the retry interval. Start
          * its backoff at completion, otherwise a retained invalid namespace
@@ -9140,7 +9153,9 @@ static void *host_query_thread(void *ctx)
             retired=old;
         }
         pthread_rwlock_unlock(&h->query_lock);
+        efs_query_stage_trace("publication-lock",rc,publication_lock_ms,0,0);
         efs_query_catalog_free(retired);
+        if(work_enabled){work_completed=query_mono_ms();work.total_ms=work_completed-now;efs_query_capture_work_trace(h->raft_id,rc,&work);}
     }
     if(disk_lease>=0)close(disk_lease);
     return NULL;

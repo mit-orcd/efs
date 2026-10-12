@@ -73,7 +73,7 @@ static void scheduler_oracle(void) {
   captures=releases=barriers=0;clock_ms=now;host.query_deadline_ms=now+200;
   struct efs_kv_lsm_snapshot *p=NULL;struct efs_server_query_view v;
   uint64_t rev[4096],imp[2];int changed=0;
-  int rc=host_query_source(&host,&p,&v,rev,imp,&changed);
+  int rc=host_query_source(&host,&p,&v,rev,imp,&changed,NULL);
   work+=captures;proofs+=2*barriers;assert(captures<=4 && clock_ms<=host.query_deadline_ms);
   fast=efs_query_refresh_cut_retry(rc,changed,clock_ms-now);
   failed=efs_query_refresh_failures(failed,0,rc);
@@ -94,7 +94,7 @@ static void scheduler_oracle(void) {
   if(!efs_query_refresh_due_reason(now,1,last,256,0,failed,fast,256,2000))continue;
   captures=releases=barriers=0;clock_ms=now;host.query_deadline_ms=now+200;
   struct efs_kv_lsm_snapshot *p=NULL;struct efs_server_query_view v;uint64_t rev[4096],imp[2];int changed=0;
-  int rc=host_query_source(&host,&p,&v,rev,imp,&changed);
+  int rc=host_query_source(&host,&p,&v,rev,imp,&changed,NULL);
   assert(rc==EFS_ERR_BUSY && changed && !p && captures==4 && releases==4);
   work+=captures;proofs+=2*barriers;cohorts++;
   fast=efs_query_refresh_cut_retry(rc,changed,clock_ms-now);failed=1;last=clock_ms;now=clock_ms;
@@ -103,7 +103,7 @@ static void scheduler_oracle(void) {
  /* A prior collision followed by authority failure is not cut-only. */
  captures=releases=barriers=0;clock_ms=100;host.query_deadline_ms=300;cohort_fail_after=2;
  struct efs_kv_lsm_snapshot *p=NULL;struct efs_server_query_view v;uint64_t rev[4096],imp[2];int changed=1;
- assert(host_query_source(&host,&p,&v,rev,imp,&changed)==EFS_ERR_BUSY);
+ assert(host_query_source(&host,&p,&v,rev,imp,&changed,NULL)==EFS_ERR_BUSY);
  assert(!changed && !p && captures==2 && releases==2 && !efs_query_refresh_cut_retry(EFS_ERR_BUSY,changed,20));
  cohort_fail_after=0;model=0;
  assert(!efs_query_refresh_cut_retry(EFS_ERR_BUSY,0,10));
@@ -122,7 +122,9 @@ static void scheduler_oracle(void) {
 static int run(void){captures=releases=barriers=0;clock_ms=100;host.query_deadline_ms=200;
  struct efs_kv_lsm_snapshot *p=(void*)1;struct efs_server_query_view view;
  uint64_t revisions[4096],imports[2];int final_changed=-1;
- int rc=host_query_source(&host,&p,&view,revisions,imports,&final_changed);
+ struct efs_query_capture_work work={0};
+ int rc=host_query_source(&host,&p,&view,revisions,imports,&final_changed,&work);
+ assert(work.pins==captures && work.pins_ok==(pin_rc?0:captures) && work.pairs==barriers);
  assert(final_changed==(rc==EFS_ERR_BUSY && captures<=collisions && !import_change && !barrier_rc));
  if(rc)assert(!p);else {assert(p->serial==captures && releases+1==captures);
  assert(view.boot_id==42 && view.source_ns==999 && revisions[0]==captures);
@@ -136,7 +138,7 @@ int main(void){pthread_mutex_init(&host.mu,NULL);pthread_mutex_init(&host.snap_m
  model=1;live_b=0;captures=releases=barriers=0;host.query_deadline_ms=200;
  struct efs_kv_lsm_snapshot *mixed=NULL;struct efs_server_query_view view;
  uint64_t revisions[4096],imports[2];int changed=0;
- assert(host_query_source_once(&host,&mixed,&view,revisions,imports,&changed)==EFS_ERR_BUSY);
+ assert(host_query_source_once(&host,&mixed,&view,revisions,imports,&changed,NULL)==EFS_ERR_BUSY);
  assert(changed && !mixed && captures==1 && releases==1 && live_b==1);
  assert(pins[0].side_a==1 && pins[0].side_b==0); /* pin itself remains immutable */
  live_b=0;assert(!run() && captures==2 && releases==2 && pins[1].side_b==1);

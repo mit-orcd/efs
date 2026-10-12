@@ -2191,6 +2191,8 @@ Reviewed frozen `b239dc7d` (1,517 verified inputs) handed to NUC/ORCD; AMD full 
 
 Frozen `b239dc7d` full normal/fault, 18 focused sanitizers, fully sanitized LSM and both-mode ordinary overwrite PASS. Its one QUIET direct packing run still FAIL; buffered/cold packing/GC NOTRUN, mounts restored and jobs ended. Shorter cut retry has no demonstrated release-pressure benefit. [Exact quiet evidence and next discriminator](../status/v030-query-stage-diagnostic-20261012.md#reviewed-candidate-quiet-result-b239dc7d-still-blocked). No push, release tag or promotion.
 
+Local bounded nonblocking deep-case/capture-work diagnostics now pass focused native/sanitizer/failure-observer checks; workload/fences/deadlines unchanged. Peer/full Linux gates pending, no new live run. [Next discriminating plan](../status/v030-query-stage-diagnostic-20261012.md#local-nonblocking-phasework-diagnostic-proposal).
+
 
 ## Appendix 2 — In flight — the current handoff block
 
