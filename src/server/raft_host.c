@@ -1,3 +1,4 @@
+#include "efs/repair_job.h"
 #include "../common/query_stage_trace.h"
 #include "efs/query_policy.h"
 #include "server_internal.h"
@@ -3170,6 +3171,8 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return apply_activate_lane_cmd(h, cmd, clen, index, group);
     if (cmd[0] == EFS_MD_CMD_LANE_FENCE)
         return apply_lane_fence_cmd(h, cmd, clen, index);
+    if(cmd[0]==EFS_MD_CMD_REPAIR_JOB)
+        return efs_repair_apply_command(h->kv,group,cmd,clen);
     if(cmd[0]==EFS_MD_CMD_APPEND_COMPLETE_ATOMIC) {
         if(clen!=EFS_MD_APPEND_COMPLETE_ATOMIC_LEN || group!=efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd+1))))
             return EFS_ERR_INVAL;
@@ -4274,6 +4277,7 @@ static uint64_t host_pressure_command_charge(const uint8_t *cmd, uint32_t n)
     }
     uint64_t work = 0;
     switch (cmd[0]) {
+    case EFS_MD_CMD_REPAIR_JOB: work=64u<<10; break;
     case EFS_MD_CMD_APPEND_CATCHUP:
         work=host_pressure_rows_charge((n==38 || n==58) && rd32be(cmd+33)>0 &&
             rd32be(cmd+33)<=EFS_META_APPEND_CATCHUP_MAX ? rd32be(cmd+33)+1 :

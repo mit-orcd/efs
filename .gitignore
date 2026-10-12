@@ -70,3 +70,5 @@ __pycache__/
 
 /tests/test_put_upload_client
 /tests/test_query_policy
+
+/tests/test_repair_job
