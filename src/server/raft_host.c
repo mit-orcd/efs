@@ -4430,18 +4430,17 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
 
     if (term)
         *term = 0;
-    /* Join the shared fsync before taking h->mu. Every proposer blocked
-     * on the raft lock is already inside the hold, so one fsync covers
-     * the batch. The fsync used to run inside disk_append while h->mu
-     * was held: 144 mkdir threads each waited out a private fsync
-     * (idle p50 8 ms, 9×16 p50 258 ms). A caller that already holds
-     * (the report batch) keeps that outer fsync and broadcasts after
-     * it. Taking a slot on every proposer, including ones that arrive
-     * after the first hold, made idle mkdir wait out unrelated
-     * appends (p50 7.1 → 11.9 ms) and did not raise the 144-way rate. */
-    if (h->disk && efs_raft_disk_sync_depth(h->disk) == 0 &&
-        efs_raft_disk_sync_hold(h->disk) == EFS_OK)
-        quiet = 1;
+    /* Each disk-backed submit owns a hold before taking h->mu. Merely
+     * observing another caller's hold is racy: it can close before append,
+     * making the storage callback fsync while the host mutex is held.
+     * An existing outer cohort stays responsible for its shared boundary;
+     * release our nested hold without waiting on that caller's ownership. */
+    if (h->disk) {
+        int nested=efs_raft_disk_sync_depth(h->disk)>0;
+        rc=efs_raft_disk_sync_hold(h->disk);
+        if(rc!=EFS_OK)return rc;
+        quiet=nested?2:1;
+    }
     propose_q_add();
     pthread_mutex_lock(&h->mu);
     r = group_raft(h, group);
@@ -4493,7 +4492,7 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
             host_publish_group(h, group);
             pthread_mutex_unlock(&h->mu);
             propose_q_sub();
-            if (quiet && rc == EFS_OK) {
+            if (quiet == 1 && rc == EFS_OK) {
                 int spins = 0;
 
                 /* Threads already inside host_propose are in propose_q.
@@ -4518,21 +4517,17 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
                     pthread_mutex_unlock(&h->mu);
                 }
             } else if (quiet) {
-                (void)efs_raft_disk_sync_release(h->disk);
-            } else if (rc == EFS_OK && h->disk &&
-                       efs_raft_disk_sync_depth(h->disk) == 0) {
-                /* The outer hold closed before this append, so the
-                 * append fsynced itself. Mark that index durable. */
-                pthread_mutex_lock(&h->mu);
-                r = group_raft(h, group);
-                if (!r || efs_raft_role(r) != EFS_RAFT_LEADER)
-                    rc = EFS_ERR_NOT_PRIMARY;
-                else
-                    rc = host_mark_durable_covered(h, group, r, myidx);
-                if (rc == EFS_OK && term && r)
-                    *term = efs_raft_term(r);
-                host_publish_group(h, group);
-                pthread_mutex_unlock(&h->mu);
+                int sync_rc=efs_raft_disk_sync_release(h->disk);
+                if(rc==EFS_OK)rc=sync_rc;
+                if(rc==EFS_OK) {
+                    /* This may have closed the last hold, or an outer
+                     * owner may still owe the tail. Publish only the
+                     * completed disk watermark, never our bare index. */
+                    pthread_mutex_lock(&h->mu);
+                    host_note_durable_synced(h);
+                    host_publish_group(h,group);
+                    pthread_mutex_unlock(&h->mu);
+                }
             }
             host_pump_kick(h);
             return rc;
