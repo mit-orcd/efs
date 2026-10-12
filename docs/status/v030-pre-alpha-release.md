@@ -1,6 +1,6 @@
 # v0.3.0-pre-alpha integration and acceptance
 
-Status: execution STOPPED; committed branch reconciliation complete, qualification incomplete. Not release accepted, tagged, deployed as a
+Status: narrowed qualification RESUMED; committed branch reconciliation complete, qualification incomplete. Not release accepted, tagged, deployed as a
 release or pushed. User authorization, Oct 11: create an isolated integration
 branch, coordinate all agents, add and test all improvements, prioritize
 small-file packing and code-review findings. Release owner: agent 2 / AMD.
@@ -16,7 +16,7 @@ America/New_York; no schedule or push is created by this checkpoint.
 
 ## Current authoritative checkpoint
 
-Execution STOPPED. The [October12 scope decision](v030-release-scope-20261012.md)
+Execution RESUMED on common candidate52bcfd35 for all three clusters under the subsequent start instruction. The [October12 scope decision](v030-release-scope-20261012.md)
 limits qualification to TCP/direct I/O/files. Containers and dedicated repair/
 recovery gates are deferred; their failures/gaps remain open. Packing/query
 progress, applicable direct-I/O correctness and final merged-source qualification

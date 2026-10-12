@@ -49,8 +49,7 @@ This makes final native and live qualification parallel across three clusters
 without mixing source revisions. If implementation is identical, retain the
 verified source-specific evidence and avoid unnecessary duplicate runs.
 
-Assignments are documented only; execution remains STOPPED until explicitly
-resumed. No push, tag or shared branch promotion is authorized.
+The user subsequently said “start and evert 15 minutes report back progress”: execution is RESUMED for these assignments, with a 15-minute progress heartbeat. No push, tag or shared branch promotion is authorized.
 
 Retain existing durability protections and normal regression coverage that
 checks acknowledged-write correctness. Dedicated repair, crash-recovery,
@@ -59,7 +58,24 @@ scope. Recovery has not been declared safe or complete; candidate notes must
 state these unqualified capabilities explicitly. NFS-specific acceptance is
 outside TCP/direct-I/O qualification and remains tracked separately.
 
-Execution remains STOPPED under the user's “Document, commit, and stop” reply.
-Documenting scope does not authorize new test launches, deployment, merge of
-unqualified candidates, promotion, tag or push. Current evidence and excluded
+The earlier stop is superseded by the subsequent explicit start instruction for the narrowed assignments. Unqualified candidates are not release accepted; promotion, tag and push remain unauthorized. Current evidence and excluded
 commits are in the [execution ledger](amd-all-suites-20261011.md).
+
+
+## Test environment policy — subsequent October12 instruction
+
+The human explicitly says no extra effort retaining old binaries or data, and
+EFS cluster data on AMD/Intel/NUC may be erased if easier. No backward-compatibility
+qualification is required for this release. All three owners have been notified.
+Use clean identified EFS test stores or redeploy common binaries where helpful;
+do not erase unrelated host paths/services. Retain test commands, source/binary
+identity, raw logs and verdicts. An active clean measurement need not be disrupted
+solely to change retention policy. Existing correctness assertions and budgets
+remain unchanged; this does not authorize push/tag/promotion.
+
+Common candidate now frozen at
+`52bcfd3570b0a59076c225caad9157b0825954d8`, branch
+`qualification-v030-tcp-direct`, based release2b3ccfe0. All three owners received
+this same SHA. It combines corrected admitted-read proof with applied-floor
+retention; scheduler17 and unintegrated experimental repair stages are excluded.
+Candidate is for qualification, not yet release accepted.

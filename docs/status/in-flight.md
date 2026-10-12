@@ -3,7 +3,7 @@
 [Status index](README.md) · [Decisions](decisions.md) ·
 [Architecture](../how-it-works/architecture.md)
 
-**Current state:** execution STOPPED by confirmed human reply. [Accepted release scope](v030-release-scope-20261012.md) is TCP/direct I/O/files only; containers and dedicated repair/recovery are deferred. Next authorized session should qualify read-progressa9f158ce, resolve original-budget packing/query failures, run direct-I/O files correctness/GC and final frozen-source tests. No repair activation, test launch, deployment, promotion, tag or push is authorized now. See [execution ledger](amd-all-suites-20261011.md).
+**Current state:** narrowed qualification RESUMED under explicit human start, reporting every15minutes. Common candidate52bcfd3570b0a59076c225caad9157b0825954d8 on qualification-v030-tcp-direct; AMD groups1/4, Intel group2, NUC group3. All received exactSHA. TCP/direct/files only; containers and dedicated repair/recovery deferred. No old-binary/data or backward-compatibility preservation effort required; identified EFS test stores may be erased if easier. Keep raw evidence and source identity; unrelated services untouched. No push/tag/promotion. [Scope and assignments](v030-release-scope-20261012.md).
 
 ## Superseded assignments and evidence (before human stop)
 
@@ -227,3 +227,6 @@ packing/query), NUC group3 (direct TCP files POSIX/peer/mutation/GC). All agents
 start from full baseline8b7391b3f3edcf9fc99440d9aad3c240325acb83 and must use the
 same centrally published candidate SHA, including any intended read-progress
 fix, before execution. [Freeze/dependency contract](v030-release-scope-20261012.md#common-source-and-parallel-execution-contract).
+
+
+[Current common52 group results and next blocker](v030-tcp-direct-qualification-20261012.md): Intel quietfailure remains open; collect exact raw diagnostic evidence, review NUC passes; AMD normal/faultnative+RaftsanPASS.

@@ -1477,9 +1477,11 @@ this document is the invariant they are measured against.
 
 ### v0.3.0-pre-alpha release integration
 
-**Execution STOPPED**, confirmed by the human's October12 “Document, commit, and stop” reply. [Accepted release scope](../status/v030-release-scope-20261012.md): **TCP/direct I/O/files engine**. Containers, buffered/RDMA and dedicated repair/recovery qualification are deferred and no longer release blockers; their gaps remain open. Four planning gate groups remain: read-progress fix safety/sanitizers, seven-client packing/query acceptance, direct-I/O files POSIX/peer/mutation/GC, and final frozen merged-source native/fault/affected live qualification. Owners: **AMD groups1/4, Intel group2, NUC group3**. All start from full baseline8b7391b3 and test one centrally frozen candidate SHA; see the scope page for parallel execution and final-source rerun rules. This is not an exact invocation count.
+**Execution RESUMED** by the subsequent human “start” instruction; progress reports every15minutes. Common candidate52bcfd3570b0a59076c225caad9157b0825954d8 is frozen on qualification-v030-tcp-direct, not yet release accepted. AMD/Intel/NUC all received this SHA. Old binaries/data and backwards compatibility need no preservation effort; identified EFS stores may be wiped if easier. [Accepted release scope](../status/v030-release-scope-20261012.md): **TCP/direct I/O/files engine**. Containers, buffered/RDMA and dedicated repair/recovery qualification are deferred and no longer release blockers; their gaps remain open. Four planning gate groups remain: read-progress fix safety/sanitizers, seven-client packing/query acceptance, direct-I/O files POSIX/peer/mutation/GC, and final frozen merged-source native/fault/affected live qualification. Owners: **AMD groups1/4, Intel group2, NUC group3**. All start from full baseline8b7391b3 and test one centrally frozen candidate SHA; see the scope page for parallel execution and final-source rerun rules. This is not an exact invocation count.
 
 Integrated inactive repair prerequisites pass full normal/fault native at exact94bd2e52 (implementation2b216427); no activation or restored-redundancy claim. Excluded privatea9f158ce passes build/affected Raft tests but still needs broader safety/sanitizer/mounted acceptance. Quiet scheduler17d218d7 remainsFAIL (stats/find all7, deep client5), excluded. Clean64-file cold/reclamation diagnosticPASS; global reclamation failures with retained live POSIX trees are confounded. Original services/mounts preserved. See [execution ledger](../status/amd-all-suites-20261011.md). No tag, push or shared branch promotion.
+
+[Current common52 execution](../status/v030-tcp-direct-qualification-20261012.md): AMD normal/fault native and Raft sanitizersPASS; NUC reports files core216/216,peer67/67 and isolated physical packingPASS pending raw review; Intel seven-client quietFAIL with broad timeouts/teardown, diagnostic follow-up. No release acceptance.
 
 Previous qualification source: `410afed433b6da093bdc2acf37bec253ddbd586c`, corrected packaging-v2 (1,563 files, 52 directories). The new AMD all-suite run explicitly freezes `28b2089b`; its verdicts are recorded separately. Later integration/documentation commits are not new execution identities. AMD full normal/fault native, 20 focused sanitizer and fully sanitized real-LSM catalog/audit gates PASS. Fixed mounted CREATE three-stage/cold ownership and targeted query diagnosis remain NOTRUN centrally.
 
@@ -2164,7 +2166,7 @@ Release scope is now true-defect testing/fixing only. The next shared candidate 
 
 *Source: `status/in-flight.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-**Current state:** execution STOPPED by confirmed human reply. [Accepted release scope](../status/v030-release-scope-20261012.md) is TCP/direct I/O/files only; containers and dedicated repair/recovery are deferred. Next authorized session should qualify read-progressa9f158ce, resolve original-budget packing/query failures, run direct-I/O files correctness/GC and final frozen-source tests. No repair activation, test launch, deployment, promotion, tag or push is authorized now. See [execution ledger](../status/amd-all-suites-20261011.md).
+**Current state:** narrowed qualification RESUMED under explicit human start, reporting every15minutes. Common candidate52bcfd3570b0a59076c225caad9157b0825954d8 on qualification-v030-tcp-direct; AMD groups1/4, Intel group2, NUC group3. All received exactSHA. TCP/direct/files only; containers and dedicated repair/recovery deferred. No old-binary/data or backward-compatibility preservation effort required; identified EFS test stores may be erased if easier. Keep raw evidence and source identity; unrelated services untouched. No push/tag/promotion. [Scope and assignments](../status/v030-release-scope-20261012.md).
 
 ### Superseded assignments and evidence (before human stop)
 
@@ -2388,6 +2390,9 @@ packing/query), NUC group3 (direct TCP files POSIX/peer/mutation/GC). All agents
 start from full baseline8b7391b3f3edcf9fc99440d9aad3c240325acb83 and must use the
 same centrally published candidate SHA, including any intended read-progress
 fix, before execution. [Freeze/dependency contract](../status/v030-release-scope-20261012.md#common-source-and-parallel-execution-contract).
+
+
+[Current common52 group results and next blocker](../status/v030-tcp-direct-qualification-20261012.md): Intel quietfailure remains open; collect exact raw diagnostic evidence, review NUC passes; AMD normal/faultnative+RaftsanPASS.
 
 
 ## Appendix 3 — Decisions — taken and pending (register D1–D31)
