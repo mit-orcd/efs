@@ -1,0 +1,39 @@
+{
+  "source": "ecdc8c6034b610a2bf69e7a79664d8a5e990de84",
+  "cwd": "/data1/efs/amd-commonecdc-20261012/source",
+  "command": [
+    "python3",
+    "-u",
+    "tests/live/gc_reclamation.py",
+    "--mode",
+    "direct",
+    "--transport",
+    "tcp",
+    "--root",
+    "/data1/efs/amd-commonecdc-isolated-20261012",
+    "--root",
+    "/data1/efs/amd-commonecdc-isolated-20261012",
+    "--port",
+    "34660",
+    "--mount",
+    "/tmp/efs-amd-pack-isolated-ecdc8c6034b610a2bf69e7a79664d8a5e990de84-mnt",
+    "--peer-mount",
+    "/tmp/efs-amd-pack-isolated-ecdc8c6034b610a2bf69e7a79664d8a5e990de84-peer",
+    "--disable-efs-commands",
+    "--mounted-packing-only",
+    "--packing-clients",
+    "2",
+    "--fixture-quota",
+    "4G",
+    "--server-binary",
+    "/data1/efs/amd-commonecdc-20261012/source/efsd",
+    "--client-binary",
+    "/data1/efs/amd-commonecdc-20261012/source/efs-fuse"
+  ],
+  "environment": {
+    "EFS_RAFT_FLOW": "0",
+    "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+    "EFS_RAFT_GROUP_DRAIN": "0"
+  },
+  "scope": "isolated two-client packed lifecycle physical deletion; .efs disabled; not full broad acceptance"
+}

@@ -711,3 +711,5 @@ NUCecdc focused evidence integrated: [report](nuc-release-ecdc-focused-20261012.
 AMD bounded labelledecdc broad diagnostic running; isolatedREADDIR5e035dcd review pending, not deployed. Acceptance remains failed. [Ledger](v030-tcp-direct-qualification-20261012.md).
 
 10:19 EDT: current frozen qualification `e59e815fab2916340baad585dc08712ed182b7ea` reviewedREADDIR fence reuse; new gates pending. ecdc diagnostic reproduces directory failures; isolatedpacking oracle running. [Ledger](v030-tcp-direct-qualification-20261012.md).
+
+Isolatedecdc packing cold/physical/queue **PASS20.095s**; broad deadlines/globalemptyFAIL retained. Newe59 candidate preparing common tests.
