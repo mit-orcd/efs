@@ -29,6 +29,9 @@
 #define EFS_MD_APPEND_COMPLETE_ATOMIC_LEN 101u
 #define EFS_MD_REQ_EXPIRY_CLOCK 63 /* local clock health only */
 #define EFS_MD_REQ_EXPIRY_CLOCK_RESET 64 /* local operator uid4; no namespace mutation */
+#define EFS_MD_REQ_EXPIRY_POLICY_INFO 68 /* policy read; OK hint carries enabled/clear flags */
+#define EFS_MD_REQ_EXPIRY_ORIGIN 69 /* record root-generation/policy-revision/max; OK hint=clear */
+#define EFS_MD_REQ_EXPIRY_PARENT 70 /* inode read: parent/generation/mode */
 #define EFS_MD_REQ_EXPIRY_ID 67 /* inode8; authoritative generation/uid/mode/links */
 #define EFS_MD_REQ_EXPIRY_ENABLE 66 /* renewal prefix + parent/name; absent-record CAS */
 #define EFS_MD_REQ_EXPIRY_DELETE 65 /* guarded due FileID/name; receiver owns clock */

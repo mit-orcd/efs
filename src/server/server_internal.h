@@ -381,6 +381,7 @@ void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out);
  * ReadIndex). Leader-only; NOT_PRIMARY otherwise. */
 void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
                              struct efs_msg_raft_mkfs_reply *out);
+void server_raft_host_expiry_status(struct efs_expiry_status *out);
 void server_raft_host_status(struct efs_msg_raft_status_reply *out);
 int server_raft_host_active(void);
 /* Borrowed immutable query image; group slots are 0 and 2. Only background

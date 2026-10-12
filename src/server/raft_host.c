@@ -391,7 +391,10 @@ struct efs_raft_host {
     struct efs_expiry_clock expiry_clock;
     uint8_t expiry_resume[HOST_NGROUPS][EFS_EXPIRY_INDEX_BYTES];
     uint8_t expiry_resuming[HOST_NGROUPS];
-    uint64_t expiry_removed,expiry_refused,expiry_errors;
+    uint64_t expiry_removed,expiry_refused,expiry_errors,expiry_namespace_bytes;
+    uint64_t expiry_passes,expiry_last_pass_us,expiry_last_delete_us;
+    uint64_t expiry_due[2],expiry_sample_us[2];
+    uint32_t expiry_capped[2],expiry_sampled_mask;
     uint64_t query_deadline_ms;
     uint32_t query_cancel_checks; /* Owned by the query publisher thread. */
     struct efs_server_query_view query_view;
@@ -8802,12 +8805,22 @@ static void host_gc_expiry_pass(struct efs_raft_host *h,uint8_t group,uint32_t a
     unsigned slot=group>>1;struct efs_expiry_page page;
     rc=efs_expiry_due_page(h->kv,anchor,wall,h->expiry_resuming[slot]?h->expiry_resume[slot]:NULL,&page);
     if(rc!=EFS_OK){__atomic_fetch_add(&h->expiry_errors,1,__ATOMIC_RELAXED);return;}
+    /* A fresh first page gives a bounded lower bound, not an exact backlog.
+     * Cursor pages are work scheduling and must not masquerade as totals. */
+    if(!h->expiry_resuming[slot]) {
+        __atomic_store_n(&h->expiry_due[slot],page.count,__ATOMIC_RELAXED);
+        __atomic_store_n(&h->expiry_capped[slot],page.more,__ATOMIC_RELAXED);
+        __atomic_store_n(&h->expiry_sample_us[slot],now_us_(),__ATOMIC_RELAXED);
+        __atomic_fetch_or(&h->expiry_sampled_mask,1u<<slot,__ATOMIC_RELAXED);
+    }
+    __atomic_fetch_add(&h->expiry_passes,1,__ATOMIC_RELAXED);
+    __atomic_store_n(&h->expiry_last_pass_us,now_us_(),__ATOMIC_RELAXED);
     if(!page.count){h->expiry_resuming[slot]=0;return;}
     struct timespec begin;clock_gettime(CLOCK_MONOTONIC,&begin);
     for(unsigned i=0;i<page.count && i<8 && h->gc_running;i++) {
         if(!host_expiry_clock_read(h,&wall))return;
         rc=host_expiry_delete(h,group,&page.rows[i]);
-        if(rc==EFS_OK)__atomic_fetch_add(&h->expiry_removed,1,__ATOMIC_RELAXED);
+        if(rc==EFS_OK) { /* Receiver records confirmed namespace removals. */ }
         else if(rc==EFS_ERR_BUSY || rc==EFS_ERR_STALE || rc==EFS_ERR_NOT_FOUND ||
                 rc==EFS_ERR_NOT_PRIMARY || rc==EFS_ERR_NO_QUORUM)
             __atomic_fetch_add(&h->expiry_refused,1,__ATOMIC_RELAXED);
@@ -10869,7 +10882,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         }
         out->leader_hint=result.primary_id?(int)result.primary_id-1:-1;return;
     }
-    if(clen && cmd[0]==EFS_MD_REQ_EXPIRY_ID) {
+    if(clen && (cmd[0]==EFS_MD_REQ_EXPIRY_ID || cmd[0]==EFS_MD_REQ_EXPIRY_PARENT)) {
         if(!h->expiry_enabled){out->rc=EFS_ERR_ACCES;return;}
         if(clen!=9 || !rd64be(cmd+1) || group!=efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd+1)))) {
             out->rc=EFS_ERR_INVAL;return;
@@ -10880,12 +10893,16 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         }
         struct efs_meta_row row;rc=host_read_index(h,group,&hint);
         if(rc==EFS_OK)rc=efs_meta_apply_get_inode(h->kv,rd64be(cmd+1),&row);
-        if(rc==EFS_OK){out->index=row.generation;out->salt=row.uid|((uint64_t)row.mode<<32);out->term=row.nlink;}
+        if(rc==EFS_OK) {
+            if(cmd[0]==EFS_MD_REQ_EXPIRY_PARENT) {out->index=row.parent;out->salt=row.generation;out->term=row.mode;}
+            else {out->index=row.generation;out->salt=row.uid|((uint64_t)row.mode<<32);out->term=row.nlink;}
+        }
         out->rc=rc;out->leader_hint=hint;return;
     }
     if(clen && (cmd[0]==EFS_MD_CMD_EXPIRY_POLICY || cmd[0]==EFS_MD_CMD_EXPIRY_RENEW ||
                  cmd[0]==EFS_MD_REQ_EXPIRY_POLICY || cmd[0]==EFS_MD_REQ_EXPIRY_RECORD ||
-                 cmd[0]==EFS_MD_REQ_EXPIRY_ENABLE)) {
+                 cmd[0]==EFS_MD_REQ_EXPIRY_ENABLE || cmd[0]==EFS_MD_REQ_EXPIRY_POLICY_INFO ||
+                 cmd[0]==EFS_MD_REQ_EXPIRY_ORIGIN)) {
         if(!h->expiry_enabled){out->rc=EFS_ERR_ACCES;return;}
         if(cmd[0]==EFS_MD_REQ_EXPIRY_ENABLE &&
            (clen<55 || !rd64be(cmd+45) || !cmd[53] || clen!=54u+cmd[53] ||
@@ -10913,17 +10930,20 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             rc=host_propose_wait_idx(h,group,cmd,clen,&hint,&idx);
         else rc=EFS_OK;
         if(rc==EFS_OK)rc=host_read_index(h,group,&hint);
-        if(rc==EFS_OK && (cmd[0]==EFS_MD_REQ_EXPIRY_POLICY || cmd[0]==EFS_MD_REQ_EXPIRY_RECORD)) {
+        if(rc==EFS_OK && (cmd[0]==EFS_MD_REQ_EXPIRY_POLICY || cmd[0]==EFS_MD_REQ_EXPIRY_RECORD ||
+                          cmd[0]==EFS_MD_REQ_EXPIRY_POLICY_INFO || cmd[0]==EFS_MD_REQ_EXPIRY_ORIGIN)) {
             struct efs_meta_row row;rc=efs_meta_apply_get_inode(h->kv,rd64be(cmd+1),&row);
             if(rc==EFS_OK && row.generation!=rd64be(cmd+9))rc=EFS_ERR_STALE;
-            if(rc==EFS_OK && cmd[0]==EFS_MD_REQ_EXPIRY_POLICY && !S_ISDIR(row.mode))rc=EFS_ERR_INVAL;
+            if(rc==EFS_OK && (cmd[0]==EFS_MD_REQ_EXPIRY_POLICY || cmd[0]==EFS_MD_REQ_EXPIRY_POLICY_INFO) && !S_ISDIR(row.mode))rc=EFS_ERR_INVAL;
         }
-        if(rc==EFS_OK && (cmd[0]==EFS_MD_REQ_EXPIRY_POLICY || cmd[0]==EFS_MD_CMD_EXPIRY_POLICY)) {
+        if(rc==EFS_OK && (cmd[0]==EFS_MD_REQ_EXPIRY_POLICY || cmd[0]==EFS_MD_CMD_EXPIRY_POLICY || cmd[0]==EFS_MD_REQ_EXPIRY_POLICY_INFO)) {
             struct efs_expiry_policy p;rc=efs_expiry_policy_get(h->kv,rd64be(cmd+1),rd64be(cmd+9),&p);
-            if(rc==EFS_OK){out->index=p.revision;out->salt=p.ttl_ns;out->term=p.max_ns;}
+            if(rc==EFS_OK){out->index=p.revision;out->salt=p.ttl_ns;out->term=p.max_ns;
+                if(cmd[0]==EFS_MD_REQ_EXPIRY_POLICY_INFO)hint=p.enabled|(p.allow_clear<<1);}
         } else if(rc==EFS_OK) {
             struct efs_expiry_record r;rc=efs_expiry_get(h->kv,rd64be(cmd+1),rd64be(cmd+9),&r);
-            if(rc==EFS_OK){out->index=r.revision;out->salt=r.deadline_ns;out->term=r.root;}
+            if(rc==EFS_OK){out->index=r.revision;out->salt=r.deadline_ns;out->term=r.root;
+                if(cmd[0]==EFS_MD_REQ_EXPIRY_ORIGIN){out->index=r.root_generation;out->salt=r.policy_revision;out->term=r.max_ns;hint=r.allow_clear;}}
         }
         out->rc=rc;out->leader_hint=hint;return;
     }
@@ -11296,6 +11316,35 @@ void server_raft_host_storage_session_fence(const struct efs_msg_storage_session
         int rc=server_put_session_begin(g_host->s,request->uuid,request->floor-1,&guard);
         server_put_session_end(&guard);out->rc=rc==EFS_ERR_STALE?EFS_OK:rc==EFS_OK?EFS_ERR_BUSY:rc;
     }
+}
+
+void server_raft_host_expiry_status(struct efs_expiry_status *out)
+{
+    memset(out,0,sizeof(*out));
+    struct efs_raft_host *h=g_host;
+    if(!h || !h->running)return;
+    out->available=1;out->enabled=h->expiry_enabled;
+    if(h->expiry_enabled)(void)host_expiry_clock_read(h,NULL);
+    pthread_mutex_lock(&h->mu);
+    out->healthy=h->expiry_clock.healthy;out->uncertain=h->expiry_clock.uncertain;
+    for(unsigned i=0;i<HOST_NGROUPS;i++)
+        if(h->g[i].hosted && h->g[i].r && efs_raft_role(h->g[i].r)==EFS_RAFT_LEADER)
+            out->leader_mask|=1u<<(h->g[i].group>>1);
+    pthread_mutex_unlock(&h->mu);
+    uint64_t now=now_us_(),t;
+#define EXP_LOAD(f) __atomic_load_n(&h->expiry_##f,__ATOMIC_RELAXED)
+#define EXP_AGE(v) ((v)?(now>=(v)?(now-(v))/1000:0):UINT64_MAX)
+    out->removed_files=EXP_LOAD(removed);out->namespace_bytes=EXP_LOAD(namespace_bytes);
+    out->refused=EXP_LOAD(refused);out->errors=EXP_LOAD(errors);out->passes=EXP_LOAD(passes);
+    t=EXP_LOAD(last_pass_us);out->last_pass_age_ms=EXP_AGE(t);
+    t=EXP_LOAD(last_delete_us);out->last_delete_age_ms=EXP_AGE(t);
+    out->sampled_mask=EXP_LOAD(sampled_mask)&out->leader_mask;
+    for(unsigned i=0;i<2;i++) {
+        out->due_lower_bound[i]=EXP_LOAD(due[i]);out->due_capped[i]=EXP_LOAD(capped[i]);
+        t=EXP_LOAD(sample_us[i]);out->sample_age_ms[i]=EXP_AGE(t);
+    }
+#undef EXP_AGE
+#undef EXP_LOAD
 }
 
 void server_raft_host_status(struct efs_msg_raft_status_reply *out)
@@ -15242,6 +15291,11 @@ unlink_done:
                 dsh, ish, psh);
     set_inode_rc(out, rc, hint);
     if (rc == EFS_OK) {
+        if(expiry) {
+            __atomic_fetch_add(&h->expiry_removed,1,__ATOMIC_RELAXED);
+            __atomic_fetch_add(&h->expiry_namespace_bytes,row.size,__ATOMIC_RELAXED);
+            __atomic_store_n(&h->expiry_last_delete_us,now_us_(),__ATOMIC_RELAXED);
+        }
         if (!last)
             stat_to_inode(&st, &out->inode);
         else {

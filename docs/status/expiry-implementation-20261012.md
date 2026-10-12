@@ -296,3 +296,31 @@ SHA256 (normal / fault):
 | efs-fuse | `dd9b00bf1771aede5efb681826504e0c777e06e6efae31d8a7efd8623aaa31ea` | `5ce485adfb91cc30b76e7532747740e1adbfbc5d393fbcc5da4e635424d1953f` |
 | efs-mgmt | `4fa75a7425b29a1aebdcb9ce6b63b53c7b8842e87f18bece840c3e9e9dcaf6ed` | `07230f17074adfdef7de0bfe65677a8622f646f3adcaef4a83a567ec6817ac2a` |
 | Gate log | `6587b6e2dd0ee6ab127a0055a6fd529353227a25ac66cebba27142af4dabf131` | `e83e0b10c1fa5842ea4bd695001e691cdb9cbf74ad696653efc819c9ea932f2c` |
+
+## Inspection, worker status and sustained soak follow-up
+
+In progress after initial D33 qualification: `expiry NODE:PORT show PATH
+[--mount MOUNT]` provides readable local-time deadlines and relative time, saved
+policy source for files, and nearest enabled/disabled future-file policy for
+directories. Paths resolve authoritatively from the export root; `--mount`
+strips a local mount prefix and checks its inode against the server. Endpoint
+FileID/deadline changes fail inspection rather than silently showing a replacement.
+Inspection across RPCs is sampled, not atomic; folder ancestry can change.
+
+`expiry-status NODE:PORT` reports local enabled/clock/leader state, last confirmed
+removal age, process-local confirmed removal count and observed logical namespace
+bytes, refused/retry/error counters and bounded backlog sample age. `gc-status`
+version 3 appends the same expiry observations; existing physical fragment/payload
+counters still cover all deletion causes. No expiry-only physical-byte attribution
+is claimed. Counters reset on restart and may omit ambiguous committed outcomes.
+Do not treat their sums across replicas/restarts as a durable lifetime ledger.
+Only the coordinator counts confirmed removals; forwarded workers do not double
+count them. Backlog scans remain capped at 64; an old sample is not a current
+exact total and a follower does not publish authoritative backlog samples.
+
+A bounded two-mount soak is being added to `--suite expiry --soak-seconds`:
+four concurrent workers create/write/fsync, renew, rename, and replace paths;
+expired originals drain from namespace and physical storage, renewed and replacement
+bytes must survive, survivor cleanup must reclaim storage. Cold restarts occur
+between fully closed/drained batches. Space/inodes and daemon RSS are monitored.
+Final verdict and exact build/evidence identities will be recorded after NUC gates.

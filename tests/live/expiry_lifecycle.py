@@ -59,6 +59,17 @@ def exercise(mount,port,work,wait,physical_files,restart,offline,forward_group,c
     base=mount/'expiry-gates';base.mkdir()
     plain=base/'default-off';created(plain);assert record(plain)[1:]==(0,0,0);mark('default-off')
     policy(base,uid=os.getuid(),accepted=(-16,));mark('operator authorization')
+    cli=Path(__file__).resolve().parents[2]/'efs-mgmt'
+    policy(base,ttl=30,max_seconds=90)
+    inspected=base/'inspection';created(inspected)
+    for target in (inspected,base):
+        result=subprocess.run([str(cli),'expiry',f'127.0.0.1:{port}','show',str(target),'--mount',str(mount)],capture_output=True,text=True,check=True)
+        assert 'policy_source: inode' in result.stdout,result.stdout
+        assert ('expires in' if target==inspected else 'future_file_policy: enabled') in result.stdout,result.stdout
+    inspected.unlink();policy(base,ttl=3)
+    result=subprocess.run([str(cli),'expiry',f'127.0.0.1:{port}','show','/missing-expiry-inspection'],capture_output=True,text=True)
+    assert result.returncode!=0
+    mark('path inspection dates and inherited folder policy')
     info=subprocess.run([str(Path(__file__).resolve().parents[2]/'efs-mgmt'),'expiry-id',f'127.0.0.1:{port}',str(base.stat().st_ino)],capture_output=True,text=True,check=True)
     assert 'generation=1' in info.stdout and 'nlink=2' in info.stdout,info.stdout
     rpc(60,base.stat().st_ino,gen=2,accepted=(-14,))
@@ -201,6 +212,8 @@ def exercise(mount,port,work,wait,physical_files,restart,offline,forward_group,c
             rc,_,bits,_,_=struct.unpack('=iiQQQ',reply[1:]);assert rc==0
             return bits
         wait(lambda:all(clock(n)&2 for n in range(4)),'uncertain clock latched',30)
+        state=subprocess.check_output([str(cli),'expiry-status',f'127.0.0.1:{port}'],text=True)
+        assert 'paused: clock uncertain' in state and 'operator reset required' in state,state
         paused=base/'clock-paused';ino=created(paused);time.sleep(5);assert paused.exists()
         marker.unlink();time.sleep(2);assert paused.exists(),'uncertainty cleared without explicit reset'
         for n in range(4):clock(n,True)
@@ -211,6 +224,14 @@ def exercise(mount,port,work,wait,physical_files,restart,offline,forward_group,c
     wait(lambda:not any(bulk.iterdir()),'paged deadline backlog drained',100)
     wait(lambda:all(not physical_files(i) for i in inos),'bulk expiry physical reclamation',120)
     bulk.rmdir();mark('144-file bounded page backlog')
+    statuses=[subprocess.check_output([str(cli),'gc-status',f'127.0.0.1:{port+i}'],text=True) for i in range(4)]
+    import re
+    removed=sum(int(re.search(r'expired_files=(\d+)',text).group(1)) for text in statuses)
+    logical=sum(int(re.search(r'expired_namespace_bytes=(\d+)',text).group(1)) for text in statuses)
+    assert removed>=144 and logical>=144*len(b'expiry payload '*400),(removed,logical,statuses)
+    assert all('expiry_available=1' in text and 'scope=since_process_start' in text for text in statuses)
+    (work/'expiry-worker-status.txt').write_text('\n'.join(statuses))
+    mark('worker status confirmed removals and logical bytes')
     # Keep ordinary regression tests outside this policy, remove only owned tree.
     path.unlink();survivor.unlink();child.rmdir();base.rmdir()
     mark('owned tree cleanup')

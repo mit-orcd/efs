@@ -102,6 +102,7 @@ class PosixPhaseCollector:
 
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--expiry-clock-fault',action='store_true',help='expiry clock-health pause/reset gate; requires a fault-enabled daemon')
+p.add_argument('--expiry-soak-seconds',type=int,default=0,help='0 or 60..7200 seconds of bounded two-mount expiry churn/restarts; requires --expiry')
 p.add_argument('--expiry',action='store_true',help='expiry lifecycle before normal reclamation/POSIX gates; explicit TCP/direct/files only')
 p.add_argument('--peer-mkdir-race-only',action='store_true',help='64 competing peer mkdir races in an isolated cluster, then cold namespace verification')
 p.add_argument('--peer-open-contention-only',action='store_true',help='twenty concurrent append/OPEN races, full peer POSIX, exact cold bytes and physical cleanup only')
@@ -264,6 +265,8 @@ for path in sorted(inputs):
                       for name in ('efsd','efs-fuse','efs-mgmt')},
 },indent=2))
 env = dict(os.environ, EFS_MD_RAFT_N='4', EFS_TRANSPORT=a.transport)
+if a.expiry_soak_seconds:
+    assert a.expiry and 60 <= a.expiry_soak_seconds <= 7200
 if a.expiry:
     assert a.mode=='direct' and a.transport=='tcp' and a.disable_efs_commands
     env.update(EFS_EXPIRY='1',EFS_PACKED_WRITES='0')
@@ -648,6 +651,20 @@ try:
                 if match:return int(match.group(1))
             return 0
         exercise(mount,a.port,work,wait,files,expiry_restart,expiry_offline,expiry_forward_group,a.expiry_clock_fault)
+        if a.expiry_soak_seconds:
+            peer_log=open(work/'expiry-soak-peer.log','ab');handles.append(peer_log)
+            def soak_peer_start():
+                global peer
+                peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+                wait(lambda:os.path.ismount(peer_mount),'expiry soak peer mounted',40)
+            def soak_restart():
+                global peer
+                run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
+                expiry_restart();soak_peer_start()
+            soak_peer_start()
+            from expiry_soak import exercise as soak
+            soak(mount,peer_mount,a.port,work,wait,files,soak_restart,a.expiry_soak_seconds)
+            run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
     if a.ordinary_overwrite_only:
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
         peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)

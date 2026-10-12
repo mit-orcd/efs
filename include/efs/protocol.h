@@ -234,6 +234,16 @@ struct efs_msg_gc_inode_reply { int32_t rc; };
 struct efs_gc_io_stats {
     uint64_t ops, bytes, errors, us_sum;
 };
+/* Process-local observations, reset on restart. Namespace bytes are logical
+ * metadata bytes observed at deletion, never physical reclaimed bytes. */
+struct efs_expiry_status {
+    uint32_t available, enabled, healthy, uncertain, leader_mask, sampled_mask;
+    uint64_t removed_files, namespace_bytes, refused, errors, passes;
+    uint64_t last_pass_age_ms, last_delete_age_ms;
+    uint64_t due_lower_bound[2], sample_age_ms[2];
+    uint32_t due_capped[2];
+};
+
 struct efs_msg_gc_status_reply {
     uint32_t version, node_id, stage, group;
     uint32_t sampled_mask, exports, reap_capped[2];
@@ -244,6 +254,8 @@ struct efs_msg_gc_status_reply {
     uint64_t pending[2], reap_seen[2], orphan_seen[2], first_reap[2], first_seen_age_ms[2];
     /* Version 2 appends checksum_read, unlink, dir_sync in that order. */
     struct efs_gc_io_stats io[EFS_GC_IO_CLASSES];
+    /* Version 3 appends expiry; prior offsets remain stable. */
+    struct efs_expiry_status expiry;
 };
 
 /* D25 read authority for write admission, including holes and new lanes.
