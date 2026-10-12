@@ -1,5 +1,7 @@
 # Project status — current work and index
 
+**Standing testing scope:** containers are experimental and excluded from required tests and release gates. Use files for required qualification; container-only investigation requires explicit new user authorization. [Binding policy](container-testing-policy-20261012.md).
+
 ## v0.3.0-pre-alpha release integration
 
 Current solo final-source freeze: **1e3a46384e897a47751871b15e82ead86c9d0abd**, reviewed qualification fixes merged into release branch. Exact-source native/fault/sanitizer then heavy live qualification RUNNING on AMD; not accepted. Diagnostic tracing excluded. [Final-source ledger](v030-tcp-direct-qualification-20261012.md).

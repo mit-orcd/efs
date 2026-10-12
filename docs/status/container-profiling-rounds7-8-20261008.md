@@ -1,5 +1,7 @@
 # P4.1 · Container profiling rounds 7–8
 
+**Historical experimental evidence:** container-specific tests and follow-up measurements are no longer required or authorized by this page. [Standing container testing policy](container-testing-policy-20261012.md).
+
 Follow-up to [rounds 1–6](container-profiling-20261008.md), on
 `devel-storage-engine` starting at `73b402cd`. Same private xorinox three-VM
 Raft group and gateway, TCP/port 27432, fresh roots under `/data1/efs/bench`.

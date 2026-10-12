@@ -1,5 +1,7 @@
 # Storage engine v2 and XFS optimization proposal
 
+**Testing scope supersedes the proposed sequence below:** containers and container-specific benchmarks, comparisons and gates are experimental, excluded from required testing, and require explicit new user authorization before investigation resumes. Files correctness work remains in scope. [Binding policy](../status/container-testing-policy-20261012.md).
+
 [Backlog](README.md) · [Parked ideas](ideas.md) · [Current queue](../status/README.md) ·
 [Architecture](../how-it-works/architecture.md) · [GC checkpoint](../status/gc-implementation-20261007.md)
 

@@ -1,5 +1,7 @@
 # Work items — long-form text for the open W items
 
+**Standing container scope:** container-backend work and all container-specific testing/benchmarks/qualification below are experimental reference, not required tasks or release blockers. Resume only with explicit new user authorization. Files-backed packing and shared files correctness remain in scope. [Binding policy](../status/container-testing-policy-20261012.md).
+
 Companion to [the status page](../status/README.md). The status page holds the queue,
 the plan and the decisions; this page holds the full text of the open
 long-form items that the plan rows point at: the source evidence, the

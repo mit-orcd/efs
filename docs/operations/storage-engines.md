@@ -1,5 +1,7 @@
 # Experimental storage engine selection
 
+**Standing policy (October 12, 2026): containers are experimental and excluded from required testing and release qualification.** The container commands and A/B/profiling procedures below are historical reference, not required work or authorization to run them. Use files for required qualification. [Binding scope and exceptions](../status/container-testing-policy-20261012.md).
+
 On `devel-storage-engine`, `efsd` accepts `--storage-engine files|containers`.
 `files` remains the default. Select server data I/O independently with
 `--direct-io` or `--no-direct-io`. Startup logs both selections.
