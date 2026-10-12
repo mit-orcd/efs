@@ -75,3 +75,9 @@ GC keys identify object generation, not FileID generation. Added a bounded one-s
 The proposed deletion callback gate is NOT installed in default live GC: no extra empty-journal scan per object is introduced. A candidate adapter inserts the proposed predicate into the actual extracted callback, proving BUSY/corrupt/IO/NOMEM prevents deletion and ACK; this is prerequisite adapter coverage, not a distributed race/protection oracle. Future activation must connect committed scheduling/admission and verified target seals, and cover scan→admit→delete races under real leader/restart conditions.
 
 AMD full native validation found a test compile regression after target fence helper rename: existing PUT upload receiver cleanup still used old static helper. Corrected that test reference without obsolete production wrappers; AMD retains failure and reruns full native.
+
+## Fresh readonly write authority prerequisite
+
+Read-only tag56 accepts only canonical initial-state job identity on the exact lane group, forwards when not locally hosted, executes fresh ReadIndex/own-apply before checking exact journal/source and committed GC scheduling. It neither proposes mutation nor returns durable-data/target-seal receipts. Sealed/cancelled/missing/stale-source/GC-scheduled jobs cannot obtain write authority. FileID writer-view and export geometry remain receiver requirements.
+
+Actual journal memory/LSM authority assertions plus EIO/cold suite PASS. Actual extracted submit branch adapter verifies ReadIndex failure stops authority read, forwards without local authority, rejects wrong group/state/caller flags, and keeps cursor unchanged; production host syntax check PASS. Adapter uses stub ReadIndex/codec/forwarding, so this does not qualify real election/partition/own-apply behavior or physical repair. Integrated full normal/fault suites are run independently by AMD.

@@ -144,6 +144,34 @@ static int scan_jobs(struct efs_kv *kv,const struct efs_repair_job *j,struct sca
     uint8_t k[19];key(j,EFS_KV_KIND_REPAIR_JOB,k);
     int rc=efs_kv_scan_prefix(kv,k,3,scan_cb,s);return s->rc?s->rc:(rc==1?EFS_OK:rc);
 }
+static int gc_not_scheduled(struct efs_kv *kv,const struct efs_repair_job *j)
+{
+    /* ADMIT and GC scheduling apply on the same lane group. Even if a
+     * historical row remains visible, a committed GC record forbids new jobs.
+     * Check under the outer atomic apply scope, before recording authority. */
+    uint8_t gk[EFS_KV_KEY_MAX],gv[EFS_META_GC_VAL];uint32_t gkl=0,gn=sizeof(gv);
+    int rc=efs_kv_key_gc(anchor(j),j->ino,j->object,j->ci%64,j->ci,gk,&gkl);
+    if(rc)return rc;
+    rc=efs_txn_key_exclusive(kv,gk,gkl);if(rc)return rc;
+    rc=efs_kv_get(kv,gk,gkl,gv,&gn);
+    if(rc==EFS_OK || (rc==EFS_ERR_INVAL && gn>sizeof(gv)))return EFS_ERR_STALE;
+    if(rc!=EFS_ERR_NOT_FOUND)return rc;
+    return EFS_OK;
+}
+/* ReadIndex must precede this read; current source and GC scheduling are part
+ * of the permit, not just an old ADMITTED journal flag. FileID/export authority
+ * still requires the receiver's separate inode writer view and geometry check. */
+int efs_repair_write_authority(struct efs_kv *kv,const struct efs_repair_job *j)
+{
+    if(valid(j) || j->state!=EFS_REPAIR_ADMITTED || j->flags)return EFS_ERR_INVAL;
+    struct efs_repair_job old,now;int rc=efs_repair_get(kv,j,&old);
+    if(rc)return rc;
+    if(old.state!=EFS_REPAIR_ADMITTED || (old.flags&EFS_REPAIR_CANCELLED))return EFS_ERR_STALE;
+    rc=gc_not_scheduled(kv,j);if(rc)return rc;
+    rc=efs_repair_capture(kv,j,&now);
+    if(rc)return rc==EFS_ERR_NOT_FOUND?EFS_ERR_STALE:rc;
+    return same(j,&now)?EFS_OK:EFS_ERR_STALE;
+}
 int efs_repair_admit(struct efs_kv *kv,const struct efs_repair_job *j)
 {
     if(valid(j) || j->state!=EFS_REPAIR_ADMITTED || j->flags)return EFS_ERR_INVAL;
@@ -157,16 +185,7 @@ int efs_repair_admit(struct efs_kv *kv,const struct efs_repair_job *j)
         return EFS_ERR_STALE; /* A terminal UUID is never re-admitted. */
     }
     if(rc!=EFS_ERR_NOT_FOUND)return rc;
-    /* ADMIT and GC scheduling apply on the same lane group. Even if a
-     * historical row remains visible, a committed GC record forbids new jobs.
-     * Check under the outer atomic apply scope, before recording authority. */
-    uint8_t gk[EFS_KV_KEY_MAX],gv[EFS_META_GC_VAL];uint32_t gkl=0,gn=sizeof(gv);
-    rc=efs_kv_key_gc(anchor(j),j->ino,j->object,j->ci%64,j->ci,gk,&gkl);
-    if(rc)return rc;
-    rc=efs_txn_key_exclusive(kv,gk,gkl);if(rc)return rc;
-    rc=efs_kv_get(kv,gk,gkl,gv,&gn);
-    if(rc==EFS_OK || (rc==EFS_ERR_INVAL && gn>sizeof(gv)))return EFS_ERR_STALE;
-    if(rc!=EFS_ERR_NOT_FOUND)return rc;
+    rc=gc_not_scheduled(kv,j);if(rc)return rc;
     rc=efs_repair_capture(kv,j,&now);if(rc)return rc==EFS_ERR_NOT_FOUND?EFS_ERR_STALE:rc;if(!same(j,&now))return EFS_ERR_STALE;
     struct scan s={.match=j};rc=scan_jobs(kv,j,&s);if(rc && rc!=EFS_ERR_BUSY)return rc;
     if(s.duplicate || s.count>=EFS_REPAIR_PENDING_MAX)return EFS_ERR_BUSY;

@@ -37,6 +37,7 @@ int efs_repair_admit(struct efs_kv *, const struct efs_repair_job *);
 int efs_repair_get(struct efs_kv *, const struct efs_repair_job *, struct efs_repair_job *);
 /* Durable apply records of coordinator-verified receipts. These functions
  * cannot establish target durability or revocation by themselves. */
+int efs_repair_write_authority(struct efs_kv *, const struct efs_repair_job *);
 int efs_repair_record_data(struct efs_kv *, const struct efs_repair_job *);
 int efs_repair_cancel(struct efs_kv *, const struct efs_repair_job *);
 int efs_repair_record_seal(struct efs_kv *, const struct efs_repair_job *, uint32_t target_floor);
