@@ -1,0 +1,30 @@
+[
+  {
+    "pid": 235293,
+    "command": "/home/efs/nuc-28-qualification/source-normal/efsd --node-id 1 --addr 127.0.0.1 --port 24210 --storage /home/efs/nuc-28-qualification/results/live-extra/cursor-replay-direct/gc-direct-1ekmaei8/n1 --quota 1G --direct-io ",
+    "applied_interval_ms": "10",
+    "fault_scope": null,
+    "preload": null
+  },
+  {
+    "pid": 235306,
+    "command": "/home/efs/nuc-28-qualification/source-normal/efsd --node-id 2 --addr 127.0.0.1 --port 24211 --storage /home/efs/nuc-28-qualification/results/live-extra/cursor-replay-direct/gc-direct-1ekmaei8/n2 --quota 1G --direct-io --join 127.0.0.1:24210 ",
+    "applied_interval_ms": "10",
+    "fault_scope": null,
+    "preload": null
+  },
+  {
+    "pid": 235328,
+    "command": "/home/efs/nuc-28-qualification/source-normal/efsd --node-id 4 --addr 127.0.0.1 --port 24213 --storage /home/efs/nuc-28-qualification/results/live-extra/cursor-replay-direct/gc-direct-i8ggi31b/n4 --quota 1G --direct-io --join 127.0.0.1:24210 ",
+    "applied_interval_ms": "10",
+    "fault_scope": null,
+    "preload": null
+  },
+  {
+    "pid": 235360,
+    "command": "/home/efs/nuc-28-qualification/source-normal/efsd --node-id 3 --addr 127.0.0.1 --port 24212 --storage /home/efs/nuc-28-qualification/results/live-extra/cursor-replay-direct/gc-direct-i8ggi31b/n3 --quota 1G --direct-io --join 127.0.0.1:24210 ",
+    "applied_interval_ms": "10",
+    "fault_scope": "/home/efs/nuc-28-qualification/results/live-extra/cursor-replay-direct/gc-direct-1ekmaei8/applied-marker-fault",
+    "preload": "/home/efs/nuc-28-qualification/results/live-extra/cursor-replay-direct/gc-direct-1ekmaei8/applied-checkpoint-fault.so"
+  }
+]

@@ -1,0 +1,28 @@
+{
+  "name": "persist-engine-files-direct-remount",
+  "command": [
+    "/home/efs/nuc-28-qualification/source-normal/scripts/client.sh",
+    "127.0.0.1:27500",
+    "/data1/efs/mnt"
+  ],
+  "cwd": "/home/efs/nuc-28-qualification/source-normal",
+  "environment": {
+    "EFS_GIT_ID": "28b2089b-release-normal",
+    "EFS_GIT_BRANCH": "release-v0.3.0-pre-alpha",
+    "EFS_GIT_DESCRIBE": "v0.3.0-pre-alpha-candidate",
+    "EFS_RAFT_FLOW": "0",
+    "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+    "EFS_RAFT_GROUP_DRAIN": "0",
+    "EFS_RAFT_BATCH_OVERLAP": "0",
+    "EFS_RAFT_BATCH_NOOP": "0",
+    "EFS_PACKED_WRITES": "0",
+    "EFS_TRANSPORT": "tcp",
+    "EFS_DATA_GC_ADMISSION": "1",
+    "EFS_GC_BACKLOG_IDLE_MS": "20",
+    "EFS_CLUSTER_SCRIPTS": "/home/efs/nuc-28-qualification/results/cluster-scripts",
+    "EFS_TEST_WORK_ROOT": "/home/efs/nuc-28-qualification/results/private-work"
+  },
+  "source": "28b2089be6a5df835cc7bb46b9c2a9e2f10df190",
+  "started": "2026-10-12T04:12:44Z",
+  "timeout": 1800
+}

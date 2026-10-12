@@ -1,0 +1,13 @@
+{
+  "mode": "direct",
+  "transport": "tcp",
+  "cross_group": true,
+  "source": "/home/efs/nuc-28-qualification/source-fault",
+  "probe_source_sha256": "0afc9591aaf3612453a6cc5be9418f9276059359a49d3176fd70b3c0ac969cd3",
+  "binary_sha256": {
+    "efsd": "0469b63226afad89fa0aa535582e59e606e44e5224982677246f07630ae97642",
+    "efs-fuse": "7696a2e90d3a4774f764acf71867666480b76514a2d33882ea12f856b1bc5c08",
+    "efs-mgmt": "f3e022710eae271d3463c29b1e4c8cdc05d8f21f9cce937367ced93e5fa5c160",
+    "libefs.a": "5b57d254e0ada4ee868a3795fc9348c667138fb824052bc461fb2c45968de338"
+  }
+}

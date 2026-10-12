@@ -1,0 +1,22 @@
+2026-10-12T04:12:15.188Z storage-engine=files direct_io=on
+2026-10-12T04:12:15.188Z Data GC admission: experimental
+2026-10-12T04:12:15.189Z Loaded 4 persisted cluster node(s) from /home/efs/nuc-28-qualification/results/live-extra/publication-replay-direct-cross/n2/meta/cluster_nodes.bin
+2026-10-12T04:12:15.189Z   persisted node 1: 127.0.0.1:25012
+2026-10-12T04:12:15.189Z   persisted node 2: 127.0.0.1:25013
+2026-10-12T04:12:15.189Z   persisted node 3: 127.0.0.1:25014
+2026-10-12T04:12:15.189Z   persisted node 4: 127.0.0.1:25015
+2026-10-12T04:12:15.189Z Storage quota: explicit 1.00 GiB (safe maximum 252.31 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T04:12:15.197Z Joined cluster with 4 nodes
+2026-10-12T04:12:15.201Z heartbeat: enabled (2000 ms interval)
+2026-10-12T04:12:15.210Z raft-host: up raft_id=1 n=4 boot=1942709574775933 salt=10931114129989279363 g0=hosted g2=hosted
+2026-10-12T04:12:15.210Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:46:34Z on nuc), build=28b2089b-release-fault: node 2 listening on 127.0.0.1:25013, storage=/home/efs/nuc-28-qualification/results/live-extra/publication-replay-direct-cross/n2 (1 paths, stripe=none), used=131072, quota=1073741824, direct_io=on, writers=0 shared
+2026-10-12T04:12:15.210Z kv-obs: mt_bytes=7010 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:12:15.715Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=403
+2026-10-12T04:12:17.201Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=985 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:12:17.758Z query-catchup: rc=0 backend=disk
+2026-10-12T04:12:17.758Z query-restore: rc=0 backend=disk
+2026-10-12T04:12:17.764Z query-publish: generation=1 g0=7 g2=32 rebuilt=2 refolded=1 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=46 root_rc=0 files=1 dirs=0 logical=262144
+2026-10-12T04:12:18.661Z raft-host: applied session index=33 kind=1 shard=0 ino=0
+2026-10-12T04:12:18.732Z iostats: get ops=1 bytes=65536 errors=0 avg_us=387 p50_us=387 max_us=387 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T04:12:19.158Z store: put O_DIRECT bounce copy (buf align=2896 len=65536)
+2026-10-12T04:12:19.352Z raft-host: applied session index=36 kind=1 shard=0 ino=0

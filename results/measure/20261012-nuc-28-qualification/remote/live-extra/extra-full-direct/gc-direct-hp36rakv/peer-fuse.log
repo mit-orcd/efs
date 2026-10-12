@@ -1,0 +1,22 @@
+2026-10-12T03:54:08.949Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:46:04Z on nuc), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt2
+2026-10-12T03:54:08.949Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:54:08.949Z   node id=1 127.0.0.1:24210
+2026-10-12T03:54:08.949Z   node id=2 127.0.0.1:24211
+2026-10-12T03:54:08.949Z   node id=3 127.0.0.1:24212
+2026-10-12T03:54:08.949Z   node id=4 127.0.0.1:24213
+2026-10-12T03:54:08.949Z fetching metadata...
+2026-10-12T03:54:08.951Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:54:08.951Z export id=1 name=default
+2026-10-12T03:54:08.951Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:54:08.952Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:54:08.953Z fuse serving
+2026-10-12T03:54:09.339Z reply-buffer new owner=0x7f6904022360 read=0 readdir=0 pid=302472
+2026-10-12T03:54:09.339Z reply-buffer grow owner=0x7f6904022360 read=4096 readdir=0 pid=302472
+2026-10-12T03:54:09.340Z buf-budget hard=268435456 drain=67108864 slab=33554432
+2026-10-12T03:54:09.351Z reply-buffer new owner=0x7f69040235d0 read=0 readdir=0 pid=302472
+2026-10-12T03:54:09.351Z reply-buffer grow owner=0x7f69040235d0 read=196608 readdir=0 pid=302472
+2026-10-12T03:54:09.389Z reply-buffer new owner=0x7f68fc011700 read=0 readdir=0 pid=302472
+2026-10-12T03:54:09.389Z reply-buffer grow owner=0x7f68fc011700 read=196608 readdir=0 pid=302472
+2026-10-12T03:54:09.772Z reply-buffer retire owner=0x7f6904022360 read=4096 readdir=0 pid=302472
+2026-10-12T03:54:09.772Z reply-buffer retire owner=0x7f68fc011700 read=196608 readdir=0 pid=302472
+2026-10-12T03:54:09.772Z reply-buffer retire owner=0x7f69040235d0 read=196608 readdir=0 pid=302472

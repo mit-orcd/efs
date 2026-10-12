@@ -1,0 +1,24 @@
+2026-10-12T04:11:49.139Z storage-engine=files direct_io=on
+2026-10-12T04:11:49.140Z Data GC admission: experimental
+2026-10-12T04:11:49.140Z Loaded 4 persisted cluster node(s) from /home/efs/nuc-28-qualification/results/live-extra/publication-pending-direct-apply/n2/meta/cluster_nodes.bin
+2026-10-12T04:11:49.140Z   persisted node 1: 127.0.0.1:25004
+2026-10-12T04:11:49.140Z   persisted node 2: 127.0.0.1:25005
+2026-10-12T04:11:49.140Z   persisted node 3: 127.0.0.1:25006
+2026-10-12T04:11:49.140Z   persisted node 4: 127.0.0.1:25007
+2026-10-12T04:11:49.140Z Storage quota: explicit 1.00 GiB (safe maximum 252.34 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T04:11:49.144Z Joined cluster with 4 nodes
+2026-10-12T04:11:49.148Z heartbeat: enabled (2000 ms interval)
+2026-10-12T04:11:49.156Z raft-host: up raft_id=1 n=4 boot=1938264371531357 salt=4722963115761781719 g0=hosted g2=hosted
+2026-10-12T04:11:49.156Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:46:34Z on nuc), build=28b2089b-release-fault: node 2 listening on 127.0.0.1:25005, storage=/home/efs/nuc-28-qualification/results/live-extra/publication-pending-direct-apply/n2 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=0 shared
+2026-10-12T04:11:49.156Z kv-obs: mt_bytes=2244 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:11:49.663Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=404
+2026-10-12T04:11:51.148Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=986 passes=2 sampled=3 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:11:51.690Z query-catchup: rc=0 backend=disk
+2026-10-12T04:11:51.690Z query-restore: rc=0 backend=disk
+2026-10-12T04:11:51.695Z query-publish: generation=1 g0=10 g2=3 rebuilt=0 refolded=0 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=29 root_rc=0 files=1 dirs=0 logical=0
+2026-10-12T04:11:52.867Z raft-host: apply-sleep us=400081 group=0 idx=12 applied=11
+2026-10-12T04:11:53.267Z raft-host: read-sleep us=399813 group=0 want=12 read_idx=12 applied=11 pending=1
+2026-10-12T04:11:53.668Z raft-host: read-sleep us=400109 group=0 want=12 read_idx=12 applied=11 pending=1
+2026-10-12T04:11:54.069Z raft-host: read-sleep us=400083 group=0 want=12 read_idx=12 applied=11 pending=1
+2026-10-12T04:11:54.258Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=202 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:11:54.470Z raft-host: read-sleep us=400081 group=0 want=12 read_idx=12 applied=11 pending=1

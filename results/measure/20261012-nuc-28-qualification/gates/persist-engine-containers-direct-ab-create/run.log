@@ -1,0 +1,1 @@
+{"phase": "create", "workers": 4, "operations": 256, "bytes": 134217728, "wall_s": 13.219514612996136, "MiB_s": 9.682655055592049, "ops_s": 19.365310111184098, "p99_ms": 302.97477500425885, "max_ms": 312.5305700013996, "errors": 0, "integrity": false}

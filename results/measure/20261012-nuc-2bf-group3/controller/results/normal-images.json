@@ -1,0 +1,25 @@
+{
+  "efsd": {
+    "sha256": "5b395b90a101e5eccad757f9bd9a00dd2bfe8b37ceefa8b5def9824729170604",
+    "version": "efsd 2bf7e257-frozen (branch qualification-v030-tcp-direct, built 2026-10-12T12:49:35Z on nuc)\n"
+  },
+  "efs-fuse": {
+    "sha256": "a1ce55584e47be5c3d425b7c7e532cf9a324cefa233b0fa76551227400dc5b87",
+    "version": "efs-fuse 2bf7e257-frozen (branch qualification-v030-tcp-direct, built 2026-10-12T12:49:35Z on nuc)\n"
+  },
+  "efs-mgmt": {
+    "sha256": "aa4729d39c08fdd493e6b196321a597eeb3607614fd942aaa91a4c37a16a88bf",
+    "version": "efs-mgmt 2bf7e257-frozen (branch qualification-v030-tcp-direct, built 2026-10-12T12:49:35Z on nuc)\n"
+  },
+  "efs-query": {
+    "sha256": "c1886320c7e5fb6684408198fe263f6d9c0d69e2223f3c84c7d06cdab0d92f62",
+    "version": "efs-query 2bf7e257-frozen (branch qualification-v030-tcp-direct, built 2026-10-12T12:49:35Z on nuc)\n"
+  },
+  "efs-bench": {
+    "sha256": "0e22f7fe29cdba92b86670f2c1f4979442838b0160b4e6a5cebecabfdc01f0c4",
+    "version": "efs-bench 2bf7e257-frozen (branch qualification-v030-tcp-direct, built 2026-10-12T12:49:35Z on nuc)\n"
+  },
+  "libefs.a": {
+    "sha256": "b7bcfe16bb94c7be58c0cda6dbe64c082d3b85b182bb474e2f043e0080593fed"
+  }
+}

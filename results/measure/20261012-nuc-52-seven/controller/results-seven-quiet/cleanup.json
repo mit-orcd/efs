@@ -1,0 +1,7 @@
+{
+  "mounts": {
+    "mnt": false,
+    "mnt2": false
+  },
+  "efsd_processes": ""
+}

@@ -1,0 +1,1 @@
+{"phase": "delete", "workers": 4, "operations": 256, "bytes": 0, "wall_s": 2.6882155100029195, "MiB_s": 0.0, "ops_s": 95.23046015002048, "p99_ms": 82.60314899962395, "max_ms": 83.51767099520657, "errors": 0, "integrity": false}

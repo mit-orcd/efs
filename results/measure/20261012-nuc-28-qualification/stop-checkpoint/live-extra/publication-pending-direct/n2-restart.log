@@ -1,0 +1,19 @@
+2026-10-12T04:11:42.279Z storage-engine=files direct_io=on
+2026-10-12T04:11:42.280Z Data GC admission: experimental
+2026-10-12T04:11:42.280Z Loaded 4 persisted cluster node(s) from /home/efs/nuc-28-qualification/results/live-extra/publication-pending-direct/n2/meta/cluster_nodes.bin
+2026-10-12T04:11:42.280Z   persisted node 1: 127.0.0.1:25000
+2026-10-12T04:11:42.280Z   persisted node 2: 127.0.0.1:25001
+2026-10-12T04:11:42.280Z   persisted node 3: 127.0.0.1:25002
+2026-10-12T04:11:42.280Z   persisted node 4: 127.0.0.1:25003
+2026-10-12T04:11:42.280Z Storage quota: explicit 1.00 GiB (safe maximum 252.35 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T04:11:42.284Z Joined cluster with 4 nodes
+2026-10-12T04:11:42.288Z heartbeat: enabled (2000 ms interval)
+2026-10-12T04:11:42.297Z raft-host: up raft_id=1 n=4 boot=1950092772218406 salt=7581786229750710093 g0=hosted g2=hosted
+2026-10-12T04:11:42.297Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:46:34Z on nuc), build=28b2089b-release-fault: node 2 listening on 127.0.0.1:25001, storage=/home/efs/nuc-28-qualification/results/live-extra/publication-pending-direct/n2 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=0 shared
+2026-10-12T04:11:42.297Z kv-obs: mt_bytes=2244 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:11:42.802Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=403
+2026-10-12T04:11:44.288Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=985 passes=2 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:11:44.828Z query-catchup: rc=0 backend=disk
+2026-10-12T04:11:44.828Z query-restore: rc=0 backend=disk
+2026-10-12T04:11:44.834Z query-publish: generation=1 g0=10 g2=3 rebuilt=0 refolded=0 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=30 root_rc=0 files=1 dirs=0 logical=0
+2026-10-12T04:11:45.607Z raft-host: apply publish rc=-14 index=12 ino=4097 ci=0 why=0 span=0+0 exp=0 base_n=0

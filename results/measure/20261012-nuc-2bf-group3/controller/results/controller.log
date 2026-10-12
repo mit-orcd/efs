@@ -1,0 +1,13 @@
+2026-10-12T12:50:48Z posix-core-peer-direct START
+2026-10-12T12:52:24Z posix-core-peer-direct PASS 0
+Traceback (most recent call last):
+  File "/home/efs/nuc-2bf-group3/controller.py", line 9, in <module>
+    matrix.matrix()
+  File "/home/efs/nuc-2bf-group3/matrix.py", line 41, in matrix
+    extra_gc('mounted-packing-direct',['--mounted-packing-only'], 'direct')
+  File "/home/efs/nuc-2bf-group3/matrix.py", line 34, in extra_gc
+    s=fault if variant=='fault' else src;work=Path('/data1/efs/nuc-2bf-group3')/name;work.mkdir(parents=True,exist_ok=False)
+                                                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.12/pathlib.py", line 1311, in mkdir
+    os.mkdir(self, mode)
+FileExistsError: [Errno 17] File exists: '/data1/efs/nuc-2bf-group3/mounted-packing-direct'

@@ -1,0 +1,1 @@
+Manager freeze def: prevent queued2bf launch after active core completes. This directory is an intentional controller stop barrier, not a candidate gate failure.

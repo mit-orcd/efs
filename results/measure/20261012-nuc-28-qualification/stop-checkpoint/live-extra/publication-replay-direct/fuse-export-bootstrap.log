@@ -1,0 +1,14 @@
+2026-10-12T04:11:59.720Z efs-fuse: legacy export label 'private-replay' is ignored; mounting the single export 'default' (id=1)
+2026-10-12T04:11:59.720Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:46:34Z on nuc), build=28b2089b-release-fault: starting export=default mount=/data1/efs/mnt
+2026-10-12T04:11:59.720Z Discovered 4 cluster nodes from 127.0.0.1:25008
+2026-10-12T04:11:59.720Z   node id=1 127.0.0.1:25008
+2026-10-12T04:11:59.720Z   node id=2 127.0.0.1:25009
+2026-10-12T04:11:59.720Z   node id=3 127.0.0.1:25010
+2026-10-12T04:11:59.720Z   node id=4 127.0.0.1:25011
+2026-10-12T04:11:59.720Z fetching metadata...
+2026-10-12T04:11:59.720Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T04:11:59.720Z export id=1 name=default
+2026-10-12T04:11:59.721Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T04:11:59.721Z efs-fuse daemon pid=428507
+2026-10-12T04:11:59.723Z efs-fuse: workers max=10 idle=10
+2026-10-12T04:11:59.725Z fuse serving

@@ -1,0 +1,44 @@
+2026-10-12T03:57:17.684Z storage-engine=files direct_io=off
+2026-10-12T03:57:17.684Z Data GC admission: experimental
+2026-10-12T03:57:17.684Z Storage quota: explicit 1.00 GiB (safe maximum 253.59 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T03:57:17.692Z Joined cluster with 3 nodes
+2026-10-12T03:57:17.697Z heartbeat: enabled (2000 ms interval)
+2026-10-12T03:57:17.711Z raft-host: up raft_id=3 n=4 boot=1361661182016303 salt=13819831573602875336 g0=off g2=hosted
+2026-10-12T03:57:17.711Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:46:04Z on nuc), build=28b2089b-release-normal: node 4 listening on 127.0.0.1:24213, storage=/home/efs/nuc-28-qualification/results/live-extra/cursor-replay-buffered/gc-buffered-ravhj2zo/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-12T03:57:17.711Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:57:19.697Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=980 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:57:24.533Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=4491 p50_us=4491 max_us=4491 wdisk ops=1 bytes=65536 errors=0 avg_us=4378 p50_us=4378 max_us=4378
+2026-10-12T03:57:27.611Z storage-engine=files direct_io=off
+2026-10-12T03:57:27.611Z Data GC admission: experimental
+2026-10-12T03:57:27.611Z Loaded 4 persisted cluster node(s) from /home/efs/nuc-28-qualification/results/live-extra/cursor-replay-buffered/gc-buffered-ravhj2zo/n4/meta/cluster_nodes.bin
+2026-10-12T03:57:27.611Z   persisted node 1: 127.0.0.1:24210
+2026-10-12T03:57:27.611Z   persisted node 2: 127.0.0.1:24211
+2026-10-12T03:57:27.611Z   persisted node 4: 127.0.0.1:24213
+2026-10-12T03:57:27.611Z   persisted node 3: 127.0.0.1:24212
+2026-10-12T03:57:27.613Z Storage quota: explicit 1.00 GiB (safe maximum 253.58 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T03:57:27.621Z Joined cluster with 4 nodes
+2026-10-12T03:57:27.626Z heartbeat: enabled (2000 ms interval)
+2026-10-12T03:57:27.634Z raft-host: up raft_id=3 n=4 boot=1363074443277499 salt=12590360004595824891 g0=off g2=hosted
+2026-10-12T03:57:27.634Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:46:04Z on nuc), build=28b2089b-release-normal: node 4 listening on 127.0.0.1:24213, storage=/home/efs/nuc-28-qualification/results/live-extra/cursor-replay-buffered/gc-buffered-ravhj2zo/n4 (1 paths, stripe=none), used=786432, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-12T03:57:27.634Z kv-obs: mt_bytes=130 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:57:28.175Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T03:57:29.626Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=985 passes=2 sampled=0 pending=0,0 reap=0,0 removed=3 file_bytes=196704 payload_bytes=196608 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:57:33.179Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T03:57:34.398Z raft-host: applied session index=4 kind=1 shard=0 ino=0
+2026-10-12T03:57:35.534Z storage-engine=files direct_io=off
+2026-10-12T03:57:35.534Z Data GC admission: experimental
+2026-10-12T03:57:35.534Z Loaded 4 persisted cluster node(s) from /home/efs/nuc-28-qualification/results/live-extra/cursor-replay-buffered/gc-buffered-ravhj2zo/n4/meta/cluster_nodes.bin
+2026-10-12T03:57:35.534Z   persisted node 1: 127.0.0.1:24210
+2026-10-12T03:57:35.534Z   persisted node 2: 127.0.0.1:24211
+2026-10-12T03:57:35.534Z   persisted node 4: 127.0.0.1:24213
+2026-10-12T03:57:35.534Z   persisted node 3: 127.0.0.1:24212
+2026-10-12T03:57:35.536Z Storage quota: explicit 1.00 GiB (safe maximum 253.58 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T03:57:35.558Z Joined cluster with 4 nodes
+2026-10-12T03:57:35.564Z heartbeat: enabled (2000 ms interval)
+2026-10-12T03:57:35.573Z raft-host: up raft_id=3 n=4 boot=1363074443277500 salt=14456665012185942883 g0=off g2=hosted
+2026-10-12T03:57:35.573Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:46:04Z on nuc), build=28b2089b-release-normal: node 4 listening on 127.0.0.1:24213, storage=/home/efs/nuc-28-qualification/results/live-extra/cursor-replay-buffered/gc-buffered-ravhj2zo/n4 (1 paths, stripe=none), used=589824, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-12T03:57:35.573Z kv-obs: mt_bytes=1229 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:57:36.084Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T03:57:37.565Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=982 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:57:41.086Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T03:57:46.088Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0

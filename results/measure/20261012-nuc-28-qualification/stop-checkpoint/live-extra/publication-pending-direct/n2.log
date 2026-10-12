@@ -1,0 +1,14 @@
+2026-10-12T04:11:39.106Z storage-engine=files direct_io=on
+2026-10-12T04:11:39.106Z Data GC admission: experimental
+2026-10-12T04:11:39.106Z Storage quota: explicit 1.00 GiB (safe maximum 252.36 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T04:11:39.114Z Joined cluster with 2 nodes
+2026-10-12T04:11:39.118Z heartbeat: enabled (2000 ms interval)
+2026-10-12T04:11:39.131Z raft-host: up raft_id=1 n=4 boot=1950092772218405 salt=2941286113023245917 g0=hosted g2=hosted
+2026-10-12T04:11:39.131Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:46:34Z on nuc), build=28b2089b-release-fault: node 2 listening on 127.0.0.1:25001, storage=/home/efs/nuc-28-qualification/results/live-extra/publication-pending-direct/n2 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=0 shared
+2026-10-12T04:11:39.131Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:11:39.638Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=405
+2026-10-12T04:11:41.118Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=981 passes=2 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:11:41.641Z query-restore: rc=-3 backend=disk
+2026-10-12T04:11:41.687Z query-publish: generation=1 g0=3 g2=2 rebuilt=4096 refolded=2 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=45 root_rc=0 files=1 dirs=0 logical=0
+2026-10-12T04:11:42.023Z raft-host: applied session index=4 kind=1 shard=0 ino=0
+2026-10-12T04:11:42.139Z raft-host: apply publish rc=-13 index=9 ino=4097 ci=0 why=0 span=0+0 exp=0 base_n=0

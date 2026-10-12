@@ -1,0 +1,11 @@
+real production client session CREATE/REGISTER/ESTABLISH and exact retry PASS
+pending intent locator group=0 index=7 term=1
+pending intent survives lost admission ACK; early retirement refused PASS
+proof response status=0 state=5 index=12
+pending intent locator group=0 index=7 term=1
+committed mapping/apply pending group=0 index=12 term=2
+committed/unapplied mapping ready for all-daemon crash PASS
+raft-session status=0 rc=0 primary=1 op=fence ssh=1263 shard=1 epoch=2 state=1 touched=1 index=18
+committed/unapplied mapping survives four-daemon crash, exact locator and replay floor PASS
+production session retry cannot resurrect fenced epoch after restart PASS
+publication pending: direct/TCP lost ACK, four-daemon crash and cold recovery PASS

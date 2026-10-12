@@ -1,0 +1,7 @@
+real production client session CREATE/REGISTER/ESTABLISH and exact retry PASS
+pending intent locator group=0 index=7 term=1
+pending intent survives lost admission ACK; early retirement refused PASS
+pending intent locator group=0 index=7 term=1
+terminal rejection locator group=0 index=12 term=2
+cold pending query, altered retry refusal, final rejection and replay floor PASS
+publication pending: direct/TCP lost ACK, four-daemon crash and cold recovery PASS
