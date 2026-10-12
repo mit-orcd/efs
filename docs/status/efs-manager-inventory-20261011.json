@@ -1,0 +1,55 @@
+{
+  "release": "40fa182b558dcc304cbdda82f0e0b6ea4f6d17a6",
+  "owners": [
+    {
+      "branch": "devel-mac",
+      "head": "51b67e96b6b235ad7c0bc2bfa603c62c2c1a598f",
+      "nonancestor_commits": [
+        "51b67e96b6b235ad7c0bc2bfa603c62c2c1a598f Record passing Mac native POSIX and atomic completion qualification"
+      ]
+    },
+    {
+      "branch": "devel-amd",
+      "head": "19f7efb374f7cc7323f25721c23908cdd138f855",
+      "nonancestor_commits": []
+    },
+    {
+      "branch": "devel-nuc",
+      "head": "101598d2f2d0ce9ac99ab59f840130f3c8f0e218",
+      "nonancestor_commits": [
+        "101598d2f2d0ce9ac99ab59f840130f3c8f0e218 Require both mode ordinary overwrite cold gates before NUC promotion",
+        "444cd4f0fd2177761572b86ee99d714615aacb5f Port isolated W112 ordinary overwrite warm peer cold and physical gates",
+        "627958bdd9c95e5cf22a304d7d21110ae4d26fa1 W112 preserve accepted full-overwrite bytes during STALE replay",
+        "db412ceb54c7406637118038b5a26239880d7242 Hold NUC promotion until shared stale full overwrite corruption is repaired",
+        "63c9cb15c4b0b386f9ef6396e9a946ac70cf50b6 Exclude duplicate private Raft store logs from current evidence copies",
+        "7598c8f08eb973ce58fdc18b1075cf849919db6d Clarify that the W52 tag45 draft was superseded before admission"
+      ]
+    },
+    {
+      "branch": "devel-orcd",
+      "head": "bc15451909c77ec04180639db6c069bb34ee3fa0",
+      "nonancestor_commits": [
+        "bc15451909c77ec04180639db6c069bb34ee3fa0 Document frozen ORCD source, deployed identity and unfinished stability gates",
+        "83cff8043ab0d9f03506dd55572e57cb33398d52 Stop expired read routing retries and retain exact merged deployment gates",
+        "4fe291b0218bc37cd964c925ecebcea4df93e99f W112 preserve accepted full-overwrite bytes during STALE replay"
+      ]
+    },
+    {
+      "branch": "devel-intel",
+      "head": "60c86d881480a3e8de55f09a2a9bbf63987869ba",
+      "nonancestor_commits": []
+    },
+    {
+      "branch": "devel-code-review",
+      "head": "5ddd2047af746acd5983309cbf5da56abfeb01f1",
+      "nonancestor_commits": [
+        "5ddd2047af746acd5983309cbf5da56abfeb01f1 review: record bounded tag54 append completion safety disposition",
+        "67687dce402f124fcfbb977641ac0f49fc84971a review: reproduce inherited read retry deadline overrun and provide scoped guard",
+        "a1700b6412d99f94132bf774700d755c01f79970 review: independently reproduce W112 and verify full overwrite replay boundaries",
+        "858db9cf80b270adaeeb8be654e8c014880f4522 review: record bounded query retry and page barrier disposition",
+        "ba33c3f12b9156af12828ee352e3c5da3e7e9866 review: record bounded merged authority and batch disposition for 9c65c893",
+        "6307ca635fd238ac99fb524bf2ed8f3c2f15ed6f review: reproduce silent old-peer authority timeout and test fresh legacy fallback"
+      ]
+    }
+  ]
+}
