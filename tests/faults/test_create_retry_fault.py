@@ -12,6 +12,13 @@ source = Path(os.environ.get('EFS_CREATE_FAULT_SOURCE',
 match = re.search(r'^static int rpc_fault_create_reply\([^;]+?\)\n\{',
                   source, re.M)
 assert match
+# Retained replies pass through the common transport hook. A second injection
+# here doubles the lost/BUSY stages and invalidates the mounted three-stage gate.
+retained = re.search(r'^static int create_request_rpc\([^;]+?\)\n\{', source, re.M)
+assert retained
+retained_body = source[retained.start():source.index('\n}', retained.end()) + 2]
+assert 'EFS_FAULT_CREATE_RETRY_FILE' not in retained_body, 'duplicate retained CREATE fault injection'
+assert 'test-create-retry:' not in retained_body, 'duplicate retained CREATE fault stage'
 function = source[match.start():source.index('\n}', match.end()) + 2]
 code = r'''
 #include "efs/protocol.h"

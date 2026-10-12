@@ -1,0 +1,19 @@
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=1 seq=42 ino=512 identical=1
+test-create-retry: stage=2 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=1 seq=42 ino=512 identical=1
+test-create-retry: stage=2 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+test-create-retry: stage=0 seq=42 ino=512 identical=1
+CREATE fault hook: retained/legacy loss, BUSY, same durable identity and changed-identity refusal PASS

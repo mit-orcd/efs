@@ -1,0 +1,13 @@
+actual retained caller: attempts=5 wire_calls=5 one receipt, stable identity/inode/generation, ACK/probe changes, one slot release PASS
+test-create-retry: stage=0 seq=42 ino=4097 identical=1
+test-create-retry: stage=1 seq=42 ino=4097 identical=1
+test-create-retry: stage=2 seq=42 ino=4097 identical=1
+test-create-retry: stage=0 seq=42 ino=4097 identical=1 retained=1
+test-create-retry: stage=1 seq=42 ino=4097 identical=1 retained=1
+test-create-retry: stage=2 seq=42 ino=4097 identical=1 retained=1
+{"stages": [["0", "42", "4097"], ["1", "42", "4097"], ["2", "42", "4097"], ["0", "42", "4097"], ["1", "42", "4097"], ["2", "42", "4097"]], "actual_function_names": ["rpc_fault_create_reply", "create_request_rpc", "rpc_status_to_efs"], "scope": "controlled receipt/transport; live server, dentry and OPEN token cold oracles separately required"}
+Traceback (most recent call last):
+  File "/tmp/v030-create-integrated.py", line 69, in <module>
+    assert len(stages)==3 and [int(x[0]) for x in stages]==[0,1,2],stages
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [('0', '42', '4097'), ('1', '42', '4097'), ('2', '42', '4097'), ('0', '42', '4097'), ('1', '42', '4097'), ('2', '42', '4097')]

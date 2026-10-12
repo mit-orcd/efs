@@ -1477,6 +1477,8 @@ this document is the invariant they are measured against.
 
 ### v0.3.0-pre-alpha release integration
 
+A reviewed next-candidate CREATE fault-injection fix removes a duplicated retained hook; actual combined-path baseline six-stage failure and fixed three-stage native/sanitizer passes are preserved in the [diagnostic ledger](../status/v030-query-stage-diagnostic-20261012.md#create-retry-fault-injection-defect). Mounted requalification remains pending.
+
 Current execution target is shared `c2bfb9e9`: AMD full normal/fault suites,
 20 focused sanitizer gates and fully sanitized real-LSM catalog/audit pass;
 original direct/buffered overwrite and cold-byte/physical cleanup gates pass.

@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/tmp/v030-create-review/tests/faults/test_create_retry_fault.py", line 20, in <module>
+    assert 'EFS_FAULT_CREATE_RETRY_FILE' not in retained_body, 'duplicate retained CREATE fault injection'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: duplicate retained CREATE fault injection

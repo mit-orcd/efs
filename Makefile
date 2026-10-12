@@ -317,6 +317,7 @@ docs-check:
 
 test: all
 	python3 tests/faults/test_create_retry_fault.py
+	python3 tests/faults/test_create_retry_integrated.py
 	python3 tests/faults/test_append_cleanup_retry.py
 	$(MAKE) tests/test_put_storage_fence
 	./tests/test_put_storage_fence
