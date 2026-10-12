@@ -1,0 +1,12 @@
+2026-10-12T17:45:03.384Z efs-fuse v0.3.1-pre-alpha-candidate (branch release-v0.3.1-pre-alpha, built 2026-10-12T17:39:54Z on amd-395), build=15e2a5310df1dd0fd4e307a9508c95d513d14672: starting export=default mount=/tmp/efs-amd-pack-isolated-15e2a5310df1dd0fd4e307a9508c95d513d14672-peer
+2026-10-12T17:45:03.384Z Discovered 4 cluster nodes from 127.0.0.1:25120
+2026-10-12T17:45:03.384Z   node id=1 127.0.0.1:25120
+2026-10-12T17:45:03.384Z   node id=2 127.0.0.1:25121
+2026-10-12T17:45:03.384Z   node id=3 127.0.0.1:25122
+2026-10-12T17:45:03.384Z   node id=4 127.0.0.1:25123
+2026-10-12T17:45:03.384Z fetching metadata...
+2026-10-12T17:45:03.384Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T17:45:03.384Z export id=1 name=default
+2026-10-12T17:45:03.384Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T17:45:03.387Z efs-fuse: workers max=10 idle=10
+2026-10-12T17:45:03.388Z fuse serving

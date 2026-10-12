@@ -1,6 +1,6 @@
 # Project status — current work and index
 
-**Current integration:** `release-v0.3.1-pre-alpha` contains all captured known branch tips; ordinary files/TCP/direct qualification pending on a new frozen SHA. Packing, containers, .efs and repair activation remain disabled. Root alone; no push/tag. [v0.3.1 ledger](v031-qualification-20261012.md). Earlier v0.3.0 results are historical and do not qualify the new merge.
+**Current release candidate:** `release-v0.3.1-pre-alpha`, frozen **15e2a5310df1dd0fd4e307a9508c95d513d14672**, contains all captured known branch tips. AMD full normal/fault native, earlyACK, eight affected sanitizers, fully instrumented Raft, ordinarycore1512/1512, peer67/67, seven stops and ordinary overwrite/cold/reclamation PASS. Packing, containers, .efs and repair activation disabled. Root alone; private fixtures stopped; no push/tag. [v0.3.1 exact-source ledger](v031-qualification-20261012.md). Earlier v0.3.0 results remain historical.
 
 **Latest alpha scope:** ordinary files/TCP/direct only, `EFS_PACKED_WRITES=0`, `EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`. Small-file packing is excluded alongside containers, `.efs`, RDMA, buffered and dedicated repair/recovery. Earlier packing qualification requirements below are historical. [Binding packing exclusion](v030-packing-exclusion-20261012.md).
 
