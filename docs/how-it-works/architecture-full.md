@@ -2185,6 +2185,8 @@ NUCecdc focused evidence integrated: [report](../status/nuc-release-ecdc-focused
 
 AMD bounded labelledecdc broad diagnostic running; isolatedREADDIR5e035dcd review pending, not deployed. Acceptance remains failed. [Ledger](../status/v030-tcp-direct-qualification-20261012.md).
 
+10:19 EDT: current frozen qualification `e59e815fab2916340baad585dc08712ed182b7ea` reviewedREADDIR fence reuse; new gates pending. ecdc diagnostic reproduces directory failures; isolatedpacking oracle running. [Ledger](../status/v030-tcp-direct-qualification-20261012.md).
+
 
 ## Appendix 2 — In flight — the current handoff block
 
