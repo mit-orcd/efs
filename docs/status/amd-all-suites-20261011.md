@@ -116,3 +116,5 @@ AMD independent corrected repair-prerequisite review: daemon/tools build, journa
 Separate repair storage-fence prerequisite `ac540d7a`: independent AMD daemon build and existing PUT/new repair guard/certificate tests PASS. Integrated inactive barrier does not close repair GAP.
 
 Expanded full normal/fault native runs on integrated `7a00b2cf` both **FAIL exit2** compiling `tests/test_put_upload_server.c`: its cleanup retained the renamed private `put_session_path` helper. Earlier focused fence builds did not include this existing receiver test. Correct the test to the generalized helper's ordinary PUT domain; retain failed logs and rerun full suites on a new exact candidate.
+
+Corrected upload-test candidate `01f61516` full normal/fault runs both **FAIL exit2** at an older lock-verdict test extractor assuming the classification expression begins with PREPARE. The transaction-retry extractor shares that assumption. Both now locate the actual host_apply classification independently of command ordering and pass focused local checks; full rerun remains required. Original results retained under `results/measure/20261012-release-native`.
