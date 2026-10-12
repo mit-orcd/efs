@@ -11,6 +11,9 @@
 #define EFS_KV_SHARD_BITS 12
 #define EFS_KV_SHARD_MASK 0xFFFu
 #define EFS_KV_KEY_MAX    320
+#define EFS_KV_KIND_EXPIRY_POLICY 42 /* directory FileID: operator policy */
+#define EFS_KV_KIND_EXPIRY 43 /* FileID: fixed deadline and monotonic revision */
+#define EFS_KV_KIND_EXPIRY_INDEX 44 /* group anchor/deadline/FileID: revision */
 #define EFS_KV_KIND_REPAIR_JOB 40 /* staged group-anchor / job UUID: durable debt */
 #define EFS_KV_KIND_REPAIR_FLOOR 41 /* terminal job UUID/epoch revocation; retained */
 #define EFS_KV_KIND_PACK_STREAM 37 /* group/session/sequence: immutable admission */

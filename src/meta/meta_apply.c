@@ -1,4 +1,5 @@
 #include "efs/meta_apply.h"
+#include "efs/expiry.h"
 #include "efs/metadata.h"
 #include "efs/raft.h"
 #include "efs/meta_cmd.h"
@@ -2264,8 +2265,9 @@ static int apply_orphan_unlink(struct efs_kv *kv, efs_ino_t parent,
     return meta_write_batch(kv,it,n);
 }
 
-int efs_meta_apply_unlink_op(struct efs_kv *kv, efs_ino_t parent, const char *name,
-                             uint64_t now, const struct efs_opid_req *q)
+static int unlink_batch(struct efs_kv *kv, efs_ino_t parent, const char *name,
+                             uint64_t now, const struct efs_opid_req *q,
+                             const struct efs_expiry_due *expiry)
 {
     struct efs_meta_dentry dent, tomb;
     struct efs_meta_row row, prow;
@@ -2278,7 +2280,8 @@ int efs_meta_apply_unlink_op(struct efs_kv *kv, efs_ino_t parent, const char *na
     uint8_t k_opid[EFS_KV_KEY_MAX], v_opid[EFS_OPID_VAL_MAX];
     uint8_t k_xa[EFS_KV_KEY_MAX];
     uint32_t kl = 0, kh = 0, ki = 0, kp = 0, kln = 0, kr = 0, kxa = 0;
-    struct efs_kv_item it[12];
+    struct efs_kv_item it[16];
+    struct efs_expiry_change expiry_change;
     uint32_t n = 0, psh, hsh, dsh, nlink_after = 0;
     int rc, held = 0;
     int touch_parent = 0;
@@ -2302,6 +2305,7 @@ int efs_meta_apply_unlink_op(struct efs_kv *kv, efs_ino_t parent, const char *na
             return rep.rc;
     }
     rc = efs_meta_apply_resolve(kv, parent, name, &dent, &row);
+    if (expiry && rc != EFS_OK) return rc;
     if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_IO) {
         int repaired = apply_orphan_unlink(kv,parent,name,now,q);
         return repaired == EFS_ERR_NOT_FOUND ? rc : repaired;
@@ -2310,6 +2314,23 @@ int efs_meta_apply_unlink_op(struct efs_kv *kv, efs_ino_t parent, const char *na
         return rc;
     if (S_ISDIR(row.mode))
         return EFS_ERR_INVAL;
+    if (expiry) {
+        struct efs_expiry_record current;
+        if (!S_ISREG(row.mode) || row.nlink != 1 ||
+            row.ino != expiry->ino || row.generation != expiry->generation)
+            return EFS_ERR_STALE;
+        rc = efs_expiry_get(kv, row.ino, row.generation, &current);
+        if (rc != EFS_OK) return rc;
+        if (!current.deadline_ns || current.deadline_ns > now ||
+            current.deadline_ns != expiry->deadline_ns ||
+            current.revision != expiry->revision) return EFS_ERR_STALE;
+        /* Tombstone the revision in the namespace decision. Delayed renewal
+         * must also verify the live inode, not resurrect a retired FileID. */
+        current.deadline_ns = 0;
+        rc = efs_expiry_plan(kv,row.ino,row.generation,current.revision,
+                             &current,&expiry_change);
+        if (rc != EFS_OK) return rc;
+    }
     nlink_after = row.nlink <= 1 ? 0 : row.nlink - 1;
     rc = efs_meta_apply_get_inode(kv, parent, &prow);
     if (rc != EFS_OK)
@@ -2317,6 +2338,11 @@ int efs_meta_apply_unlink_op(struct efs_kv *kv, efs_ino_t parent, const char *na
     psh = efs_kv_inode_shard(parent);
     dsh = efs_kv_dentry_shard(parent, name, prow.layout);
     hsh = efs_kv_dentry_shard(parent, name, EFS_META_LAYOUT_HASHED);
+    /* This helper is one participant-log apply. Cross-group expiry must
+     * take the guarded transaction path; never write another group's rows. */
+    if (expiry && (efs_raft_shard_group(psh) != efs_raft_shard_group(dsh) ||
+        efs_raft_shard_group(efs_kv_inode_shard(row.ino)) != efs_raft_shard_group(dsh)))
+        return EFS_ERR_INVAL;
     rc = efs_kv_key_dentry(psh, parent, name, k_loc, &kl);
     if (rc == EFS_OK)
         rc = efs_kv_key_dentry(hsh, parent, name, k_hash, &kh);
@@ -2495,7 +2521,23 @@ int efs_meta_apply_unlink_op(struct efs_kv *kv, efs_ino_t parent, const char *na
             return rc;
         n += (uint32_t)rc;
     }
+    if (expiry) {
+        if (n + expiry_change.count > sizeof(it)/sizeof(it[0]))
+            return EFS_ERR_OVERFLOW;
+        for (uint32_t i=0;i<expiry_change.count;i++)it[n++]=expiry_change.items[i];
+    }
     return meta_write_batch(kv, it, n);
+}
+
+int efs_meta_apply_unlink_op(struct efs_kv *kv, efs_ino_t parent, const char *name,
+                             uint64_t now, const struct efs_opid_req *q)
+{ return unlink_batch(kv,parent,name,now,q,NULL); }
+
+int efs_meta_apply_expire(struct efs_kv *kv, efs_ino_t parent, const char *name,
+                          uint64_t committed_now, const struct efs_expiry_due *due)
+{
+    if (!due || !due->revision || !due->deadline_ns) return EFS_ERR_INVAL;
+    return unlink_batch(kv,parent,name,committed_now,NULL,due);
 }
 
 int efs_meta_apply_link(struct efs_kv *kv, efs_ino_t src_parent, const char *src_name,

@@ -1,6 +1,7 @@
 #ifndef EFS_META_APPLY_H
 #define EFS_META_APPLY_H
 #include "efs/packed_segment.h"
+#include "efs/expiry.h"
 
 #include "efs/common.h"
 #include "efs/kv.h"
@@ -645,6 +646,10 @@ int efs_meta_apply_mkdir_log_op(struct efs_kv *kv, const struct efs_meta_attrs *
                                 const struct efs_opid_req *q, efs_ino_t *out);
 /* UNLINK / RMDIR with an op-id: replay answers the recorded OK (reply
  * ino = the removed inode; extra = nlink after, unlink only). */
+/* Conditional one-group expiry apply; caller supplies a committed leader
+ * clock decision. This never reads a replica wall clock or deletes fragments. */
+int efs_meta_apply_expire(struct efs_kv *, efs_ino_t parent, const char *name,
+                          uint64_t committed_now, const struct efs_expiry_due *);
 int efs_meta_apply_unlink_op(struct efs_kv *kv, efs_ino_t parent, const char *name,
                              uint64_t now, const struct efs_opid_req *q);
 int efs_meta_apply_rmdir_op(struct efs_kv *kv, efs_ino_t parent, const char *name,
