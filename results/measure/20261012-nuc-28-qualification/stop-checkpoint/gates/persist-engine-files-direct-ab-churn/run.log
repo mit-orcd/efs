@@ -1,0 +1,1 @@
+{"phase": "churn", "workers": 4, "operations": 256, "bytes": 33554432, "wall_s": 4.6971881429999485, "MiB_s": 6.812586386961837, "ops_s": 54.5006910956947, "p99_ms": 119.86592399625806, "max_ms": 142.86394699593075, "errors": 0, "integrity": false}

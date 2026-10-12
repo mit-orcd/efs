@@ -1,0 +1,30 @@
+[
+  {
+    "pid": 310367,
+    "command": "/home/efs/nuc-28-qualification/source-normal/efsd --node-id 1 --addr 127.0.0.1 --port 24210 --storage /home/efs/nuc-28-qualification/results/live-extra/cursor-replay-buffered/gc-buffered-3e_1fdwu/n1 --quota 1G --no-direct-io ",
+    "applied_interval_ms": "10",
+    "fault_scope": null,
+    "preload": null
+  },
+  {
+    "pid": 310410,
+    "command": "/home/efs/nuc-28-qualification/source-normal/efsd --node-id 2 --addr 127.0.0.1 --port 24211 --storage /home/efs/nuc-28-qualification/results/live-extra/cursor-replay-buffered/gc-buffered-3e_1fdwu/n2 --quota 1G --no-direct-io --join 127.0.0.1:24210 ",
+    "applied_interval_ms": "10",
+    "fault_scope": null,
+    "preload": null
+  },
+  {
+    "pid": 310432,
+    "command": "/home/efs/nuc-28-qualification/source-normal/efsd --node-id 4 --addr 127.0.0.1 --port 24213 --storage /home/efs/nuc-28-qualification/results/live-extra/cursor-replay-buffered/gc-buffered-ravhj2zo/n4 --quota 1G --no-direct-io --join 127.0.0.1:24210 ",
+    "applied_interval_ms": "10",
+    "fault_scope": null,
+    "preload": null
+  },
+  {
+    "pid": 310464,
+    "command": "/home/efs/nuc-28-qualification/source-normal/efsd --node-id 3 --addr 127.0.0.1 --port 24212 --storage /home/efs/nuc-28-qualification/results/live-extra/cursor-replay-buffered/gc-buffered-ravhj2zo/n3 --quota 1G --no-direct-io --join 127.0.0.1:24210 ",
+    "applied_interval_ms": "10",
+    "fault_scope": "/home/efs/nuc-28-qualification/results/live-extra/cursor-replay-buffered/gc-buffered-3e_1fdwu/applied-marker-fault",
+    "preload": "/home/efs/nuc-28-qualification/results/live-extra/cursor-replay-buffered/gc-buffered-3e_1fdwu/applied-checkpoint-fault.so"
+  }
+]

@@ -1,0 +1,3 @@
+GET pair mode=0 elapsed_ms=5005 restored_deadline=0
+GET pair mode=1 elapsed_ms=75 restored_deadline=42955285
+merge-base GET pair: partial reply cannot exceed default/inherited budget; pool and TLS retained PASS

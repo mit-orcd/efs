@@ -1,0 +1,525 @@
+2026-10-12T04:04:58.171Z storage-engine=files direct_io=on
+2026-10-12T04:04:58.171Z Data GC admission: experimental
+2026-10-12T04:04:58.172Z Storage quota: explicit 4.00 GiB (safe maximum 253.52 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T04:04:58.179Z Joined cluster with 3 nodes
+2026-10-12T04:04:58.185Z heartbeat: enabled (2000 ms interval)
+2026-10-12T04:04:58.198Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-12T04:04:58.198Z raft-host: up raft_id=2 n=3 boot=1559813329068207 salt=10695259407791401611 g0=hosted g2=hosted
+2026-10-12T04:04:58.198Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:46:34Z on nuc), build=28b2089b-release-fault: node 3 listening on 127.0.0.1:25402, storage=/home/efs/nuc-28-qualification/results/live-extra/production-cap-pressure/n3 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=0 shared
+2026-10-12T04:04:58.198Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=0 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:04:58.198Z raft-obs: wait_timeouts=0 pump_hold_max=4us lock_wait_max=3us drain_max=3us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:04:58.198Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:04:58.205Z raft-obs: g0 term 0->1 role FOLLOWER->FOLLOWER leader=1 commit=2 applied=2 t=1791777898205ms
+2026-10-12T04:04:58.205Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=17 proposal_n=0 proposal_bytes=0 outbox_bytes=80 outbox_hi=80 inbox_bytes=0 inbox_hi=121 rejected=0 recv_rejected=0
+2026-10-12T04:04:58.205Z raft-obs: tx->1 enq=1 drop=0 sent=0 fail=0 hi=1 rtt_avg=0us get_avg=0us get_max=0ms
+2026-10-12T04:04:58.205Z raft-obs: wait_timeouts=0 pump_hold_max=4453us lock_wait_max=0us drain_max=4452us tick_max=1us apply_max=100us persist_max=0us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:04:58.217Z raft-obs: g2 term 0->1 role FOLLOWER->FOLLOWER leader=0 commit=2 applied=2 t=1791777898217ms
+2026-10-12T04:05:00.185Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=978 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:05:03.202Z kv-obs: mt_bytes=506 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:05:03.207Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=30 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=160 inbox_bytes=0 inbox_hi=160 rejected=0 recv_rejected=0
+2026-10-12T04:05:03.207Z raft-obs: tx->0 enq=97 drop=0 sent=97 fail=0 hi=1 rtt_avg=174us get_avg=2us get_max=0ms
+2026-10-12T04:05:03.207Z raft-obs: tx->1 enq=98 drop=0 sent=98 fail=0 hi=1 rtt_avg=179us get_avg=3us get_max=0ms
+2026-10-12T04:05:03.207Z raft-obs: wait_timeouts=0 pump_hold_max=2255us lock_wait_max=88us drain_max=2254us tick_max=11us apply_max=27us persist_max=3279us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:05:04.405Z kv-fault: compactor parked (/home/efs/nuc-28-qualification/results/live-extra/production-cap-pressure/park)
+2026-10-12T04:05:08.213Z pressure-obs: pending_n=1 pending_bytes=1048585 pending_work=16781456 log_bytes=88081170 proposal_n=0 proposal_bytes=0 outbox_bytes=80 outbox_hi=160 inbox_bytes=0 inbox_hi=3146031 rejected=0 recv_rejected=0
+2026-10-12T04:05:08.214Z raft-obs: tx->0 enq=152 drop=0 sent=152 fail=0 hi=1 rtt_avg=162us get_avg=2us get_max=0ms
+2026-10-12T04:05:08.214Z raft-obs: tx->1 enq=399 drop=0 sent=348 fail=0 hi=1 rtt_avg=145us get_avg=1us get_max=0ms
+2026-10-12T04:05:08.214Z raft-obs: wait_timeouts=0 pump_hold_max=74256us lock_wait_max=2us drain_max=74254us tick_max=2us apply_max=74071us persist_max=11122us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:05:08.214Z kv-obs: mt_bytes=3145979 l0_bytes=83888640 l0=42 l1=0
+2026-10-12T04:05:08.312Z raft-host: gc-pass ms=46 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:05:13.216Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=201328350 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=160 inbox_bytes=0 inbox_hi=4194708 rejected=0 recv_rejected=0
+2026-10-12T04:05:13.216Z raft-obs: tx->0 enq=192 drop=0 sent=192 fail=0 hi=1 rtt_avg=153us get_avg=1us get_max=0ms
+2026-10-12T04:05:13.216Z raft-obs: tx->1 enq=787 drop=0 sent=663 fail=0 hi=1 rtt_avg=135us get_avg=1us get_max=0ms
+2026-10-12T04:05:13.216Z raft-obs: wait_timeouts=0 pump_hold_max=56526us lock_wait_max=2us drain_max=56525us tick_max=43us apply_max=56246us persist_max=16076us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:05:13.216Z kv-obs: mt_bytes=0 l0_bytes=201332400 l0=98 l1=0
+2026-10-12T04:05:15.376Z raft-host: gc-pass ms=27 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:05:16.190Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=814 passes=18 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:05:17.408Z raft-host: gc-pass ms=21 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:05:18.220Z pressure-obs: pending_n=1 pending_bytes=1048585 pending_work=16781456 log_bytes=303041095 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=160 inbox_bytes=0 inbox_hi=4194708 rejected=0 recv_rejected=0
+2026-10-12T04:05:18.220Z raft-obs: tx->0 enq=240 drop=0 sent=240 fail=0 hi=1 rtt_avg=151us get_avg=1us get_max=0ms
+2026-10-12T04:05:18.220Z raft-obs: tx->1 enq=1135 drop=0 sent=949 fail=0 hi=1 rtt_avg=134us get_avg=1us get_max=0ms
+2026-10-12T04:05:18.220Z raft-obs: wait_timeouts=0 pump_hold_max=80399us lock_wait_max=17us drain_max=80397us tick_max=18us apply_max=80154us persist_max=10529us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:05:18.220Z kv-obs: mt_bytes=0 l0_bytes=301998480 l0=146 l1=0
+2026-10-12T04:05:18.422Z raft-host: gc-pass ms=9 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:05:20.439Z raft-host: gc-pass ms=5 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:05:22.478Z raft-host: gc-pass ms=28 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:05:23.226Z pressure-obs: pending_n=1 pending_bytes=1048585 pending_work=16781456 log_bytes=403705255 proposal_n=0 proposal_bytes=0 outbox_bytes=80 outbox_hi=160 inbox_bytes=0 inbox_hi=4194708 rejected=0 recv_rejected=0
+2026-10-12T04:05:23.226Z raft-obs: tx->0 enq=286 drop=0 sent=286 fail=0 hi=1 rtt_avg=147us get_avg=1us get_max=0ms
+2026-10-12T04:05:23.226Z raft-obs: tx->1 enq=1490 drop=0 sent=1249 fail=0 hi=1 rtt_avg=131us get_avg=1us get_max=0ms
+2026-10-12T04:05:23.226Z raft-obs: wait_timeouts=0 pump_hold_max=74791us lock_wait_max=2us drain_max=74789us tick_max=23us apply_max=74615us persist_max=9850us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:05:23.226Z kv-obs: mt_bytes=0 l0_bytes=402664560 l0=194 l1=0
+2026-10-12T04:05:23.505Z raft-host: gc-pass ms=22 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:05:24.529Z raft-host: gc-pass ms=20 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:05:28.230Z pressure-obs: pending_n=1 pending_bytes=1048585 pending_work=16781456 log_bytes=518001020 proposal_n=0 proposal_bytes=0 outbox_bytes=80 outbox_hi=160 inbox_bytes=1048677 inbox_hi=4194708 rejected=0 recv_rejected=0
+2026-10-12T04:05:28.230Z raft-obs: tx->0 enq=324 drop=0 sent=324 fail=0 hi=1 rtt_avg=142us get_avg=1us get_max=0ms
+2026-10-12T04:05:28.230Z raft-obs: tx->1 enq=1883 drop=0 sent=1566 fail=0 hi=1 rtt_avg=131us get_avg=1us get_max=0ms
+2026-10-12T04:05:28.230Z raft-obs: wait_timeouts=0 pump_hold_max=79598us lock_wait_max=4us drain_max=79596us tick_max=18us apply_max=79329us persist_max=10375us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:05:28.230Z kv-obs: mt_bytes=1048707 l0_bytes=515913900 l0=248 l1=0
+2026-10-12T04:05:28.568Z raft-host: gc-pass ms=8 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:05:29.010Z raft-snap: start group=0 incl=513
+2026-10-12T04:05:29.206Z raft-snap: end group=0 incl=513 bytes=16777744 ms=196
+2026-10-12T04:05:30.827Z raft-host: gc-pass ms=50 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:05:32.194Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=362 passes=34 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:05:33.246Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=83886813 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=160 inbox_bytes=1048677 inbox_hi=4194708 rejected=0 recv_rejected=0
+2026-10-12T04:05:33.246Z raft-obs: tx->0 enq=369 drop=0 sent=369 fail=0 hi=1 rtt_avg=139us get_avg=1us get_max=0ms
+2026-10-12T04:05:33.246Z raft-obs: tx->1 enq=2244 drop=0 sent=1868 fail=0 hi=1 rtt_avg=128us get_avg=1us get_max=0ms
+2026-10-12T04:05:33.246Z raft-obs: wait_timeouts=0 pump_hold_max=62459us lock_wait_max=1us drain_max=62458us tick_max=4us apply_max=62281us persist_max=14014us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:05:33.246Z kv-obs: mt_bytes=0 l0_bytes=619725803 l0=298 l1=0
+2026-10-12T04:05:34.856Z raft-host: gc-pass ms=9 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:05:36.882Z raft-host: gc-pass ms=14 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:05:38.250Z pressure-obs: pending_n=1 pending_bytes=1048585 pending_work=16781456 log_bytes=201328333 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=160 inbox_bytes=0 inbox_hi=4194708 rejected=0 recv_rejected=0
+2026-10-12T04:05:38.250Z raft-obs: tx->0 enq=405 drop=0 sent=405 fail=0 hi=1 rtt_avg=136us get_avg=1us get_max=0ms
+2026-10-12T04:05:38.250Z raft-obs: tx->1 enq=2654 drop=0 sent=2209 fail=0 hi=1 rtt_avg=127us get_avg=1us get_max=0ms
+2026-10-12T04:05:38.250Z raft-obs: wait_timeouts=0 pump_hold_max=67879us lock_wait_max=2us drain_max=67878us tick_max=3us apply_max=67695us persist_max=11665us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:05:38.250Z kv-obs: mt_bytes=3145979 l0_bytes=732975143 l0=352 l1=0
+2026-10-12T04:05:39.979Z raft-host: gc-pass ms=81 orphan=0 reap=0 frag=0 spread=0 recover=19 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:05:40.997Z raft-host: gc-pass ms=13 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:05:42.124Z raft-host: gc-pass ms=122 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:05:43.290Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=268437773 proposal_n=0 proposal_bytes=0 outbox_bytes=80 outbox_hi=160 inbox_bytes=1048677 inbox_hi=4194708 rejected=0 recv_rejected=0
+2026-10-12T04:05:43.290Z raft-obs: tx->0 enq=437 drop=0 sent=437 fail=0 hi=1 rtt_avg=139us get_avg=1us get_max=0ms
+2026-10-12T04:05:43.290Z raft-obs: tx->1 enq=2920 drop=0 sent=2427 fail=0 hi=1 rtt_avg=129us get_avg=1us get_max=0ms
+2026-10-12T04:05:43.290Z raft-obs: wait_timeouts=0 pump_hold_max=105204us lock_wait_max=2us drain_max=105202us tick_max=3us apply_max=104878us persist_max=26904us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:05:43.290Z kv-obs: mt_bytes=0 l0_bytes=804280283 l0=386 l1=0
+2026-10-12T04:05:45.187Z raft-host: gc-pass ms=46 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:05:46.197Z raft-host: gc-pass ms=6 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:05:48.197Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=995 passes=49 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:05:48.346Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=356518913 proposal_n=0 proposal_bytes=0 outbox_bytes=80 outbox_hi=160 inbox_bytes=1048757 inbox_hi=4194708 rejected=848 recv_rejected=0
+2026-10-12T04:05:48.346Z raft-obs: tx->0 enq=489 drop=0 sent=489 fail=0 hi=1 rtt_avg=140us get_avg=1us get_max=0ms
+2026-10-12T04:05:48.346Z raft-obs: tx->1 enq=3235 drop=0 sent=2694 fail=0 hi=1 rtt_avg=129us get_avg=1us get_max=0ms
+2026-10-12T04:05:48.346Z raft-obs: wait_timeouts=0 pump_hold_max=68498us lock_wait_max=2us drain_max=68497us tick_max=15us apply_max=68336us persist_max=11085us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:05:48.346Z kv-obs: mt_bytes=0 l0_bytes=892363103 l0=428 l1=0
+2026-10-12T04:05:53.352Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=470814678 proposal_n=0 proposal_bytes=0 outbox_bytes=80 outbox_hi=160 inbox_bytes=0 inbox_hi=4194708 rejected=1892 recv_rejected=0
+2026-10-12T04:05:53.352Z raft-obs: tx->0 enq=529 drop=0 sent=529 fail=0 hi=1 rtt_avg=140us get_avg=1us get_max=0ms
+2026-10-12T04:05:53.352Z raft-obs: tx->1 enq=3623 drop=0 sent=3021 fail=0 hi=1 rtt_avg=129us get_avg=1us get_max=0ms
+2026-10-12T04:05:53.352Z raft-obs: wait_timeouts=0 pump_hold_max=62103us lock_wait_max=6us drain_max=62102us tick_max=9us apply_max=61857us persist_max=10956us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:05:53.352Z kv-obs: mt_bytes=1048707 l0_bytes=1005612443 l0=482 l1=0
+2026-10-12T04:05:54.256Z raft-host: gc-pass ms=17 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:05:55.327Z raft-host: gc-pass ms=66 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:05:56.341Z raft-host: gc-pass ms=8 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:05:56.401Z raft-snap: start group=0 incl=1024
+2026-10-12T04:05:56.838Z raft-snap: end group=0 incl=1024 bytes=16777744 ms=437
+2026-10-12T04:05:58.356Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=4194353 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=160 inbox_bytes=0 inbox_hi=4194708 rejected=3304 recv_rejected=14
+2026-10-12T04:05:58.356Z raft-obs: tx->0 enq=572 drop=0 sent=572 fail=0 hi=1 rtt_avg=137us get_avg=1us get_max=0ms
+2026-10-12T04:05:58.356Z raft-obs: tx->1 enq=3908 drop=0 sent=3268 fail=0 hi=1 rtt_avg=128us get_avg=1us get_max=0ms
+2026-10-12T04:05:58.356Z raft-obs: wait_timeouts=0 pump_hold_max=66318us lock_wait_max=3us drain_max=66317us tick_max=3us apply_max=66100us persist_max=14489us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:05:58.356Z kv-obs: mt_bytes=0 l0_bytes=1075868986 l0=516 l1=0
+2026-10-12T04:06:03.360Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=4194353 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=160 inbox_bytes=0 inbox_hi=4194708 rejected=5362 recv_rejected=72
+2026-10-12T04:06:03.361Z raft-obs: tx->0 enq=613 drop=0 sent=613 fail=0 hi=1 rtt_avg=139us get_avg=1us get_max=0ms
+2026-10-12T04:06:03.361Z raft-obs: tx->1 enq=4019 drop=0 sent=3379 fail=0 hi=1 rtt_avg=130us get_avg=1us get_max=0ms
+2026-10-12T04:06:03.361Z raft-obs: wait_timeouts=0 pump_hold_max=349us lock_wait_max=13us drain_max=348us tick_max=3us apply_max=0us persist_max=18us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:06:04.201Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=381 passes=65 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:06:05.566Z store: put O_DIRECT bounce copy (buf align=3120 len=65536)
+2026-10-12T04:06:05.586Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=2 bytes=131072 errors=0 avg_us=20618 p50_us=20730 max_us=20730 wdisk ops=2 bytes=131072 errors=0 avg_us=19821 p50_us=19859 max_us=19859
+2026-10-12T04:06:08.362Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=4194353 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=160 inbox_bytes=0 inbox_hi=4194708 rejected=8666 recv_rejected=178
+2026-10-12T04:06:08.362Z raft-obs: tx->0 enq=848 drop=0 sent=845 fail=0 hi=1 rtt_avg=113us get_avg=1us get_max=0ms
+2026-10-12T04:06:08.362Z raft-obs: tx->1 enq=5183 drop=0 sent=4477 fail=0 hi=1 rtt_avg=106us get_avg=0us get_max=0ms
+2026-10-12T04:06:08.362Z raft-obs: wait_timeouts=0 pump_hold_max=311us lock_wait_max=13us drain_max=310us tick_max=2us apply_max=0us persist_max=16us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:06:10.588Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=72 bytes=4718592 errors=0 avg_us=7594 p50_us=7706 max_us=20730 wdisk ops=72 bytes=4718592 errors=0 avg_us=7538 p50_us=7659 max_us=19859
+2026-10-12T04:06:13.366Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=4194353 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=160 inbox_bytes=0 inbox_hi=4194708 rejected=10846 recv_rejected=274
+2026-10-12T04:06:13.366Z raft-obs: tx->0 enq=899 drop=0 sent=896 fail=0 hi=1 rtt_avg=116us get_avg=1us get_max=0ms
+2026-10-12T04:06:13.366Z raft-obs: tx->1 enq=5357 drop=0 sent=4650 fail=0 hi=1 rtt_avg=107us get_avg=0us get_max=0ms
+2026-10-12T04:06:13.366Z raft-obs: wait_timeouts=0 pump_hold_max=419us lock_wait_max=1us drain_max=418us tick_max=2us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:06:15.589Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=72 bytes=4718592 errors=0 avg_us=7594 p50_us=7706 max_us=20730 wdisk ops=72 bytes=4718592 errors=0 avg_us=7538 p50_us=7659 max_us=19859
+2026-10-12T04:06:18.369Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=4194353 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=160 inbox_bytes=0 inbox_hi=4194708 rejected=12982 recv_rejected=402
+2026-10-12T04:06:18.370Z raft-obs: tx->0 enq=959 drop=0 sent=956 fail=0 hi=1 rtt_avg=119us get_avg=1us get_max=0ms
+2026-10-12T04:06:18.370Z raft-obs: tx->1 enq=5492 drop=0 sent=4785 fail=0 hi=1 rtt_avg=108us get_avg=0us get_max=0ms
+2026-10-12T04:06:18.370Z raft-obs: wait_timeouts=0 pump_hold_max=283us lock_wait_max=2us drain_max=281us tick_max=2us apply_max=0us persist_max=7us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:06:20.205Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=299 passes=81 sampled=0 pending=0,0 reap=0,0 removed=8 file_bytes=557056 payload_bytes=524288 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:06:20.592Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=72 bytes=4718592 errors=0 avg_us=7594 p50_us=7706 max_us=20730 wdisk ops=72 bytes=4718592 errors=0 avg_us=7538 p50_us=7659 max_us=19859
+2026-10-12T04:06:23.370Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=4194353 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=160 inbox_bytes=0 inbox_hi=4194708 rejected=15126 recv_rejected=520
+2026-10-12T04:06:23.370Z raft-obs: tx->0 enq=1016 drop=0 sent=1013 fail=0 hi=1 rtt_avg=121us get_avg=1us get_max=0ms
+2026-10-12T04:06:23.370Z raft-obs: tx->1 enq=5633 drop=0 sent=4926 fail=0 hi=1 rtt_avg=109us get_avg=0us get_max=0ms
+2026-10-12T04:06:23.370Z raft-obs: wait_timeouts=0 pump_hold_max=222us lock_wait_max=4us drain_max=221us tick_max=5us apply_max=0us persist_max=5us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:06:25.597Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=72 bytes=4718592 errors=0 avg_us=7594 p50_us=7706 max_us=20730 wdisk ops=72 bytes=4718592 errors=0 avg_us=7538 p50_us=7659 max_us=19859
+2026-10-12T04:06:28.370Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=4194353 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=160 inbox_bytes=0 inbox_hi=4194708 rejected=17272 recv_rejected=638
+2026-10-12T04:06:28.370Z raft-obs: tx->0 enq=1071 drop=0 sent=1068 fail=0 hi=1 rtt_avg=122us get_avg=1us get_max=0ms
+2026-10-12T04:06:28.370Z raft-obs: tx->1 enq=5768 drop=0 sent=5061 fail=0 hi=1 rtt_avg=109us get_avg=0us get_max=0ms
+2026-10-12T04:06:28.370Z raft-obs: wait_timeouts=0 pump_hold_max=319us lock_wait_max=3us drain_max=318us tick_max=22us apply_max=0us persist_max=3us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:06:30.599Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=72 bytes=4718592 errors=0 avg_us=7594 p50_us=7706 max_us=20730 wdisk ops=72 bytes=4718592 errors=0 avg_us=7538 p50_us=7659 max_us=19859
+2026-10-12T04:06:33.374Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=4194353 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=160 inbox_bytes=0 inbox_hi=4194708 rejected=19410 recv_rejected=766
+2026-10-12T04:06:33.374Z raft-obs: tx->0 enq=1141 drop=0 sent=1138 fail=0 hi=1 rtt_avg=124us get_avg=1us get_max=0ms
+2026-10-12T04:06:33.374Z raft-obs: tx->1 enq=5897 drop=0 sent=5190 fail=0 hi=1 rtt_avg=111us get_avg=0us get_max=0ms
+2026-10-12T04:06:33.374Z raft-obs: wait_timeouts=0 pump_hold_max=321us lock_wait_max=2us drain_max=320us tick_max=4us apply_max=0us persist_max=12us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:06:35.600Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=72 bytes=4718592 errors=0 avg_us=7594 p50_us=7706 max_us=20730 wdisk ops=72 bytes=4718592 errors=0 avg_us=7538 p50_us=7659 max_us=19859
+2026-10-12T04:06:36.208Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=223 passes=97 sampled=0 pending=0,0 reap=0,0 removed=8 file_bytes=557056 payload_bytes=524288 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:06:38.378Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=4194353 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=160 inbox_bytes=0 inbox_hi=4194708 rejected=21594 recv_rejected=892
+2026-10-12T04:06:38.378Z raft-obs: tx->0 enq=1204 drop=0 sent=1201 fail=0 hi=1 rtt_avg=121us get_avg=1us get_max=0ms
+2026-10-12T04:06:38.378Z raft-obs: tx->1 enq=6053 drop=0 sent=5346 fail=0 hi=1 rtt_avg=109us get_avg=0us get_max=0ms
+2026-10-12T04:06:38.378Z raft-obs: wait_timeouts=0 pump_hold_max=182us lock_wait_max=8us drain_max=182us tick_max=11us apply_max=0us persist_max=6us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:06:40.604Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=72 bytes=4718592 errors=0 avg_us=7594 p50_us=7706 max_us=20730 wdisk ops=72 bytes=4718592 errors=0 avg_us=7538 p50_us=7659 max_us=19859
+2026-10-12T04:06:43.380Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=4194353 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=160 inbox_bytes=0 inbox_hi=4194708 rejected=23814 recv_rejected=1034
+2026-10-12T04:06:43.380Z raft-obs: tx->0 enq=1291 drop=0 sent=1288 fail=0 hi=1 rtt_avg=117us get_avg=0us get_max=0ms
+2026-10-12T04:06:43.380Z raft-obs: tx->1 enq=6195 drop=0 sent=5488 fail=0 hi=1 rtt_avg=108us get_avg=0us get_max=0ms
+2026-10-12T04:06:43.380Z raft-obs: wait_timeouts=0 pump_hold_max=247us lock_wait_max=6us drain_max=246us tick_max=2us apply_max=0us persist_max=3us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:06:45.606Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=72 bytes=4718592 errors=0 avg_us=7594 p50_us=7706 max_us=20730 wdisk ops=72 bytes=4718592 errors=0 avg_us=7538 p50_us=7659 max_us=19859
+2026-10-12T04:06:48.382Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=4194353 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=160 inbox_bytes=0 inbox_hi=4194708 rejected=26004 recv_rejected=1160
+2026-10-12T04:06:48.382Z raft-obs: tx->0 enq=1373 drop=0 sent=1370 fail=0 hi=1 rtt_avg=114us get_avg=0us get_max=0ms
+2026-10-12T04:06:48.382Z raft-obs: tx->1 enq=6348 drop=0 sent=5641 fail=0 hi=1 rtt_avg=106us get_avg=0us get_max=0ms
+2026-10-12T04:06:48.382Z raft-obs: wait_timeouts=0 pump_hold_max=130us lock_wait_max=1us drain_max=129us tick_max=14us apply_max=0us persist_max=6us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:06:50.607Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=72 bytes=4718592 errors=0 avg_us=7594 p50_us=7706 max_us=20730 wdisk ops=72 bytes=4718592 errors=0 avg_us=7538 p50_us=7659 max_us=19859
+2026-10-12T04:06:52.210Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=163 passes=113 sampled=0 pending=0,0 reap=0,0 removed=8 file_bytes=557056 payload_bytes=524288 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:06:53.384Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=4194353 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=160 inbox_bytes=0 inbox_hi=4194708 rejected=28212 recv_rejected=1304
+2026-10-12T04:06:53.384Z raft-obs: tx->0 enq=1457 drop=0 sent=1454 fail=0 hi=1 rtt_avg=110us get_avg=0us get_max=0ms
+2026-10-12T04:06:53.384Z raft-obs: tx->1 enq=6491 drop=0 sent=5784 fail=0 hi=1 rtt_avg=105us get_avg=0us get_max=0ms
+2026-10-12T04:06:53.384Z raft-obs: wait_timeouts=0 pump_hold_max=146us lock_wait_max=1us drain_max=145us tick_max=2us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:06:55.609Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=72 bytes=4718592 errors=0 avg_us=7594 p50_us=7706 max_us=20730 wdisk ops=72 bytes=4718592 errors=0 avg_us=7538 p50_us=7659 max_us=19859
+2026-10-12T04:06:58.388Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=4194353 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=160 inbox_bytes=0 inbox_hi=4194708 rejected=30404 recv_rejected=1432
+2026-10-12T04:06:58.388Z raft-obs: tx->0 enq=1529 drop=0 sent=1526 fail=0 hi=1 rtt_avg=107us get_avg=0us get_max=0ms
+2026-10-12T04:06:58.388Z raft-obs: tx->1 enq=6645 drop=0 sent=5938 fail=0 hi=1 rtt_avg=104us get_avg=0us get_max=0ms
+2026-10-12T04:06:58.388Z raft-obs: wait_timeouts=0 pump_hold_max=146us lock_wait_max=8us drain_max=145us tick_max=8us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:00.612Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=72 bytes=4718592 errors=0 avg_us=7594 p50_us=7706 max_us=20730 wdisk ops=72 bytes=4718592 errors=0 avg_us=7538 p50_us=7659 max_us=19859
+2026-10-12T04:07:03.388Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=4194353 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=160 inbox_bytes=0 inbox_hi=4194708 rejected=32596 recv_rejected=1572
+2026-10-12T04:07:03.388Z raft-obs: tx->0 enq=1606 drop=0 sent=1603 fail=0 hi=1 rtt_avg=105us get_avg=0us get_max=0ms
+2026-10-12T04:07:03.388Z raft-obs: tx->1 enq=6790 drop=0 sent=6083 fail=0 hi=1 rtt_avg=102us get_avg=0us get_max=0ms
+2026-10-12T04:07:03.388Z raft-obs: wait_timeouts=0 pump_hold_max=120us lock_wait_max=9us drain_max=120us tick_max=7us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:05.613Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=72 bytes=4718592 errors=0 avg_us=7594 p50_us=7706 max_us=20730 wdisk ops=72 bytes=4718592 errors=0 avg_us=7538 p50_us=7659 max_us=19859
+2026-10-12T04:07:08.212Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=100 passes=129 sampled=0 pending=0,0 reap=0,0 removed=8 file_bytes=557056 payload_bytes=524288 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:07:08.389Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=4194353 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=160 inbox_bytes=0 inbox_hi=4194708 rejected=34728 recv_rejected=1662
+2026-10-12T04:07:08.389Z raft-obs: tx->0 enq=1660 drop=0 sent=1657 fail=0 hi=1 rtt_avg=103us get_avg=0us get_max=0ms
+2026-10-12T04:07:08.389Z raft-obs: tx->1 enq=6898 drop=0 sent=6191 fail=0 hi=1 rtt_avg=102us get_avg=0us get_max=0ms
+2026-10-12T04:07:08.389Z raft-obs: wait_timeouts=0 pump_hold_max=105us lock_wait_max=1us drain_max=105us tick_max=4us apply_max=0us persist_max=2us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:09.034Z raft-snap: import start group=0 incl=2304
+2026-10-12T04:07:10.617Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=72 bytes=4718592 errors=0 avg_us=7594 p50_us=7706 max_us=20730 wdisk ops=72 bytes=4718592 errors=0 avg_us=7538 p50_us=7659 max_us=19859
+2026-10-12T04:07:13.390Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=4194353 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=240 inbox_bytes=0 inbox_hi=4194708 rejected=148212 recv_rejected=1710
+2026-10-12T04:07:13.390Z raft-obs: tx->0 enq=1716 drop=0 sent=1713 fail=0 hi=1 rtt_avg=101us get_avg=0us get_max=0ms
+2026-10-12T04:07:13.390Z raft-obs: tx->1 enq=63029 drop=0 sent=62322 fail=0 hi=2 rtt_avg=23us get_avg=0us get_max=0ms
+2026-10-12T04:07:13.390Z raft-obs: wait_timeouts=0 pump_hold_max=30399us lock_wait_max=6us drain_max=30398us tick_max=11us apply_max=0us persist_max=4us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:15.619Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=72 bytes=4718592 errors=0 avg_us=7594 p50_us=7706 max_us=20730 wdisk ops=72 bytes=4718592 errors=0 avg_us=7538 p50_us=7659 max_us=19859
+2026-10-12T04:07:16.100Z kv-fault: compactor released
+2026-10-12T04:07:16.100Z kv-compact: start l0=516 inputs=257 range=270 l0only=0
+2026-10-12T04:07:16.741Z kv-compact: end bytes=16777552 ms=641 l0=259 l1=1 rc=0
+2026-10-12T04:07:16.741Z kv-compact: start l0=259 inputs=257 range=510 l0only=0
+2026-10-12T04:07:16.741Z raft-snap: import flush group=0 rc=0 ms=7707
+2026-10-12T04:07:16.804Z raft-snap: import export group=0 rc=0 ms=7769
+2026-10-12T04:07:16.821Z raft-snap: import diff group=0 rc=0 n=152 ms=7787
+2026-10-12T04:07:16.836Z kv-compact: end bytes=64 ms=95 l0=2 l1=2 rc=0
+2026-10-12T04:07:16.836Z kv-compact: start l0=2 inputs=1 range=1 l0only=0
+2026-10-12T04:07:16.836Z raft-host: applied session index=3 kind=1 shard=0 ino=0
+2026-10-12T04:07:16.836Z raft-host: applied session index=5 kind=1 shard=0 ino=0
+2026-10-12T04:07:16.875Z kv-compact: end bytes=188 ms=39 l0=1 l1=3 rc=0
+2026-10-12T04:07:17.004Z kv-compact: start l0=6 inputs=2 range=270 l0only=0
+2026-10-12T04:07:17.029Z raft-host: gc-pass ms=127 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:07:17.088Z kv-compact: end bytes=16777552 ms=84 l0=5 l1=3 rc=0
+2026-10-12T04:07:17.088Z kv-compact: start l0=5 inputs=2 range=1 l0only=0
+2026-10-12T04:07:17.123Z kv-compact: end bytes=15032 ms=35 l0=4 l1=3 rc=0
+2026-10-12T04:07:17.123Z kv-compact: start l0=4 inputs=1 range=258 l0only=0
+2026-10-12T04:07:17.168Z kv-compact: end bytes=8164 ms=45 l0=3 l1=4 rc=0
+2026-10-12T04:07:17.268Z kv-compact: start l0=5 inputs=2 range=270 l0only=0
+2026-10-12T04:07:17.336Z kv-compact: end bytes=16777552 ms=68 l0=4 l1=4 rc=0
+2026-10-12T04:07:17.336Z kv-compact: start l0=4 inputs=1 range=269 l0only=0
+2026-10-12T04:07:17.374Z kv-compact: end bytes=1060 ms=37 l0=3 l1=5 rc=0
+2026-10-12T04:07:17.473Z kv-compact: start l0=5 inputs=2 range=270 l0only=0
+2026-10-12T04:07:17.542Z kv-compact: end bytes=16777552 ms=69 l0=4 l1=5 rc=0
+2026-10-12T04:07:17.542Z kv-compact: start l0=4 inputs=4 range=510 l0only=0
+2026-10-12T04:07:17.579Z kv-compact: end bytes=64 ms=37 l0=1 l1=5 rc=0
+2026-10-12T04:07:17.824Z kv-compact: start l0=5 inputs=3 range=270 l0only=0
+2026-10-12T04:07:17.891Z kv-compact: end bytes=16777552 ms=67 l0=3 l1=5 rc=0
+2026-10-12T04:07:18.003Z kv-compact: start l0=5 inputs=2 range=270 l0only=0
+2026-10-12T04:07:18.069Z kv-compact: end bytes=16777552 ms=66 l0=4 l1=5 rc=0
+2026-10-12T04:07:18.069Z kv-compact: start l0=4 inputs=4 range=510 l0only=0
+2026-10-12T04:07:18.106Z kv-compact: end bytes=64 ms=37 l0=1 l1=5 rc=0
+2026-10-12T04:07:18.346Z kv-compact: start l0=5 inputs=3 range=270 l0only=0
+2026-10-12T04:07:18.412Z kv-compact: end bytes=16777552 ms=66 l0=3 l1=5 rc=0
+2026-10-12T04:07:18.427Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=31464795 proposal_n=0 proposal_bytes=0 outbox_bytes=160 outbox_hi=400 inbox_bytes=1048677 inbox_hi=6292222 rejected=243932 recv_rejected=1750
+2026-10-12T04:07:18.427Z raft-obs: tx->0 enq=1790 drop=0 sent=1783 fail=0 hi=1 rtt_avg=99us get_avg=0us get_max=0ms
+2026-10-12T04:07:18.427Z raft-obs: tx->1 enq=110644 drop=0 sent=109925 fail=0 hi=4 rtt_avg=19us get_avg=0us get_max=0ms
+2026-10-12T04:07:18.427Z raft-obs: wait_timeouts=0 pump_hold_max=154401us lock_wait_max=4us drain_max=154400us tick_max=5us apply_max=49323us persist_max=14710us applies_in_worst=36 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:18.427Z kv-obs: mt_bytes=2097343 l0_bytes=84 l0=3 l1=5
+2026-10-12T04:07:18.527Z kv-compact: start l0=5 inputs=2 range=270 l0only=0
+2026-10-12T04:07:18.595Z kv-compact: end bytes=16777552 ms=68 l0=4 l1=5 rc=0
+2026-10-12T04:07:18.596Z kv-compact: start l0=4 inputs=4 range=510 l0only=0
+2026-10-12T04:07:18.633Z kv-compact: end bytes=64 ms=37 l0=1 l1=5 rc=0
+2026-10-12T04:07:18.872Z kv-compact: start l0=5 inputs=3 range=270 l0only=0
+2026-10-12T04:07:18.936Z kv-compact: end bytes=16777552 ms=64 l0=3 l1=5 rc=0
+2026-10-12T04:07:19.044Z kv-compact: start l0=5 inputs=2 range=270 l0only=0
+2026-10-12T04:07:19.116Z kv-compact: end bytes=16777552 ms=72 l0=4 l1=5 rc=0
+2026-10-12T04:07:19.116Z kv-compact: start l0=4 inputs=4 range=510 l0only=0
+2026-10-12T04:07:19.152Z kv-compact: end bytes=64 ms=36 l0=1 l1=5 rc=0
+2026-10-12T04:07:19.391Z kv-compact: start l0=5 inputs=3 range=270 l0only=0
+2026-10-12T04:07:19.461Z kv-compact: end bytes=16777552 ms=70 l0=3 l1=5 rc=0
+2026-10-12T04:07:19.576Z kv-compact: start l0=5 inputs=2 range=270 l0only=0
+2026-10-12T04:07:19.643Z kv-compact: end bytes=16777552 ms=67 l0=4 l1=5 rc=0
+2026-10-12T04:07:19.643Z kv-compact: start l0=4 inputs=4 range=510 l0only=0
+2026-10-12T04:07:19.678Z kv-compact: end bytes=64 ms=35 l0=1 l1=5 rc=0
+2026-10-12T04:07:19.918Z kv-compact: start l0=5 inputs=3 range=270 l0only=0
+2026-10-12T04:07:19.987Z kv-compact: end bytes=16777552 ms=70 l0=3 l1=5 rc=0
+2026-10-12T04:07:20.098Z kv-compact: start l0=5 inputs=2 range=270 l0only=0
+2026-10-12T04:07:20.098Z raft-host: gc-pass ms=49 orphan=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:07:20.154Z kv-compact: end bytes=16777552 ms=56 l0=4 l1=5 rc=0
+2026-10-12T04:07:20.154Z kv-compact: start l0=4 inputs=4 range=510 l0only=0
+2026-10-12T04:07:20.186Z kv-compact: end bytes=64 ms=32 l0=1 l1=5 rc=0
+2026-10-12T04:07:20.337Z raft-host: applied session index=2373 kind=1 shard=0 ino=0
+2026-10-12T04:07:20.620Z iostats: get ops=16 bytes=1048576 errors=0 avg_us=3478 p50_us=3316 max_us=6700 put ops=72 bytes=4718592 errors=0 avg_us=7594 p50_us=7706 max_us=20730 wdisk ops=72 bytes=4718592 errors=0 avg_us=7538 p50_us=7659 max_us=19859
+2026-10-12T04:07:21.773Z storage-engine=files direct_io=on
+2026-10-12T04:07:21.773Z Data GC admission: experimental
+2026-10-12T04:07:21.774Z Loaded 3 persisted cluster node(s) from /home/efs/nuc-28-qualification/results/live-extra/production-cap-pressure/n3/meta/cluster_nodes.bin
+2026-10-12T04:07:21.774Z   persisted node 1: 127.0.0.1:25400
+2026-10-12T04:07:21.774Z   persisted node 2: 127.0.0.1:25401
+2026-10-12T04:07:21.774Z   persisted node 3: 127.0.0.1:25402
+2026-10-12T04:07:21.775Z Storage quota: explicit 4.00 GiB (safe maximum 252.38 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T04:07:52.069Z No HELLO_ACK from peer 127.0.0.1:25400 (timeout or disconnect)
+2026-10-12T04:07:52.069Z Could not join cluster at 127.0.0.1:25400; starting as standalone and retrying in background
+2026-10-12T04:07:52.069Z heartbeat: enabled (2000 ms interval)
+2026-10-12T04:07:52.309Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-12T04:07:52.309Z raft-host: up raft_id=2 n=3 boot=1559813329068208 salt=6382470772315371812 g0=hosted g2=hosted
+2026-10-12T04:07:52.309Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:46:34Z on nuc), build=28b2089b-release-fault: node 3 listening on 127.0.0.1:25402, storage=/home/efs/nuc-28-qualification/results/live-extra/production-cap-pressure/n3 (1 paths, stripe=none), used=4194304, quota=4294967296, direct_io=on, writers=0 shared
+2026-10-12T04:07:52.309Z raft-obs: g0 term 0->1 role FOLLOWER->FOLLOWER leader=-1 commit=2447 applied=2447 t=1791778072309ms
+2026-10-12T04:07:52.309Z raft-obs: g2 term 0->1 role FOLLOWER->FOLLOWER leader=-1 commit=38 applied=38 t=1791778072309ms
+2026-10-12T04:07:52.309Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.309Z raft-obs: wait_timeouts=0 pump_hold_max=3us lock_wait_max=2us drain_max=3us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.309Z kv-obs: mt_bytes=7357 l0_bytes=20 l0=1 l1=5
+2026-10-12T04:07:52.314Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.314Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=0us tick_max=1us apply_max=0us persist_max=3us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.319Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.319Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=0us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.324Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.330Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.335Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.335Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.340Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.345Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.345Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=0us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.350Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.355Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.360Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.360Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.365Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.370Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.370Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.375Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.381Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.381Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=0us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.386Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.386Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=0us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.391Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.391Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.396Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.396Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.401Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.401Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.406Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.411Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.411Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=0us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.416Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.416Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.421Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.421Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.426Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.426Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.432Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.432Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.437Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.437Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.442Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.442Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.447Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.447Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.452Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.452Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.457Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.457Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=2us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.462Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.462Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=2us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.467Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.467Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.473Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.473Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.478Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.478Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.483Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.483Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.488Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.488Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.493Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.493Z raft-obs: wait_timeouts=0 pump_hold_max=3us lock_wait_max=0us drain_max=2us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.498Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.498Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.503Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.503Z raft-obs: wait_timeouts=0 pump_hold_max=3us lock_wait_max=1us drain_max=1us tick_max=2us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.508Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.508Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.513Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.514Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=2us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.519Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.519Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.524Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.524Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.529Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.529Z raft-obs: wait_timeouts=0 pump_hold_max=3us lock_wait_max=1us drain_max=2us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.534Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.534Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.539Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.539Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.544Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.544Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.549Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.549Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.554Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.554Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.559Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.560Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.565Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.565Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.570Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.570Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.575Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.575Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.580Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.580Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.585Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.585Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.590Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.590Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.595Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.595Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.600Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.600Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.605Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.605Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.611Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.611Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.616Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.616Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.621Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.621Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.626Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.626Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.631Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.631Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=0us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.636Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.636Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.641Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.641Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.646Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.646Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.651Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.651Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.657Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.657Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.662Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.662Z raft-obs: wait_timeouts=0 pump_hold_max=3us lock_wait_max=1us drain_max=2us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.667Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.667Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.672Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.672Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.677Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.677Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.682Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.682Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.687Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.687Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=0us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.692Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.697Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.697Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.703Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.703Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.708Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.708Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.713Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.713Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.718Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.718Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.723Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.723Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.728Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.728Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.733Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.733Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.738Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.738Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=2us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.743Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.743Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.749Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.749Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.754Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.754Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.759Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.759Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.764Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.764Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=2us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.769Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.769Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.774Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.774Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.779Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.779Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.784Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.784Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.789Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.789Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.795Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.795Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.800Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.800Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.805Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.805Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.810Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.810Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.815Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.815Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.820Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.820Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.825Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.825Z raft-obs: wait_timeouts=0 pump_hold_max=3us lock_wait_max=1us drain_max=2us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.830Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.830Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.835Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.835Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.840Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.841Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.846Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.846Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.851Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.851Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=2us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.856Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.856Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.861Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.861Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.866Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.866Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.871Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.871Z raft-obs: wait_timeouts=0 pump_hold_max=3us lock_wait_max=0us drain_max=2us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.876Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.876Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.881Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.881Z raft-obs: wait_timeouts=0 pump_hold_max=3us lock_wait_max=0us drain_max=1us tick_max=2us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.887Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.887Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=0us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.892Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.892Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=0us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.897Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.897Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=0us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.902Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.902Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.907Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.907Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=0us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.912Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.912Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.917Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.917Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.922Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.922Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.927Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.927Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.933Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.933Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.938Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.938Z raft-obs: wait_timeouts=0 pump_hold_max=3us lock_wait_max=1us drain_max=2us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.943Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=0 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.943Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:52.959Z raft-obs: g0 term 1->2 role FOLLOWER->CANDIDATE leader=-1 commit=2447 applied=2447 t=1791778072959ms
+2026-10-12T04:07:52.959Z pressure-obs: pending_n=0 pending_bytes=0 pending_work=0 log_bytes=71315691 proposal_n=0 proposal_bytes=0 outbox_bytes=0 outbox_hi=160 inbox_bytes=0 inbox_hi=0 rejected=0 recv_rejected=0
+2026-10-12T04:07:52.959Z raft-obs: tx->0 enq=1 drop=0 sent=0 fail=0 hi=1 rtt_avg=0us get_avg=0us get_max=0ms
+2026-10-12T04:07:52.959Z raft-obs: tx->1 enq=1 drop=0 sent=0 fail=0 hi=1 rtt_avg=0us get_avg=0us get_max=0ms
+2026-10-12T04:07:52.959Z raft-obs: wait_timeouts=0 pump_hold_max=11027us lock_wait_max=0us drain_max=1us tick_max=11026us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-12T04:07:53.092Z raft-obs: g2 term 1->2 role FOLLOWER->CANDIDATE leader=-1 commit=38 applied=38 t=1791778073092ms
+2026-10-12T04:07:53.606Z raft-obs: g2 term 2->3 role CANDIDATE->CANDIDATE leader=-1 commit=38 applied=38 t=1791778073606ms
+2026-10-12T04:07:53.800Z raft-obs: g0 term 2->3 role CANDIDATE->CANDIDATE leader=-1 commit=2447 applied=2447 t=1791778073800ms
+2026-10-12T04:07:54.069Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=756 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:07:54.193Z raft-obs: g2 term 3->4 role CANDIDATE->CANDIDATE leader=-1 commit=38 applied=38 t=1791778074193ms
+2026-10-12T04:07:54.667Z raft-obs: g0 term 3->4 role CANDIDATE->CANDIDATE leader=-1 commit=2447 applied=2447 t=1791778074667ms
+2026-10-12T04:07:54.787Z raft-obs: g2 term 4->4 role CANDIDATE->LEADER leader=2 commit=38 applied=38 t=1791778074787ms
+2026-10-12T04:07:54.788Z raft-obs: g0 term 4->4 role CANDIDATE->LEADER leader=2 commit=2447 applied=2447 t=1791778074788ms
+2026-10-12T04:07:55.263Z raft-host: applied session index=40 kind=1 shard=0 ino=0
+2026-10-12T04:07:55.373Z raft-host: gc-pass ms=52 orphan=51 reap=0 frag=0 spread=0 recover=0 fscans=2 fsegs=1 fkeys=0 femit=0 ftomb=0 scans=14 segs=15 keys=602 emit=506 tomb=96 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T04:07:55.382Z iostats: get ops=2 bytes=131072 errors=0 avg_us=774 p50_us=906 max_us=906 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0

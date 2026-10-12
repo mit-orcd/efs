@@ -1,0 +1,28 @@
+Evidence directory: /home/efs/nuc-28-qualification/results/live-extra/cursor-replay-buffered/gc-buffered-3e_1fdwu
+node 1 listening PASS
+node 2 listening PASS
+node 4 listening PASS
+node 3 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=5606363144373040028
+client serving PASS
+checkpoint follower initial apply PASS
+checkpoint follower applied all retained-tail mutations PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 310503 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 4 listening PASS
+node 3 listening PASS
+client serving PASS
+cold checkpoint follower replay PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 310717 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 4 listening PASS
+node 3 listening PASS
+client serving PASS
+checkpoint replay deletion queues drained PASS
+retained applied-marker tail: cold rename/link/mode/truncate/delete and exact payload replay PASS

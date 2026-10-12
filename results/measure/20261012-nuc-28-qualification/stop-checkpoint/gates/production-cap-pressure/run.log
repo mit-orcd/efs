@@ -1,0 +1,13 @@
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 386885 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 388807 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 389028 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+production-cap follower observation confirmed; memory/lag/recovery bounds remain separate gates
+483 TSV observations match every raw JSON field; unavailable counters remain NA
+2112 acknowledged 1 MiB writes; real 1 GiB follower L0 cap; healthy quorum; InstallSnapshot recovery; three cold exact-value oracles; FUSE oracle=True
+

@@ -1,0 +1,16 @@
+2026-10-12T04:11:35.400Z storage-engine=files direct_io=on
+2026-10-12T04:11:35.400Z Data GC admission: experimental
+2026-10-12T04:11:35.401Z Loaded 3 persisted cluster node(s) from /home/efs/nuc-28-qualification/results/private-work/efs-checkpoint-fault-d1cd3rgv/n1/meta/cluster_nodes.bin
+2026-10-12T04:11:35.401Z   persisted node 1: 127.0.0.1:22430
+2026-10-12T04:11:35.401Z   persisted node 2: 127.0.0.1:22431
+2026-10-12T04:11:35.401Z   persisted node 3: 127.0.0.1:22432
+2026-10-12T04:11:35.401Z Storage quota: automatic 252.36 GiB (safe maximum 252.36 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T04:11:35.409Z Joined cluster with 3 nodes
+2026-10-12T04:11:35.412Z heartbeat: enabled (2000 ms interval)
+2026-10-12T04:11:35.424Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-12T04:11:35.424Z raft-host: up raft_id=1 n=3 boot=1951853648395891 salt=15701863617585741731 g0=hosted g2=hosted
+2026-10-12T04:11:35.424Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:46:04Z on nuc), build=28b2089b-release-normal: node 2 listening on 127.0.0.1:22431, storage=/home/efs/nuc-28-qualification/results/private-work/efs-checkpoint-fault-d1cd3rgv/n1 (1 paths, stripe=none), used=0, quota=270974218547, direct_io=on, writers=4 shared
+2026-10-12T04:11:35.424Z kv-obs: mt_bytes=915 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:11:36.686Z raft-host: kv wal fsync failed at pump release
+2026-10-12T04:11:36.686Z raft-host: applied checkpoint not advanced after persistence failure
+2026-10-12T04:11:37.157Z raft-host: shutdown durability failed; checkpoint retained

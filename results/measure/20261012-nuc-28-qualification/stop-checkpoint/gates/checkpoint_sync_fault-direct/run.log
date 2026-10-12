@@ -1,0 +1,2 @@
+Evidence: /home/efs/nuc-28-qualification/results/private-work/efs-checkpoint-fault-d1cd3rgv
+PASS: KV EIO cannot advance pump/shutdown checkpoints; retained Raft replay restores cold acknowledged inode

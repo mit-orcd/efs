@@ -1,0 +1,25 @@
+2026-10-12T04:11:42.178Z storage-engine=files direct_io=on
+2026-10-12T04:11:42.178Z Data GC admission: experimental
+2026-10-12T04:11:42.178Z Loaded 4 persisted cluster node(s) from /home/efs/nuc-28-qualification/results/live-extra/publication-pending-direct/n1/meta/cluster_nodes.bin
+2026-10-12T04:11:42.178Z   persisted node 1: 127.0.0.1:25000
+2026-10-12T04:11:42.178Z   persisted node 2: 127.0.0.1:25001
+2026-10-12T04:11:42.178Z   persisted node 3: 127.0.0.1:25002
+2026-10-12T04:11:42.178Z   persisted node 4: 127.0.0.1:25003
+2026-10-12T04:11:42.178Z Storage quota: explicit 1.00 GiB (safe maximum 252.35 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T04:11:42.178Z Trying to rejoin via persisted peer 127.0.0.1:25001 (node 2)...
+2026-10-12T04:11:42.178Z Cannot connect to peer 127.0.0.1:25001
+2026-10-12T04:11:42.178Z Failed to rejoin via 127.0.0.1:25001
+2026-10-12T04:11:42.178Z Trying to rejoin via persisted peer 127.0.0.1:25002 (node 3)...
+2026-10-12T04:11:42.178Z Cannot connect to peer 127.0.0.1:25002
+2026-10-12T04:11:42.178Z Failed to rejoin via 127.0.0.1:25002
+2026-10-12T04:11:42.178Z Trying to rejoin via persisted peer 127.0.0.1:25003 (node 4)...
+2026-10-12T04:11:42.178Z Cannot connect to peer 127.0.0.1:25003
+2026-10-12T04:11:42.178Z Failed to rejoin via 127.0.0.1:25003
+2026-10-12T04:11:42.178Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-12T04:11:42.178Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-12T04:11:42.178Z heartbeat: enabled (2000 ms interval)
+2026-10-12T04:11:42.187Z raft-host: up raft_id=0 n=4 boot=1949989736295840 salt=6709281944322407836 g0=hosted g2=off
+2026-10-12T04:11:42.187Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:46:34Z on nuc), build=28b2089b-release-fault: node 1 listening on 127.0.0.1:25000, storage=/home/efs/nuc-28-qualification/results/live-extra/publication-pending-direct/n1 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=0 shared
+2026-10-12T04:11:42.187Z kv-obs: mt_bytes=2114 l0_bytes=0 l0=0 l1=0
+2026-10-12T04:11:44.179Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=985 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T04:11:45.607Z raft-host: apply publish rc=-14 index=12 ino=4097 ci=0 why=0 span=0+0 exp=0 base_n=0

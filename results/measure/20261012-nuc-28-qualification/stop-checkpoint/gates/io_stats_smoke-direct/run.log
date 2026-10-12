@@ -1,0 +1,15 @@
+io-stats 127.0.0.1:60229 uptime_s=0
+  get_chunk  ops=2 bytes=65536 errors=1 us_sum=519 avg_us=259 p50_us=480 max_us=480
+  put_chunk  ops=1 bytes=65536 errors=0 us_sum=5432 avg_us=5432 p50_us=5432 max_us=5432
+  disk_write ops=1 bytes=65536 errors=0 us_sum=4891 avg_us=4891 p50_us=4891 max_us=4891
+  disk_read  ops=2 bytes=65536 errors=1 us_sum=369 avg_us=184 p50_us=357 max_us=357
+  gc_delete  ops=2 bytes=0 errors=0 us_sum=2442 avg_us=1221 p50_us=2401 max_us=2401
+node=1 stage=0 group=0 exports=1 passes=1 elapsed_ms=0 last_pass_age_ms=95 last_delete_age_ms=7
+data_usage_bytes=0 removed_fragments=1 unlinked_file_bytes=69632 reclaimed_payload_bytes=65536 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0
+group=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615
+group=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615
+gc_io=checksum_read ops=1 bytes=32 errors=0 us_sum=105 avg_us=105
+gc_io=unlink ops=1 bytes=0 errors=0 us_sum=46 avg_us=46
+gc_io=dir_sync ops=2 bytes=0 errors=0 us_sum=2213 avg_us=1106
+
+I/O stats: real PUT/GET, missing read, GC retry and single physical removal PASS

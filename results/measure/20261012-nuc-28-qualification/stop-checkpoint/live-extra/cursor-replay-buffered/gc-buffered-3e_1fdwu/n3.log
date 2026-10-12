@@ -1,0 +1,55 @@
+2026-10-12T03:57:20.937Z storage-engine=files direct_io=off
+2026-10-12T03:57:20.937Z Data GC admission: experimental
+2026-10-12T03:57:20.937Z Storage quota: explicit 1.00 GiB (safe maximum 253.59 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T03:57:20.945Z Joined cluster with 4 nodes
+2026-10-12T03:57:20.949Z heartbeat: enabled (2000 ms interval)
+2026-10-12T03:57:20.964Z raft-host: up raft_id=2 n=4 boot=1361248582766231 salt=3449855708230094206 g0=hosted g2=hosted
+2026-10-12T03:57:20.964Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:46:04Z on nuc), build=28b2089b-release-normal: node 3 listening on 127.0.0.1:24212, storage=/home/efs/nuc-28-qualification/results/live-extra/cursor-replay-buffered/gc-buffered-ravhj2zo/n3 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-12T03:57:20.964Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:57:21.068Z query-restore: rc=-3 backend=disk
+2026-10-12T03:57:21.086Z query-publish: generation=1 g0=1 g2=1 rebuilt=4096 refolded=0 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=20 root_rc=-3 files=0 dirs=0 logical=0
+2026-10-12T03:57:22.949Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=977 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:57:24.502Z raft-host: applied session index=3 kind=1 shard=0 ino=0
+2026-10-12T03:57:24.536Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=6625 p50_us=6625 max_us=6625 wdisk ops=1 bytes=65536 errors=0 avg_us=6472 p50_us=6472 max_us=6472
+2026-10-12T03:57:25.967Z kv-obs: mt_bytes=9196 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:57:26.264Z query-publish: generation=2 g0=108 g2=2 rebuilt=3 refolded=7 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=70 root_rc=0 files=9 dirs=1 logical=8223
+2026-10-12T03:57:30.863Z storage-engine=files direct_io=off
+2026-10-12T03:57:30.863Z Data GC admission: experimental
+2026-10-12T03:57:30.863Z Loaded 4 persisted cluster node(s) from /home/efs/nuc-28-qualification/results/live-extra/cursor-replay-buffered/gc-buffered-ravhj2zo/n3/meta/cluster_nodes.bin
+2026-10-12T03:57:30.863Z   persisted node 1: 127.0.0.1:24210
+2026-10-12T03:57:30.863Z   persisted node 2: 127.0.0.1:24211
+2026-10-12T03:57:30.863Z   persisted node 4: 127.0.0.1:24213
+2026-10-12T03:57:30.863Z   persisted node 3: 127.0.0.1:24212
+2026-10-12T03:57:30.865Z Storage quota: explicit 1.00 GiB (safe maximum 253.58 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T03:57:30.888Z Joined cluster with 4 nodes
+2026-10-12T03:57:30.892Z heartbeat: enabled (2000 ms interval)
+2026-10-12T03:57:30.898Z raft-host: up raft_id=2 n=4 boot=1362661851458526 salt=14010020603951588919 g0=hosted g2=hosted
+2026-10-12T03:57:30.899Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:46:04Z on nuc), build=28b2089b-release-normal: node 3 listening on 127.0.0.1:24212, storage=/home/efs/nuc-28-qualification/results/live-extra/cursor-replay-buffered/gc-buffered-ravhj2zo/n3 (1 paths, stripe=none), used=786432, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-12T03:57:30.899Z kv-obs: mt_bytes=25937 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:57:31.029Z query-catchup: rc=0 backend=disk
+2026-10-12T03:57:31.029Z query-restore: rc=0 backend=disk
+2026-10-12T03:57:31.035Z query-publish: generation=1 g0=225 g2=3 rebuilt=1 refolded=5 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=34 root_rc=0 files=17 dirs=1 logical=16459
+2026-10-12T03:57:32.892Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=988 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:57:34.398Z raft-host: applied session index=4 kind=1 shard=0 ino=0
+2026-10-12T03:57:34.416Z iostats: get ops=1 bytes=65536 errors=0 avg_us=102 p50_us=102 max_us=102 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T03:57:38.787Z storage-engine=files direct_io=off
+2026-10-12T03:57:38.787Z Data GC admission: experimental
+2026-10-12T03:57:38.787Z Loaded 4 persisted cluster node(s) from /home/efs/nuc-28-qualification/results/live-extra/cursor-replay-buffered/gc-buffered-ravhj2zo/n3/meta/cluster_nodes.bin
+2026-10-12T03:57:38.787Z   persisted node 1: 127.0.0.1:24210
+2026-10-12T03:57:38.787Z   persisted node 2: 127.0.0.1:24211
+2026-10-12T03:57:38.787Z   persisted node 4: 127.0.0.1:24213
+2026-10-12T03:57:38.787Z   persisted node 3: 127.0.0.1:24212
+2026-10-12T03:57:38.788Z Storage quota: explicit 1.00 GiB (safe maximum 253.57 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T03:57:38.808Z Joined cluster with 4 nodes
+2026-10-12T03:57:38.812Z heartbeat: enabled (2000 ms interval)
+2026-10-12T03:57:38.817Z raft-host: up raft_id=2 n=4 boot=1362661851458527 salt=6372517950769806906 g0=hosted g2=hosted
+2026-10-12T03:57:38.817Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:46:04Z on nuc), build=28b2089b-release-normal: node 3 listening on 127.0.0.1:24212, storage=/home/efs/nuc-28-qualification/results/live-extra/cursor-replay-buffered/gc-buffered-ravhj2zo/n3 (1 paths, stripe=none), used=786432, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-12T03:57:38.817Z kv-obs: mt_bytes=28048 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:57:38.931Z query-catchup: rc=0 backend=disk
+2026-10-12T03:57:38.931Z query-restore: rc=0 backend=disk
+2026-10-12T03:57:38.937Z query-publish: generation=1 g0=277 g2=6 rebuilt=0 refolded=0 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=16 root_rc=0 files=17 dirs=1 logical=16459
+2026-10-12T03:57:40.812Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=987 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:57:42.316Z raft-host: applied session index=281 kind=1 shard=0 ino=0
+2026-10-12T03:57:43.818Z kv-obs: mt_bytes=31416 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:57:44.383Z query-publish: generation=2 g0=361 g2=6 rebuilt=2 refolded=1 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=38 root_rc=0 files=0 dirs=0 logical=0
+2026-10-12T03:57:45.998Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0

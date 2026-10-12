@@ -1,0 +1,20 @@
+2026-10-12T04:11:35.299Z storage-engine=files direct_io=on
+2026-10-12T04:11:35.299Z Data GC admission: experimental
+2026-10-12T04:11:35.299Z Loaded 3 persisted cluster node(s) from /home/efs/nuc-28-qualification/results/private-work/efs-checkpoint-fault-d1cd3rgv/n0/meta/cluster_nodes.bin
+2026-10-12T04:11:35.299Z   persisted node 1: 127.0.0.1:22430
+2026-10-12T04:11:35.299Z   persisted node 2: 127.0.0.1:22431
+2026-10-12T04:11:35.299Z   persisted node 3: 127.0.0.1:22432
+2026-10-12T04:11:35.299Z Storage quota: automatic 252.36 GiB (safe maximum 252.36 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T04:11:35.299Z Trying to rejoin via persisted peer 127.0.0.1:22431 (node 2)...
+2026-10-12T04:11:35.299Z Cannot connect to peer 127.0.0.1:22431
+2026-10-12T04:11:35.299Z Failed to rejoin via 127.0.0.1:22431
+2026-10-12T04:11:35.299Z Trying to rejoin via persisted peer 127.0.0.1:22432 (node 3)...
+2026-10-12T04:11:35.299Z Cannot connect to peer 127.0.0.1:22432
+2026-10-12T04:11:35.299Z Failed to rejoin via 127.0.0.1:22432
+2026-10-12T04:11:35.299Z Could not rejoin any of the 2 persisted peer(s)
+2026-10-12T04:11:35.299Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-12T04:11:35.300Z heartbeat: enabled (2000 ms interval)
+2026-10-12T04:11:35.310Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-12T04:11:35.310Z raft-host: up raft_id=0 n=3 boot=1951905231389194 salt=17902092523955607587 g0=hosted g2=hosted
+2026-10-12T04:11:35.310Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:46:04Z on nuc), build=28b2089b-release-normal: node 1 listening on 127.0.0.1:22430, storage=/home/efs/nuc-28-qualification/results/private-work/efs-checkpoint-fault-d1cd3rgv/n0 (1 paths, stripe=none), used=0, quota=270972419379, direct_io=on, writers=4 shared
+2026-10-12T04:11:35.310Z kv-obs: mt_bytes=915 l0_bytes=0 l0=0 l1=0

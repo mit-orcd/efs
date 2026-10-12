@@ -1,0 +1,9 @@
+2026-10-12T04:11:34.269Z storage-engine=files direct_io=on
+2026-10-12T04:11:34.269Z Data GC admission: experimental
+2026-10-12T04:11:34.269Z Storage quota: automatic 252.37 GiB (safe maximum 252.37 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T04:11:34.277Z Joined cluster with 3 nodes
+2026-10-12T04:11:34.285Z heartbeat: enabled (2000 ms interval)
+2026-10-12T04:11:34.298Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-12T04:11:34.298Z raft-host: up raft_id=2 n=3 boot=1949160529330402 salt=904518620642892196 g0=hosted g2=hosted
+2026-10-12T04:11:34.298Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:46:04Z on nuc), build=28b2089b-release-normal: node 3 listening on 127.0.0.1:22432, storage=/home/efs/nuc-28-qualification/results/private-work/efs-checkpoint-fault-d1cd3rgv/n2 (1 paths, stripe=none), used=0, quota=270981067571, direct_io=on, writers=4 shared
+2026-10-12T04:11:34.298Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
