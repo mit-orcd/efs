@@ -1,0 +1,9 @@
+2026-10-12T02:08:39.070Z storage-engine=files direct_io=off
+2026-10-12T02:08:39.071Z Data GC admission: disabled
+2026-10-12T02:08:39.071Z Storage quota: explicit 1.00 GiB (safe maximum 494.23 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T02:08:39.076Z Joined cluster with 4 nodes
+2026-10-12T02:08:39.079Z heartbeat: enabled (2000 ms interval)
+2026-10-12T02:08:39.088Z raft-host: up raft_id=3 n=4 boot=9907764870250790 salt=16843119804168889248 g0=off g2=hosted
+2026-10-12T02:08:39.088Z efsd v0.3.0-pre-alpha-c2bfb9e9 (branch release-v0.3.0-pre-alpha, built 2026-10-12T01:55:00Z on intel2), build=c2bfb9e9-release-fault: node 4 listening on 127.0.0.1:31013, storage=/home/efs/additional-work-dir/gc-buffered-3t5a001w/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-12T02:08:39.088Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T02:08:41.079Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=987 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
