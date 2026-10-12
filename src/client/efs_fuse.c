@@ -1793,7 +1793,7 @@ static int efs_fuse_readdir_ino(fuse_ino_t ino, struct readdir_collect_arg *col,
         rc = efs_client_rpc_readdir_cur(g_client.export_id, parent.ino,
                                         ents, &n, &src, name_cur, &done);
         if (rc != 0)
-            return (rc == EFS_ERR_NOT_FOUND) ? -ENOENT : -EIO;
+            return fuse_stat_errno(rc);
         if (readdir_collect_page(col, ents, n) != 0)
             return -ENOMEM;
         if (n == 0 && !done)
