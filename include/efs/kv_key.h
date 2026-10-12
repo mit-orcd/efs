@@ -11,6 +11,8 @@
 #define EFS_KV_SHARD_BITS 12
 #define EFS_KV_SHARD_MASK 0xFFFu
 #define EFS_KV_KEY_MAX    320
+#define EFS_KV_KIND_REPAIR_JOB 40 /* staged group-anchor / job UUID: durable debt */
+#define EFS_KV_KIND_REPAIR_FLOOR 41 /* terminal job UUID/epoch revocation; retained */
 #define EFS_KV_KIND_PACK_STREAM 37 /* group/session/sequence: immutable admission */
 #define EFS_KV_KIND_PACK_FLOOR 38 /* group/session: durable shared-upload replay floor */
 #define EFS_KV_KIND_PACK_READER 39 /* group anchor: monotonic reader capability */

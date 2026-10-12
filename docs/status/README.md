@@ -2,7 +2,7 @@
 
 ## v0.3.0-pre-alpha release integration
 
-**Packing and repair fixes and affected testing RESUMED** by the human's October 12 reply, “Resume fixes and affected testing.” Intel owns packing, NUC repair, AMD review/integration and affected reruns. Original qualification failures on frozen `28b2089b` remain unchanged; the unfinished original matrix is not automatically restarted. No fixed-source acceptance is claimed yet. See [execution ledger](amd-all-suites-20261011.md). `devel` and `main` have not been advanced; no tag or push.
+**Packing and repair fixes and affected testing RESUMED** by the human's October 12 reply, “Resume fixes and affected testing.” Intel owns packing, NUC repair, AMD review/integration and affected reruns. Original qualification failures on frozen `28b2089b` remain unchanged; the unfinished original matrix is not automatically restarted. Corrected inactive repair-journal prerequisite passes independent AMD build and focused regressions; physical repair and packing fixed-source acceptance remain unproven. See [execution ledger](amd-all-suites-20261011.md). `devel` and `main` have not been advanced; no tag or push.
 
 Previous qualification source: `410afed433b6da093bdc2acf37bec253ddbd586c`, corrected packaging-v2 (1,563 files, 52 directories). The new AMD all-suite run explicitly freezes `28b2089b`; its verdicts are recorded separately. Later integration/documentation commits are not new execution identities. AMD full normal/fault native, 20 focused sanitizer and fully sanitized real-LSM catalog/audit gates PASS. Fixed mounted CREATE three-stage/cold ownership and targeted query diagnosis remain NOTRUN centrally.
 

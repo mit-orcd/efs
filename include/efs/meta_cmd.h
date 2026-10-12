@@ -27,6 +27,7 @@
 #define EFS_MD_REQ_PACK_STATUS 46 /* same manifest, fresh authority only */
 /* Exact single-shard APPEND image envelope; no replica-local EOF selection. */
 #define EFS_MD_APPEND_COMPLETE_ATOMIC_LEN 101u
+#define EFS_MD_CMD_REPAIR_JOB 55 /* staged: op1, canonical job244, arg4; no RPC/worker admission */
 #define EFS_MD_CMD_APPEND_COMPLETE_ATOMIC 54 /* ino/gen/offset/UUID/epoch/content epoch/reservation: 101 bytes */
 #define EFS_MD_CMD_APPEND_ATOMIC 53
 #define EFS_MD_CMD_QUERY_POLICY 43 /* expected version:8, mask:4 */
