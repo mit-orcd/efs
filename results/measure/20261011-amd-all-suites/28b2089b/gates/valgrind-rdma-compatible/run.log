@@ -1,0 +1,17 @@
+[leaks] mode=direct transport=auto; evidence retained at /tmp/efs-all-28b2089b-vg-rdma-compatible
+[leaks] building (after any rsync --delete) ...
+[leaks] phase 1: unit tests under valgrind
+[leaks] phase 1: units SKIP — caller reuses its separate unchanged-source unit verdict
+[leaks] phase 2: efsd under valgrind (3-node raft group, efs-bench workload)
+[leaks] efsd: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] phase 3: efs-fuse under valgrind (mini-POSIX through the mount)
+[leaks] efs-fuse: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] phase 4: efsd + efs-fuse over RDMA (10.0.0.206)
+tests/valgrind_leaks.sh: line 1: 1767556 Killed                     EFS_MD_RAFT_N=3 EFS_TRANSPORT=tcp setsid ./efsd --node-id "$id" --addr "$ADDR" --port "$port" --storage "$STORAGE/s$id" --quota 1G --writers 0 "$IO_FLAG" $join > "$out" 2>&1 < /dev/null
+tests/valgrind_leaks.sh: line 1: 1767569 Killed                     EFS_MD_RAFT_N=3 EFS_TRANSPORT=tcp setsid ./efsd --node-id "$id" --addr "$ADDR" --port "$port" --storage "$STORAGE/s$id" --quota 1G --writers 0 "$IO_FLAG" $join > "$out" 2>&1 < /dev/null
+tests/valgrind_leaks.sh: line 1: 1767583 Killed                     EFS_MD_RAFT_N=3 EFS_TRANSPORT=tcp setsid ./efsd --node-id "$id" --addr "$ADDR" --port "$port" --storage "$STORAGE/s$id" --quota 1G --writers 0 "$IO_FLAG" $join > "$out" 2>&1 < /dev/null
+[leaks]   RDMA transport up (upgrade exercised)
+[leaks] efs-fuse/rdma: definite=0B indirect=0B (uninit/invalid skipped: ibverbs/DMA)
+[leaks] efsd/rdma: definite=0B indirect=0B (uninit/invalid skipped: ibverbs/DMA)
+
+[leaks] PASS memory gates in selected mode; separately recorded SKIPs remain SKIP

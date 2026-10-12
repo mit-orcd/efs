@@ -1,0 +1,3 @@
+query-disk: unlinked directory ino=36864004096 parent=1 nlink=2
+query-disk: build-failed rc=-1 initial=1 index_ms=174 stats_ms=175 persist_ms=0 rebuilt=4096 refolded=3004 rows=3004
+query disk: RAM oracle, external sort, bounded metadata, retained snapshot, rename and cancellation PASS

@@ -18,3 +18,14 @@ node 2 listening PASS
 node 3 listening PASS
 node 4 listening PASS
 client serving PASS
+sustained cold bytes and physical deletion drained PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 1752672 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+post-pressure cold write and physical deletion drained PASS
+overload acknowledged-byte recovery and physical reclamation PASS; refused I/O remains in verdict

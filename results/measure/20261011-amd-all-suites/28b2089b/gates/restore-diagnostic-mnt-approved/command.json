@@ -1,0 +1,10 @@
+{
+  "name": "restore-diagnostic-mnt-approved",
+  "command": [
+    "/data1/efs/src/scripts/client.sh",
+    "127.0.0.1:17432",
+    "/data1/efs/mnt"
+  ],
+  "source": "28b2089be6a5df835cc7bb46b9c2a9e2f10df190",
+  "started": "2026-10-12T04:14:08Z"
+}

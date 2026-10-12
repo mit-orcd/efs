@@ -1,0 +1,8 @@
+Note: legacy label 'vgtest' is ignored; initializes the single cluster export.
+raft-mkfs rc=-15 leader_hint=-1 index=0 salt=13536468650098073039
+Note: legacy label 'vgtest' is ignored; initializes the single cluster export.
+raft-mkfs rc=0 leader_hint=1 index=2 salt=13536468650098073039
+Note: legacy label 'vgtest' is ignored; initializes the single cluster export.
+raft-mkfs rc=-15 leader_hint=-1 index=0 salt=9537613915059319512
+Note: legacy label 'vgtest' is ignored; initializes the single cluster export.
+raft-mkfs rc=0 leader_hint=0 index=2 salt=9537613915059319512

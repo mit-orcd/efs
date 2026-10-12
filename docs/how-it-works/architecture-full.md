@@ -2155,6 +2155,8 @@ Diagnostic follow-up preserves original stop exceptions while guaranteeing obser
 
 Release scope is now true-defect testing/fixing only. The next shared candidate restores pre-b239 scheduling and quarantines the unproven retry optimization; all fixes/fences/diagnostics retained. Diagnostic eligibility is historical, not active policy. All owners must qualify the same immutable candidate after safe drain/restoration. [Exact inverse and remaining gates](../status/v030-query-stage-diagnostic-20261012.md#defect-only-shared-candidate-optimization-quarantined).
 
+- [NUC repair gap: source trace, initial-scope fencing dependencies and strict protection gates](../status/nuc-repair-gap-design-20261012.md) — W74 remains open; no repaired-protection claim.
+
 
 ## Appendix 2 — In flight — the current handoff block
 

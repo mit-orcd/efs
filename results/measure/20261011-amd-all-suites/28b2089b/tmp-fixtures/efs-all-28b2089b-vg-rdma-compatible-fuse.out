@@ -1,0 +1,12 @@
+2026-10-12T04:10:47.718Z efs-fuse: legacy export label 'vgtest' is ignored; mounting the single export 'default' (id=1)
+2026-10-12T04:10:47.742Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T04:06:04Z on amd-395), build=28b2089b-release-valgrind-compatible: starting export=default mount=/tmp/efs-all-28b2089b-vg-rdma-compatible/mnt
+2026-10-12T04:10:47.766Z Discovered 3 cluster nodes from 127.0.0.1:26320
+2026-10-12T04:10:47.766Z   node id=1 127.0.0.1:26320
+2026-10-12T04:10:47.766Z   node id=2 127.0.0.1:26321
+2026-10-12T04:10:47.766Z   node id=3 127.0.0.1:26322
+2026-10-12T04:10:47.766Z fetching metadata...
+2026-10-12T04:10:47.770Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T04:10:47.770Z export id=1 name=default
+2026-10-12T04:10:47.773Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T04:10:47.810Z efs-fuse: workers max=10 idle=10
+2026-10-12T04:10:47.842Z fuse serving

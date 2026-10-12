@@ -1,0 +1,28 @@
+efs: CQ moderation off failed errno=0
+efsd: RDMA transport up on rxe0 port 1 (lid 0)
+efs: RDMA transport up on rxe0 port 1 (lid 0, 4 recv + up to 32 lazy send slots, 84 KiB each)
+PASS: rdma xprt (rdma=67 tcp_big=1 frames=68)
+raft-mkfs rc=0 leader_hint=1 index=2 salt=11590776028975745361
+Stop with: /data1/efs/release-v030-28b2089b/scripts/client.sh stop /tmp/efs-rdma-28b2089b-gid1/gate-rdma-0oK4Ym/mnt
+Logging efs-fuse to /tmp/efs-rdma-28b2089b-gid1/gate-rdma-0oK4Ym/efs-fuse-mnt.log
+Mounted /tmp/efs-rdma-28b2089b-gid1/gate-rdma-0oK4Ym/mnt
+Stop with: /data1/efs/release-v030-28b2089b/scripts/client.sh stop /tmp/efs-rdma-28b2089b-gid1/gate-rdma-0oK4Ym/mnt2
+Logging efs-fuse to /tmp/efs-rdma-28b2089b-gid1/gate-rdma-0oK4Ym/efs-fuse-mnt2.log
+Mounted /tmp/efs-rdma-28b2089b-gid1/gate-rdma-0oK4Ym/mnt2
+pass err_chdir_into_file             
+pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 216/216 pass, 0 fail, 0 skip, 0 notrun  (13.5s)
+wrote /tmp/efs-rdma-28b2089b-gid1/gate-rdma-0oK4Ym/posix.tsv
+pass peer_fcntl_range_adjacent       
+pass peer_mtime_no_regress           
+============================================================
+POSIX 2-client: 67/67 pass, 0 fail  (5.4s)
+wrote /tmp/efs-rdma-28b2089b-gid1/gate-rdma-0oK4Ym/posix2.tsv
+Evidence: /tmp/efs-rdma-28b2089b-gid1/gate-rdma-0oK4Ym
+Unmounting /tmp/efs-rdma-28b2089b-gid1/gate-rdma-0oK4Ym/mnt
+Retiring drained efs-fuse PID 1762806 for /tmp/efs-rdma-28b2089b-gid1/gate-rdma-0oK4Ym/mnt
+Unmounted /tmp/efs-rdma-28b2089b-gid1/gate-rdma-0oK4Ym/mnt
+Unmounting /tmp/efs-rdma-28b2089b-gid1/gate-rdma-0oK4Ym/mnt2
+Retiring drained efs-fuse PID 1762842 for /tmp/efs-rdma-28b2089b-gid1/gate-rdma-0oK4Ym/mnt2
+Unmounted /tmp/efs-rdma-28b2089b-gid1/gate-rdma-0oK4Ym/mnt2

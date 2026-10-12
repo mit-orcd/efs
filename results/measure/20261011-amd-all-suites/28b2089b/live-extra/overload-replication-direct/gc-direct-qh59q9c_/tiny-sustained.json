@@ -2422,6 +2422,9 @@
   "cold_acknowledged_tiny": 512,
   "cold_acknowledged_large_bytes": 67108864,
   "cold_verified": true,
-  "physical_inventory_empty": false,
-  "cold_recovery_wall_s": 12.873512499034405
+  "physical_inventory_empty": true,
+  "cold_recovery_wall_s": 12.873512499034405,
+  "gc_drain_wall_s": 32.87138485000469,
+  "gc_drain_deadline_s": 180,
+  "post_pressure_cold_write_verified": true
 }

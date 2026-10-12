@@ -1,0 +1,19 @@
+Cluster nodes (4):
+  node 1: 127.0.0.1:27432  up  used=12.69 MiB  quota=2.00 GiB (0.6%)  storage(1):
+      /tmp/efs-rdma-28b2089b-gid1/gate-rdma-0oK4Ym/n1
+  node 2: 127.0.0.1:27433  up  used=15.56 MiB  quota=2.00 GiB (0.8%)  storage(1):
+      /tmp/efs-rdma-28b2089b-gid1/gate-rdma-0oK4Ym/n2
+  node 3: 127.0.0.1:27434  up  used=12.19 MiB  quota=2.00 GiB (0.6%)  storage(1):
+      /tmp/efs-rdma-28b2089b-gid1/gate-rdma-0oK4Ym/n3
+  node 4: 127.0.0.1:27435  up  used=13.94 MiB  quota=2.00 GiB (0.7%)  storage(1):
+      /tmp/efs-rdma-28b2089b-gid1/gate-rdma-0oK4Ym/n4
+Usable (2+1 logical): used=36.25 MiB  free=5.30 GiB  capacity=5.33 GiB (0.7%; filesystem capacity)
+Usable bytes: used=38010880 free=5688612180 capacity=5726623060
+Cluster state: OK (4 up, 0 down)
+Versions: efsd (no git metadata, branch unknown, built 2026-10-12T03:56:43Z on amd-395) — 4/4 identical
+Node 127.0.0.1:27432 state: active
+Heal:
+  node 1: idle
+  node 2: idle
+  node 3: idle
+  node 4: idle

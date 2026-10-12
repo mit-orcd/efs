@@ -1,0 +1,1 @@
+indexed fault gates: four publication barriers, ten short-write/ENOSPC boundaries, sticky failure, read-only recovery, inventory errors and GC-sync failure PASS

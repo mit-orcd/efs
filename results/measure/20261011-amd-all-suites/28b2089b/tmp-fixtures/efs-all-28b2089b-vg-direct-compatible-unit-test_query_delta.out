@@ -1,0 +1,8 @@
+files=6000 delta=1023 refolded=1023 rebuilt=1 stats_ms=242.398
+files=6000 delta=1024 refolded=1024 rebuilt=1 stats_ms=225.985
+files=6000 delta=1025 refolded=1025 rebuilt=1 stats_ms=223.654
+files=6000 delta=4096 refolded=4096 rebuilt=1 stats_ms=585.916
+phase=create refolded=2049 tree_files=8048
+phase=delete refolded=1 tree_files=6000
+removed subtree: refolded=1 unrelated_files=6000
+query large delta: PASS
