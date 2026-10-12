@@ -3110,6 +3110,8 @@ subsequent loss, durable debt across restart and authority changes, and safe
 profile cutover while writers remain active. Retain actual configured RF/EC
 and permanent-loss evidence. Coordinate with W66 metadata topology.
 
+**October 12 implementation checkpoint:** corrected inactive durable job/floor journal, separate repair storage certificate domain, GC-scheduled admission refusal and fresh readonly job authority are integrated on the release branch. Full normal/fault native suites pass exact `b2593687` on AMD; focused journal cold/WAL EIO/bounds and storage-fence tests also pass. No receiver, worker or live GC hook is enabled, and no physically restored protection is claimed. The named-temp atomic writer remains excluded pending crash-safe anonymous staging; initial physical scope is ordinary missing fragments on one files storage root. Packed objects, containers, multiple roots, corrupt replacement, spare placement and profile cutover remain unsupported. Both original repair GAPs stay open. See [current repair investigation](../status/nuc-repair-gap-design-20261012.md) and [source-specific execution ledger](../status/amd-all-suites-20261011.md).
+
 **Forbidden:** counting returning/empty nodes as restored fragments, calling
 GC or metadata snapshot recovery repair, advertising D36 as implemented, or
 replacing the accepted four-node target with a five-node minimum/f=3 ladder.
