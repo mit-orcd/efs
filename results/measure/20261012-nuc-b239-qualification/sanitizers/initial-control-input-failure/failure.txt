@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/data1/efs/nuc-b239-qualification/sanitizers.py", line 25, in <module>
+    assert "sent[i]=='N'" in (out/'fold-old-control.log').read_text(), 'old source must fail overwrite byte assertion'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: old source must fail overwrite byte assertion

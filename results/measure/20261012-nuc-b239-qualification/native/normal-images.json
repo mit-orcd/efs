@@ -1,0 +1,22 @@
+{
+  "efsd": {
+    "sha256": "313b48fe4ea7e863ca167b14877777a0a9784ca4fb7e635ee3b192fe878832a4",
+    "version": "efsd b239dc7de104-release-normal (branch approved-merged, built 2026-10-12T01:19:57Z on nuc)\n"
+  },
+  "efs-fuse": {
+    "sha256": "74ca45dcd94c2c9650a9e15c848e84fabee267b21b6b5a067a70550a74c3fed7",
+    "version": "efs-fuse b239dc7de104-release-normal (branch approved-merged, built 2026-10-12T01:19:57Z on nuc)\n"
+  },
+  "efs-mgmt": {
+    "sha256": "b4729fc1680795833da78ae98d6fc22584e4e343a4e46fbc689c3a9e3f3f9ba8",
+    "version": "efs-mgmt b239dc7de104-release-normal (branch approved-merged, built 2026-10-12T01:19:57Z on nuc)\n"
+  },
+  "efs-query": {
+    "sha256": "4604a74608ba1baa77e4418828b60e97d945de14c42be05780a811dfaa2b3dc9",
+    "version": "efs-query b239dc7de104-release-normal (branch approved-merged, built 2026-10-12T01:19:57Z on nuc)\n"
+  },
+  "efs-bench": {
+    "sha256": "e7b0d5b8264cb9853bc5a0967615716c132870ec05d81fb65af5a4c41f5e6199",
+    "version": "efs-bench b239dc7de104-release-normal (branch approved-merged, built 2026-10-12T01:19:57Z on nuc)\n"
+  }
+}

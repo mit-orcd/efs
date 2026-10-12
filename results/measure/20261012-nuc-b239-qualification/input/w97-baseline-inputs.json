@@ -1,0 +1,10 @@
+{
+  "src/server/store.c": {
+    "approved_sha256": "db90eee4de205208d05da02a846a224e165f01c384f420a71a23d7dbfe263863",
+    "baseline_sha256": "f0f3dcc466e4ccef995661b92a71b79f5950a25781c7f85ecd8d9771393ad7de"
+  },
+  "tests/test_store_durability.c": {
+    "approved_sha256": "e620cf6c6eaa3dd145527d553d580e36d07452d6f49b0ff5b4841d6fd7cb9c83",
+    "baseline_sha256": "81796be25d7bd89f8a58bfde21a6037288322a190fe7431853313a145d5c00aa"
+  }
+}
