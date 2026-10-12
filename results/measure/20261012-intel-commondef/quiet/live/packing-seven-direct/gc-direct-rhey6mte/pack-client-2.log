@@ -1,0 +1,31 @@
+2026-10-12T12:54:03.404Z efs-fuse (no git metadata, branch qualification-v030-tcp-direct, built 2026-10-12T12:52:49Z on intel1), build=def46109909c793e58ae2c453c5de537cdb2c627: starting export=default mount=/tmp/efs-intel-commondef-20261012-intel1_efs/temp/efs-pack-client-2-u830zycc
+2026-10-12T12:54:03.405Z Discovered 4 cluster nodes from 127.0.0.1:34510
+2026-10-12T12:54:03.405Z   node id=1 127.0.0.1:34510
+2026-10-12T12:54:03.405Z   node id=2 127.0.0.1:34511
+2026-10-12T12:54:03.405Z   node id=3 127.0.0.1:34512
+2026-10-12T12:54:03.405Z   node id=4 127.0.0.1:34513
+2026-10-12T12:54:03.405Z fetching metadata...
+2026-10-12T12:54:03.405Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T12:54:03.405Z export id=1 name=default
+2026-10-12T12:54:03.405Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T12:54:03.410Z efs-fuse: workers max=10 idle=10
+2026-10-12T12:54:03.417Z fuse serving
+2026-10-12T12:54:08.864Z fsync-split ino=5696 flush_ms=693 report_ms=0 rc=0
+2026-10-12T12:54:08.955Z efs: read hole ino=6693 ci=1 holes=1
+2026-10-12T12:54:11.159Z efs: read hole ino=5314 ci=0 holes=2
+2026-10-12T12:54:15.915Z efs: rename_at 1984/a -> 1984/b rc=-12 after 1 tries
+2026-10-12T12:54:33.268Z fsync-split ino=15052 flush_ms=455 report_ms=0 rc=0
+2026-10-12T12:54:42.460Z inode-rpc: slow-ok type=45 attempts=1 saw_busy=0 status=0 us=1358808
+2026-10-12T12:54:43.663Z inode-rpc: slow-ok type=45 attempts=2 saw_busy=1 status=0 us=1128142
+2026-10-12T12:54:47.232Z inode-rpc: slow-ok type=67 attempts=3 saw_busy=1 status=0 us=1133268
+2026-10-12T12:54:54.801Z fsync-split ino=4527 flush_ms=500 report_ms=0 rc=0
+2026-10-12T12:54:55.489Z fsync-split ino=10455 flush_ms=389 report_ms=0 rc=0
+2026-10-12T12:55:15.442Z fsync-split ino=6366 flush_ms=335 report_ms=0 rc=0
+2026-10-12T12:55:16.844Z fsync-split ino=7794 flush_ms=101 report_ms=0 rc=0
+2026-10-12T12:55:17.150Z efs: read hole ino=5593 ci=5 holes=3
+2026-10-12T12:55:17.313Z inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=1177337
+2026-10-12T12:55:17.950Z fsync-split ino=7794 flush_ms=165 report_ms=0 rc=0
+2026-10-12T12:55:18.588Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1173941
+2026-10-12T12:55:21.892Z efs: read hole ino=11850 ci=1 holes=12
+2026-10-12T12:55:24.807Z fsync-split ino=4893 flush_ms=527 report_ms=0 rc=0
+2026-10-12T12:55:24.919Z fsync-split ino=4297 flush_ms=280 report_ms=0 rc=0
