@@ -1,9 +1,9 @@
-# Agent handoff — AMD qualification resumed
+# Agent handoff — AMD checkpoint awaiting authority clarification
 
 [Status index](README.md) · [Decisions](decisions.md) ·
 [Architecture](../how-it-works/architecture.md)
 
-**Current state:** direct human reply on October 12 authorizes resumed packing/repair fixes and affected testing. Intel owns packing, NUC repair, AMD review/integration on `release-v0.3.0-pre-alpha` and affected tests. Preserve frozen `28b2089b` failures and prior stop checkpoints. Do not automatically restart the unfinished original matrix. No push, tag, promotion or default repair activation. See [execution ledger](amd-all-suites-20261011.md).
+**Current state:** resumed fixes have reached a checkpoint; further launches are provisionally paused because Intel reports a newer direct human “Document, commit, and stop” answer. Root requested scope clarification. Release2ecd00f9 remains tested normal/fault; private read-progress candidatea9f158ce passes build/affected regressions but is excluded. Scheduler17quietFAIL remains excluded. NUC repair GC race/lock correction is being checkpointed, not activated. Original AMD services/mounts intact, no owned private screens. No push/tag/promotion. See [execution ledger](amd-all-suites-20261011.md#latest-private-packing-checkpoint--october-12).
 
 ## Superseded assignments and evidence (before human stop)
 
@@ -216,3 +216,6 @@ Subsequent human authority permits packing-timeout and repair-gap implementation
 
 
 **Latest authority — October 12:** human explicitly replied “Resume fixes and affected testing.” This supersedes the preceding stop for coordinated fixes and affected reruns. Both owners acknowledged. Intel investigates completed-read-round starvation; NUC submitted corrected inactive journal checkpoint `8af41a1e`, pending AMD review. Actual repaired-fragment/cold/second-loss proof remains required.
+
+
+**Subsequent authority conflict — October12:** Intel reports a newer direct stop answer; root requested whether it applies here and paused launches pending clarification. This checkpoint supersedes the preceding running task description, not original immutable verdicts.

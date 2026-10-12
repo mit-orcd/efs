@@ -151,3 +151,36 @@ Independent exactdd40eee0 allbuild and affected receiver/receipt/journal/identit
 A separate private seven-client/jobs16 run enables EFS_QUERY_STAGE_TRACE while retaining original budgets. Capable nodes return root-catalog-absent/request-root-authority/page-consumeBUSY for newly created roots; repeated transaction-cut revision changes prevent refresh while namespace traffic remains active. Observed n3:71 invalidated cuts/max55ms; n2:69/max15ms, intent/decision/guard activity. This is a measured publication-progress cause, not permission to relax the fence: post-pin barriers protect against missing asynchronous transaction participants. Need deterministic cut-closure proof/regressions (missing participants, prepare/decision/resolve crossings, imports and new-root lineage) before changing capture. Physical64 fixture alreadyPASS separately; live POSIX failures remainFAIL. Intel provided readonly review but declines further launches pending its own chat stop/resume reply; AMD investigation and NUC repair continue under root human resume.
 
 Combined inactive receiver implementation2b216427 full normal/faultnative rerun at exact94bd2e52 **PASS exit0**; raw logs and counts retained in results/measure/20261012-release-native/94bd2e52/verdict.json. No active receiver RPC or physical-restoration proof. New private17d218d7 experiment combines excluded corrected read-completion with historical bounded cut-only200ms retry; original b239 historicalquietFAIL remains, candidate unintegrated. This combination has different foreground behavior and needs fresh original-budget quiet acceptance, not inherited gates.
+
+
+### Latest private packing checkpoint — October 12
+
+Combined scheduler17d218d7 original-budget quiet run **FAIL1**: six clients211/2/1/7,
+client5 210/3/1/7 (PASS/FAIL/SKIP/NOTRUN). Stats/find fail everywhere; deep fails
+on client5. Peer67/67 and acknowledged cold bytesPASS. Global packed-empty
+remains confounded by retained live POSIX trees. [Compact evidence](../../results/measure/20261012-packing-review/quiet-17d218d7/README.md).
+Candidate remains excluded; no repeated unchanged scheduler trial planned.
+
+Private a9f158ce, based4e without scheduler17, fixes a reproduced moving-own-apply
+read target using two bounded proof records. Before-change regressionFAIL at the
+intended assertion; fullbuild and affected actual Raft normal/earlyACK plus actual
+completion/coherent-publication regressionsPASS0. [Evidence and limits](../../results/measure/20261012-packing-review/a9f158ce/README.md).
+Mounted original-budget acceptance, sanitizers and broader context invalidation
+review remain pending; no release integration. NUC confirmed the reviewed potential
+GC/ReadIndex/session-stripe lock cycle and is checkpointing a nonblocking correction;
+its latest stages remain excluded pending review/distributed acceptance.
+
+Intel reports a newer direct human “Document, commit, and stop” answer. Root has
+paused further launches and asked whether that supersedes this chat's resume.
+Already executing AMD tests completed; no owned screen/private fixture remains.
+Original four AMD daemon PIDs1072884/1072921/1072964/1073011 and both production
+mounts remain present. Release HEAD2ecd00f9 full-native proof is unchanged; source
+hash-check logs for94bd2e52 retained alongside that exact execution evidence.
+
+NUC stopped/checkpointed6faf3ebe: fresh proof outside inode WR, nonblocking local
+both-anchor debt recheck under WR, durable death/delete held through completion.
+Owner reports build/receiver/store/defaultfanout/adapter and actual physical
+late-DATA buffered/direct racePASS (STALE,zero receipt,no resurrection).
+Actual quorum PUT + SESSION_FENCE_LOC + GC overlap, priorDATA/journal cancellation
+and restored redundancy remainNOTRUN. No149/default activation; four original
+NUC daemons and both original mounts preserved. This stage is not root-integrated.
