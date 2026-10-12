@@ -3894,11 +3894,8 @@ static void read_prof_tick(void)
  * arrive while a round is in flight share the NEXT round (never the one
  * already sent: a commit between its send and this reader's arrival
  * would be missed), so any number of concurrent followers' reads cost
- * two leader RPCs per round trip. A two-RPC window lets the next fresh
- * admission reach the leader before the older network round returns. Caller
- * threads own these RPCs; there are no detached workers. Results publish only
- * in increasing admission order; an older late response cannot overwrite the
- * newer proof/error. Each caller keeps its own deadline. */
+ * two leader RPCs per round trip. Errors are shared by that round's
+ * waiters; each caller keeps its own deadline. */
 struct host_ri_coal {
     pthread_mutex_t mu;
     pthread_cond_t cv;
@@ -3934,10 +3931,6 @@ static int host_remote_read_index(struct efs_raft_host *h, uint8_t group,
     }
     c = &g_ri_coal[group >> 1];
     pthread_mutex_lock(&c->mu);
-    if (c->started == UINT64_MAX) {
-        pthread_mutex_unlock(&c->mu);
-        return EFS_ERR_BUSY;
-    }
     need = c->started + 1;
     for (;;) {
         if (c->finished >= need) {
@@ -3947,22 +3940,20 @@ static int host_remote_read_index(struct efs_raft_host *h, uint8_t group,
             pthread_mutex_unlock(&c->mu);
             return rc;
         }
-        if (c->inflight < 2) {
+        if (!c->inflight) {
             struct efs_msg_raft_mkfs_reply rep;
             uint64_t round = ++c->started;
 
-            c->inflight++;
+            c->inflight = 1;
             pthread_mutex_unlock(&c->mu);
             memset(&rep, 0, sizeof(rep));
             rc = host_remote_cmd(h, group, NULL, 0, &rep, leader);
             pthread_mutex_lock(&c->mu);
-            c->inflight--;
-            if (round > c->finished) {
-                c->finished = round;
-                c->last_rc = rc;
-                c->last_idx = rc == EFS_OK ? rep.index : 0;
-                c->last_hint = rc == EFS_OK ? rep.leader_hint : -1;
-            }
+            c->inflight = 0;
+            c->finished = round;
+            c->last_rc = rc;
+            c->last_idx = rc == EFS_OK ? rep.index : 0;
+            c->last_hint = rc == EFS_OK ? rep.leader_hint : -1;
             pthread_cond_broadcast(&c->cv);
             continue;
         }
