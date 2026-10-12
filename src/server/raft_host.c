@@ -10451,6 +10451,7 @@ int server_raft_host_repair_record(unsigned op,const struct efs_repair_job *j,
 {
     struct efs_raft_host *h=g_host;uint8_t cmd[EFS_REPAIR_COMMAND_BYTES];
     if(!h || !h->running || !j)return EFS_ERR_INVAL;
+    if(!h->s || !h->s->repair_experiment)return EFS_ERR_ACCES;
     if(op<EFS_REPAIR_OP_ADMIT || op>EFS_REPAIR_OP_RETIRE ||
        j->state!=EFS_REPAIR_ADMITTED || j->flags || j->span_off || j->span_len ||
        (op!=EFS_REPAIR_OP_SEAL && op!=EFS_REPAIR_OP_RETIRE && arg) ||
@@ -10523,6 +10524,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         out->rc=EFS_ERR_ACCES;return;
     }
     if(clen && (cmd[0]==EFS_MD_REQ_REPAIR_WRITE_AUTHORITY || cmd[0]==EFS_MD_REQ_REPAIR_SEAL_AUTHORITY)) {
+        if(!h->s || !h->s->repair_experiment){out->rc=EFS_ERR_ACCES;return;}
         struct efs_repair_job expected;
         rc=efs_repair_job_decode(cmd+1,clen-1,&expected);
         if(rc || expected.state!=EFS_REPAIR_ADMITTED || expected.flags ||

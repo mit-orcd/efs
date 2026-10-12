@@ -24,7 +24,7 @@ code=r'''
 #define HOST_LOCK_LEN 99
 #define HOST_SESS_CREATE_LEN 100
 #define EFS_FAULTS 0
-struct server {uint32_t id;};
+struct server {uint32_t id;int repair_experiment;};
 struct efs_raft_host {pthread_mutex_t mu;struct server *s;void *kv;int running,snap_batch;uint64_t apply_extra,obs_apply_cnt,obs_apply_cycle_us;};
 struct host_group {struct efs_raft_host *host;int import_block;void *r;uint8_t group;uint64_t arc_idx[8],arc_term[8],arc_extra[8];int arc_rc[8];};
 struct efs_msg_raft_mkfs_reply {int rc,leader_hint;};
@@ -63,8 +63,9 @@ int main(void){
  struct efs_msg_raft_mkfs_reply reply;uint8_t raw[]={0,EFS_MD_CMD_REPAIR_JOB,3};
  server_raft_host_submit(raw,sizeof(raw),&reply);assert(reply.rc==EFS_ERR_ACCES);
  assert(scopes==10);
- struct server node={1};h.s=&node;pthread_mutex_init(&h.mu,NULL);slot=&g;g.r=&g;
+ struct server node={1,1};h.s=&node;pthread_mutex_init(&h.mu,NULL);slot=&g;g.r=&g;
  uint8_t query[2+EFS_REPAIR_JOB_BYTES]={2,EFS_MD_REQ_REPAIR_WRITE_AUTHORITY,EFS_REPAIR_ADMITTED};
+ node.repair_experiment=0;server_raft_host_submit(query,sizeof(query),&reply);assert(reply.rc==EFS_ERR_ACCES&&!reads&&!authorities);node.repair_experiment=1;
  read_rc=EFS_ERR_IO;server_raft_host_submit(query,sizeof(query),&reply);assert(reply.rc==EFS_ERR_IO&&reads==1&&!authorities);
  read_rc=0;authority_rc=EFS_ERR_STALE;server_raft_host_submit(query,sizeof(query),&reply);assert(reply.rc==EFS_ERR_STALE&&reads==2&&authorities==1);
  authority_rc=0;server_raft_host_submit(query,sizeof(query),&reply);assert(!reply.rc&&reads==3&&authorities==2);

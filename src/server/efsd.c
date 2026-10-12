@@ -466,6 +466,46 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    const char *repair = getenv("EFS_REPAIR_EXPERIMENT");
+    const char *repair_init = getenv("EFS_REPAIR_INIT_STORE");
+    if ((repair && strcmp(repair,"0") && strcmp(repair,"1")) ||
+        (repair_init && strcmp(repair_init,"0") && strcmp(repair_init,"1"))) {
+        fprintf(stderr,"EFS_REPAIR_EXPERIMENT and EFS_REPAIR_INIT_STORE must be 0 or 1\n");return 1;
+    }
+    server.repair_experiment = repair && !strcmp(repair,"1");
+    int initialize_repair = repair_init && !strcmp(repair_init,"1");
+    if (initialize_repair && !server.repair_experiment) {
+        fprintf(stderr,"EFS_REPAIR_INIT_STORE requires explicit EFS_REPAIR_EXPERIMENT=1\n");return 1;
+    }
+    if (!server.repair_experiment) {
+        /* Separate activation marker, identity and any old target floors
+         * conservatively latch the root. Ordinary restart cannot run GC while an old
+         * repair target may still have a proven write in flight. No default
+         * runtime debt scans; safe explicit deactivation is not implemented. */
+        const char *markers[]={"repair-active","repair-store","repair-job"};
+        for(unsigned i=0;i<sizeof(markers)/sizeof(markers[0]);i++) {
+            char identity_path[EFS_MAX_PATH+80];struct stat identity_stat;
+            int nn=snprintf(identity_path,sizeof(identity_path),"%s/meta/%s",server.storage_paths[0],markers[i]);
+            if(nn<0 || (size_t)nn>=sizeof(identity_path))return 1;
+            if(!lstat(identity_path,&identity_stat) || errno!=ENOENT) {
+                fprintf(stderr,"repair-initialized root requires EFS_REPAIR_EXPERIMENT=1; safe deactivation is unavailable\n");return 1;
+            }
+        }
+    }
+    if (server.repair_experiment) {
+        if (server.storage_engine || server.storage_path_count!=1) {
+            fprintf(stderr,"repair experiment requires single-root FILES storage\n");return 1;
+        }
+        uint8_t store_uuid[16];
+        int rr=server_repair_activation(&server,initialize_repair);
+        if(!rr)rr=initialize_repair ? server_repair_store_initialize(&server,1,store_uuid) :
+                                     server_repair_store_identity(&server,store_uuid);
+        if (rr!=EFS_OK) {
+            fprintf(stderr,"repair store identity unavailable rc=%d; trusted local EFS_REPAIR_INIT_STORE=1 setup required for unbound roots\n",rr);return 1;
+        }
+        fprintf(stderr,"Repair: experimental missing-base FILES receiver; no automatic repair worker\n");
+    }
+
     const char *data_pressure = getenv("EFS_DATA_GC_ADMISSION");
     if (data_pressure && strcmp(data_pressure, "0") && strcmp(data_pressure, "1")) {
         fprintf(stderr, "EFS_DATA_GC_ADMISSION must be 0 or 1\n");

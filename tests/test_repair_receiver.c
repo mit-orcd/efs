@@ -36,7 +36,7 @@ int main(void)
  for(int direct=0;direct<2;direct++){
   char root[]="/tmp/efs-repair-receiver-XXXXXX";assert(mkdtemp(root));
   struct efsd_server *s=calloc(1,sizeof(*s));assert(s);pthread_mutex_init(&s->lock,NULL);pthread_cond_init(&s->export_idle_cv,NULL);
-  s->id=1;s->node_count=1;s->nodes[0].id=1;s->storage_path_count=1;s->direct_io=direct;strcpy(s->storage_paths[0],root);
+  s->repair_experiment=1;s->id=1;s->node_count=1;s->nodes[0].id=1;s->storage_path_count=1;s->direct_io=direct;strcpy(s->storage_paths[0],root);
   s->export_count=1;s->exports[0].id=1;s->exports[0].chunk_size=EFS_MIN_CHUNK_SIZE;
   uint32_t len=EFS_MIN_CHUNK_SIZE/2;s->quota=len;
   struct efs_repair_job j={.ino=4097,.inode_gen=7,.object=101,.fragment_len=len,.epoch=1,.owner=1,.nodes={1,2,3},.state=EFS_REPAIR_ADMITTED};
@@ -44,6 +44,7 @@ int main(void)
   uint8_t *body=calloc(1,4+EFS_REPAIR_JOB_BYTES+len),receipt[EFS_REPAIR_RECEIPT_BYTES];assert(body);body[3]=1;memset(body+4+EFS_REPAIR_JOB_BYTES,77,len);efs_hash(body+4+EFS_REPAIR_JOB_BYTES,len,j.sums[0]);
   for(unsigned i=1;i<3;i++)memset(j.sums[i],i,32);
   assert(!efs_repair_job_encode(&j,body+4));uint32_t bytes=4+EFS_REPAIR_JOB_BYTES+len;
+  s->repair_experiment=0;assert(server_repair_receive(s,body,bytes,0,receipt)==EFS_ERR_ACCES);zero(receipt);s->repair_experiment=1;
   authority_rc=EFS_ERR_BUSY;assert(server_repair_receive(s,body,bytes,0,receipt)==EFS_ERR_BUSY);zero(receipt);assert(!s->nodes[0].used);authority_rc=0;
   writer_status=EFS_INODE_RPC_STALE;assert(server_repair_receive(s,body,bytes,0,receipt)==EFS_ERR_STALE);zero(receipt);writer_status=EFS_INODE_RPC_OK;
   body[bytes-1]^=1;int old_calls=authority_calls;assert(server_repair_receive(s,body,bytes,0,receipt)==EFS_ERR_CHECKSUM);zero(receipt);assert(authority_calls==old_calls);body[bytes-1]^=1;

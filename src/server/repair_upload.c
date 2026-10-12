@@ -13,6 +13,7 @@ int server_repair_receive(struct efsd_server *s,const uint8_t *body,uint32_t byt
     if(!receipt)return EFS_ERR_INVAL;
     memset(receipt,0,EFS_REPAIR_RECEIPT_BYTES);
     if(!s || !body || bytes<4+EFS_REPAIR_JOB_BYTES || (seal!=0 && seal!=1))return EFS_ERR_INVAL;
+    if(!s->repair_experiment)return EFS_ERR_ACCES;
     uint32_t eid=((uint32_t)body[0]<<24)|((uint32_t)body[1]<<16)|((uint32_t)body[2]<<8)|body[3];
     struct efs_repair_job j;int rc=efs_repair_job_decode(body+4,EFS_REPAIR_JOB_BYTES,&j);
     if(rc)return rc;

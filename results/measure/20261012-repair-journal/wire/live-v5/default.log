@@ -1,0 +1,8 @@
+2026-10-12T11:39:11.079Z storage-engine=files direct_io=off
+2026-10-12T11:39:11.079Z Data GC admission: disabled
+2026-10-12T11:39:11.080Z Storage quota: explicit 1.00 GiB (safe maximum 251.31 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T11:39:11.083Z heartbeat: enabled (2000 ms interval)
+2026-10-12T11:39:11.095Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-12T11:39:11.095Z raft-host: up raft_id=0 n=3 boot=1852195018951899 salt=4392094284738203467 g0=hosted g2=hosted
+2026-10-12T11:39:11.095Z efsd (no git metadata, branch unknown, built 2026-10-12T11:32:45Z on nuc), build=b75523c3-wire-wip: node 1 listening on 127.0.0.1:56221, storage=/home/efs/nuc-repair-wire-20261012-v5/store (1 paths, stripe=none), used=0, quota=1073741824, direct_io=off, writers=4 shared
+2026-10-12T11:39:11.095Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0

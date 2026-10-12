@@ -166,9 +166,11 @@ int server_repair_store_identity(struct efsd_server *s,uint8_t uuid[16])
     if(memcmp(b,"ERS1",4) || !any || memcmp(sum,b+20,32))return EFS_ERR_IO;
     memcpy(uuid,b+4,16);return EFS_OK;
 }
-static int repair_store_seal_identity(struct efsd_server *s)
+static int repair_store_seal_file(struct efsd_server *s,const char *name)
 {
-    char path[EFS_MAX_PATH+80];int rc=repair_store_path(s,path);if(rc)return rc;
+    char path[EFS_MAX_PATH+80];int nn=snprintf(path,sizeof(path),"%s",name);
+    if(nn<0 || (size_t)nn>=sizeof(path))return EFS_ERR_INVAL;
+    int rc=EFS_OK;
     int fd=open(path,O_RDONLY|O_CLOEXEC|O_NOFOLLOW);if(fd<0)return EFS_ERR_IO;
     int sr;do{sr=fsync(fd);}while(sr<0 && errno==EINTR);
     int closed=close(fd);if(sr<0 || closed)return EFS_ERR_IO;
@@ -190,6 +192,58 @@ static int repair_store_seal_identity(struct efsd_server *s)
     }
     free(resolved);return rc;
 }
+static int repair_store_seal_identity(struct efsd_server *s)
+{
+    char path[EFS_MAX_PATH+80];int rc=repair_store_path(s,path);
+    return rc?rc:repair_store_seal_file(s,path);
+}
+/* Separate durable activation latch survives identity deletion/corruption.
+ * Creation is trusted local setup only, never an RPC. No deactivation exists. */
+int server_repair_activation(struct efsd_server *s,int create)
+{
+    if(!s || s->storage_path_count!=1 || (create!=0 && create!=1))return EFS_ERR_INVAL;
+    char path[EFS_MAX_PATH+80],dir[EFS_MAX_PATH+80];
+    int nn=snprintf(path,sizeof(path),"%s/meta/repair-active",s->storage_paths[0]);
+    if(nn<0 || (size_t)nn>=sizeof(path))return EFS_ERR_INVAL;
+    strcpy(dir,path);*strrchr(dir,'/')=0;
+    pthread_once(&put_session_once,put_session_init);pthread_mutex_t *mu=&put_session_mu[0];pthread_mutex_lock(mu);
+    int parent=open(dir,O_RDONLY|O_DIRECTORY|O_CLOEXEC|O_NOFOLLOW),rc=EFS_OK,fd=-1;
+    if(parent<0){pthread_mutex_unlock(mu);return EFS_ERR_IO;}
+    uint8_t expected[36]={0},got[36];memcpy(expected,"ERA1",4);efs_hash(expected,4,expected+4);
+    fd=openat(parent,"repair-active",O_RDONLY|O_CLOEXEC|O_NOFOLLOW);
+    if(fd>=0){
+        struct stat st;size_t off=0;
+        if(fstat(fd,&st) || !S_ISREG(st.st_mode) || st.st_size!=sizeof(got))rc=EFS_ERR_IO;
+        while(!rc && off<sizeof(got)){ssize_t n=read(fd,got+off,sizeof(got)-off);
+            if(n<0 && errno==EINTR)continue;
+            if(n<=0){rc=EFS_ERR_IO;break;}off+=(size_t)n;}
+        if(close(fd))rc=EFS_ERR_IO;
+        fd=-1;
+        if(!rc && memcmp(expected,got,sizeof(got)))rc=EFS_ERR_IO;
+    }else if(errno!=ENOENT)rc=EFS_ERR_IO;
+    else if(!create)rc=EFS_ERR_STALE;
+    else {
+#ifdef O_TMPFILE
+        fd=openat(parent,".",O_TMPFILE|O_RDWR|O_CLOEXEC,0600);
+#else
+        rc=EFS_ERR_INVAL;
+#endif
+        if(fd<0 && !rc)rc=EFS_ERR_IO;
+        size_t off=0;while(!rc && off<sizeof(expected)){ssize_t n=write(fd,expected+off,sizeof(expected)-off);
+            if(n<0 && errno==EINTR)continue;
+            if(n<=0){rc=EFS_ERR_IO;break;}off+=(size_t)n;}
+        if(!rc){int sr;do{sr=fsync(fd);}while(sr<0 && errno==EINTR);if(sr<0)rc=EFS_ERR_IO;}
+        if(!rc){char proc[64];snprintf(proc,sizeof(proc),"/proc/self/fd/%d",fd);
+            if(linkat(AT_FDCWD,proc,parent,"repair-active",AT_SYMLINK_FOLLOW))rc=errno==EEXIST?EFS_ERR_BUSY:EFS_ERR_IO;}
+        if(fd>=0 && close(fd))rc=EFS_ERR_IO;
+    }
+    if(close(parent))rc=EFS_ERR_IO;
+    /* A prior failed setup may leave a linked but unacknowledged marker.
+     * Every successful startup/read repeats file and ancestry barriers. */
+    if(!rc)rc=repair_store_seal_file(s,path);
+    pthread_mutex_unlock(mu);return rc;
+}
+
 int server_repair_store_initialize(struct efsd_server *s,int trusted_existing,uint8_t uuid[16])
 {
     if(!uuid || (trusted_existing!=0 && trusted_existing!=1))return EFS_ERR_INVAL;

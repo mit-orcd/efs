@@ -1,0 +1,6 @@
+{
+  "binary": "/home/efs/nuc-receiver-cc090985-wip/efsd",
+  "sha256": "22e722be4fd0c82d6cb47ec9b8904866a56a21a358c46b5b434338b08c240c3c",
+  "build_id": "b75523c3-wire-wip",
+  "scope": "real daemon protocol/default-off/incarnation boundary only; no repair or quorum recovery proof"
+}
