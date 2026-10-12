@@ -61,6 +61,22 @@ MNT="$WORK/mnt"
 EXPORT="vgtest"
 MODE=${EFS_VG_MODE:-buffered}
 case "$MODE" in direct) IO_FLAG=--direct-io;; buffered) IO_FLAG=--no-direct-io;; *) echo 'invalid EFS_VG_MODE' >&2; exit 2;; esac
+VG_BUILD_ARGS=()
+# Optional private, annotated verbs runtime. System libraries and ordinary
+# builds are untouched. Rebuild all objects so DMA annotations cannot be lost
+# by reusing an earlier non-Memcheck rdma.o.
+if [ -n "${EFS_VG_RDMA_RUNTIME:-}" ]; then
+    cache="$EFS_VG_RDMA_RUNTIME/rdma-core-build/CMakeCache.txt"
+    grep -qEx 'ENABLE_VALGRIND:(BOOL|UNINITIALIZED)=ON' "$cache" || exit 2
+    for setting in HAVE_VALGRIND_MEMCHECK:INTERNAL=1; do
+        grep -qx "$setting" "$cache" || { echo "annotated verbs runtime required: $setting" >&2; exit 2; }
+    done
+    test -f "$EFS_VG_RDMA_RUNTIME/vg-headers/valgrind/memcheck.h" || exit 2
+    test -f "$EFS_VG_RDMA_RUNTIME/rdma-core-build/lib/libibverbs.so" || exit 2
+    export LD_LIBRARY_PATH="$EFS_VG_RDMA_RUNTIME/rdma-core-build/lib:${LD_LIBRARY_PATH:-}"
+    export C_INCLUDE_PATH="$EFS_VG_RDMA_RUNTIME/vg-headers:${C_INCLUDE_PATH:-}"
+    VG_BUILD_ARGS=(-B EFS_MEMCHECK=1)
+fi
 OWN_PIDS=()
 VG="valgrind --error-exitcode=99 --errors-for-leak-kinds=definite,indirect --leak-check=full --show-leak-kinds=definite,indirect,possible"
 # Current unit suite (the old-engine tests were deleted in step 11 inc 2).
@@ -309,9 +325,13 @@ note "mode=$MODE transport=${EFS_TRANSPORT:-auto}; evidence retained at $WORK"
 
 note "building (after any rsync --delete) ..."
 # Unit-test make targets carry the tests/ prefix; use the current canonical C list.
-make -s efsd efs-fuse efs-mgmt efs-bench \
+make -s "${VG_BUILD_ARGS[@]}" efsd efs-fuse efs-mgmt efs-bench \
     $(for t in $UNIT_TESTS; do echo "tests/$t"; done) >/dev/null 2>&1 \
     || { echo "[leaks] build failed"; exit 2; }
+if [ -n "${EFS_VG_RDMA_RUNTIME:-}" ]; then
+    note "annotated verbs runtime=$EFS_VG_RDMA_RUNTIME; strict RDMA unit memory gate"
+    python3 tests/test_rdma_memcheck.py || exit 1
+fi
 
 # ---------------------------------------------------------------- unit ---
 note "phase 1: unit tests under valgrind"
@@ -323,7 +343,7 @@ for t in $UNIT_TESTS; do
     log="$WORK-unit-$t.vg"
     unit_vg=$VG
     case "$t" in
-        test_namespace_session|test_store_containers|test_principles_index|test_append_transaction|test_append_receipt|test_put_ticket|test_mtime_barrier|test_publication_session|test_publication_recovery|test_lane_bootstrap_recovery|test_kv_lsm|test_raft_store|test_session)
+        test_namespace_session|test_store_containers|test_principles_index|test_append_transaction|test_append_receipt|test_put_ticket|test_mtime_barrier|test_publication_session|test_publication_recovery|test_lane_bootstrap_recovery|test_kv_lsm|test_raft_store|test_session|test_repair_job)
             # These fixtures deliberately _exit in children before destruction.
             # Keep their crash/recovery assertions and memory-access error exit
             # checks; gate clean parent leaks separately. Abrupt child allocation

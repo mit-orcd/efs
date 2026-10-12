@@ -1,0 +1,1 @@
+transaction resolve: version/batch failures preserve old row/version and epoch guard; exact retry commits once then permits revocation PASS

@@ -34,6 +34,9 @@ CFLAGS = -O3 -g -fno-omit-frame-pointer -march=native -mtune=native \
 ifeq ($(EFS_FAULTS),1)
 CFLAGS += -DEFS_FAULTS=1
 endif
+ifeq ($(EFS_MEMCHECK),1)
+CFLAGS += -DEFS_MEMCHECK=1
+endif
 INCLUDES = -Iinclude -Isrc/common -Ideps/blake3
 
 LDFLAGS = -lpthread -lm -ldl -libverbs

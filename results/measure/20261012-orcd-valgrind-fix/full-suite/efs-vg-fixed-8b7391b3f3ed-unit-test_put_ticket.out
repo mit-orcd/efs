@@ -1,0 +1,3 @@
+PUT ticket codec: fixed endian, exact length, malformed geometry/object/members and output canaries PASS
+PUT ticket codec: fixed endian, exact length, malformed geometry/object/members and output canaries PASS
+PUT tickets: admission, atomic ownership, revocation, bounded retirement and crash replay PASS
