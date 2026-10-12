@@ -1,0 +1,30 @@
+2026-10-12T14:29:10.019Z storage-engine=files direct_io=on
+2026-10-12T14:29:10.019Z Data GC admission: experimental
+2026-10-12T14:29:10.019Z Storage quota: explicit 4.00 GiB (safe maximum 483.19 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T14:29:10.026Z Joined cluster with 4 nodes
+2026-10-12T14:29:10.030Z heartbeat: enabled (2000 ms interval)
+2026-10-12T14:29:10.042Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-12T14:29:10.042Z raft-host: up raft_id=3 n=4 boot=9893280794042626 salt=16914986795922153203 g0=off g2=hosted
+2026-10-12T14:29:10.042Z efsd (no git metadata, branch qualification-v030-tcp-direct, built 2026-10-12T14:22:36Z on intel1), build=e59e815fab2916340baad585dc08712ed182b7ea: node 4 listening on 127.0.0.1:34513, storage=/data1/efs/intel-e59-dir2-diag-20261012/evidence/live/n4 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=4 shared
+2026-10-12T14:29:10.042Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:29:12.030Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=983 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T14:29:14.723Z raft-host: applied session index=3 kind=1 shard=0 ino=0
+2026-10-12T14:29:14.764Z raft-host: applied session index=7 kind=1 shard=0 ino=0
+2026-10-12T14:29:14.770Z raft-host: applied session index=8 kind=1 shard=0 ino=0
+2026-10-12T14:29:15.043Z kv-obs: mt_bytes=12212 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:29:15.492Z store: put O_DIRECT bounce copy (buf align=3517 len=4096)
+2026-10-12T14:29:15.500Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=4573 errors=0 avg_us=37793 p50_us=37793 max_us=37793 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T14:29:20.045Z kv-obs: mt_bytes=166579 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:29:20.500Z iostats: get ops=23 bytes=94208 errors=0 avg_us=2162 p50_us=2016 max_us=3604 put ops=70 bytes=320239 errors=0 avg_us=20140 p50_us=19092 max_us=57051 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T14:29:25.045Z kv-obs: mt_bytes=328360 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:29:25.503Z iostats: get ops=49 bytes=200704 errors=0 avg_us=3712 p50_us=2078 max_us=73704 put ops=145 bytes=663988 errors=0 avg_us=19935 p50_us=15281 max_us=98918 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T14:29:28.035Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=915 passes=18 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T14:29:30.045Z kv-obs: mt_bytes=477816 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:29:30.547Z iostats: get ops=77 bytes=315392 errors=0 avg_us=4070 p50_us=2118 max_us=76105 put ops=215 bytes=984356 errors=0 avg_us=19280 p50_us=17208 max_us=98918 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T14:29:35.048Z kv-obs: mt_bytes=637494 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:29:35.548Z iostats: get ops=93 bytes=380928 errors=0 avg_us=3721 p50_us=2078 max_us=76105 put ops=292 bytes=1336606 errors=0 avg_us=19558 p50_us=18904 max_us=98918 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T14:29:40.049Z kv-obs: mt_bytes=764604 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:29:40.553Z iostats: get ops=106 bytes=434176 errors=0 avg_us=4209 p50_us=2103 max_us=76105 put ops=352 bytes=1610986 errors=0 avg_us=19805 p50_us=17973 max_us=98918 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T14:29:44.038Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=857 passes=34 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T14:29:45.050Z kv-obs: mt_bytes=800795 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:29:45.556Z iostats: get ops=106 bytes=434176 errors=0 avg_us=4209 p50_us=2103 max_us=76105 put ops=384 bytes=1757322 errors=0 avg_us=21145 p50_us=28683 max_us=98918 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0

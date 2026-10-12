@@ -1,0 +1,6 @@
+parallel 2 tests jobs=16 (serial 0 after)
+pass dir_readdir_listing             
+pass names_crazy_dirs                
+============================================================
+POSIX suite: 2/2 pass, 0 fail, 0 skip, 0 notrun  (0.1s)
+wrote /tmp/intel-observer-reference-e59/results.tsv
