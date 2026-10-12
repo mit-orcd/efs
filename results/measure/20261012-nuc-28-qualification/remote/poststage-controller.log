@@ -1,0 +1,5 @@
+2026-10-12T03:48:42Z pack-soak START
+2026-10-12T03:49:42Z pack-soak PASS 0
+2026-10-12T03:49:42Z cursor-replay-direct START
+2026-10-12T03:50:15Z cursor-replay-direct PASS 0
+2026-10-12T03:50:15Z extra-full-direct START

@@ -1,0 +1,22 @@
+[
+  {
+    "command": [
+      "make",
+      "clean"
+    ],
+    "returncode": 0,
+    "seconds": 0.02285599708557129
+  },
+  {
+    "command": [
+      "make",
+      "-j8",
+      "EFS_FAULTS=1",
+      "all",
+      "libefs.a",
+      "tests/stress/pack_storage_soak"
+    ],
+    "returncode": 0,
+    "seconds": 23.308541536331177
+  }
+]

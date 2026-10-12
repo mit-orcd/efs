@@ -1,0 +1,36 @@
+2026-10-12T03:49:49.365Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:46:04Z on nuc), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:49:49.366Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:49:49.366Z   node id=1 127.0.0.1:24210
+2026-10-12T03:49:49.366Z   node id=2 127.0.0.1:24211
+2026-10-12T03:49:49.366Z   node id=4 127.0.0.1:24213
+2026-10-12T03:49:49.366Z   node id=3 127.0.0.1:24212
+2026-10-12T03:49:49.366Z fetching metadata...
+2026-10-12T03:49:49.366Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:49:49.366Z export id=1 name=default
+2026-10-12T03:49:49.366Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:49:49.370Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:49:49.373Z fuse serving
+2026-10-12T03:49:59.342Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:46:04Z on nuc), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:49:59.343Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:49:59.343Z   node id=1 127.0.0.1:24210
+2026-10-12T03:49:59.343Z   node id=2 127.0.0.1:24211
+2026-10-12T03:49:59.343Z   node id=4 127.0.0.1:24213
+2026-10-12T03:49:59.343Z   node id=3 127.0.0.1:24212
+2026-10-12T03:49:59.343Z fetching metadata...
+2026-10-12T03:49:59.343Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:49:59.343Z export id=1 name=default
+2026-10-12T03:49:59.343Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:49:59.346Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:49:59.351Z fuse serving
+2026-10-12T03:50:07.348Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:46:04Z on nuc), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:50:07.349Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:50:07.349Z   node id=1 127.0.0.1:24210
+2026-10-12T03:50:07.349Z   node id=2 127.0.0.1:24211
+2026-10-12T03:50:07.349Z   node id=4 127.0.0.1:24213
+2026-10-12T03:50:07.349Z   node id=3 127.0.0.1:24212
+2026-10-12T03:50:07.349Z fetching metadata...
+2026-10-12T03:50:07.350Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:50:07.350Z export id=1 name=default
+2026-10-12T03:50:07.350Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:50:07.352Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:50:07.358Z fuse serving
