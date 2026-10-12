@@ -10,18 +10,6 @@
     "sha256": "b5efe302ebe9afaf71a34d4eaaf55ab6143fe73b8ef549b0fc7511daf8eaf80c"
   },
   {
-    "path": "gc-direct-kq20zujx/n3/mdraft/log/raft.log",
-    "bytes": 42991616,
-    "sha256": "ea3536516b6f34478ba9830bdc46d2e88e9a21bf2b6d05abd19dd9308436dd1e",
-    "stored_path": "gc-direct-kq20zujx/n3/mdraft/log/raft.log.gz"
-  },
-  {
-    "path": "gc-direct-kq20zujx/n4/mdraft/log/raft.log",
-    "bytes": 22020096,
-    "sha256": "f91313e767aab96fa4d3e6074d31a31cf0a28eafba08b0e4e0e5cc04f51030df",
-    "stored_path": "gc-direct-kq20zujx/n4/mdraft/log/raft.log.gz"
-  },
-  {
     "path": "gc-direct-ox24gjxt/failed-status.json",
     "bytes": 5210,
     "sha256": "7cf699806751104e5b0ab560b117846952c52a50c906b87172f5c4cd7c1179dd"
@@ -42,21 +30,9 @@
     "sha256": "96ebefbd48283d7f0ff336939524e689b0de652150db5888b8f9103317e0eb1b"
   },
   {
-    "path": "gc-direct-ox24gjxt/n1/mdraft/log/raft.log",
-    "bytes": 20971520,
-    "sha256": "6f15e24b81941536023424aa729322fbad780823459c63d1c5c6839bde2b3f91",
-    "stored_path": "gc-direct-ox24gjxt/n1/mdraft/log/raft.log.gz"
-  },
-  {
     "path": "gc-direct-ox24gjxt/n1.log",
     "bytes": 592193,
     "sha256": "050dc00ad78f6e78f6ffa0d3d6fdafb6ef00f50e9e9cd9144f2db17e324d8e1b"
-  },
-  {
-    "path": "gc-direct-ox24gjxt/n2/mdraft/log/raft.log",
-    "bytes": 42991616,
-    "sha256": "af718f940f00ea54945f889669bbf979fe9373028525679af32b8eef00e38ac8",
-    "stored_path": "gc-direct-ox24gjxt/n2/mdraft/log/raft.log.gz"
   },
   {
     "path": "gc-direct-ox24gjxt/n2.log",
