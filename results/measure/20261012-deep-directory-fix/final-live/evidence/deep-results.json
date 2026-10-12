@@ -1,0 +1,142 @@
+[
+  {
+    "client": 0,
+    "command": [
+      "python3",
+      "/data1/efs/amd-deep-final-4e239d02-20261012/source/tests/posix/posix_suite.py",
+      "/tmp/efs-amd-deep-final4e/deep-mnt0",
+      "--suite",
+      "core",
+      "--jobs",
+      "16",
+      "--timeout-s",
+      "30",
+      "--tag",
+      "deep0",
+      "--results",
+      "/data1/efs/amd-deep-final-4e239d02-live-20261012/evidence/deep-0.tsv"
+    ],
+    "seconds": 37.678,
+    "returncode": 0
+  },
+  {
+    "client": 1,
+    "command": [
+      "python3",
+      "/data1/efs/amd-deep-final-4e239d02-20261012/source/tests/posix/posix_suite.py",
+      "/tmp/efs-amd-deep-final4e/deep-mnt1",
+      "--suite",
+      "core",
+      "--jobs",
+      "16",
+      "--timeout-s",
+      "30",
+      "--tag",
+      "deep1",
+      "--results",
+      "/data1/efs/amd-deep-final-4e239d02-live-20261012/evidence/deep-1.tsv"
+    ],
+    "seconds": 39.279,
+    "returncode": 0
+  },
+  {
+    "client": 2,
+    "command": [
+      "python3",
+      "/data1/efs/amd-deep-final-4e239d02-20261012/source/tests/posix/posix_suite.py",
+      "/tmp/efs-amd-deep-final4e/deep-mnt2",
+      "--suite",
+      "core",
+      "--jobs",
+      "16",
+      "--timeout-s",
+      "30",
+      "--tag",
+      "deep2",
+      "--results",
+      "/data1/efs/amd-deep-final-4e239d02-live-20261012/evidence/deep-2.tsv"
+    ],
+    "seconds": 36.025,
+    "returncode": 0
+  },
+  {
+    "client": 3,
+    "command": [
+      "python3",
+      "/data1/efs/amd-deep-final-4e239d02-20261012/source/tests/posix/posix_suite.py",
+      "/tmp/efs-amd-deep-final4e/deep-mnt3",
+      "--suite",
+      "core",
+      "--jobs",
+      "16",
+      "--timeout-s",
+      "30",
+      "--tag",
+      "deep3",
+      "--results",
+      "/data1/efs/amd-deep-final-4e239d02-live-20261012/evidence/deep-3.tsv"
+    ],
+    "seconds": 39.48,
+    "returncode": 0
+  },
+  {
+    "client": 4,
+    "command": [
+      "python3",
+      "/data1/efs/amd-deep-final-4e239d02-20261012/source/tests/posix/posix_suite.py",
+      "/tmp/efs-amd-deep-final4e/deep-mnt4",
+      "--suite",
+      "core",
+      "--jobs",
+      "16",
+      "--timeout-s",
+      "30",
+      "--tag",
+      "deep4",
+      "--results",
+      "/data1/efs/amd-deep-final-4e239d02-live-20261012/evidence/deep-4.tsv"
+    ],
+    "seconds": 39.431,
+    "returncode": 0
+  },
+  {
+    "client": 5,
+    "command": [
+      "python3",
+      "/data1/efs/amd-deep-final-4e239d02-20261012/source/tests/posix/posix_suite.py",
+      "/tmp/efs-amd-deep-final4e/deep-mnt5",
+      "--suite",
+      "core",
+      "--jobs",
+      "16",
+      "--timeout-s",
+      "30",
+      "--tag",
+      "deep5",
+      "--results",
+      "/data1/efs/amd-deep-final-4e239d02-live-20261012/evidence/deep-5.tsv"
+    ],
+    "seconds": 39.477,
+    "returncode": 0
+  },
+  {
+    "client": 6,
+    "command": [
+      "python3",
+      "/data1/efs/amd-deep-final-4e239d02-20261012/source/tests/posix/posix_suite.py",
+      "/tmp/efs-amd-deep-final4e/deep-mnt6",
+      "--suite",
+      "core",
+      "--jobs",
+      "16",
+      "--timeout-s",
+      "30",
+      "--tag",
+      "deep6",
+      "--results",
+      "/data1/efs/amd-deep-final-4e239d02-live-20261012/evidence/deep-6.tsv"
+    ],
+    "seconds": 35.478,
+    "returncode": 0
+  }
+]

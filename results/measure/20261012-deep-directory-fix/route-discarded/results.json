@@ -1,0 +1,61 @@
+[
+  {
+    "name": "normal-build",
+    "command": [
+      "make",
+      "-j8",
+      "EFS_GIT_ID=91fb8ef07645fdac65081e64ee6b746ca23fa367",
+      "EFS_GIT_BRANCH=fix-release-deep-lookup",
+      "EFS_GIT_DESCRIBE=lookup-route-candidate",
+      "all"
+    ],
+    "cwd": "/data1/efs/amd-deep-route-91fb-20261012/source",
+    "commit": "91fb8ef07645fdac65081e64ee6b746ca23fa367",
+    "exit": 0,
+    "duration_seconds": 9.472469329833984
+  },
+  {
+    "name": "test_lookup_route",
+    "command": [
+      "python3",
+      "tests/test_lookup_route.py"
+    ],
+    "cwd": "/data1/efs/amd-deep-route-91fb-20261012/source",
+    "commit": "91fb8ef07645fdac65081e64ee6b746ca23fa367",
+    "exit": 0,
+    "duration_seconds": 0.062371253967285156
+  },
+  {
+    "name": "test_lookup_errno",
+    "command": [
+      "python3",
+      "tests/test_lookup_errno.py"
+    ],
+    "cwd": "/data1/efs/amd-deep-route-91fb-20261012/source",
+    "commit": "91fb8ef07645fdac65081e64ee6b746ca23fa367",
+    "exit": 0,
+    "duration_seconds": 0.06935644149780273
+  },
+  {
+    "name": "test_metadata_retry_budget",
+    "command": [
+      "python3",
+      "tests/test_metadata_retry_budget.py"
+    ],
+    "cwd": "/data1/efs/amd-deep-route-91fb-20261012/source",
+    "commit": "91fb8ef07645fdac65081e64ee6b746ca23fa367",
+    "exit": 0,
+    "duration_seconds": 0.0817251205444336
+  },
+  {
+    "name": "ordinary-live",
+    "command": [
+      "python3",
+      "/tmp/amd-deep-route-fixture.py"
+    ],
+    "cwd": "/data1/efs/amd-deep-route-91fb-20261012/source",
+    "commit": "91fb8ef07645fdac65081e64ee6b746ca23fa367",
+    "exit": 1,
+    "duration_seconds": 70.06663417816162
+  }
+]

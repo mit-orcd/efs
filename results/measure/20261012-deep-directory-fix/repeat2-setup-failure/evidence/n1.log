@@ -1,0 +1,5 @@
+2026-10-12T16:00:48.297Z storage-engine=files direct_io=on
+2026-10-12T16:00:48.297Z Data GC admission: disabled
+2026-10-12T16:00:48.297Z Storage quota: explicit 4.00 GiB (safe maximum 31.75 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T16:00:48.297Z bind failed for 127.0.0.1:34900: Address already in use
+2026-10-12T16:00:48.297Z Failed to listen on 127.0.0.1:34900: Address already in use

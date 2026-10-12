@@ -1,0 +1,75 @@
+[
+  {
+    "name": "normal-clean",
+    "command": [
+      "make",
+      "EFS_GIT_ID=06f5420c9182474805b5258cf4bc6d23c1ec3f3f",
+      "EFS_GIT_BRANCH=fix-release-deep-lookup",
+      "EFS_GIT_DESCRIBE=lookup-route-candidate",
+      "clean"
+    ],
+    "cwd": "/data1/efs/amd-deep-slice32-06f5-20261012/source",
+    "commit": "06f5420c9182474805b5258cf4bc6d23c1ec3f3f",
+    "exit": 0,
+    "duration_seconds": 0.029608488082885742
+  },
+  {
+    "name": "normal-build",
+    "command": [
+      "make",
+      "-j8",
+      "EFS_GIT_ID=06f5420c9182474805b5258cf4bc6d23c1ec3f3f",
+      "EFS_GIT_BRANCH=fix-release-deep-lookup",
+      "EFS_GIT_DESCRIBE=lookup-route-candidate",
+      "all"
+    ],
+    "cwd": "/data1/efs/amd-deep-slice32-06f5-20261012/source",
+    "commit": "06f5420c9182474805b5258cf4bc6d23c1ec3f3f",
+    "exit": 0,
+    "duration_seconds": 9.419173002243042
+  },
+  {
+    "name": "test_host_inbox",
+    "command": [
+      "python3",
+      "tests/test_host_inbox.py"
+    ],
+    "cwd": "/data1/efs/amd-deep-slice32-06f5-20261012/source",
+    "commit": "06f5420c9182474805b5258cf4bc6d23c1ec3f3f",
+    "exit": 0,
+    "duration_seconds": 0.07135415077209473
+  },
+  {
+    "name": "test_readindex_operation",
+    "command": [
+      "python3",
+      "tests/test_readindex_operation.py"
+    ],
+    "cwd": "/data1/efs/amd-deep-slice32-06f5-20261012/source",
+    "commit": "06f5420c9182474805b5258cf4bc6d23c1ec3f3f",
+    "exit": 0,
+    "duration_seconds": 0.0677022933959961
+  },
+  {
+    "name": "test_lookup_read_group",
+    "command": [
+      "python3",
+      "tests/test_lookup_read_group.py"
+    ],
+    "cwd": "/data1/efs/amd-deep-slice32-06f5-20261012/source",
+    "commit": "06f5420c9182474805b5258cf4bc6d23c1ec3f3f",
+    "exit": 0,
+    "duration_seconds": 0.06565022468566895
+  },
+  {
+    "name": "ordinary-live",
+    "command": [
+      "python3",
+      "/tmp/amd-deep-slice32-fixture.py"
+    ],
+    "cwd": "/data1/efs/amd-deep-slice32-06f5-20261012/source",
+    "commit": "06f5420c9182474805b5258cf4bc6d23c1ec3f3f",
+    "exit": 0,
+    "duration_seconds": 64.21696901321411
+  }
+]

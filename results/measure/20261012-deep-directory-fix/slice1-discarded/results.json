@@ -1,0 +1,75 @@
+[
+  {
+    "name": "normal-clean",
+    "command": [
+      "make",
+      "EFS_GIT_ID=0bd5fa0186d73570e481e1ee1d3f8d02c3c575c0",
+      "EFS_GIT_BRANCH=fix-release-deep-lookup",
+      "EFS_GIT_DESCRIBE=lookup-route-candidate",
+      "clean"
+    ],
+    "cwd": "/data1/efs/amd-deep-slice1-0bd5-20261012/source",
+    "commit": "0bd5fa0186d73570e481e1ee1d3f8d02c3c575c0",
+    "exit": 0,
+    "duration_seconds": 0.02616596221923828
+  },
+  {
+    "name": "normal-build",
+    "command": [
+      "make",
+      "-j8",
+      "EFS_GIT_ID=0bd5fa0186d73570e481e1ee1d3f8d02c3c575c0",
+      "EFS_GIT_BRANCH=fix-release-deep-lookup",
+      "EFS_GIT_DESCRIBE=lookup-route-candidate",
+      "all"
+    ],
+    "cwd": "/data1/efs/amd-deep-slice1-0bd5-20261012/source",
+    "commit": "0bd5fa0186d73570e481e1ee1d3f8d02c3c575c0",
+    "exit": 0,
+    "duration_seconds": 9.383712530136108
+  },
+  {
+    "name": "test_host_inbox",
+    "command": [
+      "python3",
+      "tests/test_host_inbox.py"
+    ],
+    "cwd": "/data1/efs/amd-deep-slice1-0bd5-20261012/source",
+    "commit": "0bd5fa0186d73570e481e1ee1d3f8d02c3c575c0",
+    "exit": 0,
+    "duration_seconds": 0.07331585884094238
+  },
+  {
+    "name": "test_readindex_operation",
+    "command": [
+      "python3",
+      "tests/test_readindex_operation.py"
+    ],
+    "cwd": "/data1/efs/amd-deep-slice1-0bd5-20261012/source",
+    "commit": "0bd5fa0186d73570e481e1ee1d3f8d02c3c575c0",
+    "exit": 0,
+    "duration_seconds": 0.062393903732299805
+  },
+  {
+    "name": "test_lookup_read_group",
+    "command": [
+      "python3",
+      "tests/test_lookup_read_group.py"
+    ],
+    "cwd": "/data1/efs/amd-deep-slice1-0bd5-20261012/source",
+    "commit": "0bd5fa0186d73570e481e1ee1d3f8d02c3c575c0",
+    "exit": 0,
+    "duration_seconds": 0.05534768104553223
+  },
+  {
+    "name": "ordinary-live",
+    "command": [
+      "python3",
+      "/tmp/amd-deep-slice1-fixture.py"
+    ],
+    "cwd": "/data1/efs/amd-deep-slice1-0bd5-20261012/source",
+    "commit": "0bd5fa0186d73570e481e1ee1d3f8d02c3c575c0",
+    "exit": 1,
+    "duration_seconds": 91.8428909778595
+  }
+]

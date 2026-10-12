@@ -1,0 +1,48 @@
+{
+  "servers": [
+    {
+      "pid": 2061097,
+      "environment": [
+        "EFS_TRANSPORT=tcp",
+        "EFS_PACK_PROF=0",
+        "EFS_MD_RAFT_N=4",
+        "EFS_PACKED_WRITES=0",
+        "EFS_COMMANDS=0",
+        "EFS_COMMANDS_SERVER=0"
+      ]
+    },
+    {
+      "pid": 2061134,
+      "environment": [
+        "EFS_TRANSPORT=tcp",
+        "EFS_PACK_PROF=0",
+        "EFS_MD_RAFT_N=4",
+        "EFS_PACKED_WRITES=0",
+        "EFS_COMMANDS=0",
+        "EFS_COMMANDS_SERVER=0"
+      ]
+    },
+    {
+      "pid": 2061173,
+      "environment": [
+        "EFS_TRANSPORT=tcp",
+        "EFS_PACK_PROF=0",
+        "EFS_MD_RAFT_N=4",
+        "EFS_PACKED_WRITES=0",
+        "EFS_COMMANDS=0",
+        "EFS_COMMANDS_SERVER=0"
+      ]
+    },
+    {
+      "pid": 2061220,
+      "environment": [
+        "EFS_TRANSPORT=tcp",
+        "EFS_PACK_PROF=0",
+        "EFS_MD_RAFT_N=4",
+        "EFS_PACKED_WRITES=0",
+        "EFS_COMMANDS=0",
+        "EFS_COMMANDS_SERVER=0"
+      ]
+    }
+  ]
+}

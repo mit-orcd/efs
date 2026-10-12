@@ -1,0 +1,38 @@
+{
+  "source": "4e239d029029b8105a6e07f0e69a26fdc449de32",
+  "cwd": "/data1/efs/amd-deep-final-4e239d02-20261012/source",
+  "command": [
+    "python3",
+    "-u",
+    "tests/live/gc_reclamation.py",
+    "--mode",
+    "direct",
+    "--transport",
+    "tcp",
+    "--root",
+    "/data1/efs/amd-deep-final-4e239d02-overwrite-20261012",
+    "--root",
+    "/data1/efs/amd-deep-final-4e239d02-overwrite-20261012",
+    "--port",
+    "24940",
+    "--mount",
+    "/tmp/efs-amd-pack-isolated-4e239d029029b8105a6e07f0e69a26fdc449de32-mnt",
+    "--peer-mount",
+    "/tmp/efs-amd-pack-isolated-4e239d029029b8105a6e07f0e69a26fdc449de32-peer",
+    "--disable-efs-commands",
+    "--ordinary-overwrite-only",
+    "--fixture-quota",
+    "4G",
+    "--server-binary",
+    "/data1/efs/amd-deep-final-4e239d02-20261012/source/efsd",
+    "--client-binary",
+    "/data1/efs/amd-deep-final-4e239d02-20261012/source/efs-fuse"
+  ],
+  "environment": {
+    "EFS_PACKED_WRITES": "0",
+    "EFS_RAFT_FLOW": "0",
+    "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+    "EFS_RAFT_GROUP_DRAIN": "0"
+  },
+  "scope": "ordinary overwrite, cold restart and physical deletion; .efs disabled; not full broad acceptance"
+}

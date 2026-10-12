@@ -1,7 +1,7 @@
 # TCP/direct-I/O common-source qualification — October12
 
 User explicitly resumed assigned groups and requested15-minute reports; recurring
-progress heartbeat v0-3-0-qualification-progress is active. The later human policy
+progress heartbeat v0-3-0-qualification-progress was active during the historical split; it is now paused and root works alone. The later human policy
 waives old-binary/data preservation and backward-compatibility efforts. AMD,
 Intel and NUC were notified and owners acknowledged. Identified EFS stores may
 be wiped where easier; test evidence and unrelated services remain protected.
@@ -180,3 +180,10 @@ Root alone exports all24,334regular tracked files with SHA256 manifest and runs 
 ## Final integrated source verdict, ordinary-files scope
 
 [Final report](v030-final-qualification-1e3a4638-20261012.md): frozen1e3a normal/fault/native/earlyACK/fiveaffectedsanitizers PASS. Ordinaryfiles7client core1505PASS/7FAIL, all failures dir_deep_nesting30s; peer67/67 and7gracefulstopsPASS. Isolatedordinaryoverwrite primary/peer/cold/physical/queuedrainPASS. Packing0 andbothcommands0 verified on all actual processes.24,334source inputs unchanged,89evidencefilesverified,privatefixturesstopped. Notaccepted: deep-directory concurrency remains a blocker. No otheragents/tag/push.
+
+
+## Solo deep-directory fix: final release qualification PASS
+
+Frozen **4e239d029029b8105a6e07f0e69a26fdc449de32** supersedes 1e3a as current execution identity. [Exact report](v030-deep-directory-fix-20261012.md): bounded receive prefix8→32 closes ordinary deep-directory timeout without authority/durability changes. Three fresh candidate runs plus final release run each core1512/1512, deep7/7, peer67/67 and seven stops PASS, original budgets unchanged. Discarded routing and one-frame experiments are not integrated; repeat2 setup port conflict was NOTRUN and retained.
+
+Final exact-source normal/fault fullnative, earlyACK and five affected ASan/UBSan tests PASS; isolated ordinary overwrite primary/peer/cold/physical/queuedrain PASS. 24,466 tracked regular inputs unchanged; raw evidence integrity verified. All owned private AMD fixtures stopped. Packing0, commands0/server0, files/TCP/direct. Containers, packing, .efs, buffered/RDMA and dedicated repair/recovery remain excluded. Root worked alone; heartbeat paused; no push/tag/promotion. Deep-directory release blocker closed for this scope.

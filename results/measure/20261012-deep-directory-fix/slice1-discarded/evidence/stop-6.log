@@ -1,0 +1,3 @@
+Unmounting /tmp/efs-amd-deep-slice1/deep-mnt6
+Retiring drained efs-fuse PID 2056245 for /tmp/efs-amd-deep-slice1/deep-mnt6
+Unmounted /tmp/efs-amd-deep-slice1/deep-mnt6

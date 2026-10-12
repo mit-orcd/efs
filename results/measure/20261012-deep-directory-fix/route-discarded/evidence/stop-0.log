@@ -1,0 +1,3 @@
+Unmounting /tmp/efs-amd-deep-route91fb/deep-mnt0
+Retiring drained efs-fuse PID 2050968 for /tmp/efs-amd-deep-route91fb/deep-mnt0
+Unmounted /tmp/efs-amd-deep-route91fb/deep-mnt0

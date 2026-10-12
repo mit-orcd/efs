@@ -1,0 +1,155 @@
+[
+  {
+    "name": "normal-clean",
+    "command": [
+      "make",
+      "EFS_GIT_ID=4e239d029029b8105a6e07f0e69a26fdc449de32",
+      "EFS_GIT_BRANCH=release-v0.3.0-pre-alpha",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "clean"
+    ],
+    "cwd": "/data1/efs/amd-deep-final-4e239d02-20261012/source",
+    "commit": "4e239d029029b8105a6e07f0e69a26fdc449de32",
+    "exit": 0,
+    "duration_seconds": 0.0299530029296875
+  },
+  {
+    "name": "normal-build",
+    "command": [
+      "make",
+      "-j8",
+      "EFS_GIT_ID=4e239d029029b8105a6e07f0e69a26fdc449de32",
+      "EFS_GIT_BRANCH=release-v0.3.0-pre-alpha",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "all"
+    ],
+    "cwd": "/data1/efs/amd-deep-final-4e239d02-20261012/source",
+    "commit": "4e239d029029b8105a6e07f0e69a26fdc449de32",
+    "exit": 0,
+    "duration_seconds": 9.441576957702637
+  },
+  {
+    "name": "normal-native",
+    "command": [
+      "make",
+      "EFS_GIT_ID=4e239d029029b8105a6e07f0e69a26fdc449de32",
+      "EFS_GIT_BRANCH=release-v0.3.0-pre-alpha",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "test"
+    ],
+    "cwd": "/data1/efs/amd-deep-final-4e239d02-20261012/source",
+    "commit": "4e239d029029b8105a6e07f0e69a26fdc449de32",
+    "exit": 0,
+    "duration_seconds": 91.21407461166382
+  },
+  {
+    "name": "early-ack-raft",
+    "command": [
+      "./tests/test_raft"
+    ],
+    "cwd": "/data1/efs/amd-deep-final-4e239d02-20261012/source",
+    "commit": "4e239d029029b8105a6e07f0e69a26fdc449de32",
+    "exit": 0,
+    "duration_seconds": 0.0068624019622802734
+  },
+  {
+    "name": "fault-clean",
+    "command": [
+      "make",
+      "EFS_GIT_ID=4e239d029029b8105a6e07f0e69a26fdc449de32",
+      "EFS_GIT_BRANCH=release-v0.3.0-pre-alpha",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "clean"
+    ],
+    "cwd": "/data1/efs/amd-deep-final-4e239d02-20261012/fault-source",
+    "commit": "4e239d029029b8105a6e07f0e69a26fdc449de32",
+    "exit": 0,
+    "duration_seconds": 0.031267642974853516
+  },
+  {
+    "name": "fault-build",
+    "command": [
+      "make",
+      "-j8",
+      "EFS_GIT_ID=4e239d029029b8105a6e07f0e69a26fdc449de32",
+      "EFS_GIT_BRANCH=release-v0.3.0-pre-alpha",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "EFS_FAULTS=1",
+      "all"
+    ],
+    "cwd": "/data1/efs/amd-deep-final-4e239d02-20261012/fault-source",
+    "commit": "4e239d029029b8105a6e07f0e69a26fdc449de32",
+    "exit": 0,
+    "duration_seconds": 9.472102642059326
+  },
+  {
+    "name": "fault-native",
+    "command": [
+      "make",
+      "EFS_GIT_ID=4e239d029029b8105a6e07f0e69a26fdc449de32",
+      "EFS_GIT_BRANCH=release-v0.3.0-pre-alpha",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "EFS_FAULTS=1",
+      "test"
+    ],
+    "cwd": "/data1/efs/amd-deep-final-4e239d02-20261012/fault-source",
+    "commit": "4e239d029029b8105a6e07f0e69a26fdc449de32",
+    "exit": 0,
+    "duration_seconds": 90.94344925880432
+  },
+  {
+    "name": "san-test_host_inbox",
+    "command": [
+      "python3",
+      "tests/test_host_inbox.py"
+    ],
+    "cwd": "/data1/efs/amd-deep-final-4e239d02-20261012/source",
+    "commit": "4e239d029029b8105a6e07f0e69a26fdc449de32",
+    "exit": 0,
+    "duration_seconds": 0.13012313842773438
+  },
+  {
+    "name": "san-test_readindex_operation",
+    "command": [
+      "python3",
+      "tests/test_readindex_operation.py"
+    ],
+    "cwd": "/data1/efs/amd-deep-final-4e239d02-20261012/source",
+    "commit": "4e239d029029b8105a6e07f0e69a26fdc449de32",
+    "exit": 0,
+    "duration_seconds": 0.0969240665435791
+  },
+  {
+    "name": "san-test_lookup_read_group",
+    "command": [
+      "python3",
+      "tests/test_lookup_read_group.py"
+    ],
+    "cwd": "/data1/efs/amd-deep-final-4e239d02-20261012/source",
+    "commit": "4e239d029029b8105a6e07f0e69a26fdc449de32",
+    "exit": 0,
+    "duration_seconds": 0.09210848808288574
+  },
+  {
+    "name": "san-test_readindex_pair",
+    "command": [
+      "python3",
+      "tests/test_readindex_pair.py"
+    ],
+    "cwd": "/data1/efs/amd-deep-final-4e239d02-20261012/source",
+    "commit": "4e239d029029b8105a6e07f0e69a26fdc449de32",
+    "exit": 0,
+    "duration_seconds": 0.12706851959228516
+  },
+  {
+    "name": "san-test_readindex_remote_pair",
+    "command": [
+      "python3",
+      "tests/test_readindex_remote_pair.py"
+    ],
+    "cwd": "/data1/efs/amd-deep-final-4e239d02-20261012/source",
+    "commit": "4e239d029029b8105a6e07f0e69a26fdc449de32",
+    "exit": 0,
+    "duration_seconds": 0.12642884254455566
+  }
+]

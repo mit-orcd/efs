@@ -1,0 +1,3 @@
+Unmounting /tmp/efs-amd-deep-baseline/deep-mnt4
+Retiring drained efs-fuse PID 2044767 for /tmp/efs-amd-deep-baseline/deep-mnt4
+Unmounted /tmp/efs-amd-deep-baseline/deep-mnt4

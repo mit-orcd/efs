@@ -1,5 +1,7 @@
 # v0.3.0-pre-alpha candidate notes
 
+**Latest exact-source result:** `4e239d029029b8105a6e07f0e69a26fdc449de32` passes AMD ordinary-files qualification after the deep-directory fix; packing/containers/.efs remain disabled. [Report](../status/v030-deep-directory-fix-20261012.md). No push or tag. Earlier failed checkpoints below are historical.
+
 **Latest alpha scope:** ordinary files/TCP/direct only, `EFS_PACKED_WRITES=0`, `EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`. Small-file packing is excluded alongside containers, `.efs`, RDMA, buffered and dedicated repair/recovery. Earlier packing qualification requirements below are historical. [Binding packing exclusion](../status/v030-packing-exclusion-20261012.md).
 
 This is an integration candidate, not a published or tagged release. The

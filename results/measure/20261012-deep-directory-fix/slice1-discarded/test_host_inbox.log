@@ -1,0 +1,1 @@
+host inbox: stable group order, global read/control/config fences, frame/byte bounds, bounded FIFO slices, deferred credits and backlog wakes PASS
