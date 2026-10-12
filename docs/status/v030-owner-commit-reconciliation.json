@@ -5,9 +5,15 @@
   "owners": {
     "amd": {
       "branch": "devel-amd",
-      "frozen_tip": "19f7efb374f7cc7323f25721c23908cdd138f855",
+      "frozen_tip": "f1babb1ceac859c700507aa17b042eab3f6c4237",
       "tip_is_ancestor": true,
-      "nonancestor_commits": []
+      "nonancestor_commits": [
+        {
+          "commit": "f1babb1ceac859c700507aa17b042eab3f6c4237",
+          "disposition": "integrated",
+          "reason": "Exact frozen owner/manager handoff tip is now a release ancestor."
+        }
+      ]
     },
     "mac": {
       "branch": "devel-mac",
@@ -112,9 +118,15 @@
     },
     "intel": {
       "branch": "devel-intel",
-      "frozen_tip": "60c86d881480a3e8de55f09a2a9bbf63987869ba",
+      "frozen_tip": "6f657ef408543f9f7f9f3728191ae83659bbaca4",
       "tip_is_ancestor": true,
-      "nonancestor_commits": []
+      "nonancestor_commits": [
+        {
+          "commit": "6f657ef408543f9f7f9f3728191ae83659bbaca4",
+          "disposition": "integrated",
+          "reason": "Exact frozen owner/manager handoff tip is now a release ancestor."
+        }
+      ]
     },
     "code-review": {
       "branch": "devel-code-review",
@@ -185,5 +197,20 @@
       ]
     }
   },
-  "latest_ancestry_reconciliation_head": "a34155975878afb74571b17fe8626e98e9734a0e"
+  "latest_ancestry_reconciliation_head": "9613249497e7d26282a5b2e3250ab3b2c798fee5",
+  "frozen_owner_handoffs": {
+    "amd": "f1babb1ceac859c700507aa17b042eab3f6c4237",
+    "mac": "51b67e96b6b235ad7c0bc2bfa603c62c2c1a598f",
+    "nuc": "e0ec9208dab076d4a2d1374a3413accdbb33c63d",
+    "orcd": "bc15451909c77ec04180639db6c069bb34ee3fa0",
+    "intel": "6f657ef408543f9f7f9f3728191ae83659bbaca4",
+    "code-review": "d3efd6643ec93405ef6f2f66fd8b882069449e98"
+  },
+  "all_frozen_handoffs_are_ancestors": true,
+  "held_commits_within_frozen_handoffs": [],
+  "held_scope": [
+    "Mac client combined CREATE/OPEN adoption portion of f842cd37 absent from root source despite original ancestry: assigned Mac reconciliation and lifetime regressions; not qualified.",
+    "Any new post-handoff branch commits excluded until submitted/reviewed; frozen tips fixed above.",
+    "Mounted packing direct still failed on d26; buffered running, no release acceptance."
+  ]
 }
