@@ -2,7 +2,7 @@
 """Unprivileged private Intel container fixture actions; raw evidence stays outside Git."""
 import argparse,hashlib,json,os,signal,socket,subprocess,time
 from pathlib import Path
-p=argparse.ArgumentParser(description=__doc__);p.add_argument('action',choices=['proof','start','mount','stop-clients','stop-servers','run','inventory']);p.add_argument('--base',type=Path,required=True);p.add_argument('--host-index',type=int,choices=[0,1],required=True);p.add_argument('--command');a=p.parse_args()
+p=argparse.ArgumentParser(description=__doc__);p.add_argument('action',choices=['proof','start','mount','stop-clients','stop-servers','run','inventory']);p.add_argument('--base',type=Path,required=True);p.add_argument('--host-index',type=int,choices=[0,1],required=True);p.add_argument('--command');p.add_argument('--clients',type=int,default=2,choices=range(1,8));a=p.parse_args()
 b=a.base.resolve();assert b.parent==Path('/data1/efs/bench') and b.name.startswith('container-') and os.getuid()!=0
 s=b/'src';out=b/'artifacts';out.mkdir(exist_ok=True)
 env={k:v for k,v in os.environ.items() if not k.startswith('EFS_')};env.update(EFS_MD_RAFT_N='4',EFS_TRANSPORT='tcp',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_PACKED_WRITES='0')
@@ -38,17 +38,20 @@ elif a.action=='start':
   rows.append(launch(cmd,'n%d'%n))
  (out/'servers.json').write_text(json.dumps(rows,indent=2));print(json.dumps(rows))
 elif a.action=='mount':
- rows=[];seed=['10.0.0.209:27432','10.0.0.207:27432'][a.host_index]
- for i in range(2):
+ rows=json.loads((out/'clients.json').read_text()) if (out/'clients.json').exists() else [];seed=['10.0.0.209:27432','10.0.0.207:27432'][a.host_index]
+ # Existing stopped clients may be remounted; live clients retain their identities.
+ for i in range(a.clients):
+  if i<len(rows) and os.path.ismount(b/('mnt%d'%i)):continue
   m=b/('mnt%d'%i);m.mkdir(exist_ok=True);assert not os.path.ismount(m)
   row=launch([str(s/'efs-fuse'),seed,'fs',str(m),'-f'],'client%d'%i);end=time.monotonic()+40
   while not os.path.ismount(m):
    assert time.monotonic()<end,'mount timeout';time.sleep(.1)
-  rows.append(row)
+  if i<len(rows):rows[i]=row
+  else:rows.append(row)
  (out/'clients.json').write_text(json.dumps(rows,indent=2));print(json.dumps(rows))
 elif a.action=='stop-clients':
- for i in range(2):
-  m=b/('mnt%d'%i)
+ for row in json.loads((out/'clients.json').read_text()):
+  m=Path(row['argv'][3]);assert m.parent==b
   if os.path.ismount(m):subprocess.run([str(s/'scripts/client.sh'),'stop',str(m)],env=env,cwd=s,check=True,timeout=75)
  print('clients graceful PASS')
 elif a.action=='stop-servers':
