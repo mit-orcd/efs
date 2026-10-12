@@ -1475,6 +1475,10 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+release-v0.3.2-based branch, four active direct items (expiry deferred) and the requested ORCD
+RDMA/direct-I/O profile with commands enabled and containers/packing disabled.
+Deployment and enabled-feature acceptance are pending.
+
 **Current release integration:** `release-v0.3.2-pre-alpha` merges reviewed ORCD evidence9fc5e024 into v0.3.1. Product/test inputs unchanged. AMD TCP/direct and TCP/buffered PASS; independently reviewed ORCD nativeRDMA/direct two core rounds1512/1512 and peer67/67 per round, native/fault/sanitizers/cold/physicalGC PASS. Tested SHAs remain15e2a531 AMD and40f4509d ORCD; the merge itself was not remotely executed. Packing/containers/.efs/repair remain disabled. No push/tag/deployment. [v0.3.2 review and coverage](../status/v032-integration-review-20261012.md).
 
 **Latest alpha scope:** ordinary files/TCP/direct only, `EFS_PACKED_WRITES=0`, `EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`. Small-file packing is excluded alongside containers, `.efs`, RDMA, buffered and dedicated repair/recovery. Earlier packing qualification requirements below are historical. [Binding packing exclusion](../status/v030-packing-exclusion-20261012.md).
@@ -6589,6 +6593,11 @@ large-tree/load/checksum and remaining fault/gateway gates stay open.
 <a id="w90"></a>
 
 ### W90 · Scratch-file expiry metadata and safe lifecycle
+
+**Oct 12 user scope:** deferred for now. `devel-efs` focuses on non-expiry
+`.efs` commands; retain truthful unavailable/refusal behavior for expiry options.
+The accepted design below is retained, with no implementation or activation
+authorization inferred from this work profile.
 
 **Policy accepted Oct 8 (D33):** opt-in fixed expiry, no universal TTL, owner renewal within operator limits, singly linked regular files and safe conditional namespace deletion. This supersedes the initial open-policy discussion below; implementation remains open. [Contract](../status/accepted-namespace-scratch-20261008.md#d33--w90-opt-in-fixed-scratch-expiry).
 
