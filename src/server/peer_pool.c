@@ -171,6 +171,9 @@ struct efs_conn *server_peer_conn_get(const char *host, uint16_t port)
         return NULL;
     }
     for (;;) {
+        if(!efs_net_remaining_ms(1)) {
+            pthread_mutex_unlock(&p->lock);return NULL;
+        }
         int free_s = -1;
         for (int s = 0; s < EFS_PEER_CONNS_PER_NODE; s++) {
             if (!p->busy[s]) {
@@ -182,8 +185,12 @@ struct efs_conn *server_peer_conn_get(const char *host, uint16_t port)
             /* Bounded wait: never park a caller forever on a busy pool; after
              * the deadline let the caller fail/back off. */
             struct timespec ts;
+            int wait_ms=efs_net_remaining_ms(5000);
+            if(!wait_ms) { pthread_mutex_unlock(&p->lock);return NULL; }
             clock_gettime(CLOCK_REALTIME, &ts);
-            ts.tv_sec += 5;
+            ts.tv_sec+=wait_ms/1000;
+            ts.tv_nsec+=(long)(wait_ms%1000)*1000000;
+            if(ts.tv_nsec>=1000000000L) { ts.tv_sec++;ts.tv_nsec-=1000000000L; }
             int wrc = pthread_cond_timedwait(&p->cv, &p->lock, &ts);
             if (wrc == ETIMEDOUT) {
                 pthread_mutex_unlock(&p->lock);

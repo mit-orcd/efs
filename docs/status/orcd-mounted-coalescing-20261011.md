@@ -842,3 +842,42 @@ The merged Mac atomic APPEND selection writes durable tag 53. Stores that
 contain this tag require a tag-53-capable metadata reader; this all-node
 upgrade does not establish compatibility with an older binary rollback.
 Packing tags 45–51 and catch-up tag 52 retain their existing meanings.
+
+## Follower read budget candidate and retained acceptance failures
+
+The `bbe8b475f735` checkpoint passed the complete Linux normal and fault-enabled
+native gates against 713 exact tracked inputs. All eleven canonical builds,
+runtime identity checks, cold reads of all 61 retained shared-fixture survivors,
+and pinned statistics/revocation checks passed. The selected shared object also
+passed cold zero-fragment verification after four durable member fences; this
+closes that fixture's shared-fragment reclamation proof, including the offline
+member hold. Empty directories and unrelated live objects remain outside that
+reclamation claim.
+
+Two quiet original seven-client/jobs=16/30-second POSIX waves remain failures.
+Wave 1 had five clients at 220 pass/0 fail/1 skip and two at 219/1/1, with
+`deepnest` timing out. Wave 2 had three clients at 220/0/1 and four at 219/1/1:
+three statistics queries and one find query timed out, while every deep nesting
+case passed. Both complete raw waves are retained; neither establishes a full
+mounted pass or closes concurrent query work.
+
+The next bounded candidate overlaps independently fresh hosted follower read
+proofs with eight reusable 128 KiB helper stacks. There is no queued work or
+per-request thread creation; saturation or partial/failed initialization keeps
+the scalar fallback. Both callbacks finish before stack or host ownership can
+escape. Local leader admissions and unhosted routing retain their existing
+freshness checks. No coverage is reused across requests.
+
+A forwarded read previously combined a 400 ms logical retry budget with a
+30-second transport receive wait, including RDMA, and a five-second peer pool
+wait. The read-only scope now applies one absolute existing 400 ms budget to
+pool checkout, connect, retries and frames, preserving any shorter inherited
+budget. Receive timeout properties are restored on successful pool release;
+lost, malformed or short replies drop the connection. An IO result after this
+read budget expires becomes BUSY, never successful authority. Earlier hard
+transport/protocol failures and semantic refusals retain their meanings.
+Mutation timeouts, uncertain-write ownership and replay behavior are unchanged.
+Actual production function tests cover budgets, pool ownership, TCP/RDMA
+receive limits, helper saturation, partial initialization and joined callback
+lifetime. Focused local ASan/UBSan passes; full Linux and mounted qualification
+of this candidate is still required.

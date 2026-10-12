@@ -3555,6 +3555,7 @@ static int host_rpc_submit(struct efs_raft_host *h, int rid, uint8_t group,
     void *reply = NULL;
     uint32_t rlen = 0;
     int rc = EFS_OK;
+    int old_recv_ms=0;
 
     memset(rep, 0, sizeof(*rep));
     /* HOST_CMD_MAX is the stack buffer, not a protocol max. A publication
@@ -3581,9 +3582,10 @@ static int host_rpc_submit(struct efs_raft_host *h, int rid, uint8_t group,
         rc = EFS_ERR_BUSY;
         goto out;
     }
-    if (pc->kind == EFS_CONN_TCP && pc->fd >= 0 && io_ms > 0) {
-        efs_set_recv_timeout(pc->fd, io_ms);
-        efs_set_send_timeout(pc->fd, io_ms);
+    if (io_ms > 0) {
+        old_recv_ms=pc->recv_timeout_ms;
+        efs_conn_set_recv_timeout(pc,io_ms);
+        if(pc->fd>=0)efs_set_send_timeout(pc->fd,io_ms);
     }
     if (efs_conn_send_msg(pc, EFS_MSG_RAFT_MKFS, payload, plen) != 0) {
         server_peer_conn_drop(host, port, pc);
@@ -3599,9 +3601,9 @@ static int host_rpc_submit(struct efs_raft_host *h, int rid, uint8_t group,
     }
     memcpy(rep, reply, sizeof(*rep));
     free(reply);
-    if (pc->kind == EFS_CONN_TCP && pc->fd >= 0) {
-        efs_set_recv_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
-        efs_set_send_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
+    if (io_ms > 0) {
+        efs_conn_set_recv_timeout(pc,old_recv_ms);
+        if(pc->fd>=0)efs_set_send_timeout(pc->fd,EFS_IO_TIMEOUT_MS);
     }
     server_peer_conn_release(host, port, pc);
 out:
@@ -3624,7 +3626,7 @@ static int host_local_leader(struct efs_raft_host *h, uint8_t group)
     return v.has ? v.leader : -1;
 }
 
-static int host_remote_cmd(struct efs_raft_host *h, uint8_t group,
+static int host_remote_cmd_impl(struct efs_raft_host *h, uint8_t group,
                            const uint8_t *cmd, uint32_t clen,
                            struct efs_msg_raft_mkfs_reply *rep, int prefer_rid)
 {
@@ -3651,7 +3653,8 @@ static int host_remote_cmd(struct efs_raft_host *h, uint8_t group,
             prefer_rid = -1;
             continue;
         }
-        rc = host_rpc_submit(h, rid, group, cmd, clen, rep, EFS_IO_TIMEOUT_MS);
+        int io_ms=clen?EFS_IO_TIMEOUT_MS:HOST_READ_TRIES*HOST_TICK_US/1000;
+        rc = host_rpc_submit(h, rid, group, cmd, clen, rep, io_ms);
         if (rc != EFS_OK) {
             if (host_past_deadline(&end))
                 return rc;
@@ -3677,6 +3680,29 @@ static int host_remote_cmd(struct efs_raft_host *h, uint8_t group,
         skip = rid;
         prefer_rid = -1;
     }
+}
+
+/* A read-only forwarded proof must not borrow the mutation RPC's 30-second
+ * transport wait. One absolute budget covers pool admission, connection,
+ * all leader retries and TCP/RDMA frames. Mutation uncertainty retains its
+ * existing timeout and replay ownership. Restore the caller's scope on exit. */
+static int host_remote_cmd(struct efs_raft_host *h,uint8_t group,
+                          const uint8_t *cmd,uint32_t clen,
+                          struct efs_msg_raft_mkfs_reply *rep,int prefer_rid)
+{
+    if(clen)return host_remote_cmd_impl(h,group,cmd,clen,rep,prefer_rid);
+    uint64_t previous=efs_net_deadline_ms();
+    struct timespec now;clock_gettime(CLOCK_MONOTONIC,&now);
+    uint64_t deadline=(uint64_t)now.tv_sec*1000+(uint64_t)now.tv_nsec/1000000+
+                      HOST_READ_TRIES*HOST_TICK_US/1000;
+    if(!previous || deadline<previous)efs_net_set_deadline_ms(deadline);
+    int rc=host_remote_cmd_impl(h,group,cmd,clen,rep,prefer_rid);
+    /* Expired read authority remains retryable, exactly like a local round
+     * that missed its quorum deadline. Earlier transport/protocol errors
+     * remain hard failures; this never manufactures a successful proof. */
+    if(rc==EFS_ERR_IO && !efs_net_remaining_ms(1))rc=EFS_ERR_BUSY;
+    efs_net_set_deadline_ms(previous);
+    return rc;
 }
 
 static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
@@ -4053,10 +4079,13 @@ static int host_read_index(struct efs_raft_host *h,uint8_t group,int *hint)
     return host_read_index_admitted(h,group,hint,NULL);
 }
 
+#include "read_index_pair_remote.h"
+
 /* Overlap two independent hosted-leader read rounds. Both admissions are
  * captured before either probe is sent. A pending older round cannot cover
  * either admission; the existing waiter starts its next round as needed.
- * Different leaders/unhosted groups keep the ordinary scalar routing. */
+ * Different hosted leaders use bounded independent proofs; unhosted groups
+ * retain ordinary scalar routing. Neither path shares coverage across RPCs. */
 static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
                                 uint8_t second,int *hint)
 {
@@ -4067,9 +4096,10 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
     for(unsigned i=0;i<2;i++) {
         r[i]=group_raft(h,groups[i]);
         if(!r[i] || efs_raft_role(r[i])!=EFS_RAFT_LEADER) {
+            int hosted=group_raft(h,first)!=NULL && group_raft(h,second)!=NULL;
             pthread_mutex_unlock(&h->mu);
-            rc=host_read_index(h,first,hint);
-            return rc==EFS_OK ? host_read_index(h,second,hint) : rc;
+            return hosted?host_read_index_remote_pair(h,first,second,hint):
+                          host_read_index_scalar_pair(h,first,second,hint);
         }
         uint64_t previous=efs_raft_read_round(r[i]);
         if(previous==UINT64_MAX) {
