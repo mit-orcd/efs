@@ -2,6 +2,8 @@
 
 **Current scope (user decision): repair and recovery for unplanned events are deferred; focus on normal operations, clean shutdown and orderly restart.** Existing durability safeguards and fault-test evidence remain in place. The historical standalone two-repair-GAP/TCP-only item is closed on the isolated fix branch; automatic and packed-segment failure repair remain deferred. [Scope and qualification](orcd-default-repair-20261012.md#current-work-scope--user-decision).
 
+[ORCD v0.3.1 RDMA/direct-I/O requalification](orcd-v031-rdma-direct-20261012.md) tests the frozen `release-v0.3.1-pre-alpha` snapshot with packing, containers and `.efs` excluded.
+
 [ORCD ordinary-file RDMA/direct-I/O deployment and newer-commit review](orcd-profile-review-20261012.md): `.efs`, containers and small-file packing disabled and excluded; normal operations and orderly restart qualify separately from the release branch.
 
 [ORCD mandatory standalone repair qualification](orcd-default-repair-20261012.md) supersedes the earlier default repair GAP for ordinary missing-base roles; release activation and broader W74 remain separate.
