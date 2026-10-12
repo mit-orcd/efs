@@ -384,6 +384,29 @@ static void pack_publish_batch(struct pack_context *p)
         p->batch_results[slots[j]]=one;
     }
 }
+/* Independent immutable fragment PUTs lease the same bounded, precharged
+ * helpers as publication. Every helper is joined before publication/retry;
+ * successful ACK bits survive a partial failure without replaying those PUTs. */
+struct pack_put_run { struct pack_context *pack; uint32_t bytes; };
+static int pack_put_one(void *context,uint32_t fi)
+{
+    struct pack_put_run *run=context;struct pack_context *p=run->pack;
+    if(__atomic_load_n(&p->put_mask,__ATOMIC_RELAXED)&(1u<<fi))return EFS_OK;
+    if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
+    uint8_t wire[EFS_PACKED_PUT_HEADER+EFS_PACK_UPLOAD_MAX];
+    memcpy(wire,p->wire,run->bytes);efs_put_upload_wr32(wire+4,fi);
+    efs_node_id_t node=p->object.nodes[fi];
+    struct efs_conn *c=efs_client_conn_get(node);if(!c)return EFS_ERR_NET;
+    uint8_t type=0;void *raw=NULL;uint32_t n=0;
+    if(efs_conn_send_msg_parts(c,EFS_MSG_PUT_PACKED,wire,run->bytes,
+         p->fragments[fi],(uint32_t)p->cohort.geometry/2) || efs_conn_recv_msg(c,&type,&raw,&n)) {
+        free(raw);efs_client_conn_drop(node,c);return EFS_ERR_NET;
+    }
+    efs_client_conn_release(node,c);
+    int rc=type==EFS_MSG_PUT_PACKED_REPLY && n==4?(int32_t)efs_put_upload_rd32(raw):EFS_ERR_PROTO;
+    free(raw);if(rc)return rc;
+    __atomic_fetch_or(&p->put_mask,1u<<fi,__ATOMIC_RELAXED);return EFS_OK;
+}
 static int pack_publish_cohort(struct pack_context *p)
 {
     if(p->batch)pack_publish_batch(p);
@@ -409,21 +432,8 @@ static int pack_progress(struct pack_context *p)
         rc=efs_pack_upload_encode(&p->object,p->cohort.refs,p->cohort.count,
             p->wire+EFS_PACKED_PUT_HEADER,sizeof(p->wire)-EFS_PACKED_PUT_HEADER,&manifest);if(rc)return rc;
         efs_put_upload_wr32(p->wire,g_client.export_id);efs_put_upload_wr32(p->wire+8,(uint32_t)manifest);
-        for(unsigned fi=0;fi<EFS_NUM_FRAGMENTS;fi++) {
-            if(p->put_mask&(1u<<fi))continue;
-            if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
-            efs_put_upload_wr32(p->wire+4,fi);efs_node_id_t node=p->object.nodes[fi];
-            struct efs_conn *c=efs_client_conn_get(node);if(!c)return EFS_ERR_NET;
-            uint8_t type=0;void *raw=NULL;uint32_t n=0;
-            if(efs_conn_send_msg_parts(c,EFS_MSG_PUT_PACKED,p->wire,EFS_PACKED_PUT_HEADER+(uint32_t)manifest,
-                 p->fragments[fi],(uint32_t)p->cohort.geometry/2) || efs_conn_recv_msg(c,&type,&raw,&n)) {
-                free(raw);efs_client_conn_drop(node,c);return EFS_ERR_NET;
-            }
-            efs_client_conn_release(node,c);
-            rc=type==EFS_MSG_PUT_PACKED_REPLY && n==4?(int32_t)efs_put_upload_rd32(raw):EFS_ERR_PROTO;
-            free(raw);if(rc)return rc;
-            p->put_mask|=1u<<fi;
-        }
+        struct pack_put_run run={p,EFS_PACKED_PUT_HEADER+(uint32_t)manifest};
+        rc=pack_parallel(p,EFS_NUM_FRAGMENTS,pack_put_one,&run);if(rc)return rc;
     }
     rc=pack_publish_cohort(p);if(rc)return rc;
     return EFS_OK;

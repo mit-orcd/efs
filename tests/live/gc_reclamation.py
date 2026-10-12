@@ -409,12 +409,18 @@ def start(prefer_single_host=False):
         if prefer_single_host and i==0:time.sleep(2)
     time.sleep(3)
 
-def stop(crash=False):
+def stop(crash=False, strict=False):
     for proc in servers:
         if proc.poll() is None:proc.send_signal(signal.SIGKILL if crash else signal.SIGTERM)
     for proc in servers:
         try:proc.wait(timeout=20)
-        except subprocess.TimeoutExpired:proc.kill();proc.wait()
+        except subprocess.TimeoutExpired:
+            if strict:
+                raise AssertionError('orderly daemon shutdown exceeded 20 seconds; no forced kill accepted')
+            proc.kill();proc.wait()
+        if strict:
+            assert not crash and proc.returncode == 0, ('orderly daemon exit',proc.pid,proc.returncode)
+    if strict:print('all four daemons exited orderly with status zero PASS',flush=True)
     servers.clear()
 
 def mount_client():
@@ -665,7 +671,7 @@ try:
                 result=subprocess.run(list(map(str,command)),env=env,timeout=600)
                 if result.returncode:failures.append({'gate':label,'returncode':result.returncode})
         run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
-        unmount();stop(crash=True);start();mount_client()
+        unmount();stop(strict=True);start();mount_client()
         for name,body in expected.items():assert (mount/'mounted-pack'/name).read_bytes()==body,name
         assert not (mount/'mounted-pack'/'tiny-2').exists()
         print('mounted packed/ordinary mutations and acknowledged cold hashes PASS',flush=True)
@@ -675,9 +681,11 @@ try:
         wait(lambda:not packed_files(),'mounted packed physical fragments reclaimed',180)
         wait(drained,'mounted packing metadata queues drained',180)
         report={'cold_verified':True,'physical_packed_empty':True,'failures':failures,
-                'source_sha256':digest.hexdigest(),'clients':a.packing_clients,'mode':a.mode,'transport':a.transport}
+                'source_sha256':digest.hexdigest(),'clients':a.packing_clients,'mode':a.mode,'transport':a.transport,
+                'restart':'orderly; four status-zero daemons, no forced kill'}
         (work/'mounted-packing.json').write_text(json.dumps(report,indent=2))
         assert not failures,failures
+        unmount();stop(strict=True)
         print('mounted packing '+a.mode+' PASS',flush=True)
         raise SystemExit(0)
     if a.efs_commands_only:

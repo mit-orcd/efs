@@ -14,6 +14,7 @@ code=s[:s.index('static uint64_t pack_now(')].replace('static int pack_batch_pee
 struct efs_client g_client;
 /* This gate drives scalar retry ownership. The actual compatibility helper
  * and both batch downgrade paths are exercised by their dedicated gates. */
+static unsigned put_live,put_peak;
 static unsigned sends[3],publications[2],loads[2],retirements[2],released;
 static unsigned commands,upload_retired,retire_inflight,retire_peak;
 static int admit_fail,put_fail,publication_fail,load_fail,retire_fail,upload_fail;
@@ -30,7 +31,7 @@ static int exercise_one(void *context,uint32_t i)
  usleep(20000);__atomic_sub_fetch(&parallel_live,1,__ATOMIC_SEQ_CST);
  return i==11?EFS_ERR_NET:EFS_OK;
 }
-static uint32_t current_fi;static uint8_t digest[EFS_HASH_SIZE];static int have_digest;
+static __thread uint32_t current_fi;static uint8_t digest[EFS_HASH_SIZE];static int have_digest;
 static uint64_t pack_now(void){return 1000000000;}
 static __thread uint64_t deadline;
 uint64_t efs_client_rpc_deadline_ms(void){return deadline;}
@@ -55,12 +56,16 @@ int efs_conn_send_msg_parts(struct efs_conn *c,uint8_t t,const void *a,uint32_t 
  assert(!efs_pack_upload_decode(h+EFS_PACKED_PUT_HEADER,an-EFS_PACKED_PUT_HEADER,&o,refs,EFS_PACK_MAX_RECORDS,&n));
  assert(n==2 && o.nodes[current_fi]==(uintptr_t)c && bn==o.ledger.geometry/2);
  uint8_t sum[EFS_HASH_SIZE];efs_hash(b,bn,sum);assert(!memcmp(sum,o.checksums[current_fi],sizeof(sum)));
+ pthread_mutex_lock(&pack_mu);
  if(have_digest)assert(!memcmp(digest,o.ledger.body_digest,sizeof(digest)));
  else {memcpy(digest,o.ledger.body_digest,sizeof(digest));have_digest=1;}
- sends[current_fi]++;return 0;
+ pthread_mutex_unlock(&pack_mu);
+ unsigned live=__atomic_add_fetch(&put_live,1,__ATOMIC_SEQ_CST),peak=__atomic_load_n(&put_peak,__ATOMIC_SEQ_CST);
+ while(live>peak&&!__atomic_compare_exchange_n(&put_peak,&peak,live,0,__ATOMIC_SEQ_CST,__ATOMIC_SEQ_CST)){}
+ usleep(20000);sends[current_fi]++;return 0;
 }
 int efs_conn_recv_msg(struct efs_conn *c,uint8_t *t,void **b,uint32_t *n){
- (void)c;*b=NULL;*n=0;if(current_fi==1 && put_fail){put_fail=0;return -1;}
+ (void)c;__atomic_sub_fetch(&put_live,1,__ATOMIC_SEQ_CST);*b=NULL;*n=0;if(current_fi==1 && put_fail){put_fail=0;return -1;}
  *t=EFS_MSG_PUT_PACKED_REPLY;*n=4;*b=calloc(1,4);assert(*b);return 0;
 }
 int efs_dcache_finish_publication(efs_ino_t ino,uint64_t g,uint32_t ci,uint64_t obj,uint64_t seq,int verdict,const struct efs_chunk_rec *r){
@@ -111,7 +116,7 @@ int main(void){
  p.busy=1;assert(pack_flush_group(0,1)==EFS_ERR_BUSY&&!commands);p.busy=0;
  admit_fail=put_fail=publication_fail=load_fail=retire_fail=upload_fail=1;
  assert(pack_flush_group(0,1)==EFS_ERR_NET && p.built && p.cohort.count==2 && !released);
- assert(pack_flush_group(0,1)==EFS_ERR_NET && p.put_mask==1 && !released);
+ assert(pack_flush_group(0,1)==EFS_ERR_NET && p.put_mask==5 && !released && !put_live && put_peak>=2 && !publications[0] && !publications[1]);
  assert(pack_flush_group(0,1)==EFS_ERR_NET && p.put_mask==7 && p.writers[0].done && !p.writers[1].done && !released);
  assert(pack_flush_group(0,1)==EFS_ERR_NET && p.writers[1].published && !p.writers[1].loaded);
  assert(!pack_flush_group(0,1) && !p.cohort.count && retirement.active && !released && pack_ack_credits==2);

@@ -8632,6 +8632,13 @@ static unsigned host_gc_backlog_idle(unsigned configured, int capped,
     return capped && removed_after > removed_before ? configured : GC_LOOP_MS;
 }
 
+/* Both saturation and a durable packed deletion ACK are required. Unlike a
+ * local unlink counter, this proof also covers a non-placement leader. */
+static unsigned host_gc_packed_idle(unsigned ordinary, int capped, int deleted)
+{
+    return capped && deleted ? 20 : ordinary;
+}
+
 
 static void *host_gc_thread(void *arg)
 {
@@ -8644,6 +8651,7 @@ static void *host_gc_thread(void *arg)
         struct reap_times reap_times = {0};
         uint64_t removed_before = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED);
         int backlog_capped = 0;
+        int packed_capped = 0, packed_deleted = 0;
 
         __atomic_store_n(&h->s->gc_pass_start_us, efs_iostats_now_us(), __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_stage, 1, __ATOMIC_RELAXED);
@@ -8683,7 +8691,11 @@ static void *host_gc_thread(void *arg)
             host_gc_close_step_pass(h, h->g[g].group, anchor);
             host_gc_close_pass(h, h->g[g].group, anchor);
             host_gc_orphan_pass(h, h->g[g].group, anchor);
-            backlog_capped |= host_gc_pack_pass(h,h->g[g].group,anchor);
+            int pack_deleted = 0;
+            int pack_capped = host_gc_pack_pass(h,h->g[g].group,anchor,&pack_deleted);
+            packed_capped |= pack_capped && pack_deleted;
+            packed_deleted |= pack_deleted;
+            backlog_capped |= pack_capped;
             t_orphan += now_us_() - ta;
             ta = now_us_();
             host_gc_reap_pass(h, h->g[g].group, anchor, &reap_times);
@@ -8756,10 +8768,16 @@ static void *host_gc_thread(void *arg)
         __atomic_store_n(&h->s->gc_pass_start_us, 0, __ATOMIC_RELAXED);
         uint64_t removed_after = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED);
         unsigned idle_ms = host_gc_backlog_idle(h->gc_backlog_idle_ms, backlog_capped, removed_before, removed_after);
+        /* Small objects can leave thousands of retired packs. Keep the same
+         * eight-object/200ms pass budgets and a fair yield, but do not spend
+         * a full second asleep after a saturated page made durable deletion
+         * progress. This also covers remote-only placement. */
+        idle_ms = host_gc_packed_idle(idle_ms, packed_capped, packed_deleted);
         if (idle_ms < GC_LOOP_MS && env_on("EFS_RAFT_OBS"))
             fprintf(stderr, "raft-host: gc-backlog-idle ms=%u removed=%llu\n", idle_ms,
                     (unsigned long long)(removed_after - removed_before));
-        /* Default 1s between passes, in 20 ms slices so shutdown is prompt.
+        /* Idle/blocked passes wait 1s; progressing packed backlog yields 20ms.
+         * Sleep in 20ms slices so shutdown is prompt.
          * A snapshot export queued by the pump starts on the next slice. */
         for (g = 0; g < (int)((idle_ms + 19) / 20) && h->gc_running; g++) {
             host_snap_export_pass(h);
