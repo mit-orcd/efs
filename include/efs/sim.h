@@ -180,6 +180,8 @@ int efs_sim_corrupt(struct efs_sim *sim, int server, const struct efs_frag_id *i
 int efs_sim_drop_sum(struct efs_sim *sim, const struct efs_frag_id *id);
 /* 1 when the payload still matches its stored checksum. */
 int efs_sim_frag_healthy(struct efs_sim *sim, const struct efs_frag_id *id);
+/* Explicit synchronous simulator repair model, not a daemon worker. */
+int efs_sim_repair_role(struct efs_sim *,efs_ino_t,uint32_t,uint32_t);
 int efs_sim_partition(struct efs_sim *sim, int server, int on);
 int efs_sim_clock_step(struct efs_sim *sim, uint64_t delta);
 

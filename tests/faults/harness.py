@@ -3,10 +3,11 @@
 
 Two layers:
   sim          tests/faults/fault_sim on the in-process simulator
-  integration  four efsd processes and two FUSE clients, TCP, disposable
+  integration  four efsd processes and two FUSE clients, selected transport, disposable
                storage. Simulator success is not this layer.
 
-Repair is a gap. A readable file is not reported as fully protected.
+Ordinary missing-role repair is mandatory. A readable file alone is not
+reported as fully protected.
 
 This process only signals PIDs it started. It refuses ports 19810 and
 19820 and any storage path under /data1.
@@ -21,6 +22,7 @@ import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -205,10 +207,29 @@ class Journal(object):
         self.fp.close()
 
 
-def tcp_env():
+def transport_env(transport="tcp", device=None):
     env = os.environ.copy()
-    env["EFS_TRANSPORT"] = "tcp"
-    env.pop("EFS_RDMA_DEV", None)
+    env["EFS_TRANSPORT"] = transport
+    if transport == "rdma" and device:
+        env["EFS_RDMA_DEV"] = device
+    else:
+        env.pop("EFS_RDMA_DEV", None)
+    return env
+
+
+def fixture_env(transport="tcp", device=None, initialize=None):
+    """Keep repair activation inside owned daemon processes, never the caller.
+
+    initialize=None is a client/driver; False reopens an initialized store.
+    Existing stores are never initialized by Cluster.start().
+    """
+    env = transport_env(transport, device)
+    env.pop("EFS_REPAIR_EXPERIMENT", None)
+    env.pop("EFS_REPAIR_INIT_STORE", None)
+    env["EFS_PACKED_WRITES"] = "0"  # matrix qualifies ordinary base fragments
+    if initialize is not None:
+        env["EFS_REPAIR_EXPERIMENT"] = "1"
+        env["EFS_REPAIR_INIT_STORE"] = "1" if initialize else "0"
     return env
 
 
@@ -241,7 +262,7 @@ def is_fuse(mount):
     return rc == 0 and out.strip() == "fuse.efs-fuse"
 
 
-def transport_of(pid, log_path):
+def transport_of(pid, log_path, expected="tcp", log_offset=0):
     envp = "/proc/%d/environ" % pid
     if not os.path.exists(envp):
         raise RuntimeError("fuse pid %s is gone" % pid)
@@ -250,15 +271,31 @@ def transport_of(pid, log_path):
     for item in raw:
         if item.startswith(b"EFS_TRANSPORT="):
             got = item.split(b"=", 1)[1].decode("utf-8", "replace")
-    if got != "tcp":
-        raise RuntimeError("efs-fuse transport is %s, want tcp" % got)
-    if os.path.exists(log_path) and "RDMA transport up" in open(log_path, errors="replace").read():
-        raise RuntimeError("tcp requested but fuse log shows RDMA")
-    return got
+    if got != expected:
+        raise RuntimeError("process transport is %s, want %s" % (got, expected))
+    log = ""
+    if os.path.exists(log_path):
+        with open(log_path, errors="replace") as fp:
+            fp.seek(log_offset)
+            log = fp.read()
+    devices = []
+    for fd in os.listdir("/proc/%d/fd" % pid):
+        try:
+            target = os.readlink("/proc/%d/fd/%s" % (pid, fd))
+            if "/dev/infiniband/uverbs" in target:
+                devices.append(target)
+        except FileNotFoundError:
+            pass
+    if expected == "rdma" and (not devices or "RDMA transport up" not in log):
+        raise RuntimeError("native RDMA proof missing for pid %d" % pid)
+    if expected == "tcp" and (devices or "RDMA transport up" in log):
+        raise RuntimeError("TCP requested but process has native RDMA state")
+    return {"transport": got, "uverbs": sorted(set(devices)), "pid": pid,
+            "log_path": log_path, "log_offset": log_offset}
 
 
 class Server(object):
-    def __init__(self, node_id, port, storage, join, binary, mode="buffered"):
+    def __init__(self, node_id, port, storage, join, binary, mode="buffered", transport="tcp", device=None):
         assert_safe_port(port)
         assert_safe_storage(storage)
         self.node_id = node_id
@@ -269,7 +306,10 @@ class Server(object):
         if mode not in ("direct", "buffered"):
             raise ValueError("invalid storage I/O mode")
         self.mode = mode
+        self.transport = transport
+        self.device = device
         self.proc = None
+        self.initialized = False
         self.log_path = os.path.join(storage, "efsd.log")
 
     def argv(self):
@@ -285,13 +325,16 @@ class Server(object):
 
     def start(self):
         os.makedirs(self.storage, exist_ok=True)
+        self.log_offset = os.path.getsize(self.log_path) if os.path.exists(self.log_path) else 0
         log = open(self.log_path, "ab")
         self.proc = track(subprocess.Popen(
-            self.argv(), stdout=log, stderr=log, env=tcp_env(),
+            self.argv(), stdout=log, stderr=log,
+            env=fixture_env(self.transport, self.device, initialize=not self.initialized),
             start_new_session=True, cwd=os.path.dirname(self.binary) or None))
         wait_port(self.port, 10)
         if self.proc.poll() is not None:
             raise RuntimeError("efsd node %s exited during start" % self.node_id)
+        self.initialized = True
 
     def stop(self):
         if self.proc is None:
@@ -317,10 +360,12 @@ def kill_owned_one(proc):
 
 
 class Cluster(object):
-    def __init__(self, work, binary_dir, mode="buffered"):
+    def __init__(self, work, binary_dir, mode="buffered", transport="tcp", device=None):
         self.work = work
         self.binary_dir = binary_dir
         self.mode = mode
+        self.transport = transport
+        self.device = device
         self.servers = []
         self.mounts = []  # (path, proc, log)
         self.journal = None
@@ -338,7 +383,9 @@ class Cluster(object):
         return os.path.join(self.binary_dir, "efs-mgmt")
 
     def start(self):
-        for name in ("efsd", "efs-fuse", "efs-mgmt"):
+        if os.listdir(self.work):
+            raise RuntimeError("refusing to initialize nonempty fixture root %s" % self.work)
+        for name in ("efsd", "efs-fuse", "efs-mgmt", "tests/faults/repair_request"):
             path = os.path.join(self.binary_dir, name)
             if not os.path.isfile(path) or not os.access(path, os.X_OK):
                 raise RuntimeError("missing binary %s" % path)
@@ -347,16 +394,16 @@ class Cluster(object):
         for i, port in enumerate(ports):
             storage = os.path.join(self.work, "s%d" % (i + 1))
             join = None if i == 0 else seed
-            srv = Server(i + 1, port, storage, join, self.efsd(), self.mode)
-            srv.start()
+            srv = Server(i + 1, port, storage, join, self.efsd(), self.mode, self.transport, self.device)
             self.servers.append(srv)
+            srv.start()
         self.journal = Journal(os.path.join(self.work, "journal.jsonl"))
         # A listening socket precedes joining/election. Retry only the
         # idempotent initialization of this newly owned disposable cluster.
         deadline = time.monotonic() + 30
         while True:
             rc, out, err = run_cmd(
-                [self.mgmt(), "raft-mkfs", seed], timeout=20, env=tcp_env())
+                [self.mgmt(), "raft-mkfs", seed], timeout=20, env=fixture_env(self.transport, self.device))
             self.journal.record("raft-mkfs", rc=rc, stdout=out[-400:], stderr=err[-400:])
             if rc == 0:
                 break
@@ -370,12 +417,12 @@ class Cluster(object):
     def mount(self, label):
         path = os.path.join(self.work, "mnt-" + label)
         os.makedirs(path, exist_ok=True)
-        log_path = os.path.join(self.work, "fuse-%s.log" % label)
+        log_path = os.path.join(self.work, "fuse-%s-%d.log" % (label, len(owned)))
         log = open(log_path, "ab")
         seed = "127.0.0.1:%d" % self.servers[0].port
         proc = track(subprocess.Popen(
             [self.fuse(), seed, EXPORT, path, "-f"],
-            stdout=log, stderr=log, env=tcp_env(),
+            stdout=log, stderr=log, env=fixture_env(self.transport, self.device),
             start_new_session=True))
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
@@ -393,9 +440,12 @@ class Cluster(object):
         raise RuntimeError("mount %s did not become fuse.efs-fuse" % path)
 
     def check_transport(self):
+        for srv in self.servers:
+            proof = transport_of(srv.proc.pid, srv.log_path, self.transport, srv.log_offset)
+            self.journal.record("transport", node_id=srv.node_id, **proof)
         for path, proc, log_path in self.mounts:
-            transport_of(proc.pid, log_path)
-            self.journal.record("transport", mount=path, transport="tcp", pid=proc.pid)
+            proof = transport_of(proc.pid, log_path, self.transport)
+            self.journal.record("transport", mount=path, **proof)
 
     def reset_clients(self):
         # Each single-node fault must begin with fresh peer health. Otherwise
@@ -412,7 +462,7 @@ class Cluster(object):
     def leader_node_id(self):
         addr = "127.0.0.1:%d" % self.servers[0].port
         rc, out, err = run_cmd(
-            [self.mgmt(), "raft-status", addr], timeout=10, env=tcp_env())
+            [self.mgmt(), "raft-status", addr], timeout=10, env=fixture_env(self.transport, self.device))
         if rc != 0:
             raise RuntimeError("raft-status failed: %s" % err[-200:])
         for line in out.splitlines():
@@ -456,7 +506,11 @@ class Cluster(object):
         if self.journal:
             self.journal.close()
         if not self.keep:
-            shutil.rmtree(self.work, ignore_errors=True)
+            # Keep transport/process logs and the journal as qualification
+            # evidence; discard only the owned daemon data after stopping it.
+            for srv in self.servers:
+                for name in ("data", "meta"):
+                    shutil.rmtree(os.path.join(srv.storage, name), ignore_errors=True)
 
 
 _PUBLISH_CHILD = (
@@ -812,19 +866,94 @@ def case_crash_fsync(cluster, seed):
     return results
 
 
-def case_repair_gap():
-    return [row(
-        "repair_restores_protection", "GAP",
-        readable=None, repaired=False, protected=False,
-        detail="no fragment repair; a successful read of a 2-of-3 chunk "
-               "does not restore protection, and restarting a node does not "
-               "rebuild fragments it lost")]
+def case_repair(cluster, seed):
+    results = []
+    for fi in range(3):
+        cluster.reset_clients()
+        a, b = (x[0] for x in cluster.mounts)
+        name = "repair-role-%d" % fi
+        data = pattern(seed, name, 131072)
+        before = cluster.snapshot_exports()
+        timed_publish(a, name, data, cluster.journal, cluster.work)
+        fragments = data_fragment_set(before, cluster.snapshot_exports())
+        if not fragments or set(fragments) != {0, 1, 2}:
+            raise RuntimeError("repair fixture lacks three physical ordinary fragments")
+        path = fragments[fi]
+        original = open(path, "rb").read()
+        payload_len = checksum_tail_offset(len(original))
+        inode = os.stat(os.path.join(a, name)).st_ino
+        match = FRAG_NAME.match(os.path.basename(path))
+        ci, _fi, obj = (int(x) for x in match.groups())
+        os.unlink(path)
+        cluster.reset_clients()
+        got, err = timed_read(cluster.mounts[1][0], name, cluster.journal, cluster.work)
+        if err is not None or got != data or os.path.exists(path):
+            raise RuntimeError("degraded fresh read did not prove missing role")
+        success = False
+        for srv in cluster.servers:
+            command = [os.path.join(cluster.binary_dir, "tests/faults/repair_request"),
+                       "127.0.0.1", str(srv.port), str(inode), str(obj), str(ci),
+                       str(fi), str(payload_len)]
+            rc, out, error = run_cmd(command, timeout=60,
+                env=fixture_env(cluster.transport, cluster.device))
+            cluster.journal.record("repair-request", node_id=srv.node_id, rc=rc,
+                                   stdout=out, stderr=error)
+            if rc == 0:
+                success = True
+                break
+        if not success:
+            raise RuntimeError("no coordinator completed real repair role %d" % fi)
+        restored = open(path, "rb").read()
+        if restored[:payload_len+32] != original[:payload_len+32]:
+            raise RuntimeError("physical restored role/checksum differs")
+        identities = {srv.node_id: sha256(open(os.path.join(srv.storage, "meta", "repair-store"), "rb").read())
+                      for srv in cluster.servers}
+        # Stop all processes, retain stores, and start cold before the second
+        # independent physical loss. No writer/client cache can supply data.
+        for mount, proc, _log in cluster.mounts:
+            kill_owned_one(proc)
+            subprocess.run(["fusermount3", "-uz", mount], check=True, timeout=5)
+        cluster.mounts = []
+        for srv in cluster.servers:
+            srv.stop()
+        for srv in cluster.servers:
+            srv.start()
+        for label in ("repair-cold-a", "repair-cold-b"):
+            cluster.mount(label)
+        cluster.check_transport()
+        for srv in cluster.servers:
+            identity = sha256(open(os.path.join(srv.storage, "meta", "repair-store"), "rb").read())
+            if identity != identities[srv.node_id]:
+                raise RuntimeError("cold restart changed target store incarnation")
+            env = open("/proc/%d/environ" % srv.proc.pid, "rb").read().split(b"\0")
+            if b"EFS_REPAIR_INIT_STORE=0" not in env:
+                raise RuntimeError("cold restart attempted store initialization")
+        if any(not os.path.isfile(p) for p in fragments.values()):
+            raise RuntimeError("cold restart did not retain three physical roles")
+        if open(path, "rb").read()[:payload_len+32] != original[:payload_len+32]:
+            raise RuntimeError("cold repaired fragment/checksum differs")
+        cluster.journal.record("repair-cold-protection", role=fi,
+                               store_identity_sha256=identities, physical_roles=3,
+                               initialization=False)
+        second = (fi+1)%3
+        os.unlink(fragments[second])
+        cluster.reset_clients()
+        got, err = recovered_read(cluster.mounts[1][0], name, cluster.journal, cluster.work)
+        if err is not None or got != data:
+            raise RuntimeError("cold second-loss bytes failed role %d" % fi)
+        results.append(row("repair_restores_protection", "PASS", role=fi,
+            readable=True, repaired=True, protected=True,
+            protection_checked="after cold restart, before second loss",
+            detail="ordinary base role physically restored and hashed; cold all-daemon/client restart then another original role lost; exact peer bytes",
+            expected_sha256=sha256(data), actual_sha256=sha256(got),
+            restored_payload_sha256=sha256(restored[:payload_len])))
+    return results
 
 
-def integrate(work, binary_dir, seed, mode="buffered"):
+def integrate(work, binary_dir, seed, mode="buffered", transport="tcp", device=None):
     signal.signal(signal.SIGTERM, _on_signal)
     signal.signal(signal.SIGINT, _on_signal)
-    cluster = Cluster(work, binary_dir, mode)
+    cluster = Cluster(work, binary_dir, mode, transport, device)
     results = []
     try:
         cluster.start()
@@ -834,7 +963,8 @@ def integrate(work, binary_dir, seed, mode="buffered"):
         if m:
             build = m.group(1)
         for fn in (case_one_server_lost, case_corrupt_one,
-                   case_missing_checksum, case_crash_fsync):
+                   case_missing_checksum, case_crash_fsync,
+                   case_repair):
             t0 = time.monotonic()
             try:
                 part = fn(cluster, seed)
@@ -851,7 +981,6 @@ def integrate(work, binary_dir, seed, mode="buffered"):
             results.extend(part)
             if any(item["status"] == "FAIL" for item in part):
                 cluster.keep = True
-        results.extend(case_repair_gap())
     except Exception as e:
         cluster.keep = True
         results.append(row(
@@ -859,6 +988,8 @@ def integrate(work, binary_dir, seed, mode="buffered"):
             detail="%s: %s" % (type(e).__name__, e)))
     finally:
         cluster.close()
+    for item in results:
+        item["transport"] = transport
     return results
 
 
@@ -981,9 +1112,43 @@ def self_test():
             os.kill(other.pid, signal.SIGKILL)
             other.wait(timeout=5)
 
-    gap = case_repair_gap()[0]
-    if gap["status"] != "GAP" or gap["repaired"] is not False:
-        fails.append("repair case was not a gap")
+    with tempfile.TemporaryDirectory(prefix="efs-fault-safety-") as root:
+        sentinel = os.path.join(root, "existing-store")
+        with open(sentinel, "wb") as fp:
+            fp.write(b"preserve")
+        cluster = Cluster(root, "/missing/binaries")
+        try:
+            cluster.start()
+            fails.append("nonempty fixture root accepted")
+        except RuntimeError as exc:
+            if "nonempty fixture root" not in str(exc):
+                fails.append("existing fixture was not refused before binary/start checks")
+        finally:
+            cluster.close()
+        if open(sentinel, "rb").read() != b"preserve" or cluster.servers:
+            fails.append("existing fixture touched")
+
+    inherited = dict(os.environ)
+    try:
+        os.environ["EFS_REPAIR_EXPERIMENT"] = "0"
+        os.environ["EFS_REPAIR_INIT_STORE"] = "1"
+        os.environ["EFS_PACKED_WRITES"] = "1"
+        first = fixture_env(initialize=True)
+        cold = fixture_env(initialize=False)
+        client = fixture_env()
+        if (first.get("EFS_REPAIR_EXPERIMENT") != "1" or
+                first.get("EFS_REPAIR_INIT_STORE") != "1" or
+                cold.get("EFS_REPAIR_EXPERIMENT") != "1" or
+                cold.get("EFS_REPAIR_INIT_STORE") != "0" or
+                "EFS_REPAIR_EXPERIMENT" in client or
+                "EFS_REPAIR_INIT_STORE" in client or
+                client.get("EFS_PACKED_WRITES") != "0"):
+            fails.append("fixture activation leaked or cold restart reinitialized store")
+        if os.environ["EFS_REPAIR_EXPERIMENT"] != "0":
+            fails.append("fixture mutated caller environment")
+    finally:
+        os.environ.clear()
+        os.environ.update(inherited)
 
     if fails:
         for msg in fails:
@@ -998,9 +1163,11 @@ def main(argv):
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--out", default="")
     parser.add_argument("--integrate", action="store_true",
-                        help="start a private 4-server TCP cluster")
+                        help="start a private 4-server cluster")
     parser.add_argument("--mode", choices=("direct", "buffered"), default="buffered",
                         help="private integration daemon storage mode (default: buffered)")
+    parser.add_argument("--transport", choices=("tcp", "rdma"), default="tcp")
+    parser.add_argument("--rdma-device", default=None)
     parser.add_argument("--seed", type=int, default=101)
     args = parser.parse_args(argv)
     if args.self_test:
@@ -1009,26 +1176,32 @@ def main(argv):
         parser.error("--out is required")
     os.makedirs(args.out, exist_ok=True)
     assert_safe_storage(args.out)
+    if os.listdir(args.out):
+        parser.error("output directory must be empty; existing evidence/stores are preserved")
     results_path = os.path.join(args.out, "results.jsonl")
-    sim_bin = os.path.join(HERE, "fault_sim")
+    sim_bin = repo_bin("tests/faults/fault_sim")
     rows = []
     with open(results_path, "w", encoding="utf-8") as fp:
         config = {
             "seed": args.seed,
-            "transport": "tcp",
+            "transport": args.transport,
+            "rdma_device": args.rdma_device,
             "integrate": args.integrate,
             "mode": args.mode,
-            "replay": "bash tests/faults/run_faults.sh %s --mode %s%s" % (
-                args.out, args.mode, " --integrate" if args.integrate else ""),
+            "replay_argv": ["bash", "tests/faults/run_faults.sh", args.out,
+                            "--mode", args.mode, "--transport", args.transport,
+                            "--seed", str(args.seed)]
+                           + (["--rdma-device", args.rdma_device] if args.rdma_device else [])
+                           + (["--integrate"] if args.integrate else []),
             "live_cluster": "not used; ports 19810 and 19820 are refused",
-            "repair": "gap",
+            "repair": "mandatory ordinary base role; owned fixture stores only",
         }
         open(os.path.join(args.out, "config.json"), "w").write(
             json.dumps(config, indent=2) + "\n")
         rows.extend(run_sim(sim_bin, fp))
         if args.integrate:
             part = integrate(os.path.join(args.out, "cluster"),
-                             os.environ.get("EFS_FAULT_BIN", ROOT), args.seed, args.mode)
+                             os.environ.get("EFS_FAULT_BIN", ROOT), args.seed, args.mode, args.transport, args.rdma_device)
             for item in part:
                 fp.write(json.dumps(item, sort_keys=True) + "\n")
                 fp.flush()

@@ -47,6 +47,7 @@ struct efs_ino_hold {
 
 struct efsd_server {
     efs_node_id_t id;
+    int repair_experiment; /* explicit default-off single-root FILES experiment */
     char addr[64];
     uint16_t port;
 
@@ -134,7 +135,15 @@ int server_put_session_fence(struct efsd_server *, const uint8_t uuid[16],
 /* Inactive repair-only certificate domain. Authority must be checked before
  * taking this guard, and GC must wait for committed seal receipt. These are
  * local storage barriers, never repair admission or durable data receipts. */
+struct efs_repair_job;
+/* Trusted local coordinator only; not an RPC endpoint. */
+int server_raft_host_repair_gc_ready(efs_ino_t,uint32_t,uint64_t);
+int server_raft_host_repair_gc_inode_local_ready(efs_ino_t);
+int server_raft_host_repair_prepare(const struct efs_repair_job *,struct efs_repair_job *,uint8_t *,uint8_t *);
+int server_repair_run(struct efsd_server *,const struct efs_repair_job *);
+int server_raft_host_repair_record(unsigned,const struct efs_repair_job *,uint32_t,const uint8_t *,uint32_t);
 int server_repair_receive(struct efsd_server *,const uint8_t *,uint32_t,int seal,uint8_t *receipt);
+int server_repair_activation(struct efsd_server *,int trusted_create);
 int server_repair_store_matches(struct efsd_server *,const uint8_t expected[16]);
 int server_repair_store_identity(struct efsd_server *,uint8_t uuid[16]);
 int server_repair_store_initialize(struct efsd_server *,int trusted_existing,uint8_t uuid[16]);
@@ -294,6 +303,9 @@ void efs_iostats_dump(int force);
 
 /* Append local storage roots without restart. csv is comma-separated
  * absolute paths. Existing roots are skipped. count_out is the new total. */
+int server_gc_inode_checked(struct efsd_server *,efs_export_id_t,efs_ino_t,uint64_t,
+                            int (*authority)(void *,efs_ino_t),void *context);
+int server_repair_gc_inode(struct efsd_server *,efs_export_id_t,efs_ino_t,uint64_t);
 int server_gc_inode(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
                      uint64_t generation);
 void server_gc_status(struct efsd_server *s, struct efs_msg_gc_status_reply *out);

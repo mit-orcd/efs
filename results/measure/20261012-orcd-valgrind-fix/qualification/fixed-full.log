@@ -1,0 +1,80 @@
+[leaks] mode=direct transport=rdma; evidence retained at /tmp/efs-vg-fixed-8b7391b3f3ed
+[leaks] building (after any rsync --delete) ...
+[leaks] annotated verbs runtime=/home/erbmi1/orcd/scratch/efs/orcd-test/qualification-valgrind-fix-8b7391b3f3ed; strict RDMA unit memory gate
+RDMA Memcheck: bounded completion, repost/tail poisoning, undefined send detection PASS
+[leaks] phase 1: unit tests under valgrind
+[leaks] unit/test_repair_job: parent leak gate; deliberate crash-child leaks EXCLUDED (access-error exits still gated)
+[leaks] unit/test_repair_job: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_query_policy: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_query_refresh: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_txn_resolve_faults: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_namespace_session: parent leak gate; deliberate crash-child leaks EXCLUDED (access-error exits still gated)
+[leaks] unit/test_namespace_session: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_admission: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_store_containers: parent leak gate; deliberate crash-child leaks EXCLUDED (access-error exits still gated)
+[leaks] unit/test_store_containers: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_principles_index_fault: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_principles_index: parent leak gate; deliberate crash-child leaks EXCLUDED (access-error exits still gated)
+[leaks] unit/test_principles_index: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_query_catalog: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_name_index: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_append_transaction: parent leak gate; deliberate crash-child leaks EXCLUDED (access-error exits still gated)
+[leaks] unit/test_append_transaction: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_store_durability: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_append_receipt: parent leak gate; deliberate crash-child leaks EXCLUDED (access-error exits still gated)
+[leaks] unit/test_append_receipt: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_put_ticket: parent leak gate; deliberate crash-child leaks EXCLUDED (access-error exits still gated)
+[leaks] unit/test_put_ticket: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_store_gc: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_bench_latency: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_store_overwrite: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_writer_routing: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_kv_snapshot_tail: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_kv_seg_index: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_mtime_barrier: parent leak gate; deliberate crash-child leaks EXCLUDED (access-error exits still gated)
+[leaks] unit/test_mtime_barrier: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_publication_session: parent leak gate; deliberate crash-child leaks EXCLUDED (access-error exits still gated)
+[leaks] unit/test_publication_session: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_publication_ack: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_publication_recovery: parent leak gate; deliberate crash-child leaks EXCLUDED (access-error exits still gated)
+[leaks] unit/test_publication_recovery: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_lane_bootstrap_recovery: parent leak gate; deliberate crash-child leaks EXCLUDED (access-error exits still gated)
+[leaks] unit/test_lane_bootstrap_recovery: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_fence_view: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_reply_buffers: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_bufpool: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_erasure: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_placement: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_rdma_xprt: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_wire: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_data: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_kv: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_kv_lsm: parent leak gate; deliberate crash-child leaks EXCLUDED (access-error exits still gated)
+[leaks] unit/test_kv_lsm: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_raft_store: parent leak gate; deliberate crash-child leaks EXCLUDED (access-error exits still gated)
+[leaks] unit/test_raft_store: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_meta_apply: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_raft: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_sim: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_txn: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_session: parent leak gate; deliberate crash-child leaks EXCLUDED (access-error exits still gated)
+[leaks] unit/test_session: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_lock: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_stage_evict: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_conn_fd: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_query_disk: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_query_delta: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_query_disk_io: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] phase 2: efsd under valgrind (3-node raft group, efs-bench workload)
+[leaks] efsd: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] phase 3: efs-fuse under valgrind (mini-POSIX through the mount)
+[leaks] efs-fuse: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] phase 4: efsd + efs-fuse over RDMA (172.16.223.59)
+tests/valgrind_leaks.sh: line 208: 1520022 Killed                  EFS_MD_RAFT_N=3 EFS_TRANSPORT=tcp setsid ./efsd --node-id "$id" --addr "$ADDR" --port "$port" --storage "$STORAGE/s$id" --quota 1G --writers 0 "$IO_FLAG" $join > "$out" 2>&1 < /dev/null
+tests/valgrind_leaks.sh: line 208: 1520035 Killed                  EFS_MD_RAFT_N=3 EFS_TRANSPORT=tcp setsid ./efsd --node-id "$id" --addr "$ADDR" --port "$port" --storage "$STORAGE/s$id" --quota 1G --writers 0 "$IO_FLAG" $join > "$out" 2>&1 < /dev/null
+tests/valgrind_leaks.sh: line 208: 1520049 Killed                  EFS_MD_RAFT_N=3 EFS_TRANSPORT=tcp setsid ./efsd --node-id "$id" --addr "$ADDR" --port "$port" --storage "$STORAGE/s$id" --quota 1G --writers 0 "$IO_FLAG" $join > "$out" 2>&1 < /dev/null
+[leaks]   RDMA transport up (upgrade exercised)
+[leaks] efs-fuse/rdma: definite=0B indirect=0B (uninit/invalid skipped: ibverbs/DMA)
+[leaks] efsd/rdma: definite=0B indirect=0B (uninit/invalid skipped: ibverbs/DMA)
+
+[leaks] PASS memory gates in selected mode; separately recorded SKIPs remain SKIP

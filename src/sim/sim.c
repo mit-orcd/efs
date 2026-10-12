@@ -1131,3 +1131,34 @@ int efs_sim_clock_step(struct efs_sim *sim, uint64_t delta)
     hist(sim, 0x14, delta, 0);
     return EFS_OK;
 }
+
+/* Synchronous model: no scheduled mutation can interleave this operation.
+ * The live harness separately proves real authority, receipts and cold IO. */
+int efs_sim_repair_role(struct efs_sim *sim,efs_ino_t ino,uint32_t ci,uint32_t fi)
+{
+    if(!sim || fi>=3)return EFS_ERR_INVAL;
+    struct efs_meta_chunk ch;uint64_t igen=0;int rc=sim_raft_get_chunk(sim,ino,ci,&ch);
+    if(rc)return rc;
+    if(ch.coding_profile_id!=EFS_META_PROFILE_K2F1 || ch.packed.segment_id)return EFS_ERR_INVAL;
+    rc=efs_sim_inode_nlink(sim,ino,NULL,&igen);if(rc)return rc;
+    uint32_t fl=EFS_SIM_CHUNK/2;uint8_t *block=malloc(3u*fl);if(!block)return EFS_ERR_NOMEM;
+    efs_node_id_t ranks[3];place_rank(sim,ino,ci,ranks);
+    struct efs_frag_id id;uint8_t sum[EFS_HASH_SIZE];
+    for(unsigned f=0;f<3;f++)if(f!=fi){
+        uint32_t len=fl;fill_frag(&id,ino,igen,ch.generation,ci,f);
+        int si=(int)ranks[f]-1;
+        if(!sim->srv[si].alive || sim->srv[si].partitioned){rc=EFS_ERR_BUSY;goto done;}
+        rc=frag_ok(sim,&id,NULL,block+f*fl,&len,sum);
+        if(rc || len!=fl || memcmp(sum,ch.checksums[f],sizeof(sum))){rc=EFS_ERR_CHECKSUM;goto done;}
+    }
+    unsigned a=(fi+1)%3,b=(fi+2)%3;
+    for(uint32_t i=0;i<fl;i++)block[fi*fl+i]=block[a*fl+i]^block[b*fl+i];
+    fill_frag(&id,ino,igen,ch.generation,ci,fi);frag_sum(&id,block+fi*fl,fl,sum);
+    if(memcmp(sum,ch.checksums[fi],sizeof(sum))){rc=EFS_ERR_CHECKSUM;goto done;}
+    int si=(int)ranks[fi]-1;
+    if(!sim->srv[si].alive || sim->srv[si].partitioned){rc=EFS_ERR_BUSY;goto done;}
+    rc=efs_store_del(sim->srv[si].store,&id);if(rc && rc!=EFS_ERR_NOT_FOUND)goto done;
+    rc=efs_store_put(sim->srv[si].store,&id,block+fi*fl,fl,sum);
+done:
+    free(block);return rc;
+}

@@ -20,6 +20,7 @@
 #include "efs/protocol.h"
 #include "efs/wire.h"
 #include "efs/common.h"
+#include "rdma_memcheck.h"
 
 #include <infiniband/verbs.h>
 
@@ -723,6 +724,7 @@ static int post_recv(struct efs_rdma_conn *rc, int idx)
         .sg_list = &sge,
     };
     struct ibv_recv_wr *bad = NULL;
+    rdma_memcheck_post_recv((void *)(uintptr_t)sge.addr, sge.length);
     return ibv_post_recv(rc->qp, &wr, &bad);
 }
 
@@ -821,6 +823,10 @@ static void harvest_recv_wcs(struct ibv_wc *wcs, int n)
                 if (write(rc->efd, &one, sizeof(one)) < 0 && errno != EAGAIN)
                     rc->broken = 1;
             } else {
+                if (buf >= 0 && buf < rc->nrecv)
+                    rdma_memcheck_recv_complete(rc->recv_bufs[buf] +
+                                               EFS_RDMA_RECV_ALIGN,
+                                               rc->bufsz, wcs[i].byte_len);
                 pend_push(rc, buf, wcs[i].byte_len);
             }
         }
@@ -1567,6 +1573,7 @@ static void send_fail_dump2(struct efs_rdma_conn *rc, uint8_t type,
 static int post_send(struct efs_rdma_conn *rc, uint64_t wr_id,
                      const void *buf, uint32_t len, int inline_ok)
 {
+    rdma_memcheck_send(buf, len);
     struct ibv_sge sge = {
         .addr = (uintptr_t)buf,
         .length = len,
@@ -1597,6 +1604,8 @@ static int post_send2(struct efs_rdma_conn *rc, uint64_t wr_id,
                       const void *payload, uint32_t payload_len,
                       uint32_t payload_lkey)
 {
+    rdma_memcheck_send(hdr, hdr_len);
+    rdma_memcheck_send(payload, payload_len);
     struct ibv_sge sge[2] = {
         { .addr = (uintptr_t)hdr, .length = hdr_len, .lkey = rc->send_mrs[wr_id & 0xffu]->lkey },
         { .addr = (uintptr_t)payload, .length = payload_len,

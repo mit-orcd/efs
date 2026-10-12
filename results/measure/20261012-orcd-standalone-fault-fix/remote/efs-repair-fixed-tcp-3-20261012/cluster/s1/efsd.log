@@ -1,0 +1,116 @@
+2026-10-12T14:03:29.552Z storage-engine=files direct_io=on
+2026-10-12T14:03:29.553Z Repair: experimental missing-base FILES manual coordinator; automatic repair disabled
+2026-10-12T14:03:29.553Z Data GC admission: disabled
+2026-10-12T14:03:29.553Z Storage quota: explicit 1.00 GiB (safe maximum 240.69 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T14:03:29.554Z heartbeat: enabled (2000 ms interval)
+2026-10-12T14:03:29.555Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:03:29.555Z raft-host: up raft_id=0 n=4 boot=7960317245560886 salt=7133923694637832639 g0=hosted g2=off
+2026-10-12T14:03:29.555Z efsd (no git metadata, branch unknown, built 2026-10-12T13:53:53Z on fcstor006), build=orcd-repair-final-wip: node 1 listening on 127.0.0.1:24748, storage=/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T14:03:30.485Z raft-host: applied session index=3 kind=1 shard=0 ino=0
+2026-10-12T14:03:30.487Z store: put O_DIRECT bounce copy (buf align=3104 len=65536)
+2026-10-12T14:03:30.488Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=1281 p50_us=1281 max_us=1281 wdisk ops=1 bytes=65536 errors=0 avg_us=1137 p50_us=1137 max_us=1137
+2026-10-12T14:03:30.845Z storage-engine=files direct_io=on
+2026-10-12T14:03:30.845Z Repair: experimental missing-base FILES manual coordinator; automatic repair disabled
+2026-10-12T14:03:30.845Z Data GC admission: disabled
+2026-10-12T14:03:30.845Z Loaded 4 persisted cluster node(s) from /tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1/meta/cluster_nodes.bin
+2026-10-12T14:03:30.845Z   persisted node 1: 127.0.0.1:24748
+2026-10-12T14:03:30.845Z   persisted node 2: 127.0.0.1:24749
+2026-10-12T14:03:30.845Z   persisted node 3: 127.0.0.1:24750
+2026-10-12T14:03:30.845Z   persisted node 4: 127.0.0.1:24751
+2026-10-12T14:03:30.845Z Storage quota: explicit 1.00 GiB (safe maximum 240.69 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T14:03:30.845Z Trying to rejoin via persisted peer 127.0.0.1:24749 (node 2)...
+2026-10-12T14:03:30.846Z Joined cluster with 4 nodes
+2026-10-12T14:03:30.846Z Rejoined cluster via 127.0.0.1:24749
+2026-10-12T14:03:30.847Z heartbeat: enabled (2000 ms interval)
+2026-10-12T14:03:30.848Z kv-obs: mt_bytes=2910 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:03:30.848Z raft-host: up raft_id=0 n=4 boot=7960317245560887 salt=471794743431028247 g0=hosted g2=off
+2026-10-12T14:03:30.848Z efsd (no git metadata, branch unknown, built 2026-10-12T13:53:53Z on fcstor006), build=orcd-repair-final-wip: node 1 listening on 127.0.0.1:24748, storage=/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1 (1 paths, stripe=none), used=65536, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T14:03:30.892Z raft-host: applied session index=10 kind=1 shard=0 ino=0
+2026-10-12T14:03:31.023Z raft-host: applied session index=23 kind=1 shard=0 ino=0
+2026-10-12T14:03:31.026Z iostats: get ops=1 bytes=65536 errors=0 avg_us=596 p50_us=596 max_us=596 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T14:03:31.143Z store: put O_DIRECT bounce copy (buf align=3104 len=65536)
+2026-10-12T14:03:32.847Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=995 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T14:03:35.851Z kv-obs: mt_bytes=14871 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:03:36.029Z iostats: get ops=9 bytes=589824 errors=0 avg_us=685 p50_us=566 max_us=1375 put ops=6 bytes=393216 errors=0 avg_us=701 p50_us=735 max_us=762 wdisk ops=6 bytes=393216 errors=0 avg_us=640 p50_us=683 max_us=702
+2026-10-12T14:03:36.064Z raft-host: applied session index=87 kind=1 shard=0 ino=0
+2026-10-12T14:03:36.516Z raft-host: applied session index=125 kind=1 shard=0 ino=0
+2026-10-12T14:03:36.670Z raft-host: applied session index=141 kind=1 shard=0 ino=0
+2026-10-12T14:03:36.679Z Repair manual: ino=61441 role=0 phase=capture rc=-15; no debt is discarded
+2026-10-12T14:03:36.704Z storage-engine=files direct_io=on
+2026-10-12T14:03:36.705Z Repair: experimental missing-base FILES manual coordinator; automatic repair disabled
+2026-10-12T14:03:36.705Z Data GC admission: disabled
+2026-10-12T14:03:36.705Z Loaded 4 persisted cluster node(s) from /tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1/meta/cluster_nodes.bin
+2026-10-12T14:03:36.705Z   persisted node 1: 127.0.0.1:24748
+2026-10-12T14:03:36.705Z   persisted node 2: 127.0.0.1:24749
+2026-10-12T14:03:36.705Z   persisted node 3: 127.0.0.1:24750
+2026-10-12T14:03:36.705Z   persisted node 4: 127.0.0.1:24751
+2026-10-12T14:03:36.705Z Storage quota: explicit 1.00 GiB (safe maximum 240.68 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T14:03:36.705Z Trying to rejoin via persisted peer 127.0.0.1:24749 (node 2)...
+2026-10-12T14:03:36.705Z Cannot connect to peer 127.0.0.1:24749
+2026-10-12T14:03:36.705Z Failed to rejoin via 127.0.0.1:24749
+2026-10-12T14:03:36.705Z Trying to rejoin via persisted peer 127.0.0.1:24750 (node 3)...
+2026-10-12T14:03:36.705Z Cannot connect to peer 127.0.0.1:24750
+2026-10-12T14:03:36.705Z Failed to rejoin via 127.0.0.1:24750
+2026-10-12T14:03:36.705Z Trying to rejoin via persisted peer 127.0.0.1:24751 (node 4)...
+2026-10-12T14:03:36.705Z Cannot connect to peer 127.0.0.1:24751
+2026-10-12T14:03:36.705Z Failed to rejoin via 127.0.0.1:24751
+2026-10-12T14:03:36.705Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-12T14:03:36.705Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-12T14:03:36.706Z heartbeat: enabled (2000 ms interval)
+2026-10-12T14:03:36.708Z raft-host: up raft_id=0 n=4 boot=7960317245560888 salt=4694437475417250493 g0=hosted g2=off
+2026-10-12T14:03:36.708Z efsd (no git metadata, branch unknown, built 2026-10-12T13:53:53Z on fcstor006), build=orcd-repair-final-wip: node 1 listening on 127.0.0.1:24748, storage=/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1 (1 paths, stripe=none), used=851968, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T14:03:36.708Z kv-obs: mt_bytes=26454 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:03:37.799Z iostats: get ops=1 bytes=65536 errors=0 avg_us=762 p50_us=762 max_us=762 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T14:03:38.009Z raft-host: applied session index=157 kind=1 shard=0 ino=0
+2026-10-12T14:03:38.163Z raft-host: applied session index=164 kind=1 shard=0 ino=0
+2026-10-12T14:03:38.191Z storage-engine=files direct_io=on
+2026-10-12T14:03:38.191Z Repair: experimental missing-base FILES manual coordinator; automatic repair disabled
+2026-10-12T14:03:38.191Z Data GC admission: disabled
+2026-10-12T14:03:38.191Z Loaded 4 persisted cluster node(s) from /tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1/meta/cluster_nodes.bin
+2026-10-12T14:03:38.191Z   persisted node 1: 127.0.0.1:24748
+2026-10-12T14:03:38.191Z   persisted node 2: 127.0.0.1:24749
+2026-10-12T14:03:38.191Z   persisted node 3: 127.0.0.1:24750
+2026-10-12T14:03:38.191Z   persisted node 4: 127.0.0.1:24751
+2026-10-12T14:03:38.192Z Storage quota: explicit 1.00 GiB (safe maximum 240.68 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T14:03:38.192Z Trying to rejoin via persisted peer 127.0.0.1:24749 (node 2)...
+2026-10-12T14:03:38.192Z Cannot connect to peer 127.0.0.1:24749
+2026-10-12T14:03:38.192Z Failed to rejoin via 127.0.0.1:24749
+2026-10-12T14:03:38.192Z Trying to rejoin via persisted peer 127.0.0.1:24750 (node 3)...
+2026-10-12T14:03:38.192Z Cannot connect to peer 127.0.0.1:24750
+2026-10-12T14:03:38.192Z Failed to rejoin via 127.0.0.1:24750
+2026-10-12T14:03:38.192Z Trying to rejoin via persisted peer 127.0.0.1:24751 (node 4)...
+2026-10-12T14:03:38.192Z Cannot connect to peer 127.0.0.1:24751
+2026-10-12T14:03:38.192Z Failed to rejoin via 127.0.0.1:24751
+2026-10-12T14:03:38.192Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-12T14:03:38.192Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-12T14:03:38.193Z heartbeat: enabled (2000 ms interval)
+2026-10-12T14:03:38.194Z raft-host: up raft_id=0 n=4 boot=7982389510295556 salt=12096009750671717455 g0=hosted g2=off
+2026-10-12T14:03:38.194Z efsd (no git metadata, branch unknown, built 2026-10-12T13:53:53Z on fcstor006), build=orcd-repair-final-wip: node 1 listening on 127.0.0.1:24748, storage=/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1 (1 paths, stripe=none), used=851968, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T14:03:38.194Z kv-obs: mt_bytes=30680 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:03:39.380Z raft-host: applied session index=181 kind=1 shard=0 ino=0
+2026-10-12T14:03:39.535Z raft-host: applied session index=188 kind=1 shard=0 ino=0
+2026-10-12T14:03:39.563Z storage-engine=files direct_io=on
+2026-10-12T14:03:39.563Z Repair: experimental missing-base FILES manual coordinator; automatic repair disabled
+2026-10-12T14:03:39.563Z Data GC admission: disabled
+2026-10-12T14:03:39.563Z Loaded 4 persisted cluster node(s) from /tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1/meta/cluster_nodes.bin
+2026-10-12T14:03:39.563Z   persisted node 1: 127.0.0.1:24748
+2026-10-12T14:03:39.563Z   persisted node 2: 127.0.0.1:24749
+2026-10-12T14:03:39.563Z   persisted node 3: 127.0.0.1:24750
+2026-10-12T14:03:39.563Z   persisted node 4: 127.0.0.1:24751
+2026-10-12T14:03:39.564Z Storage quota: explicit 1.00 GiB (safe maximum 240.68 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T14:03:39.564Z Trying to rejoin via persisted peer 127.0.0.1:24749 (node 2)...
+2026-10-12T14:03:39.564Z Cannot connect to peer 127.0.0.1:24749
+2026-10-12T14:03:39.564Z Failed to rejoin via 127.0.0.1:24749
+2026-10-12T14:03:39.564Z Trying to rejoin via persisted peer 127.0.0.1:24750 (node 3)...
+2026-10-12T14:03:39.564Z Cannot connect to peer 127.0.0.1:24750
+2026-10-12T14:03:39.564Z Failed to rejoin via 127.0.0.1:24750
+2026-10-12T14:03:39.564Z Trying to rejoin via persisted peer 127.0.0.1:24751 (node 4)...
+2026-10-12T14:03:39.564Z Cannot connect to peer 127.0.0.1:24751
+2026-10-12T14:03:39.564Z Failed to rejoin via 127.0.0.1:24751
+2026-10-12T14:03:39.564Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-12T14:03:39.564Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-12T14:03:39.565Z heartbeat: enabled (2000 ms interval)
+2026-10-12T14:03:39.567Z kv-obs: mt_bytes=34834 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:03:39.567Z raft-host: up raft_id=0 n=4 boot=7982389510295557 salt=12733338769795915572 g0=hosted g2=off
+2026-10-12T14:03:39.567Z efsd (no git metadata, branch unknown, built 2026-10-12T13:53:53Z on fcstor006), build=orcd-repair-final-wip: node 1 listening on 127.0.0.1:24748, storage=/tmp/efs-repair-fixed-tcp-3-20261012/cluster/s1 (1 paths, stripe=none), used=851968, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T14:03:40.545Z raft-host: applied session index=198 kind=1 shard=0 ino=0

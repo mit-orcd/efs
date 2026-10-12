@@ -1,0 +1,1 @@
+test_repair_store_identity: tests/test_repair_store_identity.c:55: main: Assertion `server_repair_activation(&cold,1)==EFS_OK' failed.

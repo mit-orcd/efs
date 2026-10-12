@@ -1,0 +1,186 @@
+2026-10-12T14:04:10.490Z storage-engine=files direct_io=on
+2026-10-12T14:04:10.490Z Repair: experimental missing-base FILES manual coordinator; automatic repair disabled
+2026-10-12T14:04:10.490Z Data GC admission: disabled
+2026-10-12T14:04:10.490Z Storage quota: explicit 1.00 GiB (safe maximum 240.64 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T14:04:10.491Z Joined cluster with 3 nodes
+2026-10-12T14:04:10.492Z heartbeat: enabled (2000 ms interval)
+2026-10-12T14:04:10.493Z raft-host: up raft_id=2 n=4 boot=7986401316462548 salt=15604908885927164876 g0=hosted g2=hosted
+2026-10-12T14:04:10.493Z efsd (no git metadata, branch unknown, built 2026-10-12T14:04:01Z on fcstor006), build=orcd-repair-pool-negative: node 3 listening on 127.0.0.1:24753, storage=/tmp/efs-repair-pool-negative-results-20261012/cluster/s3 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T14:04:10.493Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:04:10.994Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=400
+2026-10-12T14:04:11.321Z raft-host: applied session index=3 kind=1 shard=0 ino=0
+2026-10-12T14:04:11.323Z store: put O_DIRECT bounce copy (buf align=3104 len=65536)
+2026-10-12T14:04:11.324Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=1073 p50_us=1073 max_us=1073 wdisk ops=1 bytes=65536 errors=0 avg_us=940 p50_us=940 max_us=940
+2026-10-12T14:04:11.340Z raft-host: applied session index=8 kind=1 shard=0 ino=0
+2026-10-12T14:04:11.909Z raft-host: applied session index=21 kind=1 shard=0 ino=0
+2026-10-12T14:04:11.927Z raft-host: applied session index=5 kind=1 shard=0 ino=0
+2026-10-12T14:04:12.024Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9995
+2026-10-12T14:04:12.029Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9990
+2026-10-12T14:04:12.034Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9985
+2026-10-12T14:04:12.039Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9980
+2026-10-12T14:04:12.044Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9975
+2026-10-12T14:04:12.049Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9969
+2026-10-12T14:04:12.054Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9964
+2026-10-12T14:04:12.059Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9959
+2026-10-12T14:04:12.064Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9954
+2026-10-12T14:04:12.069Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9949
+2026-10-12T14:04:12.075Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9944
+2026-10-12T14:04:12.080Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9939
+2026-10-12T14:04:12.085Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9934
+2026-10-12T14:04:12.090Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9929
+2026-10-12T14:04:12.095Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9924
+2026-10-12T14:04:12.100Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9919
+2026-10-12T14:04:12.105Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9914
+2026-10-12T14:04:12.110Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9909
+2026-10-12T14:04:12.115Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9904
+2026-10-12T14:04:12.120Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9898
+2026-10-12T14:04:12.125Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9893
+2026-10-12T14:04:12.130Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9888
+2026-10-12T14:04:12.135Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9883
+2026-10-12T14:04:12.140Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9878
+2026-10-12T14:04:12.146Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9873
+2026-10-12T14:04:12.151Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9868
+2026-10-12T14:04:12.156Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9863
+2026-10-12T14:04:12.161Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9858
+2026-10-12T14:04:12.166Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9853
+2026-10-12T14:04:12.171Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9848
+2026-10-12T14:04:12.176Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9843
+2026-10-12T14:04:12.181Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9838
+2026-10-12T14:04:12.186Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9833
+2026-10-12T14:04:12.191Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9827
+2026-10-12T14:04:12.196Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9822
+2026-10-12T14:04:12.201Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9817
+2026-10-12T14:04:12.206Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9812
+2026-10-12T14:04:12.212Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9807
+2026-10-12T14:04:12.217Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9802
+2026-10-12T14:04:12.222Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9797
+2026-10-12T14:04:12.227Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9792
+2026-10-12T14:04:12.232Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9787
+2026-10-12T14:04:12.237Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9782
+2026-10-12T14:04:12.242Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9777
+2026-10-12T14:04:12.247Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9772
+2026-10-12T14:04:12.252Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9767
+2026-10-12T14:04:12.257Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9761
+2026-10-12T14:04:12.262Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9756
+2026-10-12T14:04:12.267Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9751
+2026-10-12T14:04:12.272Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9746
+2026-10-12T14:04:12.277Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9741
+2026-10-12T14:04:12.283Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9736
+2026-10-12T14:04:12.288Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9731
+2026-10-12T14:04:12.293Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9726
+2026-10-12T14:04:12.298Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9721
+2026-10-12T14:04:12.303Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9716
+2026-10-12T14:04:12.308Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9711
+2026-10-12T14:04:12.313Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9706
+2026-10-12T14:04:12.318Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9701
+2026-10-12T14:04:12.323Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9696
+2026-10-12T14:04:12.328Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9691
+2026-10-12T14:04:12.333Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9685
+2026-10-12T14:04:12.338Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9680
+2026-10-12T14:04:12.343Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9675
+2026-10-12T14:04:12.348Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9670
+2026-10-12T14:04:12.354Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9665
+2026-10-12T14:04:12.359Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9660
+2026-10-12T14:04:12.364Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9655
+2026-10-12T14:04:12.369Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9650
+2026-10-12T14:04:12.374Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9645
+2026-10-12T14:04:12.379Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9640
+2026-10-12T14:04:12.384Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9635
+2026-10-12T14:04:12.389Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9630
+2026-10-12T14:04:12.394Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9625
+2026-10-12T14:04:12.492Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=996 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T14:04:12.499Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9519
+2026-10-12T14:04:12.504Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9514
+2026-10-12T14:04:12.509Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9509
+2026-10-12T14:04:12.514Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9504
+2026-10-12T14:04:12.520Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9499
+2026-10-12T14:04:12.525Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9494
+2026-10-12T14:04:12.530Z Repair negative pool cooldown: host=127.0.0.1 port=24752 remaining_ms=9489
+2026-10-12T14:04:12.970Z raft-host: applied session index=8 kind=1 shard=0 ino=0
+2026-10-12T14:04:12.996Z query-restore: rc=-3 backend=disk
+2026-10-12T14:04:13.005Z query-publish: generation=1 g0=43 g2=8 rebuilt=4096 refolded=5 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=9 root_rc=0 files=4 dirs=0 logical=16384
+2026-10-12T14:04:13.136Z raft-host: applied session index=10 kind=1 shard=0 ino=0
+2026-10-12T14:04:14.499Z storage-engine=files direct_io=on
+2026-10-12T14:04:14.500Z Repair: experimental missing-base FILES manual coordinator; automatic repair disabled
+2026-10-12T14:04:14.500Z Data GC admission: disabled
+2026-10-12T14:04:14.500Z Loaded 4 persisted cluster node(s) from /tmp/efs-repair-pool-negative-results-20261012/cluster/s3/meta/cluster_nodes.bin
+2026-10-12T14:04:14.500Z   persisted node 1: 127.0.0.1:24743
+2026-10-12T14:04:14.500Z   persisted node 2: 127.0.0.1:24752
+2026-10-12T14:04:14.500Z   persisted node 3: 127.0.0.1:24753
+2026-10-12T14:04:14.500Z   persisted node 4: 127.0.0.1:24754
+2026-10-12T14:04:14.500Z Storage quota: explicit 1.00 GiB (safe maximum 240.63 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T14:04:14.501Z Joined cluster with 4 nodes
+2026-10-12T14:04:14.502Z heartbeat: enabled (2000 ms interval)
+2026-10-12T14:04:14.503Z raft-host: up raft_id=2 n=4 boot=7986401316462549 salt=8475022647795003516 g0=hosted g2=hosted
+2026-10-12T14:04:14.503Z efsd (no git metadata, branch unknown, built 2026-10-12T14:04:01Z on fcstor006), build=orcd-repair-pool-negative: node 3 listening on 127.0.0.1:24753, storage=/tmp/efs-repair-pool-negative-results-20261012/cluster/s3 (1 paths, stripe=none), used=327680, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T14:04:14.503Z kv-obs: mt_bytes=14448 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:04:14.609Z query-catchup: rc=0 backend=disk
+2026-10-12T14:04:14.609Z query-restore: rc=0 backend=disk
+2026-10-12T14:04:14.610Z query-publish: generation=1 g0=62 g2=12 rebuilt=1 refolded=3 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=6 root_rc=0 files=6 dirs=0 logical=24576
+2026-10-12T14:04:14.729Z raft-host: applied session index=13 kind=1 shard=0 ino=0
+2026-10-12T14:04:14.895Z raft-host: applied session index=15 kind=1 shard=0 ino=0
+2026-10-12T14:04:14.948Z store: put O_DIRECT bounce copy (buf align=3104 len=65536)
+2026-10-12T14:04:14.949Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=815 p50_us=815 max_us=815 wdisk ops=1 bytes=65536 errors=0 avg_us=682 p50_us=682 max_us=682
+2026-10-12T14:04:16.086Z raft-host: applied session index=18 kind=1 shard=0 ino=0
+2026-10-12T14:04:16.104Z raft-host: applied session index=85 kind=1 shard=0 ino=0
+2026-10-12T14:04:16.339Z raft-host: applied session index=118 kind=1 shard=0 ino=0
+2026-10-12T14:04:16.502Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=995 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T14:04:16.506Z raft-host: applied session index=125 kind=1 shard=0 ino=0
+2026-10-12T14:04:16.613Z raft-host: applied session index=20 kind=1 shard=0 ino=0
+2026-10-12T14:04:16.746Z storage-engine=files direct_io=on
+2026-10-12T14:04:16.746Z Repair: experimental missing-base FILES manual coordinator; automatic repair disabled
+2026-10-12T14:04:16.746Z Data GC admission: disabled
+2026-10-12T14:04:16.746Z Loaded 4 persisted cluster node(s) from /tmp/efs-repair-pool-negative-results-20261012/cluster/s3/meta/cluster_nodes.bin
+2026-10-12T14:04:16.746Z   persisted node 1: 127.0.0.1:24743
+2026-10-12T14:04:16.746Z   persisted node 2: 127.0.0.1:24752
+2026-10-12T14:04:16.746Z   persisted node 3: 127.0.0.1:24753
+2026-10-12T14:04:16.746Z   persisted node 4: 127.0.0.1:24754
+2026-10-12T14:04:16.747Z Storage quota: explicit 1.00 GiB (safe maximum 240.63 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T14:04:16.747Z Joined cluster with 4 nodes
+2026-10-12T14:04:16.748Z heartbeat: enabled (2000 ms interval)
+2026-10-12T14:04:16.750Z kv-obs: mt_bytes=34529 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:04:16.750Z raft-host: up raft_id=2 n=4 boot=7986401316462550 salt=15150730147392727704 g0=hosted g2=hosted
+2026-10-12T14:04:16.750Z efsd (no git metadata, branch unknown, built 2026-10-12T14:04:01Z on fcstor006), build=orcd-repair-pool-negative: node 3 listening on 127.0.0.1:24753, storage=/tmp/efs-repair-pool-negative-results-20261012/cluster/s3 (1 paths, stripe=none), used=851968, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T14:04:17.251Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=402
+2026-10-12T14:04:17.571Z raft-host: applied session index=140 kind=1 shard=0 ino=0
+2026-10-12T14:04:17.575Z iostats: get ops=1 bytes=65536 errors=0 avg_us=627 p50_us=627 max_us=627 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T14:04:17.739Z raft-host: applied session index=145 kind=1 shard=0 ino=0
+2026-10-12T14:04:17.744Z store: put O_DIRECT bounce copy (buf align=3712 len=65536)
+2026-10-12T14:04:17.895Z raft-host: applied session index=161 kind=1 shard=0 ino=0
+2026-10-12T14:04:18.028Z storage-engine=files direct_io=on
+2026-10-12T14:04:18.028Z Repair: experimental missing-base FILES manual coordinator; automatic repair disabled
+2026-10-12T14:04:18.028Z Data GC admission: disabled
+2026-10-12T14:04:18.028Z Loaded 4 persisted cluster node(s) from /tmp/efs-repair-pool-negative-results-20261012/cluster/s3/meta/cluster_nodes.bin
+2026-10-12T14:04:18.028Z   persisted node 1: 127.0.0.1:24743
+2026-10-12T14:04:18.028Z   persisted node 2: 127.0.0.1:24752
+2026-10-12T14:04:18.028Z   persisted node 3: 127.0.0.1:24753
+2026-10-12T14:04:18.028Z   persisted node 4: 127.0.0.1:24754
+2026-10-12T14:04:18.029Z Storage quota: explicit 1.00 GiB (safe maximum 240.63 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T14:04:18.030Z Joined cluster with 4 nodes
+2026-10-12T14:04:18.031Z heartbeat: enabled (2000 ms interval)
+2026-10-12T14:04:18.032Z raft-host: up raft_id=2 n=4 boot=7986401316462551 salt=17000509145596182291 g0=hosted g2=hosted
+2026-10-12T14:04:18.032Z efsd (no git metadata, branch unknown, built 2026-10-12T14:04:01Z on fcstor006), build=orcd-repair-pool-negative: node 3 listening on 127.0.0.1:24753, storage=/tmp/efs-repair-pool-negative-results-20261012/cluster/s3 (1 paths, stripe=none), used=917504, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T14:04:18.032Z kv-obs: mt_bytes=39602 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:04:18.534Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=401
+2026-10-12T14:04:19.121Z raft-host: applied session index=24 kind=1 shard=0 ino=0
+2026-10-12T14:04:19.125Z iostats: get ops=1 bytes=65536 errors=0 avg_us=596 p50_us=596 max_us=596 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T14:04:19.291Z raft-host: applied session index=26 kind=1 shard=0 ino=0
+2026-10-12T14:04:19.295Z store: put O_DIRECT bounce copy (buf align=2608 len=65536)
+2026-10-12T14:04:19.445Z raft-host: applied session index=183 kind=1 shard=0 ino=0
+2026-10-12T14:04:19.577Z storage-engine=files direct_io=on
+2026-10-12T14:04:19.577Z Repair: experimental missing-base FILES manual coordinator; automatic repair disabled
+2026-10-12T14:04:19.577Z Data GC admission: disabled
+2026-10-12T14:04:19.577Z Loaded 4 persisted cluster node(s) from /tmp/efs-repair-pool-negative-results-20261012/cluster/s3/meta/cluster_nodes.bin
+2026-10-12T14:04:19.577Z   persisted node 1: 127.0.0.1:24743
+2026-10-12T14:04:19.577Z   persisted node 2: 127.0.0.1:24752
+2026-10-12T14:04:19.577Z   persisted node 3: 127.0.0.1:24753
+2026-10-12T14:04:19.577Z   persisted node 4: 127.0.0.1:24754
+2026-10-12T14:04:19.578Z Storage quota: explicit 1.00 GiB (safe maximum 240.63 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T14:04:19.578Z Joined cluster with 4 nodes
+2026-10-12T14:04:19.579Z heartbeat: enabled (2000 ms interval)
+2026-10-12T14:04:19.581Z raft-host: up raft_id=2 n=4 boot=7986401316462552 salt=984156024897482160 g0=hosted g2=hosted
+2026-10-12T14:04:19.581Z efsd (no git metadata, branch unknown, built 2026-10-12T14:04:01Z on fcstor006), build=orcd-repair-pool-negative: node 3 listening on 127.0.0.1:24753, storage=/tmp/efs-repair-pool-negative-results-20261012/cluster/s3 (1 paths, stripe=none), used=983040, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T14:04:19.581Z kv-obs: mt_bytes=44891 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:04:20.082Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=401
+2026-10-12T14:04:20.513Z raft-host: applied session index=29 kind=1 shard=0 ino=0
+2026-10-12T14:04:20.517Z iostats: get ops=1 bytes=65536 errors=0 avg_us=628 p50_us=628 max_us=628 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0

@@ -1,0 +1,193 @@
+{"op": "raft-mkfs", "rc": 1, "stderr": "", "stdout": "raft-mkfs rc=-15 leader_hint=-1 index=0 salt=3894968641099230434\n"}
+{"op": "raft-mkfs", "rc": 1, "stderr": "", "stdout": "raft-mkfs rc=-15 leader_hint=-1 index=1 salt=3894968641099230434\n"}
+{"op": "raft-mkfs", "rc": 0, "stderr": "", "stdout": "raft-mkfs rc=0 leader_hint=1 index=2 salt=3894968641099230434\n"}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1891549, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1891578, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1891610, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1891642, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-a-4.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-a", "op": "transport", "pid": 1891716, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-b-5.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-b", "op": "transport", "pid": 1891736, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"elapsed_s": 0.03132495563477278, "name": "lost-1", "op": "fsync", "rc": 0}
+{"durable": true, "name": "lost-1", "op": "fsync-result", "rc": 0, "sha256": "0306ac262fa86b2ffa251b701f39b67985de4c8fde437b7cea41f32f8ebf820d"}
+{"elapsed_s": 1.1646813359111547, "name": "lost-1", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-1", "op": "read-result", "sha256": "0306ac262fa86b2ffa251b701f39b67985de4c8fde437b7cea41f32f8ebf820d", "size": 4096}
+{"elapsed_s": 0.03132170997560024, "name": "new-1", "op": "fsync", "rc": 0}
+{"durable": true, "name": "new-1", "op": "fsync-result", "rc": 0, "sha256": "d3f03d097e126b52cad6b51934b68300de2215bc6b92b369dd907df4c9b9705b"}
+{"elapsed_s": 0.16350017115473747, "name": "new-1", "op": "read", "rc": 0}
+{"errno": null, "name": "new-1", "op": "read-result", "sha256": "d3f03d097e126b52cad6b51934b68300de2215bc6b92b369dd907df4c9b9705b", "size": 4096}
+{"log_offset": 1493, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1891771, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1891578, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1891610, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1891642, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-a-11.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-a", "op": "transport", "pid": 1891809, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-b-12.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-b", "op": "transport", "pid": 1891828, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"elapsed_s": 0.031325758434832096, "name": "lost-1", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-1", "op": "read-result", "sha256": "0306ac262fa86b2ffa251b701f39b67985de4c8fde437b7cea41f32f8ebf820d", "size": 4096}
+{"elapsed_s": 0.03132268227636814, "name": "lost-2", "op": "fsync", "rc": 0}
+{"durable": true, "name": "lost-2", "op": "fsync-result", "rc": 0, "sha256": "466ec03da21e833d93f85e2cc72468d042a28fc95a3013f74b5150c621e2d5a4"}
+{"elapsed_s": 1.4649186320602894, "name": "lost-2", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-2", "op": "read-result", "sha256": "466ec03da21e833d93f85e2cc72468d042a28fc95a3013f74b5150c621e2d5a4", "size": 4096}
+{"elapsed_s": 0.031319024972617626, "name": "new-2", "op": "fsync", "rc": 0}
+{"durable": true, "name": "new-2", "op": "fsync-result", "rc": 0, "sha256": "4c855d5af6329493ca1d01ccadf67e4d038bfd71e59e32643d7a26c61b32795a"}
+{"elapsed_s": 0.015215439721941948, "name": "new-2", "op": "read", "rc": 0}
+{"errno": null, "name": "new-2", "op": "read-result", "sha256": "4c855d5af6329493ca1d01ccadf67e4d038bfd71e59e32643d7a26c61b32795a", "size": 4096}
+{"log_offset": 1493, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1891771, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 2353, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1891870, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1891610, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1891642, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-a-19.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-a", "op": "transport", "pid": 1891911, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-b-20.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-b", "op": "transport", "pid": 1891939, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"elapsed_s": 0.16348803788423538, "name": "lost-2", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-2", "op": "read-result", "sha256": "466ec03da21e833d93f85e2cc72468d042a28fc95a3013f74b5150c621e2d5a4", "size": 4096}
+{"elapsed_s": 0.03131487686187029, "name": "lost-3", "op": "fsync", "rc": 0}
+{"durable": true, "name": "lost-3", "op": "fsync-result", "rc": 0, "sha256": "b83d91b609846568fca9b7075e37a616c1603db67aac898f32c021ea14efef1e"}
+{"elapsed_s": 0.01526047382503748, "name": "lost-3", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-3", "op": "read-result", "sha256": "b83d91b609846568fca9b7075e37a616c1603db67aac898f32c021ea14efef1e", "size": 4096}
+{"elapsed_s": 0.03131855372339487, "name": "new-3", "op": "fsync", "rc": 0}
+{"durable": true, "name": "new-3", "op": "fsync-result", "rc": 0, "sha256": "488b7cf7204036fc132bf8ea52158e6f57c91de1f350b739e0cbf4a9789232d8"}
+{"elapsed_s": 0.01525961235165596, "name": "new-3", "op": "read", "rc": 0}
+{"errno": null, "name": "new-3", "op": "read-result", "sha256": "488b7cf7204036fc132bf8ea52158e6f57c91de1f350b739e0cbf4a9789232d8", "size": 4096}
+{"log_offset": 1493, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1891771, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 2353, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1891870, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 2759, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1891973, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1891642, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-a-27.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-a", "op": "transport", "pid": 1892013, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-b-28.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-b", "op": "transport", "pid": 1892041, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"elapsed_s": 0.015262397937476635, "name": "lost-3", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-3", "op": "read-result", "sha256": "b83d91b609846568fca9b7075e37a616c1603db67aac898f32c021ea14efef1e", "size": 4096}
+{"elapsed_s": 0.0313135152682662, "name": "lost-4", "op": "fsync", "rc": 0}
+{"durable": true, "name": "lost-4", "op": "fsync-result", "rc": 0, "sha256": "2515c5161e4cddbdd725fb7da2a3e4f65cf944d7ef698dda738da1e6b0f6e6ee"}
+{"elapsed_s": 0.015260964632034302, "name": "lost-4", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-4", "op": "read-result", "sha256": "2515c5161e4cddbdd725fb7da2a3e4f65cf944d7ef698dda738da1e6b0f6e6ee", "size": 4096}
+{"elapsed_s": 0.03131657000631094, "name": "new-4", "op": "fsync", "rc": 0}
+{"durable": true, "name": "new-4", "op": "fsync-result", "rc": 0, "sha256": "7adf1193f481fcd086304fdfef54f08566aa22a481d2ac973a5d335cad8fd502"}
+{"elapsed_s": 0.015259441919624805, "name": "new-4", "op": "read", "rc": 0}
+{"errno": null, "name": "new-4", "op": "read-result", "sha256": "7adf1193f481fcd086304fdfef54f08566aa22a481d2ac973a5d335cad8fd502", "size": 4096}
+{"log_offset": 1493, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1891771, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 2353, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1891870, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 2759, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1891973, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 2154, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1892071, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-a-35.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-a", "op": "transport", "pid": 1892106, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-b-36.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-b", "op": "transport", "pid": 1892125, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"elapsed_s": 0.031321640126407146, "name": "lost-4", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-4", "op": "read-result", "sha256": "2515c5161e4cddbdd725fb7da2a3e4f65cf944d7ef698dda738da1e6b0f6e6ee", "size": 4096}
+{"elapsed_s": 0.03127123601734638, "name": "cor-0", "op": "fsync", "rc": 0}
+{"durable": true, "name": "cor-0", "op": "fsync-result", "rc": 0, "sha256": "dfc960fb4f0400eb12e38b29803da63fb12d681a516e2b949880e757c2e4639f"}
+{"elapsed_s": 0.015262688510119915, "name": "cor-0", "op": "read", "rc": 0}
+{"errno": null, "name": "cor-0", "op": "read-result", "sha256": "dfc960fb4f0400eb12e38b29803da63fb12d681a516e2b949880e757c2e4639f", "size": 4096}
+{"elapsed_s": 0.015255525708198547, "name": "cor-1", "op": "fsync", "rc": 0}
+{"durable": true, "name": "cor-1", "op": "fsync-result", "rc": 0, "sha256": "bf76845067fe55b51acb378204acdf81832f1eca6d420727f564ac980b971bc8"}
+{"elapsed_s": 0.015238583087921143, "name": "cor-1", "op": "read", "rc": 0}
+{"errno": null, "name": "cor-1", "op": "read-result", "sha256": "bf76845067fe55b51acb378204acdf81832f1eca6d420727f564ac980b971bc8", "size": 4096}
+{"elapsed_s": 0.015216672793030739, "name": "cor-2", "op": "fsync", "rc": 0}
+{"durable": true, "name": "cor-2", "op": "fsync-result", "rc": 0, "sha256": "638214f0e446b5b1dfee29177683e79258ed46bde38c24027e27b8f90cc736d1"}
+{"elapsed_s": 0.015260623767971992, "name": "cor-2", "op": "read", "rc": 0}
+{"errno": null, "name": "cor-2", "op": "read-result", "sha256": "638214f0e446b5b1dfee29177683e79258ed46bde38c24027e27b8f90cc736d1", "size": 4096}
+{"elapsed_s": 0.015254382975399494, "name": "nosum", "op": "fsync", "rc": 0}
+{"durable": true, "name": "nosum", "op": "fsync-result", "rc": 0, "sha256": "2c9740f7a09ed4b2498a44496910f58eb826e96a98c4b0580cbbb129b531a395"}
+{"elapsed_s": 0.015261766500771046, "name": "nosum", "op": "read", "rc": 0}
+{"errno": null, "name": "nosum", "op": "read-result", "sha256": "2c9740f7a09ed4b2498a44496910f58eb826e96a98c4b0580cbbb129b531a395", "size": 4096}
+{"elapsed_s": 0.015255273319780827, "name": "after-fsync", "op": "fsync", "rc": 0}
+{"durable": true, "name": "after-fsync", "op": "fsync-result", "rc": 0, "sha256": "5e8ce3f71a69a062894aad9a2961258fbc21009eb8d707e37f28eccb5cc858d4"}
+{"elapsed_s": 0.015258208848536015, "name": "after-fsync", "op": "read", "rc": 0}
+{"errno": null, "name": "after-fsync", "op": "read-result", "sha256": "5e8ce3f71a69a062894aad9a2961258fbc21009eb8d707e37f28eccb5cc858d4", "size": 4096}
+{"elapsed_s": 0.01525705773383379, "name": "before-fsync", "op": "read", "rc": 0}
+{"errno": null, "name": "before-fsync", "op": "read-result", "sha256": null, "size": 0}
+{"log_offset": 1493, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1891771, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 2353, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1891870, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 2759, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1891973, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 2154, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1892071, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-a-51.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-a", "op": "transport", "pid": 1892191, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-b-52.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-b", "op": "transport", "pid": 1892210, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"elapsed_s": 0.03132280241698027, "name": "repair-role-0", "op": "fsync", "rc": 0}
+{"durable": true, "name": "repair-role-0", "op": "fsync-result", "rc": 0, "sha256": "69112cfb7e1181f1ff5468a045cc7c9f2b2ccc3ed4179adcbd8cc1fbcb55dfab"}
+{"log_offset": 1493, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1891771, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 2353, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1891870, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 2759, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1891973, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 2154, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1892071, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-a-54.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-a", "op": "transport", "pid": 1892250, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-b-55.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-b", "op": "transport", "pid": 1892269, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"elapsed_s": 0.0313244853168726, "name": "repair-role-0", "op": "read", "rc": 0}
+{"errno": null, "name": "repair-role-0", "op": "read-result", "sha256": "69112cfb7e1181f1ff5468a045cc7c9f2b2ccc3ed4179adcbd8cc1fbcb55dfab", "size": 131072}
+{"node_id": 1, "op": "repair-request", "rc": 0, "stderr": "efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 4 recv + up to 32 lazy send slots, 84 KiB each)\n", "stdout": "repair ino=61441 object=14935471367701015261 role=0 rc=0 transport=rdma\n"}
+{"log_offset": 4552, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1892301, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 5229, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1892331, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 5484, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1892363, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 3701, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1892395, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-repair-cold-a-61.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-repair-cold-a", "op": "transport", "pid": 1892436, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-repair-cold-b-62.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-repair-cold-b", "op": "transport", "pid": 1892481, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"initialization": false, "op": "repair-cold-protection", "physical_roles": 3, "role": 0, "store_identity_sha256": {"1": "f3cc7284d82aa89847bd5f54ca4a5b9dedf42e3fe52da891459cf55473698e88", "2": "0623323ced2c87b8e4800ac2b3bd95933b9bb3de0e06da630a67bd36cbe5e6c9", "3": "125290d1a669c90671898e609fed1aeb5e5c0a7831cab133aca0b313bd736abf", "4": "03bb36cd098063af691dfe00d05cbec7b64e7ac31da9fb1d40088a704255f47d"}}
+{"log_offset": 4552, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1892301, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 5229, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1892331, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 5484, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1892363, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 3701, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1892395, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-a-63.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-a", "op": "transport", "pid": 1892502, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-b-64.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-b", "op": "transport", "pid": 1892521, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"elapsed_s": 0.16348505299538374, "name": "repair-role-0", "op": "read", "rc": 0}
+{"errno": null, "name": "repair-role-0", "op": "read-result", "sha256": "69112cfb7e1181f1ff5468a045cc7c9f2b2ccc3ed4179adcbd8cc1fbcb55dfab", "size": 131072}
+{"log_offset": 4552, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1892301, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 5229, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1892331, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 5484, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1892363, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 3701, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1892395, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-a-66.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-a", "op": "transport", "pid": 1892546, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-b-67.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-b", "op": "transport", "pid": 1892565, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"elapsed_s": 0.03133080713450909, "name": "repair-role-1", "op": "fsync", "rc": 0}
+{"durable": true, "name": "repair-role-1", "op": "fsync-result", "rc": 0, "sha256": "4ec0ce36006aed7a2e26790bed805420fe87cb42450db5c78f6c74ff474fbc61"}
+{"log_offset": 4552, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1892301, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 5229, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1892331, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 5484, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1892363, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 3701, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1892395, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-a-69.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-a", "op": "transport", "pid": 1892605, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-b-70.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-b", "op": "transport", "pid": 1892624, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"elapsed_s": 0.0313224708661437, "name": "repair-role-1", "op": "read", "rc": 0}
+{"errno": null, "name": "repair-role-1", "op": "read-result", "sha256": "4ec0ce36006aed7a2e26790bed805420fe87cb42450db5c78f6c74ff474fbc61", "size": 131072}
+{"node_id": 1, "op": "repair-request", "rc": 1, "stderr": "efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 4 recv + up to 32 lazy send slots, 84 KiB each)\n", "stdout": "repair ino=65537 object=11530510653232215018 role=1 rc=-15 transport=rdma\n"}
+{"node_id": 2, "op": "repair-request", "rc": 0, "stderr": "efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 4 recv + up to 32 lazy send slots, 84 KiB each)\n", "stdout": "repair ino=65537 object=11530510653232215018 role=1 rc=0 transport=rdma\n"}
+{"log_offset": 7362, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1892659, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 7403, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1892689, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 7666, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1892721, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 5637, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1892753, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-repair-cold-a-76.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-repair-cold-a", "op": "transport", "pid": 1892796, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-repair-cold-b-77.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-repair-cold-b", "op": "transport", "pid": 1892836, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"initialization": false, "op": "repair-cold-protection", "physical_roles": 3, "role": 1, "store_identity_sha256": {"1": "f3cc7284d82aa89847bd5f54ca4a5b9dedf42e3fe52da891459cf55473698e88", "2": "0623323ced2c87b8e4800ac2b3bd95933b9bb3de0e06da630a67bd36cbe5e6c9", "3": "125290d1a669c90671898e609fed1aeb5e5c0a7831cab133aca0b313bd736abf", "4": "03bb36cd098063af691dfe00d05cbec7b64e7ac31da9fb1d40088a704255f47d"}}
+{"log_offset": 7362, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1892659, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 7403, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1892689, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 7666, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1892721, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 5637, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1892753, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-a-78.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-a", "op": "transport", "pid": 1892857, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-b-79.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-b", "op": "transport", "pid": 1892876, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"elapsed_s": 0.031325437128543854, "name": "repair-role-1", "op": "read", "rc": 0}
+{"errno": null, "name": "repair-role-1", "op": "read-result", "sha256": "4ec0ce36006aed7a2e26790bed805420fe87cb42450db5c78f6c74ff474fbc61", "size": 131072}
+{"log_offset": 7362, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1892659, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 7403, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1892689, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 7666, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1892721, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 5637, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1892753, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-a-81.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-a", "op": "transport", "pid": 1892900, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-b-82.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-b", "op": "transport", "pid": 1892919, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"elapsed_s": 0.16350150294601917, "name": "repair-role-2", "op": "fsync", "rc": 0}
+{"durable": true, "name": "repair-role-2", "op": "fsync-result", "rc": 0, "sha256": "e2aba731d102fd3994ebb75d33fc0f66da9b8f1da38bf4c06c164b3bbeea071b"}
+{"log_offset": 7362, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1892659, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 7403, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1892689, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 7666, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1892721, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 5637, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1892753, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-a-84.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-a", "op": "transport", "pid": 1892959, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-b-85.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-b", "op": "transport", "pid": 1892978, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"elapsed_s": 0.03132146876305342, "name": "repair-role-2", "op": "read", "rc": 0}
+{"errno": null, "name": "repair-role-2", "op": "read-result", "sha256": "e2aba731d102fd3994ebb75d33fc0f66da9b8f1da38bf4c06c164b3bbeea071b", "size": 131072}
+{"node_id": 1, "op": "repair-request", "rc": 1, "stderr": "efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 4 recv + up to 32 lazy send slots, 84 KiB each)\n", "stdout": "repair ino=69633 object=7542198660576790555 role=2 rc=-15 transport=rdma\n"}
+{"node_id": 2, "op": "repair-request", "rc": 0, "stderr": "efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 4 recv + up to 32 lazy send slots, 84 KiB each)\n", "stdout": "repair ino=69633 object=7542198660576790555 role=2 rc=0 transport=rdma\n"}
+{"log_offset": 9965, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1893013, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 9585, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1893043, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 9846, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1893075, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 7558, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1893107, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-repair-cold-a-91.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-repair-cold-a", "op": "transport", "pid": 1893148, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-repair-cold-b-92.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-repair-cold-b", "op": "transport", "pid": 1893193, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"initialization": false, "op": "repair-cold-protection", "physical_roles": 3, "role": 2, "store_identity_sha256": {"1": "f3cc7284d82aa89847bd5f54ca4a5b9dedf42e3fe52da891459cf55473698e88", "2": "0623323ced2c87b8e4800ac2b3bd95933b9bb3de0e06da630a67bd36cbe5e6c9", "3": "125290d1a669c90671898e609fed1aeb5e5c0a7831cab133aca0b313bd736abf", "4": "03bb36cd098063af691dfe00d05cbec7b64e7ac31da9fb1d40088a704255f47d"}}
+{"log_offset": 9965, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1893013, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 9585, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1893043, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 9846, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1893075, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 7558, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1893107, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-a-93.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-a", "op": "transport", "pid": 1893214, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"log_offset": 0, "log_path": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/fuse-b-94.log", "mount": "/tmp/efs-repair-default-rdma-52581e6ca37c/cluster/mnt-b", "op": "transport", "pid": 1893233, "transport": "rdma", "uverbs": ["/dev/infiniband/uverbs0", "/dev/infiniband/uverbs2"]}
+{"elapsed_s": 0.16350827552378178, "name": "repair-role-2", "op": "read", "rc": 0}
+{"errno": null, "name": "repair-role-2", "op": "read-result", "sha256": "e2aba731d102fd3994ebb75d33fc0f66da9b8f1da38bf4c06c164b3bbeea071b", "size": 131072}

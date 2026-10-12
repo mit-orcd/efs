@@ -999,14 +999,18 @@ static int gc_dead_ancestors(struct efsd_server *s, const char *inode_path)
     return EFS_OK;
 }
 
-int server_gc_inode(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
-                    uint64_t generation)
+int server_gc_inode_checked(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
+                    uint64_t generation,int (*authority)(void *,efs_ino_t),void *context)
 {
     if (!s || !eid || ino <= EFS_ROOT_INO || efs_ino_is_meta_table(ino) || !generation)
         return EFS_ERR_INVAL;
     pthread_rwlock_t *mu = inode_gc_lock(eid, ino);
     pthread_rwlock_wrlock(mu);
-    int rc = inode_death_set(s, eid, ino);
+    /* Keep the exact inode write guard across nonblocking repair-debt recheck and
+     * durable death. An ADMIT racing after that proof cannot publish a DATA
+     * receipt: its read guard waits, then sees persistent inode death. */
+    int rc=authority?authority(context,ino):EFS_OK;
+    if(!rc)rc=inode_death_set(s,eid,ino);
     unsigned left = 128;
     for (uint32_t r = 0;
          rc == EFS_OK && r < (s->storage_path_count ? s->storage_path_count : 1); r++) {
@@ -1020,6 +1024,11 @@ int server_gc_inode(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
     if (rc != EFS_OK && rc != EFS_ERR_BUSY)
         __atomic_fetch_add(&s->gc_delete_errors, 1, __ATOMIC_RELAXED);
     return rc;
+}
+
+int server_gc_inode(struct efsd_server *s,efs_export_id_t eid,efs_ino_t ino,uint64_t generation)
+{
+    return server_gc_inode_checked(s,eid,ino,generation,NULL,NULL);
 }
 
 /* direct: caller decides per-ino — data fragments only. Metadata pages

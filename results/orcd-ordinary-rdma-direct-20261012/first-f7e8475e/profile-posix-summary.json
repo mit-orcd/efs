@@ -1,0 +1,37 @@
+[
+  {
+    "host": "fcstor007",
+    "output": "pass dir_mkdir_umask                 \npass attr_umask_respected            \npass perm_dir_no_x_search            \npass err_chdir_into_file             \npass chdir_dotdot_after_mkdir        \n============================================================\nPOSIX suite: 216/221 pass, 1 fail, 4 skip, 0 notrun  (49.0s)\nwrote /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor007/profile-posix-f7e8475e21a2.tsv",
+    "exit": "1"
+  },
+  {
+    "host": "fcstor008",
+    "output": "pass dir_mkdir_umask                 \npass attr_umask_respected            \npass perm_dir_no_x_search            \npass err_chdir_into_file             \npass chdir_dotdot_after_mkdir        \n============================================================\nPOSIX suite: 216/221 pass, 1 fail, 4 skip, 0 notrun  (48.7s)\nwrote /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor008/profile-posix-f7e8475e21a2.tsv",
+    "exit": "1"
+  },
+  {
+    "host": "fcstor009",
+    "output": "pass dir_mkdir_umask                 \npass attr_umask_respected            \npass perm_dir_no_x_search            \npass err_chdir_into_file             \npass chdir_dotdot_after_mkdir        \n============================================================\nPOSIX suite: 216/221 pass, 1 fail, 4 skip, 0 notrun  (48.4s)\nwrote /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor009/profile-posix-f7e8475e21a2.tsv",
+    "exit": "1"
+  },
+  {
+    "host": "fcstor010",
+    "output": "pass dir_mkdir_umask                 \npass attr_umask_respected            \npass perm_dir_no_x_search            \npass err_chdir_into_file             \npass chdir_dotdot_after_mkdir        \n============================================================\nPOSIX suite: 216/221 pass, 1 fail, 4 skip, 0 notrun  (48.8s)\nwrote /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor010/profile-posix-f7e8475e21a2.tsv",
+    "exit": "1"
+  },
+  {
+    "host": "fcstor011",
+    "output": "pass dir_mkdir_umask                 \npass attr_umask_respected            \npass perm_dir_no_x_search            \npass err_chdir_into_file             \npass chdir_dotdot_after_mkdir        \n============================================================\nPOSIX suite: 216/221 pass, 1 fail, 4 skip, 0 notrun  (48.8s)\nwrote /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor011/profile-posix-f7e8475e21a2.tsv",
+    "exit": "1"
+  },
+  {
+    "host": "fcstor012",
+    "output": "pass dir_mkdir_umask                 \npass attr_umask_respected            \npass perm_dir_no_x_search            \npass err_chdir_into_file             \npass chdir_dotdot_after_mkdir        \n============================================================\nPOSIX suite: 216/221 pass, 1 fail, 4 skip, 0 notrun  (48.4s)\nwrote /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor012/profile-posix-f7e8475e21a2.tsv",
+    "exit": "1"
+  },
+  {
+    "host": "fcstor013",
+    "output": "pass dir_mkdir_umask                 \npass attr_umask_respected            \npass perm_dir_no_x_search            \npass err_chdir_into_file             \npass chdir_dotdot_after_mkdir        \n============================================================\nPOSIX suite: 216/221 pass, 1 fail, 4 skip, 0 notrun  (48.9s)\nwrote /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor013/profile-posix-f7e8475e21a2.tsv",
+    "exit": "1"
+  }
+]

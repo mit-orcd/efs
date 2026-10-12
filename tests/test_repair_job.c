@@ -84,6 +84,8 @@ static void journal(struct efs_kv *kv,int lsm)
     assert(!efs_repair_write_authority(kv,&j));
     assert(!efs_kv_put(kv,gk,gkl,gv,sizeof(gv)));
     assert(efs_repair_write_authority(kv,&j)==EFS_ERR_STALE);
+    assert(efs_repair_record_data(kv,&j)==EFS_ERR_STALE);
+    assert(!efs_repair_get(kv,&j,&got) && !got.flags);
     assert(!efs_kv_del(kv,gk,gkl));
     struct efs_repair_job conflict=j;conflict.sums[0][0]^=1;
     assert(efs_repair_admit(kv,&conflict)==EFS_ERR_STALE);
@@ -93,6 +95,7 @@ static void journal(struct efs_kv *kv,int lsm)
     conflict=j;conflict.uuid[0]=18;assert(efs_repair_admit(kv,&conflict)==EFS_ERR_BUSY);
     assert(efs_repair_gc_ready(kv,ino,j.inode_gen,0,101)==EFS_ERR_BUSY);
     assert(efs_repair_gc_object_ready(kv,ino,0,101)==EFS_ERR_BUSY);
+    assert(efs_repair_gc_inode_ready(kv,ino)==EFS_ERR_BUSY);
     assert(efs_repair_retire(kv,&j,0)==EFS_ERR_BUSY);
     assert(efs_repair_record_seal(kv,&j,1)==EFS_ERR_STALE);
     assert(efs_repair_record_seal(kv,&j,2)==EFS_ERR_BUSY);
@@ -164,6 +167,20 @@ static void cold(void)
     kv=efs_kv_lsm_open(path,NULL);assert(kv);assert(efs_repair_admit(kv,&j)==EFS_ERR_STALE);
     assert(!efs_repair_retire(kv,&j,1));efs_kv_lsm_close(kv);
     printf("repair journal cold: admitted debt after abrupt process exit; terminal floor after flush/compaction/reopen PASS\n");
+}
+static void gc_both_anchors(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();assert(kv);efs_ino_t ino=create(kv);
+    struct efs_meta_pub p=pub(kv,ino,201,0);p.chunk_index=1;p.new_size=262144;assert(!efs_meta_apply_publish(kv,&p));
+    struct efs_repair_job first=capture(kv,ino,101,96),second,q=first;q.uuid[0]=97;q.ci=1;q.object=201;
+    assert(!efs_repair_capture(kv,&q,&second));
+    assert(efs_kv_anchor_shard(efs_kv_lane_shard(ino,0))!=efs_kv_anchor_shard(efs_kv_lane_shard(ino,1)));
+    assert(!efs_repair_admit(kv,&first));assert(!efs_repair_admit(kv,&second));assert(efs_repair_gc_inode_ready(kv,ino)==EFS_ERR_BUSY);
+    assert(!efs_repair_cancel(kv,&first));assert(!efs_repair_record_seal(kv,&first,2));assert(efs_repair_gc_inode_ready(kv,ino)==EFS_ERR_BUSY);
+    assert(!efs_repair_gc_object_ready(kv,ino,0,101));assert(efs_repair_gc_object_ready(kv,ino,1,201)==EFS_ERR_BUSY);
+    assert(!efs_repair_cancel(kv,&second));assert(!efs_repair_record_seal(kv,&second,2));assert(!efs_repair_gc_inode_ready(kv,ino));
+    assert(!efs_repair_retire(kv,&first,1));assert(!efs_repair_retire(kv,&second,1));assert(!efs_repair_gc_inode_ready(kv,ino));
+    efs_kv_mem_free(kv);puts("whole-inode GC bounded both-anchor debt: one sealed role cannot release other lane; all terminal seals required PASS");
 }
 static void receipt_codec(void)
 {
@@ -246,6 +263,6 @@ int main(void)
 {
     struct efs_kv *kv=efs_kv_mem_create();assert(kv);journal(kv,0);efs_kv_mem_free(kv);
     char path[]="/tmp/efs-repair-apply-XXXXXX";assert(mkdtemp(path));
-    kv=efs_kv_lsm_open(path,NULL);assert(kv);journal(kv,1);efs_kv_lsm_close(kv);cold();bounded();fenced_liveness();receipt_codec();sync_faults();
+    kv=efs_kv_lsm_open(path,NULL);assert(kv);journal(kv,1);efs_kv_lsm_close(kv);cold();bounded();fenced_liveness();receipt_codec();gc_both_anchors();sync_faults();
     puts("inactive repair-journal prerequisite PASS; physical repair and distributed authority NOTRUN");return 0;
 }

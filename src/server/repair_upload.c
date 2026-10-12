@@ -13,6 +13,7 @@ int server_repair_receive(struct efsd_server *s,const uint8_t *body,uint32_t byt
     if(!receipt)return EFS_ERR_INVAL;
     memset(receipt,0,EFS_REPAIR_RECEIPT_BYTES);
     if(!s || !body || bytes<4+EFS_REPAIR_JOB_BYTES || (seal!=0 && seal!=1))return EFS_ERR_INVAL;
+    if(!s->repair_experiment)return EFS_ERR_ACCES;
     uint32_t eid=((uint32_t)body[0]<<24)|((uint32_t)body[1]<<16)|((uint32_t)body[2]<<8)|body[3];
     struct efs_repair_job j;int rc=efs_repair_job_decode(body+4,EFS_REPAIR_JOB_BYTES,&j);
     if(rc)return rc;
@@ -53,4 +54,18 @@ int server_repair_receive(struct efsd_server *s,const uint8_t *body,uint32_t byt
     server_put_session_end(&guard);
     if(!rc)rc=efs_repair_receipt_encode(&j,seal?EFS_REPAIR_RECEIPT_SEAL:EFS_REPAIR_RECEIPT_DATA,receipt);
     return rc;
+}
+
+static int repair_inode_gc_authority(void *context,efs_ino_t ino)
+{
+    (void)context;return server_raft_host_repair_gc_inode_local_ready(ino);
+}
+int server_repair_gc_inode(struct efsd_server *s,efs_export_id_t eid,efs_ino_t ino,uint64_t generation)
+{
+    if(!s || !s->repair_experiment)return EFS_ERR_ACCES;
+    /* ReadIndex may wait for session-fence apply. Never await it while holding
+     * the inode guard: PUT holds a session stripe before taking inode RD. */
+    int rc=server_raft_host_repair_gc_ready(ino,0,0);
+    if(rc)return rc;
+    return server_gc_inode_checked(s,eid,ino,generation,repair_inode_gc_authority,s);
 }

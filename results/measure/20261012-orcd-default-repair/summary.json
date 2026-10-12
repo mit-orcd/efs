@@ -1,0 +1,103 @@
+{
+  "commit": "52581e6ca37c7806b6ec472b062870a4a7f5f282",
+  "host": "fcstor006",
+  "gates": {
+    "rdma": {
+      "status": "PASS",
+      "rows": 23,
+      "repair_roles": [
+        0,
+        1,
+        2
+      ],
+      "replay_argv": [
+        "bash",
+        "tests/faults/run_faults.sh",
+        "/tmp/efs-repair-default-rdma-52581e6ca37c",
+        "--mode",
+        "direct",
+        "--transport",
+        "rdma",
+        "--seed",
+        "101",
+        "--rdma-device",
+        "mlx5_2",
+        "--integrate"
+      ],
+      "current_incarnation_transport_proofs": 102,
+      "cold_protection_checks": 3
+    },
+    "tcp": {
+      "status": "PASS",
+      "rows": 23,
+      "repair_roles": [
+        0,
+        1,
+        2
+      ],
+      "replay_argv": [
+        "bash",
+        "tests/faults/run_faults.sh",
+        "/tmp/efs-repair-default-tcp-52581e6ca37c",
+        "--mode",
+        "direct",
+        "--transport",
+        "tcp",
+        "--seed",
+        "101",
+        "--rdma-device",
+        "mlx5_2",
+        "--integrate"
+      ],
+      "current_incarnation_transport_proofs": 102,
+      "cold_protection_checks": 3
+    },
+    "buffered": {
+      "status": "PASS",
+      "rows": 23,
+      "repair_roles": [
+        0,
+        1,
+        2
+      ],
+      "replay_argv": [
+        "bash",
+        "tests/faults/run_faults.sh",
+        "/tmp/efs-repair-default-buffered-52581e6ca37c",
+        "--mode",
+        "buffered",
+        "--transport",
+        "tcp",
+        "--seed",
+        "101",
+        "--integrate"
+      ],
+      "current_incarnation_transport_proofs": 102,
+      "cold_protection_checks": 3
+    },
+    "fault-native": {
+      "status": "PASS"
+    },
+    "normal-native": {
+      "status": "PASS"
+    },
+    "activation-boundary": {
+      "status": "PASS"
+    }
+  },
+  "repair_scope": "manual missing ordinary base role, single-root FILES 2+1; no automatic/packed/delta/container/spare replacement qualification",
+  "live_preservation": {
+    "status": "PASS",
+    "hosts": 11,
+    "pid_binary_hash_arguments_environment_mount_unchanged": true
+  },
+  "source_cleanup": {
+    "status": "PASS",
+    "commit": "52581e6ca37c7806b6ec472b062870a4a7f5f282",
+    "source_files": 1603,
+    "source_mismatches": [],
+    "owned_processes": [],
+    "owned_mounts": [],
+    "uid": 246111
+  }
+}

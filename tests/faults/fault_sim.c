@@ -5,8 +5,7 @@
  * client can reconstruct while that process is gone. The integration
  * harness in harness.py is that check.
  *
- * Repair is not implemented. A readable chunk with a damaged fragment is
- * reported as a gap for "fully protected", not as a pass.
+ * Repair model is explicit; it is not a durable daemon receipt proof.
  */
 #include "efs/sim.h"
 
@@ -272,10 +271,24 @@ static void case_two_fragments(void)
 
 static void case_repair_gap(void)
 {
-    emit("repair_restores_protection", "GAP",
-         "no repair; a readable 2-of-3 chunk is not fully protected "
-         "and a restarted node does not rebuild lost fragments");
-    gaps++;
+    begin();
+    for(unsigned fi=0;fi<3;fi++){
+        struct efs_sim *s=mk(300+fi);efs_ino_t ino=0;struct efs_frag_id id;
+        uint8_t data[64],got[64];fill(data,sizeof(data),71);
+        CHECK(s,"repair mk");if(!s)continue;
+        CHECK(publish_file(s,"repair",data,sizeof(data),&ino)==EFS_OK,"repair publish");
+        CHECK(frag_of(s,ino,fi,&id)==EFS_OK,"repair identity");
+        CHECK(efs_sim_corrupt(s,0,&id)==EFS_OK,"repair fault");
+        CHECK(!efs_sim_frag_healthy(s,&id),"repair fault really unhealthy");
+        CHECK(efs_sim_repair_role(s,ino,0,fi)==EFS_OK,"repair model");
+        CHECK(efs_sim_frag_healthy(s,&id),"repaired role healthy");
+        CHECK(frag_of(s,ino,(fi+1)%3,&id)==EFS_OK,"second identity");
+        CHECK(efs_sim_corrupt(s,0,&id)==EFS_OK,"second independent fault");
+        CHECK(efs_sim_read_chunk(s,ino,0,got,sizeof(got))==EFS_OK &&
+              !memcmp(data,got,sizeof(data)),"second-loss exact bytes");
+        efs_sim_free(s);
+    }
+    finish("repair_restores_protection","synchronous simulator model repairs each role from authoritative checksums and survives second corruption; real daemon qualification is separate");
 }
 
 int main(void)

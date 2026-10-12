@@ -21,7 +21,7 @@ struct efs_raft_host {struct efs_kv *kv;struct server *s;int gc_running;};
 struct pack_gc_scan {struct efs_pack_object object[8];uint8_t skip[19],last[19];uint32_t count,skip_len,visited,last_len;int error;};
 static uint8_t pack_gc_cursor[2][19];static uint32_t pack_gc_cursor_len[2];
 static unsigned candidates,visited,phase,storage_calls,commands,removed;
-static int scan_error,storage_error,cleanup_error;
+static int scan_error,storage_error,cleanup_error,delete_ack_error,deleted;
 static uint64_t clock_us,storage_us;
 static struct efs_pack_object current;
 static int gc_gi(uint8_t g){assert(g==0||g==2);return g/2;}
@@ -38,22 +38,25 @@ static int host_session_cleanup_admit(struct efs_raft_host *h,const uint8_t *cmd
 static int host_pack_gc_storage(struct efs_raft_host *h,const struct efs_pack_object *o,uint32_t member,int deletion){(void)h;assert(member==1&&o->ledger.phase==EFS_PACK_RECLAIMING);if(deletion)assert(o->ledger.fence_acks==1);storage_calls++;clock_us+=storage_us;if(!storage_error&&deletion)removed++;return storage_error;}
 static int host_pack_gc_command(struct efs_raft_host *h,const struct efs_pack_object *o,uint8_t tag,uint32_t bit,int deletion){
  (void)h;commands++;current=*o;
+ if(tag==EFS_MD_CMD_PACK_GC_ACK && deletion && delete_ack_error)return EFS_ERR_IO;
  if(tag==EFS_MD_CMD_PACK_GC_ACK){assert(bit==1);if(deletion){assert(current.ledger.fence_acks==1);current.ledger.delete_acks=1;current.ledger.phase=EFS_PACK_RETIRED;}else current.ledger.fence_acks=1;}
  else assert(tag==EFS_MD_CMD_PACK_GC_RETIRE);
  return 0;
 }
 int efs_pack_lifetime_get(struct efs_kv *kv,const struct efs_pack_object *o,struct efs_pack_object *out){(void)kv;(void)o;*out=current;return 0;}
 '''+s[start:]+r'''
-static void reset(void){candidates=visited=storage_calls=commands=removed=0;phase=EFS_PACK_RETIRED;scan_error=storage_error=cleanup_error=0;clock_us=storage_us=0;memset(pack_gc_cursor_len,0,sizeof(pack_gc_cursor_len));}
+static void reset(void){candidates=visited=storage_calls=commands=removed=0;phase=EFS_PACK_RETIRED;scan_error=storage_error=cleanup_error=delete_ack_error=deleted=0;clock_us=storage_us=0;memset(pack_gc_cursor_len,0,sizeof(pack_gc_cursor_len));}
 int main(void){struct server server={0};struct efs_raft_host h={.s=&server,.gc_running=1};
- reset();assert(!host_gc_pack_pass(&h,0,1)&&!commands);
- reset();candidates=4;assert(!host_gc_pack_pass(&h,0,1)&&commands==4&&!storage_calls);
- reset();candidates=8;assert(host_gc_pack_pass(&h,0,1)==1&&commands==8);
- reset();visited=2048;assert(host_gc_pack_pass(&h,0,1)==1&&!commands);
- reset();candidates=8;scan_error=EFS_ERR_IO;assert(!host_gc_pack_pass(&h,0,1)&&server.gc_scan_errors==1&&!commands);
- reset();candidates=8;phase=EFS_PACK_ACTIVE;cleanup_error=EFS_ERR_BUSY;assert(host_gc_pack_pass(&h,0,1)==1&&!storage_calls&&!commands&&!removed);
- reset();candidates=1;phase=EFS_PACK_RECLAIMING;storage_us=150001;assert(host_gc_pack_pass(&h,0,1)==1&&storage_calls==2&&removed==1&&commands==3);
- reset();candidates=8;phase=EFS_PACK_RECLAIMING;storage_error=EFS_ERR_NET;assert(host_gc_pack_pass(&h,0,1)==1&&!removed&&storage_calls==8&&!commands);
+ reset();assert(!host_gc_pack_pass(&h,0,1,&deleted)&&!commands);
+ reset();candidates=4;assert(!host_gc_pack_pass(&h,0,1,&deleted)&&commands==4&&!storage_calls);
+ reset();candidates=8;assert(host_gc_pack_pass(&h,0,1,&deleted)==1&&commands==8);
+ reset();visited=2048;assert(host_gc_pack_pass(&h,0,1,&deleted)==1&&!commands);
+ reset();candidates=8;scan_error=EFS_ERR_IO;assert(!host_gc_pack_pass(&h,0,1,&deleted)&&server.gc_scan_errors==1&&!commands);
+ reset();candidates=8;phase=EFS_PACK_ACTIVE;cleanup_error=EFS_ERR_BUSY;assert(host_gc_pack_pass(&h,0,1,&deleted)==1&&!storage_calls&&!commands&&!removed);
+ reset();candidates=1;phase=EFS_PACK_RECLAIMING;storage_us=150001;deleted=0;assert(host_gc_pack_pass(&h,0,1,&deleted)==1&&storage_calls==2&&removed==1&&commands==3&&deleted);
+ reset();candidates=8;phase=EFS_PACK_RECLAIMING;storage_error=EFS_ERR_NET;deleted=0;assert(host_gc_pack_pass(&h,0,1,&deleted)==1&&!removed&&storage_calls==8&&!commands&&!deleted);
+ reset();candidates=1;phase=EFS_PACK_RECLAIMING;delete_ack_error=1;
+ assert(!host_gc_pack_pass(&h,0,1,&deleted)&&removed==1&&!deleted&&commands==2);
  puts("packed GC budget: empty/partial/full pages, scan ceiling, refusal, blocked owners, durable fence-before-delete and elapsed cap PASS");
 }
 '''

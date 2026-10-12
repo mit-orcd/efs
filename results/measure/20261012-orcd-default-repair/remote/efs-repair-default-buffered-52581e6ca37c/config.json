@@ -1,0 +1,21 @@
+{
+  "seed": 101,
+  "transport": "tcp",
+  "rdma_device": null,
+  "integrate": true,
+  "mode": "buffered",
+  "replay_argv": [
+    "bash",
+    "tests/faults/run_faults.sh",
+    "/tmp/efs-repair-default-buffered-52581e6ca37c",
+    "--mode",
+    "buffered",
+    "--transport",
+    "tcp",
+    "--seed",
+    "101",
+    "--integrate"
+  ],
+  "live_cluster": "not used; ports 19810 and 19820 are refused",
+  "repair": "mandatory ordinary base role; owned fixture stores only"
+}

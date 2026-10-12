@@ -28,6 +28,11 @@ int main(void) {
   assert(host_gc_backlog_idle(ms,1,2,1)==1000);
   assert(host_gc_backlog_idle(ms,1,1,2)==ms);
  }
+ assert(host_gc_packed_idle(1000,0,0)==1000);
+ assert(host_gc_packed_idle(1000,1,0)==1000);
+ assert(host_gc_packed_idle(1000,0,1)==1000);
+ assert(host_gc_packed_idle(1000,1,1)==20);
+ assert(host_gc_packed_idle(40,1,0)==40);
  puts("GC backlog idle: strict config, default/idle/blocked/reset backoff and bounded progress PASS");
 }
 '''
@@ -36,7 +41,8 @@ thread=s[b:s.index('/* W92 query publication:',b)]
 assert 'host_gc_reap_pass(h, h->g[g].group' in thread
 assert 'backlog_capped |= __atomic_load_n' in thread
 assert 'backlog_capped |= host_gc_frag_pass(' in thread
-assert 'backlog_capped |= host_gc_pack_pass(' in thread
+assert 'pack_capped = host_gc_pack_pass(' in thread
+assert 'host_gc_packed_idle(idle_ms, packed_capped, packed_deleted)' in thread
 assert 'removed_before' in thread and 'removed_after' in thread
 assert 'host_snap_export_pass(h)' in thread and 'usleep(20 * 1000)' in thread
 with tempfile.TemporaryDirectory(prefix='efs-gc-idle-') as temp:

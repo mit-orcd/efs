@@ -127,7 +127,7 @@ static int put(struct efs_kv *kv,const struct efs_repair_job *j)
     key(j,EFS_KV_KIND_REPAIR_JOB,k);struct efs_kv_item item={EFS_KV_PUT,k,sizeof(k),v,sizeof(v)};
     return efs_kv_batch(kv,&item,1);
 }
-struct scan {const struct efs_repair_job *match;uint32_t count;int duplicate,rc,any_gen,any_fi;};
+struct scan {const struct efs_repair_job *match;uint32_t count;int duplicate,rc,any_gen,any_fi,any_ci,any_object;};
 static int scan_cb(void *u,const uint8_t *k,uint32_t kl,const uint8_t *v,uint32_t vl)
 {
     struct scan *s=u;struct efs_repair_job j;uint8_t expected[19];
@@ -136,7 +136,7 @@ static int scan_cb(void *u,const uint8_t *k,uint32_t kl,const uint8_t *v,uint32_
     if(memcmp(k,expected,19)){s->rc=EFS_ERR_PROTO;return 1;}
     if(++s->count>EFS_REPAIR_PENDING_MAX){s->rc=EFS_ERR_OVERFLOW;return 1;}
     const struct efs_repair_job *m=s->match;
-    if(m && j.ino==m->ino && (s->any_gen || j.inode_gen==m->inode_gen) && j.ci==m->ci && j.object==m->object && (s->any_fi || j.fi==m->fi)){
+    if(m && j.ino==m->ino && (s->any_gen || j.inode_gen==m->inode_gen) && (s->any_ci || j.ci==m->ci) && (s->any_object || j.object==m->object) && (s->any_fi || j.fi==m->fi)){
         s->duplicate=1;
         if(j.state!=EFS_REPAIR_SEALED)s->rc=EFS_ERR_BUSY;
     }
@@ -200,6 +200,7 @@ int efs_repair_record_data(struct efs_kv *kv,const struct efs_repair_job *j)
 {
     struct efs_repair_job old,now;int rc=load(kv,j,&old);if(rc)return rc;
     if(old.state!=EFS_REPAIR_ADMITTED)return EFS_ERR_STALE;
+    rc=gc_not_scheduled(kv,j);if(rc)return rc;
     rc=efs_repair_capture(kv,j,&now);if(rc)return rc==EFS_ERR_NOT_FOUND?EFS_ERR_STALE:rc;if(!same(j,&now))return EFS_ERR_STALE;
     if(old.flags&EFS_REPAIR_DATA_DURABLE)return EFS_OK;
     old.flags|=EFS_REPAIR_DATA_DURABLE;return put(kv,&old);
@@ -236,6 +237,7 @@ int efs_repair_retire(struct efs_kv *kv,const struct efs_repair_job *j,int cance
     if(old.state!=EFS_REPAIR_SEALED || !!(old.flags&EFS_REPAIR_CANCELLED)!=!!cancelled)return EFS_ERR_BUSY;
     if(!cancelled){
         if(!(old.flags&EFS_REPAIR_DATA_DURABLE))return EFS_ERR_BUSY;
+        rc=gc_not_scheduled(kv,j);if(rc)return rc;
         rc=efs_repair_capture(kv,j,&now);if(rc)return rc==EFS_ERR_NOT_FOUND?EFS_ERR_STALE:rc;if(!same(j,&now))return EFS_ERR_STALE;
     }
     uint8_t k[19],fk[19],v[76]={0};key(j,EFS_KV_KIND_REPAIR_JOB,k);key(j,EFS_KV_KIND_REPAIR_FLOOR,fk);
@@ -258,6 +260,20 @@ int efs_repair_gc_object_ready(struct efs_kv *kv,efs_ino_t ino,uint32_t ci,uint6
     struct efs_repair_job j={.ino=ino,.ci=ci,.object=object};
     struct scan s={.match=&j,.any_gen=1,.any_fi=1};
     return scan_jobs(kv,&j,&s);
+}
+
+int efs_repair_gc_inode_ready(struct efs_kv *kv,efs_ino_t ino)
+{
+    if(!kv || !ino)return EFS_ERR_INVAL;
+    struct efs_repair_job selector={.ino=ino};
+    for(uint32_t anchor=1;anchor<=2;anchor++){
+        uint8_t prefix[3]={(uint8_t)(anchor>>8),(uint8_t)anchor,EFS_KV_KIND_REPAIR_JOB};
+        struct scan scan={.match=&selector,.any_gen=1,.any_fi=1,.any_ci=1,.any_object=1};
+        int rc=efs_kv_scan_prefix(kv,prefix,sizeof(prefix),scan_cb,&scan);
+        if(scan.rc)return scan.rc;
+        if(rc<0)return rc;
+    }
+    return EFS_OK;
 }
 
 int efs_repair_apply_command(struct efs_kv *kv,uint32_t group,const uint8_t *cmd,uint32_t n)

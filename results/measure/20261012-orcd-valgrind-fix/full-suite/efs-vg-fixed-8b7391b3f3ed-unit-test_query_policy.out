@@ -1,0 +1,1 @@
+query policy: defaults, masks, stale CAS, cold persistence, read/write IO/NOMEM/BUSY refusal without effects, overflow and malformed refusal PASS

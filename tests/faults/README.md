@@ -1,98 +1,88 @@
-# Fault injection
+# Standalone fault suite
 
-This suite sits beside the POSIX tests. It looks for data loss, silent
-corruption, a success that was not durable, and recovery that is only
-partial. It does not use the live cluster, port 19810, port 19820, or
-`/data1`.
+This suite keeps simulator and real-process evidence separate. Defaults remain
+TCP and buffered I/O; select direct I/O and RDMA explicitly.
 
-A chunk that can still be read is not fully protected. Nothing in efs
-rebuilds a lost fragment. Those cases stay `GAP`. They are not passes.
+Repair is mandatory in every integration run; no `--repair-experiment` option
+is needed or accepted. The harness activates the bounded manual repair path
+only in its own disposable single-root FILES daemons, refuses a nonempty fixture
+root, and initializes store identities only on their first startup. Cold
+restarts reopen those identities with initialization disabled. Repair flags
+are not added to the caller or client environment. The deployed daemon's
+activation guard remains unchanged; running this suite does not enable repair
+on an existing cluster.
 
-## Layers
+The simulator exercises a synchronous repair model for every role, checking
+identity-bound authoritative digests and exact reads after a second corruption.
+That model does not establish physical durability or quorum receipts. Real
+integration removes a physical role, proves degraded reads do not heal it,
+invokes the actual coordinator, verifies replacement bytes/checksum, cold
+restarts every daemon/client without reinitialization, rechecks all three
+physical roles and unchanged store identities, removes another original role, and verifies exact
+bytes from a fresh peer. It repeats this for roles 0/1/2.
 
-| Layer | What it runs | What a pass means |
-|---|---|---|
-| `sim` | `fault_sim`, in one process (strict three-fragment publication) | The protocol reactions in `include/efs/sim.h`: crash, restart, corrupt, drop the sidecar |
-| `integration` | four `efsd` processes, two `efs-fuse` clients | The same observations through real processes, disks, and FUSE |
+The coordinator accepts a selector, captures current leader/term and metadata,
+reads and hashes both survivors, reconstructs and checks the missing role,
+commits ADMIT, obtains the target's actual durable DATA receipt, commits DATA,
+obtains and commits terminal SEAL, and retires the job. Caller bytes and receipts
+are never accepted. Public generic journal mutation remains refused. Errors
+retain debt; old owner/term or incarnation cannot be silently replaced. Fragment
+and whole-inode GC use the experimental debt guards. One worker per daemon can
+execute at a time; ordinary/default-off GC does not scan repair debt.
 
-The simulator reads a crashed server's store directly. A sim pass does not
-prove a FUSE client can rebuild a chunk while that process is gone. Run
-the integration layer for that.
+Packed objects, delta spans, containers, spare relocation, empty replacement
+stores, automatic repair, and interrupted-job leadership takeover are not
+qualified here. A short-write delta fixture was refused and retained as failure
+evidence; the passing fixture writes a full ordinary base chunk. The private
+driver is not an installed user administration interface.
 
-`make test` does not include this suite. `fault_sim` exits 2 while repair
-is a gap, and that must not be turned into a green unit run.
+## Run
 
-## Build and run
-
-Build on an fcstor, in `/tmp/efs`, after rsync. Do not run `make` in
-`$HOME/git/efs`.
-
-```bash
-cd /tmp/efs && make tests/faults/fault_sim efsd efs-fuse efs-mgmt
-bash tests/faults/run_faults.sh /tmp/efs-fault-out
-EFS_FAULT_BIN=/tmp/efs bash tests/faults/run_faults.sh /tmp/efs-fault-direct --integrate --mode direct
-EFS_FAULT_BIN=/tmp/efs bash tests/faults/run_faults.sh /tmp/efs-fault-buffered --integrate --mode buffered
+```sh
+make tests/faults/fault_sim tests/faults/repair_request efsd efs-fuse efs-mgmt
+bash tests/faults/run_faults.sh /tmp/efs-fault-model
+EFS_FAULT_BIN=/path/to/build bash tests/faults/run_faults.sh /tmp/efs-fault-tcp \
+    --integrate --mode direct
 ```
 
-`--integrate` starts servers. `--mode direct|buffered` explicitly selects the
-private daemon storage mode and records it in replay metadata; buffered remains
-the default. Without it, the integration rows are
-`not_run`. The harness self-test always runs. It checks that cleanup
-kills only processes the suite started.
+Native RDMA plus mandatory repair, on a machine with an active HCA:
 
-Exit 0 means every row passed. Exit 1 means a row failed. Exit 2 means a
-gap or a layer that did not run. Exit 2 is not success.
+```sh
+EFS_FAULT_BIN=/path/to/build bash tests/faults/run_faults.sh /tmp/efs-fault-rdma \
+    --integrate --mode direct --transport rdma --rdma-device mlx5_2
+```
 
-Results are `results.jsonl` plus `config.json` (seed, transport, replay
-command). Integration also writes `cluster/journal.jsonl` and keeps that
-tree when a case fails.
+Without `--integrate`, integration is `not_run` and returns exit 2. Every
+integration run must execute real repair and have no FAIL, GAP or not_run to
+return exit 0. `make test` runs worker and
+receipt regressions but does not launch private FUSE processes.
 
-## First cases
+RDMA requires live uverbs descriptors and a successful connection log from the
+**current process incarnation** for every daemon and client, including cold
+restarts. Silent TCP fallback fails. Proofs, logs and journal survive cleanup;
+only owned daemon data is discarded after a successful fixture. Config retains
+exact replay argv. A machine lacking FUSE, RDMA, or binaries fails rather than
+borrowing simulator or TCP acceptance.
 
-- One server killed after `fsync`, including the metadata leader. The
-  file stays readable from the other client. A new `fsync` may succeed
-  with two generation-matched live fragment holders under the production
-  degraded-write contract; exact peer bytes are required. The chunk is not
-  repaired. Clients restart between single-node faults so a previous node
-  cooldown does not turn the next case into a two-node outage.
-- That server started again on the same storage. The acknowledged file
-  and its name survive.
-- One fragment's bytes flipped, sidecar checksum left as it was. Each
-  of fragment 0, 1, and 2. The on-disk byte must still be flipped after
-  a correct read (the read did not heal it). Fragment 2 is parity: a
-  correct read there does not, by itself, prove the checksum was checked.
-- Sidecar removed and the payload flipped. The fresh client must return
-  the original bytes or an explicit error, never different bytes.
-- Writer killed after `fsync` returns, then read from the other client.
-  A write that has not called `fsync`, with the fuse process killed
-  while the fd is still open, may be absent. It must not come back as
-  different bytes.
+The harness signals only its own processes, owns private ports/mounts/storage,
+and refuses ports 19810/19820 and storage under `/data1`. Never point it at a live
+cluster or mounted store. Expected payload bytes and hashes live outside EFS.
 
-`O_SYNC` is not a separate case. The tree does not document it as its
-own durability point; `fsync` is the one these cases use.
+## Existing fault matrix
 
-## Disk full, when that case is added
+- Kill each server after acknowledged fsync, including the metadata leader:
+  exact peer reads; new writes may succeed with two generation-matched holders
+  under the degraded-write contract, without claiming three-copy protection.
+- Restart the same stores: acknowledged name and bytes survive cold clients.
+- Flip each fragment role while retaining its checksum: exact reconstruction,
+  without claiming that a read repairs the damaged copy.
+- Remove a checksum and flip payload: exact peer bytes or explicit error;
+  untrusted changed bytes must never be served.
+- Kill the writer FUSE process after fsync: exact peer bytes and size. Kill with
+  an open unsynced file: absence is allowed, wrong visible bytes are not.
+- Explicit repair: physical missing-role replacement, all-process cold restart,
+  and second independent loss, with ordinary base scope stated above.
 
-Do not copy the README table into the oracle. The README says one full
-disk still accepts writes until a second disk is full. Publication in
-this tree requires every fragment acknowledgement (`k+f`). A node that
-cannot persist its fragment must not produce a successful durability
-acknowledgement. Existing data stays readable. Quota exhaustion and a
-full backing filesystem are different injections and stay separate.
-
-## Not in this increment
-
-Deterministic pauses around fragment durability, metadata commit, the
-client reply, and WAL truncation. Network partitions. Permanent empty
-replacement. Disk I/O errors. RDMA. Those rows are not passes.
-
-RDMA, when it is added, needs its own isolated cluster and an explicit
-transport check. A TCP fault does not apply to RDMA.
-
-## Oracle
-
-Expected bytes are generated outside efs (`pattern(seed, name, length)`
-in `harness.py`, nonzero, different per name and offset). The journal
-is outside the server storage directories. Reads used as evidence go
-through the client that did not write the file, so the writer cache is
-not the answer.
+Deterministic durability pauses, partitions, empty replacement, disk I/O errors,
+and comprehensive pending-job/election/GC overlap qualification remain separate
+work. Passing this bounded repair case does not close those capabilities.

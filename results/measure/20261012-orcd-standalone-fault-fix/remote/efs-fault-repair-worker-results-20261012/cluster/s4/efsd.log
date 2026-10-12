@@ -1,0 +1,38 @@
+2026-10-12T13:47:25.817Z storage-engine=files direct_io=on
+2026-10-12T13:47:25.817Z Repair: experimental missing-base FILES receiver; no automatic repair worker
+2026-10-12T13:47:25.817Z Data GC admission: disabled
+2026-10-12T13:47:25.817Z Storage quota: explicit 1.00 GiB (safe maximum 241.22 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T13:47:25.827Z efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 4 recv + up to 32 lazy send slots, 84 KiB each)
+2026-10-12T13:47:25.828Z Joined cluster with 4 nodes
+2026-10-12T13:47:25.828Z heartbeat: enabled (2000 ms interval)
+2026-10-12T13:47:25.829Z raft-host: up raft_id=3 n=4 boot=7835445564784845 salt=2665942956926061695 g0=off g2=hosted
+2026-10-12T13:47:25.829Z efsd (no git metadata, branch unknown, built 2026-10-12T13:47:16Z on fcstor006), build=orcd-repair-worker-wip: node 4 listening on 127.0.0.1:24743, storage=/tmp/efs-fault-repair-worker-results-20261012/cluster/s4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T13:47:25.829Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T13:47:25.843Z efsd: RDMA transport up on mlx5_2 port 1 (lid 2160)
+2026-10-12T13:47:26.620Z raft-host: applied session index=3 kind=1 shard=0 ino=0
+2026-10-12T13:47:27.828Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=996 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T13:47:27.973Z raft-host: applied session index=5 kind=1 shard=0 ino=0
+2026-10-12T13:47:28.245Z store: put O_DIRECT zero-copy (payload+digest writev) len=65536
+2026-10-12T13:47:28.246Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=881 p50_us=881 max_us=881 wdisk ops=1 bytes=65536 errors=0 avg_us=715 p50_us=715 max_us=715
+2026-10-12T13:47:28.642Z raft-host: applied session index=8 kind=1 shard=0 ino=0
+2026-10-12T13:47:30.205Z storage-engine=files direct_io=on
+2026-10-12T13:47:30.206Z Repair: experimental missing-base FILES receiver; no automatic repair worker
+2026-10-12T13:47:30.206Z Data GC admission: disabled
+2026-10-12T13:47:30.206Z Loaded 4 persisted cluster node(s) from /tmp/efs-fault-repair-worker-results-20261012/cluster/s4/meta/cluster_nodes.bin
+2026-10-12T13:47:30.206Z   persisted node 1: 127.0.0.1:24740
+2026-10-12T13:47:30.206Z   persisted node 2: 127.0.0.1:24741
+2026-10-12T13:47:30.206Z   persisted node 3: 127.0.0.1:24742
+2026-10-12T13:47:30.206Z   persisted node 4: 127.0.0.1:24743
+2026-10-12T13:47:30.206Z Storage quota: explicit 1.00 GiB (safe maximum 241.21 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T13:47:30.215Z efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 4 recv + up to 32 lazy send slots, 84 KiB each)
+2026-10-12T13:47:30.216Z Joined cluster with 4 nodes
+2026-10-12T13:47:30.217Z heartbeat: enabled (2000 ms interval)
+2026-10-12T13:47:30.218Z kv-obs: mt_bytes=3427 l0_bytes=0 l0=0 l1=0
+2026-10-12T13:47:30.218Z raft-host: up raft_id=3 n=4 boot=7835445564784846 salt=2052164072777892283 g0=off g2=hosted
+2026-10-12T13:47:30.218Z efsd (no git metadata, branch unknown, built 2026-10-12T13:47:16Z on fcstor006), build=orcd-repair-worker-wip: node 4 listening on 127.0.0.1:24743, storage=/tmp/efs-fault-repair-worker-results-20261012/cluster/s4 (1 paths, stripe=none), used=65536, quota=1073741824, direct_io=on, writers=20 shared
+2026-10-12T13:47:30.393Z efsd: RDMA transport up on mlx5_2 port 1 (lid 2160)
+2026-10-12T13:47:32.217Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=995 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T13:47:38.878Z raft-host: applied session index=11 kind=1 shard=0 ino=0
+2026-10-12T13:47:39.047Z raft-host: applied session index=13 kind=1 shard=0 ino=0
+2026-10-12T13:47:39.445Z raft-host: applied session index=15 kind=1 shard=0 ino=0
+2026-10-12T13:47:39.950Z raft-host: applied session index=17 kind=1 shard=0 ino=0

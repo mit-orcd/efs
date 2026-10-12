@@ -1,0 +1,189 @@
+{"op": "raft-mkfs", "rc": 1, "stderr": "", "stdout": "raft-mkfs rc=-15 leader_hint=-1 index=0 salt=3834634244003060648\n"}
+{"op": "raft-mkfs", "rc": 0, "stderr": "", "stdout": "raft-mkfs rc=0 leader_hint=1 index=2 salt=3834634244003060648\n"}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1874002, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1874031, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1874061, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1874092, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-a-4.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-a", "op": "transport", "pid": 1874159, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-b-5.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-b", "op": "transport", "pid": 1874177, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.015261600725352764, "name": "lost-1", "op": "fsync", "rc": 0}
+{"durable": true, "name": "lost-1", "op": "fsync-result", "rc": 0, "sha256": "0306ac262fa86b2ffa251b701f39b67985de4c8fde437b7cea41f32f8ebf820d"}
+{"elapsed_s": 0.16349775902926922, "name": "lost-1", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-1", "op": "read-result", "sha256": "0306ac262fa86b2ffa251b701f39b67985de4c8fde437b7cea41f32f8ebf820d", "size": 4096}
+{"elapsed_s": 0.015239459462463856, "name": "new-1", "op": "fsync", "rc": 0}
+{"durable": true, "name": "new-1", "op": "fsync-result", "rc": 0, "sha256": "d3f03d097e126b52cad6b51934b68300de2215bc6b92b369dd907df4c9b9705b"}
+{"elapsed_s": 0.16350450087338686, "name": "new-1", "op": "read", "rc": 0}
+{"errno": null, "name": "new-1", "op": "read-result", "sha256": "d3f03d097e126b52cad6b51934b68300de2215bc6b92b369dd907df4c9b9705b", "size": 4096}
+{"log_offset": 1199, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1874203, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1874031, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1874061, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1874092, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-a-11.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-a", "op": "transport", "pid": 1874240, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-b-12.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-b", "op": "transport", "pid": 1874258, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.0313231535255909, "name": "lost-1", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-1", "op": "read-result", "sha256": "0306ac262fa86b2ffa251b701f39b67985de4c8fde437b7cea41f32f8ebf820d", "size": 4096}
+{"elapsed_s": 0.01525947730988264, "name": "lost-2", "op": "fsync", "rc": 0}
+{"durable": true, "name": "lost-2", "op": "fsync-result", "rc": 0, "sha256": "466ec03da21e833d93f85e2cc72468d042a28fc95a3013f74b5150c621e2d5a4"}
+{"elapsed_s": 0.9144443515688181, "name": "lost-2", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-2", "op": "read-result", "sha256": "466ec03da21e833d93f85e2cc72468d042a28fc95a3013f74b5150c621e2d5a4", "size": 4096}
+{"elapsed_s": 0.0312852943316102, "name": "new-2", "op": "fsync", "rc": 0}
+{"durable": true, "name": "new-2", "op": "fsync-result", "rc": 0, "sha256": "4c855d5af6329493ca1d01ccadf67e4d038bfd71e59e32643d7a26c61b32795a"}
+{"elapsed_s": 0.1134045934304595, "name": "new-2", "op": "read", "rc": 0}
+{"errno": null, "name": "new-2", "op": "read-result", "sha256": "4c855d5af6329493ca1d01ccadf67e4d038bfd71e59e32643d7a26c61b32795a", "size": 4096}
+{"log_offset": 1199, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1874203, "transport": "tcp", "uverbs": []}
+{"log_offset": 1665, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1874302, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1874061, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1874092, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-a-19.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-a", "op": "transport", "pid": 1874342, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-b-20.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-b", "op": "transport", "pid": 1874369, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.1635059043765068, "name": "lost-2", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-2", "op": "read-result", "sha256": "466ec03da21e833d93f85e2cc72468d042a28fc95a3013f74b5150c621e2d5a4", "size": 4096}
+{"elapsed_s": 0.015263034030795097, "name": "lost-3", "op": "fsync", "rc": 0}
+{"durable": true, "name": "lost-3", "op": "fsync-result", "rc": 0, "sha256": "b83d91b609846568fca9b7075e37a616c1603db67aac898f32c021ea14efef1e"}
+{"elapsed_s": 0.015263965353369713, "name": "lost-3", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-3", "op": "read-result", "sha256": "b83d91b609846568fca9b7075e37a616c1603db67aac898f32c021ea14efef1e", "size": 4096}
+{"elapsed_s": 0.015267793089151382, "name": "new-3", "op": "fsync", "rc": 0}
+{"durable": true, "name": "new-3", "op": "fsync-result", "rc": 0, "sha256": "488b7cf7204036fc132bf8ea52158e6f57c91de1f350b739e0cbf4a9789232d8"}
+{"elapsed_s": 0.015265529043972492, "name": "new-3", "op": "read", "rc": 0}
+{"errno": null, "name": "new-3", "op": "read-result", "sha256": "488b7cf7204036fc132bf8ea52158e6f57c91de1f350b739e0cbf4a9789232d8", "size": 4096}
+{"log_offset": 1199, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1874203, "transport": "tcp", "uverbs": []}
+{"log_offset": 1665, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1874302, "transport": "tcp", "uverbs": []}
+{"log_offset": 2303, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1874399, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1874092, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-a-27.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-a", "op": "transport", "pid": 1874438, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-b-28.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-b", "op": "transport", "pid": 1874465, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.1635259510949254, "name": "lost-3", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-3", "op": "read-result", "sha256": "b83d91b609846568fca9b7075e37a616c1603db67aac898f32c021ea14efef1e", "size": 4096}
+{"elapsed_s": 0.16350547317415476, "name": "lost-4", "op": "fsync", "rc": 0}
+{"durable": true, "name": "lost-4", "op": "fsync-result", "rc": 0, "sha256": "2515c5161e4cddbdd725fb7da2a3e4f65cf944d7ef698dda738da1e6b0f6e6ee"}
+{"elapsed_s": 0.015261962078511715, "name": "lost-4", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-4", "op": "read-result", "sha256": "2515c5161e4cddbdd725fb7da2a3e4f65cf944d7ef698dda738da1e6b0f6e6ee", "size": 4096}
+{"elapsed_s": 0.8643264397978783, "name": "new-4", "op": "fsync", "rc": 0}
+{"durable": true, "name": "new-4", "op": "fsync-result", "rc": 0, "sha256": "7adf1193f481fcd086304fdfef54f08566aa22a481d2ac973a5d335cad8fd502"}
+{"elapsed_s": 0.01526318397372961, "name": "new-4", "op": "read", "rc": 0}
+{"errno": null, "name": "new-4", "op": "read-result", "sha256": "7adf1193f481fcd086304fdfef54f08566aa22a481d2ac973a5d335cad8fd502", "size": 4096}
+{"log_offset": 1199, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1874203, "transport": "tcp", "uverbs": []}
+{"log_offset": 1665, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1874302, "transport": "tcp", "uverbs": []}
+{"log_offset": 2303, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1874399, "transport": "tcp", "uverbs": []}
+{"log_offset": 1816, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1874504, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-a-35.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-a", "op": "transport", "pid": 1874540, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-b-36.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-b", "op": "transport", "pid": 1874558, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.015265759080648422, "name": "lost-4", "op": "read", "rc": 0}
+{"errno": null, "name": "lost-4", "op": "read-result", "sha256": "2515c5161e4cddbdd725fb7da2a3e4f65cf944d7ef698dda738da1e6b0f6e6ee", "size": 4096}
+{"elapsed_s": 0.015264496207237244, "name": "cor-0", "op": "fsync", "rc": 0}
+{"durable": true, "name": "cor-0", "op": "fsync-result", "rc": 0, "sha256": "dfc960fb4f0400eb12e38b29803da63fb12d681a516e2b949880e757c2e4639f"}
+{"elapsed_s": 0.015263102948665619, "name": "cor-0", "op": "read", "rc": 0}
+{"errno": null, "name": "cor-0", "op": "read-result", "sha256": "dfc960fb4f0400eb12e38b29803da63fb12d681a516e2b949880e757c2e4639f", "size": 4096}
+{"elapsed_s": 0.01526359561830759, "name": "cor-1", "op": "fsync", "rc": 0}
+{"durable": true, "name": "cor-1", "op": "fsync-result", "rc": 0, "sha256": "bf76845067fe55b51acb378204acdf81832f1eca6d420727f564ac980b971bc8"}
+{"elapsed_s": 0.015262042172253132, "name": "cor-1", "op": "read", "rc": 0}
+{"errno": null, "name": "cor-1", "op": "read-result", "sha256": "bf76845067fe55b51acb378204acdf81832f1eca6d420727f564ac980b971bc8", "size": 4096}
+{"elapsed_s": 0.015261050313711166, "name": "cor-2", "op": "fsync", "rc": 0}
+{"durable": true, "name": "cor-2", "op": "fsync-result", "rc": 0, "sha256": "638214f0e446b5b1dfee29177683e79258ed46bde38c24027e27b8f90cc736d1"}
+{"elapsed_s": 0.015237025916576385, "name": "cor-2", "op": "read", "rc": 0}
+{"errno": null, "name": "cor-2", "op": "read-result", "sha256": "638214f0e446b5b1dfee29177683e79258ed46bde38c24027e27b8f90cc736d1", "size": 4096}
+{"elapsed_s": 0.015261220745742321, "name": "nosum", "op": "fsync", "rc": 0}
+{"durable": true, "name": "nosum", "op": "fsync-result", "rc": 0, "sha256": "2c9740f7a09ed4b2498a44496910f58eb826e96a98c4b0580cbbb129b531a395"}
+{"elapsed_s": 0.01526695117354393, "name": "nosum", "op": "read", "rc": 0}
+{"errno": null, "name": "nosum", "op": "read-result", "sha256": "2c9740f7a09ed4b2498a44496910f58eb826e96a98c4b0580cbbb129b531a395", "size": 4096}
+{"elapsed_s": 0.015261351130902767, "name": "after-fsync", "op": "fsync", "rc": 0}
+{"durable": true, "name": "after-fsync", "op": "fsync-result", "rc": 0, "sha256": "5e8ce3f71a69a062894aad9a2961258fbc21009eb8d707e37f28eccb5cc858d4"}
+{"elapsed_s": 0.015263414941728115, "name": "after-fsync", "op": "read", "rc": 0}
+{"errno": null, "name": "after-fsync", "op": "read-result", "sha256": "5e8ce3f71a69a062894aad9a2961258fbc21009eb8d707e37f28eccb5cc858d4", "size": 4096}
+{"elapsed_s": 0.0152626633644104, "name": "before-fsync", "op": "read", "rc": 0}
+{"errno": null, "name": "before-fsync", "op": "read-result", "sha256": null, "size": 0}
+{"log_offset": 1199, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1874203, "transport": "tcp", "uverbs": []}
+{"log_offset": 1665, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1874302, "transport": "tcp", "uverbs": []}
+{"log_offset": 2303, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1874399, "transport": "tcp", "uverbs": []}
+{"log_offset": 1816, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1874504, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-a-51.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-a", "op": "transport", "pid": 1874618, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-b-52.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-b", "op": "transport", "pid": 1874636, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.031328072771430016, "name": "repair-role-0", "op": "fsync", "rc": 0}
+{"durable": true, "name": "repair-role-0", "op": "fsync-result", "rc": 0, "sha256": "69112cfb7e1181f1ff5468a045cc7c9f2b2ccc3ed4179adcbd8cc1fbcb55dfab"}
+{"log_offset": 1199, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1874203, "transport": "tcp", "uverbs": []}
+{"log_offset": 1665, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1874302, "transport": "tcp", "uverbs": []}
+{"log_offset": 2303, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1874399, "transport": "tcp", "uverbs": []}
+{"log_offset": 1816, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1874504, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-a-54.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-a", "op": "transport", "pid": 1874678, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-b-55.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-b", "op": "transport", "pid": 1874695, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.015264365822076797, "name": "repair-role-0", "op": "read", "rc": 0}
+{"errno": null, "name": "repair-role-0", "op": "read-result", "sha256": "69112cfb7e1181f1ff5468a045cc7c9f2b2ccc3ed4179adcbd8cc1fbcb55dfab", "size": 131072}
+{"node_id": 1, "op": "repair-request", "rc": 0, "stderr": "", "stdout": "repair ino=61441 object=10996500835232203925 role=0 rc=0 transport=tcp\n"}
+{"log_offset": 3875, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1874725, "transport": "tcp", "uverbs": []}
+{"log_offset": 4684, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1874755, "transport": "tcp", "uverbs": []}
+{"log_offset": 5046, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1874785, "transport": "tcp", "uverbs": []}
+{"log_offset": 3231, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1874816, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-repair-cold-a-61.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-repair-cold-a", "op": "transport", "pid": 1874856, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-repair-cold-b-62.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-repair-cold-b", "op": "transport", "pid": 1874900, "transport": "tcp", "uverbs": []}
+{"log_offset": 3875, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1874725, "transport": "tcp", "uverbs": []}
+{"log_offset": 4684, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1874755, "transport": "tcp", "uverbs": []}
+{"log_offset": 5046, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1874785, "transport": "tcp", "uverbs": []}
+{"log_offset": 3231, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1874816, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-a-63.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-a", "op": "transport", "pid": 1874920, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-b-64.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-b", "op": "transport", "pid": 1874938, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.1634966777637601, "name": "repair-role-0", "op": "read", "rc": 0}
+{"errno": null, "name": "repair-role-0", "op": "read-result", "sha256": "69112cfb7e1181f1ff5468a045cc7c9f2b2ccc3ed4179adcbd8cc1fbcb55dfab", "size": 131072}
+{"log_offset": 3875, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1874725, "transport": "tcp", "uverbs": []}
+{"log_offset": 4684, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1874755, "transport": "tcp", "uverbs": []}
+{"log_offset": 5046, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1874785, "transport": "tcp", "uverbs": []}
+{"log_offset": 3231, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1874816, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-a-66.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-a", "op": "transport", "pid": 1874961, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-b-67.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-b", "op": "transport", "pid": 1874979, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.16348537523299456, "name": "repair-role-1", "op": "fsync", "rc": 0}
+{"durable": true, "name": "repair-role-1", "op": "fsync-result", "rc": 0, "sha256": "4ec0ce36006aed7a2e26790bed805420fe87cb42450db5c78f6c74ff474fbc61"}
+{"log_offset": 3875, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1874725, "transport": "tcp", "uverbs": []}
+{"log_offset": 4684, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1874755, "transport": "tcp", "uverbs": []}
+{"log_offset": 5046, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1874785, "transport": "tcp", "uverbs": []}
+{"log_offset": 3231, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1874816, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-a-69.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-a", "op": "transport", "pid": 1875019, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-b-70.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-b", "op": "transport", "pid": 1875037, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.11344865430146456, "name": "repair-role-1", "op": "read", "rc": 0}
+{"errno": null, "name": "repair-role-1", "op": "read-result", "sha256": "4ec0ce36006aed7a2e26790bed805420fe87cb42450db5c78f6c74ff474fbc61", "size": 131072}
+{"node_id": 1, "op": "repair-request", "rc": 0, "stderr": "", "stdout": "repair ino=65537 object=18345975122454945552 role=1 rc=0 transport=tcp\n"}
+{"log_offset": 6205, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1875068, "transport": "tcp", "uverbs": []}
+{"log_offset": 6637, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1875098, "transport": "tcp", "uverbs": []}
+{"log_offset": 7005, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1875128, "transport": "tcp", "uverbs": []}
+{"log_offset": 5111, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1875159, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-repair-cold-a-76.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-repair-cold-a", "op": "transport", "pid": 1875201, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-repair-cold-b-77.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-repair-cold-b", "op": "transport", "pid": 1875236, "transport": "tcp", "uverbs": []}
+{"log_offset": 6205, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1875068, "transport": "tcp", "uverbs": []}
+{"log_offset": 6637, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1875098, "transport": "tcp", "uverbs": []}
+{"log_offset": 7005, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1875128, "transport": "tcp", "uverbs": []}
+{"log_offset": 5111, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1875159, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-a-78.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-a", "op": "transport", "pid": 1875260, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-b-79.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-b", "op": "transport", "pid": 1875278, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.015233098529279232, "name": "repair-role-1", "op": "read", "rc": 0}
+{"errno": null, "name": "repair-role-1", "op": "read-result", "sha256": "4ec0ce36006aed7a2e26790bed805420fe87cb42450db5c78f6c74ff474fbc61", "size": 131072}
+{"log_offset": 6205, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1875068, "transport": "tcp", "uverbs": []}
+{"log_offset": 6637, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1875098, "transport": "tcp", "uverbs": []}
+{"log_offset": 7005, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1875128, "transport": "tcp", "uverbs": []}
+{"log_offset": 5111, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1875159, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-a-81.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-a", "op": "transport", "pid": 1875301, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-b-82.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-b", "op": "transport", "pid": 1875319, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.03132718149572611, "name": "repair-role-2", "op": "fsync", "rc": 0}
+{"durable": true, "name": "repair-role-2", "op": "fsync-result", "rc": 0, "sha256": "e2aba731d102fd3994ebb75d33fc0f66da9b8f1da38bf4c06c164b3bbeea071b"}
+{"log_offset": 6205, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1875068, "transport": "tcp", "uverbs": []}
+{"log_offset": 6637, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1875098, "transport": "tcp", "uverbs": []}
+{"log_offset": 7005, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1875128, "transport": "tcp", "uverbs": []}
+{"log_offset": 5111, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1875159, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-a-84.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-a", "op": "transport", "pid": 1875358, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-b-85.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-b", "op": "transport", "pid": 1875376, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.015254619531333447, "name": "repair-role-2", "op": "read", "rc": 0}
+{"errno": null, "name": "repair-role-2", "op": "read-result", "sha256": "e2aba731d102fd3994ebb75d33fc0f66da9b8f1da38bf4c06c164b3bbeea071b", "size": 131072}
+{"node_id": 1, "op": "repair-request", "rc": 1, "stderr": "", "stdout": "repair ino=69633 object=2818294970645428484 role=2 rc=-15 transport=tcp\n"}
+{"node_id": 2, "op": "repair-request", "rc": 1, "stderr": "", "stdout": "repair ino=69633 object=2818294970645428484 role=2 rc=-15 transport=tcp\n"}
+{"node_id": 3, "op": "repair-request", "rc": 0, "stderr": "", "stdout": "repair ino=69633 object=2818294970645428484 role=2 rc=0 transport=tcp\n"}
+{"log_offset": 8426, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1875410, "transport": "tcp", "uverbs": []}
+{"log_offset": 8696, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1875440, "transport": "tcp", "uverbs": []}
+{"log_offset": 8965, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1875470, "transport": "tcp", "uverbs": []}
+{"log_offset": 6975, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1875501, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-repair-cold-a-91.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-repair-cold-a", "op": "transport", "pid": 1875541, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-repair-cold-b-92.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-repair-cold-b", "op": "transport", "pid": 1875581, "transport": "tcp", "uverbs": []}
+{"log_offset": 8426, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s1/efsd.log", "node_id": 1, "op": "transport", "pid": 1875410, "transport": "tcp", "uverbs": []}
+{"log_offset": 8696, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s2/efsd.log", "node_id": 2, "op": "transport", "pid": 1875440, "transport": "tcp", "uverbs": []}
+{"log_offset": 8965, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s3/efsd.log", "node_id": 3, "op": "transport", "pid": 1875470, "transport": "tcp", "uverbs": []}
+{"log_offset": 6975, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/s4/efsd.log", "node_id": 4, "op": "transport", "pid": 1875501, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-a-93.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-a", "op": "transport", "pid": 1875601, "transport": "tcp", "uverbs": []}
+{"log_offset": 0, "log_path": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/fuse-b-94.log", "mount": "/tmp/efs-qualified-v3-tcp-ed749cab/cluster/mnt-b", "op": "transport", "pid": 1875619, "transport": "tcp", "uverbs": []}
+{"elapsed_s": 0.015265880152583122, "name": "repair-role-2", "op": "read", "rc": 0}
+{"errno": null, "name": "repair-role-2", "op": "read-result", "sha256": "e2aba731d102fd3994ebb75d33fc0f66da9b8f1da38bf4c06c164b3bbeea071b", "size": 131072}

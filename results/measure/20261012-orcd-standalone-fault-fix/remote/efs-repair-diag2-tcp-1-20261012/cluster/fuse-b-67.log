@@ -1,0 +1,13 @@
+2026-10-12T14:01:16.414Z efs-fuse: legacy export label 'efs-fault' is ignored; mounting the single export 'default' (id=1)
+2026-10-12T14:01:16.414Z efs-fuse (no git metadata, branch unknown, built 2026-10-12T13:53:53Z on fcstor006), build=orcd-repair-final-wip: starting export=default mount=/tmp/efs-repair-diag2-tcp-1-20261012/cluster/mnt-b
+2026-10-12T14:01:16.414Z Discovered 4 cluster nodes from 127.0.0.1:24740
+2026-10-12T14:01:16.414Z   node id=1 127.0.0.1:24740
+2026-10-12T14:01:16.414Z   node id=2 127.0.0.1:24741
+2026-10-12T14:01:16.414Z   node id=3 127.0.0.1:24742
+2026-10-12T14:01:16.414Z   node id=4 127.0.0.1:24743
+2026-10-12T14:01:16.414Z fetching metadata...
+2026-10-12T14:01:16.414Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T14:01:16.414Z export id=1 name=default
+2026-10-12T14:01:16.414Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T14:01:16.415Z efs-fuse: workers max=10 idle=10
+2026-10-12T14:01:16.417Z fuse serving

@@ -7492,8 +7492,39 @@ out:
 /* Reap markers are the durable retry ledger for unreferenced PUT bodies too.
  * All members must install a death fence and finish their bounded inventory
  * before REAP_DONE removes that ledger. Never use the live-inode collector. */
+/* Experimental target-side proof before physical deletion. Whole inode GC
+ * covers both lane groups; unhosted/stale authority is never absence proof. */
+int server_raft_host_repair_gc_ready(efs_ino_t ino,uint32_t ci,uint64_t object)
+{
+    struct efs_raft_host *h=g_host;if(!h || !h->running || !h->s || !h->s->repair_experiment)return EFS_ERR_ACCES;
+    uint8_t groups[2]={EFS_RAFT_GROUP_SHARD,EFS_RAFT_GROUP_SHARD2};unsigned count=2;
+    if(object){groups[0]=efs_raft_shard_group(efs_kv_lane_shard(ino,ci%EFS_META_LANES));count=1;}
+    for(unsigned i=0;i<count;i++){
+        if(!host_hosts(h,groups[i]))return EFS_ERR_BUSY;
+        int hint=-1,rc=host_read_index(h,groups[i],&hint);if(rc)return rc;
+    }
+    pthread_mutex_lock(&h->mu);
+    int rc=object?efs_repair_gc_object_ready(h->kv,ino,ci,object):efs_repair_gc_inode_ready(h->kv,ino);
+    pthread_mutex_unlock(&h->mu);return rc;
+}
+
+/* Called under the physical inode WR guard after an unlocked fresh ReadIndex.
+ * Never wait for h->mu: its owner may be applying a session fence whose PUT
+ * owns a storage stripe and is waiting for this inode guard. BUSY is retry. */
+int server_raft_host_repair_gc_inode_local_ready(efs_ino_t ino)
+{
+    struct efs_raft_host *h=g_host;
+    if(!h || !h->running || !h->s || !h->s->repair_experiment)return EFS_ERR_ACCES;
+    if(!host_hosts(h,EFS_RAFT_GROUP_SHARD) || !host_hosts(h,EFS_RAFT_GROUP_SHARD2))return EFS_ERR_BUSY;
+    if(pthread_mutex_trylock(&h->mu))return EFS_ERR_BUSY;
+    int rc=efs_repair_gc_inode_ready(h->kv,ino);
+    pthread_mutex_unlock(&h->mu);
+    return rc;
+}
+
 static int host_gc_inode_nodes(struct efs_raft_host *h, efs_ino_t ino, uint64_t gen)
 {
+    if(h->s->repair_experiment){int rc=server_raft_host_repair_gc_ready(ino,0,0);if(rc)return rc;}
     struct efs_node nodes[EFS_MAX_NODES];
     struct efs_conn *pending[EFS_MAX_NODES] = {0};
     int status[EFS_MAX_NODES];
@@ -7534,7 +7565,7 @@ static int host_gc_inode_nodes(struct efs_raft_host *h, efs_ino_t ino, uint64_t 
     }
     for (uint32_t i = 0; i < count; i++)
         if (nodes[i].id == h->s->id)
-            status[i] = server_gc_inode(h->s, 1, ino, gen);
+            status[i] = h->s->repair_experiment?server_repair_gc_inode(h->s,1,ino,gen):server_gc_inode(h->s,1,ino,gen);
     for (uint32_t i = 0; i < count; i++) {
         struct efs_conn *pc = pending[i];
         if (pc) {
@@ -8093,6 +8124,13 @@ static void host_gc_record(struct efs_raft_host *h, struct efs_export *ex,
     gen = rd64be(key + 11);
     lane = key[19];
     ci = rd32be(key + 20);
+    if(h->s->repair_experiment){
+        /* ADMIT rejects an already queued GC key in the same serialized
+         * lane apply. Once this key exists no later admission can race this
+         * unlocked physical delete after the bounded debt check. */
+        pthread_mutex_lock(&h->mu);int blocked=efs_repair_gc_object_ready(h->kv,ino,ci,gen);pthread_mutex_unlock(&h->mu);
+        if(blocked)return;
+    }
     for (fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
         int rc;
 
@@ -8667,6 +8705,13 @@ static unsigned host_gc_backlog_idle(unsigned configured, int capped,
     return capped && removed_after > removed_before ? configured : GC_LOOP_MS;
 }
 
+/* Both saturation and a durable packed deletion ACK are required. Unlike a
+ * local unlink counter, this proof also covers a non-placement leader. */
+static unsigned host_gc_packed_idle(unsigned ordinary, int capped, int deleted)
+{
+    return capped && deleted ? 20 : ordinary;
+}
+
 
 static void *host_gc_thread(void *arg)
 {
@@ -8679,6 +8724,7 @@ static void *host_gc_thread(void *arg)
         struct reap_times reap_times = {0};
         uint64_t removed_before = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED);
         int backlog_capped = 0;
+        int packed_capped = 0, packed_deleted = 0;
 
         __atomic_store_n(&h->s->gc_pass_start_us, efs_iostats_now_us(), __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_stage, 1, __ATOMIC_RELAXED);
@@ -8718,7 +8764,11 @@ static void *host_gc_thread(void *arg)
             host_gc_close_step_pass(h, h->g[g].group, anchor);
             host_gc_close_pass(h, h->g[g].group, anchor);
             host_gc_orphan_pass(h, h->g[g].group, anchor);
-            backlog_capped |= host_gc_pack_pass(h,h->g[g].group,anchor);
+            int pack_deleted = 0;
+            int pack_capped = host_gc_pack_pass(h,h->g[g].group,anchor,&pack_deleted);
+            packed_capped |= pack_capped && pack_deleted;
+            packed_deleted |= pack_deleted;
+            backlog_capped |= pack_capped;
             t_orphan += now_us_() - ta;
             ta = now_us_();
             host_gc_reap_pass(h, h->g[g].group, anchor, &reap_times);
@@ -8791,10 +8841,16 @@ static void *host_gc_thread(void *arg)
         __atomic_store_n(&h->s->gc_pass_start_us, 0, __ATOMIC_RELAXED);
         uint64_t removed_after = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED);
         unsigned idle_ms = host_gc_backlog_idle(h->gc_backlog_idle_ms, backlog_capped, removed_before, removed_after);
+        /* Small objects can leave thousands of retired packs. Keep the same
+         * eight-object/200ms pass budgets and a fair yield, but do not spend
+         * a full second asleep after a saturated page made durable deletion
+         * progress. This also covers remote-only placement. */
+        idle_ms = host_gc_packed_idle(idle_ms, packed_capped, packed_deleted);
         if (idle_ms < GC_LOOP_MS && env_on("EFS_RAFT_OBS"))
             fprintf(stderr, "raft-host: gc-backlog-idle ms=%u removed=%llu\n", idle_ms,
                     (unsigned long long)(removed_after - removed_before));
-        /* Default 1s between passes, in 20 ms slices so shutdown is prompt.
+        /* Idle/blocked passes wait 1s; progressing packed backlog yields 20ms.
+         * Sleep in 20ms slices so shutdown is prompt.
          * A snapshot export queued by the pump starts on the next slice. */
         for (g = 0; g < (int)((idle_ms + 19) / 20) && h->gc_running; g++) {
             host_snap_export_pass(h);
@@ -10515,6 +10571,88 @@ static int host_repair_write_read(struct efs_raft_host *h,uint8_t group,
     pthread_mutex_unlock(&h->mu);return rc;
 }
 
+/* Capture only on the current lane leader. Pending jobs retain their exact
+ * canonical owner/term/store; a new leader cannot silently forget old debt. */
+int server_raft_host_repair_prepare(const struct efs_repair_job *selector,
+    struct efs_repair_job *out,uint8_t *state,uint8_t *flags)
+{
+    struct efs_raft_host *h=g_host;
+    if(!h || !h->running || !h->s || !h->s->repair_experiment)return EFS_ERR_ACCES;
+    if(!selector || !out || !state || !flags || selector->span_off || selector->span_len ||
+       selector->state!=EFS_REPAIR_ADMITTED || selector->flags)return EFS_ERR_INVAL;
+    struct efs_repair_job q=*selector,current;int hint=-1;
+    uint8_t group=efs_raft_shard_group(efs_kv_lane_shard(q.ino,q.ci%EFS_META_LANES));
+    int rc=host_read_index(h,group,&hint);if(rc)return rc;
+    pthread_mutex_lock(&h->mu);struct host_group *g=group_slot(h,group);
+    *state=*flags=0;
+    if(!g || !g->r || efs_raft_role(g->r)!=EFS_RAFT_LEADER)rc=EFS_ERR_NOT_PRIMARY;
+    else if(efs_raft_term(g->r)>UINT32_MAX-1ull)rc=EFS_ERR_STALE;
+    else {
+        q.owner=h->s->id;q.epoch=(uint32_t)efs_raft_term(g->r);
+        rc=efs_repair_capture(h->kv,&q,&current);
+        if(!rc){
+            struct efs_repair_job old;
+            rc=efs_repair_get(h->kv,&current,&old);
+            if(rc==EFS_ERR_NOT_FOUND)rc=0;
+            else if(!rc){*state=old.state;*flags=old.flags;}
+            if(!rc)*out=current;
+        }
+    }
+    pthread_mutex_unlock(&h->mu);return rc;
+}
+
+/* Trusted local coordinator only, deliberately absent from handler dispatch.
+ * Public/forwarded generic tag55 continues to be refused. DATA/SEAL can only
+ * be recorded from a receipt returned by the exact target operation; encoding
+ * alone is not a proof. Lost proposal replies leave debt and require retry. */
+int server_raft_host_repair_record(unsigned op,const struct efs_repair_job *j,
+                                  uint32_t arg,const uint8_t *receipt,uint32_t n)
+{
+    struct efs_raft_host *h=g_host;uint8_t cmd[EFS_REPAIR_COMMAND_BYTES];
+    if(!h || !h->running || !j)return EFS_ERR_INVAL;
+    if(!h->s || !h->s->repair_experiment)return EFS_ERR_ACCES;
+    if(op<EFS_REPAIR_OP_ADMIT || op>EFS_REPAIR_OP_RETIRE ||
+       j->state!=EFS_REPAIR_ADMITTED || j->flags || j->span_off || j->span_len ||
+       (op!=EFS_REPAIR_OP_SEAL && op!=EFS_REPAIR_OP_RETIRE && arg) ||
+       (op==EFS_REPAIR_OP_SEAL && arg!=j->epoch+1u) ||
+       (op==EFS_REPAIR_OP_RETIRE && arg>1))return EFS_ERR_INVAL;
+    int rc=efs_repair_job_encode(j,cmd+2);if(rc)return rc;
+    if(op==EFS_REPAIR_OP_DATA || op==EFS_REPAIR_OP_SEAL){
+        rc=efs_repair_receipt_verify(j,op==EFS_REPAIR_OP_DATA?EFS_REPAIR_RECEIPT_DATA:EFS_REPAIR_RECEIPT_SEAL,receipt,n);
+        if(rc)return rc;
+    }else if(receipt || n)return EFS_ERR_INVAL;
+    if(op==EFS_REPAIR_OP_ADMIT){
+        struct efs_msg_inode_writer_view q={j->ino,j->inode_gen,j->ci,0};
+        struct efs_msg_inode_writer_view_reply view;server_raft_host_writer_view(&q,&view);
+        if(view.status==EFS_INODE_RPC_NOT_PRIMARY)return EFS_ERR_NOT_PRIMARY;
+        if(view.status==EFS_INODE_RPC_BUSY)return EFS_ERR_BUSY;
+        if(view.status==EFS_INODE_RPC_NOT_FOUND || view.status==EFS_INODE_RPC_STALE)return EFS_ERR_STALE;
+        if(view.status!=EFS_INODE_RPC_OK)return EFS_ERR_IO;
+        rc=efs_writer_view_reply_valid(&q,&view);if(rc)return rc;
+    }
+    uint8_t group=efs_raft_shard_group(efs_kv_lane_shard(j->ino,j->ci%EFS_META_LANES));
+    int hint=-1;rc=host_read_index(h,group,&hint);if(rc)return rc;
+    pthread_mutex_lock(&h->mu);struct host_group *g=group_slot(h,group);
+    if(!g || !g->r || efs_raft_role(g->r)!=EFS_RAFT_LEADER)rc=EFS_ERR_NOT_PRIMARY;
+    else if((op==EFS_REPAIR_OP_ADMIT || op==EFS_REPAIR_OP_DATA) &&
+            (efs_raft_term(g->r)>UINT32_MAX-1ull || efs_raft_term(g->r)!=j->epoch ||
+             !h->s || h->s->id!=j->owner))rc=EFS_ERR_STALE;
+    else if(op==EFS_REPAIR_OP_ADMIT){
+        struct efs_repair_job current;uint8_t encoded[EFS_REPAIR_JOB_BYTES];
+        rc=efs_repair_capture(h->kv,j,&current);
+        if(!rc)rc=efs_repair_job_encode(&current,encoded);
+        if(!rc && memcmp(encoded,cmd+2,sizeof(encoded)))rc=EFS_ERR_STALE;
+    }else if(op==EFS_REPAIR_OP_DATA)rc=efs_repair_write_authority(h->kv,j);
+    else if(op==EFS_REPAIR_OP_SEAL)rc=efs_repair_seal_authority(h->kv,j);
+    else if(op==EFS_REPAIR_OP_CANCEL){struct efs_repair_job current;rc=efs_repair_get(h->kv,j,&current);}
+    pthread_mutex_unlock(&h->mu);if(rc)return rc;
+    cmd[0]=EFS_MD_CMD_REPAIR_JOB;cmd[1]=(uint8_t)op;wr32be(cmd+2+EFS_REPAIR_JOB_BYTES,arg);
+    /* The committed entry term is the final ADMIT/DATA fence. A leadership
+     * change before proposal cannot grant stale ownership; a forwarded55 is
+     * refused by the public path instead of becoming an untrusted mutation. */
+    return host_propose_wait_idx(h,group,cmd,sizeof(cmd),&hint,NULL);
+}
+
 void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
                              struct efs_msg_raft_mkfs_reply *out)
 {
@@ -10545,6 +10683,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         out->rc=EFS_ERR_ACCES;return;
     }
     if(clen && (cmd[0]==EFS_MD_REQ_REPAIR_WRITE_AUTHORITY || cmd[0]==EFS_MD_REQ_REPAIR_SEAL_AUTHORITY)) {
+        if(!h->s || !h->s->repair_experiment){out->rc=EFS_ERR_ACCES;return;}
         struct efs_repair_job expected;
         rc=efs_repair_job_decode(cmd+1,clen-1,&expected);
         if(rc || expected.state!=EFS_REPAIR_ADMITTED || expected.flags ||

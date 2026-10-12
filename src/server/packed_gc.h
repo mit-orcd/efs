@@ -62,7 +62,7 @@ static int host_pack_gc_command(struct efs_raft_host *h,const struct efs_pack_ob
     if(!lead)return EFS_ERR_NOT_PRIMARY;
     return host_gc_propose(h,(uint8_t)o->ledger.publication_group,cmd,(uint32_t)n+6);
 }
-static int host_gc_pack_pass(struct efs_raft_host *h,uint8_t group,uint32_t anchor)
+static int host_gc_pack_pass(struct efs_raft_host *h,uint8_t group,uint32_t anchor,int *deleted)
 {
     static struct pack_gc_scan scan;int gi=gc_gi(group);
     uint8_t prefix[3];prefix[0]=(uint8_t)(anchor>>8);prefix[1]=(uint8_t)anchor;prefix[2]=EFS_KV_KIND_PACK_OBJECT;
@@ -94,6 +94,10 @@ static int host_gc_pack_pass(struct efs_raft_host *h,uint8_t group,uint32_t anch
                     rc=host_pack_gc_storage(h,&o,member,deletion);
                     if(!rc)rc=host_pack_gc_command(h,&o,EFS_MD_CMD_PACK_GC_ACK,bit,deletion);
                     if(rc)break;
+                    /* An acknowledged deletion is progress even when this
+                     * leader is not a placement member. Fence-only work and
+                     * failed storage/metadata ACKs must not accelerate GC. */
+                    if(deletion)*deleted=1;
                     rc=efs_pack_lifetime_get(h->kv,&o,&o);if(rc)break;
                     if(now_us_()>deadline)break;
                 }
