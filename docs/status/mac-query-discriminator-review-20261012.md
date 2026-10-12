@@ -21,3 +21,12 @@ Opt-in synchronous trace output still runs inside host mutex for cut counters an
 Archived exact 1fb5339f into an isolated local directory. Executed test_query_root_refusals.py (its actual-source off/on label and timing assertions), test_query_capture_retry.py and test_query_page_barriers.py normally and with ASan/UBSan: all six executions PASS exit 0. Raw output: evidence/mac-query-review-1fb5339f.txt. These use extracted actual host functions with controlled dependencies and do not certify mounted progress.
 
 Real LSM transaction activity regression, Linux/full merged regression and fault suites remain AMD-owned qualification; not run or claimed here. Counter saturation/replay and exact pin immutability should remain explicit coverage expectations. Preserve original budgets, no fence changes and no new expensive unchanged workload until AMD finishes its own required gates.
+
+
+## Follow-up review: 57748bb5
+
+Reviewed exact 57748bb5abff41411fc80eba5ab0d5a8fd90b2d6 against 1fb5339f. Typed counter values and applied indices are now copied while host mutex is held, then emitted after unlock; no authority/refusal/fence or pin-release order changed. The live counter/revision endpoint caveat remains because their KV getter acquisitions are still separate. Lag-lock acquisition duration is saved immediately after acquisition, emitted after writer unlock, and zero-millisecond samples are suppressed. This removes the identified host/lag critical-section logging amplification and the routine zero-wait log volume.
+
+Adequate for one separately instrumented diagnostic once AMD's required gates pass; not quiet acceptance. Capture summary/typed elapsed values are still computed at emission and can include preceding synchronous log time; classify them as cumulative attempt durations, not exclusive proof or apply latency. Suppressed lag events mean less than one millisecond at the clock's resolution, not proof of no contention. Logging in root/page consumers can still perturb borrowed-view duration.
+
+Independently archived exact 57748bb5 and executed actual capture regression trace OFF/ON, normal and ASan/UBSan: all four executions PASS exit 0. Raw evidence: evidence/mac-query-review-57748bb5.txt. No new cluster run/deployment or release edits performed.
