@@ -1,5 +1,7 @@
 # P4.1 · Experimental daemon container backend
 
+**Historical experimental evidence:** container-specific tests and follow-up measurements are no longer required or authorized by this page. [Standing container testing policy](container-testing-policy-20261012.md).
+
 Implementation branch: `devel-storage-engine`; baseline merge `a42a5be3`.
 User authorized implementation and four-way files/containers × buffered/direct
 A/B on the xorinox VM cluster. This is a new on-disk format with fresh roots;

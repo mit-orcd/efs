@@ -1,5 +1,7 @@
 # Project status — current work and index
 
+**Standing testing scope:** containers are experimental and excluded from required tests and release gates. Use files for required qualification; container-only investigation requires explicit new user authorization. [Binding policy](container-testing-policy-20261012.md).
+
 ## v0.3.0-pre-alpha release integration
 
 **Execution is stopped.** The human subsequently authorized branch reconciliation and this documentation review only; neither restarts cluster work. All committed local/remote-tracking branch tips were integrated at `15ff4de7`. `devel` and `main` were not advanced. The release tag has not been created; nothing has been pushed.

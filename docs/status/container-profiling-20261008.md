@@ -1,5 +1,7 @@
 # P4.1 · Container daemon tracing and five CPU profiling rounds
 
+**Historical experimental evidence:** container-specific tests and follow-up measurements are no longer required or authorized by this page. [Standing container testing policy](container-testing-policy-20261012.md).
+
 Branch `devel-storage-engine`; baseline `175fcf98`. User requested round 1
 strace, then rounds 2–6 CPU perf, for both buffered and direct container I/O.
 Use the same isolated three-node VM group/private gateway workload as the

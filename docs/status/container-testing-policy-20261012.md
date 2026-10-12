@@ -1,0 +1,9 @@
+# Container backend policy — experimental and excluded from required testing
+
+Accepted user decision, October 12, 2026: the `containers` storage backend is experimental. Containers and everything specific to that backend are outside required testing and release qualification. This policy continues to apply to future work until the user explicitly changes it; it is not limited to the current release.
+
+Use the `files` backend for required qualification. Do not schedule container-specific unit/native suites, live POSIX/peer/concurrency suites, restart/crash/corruption/reclamation checks, files-versus-containers A/B runs, profiling, benchmarks, or container-engine matrix combinations as required work. Container failures and untested container features are not release blockers. Historical test commands, backlog gates and reproduction instructions are retained as experimental reference and do not authorize new container testing. Explicit new user authorization is required to resume container investigation or qualification.
+
+This is a scope decision, not a claim that containers are correct, faster or production-ready. Existing implementation, evidence and unresolved gaps remain preserved. Do not mark skipped container coverage PASS or remove its gaps from historical records. No production deployment or engine migration is authorized by this policy.
+
+Tiny-file/segment packing is distinct from the container backend. Packing, durable writes, metadata, POSIX, concurrency and GC remain subject to required tests when used by the `files` backend. Shared code affecting files still needs the relevant files correctness checks. A generic native command may incidentally execute a bundled container check; that does not make container qualification required or justify a separate run. No test-runner changes are made by this documentation decision.
