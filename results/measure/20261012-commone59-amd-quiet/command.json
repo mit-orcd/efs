@@ -1,0 +1,43 @@
+{
+  "source": "e59e815fab2916340baad585dc08712ed182b7ea",
+  "cwd": "/data1/efs/amd-commone59-20261012/source",
+  "command": [
+    "python3",
+    "-u",
+    "tests/live/gc_reclamation.py",
+    "--mode",
+    "direct",
+    "--transport",
+    "tcp",
+    "--root",
+    "/data1/efs/amd-commone59-quiet-20261012",
+    "--root",
+    "/data1/efs/amd-commone59-quiet-20261012",
+    "--port",
+    "34680",
+    "--mount",
+    "/tmp/efs-amd-pack-quiet-e59e815fab2916340baad585dc08712ed182b7ea-mnt",
+    "--peer-mount",
+    "/tmp/efs-amd-pack-quiet-e59e815fab2916340baad585dc08712ed182b7ea-peer",
+    "--disable-efs-commands",
+    "--mounted-packing-only",
+    "--packing-clients",
+    "7",
+    "--posix-jobs",
+    "16",
+    "--posix",
+    "--continue-posix-failure",
+    "--fixture-quota",
+    "4G",
+    "--server-binary",
+    "/data1/efs/amd-commone59-20261012/source/efsd",
+    "--client-binary",
+    "/data1/efs/amd-commone59-20261012/source/efs-fuse"
+  ],
+  "environment": {
+    "EFS_RAFT_FLOW": "0",
+    "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+    "EFS_RAFT_GROUP_DRAIN": "0"
+  },
+  "scope": "alpha files TCP/direct seven/jobs16 4G with .efs disabled, core POSIX, original budgets"
+}

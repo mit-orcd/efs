@@ -715,3 +715,5 @@ AMD bounded labelledecdc broad diagnostic running; isolatedREADDIR5e035dcd revie
 Isolatedecdc packing cold/physical/queue **PASS20.095s**; broad deadlines/globalemptyFAIL retained. Newe59 candidate preparing common tests.
 
 Newe59 NUC21/21focused deep/readdir PASS evidence integrated; Intel70/70I/O PASS but listing/names timeout13cases. AMD native/fault progressing,broadqueued. [Ledger](v030-tcp-direct-qualification-20261012.md).
+
+E59 AMD nativePASS/fullFAIL. Corrected Intel actualworker evidence points toward flush/context-exit costs, not measuredREADDIRdelay. Additionaldiagnostic rejected byautomaticapproval citingnewerstop; humanclarificationpending, no newlaunch. [Ledger](v030-tcp-direct-qualification-20261012.md).
