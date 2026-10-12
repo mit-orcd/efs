@@ -840,8 +840,21 @@ int efs_client_rpc_lookup(efs_export_id_t export_id, efs_ino_t parent,
     /* The raft host resolves dentry placement (local vs hashed layout)
      * internally and bounces when the answering node lacks a group, so the
      * client always enters at the parent directory's shard. */
-    int rc = rpc_send_recv_owner(parent, EFS_MSG_INODE_LOOKUP, &req, sizeof(req),
-                                 EFS_MSG_INODE_LOOKUP_REPLY, &r, sizeof(r));
+    /* A cached binding is only a placement hint, never a name verdict.
+     * Scattered directory children on the other group otherwise pay the
+     * parent leader's fresh fence, a forwarded GETATTR and the child's fresh
+     * fence serially. A dual voter overlaps the independent group proofs.
+     * Missing/stale hints retain authoritative LOOKUP and normal retries;
+     * no cached row or completed earlier proof can satisfy this request. */
+    struct efs_inode placement;
+    int dual = g_client.node_count > 3 &&
+        efs_client_lookup_local(parent, name, &placement) == EFS_OK &&
+        efs_raft_shard_group(efs_kv_inode_shard(placement.ino)) !=
+        efs_raft_shard_group(efs_kv_inode_shard(parent));
+    int rc = dual ? rpc_send_recv_dual(EFS_MSG_INODE_LOOKUP, &req, sizeof(req),
+                                     EFS_MSG_INODE_LOOKUP_REPLY, &r, sizeof(r), 0)
+                  : rpc_send_recv_owner(parent, EFS_MSG_INODE_LOOKUP, &req, sizeof(req),
+                                        EFS_MSG_INODE_LOOKUP_REPLY, &r, sizeof(r));
     if (rc != EFS_OK)
         return rc;
     if (r.status != EFS_INODE_RPC_OK)
