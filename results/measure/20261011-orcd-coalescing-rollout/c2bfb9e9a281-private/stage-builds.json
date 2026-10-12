@@ -1,0 +1,52 @@
+[
+  {
+    "host": "fcstor003",
+    "result": "FAIL",
+    "error": "fcstor003: Traceback (most recent call last):\n  File \"<stdin>\", line 3, in <module>\n  File \"/usr/lib64/python3.9/pathlib.py\", line 1194, in read_text\n    with self.open(mode='r', encoding=encoding, errors=errors) as f:\n  File \"/usr/lib64/python3.9/pathlib.py\", line 1180, in open\n    return io.open(self, mode, buffering, encoding, errors, newline,\n  File \"/usr/lib64/python3.9/pathlib.py\", line 1038, in _opener\n    return self._accessor.open(self, flags, mode)\nFileNotFoundError: [Errno 2] No such file or directory: '/home/erbmi1/orcd/scratch/efs/orcd-test/qualification-c2bfb9e9a281/dirs.json'\nsource.tar.gz: OK"
+  },
+  {
+    "host": "fcstor004",
+    "result": "FAIL",
+    "error": "fcstor004: Traceback (most recent call last):\n  File \"<stdin>\", line 3, in <module>\n  File \"/usr/lib64/python3.9/pathlib.py\", line 1194, in read_text\n    with self.open(mode='r', encoding=encoding, errors=errors) as f:\n  File \"/usr/lib64/python3.9/pathlib.py\", line 1180, in open\n    return io.open(self, mode, buffering, encoding, errors, newline,\n  File \"/usr/lib64/python3.9/pathlib.py\", line 1038, in _opener\n    return self._accessor.open(self, flags, mode)\nFileNotFoundError: [Errno 2] No such file or directory: '/home/erbmi1/orcd/scratch/efs/orcd-test/qualification-c2bfb9e9a281/dirs.json'\nsource.tar.gz: OK"
+  },
+  {
+    "host": "fcstor005",
+    "result": "PASS",
+    "output": "source.tar.gz: OK\nstage-build-PASS"
+  },
+  {
+    "host": "fcstor007",
+    "result": "PASS",
+    "output": "source.tar.gz: OK\nstage-build-PASS"
+  },
+  {
+    "host": "fcstor008",
+    "result": "PASS",
+    "output": "source.tar.gz: OK\nstage-build-PASS"
+  },
+  {
+    "host": "fcstor009",
+    "result": "PASS",
+    "output": "source.tar.gz: OK\nstage-build-PASS"
+  },
+  {
+    "host": "fcstor010",
+    "result": "PASS",
+    "output": "source.tar.gz: OK\nstage-build-PASS"
+  },
+  {
+    "host": "fcstor011",
+    "result": "PASS",
+    "output": "source.tar.gz: OK\nstage-build-PASS"
+  },
+  {
+    "host": "fcstor012",
+    "result": "PASS",
+    "output": "source.tar.gz: OK\nstage-build-PASS"
+  },
+  {
+    "host": "fcstor013",
+    "result": "PASS",
+    "output": "source.tar.gz: OK\nstage-build-PASS"
+  }
+]

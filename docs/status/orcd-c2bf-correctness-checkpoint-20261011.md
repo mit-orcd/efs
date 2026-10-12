@@ -1,0 +1,15 @@
+# ORCD common-candidate correctness checkpoint (2026-10-11)
+
+Source `c2bfb9e9a281aae33dfaa01689e61866ccf60af8` completed the active private fixture before the manager froze `410afed433b6da093bdc2acf37bec253ddbd586c`. These results describe c2 only; qualification of 410 remains separate. Concurrent pressure-query correctness and release acceptance remain open.
+
+Independent normal/fault `make all test`, 19 focused ASan/UBSan checks and the fully sanitized real-LSM catalog test passed. All 1,557 source inputs were verified before/after; ten additional independent peer builds passed. Initial peer preparation failed on two hosts because directory metadata had not yet arrived; raw failure and successful corrected preparations are retained. Initial private-start preflight used an incorrect results subdirectory, refused before starting stores, and was corrected in the deployment helper.
+
+The private fixture used four physical ORCD servers, TCP/direct transport, seven PACK1 mounts, 24 fresh storage roots, matching `c2bfb9e9-release-normal` binaries, and disabled flow, early retirement, group drain and admission pressure. Original services and stores were preserved.
+
+Sixty-four mounted 512-byte writes/readbacks produced 12 packed objects with 64 header records. Six selected references were independently confirmed through canonical packed mapping RPCs to share one object with three physical fragments. Partial unlink preserved neighbor byte hashes and fragments. Removing remaining references with server four offline retained all fragments and produced valid fences on the online three servers. Restoring server four produced all four durable fences and reclaimed the fragments within the original 180-second bound.
+
+After a cold private restart, 58 surviving files retained exact inode identities and SHA256 bytes on all seven mounts; the selected reclaimed object remained absent with all four fences durable. Four ordinary overwrites—growth, full replacement, zero-filled replacement and partial replacement—passed primary/peer warm and cold expected-byte/inode checks. Broader deletion of all captured objects was not started after the common-candidate change; the private stores remain preserved.
+
+All private c2 mounts/processes were safely stopped. Final read-only proof confirms the original eleven services retain source `4fe291b0218bc37cd964c925ecebcea4df93e99f`, run as nonroot site UID 246111, and use the original executable paths/hashes.
+
+[Acceptance summary](../../results/measure/20261011-orcd-coalescing-rollout/c2bfb9e9a281-private/acceptance-summary.json), [original-service proof](../../results/measure/20261011-orcd-coalescing-rollout/c2bfb9e9a281-private/final-original-services.json), and [artifact hashes](../../results/measure/20261011-orcd-coalescing-rollout/c2bfb9e9a281-private/artifact-sha256.json) retain the raw qualification logs, source manifests, physical witnesses, canonical mapping results and helper recipes. No performance acceptance or improvement is claimed.

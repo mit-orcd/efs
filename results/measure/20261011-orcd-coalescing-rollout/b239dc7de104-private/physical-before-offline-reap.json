@@ -1,0 +1,260 @@
+{
+  "logical_fixture_bytes": 32768,
+  "scope": "after one partial unlink, three-member fencing while fourth server stopped; all storage roots reachable through SSH",
+  "nodes": [
+    {
+      "host": "fcstor003",
+      "files": [
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/0194/7140/1354/5220/7880/10003335675681578602/1",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1369/0076/7473/1735/9269/8040794482630214828/1",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1207/4503/5918/0989/4260/3317482776722449294/2",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/0999/1809/8875/7827/2235/10296149513521780621/2",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/0799/1348/2950/5427/5093/17119454307765098498/2",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1101/9407/2466/2898/2611/7363079470318850892/1",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1755/3641/3130/4979/8292/4013790042889712171/1",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1825/3393/8577/7364/8749/16307376152719276400/2",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/0911/2282/2792/8558/4949/4136022131917832342/1",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1669/4664/1773/6716/9444/2424663244006296736/2",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1824/3951/3516/8901/5897/880559459502520734/1",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1426/4053/3545/4573/8108/16983678304315863801/2",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        }
+      ]
+    },
+    {
+      "host": "fcstor004",
+      "files": [
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/0194/7140/1354/5220/7880/10003335675681578602/2",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1369/0076/7473/1735/9269/8040794482630214828/2",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1101/9407/2466/2898/2611/7363079470318850892/2",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1755/3641/3130/4979/8292/4013790042889712171/2",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/0911/2282/2792/8558/4949/4136022131917832342/2",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1824/3951/3516/8901/5897/880559459502520734/2",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1372/3427/9903/4509/6104/7887289488269498719/0",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        }
+      ]
+    },
+    {
+      "host": "fcstor005",
+      "files": [
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1207/4503/5918/0989/4260/3317482776722449294/0",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/0999/1809/8875/7827/2235/10296149513521780621/0",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/0799/1348/2950/5427/5093/17119454307765098498/0",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1825/3393/8577/7364/8749/16307376152719276400/0",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1669/4664/1773/6716/9444/2424663244006296736/0",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1426/4053/3545/4573/8108/16983678304315863801/0",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1372/3427/9903/4509/6104/7887289488269498719/1",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        }
+      ]
+    },
+    {
+      "host": "fcstor006",
+      "files": [
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/0194/7140/1354/5220/7880/10003335675681578602/0",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1369/0076/7473/1735/9269/8040794482630214828/0",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1207/4503/5918/0989/4260/3317482776722449294/1",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/0999/1809/8875/7827/2235/10296149513521780621/1",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/0799/1348/2950/5427/5093/17119454307765098498/1",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1101/9407/2466/2898/2611/7363079470318850892/0",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1755/3641/3130/4979/8292/4013790042889712171/0",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1825/3393/8577/7364/8749/16307376152719276400/1",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/0911/2282/2792/8558/4949/4136022131917832342/0",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1669/4664/1773/6716/9444/2424663244006296736/1",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1824/3951/3516/8901/5897/880559459502520734/0",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1426/4053/3545/4573/8108/16983678304315863801/1",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        },
+        {
+          "path": "/data1/01/efs-orcd-b239-private/data/packs-v1/1/1372/3427/9903/4509/6104/7887289488269498719/2",
+          "category": "data/packs-v1/1",
+          "bytes": 8192,
+          "allocated_bytes": 8192
+        }
+      ]
+    }
+  ]
+}

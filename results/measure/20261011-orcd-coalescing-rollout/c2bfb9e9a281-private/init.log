@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/Users/mike/Documents/Codex/2026-10-08/efs/operations/orcd-c2bf-qualification/private-cluster.py", line 28, in <module>
+    h=m.STORAGE[0];call(h,f'''cd {source(h)}
+  File "/Users/mike/Documents/Codex/2026-10-08/efs/operations/orcd-c2bf-qualification/private-cluster.py", line 9, in call
+    out=m.shell(h,body,timeout=t);print(h,out,flush=True);return out
+  File "/Users/mike/git/cluster/orcd-test.py", line 43, in shell
+    return run(host, 'bash -c ' + shlex.quote('set -euo pipefail\n' + body), timeout)
+  File "/Users/mike/git/cluster/orcd-test.py", line 38, in run
+    raise RuntimeError(f'{host}: {result.stderr.strip()}\n{result.stdout.strip()}')
+RuntimeError: fcstor003: 
+

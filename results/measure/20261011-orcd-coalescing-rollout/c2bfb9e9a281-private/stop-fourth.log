@@ -1,0 +1,1 @@
+fcstor006 /tmp/efs-orcd-unit-c2bfb9e9/efsd --node-id 4 --addr 172.16.223.60 --port 19862 --storage /data1/01/efs-orcd-c2bf-private,/data1/02/efs-orcd-c2bf-private,/data1/03/efs-orcd-c2bf-private,/data1/04/efs-orcd-c2bf-private,/data1/05/efs-orcd-c2bf-private,/data1/06/efs-orcd-c2bf-private --direct-io --join 172.16.223.57:19862

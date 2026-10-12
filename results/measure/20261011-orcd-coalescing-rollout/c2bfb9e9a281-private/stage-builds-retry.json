@@ -1,0 +1,12 @@
+[
+  {
+    "host": "fcstor003",
+    "result": "PASS",
+    "output": "source.tar.gz: OK\nstage-build-PASS"
+  },
+  {
+    "host": "fcstor004",
+    "result": "PASS",
+    "output": "source.tar.gz: OK\nstage-build-PASS"
+  }
+]

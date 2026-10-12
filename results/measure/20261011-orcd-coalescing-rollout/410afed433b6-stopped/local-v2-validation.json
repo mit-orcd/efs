@@ -1,0 +1,12 @@
+{
+  "inputs": 1563,
+  "unchanged_existing": 1558,
+  "added": [
+    "results/measure/20261012-v030-create-single-hook/artifact-sha256.json",
+    "results/measure/20261012-v030-merged-native/c2bfb9e9/acceptance-summary.json",
+    "results/measure/20261012-v030-ordinary-overwrite/c2bfb9e9/artifact-sha256.json",
+    "results/measure/20261012-v030-phase-work/c2bfb9e9/direct/gc-direct-873jwzj0/query-events-manifest.json",
+    "results/measure/20261012-v030-phase-work/c2bfb9e9/direct/phase-work-summary.json"
+  ],
+  "doc_gate": "PASS"
+}
