@@ -12120,7 +12120,7 @@ static void host_create(efs_ino_t parent, const char *name, uint32_t mode,
                              uint32_t uid, uint32_t gid, uint32_t flags,
                              uint64_t owner, const struct efs_opid_req *q,
                              uint32_t expected_shard, int pinned_route, uint8_t covered,
-                             struct efs_msg_inode_reply *out)
+                             struct efs_msg_inode_reply *out,uint8_t *settled)
 {
     struct efs_raft_host *h = g_host;
     struct efs_meta_row prow;
@@ -12138,6 +12138,7 @@ static void host_create(efs_ino_t parent, const char *name, uint32_t mode,
     uint64_t hold = (flags & EFS_CREATE_F_HOLD) ? owner : 0;
     int pending = !!(flags & EFS_CREATE_F_PENDING);
 
+    if(settled)*settled=0;
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
     if (!h || !h->running || !name || parent == 0) {
@@ -12254,6 +12255,10 @@ static void host_create(efs_ino_t parent, const char *name, uint32_t mode,
             rc = host_propose(h, dg, cmd, clen, &idx, &term, &hint);
         if (rc == EFS_OK)
             rc = host_wait_verdict(h, dg, idx, term, &hint);
+        /* Coverage comes only from this exact, durable applied entry. A
+         * forwarded early return or cross-group transaction keeps zero and
+         * therefore retains the independent post-submission quorum proof. */
+        if(rc==EFS_OK && settled)*settled=(uint8_t)(1u<<dg);
     }
     if (rc == EFS_OK) {
         int lrc = efs_meta_apply_lookup_tx(h->kv, parent, name, host_txn_coord,
@@ -12289,7 +12294,7 @@ void server_raft_host_create(efs_ino_t parent,const char *name,uint32_t mode,
     uint32_t uid,uint32_t gid,uint32_t flags,uint64_t owner,
     const struct efs_opid_req *q,struct efs_msg_inode_reply *out)
 {
-    host_create(parent,name,mode,uid,gid,flags,owner,q,0,0,0,out);
+    host_create(parent,name,mode,uid,gid,flags,owner,q,0,0,0,out,NULL);
 }
 
 static void host_retained_create_forward(struct efs_raft_host *h,
@@ -12384,13 +12389,17 @@ void server_raft_host_create_retained(const struct efs_msg_create_retained *requ
     if(request->probe || rc!=EFS_ERR_BUSY) {
         set_inode_rc(&out->rpc,rc,hint);return;
     }
+    uint8_t settled=0;
     host_create(request->create.parent,request->create.name,request->create.mode,
         request->create.uid,request->create.gid,EFS_CREATE_F_PENDING,0,&request->q,
-        request->shard,1,covered,&out->rpc);
+        request->shard,1,covered,&out->rpc,&settled);
     /* Ordinary failure is not terminal proof. Query the retained shard after
      * the mutation, including recorded negative verdicts and lost replies. */
     struct efs_msg_inode_reply submitted=out->rpc;
-    covered=0; /* Submission is a mutation boundary: require a fresh proof. */
+    /* A successful local exact-entry verdict covers this submission's
+     * receipt lookup. Refusal/ambiguity/forwarding remains an independent
+     * probe; never reuse the pre-mutation ReadIndex across this boundary. */
+    covered=submitted.status==EFS_INODE_RPC_OK?settled:0;
     rc=host_retained_create_proof(h,request,out,&hint,&covered);
     if(!out->known)out->rpc=submitted;
 }
