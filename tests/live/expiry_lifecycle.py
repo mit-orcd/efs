@@ -63,6 +63,20 @@ def exercise(mount,port,work,wait,physical_files,restart,offline,clock_fault=Fal
     policy(base,ttl=12);assert record(born)[2]==deadline;mark('fixed birth and future-only policy')
     wait(lambda:not born.exists(),'expiry removes eligible birth',40)
     wait(lambda:not physical_files(ino),'expiry physical reclamation',90);mark('namespace and physical reclamation')
+    # Force inheritance across the two actual metadata groups, rather than
+    # relying on whatever name hashing the seed happens to choose.
+    directories=[];cross=None
+    for i in range(32):
+        candidate=base/('cross-policy-'+str(i));candidate.mkdir();directories.append(candidate)
+        if (candidate.stat().st_ino&1)!=(base.stat().st_ino&1):cross=candidate;break
+    assert cross is not None,'fixture failed to choose a different inode group'
+    inherited=cross/'inherited';cross_ino=created(inherited)
+    assert (cross_ino&1)!=(base.stat().st_ino&1)
+    assert record(inherited)[3]==base.stat().st_ino
+    wait(lambda:not inherited.exists(),'cross-group inherited expiry',40)
+    wait(lambda:not physical_files(cross_ino),'cross-group inherited reclamation',90)
+    for directory in directories:directory.rmdir()
+    mark('explicit cross-group inheritance and deletion')
     held=base/'held';policy(base,ttl=3);ino=created(held)
     fd=os.open(held,os.O_RDWR)
     try:
@@ -144,7 +158,7 @@ def exercise(mount,port,work,wait,physical_files,restart,offline,clock_fault=Fal
     wait(lambda:not physical_files(ino),'feature re-enable physical reclaim',90)
     assert no_birth.exists() and record(no_birth)[1:]==(0,0,0)
     no_birth.unlink();mark('global disable pauses and bounded re-enable catches up')
-    remote=base/'offline';ino=created(remote);rejoin=offline()
+    remote=base/'offline';ino=created(remote);rejoin=offline(storage_ino=ino)
     try:
         wait(lambda:not remote.exists(),'expiry with offline storage member',40)
         assert physical_files(ino),'offline physical debt unexpectedly gone'

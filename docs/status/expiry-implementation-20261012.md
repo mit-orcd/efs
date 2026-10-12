@@ -175,3 +175,16 @@ hosts group 0); the harness now finds an actual leader among all four nodes.
 This is not recorded as a complete passing run. Raw
 `/home/efs/expiry-a5ac58a7-gates.log` retained. New explicit existing-file
 control and the corrected full matrix must pass before final qualification.
+
+## Final matrix fixture corrections
+
+Normal `9e292f84` passed explicit enablement on existing files (owner, generation,
+link-count, retention, effective-policy and symlink refusals), deletion replay,
+replacement survival, publication, cold restart and global disable/re-enable.
+Its offline gate stopped fixed n4, which was not a fragment holder for that
+particular file; physical fragments could legitimately be reclaimed. The gate
+now chooses an observed fragment holder and records its actual fragment paths.
+Leader loss similarly chooses an observed leader from all four nodes. These
+fixture failures are retained in `/home/efs/expiry-9e292f84-gates.log`; they are
+not called full passes. The final script also forces inherited policy across
+both metadata groups and hashes the companion lifecycle script in its manifest.

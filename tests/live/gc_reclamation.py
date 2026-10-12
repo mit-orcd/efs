@@ -259,6 +259,7 @@ for path in sorted(inputs):
     "real_roots":[str(x.resolve()) for x in roots],"port":a.port,
     "gates":{key:str(value) if isinstance(value,Path) else value for key,value in vars(a).items()},"source_tree_sha256":digest.hexdigest(),
     "test_script_sha256":hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+    "expiry_script_sha256":hashlib.sha256((source/"tests/live/expiry_lifecycle.py").read_bytes()).hexdigest() if a.expiry else None,
     "binary_sha256":{name:hashlib.sha256((a.server_binary if name=='efsd' and a.server_binary else a.client_binary if name=='efs-fuse' and a.client_binary else source/name).read_bytes()).hexdigest()
                       for name in ('efsd','efs-fuse','efs-mgmt')},
 },indent=2))
@@ -612,8 +613,15 @@ try:
             unmount();stop(crash=True)
             if enabled is not None:env['EFS_EXPIRY']='1' if enabled else '0'
             start();mount_client()
-        def expiry_offline(group=None):
+        def expiry_offline(group=None,storage_ino=None):
             node=3
+            if storage_ino is not None:
+                fragments=files(storage_ino)
+                holders=[i for i,root in enumerate(roots) if any(path.is_relative_to(root) for path in fragments)]
+                assert holders,('no fragment holder for offline gate',storage_ino)
+                node=holders[-1]
+                (work/'expiry-offline-holder.json').write_text(json.dumps({'ino':storage_ino,'node':node+1,
+                    'fragments':[str(path) for path in fragments if path.is_relative_to(roots[node])]},indent=2))
             if group is not None:
                 elected=None;status=''
                 for candidate in range(4):
