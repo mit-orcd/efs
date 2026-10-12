@@ -5072,6 +5072,8 @@ def main(argv=None):
             return 2
         _worker_main(args[1], args[2], args[3])
         return 1
+    if "--suite=expiry" in args:
+        args[args.index("--suite=expiry"):args.index("--suite=expiry") + 1] = ["--suite", "expiry"]
     if any(args[i:i + 2] == ["--suite", "expiry"] for i in range(len(args))):
         from posix_expiry import main as expiry_main
         return expiry_main(args)

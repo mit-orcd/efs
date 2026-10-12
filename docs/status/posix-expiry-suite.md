@@ -12,7 +12,8 @@ Run locally on Linux (NUC qualification host), from this branch's source tree.
 Install FUSE and permit the invoking user to mount both paths. Build native
 binaries first; no containers are used. Both mount directories must be empty
 and unmounted, four ports must be free, and storage roots must be private to
-this test. Do not stop or attach to an unrelated running user cluster.
+this test. Missing private root parents are created; each run creates fresh
+fixture subdirectories within them. Do not stop or attach to an unrelated running user cluster.
 
 ```sh
 make -j4 EFS_FAULTS=0 efsd efs-fuse efs-mgmt

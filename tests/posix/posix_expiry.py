@@ -46,6 +46,9 @@ def command(argv):
 
 def main(argv=None):
     cmd, env = command(sys.argv[1:] if argv is None else argv)
+    for i, arg in enumerate(cmd[:-1]):
+        if arg == '--root':
+            Path(cmd[i + 1]).mkdir(parents=True, exist_ok=True)
     print('POSIX expiry: isolated lifecycle, recovery, physical GC, core and peer gates', flush=True)
     return subprocess.call(cmd, env=env)
 
