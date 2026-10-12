@@ -2167,6 +2167,8 @@ Current central qualification freeze: `03bd89fb7de56c2c6af44ab3bd26c54caf4b8274`
 
 09:10 EDT checkpoint on `03bd89fb`: AMD full native/fault/sanitizers PASS; NUC core/peer/isolated packing PASS; Intel prerequisites PASS; Intel/NUC seven-client gates RUNNING. Release acceptance pending. [Ledger](../status/v030-tcp-direct-qualification-20261012.md).
 
+Final `03bd89fb` live verdict: Intel and NUC seven-client FAIL. NUC data/cold/physical/drain checks PASS independently; [NUC report](../status/nuc-release-03bd-group3-20261012.md). Targeted deep-path diagnostic next; candidate unaccepted.
+
 
 ## Appendix 2 — In flight — the current handoff block
 
