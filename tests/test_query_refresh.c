@@ -45,6 +45,17 @@ int main(void)
     assert(efs_query_refresh_due(52000,1000,50000,10000,0,0,256,2000));
     /* A slow completed build has already used the interval; no added delay. */
     assert(efs_query_refresh_due(5000,1001,1000,256,0,0,256,2000));
+    /* Only cheap final cut refusals retry early; authority/costly failures wait. */
+    assert(efs_query_refresh_cut_retry(EFS_ERR_BUSY,1,55));
+    assert(!efs_query_refresh_cut_retry(EFS_ERR_BUSY,0,55));
+    assert(!efs_query_refresh_cut_retry(EFS_ERR_NOT_PRIMARY,1,55));
+    assert(!efs_query_refresh_cut_retry(EFS_ERR_IO,1,55));
+    assert(!efs_query_refresh_cut_retry(EFS_ERR_BUSY,1,200));
+    assert(!efs_query_refresh_due_reason(1199,0,1000,256,0,1,1,256,2000));
+    assert(efs_query_refresh_due_reason(1200,0,1000,256,0,1,1,256,2000));
+    assert(!efs_query_refresh_due_reason(1200,0,1000,256,0,1,0,256,2000));
+    assert(!efs_query_refresh_due_reason(1200,0,1000,0,0,1,1,256,2000));
+    assert(!efs_query_refresh_due_reason(1200,0,1000,256,0,0,1,256,2000));
     int valid;
     assert(efs_query_export_lifetime(NULL,&valid)==3600000 && valid);
     assert(efs_query_export_lifetime("86400000",&valid)==86400000 && valid);
