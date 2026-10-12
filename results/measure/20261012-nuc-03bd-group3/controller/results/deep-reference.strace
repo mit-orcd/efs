@@ -1,0 +1,1569 @@
+execve("/usr/bin/python3", ["python3", "deep-reference.py"], 0x7ffd24f88da0 /* 26 vars */) = 0
+access("/etc/ld.so.preload", R_OK)      = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=42111, ...}) = 0
+close(3)                                = 0
+openat(AT_FDCWD, "/lib64/libpython3.12.so.1.0", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0@\0\0\0\0\0\0\0\330Tc\0\0\0\0\0\0\0\0\0@\08\0\f\0@\0$\0#\0\1\0\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0000\306\7\0\0\0\0\0000\306\7\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\5\0\0\0\0\320\7\0\0\0\0\0\0\320\7\0\0\0\0\0\0\320\7\0\0\0\0\0U\21&\0\0\0\0\0U\21&\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\4\0\0\0\0\360-\0\0\0\0\0\0\360-\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=6512088, ...}) = 0
+close(3)                                = 0
+openat(AT_FDCWD, "/lib64/libc.so.6", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\3\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0P\247\2\0\0\0\0\0@\0\0\0\0\0\0\08\263#\0\0\0\0\0\0\0\0\0@\08\0\16\0@\0D\0C\0\6\0\0\0\4\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0\20\3\0\0\0\0\0\0\20\3\0\0\0\0\0\0\10\0\0\0\0\0\0\0\3\0\0\0\4\0\0\0`\325\31\0\0\0\0\0`\325\31\0\0\0\0\0`\325\31\0\0\0\0\0\34\0\0\0\0\0\0\0\34\0\0\0\0\0\0\0\20\0\0\0\0\0\0\0\1\0\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=2343992, ...}) = 0
+close(3)                                = 0
+openat(AT_FDCWD, "/lib64/libm.so.6", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\3\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0@\0\0\0\0\0\0\0\260\366\n\0\0\0\0\0\0\0\0\0@\08\0\v\0@\0!\0 \0\1\0\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\10\365\0\0\0\0\0\0\10\365\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\5\0\0\0\0\0\1\0\0\0\0\0\0\0\1\0\0\0\0\0\0\0\1\0\0\0\0\0I^\6\0\0\0\0\0I^\6\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\4\0\0\0\0`\7\0\0\0\0\0\0`\7\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=720624, ...}) = 0
+close(3)                                = 0
+openat(AT_FDCWD, "/usr/lib/locale/locale-archive", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=229754784, ...}) = 0
+close(3)                                = 0
+openat(AT_FDCWD, "/usr/lib64/gconv/gconv-modules.cache", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=27012, ...}) = 0
+close(3)                                = 0
+getcwd("/home/efs/nuc-03bd-group3", 4096) = 26
+newfstatat(AT_FDCWD, "/home/efs/.local/bin/python3", 0x7ffe86020458, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/home/efs/bin/python3", 0x7ffe86020458, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/local/bin/python3", 0x7ffe86020458, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/bin/python3", {st_mode=S_IFREG|0755, st_size=15800, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/pyvenv.cfg", O_RDONLY) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/bin/pyvenv.cfg", O_RDONLY) = -1 ENOENT (No such file or directory)
+readlink("/usr/bin/python3", "python3.12", 4096) = 10
+readlink("/usr/bin/python3.12", 0x7ffe8601b470, 4096) = -1 EINVAL (Invalid argument)
+openat(AT_FDCWD, "/usr/bin/python3._pth", O_RDONLY) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/bin/python3.12._pth", O_RDONLY) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/bin/pybuilddir.txt", O_RDONLY) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/bin/lib64/python312.zip", 0x7ffe860201b0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib64/python312.zip", 0x7ffe86020200, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/bin/lib64/python3.12/os.py", 0x7ffe86020200, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/bin/lib64/python3.12/os.pyc", 0x7ffe86020200, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/os.py", {st_mode=S_IFREG|0644, st_size=40821, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/bin/lib64/python3.12/lib-dynload", 0x7ffe86020208, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/etc/localtime", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=3552, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=3552, ...}) = 0
+read(3, "TZif2\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\6\0\0\0\6\0\0\0\0\0\0\0\354\0\0\0\6\0\0\0\24\200\0\0\0\236\246\36p\237\272\353`\240\206\0p\241\232\315`\242e\342p\243\203\351\340\244j\256p\2455\247`\246S\312\360\247\25\211`\2503\254\360\250\376\245\340\252\23\216\360\252\336\207\340\253\363p\360\254\276i\340\255\323R\360\256\236K\340\257\2634\360\260~-\340\261\234Qp\262gJ`\263|3p\264G,`\265\\\25p\266'\16`\267;\367p\270\6\360`\271\33\331p\271\346\322`\273\4\365\360\273\306\264`\274\344\327\360\275\257\320\340\276\304\271\360\277\217\262\340\300\244\233\360\301o\224\340"..., 4096) = 3552
+read(3, "TZif2\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\6\0\0\0\6\0\0\0\0\0\0\0\354\0\0\0\6\0\0\0\24\377\377\377\377^\3\360\220\377\377\377\377\236\246\36p\377\377\377\377\237\272\353`\377\377\377\377\240\206\0p\377\377\377\377\241\232\315`\377\377\377\377\242e\342p\377\377\377\377\243\203\351\340\377\377\377\377\244j\256p\377\377\377\377\2455\247`\377\377\377\377\246S\312\360\377\377\377\377\247\25\211`\377\377\377\377\2503\254\360\377\377\377\377\250\376\245\340\377\377\377\377\252\23\216\360\377\377\377\377\252\336\207\340\377\377\377\377\253\363p\360\377\377\377\377\254\276i\340\377\377\377\377\255\323R\360\377\377\377\377\256\236K\340\377\377\377\377"..., 4096) = 2260
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python312.zip", 0x7ffe8601fbf0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib64", {st_mode=S_IFDIR|0555, st_size=65536, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python312.zip", 0x7ffe8601ffa0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+fstat(3, {st_mode=S_IFDIR|0755, st_size=8192, ...}) = 0
+getdents64(3, 0x55c99332ad30 /* 198 entries */, 32768) = 6584
+getdents64(3, 0x55c99332ad30 /* 0 entries */, 32768) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/encodings/__init__.cpython-312-x86_64-linux-gnu.so", 0x7ffe8601ffa0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/encodings/__init__.abi3.so", 0x7ffe8601ffa0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/encodings/__init__.so", 0x7ffe8601ffa0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/encodings/__init__.py", {st_mode=S_IFREG|0644, st_size=5884, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/encodings/__init__.py", {st_mode=S_IFREG|0644, st_size=5884, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/encodings/__pycache__/__init__.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=5777, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=5777, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\374\26\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\6\0\0\0\0\0\0\0\363\334\0\0\0\227\0d\0Z\0d\1d\2l\1Z\1d\1d\2l\2Z\2d\3d\4l\3m\4Z\4\1\0i\0Z\5d\5Z\6d\6g\1Z\7e\4j\10\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0Z\10\2\0G\0d\7\204\0d\10e\te\n\253\4\0\0\0\0\0\0Z\vd\t\204\0Z\fd\n\204\0Z\r\2\0e\1j\34\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0e\r\253\1\0\0\0\0\0\0\1\0e\2j\36\0\0\0\0\0\0\0\0\0\0"..., 5778) = 5777
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/encodings", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/encodings", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/encodings", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/encodings", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+fstat(3, {st_mode=S_IFDIR|0755, st_size=8192, ...}) = 0
+getdents64(3, 0x55c9933342a0 /* 125 entries */, 32768) = 4328
+getdents64(3, 0x55c9933342a0 /* 0 entries */, 32768) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/encodings/aliases.py", {st_mode=S_IFREG|0644, st_size=15677, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/encodings/aliases.py", {st_mode=S_IFREG|0644, st_size=15677, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/encodings/__pycache__/aliases.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=12410, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=12410, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j==\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\5\0\0\0\0\0\0\0\363\372\t\0\0\227\0d\0Z\0i\0d\1d\2\223\1d\3d\2\223\1d\4d\2\223\1d\5d\2\223\1d\6d\2\223\1d\7d\2\223\1d\10d\2\223\1d\td\2\223\1d\nd\2\223\1d\vd\2\223\1d\fd\2\223\1d\rd\2\223\1d\16d\17\223\1d\20d\17\223\1d\21d\22\223\1d\23d\22\223\1d\24d\25\223\1i\0d\26d\25\223\1d\27d\30\223\1d\31d\32\223\1d\33d\32\223\1d\34d\32\223\1d\35d\32\223\1d\36d\32\223\1d\37d\32"..., 12411) = 12410
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/encodings", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/encodings/utf_8.py", {st_mode=S_IFREG|0644, st_size=1005, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/encodings/utf_8.py", {st_mode=S_IFREG|0644, st_size=1005, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/encodings/__pycache__/utf_8.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=2149, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=2149, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\355\3\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\5\0\0\0\0\0\0\0\363\336\0\0\0\227\0d\0Z\0d\1d\2l\1Z\1e\1j\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0Z\3d\rd\3\204\1Z\4\2\0G\0d\4\204\0d\5e\1j\n\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\253\3\0\0\0\0\0\0Z\5\2\0G\0d\6\204\0d\7e\1j\f\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\253\3\0\0\0\0\0\0Z\7\2\0G\0d\10\204\0d\te\1j\20\0\0\0\0\0\0\0\0\0\0\0\0\0\0"..., 2150) = 2149
+read(3, "", 1)                          = 0
+close(3)                                = 0
+fstat(0, {st_mode=S_IFIFO|0600, st_size=0, ...}) = 0
+fstat(0, {st_mode=S_IFIFO|0600, st_size=0, ...}) = 0
+fstat(1, {st_mode=S_IFREG|0644, st_size=0, ...}) = 0
+fstat(2, {st_mode=S_IFREG|0644, st_size=0, ...}) = 0
+newfstatat(AT_FDCWD, "/usr/bin/pyvenv.cfg", 0x7ffe8601fab0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/pyvenv.cfg", 0x7ffe8601fb30, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/home/efs/.local/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/home/efs/.local/lib/python3.12/site-packages", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+fstat(3, {st_mode=S_IFDIR|0755, st_size=4096, ...}) = 0
+getdents64(3, 0x55c99335a780 /* 14 entries */, 32768) = 528
+getdents64(3, 0x55c99335a780 /* 0 entries */, 32768) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/local/lib64/python3.12/site-packages", 0x7ffe8601fda0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/local/lib/python3.12/site-packages", 0x7ffe8601fda0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/site-packages", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+fstat(3, {st_mode=S_IFDIR|0755, st_size=4096, ...}) = 0
+getdents64(3, 0x55c99335a780 /* 61 entries */, 32768) = 2480
+getdents64(3, 0x55c99335a780 /* 0 entries */, 32768) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.12/site-packages", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+fstat(3, {st_mode=S_IFDIR|0755, st_size=4096, ...}) = 0
+getdents64(3, 0x55c99335a780 /* 84 entries */, 32768) = 3288
+getdents64(3, 0x55c99335a780 /* 0 entries */, 32768) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.12/site-packages/distutils-precedence.pth", {st_mode=S_IFREG|0644, st_size=151, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(AT_FDCWD, "/usr/lib/python3.12/site-packages/distutils-precedence.pth", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=151, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=151, ...}) = 0
+read(3, "import os; var = 'SETUPTOOLS_USE_DISTUTILS'; enabled = os.environ.get(var, 'local') == 'local'; enabled and __import__('_distutils_hack').add_shim(); \n", 152) = 151
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/encodings", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/encodings/utf_8_sig.py", {st_mode=S_IFREG|0644, st_size=4133, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/encodings/utf_8_sig.py", {st_mode=S_IFREG|0644, st_size=4133, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/encodings/__pycache__/utf_8_sig.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=6747, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=6747, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j%\20\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\5\0\0\0\0\0\0\0\363\316\0\0\0\227\0d\0Z\0d\1d\2l\1Z\1d\16d\3\204\1Z\2d\16d\4\204\1Z\3\2\0G\0d\5\204\0d\6e\1j\10\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\253\3\0\0\0\0\0\0Z\4\2\0G\0d\7\204\0d\10e\1j\n\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\253\3\0\0\0\0\0\0Z\6\2\0G\0d\t\204\0d\ne\1j\16\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\253\3\0\0\0\0\0\0Z\7\2\0"..., 6748) = 6747
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+fstat(3, {st_mode=S_IFDIR|0755, st_size=4096, ...}) = 0
+getdents64(3, 0x55c993362d40 /* 61 entries */, 32768) = 3792
+getdents64(3, 0x55c993362d40 /* 0 entries */, 32768) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/.local/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/.local/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/.local/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/home/efs/.local/lib/python3.12/site-packages", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+fstat(3, {st_mode=S_IFDIR|0755, st_size=4096, ...}) = 0
+getdents64(3, 0x55c993362d40 /* 14 entries */, 32768) = 528
+getdents64(3, 0x55c993362d40 /* 0 entries */, 32768) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/site-packages", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+fstat(3, {st_mode=S_IFDIR|0755, st_size=4096, ...}) = 0
+getdents64(3, 0x55c993362d40 /* 61 entries */, 32768) = 2480
+getdents64(3, 0x55c993362d40 /* 0 entries */, 32768) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.12/site-packages", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+fstat(3, {st_mode=S_IFDIR|0755, st_size=4096, ...}) = 0
+getdents64(3, 0x55c993362d40 /* 84 entries */, 32768) = 3288
+getdents64(3, 0x55c993362d40 /* 0 entries */, 32768) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.12/site-packages/_distutils_hack/__init__.cpython-312-x86_64-linux-gnu.so", 0x7ffe8601f4d0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.12/site-packages/_distutils_hack/__init__.abi3.so", 0x7ffe8601f4d0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.12/site-packages/_distutils_hack/__init__.so", 0x7ffe8601f4d0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.12/site-packages/_distutils_hack/__init__.py", {st_mode=S_IFREG|0644, st_size=6299, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.12/site-packages/_distutils_hack/__init__.py", {st_mode=S_IFREG|0644, st_size=6299, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.12/site-packages/_distutils_hack/__pycache__/__init__.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=9993, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=9993, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0\0SSh\233\30\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\6\0\0\0\0\0\0\0\363\36\1\0\0\227\0d\0d\1l\0Z\0d\0d\1l\1Z\1d\2e\0j\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0v\0Z\3d\3\204\0Z\4d\4\204\0Z\5d\5\204\0Z\6d\6\204\0Z\7d\7\204\0Z\10\2\0G\0d\10\204\0d\t\253\2\0\0\0\0\0\0Z\t\2\0G\0d\n\204\0d\v\253\2\0\0\0\0\0\0Z\ne\nj\26\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0D\0]\31\0\0Z\f\2\0e\re\nd\fe\f\233\0"..., 9994) = 9993
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/.local/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/.local/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3/deep-reference.py", {st_mode=S_IFREG|0644, st_size=531, ...}, 0) = 0
+openat(AT_FDCWD, "/home/efs/nuc-03bd-group3/deep-reference.py", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=531, ...}) = 0
+read(3, "ally:shutil.rmtree(d)\n", 4096) = 22
+fstat(3, {st_mode=S_IFREG|0644, st_size=531, ...}) = 0
+read(3, "import importlib.util,os,sys,tempfile,shutil\nfrom pathlib import Path\nsource=Path('/home/efs/nuc-03bd-group3/source-normal/tests/posix/posix_suite.py')\nspec=importlib.util.spec_from_file_location('pos"..., 532) = 531
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3/deep-reference.py", {st_mode=S_IFREG|0644, st_size=531, ...}, 0) = 0
+readlink("deep-reference.py", 0x7ffe8600fbd0, 4096) = -1 EINVAL (Invalid argument)
+getcwd("/home/efs/nuc-03bd-group3", 1024) = 26
+readlink("/home/efs/nuc-03bd-group3/deep-reference.py", 0x7ffe8600f770, 1023) = -1 EINVAL (Invalid argument)
+openat(AT_FDCWD, "/home/efs/nuc-03bd-group3/deep-reference.py", O_RDONLY) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=531, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=531, ...}) = 0
+read(3, "import importlib.util,os,sys,tempfile,shutil\nfrom pathlib import Path\nsource=Path('/home/efs/nuc-03bd-group3/source-normal/tests/posix/posix_suite.py')\nspec=importlib.util.spec_from_file_location('pos"..., 4096) = 531
+read(3, "import importlib.util,os,sys,tempfile,shutil\nfrom pathlib import Path\nsource=Path('/home/efs/nuc-03bd-group3/source-normal/tests/posix/posix_suite.py')\nspec=importlib.util.spec_from_file_location('pos"..., 4096) = 531
+read(3, "", 4096)                       = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/home/efs/nuc-03bd-group3", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+fstat(3, {st_mode=S_IFDIR|0755, st_size=4096, ...}) = 0
+getdents64(3, 0x55c993373170 /* 13 entries */, 32768) = 448
+getdents64(3, 0x55c993373170 /* 0 entries */, 32768) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/importlib/__init__.cpython-312-x86_64-linux-gnu.so", 0x7ffe8601fde0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/importlib/__init__.abi3.so", 0x7ffe8601fde0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/importlib/__init__.so", 0x7ffe8601fde0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/importlib/__init__.py", {st_mode=S_IFREG|0644, st_size=4784, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/importlib/__init__.py", {st_mode=S_IFREG|0644, st_size=4784, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/importlib/__pycache__/__init__.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=4561, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=4561, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\260\22\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\5\0\0\0\0\0\0\0\363,\2\0\0\227\0d\0Z\0g\0d\1\242\1Z\1d\2d\3l\2Z\2d\2d\3l\3Z\3\t\0d\2d\3l\4Z\5d\4e\5_\6\0\0\0\0\0\0\0\0d\5e\5_\7\0\0\0\0\0\0\0\0\t\0e\10j\23\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0d\6d\7\253\2\0\0\0\0\0\0e\5_\10\0\0\0\0\0\0\0\0e\5e\3j\26\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0d\4<\0\0\0\t\0d\2d\3l\17Z\20d\n"..., 4562) = 4561
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/warnings.py", {st_mode=S_IFREG|0644, st_size=21909, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/warnings.py", {st_mode=S_IFREG|0644, st_size=21909, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/warnings.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=23829, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=23829, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\225U\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\6\0\0\0\0\0\0\0\3638\2\0\0\227\0d\0Z\0d\1d\2l\1Z\1g\0d\3\242\1Z\2d0d\4\204\1Z\3d1d\5\204\1Z\4d\6\204\0Z\5d\7\204\0Z\6e\3Z\7d\10\204\0Z\10e\4Z\td\t\204\0Z\nd\ne\vd\nd\1d\vf\5d\f\204\1Z\fe\vd\1d\vf\3d\r\204\1Z\rd\16\204\0Z\16d\17\204\0Z\17\2\0G\0d\20\204\0d\21e\20\253\3\0\0\0\0\0\0Z\21d\22\204\0Z\22d\23\204\0Z\23d\24\204\0Z\24d\25\204\0"..., 23830) = 23829
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/importlib", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/importlib", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/importlib", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/importlib", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+fstat(3, {st_mode=S_IFDIR|0755, st_size=4096, ...}) = 0
+getdents64(3, 0x55c993373170 /* 14 entries */, 32768) = 456
+getdents64(3, 0x55c993373170 /* 0 entries */, 32768) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/importlib/_abc.py", {st_mode=S_IFREG|0644, st_size=1354, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/importlib/_abc.py", {st_mode=S_IFREG|0644, st_size=1354, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/importlib/__pycache__/_abc.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=1645, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=1645, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275jJ\5\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\5\0\0\0\0\0\0\0\363H\0\0\0\227\0d\0Z\0d\1d\2l\1m\2Z\2\1\0d\3d\4l\3Z\3\2\0G\0d\5\204\0d\6e\3j\10\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\254\7\253\3\0\0\0\0\0\0Z\5y\4)\10z>Subset of importlib.abc used to reduce importlib.util imports.\351\1\0\0\0)\1\332\n_bootstrap\351"..., 1646) = 1645
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/types.py", {st_mode=S_IFREG|0644, st_size=10993, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/types.py", {st_mode=S_IFREG|0644, st_size=10993, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/types.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=14947, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=14947, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\361*\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\6\0\0\0\0\0\0\0\363@\4\0\0\227\0d\0Z\0d\1d\2l\1Z\1d\3\204\0Z\2\2\0e\3e\2\253\1\0\0\0\0\0\0Z\4\2\0e\3d\4\204\0\253\1\0\0\0\0\0\0Z\5\2\0e\3e\2j\f\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\253\1\0\0\0\0\0\0Z\7\2\0e\3e\3j\20\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\253\1\0\0\0\0\0\0Z\t\2\0e\3e\1j\24\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\253\1\0\0\0\0"..., 14948) = 14947
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/tempfile.py", {st_mode=S_IFREG|0644, st_size=32386, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/tempfile.py", {st_mode=S_IFREG|0644, st_size=32386, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/tempfile.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=40602, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=40602, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\202~\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\5\0\0\0\0\0\0\0\363\350\2\0\0\227\0d\0Z\0g\0d\1\242\1Z\1d\2d\3l\2Z\3d\2d\3l\4Z\5d\2d\3l\6Z\7d\2d\3l\10Z\td\2d\3l\nZ\vd\2d\3l\fZ\rd\2d\4l\16m\17Z\20\1\0d\2d\3l\21Z\22d\2d\3l\23Z\24d\2d\3l\25Z\26d\2d\3l\27Z\27e\27j0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0Z\31e\tj4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0e\tj6\0\0"..., 40603) = 40602
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/functools.py", {st_mode=S_IFREG|0644, st_size=37940, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/functools.py", {st_mode=S_IFREG|0644, st_size=37940, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/functools.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=40344, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=40344, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j4\224\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\7\0\0\0\0\0\0\0\363\246\2\0\0\227\0d\0Z\0g\0d\1\242\1Z\1d\2d\3l\2m\3Z\3\1\0d\2d\4l\4m\5Z\5\1\0d\2d\5l\6m\7Z\7\1\0d\2d\6l\10m\tZ\t\1\0d\2d\7l\nm\vZ\v\1\0d\10Z\fd\tZ\re\fe\rf\2d\n\204\1Z\16e\fe\rf\2d\v\204\1Z\17d\f\204\0Z\20d\r\204\0Z\21d\16\204\0Z\22d\17\204\0Z\23d\20\204\0Z\24d\21\204\0Z\25d\22\204\0Z\26d\23\204\0Z\27d\24\204\0"..., 40345) = 40344
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/collections/__init__.cpython-312-x86_64-linux-gnu.so", 0x7ffe8601f350, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/collections/__init__.abi3.so", 0x7ffe8601f350, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/collections/__init__.so", 0x7ffe8601f350, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/collections/__init__.py", {st_mode=S_IFREG|0644, st_size=52378, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/collections/__init__.py", {st_mode=S_IFREG|0644, st_size=52378, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/collections/__pycache__/__init__.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=72939, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=72939, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\232\314\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\5\0\0\0\0\0\0\0\363\22\3\0\0\227\0d\0Z\0g\0d\1\242\1Z\1d\2d\3l\2Z\2d\2d\3l\3Z\4d\2d\4l\5m\6Z\7\1\0d\2d\5l\5m\10Z\t\1\0d\2d\6l\5m\nZ\v\1\0d\2d\7l\fm\rZ\16\1\0d\2d\10l\17m\20Z\21\1\0d\2d\tl\17m\22Z\23\1\0d\2d\nl\24m\25Z\26\1\0d\2d\vl\27m\30Z\31\1\0\t\0d\2d\fl\32m\33Z\33\1\0e\2j8\0\0\0\0\0\0\0\0\0\0\0\0\0\0"..., 72940) = 72939
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/keyword.py", {st_mode=S_IFREG|0644, st_size=1073, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/keyword.py", {st_mode=S_IFREG|0644, st_size=1073, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/keyword.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=1043, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=1043, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j1\4\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\3\0\0\0\0\0\0\0\363h\0\0\0\227\0d\0Z\0g\0d\1\242\1Z\1g\0d\2\242\1Z\2g\0d\3\242\1Z\3\2\0e\4e\2\253\1\0\0\0\0\0\0j\n\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0Z\6\2\0e\4e\3\253\1\0\0\0\0\0\0j\n\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0Z\7y\4)\5a\204\1\0\0Keywords (from \"Grammar/python.gram\")\n\nThis fil"..., 1044) = 1043
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/operator.py", {st_mode=S_IFREG|0644, st_size=10965, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/operator.py", {st_mode=S_IFREG|0644, st_size=10965, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/operator.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=17354, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=17354, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\325*\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\4\0\0\0\0\0\0\0\363v\2\0\0\227\0d\0Z\0g\0d\1\242\1Z\1d\2d\3l\2m\3Z\4\1\0d\4\204\0Z\5d\5\204\0Z\6d\6\204\0Z\7d\7\204\0Z\10d\10\204\0Z\td\t\204\0Z\nd\n\204\0Z\vd\v\204\0Z\fd\f\204\0Z\rd\r\204\0Z\16d\16\204\0Z\3d\17\204\0Z\17d\20\204\0Z\20d\21\204\0Z\21d\22\204\0Z\22d\23\204\0Z\23e\23Z\24d\24\204\0Z\25d\25\204\0Z\26d\26\204\0Z\27d\27\204\0Z\30d\30\204\0Z\31d\31"..., 17355) = 17354
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/reprlib.py", {st_mode=S_IFREG|0644, st_size=7148, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/reprlib.py", {st_mode=S_IFREG|0644, st_size=7148, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/reprlib.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=10228, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=10228, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\354\33\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\4\0\0\0\0\0\0\0\363x\0\0\0\227\0d\0Z\0g\0d\1\242\1Z\1d\2d\3l\2Z\2d\2d\4l\3m\4Z\4\1\0d\2d\5l\5m\6Z\6\1\0d\nd\6\204\1Z\7\2\0G\0d\7\204\0d\10\253\2\0\0\0\0\0\0Z\10d\t\204\0Z\t\2\0e\10\253\0\0\0\0\0\0\0Z\ne\nj\26\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0Z\vy\3)\vzGRedo the builtin repr() (represent"..., 10229) = 10228
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/shutil.py", {st_mode=S_IFREG|0644, st_size=56198, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/shutil.py", {st_mode=S_IFREG|0644, st_size=56198, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/shutil.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=65317, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=65317, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\206\333\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\5\0\0\0\0\0\0\0\363V\7\0\0\227\0d\0Z\0d\1d\2l\1Z\1d\1d\2l\2Z\2d\1d\2l\3Z\3d\1d\2l\4Z\4d\1d\2l\5Z\5d\1d\2l\6Z\6d\1d\2l\7Z\7\t\0d\1d\2l\10Z\10[\10d\3Z\t\t\0d\1d\2l\vZ\v[\vd\3Z\f\t\0d\1d\2l\rZ\r[\rd\3Z\16e\1j\36\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0d\5k(\0\0Z\20d\2x\1Z\21Z\22e\1j\36\0\0\0\0\0\0"..., 65318) = 65317
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/fnmatch.py", {st_mode=S_IFREG|0644, st_size=5999, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/fnmatch.py", {st_mode=S_IFREG|0644, st_size=5999, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/fnmatch.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=6482, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=6482, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275jo\27\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\4\0\0\0\0\0\0\0\363|\0\0\0\227\0d\0Z\0d\1d\2l\1Z\1d\1d\2l\2Z\2d\1d\2l\3Z\3d\1d\2l\4Z\4g\0d\3\242\1Z\5d\4\204\0Z\6\2\0e\4j\16\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0d\5d\6\254\7\253\2\0\0\0\0\0\0d\10\204\0\253\0\0\0\0\0\0\0Z\10d\t\204\0Z\td\n\204\0Z\nd\v\204\0Z\vy\2)\fa\243\1\0\0Filename matching with shel"..., 6483) = 6482
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/re/__init__.cpython-312-x86_64-linux-gnu.so", 0x7ffe8601ebb0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/re/__init__.abi3.so", 0x7ffe8601ebb0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/re/__init__.so", 0x7ffe8601ebb0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/re/__init__.py", {st_mode=S_IFREG|0644, st_size=16315, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/re/__init__.py", {st_mode=S_IFREG|0644, st_size=16315, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/re/__pycache__/__init__.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=17932, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=17932, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\273?\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\10\0\0\0\0\0\0\0\363\226\2\0\0\227\0d\0Z\0d\1d\2l\1Z\1d\3d\4l\2m\3Z\3m\4Z\4\1\0d\1d\2l\5Z\5d\1d\2l\6Z\6g\0d\5\242\1Z\7d\6Z\10e\1j\22\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\2\0e\1j\24\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0e\1j\26\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0e\1j\30\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\254\7\253\2\0\0\0\0\0\0"..., 17933) = 17932
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/enum.py", {st_mode=S_IFREG|0644, st_size=81540, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/enum.py", {st_mode=S_IFREG|0644, st_size=81540, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/enum.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=80346, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=80346, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\204>\1\0\343\0\0\0\0\0\0\0\0\0\0\0\0\10\0\0\0\0\0\0\0\363\352\2\0\0\227\0d\0d\1l\0Z\0d\0d\1l\1Z\2d\0d\2l\3m\4Z\4m\5Z\5\1\0d\0d\3l\6m\7Z\10\1\0d\0d\4l\tm\nZ\n\1\0g\0d\5\242\1Z\vd\1x\1Z\fx\1Z\rx\1Z\16x\1Z\17Z\20\2\0G\0d\6\204\0d\7e\21\253\3\0\0\0\0\0\0Z\22\2\0G\0d\10\204\0d\te\21\253\3\0\0\0\0\0\0Z\23d\n\204\0Z\24d\v\204\0Z\25d\f\204\0Z\26d\r\204\0Z\27d\16\204\0"..., 80347) = 80346
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/re", {st_mode=S_IFDIR|0755, st_size=122, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/re", {st_mode=S_IFDIR|0755, st_size=122, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/re", {st_mode=S_IFDIR|0755, st_size=122, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/re", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+fstat(3, {st_mode=S_IFDIR|0755, st_size=122, ...}) = 0
+getdents64(3, 0x55c9933b49d0 /* 8 entries */, 32768) = 248
+getdents64(3, 0x55c9933b49d0 /* 0 entries */, 32768) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/re/_compiler.py", {st_mode=S_IFREG|0644, st_size=26399, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/re/_compiler.py", {st_mode=S_IFREG|0644, st_size=26399, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/re/__pycache__/_compiler.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=26496, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=26496, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\37g\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\10\0\0\0\0\0\0\0\363`\1\0\0\227\0d\0Z\0d\1d\2l\1Z\1d\3d\4l\2m\3Z\3\1\0d\3d\5l\4\255\2\1\0d\3d\6l\5m\6Z\6\1\0e\1j\16\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0e\7k(\0\0s\7J\0d\7\253\0\0\0\0\0\0\0\202\1e\10e\th\2Z\ne\ve\fh\2Z\re\16e\17h\2Z\20e\ne\21e\22h\2z\7\0\0Z\23e\24e\25e\26e\27f\3e\30e\25e\31e\32f\3e\33e\33e\ve\34"..., 26497) = 26496
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/re", {st_mode=S_IFDIR|0755, st_size=122, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/re/_parser.py", {st_mode=S_IFREG|0644, st_size=41201, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/re/_parser.py", {st_mode=S_IFREG|0644, st_size=41201, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/re/__pycache__/_parser.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=41949, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=41949, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\361\240\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\v\0\0\0\0\0\0\0\363B\2\0\0\227\0d\0Z\0d\1d\2l\1\255\2\1\0d\3Z\2d\4Z\3\2\0e\4d\5\253\1\0\0\0\0\0\0Z\5\2\0e\4d\6\253\1\0\0\0\0\0\0Z\6\2\0e\4d\7\253\1\0\0\0\0\0\0Z\7\2\0e\4d\10\253\1\0\0\0\0\0\0Z\10\2\0e\4d\t\253\1\0\0\0\0\0\0Z\t\2\0e\4e\ne\ve\fh\3\253\1\0\0\0\0\0\0Z\r\2\0e\4e\16e\17e\20e\21e\22e\23h\6\253\1\0\0\0\0\0\0Z\24e\21\2\0"..., 41950) = 41949
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/re", {st_mode=S_IFDIR|0755, st_size=122, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/re/_constants.py", {st_mode=S_IFREG|0644, st_size=5930, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/re/_constants.py", {st_mode=S_IFREG|0644, st_size=5930, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/re/__pycache__/_constants.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=5305, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=5305, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j*\27\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\24\0\0\0\0\0\0\0\363\214\1\0\0\227\0d\0Z\0d\1Z\1d\2d\3l\2m\3Z\3m\4Z\4\1\0\2\0G\0d\4\204\0d\5e\5\253\3\0\0\0\0\0\0Z\6\2\0G\0d\6\204\0d\7e\7\253\3\0\0\0\0\0\0Z\10\2\0e\10e\3d\10\253\2\0\0\0\0\0\0Z\3d\t\204\0Z\t\2\0e\td\n\216\0Z\ne\nd\vd\f\205\2=\0\2\0e\td\rd\16d\17d\20d\21d\22d\23d\24d\25d\26d\27d\30\253\f\0\0\0\0\0\0Z\v\2\0e\td\31"..., 5306) = 5305
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/re", {st_mode=S_IFDIR|0755, st_size=122, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/re/_casefix.py", {st_mode=S_IFREG|0644, st_size=5444, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/re/_casefix.py", {st_mode=S_IFREG|0644, st_size=5444, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/re/__pycache__/_casefix.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=1818, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=1818, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275jD\25\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\4\0\0\0\0\0\0\0\363<\1\0\0\227\0i\0d\0d\1\223\1d\2d\3\223\1d\4d\5\223\1d\6d\7\223\1d\10d\t\223\1d\nd\v\223\1d\fd\r\223\1d\16d\17\223\1d\20d\21\223\1d\22d\23\223\1d\24d\25\223\1d\26d\27\223\1d\30d\31\223\1d\32d\33\223\1d\34d\35\223\1d\36d\37\223\1d d!\223\1i\0d\"d#\223\1d$d%\223\1d&d'\223\1d(d)\223\1d*d+\223\1d,d-\223\1d.d/\223\1d0d1\223\1d2"..., 1819) = 1818
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/copyreg.py", {st_mode=S_IFREG|0644, st_size=7614, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/copyreg.py", {st_mode=S_IFREG|0644, st_size=7614, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/copyreg.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=7401, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=7401, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\276\35\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\6\0\0\0\0\0\0\0\363\312\0\0\0\227\0d\0Z\0g\0d\1\242\1Z\1i\0Z\2d\20d\3\204\1Z\3d\4\204\0Z\4d\5\204\0Z\5\2\0e\3e\6e\5e\6\253\3\0\0\0\0\0\0\1\0d\6\204\0Z\7\2\0e\3\2\0e\10e\te\nz\7\0\0\253\1\0\0\0\0\0\0e\7\253\2\0\0\0\0\0\0\1\0d\7\204\0Z\vd\10Z\f\2\0e\10e\tj\32\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\253\1\0\0\0\0\0\0Z\16d\t\204\0Z\17d\n\204\0Z\20"..., 7402) = 7401
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/zlib.cpython-312-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=51560, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/zlib.cpython-312-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0@\0\0\0\0\0\0\0\250\301\0\0\0\0\0\0\0\0\0\0@\08\0\v\0@\0\37\0\36\0\1\0\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\260\27\0\0\0\0\0\0\260\27\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\5\0\0\0\0 \0\0\0\0\0\0\0 \0\0\0\0\0\0\0 \0\0\0\0\0\0!D\0\0\0\0\0\0!D\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\4\0\0\0\0p\0\0\0\0\0\0\0p\0\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=51560, ...}) = 0
+close(3)                                = 0
+openat(AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=42111, ...}) = 0
+close(3)                                = 0
+openat(AT_FDCWD, "/lib64/libz.so.1", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0@\0\0\0\0\0\0\0\30\36\2\0\0\0\0\0\0\0\0\0@\08\0\v\0@\0 \0\37\0\1\0\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0H\37\0\0\0\0\0\0H\37\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\5\0\0\0\0 \0\0\0\0\0\0\0 \0\0\0\0\0\0\0 \0\0\0\0\0\0)_\1\0\0\0\0\0)_\1\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\4\0\0\0\0\200\1\0\0\0\0\0\0\200\1\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=140824, ...}) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/bz2.py", {st_mode=S_IFREG|0644, st_size=11847, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/bz2.py", {st_mode=S_IFREG|0644, st_size=11847, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/bz2.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=15135, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=15135, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275jG.\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\5\0\0\0\0\0\0\0\363\230\0\0\0\227\0d\0Z\0g\0d\1\242\1Z\1d\2Z\2d\3d\4l\3m\4Z\5\1\0d\3d\5l\6Z\6d\3d\5l\7Z\7d\3d\5l\10Z\10d\3d\6l\tm\nZ\nm\vZ\v\1\0d\3Z\fd\7Z\rd\10Z\16\2\0G\0d\t\204\0d\ne\10j\36\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\253\3\0\0\0\0\0\0Z\20\t\0\t\0d\16d\v\204\1Z\4d\17d\f\204\1Z\21d\r\204\0Z\22y\5)\20z\254In"..., 15136) = 15135
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/_compression.py", {st_mode=S_IFREG|0644, st_size=5681, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/_compression.py", {st_mode=S_IFREG|0644, st_size=5681, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/_compression.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=7480, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=7480, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j1\26\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\5\0\0\0\0\0\0\0\363\204\0\0\0\227\0d\0Z\0d\1d\2l\1Z\1d\1d\2l\2Z\2e\1j\6\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0Z\4\2\0G\0d\3\204\0d\4e\1j\n\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\253\3\0\0\0\0\0\0Z\6\2\0G\0d\5\204\0d\6e\1j\16\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\253\3\0\0\0\0\0\0Z\10y\2)\7z7Internal classes used "..., 7481) = 7480
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/_bz2.cpython-312-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=33232, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/_bz2.cpython-312-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0@\0\0\0\0\0\0\0\20z\0\0\0\0\0\0\0\0\0\0@\08\0\v\0@\0\37\0\36\0\1\0\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0H\23\0\0\0\0\0\0H\23\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\5\0\0\0\0 \0\0\0\0\0\0\0 \0\0\0\0\0\0\0 \0\0\0\0\0\0001\"\0\0\0\0\0\0001\"\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\4\0\0\0\0P\0\0\0\0\0\0\0P\0\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=33232, ...}) = 0
+close(3)                                = 0
+openat(AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=42111, ...}) = 0
+close(3)                                = 0
+openat(AT_FDCWD, "/lib64/libbz2.so.1", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0@\0\0\0\0\0\0\0\210-\1\0\0\0\0\0\0\0\0\0@\08\0\v\0@\0\36\0\35\0\1\0\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0`\23\0\0\0\0\0\0`\23\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\5\0\0\0\0 \0\0\0\0\0\0\0 \0\0\0\0\0\0\0 \0\0\0\0\0\0\261\325\0\0\0\0\0\0\261\325\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\4\0\0\0\0\0\1\0\0\0\0\0\0\0\1\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=79112, ...}) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lzma.py", {st_mode=S_IFREG|0644, st_size=13277, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lzma.py", {st_mode=S_IFREG|0644, st_size=13277, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/lzma.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=15857, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=15857, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\3353\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\t\0\0\0\0\0\0\0\363\270\0\0\0\227\0d\0Z\0g\0d\1\242\1Z\1d\2d\3l\2Z\2d\2d\3l\3Z\3d\2d\3l\4Z\4d\2d\4l\5\255\2\1\0d\2d\5l\5m\6Z\6m\7Z\7\1\0d\2d\3l\10Z\10d\2Z\td\6Z\nd\7Z\v\2\0G\0d\10\204\0d\te\10j\30\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\253\3\0\0\0\0\0\0Z\rd\17d\3d\nd\3d\3d\3d\3d\3d\v\234\7d\f\204\3Z\16e\17d\nd\3"..., 15858) = 15857
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/_lzma.cpython-312-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=46248, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/_lzma.cpython-312-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0@\0\0\0\0\0\0\0\350\254\0\0\0\0\0\0\0\0\0\0@\08\0\v\0@\0\37\0\36\0\1\0\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0@\33\0\0\0\0\0\0@\33\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\5\0\0\0\0 \0\0\0\0\0\0\0 \0\0\0\0\0\0\0 \0\0\0\0\0\0\311I\0\0\0\0\0\0\311I\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\4\0\0\0\0p\0\0\0\0\0\0\0p\0\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=46248, ...}) = 0
+close(3)                                = 0
+openat(AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=42111, ...}) = 0
+close(3)                                = 0
+openat(AT_FDCWD, "/lib64/liblzma.so.5", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0@\0\0\0\0\0\0\0\370A\3\0\0\0\0\0\0\0\0\0@\08\0\v\0@\0\37\0\36\0\1\0\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0h-\0\0\0\0\0\0h-\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\5\0\0\0\0000\0\0\0\0\0\0\0000\0\0\0\0\0\0\0000\0\0\0\0\0\0\351*\2\0\0\0\0\0\351*\2\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\4\0\0\0\0`\2\0\0\0\0\0\0`\2\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=215480, ...}) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/random.py", {st_mode=S_IFREG|0644, st_size=34689, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/random.py", {st_mode=S_IFREG|0644, st_size=34689, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/random.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=33147, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=33147, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\201\207\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\5\0\0\0\0\0\0\0\363^\4\0\0\227\0d\0Z\0d\1d\2l\1m\2Z\3\1\0d\1d\3l\4m\5Z\6m\7Z\10m\tZ\nm\vZ\fm\rZ\16\1\0d\1d\4l\4m\17Z\20m\21Z\22m\23Z\24m\25Z\26\1\0d\1d\5l\4m\27Z\30m\31Z\32m\33Z\34\1\0d\1d\6l\4m\35Z\36m\37Z m!Z\"\1\0d\1d\7l#m$Z%\1\0d\1d\10l&m'Z(\1\0d\1d\tl)m*Z+\1\0d\1d\nl,m-Z.m/"..., 33148) = 33147
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/math.cpython-312-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=72136, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/math.cpython-312-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0@\0\0\0\0\0\0\0\10\22\1\0\0\0\0\0\0\0\0\0@\08\0\v\0@\0\37\0\36\0\1\0\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\20\37\0\0\0\0\0\0\20\37\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\5\0\0\0\0 \0\0\0\0\0\0\0 \0\0\0\0\0\0\0 \0\0\0\0\0\0\35\213\0\0\0\0\0\0\35\213\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\4\0\0\0\0\260\0\0\0\0\0\0\0\260\0\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=72136, ...}) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/bisect.py", {st_mode=S_IFREG|0644, st_size=3423, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/bisect.py", {st_mode=S_IFREG|0644, st_size=3423, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/bisect.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=3643, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=3643, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j_\r\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\4\0\0\0\0\0\0\0\363j\0\0\0\227\0d\0Z\0d\td\2d\3\234\1d\4\204\3Z\1d\td\2d\3\234\1d\5\204\3Z\2d\td\2d\3\234\1d\6\204\3Z\3d\td\2d\3\234\1d\7\204\3Z\4\t\0d\1d\10l\5\255\2\1\0e\2Z\7e\1Z\10y\2#\0e\6$\0r\3\1\0Y\0\214\fw\0x\3Y\0w\1)\nz\25Bisection algorithms.\351\0\0\0\0N\251\1\332\3keyc\4\0\0\0\0\0\0\0\1\0\0\0\7"..., 3644) = 3643
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/_bisect.cpython-312-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=24696, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/_bisect.cpython-312-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0@\0\0\0\0\0\0\0\270X\0\0\0\0\0\0\0\0\0\0@\08\0\v\0@\0\37\0\36\0\1\0\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\08\r\0\0\0\0\0\08\r\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\5\0\0\0\0\20\0\0\0\0\0\0\0\20\0\0\0\0\0\0\0\20\0\0\0\0\0\0Y\34\0\0\0\0\0\0Y\34\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\4\0\0\0\0000\0\0\0\0\0\0\0000\0\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=24696, ...}) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/_random.cpython-312-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=24504, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/_random.cpython-312-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0@\0\0\0\0\0\0\0\370W\0\0\0\0\0\0\0\0\0\0@\08\0\v\0@\0\37\0\36\0\1\0\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0x\20\0\0\0\0\0\0x\20\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\5\0\0\0\0 \0\0\0\0\0\0\0 \0\0\0\0\0\0\0 \0\0\0\0\0\0a\27\0\0\0\0\0\0a\27\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\4\0\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=24504, ...}) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/.local/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/hashlib.py", {st_mode=S_IFREG|0644, st_size=9683, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/hashlib.py", {st_mode=S_IFREG|0644, st_size=9683, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/hashlib.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=8285, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=8285, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0\200\242\275j\323%\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\6\0\0\0\0\0\0\0\363\326\1\0\0\227\0d\0Z\0d\1Z\1\2\0e\2e\1\253\1\0\0\0\0\0\0Z\3\2\0e\2e\1\253\1\0\0\0\0\0\0Z\4e\1d\2z\0\0\0Z\5i\0Z\6d\3d\4l\7Z\7\2\0e\7j\20\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\253\0\0\0\0\0\0\0r\10\2\0e\2\253\0\0\0\0\0\0\0Z\tn\4d\5d\6h\2Z\td\7\204\0Z\nd\10\204\0Z\vd\21d\t\204\1Z\fd\21d\n\204\1Z\r\t\0d\3d\4l\7"..., 8286) = 8285
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/_hashlib.cpython-312-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=65936, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/_hashlib.cpython-312-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0@\0\0\0\0\0\0\0\320\371\0\0\0\0\0\0\0\0\0\0@\08\0\v\0@\0\37\0\36\0\1\0\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\250!\0\0\0\0\0\0\250!\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\5\0\0\0\0000\0\0\0\0\0\0\0000\0\0\0\0\0\0\0000\0\0\0\0\0\0\225[\0\0\0\0\0\0\225[\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\4\0\0\0\0\220\0\0\0\0\0\0\0\220\0\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=65936, ...}) = 0
+close(3)                                = 0
+openat(AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=42111, ...}) = 0
+close(3)                                = 0
+openat(AT_FDCWD, "/lib64/libcrypto.so.3", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0@\0\0\0\0\0\0\0\20\24V\0\0\0\0\0\0\0\0\0@\08\0\v\0@\0 \0\37\0\1\0\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\3200\5\0\0\0\0\0\3200\5\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\5\0\0\0\0@\5\0\0\0\0\0\0@\5\0\0\0\0\0\0@\5\0\0\0\0\0mr5\0\0\0\0\0mr5\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\4\0\0\0\0\300:\0\0\0\0\0\0\300:\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=5643280, ...}) = 0
+close(3)                                = 0
+openat(AT_FDCWD, "/proc/sys/crypto/fips_enabled", O_RDONLY) = 3
+read(3, "0\n", 2)                       = 2
+close(3)                                = 0
+openat(AT_FDCWD, "/etc/pki/tls/openssl.cnf", O_RDONLY) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=12412, ...}) = 0
+read(3, "#\n# OpenSSL example configuration file.\n# See doc/man5/config.pod for more info.\n#\n# This is mostly being used for generation of certificate requests,\n# but may be used for auto loading of providers\n\n"..., 4096) = 4096
+newfstatat(AT_FDCWD, "/etc/pki/tls/openssl.d", {st_mode=S_IFDIR|0755, st_size=34, ...}, 0) = 0
+openat(AT_FDCWD, "/etc/pki/tls/openssl.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 4
+fstat(4, {st_mode=S_IFDIR|0755, st_size=34, ...}) = 0
+getdents64(4, 0x55c993418b80 /* 3 entries */, 32768) = 88
+openat(AT_FDCWD, "/etc/pki/tls/openssl.d/pkcs11-provider.conf", O_RDONLY) = 5
+fstat(5, {st_mode=S_IFREG|0644, st_size=345, ...}) = 0
+read(5, "[provider_sect]\npkcs11 = pkcs11_sect\n\n[pkcs11_sect]\nactivate = 1\n## Some applications may require early loading to work properly\n## however this setting should not be enabled by default because\n## it "..., 4096) = 345
+read(5, "", 4096)                       = 0
+getdents64(4, 0x55c993418b80 /* 0 entries */, 32768) = 0
+close(4)                                = 0
+close(5)                                = 0
+newfstatat(AT_FDCWD, "/etc/crypto-policies/back-ends/opensslcnf.config", {st_mode=S_IFREG|0644, st_size=897, ...}, 0) = 0
+openat(AT_FDCWD, "/etc/crypto-policies/back-ends/opensslcnf.config", O_RDONLY) = 4
+fstat(4, {st_mode=S_IFREG|0644, st_size=897, ...}) = 0
+read(4, "CipherString = @SECLEVEL=2:kEECDH:kEDH:kPSK:kDHEPSK:kECDHEPSK:kRSAPSK:-kRSA:-aDSS:-3DES:!DES:!RC4:!RC2:!IDEA:-SEED:!eNULL:!aNULL:!MD5:-SHA384:-CAMELLIA:-ARIA:-AESCCM8\nCiphersuites = TLS_AES_256_GCM_SH"..., 4096) = 897
+read(4, "", 4096)                       = 0
+close(4)                                = 0
+read(3, "d look\n# For type CA, the listed attributes must be the same, and the optional\n# and supplied fields are just that :-)\npolicy\t\t= policy_match\n\n# For the CA policy\n[ policy_match ]\ncountryName\t\t= match"..., 4096) = 4096
+read(3, "ltName=email:copy\n# Copy issuer details\n# issuerAltName=issuer:copy\n\n# DER hex encoding of an extension: beware experts only!\n# obj=DER:02:03\n# Where 'obj' is a standard or added object\n# You can even"..., 4096) = 4096
+read(3, "dcert = $insta::certout # insta.cert.pem\n\n[rr]\n# Certificate revocation\ncmd = rr\noldcert = $insta::certout # insta.cert.pem\n", 4096) = 124
+read(3, "", 4096)                       = 0
+close(3)                                = 0
+openat(AT_FDCWD, "/usr/lib64/ossl-modules/pkcs11.so", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0@\0\0\0\0\0\0\0\200>\5\0\0\0\0\0\0\0\0\0@\08\0\v\0@\0\37\0\36\0\1\0\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\10=\0\0\0\0\0\0\10=\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\5\0\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\335%\3\0\0\0\0\0\335%\3\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\4\0\0\0\0p\3\0\0\0\0\0\0p\3\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=345664, ...}) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/_blake2.cpython-312-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=82848, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/_blake2.cpython-312-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0@\0\0\0\0\0\0\0\340;\1\0\0\0\0\0\0\0\0\0@\08\0\v\0@\0\37\0\36\0\1\0\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0000\22\0\0\0\0\0\0000\22\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\5\0\0\0\0 \0\0\0\0\0\0\0 \0\0\0\0\0\0\0 \0\0\0\0\0\0\255\351\0\0\0\0\0\0\255\351\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\4\0\0\0\0\20\1\0\0\0\0\0\0\20\1\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=82848, ...}) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/weakref.py", {st_mode=S_IFREG|0644, st_size=21513, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/weakref.py", {st_mode=S_IFREG|0644, st_size=21513, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/weakref.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=31213, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=31213, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\tT\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\5\0\0\0\0\0\0\0\3632\1\0\0\227\0d\0Z\0d\1d\2l\1m\2Z\2m\3Z\3m\4Z\4m\5Z\5m\6Z\6m\7Z\7m\10Z\10m\tZ\t\1\0d\1d\3l\nm\vZ\vm\fZ\f\1\0d\1d\4l\rZ\rd\1d\4l\16Z\16d\1d\4l\17Z\17e\7e\6f\2Z\20g\0d\5\242\1Z\21e\rj$\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0j'\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0e\v\253\1\0\0\0\0\0\0\1\0\2\0"..., 31214) = 31213
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/_weakrefset.py", {st_mode=S_IFREG|0644, st_size=5893, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/_weakrefset.py", {st_mode=S_IFREG|0644, st_size=5893, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/_weakrefset.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=11739, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=11739, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\5\27\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\4\0\0\0\0\0\0\0\363J\0\0\0\227\0d\0d\1l\0m\1Z\1\1\0d\0d\2l\2m\3Z\3\1\0d\3g\1Z\4\2\0G\0d\4\204\0d\5\253\2\0\0\0\0\0\0Z\5\2\0G\0d\6\204\0d\3\253\2\0\0\0\0\0\0Z\6y\7)\10\351\0\0\0\0\251\1\332\3ref)\1\332\fGenericAlias\332\7WeakSetc\0\0\0\0\0\0\0\0\0\0\0\0\1\0\0\0\0\0\0\0\363\36\0\0\0\227\0e\0Z\1d\0Z\2d\1\204\0Z\3d\2\204"..., 11740) = 11739
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/pathlib.py", {st_mode=S_IFREG|0644, st_size=51052, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/pathlib.py", {st_mode=S_IFREG|0644, st_size=51052, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/pathlib.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=61700, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=61700, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275jl\307\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\10\0\0\0\0\0\0\0\363\30\4\0\0\227\0d\0Z\0d\1d\2l\1Z\1d\1d\2l\2Z\2d\1d\2l\3Z\3d\1d\2l\4Z\4d\1d\2l\5Z\5d\1d\2l\6Z\6d\1d\2l\7Z\7d\1d\2l\10Z\10d\1d\2l\tZ\td\1d\3l\nm\vZ\v\1\0d\1d\4l\fm\rZ\rm\16Z\16m\17Z\17m\20Z\20\1\0d\1d\5l\21m\22Z\22m\23Z\23m\24Z\24m\25Z\25m\26Z\26m\27Z\27m\30Z\30\1\0d\1d\6l\31m\32"..., 61701) = 61700
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/.local/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/.local/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/.local/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/.local/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/.local/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/.local/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/.local/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/urllib/__init__.cpython-312-x86_64-linux-gnu.so", 0x7ffe8601f640, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/urllib/__init__.abi3.so", 0x7ffe8601f640, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/urllib/__init__.so", 0x7ffe8601f640, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/urllib/__init__.py", {st_mode=S_IFREG|0644, st_size=0, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/urllib/__init__.py", {st_mode=S_IFREG|0644, st_size=0, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/urllib/__pycache__/__init__.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=137, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=137, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0\200\242\275j\0\0\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\363\4\0\0\0\227\0y\0)\1N\251\0r\2\0\0\0\363\0\0\0\0\372(/usr/lib64/python3.12/urllib/__init__.py\332\10<module>r\5\0\0\0\1\0\0\0s\5\0\0\0\361\3\1\1\1r\3\0\0\0", 138) = 137
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/urllib", {st_mode=S_IFDIR|0755, st_size=135, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/urllib", {st_mode=S_IFDIR|0755, st_size=135, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/urllib", {st_mode=S_IFDIR|0755, st_size=135, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/urllib", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+fstat(3, {st_mode=S_IFDIR|0755, st_size=135, ...}) = 0
+getdents64(3, 0x55c99343ac40 /* 9 entries */, 32768) = 280
+getdents64(3, 0x55c99343ac40 /* 0 entries */, 32768) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/urllib/parse.py", {st_mode=S_IFREG|0644, st_size=45676, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/urllib/parse.py", {st_mode=S_IFREG|0644, st_size=45676, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/urllib/__pycache__/parse.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=50615, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=50615, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275jl\262\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\6\0\0\0\0\0\0\0\363\330\6\0\0\227\0d\0Z\0d\1d\2l\1m\2Z\2\1\0d\1d\3l\3Z\3d\1d\3l\4Z\4d\1d\3l\5Z\5d\1d\3l\6Z\6d\1d\3l\7Z\7d\1d\3l\10Z\10g\0d\4\242\1Z\tg\0d\5\242\1Z\ng\0d\6\242\1Z\vg\0d\7\242\1Z\fg\0d\10\242\1Z\rg\0d\t\242\1Z\16g\0d\n\242\1Z\17d\vZ\20d\fZ\21g\0d\r\242\1Z\22d\16\204\0Z\23d\17Z\24d\20Z\25d\21\204\0Z\26"..., 50616) = 50615
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/ipaddress.py", {st_mode=S_IFREG|0644, st_size=81414, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/ipaddress.py", {st_mode=S_IFREG|0644, st_size=81414, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/ipaddress.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=93778, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=93778, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\6>\1\0\343\0\0\0\0\0\0\0\0\0\0\0\0\6\0\0\0\0\0\0\0\363H\2\0\0\227\0d\0Z\0d\1Z\1d\2d\3l\2Z\2d\4Z\3d\5Z\4\2\0G\0d\6\204\0d\7e\5\253\3\0\0\0\0\0\0Z\6\2\0G\0d\10\204\0d\te\5\253\3\0\0\0\0\0\0Z\7d\n\204\0Z\10d2d\v\204\1Z\td\f\204\0Z\nd\r\204\0Z\vd\16\204\0Z\fd\17\204\0Z\rd\20\204\0Z\16d\21\204\0Z\17d\22\204\0Z\20d\23\204\0Z\21d\24\204\0Z\22d\25\204\0Z\23\2\0G\0d\26\204\0d\27\253\2\0\0"..., 93779) = 93778
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3/source-normal/tests/posix/posix_suite.py", {st_mode=S_IFREG|0755, st_size=177615, ...}, 0) = 0
+openat(AT_FDCWD, "/home/efs/nuc-03bd-group3/source-normal/tests/posix/__pycache__/posix_suite.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/home/efs/nuc-03bd-group3/source-normal/tests/posix/posix_suite.py", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0755, st_size=177615, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0755, st_size=177615, ...}) = 0
+read(3, "#!/usr/bin/env python3\n\"\"\"Comprehensive POSIX correctness suite for an efs FUSE mount.\n\nReusable + extensible: each test is a function decorated with @test that\nreceives a fresh empty directory inside"..., 177616) = 177615
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3/source-normal/tests/posix/posix_suite.py", {st_mode=S_IFREG|0755, st_size=177615, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3/source-normal/tests/posix/__pycache__", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3/source-normal/tests/posix", {st_mode=S_IFDIR|0755, st_size=117, ...}, 0) = 0
+mkdir("/home/efs/nuc-03bd-group3/source-normal/tests/posix/__pycache__", 0777) = 0
+openat(AT_FDCWD, "/home/efs/nuc-03bd-group3/source-normal/tests/posix/__pycache__/posix_suite.cpython-312.pyc.140500713314256", O_WRONLY|O_CREAT|O_EXCL|O_CLOEXEC, 0644) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=0, ...}) = 0
+write(3, "\313\r\r\n\0\0\0\0\367\332\314j\317\265\2\0\343\0\0\0\0\0\0\0\0\0\0\0\0\7\0\0\0\0\0\0\0\363\270\22\0\0\227\0d\0Z\0d\1d\2l\1Z\1d\1d\2l\2Z\2d\1d\2l\3Z\3d\1d\2l\4Z\4d\1d\2l\5Z\5d\1d\2l\6Z\6d\1d\2l\7Z\7d\1d\2l\10Z\10d\1d\2l\tZ\nd\1d\2l\vZ\vd\1d\2l\fZ\fd\1d\2l\rZ\rd\1d\2l\16Z\16d\1d\2l\17Z\17g\0Z\20g\0Z\21d\3\204\0Z\22d\4\204\0Z\23\220\1d,d\5\204\1Z\24d\6\204\0Z\25d\7\204\0"..., 357892) = 357892
+close(3)                                = 0
+rename("/home/efs/nuc-03bd-group3/source-normal/tests/posix/__pycache__/posix_suite.cpython-312.pyc.140500713314256", "/home/efs/nuc-03bd-group3/source-normal/tests/posix/__pycache__/posix_suite.cpython-312.pyc") = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/fcntl.cpython-312-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=24240, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/fcntl.cpython-312-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0@\0\0\0\0\0\0\0\360V\0\0\0\0\0\0\0\0\0\0@\08\0\v\0@\0\37\0\36\0\1\0\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\200\r\0\0\0\0\0\0\200\r\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\5\0\0\0\0\20\0\0\0\0\0\0\0\20\0\0\0\0\0\0\0\20\0\0\0\0\0\0\251\23\0\0\0\0\0\0\251\23\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\4\0\0\0\0000\0\0\0\0\0\0\0000\0\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=24240, ...}) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/mmap.cpython-312-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=33680, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/mmap.cpython-312-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0@\0\0\0\0\0\0\0\320{\0\0\0\0\0\0\0\0\0\0@\08\0\v\0@\0\37\0\36\0\1\0\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\20\26\0\0\0\0\0\0\20\26\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\5\0\0\0\0 \0\0\0\0\0\0\0 \0\0\0\0\0\0\0 \0\0\0\0\0\0\325#\0\0\0\0\0\0\325#\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\4\0\0\0\0P\0\0\0\0\0\0\0P\0\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=33680, ...}) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/signal.py", {st_mode=S_IFREG|0644, st_size=2495, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/signal.py", {st_mode=S_IFREG|0644, st_size=2495, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/signal.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=4459, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=4459, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\277\t\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\5\0\0\0\0\0\0\0\363\f\2\0\0\227\0d\0d\1l\0Z\0d\0d\2l\0\255\2\1\0d\0d\3l\1m\2Z\3\1\0\2\0e\4\253\0\0\0\0\0\0\0Z\5\2\0e\3j\f\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0d\4e\7d\5\204\0\253\3\0\0\0\0\0\0\1\0\2\0e\3j\f\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0d\6e\7d\7\204\0\253\3\0\0\0\0\0\0\1\0d\10e\5v\0r\25\2\0e\3j\f\0\0\0\0\0\0\0\0\0\0\0\0\0\0"..., 4460) = 4459
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/socket.py", {st_mode=S_IFREG|0644, st_size=37815, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/socket.py", {st_mode=S_IFREG|0644, st_size=37815, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/socket.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=41947, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=41947, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\267\223\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\5\0\0\0\0\0\0\0\363\0\10\0\0\227\0d\0Z\0d\1d\2l\1Z\1d\1d\3l\1\255\2\1\0d\1d\2l\2Z\2d\1d\2l\3Z\3d\1d\2l\4Z\4d\1d\2l\5Z\5d\1d\4l\6m\7Z\7m\10Z\10\1\0\t\0d\1d\2l\tZ\t\2\0e\ve\td\5d\6\253\3\0\0\0\0\0\0Z\f\2\0e\ve\td\7d\10\253\3\0\0\0\0\0\0Z\r\2\0e\ve\td\td\10\253\3\0\0\0\0\0\0Z\16g\0d\n\242\1Z\17e\17j!\0\0\0\0"..., 41948) = 41947
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/_socket.cpython-312-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=101488, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/_socket.cpython-312-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0@\0\0\0\0\0\0\0\260\204\1\0\0\0\0\0\0\0\0\0@\08\0\v\0@\0\37\0\36\0\1\0\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\260*\0\0\0\0\0\0\260*\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\5\0\0\0\0000\0\0\0\0\0\0\0000\0\0\0\0\0\0\0000\0\0\0\0\0\0\205\247\0\0\0\0\0\0\205\247\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\4\0\0\0\0\340\0\0\0\0\0\0\0\340\0\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=101488, ...}) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/selectors.py", {st_mode=S_IFREG|0644, st_size=19671, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/selectors.py", {st_mode=S_IFREG|0644, st_size=19671, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/selectors.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=26105, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=26105, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\327L\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\5\0\0\0\0\0\0\0\363t\2\0\0\227\0d\0Z\0d\1d\2l\1m\2Z\2m\3Z\3\1\0d\1d\3l\4m\5Z\5\1\0d\1d\4l\6m\7Z\7\1\0d\1d\5l\10Z\10d\1d\5l\tZ\td\1d\5l\nZ\nd\6Z\vd\7Z\fd\10\204\0Z\r\2\0e\5d\tg\0d\n\242\1\253\2\0\0\0\0\0\0Z\16d\ve\16_\0\0\0\0\0\0\0\0\0d\fe\16j\36\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0_\0\0\0\0\0\0\0\0\0d\re\16"..., 26106) = 26105
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/collections", {st_mode=S_IFDIR|0755, st_size=58, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/collections", {st_mode=S_IFDIR|0755, st_size=58, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/collections", {st_mode=S_IFDIR|0755, st_size=58, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/collections", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+fstat(3, {st_mode=S_IFDIR|0755, st_size=58, ...}) = 0
+getdents64(3, 0x55c9934b8270 /* 5 entries */, 32768) = 144
+getdents64(3, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/collections/abc.py", {st_mode=S_IFREG|0644, st_size=119, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/collections/abc.py", {st_mode=S_IFREG|0644, st_size=119, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/collections/__pycache__/abc.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=251, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=251, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275jw\0\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\2\0\0\0\0\0\0\0\363&\0\0\0\227\0d\0d\1l\0\255\2\1\0d\0d\2l\0m\1Z\1\1\0d\0d\3l\0m\2Z\2\1\0y\4)\5\351\0\0\0\0)\1\332\1*)\1\332\7__all__)\1\332\25_CallableGenericAliasN)\3\332\20_collections_abcr\4\0\0\0r\5\0\0\0\251\0\363\0\0\0\0\372(/usr/lib64/python3.12/collection"..., 252) = 251
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/select.cpython-312-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=38144, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/select.cpython-312-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0@\0\0\0\0\0\0\0@\215\0\0\0\0\0\0\0\0\0\0@\08\0\v\0@\0\37\0\36\0\1\0\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\200\30\0\0\0\0\0\0\200\30\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\5\0\0\0\0 \0\0\0\0\0\0\0 \0\0\0\0\0\0\0 \0\0\0\0\0\0M)\0\0\0\0\0\0M)\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\4\0\0\0\0P\0\0\0\0\0\0\0P\0\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=38144, ...}) = 0
+close(3)                                = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/array.cpython-312-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=68352, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/array.cpython-312-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0@\0\0\0\0\0\0\0@\3\1\0\0\0\0\0\0\0\0\0@\08\0\v\0@\0\37\0\36\0\1\0\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\300!\0\0\0\0\0\0\300!\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\5\0\0\0\0000\0\0\0\0\0\0\0000\0\0\0\0\0\0\0000\0\0\0\0\0\0\235i\0\0\0\0\0\0\235i\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\4\0\0\0\0\240\0\0\0\0\0\0\0\240\0\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=68352, ...}) = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/subprocess.py", {st_mode=S_IFREG|0644, st_size=88747, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/subprocess.py", {st_mode=S_IFREG|0644, st_size=88747, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/subprocess.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=79056, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=79056, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\253Z\1\0\343\0\0\0\0\0\0\0\0\0\0\0\0\5\0\0\0\0\0\0\0\363\264\3\0\0\227\0d\0Z\0d\1d\2l\1Z\1d\1d\2l\2Z\2d\1d\2l\3Z\3d\1d\2l\4Z\4d\1d\2l\5Z\5d\1d\2l\6Z\6d\1d\2l\7Z\7d\1d\2l\10Z\10d\1d\2l\tZ\td\1d\2l\nZ\nd\1d\2l\vZ\vd\1d\3l\6m\fZ\r\1\0d\1d\2l\16Z\16\t\0d\1d\2l\17Z\17g\0d\4\242\1Z\21\t\0d\1d\2l\22Z\22d\5Z\23e\10j*\0\0\0\0\0\0\0\0"..., 79057) = 79056
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/locale.py", {st_mode=S_IFREG|0644, st_size=78599, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/locale.py", {st_mode=S_IFREG|0644, st_size=78599, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/locale.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=59490, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=59490, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\0073\1\0\343\0\0\0\0\0\0\0\0\0\0\0\0\f\0\0\0\0\0\0\0\363\250\"\0\0\227\0d\0Z\0d\1d\2l\1Z\1d\1d\2l\2Z\2d\1d\2l\3Z\2d\1d\2l\4Z\4d\1d\2l\5Z\5d\1d\3l\6m\7Z\10\1\0d\1d\2l\tZ\tg\0d\4\242\1Z\nd\5\204\0Z\vd\6\204\0Z\f\t\0d\1d\7l\r\255\2\1\0d\21\2\0e\33\253\0\0\0\0\0\0\0v\1r\2e\fZ\34d\22\2\0e\33\253\0\0\0\0\0\0\0v\1r\2e\vZ\35e\31Z\36i\0Z\37\2\0e\tj@\0\0"..., 59491) = 59490
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/threading.py", {st_mode=S_IFREG|0644, st_size=59742, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/threading.py", {st_mode=S_IFREG|0644, st_size=59742, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/threading.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=65127, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=65127, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0\200\242\275j^\351\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\5\0\0\0\0\0\0\0\363\302\4\0\0\227\0d\0Z\0d\1d\2l\1Z\2d\1d\2l\3Z\4d\1d\2l\5Z\5d\1d\2l\6Z\6d\1d\3l\7m\10Z\t\1\0d\1d\4l\nm\vZ\v\1\0d\1d\5l\fm\rZ\16\1\0\t\0d\1d\6l\17m\20Z\21\1\0g\0d\7\242\1Z\24e\5j*\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0Z\26e\5j.\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0Z\30e\5j2\0\0\0\0\0\0\0\0\0\0"..., 65128) = 65127
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/contextlib.py", {st_mode=S_IFREG|0644, st_size=27637, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/contextlib.py", {st_mode=S_IFREG|0644, st_size=27637, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/__pycache__/contextlib.cpython-312.pyc", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=30352, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=30352, ...}) = 0
+read(3, "\313\r\r\n\0\0\0\0c\207\275j\365k\0\0\343\0\0\0\0\0\0\0\0\0\0\0\0\7\0\0\0\0\0\0\0\363\"\2\0\0\227\0d\0Z\0d\1d\2l\1Z\1d\1d\2l\2Z\2d\1d\2l\3Z\3d\1d\2l\4Z\4d\1d\3l\5m\6Z\6\1\0d\1d\4l\7m\10Z\10\1\0d\1d\5l\tm\nZ\nm\vZ\v\1\0g\0d\6\242\1Z\f\2\0G\0d\7\204\0d\10e\1j\32\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\253\3\0\0\0\0\0\0Z\16\2\0G\0d\t\204\0d\ne\1j\32\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"..., 30353) = 30352
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/.local/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.12/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/efs/nuc-03bd-group3", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12", {st_mode=S_IFDIR|0755, st_size=8192, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/_posixsubprocess.cpython-312-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=28280, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib64/python3.12/lib-dynload/_posixsubprocess.cpython-312-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0@\0\0\0\0\0\0\0\270f\0\0\0\0\0\0\0\0\0\0@\08\0\v\0@\0\37\0\36\0\1\0\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\310\27\0\0\0\0\0\0\310\27\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\5\0\0\0\0 \0\0\0\0\0\0\0 \0\0\0\0\0\0\0 \0\0\0\0\0\0y(\0\0\0\0\0\0y(\0\0\0\0\0\0\0\20\0\0\0\0\0\0\1\0\0\0\4\0\0\0\0P\0\0\0\0\0\0\0P\0\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=28280, ...}) = 0
+close(3)                                = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab", 0700) = 0
+write(2, "DEEP_REFERENCE_BEGIN\n", 21)  = 21
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49/d50/d51/d52/d53/d54/d55/d56/d57/d58", 0x7ffe86020660, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49/d50/d51/d52/d53/d54/d55/d56/d57", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49/d50/d51/d52/d53/d54/d55/d56", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49/d50/d51/d52/d53/d54/d55", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49/d50/d51/d52/d53/d54", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49/d50/d51/d52/d53", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49/d50/d51/d52", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49/d50/d51", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49/d50", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab", {st_mode=S_IFDIR|0700, st_size=6, ...}, 0) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49/d50", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49/d50/d51", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49/d50/d51/d52", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49/d50/d51/d52/d53", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49/d50/d51/d52/d53/d54", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49/d50/d51/d52/d53/d54/d55", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49/d50/d51/d52/d53/d54/d55/d56", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49/d50/d51/d52/d53/d54/d55/d56/d57", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49/d50/d51/d52/d53/d54/d55/d56/d57/d58", 0777) = 0
+mkdir("/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49/d50/d51/d52/d53/d54/d55/d56/d57/d58/d59", 0777) = 0
+openat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49/d50/d51/d52/d53/d54/d55/d56/d57/d58/d59/leaf", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=0, ...}) = 0
+write(3, "deep", 4)                     = 4
+close(3)                                = 0
+openat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49/d50/d51/d52/d53/d54/d55/d56/d57/d58/d59/leaf", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=4, ...}) = 0
+fstat(3, {st_mode=S_IFREG|0644, st_size=4, ...}) = 0
+read(3, "deep", 5)                      = 4
+read(3, "", 1)                          = 0
+close(3)                                = 0
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(4, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(4, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(4, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(4)                                = 0
+newfstatat(3, "d01", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(3, "d01", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 4
+fstat(4, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(5, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(5, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(5, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(5)                                = 0
+newfstatat(4, "d02", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(4, "d02", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 5
+fstat(5, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(6, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(6, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(6, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(6)                                = 0
+newfstatat(5, "d03", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(5, "d03", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 6
+fstat(6, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(7, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(7, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(7, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(7)                                = 0
+newfstatat(6, "d04", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(6, "d04", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 7
+fstat(7, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(8, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(8, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(8, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(8)                                = 0
+newfstatat(7, "d05", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(7, "d05", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 8
+fstat(8, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(9, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(9, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(9, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(9)                                = 0
+newfstatat(8, "d06", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(8, "d06", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 9
+fstat(9, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(10, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(10, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(10, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(10)                               = 0
+newfstatat(9, "d07", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(9, "d07", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 10
+fstat(10, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(11, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(11, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(11, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(11)                               = 0
+newfstatat(10, "d08", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(10, "d08", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 11
+fstat(11, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(12, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(12, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(12, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(12)                               = 0
+newfstatat(11, "d09", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(11, "d09", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 12
+fstat(12, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(13, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(13, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(13, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(13)                               = 0
+newfstatat(12, "d10", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(12, "d10", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 13
+fstat(13, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(14, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(14, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(14, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(14)                               = 0
+newfstatat(13, "d11", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(13, "d11", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 14
+fstat(14, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(15, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(15, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(15, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(15)                               = 0
+newfstatat(14, "d12", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(14, "d12", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 15
+fstat(15, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(16, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(16, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(16, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(16)                               = 0
+newfstatat(15, "d13", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(15, "d13", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 16
+fstat(16, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(17, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(17, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(17, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(17)                               = 0
+newfstatat(16, "d14", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(16, "d14", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 17
+fstat(17, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(18, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(18, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(18, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(18)                               = 0
+newfstatat(17, "d15", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(17, "d15", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 18
+fstat(18, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(19, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(19, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(19, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(19)                               = 0
+newfstatat(18, "d16", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(18, "d16", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 19
+fstat(19, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(20, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(20, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(20, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(20)                               = 0
+newfstatat(19, "d17", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(19, "d17", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 20
+fstat(20, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(21, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(21, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(21, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(21)                               = 0
+newfstatat(20, "d18", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(20, "d18", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 21
+fstat(21, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(22, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(22, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(22, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(22)                               = 0
+newfstatat(21, "d19", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(21, "d19", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 22
+fstat(22, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(23, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(23, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(23, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(23)                               = 0
+newfstatat(22, "d20", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(22, "d20", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 23
+fstat(23, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(24, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(24, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(24, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(24)                               = 0
+newfstatat(23, "d21", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(23, "d21", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 24
+fstat(24, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(25, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(25, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(25, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(25)                               = 0
+newfstatat(24, "d22", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(24, "d22", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 25
+fstat(25, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(26, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(26, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(26, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(26)                               = 0
+newfstatat(25, "d23", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(25, "d23", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 26
+fstat(26, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(27, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(27, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(27, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(27)                               = 0
+newfstatat(26, "d24", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(26, "d24", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 27
+fstat(27, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(28, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(28, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(28, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(28)                               = 0
+newfstatat(27, "d25", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(27, "d25", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 28
+fstat(28, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(29, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(29, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(29, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(29)                               = 0
+newfstatat(28, "d26", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(28, "d26", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 29
+fstat(29, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(30, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(30, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(30, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(30)                               = 0
+newfstatat(29, "d27", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(29, "d27", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 30
+fstat(30, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(31, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(31, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(31, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(31)                               = 0
+newfstatat(30, "d28", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(30, "d28", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 31
+fstat(31, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(32, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(32, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(32, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(32)                               = 0
+newfstatat(31, "d29", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(31, "d29", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 32
+fstat(32, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(33, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(33, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(33, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(33)                               = 0
+newfstatat(32, "d30", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(32, "d30", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 33
+fstat(33, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(34, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(34, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(34, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(34)                               = 0
+newfstatat(33, "d31", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(33, "d31", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 34
+fstat(34, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(35, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(35, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(35, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(35)                               = 0
+newfstatat(34, "d32", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(34, "d32", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 35
+fstat(35, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(36, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(36, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(36, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(36)                               = 0
+newfstatat(35, "d33", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(35, "d33", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 36
+fstat(36, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(37, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(37, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(37, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(37)                               = 0
+newfstatat(36, "d34", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(36, "d34", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 37
+fstat(37, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(38, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(38, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(38, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(38)                               = 0
+newfstatat(37, "d35", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(37, "d35", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 38
+fstat(38, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(39, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(39, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(39, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(39)                               = 0
+newfstatat(38, "d36", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(38, "d36", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 39
+fstat(39, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(40, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(40, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(40, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(40)                               = 0
+newfstatat(39, "d37", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(39, "d37", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 40
+fstat(40, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(41, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(41, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(41, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(41)                               = 0
+newfstatat(40, "d38", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(40, "d38", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 41
+fstat(41, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(42, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(42, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(42, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(42)                               = 0
+newfstatat(41, "d39", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(41, "d39", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 42
+fstat(42, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(43, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(43, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(43, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(43)                               = 0
+newfstatat(42, "d40", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(42, "d40", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 43
+fstat(43, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(44, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(44, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(44, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(44)                               = 0
+newfstatat(43, "d41", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(43, "d41", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 44
+fstat(44, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(45, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(45, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(45, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(45)                               = 0
+newfstatat(44, "d42", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(44, "d42", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 45
+fstat(45, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(46, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(46, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(46, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(46)                               = 0
+newfstatat(45, "d43", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(45, "d43", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 46
+fstat(46, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(47, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(47, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(47, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(47)                               = 0
+newfstatat(46, "d44", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(46, "d44", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 47
+fstat(47, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(48, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(48, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(48, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(48)                               = 0
+newfstatat(47, "d45", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(47, "d45", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 48
+fstat(48, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(49, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(49, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(49, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(49)                               = 0
+newfstatat(48, "d46", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(48, "d46", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 49
+fstat(49, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(50, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(50, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(50, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(50)                               = 0
+newfstatat(49, "d47", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(49, "d47", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 50
+fstat(50, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(51, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(51, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(51, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(51)                               = 0
+newfstatat(50, "d48", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(50, "d48", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 51
+fstat(51, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(52, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(52, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(52, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(52)                               = 0
+newfstatat(51, "d49", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(51, "d49", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 52
+fstat(52, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(53, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(53, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(53, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(53)                               = 0
+newfstatat(52, "d50", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(52, "d50", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 53
+fstat(53, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(54, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(54, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(54, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(54)                               = 0
+newfstatat(53, "d51", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(53, "d51", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 54
+fstat(54, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(55, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(55, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(55, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(55)                               = 0
+newfstatat(54, "d52", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(54, "d52", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 55
+fstat(55, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(56, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(56, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(56, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(56)                               = 0
+newfstatat(55, "d53", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(55, "d53", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 56
+fstat(56, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(57, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(57, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(57, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(57)                               = 0
+newfstatat(56, "d54", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(56, "d54", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 57
+fstat(57, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(58, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(58, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(58, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(58)                               = 0
+newfstatat(57, "d55", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(57, "d55", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 58
+fstat(58, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(59, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(59, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(59, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(59)                               = 0
+newfstatat(58, "d56", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(58, "d56", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 59
+fstat(59, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(60, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(60, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(60, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(60)                               = 0
+newfstatat(59, "d57", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(59, "d57", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 60
+fstat(60, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(61, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(61, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(61, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(61)                               = 0
+newfstatat(60, "d58", {st_mode=S_IFDIR|0755, st_size=17, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(60, "d58", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 61
+fstat(61, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+fstat(62, {st_mode=S_IFDIR|0755, st_size=17, ...}) = 0
+getdents64(62, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(62, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(62)                               = 0
+newfstatat(61, "d59", {st_mode=S_IFDIR|0755, st_size=18, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(61, "d59", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 62
+fstat(62, {st_mode=S_IFDIR|0755, st_size=18, ...}) = 0
+fstat(63, {st_mode=S_IFDIR|0755, st_size=18, ...}) = 0
+getdents64(63, 0x55c9934b8270 /* 3 entries */, 32768) = 72
+getdents64(63, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(63)                               = 0
+unlinkat(62, "leaf", 0)                 = 0
+close(62)                               = 0
+unlinkat(61, "d59", AT_REMOVEDIR)       = 0
+close(61)                               = 0
+unlinkat(60, "d58", AT_REMOVEDIR)       = 0
+close(60)                               = 0
+unlinkat(59, "d57", AT_REMOVEDIR)       = 0
+close(59)                               = 0
+unlinkat(58, "d56", AT_REMOVEDIR)       = 0
+close(58)                               = 0
+unlinkat(57, "d55", AT_REMOVEDIR)       = 0
+close(57)                               = 0
+unlinkat(56, "d54", AT_REMOVEDIR)       = 0
+close(56)                               = 0
+unlinkat(55, "d53", AT_REMOVEDIR)       = 0
+close(55)                               = 0
+unlinkat(54, "d52", AT_REMOVEDIR)       = 0
+close(54)                               = 0
+unlinkat(53, "d51", AT_REMOVEDIR)       = 0
+close(53)                               = 0
+unlinkat(52, "d50", AT_REMOVEDIR)       = 0
+close(52)                               = 0
+unlinkat(51, "d49", AT_REMOVEDIR)       = 0
+close(51)                               = 0
+unlinkat(50, "d48", AT_REMOVEDIR)       = 0
+close(50)                               = 0
+unlinkat(49, "d47", AT_REMOVEDIR)       = 0
+close(49)                               = 0
+unlinkat(48, "d46", AT_REMOVEDIR)       = 0
+close(48)                               = 0
+unlinkat(47, "d45", AT_REMOVEDIR)       = 0
+close(47)                               = 0
+unlinkat(46, "d44", AT_REMOVEDIR)       = 0
+close(46)                               = 0
+unlinkat(45, "d43", AT_REMOVEDIR)       = 0
+close(45)                               = 0
+unlinkat(44, "d42", AT_REMOVEDIR)       = 0
+close(44)                               = 0
+unlinkat(43, "d41", AT_REMOVEDIR)       = 0
+close(43)                               = 0
+unlinkat(42, "d40", AT_REMOVEDIR)       = 0
+close(42)                               = 0
+unlinkat(41, "d39", AT_REMOVEDIR)       = 0
+close(41)                               = 0
+unlinkat(40, "d38", AT_REMOVEDIR)       = 0
+close(40)                               = 0
+unlinkat(39, "d37", AT_REMOVEDIR)       = 0
+close(39)                               = 0
+unlinkat(38, "d36", AT_REMOVEDIR)       = 0
+close(38)                               = 0
+unlinkat(37, "d35", AT_REMOVEDIR)       = 0
+close(37)                               = 0
+unlinkat(36, "d34", AT_REMOVEDIR)       = 0
+close(36)                               = 0
+unlinkat(35, "d33", AT_REMOVEDIR)       = 0
+close(35)                               = 0
+unlinkat(34, "d32", AT_REMOVEDIR)       = 0
+close(34)                               = 0
+unlinkat(33, "d31", AT_REMOVEDIR)       = 0
+close(33)                               = 0
+unlinkat(32, "d30", AT_REMOVEDIR)       = 0
+close(32)                               = 0
+unlinkat(31, "d29", AT_REMOVEDIR)       = 0
+close(31)                               = 0
+unlinkat(30, "d28", AT_REMOVEDIR)       = 0
+close(30)                               = 0
+unlinkat(29, "d27", AT_REMOVEDIR)       = 0
+close(29)                               = 0
+unlinkat(28, "d26", AT_REMOVEDIR)       = 0
+close(28)                               = 0
+unlinkat(27, "d25", AT_REMOVEDIR)       = 0
+close(27)                               = 0
+unlinkat(26, "d24", AT_REMOVEDIR)       = 0
+close(26)                               = 0
+unlinkat(25, "d23", AT_REMOVEDIR)       = 0
+close(25)                               = 0
+unlinkat(24, "d22", AT_REMOVEDIR)       = 0
+close(24)                               = 0
+unlinkat(23, "d21", AT_REMOVEDIR)       = 0
+close(23)                               = 0
+unlinkat(22, "d20", AT_REMOVEDIR)       = 0
+close(22)                               = 0
+unlinkat(21, "d19", AT_REMOVEDIR)       = 0
+close(21)                               = 0
+unlinkat(20, "d18", AT_REMOVEDIR)       = 0
+close(20)                               = 0
+unlinkat(19, "d17", AT_REMOVEDIR)       = 0
+close(19)                               = 0
+unlinkat(18, "d16", AT_REMOVEDIR)       = 0
+close(18)                               = 0
+unlinkat(17, "d15", AT_REMOVEDIR)       = 0
+close(17)                               = 0
+unlinkat(16, "d14", AT_REMOVEDIR)       = 0
+close(16)                               = 0
+unlinkat(15, "d13", AT_REMOVEDIR)       = 0
+close(15)                               = 0
+unlinkat(14, "d12", AT_REMOVEDIR)       = 0
+close(14)                               = 0
+unlinkat(13, "d11", AT_REMOVEDIR)       = 0
+close(13)                               = 0
+unlinkat(12, "d10", AT_REMOVEDIR)       = 0
+close(12)                               = 0
+unlinkat(11, "d09", AT_REMOVEDIR)       = 0
+close(11)                               = 0
+unlinkat(10, "d08", AT_REMOVEDIR)       = 0
+close(10)                               = 0
+unlinkat(9, "d07", AT_REMOVEDIR)        = 0
+close(9)                                = 0
+unlinkat(8, "d06", AT_REMOVEDIR)        = 0
+close(8)                                = 0
+unlinkat(7, "d05", AT_REMOVEDIR)        = 0
+close(7)                                = 0
+unlinkat(6, "d04", AT_REMOVEDIR)        = 0
+close(6)                                = 0
+unlinkat(5, "d03", AT_REMOVEDIR)        = 0
+close(5)                                = 0
+unlinkat(4, "d02", AT_REMOVEDIR)        = 0
+close(4)                                = 0
+unlinkat(3, "d01", AT_REMOVEDIR)        = 0
+close(3)                                = 0
+rmdir("/tmp/nuc-deep-reference-ke33uhab/d00") = 0
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab/d00", 0x7ffe860206e0, 0) = -1 ENOENT (No such file or directory)
+write(2, "DEEP_REFERENCE_END\n", 19)    = 19
+newfstatat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab", {st_mode=S_IFDIR|0700, st_size=6, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(AT_FDCWD, "/tmp/nuc-deep-reference-ke33uhab", O_RDONLY|O_NONBLOCK|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFDIR|0700, st_size=6, ...}) = 0
+fstat(4, {st_mode=S_IFDIR|0700, st_size=6, ...}) = 0
+getdents64(4, 0x55c9934b8270 /* 2 entries */, 32768) = 48
+getdents64(4, 0x55c9934b8270 /* 0 entries */, 32768) = 0
+close(4)                                = 0
+close(3)                                = 0
+rmdir("/tmp/nuc-deep-reference-ke33uhab") = 0
