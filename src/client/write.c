@@ -6601,6 +6601,13 @@ static int dcache_replay_stale_ex_budgeted(efs_ino_t ino, uint32_t ci, int absen
             memcpy(base, copy, len);
         }
         bg = 0;
+    } else if (bg == EFS_CHUNK_BASE_UNCOND && have_base && !nrange && !span_len) {
+        /* This accepted full overwrite owns every byte. A STALE fold may
+         * reveal an older span on a different base; that is authority for
+         * the next CAS, not replacement data for this write. Retain the
+         * immutable snapshot and bind its retry to the fresh observation. */
+        memcpy(base, copy, len);
+        bg = committed;
     } else if (have_base && object_gen && committed == object_gen &&
                !chunk_obs_has_live_spans(&obs)) {
         memcpy(base, copy, len);
