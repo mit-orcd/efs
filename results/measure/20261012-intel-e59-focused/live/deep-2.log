@@ -1,0 +1,16 @@
+parallel 12 tests jobs=16 (serial 0 after)
+pass basic_chunk_boundary            
+pass fsync_then_fstat_size           
+pass basic_rdwr_no_reopen            
+pass basic_dup_write                 
+pass basic_seek_cur_past_eof_write   
+pass fsync_reopen_visible            
+pass fsync_write                     
+pass basic_append                    
+pass basic_write_read                
+pass basic_oappend_flag              
+FAIL dir_readdir_listing              timeout after 30s
+FAIL names_crazy_dirs                 timeout after 30s
+============================================================
+POSIX suite: 10/12 pass, 2 fail, 0 skip, 0 notrun  (35.8s)
+wrote /data1/efs/intel-e59-focused-20261012/evidence/live/deep-2.tsv

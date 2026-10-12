@@ -1,0 +1,194 @@
+{
+  "source-proof.json": {
+    "size": 97,
+    "sha256": "656b296245e718650984dfcd2e0ceb2c49f87d29073e11ce151213955e1d5a22"
+  },
+  "build.log": {
+    "size": 48027,
+    "sha256": "f9369f9e9baefefc4006a7c4391e93c82c8c50e5de7202542c2266db8226437d"
+  },
+  "build.json": {
+    "size": 950,
+    "sha256": "1e5916fba38e4ea0c7c779cc5f61743adb4e22c3bcb6972e327215d5858fb3ec"
+  },
+  "builds.finished": {
+    "size": 20,
+    "sha256": "65479085d8f5246c64d26567df030901b50dd411344bd978bfbc1d8e3b3d8f18"
+  },
+  "controller.log": {
+    "size": 384,
+    "sha256": "70c06bca5001f5a25adc6a1dace348fd65830c9993f0d6da5ad9007378c4a6c3"
+  },
+  "runner.pid": {
+    "size": 7,
+    "sha256": "7c1497f6898a8f4cce28136d9166cc0b253c65a4fe88b141c60ea88b01162026"
+  },
+  "all-gates.jsonl": {
+    "size": 3290,
+    "sha256": "7114f701f25b54fa5c4200f7079525c4863f73786255735422cdc8563d6d0c16"
+  },
+  "finished.json": {
+    "size": 280,
+    "sha256": "4d3c808bd12ecb71ed22e2e95f8d7aec89ccab34f57cf53e1096d65a4d57ae54"
+  },
+  "live/n1.log": {
+    "size": 74953,
+    "sha256": "f54328250f3b5f0f8527cabfd969927fc405bb77f3c8ba459dfa7bae29aa1297"
+  },
+  "live/n2.log": {
+    "size": 104587,
+    "sha256": "a2428b75aa821e4ef22209162c220f3b08f26204a7a0f841740e96466327c367"
+  },
+  "live/n3.log": {
+    "size": 74577,
+    "sha256": "4806b5f5ce88f62169ea41b963d9179c4513ea4ce9f8e884b210bf084bcbab2a"
+  },
+  "live/n4.log": {
+    "size": 5055,
+    "sha256": "c54daa3bba6587fb3bceb9063d22be2d876d4995a2b5cfb22fa07f14558ad4fb"
+  },
+  "live/runtime-config.json": {
+    "size": 3001,
+    "sha256": "a76798c52f1dbe869cf0aed34051022e079b1ab19c191284b9debfe45ee8a432"
+  },
+  "live/fuse-0.log": {
+    "size": 1233,
+    "sha256": "4915d60bc2d4d50a05765e203d03beb1660d6b2e5e785944583fd0d55071f883"
+  },
+  "live/fuse-1.log": {
+    "size": 1234,
+    "sha256": "968efb84484fdb40817f66d1f046b3b3bf6494453fc2b88bb6445320e460c412"
+  },
+  "live/fuse-2.log": {
+    "size": 1233,
+    "sha256": "39a00d2a1c69690b1f525e53fb8142cbc2cc0767a61671ac5225ec08ba28e527"
+  },
+  "live/fuse-3.log": {
+    "size": 1233,
+    "sha256": "d66337d394a0af18ccebb7a95dcd6ead698147121edbb172428aa8a8c3394a76"
+  },
+  "live/fuse-4.log": {
+    "size": 1233,
+    "sha256": "a1e81ec04b9f364616e18509fca4e79b454a2488260c9d1575435da0a7c9f1c6"
+  },
+  "live/fuse-5.log": {
+    "size": 1233,
+    "sha256": "2f65c47888dea89e8730f3fbe9cb90a776931d32b4beb6a82d0b09d2aa04bffd"
+  },
+  "live/fuse-6.log": {
+    "size": 1233,
+    "sha256": "0138f506be7d1aa58664570d2b73208dbf993030301800b067ae828f974020c8"
+  },
+  "live/client-config.json": {
+    "size": 4909,
+    "sha256": "812cdf3f97bd25b83713131e180c72fbfb2748f4f3892d39314eda4eb3984b4b"
+  },
+  "live/deep-0.log": {
+    "size": 724,
+    "sha256": "7cd80ecde494882e729575d91596988d712a62df0a8c50051959d1bfed55f987"
+  },
+  "live/deep-1.log": {
+    "size": 724,
+    "sha256": "1461f51c4f55226e5a8b1fef92c4237f25cd7c1153b39418df31a9615c311dc1"
+  },
+  "live/deep-2.log": {
+    "size": 724,
+    "sha256": "4551528bef345e3539984ca1390227a1bfeb64aa01dc18138349b8614023bf7d"
+  },
+  "live/deep-3.log": {
+    "size": 724,
+    "sha256": "55fbfcf6d1e48d2bc7c85601bc56f8fb7e924eca401f3d4fd3290b53750c2209"
+  },
+  "live/deep-4.log": {
+    "size": 724,
+    "sha256": "ff213a3000b2a29082a3fee51a5b076946c20950dc62fadc3e06e03f5e4df97d"
+  },
+  "live/deep-5.log": {
+    "size": 724,
+    "sha256": "1549d3bc8bbb2b2d2631f6ab91cc4a5c5dba630bf40cbcc5917ac88fd17026ec"
+  },
+  "live/deep-6.log": {
+    "size": 706,
+    "sha256": "7dd2bb01cacef6849f67b9742da5255639360761148923800e2c935ace0b4c75"
+  },
+  "live/deep-0.tsv": {
+    "size": 882,
+    "sha256": "8f4bc0c10971409f4e6e75645867eacbe2a4f807a0f3c3b014dca7d871a86651"
+  },
+  "live/deep-6.tsv": {
+    "size": 865,
+    "sha256": "36cba184ef3e3fcb486dd156895eb621db115e3f4cb25dc88a39b373799ee1d4"
+  },
+  "live/deep-5.tsv": {
+    "size": 882,
+    "sha256": "8661e1b0a074782887c7b2673ee3b981490df224aea47678c7a21e92a3142363"
+  },
+  "live/deep-2.tsv": {
+    "size": 882,
+    "sha256": "4e125a849db409eb2d7a36f33ad6c5ff71ffd3f7cbb04020770a89c6f8088c09"
+  },
+  "live/deep-1.tsv": {
+    "size": 882,
+    "sha256": "c20e5cd583a41cb22a7fa123140914fe351f66a07ae93d77f145484a4cf4315d"
+  },
+  "live/deep-3.tsv": {
+    "size": 882,
+    "sha256": "4d1833914a5fd0ec97a83fd04335482182af303cd55c3405626a312da162d7f1"
+  },
+  "live/deep-4.tsv": {
+    "size": 882,
+    "sha256": "9c98f9d5c4b1242653b18277c8ce48fce1a5b97618cead3b49e9c67c90a44ed0"
+  },
+  "live/deep-results.json": {
+    "size": 3796,
+    "sha256": "9a93b647648463275ef0941caa7eae8d1886c410efd269b6de7265bed7b22d9a"
+  },
+  "live/stop-0.log": {
+    "size": 234,
+    "sha256": "63d50cc18a5ab08a1b8fe6c60f395e82f127c34ae7bad0a088c044fad5e39e61"
+  },
+  "live/stop-1.log": {
+    "size": 234,
+    "sha256": "25672d159ffd2c928f05640393dc6b9da24f7f7076c8fe8fe9cc20672ada5a93"
+  },
+  "live/stop-2.log": {
+    "size": 234,
+    "sha256": "3ca652e2f9c93c6f322a3b521287aa5c578d0d612be046735f2f527103312fa3"
+  },
+  "live/stop-3.log": {
+    "size": 234,
+    "sha256": "264cf3385f74e16933c954ef35ce76d93984d21859ce4664b5dadf8745515941"
+  },
+  "live/stop-4.log": {
+    "size": 234,
+    "sha256": "ce8a15e8a4827e515aa5a0ac3c815e048e082bd09e6e7d7cc73984d1cc7f8fd6"
+  },
+  "live/stop-5.log": {
+    "size": 234,
+    "sha256": "84e7f8f0301e0dd223847fa9e6e0d394572875914fd77bb1ae75e41162cd4881"
+  },
+  "live/stop-6.log": {
+    "size": 234,
+    "sha256": "4010397851834356410134556f50830457e493909645d173cce0aa41ce07fa78"
+  },
+  "live/stop-results.json": {
+    "size": 324,
+    "sha256": "841e1ae9729aca4f6aa7443296f9af3aa58ff080f04355202cf3a81e6a21173c"
+  },
+  "gates/focused-seven-io-readdir-disabled-efs/command.json": {
+    "size": 1585,
+    "sha256": "57be8dfb3befc1188d65b7a1726a7e0115422b53c19314f4c5352e9a1d822115"
+  },
+  "gates/focused-seven-io-readdir-disabled-efs/run.log": {
+    "size": 3150,
+    "sha256": "a4ebab708cb6e602a8030b25969c7b7e7054bc3b7029adfda259be999b8c5d43"
+  },
+  "gates/focused-seven-io-readdir-disabled-efs/result.json": {
+    "size": 4219,
+    "sha256": "3c905b38bbb6664206e89e4bd6aebb86714d99cd16c6b497a3aacfd55108fed1"
+  },
+  "gates/focused-seven-io-readdir-disabled-efs/run.exit": {
+    "size": 2,
+    "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+  }
+}

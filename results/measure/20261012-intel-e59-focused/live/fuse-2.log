@@ -1,0 +1,16 @@
+2026-10-12T14:23:20.685Z efs-fuse (no git metadata, branch qualification-v030-tcp-direct, built 2026-10-12T14:22:36Z on intel1), build=e59e815fab2916340baad585dc08712ed182b7ea: starting export=default mount=/tmp/efs-intel-e59-focused-20261012-intel1_efs/deep-mnt2
+2026-10-12T14:23:20.686Z Discovered 4 cluster nodes from 127.0.0.1:34510
+2026-10-12T14:23:20.686Z   node id=1 127.0.0.1:34510
+2026-10-12T14:23:20.686Z   node id=2 127.0.0.1:34511
+2026-10-12T14:23:20.686Z   node id=3 127.0.0.1:34512
+2026-10-12T14:23:20.686Z   node id=4 127.0.0.1:34513
+2026-10-12T14:23:20.686Z fetching metadata...
+2026-10-12T14:23:20.687Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T14:23:20.687Z export id=1 name=default
+2026-10-12T14:23:20.687Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T14:23:20.692Z efs-fuse: workers max=10 idle=10
+2026-10-12T14:23:20.700Z fuse serving
+2026-10-12T14:23:22.661Z efs: read hole ino=7531 ci=1 holes=1
+2026-10-12T14:23:24.348Z fsync-split ino=5790 flush_ms=885 report_ms=0 rc=0
+2026-10-12T14:23:25.970Z fsync-split ino=7637 flush_ms=639 report_ms=0 rc=0
+2026-10-12T14:23:26.014Z fsync-split ino=4710 flush_ms=322 report_ms=0 rc=0
