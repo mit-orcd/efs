@@ -2161,6 +2161,8 @@ Release scope is now true-defect testing/fixing only. The next shared candidate 
 
 - [NUC repair gap: source trace, initial-scope fencing dependencies and strict protection gates](../status/nuc-repair-gap-design-20261012.md) — W74 remains open; no repaired-protection claim.
 
+October 12 qualification checkpoint: frozen `def46109909c793e58ae2c453c5de537cdb2c627` AMD normal/fault native and affected sanitizers PASS; NUC core/peer/two-client packing PASS; matched-4G seven-client Intel and NUC FAIL. Receiver drain scheduling investigation continues before a new central freeze. See [current qualification ledger](../status/v030-tcp-direct-qualification-20261012.md).
+
 
 ## Appendix 2 — In flight — the current handoff block
 
