@@ -174,9 +174,10 @@ hashes/configurations, all17432..17435 listeners, both mounts, closed private
 Installed source remainsf52cd2dd-nuc. Every owned gate/build controller has
 finished or was held; there is no active writer or new-candidate deployment.
 [Final proof and restoration logs](../../results/measure/20261012-nuc-manager-handoff/final-restoration/)
-retain exact processes/paths/config and payloads. Original base recipe run1 is
-expected from the safely superseded empty buffered fixture; restoration0 and
-the completed old direct20k0 remain separate genuine verdicts.
+retain exact processes/paths/config and payloads. The original base recipe records a failure from the safely superseded empty
+buffered fixture and leaves its overall run-exit marker absent; do not invent
+an overall exit marker. Its actual interrupted-fixture exit, restoration0 and
+completed old direct20k0 remain separate genuine verdicts.
 
 Code is still frozen101598d2; only documentation/raw evidence followed.
 NUC is ready for the manager-approved merged source/hash. No new live/native
