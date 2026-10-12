@@ -77,6 +77,9 @@ def exercise(mount,port,work,wait,physical_files,restart,offline,clock_fault=Fal
         candidate=base/('cross-policy-'+str(i));candidate.mkdir();directories.append(candidate)
         if (candidate.stat().st_ino&1)!=(base.stat().st_ino&1):cross=candidate;break
     assert cross is not None,'fixture failed to choose a different inode group'
+    cross_id=subprocess.run([str(Path(__file__).resolve().parents[2]/'efs-mgmt'),'expiry-id',f'127.0.0.1:{port}',str(cross.stat().st_ino)],capture_output=True,text=True,check=True)
+    assert 'generation=1' in cross_id.stdout,cross_id.stdout
+    (work/'expiry-fileid-cli.txt').write_text(info.stdout+cross_id.stdout)
     inherited=cross/'inherited';cross_ino=created(inherited)
     assert (cross_ino&1)!=(base.stat().st_ino&1)
     assert record(inherited)[3]==base.stat().st_ino
