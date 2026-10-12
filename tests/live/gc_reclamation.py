@@ -367,7 +367,9 @@ def wait(predicate, label, seconds=120):
         if predicate():
             print(label+' PASS',flush=True);return
         time.sleep(.25)
-    (work/'failed-status.json').write_text(json.dumps(status(),indent=2))
+    try:failure_status=status()
+    except Exception as error:failure_status={'diagnostic_error':str(error)}
+    (work/'failed-status.json').write_text(json.dumps(failure_status,indent=2))
     raise AssertionError(label+' timed out')
 
 def start(prefer_single_host=False):
@@ -613,8 +615,9 @@ try:
             unmount();stop(crash=True)
             if enabled is not None:env['EFS_EXPIRY']='1' if enabled else '0'
             start();mount_client()
-        def expiry_offline(group=None,storage_ino=None):
-            node=3
+        def expiry_offline(group=None,storage_ino=None,node_id=None):
+            node=3 if node_id is None else node_id-1
+            assert 0<=node<4
             if storage_ino is not None:
                 fragments=files(storage_ino)
                 holders=[i for i,root in enumerate(roots) if any(path.is_relative_to(root) for path in fragments)]
@@ -638,7 +641,13 @@ try:
                 servers[node]=subprocess.Popen(proc.args,env=env,stdout=log,stderr=log)
                 time.sleep(3)
             return rejoin
-        exercise(mount,a.port,work,wait,files,expiry_restart,expiry_offline,a.expiry_clock_fault)
+        def expiry_forward_group():
+            for candidate in (0,3):
+                observed=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+candidate}'],capture_output=True,text=True).stdout
+                match=re.search(r'group (0|2) hosted=1 role=LEADER',observed)
+                if match:return int(match.group(1))
+            return 0
+        exercise(mount,a.port,work,wait,files,expiry_restart,expiry_offline,expiry_forward_group,a.expiry_clock_fault)
     if a.ordinary_overwrite_only:
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
         peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)

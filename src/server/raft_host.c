@@ -387,6 +387,7 @@ struct efs_raft_host {
     pthread_t query_tid;
     int query_running,query_started,query_error,query_enabled;
     int expiry_enabled;
+    int expiry_peer_skip; /* last failed coordinator; protected by mu */
     struct efs_expiry_clock expiry_clock;
     uint8_t expiry_resume[HOST_NGROUPS][EFS_EXPIRY_INDEX_BYTES];
     uint8_t expiry_resuming[HOST_NGROUPS];
@@ -8774,13 +8775,23 @@ static int host_expiry_delete(struct efs_raft_host *h,uint8_t group,
     struct efs_msg_raft_mkfs_reply reply;
     uint8_t need[2];host_need_both(need);int rc;
     pthread_mutex_lock(&h->mu);int capable=host_hosts_all(h,need,2);
-    int peer=capable?-1:host_pick_peer(h,need,2,-1);pthread_mutex_unlock(&h->mu);
+    int peer=capable?-1:host_pick_peer(h,need,2,h->expiry_peer_skip);
+    if(!capable && peer<0)peer=host_pick_peer(h,need,2,-1);
+    pthread_mutex_unlock(&h->mu);
     if(capable) {
         uint8_t payload[1+sizeof(cmd)];payload[0]=group;memcpy(payload+1,cmd,42+n);
         server_raft_host_submit(payload,(uint32_t)(43+n),&reply);rc=EFS_OK;
     } else if(peer>=0)rc=host_rpc_submit(h,peer,group,cmd,(uint32_t)(42+n),&reply,1000);
     else return EFS_ERR_NOT_PRIMARY;
-    return rc?rc:reply.rc;
+    if(!capable && (rc || (reply.rc!=EFS_OK && reply.rc!=EFS_ERR_STALE && reply.rc!=EFS_ERR_NOT_FOUND))) {
+        pthread_mutex_lock(&h->mu);h->expiry_peer_skip=peer;pthread_mutex_unlock(&h->mu);
+        fprintf(stderr,"raft-host: expiry-forward retry peer=%d rc=%d ino=%llu revision=%llu\n",
+            peer+1,rc?rc:reply.rc,(unsigned long long)due->ino,(unsigned long long)due->revision);
+    }
+    /* Transport ambiguity cannot authorize a different deletion: the next
+     * pass reuses the exact FileID/deadline/revision CAS. It can safely pick
+     * the surviving coordinator; committed earlier work becomes stale. */
+    return rc?EFS_ERR_BUSY:reply.rc;
 }
 
 static void host_gc_expiry_pass(struct efs_raft_host *h,uint8_t group,uint32_t anchor)
@@ -9985,7 +9996,7 @@ int server_raft_host_start(struct efsd_server *s)
     h->balance_enabled = balance && !strcmp(balance,"1");
     h->s = s;
     h->query_enabled=query_enabled;
-    h->expiry_enabled=expiry_enabled;
+    h->expiry_enabled=expiry_enabled;h->expiry_peer_skip=-1;
     h->raft_id = (int)s->id - 1;
     h->n = n;
     h->boot_id = make_boot_id();

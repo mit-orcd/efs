@@ -22,7 +22,7 @@ def exact(s,n):
     return out
 
 
-def exercise(mount,port,work,wait,physical_files,restart,offline,clock_fault=False):
+def exercise(mount,port,work,wait,physical_files,restart,offline,forward_group,clock_fault=False):
     checks=[]
     def rpc(tag,ino=1,gen=1,extra=b'',accepted=(0,),raw=None):
         payload=raw if raw is not None else bytes((0 if ino&1 else 2,tag))+struct.pack('>QQ',ino,gen)+extra
@@ -174,6 +174,17 @@ def exercise(mount,port,work,wait,physical_files,restart,offline,clock_fault=Fal
         assert physical_files(ino),'offline physical debt unexpectedly gone'
     finally:rejoin()
     wait(lambda:not physical_files(ino),'offline expiry reclamation after rejoin',90);mark('offline storage retains debt until rejoin')
+    group=forward_group();coordinator_dirs=[];coordinator_dir=None
+    for i in range(32):
+        directory=base/('coordinator-'+str(i));directory.mkdir();coordinator_dirs.append(directory)
+        if (0 if directory.stat().st_ino&1 else 2)==group:coordinator_dir=directory;break
+    assert coordinator_dir is not None
+    routed=coordinator_dir/'routed';ino=created(routed);rejoin=offline(node_id=2)
+    try:wait(lambda:not routed.exists(),'expiry progresses with first coordinator offline',45)
+    finally:rejoin()
+    wait(lambda:not physical_files(ino),'coordinator-loss physical reclaim',90)
+    for directory in coordinator_dirs:directory.rmdir()
+    mark('first dual-group coordinator loss and surviving routing')
     elected=base/'leader-change';ino=created(elected)
     rejoin=offline(0 if ino&1 else 2)
     try:wait(lambda:not elected.exists(),'expiry after actual metadata leader loss',45)

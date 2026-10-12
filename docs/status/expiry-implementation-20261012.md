@@ -221,3 +221,22 @@ This branch deliberately retains the original verified release snapshot
 `3a41493591dcede820700db7d934da9dc10f07ee`; no unrelated concurrent release
 cleanup was merged or reverted. Reproduce by the recorded source IDs, not a
 moving release reference.
+
+## Coordinator-loss liveness fix
+
+Normal product `0c68c032` completed core **216/216 (24.9s)**, peer
+**67/67 (12.2s)** and physical cleanup. The final fault run then exposed a
+real liveness failure after killing n2, the group-2 leader/first dual-group
+coordinator: a single-group replacement leader repeatedly chose that dead
+coordinator instead of the surviving n3. Namespace/data stayed safe but expiry
+stalled. Raw `/home/efs/expiry-0c68c032-fault-gates.log`, fixture
+`/data1/efs/expiry-0c68c032-fault/gc-direct-z9ikmd8x`, retained.
+
+The worker now remembers a failed coordinator and selects another eligible
+peer on its next bounded pass. Transport ambiguity is retryable only because
+the request retains exactly the same FileID/deadline/revision condition;
+an already committed deletion becomes stale, never a deletion of a replacement.
+An explicit n2 coordinator-outage gate complements observed-leader loss.
+Timeout diagnostics preserve the original failed assertion when a node is
+intentionally offline instead of masking it with a gc-status connection error.
+Both full matrices are being rerun after this fix; W90 remains open until then.
