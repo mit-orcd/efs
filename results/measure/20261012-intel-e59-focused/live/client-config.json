@@ -1,0 +1,156 @@
+[
+  {
+    "pid": 2311364,
+    "environment": [
+      "EFS_RAFT_FLOW=0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE=0",
+      "EFS_RAFT_GROUP_DRAIN=0",
+      "EFS_RAFT_BATCH_NOOP=0",
+      "EFS_RAFT_BATCH_OVERLAP=0",
+      "EFS_TRANSPORT=tcp",
+      "EFS_DATA_GC_ADMISSION=1",
+      "EFS_GC_BACKLOG_IDLE_MS=20",
+      "EFS_CLUSTER_SCRIPTS=/data1/efs/intel-e59-focused-20261012/evidence/cluster-scripts",
+      "EFS_FAULTS=0",
+      "EFS_GIT_ID=e59e815fab2916340baad585dc08712ed182b7ea",
+      "EFS_GIT_BRANCH=qualification-v030-tcp-direct",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "EFS_MD_RAFT_N=4",
+      "EFS_PACKED_WRITES=1",
+      "EFS_COMMANDS=0",
+      "EFS_COMMANDS_SERVER=0"
+    ]
+  },
+  {
+    "pid": 2311382,
+    "environment": [
+      "EFS_RAFT_FLOW=0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE=0",
+      "EFS_RAFT_GROUP_DRAIN=0",
+      "EFS_RAFT_BATCH_NOOP=0",
+      "EFS_RAFT_BATCH_OVERLAP=0",
+      "EFS_TRANSPORT=tcp",
+      "EFS_DATA_GC_ADMISSION=1",
+      "EFS_GC_BACKLOG_IDLE_MS=20",
+      "EFS_CLUSTER_SCRIPTS=/data1/efs/intel-e59-focused-20261012/evidence/cluster-scripts",
+      "EFS_FAULTS=0",
+      "EFS_GIT_ID=e59e815fab2916340baad585dc08712ed182b7ea",
+      "EFS_GIT_BRANCH=qualification-v030-tcp-direct",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "EFS_MD_RAFT_N=4",
+      "EFS_PACKED_WRITES=1",
+      "EFS_COMMANDS=0",
+      "EFS_COMMANDS_SERVER=0"
+    ]
+  },
+  {
+    "pid": 2311399,
+    "environment": [
+      "EFS_RAFT_FLOW=0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE=0",
+      "EFS_RAFT_GROUP_DRAIN=0",
+      "EFS_RAFT_BATCH_NOOP=0",
+      "EFS_RAFT_BATCH_OVERLAP=0",
+      "EFS_TRANSPORT=tcp",
+      "EFS_DATA_GC_ADMISSION=1",
+      "EFS_GC_BACKLOG_IDLE_MS=20",
+      "EFS_CLUSTER_SCRIPTS=/data1/efs/intel-e59-focused-20261012/evidence/cluster-scripts",
+      "EFS_FAULTS=0",
+      "EFS_GIT_ID=e59e815fab2916340baad585dc08712ed182b7ea",
+      "EFS_GIT_BRANCH=qualification-v030-tcp-direct",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "EFS_MD_RAFT_N=4",
+      "EFS_PACKED_WRITES=1",
+      "EFS_COMMANDS=0",
+      "EFS_COMMANDS_SERVER=0"
+    ]
+  },
+  {
+    "pid": 2311416,
+    "environment": [
+      "EFS_RAFT_FLOW=0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE=0",
+      "EFS_RAFT_GROUP_DRAIN=0",
+      "EFS_RAFT_BATCH_NOOP=0",
+      "EFS_RAFT_BATCH_OVERLAP=0",
+      "EFS_TRANSPORT=tcp",
+      "EFS_DATA_GC_ADMISSION=1",
+      "EFS_GC_BACKLOG_IDLE_MS=20",
+      "EFS_CLUSTER_SCRIPTS=/data1/efs/intel-e59-focused-20261012/evidence/cluster-scripts",
+      "EFS_FAULTS=0",
+      "EFS_GIT_ID=e59e815fab2916340baad585dc08712ed182b7ea",
+      "EFS_GIT_BRANCH=qualification-v030-tcp-direct",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "EFS_MD_RAFT_N=4",
+      "EFS_PACKED_WRITES=1",
+      "EFS_COMMANDS=0",
+      "EFS_COMMANDS_SERVER=0"
+    ]
+  },
+  {
+    "pid": 2311433,
+    "environment": [
+      "EFS_RAFT_FLOW=0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE=0",
+      "EFS_RAFT_GROUP_DRAIN=0",
+      "EFS_RAFT_BATCH_NOOP=0",
+      "EFS_RAFT_BATCH_OVERLAP=0",
+      "EFS_TRANSPORT=tcp",
+      "EFS_DATA_GC_ADMISSION=1",
+      "EFS_GC_BACKLOG_IDLE_MS=20",
+      "EFS_CLUSTER_SCRIPTS=/data1/efs/intel-e59-focused-20261012/evidence/cluster-scripts",
+      "EFS_FAULTS=0",
+      "EFS_GIT_ID=e59e815fab2916340baad585dc08712ed182b7ea",
+      "EFS_GIT_BRANCH=qualification-v030-tcp-direct",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "EFS_MD_RAFT_N=4",
+      "EFS_PACKED_WRITES=1",
+      "EFS_COMMANDS=0",
+      "EFS_COMMANDS_SERVER=0"
+    ]
+  },
+  {
+    "pid": 2311450,
+    "environment": [
+      "EFS_RAFT_FLOW=0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE=0",
+      "EFS_RAFT_GROUP_DRAIN=0",
+      "EFS_RAFT_BATCH_NOOP=0",
+      "EFS_RAFT_BATCH_OVERLAP=0",
+      "EFS_TRANSPORT=tcp",
+      "EFS_DATA_GC_ADMISSION=1",
+      "EFS_GC_BACKLOG_IDLE_MS=20",
+      "EFS_CLUSTER_SCRIPTS=/data1/efs/intel-e59-focused-20261012/evidence/cluster-scripts",
+      "EFS_FAULTS=0",
+      "EFS_GIT_ID=e59e815fab2916340baad585dc08712ed182b7ea",
+      "EFS_GIT_BRANCH=qualification-v030-tcp-direct",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "EFS_MD_RAFT_N=4",
+      "EFS_PACKED_WRITES=1",
+      "EFS_COMMANDS=0",
+      "EFS_COMMANDS_SERVER=0"
+    ]
+  },
+  {
+    "pid": 2311467,
+    "environment": [
+      "EFS_RAFT_FLOW=0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE=0",
+      "EFS_RAFT_GROUP_DRAIN=0",
+      "EFS_RAFT_BATCH_NOOP=0",
+      "EFS_RAFT_BATCH_OVERLAP=0",
+      "EFS_TRANSPORT=tcp",
+      "EFS_DATA_GC_ADMISSION=1",
+      "EFS_GC_BACKLOG_IDLE_MS=20",
+      "EFS_CLUSTER_SCRIPTS=/data1/efs/intel-e59-focused-20261012/evidence/cluster-scripts",
+      "EFS_FAULTS=0",
+      "EFS_GIT_ID=e59e815fab2916340baad585dc08712ed182b7ea",
+      "EFS_GIT_BRANCH=qualification-v030-tcp-direct",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "EFS_MD_RAFT_N=4",
+      "EFS_PACKED_WRITES=1",
+      "EFS_COMMANDS=0",
+      "EFS_COMMANDS_SERVER=0"
+    ]
+  }
+]

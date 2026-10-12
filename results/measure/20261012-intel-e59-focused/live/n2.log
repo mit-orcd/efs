@@ -1,0 +1,1134 @@
+2026-10-12T14:23:15.024Z storage-engine=files direct_io=on
+2026-10-12T14:23:15.025Z Data GC admission: experimental
+2026-10-12T14:23:15.025Z Storage quota: explicit 4.00 GiB (safe maximum 483.27 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T14:23:15.031Z Joined cluster with 2 nodes
+2026-10-12T14:23:15.034Z heartbeat: enabled (2000 ms interval)
+2026-10-12T14:23:15.045Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-12T14:23:15.045Z raft-host: up raft_id=1 n=4 boot=9902970238326811 salt=14447883866223388195 g0=hosted g2=hosted
+2026-10-12T14:23:15.045Z efsd (no git metadata, branch qualification-v030-tcp-direct, built 2026-10-12T14:22:36Z on intel1), build=e59e815fab2916340baad585dc08712ed182b7ea: node 2 listening on 127.0.0.1:34511, storage=/data1/efs/intel-e59-focused-20261012/evidence/live/n2 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=4 shared
+2026-10-12T14:23:15.046Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:23:17.035Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=985 passes=2 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T14:23:20.133Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:21.205Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=0 emit=0 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:21.416Z raft-host: applied session index=3 kind=1 shard=0 ino=0
+2026-10-12T14:23:21.423Z raft-host: applied session index=3 kind=1 shard=0 ino=0
+2026-10-12T14:23:21.425Z raft-host: applied session index=5 kind=1 shard=0 ino=0
+2026-10-12T14:23:21.436Z raft-host: applied session index=5 kind=1 shard=0 ino=0
+2026-10-12T14:23:21.447Z raft-host: applied session index=8 kind=1 shard=0 ino=0
+2026-10-12T14:23:21.463Z raft-host: applied session index=7 kind=1 shard=0 ino=0
+2026-10-12T14:23:21.486Z raft-host: applied session index=17 kind=1 shard=0 ino=0
+2026-10-12T14:23:21.998Z raft-host: read-sleep us=20972 group=2 want=64 read_idx=64 applied=64 pending=1
+2026-10-12T14:23:21.998Z raft-host: read-sleep us=22245 group=2 want=64 read_idx=64 applied=64 pending=1
+2026-10-12T14:23:21.998Z raft-host: apply-sleep us=22375 group=2 idx=69 applied=64
+2026-10-12T14:23:21.998Z raft-host: read-sleep us=22374 group=2 want=64 read_idx=64 applied=64 pending=1
+2026-10-12T14:23:21.998Z raft-host: read-sleep us=22487 group=2 want=64 read_idx=64 applied=64 pending=1
+2026-10-12T14:23:21.998Z raft-host: read-sleep us=22481 group=2 want=64 read_idx=64 applied=64 pending=1
+2026-10-12T14:23:22.000Z raft-host: read-sleep us=24214 group=2 want=60 read_idx=64 applied=64 pending=1
+2026-10-12T14:23:22.000Z raft-host: read-sleep us=24250 group=2 want=60 read_idx=64 applied=64 pending=1
+2026-10-12T14:23:22.002Z raft-host: apply-sleep us=26612 group=2 idx=70 applied=64
+2026-10-12T14:23:22.003Z raft-host: apply-sleep us=25402 group=0 idx=89 applied=87
+2026-10-12T14:23:22.044Z raft-host: apply-sleep us=21595 group=2 idx=78 applied=72
+2026-10-12T14:23:22.047Z raft-host: apply-sleep us=21510 group=2 idx=79 applied=77
+2026-10-12T14:23:22.169Z raft-host: apply-sleep us=77003 group=0 idx=103 applied=102
+2026-10-12T14:23:22.177Z raft-host: read-sleep us=88698 group=2 want=87 read_idx=89 applied=89 pending=1
+2026-10-12T14:23:22.177Z raft-host: read-sleep us=88692 group=2 want=89 read_idx=89 applied=89 pending=1
+2026-10-12T14:23:22.177Z raft-host: read-sleep us=87405 group=2 want=89 read_idx=89 applied=89 pending=1
+2026-10-12T14:23:22.177Z raft-host: read-sleep us=87145 group=2 want=89 read_idx=89 applied=89 pending=1
+2026-10-12T14:23:22.177Z raft-host: read-sleep us=85615 group=2 want=89 read_idx=89 applied=89 pending=1
+2026-10-12T14:23:22.177Z raft-host: read-sleep us=84100 group=2 want=89 read_idx=89 applied=89 pending=1
+2026-10-12T14:23:22.177Z raft-host: read-sleep us=85181 group=2 want=89 read_idx=89 applied=89 pending=1
+2026-10-12T14:23:22.177Z raft-host: read-sleep us=88897 group=2 want=87 read_idx=89 applied=89 pending=1
+2026-10-12T14:23:22.180Z raft-host: apply-sleep us=86997 group=2 idx=90 applied=89
+2026-10-12T14:23:22.180Z raft-host: read-sleep us=90032 group=2 want=89 read_idx=89 applied=89 pending=1
+2026-10-12T14:23:22.180Z raft-host: read-sleep us=90924 group=2 want=89 read_idx=89 applied=89 pending=1
+2026-10-12T14:23:22.180Z raft-host: read-sleep us=91004 group=2 want=87 read_idx=89 applied=89 pending=1
+2026-10-12T14:23:22.180Z raft-host: read-sleep us=91779 group=2 want=87 read_idx=89 applied=89 pending=1
+2026-10-12T14:23:22.227Z raft-host: getchunks slow ino=7238 start=1 n=0 ri_ms=31 total_ms=31 rc=0 slow=1
+2026-10-12T14:23:22.231Z store: put O_DIRECT bounce copy (buf align=3456 len=65536)
+2026-10-12T14:23:22.244Z raft-host: apply-sleep us=20142 group=2 idx=98 applied=95
+2026-10-12T14:23:22.244Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=4836 p50_us=4836 max_us=4836 wdisk ops=1 bytes=65536 errors=0 avg_us=4512 p50_us=4512 max_us=4512
+2026-10-12T14:23:22.256Z raft-host: apply-sleep us=20145 group=2 idx=104 applied=97
+2026-10-12T14:23:22.256Z raft-host: apply-sleep us=20034 group=2 idx=103 applied=97
+2026-10-12T14:23:22.259Z raft-host: apply-sleep us=20670 group=2 idx=105 applied=97
+2026-10-12T14:23:22.289Z raft-host: apply-sleep us=21525 group=2 idx=110 applied=107
+2026-10-12T14:23:22.296Z raft-host: apply-sleep us=26566 group=2 idx=111 applied=108
+2026-10-12T14:23:22.307Z raft-host: apply-sleep us=27750 group=2 idx=117 applied=109
+2026-10-12T14:23:22.315Z raft-host: apply-sleep us=38696 group=2 idx=112 applied=109
+2026-10-12T14:23:22.325Z raft-host: apply-sleep us=30946 group=2 idx=119 applied=110
+2026-10-12T14:23:22.329Z raft-host: apply-sleep us=38237 group=2 idx=118 applied=110
+2026-10-12T14:23:22.382Z raft-host: apply-sleep us=20142 group=2 idx=135 applied=131
+2026-10-12T14:23:22.405Z raft-host: applied session index=148 kind=1 shard=0 ino=0
+2026-10-12T14:23:22.405Z raft-host: apply-sleep us=20087 group=2 idx=140 applied=136
+2026-10-12T14:23:22.405Z raft-host: apply-sleep us=20253 group=2 idx=141 applied=136
+2026-10-12T14:23:22.405Z raft-host: apply-sleep us=20281 group=2 idx=139 applied=136
+2026-10-12T14:23:22.415Z raft-host: apply-sleep us=27454 group=2 idx=143 applied=136
+2026-10-12T14:23:22.425Z raft-host: apply-sleep us=25102 group=0 idx=152 applied=146
+2026-10-12T14:23:22.429Z raft-host: apply-sleep us=27069 group=2 idx=144 applied=138
+2026-10-12T14:23:22.433Z raft-host: apply-sleep us=22286 group=2 idx=149 applied=141
+2026-10-12T14:23:22.445Z raft-host: apply-sleep us=22924 group=2 idx=151 applied=143
+2026-10-12T14:23:22.445Z raft-host: apply-sleep us=22992 group=2 idx=150 applied=143
+2026-10-12T14:23:22.450Z raft-host: apply-sleep us=24600 group=2 idx=152 applied=143
+2026-10-12T14:23:22.461Z raft-host: apply-sleep us=31330 group=2 idx=153 applied=144
+2026-10-12T14:23:22.461Z raft-host: apply-sleep us=31407 group=2 idx=155 applied=144
+2026-10-12T14:23:22.461Z raft-host: apply-sleep us=31486 group=2 idx=154 applied=144
+2026-10-12T14:23:22.465Z raft-host: apply-sleep us=32500 group=2 idx=156 applied=149
+2026-10-12T14:23:22.465Z raft-host: apply-sleep us=25478 group=2 idx=157 applied=149
+2026-10-12T14:23:22.472Z raft-host: apply-sleep us=26263 group=2 idx=158 applied=151
+2026-10-12T14:23:22.474Z raft-host: apply-sleep us=24093 group=0 idx=159 applied=155
+2026-10-12T14:23:22.484Z raft-host: apply-sleep us=33584 group=2 idx=159 applied=152
+2026-10-12T14:23:22.489Z raft-host: applied session index=163 kind=1 shard=0 ino=0
+2026-10-12T14:23:22.489Z raft-host: apply-sleep us=28431 group=2 idx=164 applied=155
+2026-10-12T14:23:22.489Z raft-host: apply-sleep us=28534 group=2 idx=163 applied=155
+2026-10-12T14:23:22.489Z raft-host: apply-sleep us=28619 group=2 idx=162 applied=155
+2026-10-12T14:23:22.497Z raft-host: apply-sleep us=31587 group=2 idx=165 applied=157
+2026-10-12T14:23:22.506Z raft-host: apply-sleep us=31711 group=0 idx=162 applied=159
+2026-10-12T14:23:22.506Z raft-host: apply-sleep us=38492 group=2 idx=166 applied=157
+2026-10-12T14:23:22.506Z raft-host: apply-sleep us=31739 group=0 idx=163 applied=159
+2026-10-12T14:23:22.506Z raft-host: apply-sleep us=34285 group=2 idx=167 applied=158
+2026-10-12T14:23:22.511Z raft-host: apply-sleep us=27353 group=2 idx=168 applied=161
+2026-10-12T14:23:22.512Z raft-host: apply-sleep us=23278 group=2 idx=170 applied=164
+2026-10-12T14:23:22.512Z raft-host: apply-sleep us=27480 group=2 idx=169 applied=161
+2026-10-12T14:23:22.522Z raft-host: apply-sleep us=27827 group=2 idx=174 applied=164
+2026-10-12T14:23:22.523Z raft-host: apply-sleep us=25509 group=2 idx=172 applied=165
+2026-10-12T14:23:22.523Z raft-host: apply-sleep us=25544 group=2 idx=173 applied=165
+2026-10-12T14:23:22.523Z raft-host: apply-sleep us=25535 group=2 idx=171 applied=165
+2026-10-12T14:23:22.528Z raft-host: apply-sleep us=27741 group=2 idx=175 applied=165
+2026-10-12T14:23:22.534Z raft-host: apply-sleep us=23393 group=2 idx=176 applied=168
+2026-10-12T14:23:22.534Z raft-host: apply-sleep us=23384 group=2 idx=177 applied=168
+2026-10-12T14:23:22.544Z raft-host: apply-sleep us=29867 group=2 idx=178 applied=170
+2026-10-12T14:23:22.559Z raft-host: apply-sleep us=34049 group=2 idx=187 applied=174
+2026-10-12T14:23:22.562Z raft-host: apply-sleep us=27762 group=2 idx=188 applied=177
+2026-10-12T14:23:22.562Z raft-host: apply-sleep us=22674 group=0 idx=172 applied=167
+2026-10-12T14:23:22.569Z raft-host: apply-sleep us=22643 group=0 idx=173 applied=168
+2026-10-12T14:23:22.574Z raft-host: apply-sleep us=22554 group=0 idx=175 applied=168
+2026-10-12T14:23:22.574Z raft-host: apply-sleep us=22468 group=0 idx=175 applied=168
+2026-10-12T14:23:22.574Z raft-host: apply-sleep us=22459 group=0 idx=175 applied=168
+2026-10-12T14:23:22.574Z raft-host: apply-sleep us=22589 group=0 idx=175 applied=168
+2026-10-12T14:23:22.574Z raft-host: apply-sleep us=22760 group=0 idx=175 applied=168
+2026-10-12T14:23:22.574Z raft-host: apply-sleep us=22797 group=0 idx=175 applied=168
+2026-10-12T14:23:22.574Z raft-host: apply-sleep us=22849 group=0 idx=175 applied=168
+2026-10-12T14:23:22.585Z raft-host: apply-sleep us=26063 group=2 idx=191 applied=187
+2026-10-12T14:23:22.591Z raft-host: gc-pass ms=370 orphan=300 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=6 emit=6 tomb=0 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:22.596Z raft-host: apply-sleep us=37293 group=0 idx=180 applied=171
+2026-10-12T14:23:22.601Z raft-host: apply-sleep us=38912 group=2 idx=192 applied=187
+2026-10-12T14:23:22.602Z raft-host: apply-sleep us=36246 group=2 idx=193 applied=189
+2026-10-12T14:23:22.602Z raft-host: apply-sleep us=33221 group=2 idx=194 applied=189
+2026-10-12T14:23:22.609Z raft-host: apply-sleep us=35397 group=0 idx=181 applied=175
+2026-10-12T14:23:22.609Z raft-host: apply-sleep us=35591 group=2 idx=195 applied=189
+2026-10-12T14:23:22.609Z raft-host: apply-sleep us=35458 group=2 idx=196 applied=189
+2026-10-12T14:23:22.614Z raft-host: apply-sleep us=29305 group=2 idx=197 applied=191
+2026-10-12T14:23:22.627Z raft-host: apply-sleep us=30734 group=0 idx=185 applied=180
+2026-10-12T14:23:22.627Z raft-host: apply-sleep us=30987 group=2 idx=202 applied=191
+2026-10-12T14:23:22.627Z raft-host: apply-sleep us=30702 group=0 idx=186 applied=180
+2026-10-12T14:23:22.627Z raft-host: apply-sleep us=31014 group=2 idx=203 applied=191
+2026-10-12T14:23:22.644Z raft-host: apply-sleep us=34481 group=2 idx=205 applied=196
+2026-10-12T14:23:22.659Z raft-host: apply-sleep us=23642 group=0 idx=191 applied=186
+2026-10-12T14:23:22.666Z raft-host: apply-sleep us=39169 group=2 idx=208 applied=203
+2026-10-12T14:23:22.666Z raft-host: apply-sleep us=39327 group=2 idx=207 applied=203
+2026-10-12T14:23:22.666Z raft-host: apply-sleep us=39351 group=2 idx=206 applied=203
+2026-10-12T14:23:22.666Z raft-host: apply-sleep us=39290 group=2 idx=209 applied=203
+2026-10-12T14:23:22.671Z raft-host: apply-sleep us=35516 group=0 idx=192 applied=186
+2026-10-12T14:23:22.680Z raft-host: apply-sleep us=37169 group=2 idx=215 applied=205
+2026-10-12T14:23:22.683Z raft-host: apply-sleep us=29687 group=2 idx=219 applied=205
+2026-10-12T14:23:22.684Z raft-host: apply-sleep us=29723 group=2 idx=217 applied=205
+2026-10-12T14:23:22.684Z raft-host: apply-sleep us=29756 group=2 idx=218 applied=205
+2026-10-12T14:23:22.684Z raft-host: apply-sleep us=37390 group=2 idx=216 applied=205
+2026-10-12T14:23:22.689Z raft-host: apply-sleep us=30189 group=0 idx=198 applied=191
+2026-10-12T14:23:22.698Z raft-host: apply-sleep us=31616 group=2 idx=222 applied=214
+2026-10-12T14:23:22.698Z raft-host: apply-sleep us=31626 group=2 idx=221 applied=214
+2026-10-12T14:23:22.698Z raft-host: apply-sleep us=36087 group=2 idx=220 applied=205
+2026-10-12T14:23:22.704Z raft-host: apply-sleep us=30665 group=0 idx=199 applied=192
+2026-10-12T14:23:22.705Z raft-host: apply-sleep us=30709 group=0 idx=199 applied=192
+2026-10-12T14:23:22.705Z raft-host: apply-sleep us=30716 group=0 idx=199 applied=192
+2026-10-12T14:23:22.705Z raft-host: apply-sleep us=30800 group=0 idx=199 applied=192
+2026-10-12T14:23:22.719Z raft-host: apply-sleep us=45566 group=2 idx=225 applied=214
+2026-10-12T14:23:22.725Z raft-host: apply-sleep us=43440 group=2 idx=226 applied=215
+2026-10-12T14:23:22.731Z raft-host: apply-sleep us=45927 group=2 idx=227 applied=219
+2026-10-12T14:23:22.738Z raft-host: apply-sleep us=40264 group=2 idx=230 applied=222
+2026-10-12T14:23:22.738Z raft-host: apply-sleep us=40153 group=2 idx=231 applied=222
+2026-10-12T14:23:22.738Z raft-host: apply-sleep us=49514 group=2 idx=228 applied=219
+2026-10-12T14:23:22.738Z raft-host: apply-sleep us=40170 group=2 idx=229 applied=222
+2026-10-12T14:23:22.747Z raft-host: apply-sleep us=41927 group=0 idx=204 applied=199
+2026-10-12T14:23:22.747Z raft-host: apply-sleep us=42259 group=2 idx=233 applied=222
+2026-10-12T14:23:22.747Z raft-host: apply-sleep us=42053 group=2 idx=232 applied=222
+2026-10-12T14:23:22.751Z raft-host: apply-sleep us=39227 group=0 idx=206 applied=199
+2026-10-12T14:23:22.751Z raft-host: apply-sleep us=36845 group=0 idx=207 applied=199
+2026-10-12T14:23:22.761Z raft-host: apply-sleep us=35784 group=2 idx=234 applied=226
+2026-10-12T14:23:22.764Z raft-host: apply-sleep us=33221 group=2 idx=235 applied=227
+2026-10-12T14:23:22.783Z raft-host: apply-sleep us=26740 group=0 idx=211 applied=207
+2026-10-12T14:23:22.783Z raft-host: apply-sleep us=26773 group=0 idx=211 applied=207
+2026-10-12T14:23:22.783Z raft-host: apply-sleep us=26884 group=0 idx=211 applied=207
+2026-10-12T14:23:22.783Z raft-host: apply-sleep us=26847 group=0 idx=211 applied=207
+2026-10-12T14:23:22.783Z raft-host: apply-sleep us=36319 group=0 idx=211 applied=205
+2026-10-12T14:23:22.783Z raft-host: apply-sleep us=36414 group=2 idx=237 applied=233
+2026-10-12T14:23:22.783Z raft-host: apply-sleep us=26911 group=0 idx=211 applied=207
+2026-10-12T14:23:22.783Z raft-host: apply-sleep us=26927 group=0 idx=211 applied=207
+2026-10-12T14:23:22.783Z raft-host: apply-sleep us=27002 group=0 idx=211 applied=207
+2026-10-12T14:23:22.783Z raft-host: apply-sleep us=26947 group=0 idx=211 applied=207
+2026-10-12T14:23:22.783Z raft-host: apply-sleep us=27055 group=0 idx=211 applied=207
+2026-10-12T14:23:22.791Z raft-host: apply-sleep us=40261 group=2 idx=238 applied=233
+2026-10-12T14:23:22.791Z raft-host: apply-sleep us=40331 group=2 idx=240 applied=233
+2026-10-12T14:23:22.791Z raft-host: apply-sleep us=40386 group=2 idx=239 applied=233
+2026-10-12T14:23:22.799Z raft-host: apply-sleep us=44193 group=2 idx=241 applied=233
+2026-10-12T14:23:22.809Z raft-host: apply-sleep us=45312 group=2 idx=242 applied=234
+2026-10-12T14:23:22.813Z raft-host: apply-sleep us=31997 group=2 idx=243 applied=236
+2026-10-12T14:23:22.813Z raft-host: apply-sleep us=31994 group=2 idx=244 applied=236
+2026-10-12T14:23:22.827Z raft-host: apply-sleep us=46367 group=0 idx=216 applied=210
+2026-10-12T14:23:22.842Z raft-host: apply-sleep us=55681 group=2 idx=245 applied=237
+2026-10-12T14:23:22.842Z raft-host: apply-sleep us=51409 group=2 idx=246 applied=240
+2026-10-12T14:23:22.842Z raft-host: apply-sleep us=43547 group=2 idx=248 applied=241
+2026-10-12T14:23:22.848Z raft-host: apply-sleep us=41545 group=2 idx=249 applied=241
+2026-10-12T14:23:22.856Z raft-host: apply-sleep us=41074 group=2 idx=250 applied=244
+2026-10-12T14:23:22.863Z raft-host: apply-sleep us=37839 group=2 idx=251 applied=244
+2026-10-12T14:23:22.863Z raft-host: apply-sleep us=37865 group=2 idx=252 applied=244
+2026-10-12T14:23:22.875Z raft-host: apply-sleep us=37719 group=0 idx=220 applied=216
+2026-10-12T14:23:22.875Z raft-host: apply-sleep us=40778 group=0 idx=220 applied=216
+2026-10-12T14:23:22.875Z raft-host: apply-sleep us=37854 group=0 idx=220 applied=216
+2026-10-12T14:23:22.875Z raft-host: apply-sleep us=37870 group=0 idx=220 applied=216
+2026-10-12T14:23:22.875Z raft-host: apply-sleep us=37889 group=0 idx=220 applied=216
+2026-10-12T14:23:22.875Z raft-host: apply-sleep us=37907 group=0 idx=220 applied=216
+2026-10-12T14:23:22.875Z raft-host: apply-sleep us=37914 group=0 idx=220 applied=216
+2026-10-12T14:23:22.875Z raft-host: apply-sleep us=37968 group=0 idx=220 applied=216
+2026-10-12T14:23:22.875Z raft-host: apply-sleep us=45467 group=2 idx=253 applied=244
+2026-10-12T14:23:22.875Z raft-host: apply-sleep us=32687 group=2 idx=254 applied=248
+2026-10-12T14:23:22.875Z raft-host: apply-sleep us=37995 group=0 idx=220 applied=216
+2026-10-12T14:23:22.884Z raft-host: apply-sleep us=41214 group=0 idx=223 applied=217
+2026-10-12T14:23:22.887Z raft-host: apply-sleep us=39149 group=2 idx=255 applied=249
+2026-10-12T14:23:22.889Z raft-host: apply-sleep us=34380 group=2 idx=257 applied=249
+2026-10-12T14:23:22.889Z raft-host: apply-sleep us=34422 group=2 idx=256 applied=249
+2026-10-12T14:23:22.897Z raft-host: apply-sleep us=34342 group=2 idx=258 applied=252
+2026-10-12T14:23:22.898Z raft-host: apply-sleep us=27000 group=2 idx=259 applied=252
+2026-10-12T14:23:22.909Z raft-host: apply-sleep us=33796 group=2 idx=260 applied=254
+2026-10-12T14:23:22.913Z raft-host: apply-sleep us=32024 group=2 idx=265 applied=254
+2026-10-12T14:23:22.913Z raft-host: apply-sleep us=32039 group=2 idx=266 applied=254
+2026-10-12T14:23:22.913Z raft-host: apply-sleep us=32048 group=2 idx=267 applied=254
+2026-10-12T14:23:22.917Z raft-host: apply-sleep us=36417 group=2 idx=268 applied=254
+2026-10-12T14:23:22.924Z raft-host: apply-sleep us=27489 group=0 idx=231 applied=225
+2026-10-12T14:23:22.928Z raft-host: apply-sleep us=24572 group=2 idx=272 applied=259
+2026-10-12T14:23:22.928Z raft-host: apply-sleep us=29203 group=2 idx=271 applied=259
+2026-10-12T14:23:22.937Z raft-host: apply-sleep us=26729 group=0 idx=233 applied=226
+2026-10-12T14:23:22.937Z raft-host: apply-sleep us=26690 group=0 idx=233 applied=226
+2026-10-12T14:23:22.937Z raft-host: apply-sleep us=26705 group=0 idx=233 applied=226
+2026-10-12T14:23:22.937Z raft-host: apply-sleep us=26707 group=0 idx=233 applied=226
+2026-10-12T14:23:22.937Z raft-host: apply-sleep us=26816 group=0 idx=233 applied=226
+2026-10-12T14:23:22.937Z raft-host: apply-sleep us=26770 group=0 idx=233 applied=226
+2026-10-12T14:23:22.937Z raft-host: apply-sleep us=26845 group=0 idx=233 applied=226
+2026-10-12T14:23:22.941Z raft-host: apply-sleep us=27754 group=2 idx=273 applied=267
+2026-10-12T14:23:22.950Z raft-host: apply-sleep us=35465 group=2 idx=274 applied=267
+2026-10-12T14:23:22.950Z raft-host: apply-sleep us=32460 group=2 idx=275 applied=268
+2026-10-12T14:23:22.953Z raft-host: apply-sleep us=28217 group=2 idx=276 applied=268
+2026-10-12T14:23:22.956Z raft-host: apply-sleep us=28066 group=2 idx=277 applied=272
+2026-10-12T14:23:22.959Z raft-host: apply-sleep us=25371 group=2 idx=278 applied=272
+2026-10-12T14:23:22.962Z raft-host: apply-sleep us=25060 group=0 idx=238 applied=233
+2026-10-12T14:23:22.968Z raft-host: apply-sleep us=23935 group=2 idx=283 applied=273
+2026-10-12T14:23:22.971Z raft-host: apply-sleep us=21054 group=2 idx=284 applied=275
+2026-10-12T14:23:22.976Z raft-host: apply-sleep us=23290 group=2 idx=285 applied=276
+2026-10-12T14:23:22.976Z raft-host: apply-sleep us=23292 group=2 idx=286 applied=276
+2026-10-12T14:23:22.984Z raft-host: apply-sleep us=27686 group=2 idx=287 applied=277
+2026-10-12T14:23:22.984Z raft-host: apply-sleep us=27921 group=2 idx=288 applied=277
+2026-10-12T14:23:22.992Z raft-host: apply-sleep us=31345 group=2 idx=289 applied=278
+2026-10-12T14:23:22.993Z raft-host: apply-sleep us=25888 group=2 idx=290 applied=283
+2026-10-12T14:23:22.997Z raft-host: applied session index=245 kind=1 shard=0 ino=0
+2026-10-12T14:23:22.999Z raft-host: apply-sleep us=31782 group=2 idx=291 applied=283
+2026-10-12T14:23:22.999Z raft-host: apply-sleep us=28375 group=2 idx=292 applied=284
+2026-10-12T14:23:22.999Z raft-host: apply-sleep us=31728 group=0 idx=245 applied=238
+2026-10-12T14:23:23.004Z raft-host: apply-sleep us=28347 group=2 idx=293 applied=286
+2026-10-12T14:23:23.008Z raft-host: apply-sleep us=23650 group=2 idx=303 applied=288
+2026-10-12T14:23:23.008Z raft-host: apply-sleep us=23596 group=2 idx=294 applied=288
+2026-10-12T14:23:23.012Z raft-host: apply-sleep us=27769 group=0 idx=247 applied=241
+2026-10-12T14:23:23.019Z raft-host: apply-sleep us=32236 group=2 idx=309 applied=288
+2026-10-12T14:23:23.023Z raft-host: apply-sleep us=23886 group=0 idx=251 applied=245
+2026-10-12T14:23:23.026Z raft-host: apply-sleep us=21928 group=2 idx=312 applied=293
+2026-10-12T14:23:23.026Z raft-host: apply-sleep us=25404 group=2 idx=311 applied=292
+2026-10-12T14:23:23.033Z raft-host: apply-sleep us=24704 group=2 idx=314 applied=307
+2026-10-12T14:23:23.033Z raft-host: apply-sleep us=24737 group=2 idx=313 applied=307
+2026-10-12T14:23:23.044Z raft-host: apply-sleep us=22552 group=2 idx=319 applied=309
+2026-10-12T14:23:23.050Z raft-host: apply-sleep us=23017 group=0 idx=258 applied=252
+2026-10-12T14:23:23.064Z raft-host: apply-sleep us=26046 group=0 idx=262 applied=256
+2026-10-12T14:23:23.064Z raft-host: apply-sleep us=26105 group=0 idx=263 applied=256
+2026-10-12T14:23:23.064Z raft-host: apply-sleep us=26199 group=0 idx=261 applied=256
+2026-10-12T14:23:23.064Z raft-host: apply-sleep us=26389 group=2 idx=321 applied=318
+2026-10-12T14:23:23.069Z raft-host: apply-sleep us=29469 group=2 idx=322 applied=318
+2026-10-12T14:23:23.073Z raft-host: apply-sleep us=22841 group=0 idx=265 applied=259
+2026-10-12T14:23:23.076Z raft-host: apply-sleep us=24568 group=2 idx=323 applied=319
+2026-10-12T14:23:23.083Z raft-host: apply-sleep us=20591 group=0 idx=267 applied=260
+2026-10-12T14:23:23.090Z raft-host: apply-sleep us=24597 group=2 idx=325 applied=321
+2026-10-12T14:23:23.090Z raft-host: apply-sleep us=21159 group=2 idx=327 applied=322
+2026-10-12T14:23:23.090Z raft-host: apply-sleep us=21238 group=2 idx=326 applied=322
+2026-10-12T14:23:23.095Z raft-host: apply-sleep us=21955 group=2 idx=328 applied=322
+2026-10-12T14:23:23.095Z raft-host: apply-sleep us=21937 group=2 idx=329 applied=322
+2026-10-12T14:23:23.106Z raft-host: apply-sleep us=27604 group=2 idx=331 applied=323
+2026-10-12T14:23:23.107Z raft-host: apply-sleep us=25359 group=2 idx=332 applied=324
+2026-10-12T14:23:23.107Z raft-host: apply-sleep us=25479 group=2 idx=333 applied=324
+2026-10-12T14:23:23.114Z raft-host: apply-sleep us=23491 group=2 idx=334 applied=327
+2026-10-12T14:23:23.121Z raft-host: apply-sleep us=30321 group=0 idx=274 applied=270
+2026-10-12T14:23:23.133Z raft-host: apply-sleep us=33217 group=0 idx=275 applied=270
+2026-10-12T14:23:23.135Z raft-host: apply-sleep us=27755 group=0 idx=276 applied=271
+2026-10-12T14:23:23.135Z raft-host: apply-sleep us=27906 group=0 idx=276 applied=271
+2026-10-12T14:23:23.135Z raft-host: apply-sleep us=27912 group=0 idx=276 applied=271
+2026-10-12T14:23:23.135Z raft-host: apply-sleep us=27933 group=0 idx=276 applied=271
+2026-10-12T14:23:23.135Z raft-host: apply-sleep us=28946 group=0 idx=276 applied=270
+2026-10-12T14:23:23.135Z raft-host: apply-sleep us=27984 group=0 idx=276 applied=271
+2026-10-12T14:23:23.135Z raft-host: apply-sleep us=28016 group=0 idx=276 applied=271
+2026-10-12T14:23:23.135Z raft-host: apply-sleep us=27923 group=0 idx=276 applied=271
+2026-10-12T14:23:23.135Z raft-host: apply-sleep us=29325 group=2 idx=337 applied=331
+2026-10-12T14:23:23.144Z raft-host: apply-sleep us=30130 group=2 idx=339 applied=334
+2026-10-12T14:23:23.148Z raft-host: apply-sleep us=27608 group=2 idx=340 applied=335
+2026-10-12T14:23:23.152Z raft-host: apply-sleep us=25853 group=0 idx=279 applied=274
+2026-10-12T14:23:23.152Z raft-host: apply-sleep us=25776 group=0 idx=278 applied=274
+2026-10-12T14:23:23.157Z raft-host: apply-sleep us=26925 group=2 idx=342 applied=336
+2026-10-12T14:23:23.163Z raft-host: apply-sleep us=26256 group=2 idx=343 applied=337
+2026-10-12T14:23:23.173Z raft-host: apply-sleep us=26716 group=2 idx=350 applied=339
+2026-10-12T14:23:23.173Z raft-host: apply-sleep us=25423 group=0 idx=282 applied=277
+2026-10-12T14:23:23.178Z raft-host: apply-sleep us=25755 group=2 idx=351 applied=341
+2026-10-12T14:23:23.181Z raft-host: apply-sleep us=24904 group=0 idx=284 applied=279
+2026-10-12T14:23:23.181Z raft-host: apply-sleep us=20653 group=0 idx=285 applied=279
+2026-10-12T14:23:23.181Z raft-host: apply-sleep us=20637 group=0 idx=285 applied=279
+2026-10-12T14:23:23.181Z raft-host: apply-sleep us=20672 group=0 idx=285 applied=279
+2026-10-12T14:23:23.181Z raft-host: apply-sleep us=20657 group=0 idx=285 applied=279
+2026-10-12T14:23:23.181Z raft-host: apply-sleep us=20641 group=0 idx=285 applied=279
+2026-10-12T14:23:23.182Z raft-host: apply-sleep us=20661 group=0 idx=285 applied=279
+2026-10-12T14:23:23.182Z raft-host: apply-sleep us=20635 group=0 idx=285 applied=279
+2026-10-12T14:23:23.182Z raft-host: apply-sleep us=20644 group=0 idx=285 applied=279
+2026-10-12T14:23:23.182Z raft-host: apply-sleep us=23018 group=0 idx=285 applied=279
+2026-10-12T14:23:23.185Z raft-host: apply-sleep us=21526 group=2 idx=352 applied=349
+2026-10-12T14:23:23.191Z raft-host: apply-sleep us=22628 group=2 idx=353 applied=349
+2026-10-12T14:23:23.201Z raft-host: apply-sleep us=38378 group=2 idx=354 applied=349
+2026-10-12T14:23:23.206Z raft-host: apply-sleep us=32908 group=2 idx=357 applied=350
+2026-10-12T14:23:23.206Z raft-host: apply-sleep us=32939 group=2 idx=356 applied=350
+2026-10-12T14:23:23.206Z raft-host: apply-sleep us=32953 group=2 idx=355 applied=350
+2026-10-12T14:23:23.212Z raft-host: apply-sleep us=35845 group=2 idx=358 applied=350
+2026-10-12T14:23:23.212Z raft-host: apply-sleep us=33024 group=2 idx=359 applied=351
+2026-10-12T14:23:23.225Z raft-host: apply-sleep us=34053 group=2 idx=361 applied=353
+2026-10-12T14:23:23.225Z raft-host: apply-sleep us=34063 group=2 idx=360 applied=353
+2026-10-12T14:23:23.229Z raft-host: apply-sleep us=35384 group=2 idx=362 applied=353
+2026-10-12T14:23:23.230Z raft-host: apply-sleep us=27972 group=0 idx=292 applied=289
+2026-10-12T14:23:23.231Z raft-host: apply-sleep us=29068 group=2 idx=363 applied=354
+2026-10-12T14:23:23.231Z raft-host: apply-sleep us=24878 group=0 idx=293 applied=289
+2026-10-12T14:23:23.240Z raft-host: apply-sleep us=32263 group=2 idx=364 applied=357
+2026-10-12T14:23:23.242Z raft-host: apply-sleep us=29758 group=0 idx=295 applied=289
+2026-10-12T14:23:23.242Z raft-host: apply-sleep us=29880 group=0 idx=295 applied=289
+2026-10-12T14:23:23.242Z raft-host: apply-sleep us=29842 group=0 idx=295 applied=289
+2026-10-12T14:23:23.242Z raft-host: apply-sleep us=29828 group=0 idx=295 applied=289
+2026-10-12T14:23:23.242Z raft-host: apply-sleep us=29890 group=0 idx=295 applied=289
+2026-10-12T14:23:23.242Z raft-host: apply-sleep us=29915 group=0 idx=295 applied=289
+2026-10-12T14:23:23.242Z raft-host: apply-sleep us=29880 group=0 idx=295 applied=289
+2026-10-12T14:23:23.242Z raft-host: apply-sleep us=29957 group=0 idx=295 applied=289
+2026-10-12T14:23:23.242Z raft-host: apply-sleep us=29903 group=0 idx=295 applied=289
+2026-10-12T14:23:23.242Z raft-host: apply-sleep us=29983 group=0 idx=295 applied=289
+2026-10-12T14:23:23.242Z raft-host: apply-sleep us=29911 group=0 idx=295 applied=289
+2026-10-12T14:23:23.249Z raft-host: apply-sleep us=31728 group=2 idx=365 applied=359
+2026-10-12T14:23:23.249Z raft-host: apply-sleep us=27149 group=2 idx=366 applied=359
+2026-10-12T14:23:23.257Z raft-host: apply-sleep us=31885 group=2 idx=367 applied=361
+2026-10-12T14:23:23.261Z raft-host: apply-sleep us=31359 group=2 idx=368 applied=362
+2026-10-12T14:23:23.268Z raft-host: apply-sleep us=33813 group=2 idx=370 applied=363
+2026-10-12T14:23:23.268Z raft-host: apply-sleep us=36885 group=2 idx=369 applied=363
+2026-10-12T14:23:23.282Z raft-host: apply-sleep us=29411 group=2 idx=375 applied=366
+2026-10-12T14:23:23.289Z raft-host: apply-sleep us=35860 group=2 idx=376 applied=366
+2026-10-12T14:23:23.293Z raft-host: apply-sleep us=35250 group=2 idx=377 applied=367
+2026-10-12T14:23:23.297Z raft-host: apply-sleep us=34492 group=2 idx=378 applied=368
+2026-10-12T14:23:23.297Z raft-host: apply-sleep us=21087 group=0 idx=302 applied=300
+2026-10-12T14:23:23.300Z raft-host: apply-sleep us=28891 group=0 idx=303 applied=298
+2026-10-12T14:23:23.300Z raft-host: apply-sleep us=28897 group=0 idx=303 applied=298
+2026-10-12T14:23:23.300Z raft-host: apply-sleep us=28964 group=0 idx=303 applied=298
+2026-10-12T14:23:23.300Z raft-host: apply-sleep us=29004 group=0 idx=303 applied=298
+2026-10-12T14:23:23.300Z raft-host: apply-sleep us=28983 group=0 idx=303 applied=298
+2026-10-12T14:23:23.300Z raft-host: apply-sleep us=29087 group=0 idx=303 applied=298
+2026-10-12T14:23:23.300Z raft-host: apply-sleep us=29091 group=0 idx=303 applied=298
+2026-10-12T14:23:23.300Z raft-host: apply-sleep us=29178 group=0 idx=303 applied=298
+2026-10-12T14:23:23.307Z raft-host: apply-sleep us=39671 group=2 idx=379 applied=370
+2026-10-12T14:23:23.314Z raft-host: apply-sleep us=37334 group=0 idx=307 applied=300
+2026-10-12T14:23:23.315Z raft-host: apply-sleep us=33469 group=2 idx=382 applied=375
+2026-10-12T14:23:23.325Z raft-host: apply-sleep us=36383 group=2 idx=383 applied=376
+2026-10-12T14:23:23.340Z raft-host: apply-sleep us=36833 group=2 idx=384 applied=378
+2026-10-12T14:23:23.340Z raft-host: apply-sleep us=30649 group=2 idx=393 applied=381
+2026-10-12T14:23:23.347Z raft-host: apply-sleep us=32194 group=0 idx=315 applied=307
+2026-10-12T14:23:23.347Z raft-host: apply-sleep us=32233 group=0 idx=314 applied=307
+2026-10-12T14:23:23.349Z raft-host: apply-sleep us=21102 group=0 idx=317 applied=309
+2026-10-12T14:23:23.349Z raft-host: apply-sleep us=21104 group=0 idx=317 applied=309
+2026-10-12T14:23:23.349Z raft-host: apply-sleep us=21193 group=0 idx=317 applied=309
+2026-10-12T14:23:23.349Z raft-host: apply-sleep us=23536 group=0 idx=317 applied=309
+2026-10-12T14:23:23.349Z raft-host: apply-sleep us=21224 group=0 idx=317 applied=309
+2026-10-12T14:23:23.349Z raft-host: apply-sleep us=21267 group=0 idx=317 applied=309
+2026-10-12T14:23:23.349Z raft-host: apply-sleep us=21285 group=0 idx=317 applied=309
+2026-10-12T14:23:23.349Z raft-host: apply-sleep us=21289 group=0 idx=317 applied=309
+2026-10-12T14:23:23.349Z raft-host: apply-sleep us=21313 group=0 idx=317 applied=309
+2026-10-12T14:23:23.349Z raft-host: apply-sleep us=21343 group=0 idx=317 applied=309
+2026-10-12T14:23:23.349Z raft-host: apply-sleep us=21357 group=0 idx=317 applied=309
+2026-10-12T14:23:23.349Z raft-host: apply-sleep us=21357 group=0 idx=317 applied=309
+2026-10-12T14:23:23.349Z raft-host: apply-sleep us=21405 group=0 idx=317 applied=309
+2026-10-12T14:23:23.349Z raft-host: apply-sleep us=21435 group=0 idx=317 applied=309
+2026-10-12T14:23:23.349Z raft-host: apply-sleep us=30300 group=2 idx=394 applied=382
+2026-10-12T14:23:23.349Z raft-host: apply-sleep us=23884 group=0 idx=316 applied=309
+2026-10-12T14:23:23.356Z raft-host: applied session index=319 kind=1 shard=0 ino=0
+2026-10-12T14:23:23.356Z raft-host: apply-sleep us=26843 group=0 idx=319 applied=313
+2026-10-12T14:23:23.375Z raft-host: apply-sleep us=34263 group=2 idx=400 applied=393
+2026-10-12T14:23:23.375Z raft-host: apply-sleep us=27944 group=0 idx=325 applied=315
+2026-10-12T14:23:23.375Z raft-host: apply-sleep us=32613 group=2 idx=399 applied=393
+2026-10-12T14:23:23.375Z raft-host: apply-sleep us=28169 group=2 idx=401 applied=393
+2026-10-12T14:23:23.381Z raft-host: apply-sleep us=24931 group=2 idx=402 applied=398
+2026-10-12T14:23:23.390Z raft-host: apply-sleep us=40624 group=2 idx=404 applied=398
+2026-10-12T14:23:23.390Z raft-host: apply-sleep us=33682 group=2 idx=403 applied=398
+2026-10-12T14:23:23.401Z raft-host: apply-sleep us=31499 group=0 idx=327 applied=323
+2026-10-12T14:23:23.405Z raft-host: apply-sleep us=38906 group=2 idx=409 applied=398
+2026-10-12T14:23:23.405Z raft-host: apply-sleep us=31913 group=0 idx=330 applied=324
+2026-10-12T14:23:23.405Z raft-host: apply-sleep us=31942 group=0 idx=329 applied=324
+2026-10-12T14:23:23.408Z raft-host: apply-sleep us=33739 group=2 idx=412 applied=398
+2026-10-12T14:23:23.411Z raft-host: apply-sleep us=31032 group=0 idx=331 applied=325
+2026-10-12T14:23:23.411Z raft-host: apply-sleep us=31103 group=0 idx=332 applied=325
+2026-10-12T14:23:23.411Z raft-host: apply-sleep us=29112 group=0 idx=332 applied=326
+2026-10-12T14:23:23.411Z raft-host: apply-sleep us=29137 group=0 idx=332 applied=326
+2026-10-12T14:23:23.411Z raft-host: apply-sleep us=29198 group=0 idx=332 applied=326
+2026-10-12T14:23:23.411Z raft-host: apply-sleep us=29172 group=0 idx=332 applied=326
+2026-10-12T14:23:23.411Z raft-host: apply-sleep us=29213 group=0 idx=332 applied=326
+2026-10-12T14:23:23.411Z raft-host: apply-sleep us=29209 group=0 idx=332 applied=326
+2026-10-12T14:23:23.411Z raft-host: apply-sleep us=29165 group=0 idx=332 applied=326
+2026-10-12T14:23:23.417Z raft-host: apply-sleep us=35298 group=2 idx=413 applied=402
+2026-10-12T14:23:23.430Z raft-host: apply-sleep us=45492 group=2 idx=414 applied=402
+2026-10-12T14:23:23.430Z raft-host: apply-sleep us=39779 group=2 idx=415 applied=408
+2026-10-12T14:23:23.431Z raft-host: apply-sleep us=29704 group=2 idx=416 applied=408
+2026-10-12T14:23:23.431Z raft-host: apply-sleep us=29776 group=2 idx=418 applied=408
+2026-10-12T14:23:23.431Z raft-host: apply-sleep us=29899 group=2 idx=417 applied=408
+2026-10-12T14:23:23.436Z raft-host: apply-sleep us=27642 group=2 idx=420 applied=412
+2026-10-12T14:23:23.436Z raft-host: apply-sleep us=27729 group=2 idx=419 applied=412
+2026-10-12T14:23:23.447Z raft-host: apply-sleep us=30197 group=2 idx=422 applied=413
+2026-10-12T14:23:23.456Z raft-host: apply-sleep us=37386 group=0 idx=340 applied=333
+2026-10-12T14:23:23.462Z raft-host: apply-sleep us=31765 group=2 idx=424 applied=415
+2026-10-12T14:23:23.462Z raft-host: apply-sleep us=31927 group=2 idx=425 applied=415
+2026-10-12T14:23:23.468Z raft-host: apply-sleep us=37740 group=0 idx=342 applied=335
+2026-10-12T14:23:23.472Z raft-host: apply-sleep us=35830 group=2 idx=426 applied=420
+2026-10-12T14:23:23.472Z raft-host: apply-sleep us=35825 group=0 idx=343 applied=336
+2026-10-12T14:23:23.472Z raft-host: apply-sleep us=35884 group=2 idx=427 applied=420
+2026-10-12T14:23:23.490Z raft-host: apply-sleep us=43968 group=0 idx=345 applied=337
+2026-10-12T14:23:23.490Z raft-host: apply-sleep us=44021 group=0 idx=345 applied=337
+2026-10-12T14:23:23.490Z raft-host: apply-sleep us=44046 group=0 idx=345 applied=337
+2026-10-12T14:23:23.490Z raft-host: apply-sleep us=44091 group=0 idx=345 applied=337
+2026-10-12T14:23:23.490Z raft-host: apply-sleep us=42767 group=0 idx=344 applied=337
+2026-10-12T14:23:23.490Z raft-host: apply-sleep us=44083 group=0 idx=345 applied=337
+2026-10-12T14:23:23.496Z raft-host: getchunks slow ino=10718 start=0 n=0 ri_ms=22 total_ms=22 rc=0 slow=4
+2026-10-12T14:23:23.501Z raft-host: apply-sleep us=44281 group=0 idx=351 applied=341
+2026-10-12T14:23:23.507Z raft-host: applied session index=352 kind=1 shard=0 ino=0
+2026-10-12T14:23:23.507Z raft-host: apply-sleep us=45487 group=0 idx=352 applied=341
+2026-10-12T14:23:23.507Z raft-host: apply-sleep us=45445 group=2 idx=431 applied=425
+2026-10-12T14:23:23.508Z raft-host: apply-sleep us=45511 group=2 idx=430 applied=425
+2026-10-12T14:23:23.517Z raft-host: apply-sleep us=48959 group=2 idx=433 applied=425
+2026-10-12T14:23:23.517Z raft-host: apply-sleep us=45237 group=2 idx=434 applied=427
+2026-10-12T14:23:23.517Z raft-host: apply-sleep us=49025 group=2 idx=432 applied=425
+2026-10-12T14:23:23.522Z raft-host: apply-sleep us=41819 group=0 idx=353 applied=343
+2026-10-12T14:23:23.531Z raft-host: apply-sleep us=41440 group=2 idx=438 applied=428
+2026-10-12T14:23:23.531Z raft-host: apply-sleep us=47343 group=0 idx=354 applied=343
+2026-10-12T14:23:23.531Z raft-host: apply-sleep us=52305 group=2 idx=437 applied=428
+2026-10-12T14:23:23.548Z raft-host: apply-sleep us=47014 group=2 idx=439 applied=429
+2026-10-12T14:23:23.553Z raft-host: apply-sleep us=45407 group=2 idx=440 applied=431
+2026-10-12T14:23:23.560Z raft-host: apply-sleep us=42994 group=2 idx=441 applied=434
+2026-10-12T14:23:23.564Z raft-host: apply-sleep us=40297 group=0 idx=361 applied=353
+2026-10-12T14:23:23.564Z raft-host: apply-sleep us=40393 group=0 idx=361 applied=353
+2026-10-12T14:23:23.564Z raft-host: apply-sleep us=40411 group=0 idx=361 applied=353
+2026-10-12T14:23:23.564Z raft-host: apply-sleep us=40440 group=0 idx=361 applied=353
+2026-10-12T14:23:23.564Z raft-host: apply-sleep us=40520 group=0 idx=361 applied=353
+2026-10-12T14:23:23.564Z raft-host: apply-sleep us=40620 group=0 idx=361 applied=353
+2026-10-12T14:23:23.564Z raft-host: apply-sleep us=37551 group=0 idx=361 applied=353
+2026-10-12T14:23:23.569Z raft-host: apply-sleep us=47112 group=2 idx=444 applied=434
+2026-10-12T14:23:23.569Z raft-host: apply-sleep us=49824 group=2 idx=442 applied=434
+2026-10-12T14:23:23.575Z raft-host: apply-sleep us=43299 group=2 idx=445 applied=438
+2026-10-12T14:23:23.576Z raft-host: apply-sleep us=37156 group=2 idx=446 applied=438
+2026-10-12T14:23:23.586Z raft-host: apply-sleep us=46974 group=0 idx=363 applied=358
+2026-10-12T14:23:23.586Z raft-host: apply-sleep us=38116 group=2 idx=447 applied=439
+2026-10-12T14:23:23.594Z raft-host: apply-sleep us=45478 group=0 idx=366 applied=359
+2026-10-12T14:23:23.598Z raft-host: apply-sleep us=45271 group=2 idx=448 applied=440
+2026-10-12T14:23:23.598Z raft-host: apply-sleep us=44149 group=2 idx=449 applied=440
+2026-10-12T14:23:23.607Z raft-host: apply-sleep us=38354 group=0 idx=368 applied=362
+2026-10-12T14:23:23.607Z raft-host: apply-sleep us=38320 group=2 idx=450 applied=444
+2026-10-12T14:23:23.618Z raft-host: apply-sleep us=46702 group=2 idx=455 applied=444
+2026-10-12T14:23:23.618Z raft-host: apply-sleep us=43858 group=2 idx=456 applied=445
+2026-10-12T14:23:23.622Z raft-host: apply-sleep us=36263 group=2 idx=457 applied=447
+2026-10-12T14:23:23.628Z raft-host: apply-sleep us=39210 group=2 idx=458 applied=447
+2026-10-12T14:23:23.636Z raft-host: apply-sleep us=29536 group=0 idx=371 applied=367
+2026-10-12T14:23:23.636Z raft-host: apply-sleep us=29535 group=0 idx=371 applied=367
+2026-10-12T14:23:23.636Z raft-host: apply-sleep us=29674 group=0 idx=371 applied=367
+2026-10-12T14:23:23.636Z raft-host: apply-sleep us=29673 group=0 idx=371 applied=367
+2026-10-12T14:23:23.636Z raft-host: apply-sleep us=29699 group=0 idx=371 applied=367
+2026-10-12T14:23:23.636Z raft-host: apply-sleep us=29700 group=0 idx=371 applied=367
+2026-10-12T14:23:23.636Z raft-host: apply-sleep us=29775 group=0 idx=371 applied=367
+2026-10-12T14:23:23.636Z raft-host: apply-sleep us=29805 group=0 idx=371 applied=367
+2026-10-12T14:23:23.636Z raft-host: apply-sleep us=29772 group=0 idx=371 applied=367
+2026-10-12T14:23:23.636Z raft-host: apply-sleep us=29779 group=0 idx=371 applied=367
+2026-10-12T14:23:23.636Z raft-host: apply-sleep us=42503 group=2 idx=459 applied=447
+2026-10-12T14:23:23.636Z raft-host: apply-sleep us=29965 group=0 idx=371 applied=367
+2026-10-12T14:23:23.636Z raft-host: apply-sleep us=29977 group=0 idx=371 applied=367
+2026-10-12T14:23:23.642Z raft-host: apply-sleep us=43870 group=2 idx=460 applied=447
+2026-10-12T14:23:23.646Z raft-host: apply-sleep us=45434 group=2 idx=461 applied=449
+2026-10-12T14:23:23.646Z raft-host: apply-sleep us=40972 group=2 idx=462 applied=449
+2026-10-12T14:23:23.661Z raft-host: apply-sleep us=38304 group=2 idx=463 applied=457
+2026-10-12T14:23:23.661Z raft-host: apply-sleep us=36027 group=2 idx=466 applied=457
+2026-10-12T14:23:23.661Z raft-host: apply-sleep us=38337 group=2 idx=465 applied=457
+2026-10-12T14:23:23.661Z raft-host: apply-sleep us=38415 group=2 idx=464 applied=457
+2026-10-12T14:23:23.672Z raft-host: apply-sleep us=35901 group=0 idx=378 applied=371
+2026-10-12T14:23:23.672Z raft-host: apply-sleep us=36049 group=2 idx=472 applied=459
+2026-10-12T14:23:23.672Z raft-host: apply-sleep us=35956 group=2 idx=473 applied=459
+2026-10-12T14:23:23.678Z raft-host: apply-sleep us=35540 group=2 idx=474 applied=460
+2026-10-12T14:23:23.683Z raft-host: apply-sleep us=40674 group=2 idx=475 applied=460
+2026-10-12T14:23:23.686Z raft-host: apply-sleep us=39634 group=2 idx=477 applied=462
+2026-10-12T14:23:23.686Z raft-host: apply-sleep us=39609 group=2 idx=476 applied=462
+2026-10-12T14:23:23.694Z raft-host: apply-sleep us=35413 group=0 idx=380 applied=376
+2026-10-12T14:23:23.696Z raft-host: apply-sleep us=35402 group=2 idx=478 applied=466
+2026-10-12T14:23:23.696Z raft-host: apply-sleep us=29281 group=0 idx=381 applied=377
+2026-10-12T14:23:23.706Z raft-host: apply-sleep us=27524 group=0 idx=383 applied=378
+2026-10-12T14:23:23.706Z raft-host: apply-sleep us=27723 group=0 idx=383 applied=378
+2026-10-12T14:23:23.706Z raft-host: apply-sleep us=27283 group=0 idx=383 applied=378
+2026-10-12T14:23:23.706Z raft-host: apply-sleep us=27684 group=0 idx=383 applied=378
+2026-10-12T14:23:23.706Z raft-host: apply-sleep us=27799 group=0 idx=383 applied=378
+2026-10-12T14:23:23.706Z raft-host: apply-sleep us=27978 group=0 idx=383 applied=378
+2026-10-12T14:23:23.706Z raft-host: apply-sleep us=28131 group=0 idx=383 applied=378
+2026-10-12T14:23:23.706Z raft-host: apply-sleep us=27956 group=0 idx=383 applied=378
+2026-10-12T14:23:23.706Z raft-host: apply-sleep us=34113 group=0 idx=383 applied=377
+2026-10-12T14:23:23.714Z raft-host: apply-sleep us=39518 group=2 idx=479 applied=473
+2026-10-12T14:23:23.714Z raft-host: apply-sleep us=33757 group=2 idx=480 applied=474
+2026-10-12T14:23:23.728Z raft-host: apply-sleep us=34171 group=2 idx=481 applied=477
+2026-10-12T14:23:23.733Z raft-host: apply-sleep us=34070 group=2 idx=482 applied=478
+2026-10-12T14:23:23.733Z raft-host: apply-sleep us=30081 group=2 idx=483 applied=478
+2026-10-12T14:23:23.737Z raft-host: apply-sleep us=30988 group=0 idx=388 applied=383
+2026-10-12T14:23:23.737Z raft-host: apply-sleep us=30618 group=0 idx=389 applied=383
+2026-10-12T14:23:23.745Z raft-host: apply-sleep us=38715 group=2 idx=486 applied=478
+2026-10-12T14:23:23.745Z raft-host: apply-sleep us=30949 group=2 idx=485 applied=480
+2026-10-12T14:23:23.752Z raft-host: apply-sleep us=32436 group=2 idx=491 applied=480
+2026-10-12T14:23:23.757Z raft-host: apply-sleep us=20616 group=0 idx=394 applied=387
+2026-10-12T14:23:23.757Z raft-host: apply-sleep us=20685 group=0 idx=394 applied=387
+2026-10-12T14:23:23.757Z raft-host: apply-sleep us=20718 group=0 idx=394 applied=387
+2026-10-12T14:23:23.757Z raft-host: apply-sleep us=20727 group=0 idx=394 applied=387
+2026-10-12T14:23:23.757Z raft-host: apply-sleep us=20756 group=0 idx=394 applied=387
+2026-10-12T14:23:23.757Z raft-host: apply-sleep us=20775 group=0 idx=394 applied=387
+2026-10-12T14:23:23.757Z raft-host: apply-sleep us=27434 group=0 idx=394 applied=387
+2026-10-12T14:23:23.757Z raft-host: apply-sleep us=20802 group=0 idx=394 applied=387
+2026-10-12T14:23:23.762Z raft-host: apply-sleep us=28517 group=2 idx=492 applied=483
+2026-10-12T14:23:23.767Z raft-host: apply-sleep us=30699 group=0 idx=395 applied=387
+2026-10-12T14:23:23.778Z raft-host: apply-sleep us=27820 group=2 idx=493 applied=490
+2026-10-12T14:23:23.780Z raft-host: apply-sleep us=26388 group=2 idx=494 applied=491
+2026-10-12T14:23:23.786Z raft-host: apply-sleep us=24645 group=2 idx=496 applied=492
+2026-10-12T14:23:23.801Z raft-host: apply-sleep us=30296 group=0 idx=402 applied=398
+2026-10-12T14:23:23.804Z raft-host: apply-sleep us=28395 group=0 idx=404 applied=398
+2026-10-12T14:23:23.807Z raft-host: apply-sleep us=28518 group=0 idx=405 applied=399
+2026-10-12T14:23:23.809Z raft-host: apply-sleep us=29113 group=2 idx=497 applied=493
+2026-10-12T14:23:23.809Z raft-host: apply-sleep us=22663 group=0 idx=406 applied=399
+2026-10-12T14:23:23.816Z raft-host: apply-sleep us=31866 group=2 idx=498 applied=494
+2026-10-12T14:23:23.827Z raft-host: apply-sleep us=36859 group=2 idx=499 applied=496
+2026-10-12T14:23:23.850Z raft-host: apply-sleep us=40738 group=2 idx=503 applied=497
+2026-10-12T14:23:23.850Z raft-host: apply-sleep us=40806 group=2 idx=502 applied=497
+2026-10-12T14:23:23.860Z raft-host: apply-sleep us=44273 group=2 idx=508 applied=498
+2026-10-12T14:23:23.873Z raft-host: apply-sleep us=42504 group=2 idx=509 applied=499
+2026-10-12T14:23:23.877Z raft-host: apply-sleep us=44925 group=2 idx=510 applied=499
+2026-10-12T14:23:23.877Z raft-host: apply-sleep us=44912 group=2 idx=512 applied=499
+2026-10-12T14:23:23.877Z raft-host: apply-sleep us=44979 group=2 idx=511 applied=499
+2026-10-12T14:23:23.879Z raft-host: apply-sleep us=41653 group=2 idx=515 applied=499
+2026-10-12T14:23:23.879Z raft-host: apply-sleep us=30094 group=0 idx=422 applied=413
+2026-10-12T14:23:23.879Z raft-host: apply-sleep us=34972 group=0 idx=422 applied=413
+2026-10-12T14:23:23.879Z raft-host: apply-sleep us=30121 group=0 idx=422 applied=413
+2026-10-12T14:23:23.879Z raft-host: apply-sleep us=30094 group=0 idx=422 applied=413
+2026-10-12T14:23:23.879Z raft-host: apply-sleep us=30158 group=0 idx=422 applied=413
+2026-10-12T14:23:23.879Z raft-host: apply-sleep us=30176 group=0 idx=422 applied=413
+2026-10-12T14:23:23.879Z raft-host: apply-sleep us=30245 group=0 idx=422 applied=413
+2026-10-12T14:23:23.887Z raft-host: apply-sleep us=36589 group=0 idx=426 applied=413
+2026-10-12T14:23:23.887Z raft-host: apply-sleep us=36557 group=0 idx=424 applied=413
+2026-10-12T14:23:23.897Z raft-host: apply-sleep us=35090 group=2 idx=517 applied=508
+2026-10-12T14:23:23.904Z raft-host: apply-sleep us=42993 group=2 idx=518 applied=508
+2026-10-12T14:23:23.912Z raft-host: apply-sleep us=42904 group=2 idx=519 applied=508
+2026-10-12T14:23:23.912Z raft-host: apply-sleep us=42906 group=2 idx=520 applied=508
+2026-10-12T14:23:23.938Z raft-host: apply-sleep us=56872 group=2 idx=521 applied=515
+2026-10-12T14:23:23.949Z raft-host: apply-sleep us=51837 group=0 idx=439 applied=428
+2026-10-12T14:23:23.949Z raft-host: apply-sleep us=44128 group=2 idx=527 applied=518
+2026-10-12T14:23:23.958Z raft-host: apply-sleep us=50247 group=2 idx=528 applied=518
+2026-10-12T14:23:23.958Z raft-host: apply-sleep us=44988 group=0 idx=440 applied=431
+2026-10-12T14:23:23.974Z raft-host: apply-sleep us=53200 group=2 idx=532 applied=520
+2026-10-12T14:23:23.974Z raft-host: apply-sleep us=53216 group=2 idx=534 applied=520
+2026-10-12T14:23:23.974Z raft-host: apply-sleep us=53280 group=2 idx=533 applied=520
+2026-10-12T14:23:23.985Z raft-host: apply-sleep us=58023 group=2 idx=535 applied=520
+2026-10-12T14:23:23.985Z raft-host: apply-sleep us=47406 group=2 idx=536 applied=525
+2026-10-12T14:23:23.991Z raft-host: apply-sleep us=54008 group=0 idx=443 applied=433
+2026-10-12T14:23:23.991Z raft-host: apply-sleep us=54051 group=0 idx=443 applied=433
+2026-10-12T14:23:23.991Z raft-host: apply-sleep us=54215 group=0 idx=443 applied=433
+2026-10-12T14:23:23.991Z raft-host: apply-sleep us=54269 group=0 idx=443 applied=433
+2026-10-12T14:23:23.991Z raft-host: apply-sleep us=54371 group=0 idx=443 applied=433
+2026-10-12T14:23:23.991Z raft-host: apply-sleep us=54451 group=0 idx=443 applied=433
+2026-10-12T14:23:23.997Z raft-host: apply-sleep us=52977 group=0 idx=449 applied=438
+2026-10-12T14:23:23.997Z raft-host: apply-sleep us=56471 group=2 idx=537 applied=525
+2026-10-12T14:23:23.997Z raft-host: apply-sleep us=52987 group=0 idx=448 applied=438
+2026-10-12T14:23:24.007Z raft-host: apply-sleep us=54732 group=2 idx=538 applied=527
+2026-10-12T14:23:24.009Z raft-host: apply-sleep us=51510 group=2 idx=539 applied=530
+2026-10-12T14:23:24.009Z raft-host: apply-sleep us=47835 group=2 idx=541 applied=530
+2026-10-12T14:23:24.009Z raft-host: apply-sleep us=39637 group=2 idx=542 applied=530
+2026-10-12T14:23:24.009Z raft-host: apply-sleep us=51627 group=2 idx=540 applied=530
+2026-10-12T14:23:24.017Z raft-host: apply-sleep us=31933 group=2 idx=544 applied=536
+2026-10-12T14:23:24.017Z raft-host: apply-sleep us=31920 group=2 idx=543 applied=536
+2026-10-12T14:23:24.025Z raft-host: apply-sleep us=36742 group=2 idx=545 applied=536
+2026-10-12T14:23:24.025Z raft-host: apply-sleep us=33888 group=2 idx=546 applied=536
+2026-10-12T14:23:24.031Z raft-host: apply-sleep us=37987 group=2 idx=547 applied=536
+2026-10-12T14:23:24.032Z raft-host: apply-sleep us=35531 group=2 idx=548 applied=537
+2026-10-12T14:23:24.038Z raft-host: apply-sleep us=35885 group=2 idx=550 applied=537
+2026-10-12T14:23:24.038Z raft-host: apply-sleep us=32652 group=0 idx=455 applied=450
+2026-10-12T14:23:24.112Z raft-host: apply-sleep us=102324 group=2 idx=552 applied=542
+2026-10-12T14:23:24.115Z raft-host: apply-sleep us=96054 group=0 idx=456 applied=453
+2026-10-12T14:23:24.115Z raft-host: apply-sleep us=96127 group=0 idx=456 applied=453
+2026-10-12T14:23:24.115Z raft-host: apply-sleep us=96263 group=0 idx=456 applied=453
+2026-10-12T14:23:24.115Z raft-host: apply-sleep us=96293 group=0 idx=456 applied=453
+2026-10-12T14:23:24.115Z raft-host: apply-sleep us=96293 group=0 idx=456 applied=453
+2026-10-12T14:23:24.115Z raft-host: apply-sleep us=96319 group=0 idx=456 applied=453
+2026-10-12T14:23:24.116Z raft-host: apply-sleep us=96276 group=0 idx=456 applied=453
+2026-10-12T14:23:24.116Z raft-host: apply-sleep us=96341 group=0 idx=456 applied=453
+2026-10-12T14:23:24.116Z raft-host: apply-sleep us=96382 group=0 idx=456 applied=453
+2026-10-12T14:23:24.116Z raft-host: apply-sleep us=96184 group=0 idx=456 applied=453
+2026-10-12T14:23:24.116Z raft-host: apply-sleep us=96232 group=0 idx=456 applied=453
+2026-10-12T14:23:24.116Z raft-host: apply-sleep us=96551 group=0 idx=456 applied=453
+2026-10-12T14:23:24.116Z raft-host: apply-sleep us=96613 group=0 idx=456 applied=453
+2026-10-12T14:23:24.121Z raft-host: apply-sleep us=94458 group=0 idx=458 applied=453
+2026-10-12T14:23:24.121Z report-split nrec=1 pack_ms=0 push_ms=0 finish_ms=130 skip=0 stale=0 inval=0 rc=0 fail=-/0
+2026-10-12T14:23:24.125Z raft-host: apply-sleep us=98478 group=2 idx=553 applied=546
+2026-10-12T14:23:24.125Z raft-host: apply-sleep us=93955 group=2 idx=554 applied=547
+2026-10-12T14:23:24.129Z raft-host: apply-sleep us=90785 group=2 idx=556 applied=550
+2026-10-12T14:23:24.133Z raft-host: apply-sleep us=92977 group=2 idx=557 applied=550
+2026-10-12T14:23:24.134Z raft-host: apply-sleep us=22583 group=0 idx=460 applied=455
+2026-10-12T14:23:24.138Z raft-host: apply-sleep us=26018 group=2 idx=558 applied=552
+2026-10-12T14:23:24.138Z raft-host: apply-sleep us=22134 group=2 idx=559 applied=552
+2026-10-12T14:23:24.142Z raft-host: apply-sleep us=20879 group=2 idx=565 applied=552
+2026-10-12T14:23:24.142Z raft-host: apply-sleep us=21000 group=2 idx=564 applied=552
+2026-10-12T14:23:24.147Z raft-host: apply-sleep us=20406 group=2 idx=568 applied=554
+2026-10-12T14:23:24.164Z raft-host: apply-sleep us=24562 group=2 idx=571 applied=563
+2026-10-12T14:23:24.170Z raft-host: apply-sleep us=27574 group=2 idx=572 applied=567
+2026-10-12T14:23:24.181Z raft-host: apply-sleep us=22147 group=0 idx=467 applied=464
+2026-10-12T14:23:24.184Z raft-host: apply-sleep us=30443 group=2 idx=582 applied=569
+2026-10-12T14:23:24.184Z raft-host: apply-sleep us=30691 group=2 idx=581 applied=569
+2026-10-12T14:23:24.201Z raft-host: apply-sleep us=37555 group=2 idx=583 applied=571
+2026-10-12T14:23:24.205Z raft-host: apply-sleep us=32988 group=2 idx=585 applied=572
+2026-10-12T14:23:24.205Z raft-host: apply-sleep us=29940 group=0 idx=473 applied=466
+2026-10-12T14:23:24.205Z raft-host: apply-sleep us=33334 group=2 idx=584 applied=572
+2026-10-12T14:23:24.205Z raft-host: apply-sleep us=24164 group=0 idx=472 applied=467
+2026-10-12T14:23:24.214Z raft-host: apply-sleep us=23979 group=0 idx=476 applied=467
+2026-10-12T14:23:24.214Z raft-host: apply-sleep us=24018 group=0 idx=476 applied=467
+2026-10-12T14:23:24.214Z raft-host: apply-sleep us=24067 group=0 idx=476 applied=467
+2026-10-12T14:23:24.214Z raft-host: apply-sleep us=24182 group=0 idx=476 applied=467
+2026-10-12T14:23:24.214Z raft-host: apply-sleep us=24171 group=0 idx=476 applied=467
+2026-10-12T14:23:24.214Z raft-host: apply-sleep us=24141 group=0 idx=476 applied=467
+2026-10-12T14:23:24.214Z raft-host: apply-sleep us=24094 group=0 idx=476 applied=467
+2026-10-12T14:23:24.214Z raft-host: apply-sleep us=24233 group=0 idx=476 applied=467
+2026-10-12T14:23:24.214Z raft-host: apply-sleep us=24233 group=0 idx=476 applied=467
+2026-10-12T14:23:24.214Z raft-host: apply-sleep us=24237 group=0 idx=476 applied=467
+2026-10-12T14:23:24.214Z raft-host: apply-sleep us=24346 group=0 idx=476 applied=467
+2026-10-12T14:23:24.215Z raft-host: apply-sleep us=24403 group=0 idx=476 applied=467
+2026-10-12T14:23:24.215Z raft-host: apply-sleep us=24269 group=0 idx=476 applied=467
+2026-10-12T14:23:24.225Z raft-host: apply-sleep us=30511 group=2 idx=589 applied=582
+2026-10-12T14:23:24.225Z raft-host: apply-sleep us=30558 group=2 idx=588 applied=582
+2026-10-12T14:23:24.236Z raft-host: apply-sleep us=30967 group=2 idx=590 applied=585
+2026-10-12T14:23:24.242Z raft-host: apply-sleep us=33214 group=2 idx=592 applied=585
+2026-10-12T14:23:24.242Z raft-host: apply-sleep us=31190 group=0 idx=484 applied=475
+2026-10-12T14:23:24.242Z raft-host: apply-sleep us=31451 group=2 idx=591 applied=585
+2026-10-12T14:23:24.242Z raft-host: apply-sleep us=31059 group=0 idx=483 applied=475
+2026-10-12T14:23:24.257Z raft-host: apply-sleep us=40958 group=2 idx=593 applied=587
+2026-10-12T14:23:24.264Z raft-host: apply-sleep us=32921 group=2 idx=601 applied=589
+2026-10-12T14:23:24.264Z raft-host: apply-sleep us=37827 group=2 idx=598 applied=589
+2026-10-12T14:23:24.264Z raft-host: apply-sleep us=32970 group=2 idx=600 applied=589
+2026-10-12T14:23:24.264Z raft-host: apply-sleep us=33139 group=2 idx=599 applied=589
+2026-10-12T14:23:24.269Z raft-host: apply-sleep us=32657 group=2 idx=602 applied=590
+2026-10-12T14:23:24.270Z raft-host: gc-pass ms=675 orphan=606 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=44 emit=10 tomb=34 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:24.273Z raft-host: apply-sleep us=30988 group=2 idx=604 applied=592
+2026-10-12T14:23:24.273Z raft-host: apply-sleep us=30994 group=2 idx=603 applied=592
+2026-10-12T14:23:24.279Z raft-host: apply-sleep us=21986 group=2 idx=607 applied=597
+2026-10-12T14:23:24.279Z raft-host: apply-sleep us=35227 group=2 idx=605 applied=592
+2026-10-12T14:23:24.279Z raft-host: apply-sleep us=22013 group=2 idx=608 applied=597
+2026-10-12T14:23:24.279Z raft-host: apply-sleep us=22076 group=2 idx=606 applied=597
+2026-10-12T14:23:24.286Z raft-host: apply-sleep us=35196 group=0 idx=490 applied=485
+2026-10-12T14:23:24.286Z raft-host: apply-sleep us=35059 group=0 idx=490 applied=485
+2026-10-12T14:23:24.286Z raft-host: apply-sleep us=35066 group=0 idx=490 applied=485
+2026-10-12T14:23:24.286Z raft-host: apply-sleep us=35057 group=0 idx=490 applied=485
+2026-10-12T14:23:24.286Z raft-host: apply-sleep us=35054 group=0 idx=490 applied=485
+2026-10-12T14:23:24.286Z raft-host: apply-sleep us=35179 group=0 idx=490 applied=485
+2026-10-12T14:23:24.286Z raft-host: apply-sleep us=35235 group=0 idx=490 applied=485
+2026-10-12T14:23:24.286Z raft-host: apply-sleep us=35279 group=0 idx=490 applied=485
+2026-10-12T14:23:24.286Z raft-host: apply-sleep us=35199 group=0 idx=490 applied=485
+2026-10-12T14:23:24.303Z raft-host: apply-sleep us=43942 group=2 idx=609 applied=597
+2026-10-12T14:23:24.317Z raft-host: apply-sleep us=37924 group=0 idx=499 applied=488
+2026-10-12T14:23:24.324Z raft-host: apply-sleep us=38460 group=2 idx=611 applied=608
+2026-10-12T14:23:24.330Z raft-host: apply-sleep us=43819 group=2 idx=615 applied=608
+2026-10-12T14:23:24.330Z raft-host: apply-sleep us=41172 group=2 idx=612 applied=608
+2026-10-12T14:23:24.330Z raft-host: apply-sleep us=43945 group=2 idx=613 applied=608
+2026-10-12T14:23:24.330Z raft-host: apply-sleep us=36880 group=2 idx=614 applied=608
+2026-10-12T14:23:24.336Z raft-host: apply-sleep us=37726 group=2 idx=617 applied=608
+2026-10-12T14:23:24.336Z raft-host: apply-sleep us=37739 group=2 idx=616 applied=608
+2026-10-12T14:23:24.340Z raft-host: apply-sleep us=37155 group=0 idx=504 applied=496
+2026-10-12T14:23:24.340Z raft-host: apply-sleep us=34847 group=0 idx=503 applied=496
+2026-10-12T14:23:24.343Z raft-host: apply-sleep us=31475 group=2 idx=619 applied=609
+2026-10-12T14:23:24.348Z raft-host: apply-sleep us=23767 group=0 idx=507 applied=502
+2026-10-12T14:23:24.352Z raft-host: apply-sleep us=23900 group=0 idx=509 applied=502
+2026-10-12T14:23:24.352Z raft-host: apply-sleep us=23951 group=0 idx=509 applied=502
+2026-10-12T14:23:24.352Z raft-host: apply-sleep us=23991 group=0 idx=509 applied=502
+2026-10-12T14:23:24.352Z raft-host: apply-sleep us=23977 group=0 idx=509 applied=502
+2026-10-12T14:23:24.352Z raft-host: apply-sleep us=24022 group=0 idx=509 applied=502
+2026-10-12T14:23:24.352Z raft-host: apply-sleep us=24298 group=0 idx=509 applied=502
+2026-10-12T14:23:24.352Z raft-host: apply-sleep us=24057 group=0 idx=509 applied=502
+2026-10-12T14:23:24.356Z raft-host: apply-sleep us=26413 group=2 idx=621 applied=615
+2026-10-12T14:23:24.365Z raft-host: apply-sleep us=25247 group=2 idx=624 applied=617
+2026-10-12T14:23:24.365Z raft-host: apply-sleep us=25368 group=2 idx=623 applied=617
+2026-10-12T14:23:24.365Z raft-host: apply-sleep us=27634 group=2 idx=622 applied=617
+2026-10-12T14:23:24.365Z raft-host: apply-sleep us=25397 group=2 idx=625 applied=617
+2026-10-12T14:23:24.373Z raft-host: apply-sleep us=31839 group=2 idx=626 applied=617
+2026-10-12T14:23:24.382Z raft-host: apply-sleep us=28096 group=2 idx=627 applied=620
+2026-10-12T14:23:24.382Z raft-host: apply-sleep us=28695 group=0 idx=516 applied=509
+2026-10-12T14:23:24.387Z raft-host: apply-sleep us=29854 group=0 idx=517 applied=509
+2026-10-12T14:23:24.389Z raft-host: apply-sleep us=23393 group=2 idx=629 applied=625
+2026-10-12T14:23:24.389Z raft-host: apply-sleep us=23474 group=2 idx=628 applied=625
+2026-10-12T14:23:24.400Z raft-host: apply-sleep us=30526 group=2 idx=630 applied=625
+2026-10-12T14:23:24.400Z raft-host: apply-sleep us=27010 group=2 idx=631 applied=626
+2026-10-12T14:23:24.408Z raft-host: apply-sleep us=25356 group=0 idx=525 applied=516
+2026-10-12T14:23:24.408Z raft-host: apply-sleep us=25281 group=0 idx=525 applied=516
+2026-10-12T14:23:24.408Z raft-host: apply-sleep us=25493 group=0 idx=525 applied=516
+2026-10-12T14:23:24.408Z raft-host: apply-sleep us=25440 group=0 idx=525 applied=516
+2026-10-12T14:23:24.408Z raft-host: apply-sleep us=25451 group=0 idx=525 applied=516
+2026-10-12T14:23:24.408Z raft-host: apply-sleep us=25734 group=2 idx=633 applied=627
+2026-10-12T14:23:24.408Z raft-host: apply-sleep us=25560 group=0 idx=525 applied=516
+2026-10-12T14:23:24.408Z raft-host: apply-sleep us=25633 group=0 idx=525 applied=516
+2026-10-12T14:23:24.408Z raft-host: apply-sleep us=25653 group=0 idx=525 applied=516
+2026-10-12T14:23:24.408Z raft-host: apply-sleep us=25575 group=0 idx=525 applied=516
+2026-10-12T14:23:24.408Z raft-host: apply-sleep us=25664 group=0 idx=525 applied=516
+2026-10-12T14:23:24.417Z raft-host: apply-sleep us=30519 group=2 idx=634 applied=627
+2026-10-12T14:23:24.424Z raft-host: apply-sleep us=33268 group=2 idx=635 applied=629
+2026-10-12T14:23:24.424Z raft-host: apply-sleep us=32308 group=2 idx=636 applied=629
+2026-10-12T14:23:24.429Z raft-host: apply-sleep us=23228 group=0 idx=529 applied=524
+2026-10-12T14:23:24.442Z raft-host: apply-sleep us=26518 group=2 idx=638 applied=633
+2026-10-12T14:23:24.442Z raft-host: apply-sleep us=24497 group=2 idx=637 applied=634
+2026-10-12T14:23:24.444Z raft-host: apply-sleep us=24413 group=2 idx=639 applied=634
+2026-10-12T14:23:24.458Z raft-host: apply-sleep us=28711 group=2 idx=640 applied=636
+2026-10-12T14:23:24.458Z raft-host: apply-sleep us=20004 group=2 idx=641 applied=636
+2026-10-12T14:23:24.458Z raft-host: apply-sleep us=20048 group=2 idx=643 applied=636
+2026-10-12T14:23:24.472Z raft-host: apply-sleep us=30005 group=0 idx=539 applied=530
+2026-10-12T14:23:24.472Z raft-host: apply-sleep us=33156 group=0 idx=538 applied=530
+2026-10-12T14:23:24.472Z raft-host: apply-sleep us=33121 group=0 idx=538 applied=530
+2026-10-12T14:23:24.472Z raft-host: apply-sleep us=33125 group=0 idx=538 applied=530
+2026-10-12T14:23:24.472Z raft-host: apply-sleep us=33182 group=0 idx=538 applied=530
+2026-10-12T14:23:24.472Z raft-host: apply-sleep us=33166 group=0 idx=538 applied=530
+2026-10-12T14:23:24.472Z raft-host: apply-sleep us=33163 group=0 idx=538 applied=530
+2026-10-12T14:23:24.472Z raft-host: apply-sleep us=33195 group=0 idx=538 applied=530
+2026-10-12T14:23:24.472Z raft-host: apply-sleep us=33272 group=0 idx=538 applied=530
+2026-10-12T14:23:24.479Z raft-host: apply-sleep us=30155 group=2 idx=644 applied=639
+2026-10-12T14:23:24.482Z raft-host: apply-sleep us=33627 group=2 idx=645 applied=639
+2026-10-12T14:23:24.482Z raft-host: apply-sleep us=30608 group=2 idx=646 applied=639
+2026-10-12T14:23:24.482Z raft-host: apply-sleep us=24583 group=2 idx=647 applied=643
+2026-10-12T14:23:24.500Z raft-host: apply-sleep us=40030 group=2 idx=648 applied=643
+2026-10-12T14:23:24.508Z raft-host: apply-sleep us=34590 group=2 idx=649 applied=643
+2026-10-12T14:23:24.508Z raft-host: apply-sleep us=36441 group=0 idx=546 applied=539
+2026-10-12T14:23:24.514Z raft-host: apply-sleep us=34712 group=2 idx=651 applied=644
+2026-10-12T14:23:24.514Z raft-host: apply-sleep us=34774 group=2 idx=650 applied=644
+2026-10-12T14:23:24.515Z raft-host: apply-sleep us=29964 group=2 idx=657 applied=647
+2026-10-12T14:23:24.515Z raft-host: apply-sleep us=33478 group=2 idx=656 applied=644
+2026-10-12T14:23:24.518Z raft-host: apply-sleep us=25512 group=2 idx=659 applied=647
+2026-10-12T14:23:24.518Z raft-host: apply-sleep us=25594 group=2 idx=658 applied=647
+2026-10-12T14:23:24.525Z raft-host: apply-sleep us=25014 group=0 idx=548 applied=545
+2026-10-12T14:23:24.525Z raft-host: apply-sleep us=25074 group=0 idx=548 applied=545
+2026-10-12T14:23:24.525Z raft-host: apply-sleep us=25110 group=0 idx=548 applied=545
+2026-10-12T14:23:24.525Z raft-host: apply-sleep us=25146 group=0 idx=548 applied=545
+2026-10-12T14:23:24.525Z raft-host: apply-sleep us=25165 group=0 idx=548 applied=545
+2026-10-12T14:23:24.525Z raft-host: apply-sleep us=25202 group=0 idx=548 applied=545
+2026-10-12T14:23:24.526Z raft-host: apply-sleep us=25219 group=0 idx=548 applied=545
+2026-10-12T14:23:24.526Z raft-host: apply-sleep us=25246 group=0 idx=548 applied=545
+2026-10-12T14:23:24.526Z raft-host: apply-sleep us=25331 group=0 idx=548 applied=545
+2026-10-12T14:23:24.526Z raft-host: apply-sleep us=25419 group=0 idx=548 applied=545
+2026-10-12T14:23:24.526Z raft-host: apply-sleep us=25422 group=0 idx=548 applied=545
+2026-10-12T14:23:24.534Z raft-host: apply-sleep us=33886 group=2 idx=660 applied=648
+2026-10-12T14:23:24.546Z raft-host: apply-sleep us=45533 group=2 idx=661 applied=648
+2026-10-12T14:23:24.546Z raft-host: apply-sleep us=38073 group=2 idx=662 applied=649
+2026-10-12T14:23:24.553Z raft-host: apply-sleep us=43379 group=0 idx=553 applied=547
+2026-10-12T14:23:24.554Z raft-host: apply-sleep us=43721 group=2 idx=663 applied=649
+2026-10-12T14:23:24.558Z raft-host: apply-sleep us=41122 group=2 idx=664 applied=657
+2026-10-12T14:23:24.563Z raft-host: apply-sleep us=45248 group=2 idx=665 applied=659
+2026-10-12T14:23:24.563Z raft-host: apply-sleep us=43362 group=2 idx=666 applied=659
+2026-10-12T14:23:24.567Z raft-host: apply-sleep us=32841 group=2 idx=667 applied=660
+2026-10-12T14:23:24.567Z raft-host: apply-sleep us=32943 group=0 idx=556 applied=551
+2026-10-12T14:23:24.570Z raft-host: apply-sleep us=36416 group=2 idx=670 applied=660
+2026-10-12T14:23:24.577Z raft-host: apply-sleep us=30727 group=2 idx=671 applied=662
+2026-10-12T14:23:24.589Z raft-host: apply-sleep us=35914 group=2 idx=672 applied=662
+2026-10-12T14:23:24.589Z raft-host: apply-sleep us=35775 group=0 idx=562 applied=554
+2026-10-12T14:23:24.594Z raft-host: apply-sleep us=34809 group=0 idx=563 applied=555
+2026-10-12T14:23:24.594Z raft-host: apply-sleep us=31332 group=0 idx=563 applied=555
+2026-10-12T14:23:24.594Z raft-host: apply-sleep us=31313 group=0 idx=563 applied=555
+2026-10-12T14:23:24.594Z raft-host: apply-sleep us=31506 group=0 idx=563 applied=555
+2026-10-12T14:23:24.594Z raft-host: apply-sleep us=31447 group=0 idx=563 applied=555
+2026-10-12T14:23:24.594Z raft-host: apply-sleep us=31545 group=0 idx=563 applied=555
+2026-10-12T14:23:24.594Z raft-host: apply-sleep us=31493 group=0 idx=563 applied=555
+2026-10-12T14:23:24.599Z raft-host: apply-sleep us=36366 group=2 idx=673 applied=666
+2026-10-12T14:23:24.600Z raft-host: apply-sleep us=34549 group=2 idx=674 applied=666
+2026-10-12T14:23:24.609Z raft-host: apply-sleep us=38800 group=2 idx=675 applied=670
+2026-10-12T14:23:24.609Z raft-host: apply-sleep us=31850 group=2 idx=676 applied=671
+2026-10-12T14:23:24.617Z raft-host: apply-sleep us=37267 group=2 idx=677 applied=671
+2026-10-12T14:23:24.621Z raft-host: apply-sleep us=36998 group=2 idx=678 applied=671
+2026-10-12T14:23:24.625Z raft-host: apply-sleep us=31593 group=0 idx=569 applied=563
+2026-10-12T14:23:24.637Z raft-host: applied session index=679 kind=1 shard=0 ino=0
+2026-10-12T14:23:24.637Z raft-host: apply-sleep us=37766 group=2 idx=680 applied=674
+2026-10-12T14:23:24.637Z raft-host: apply-sleep us=43532 group=2 idx=679 applied=672
+2026-10-12T14:23:24.641Z raft-host: apply-sleep us=41553 group=2 idx=681 applied=674
+2026-10-12T14:23:24.649Z raft-host: apply-sleep us=44921 group=2 idx=683 applied=674
+2026-10-12T14:23:24.650Z raft-host: apply-sleep us=40370 group=0 idx=571 applied=565
+2026-10-12T14:23:24.650Z raft-host: apply-sleep us=40558 group=2 idx=684 applied=676
+2026-10-12T14:23:24.657Z raft-host: apply-sleep us=44557 group=2 idx=685 applied=676
+2026-10-12T14:23:24.659Z raft-host: apply-sleep us=40919 group=2 idx=686 applied=677
+2026-10-12T14:23:24.662Z raft-host: apply-sleep us=40538 group=2 idx=687 applied=678
+2026-10-12T14:23:24.666Z raft-host: apply-sleep us=31030 group=0 idx=576 applied=569
+2026-10-12T14:23:24.666Z raft-host: apply-sleep us=40163 group=0 idx=575 applied=569
+2026-10-12T14:23:24.666Z raft-host: apply-sleep us=31343 group=0 idx=576 applied=569
+2026-10-12T14:23:24.666Z raft-host: apply-sleep us=31379 group=0 idx=576 applied=569
+2026-10-12T14:23:24.666Z raft-host: apply-sleep us=31386 group=0 idx=576 applied=569
+2026-10-12T14:23:24.666Z raft-host: apply-sleep us=31393 group=0 idx=576 applied=569
+2026-10-12T14:23:24.666Z raft-host: apply-sleep us=31453 group=0 idx=576 applied=569
+2026-10-12T14:23:24.666Z raft-host: apply-sleep us=28909 group=2 idx=688 applied=680
+2026-10-12T14:23:24.666Z raft-host: apply-sleep us=31356 group=0 idx=576 applied=569
+2026-10-12T14:23:24.666Z raft-host: apply-sleep us=31460 group=0 idx=576 applied=569
+2026-10-12T14:23:24.666Z raft-host: apply-sleep us=31599 group=0 idx=576 applied=569
+2026-10-12T14:23:24.667Z raft-host: apply-sleep us=35078 group=0 idx=576 applied=569
+2026-10-12T14:23:24.667Z raft-host: apply-sleep us=31467 group=0 idx=576 applied=569
+2026-10-12T14:23:24.685Z raft-host: apply-sleep us=43743 group=2 idx=689 applied=681
+2026-10-12T14:23:24.688Z raft-host: apply-sleep us=39797 group=2 idx=690 applied=683
+2026-10-12T14:23:24.698Z raft-host: apply-sleep us=41325 group=2 idx=691 applied=685
+2026-10-12T14:23:24.705Z raft-host: apply-sleep us=46048 group=2 idx=692 applied=685
+2026-10-12T14:23:24.705Z raft-host: apply-sleep us=43658 group=2 idx=693 applied=686
+2026-10-12T14:23:24.718Z raft-host: apply-sleep us=42670 group=2 idx=695 applied=688
+2026-10-12T14:23:24.718Z raft-host: apply-sleep us=42767 group=2 idx=696 applied=688
+2026-10-12T14:23:24.723Z raft-host: apply-sleep us=41299 group=2 idx=697 applied=688
+2026-10-12T14:23:24.723Z raft-host: apply-sleep us=37571 group=2 idx=699 applied=689
+2026-10-12T14:23:24.732Z raft-host: apply-sleep us=43730 group=2 idx=700 applied=690
+2026-10-12T14:23:24.805Z raft-host: read-sleep us=72171 group=2 want=699 read_idx=700 applied=700 pending=1
+2026-10-12T14:23:24.805Z raft-host: apply-sleep us=106391 group=0 idx=587 applied=580
+2026-10-12T14:23:24.805Z raft-host: apply-sleep us=111409 group=2 idx=701 applied=690
+2026-10-12T14:23:24.805Z raft-host: apply-sleep us=109193 group=2 idx=702 applied=690
+2026-10-12T14:23:24.805Z raft-host: read-sleep us=72379 group=2 want=700 read_idx=700 applied=700 pending=1
+2026-10-12T14:23:24.807Z raft-host: apply-sleep us=106440 group=2 idx=704 applied=691
+2026-10-12T14:23:24.809Z raft-host: apply-sleep us=104296 group=0 idx=588 applied=581
+2026-10-12T14:23:24.809Z raft-host: apply-sleep us=94855 group=0 idx=588 applied=581
+2026-10-12T14:23:24.809Z raft-host: apply-sleep us=94866 group=0 idx=588 applied=581
+2026-10-12T14:23:24.810Z raft-host: apply-sleep us=94910 group=0 idx=588 applied=581
+2026-10-12T14:23:24.810Z raft-host: apply-sleep us=94927 group=0 idx=588 applied=581
+2026-10-12T14:23:24.810Z raft-host: apply-sleep us=95028 group=0 idx=588 applied=581
+2026-10-12T14:23:24.810Z raft-host: apply-sleep us=95067 group=0 idx=588 applied=581
+2026-10-12T14:23:24.810Z raft-host: apply-sleep us=95076 group=0 idx=588 applied=581
+2026-10-12T14:23:24.816Z raft-host: apply-sleep us=97672 group=0 idx=591 applied=586
+2026-10-12T14:23:24.816Z raft-host: apply-sleep us=108989 group=2 idx=707 applied=693
+2026-10-12T14:23:24.834Z raft-host: apply-sleep us=111438 group=0 idx=593 applied=586
+2026-10-12T14:23:24.834Z raft-host: apply-sleep us=113470 group=2 idx=708 applied=696
+2026-10-12T14:23:24.836Z raft-host: apply-sleep us=103877 group=2 idx=710 applied=700
+2026-10-12T14:23:24.836Z raft-host: apply-sleep us=110442 group=2 idx=709 applied=699
+2026-10-12T14:23:24.839Z raft-host: apply-sleep us=33035 group=2 idx=711 applied=703
+2026-10-12T14:23:24.844Z raft-host: apply-sleep us=34619 group=2 idx=712 applied=704
+2026-10-12T14:23:24.854Z raft-host: apply-sleep us=42115 group=2 idx=713 applied=706
+2026-10-12T14:23:24.854Z raft-host: apply-sleep us=37619 group=0 idx=595 applied=591
+2026-10-12T14:23:24.856Z raft-host: apply-sleep us=28066 group=2 idx=714 applied=707
+2026-10-12T14:23:24.860Z raft-host: apply-sleep us=26153 group=2 idx=715 applied=708
+2026-10-12T14:23:24.864Z raft-host: apply-sleep us=28179 group=2 idx=716 applied=710
+2026-10-12T14:23:24.864Z raft-host: apply-sleep us=26799 group=2 idx=718 applied=710
+2026-10-12T14:23:24.872Z raft-host: apply-sleep us=33907 group=2 idx=719 applied=710
+2026-10-12T14:23:24.878Z raft-host: apply-sleep us=33702 group=0 idx=597 applied=593
+2026-10-12T14:23:24.878Z raft-host: apply-sleep us=33776 group=0 idx=597 applied=593
+2026-10-12T14:23:24.878Z raft-host: apply-sleep us=33819 group=0 idx=597 applied=593
+2026-10-12T14:23:24.878Z raft-host: apply-sleep us=33829 group=0 idx=597 applied=593
+2026-10-12T14:23:24.878Z raft-host: apply-sleep us=34780 group=0 idx=597 applied=593
+2026-10-12T14:23:24.878Z raft-host: apply-sleep us=33873 group=0 idx=597 applied=593
+2026-10-12T14:23:24.878Z raft-host: apply-sleep us=33949 group=0 idx=597 applied=593
+2026-10-12T14:23:24.885Z raft-host: apply-sleep us=31279 group=0 idx=600 applied=596
+2026-10-12T14:23:24.892Z raft-host: apply-sleep us=31959 group=2 idx=720 applied=715
+2026-10-12T14:23:24.900Z raft-host: apply-sleep us=39847 group=2 idx=721 applied=715
+2026-10-12T14:23:24.902Z raft-host: apply-sleep us=37822 group=0 idx=601 applied=596
+2026-10-12T14:23:24.902Z raft-host: apply-sleep us=39928 group=2 idx=722 applied=715
+2026-10-12T14:23:24.916Z raft-host: apply-sleep us=43966 group=2 idx=724 applied=719
+2026-10-12T14:23:24.923Z raft-host: apply-sleep us=45261 group=2 idx=725 applied=719
+2026-10-12T14:23:24.929Z raft-host: apply-sleep us=36443 group=2 idx=727 applied=720
+2026-10-12T14:23:24.929Z raft-host: apply-sleep us=41244 group=2 idx=726 applied=719
+2026-10-12T14:23:24.931Z raft-host: apply-sleep us=23437 group=0 idx=606 applied=601
+2026-10-12T14:23:24.931Z raft-host: apply-sleep us=38517 group=0 idx=606 applied=600
+2026-10-12T14:23:24.931Z raft-host: apply-sleep us=23498 group=0 idx=606 applied=601
+2026-10-12T14:23:24.931Z raft-host: apply-sleep us=23537 group=0 idx=606 applied=601
+2026-10-12T14:23:24.931Z raft-host: apply-sleep us=23699 group=0 idx=606 applied=601
+2026-10-12T14:23:24.931Z raft-host: apply-sleep us=23713 group=0 idx=606 applied=601
+2026-10-12T14:23:24.931Z raft-host: apply-sleep us=23744 group=0 idx=606 applied=601
+2026-10-12T14:23:24.931Z raft-host: apply-sleep us=23757 group=0 idx=606 applied=601
+2026-10-12T14:23:24.931Z raft-host: apply-sleep us=23803 group=0 idx=606 applied=601
+2026-10-12T14:23:24.931Z raft-host: apply-sleep us=23831 group=0 idx=606 applied=601
+2026-10-12T14:23:24.931Z raft-host: apply-sleep us=23871 group=0 idx=606 applied=601
+2026-10-12T14:23:24.936Z raft-host: apply-sleep us=36344 group=2 idx=730 applied=721
+2026-10-12T14:23:24.937Z raft-host: apply-sleep us=36398 group=2 idx=731 applied=721
+2026-10-12T14:23:24.944Z raft-host: apply-sleep us=40621 group=2 idx=732 applied=722
+2026-10-12T14:23:24.956Z raft-host: apply-sleep us=32541 group=2 idx=733 applied=725
+2026-10-12T14:23:24.956Z raft-host: apply-sleep us=32537 group=0 idx=611 applied=605
+2026-10-12T14:23:24.962Z raft-host: apply-sleep us=36336 group=2 idx=734 applied=725
+2026-10-12T14:23:24.962Z raft-host: apply-sleep us=33205 group=2 idx=736 applied=727
+2026-10-12T14:23:24.962Z raft-host: apply-sleep us=33081 group=0 idx=613 applied=605
+2026-10-12T14:23:24.974Z raft-host: apply-sleep us=42801 group=2 idx=737 applied=727
+2026-10-12T14:23:24.974Z raft-host: apply-sleep us=42800 group=2 idx=738 applied=727
+2026-10-12T14:23:24.988Z raft-host: apply-sleep us=44250 group=2 idx=740 applied=732
+2026-10-12T14:23:24.988Z raft-host: apply-sleep us=44336 group=2 idx=739 applied=732
+2026-10-12T14:23:25.007Z raft-host: apply-sleep us=51706 group=2 idx=741 applied=733
+2026-10-12T14:23:25.013Z raft-host: apply-sleep us=56440 group=2 idx=742 applied=733
+2026-10-12T14:23:25.015Z raft-host: apply-sleep us=40774 group=0 idx=618 applied=613
+2026-10-12T14:23:25.018Z raft-host: apply-sleep us=56298 group=2 idx=743 applied=736
+2026-10-12T14:23:25.020Z raft-host: apply-sleep us=36386 group=2 idx=744 applied=738
+2026-10-12T14:23:25.028Z raft-host: apply-sleep us=40304 group=0 idx=619 applied=614
+2026-10-12T14:23:25.028Z raft-host: apply-sleep us=40409 group=0 idx=619 applied=614
+2026-10-12T14:23:25.028Z raft-host: apply-sleep us=40424 group=0 idx=619 applied=614
+2026-10-12T14:23:25.028Z raft-host: apply-sleep us=40482 group=0 idx=619 applied=614
+2026-10-12T14:23:25.028Z raft-host: apply-sleep us=40406 group=0 idx=619 applied=614
+2026-10-12T14:23:25.028Z raft-host: apply-sleep us=40560 group=0 idx=619 applied=614
+2026-10-12T14:23:25.041Z raft-host: apply-sleep us=42331 group=2 idx=745 applied=740
+2026-10-12T14:23:25.043Z raft-host: apply-sleep us=35608 group=0 idx=623 applied=616
+2026-10-12T14:23:25.043Z raft-host: apply-sleep us=31092 group=2 idx=746 applied=742
+2026-10-12T14:23:25.051Z kv-obs: mt_bytes=261190 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:23:25.052Z raft-host: apply-sleep us=33869 group=2 idx=747 applied=743
+2026-10-12T14:23:25.062Z raft-host: apply-sleep us=35239 group=0 idx=626 applied=618
+2026-10-12T14:23:25.062Z raft-host: apply-sleep us=34336 group=2 idx=748 applied=744
+2026-10-12T14:23:25.071Z raft-host: apply-sleep us=36169 group=2 idx=749 applied=744
+2026-10-12T14:23:25.071Z raft-host: apply-sleep us=30181 group=2 idx=750 applied=745
+2026-10-12T14:23:25.081Z raft-host: apply-sleep us=29541 group=2 idx=752 applied=746
+2026-10-12T14:23:25.083Z raft-host: apply-sleep us=25894 group=0 idx=631 applied=625
+2026-10-12T14:23:25.083Z raft-host: apply-sleep us=25864 group=0 idx=631 applied=625
+2026-10-12T14:23:25.083Z raft-host: apply-sleep us=25904 group=0 idx=631 applied=625
+2026-10-12T14:23:25.083Z raft-host: apply-sleep us=26031 group=0 idx=631 applied=625
+2026-10-12T14:23:25.083Z raft-host: apply-sleep us=25910 group=0 idx=631 applied=625
+2026-10-12T14:23:25.083Z raft-host: apply-sleep us=26058 group=0 idx=631 applied=625
+2026-10-12T14:23:25.084Z raft-host: apply-sleep us=26143 group=0 idx=631 applied=625
+2026-10-12T14:23:25.095Z raft-host: apply-sleep us=32724 group=2 idx=754 applied=748
+2026-10-12T14:23:25.095Z raft-host: apply-sleep us=32048 group=0 idx=633 applied=627
+2026-10-12T14:23:25.095Z raft-host: apply-sleep us=32802 group=2 idx=753 applied=748
+2026-10-12T14:23:25.106Z raft-host: apply-sleep us=40180 group=2 idx=755 applied=748
+2026-10-12T14:23:25.106Z raft-host: apply-sleep us=34903 group=2 idx=756 applied=750
+2026-10-12T14:23:25.118Z raft-host: apply-sleep us=22640 group=2 idx=759 applied=754
+2026-10-12T14:23:25.118Z raft-host: apply-sleep us=22611 group=2 idx=758 applied=754
+2026-10-12T14:23:25.118Z raft-host: apply-sleep us=22653 group=2 idx=760 applied=754
+2026-10-12T14:23:25.118Z raft-host: apply-sleep us=34705 group=2 idx=757 applied=752
+2026-10-12T14:23:25.136Z raft-host: apply-sleep us=38031 group=2 idx=761 applied=754
+2026-10-12T14:23:25.142Z raft-host: apply-sleep us=35878 group=2 idx=762 applied=756
+2026-10-12T14:23:25.145Z raft-host: apply-sleep us=39592 group=2 idx=764 applied=756
+2026-10-12T14:23:25.145Z raft-host: apply-sleep us=38051 group=2 idx=765 applied=756
+2026-10-12T14:23:25.148Z raft-host: apply-sleep us=24142 group=0 idx=639 applied=634
+2026-10-12T14:23:25.148Z raft-host: apply-sleep us=24122 group=0 idx=639 applied=634
+2026-10-12T14:23:25.148Z raft-host: apply-sleep us=24236 group=0 idx=639 applied=634
+2026-10-12T14:23:25.148Z raft-host: apply-sleep us=24271 group=0 idx=639 applied=634
+2026-10-12T14:23:25.148Z raft-host: apply-sleep us=24288 group=0 idx=639 applied=634
+2026-10-12T14:23:25.148Z raft-host: apply-sleep us=24319 group=0 idx=639 applied=634
+2026-10-12T14:23:25.148Z raft-host: apply-sleep us=24337 group=0 idx=639 applied=634
+2026-10-12T14:23:25.148Z raft-host: apply-sleep us=24342 group=0 idx=639 applied=634
+2026-10-12T14:23:25.148Z raft-host: apply-sleep us=24385 group=0 idx=639 applied=634
+2026-10-12T14:23:25.148Z raft-host: apply-sleep us=24488 group=0 idx=639 applied=634
+2026-10-12T14:23:25.148Z raft-host: apply-sleep us=24511 group=0 idx=639 applied=634
+2026-10-12T14:23:25.153Z raft-host: apply-sleep us=29493 group=2 idx=767 applied=760
+2026-10-12T14:23:25.153Z raft-host: apply-sleep us=29656 group=2 idx=766 applied=760
+2026-10-12T14:23:25.169Z raft-host: apply-sleep us=38084 group=2 idx=768 applied=760
+2026-10-12T14:23:25.174Z raft-host: apply-sleep us=37264 group=0 idx=649 applied=637
+2026-10-12T14:23:25.180Z raft-host: apply-sleep us=34347 group=0 idx=650 applied=638
+2026-10-12T14:23:25.184Z raft-host: apply-sleep us=39111 group=2 idx=769 applied=765
+2026-10-12T14:23:25.185Z raft-host: apply-sleep us=36756 group=2 idx=770 applied=765
+2026-10-12T14:23:25.187Z raft-host: apply-sleep us=36840 group=2 idx=771 applied=765
+2026-10-12T14:23:25.187Z raft-host: apply-sleep us=34306 group=2 idx=773 applied=767
+2026-10-12T14:23:25.187Z raft-host: apply-sleep us=34323 group=2 idx=774 applied=767
+2026-10-12T14:23:25.187Z raft-host: apply-sleep us=34413 group=2 idx=772 applied=767
+2026-10-12T14:23:25.196Z raft-host: apply-sleep us=27338 group=2 idx=775 applied=768
+2026-10-12T14:23:25.209Z raft-host: apply-sleep us=39907 group=2 idx=776 applied=768
+2026-10-12T14:23:25.213Z raft-host: apply-sleep us=33026 group=2 idx=778 applied=768
+2026-10-12T14:23:25.213Z raft-host: apply-sleep us=33071 group=2 idx=777 applied=768
+2026-10-12T14:23:25.216Z raft-host: apply-sleep us=29457 group=0 idx=653 applied=650
+2026-10-12T14:23:25.216Z raft-host: apply-sleep us=29468 group=0 idx=653 applied=650
+2026-10-12T14:23:25.216Z raft-host: apply-sleep us=29565 group=0 idx=653 applied=650
+2026-10-12T14:23:25.216Z raft-host: apply-sleep us=29417 group=0 idx=653 applied=650
+2026-10-12T14:23:25.216Z raft-host: apply-sleep us=31302 group=2 idx=779 applied=770
+2026-10-12T14:23:25.216Z raft-host: apply-sleep us=29707 group=0 idx=653 applied=650
+2026-10-12T14:23:25.216Z raft-host: apply-sleep us=29800 group=0 idx=653 applied=650
+2026-10-12T14:23:25.229Z raft-host: apply-sleep us=41829 group=2 idx=780 applied=774
+2026-10-12T14:23:25.229Z raft-host: apply-sleep us=33370 group=2 idx=781 applied=775
+2026-10-12T14:23:25.229Z raft-host: apply-sleep us=33362 group=2 idx=782 applied=775
+2026-10-12T14:23:25.232Z raft-host: apply-sleep us=23105 group=2 idx=783 applied=776
+2026-10-12T14:23:25.232Z raft-host: apply-sleep us=23189 group=2 idx=784 applied=776
+2026-10-12T14:23:25.238Z raft-host: apply-sleep us=28962 group=0 idx=659 applied=652
+2026-10-12T14:23:25.240Z raft-host: getchunks slow ino=4174 start=0 n=1 ri_ms=23 total_ms=23 rc=0 slow=6
+2026-10-12T14:23:25.245Z raft-host: apply-sleep us=29090 group=2 idx=786 applied=779
+2026-10-12T14:23:25.245Z raft-host: apply-sleep us=29090 group=2 idx=787 applied=779
+2026-10-12T14:23:25.245Z raft-host: apply-sleep us=29757 group=2 idx=785 applied=778
+2026-10-12T14:23:25.268Z raft-host: apply-sleep us=38998 group=2 idx=788 applied=782
+2026-10-12T14:23:25.271Z raft-host: apply-sleep us=39512 group=2 idx=789 applied=784
+2026-10-12T14:23:25.276Z raft-host: apply-sleep us=36668 group=2 idx=790 applied=784
+2026-10-12T14:23:25.276Z raft-host: apply-sleep us=30968 group=0 idx=666 applied=660
+2026-10-12T14:23:25.276Z raft-host: apply-sleep us=30858 group=0 idx=666 applied=660
+2026-10-12T14:23:25.276Z raft-host: apply-sleep us=30889 group=0 idx=666 applied=660
+2026-10-12T14:23:25.277Z raft-host: apply-sleep us=27719 group=0 idx=666 applied=660
+2026-10-12T14:23:25.282Z raft-host: apply-sleep us=32716 group=2 idx=794 applied=787
+2026-10-12T14:23:25.282Z raft-host: apply-sleep us=33214 group=2 idx=791 applied=787
+2026-10-12T14:23:25.282Z raft-host: apply-sleep us=23857 group=2 idx=792 applied=787
+2026-10-12T14:23:25.282Z raft-host: apply-sleep us=23902 group=2 idx=793 applied=787
+2026-10-12T14:23:25.292Z raft-host: apply-sleep us=20558 group=2 idx=797 applied=789
+2026-10-12T14:23:25.301Z raft-host: apply-sleep us=24518 group=2 idx=800 applied=790
+2026-10-12T14:23:25.301Z raft-host: apply-sleep us=24941 group=2 idx=802 applied=789
+2026-10-12T14:23:25.301Z raft-host: apply-sleep us=24614 group=2 idx=801 applied=790
+2026-10-12T14:23:25.352Z raft-host: apply-sleep us=22361 group=2 idx=823 applied=817
+2026-10-12T14:23:25.358Z raft-host: apply-sleep us=26306 group=2 idx=824 applied=818
+2026-10-12T14:23:25.368Z raft-host: apply-sleep us=29750 group=2 idx=825 applied=821
+2026-10-12T14:23:25.372Z raft-host: apply-sleep us=33187 group=2 idx=827 applied=821
+2026-10-12T14:23:25.372Z raft-host: apply-sleep us=34111 group=2 idx=826 applied=821
+2026-10-12T14:23:25.372Z raft-host: apply-sleep us=33287 group=2 idx=828 applied=821
+2026-10-12T14:23:25.378Z raft-host: apply-sleep us=31402 group=2 idx=829 applied=822
+2026-10-12T14:23:25.380Z raft-host: apply-sleep us=25530 group=2 idx=831 applied=823
+2026-10-12T14:23:25.380Z raft-host: apply-sleep us=21046 group=0 idx=686 applied=680
+2026-10-12T14:23:25.380Z raft-host: apply-sleep us=22376 group=0 idx=683 applied=680
+2026-10-12T14:23:25.380Z raft-host: apply-sleep us=25852 group=2 idx=830 applied=823
+2026-10-12T14:23:25.380Z raft-host: apply-sleep us=21222 group=0 idx=686 applied=680
+2026-10-12T14:23:25.380Z raft-host: apply-sleep us=21271 group=0 idx=686 applied=680
+2026-10-12T14:23:25.380Z raft-host: apply-sleep us=21277 group=0 idx=686 applied=680
+2026-10-12T14:23:25.381Z raft-host: apply-sleep us=22034 group=0 idx=685 applied=680
+2026-10-12T14:23:25.397Z raft-host: apply-sleep us=26713 group=2 idx=833 applied=825
+2026-10-12T14:23:25.397Z raft-host: apply-sleep us=22776 group=2 idx=834 applied=828
+2026-10-12T14:23:25.409Z raft-host: apply-sleep us=26008 group=2 idx=836 applied=831
+2026-10-12T14:23:25.409Z raft-host: apply-sleep us=27810 group=2 idx=835 applied=831
+2026-10-12T14:23:25.424Z raft-host: apply-sleep us=24592 group=0 idx=693 applied=688
+2026-10-12T14:23:25.424Z raft-host: apply-sleep us=24666 group=0 idx=693 applied=688
+2026-10-12T14:23:25.424Z raft-host: apply-sleep us=24721 group=0 idx=693 applied=688
+2026-10-12T14:23:25.424Z raft-host: apply-sleep us=24762 group=0 idx=693 applied=688
+2026-10-12T14:23:25.424Z raft-host: apply-sleep us=24770 group=0 idx=693 applied=688
+2026-10-12T14:23:25.424Z raft-host: apply-sleep us=24780 group=0 idx=693 applied=688
+2026-10-12T14:23:25.432Z raft-host: apply-sleep us=23696 group=0 idx=695 applied=689
+2026-10-12T14:23:25.432Z raft-host: apply-sleep us=22805 group=2 idx=839 applied=836
+2026-10-12T14:23:25.437Z raft-host: apply-sleep us=24163 group=2 idx=843 applied=836
+2026-10-12T14:23:25.437Z raft-host: apply-sleep us=26257 group=2 idx=842 applied=836
+2026-10-12T14:23:25.477Z raft-host: apply-sleep us=25492 group=2 idx=852 applied=850
+2026-10-12T14:23:25.477Z raft-host: apply-sleep us=25531 group=2 idx=853 applied=850
+2026-10-12T14:23:25.477Z raft-host: apply-sleep us=25593 group=2 idx=855 applied=850
+2026-10-12T14:23:25.503Z raft-host: applied session index=858 kind=1 shard=0 ino=0
+2026-10-12T14:23:25.564Z raft-host: apply-sleep us=21858 group=2 idx=866 applied=863
+2026-10-12T14:23:25.569Z raft-host: apply-sleep us=20345 group=2 idx=867 applied=865
+2026-10-12T14:23:25.581Z raft-host: apply-sleep us=26729 group=2 idx=869 applied=865
+2026-10-12T14:23:25.589Z raft-host: apply-sleep us=26331 group=2 idx=870 applied=865
+2026-10-12T14:23:25.589Z raft-host: apply-sleep us=24243 group=0 idx=736 applied=733
+2026-10-12T14:23:25.598Z raft-host: apply-sleep us=27912 group=0 idx=740 applied=734
+2026-10-12T14:23:25.598Z raft-host: apply-sleep us=28245 group=2 idx=871 applied=867
+2026-10-12T14:23:25.598Z raft-host: apply-sleep us=25910 group=0 idx=739 applied=734
+2026-10-12T14:23:25.607Z raft-host: apply-sleep us=25091 group=2 idx=873 applied=869
+2026-10-12T14:23:25.607Z raft-host: apply-sleep us=25149 group=2 idx=874 applied=869
+2026-10-12T14:23:25.722Z raft-host: apply-sleep us=25460 group=2 idx=898 applied=893
+2026-10-12T14:23:25.727Z raft-host: apply-sleep us=21490 group=2 idx=899 applied=896
+2026-10-12T14:23:25.739Z raft-host: gc-pass ms=465 orphan=397 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=200 segs=0 keys=24 emit=14 tomb=10 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:25.747Z raft-host: apply-sleep us=25352 group=2 idx=904 applied=898
+2026-10-12T14:23:25.747Z raft-host: apply-sleep us=25434 group=2 idx=903 applied=898
+2026-10-12T14:23:25.772Z raft-host: apply-sleep us=22903 group=2 idx=908 applied=905
+2026-10-12T14:23:25.774Z raft-host: apply-sleep us=20481 group=0 idx=778 applied=771
+2026-10-12T14:23:25.777Z raft-host: apply-sleep us=20456 group=2 idx=909 applied=907
+2026-10-12T14:23:25.873Z raft-host: apply-sleep us=21594 group=2 idx=931 applied=929
+2026-10-12T14:23:26.515Z raft-host: getchunks slow ino=13094 start=0 n=0 ri_ms=23 total_ms=23 rc=0 slow=9
+2026-10-12T14:23:26.604Z raft-host: read-sleep us=74450 group=2 want=1019 read_idx=1019 applied=1019 pending=1
+2026-10-12T14:23:26.604Z raft-host: read-sleep us=74529 group=2 want=1019 read_idx=1019 applied=1019 pending=1
+2026-10-12T14:23:26.604Z raft-host: apply-sleep us=79035 group=2 idx=1020 applied=1016
+2026-10-12T14:23:26.604Z raft-host: read-sleep us=74254 group=2 want=1019 read_idx=1019 applied=1019 pending=1
+2026-10-12T14:23:26.604Z raft-host: read-sleep us=74636 group=2 want=1019 read_idx=1019 applied=1019 pending=1
+2026-10-12T14:23:26.604Z raft-host: apply-sleep us=77379 group=2 idx=1021 applied=1016
+2026-10-12T14:23:26.609Z raft-host: apply-sleep us=79132 group=2 idx=1022 applied=1019
+2026-10-12T14:23:26.909Z raft-host: apply-sleep us=21133 group=2 idx=1086 applied=1084
+2026-10-12T14:23:26.998Z raft-host: gc-pass ms=254 orphan=182 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=200 segs=0 keys=55 emit=12 tomb=43 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:27.167Z raft-host: read-sleep us=27079 group=2 want=1131 read_idx=1131 applied=1131 pending=1
+2026-10-12T14:23:27.167Z raft-host: apply-sleep us=20947 group=2 idx=1132 applied=1131
+2026-10-12T14:23:27.167Z raft-host: read-sleep us=27316 group=2 want=1131 read_idx=1131 applied=1131 pending=1
+2026-10-12T14:23:27.248Z iostats: get ops=86 bytes=1581056 errors=0 avg_us=2458 p50_us=2298 max_us=5309 put ops=88 bytes=2844169 errors=0 avg_us=48036 p50_us=19680 max_us=230673 wdisk ops=40 bytes=2621440 errors=0 avg_us=8086 p50_us=8384 max_us=11853
+2026-10-12T14:23:27.306Z raft-host: apply-sleep us=20272 group=2 idx=1160 applied=1158
+2026-10-12T14:23:28.127Z raft-host: gc-pass ms=126 orphan=57 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=86 emit=53 tomb=33 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:28.295Z raft-host: read-sleep us=75154 group=2 want=1311 read_idx=1311 applied=1311 pending=1
+2026-10-12T14:23:28.295Z raft-host: apply-sleep us=73259 group=2 idx=1312 applied=1311
+2026-10-12T14:23:28.623Z raft-host: getchunks slow ino=5980 start=0 n=1 ri_ms=24 total_ms=24 rc=0 slow=11
+2026-10-12T14:23:28.829Z raft-host: apply-sleep us=80332 group=0 idx=1276 applied=1273
+2026-10-12T14:23:28.829Z raft-host: apply-sleep us=80512 group=2 idx=1385 applied=1384
+2026-10-12T14:23:28.901Z raft-host: read-sleep us=20630 group=2 want=1395 read_idx=1395 applied=1395 pending=1
+2026-10-12T14:23:28.901Z raft-host: read-sleep us=21104 group=2 want=1395 read_idx=1395 applied=1395 pending=1
+2026-10-12T14:23:28.901Z raft-host: read-sleep us=20839 group=2 want=1395 read_idx=1395 applied=1395 pending=1
+2026-10-12T14:23:29.337Z raft-host: gc-pass ms=205 orphan=137 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=203 segs=0 keys=36 emit=15 tomb=21 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:30.055Z kv-obs: mt_bytes=559904 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:23:30.450Z raft-host: read-sleep us=53037 group=2 want=1644 read_idx=1644 applied=1644 pending=1
+2026-10-12T14:23:30.450Z raft-host: read-sleep us=54330 group=2 want=1644 read_idx=1644 applied=1644 pending=1
+2026-10-12T14:23:30.450Z raft-host: read-sleep us=53323 group=2 want=1644 read_idx=1644 applied=1644 pending=1
+2026-10-12T14:23:30.450Z raft-host: read-sleep us=39956 group=2 want=1644 read_idx=1644 applied=1644 pending=1
+2026-10-12T14:23:30.450Z raft-host: read-sleep us=56635 group=2 want=1644 read_idx=1644 applied=1644 pending=1
+2026-10-12T14:23:30.450Z raft-host: read-sleep us=52961 group=2 want=1644 read_idx=1644 applied=1644 pending=1
+2026-10-12T14:23:30.450Z raft-host: read-sleep us=32968 group=2 want=1644 read_idx=1644 applied=1644 pending=1
+2026-10-12T14:23:30.519Z raft-host: gc-pass ms=178 orphan=104 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=85 emit=73 tomb=12 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:30.719Z raft-host: read-sleep us=83564 group=2 want=1675 read_idx=1675 applied=1675 pending=1
+2026-10-12T14:23:30.940Z raft-host: getchunks slow ino=6898 start=0 n=1 ri_ms=28 total_ms=28 rc=0 slow=12
+2026-10-12T14:23:30.949Z raft-host: apply-sleep us=23938 group=2 idx=1723 applied=1718
+2026-10-12T14:23:30.958Z raft-host: apply-sleep us=23975 group=2 idx=1724 applied=1722
+2026-10-12T14:23:30.975Z raft-host: apply-sleep us=20426 group=2 idx=1729 applied=1723
+2026-10-12T14:23:30.999Z raft-host: apply-sleep us=21466 group=2 idx=1735 applied=1731
+2026-10-12T14:23:31.679Z raft-host: gc-pass ms=156 orphan=87 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=22 emit=9 tomb=13 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:31.705Z raft-host: apply-sleep us=79204 group=2 idx=1876 applied=1875
+2026-10-12T14:23:32.254Z iostats: get ops=104 bytes=1654784 errors=0 avg_us=2391 p50_us=2234 max_us=5309 put ops=159 bytes=3169239 errors=0 avg_us=36651 p50_us=18579 max_us=230673 wdisk ops=40 bytes=2621440 errors=0 avg_us=8086 p50_us=8384 max_us=11853
+2026-10-12T14:23:32.450Z raft-host: read-sleep us=20793 group=2 want=1978 read_idx=1978 applied=1978 pending=1
+2026-10-12T14:23:32.450Z raft-host: read-sleep us=20705 group=2 want=1978 read_idx=1978 applied=1978 pending=1
+2026-10-12T14:23:32.456Z raft-host: getchunks slow ino=6122 start=0 n=1 ri_ms=26 total_ms=26 rc=0 slow=13
+2026-10-12T14:23:32.826Z raft-host: gc-pass ms=144 orphan=75 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=112 emit=99 tomb=13 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:33.039Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=212 passes=16 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=1 ack_errors=0 missing_exports=0
+2026-10-12T14:23:33.952Z raft-host: gc-pass ms=122 orphan=53 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=124 emit=10 tomb=114 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:34.860Z raft-host: apply-sleep us=79131 group=2 idx=2396 applied=2395
+2026-10-12T14:23:34.869Z raft-host: apply-sleep us=83183 group=2 idx=2397 applied=2395
+2026-10-12T14:23:35.055Z kv-obs: mt_bytes=875286 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:23:35.088Z raft-host: gc-pass ms=132 orphan=63 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=66 emit=9 tomb=57 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:36.217Z raft-host: gc-pass ms=126 orphan=57 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=163 emit=135 tomb=28 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:37.255Z iostats: get ops=129 bytes=1757184 errors=0 avg_us=2314 p50_us=2078 max_us=5309 put ops=239 bytes=3535466 errors=0 avg_us=30417 p50_us=16638 max_us=230673 wdisk ops=40 bytes=2621440 errors=0 avg_us=8086 p50_us=8384 max_us=11853
+2026-10-12T14:23:37.352Z raft-host: gc-pass ms=131 orphan=61 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=60 emit=9 tomb=51 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:38.511Z raft-host: gc-pass ms=155 orphan=85 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=188 emit=161 tomb=27 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:39.647Z raft-host: gc-pass ms=132 orphan=61 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=147 emit=9 tomb=138 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:40.056Z kv-obs: mt_bytes=1193777 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:23:40.824Z raft-host: gc-pass ms=173 orphan=104 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=300 emit=183 tomb=117 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:41.452Z raft-host: getchunks slow ino=95014 start=0 n=1 ri_ms=25 total_ms=25 rc=0 slow=14
+2026-10-12T14:23:41.646Z raft-host: apply-sleep us=20174 group=2 idx=3517 applied=3513
+2026-10-12T14:23:41.653Z raft-host: apply-sleep us=27924 group=2 idx=3518 applied=3513
+2026-10-12T14:23:41.654Z raft-host: apply-sleep us=20089 group=2 idx=3519 applied=3516
+2026-10-12T14:23:41.660Z raft-host: apply-sleep us=21730 group=2 idx=3520 applied=3516
+2026-10-12T14:23:41.826Z raft-host: apply-sleep us=75312 group=2 idx=3531 applied=3530
+2026-10-12T14:23:41.980Z raft-host: gc-pass ms=152 orphan=83 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=58 emit=11 tomb=47 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:42.258Z iostats: get ops=155 bytes=1863680 errors=0 avg_us=2265 p50_us=2006 max_us=5309 put ops=320 bytes=3906137 errors=0 avg_us=26805 p50_us=13903 max_us=230673 wdisk ops=40 bytes=2621440 errors=0 avg_us=8086 p50_us=8384 max_us=11853
+2026-10-12T14:23:43.119Z raft-host: gc-pass ms=135 orphan=66 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=87 emit=10 tomb=77 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:43.876Z raft-host: read-sleep us=77181 group=2 want=3878 read_idx=3878 applied=3878 pending=1
+2026-10-12T14:23:43.876Z raft-host: apply-sleep us=81250 group=2 idx=3879 applied=3872
+2026-10-12T14:23:43.876Z raft-host: read-sleep us=77262 group=2 want=3878 read_idx=3878 applied=3878 pending=1
+2026-10-12T14:23:43.876Z raft-host: read-sleep us=77298 group=2 want=3878 read_idx=3878 applied=3878 pending=1
+2026-10-12T14:23:43.879Z raft-host: apply-sleep us=85995 group=2 idx=3880 applied=3872
+2026-10-12T14:23:43.879Z raft-host: apply-sleep us=80609 group=2 idx=3881 applied=3878
+2026-10-12T14:23:44.293Z raft-host: gc-pass ms=170 orphan=101 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=420 emit=220 tomb=200 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:44.901Z raft-host: read-sleep us=74261 group=2 want=4033 read_idx=4033 applied=4033 pending=1
+2026-10-12T14:23:44.901Z raft-host: read-sleep us=74194 group=2 want=4033 read_idx=4033 applied=4033 pending=1
+2026-10-12T14:23:44.901Z raft-host: read-sleep us=74092 group=2 want=4033 read_idx=4033 applied=4033 pending=1
+2026-10-12T14:23:44.901Z raft-host: read-sleep us=74372 group=2 want=4033 read_idx=4033 applied=4033 pending=1
+2026-10-12T14:23:44.901Z raft-host: read-sleep us=74078 group=2 want=4033 read_idx=4033 applied=4033 pending=1
+2026-10-12T14:23:44.901Z raft-host: read-sleep us=74414 group=2 want=4033 read_idx=4033 applied=4033 pending=1
+2026-10-12T14:23:44.901Z raft-host: read-sleep us=74542 group=2 want=4033 read_idx=4033 applied=4033 pending=1
+2026-10-12T14:23:45.056Z kv-obs: mt_bytes=1496770 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:23:45.455Z raft-host: gc-pass ms=158 orphan=88 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=332 emit=10 tomb=322 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:45.942Z raft-host: apply-sleep us=20151 group=2 idx=4232 applied=4230
+2026-10-12T14:23:46.609Z raft-host: gc-pass ms=150 orphan=82 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=421 emit=246 tomb=175 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:47.258Z iostats: get ops=174 bytes=1941504 errors=0 avg_us=2690 p50_us=2189 max_us=72869 put ops=393 bytes=4240482 errors=0 avg_us=25374 p50_us=17558 max_us=230673 wdisk ops=40 bytes=2621440 errors=0 avg_us=8086 p50_us=8384 max_us=11853
+2026-10-12T14:23:47.739Z raft-host: gc-pass ms=126 orphan=57 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=197 segs=0 keys=51 emit=9 tomb=42 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-12T14:23:48.625Z raft-host: apply-sleep us=72302 group=2 idx=4684 applied=4683
+2026-10-12T14:23:48.625Z raft-host: read-sleep us=72551 group=2 want=4683 read_idx=4683 applied=4683 pending=1
+2026-10-12T14:23:48.625Z raft-host: read-sleep us=71794 group=2 want=4683 read_idx=4683 applied=4683 pending=1
+2026-10-12T14:23:49.039Z raft-host: read-sleep us=77878 group=2 want=4742 read_idx=4742 applied=4742 pending=1
+2026-10-12T14:23:49.039Z raft-host: read-sleep us=77912 group=2 want=4740 read_idx=4742 applied=4742 pending=1
+2026-10-12T14:23:49.039Z raft-host: read-sleep us=77542 group=2 want=4742 read_idx=4742 applied=4742 pending=1
+2026-10-12T14:23:49.039Z raft-host: apply-sleep us=78181 group=2 idx=4743 applied=4742
+2026-10-12T14:23:49.039Z raft-host: read-sleep us=77885 group=2 want=4740 read_idx=4742 applied=4742 pending=1
+2026-10-12T14:23:49.039Z raft-host: read-sleep us=78207 group=2 want=4742 read_idx=4742 applied=4742 pending=1
+2026-10-12T14:23:49.039Z raft-host: read-sleep us=78124 group=2 want=4739 read_idx=4742 applied=4742 pending=1
+2026-10-12T14:23:49.042Z gc-health: stage=3 group=2 elapsed_ms=298 last_pass_age_ms=1302 passes=29 sampled=2 pending=0,0 reap=0,5 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=1 ack_errors=0 missing_exports=0
+2026-10-12T14:23:49.211Z raft-host: gc-pass ms=468 orphan=144 reap=253 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=212 segs=0 keys=497 emit=279 tomb=218 reap_scan=0 reap_sweep=58 reap_fence=65 reap_done=128
+2026-10-12T14:23:50.059Z kv-obs: mt_bytes=1788878 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:23:50.474Z raft-host: apply-sleep us=20592 group=2 idx=4995 applied=4993
+2026-10-12T14:23:50.513Z raft-host: apply-sleep us=21468 group=0 idx=4594 applied=4590
+2026-10-12T14:23:50.529Z raft-host: apply-sleep us=23378 group=2 idx=5001 applied=4999
+2026-10-12T14:23:50.538Z raft-host: apply-sleep us=25163 group=2 idx=5002 applied=5000
+2026-10-12T14:23:50.746Z raft-host: gc-pass ms=530 orphan=97 reap=359 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=227 segs=0 keys=483 emit=29 tomb=454 reap_scan=0 reap_sweep=108 reap_fence=135 reap_done=116
+2026-10-12T14:23:52.262Z iostats: get ops=188 bytes=1998848 errors=0 avg_us=2644 p50_us=2146 max_us=72869 put ops=445 bytes=4478407 errors=0 avg_us=24933 p50_us=17230 max_us=230673 wdisk ops=40 bytes=2621440 errors=0 avg_us=8086 p50_us=8384 max_us=11853
+2026-10-12T14:23:52.515Z raft-host: apply-sleep us=22662 group=2 idx=5361 applied=5359
+2026-10-12T14:23:53.307Z raft-host: gc-pass ms=1558 orphan=367 reap=1121 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=293 segs=0 keys=605 emit=220 tomb=385 reap_scan=0 reap_sweep=330 reap_fence=434 reap_done=356
+2026-10-12T14:23:54.373Z raft-host: apply-sleep us=24157 group=0 idx=5309 applied=5307
+2026-10-12T14:23:54.373Z raft-host: apply-sleep us=26016 group=2 idx=5732 applied=5729
+2026-10-12T14:23:54.376Z raft-host: apply-sleep us=23578 group=2 idx=5733 applied=5730
+2026-10-12T14:23:55.062Z kv-obs: mt_bytes=1817913 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:23:55.956Z raft-host: gc-pass ms=1645 orphan=456 reap=1113 frag=7 spread=0 recover=68 fscans=1 fsegs=0 fkeys=2 femit=2 ftomb=0 scans=295 segs=0 keys=695 emit=110 tomb=585 reap_scan=0 reap_sweep=330 reap_fence=447 reap_done=335
+2026-10-12T14:23:57.262Z iostats: get ops=188 bytes=1998848 errors=0 avg_us=2644 p50_us=2146 max_us=72869 put ops=445 bytes=4478407 errors=0 avg_us=24933 p50_us=17230 max_us=230673 wdisk ops=40 bytes=2621440 errors=0 avg_us=8086 p50_us=8384 max_us=11853
+2026-10-12T14:23:57.401Z raft-host: gc-pass ms=1425 orphan=241 reap=1105 frag=10 spread=0 recover=68 fscans=1 fsegs=0 fkeys=3 femit=2 ftomb=1 scans=295 segs=0 keys=523 emit=103 tomb=420 reap_scan=0 reap_sweep=311 reap_fence=479 reap_done=314
+2026-10-12T14:23:58.582Z raft-host: gc-pass ms=1160 orphan=278 reap=801 frag=6 spread=0 recover=68 fscans=1 fsegs=0 fkeys=6 femit=5 ftomb=1 scans=295 segs=0 keys=428 emit=100 tomb=328 reap_scan=0 reap_sweep=192 reap_fence=449 reap_done=159
+2026-10-12T14:23:59.626Z raft-host: gc-pass ms=1024 orphan=251 reap=699 frag=4 spread=0 recover=68 fscans=1 fsegs=0 fkeys=2 femit=1 ftomb=1 scans=294 segs=0 keys=440 emit=90 tomb=350 reap_scan=0 reap_sweep=171 reap_fence=361 reap_done=165
+2026-10-12T14:24:00.064Z kv-obs: mt_bytes=1744074 l0_bytes=0 l0=0 l1=0
+2026-10-12T14:24:00.503Z raft-host: apply-sleep us=400200 group=2 idx=6540 applied=6539
+2026-10-12T14:24:00.503Z raft-host: gc-pass ms=856 orphan=237 reap=619 frag=0 spread=0 recover=0 fscans=1 fsegs=0 fkeys=1 femit=0 ftomb=1 scans=42 segs=0 keys=250 emit=70 tomb=180 reap_scan=0 reap_sweep=60 reap_fence=108 reap_done=450
