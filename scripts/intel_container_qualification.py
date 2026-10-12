@@ -20,7 +20,7 @@ if a.gate=='reclaim':
  def inventory(pair):
   index,host=pair
   cmd=['python3',a.base+'/intel_container_node.py','inventory','--base',a.base,'--host-index',str(index)]
-  check=['python3','-c',"import json,sys;from pathlib import Path;print(json.dumps([p.name for p in Path(sys.argv[1]).iterdir()]))",a.base+'/mnt0']
+  check=['python3','-c',"import json,sys;from pathlib import Path;assert any(l.split()[4]==sys.argv[1] for l in Path('/proc/self/mountinfo').read_text().splitlines()),'private export is not mounted';print(json.dumps([p.name for p in Path(sys.argv[1]).iterdir()]))",a.base+'/mnt0']
   names=json.loads(subprocess.check_output(['ssh',host,shlex.join(check)],text=True,timeout=15))
   assert not names,(host,'reclamation requires an empty private export',names)
   return {'host':host,'nodes':json.loads(subprocess.check_output(['ssh',host,shlex.join(cmd)],text=True,timeout=15))}
