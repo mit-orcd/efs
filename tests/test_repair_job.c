@@ -58,14 +58,27 @@ static void journal(struct efs_kv *kv,int lsm)
     assert(!efs_repair_job_decode(wire,sizeof(wire),&got));wire[44]^=1;
     assert(efs_repair_job_decode(wire,sizeof(wire),&got)==EFS_ERR_PROTO);
     assert(command(kv,&j,EFS_REPAIR_OP_ADMIT,0,group^2)==EFS_ERR_INVAL);
+    /* GC-scheduled object still visible in source row: ADMIT must refuse.
+     * This is the scan->ADMIT->delete race boundary, serialized at Raft apply. */
+    uint8_t gk[EFS_KV_KEY_MAX],gv[EFS_META_GC_VAL]={0};uint32_t gkl=0;
+    assert(!efs_kv_key_gc(efs_kv_anchor_shard(efs_kv_lane_shard(ino,0)),ino,101,0,0,gk,&gkl));
+    assert(!efs_kv_put(kv,gk,gkl,gv,sizeof(gv)));
+    assert(efs_repair_admit(kv,&j)==EFS_ERR_STALE);
+    assert(efs_repair_get(kv,&j,&got)==EFS_ERR_NOT_FOUND);
+    assert(!efs_kv_del(kv,gk,gkl));
     fail(kv,lsm);assert(command(kv,&j,EFS_REPAIR_OP_ADMIT,0,group)==EFS_ERR_IO);
     assert(efs_repair_get(kv,&j,&got)==EFS_ERR_NOT_FOUND);
     assert(!command(kv,&j,EFS_REPAIR_OP_ADMIT,0,group));assert(!efs_repair_admit(kv,&j));
+    assert(!efs_repair_write_authority(kv,&j));
+    assert(!efs_kv_put(kv,gk,gkl,gv,sizeof(gv)));
+    assert(efs_repair_write_authority(kv,&j)==EFS_ERR_STALE);
+    assert(!efs_kv_del(kv,gk,gkl));
     struct efs_repair_job conflict=j;conflict.sums[0][0]^=1;
     assert(efs_repair_admit(kv,&conflict)==EFS_ERR_STALE);
     conflict=j;conflict.owner=2;assert(efs_repair_admit(kv,&conflict)==EFS_ERR_STALE);
     conflict=j;conflict.uuid[0]=18;assert(efs_repair_admit(kv,&conflict)==EFS_ERR_BUSY);
     assert(efs_repair_gc_ready(kv,ino,j.inode_gen,0,101)==EFS_ERR_BUSY);
+    assert(efs_repair_gc_object_ready(kv,ino,0,101)==EFS_ERR_BUSY);
     assert(efs_repair_retire(kv,&j,0)==EFS_ERR_BUSY);
     assert(efs_repair_record_seal(kv,&j,1)==EFS_ERR_STALE);
     fail(kv,lsm);assert(efs_repair_record_data(kv,&j)==EFS_ERR_IO);
@@ -73,7 +86,7 @@ static void journal(struct efs_kv *kv,int lsm)
     assert(!efs_repair_record_data(kv,&j));
     fail(kv,lsm);assert(efs_repair_record_seal(kv,&j,2)==EFS_ERR_IO);
     assert(efs_repair_gc_ready(kv,ino,j.inode_gen,0,101)==EFS_ERR_BUSY);
-    assert(!efs_repair_record_seal(kv,&j,2));assert(!efs_repair_gc_ready(kv,ino,j.inode_gen,0,101));
+    assert(!efs_repair_record_seal(kv,&j,2));assert(efs_repair_write_authority(kv,&j)==EFS_ERR_STALE);assert(!efs_repair_gc_object_ready(kv,ino,0,101));assert(!efs_repair_gc_ready(kv,ino,j.inode_gen,0,101));
     fail(kv,lsm);assert(efs_repair_retire(kv,&j,0)==EFS_ERR_IO);
     assert(!efs_repair_get(kv,&j,&got) && got.state==EFS_REPAIR_SEALED);
     assert(!efs_repair_retire(kv,&j,0));assert(!efs_repair_retire(kv,&j,0));

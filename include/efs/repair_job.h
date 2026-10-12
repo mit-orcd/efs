@@ -37,12 +37,14 @@ int efs_repair_admit(struct efs_kv *, const struct efs_repair_job *);
 int efs_repair_get(struct efs_kv *, const struct efs_repair_job *, struct efs_repair_job *);
 /* Durable apply records of coordinator-verified receipts. These functions
  * cannot establish target durability or revocation by themselves. */
+int efs_repair_write_authority(struct efs_kv *, const struct efs_repair_job *);
 int efs_repair_record_data(struct efs_kv *, const struct efs_repair_job *);
 int efs_repair_cancel(struct efs_kv *, const struct efs_repair_job *);
 int efs_repair_record_seal(struct efs_kv *, const struct efs_repair_job *, uint32_t target_floor);
 int efs_repair_retire(struct efs_kv *, const struct efs_repair_job *, int cancelled);
 /* Mandatory future GC integration point. BUSY until EVERY matching active
  * job has a committed terminal target seal; absence never proves a target
- * receipt. This predicate is not wired into live GC yet. */
+ * receipt. The object predicate also fences historical FileID generations. */
 int efs_repair_gc_ready(struct efs_kv *, efs_ino_t, uint64_t, uint32_t, uint64_t);
+int efs_repair_gc_object_ready(struct efs_kv *, efs_ino_t, uint32_t, uint64_t);
 #endif

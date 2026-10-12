@@ -10456,6 +10456,22 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     if(clen && (cmd[0]==EFS_MD_CMD_REPAIR_JOB || cmd[0]==EFS_MD_CMD_PACK_GC_ACK || cmd[0]==EFS_MD_CMD_PACK_CANCEL || cmd[0]==EFS_MD_CMD_PACK_GC_RETIRE)) {
         out->rc=EFS_ERR_ACCES;return;
     }
+    if(clen && cmd[0]==EFS_MD_REQ_REPAIR_WRITE_AUTHORITY) {
+        struct efs_repair_job expected;
+        rc=efs_repair_job_decode(cmd+1,clen-1,&expected);
+        if(rc || expected.state!=EFS_REPAIR_ADMITTED || expected.flags ||
+           group!=efs_raft_shard_group(efs_kv_lane_shard(expected.ino,expected.ci%EFS_META_LANES))) {
+            out->rc=rc?rc:EFS_ERR_INVAL;return;
+        }
+        if(!host_hosts(h,group)) {
+            rc=host_remote_cmd(h,group,cmd,clen,out,-1);if(rc)out->rc=rc;return;
+        }
+        /* ReadIndex waits for this replica's own apply before journal/source
+         * reads. This returns permission only, never a durable target receipt. */
+        rc=host_read_index(h,group,&hint);
+        if(!rc)rc=efs_repair_write_authority(h->kv,&expected);
+        out->rc=rc;out->leader_hint=hint;return;
+    }
     if(clen && cmd[0]==EFS_MD_REQ_PACK_GC_VIEW) {
         struct efs_pack_object expected,current;
         rc=efs_pack_object_decode(cmd+1,clen-1,&expected);

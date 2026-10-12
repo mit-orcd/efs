@@ -124,7 +124,7 @@ static int put(struct efs_kv *kv,const struct efs_repair_job *j)
     key(j,EFS_KV_KIND_REPAIR_JOB,k);struct efs_kv_item item={EFS_KV_PUT,k,sizeof(k),v,sizeof(v)};
     return efs_kv_batch(kv,&item,1);
 }
-struct scan {const struct efs_repair_job *match;uint32_t count;int duplicate,rc;};
+struct scan {const struct efs_repair_job *match;uint32_t count;int duplicate,rc,any_gen,any_fi;};
 static int scan_cb(void *u,const uint8_t *k,uint32_t kl,const uint8_t *v,uint32_t vl)
 {
     struct scan *s=u;struct efs_repair_job j;uint8_t expected[19];
@@ -133,7 +133,7 @@ static int scan_cb(void *u,const uint8_t *k,uint32_t kl,const uint8_t *v,uint32_
     if(memcmp(k,expected,19)){s->rc=EFS_ERR_PROTO;return 1;}
     if(++s->count>EFS_REPAIR_PENDING_MAX){s->rc=EFS_ERR_OVERFLOW;return 1;}
     const struct efs_repair_job *m=s->match;
-    if(m && j.ino==m->ino && j.inode_gen==m->inode_gen && j.ci==m->ci && j.object==m->object && j.fi==m->fi){
+    if(m && j.ino==m->ino && (s->any_gen || j.inode_gen==m->inode_gen) && j.ci==m->ci && j.object==m->object && (s->any_fi || j.fi==m->fi)){
         s->duplicate=1;
         if(j.state!=EFS_REPAIR_SEALED)s->rc=EFS_ERR_BUSY;
     }
@@ -143,6 +143,34 @@ static int scan_jobs(struct efs_kv *kv,const struct efs_repair_job *j,struct sca
 {
     uint8_t k[19];key(j,EFS_KV_KIND_REPAIR_JOB,k);
     int rc=efs_kv_scan_prefix(kv,k,3,scan_cb,s);return s->rc?s->rc:(rc==1?EFS_OK:rc);
+}
+static int gc_not_scheduled(struct efs_kv *kv,const struct efs_repair_job *j)
+{
+    /* ADMIT and GC scheduling apply on the same lane group. Even if a
+     * historical row remains visible, a committed GC record forbids new jobs.
+     * Check under the outer atomic apply scope, before recording authority. */
+    uint8_t gk[EFS_KV_KEY_MAX],gv[EFS_META_GC_VAL];uint32_t gkl=0,gn=sizeof(gv);
+    int rc=efs_kv_key_gc(anchor(j),j->ino,j->object,j->ci%64,j->ci,gk,&gkl);
+    if(rc)return rc;
+    rc=efs_txn_key_exclusive(kv,gk,gkl);if(rc)return rc;
+    rc=efs_kv_get(kv,gk,gkl,gv,&gn);
+    if(rc==EFS_OK || (rc==EFS_ERR_INVAL && gn>sizeof(gv)))return EFS_ERR_STALE;
+    if(rc!=EFS_ERR_NOT_FOUND)return rc;
+    return EFS_OK;
+}
+/* ReadIndex must precede this read; current source and GC scheduling are part
+ * of the permit, not just an old ADMITTED journal flag. FileID/export authority
+ * still requires the receiver's separate inode writer view and geometry check. */
+int efs_repair_write_authority(struct efs_kv *kv,const struct efs_repair_job *j)
+{
+    if(valid(j) || j->state!=EFS_REPAIR_ADMITTED || j->flags)return EFS_ERR_INVAL;
+    struct efs_repair_job old,now;int rc=efs_repair_get(kv,j,&old);
+    if(rc)return rc;
+    if(old.state!=EFS_REPAIR_ADMITTED || (old.flags&EFS_REPAIR_CANCELLED))return EFS_ERR_STALE;
+    rc=gc_not_scheduled(kv,j);if(rc)return rc;
+    rc=efs_repair_capture(kv,j,&now);
+    if(rc)return rc==EFS_ERR_NOT_FOUND?EFS_ERR_STALE:rc;
+    return same(j,&now)?EFS_OK:EFS_ERR_STALE;
 }
 int efs_repair_admit(struct efs_kv *kv,const struct efs_repair_job *j)
 {
@@ -157,6 +185,7 @@ int efs_repair_admit(struct efs_kv *kv,const struct efs_repair_job *j)
         return EFS_ERR_STALE; /* A terminal UUID is never re-admitted. */
     }
     if(rc!=EFS_ERR_NOT_FOUND)return rc;
+    rc=gc_not_scheduled(kv,j);if(rc)return rc;
     rc=efs_repair_capture(kv,j,&now);if(rc)return rc==EFS_ERR_NOT_FOUND?EFS_ERR_STALE:rc;if(!same(j,&now))return EFS_ERR_STALE;
     struct scan s={.match=j};rc=scan_jobs(kv,j,&s);if(rc && rc!=EFS_ERR_BUSY)return rc;
     if(s.duplicate || s.count>=EFS_REPAIR_PENDING_MAX)return EFS_ERR_BUSY;
@@ -214,9 +243,17 @@ int efs_repair_gc_ready(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,uint32_t ci
 {
     struct efs_repair_job j={.ino=ino,.inode_gen=gen,.ci=ci,.object=object};struct scan s={.match=&j};
     if(!kv || !ino || !gen || !object)return EFS_ERR_INVAL;
-    /* Match all fragment roles, not just the selector's default role. */
-    for(unsigned fi=0;fi<3;fi++){j.fi=fi;memset(&s,0,sizeof(s));s.match=&j;int rc=scan_jobs(kv,&j,&s);if(rc)return rc;}
-    return EFS_OK;
+    s.any_fi=1;return scan_jobs(kv,&j,&s);
+}
+
+/* GC keys carry object generation, not FileID generation. Fence ALL matching
+ * historical identities rather than accidentally skipping an older job. */
+int efs_repair_gc_object_ready(struct efs_kv *kv,efs_ino_t ino,uint32_t ci,uint64_t object)
+{
+    if(!kv || ino<=EFS_ROOT_INO || !object)return EFS_ERR_INVAL;
+    struct efs_repair_job j={.ino=ino,.ci=ci,.object=object};
+    struct scan s={.match=&j,.any_gen=1,.any_fi=1};
+    return scan_jobs(kv,&j,&s);
 }
 
 int efs_repair_apply_command(struct efs_kv *kv,uint32_t group,const uint8_t *cmd,uint32_t n)

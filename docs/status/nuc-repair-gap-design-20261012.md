@@ -63,3 +63,10 @@ No physical repair, verified target receipt, live target fencing/GC coupling, wo
 
 
 Corrected storage barrier owner `ac540d7a` independently passes AMD daemon build and existing PUT/new repair storage-fence tests. Shared guard and durable certificate implementation preserve ordinary PUT path/format; repair uses a separate `meta/repair-job` certificate domain. Tests cover guarded-write/seal ordering, cold monotonic floors, sync failures/retry, corruption refusal and same-UUID domain isolation. Evidence: `results/measure/20261012-repair-review/ac540d7a`. No receiver/worker is enabled and live generation-GC coupling remains unfinished.
+
+
+## GC admission and readonly authority stage
+
+Owner stages `1662db31`, `a9f094be`, `60cd5a2c` independently reviewed/built/tested on AMD before integration. ADMIT rejects committed GC scheduling under the owning lane apply, including a still-visible historical source. A bounded all-FileID-generation/all-role predicate is available for future GC coupling; it is not installed in default GC. The hypothetical callback adapter is explicitly uninstalled and excluded from native acceptance. Readonly tag56 forwards unhosted groups and establishes fresh ReadIndex before exact ADMITTED job, captured source and GC-scheduling checks. No caller DATA/SEAL flag is a durable physical receipt.
+
+AMD focused journal/WAL/cold/host/bounds checks PASS; evidence `results/measure/20261012-repair-review/60cd5a2c`. Live election/apply/receiver/GC race and physical role restoration remain unproven. Receiver must additionally validate FileID writer view/export geometry, verified reconstructed checksum and durable target write before returning a trusted identity-bound receipt. No worker/default activation.
