@@ -1,0 +1,23 @@
+{
+  "source": "410afed433b6da093bdc2acf37bec253ddbd586c",
+  "state": "STOPPED",
+  "reason": "direct human instruction via verified manager chat",
+  "input_scope": 1563,
+  "directories": 52,
+  "actual_git_inputs": "PASS",
+  "local_docs": "PASS",
+  "original_packaging_fault_native": "FAIL exit2 docs links",
+  "v2_fault_native": "PASS",
+  "v2_normal_native": "STOPPED",
+  "normal_completion_marker": false,
+  "sanitizers": "NOTRUN",
+  "strict_create_mounted": "NOTRUN",
+  "mounted_packing_gc": "NOTRUN",
+  "stage_builds": 10,
+  "stage_v2_all_inputs_docs_binaries": "PASS",
+  "active_owned_processes": [],
+  "original_services": "PASS all11protected",
+  "concurrent_queries": "OPEN",
+  "release_acceptance": "OPEN",
+  "shell_trap_exit_zero_is_completion": false
+}

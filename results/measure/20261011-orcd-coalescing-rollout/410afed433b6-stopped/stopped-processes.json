@@ -1,0 +1,47 @@
+{
+  "stop_reason": "direct human manager instruction",
+  "owned_before": [
+    {
+      "pid": 1731976,
+      "ppid": 1731883,
+      "args": [
+        "bash",
+        "full-prerequisites.sh"
+      ],
+      "cwd": "/tmp/efs-orcd-unit-410afed4"
+    },
+    {
+      "pid": 1739057,
+      "ppid": 1731976,
+      "args": [
+        "make",
+        "-j8",
+        "EFS_FAULTS=0",
+        "EFS_GIT_ID=410afed4-release-normal",
+        "EFS_GIT_BRANCH=release-v0.3.0-pre-alpha",
+        "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+        "all",
+        "test"
+      ],
+      "cwd": "/tmp/efs-orcd-unit-410afed4"
+    },
+    {
+      "pid": 1740350,
+      "ppid": 1739057,
+      "args": [
+        "python3",
+        "tests/test_opid_admission.py"
+      ],
+      "cwd": "/tmp/efs-orcd-unit-410afed4"
+    },
+    {
+      "pid": 1740356,
+      "ppid": 1740350,
+      "args": [
+        "/tmp/efs-opid-admit-d291fyrm/test"
+      ],
+      "cwd": "/tmp/efs-orcd-unit-410afed4"
+    }
+  ],
+  "active_after": []
+}
