@@ -299,7 +299,7 @@ SHA256 (normal / fault):
 
 ## Inspection, worker status and sustained soak follow-up
 
-In progress after initial D33 qualification: `expiry NODE:PORT show PATH
+PASS after initial D33 qualification (see [inspection/status and soak evidence](expiry-inspection-soak-20261012.md)): `expiry NODE:PORT show PATH
 [--mount MOUNT]` provides readable local-time deadlines and relative time, saved
 policy source for files, and nearest enabled/disabled future-file policy for
 directories. Paths resolve authoritatively from the export root; `--mount`
@@ -318,9 +318,12 @@ Only the coordinator counts confirmed removals; forwarded workers do not double
 count them. Backlog scans remain capped at 64; an old sample is not a current
 exact total and a follower does not publish authoritative backlog samples.
 
-A bounded two-mount soak is being added to `--suite expiry --soak-seconds`:
+A bounded two-mount soak is available through `--suite expiry --soak-seconds`:
 four concurrent workers create/write/fsync, renew, rename, and replace paths;
 expired originals drain from namespace and physical storage, renewed and replacement
 bytes must survive, survivor cleanup must reclaim storage. Cold restarts occur
-between fully closed/drained batches. Space/inodes and daemon RSS are monitored.
-Final verdict and exact build/evidence identities will be recorded after NUC gates.
+with closed descriptors and fully fsynced writes. Space/inodes and daemon RSS are monitored.
+Fault source `3b873839` passed 25 expiry gates and a 30-minute soak (137 rounds,
+1,644 expirations, six restarts); final reporting source `2da7a70a` passed
+24 normal gates and short-soak integration. Both core 216/216, peer 67/67,
+physical GC and cold cleanup PASS; exact identities and limitations are linked above.

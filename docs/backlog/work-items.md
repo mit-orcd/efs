@@ -4042,6 +4042,12 @@ TCP, direct I/O, FILES storage, `.efs` disabled, no containers and no packing.
 Normal and clock-fault matrices at `0e975936` PASS: expiry/recovery/physical GC,
 216/216 core and 67/67 peer tests in each. [Evidence and reproduction](../status/expiry-implementation-20261012.md#final-qualification--pass).
 
+**Oct 12 follow-up complete:** readable management path inspection and worker
+status; expiry-specific confirmed namespace file/observed logical-byte counters,
+separate from all-cause physical GC totals. Normal 24/24 and fault 25/25 gates,
+30-minute two-mount soak (1,644 expirations, six restarts), and both core/peer
+matrices PASS. [Evidence, limitations and commands](../status/expiry-inspection-soak-20261012.md).
+
 **Gate:** focused renewal/deletion, path-reuse, rename, hard-link, open-file and
 concurrent-publication tests; clock jumps, leader change, restart, retries and
 offline storage-member fault gates. Bound worker/index resource use, verify
