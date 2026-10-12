@@ -3,7 +3,7 @@
 [Status index](README.md) · [Decisions](decisions.md) ·
 [Architecture](../how-it-works/architecture.md)
 
-**Current state:** narrowed qualification RESUMED under explicit human start, reporting every15minutes. Common candidate2bf7e257e2a36d7f8779b770c8eca3d967ab5835 on qualification-v030-tcp-direct; AMD groups1/4, Intel group2, NUC group3. All received exactSHA. TCP/direct/files only; containers and dedicated repair/recovery deferred. No old-binary/data or backward-compatibility preservation effort required; identified EFS test stores may be erased if easier. Keep raw evidence and source identity; unrelated services untouched. No push/tag/promotion. [Scope and assignments](v030-release-scope-20261012.md).
+**Current state:** narrowed qualification RESUMED under explicit human start, reporting every15minutes. Common candidatedef46109909c793e58ae2c453c5de537cdb2c627 on qualification-v030-tcp-direct; AMD groups1/4, Intel group2, NUC group3. All received exactSHA. TCP/direct/files only; containers and dedicated repair/recovery deferred. No old-binary/data or backward-compatibility preservation effort required; identified EFS test stores may be erased if easier. Keep raw evidence and source identity; unrelated services untouched. No push/tag/promotion. [Scope and assignments](v030-release-scope-20261012.md).
 
 ## Superseded assignments and evidence (before human stop)
 

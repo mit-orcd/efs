@@ -6,13 +6,13 @@ waives old-binary/data preservation and backward-compatibility efforts. AMD,
 Intel and NUC were notified and owners acknowledged. Identified EFS stores may
 be wiped where easier; test evidence and unrelated services remain protected.
 
-Current centrally frozen candidate is **2bf7e257e2a36d7f8779b770c8eca3d967ab5835**
-on qualification-v030-tcp-direct. It adds only the reviewed successful inode-group
-leader-hint correction and its regression to prior52bcfd35. All three owners
-received this SHA for affected reruns; do not test moving/divergent branch tips.
-AMD normal/fault/changed-host sanitizer reruns and Intel/NUC live reruns are
-launched/preparing. Candidate remains outside accepted release integration.
-Earlier52 results below retain their own source identity.
+Current centrally frozen candidate is **def46109909c793e58ae2c453c5de537cdb2c627**
+on qualification-v030-tcp-direct. It adds a test-only operation-extractor mock to
+reviewed2bf leader-hint correction. All owners received exact def for renewed
+native/affected sanitizer/live gates. Source implementation is identical to2bf,
+but no fullnative pass is inferred from its failed fixture. Root/owner launch
+results must identify full def SHA. Earlier52 and2bf evidence stays source-specific;
+candidate is not release accepted or integrated.
 
 | Group | Cluster | Current result |
 | --- | --- | --- |
@@ -58,3 +58,16 @@ lookup/paired/remote-pair extraction regressionsPASS locally. Centralreview
 matches client rpc_learn_leader grouping by returnedinode. Allclusters received
 exact newcandidate2bf; fullqualifications still required, no causal performance
 or release acceptance inferred.
+
+
+## Test adapter correction and current def freeze
+
+[AMD2bf original native failures](../../results/measure/20261012-common2bf-amd/README.md):
+normal/fault buildsPASS, nativeFAIL2 because second actual helper extraction lacks
+host_view/mockgetter; changed-hint/pair ASan/UBSanPASS. Intel also refused live
+launch after the same prerequisite failure. def46109 supplies only the missing
+adapter/coveredhintassertion; all actual extraction consumers audited locally.
+NUC's already-running2bfcore measurement continues unmodified; queued later2bf
+launches are blocked intentionally, not misclassified as a product gate failure.
+All owners must switch to def after active child cleanup, with4Gseven fixtures
+and unchanged deadlines. No source divergence, failure erasure or acceptance.

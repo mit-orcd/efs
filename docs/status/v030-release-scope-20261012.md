@@ -86,3 +86,9 @@ supersedes52 for affected reruns, adding only successful inode-group hint
 correction/regression. Earlier52 passes/failures remain source-specific. All
 owners notified. Seven-client comparisons match4Gfixturequota; all deadlines
 unchanged. Latest results belong to the [current ledger](v030-tcp-direct-qualification-20261012.md).
+
+
+Current common candidate **def46109909c793e58ae2c453c5de537cdb2c627** supersedes
+2bf only to correct its second native extractor fixture. Implementation unchanged;
+fullnative2bf failures preserved. All owners received def for source-identical
+qualification. Do not substitute earlier sourcepasses for these reruns.
