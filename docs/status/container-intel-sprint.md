@@ -748,3 +748,37 @@ both request prefix fields and retains vote eviction at capacity. Exact
 both-host native compilation/controls are in progress; no live acceptance
 claim is made yet. Configuration remains balanced to isolate this product
 change against the immediately preceding placement result.
+
+
+### Dual-group container leader preference candidate
+
+Exact priority-probe source209c1f8b passes both-host affected native controls:
+backend buffered/direct, durability/GC/overwrite, metadata apply, Raft/store/
+simulation, new probe, outbox, actual Linux sender, inbox, pending votes, read
+control/admission/publication/completion/pair and empty-lane proof controls.
+783 matching tracked inputs, unchanged private preserved stores/configuration
+and split placement node1/group0, node3/group2 were verified before load.
+Intel1 efsd SHA256
+`b68353e3824e892ec70f7e31453fed5dd9b6ed6e9f762e31488479632f6d4ef2`,
+FUSE `24df6f88d69829c88d8e4479249fb6c20162c09bfe2b51dfe954a7c60d3a77d3`.
+Unchanged full gate **1447/1512 PASS,65 FAIL**: the same eight cases on
+all seven clients, mtime five, write-readdir four. The probe alone does not
+close directory performance. Its immediate physical and remaining gates are
+still running. Raw evidence stays in external
+`artifacts/container-20261012/priority209-{deploy,qualification}`.
+
+The next container-only optional balancing preference intersects the actual
+committed voter masks of both metadata groups, then applies the existing
+ordinal voter selection. The Intel masks0x7 and0xe intersect0x6: group0
+selects node2/Intel1, group2 selects node3/Intel2. Both targets host both
+groups, satisfying the existing LOOKUP/GETATTR/MKDIR routing requirement;
+node1 was single-group and could not accept that routing shortcut. No
+membership, replication quorum, authority proof, two-second grace, durable
+target catch-up guard or 30-second handoff backoff is changed. Unknown group
+membership postpones optional handoff; disjoint groups use the original
+actual-voter preference. Ordinary files keep the original policy. Native
+actual helper/policy extraction and ASan/UBSan PASS locally, including
+unhosted-but-known masks, unknown/disjoint/all-four masks, ordinary-file
+scoping and lag refusal. Original ordinal-only preference fails the new
+dual-group assertion/SIGABRT negative control. Both-host native build and
+fresh live gates remain pending; no closure claim.

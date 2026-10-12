@@ -6655,6 +6655,25 @@ static int host_checkpoint_retire(struct efs_raft_host *h, const uint64_t *idx,
     return rc;
 }
 
+/* Containers route inode/dentry reads to leaders hosting both metadata
+ * groups. Prefer that committed-membership intersection for placement too;
+ * choosing a single-group leader forces an extra forwarding hop per lookup.
+ * This is only an opt-in placement hint under h->mu, never read authority.
+ * Unknown membership postpones handoff; disjoint groups keep their ordinary
+ * actual-voter preference. Files retain the original placement policy. */
+static int host_container_balanced_voter(struct efs_raft_host *h,uint32_t voters,unsigned ordinal)
+{
+    if(!h->s || !h->s->storage_engine)return efs_raft_preferred_voter(voters,ordinal);
+    uint32_t common=voters;
+    for(unsigned i=0;i<HOST_NGROUPS;i++){
+        struct host_group *g=group_slot(h,(uint8_t)(i<<1));
+        uint32_t mask=g?(g->r?efs_raft_voters(g->r):g->voters):0;
+        if(!mask)return -1;
+        common&=mask;
+    }
+    return efs_raft_preferred_voter(common?common:voters,ordinal);
+}
+
 /* Shared pump, bounded state per hosted group; no extra timer/thread/lease.
  * Stable placement is a preference. Loss/lag/pressure never weakens quorum. */
 static void host_balance_leaders(struct efs_raft_host *h, uint64_t now)
@@ -6680,7 +6699,7 @@ static void host_balance_leaders(struct efs_raft_host *h, uint64_t now)
         if (now - g->balance_since_us < 2000000u ||
             (g->balance_attempt_us && now - g->balance_attempt_us < 30000000u))
             continue;
-        target = efs_raft_preferred_voter(voters, (unsigned)i);
+        target = host_container_balanced_voter(h,voters,(unsigned)i);
         if (target < 0 || target == h->raft_id) continue;
         rc = efs_raft_transfer(g->r, target);
         if (rc == EFS_ERR_BUSY) continue; /* Target not durably caught up yet. */
