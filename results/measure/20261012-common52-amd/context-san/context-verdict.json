@@ -1,0 +1,27 @@
+{
+  "commit": "52bcfd3570b0a59076c225caad9157b0825954d8",
+  "scope": "supplemental whitebox actual core: real membership transitions and persistence EIO; direct lifecycle/import callbacks, not distributed import",
+  "command": [
+    "gcc",
+    "-O1",
+    "-g",
+    "-std=gnu11",
+    "-D_GNU_SOURCE",
+    "-Wall",
+    "-Wextra",
+    "-fno-omit-frame-pointer",
+    "-fsanitize=address,undefined",
+    "-I/data1/efs/amd-common52-20261012/san-source/include",
+    "-I/data1/efs/amd-common52-20261012/san-source/deps/blake3",
+    "/data1/efs/amd-common52-20261012/context-san/read-floor-context.c",
+    "/data1/efs/amd-common52-20261012/san-source/libefs.a",
+    "-lpthread",
+    "-lm",
+    "-ldl",
+    "-libverbs",
+    "-o",
+    "/data1/efs/amd-common52-20261012/context-san/read-floor-context"
+  ],
+  "exit": 0,
+  "duration_seconds": 3.469089984893799
+}

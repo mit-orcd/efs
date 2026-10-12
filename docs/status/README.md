@@ -6,7 +6,7 @@
 
 Integrated inactive repair prerequisites pass full normal/fault native at exact94bd2e52 (implementation2b216427); no activation or restored-redundancy claim. Excluded privatea9f158ce passes build/affected Raft tests but still needs broader safety/sanitizer/mounted acceptance. Quiet scheduler17d218d7 remainsFAIL (stats/find all7, deep client5), excluded. Clean64-file cold/reclamation diagnosticPASS; global reclamation failures with retained live POSIX trees are confounded. Original services/mounts preserved. See [execution ledger](amd-all-suites-20261011.md). No tag, push or shared branch promotion.
 
-[Current common52 execution](v030-tcp-direct-qualification-20261012.md): AMD normal/fault native and Raft sanitizersPASS; NUC reports files core216/216,peer67/67 and isolated physical packingPASS pending raw review; Intel seven-client quietFAIL with broad timeouts/teardown, diagnostic follow-up. No release acceptance.
+[Current common52 execution](v030-tcp-direct-qualification-20261012.md): AMD normal/fault native and Raft sanitizersPASS; NUC files core216/216,peer67/67 and isolated physical packingPASS with reviewed raw evidence; Intel seven-client quietFAIL with broad timeouts/teardown, diagnostic follow-up. No release acceptance.
 
 Previous qualification source: `410afed433b6da093bdc2acf37bec253ddbd586c`, corrected packaging-v2 (1,563 files, 52 directories). The new AMD all-suite run explicitly freezes `28b2089b`; its verdicts are recorded separately. Later integration/documentation commits are not new execution identities. AMD full normal/fault native, 20 focused sanitizer and fully sanitized real-LSM catalog/audit gates PASS. Fixed mounted CREATE three-stage/cold ownership and targeted query diagnosis remain NOTRUN centrally.
 

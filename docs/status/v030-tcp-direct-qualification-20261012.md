@@ -12,9 +12,9 @@ branch, not accepted release integration. [Scope/assignments](v030-release-scope
 
 | Group | Cluster | Current result |
 | --- | --- | --- |
-| Read-progress safety | AMD | Full build/actual Raft normal+earlyACK, coherent completion/publication and full Raft ASan/UBSanPASS. Supplemental actual-core both-record/context checksPASS after correcting invalid test reply; supplemental sanitizer pending. |
+| Read-progress safety | AMD | Full build/actual Raft normal+earlyACK, coherent completion/publication and full Raft ASan/UBSanPASS. Supplemental actual-core both-record/context checksPASS after correcting invalid test reply; supplemental sanitizerPASS0. |
 | Seven-client packing/query | Intel | Quiet original7/jobs16/directTCPFAIL1 (~124s), broad POSIX timeouts plus client5 graceful teardown failure. Peer/cold/physical dependent checksNOTRUN. Same-source labelled diagnostic planned; no quiet pass. |
-| Files POSIX/peer/mutation/GC | NUC | Owner reports core216/216 and peer67/67PASS; complete direct/files core+physicalGC96.290sPASS; separate two-client packing18.323sPASS with exact coldhashes, emptyphysicalpacks and drainedqueues. Raw evidence/root review pending. |
+| Files POSIX/peer/mutation/GC | NUC | Owner reports core216/216 and peer67/67PASS; complete direct/files core+physicalGC96.290sPASS; separate two-client packing18.323sPASS with exact coldhashes, emptyphysicalpacks and drainedqueues. Raw evidence reviewed and integrated as3c98c13e; [NUC gate report](nuc-release-52bc-group3-20261012.md). |
 | Final merged qualification | AMD | Common candidate full normal/fault nativePASS0 (~90s each); final release integration still pending group2 resolution and evidence reconciliation. |
 
 [AMD exact raw logs and limits](../../results/measure/20261012-common52-amd/README.md).
@@ -24,3 +24,5 @@ Intel sourcepost23,318inputsMATCH. Per-client PASS/FAIL/SKIP/NOTRUN totals:
 No container/repair qualification, push, tag or promotion. Previously stopped/
 failed broader-source evidence remains immutable; none of these native passes
 qualifies the failed quiet live test.
+
+A same-source AMD original-budget quiet7/jobs16 comparison is running after all AMD builds/sanitizers completed, to isolate Intel broadtimeout/RI latency behavior. No profiling or concurrent AMDbuild. Intel labelled READ_PROF/query-stage diagnostic follows its failedquietrun; no diagnostic acceptance transfer.

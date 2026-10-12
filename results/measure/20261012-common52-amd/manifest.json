@@ -18,10 +18,11 @@
   "context-corrected.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
   "san-raft-early.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
   "context.exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
-  "README.md": "8fb4d5c814cd50f679bf6a29f5068e3aa9c5fbf6730458e54182cee50fec2139",
+  "README.md": "d5a16048ed6db6947a4ecc38057f72ae098a2eeb64e77ec4083928546502c87c",
   "san-raft-early.log": "6d5a0e475c33ea6abcdf753bbbfa2d556d4b0998d269589838fb7cd8d8e6f40d",
-  "context-san.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "context-san.log": "6d5a0e475c33ea6abcdf753bbbfa2d556d4b0998d269589838fb7cd8d8e6f40d",
   "fault-build.log": "085f06845883f466c40b9ca802b9f9e2baeac43c046e4eb094e9f565da02f09d",
+  "context-san.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
   "normal-build.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
   "source-check.json": "a0abcda3c4af3db40c5f34497e55f6b1d41ff76e35b4866ccae6f829fbef6a76",
   "san-raft.log": "6d5a0e475c33ea6abcdf753bbbfa2d556d4b0998d269589838fb7cd8d8e6f40d",
@@ -32,6 +33,7 @@
   "san-build.log": "0c4fb5e27643e0c75c35f44a69e358353b94d515d30086defd0d87fc62d183cb",
   "context/read-floor-context.c": "441fc6a09d10e61a2316d190c41c07a9e0236c8877f2f0362251637061fb22c3",
   "context-san/read-floor-context.c": "d3e3ba55ae0cc6b2ee08fd7ef2b54b1b6ece758cf58d108770deee7a47ad8875",
+  "context-san/context-verdict.json": "609bcfb003ee59eadc6c305e584a809a3bc56a379703a48cfc721f6aea4d3835",
   "context-corrected/read-floor-context.c": "c483da9ffb6eb8d9520284f4ca145571f66381fcf7d72bd1b65d7c5ecab654a7",
   "context-corrected/context-verdict.json": "618246a2226b51431bfd3b5f7d347a733b7679a0bb7f279bfef6de7ec4aa47fa"
 }
