@@ -15,3 +15,9 @@ Interpretation limits communicated to AMD and manager:
 - observer shutdown follows `stop()` in fixture finally. A stop exception can skip observer/handle cleanup. Normal cleanup passes but exceptional-stop cleanup is not proved; recommend nested finally to close the observer without hiding the primary failure.
 
 The proposal's own documentation already records whole-path timing and restore/catchup residuals. Those are analysis constraints, not evidence that the original-budget gate is fixed. Independent Mac retained inode 4091 remains a separate graph-consistency blocker.
+
+## Follow-up 20a3c872
+
+Bounded changed-bits review and independent tests PASS: exact `source_ms` wraps host_query_source, existing policy `capture_ms` and scheduler decisions unchanged; initial restore/catchup get a separate `restore_ms`; record label now explicitly `capture_reason`. Observer shutdown runs in finally if daemon stop raises. Actual shutdown AST test preserves the controlled stop exception and proves socket/thread cleanup; native deep60 observer test PASS. Actual sender and capture functions ASan/UBSan PASS on Mac. Residual is still residual, timings include internal callbacks and millisecond rounding, and missing records remain unknown. No alternate-source deployment or release execution performed.
+
+Human/manager narrows scope to true defects only. These observations support diagnosing the original correctness failure; they authorize no retry tuning, optimization, benchmark comparisons, or acceptance inheritance.
