@@ -593,8 +593,25 @@ try:
     mount_client()
     if a.expiry:
         from expiry_lifecycle import exercise
-        def expiry_restart():
-            unmount();stop(crash=True);start();mount_client()
+        runtime=[]
+        for proc in [*servers,client]:
+            base=Path('/proc')/str(proc.pid)
+            command=(base/'cmdline').read_bytes().split(b'\0')
+            values=dict(item.split(b'=',1) for item in (base/'environ').read_bytes().split(b'\0') if b'=' in item)
+            for key,value in ((b'EFS_COMMANDS',b'0'),(b'EFS_COMMANDS_SERVER',b'0'),(b'EFS_PACKED_WRITES',b'0'),(b'EFS_TRANSPORT',b'tcp')):
+                assert values.get(key)==value,(proc.pid,key,values.get(key))
+            if proc in servers:
+                assert b'--direct-io' in command and b'--storage-engine' in command and b'files' in command
+                assert values.get(b'EFS_EXPIRY')==b'1'
+            runtime.append({'pid':proc.pid,'command':[item.decode() for item in command if item],
+                'environment':{key.decode():values[key].decode() for key in values if key.startswith(b'EFS_')},
+                'mapped_exe_sha256':hashlib.sha256((base/'exe').read_bytes()).hexdigest()})
+        (work/'expiry-runtime.json').write_text(json.dumps(runtime,indent=2))
+        assert not (mount/'.efs').exists(),'synthetic commands must be disabled'
+        def expiry_restart(enabled=None):
+            unmount();stop(crash=True)
+            if enabled is not None:env['EFS_EXPIRY']='1' if enabled else '0'
+            start();mount_client()
         def expiry_offline(group=None):
             node=3
             if group is not None:

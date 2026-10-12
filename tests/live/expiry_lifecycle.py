@@ -22,8 +22,8 @@ def exact(s,n):
 
 def exercise(mount,port,work,wait,physical_files,restart,offline,clock_fault=False):
     checks=[]
-    def rpc(tag,ino=1,gen=1,extra=b'',accepted=(0,)):
-        payload=bytes((0 if ino&1 else 2,tag))+struct.pack('>QQ',ino,gen)+extra
+    def rpc(tag,ino=1,gen=1,extra=b'',accepted=(0,),raw=None):
+        payload=raw if raw is not None else bytes((0 if ino&1 else 2,tag))+struct.pack('>QQ',ino,gen)+extra
         until=time.monotonic()+20
         while True:
             for node in range(4):
@@ -74,7 +74,12 @@ def exercise(mount,port,work,wait,physical_files,restart,offline,clock_fault=Fal
     renew(ino,rev,time.time_ns()+int(12e9),uid=os.getuid()+1,accepted=(-16,))
     renew(ino,rev,time.time_ns()+int(12e9));assert record(path)[1]==rev+1
     renew(ino,rev,0,accepted=(-14,));time.sleep(max(0,(deadline-time.time_ns())/1e9)+1)
-    assert path.exists();mark('owner renewal invalidates old deadline')
+    assert path.exists()
+    name=path.name.encode();due=bytes((0 if ino&1 else 2,65))+struct.pack('>QQQQQB',base.stat().st_ino,ino,1,rev,deadline,len(name))+name
+    # Replay the actual older deletion request twice after eligibility. It
+    # must fail its replicated record CAS rather than delete the renewed file.
+    for _ in range(2):rpc(65,ino,accepted=(-14,),raw=due)
+    assert path.exists();mark('owner renewal invalidates old deadline and deletion replay')
     try:os.link(path,base/'forbidden-link')
     except OSError as e:assert e.errno in (errno.EPERM,errno.EACCES,errno.EINVAL,errno.EOPNOTSUPP),e
     else:raise AssertionError('active expiry hardlink accepted')
@@ -90,9 +95,11 @@ def exercise(mount,port,work,wait,physical_files,restart,offline,clock_fault=Fal
     policy(base,ttl=3)
     moving=base/'moving';ino=created(moving);_,rev,deadline,_=record(moving)
     dest=base/'renamed';moving.rename(dest);assert record(dest)[2]==deadline
-    replacement=created(moving)
-    wait(lambda:not dest.exists(),'renamed expiry',40);wait(lambda:not moving.exists(),'replacement own expiry',40)
-    wait(lambda:not physical_files(ino) and not physical_files(replacement),'rename physical reclaim',90);mark('rename binding and path reuse')
+    replacement=created(moving);_,replacement_rev,_,_=record(moving);renew(replacement,replacement_rev,0)
+    wait(lambda:not dest.exists(),'renamed expiry',40)
+    assert moving.exists() and moving.read_bytes()==b'expiry payload '*400
+    moving.unlink()
+    wait(lambda:not physical_files(ino) and not physical_files(replacement),'rename physical reclaim',90);mark('rename binding and preserved path replacement')
     child=base/'disabled';child.mkdir();policy(child,ttl=0,flags=0)
     survivor=child/'survivor';created(survivor);assert record(survivor)[2]==0;mark('disabled subtree shadows ancestor')
     policy(base,ttl=3,flags=1)
@@ -112,6 +119,14 @@ def exercise(mount,port,work,wait,physical_files,restart,offline,clock_fault=Fal
     cold=base/'cold';ino=created(cold);restart()
     wait(lambda:not cold.exists(),'cold restart expiry',40)
     wait(lambda:not physical_files(ino),'cold expiry physical reclaim',90);mark('durable index cold restart')
+    paused_feature=base/'feature-off-existing';ino=created(paused_feature)
+    restart(False);time.sleep(5);assert paused_feature.exists()
+    no_birth=base/'feature-off-birth';created(no_birth)
+    restart(True)
+    wait(lambda:not paused_feature.exists(),'re-enabled index catches overdue deadline',40)
+    wait(lambda:not physical_files(ino),'feature re-enable physical reclaim',90)
+    assert no_birth.exists() and record(no_birth)[1:]==(0,0,0)
+    no_birth.unlink();mark('global disable pauses and bounded re-enable catches up')
     remote=base/'offline';ino=created(remote);rejoin=offline()
     try:
         wait(lambda:not remote.exists(),'expiry with offline storage member',40)
