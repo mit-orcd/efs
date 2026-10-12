@@ -1,0 +1,25 @@
+# posix-suite host=intel1 mnt=/tmp/efs-intel-ecdc-focused-20261012-intel1_efs/deep-mnt5 2026-10-12T13:50:52Z
+# suite=core
+# select	basic_write_read
+# select	basic_append
+# select	basic_oappend_flag
+# select	basic_dup_write
+# select	basic_chunk_boundary
+# select	fsync_reopen_visible
+# select	basic_seek_cur_past_eof_write
+# select	basic_rdwr_no_reopen
+# select	fsync_write
+# select	fsync_then_fstat_size
+test	result	detail
+basic_write_read	PASS	
+basic_append	PASS	
+basic_oappend_flag	PASS	
+basic_dup_write	PASS	
+basic_chunk_boundary	PASS	
+fsync_reopen_visible	PASS	
+basic_seek_cur_past_eof_write	PASS	
+basic_rdwr_no_reopen	PASS	
+fsync_write	PASS	
+fsync_then_fstat_size	PASS	
+# summary pass=10 fail=0 skip=0 notrun=0 total=10 dur=4.4
+# complete

@@ -1,0 +1,15 @@
+raft-mkfs rc=0 leader_hint=1 index=2 salt=13775692720209516666
+mount0 PASS
+mount1 PASS
+mount2 PASS
+mount3 PASS
+mount4 PASS
+mount5 PASS
+mount6 PASS
+{"client": 0, "command": ["python3", "/data1/efs/intel-ecdc-focused-20261012/intel-focused-case.py", "/data1/efs/intel-ecdc-focused-20261012/normal/tests/posix/posix_suite.py", "/tmp/efs-intel-ecdc-focused-20261012-intel1_efs/deep-mnt0", "--suite", "core", "--jobs", "16", "--timeout-s", "30", "--tag", "deep0", "--results", "/data1/efs/intel-ecdc-focused-20261012/evidence/live/deep-0.tsv"], "seconds": 5.134, "returncode": 0}
+{"client": 4, "command": ["python3", "/data1/efs/intel-ecdc-focused-20261012/intel-focused-case.py", "/data1/efs/intel-ecdc-focused-20261012/normal/tests/posix/posix_suite.py", "/tmp/efs-intel-ecdc-focused-20261012-intel1_efs/deep-mnt4", "--suite", "core", "--jobs", "16", "--timeout-s", "30", "--tag", "deep4", "--results", "/data1/efs/intel-ecdc-focused-20261012/evidence/live/deep-4.tsv"], "seconds": 5.38, "returncode": 0}
+{"client": 2, "command": ["python3", "/data1/efs/intel-ecdc-focused-20261012/intel-focused-case.py", "/data1/efs/intel-ecdc-focused-20261012/normal/tests/posix/posix_suite.py", "/tmp/efs-intel-ecdc-focused-20261012-intel1_efs/deep-mnt2", "--suite", "core", "--jobs", "16", "--timeout-s", "30", "--tag", "deep2", "--results", "/data1/efs/intel-ecdc-focused-20261012/evidence/live/deep-2.tsv"], "seconds": 5.383, "returncode": 0}
+{"client": 6, "command": ["python3", "/data1/efs/intel-ecdc-focused-20261012/intel-focused-case.py", "/data1/efs/intel-ecdc-focused-20261012/normal/tests/posix/posix_suite.py", "/tmp/efs-intel-ecdc-focused-20261012-intel1_efs/deep-mnt6", "--suite", "core", "--jobs", "16", "--timeout-s", "30", "--tag", "deep6", "--results", "/data1/efs/intel-ecdc-focused-20261012/evidence/live/deep-6.tsv"], "seconds": 5.431, "returncode": 0}
+{"client": 3, "command": ["python3", "/data1/efs/intel-ecdc-focused-20261012/intel-focused-case.py", "/data1/efs/intel-ecdc-focused-20261012/normal/tests/posix/posix_suite.py", "/tmp/efs-intel-ecdc-focused-20261012-intel1_efs/deep-mnt3", "--suite", "core", "--jobs", "16", "--timeout-s", "30", "--tag", "deep3", "--results", "/data1/efs/intel-ecdc-focused-20261012/evidence/live/deep-3.tsv"], "seconds": 5.532, "returncode": 0}
+{"client": 5, "command": ["python3", "/data1/efs/intel-ecdc-focused-20261012/intel-focused-case.py", "/data1/efs/intel-ecdc-focused-20261012/normal/tests/posix/posix_suite.py", "/tmp/efs-intel-ecdc-focused-20261012-intel1_efs/deep-mnt5", "--suite", "core", "--jobs", "16", "--timeout-s", "30", "--tag", "deep5", "--results", "/data1/efs/intel-ecdc-focused-20261012/evidence/live/deep-5.tsv"], "seconds": 5.532, "returncode": 0}
+{"client": 1, "command": ["python3", "/data1/efs/intel-ecdc-focused-20261012/intel-focused-case.py", "/data1/efs/intel-ecdc-focused-20261012/normal/tests/posix/posix_suite.py", "/tmp/efs-intel-ecdc-focused-20261012-intel1_efs/deep-mnt1", "--suite", "core", "--jobs", "16", "--timeout-s", "30", "--tag", "deep1", "--results", "/data1/efs/intel-ecdc-focused-20261012/evidence/live/deep-1.tsv"], "seconds": 5.632, "returncode": 0}
