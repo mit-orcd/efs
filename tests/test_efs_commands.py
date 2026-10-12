@@ -176,6 +176,23 @@ class Commands(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertEqual(json.loads(p.stdout), envelope("ls", [b"invalid\xff"]))
 
+    def test_stats_human_readable_preserves_counts_and_json(self):
+        path = self.result("stats")
+        result = json.loads(path.read_text())
+        result["stats"].update(imm_bytes=1024, tree_bytes=400 * (1 << 30), tree_files=1638400)
+        path.write_text(json.dumps(result))
+        human = self.run_command("stats", "--human-readable")
+        self.assertEqual(human.returncode, 0, human.stderr)
+        self.assertIn(b"imm_bytes=1.0 KiB\n", human.stdout)
+        self.assertIn(b"tree_bytes=400.0 GiB\n", human.stdout)
+        self.assertIn(b"tree_files=1638400\n", human.stdout)
+        default = self.run_command("stats")
+        self.assertEqual(default.returncode, 0, default.stderr)
+        self.assertIn(b"tree_bytes=429496729600\n", default.stdout)
+        structured = self.run_command("stats", "--human-readable", "--json")
+        self.assertEqual(structured.returncode, 0, structured.stderr)
+        self.assertEqual(json.loads(structured.stdout)["stats"], result["stats"])
+
     def test_stats(self):
         self.result("stats")
         p = self.run_command("stats")
