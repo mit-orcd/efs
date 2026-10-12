@@ -323,6 +323,8 @@ test: all
 	./tests/test_put_storage_fence
 	$(MAKE) tests/test_repair_storage_fence
 	./tests/test_repair_storage_fence
+	$(MAKE) tests/test_repair_store_identity
+	./tests/test_repair_store_identity
 	python3 tests/test_storage_fence_members.py
 	python3 tests/test_storage_fence_retry.py
 	python3 tests/test_session_finish_retry.py
@@ -697,7 +699,7 @@ clean:
 	rm -f src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o src/sim/opid.o
 	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt efs-query blake3-bench
 	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim
-	rm -f $(TEST_BINS) tests/test_repair_file_atomic tests/test_repair_storage_fence tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_upload_client tests/principles_index_fault.o
+	rm -f $(TEST_BINS) tests/test_repair_store_identity tests/test_repair_file_atomic tests/test_repair_storage_fence tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_upload_client tests/principles_index_fault.o
 	rm -f .build_id.stamp
 
 $(BLAKE3_DIR)/blake3_sse2.o: $(BLAKE3_DIR)/blake3_sse2.c
@@ -842,3 +844,6 @@ tests/test_repair_storage_fence: tests/test_repair_storage_fence.c src/server/pu
 
 tests/test_repair_file_atomic: tests/test_repair_file_atomic.c src/server/store.c src/server/server_internal.h src/bench/writer.o src/bench/store_containers.o $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o src/bench/store_containers.o $(LIB) $(LDFLAGS)
+
+tests/test_repair_store_identity: tests/test_repair_store_identity.c src/server/put_fence.c src/server/server_internal.h $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ $< $(LIB) $(LDFLAGS)

@@ -35,7 +35,7 @@ static struct efs_repair_job capture(struct efs_kv *kv,efs_ino_t ino,uint64_t ob
 {
     struct efs_meta_row row;assert(!efs_meta_apply_get_inode(kv,ino,&row));
     struct efs_repair_job q={0},j;q.uuid[0]=uuid;q.ino=ino;q.inode_gen=row.generation;
-    q.object=object;q.fragment_len=65536;q.epoch=1;q.owner=1;
+    q.target_store[0]=7;q.object=object;q.fragment_len=65536;q.epoch=1;q.owner=1;
     assert(!efs_repair_capture(kv,&q,&j));return j;
 }
 static void fail(struct efs_kv *kv,int lsm)
@@ -50,12 +50,21 @@ static int command(struct efs_kv *kv,const struct efs_repair_job *j,unsigned op,
     for(unsigned i=0;i<4;i++)cmd[2+EFS_REPAIR_JOB_BYTES+i]=(uint8_t)(arg>>(24-8*i));
     return efs_repair_apply_command(kv,group,cmd,sizeof(cmd));
 }
+static int term_command(struct efs_kv *kv,const struct efs_repair_job *j,unsigned op,unsigned group,uint64_t term)
+{
+    uint8_t cmd[EFS_REPAIR_COMMAND_BYTES]={EFS_MD_CMD_REPAIR_JOB,op};
+    assert(!efs_repair_job_encode(j,cmd+2));
+    return efs_repair_apply_command_term(kv,group,term,cmd,sizeof(cmd));
+}
 static void journal(struct efs_kv *kv,int lsm)
 {
     efs_ino_t ino=create(kv);struct efs_repair_job j=capture(kv,ino,101,17),got;
     unsigned group=efs_raft_shard_group(efs_kv_lane_shard(ino,0));
     uint8_t wire[EFS_REPAIR_JOB_BYTES];assert(!efs_repair_job_encode(&j,wire));
-    assert(!efs_repair_job_decode(wire,sizeof(wire),&got));wire[44]^=1;
+    assert(!efs_repair_job_decode(wire,sizeof(wire),&got));
+    assert(efs_repair_job_decode(wire,244,&got)==EFS_ERR_PROTO); /* legacy v1 never reinterpreted */
+    wire[3]='1';assert(efs_repair_job_decode(wire,sizeof(wire),&got)==EFS_ERR_PROTO);wire[3]='2';
+    wire[44]^=1;
     assert(efs_repair_job_decode(wire,sizeof(wire),&got)==EFS_ERR_PROTO);
     assert(command(kv,&j,EFS_REPAIR_OP_ADMIT,0,group^2)==EFS_ERR_INVAL);
     /* GC-scheduled object still visible in source row: ADMIT must refuse.
@@ -66,6 +75,9 @@ static void journal(struct efs_kv *kv,int lsm)
     assert(efs_repair_admit(kv,&j)==EFS_ERR_STALE);
     assert(efs_repair_get(kv,&j,&got)==EFS_ERR_NOT_FOUND);
     assert(!efs_kv_del(kv,gk,gkl));
+    assert(term_command(kv,&j,EFS_REPAIR_OP_ADMIT,group,0)==EFS_ERR_STALE);
+    assert(term_command(kv,&j,EFS_REPAIR_OP_ADMIT,group,2)==EFS_ERR_STALE);
+    assert(term_command(kv,&j,EFS_REPAIR_OP_ADMIT,group,UINT64_MAX)==EFS_ERR_STALE);
     fail(kv,lsm);assert(command(kv,&j,EFS_REPAIR_OP_ADMIT,0,group)==EFS_ERR_IO);
     assert(efs_repair_get(kv,&j,&got)==EFS_ERR_NOT_FOUND);
     assert(!command(kv,&j,EFS_REPAIR_OP_ADMIT,0,group));assert(!efs_repair_admit(kv,&j));
@@ -76,11 +88,15 @@ static void journal(struct efs_kv *kv,int lsm)
     struct efs_repair_job conflict=j;conflict.sums[0][0]^=1;
     assert(efs_repair_admit(kv,&conflict)==EFS_ERR_STALE);
     conflict=j;conflict.owner=2;assert(efs_repair_admit(kv,&conflict)==EFS_ERR_STALE);
+    conflict=j;conflict.target_store[0]^=1;assert(efs_repair_admit(kv,&conflict)==EFS_ERR_STALE);
+    assert(efs_repair_write_authority(kv,&conflict)==EFS_ERR_STALE);
     conflict=j;conflict.uuid[0]=18;assert(efs_repair_admit(kv,&conflict)==EFS_ERR_BUSY);
     assert(efs_repair_gc_ready(kv,ino,j.inode_gen,0,101)==EFS_ERR_BUSY);
     assert(efs_repair_gc_object_ready(kv,ino,0,101)==EFS_ERR_BUSY);
     assert(efs_repair_retire(kv,&j,0)==EFS_ERR_BUSY);
     assert(efs_repair_record_seal(kv,&j,1)==EFS_ERR_STALE);
+    assert(term_command(kv,&j,EFS_REPAIR_OP_DATA,group,2)==EFS_ERR_STALE);
+    assert(!efs_repair_get(kv,&j,&got) && !got.flags);
     fail(kv,lsm);assert(efs_repair_record_data(kv,&j)==EFS_ERR_IO);
     assert(!efs_repair_get(kv,&j,&got) && !got.flags);
     assert(!efs_repair_record_data(kv,&j));
@@ -93,7 +109,7 @@ static void journal(struct efs_kv *kv,int lsm)
     assert(efs_repair_retire(kv,&j,1)==EFS_ERR_STALE);
     assert(efs_repair_admit(kv,&j)==EFS_ERR_STALE);
     assert(efs_repair_admit(kv,&conflict)==EFS_OK); /* fresh UUID, same live object */
-    assert(!efs_repair_cancel(kv,&conflict));assert(efs_repair_retire(kv,&conflict,1)==EFS_ERR_BUSY);
+    assert(!term_command(kv,&conflict,EFS_REPAIR_OP_CANCEL,group,2));assert(efs_repair_retire(kv,&conflict,1)==EFS_ERR_BUSY);
     assert(efs_repair_gc_ready(kv,ino,j.inode_gen,0,101)==EFS_ERR_BUSY);
     assert(!efs_repair_record_seal(kv,&conflict,2));assert(!efs_repair_retire(kv,&conflict,1));
     assert(!efs_repair_retire(kv,&conflict,1));assert(efs_repair_admit(kv,&conflict)==EFS_ERR_STALE);
@@ -122,7 +138,7 @@ static void bounded(void)
     for(unsigned i=0;i<=EFS_REPAIR_PENDING_MAX;i++){
         if(i){struct efs_meta_pub p=pub(kv,ino,101+i,0);p.chunk_index=i*64;p.new_size=((uint64_t)p.chunk_index+1)*131072;assert(!efs_meta_apply_publish(kv,&p));}
         struct efs_repair_job q={0},j;q.uuid[0]=100;q.uuid[1]=i;q.uuid[2]=i>>8;
-        q.ino=ino;q.inode_gen=row.generation;q.ci=i*64;q.object=101+i;q.fragment_len=65536;q.epoch=1;q.owner=1;
+        q.target_store[0]=7;q.ino=ino;q.inode_gen=row.generation;q.ci=i*64;q.object=101+i;q.fragment_len=65536;q.epoch=1;q.owner=1;
         assert(!efs_repair_capture(kv,&q,&j));int rc=efs_repair_admit(kv,&j);
         assert(rc==(i==EFS_REPAIR_PENDING_MAX?EFS_ERR_BUSY:EFS_OK));
         if(!i)first=j;
@@ -147,6 +163,28 @@ static void cold(void)
     kv=efs_kv_lsm_open(path,NULL);assert(kv);assert(efs_repair_admit(kv,&j)==EFS_ERR_STALE);
     assert(!efs_repair_retire(kv,&j,1));efs_kv_lsm_close(kv);
     printf("repair journal cold: admitted debt after abrupt process exit; terminal floor after flush/compaction/reopen PASS\n");
+}
+static void fenced_liveness(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();assert(kv);efs_ino_t ino=create(kv);
+    struct efs_meta_pub p=pub(kv,ino,102,101);p.delta_off=4096;p.delta_len=1024;
+    assert(!efs_meta_apply_publish(kv,&p));
+    struct efs_meta_row row;assert(!efs_meta_apply_get_inode(kv,ino,&row));
+    struct efs_repair_job q={.ino=ino,.inode_gen=row.generation,.object=102,.fragment_len=65536,.span_off=4096,.span_len=1024,.epoch=1,.owner=1},j;
+    q.uuid[0]=92;q.target_store[0]=7;assert(!efs_repair_capture(kv,&q,&j));q=j;assert(!efs_repair_admit(kv,&j));
+    assert(!efs_meta_apply_content_fence(kv,ino,row.generation,0,0,1,1000,103));
+    struct efs_meta_chunk_view view;assert(!efs_meta_get_chunk_view(kv,ino,row.generation,0,131072,&view));
+    assert(view.ndelta==1 && view.deltas[0].generation==102 && view.bytes.parts[1].len==0 && view.bytes.parts[0].len==1000);
+    uint8_t gk[EFS_KV_KEY_MAX],gv[EFS_META_GC_VAL];uint32_t kl=0,n=sizeof(gv);
+    assert(!efs_kv_key_gc(efs_kv_anchor_shard(efs_kv_lane_shard(ino,0)),ino,102,0,0,gk,&kl));assert(efs_kv_get(kv,gk,kl,gv,&n)==EFS_ERR_NOT_FOUND);
+    assert(efs_repair_capture(kv,&q,&j)==EFS_ERR_STALE);
+    q.uuid[0]=93;assert(efs_repair_admit(kv,&q)==EFS_ERR_STALE);
+    /* Partial live base is eligible; wholly fenced retained raw base is not. */
+    q.object=101;q.span_off=q.span_len=0;assert(!efs_repair_capture(kv,&q,&j));
+    assert(!efs_meta_apply_content_fence(kv,ino,row.generation,0,1,2,0,104));
+    assert(!efs_meta_get_chunk_view(kv,ino,row.generation,0,131072,&view));assert(view.base.generation==101 && !view.bytes.parts[0].len);
+    assert(efs_repair_capture(kv,&q,&j)==EFS_ERR_STALE);efs_kv_mem_free(kv);
+    puts("repair selector clipped liveness: retained fully fenced span/base refused without GC key; partial live base allowed PASS");
 }
 static void sync_faults(void)
 {
@@ -185,6 +223,6 @@ int main(void)
 {
     struct efs_kv *kv=efs_kv_mem_create();assert(kv);journal(kv,0);efs_kv_mem_free(kv);
     char path[]="/tmp/efs-repair-apply-XXXXXX";assert(mkdtemp(path));
-    kv=efs_kv_lsm_open(path,NULL);assert(kv);journal(kv,1);efs_kv_lsm_close(kv);cold();bounded();sync_faults();
+    kv=efs_kv_lsm_open(path,NULL);assert(kv);journal(kv,1);efs_kv_lsm_close(kv);cold();bounded();fenced_liveness();sync_faults();
     puts("inactive repair-journal prerequisite PASS; physical repair and distributed authority NOTRUN");return 0;
 }

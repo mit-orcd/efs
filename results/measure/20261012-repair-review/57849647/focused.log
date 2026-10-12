@@ -1,0 +1,25 @@
+inactive repair store identity: unprivileged durable init, failed file/name sync noACK and barrier retry, concurrent agreement, nonempty missing/corrupt refusal, cold/new disk old-job mismatch PASS
+repair storage fence: independent PUT domain, full UUID, monotonic cold floor, guarded-write ordering, file/directory sync failures and corrupt-certificate rejection PASS
+inactive missing ordinary role O_TMPFILE: unprivileged buffered/direct publication, partial-write/sync EIO, abrupt pre-link death no named orphan, post-link EIO unacked, real hash retry/corrupt refusal/quota PASS
+fenced source rc=-14
+fenced source rc=-14
+kv-compact: start l0=1 inputs=1 range=1 l0only=0
+kv-compact: end bytes=790 ms=0 l0=0 l1=1 rc=0
+repair journal mem: exact replay/conflict, failed batches, floor and GC dependency PASS
+repair journal synced-LSM: exact replay/conflict, failed batches, floor and GC dependency PASS
+repair journal cold: admitted debt after abrupt process exit; terminal floor after flush/compaction/reopen PASS
+repair journal bounded: exact128 pending jobs;129th BUSY; durable retirement releases admission slot PASS
+inactive repair-journal prerequisite PASS; physical repair and distributed authority NOTRUN
+fenced source rc=-14
+fenced source rc=-14
+kv-compact: start l0=1 inputs=1 range=1 l0only=0
+kv-compact: end bytes=790 ms=0 l0=0 l1=1 rc=0
+repair journal mem: exact replay/conflict, failed batches, floor and GC dependency PASS
+repair journal synced-LSM: exact replay/conflict, failed batches, floor and GC dependency PASS
+repair journal cold: admitted debt after abrupt process exit; terminal floor after flush/compaction/reopen PASS
+repair journal bounded: exact128 pending jobs;129th BUSY; durable retirement releases admission slot PASS
+repair WAL sync EIO admission: failed mutation not acknowledged, atomic debt/floor outcome recovered PASS
+repair WAL sync EIO retirement: failed mutation not acknowledged, atomic debt/floor outcome recovered PASS
+inactive repair-journal prerequisite PASS; physical repair and distributed authority NOTRUN
+actual host repair verdict progression, IO retry cursor, public refusal PASS
+actual source_hash full-capacity row ASan/UBSan PASS

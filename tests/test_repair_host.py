@@ -7,29 +7,34 @@ s=(root/'src/server/raft_host.c').read_text()
 b=s.index('static int host_apply(void');apply=s[b:s.index('\n}',b)+2]
 b=s.index('void server_raft_host_submit(');end=s.index('    if(clen && cmd[0]==EFS_MD_REQ_PACK_GC_VIEW)',b)
 public=s[b:end]+'}\n'
+a=s.index('static int host_repair_write_read(');fresh=s[a:s.index('\n}',a)+2]
 code=r'''
 #include "efs/meta_cmd.h"
 #include "efs/metadata.h"
 #include "efs/session.h"
 #include "efs/meta_apply.h"
 #include "efs/repair_job.h"
+#include "efs/raft.h"
 #include <assert.h>
 #include <string.h>
 #include <stdint.h>
+#include <pthread.h>
 #define HOST_APPLY_RC_MASK 7
 #define HOST_APPEND_RSV_LEN 99
 #define HOST_LOCK_LEN 99
 #define HOST_SESS_CREATE_LEN 100
-#define EFS_RAFT_LEADER 1
 #define EFS_FAULTS 0
-struct efs_raft_host {void *kv;int running,snap_batch;uint64_t apply_extra,obs_apply_cnt,obs_apply_cycle_us;};
+struct server {uint32_t id;};
+struct efs_raft_host {pthread_mutex_t mu;struct server *s;void *kv;int running,snap_batch;uint64_t apply_extra,obs_apply_cnt,obs_apply_cycle_us;};
 struct host_group {struct efs_raft_host *host;int import_block;void *r;uint8_t group;uint64_t arc_idx[8],arc_term[8],arc_extra[8];int arc_rc[8];};
 struct efs_msg_raft_mkfs_reply {int rc,leader_hint;};
 static struct efs_raft_host *g_host;
-static int verdict,cursors,scopes;
+static int verdict,cursors,scopes,role=EFS_RAFT_LEADER,flip_role;static uint64_t current_term=1;static struct host_group *slot;
+static struct host_group *group_slot(struct efs_raft_host *h,uint8_t group){(void)h;(void)group;return slot;}
 static int raft_obs_on(void){return 0;}
 static uint64_t now_us_(void){return 0;}
-static int efs_raft_role(void *r){(void)r;return 0;}
+int efs_raft_role(const struct efs_raft *r){(void)r;return role;}
+uint64_t efs_raft_term(const struct efs_raft *r){(void)r;return current_term;}
 static void host_mark_incomplete(struct host_group *g){(void)g;}
 static void host_clear_incomplete(struct host_group *g){(void)g;}
 static int efs_kv_lsm_apply_begin(struct efs_kv *kv){(void)kv;scopes++;return 0;}
@@ -37,14 +42,13 @@ static int efs_kv_lsm_apply_end(struct efs_kv *kv,const struct efs_kv_item *curs
 static void host_kv_cursor(uint8_t g,uint64_t i,uint8_t *k,uint8_t *v){(void)g;(void)i;memset(k,0,7);memset(v,0,16);}
 static int host_apply_dispatch(struct efs_raft_host *h,uint64_t i,uint64_t t,uint8_t g,const uint8_t *c,uint32_t n){(void)h;(void)i;(void)t;(void)g;(void)c;(void)n;return verdict;}
 static int owns=1,read_rc,authority_rc,reads,authorities,forwards;
-uint32_t efs_kv_lane_shard(efs_ino_t ino,uint8_t lane){(void)ino;(void)lane;return 1;}
-static uint8_t efs_raft_shard_group(uint32_t shard){(void)shard;return 2;}
-int efs_repair_job_decode(const uint8_t *in,uint32_t n,struct efs_repair_job *j){if(n!=EFS_REPAIR_JOB_BYTES)return EFS_ERR_PROTO;memset(j,0,sizeof(*j));j->ino=9;j->state=in[0];j->flags=in[1];return 0;}
+uint32_t efs_kv_lane_shard(efs_ino_t ino,uint8_t lane){(void)ino;(void)lane;return 2;}
+int efs_repair_job_decode(const uint8_t *in,uint32_t n,struct efs_repair_job *j){if(n!=EFS_REPAIR_JOB_BYTES)return EFS_ERR_PROTO;memset(j,0,sizeof(*j));j->ino=9;j->owner=1;j->epoch=1;j->state=in[0];j->flags=in[1];return 0;}
 static int host_hosts(struct efs_raft_host *h,uint8_t group){(void)h;(void)group;return owns;}
 static int host_remote_cmd(struct efs_raft_host *h,uint8_t g,const uint8_t *c,uint32_t n,struct efs_msg_raft_mkfs_reply *o,int hint){(void)h;(void)g;(void)c;(void)n;(void)hint;forwards++;o->rc=EFS_ERR_BUSY;return 0;}
-static int host_read_index(struct efs_raft_host *h,uint8_t g,int *hint){(void)h;(void)g;(void)hint;reads++;return read_rc;}
+static int host_read_index(struct efs_raft_host *h,uint8_t g,int *hint){(void)h;(void)g;(void)hint;reads++;if(flip_role)role=0;return read_rc;}
 int efs_repair_write_authority(struct efs_kv *kv,const struct efs_repair_job *j){(void)kv;(void)j;authorities++;return authority_rc;}
-'''+apply+public+r'''
+'''+fresh+apply+public+r'''
 int main(void){
  struct efs_kv kv={0};struct efs_raft_host h={.kv=&kv,.running=1};struct host_group g={.host=&h};g_host=&h;
  uint8_t cmd[]={EFS_MD_CMD_REPAIR_JOB,1};
@@ -58,6 +62,7 @@ int main(void){
  struct efs_msg_raft_mkfs_reply reply;uint8_t raw[]={0,EFS_MD_CMD_REPAIR_JOB,3};
  server_raft_host_submit(raw,sizeof(raw),&reply);assert(reply.rc==EFS_ERR_ACCES);
  assert(scopes==10);
+ struct server node={1};h.s=&node;pthread_mutex_init(&h.mu,NULL);slot=&g;g.r=&g;
  uint8_t query[2+EFS_REPAIR_JOB_BYTES]={2,EFS_MD_REQ_REPAIR_WRITE_AUTHORITY,EFS_REPAIR_ADMITTED};
  read_rc=EFS_ERR_IO;server_raft_host_submit(query,sizeof(query),&reply);assert(reply.rc==EFS_ERR_IO&&reads==1&&!authorities);
  read_rc=0;authority_rc=EFS_ERR_STALE;server_raft_host_submit(query,sizeof(query),&reply);assert(reply.rc==EFS_ERR_STALE&&reads==2&&authorities==1);
@@ -66,6 +71,10 @@ int main(void){
  query[0]=0;server_raft_host_submit(query,sizeof(query),&reply);assert(reply.rc==EFS_ERR_INVAL&&reads==3);
  query[0]=2;query[2]=EFS_REPAIR_SEALED;server_raft_host_submit(query,sizeof(query),&reply);assert(reply.rc==EFS_ERR_INVAL&&reads==3);
  query[2]=EFS_REPAIR_ADMITTED;query[3]=EFS_REPAIR_DATA_DURABLE;server_raft_host_submit(query,sizeof(query),&reply);assert(reply.rc==EFS_ERR_INVAL&&reads==3);
+ query[3]=0;current_term=2;server_raft_host_submit(query,sizeof(query),&reply);assert(reply.rc==EFS_ERR_STALE&&authorities==2);current_term=1;
+ flip_role=1;server_raft_host_submit(query,sizeof(query),&reply);assert(reply.rc==EFS_ERR_NOT_PRIMARY&&authorities==2);flip_role=0;
+ int before_reads=reads;server_raft_host_submit(query,sizeof(query),&reply);assert(reply.rc==EFS_ERR_BUSY&&reads==before_reads&&forwards==2);
+ role=EFS_RAFT_LEADER;node.id=2;server_raft_host_submit(query,sizeof(query),&reply);assert(reply.rc==EFS_ERR_STALE&&authorities==2);
  assert(cursors==8);return 0;
 }
 '''

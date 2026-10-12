@@ -12,10 +12,10 @@ static uint32_t r32(const uint8_t *p){uint32_t v=0;for(unsigned i=0;i<4;i++)v=(v
 static uint64_t r64(const uint8_t *p){uint64_t v=0;for(unsigned i=0;i<8;i++)v=(v<<8)|p[i];return v;}
 static int valid(const struct efs_repair_job *j)
 {
-    uint8_t any=0;
+    uint8_t any=0,store=0;
     if(!j)return EFS_ERR_INVAL;
-    for(unsigned i=0;i<16;i++)any|=j->uuid[i];
-    if(!any || j->ino<=EFS_ROOT_INO || efs_ino_is_meta_table(j->ino) || !j->inode_gen ||
+    for(unsigned i=0;i<16;i++){any|=j->uuid[i];store|=j->target_store[i];}
+    if(!any || !store || j->ino<=EFS_ROOT_INO || efs_ino_is_meta_table(j->ino) || !j->inode_gen ||
        !j->object || !j->epoch || j->epoch==UINT32_MAX || !j->owner || j->fi>=3 ||
        !efs_chunk_size_valid(j->fragment_len*2u) || j->fragment_len>EFS_MAX_FRAGMENT_SIZE ||
        (!j->span_len && j->span_off) || (uint64_t)j->span_off+j->span_len>2ull*j->fragment_len ||
@@ -31,23 +31,24 @@ static int valid(const struct efs_repair_job *j)
 int efs_repair_job_encode(const struct efs_repair_job *j,uint8_t out[EFS_REPAIR_JOB_BYTES])
 {
     if(!out || valid(j))return EFS_ERR_INVAL;
-    memset(out,0,EFS_REPAIR_JOB_BYTES);memcpy(out,"EFR1",4);memcpy(out+4,j->uuid,16);
+    memset(out,0,EFS_REPAIR_JOB_BYTES);memcpy(out,"EFR2",4);memcpy(out+4,j->uuid,16);
     w64(out+20,j->ino);w64(out+28,j->inode_gen);w64(out+36,j->object);w32(out+44,j->ci);
     w32(out+48,j->fragment_len);w32(out+52,j->span_off);w32(out+56,j->span_len);
     w32(out+60,j->epoch);w32(out+64,j->owner);
     for(unsigned i=0;i<3;i++)w32(out+68+4*i,j->nodes[i]);
     memcpy(out+80,j->sums,96);memcpy(out+176,j->source,32);
-    out[208]=j->fi;out[209]=j->state;out[210]=j->flags;efs_hash(out,212,out+212);return EFS_OK;
+    out[208]=j->fi;out[209]=j->state;out[210]=j->flags;
+    memcpy(out+212,j->target_store,16);efs_hash(out,228,out+228);return EFS_OK;
 }
 int efs_repair_job_decode(const uint8_t *in,uint32_t n,struct efs_repair_job *out)
 {
     uint8_t h[32];struct efs_repair_job j={0};
-    if(!in || !out || n!=EFS_REPAIR_JOB_BYTES || memcmp(in,"EFR1",4) || in[211])return EFS_ERR_PROTO;
-    efs_hash(in,212,h);if(memcmp(h,in+212,32))return EFS_ERR_PROTO;
+    if(!in || !out || n!=EFS_REPAIR_JOB_BYTES || memcmp(in,"EFR2",4) || in[211])return EFS_ERR_PROTO;
+    efs_hash(in,228,h);if(memcmp(h,in+228,32))return EFS_ERR_PROTO;
     memcpy(j.uuid,in+4,16);j.ino=r64(in+20);j.inode_gen=r64(in+28);j.object=r64(in+36);
     j.ci=r32(in+44);j.fragment_len=r32(in+48);j.span_off=r32(in+52);j.span_len=r32(in+56);
     j.epoch=r32(in+60);j.owner=r32(in+64);for(unsigned i=0;i<3;i++)j.nodes[i]=r32(in+68+4*i);
-    memcpy(j.sums,in+80,96);memcpy(j.source,in+176,32);j.fi=in[208];j.state=in[209];j.flags=in[210];
+    memcpy(j.sums,in+80,96);memcpy(j.source,in+176,32);j.fi=in[208];j.state=in[209];j.flags=in[210];memcpy(j.target_store,in+212,16);
     if(valid(&j))return EFS_ERR_PROTO;
     *out=j;return EFS_OK;
 }
@@ -83,19 +84,20 @@ static int source_hash(struct efs_kv *kv,const struct efs_repair_job *j,uint8_t 
 }
 int efs_repair_capture(struct efs_kv *kv,const struct efs_repair_job *sel,struct efs_repair_job *out)
 {
-    struct efs_meta_chunk ch;struct efs_meta_delta ds[EFS_CHUNK_DELTA_MAX];uint32_t n=0;
+    struct efs_meta_chunk_view view;struct efs_meta_chunk ch;uint32_t n=0;
     struct efs_repair_job j;
     if(!kv || !sel || !out)return EFS_ERR_INVAL;
     j=*sel;j.state=EFS_REPAIR_ADMITTED;j.flags=0;
     /* Selector validation does not require its yet-to-be-filled placement. */
     for(unsigned i=0;i<3;i++)j.nodes[i]=i+1;
     int rc=valid(&j);if(rc)return rc;
-    rc=efs_meta_apply_get_chunk_row(kv,j.ino,j.inode_gen,j.ci,&ch,ds,EFS_CHUNK_DELTA_MAX,&n,NULL);
+    rc=efs_meta_get_chunk_view(kv,j.ino,j.inode_gen,j.ci,j.fragment_len*2u,&view);
     if(rc)return rc;
+    ch=view.base;n=view.ndelta;const struct efs_meta_delta *ds=view.deltas;
     if(n>EFS_CHUNK_DELTA_MAX || ch.packed.segment_id || ch.coding_profile_id!=EFS_META_PROFILE_K2F1)return EFS_ERR_INVAL;
     int found=0;
-    if(!j.span_len && ch.generation==j.object){memcpy(j.nodes,ch.nodes,sizeof(j.nodes));memcpy(j.sums,ch.checksums,sizeof(j.sums));found=1;}
-    for(uint32_t i=0;i<n && !found;i++)if(j.span_len && ds[i].generation==j.object && ds[i].off==j.span_off && ds[i].len==j.span_len){
+    if(!j.span_len && ch.generation==j.object && view.bytes.parts[0].len){memcpy(j.nodes,ch.nodes,sizeof(j.nodes));memcpy(j.sums,ch.checksums,sizeof(j.sums));found=1;}
+    for(uint32_t i=0;i<n && !found;i++)if(j.span_len && ds[i].generation==j.object && ds[i].off==j.span_off && ds[i].len==j.span_len && view.bytes.parts[i+1].len){
         memcpy(j.nodes,ds[i].nodes,sizeof(j.nodes));memcpy(j.sums,ds[i].checksums,sizeof(j.sums));found=1;
     }
     if(!found)return EFS_ERR_STALE;
@@ -271,4 +273,19 @@ int efs_repair_apply_command(struct efs_kv *kv,uint32_t group,const uint8_t *cmd
     case EFS_REPAIR_OP_RETIRE:return arg>1?EFS_ERR_INVAL:efs_repair_retire(kv,&j,arg);
     default:return EFS_ERR_PROTO;
     }
+}
+
+/* Every replica validates the committed entry term, not its current leader's
+ * term. Old committed entries remain replayable after an election. Cancel and
+ * terminal cleanup may deliberately operate on a previous owner's job. */
+int efs_repair_apply_command_term(struct efs_kv *kv,uint32_t group,uint64_t term,
+                                 const uint8_t *cmd,uint32_t n)
+{
+    if(!cmd || n!=EFS_REPAIR_COMMAND_BYTES)return EFS_ERR_PROTO;
+    if(cmd[1]==EFS_REPAIR_OP_ADMIT || cmd[1]==EFS_REPAIR_OP_DATA){
+        struct efs_repair_job j;int rc=efs_repair_job_decode(cmd+2,EFS_REPAIR_JOB_BYTES,&j);
+        if(rc)return rc;
+        if(!term || term>UINT32_MAX-1ull || term!=j.epoch)return EFS_ERR_STALE;
+    }
+    return efs_repair_apply_command(kv,group,cmd,n);
 }
