@@ -39,6 +39,10 @@ static int efs_kv_lsm_snapshot_revisions(struct efs_kv_lsm_snapshot *p,uint64_t 
 {assert(p && n==4096);memset(r,0,n*sizeof(*r));r[0]=p->serial;return 0;}
 static int efs_kv_lsm_snapshot_transaction_revision(struct efs_kv_lsm_snapshot *p,uint64_t *out)
 {*out=p->serial;return 0;}
+static int efs_kv_lsm_snapshot_transaction_activity(struct efs_kv_lsm_snapshot *p,uint64_t out[8])
+{(void)p;memset(out,0,8*sizeof(*out));return 0;}
+static int efs_kv_lsm_transaction_activity(void *kv,uint64_t out[8])
+{(void)kv;memset(out,0,8*sizeof(*out));return 0;}
 static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,uint8_t second,int *hint)
 {(void)hint;assert(first==0 && second==2);barriers++;if(import_change)h->g[1].import_gen++;
  if(model==1)live_b=1; /* missing participant applies after pin */

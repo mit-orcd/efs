@@ -88,3 +88,30 @@ by INTENT/GUARD/REDUCE/DECISION and PUT/DEL, correlate applied vectors, and spli
 root refusal branches (catalog-newroot, generation/parent, binding, live TXN read,
 expiry). These changes are a diagnostic proposal only; no unchanged pressure
 repeat or filtering DECISION/cleanup is justified yet.
+
+## Second bounded discriminator source (qualification pending)
+
+The next instrumentation adds eight saturating process-local counters per KV
+store/snapshot: INTENT/GUARD/REDUCE/DECISION PUT/DEL. They increment only alongside
+existing query-tracked transaction revision changes under the KV mutex; the
+snapshot copies them at its original cut. Existing fence/revision semantics and
+disabled tracking are unchanged. No counter is persisted, replicated or used as
+coverage; fixed64-byte hints per store/snapshot, no per-operation log or new KV
+mutation. Collision diagnostics compare pinned/live counters and pin/live g0/g2
+applied vectors; sampling is explanatory and not an atomic new authority proof.
+
+Root diagnostics split catalog absence with authoritative new-root success,
+current transaction read refusal, catalog IO, parent/generation changes, cached
+link refusal, live binding read/missing/mismatch, and expiry. They include requested
+root, catalog generation and actual checked inode (including ancestors). Leaf
+durations are measured; outer root/page events remain duplicate envelopes.
+Initial lag-update query_lock writer wait is now measured separately. No names,
+transaction keys or payload values are logged.
+
+Actual root/binding helper tests pass tracing-off/on and under ASan/UBSan,
+including unchanged permission and no-output refusal; cut/page tests pass as
+well. A real-LSM query catalog regression checks each exact kind PUT/DEL count,
+ordinary-write noninvalidation, snapshot immutability and disabled tracking.
+Linux execution of that regression and complete candidate qualification are
+pending. Mac/ORCD review labels and sampling limits before any expensive run.
+This remains a diagnostic source, not a proven repair or quiet acceptance.

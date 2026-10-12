@@ -291,6 +291,8 @@ int main(void)
           "resolve deletion changes fence after pending records disappear");
     uint64_t revisions_before[4096],revisions_after[4096];
     CHECK(!efs_kv_lsm_metadata_revisions(kv,revisions_before,4096),"tracking baseline");
+    uint64_t activity_disabled[8],activity_after[8];
+    CHECK(!efs_kv_lsm_transaction_activity(kv,activity_disabled),"transaction activity before disabled tracking");
     fence=live;
     efs_kv_lsm_query_tracking(kv,0);
     CHECK(!efs_kv_put(kv,pending,sizeof(pending),(const uint8_t *)"x",1),"disabled transaction marker");
@@ -299,10 +301,37 @@ int main(void)
     CHECK(!efs_kv_lsm_metadata_revisions(kv,revisions_after,4096) &&
           !memcmp(revisions_before,revisions_after,sizeof(revisions_before)),"disabled tracking leaves all hints unchanged");
     CHECK(!efs_kv_lsm_transaction_revision(kv,&live) && live==fence,"disabled tracking leaves transaction fence unchanged");
+    CHECK(!efs_kv_lsm_transaction_activity(kv,activity_after) &&
+          !memcmp(activity_disabled,activity_after,sizeof(activity_after)),"disabled tracking leaves diagnostic counters unchanged");
     efs_kv_lsm_query_tracking(kv,1);
     CHECK(!capture(kv,NULL,&newer),"reenable builds authoritative image without dirty history");
     CHECK(newer && efs_query_catalog_rebuilt(newer)==4096,"reenable requires full initial build");
     efs_query_catalog_free(newer);newer=NULL;
+    source=NULL;
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source),"diagnostic activity pin");
+    uint64_t activity_pin[8],activity_live[8],activity_expect[8];
+    CHECK(!efs_kv_lsm_snapshot_transaction_activity(source,activity_pin),"pinned activity counts");
+    CHECK(!efs_kv_lsm_transaction_activity(kv,activity_live) &&
+          !memcmp(activity_pin,activity_live,sizeof(activity_pin)),"same cut activity counters");
+    memcpy(activity_expect,activity_pin,sizeof(activity_expect));
+    const uint8_t txn_kinds[4]={EFS_KV_KIND_INTENT,EFS_KV_KIND_GUARD,EFS_KV_KIND_REDUCE,EFS_KV_KIND_DECISION};
+    for(unsigned k=0;k<4;k++) {
+        uint8_t marker[4]={0,0,txn_kinds[k],255};
+        CHECK(!efs_kv_put(kv,marker,sizeof(marker),(const uint8_t *)"x",1),"typed diagnostic PUT");
+        activity_expect[2*k]++;
+        CHECK(!efs_kv_lsm_transaction_activity(kv,activity_live) &&
+              !memcmp(activity_expect,activity_live,sizeof(activity_expect)),"exact kind PUT only");
+        CHECK(!efs_kv_del(kv,marker,sizeof(marker)),"typed diagnostic DEL");
+        activity_expect[2*k+1]++;
+        CHECK(!efs_kv_lsm_transaction_activity(kv,activity_live) &&
+              !memcmp(activity_expect,activity_live,sizeof(activity_expect)),"exact kind DEL only");
+    }
+    CHECK(!efs_meta_apply_get_inode(kv,b,&r),"ordinary diagnostic row");row_put(kv,&r);
+    CHECK(!efs_kv_lsm_transaction_activity(kv,activity_live) &&
+          !memcmp(activity_expect,activity_live,sizeof(activity_expect)),"ordinary row changes no transaction activity");
+    CHECK(!efs_kv_lsm_snapshot_transaction_activity(source,activity_after) &&
+          !memcmp(activity_pin,activity_after,sizeof(activity_pin)),"pinned diagnostic activity remains immutable");
+    efs_kv_lsm_snapshot_release(source);source=NULL;
     /* Many matching names in one outside directory must not leak into a
      * scoped search; scope decisions must not survive into another query. */
     for (unsigned i=0;i<6;i++) {

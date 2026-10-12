@@ -153,6 +153,11 @@ int efs_kv_lsm_metadata_revisions(struct efs_kv *kv, uint64_t *out, uint32_t n);
  * the same KV lock as the metadata image. Saturation refuses comparisons. */
 int efs_kv_lsm_transaction_revision(struct efs_kv *kv,uint64_t *out);
 int efs_kv_lsm_snapshot_transaction_revision(struct efs_kv_lsm_snapshot *s,uint64_t *out);
+/* Diagnostic hints only, under the same lock/cut as transaction revision.
+ * Eight saturating counters: INTENT/GUARD/REDUCE/DECISION, PUT then DEL.
+ * Never use these process-local counts as authority or participant coverage. */
+int efs_kv_lsm_transaction_activity(struct efs_kv *kv,uint64_t out[8]);
+int efs_kv_lsm_snapshot_transaction_activity(struct efs_kv_lsm_snapshot *s,uint64_t out[8]);
 /* Durable partition change checkpoints, paired with the exact KV manifest.
  * WAL replay may conservatively advance counters twice after an interrupted
  * reset. Compare only inside the same lineage; missing/corrupt sidecars create

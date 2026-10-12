@@ -8880,6 +8880,8 @@ static int host_query_source_once(struct efs_raft_host *h,struct efs_kv_lsm_snap
 {
     uint64_t capture_start=query_mono_ms();
     const char *trace_stage="pin";
+    int trace=efs_query_stage_enabled();
+    uint64_t activity_before[8]={0},activity_after[8]={0};
     *transaction_changed=0;
     *source=NULL;memset(view,0,sizeof(*view));
     pthread_mutex_lock(&h->mu);
@@ -8903,6 +8905,7 @@ static int host_query_source_once(struct efs_raft_host *h,struct efs_kv_lsm_snap
     rc=efs_kv_lsm_snapshot_revisions(*source,revisions,4096);
     uint64_t transaction_before=0,transaction_after=0;
     if (!rc) rc=efs_kv_lsm_snapshot_transaction_revision(*source,&transaction_before);
+    if(trace && !rc)(void)efs_kv_lsm_snapshot_transaction_activity(*source,activity_before);
     /* Post-capture barriers expose missing asynchronous participants. Only
      * transaction activity invalidates the cut: ordinary single-entry updates
      * are atomic in the pinned KV image and need not starve publication.
@@ -8918,6 +8921,14 @@ static int host_query_source_once(struct efs_raft_host *h,struct efs_kv_lsm_snap
     pthread_mutex_unlock(&h->snap_mu);
     if (!rc) { trace_stage="transaction-cut";rc=efs_kv_lsm_transaction_revision(h->kv,&transaction_after); }
     if (!rc && transaction_before!=transaction_after) { *transaction_changed=1;rc=EFS_ERR_BUSY; }
+    if(trace && *transaction_changed && !efs_kv_lsm_transaction_activity(h->kv,activity_after)) {
+        static const char *labels[8]={"txn-intent-put","txn-intent-del","txn-guard-put","txn-guard-del",
+            "txn-reduce-put","txn-reduce-del","txn-decision-put","txn-decision-del"};
+        for(unsigned i=0;i<8;i++)if(activity_before[i]!=activity_after[i])
+            efs_query_stage_trace(labels[i],rc,query_mono_ms()-capture_start,activity_before[i],activity_after[i]);
+        efs_query_stage_trace("apply-g0",rc,0,view->applied[0],efs_raft_applied(h->g[0].r));
+        efs_query_stage_trace("apply-g2",rc,0,view->applied[1],efs_raft_applied(h->g[1].r));
+    }
     pthread_mutex_unlock(&h->mu);
     efs_query_stage_trace(trace_stage,rc,query_mono_ms()-capture_start,transaction_before,transaction_after);
     if (rc) { efs_kv_lsm_snapshot_release(*source);*source=NULL; }
@@ -9021,7 +9032,9 @@ static void *host_query_thread(void *ctx)
         int initial=h->query_view.catalog==NULL;
         if (!dirty) first_dirty=0;
         else if (!first_dirty) first_dirty=now;
+        uint64_t lag_lock_start=query_mono_ms();
         pthread_rwlock_wrlock(&h->query_lock);
+        efs_query_stage_trace("lag-lock",0,query_mono_ms()-lag_lock_start,0,0);
         struct efs_server_query_view *lag=&h->query_view;
         int was_overdue=lag->pending_changes && lag->lag_sample_ms-lag->pending_since_ms>=HOST_QUERY_T_MS;
         int overdue=dirty && now-first_dirty>=HOST_QUERY_T_MS;
@@ -9195,18 +9208,34 @@ static int query_access(const struct efs_msg_query_snapshot *q,const struct efs_
 static int query_directory_binding(struct query_request *q,efs_ino_t ino)
 {
     if (ino==EFS_ROOT_INO) return EFS_OK;
+    uint64_t started=query_mono_ms();
     struct efs_name_entry link;
     int rc=efs_query_catalog_directory_link(q->view->catalog,ino,&link);
-    if (rc) return rc;
+    if(rc) {
+        efs_query_root_stage_trace("binding-catalog",rc,query_mono_ms()-started,q->req->root,q->view->generation,ino);
+        return rc;
+    }
     struct efs_meta_dentry current;
     rc=efs_meta_apply_lookup_tx(q->h->kv,link.parent,link.name,host_txn_coord,q->h,&current);
-    if (rc==EFS_ERR_NOT_FOUND) return EFS_ERR_BUSY;
-    if (rc) return rc;
-    return current.ino==ino && current.generation==link.dentry.generation ? EFS_OK : EFS_ERR_BUSY;
+    if(rc==EFS_ERR_NOT_FOUND) {
+        efs_query_root_stage_trace("binding-missing",EFS_ERR_BUSY,query_mono_ms()-started,q->req->root,q->view->generation,ino);
+        return EFS_ERR_BUSY;
+    }
+    if(rc) {
+        efs_query_root_stage_trace("binding-live-txn",rc,query_mono_ms()-started,q->req->root,q->view->generation,ino);
+        return rc;
+    }
+    rc=current.ino==ino && current.generation==link.dentry.generation ? EFS_OK : EFS_ERR_BUSY;
+    if(rc)efs_query_root_stage_trace("binding-mismatch",rc,query_mono_ms()-started,q->req->root,q->view->generation,ino);
+    return rc;
 }
 static int query_auth_dir(struct query_request *q,efs_ino_t ino,int mask,struct efs_meta_row **out)
 {
-    if (query_mono_ms()>q->deadline) return EFS_ERR_BUSY;
+    uint64_t started=query_mono_ms();
+    if(started>q->deadline) {
+        efs_query_root_stage_trace("root-expiry",EFS_ERR_BUSY,0,q->req->root,q->view->generation,ino);
+        return EFS_ERR_BUSY;
+    }
     uint32_t start=(uint32_t)((ino^(ino>>32))*2654435761U)%HOST_QUERY_AUTH_N;
     for (uint32_t i=0;i<HOST_QUERY_AUTH_N;i++) {
         struct query_auth *a=&q->auth[(start+i)%HOST_QUERY_AUTH_N];
@@ -9217,13 +9246,25 @@ static int query_auth_dir(struct query_request *q,efs_ino_t ino,int mask,struct 
             if (rc==EFS_ERR_NOT_FOUND) {
                 struct efs_meta_row fresh;
                 rc=efs_meta_apply_get_inode_tx(q->h->kv,ino,host_txn_coord,q->h,&fresh);
-                return rc ? rc : EFS_ERR_BUSY; /* New directory waits for publication. */
+                int refused=rc?rc:EFS_ERR_BUSY;
+                efs_query_root_stage_trace(rc?"root-live-txn":"root-catalog-absent",refused,
+                    query_mono_ms()-started,q->req->root,q->view->generation,ino);
+                return refused; /* New directory waits for publication. */
             }
-            if (rc) return rc;
+            if(rc) {
+                efs_query_root_stage_trace("root-catalog-read",rc,query_mono_ms()-started,q->req->root,q->view->generation,ino);
+                return rc;
+            }
             rc=efs_meta_apply_get_inode_tx(q->h->kv,ino,host_txn_coord,q->h,&a->row);
-            if (rc) return rc;
+            if(rc) {
+                efs_query_root_stage_trace("root-live-txn",rc,query_mono_ms()-started,q->req->root,q->view->generation,ino);
+                return rc;
+            }
             if (!S_ISDIR(a->row.mode) || !a->row.nlink) return EFS_ERR_NOT_FOUND;
-            if (a->row.generation!=cached.generation || a->row.parent!=cached.parent) return EFS_ERR_BUSY;
+            if (a->row.generation!=cached.generation || a->row.parent!=cached.parent) {
+                efs_query_root_stage_trace("root-parent-generation",EFS_ERR_BUSY,query_mono_ms()-started,q->req->root,q->view->generation,ino);
+                return EFS_ERR_BUSY;
+            }
             rc=query_directory_binding(q,ino);
             if (rc) return rc;
             a->valid=1;q->auth_count++;
@@ -9234,6 +9275,7 @@ static int query_auth_dir(struct query_request *q,efs_ino_t ino,int mask,struct 
     }
     return EFS_ERR_OVERFLOW;
 }
+
 static int query_ancestry(struct query_request *q,efs_ino_t dir,efs_ino_t root,int mask)
 {
     for (uint32_t steps=0;steps<HOST_QUERY_AUTH_N;steps++) {

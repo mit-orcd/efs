@@ -2174,6 +2174,11 @@ after sideB delivery/revision advance; normal/sanitizer pass and fence-removal
 test mutant fails. [Oracle and limits](../status/v030-query-stage-diagnostic-20261012.md).
 No production ordering/fence repair is inferred.
 
+Second bounded query discriminator is prepared: fixed txn-kind PUT/DEL activity
+hints with applied vectors, precise root/binding leaf reasons/durations and initial
+lag-lock timing. [Definition and pending qualification](../status/v030-query-stage-diagnostic-20261012.md).
+No fence filtering, source promotion or quiet acceptance.
+
 
 ## Appendix 2 — In flight — the current handoff block
 

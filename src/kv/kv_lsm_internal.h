@@ -244,6 +244,7 @@ struct kv_lsm {
     uint64_t query_revision[4096],query_flushed[4096],query_lineage[2];
     int query_tracking; /* startup policy; protected by mu */
     uint64_t transaction_revision; /* prepare/resolve/decision fence, under mu */
+    uint64_t transaction_activity[8]; /* bounded diagnostic hints, not authority */
     struct kv_buf scratch;
 };
 

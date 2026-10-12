@@ -486,6 +486,7 @@ test: all
 	python3 tests/test_follower_read_redirect.py
 	python3 tests/test_query_snapshot_failover.py
 	python3 tests/test_query_page_sessions.py
+	python3 tests/test_query_root_refusals.py
 	python3 tests/test_query_capture_retry.py
 	python3 tests/test_query_page_barriers.py
 	python3 tests/test_query_stats_snapshot.py

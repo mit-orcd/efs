@@ -854,7 +854,7 @@ out:
 
 /* --- efs_kv_ops ------------------------------------------------------ */
 
-static void metadata_dirty(struct kv_lsm *l, const uint8_t *key, uint32_t len)
+static void metadata_dirty(struct kv_lsm *l, const uint8_t *key, uint32_t len,uint8_t op)
 {
     if (len<3) return;
     uint32_t shard=((uint32_t)key[0]<<8)|key[1];
@@ -862,6 +862,10 @@ static void metadata_dirty(struct kv_lsm *l, const uint8_t *key, uint32_t len)
     if (l->query_tracking && (key[2]==EFS_KV_KIND_INTENT || key[2]==EFS_KV_KIND_GUARD ||
         key[2]==EFS_KV_KIND_REDUCE || key[2]==EFS_KV_KIND_DECISION)) {
         if (l->transaction_revision!=UINT64_MAX) l->transaction_revision++;
+        unsigned kind=key[2]==EFS_KV_KIND_INTENT?0:key[2]==EFS_KV_KIND_GUARD?1:
+                      key[2]==EFS_KV_KIND_REDUCE?2:3;
+        unsigned slot=2*kind+(op==EFS_KV_DEL);
+        if(l->transaction_activity[slot]!=UINT64_MAX)l->transaction_activity[slot]++;
     }
     switch (key[2]) {
     case EFS_KV_KIND_INODE: case EFS_KV_KIND_DENTRY: case EFS_KV_KIND_LANE:
@@ -924,7 +928,7 @@ static int lsm_batch_committed(void *ctx, const struct efs_kv_item *items, uint3
         if (rc != EFS_OK)
             l->io_failed = 1;
         else
-            metadata_dirty(l,items[i].key,items[i].klen);
+            metadata_dirty(l,items[i].key,items[i].klen,items[i].op);
     }
     /* mu prevents the next batch from applying until this flush returns.
      * Publish the fully applied WAL watermark first, so reset cannot erase
@@ -1116,7 +1120,7 @@ static int replay_item(void *user, uint8_t op, const uint8_t *key,
     if (op != KV_OP_PUT && op != KV_OP_DEL)
         return EFS_ERR_PROTO;
     int rc=kv_mtab_set(&l->mt, op, key, klen, val, vlen);
-    if(!rc){int enabled=l->query_tracking;l->query_tracking=0;metadata_dirty(l,key,klen);l->query_tracking=enabled;}
+    if(!rc){int enabled=l->query_tracking;l->query_tracking=0;metadata_dirty(l,key,klen,op==KV_OP_PUT?EFS_KV_PUT:EFS_KV_DEL);l->query_tracking=enabled;}
     return rc;
 }
 
@@ -1635,6 +1639,7 @@ int efs_kv_lsm_snapshot_pin(struct efs_kv *kv, uint64_t mt_limit,
     memcpy(s->input.query_revision,l->query_revision,sizeof(l->query_revision));
     memcpy(s->input.query_lineage,l->query_lineage,sizeof(l->query_lineage));
     s->input.transaction_revision=l->transaction_revision;
+    memcpy(s->input.transaction_activity,l->transaction_activity,sizeof(l->transaction_activity));
     memcpy(s->input.metadata_revision,l->metadata_revision,
            sizeof(l->metadata_revision));
     /* Entries are already sorted, so each insertion is an append. */
@@ -1699,6 +1704,20 @@ int efs_kv_lsm_transaction_revision(struct efs_kv *kv,uint64_t *out)
     pthread_mutex_unlock(&l->mu);
     return rc;
 }
+int efs_kv_lsm_transaction_activity(struct efs_kv *kv,uint64_t out[8])
+{
+    if(!kv || kv->ops!=&lsm_ops || !kv->ctx || !out)return EFS_ERR_INVAL;
+    struct kv_lsm *l=kv->ctx;pthread_mutex_lock(&l->mu);
+    int rc=l->io_failed?EFS_ERR_IO:EFS_OK;
+    memcpy(out,l->transaction_activity,sizeof(l->transaction_activity));
+    pthread_mutex_unlock(&l->mu);return rc;
+}
+int efs_kv_lsm_snapshot_transaction_activity(struct efs_kv_lsm_snapshot *s,uint64_t out[8])
+{
+    if(!s || !out)return EFS_ERR_INVAL;
+    memcpy(out,s->input.transaction_activity,sizeof(s->input.transaction_activity));return EFS_OK;
+}
+
 int efs_kv_lsm_snapshot_transaction_revision(struct efs_kv_lsm_snapshot *s,uint64_t *out)
 {
     if (!s || !out) return EFS_ERR_INVAL;
