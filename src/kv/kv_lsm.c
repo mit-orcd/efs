@@ -202,6 +202,106 @@ int kv_mtab_set(struct kv_mtab *m, uint8_t op, const uint8_t *key,
     return EFS_OK;
 }
 
+/* Prepare all replacements before touching the committed table. A Raft apply
+ * batch commonly inserts many keys near the front of a large table: merging
+ * once avoids shifting the same suffix for every new key. Single-item writes
+ * retain their cheaper insertion/update path. Caller serializes visibility. */
+int kv_mtab_batch(struct kv_mtab *m, const struct efs_kv_item *items, uint32_t n)
+{
+    struct kv_mtab pending = {0};
+    uint32_t added = 0, total, i;
+    int rc = EFS_OK;
+
+    if (n == 1)
+        return kv_mtab_set(m, items[0].op == EFS_KV_PUT ? KV_OP_PUT : KV_OP_DEL,
+                           items[0].key, items[0].klen, items[0].val, items[0].vlen);
+    for (i = 0; i < n; i++) {
+        rc = kv_mtab_set(&pending,
+                        items[i].op == EFS_KV_PUT ? KV_OP_PUT : KV_OP_DEL,
+                        items[i].key, items[i].klen, items[i].val, items[i].vlen);
+        if (rc != EFS_OK)
+            goto out;
+    }
+    /* The temporary table also collapses duplicate keys in original order:
+     * the last operation wins, including PUT/DEL/PUT sequences. */
+    for (i = 0; i < pending.n; i++) {
+        int found;
+        (void)kv_mtab_pos(m, pending.e[i]->key, pending.e[i]->klen, &found);
+        added += !found;
+    }
+    if (added > UINT32_MAX - m->n) {
+        rc = EFS_ERR_NOMEM;
+        goto out;
+    }
+    total = m->n + added;
+    if (total > m->cap) {
+        uint32_t cap = m->cap && m->cap <= UINT32_MAX / 2 ? m->cap * 2 : total;
+        if (cap < total) cap = total;
+        struct kv_ent **e = malloc((size_t)cap * sizeof(*e));
+        uint64_t *pfx = malloc((size_t)cap * sizeof(*pfx));
+        if (!e || !pfx) {
+            free(e);
+            free(pfx);
+            rc = EFS_ERR_NOMEM;
+            goto out;
+        }
+        if (m->n) {
+            memcpy(e, m->e, (size_t)m->n * sizeof(*e));
+            memcpy(pfx, m->pfx, (size_t)m->n * sizeof(*pfx));
+        }
+        free(m->e);
+        free(m->pfx);
+        m->e = e;
+        m->pfx = pfx;
+        m->cap = cap;
+    }
+    if (!added) {
+        /* Update-only batches need no whole-table walk or pointer movement. */
+        for (i = 0; i < pending.n; i++) {
+            int found;
+            struct kv_ent *e = pending.e[i];
+            uint32_t at = kv_mtab_pos(m, e->key, e->klen, &found);
+            m->bytes -= m->e[at]->vlen;
+            m->bytes += e->vlen;
+            ent_free(m->e[at]);
+            m->e[at] = e;
+            pending.e[i] = NULL;
+        }
+    } else {
+        uint32_t old = m->n, next = pending.n, dest = total;
+        while (next) {
+            struct kv_ent *e = pending.e[next - 1];
+            int cmp = old ? kv_key_cmp(m->e[old - 1]->key,
+                m->e[old - 1]->klen, e->key, e->klen) : -1;
+            if (cmp > 0) {
+                --old;
+                --dest;
+                m->e[dest] = m->e[old];
+                m->pfx[dest] = m->pfx[old];
+                continue;
+            }
+            if (!cmp) {
+                --old;
+                m->bytes -= m->e[old]->vlen;
+                m->bytes += e->vlen;
+                ent_free(m->e[old]);
+            } else {
+                m->bytes += e->klen + e->vlen + sizeof(*e) +
+                            sizeof(e) + sizeof(*m->pfx);
+            }
+            --next;
+            --dest;
+            m->e[dest] = e;
+            m->pfx[dest] = pending.pfx[next];
+            pending.e[next] = NULL;
+        }
+        m->n = total;
+    }
+out:
+    kv_mtab_clear(&pending);
+    return rc;
+}
+
 /* --- live set -------------------------------------------------------- */
 
 static void drop_segs(struct kv_lsm *l)
@@ -919,17 +1019,15 @@ static int lsm_batch_committed(void *ctx, const struct efs_kv_item *items, uint3
     if (arc != EFS_OK)
         l->io_failed = 1;
     rc = arc;
-    for (i = 0; i < n && rc == EFS_OK; i++) {
-        uint8_t op = items[i].op == EFS_KV_PUT ? KV_OP_PUT : KV_OP_DEL;
-        rc = kv_mtab_set(&l->mt, op, items[i].key, items[i].klen, items[i].val,
-                      items[i].vlen);
-        /* The record is already durable, so a half-applied batch means RAM
-         * now disagrees with what a restart would rebuild. */
-        if (rc != EFS_OK)
-            l->io_failed = 1;
-        else
-            metadata_dirty(l,items[i].key,items[i].klen,items[i].op);
-    }
+    if (rc == EFS_OK)
+        rc = kv_mtab_batch(&l->mt, items, n);
+    /* The record is durable already. Refuse further writes after any failed
+     * RAM apply; cold replay remains the source of truth. */
+    if (rc != EFS_OK)
+        l->io_failed = 1;
+    else
+        for (i = 0; i < n; i++)
+            metadata_dirty(l, items[i].key, items[i].klen, items[i].op);
     /* mu prevents the next batch from applying until this flush returns.
      * Publish the fully applied WAL watermark first, so reset cannot erase
      * another thread's durable-but-not-yet-applied record. */

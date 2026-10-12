@@ -457,6 +457,7 @@ test: all
 	python3 tests/test_checkpoint_worker.py
 	python3 tests/test_host_retire.py
 	python3 tests/test_recv_overlap.py
+	python3 tests/test_kv_mtab_batch.py
 	./tests/test_kv_lsm
 	./tests/test_query_policy
 	./tests/test_query_catalog

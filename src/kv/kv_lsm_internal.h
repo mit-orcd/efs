@@ -171,7 +171,7 @@ struct kv_ent {
     uint8_t *val;
 };
 
-/* Sorted by key; binary search to find, memmove to insert. */
+/* Sorted by key; binary search, single insertion or committed batch merge. */
 struct kv_mtab {
     struct kv_ent **e;
     uint64_t *pfx;  /* first 8 key bytes of e[i], big-endian, zero-padded */
@@ -268,6 +268,7 @@ void kv_sync_dir(const char *dir);
 void kv_mtab_clear(struct kv_mtab *m);
 uint32_t kv_mtab_pos(const struct kv_mtab *m, const uint8_t *key, uint32_t klen,
                      int *found);
+int kv_mtab_batch(struct kv_mtab *m, const struct efs_kv_item *items, uint32_t n);
 int kv_mtab_set(struct kv_mtab *m, uint8_t op, const uint8_t *key,
                 uint32_t klen, const uint8_t *val, uint32_t vlen);
 /* Advances past keys below lower; sets done at the end of the source. */

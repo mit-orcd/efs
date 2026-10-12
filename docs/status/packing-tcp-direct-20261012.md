@@ -235,3 +235,23 @@ for each inserted key while holding the metadata mutex. This is a measured
 optimization target, not proof of the timeout cause or justification to weaken
 fresh ReadIndex admission. Next: measure/reduce insertion movement with exact
 ordering/atomic-batch/failure regressions, then rerun quiet original budgets.
+
+
+## Committed memtable batch merge candidate
+
+W95 candidate replaces repeated committed-batch insertion shifts with a prepared
+sorted batch and one backward merge. Single-item writes retain the existing
+path; update-only batches use binary-search replacement without walking the
+whole table. Duplicate keys retain the last original operation. Preparation and
+capacity allocations finish before committed entries change. WAL order, apply
+serialization, durable-error poisoning, metadata dirty hints and read proofs
+remain unchanged. On RAM apply allocation failure the durable record is retained
+and the store refuses further writes until recovery, as before.
+
+Local regression PASS: `python3 tests/test_kv_mtab_batch.py`; sanitizer PASS:
+`CC='cc -fsanitize=address,undefined -fno-omit-frame-pointer -g'
+python3 tests/test_kv_mtab_batch.py`. Checks2000 mixed binary-key model batches,
+PUT/DEL duplicates, exact bytes/accounting/order, every26 allocation refusals,
+and reduction of repeated suffix movement. The regression is part of `make test`.
+AMD durable LSM/native/fault and live packing qualification are pending at this
+candidate checkpoint; no timeout or authority change, no release promotion.
