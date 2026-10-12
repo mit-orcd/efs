@@ -709,7 +709,7 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
     void *payload = NULL;
     uint32_t len = 0;
     if (argc != 1 || parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
-        fprintf(stderr, "Usage:\n  efs-mgmt gc-status <node:port>\n");
+        fprintf(stderr, "Usage:\n  efs-mgmt %s <node:port>\n",expiry_only?"expiry-status":"gc-status");
         return 1;
     }
     int fd = efs_connect_tcp(host, port);
@@ -738,7 +738,7 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
             fprintf(stderr,"Expiry worker status unavailable; upgrade the server.\n");free(payload);return 1;
         }
         const struct efs_expiry_status *e=&g->expiry;char bytes[64],age[80];
-        const char *state=!e->enabled?"disabled":(!e->healthy || e->uncertain)?"paused: clock uncertain":
+        const char *state=!e->enabled?"disabled":e->uncertain?"paused: clock uncertain":!e->healthy?"waiting: clock health sample":
                           !e->leader_mask?"standby: no local leader group":"running";
         format_bytes(e->namespace_bytes,bytes,sizeof(bytes));
         printf("Expiry worker: %s\nClock: %s%s\nConfirmed namespace removals: %llu files; %s observed logical bytes\n"
@@ -785,7 +785,7 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
     if(g->version>=3) {
         const struct efs_expiry_status *e=&g->expiry;
         const char *state=!e->available?"unavailable":!e->enabled?"disabled":
-                          (!e->healthy || e->uncertain)?"paused_clock":!e->leader_mask?"standby":"running";
+                          e->uncertain?"paused_clock":!e->healthy?"warming_clock":!e->leader_mask?"standby":"running";
         printf("expiry_state=%s expiry_available=%u expiry_enabled=%u expiry_clock_healthy=%u expiry_clock_uncertain=%u "
                "expiry_leader_mask=%u expired_files=%llu expired_namespace_bytes=%llu "
                "expired_size_unknown_files=%llu expiry_refused=%llu expiry_errors=%llu expiry_passes=%llu "

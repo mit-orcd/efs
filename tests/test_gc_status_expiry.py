@@ -17,10 +17,10 @@ def exact(s,n):
     return data
 
 
-def probe(binary,command,version,payload_size=None):
+def probe(binary,command,version,payload_size=None,healthy=1,uncertain=0):
     base=struct.pack('=8I25Q',version,1,0,0,0,1,0,0,*([0]*25))
     io=struct.pack('=12Q',*([0]*12))
-    expiry=struct.pack('=6I12Q2I',1,1,1,0,1,1,
+    expiry=struct.pack('=6I12Q2I',1,1,healthy,uncertain,1,1,
                        17,16384,2,3,4,5,1000,2000,64,0,3000,0,1,0)
     payload=base+(io if version>=2 else b'')+(expiry if version>=3 else b'')
     if payload_size is not None:payload=payload[:payload_size]
@@ -54,6 +54,10 @@ def main():
     result=probe(binary,'expiry-status',3)
     assert result.returncode==0 and '17 files' in result.stdout and 'at least 64' in result.stdout,result
     assert '2 seconds ago' in result.stdout and 'size_unknown=2' in result.stdout,result
+    result=probe(binary,'expiry-status',3,healthy=0)
+    assert result.returncode==0 and 'waiting: clock health sample' in result.stdout and 'operator reset required' not in result.stdout,result
+    result=probe(binary,'expiry-status',3,healthy=0,uncertain=1)
+    assert result.returncode==0 and 'paused: clock uncertain' in result.stdout and 'operator reset required' in result.stdout,result
     for version,size in ((3,328),(2,232),(1,231),(4,None)):
         assert probe(binary,'gc-status',version,size).returncode!=0,(version,size)
     print('GC status v1/v2 compatibility, v3 expiry fields and malformed replies PASS')
