@@ -1,7 +1,7 @@
 # Project status — current work and index
 
 [devel-efs scope and outstanding items](devel-efs-20261012.md) records the new
-release-v0.3.2-based branch, five direct open items and the requested ORCD
+release-v0.3.2-based branch, four active direct items (expiry deferred) and the requested ORCD
 RDMA/direct-I/O profile with commands enabled and containers/packing disabled.
 Deployment and enabled-feature acceptance are pending.
 

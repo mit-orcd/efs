@@ -4017,6 +4017,11 @@ large-tree/load/checksum and remaining fault/gateway gates stay open.
 
 ## W90 · Scratch-file expiry metadata and safe lifecycle
 
+**Oct 12 user scope:** deferred for now. `devel-efs` focuses on non-expiry
+`.efs` commands; retain truthful unavailable/refusal behavior for expiry options.
+The accepted design below is retained, with no implementation or activation
+authorization inferred from this work profile.
+
 **Policy accepted Oct 8 (D33):** opt-in fixed expiry, no universal TTL, owner renewal within operator limits, singly linked regular files and safe conditional namespace deletion. This supersedes the initial open-policy discussion below; implementation remains open. [Contract](../status/accepted-namespace-scratch-20261008.md#d33--w90-opt-in-fixed-scratch-expiry).
 
 **Class/state:** feature; accepted D33 policy, implementation open. Recorded Oct 8, 2026 at the user's request.
