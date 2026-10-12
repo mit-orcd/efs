@@ -12,9 +12,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 static int fault;
-static pthread_mutex_t cohort_gate_mu=PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t cohort_gate_cv=PTHREAD_COND_INITIALIZER;
-static int cohort_gate,cohort_entered,cohort_release,cohort_fail_first;
 static const char *watched_root;
 static unsigned outside_syncs, root_syncs, directory_syncs, body_syncs, mkdir_calls, mapping_reads;
 static ssize_t container_pread(int fd,void *buf,size_t n,off_t off) {
@@ -39,14 +36,6 @@ static int container_sync(int fd)
     }
     int body=strstr(name,".efs-containers/")&&strstr(name,".dat");
     if(body)__atomic_fetch_add(&body_syncs,1,__ATOMIC_RELAXED);
-    if(body && cohort_gate){
-        pthread_mutex_lock(&cohort_gate_mu);
-        int first=++cohort_entered==1;
-        while(first && !cohort_release)pthread_cond_wait(&cohort_gate_cv,&cohort_gate_mu);
-        int fail=first && cohort_fail_first;
-        pthread_mutex_unlock(&cohort_gate_mu);
-        if(fail){errno=EIO;return -1;}
-    }
     if(fault==1&&body){errno=EIO;return -1;}
     if(fault==2&&S_ISDIR(st.st_mode)){errno=EIO;return -1;}
     int rc=fsync(fd);
@@ -119,55 +108,6 @@ static void *actor(void *arg)
     efs_tls_chunk_gen=333;efs_tls_write_root=0;
     for(unsigned i=0;i<25;i++){write_value(4242,0,(uintptr_t)arg,EFS_OK);read_value(4242,0,EFS_OK,-1);}return NULL;
 }
-struct cohort_actor {struct target *target;int fd,id,rc;};
-static void *cohort_actor_run(void *arg)
-{
-    struct cohort_actor *a=arg;uint8_t *page;
-    assert(!posix_memalign((void**)&page,PAGE,PAGE));memset(page,a->id+1,PAGE);
-    assert(!full_io(a->fd,page,PAGE,(off_t)(250000+a->id)*PAGE,1));free(page);
-    a->rc=body_barrier(a->target,0,a->fd);return NULL;
-}
-static void check_body_cohort(struct target *t,int fd,int first_failure,int all_failure)
-{
-    pthread_t threads[16];struct cohort_actor actors[16];
-    cohort_gate=1;cohort_entered=cohort_release=0;cohort_fail_first=first_failure;
-    body_syncs=0;fault=all_failure?1:0;
-    for(unsigned i=0;i<16;i++)actors[i]=(struct cohort_actor){t,fd,(int)i,99};
-    assert(!pthread_create(&threads[0],NULL,cohort_actor_run,&actors[0]));
-    unsigned tries;
-    for(tries=0;tries<5000;tries++){
-        pthread_mutex_lock(&cohort_gate_mu);int entered=cohort_entered;pthread_mutex_unlock(&cohort_gate_mu);
-        if(entered)break;
-        usleep(1000);
-    }
-    assert(tries<5000);
-    for(unsigned i=1;i<16;i++)assert(!pthread_create(&threads[i],NULL,cohort_actor_run,&actors[i]));
-    /* The first captured cohort is in fsync. All later completed writes must
-     * wait for their own next barrier, never borrow the in-flight one. */
-    for(tries=0;tries<5000;tries++){
-        unsigned pending=0;pthread_mutex_lock(&t->sync[0].mu);
-        for(struct body_barrier_waiter *w=t->sync[0].pending;w;w=w->next)pending++;
-        pthread_mutex_unlock(&t->sync[0].mu);
-        if(pending==15)break;
-        usleep(1000);
-    }
-    assert(tries<5000);
-    pthread_mutex_lock(&cohort_gate_mu);cohort_release=1;pthread_cond_broadcast(&cohort_gate_cv);pthread_mutex_unlock(&cohort_gate_mu);
-    for(unsigned i=0;i<16;i++)assert(!pthread_join(threads[i],NULL));
-    cohort_gate=0;fault=0;
-    assert(body_syncs==2);
-    assert(actors[0].rc==((first_failure||all_failure)?EFS_ERR_IO:EFS_OK));
-    for(unsigned i=1;i<16;i++)assert(actors[i].rc==(all_failure?EFS_ERR_IO:EFS_OK));
-    /* A failed cohort retains its failure even if the next one succeeds;
-     * a later fresh retry is permitted and performs a new durable barrier. */
-    assert(!body_barrier(t,0,fd));assert(body_syncs==3);
-    uint8_t *page;assert(!posix_memalign((void**)&page,PAGE,PAGE));
-    for(unsigned i=0;i<16;i++){
-        assert(!full_io(fd,page,PAGE,(off_t)(250000+i)*PAGE,0));
-        for(unsigned j=0;j<PAGE;j++)assert(page[j]==i+1);
-    }
-    free(page);
-}
 static int remove_owned(const char *p,const struct stat *st,int type,struct FTW *f)
 {(void)st;(void)f;return type==FTW_DP?rmdir(p):unlink(p);}
 int main(int argc, char **argv)
@@ -190,10 +130,6 @@ int main(int argc, char **argv)
         /* Idempotent same identity is charged once; replacement uses a fresh extent. */
         int cached_fd=((struct target*)server.container_targets[0])->data_fds[0];assert(cached_fd>=0);
         assert(!!(fcntl(cached_fd,F_GETFL)&O_DIRECT)==direct);
-        struct target *sync_target=server.container_targets[0];
-        check_body_cohort(sync_target,cached_fd,0,0);
-        check_body_cohort(sync_target,cached_fd,1,0);
-        check_body_cohort(sync_target,cached_fd,0,1);
         watched_root=server.storage_paths[0];outside_syncs=root_syncs=directory_syncs=mkdir_calls=0;
         write_value(42,0,18,EFS_OK);assert(server.nodes[0].used==EFS_FRAGMENT_SIZE);
         assert(!outside_syncs && !root_syncs && directory_syncs==1 && !mkdir_calls);watched_root=NULL;
