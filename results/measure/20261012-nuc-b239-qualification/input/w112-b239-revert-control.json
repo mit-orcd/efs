@@ -1,0 +1,5 @@
+{
+  "commit": "b239dc7de104ff8437e49d9333a529790601464c",
+  "change": "Only W112 seven-line full-overwrite STALE guard removed; current interfaces unchanged",
+  "sha256": "ca7b2500b9cb03803ee111bda9faada6bfa6f004f74714668acccdf28713996b"
+}
