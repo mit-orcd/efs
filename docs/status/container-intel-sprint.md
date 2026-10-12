@@ -838,3 +838,20 @@ fallback, repeated reuse, hard refusal and joined lifetimes. Original eight
 container slots fail the capacity assertion/SIGABRT negative control. Local
 fresh-round paired admission controls also PASS. Both-host native/live
 validation is still required, and earlier physical passes do not qualify it.
+
+
+Dualb0 qualification completed: quiet core **430/432 PASS,2 deep60
+timeouts**; peer134/134 PASS; private mmap PASS/shared-write ENODEV
+skips; lifecycle256×512KiB four workers and both-host tiny300 durable
+generations warm/cold hashes, global graceful restart and deletes PASS.
+Final physical observer **PASS11.326s**. Initial immediate full-load
+mappings24726/25158/24666/25145 and bodies
+1716420608/1748897792/1714409472/1747206144 bytes drained to all-zero
+at86.028s (observer PASS86.035s). Full53 failures still leave directory
+acceptance open.
+
+Exact capacity candidate is
+`c23f9687deb87d2ee232ede9d59bbeb3fd58a561`, 783 tracked inputs.
+Native builds/affected controls are now running on both Intel hosts after
+the preceding qualification completed. Profiling remains off; no overlapping
+remote native work will run during live qualification or physical observers.
