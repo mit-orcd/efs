@@ -782,3 +782,21 @@ unhosted-but-known masks, unknown/disjoint/all-four masks, ordinary-file
 scoping and lag refusal. Original ordinal-only preference fails the new
 dual-group assertion/SIGABRT negative control. Both-host native build and
 fresh live gates remain pending; no closure claim.
+
+
+Priority209 qualification completed: immediate full-load physical reclamation
+**PASS112.619s**, all four ordinary maps/bodies zero at112.612s; initial
+mappings25281/24922/25245/25111 and allocated bodies
+1740349440/1725296640/1746358272/1729781760 bytes. Quiet core
+**430/432 PASS,2 deep60 timeouts**. Peer134/134 PASS; mmap private
+PASS/shared-write ENODEV skips; lifecycle256×512KiB four workers and tiny
+300 durable generations per host warm/cold hashes PASS; global graceful
+restart and deletes PASS. Final physical observer **PASS10.240s**. Full65
+failures remain; this is not directory acceptance or physical evidence for
+a newer SHA.
+
+Exact dual-group placement candidate is
+`b0ba38194586b853760ea253a97f5d33961e5bb7`, 783 tracked build inputs.
+Native build/affected controls are underway on both Intel hosts, and live
+validation follows only after both exit successfully. Every preceding
+private store and metadata history remains preserved.
