@@ -532,3 +532,9 @@ update is not timed; a stall there can occur before any capture event. Synchrono
 fprintf, including lock-held events, perturbs diagnostic latency. Preserve this
 source/results first; add that missing discriminator only if evidence requires
 it. Instrumented timing is never quiet acceptance.
+
+[Latest exact-stage evidence](v030-query-stage-diagnostic-20261012.md) establishes
+146 cut revision collisions and46.915/48.816s publication gaps under the original
+pressure budgets. d485 full normal/fault/sixteen sanitizers and ordinary exact
+both-mode cold/cleanup PASS, instrumented pressure FAIL/restored0; no additional
+fix or quiet ON/OFF acceptance. Mac/ORCD now own bounded design/admission analysis.

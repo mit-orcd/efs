@@ -2162,6 +2162,13 @@ diagnostic run. No additional correctness fix is proven yet. Diagnostic review n
 lag-update writer lock is unmeasured and tracing perturbs latency; keep separate
 quiet acceptance.
 
+[AMD query-stage diagnostic](../status/v030-query-stage-diagnostic-20261012.md): d485 full
+normal/fault plus sixteen sanitizers and ordinary both-mode cold/cleanup PASS;
+single instrumented packing run FAIL/restored0. Observed146 transaction-cut
+collisions, zero recorded pending refusals,46.915/48.816s publication gaps.
+Separate coherent-cut/root diagnosis and foreground admission/proposal analysis
+are assigned; no safe additional repair is proven.
+
 
 ## Appendix 2 — In flight — the current handoff block
 
