@@ -695,3 +695,5 @@ Current central qualification freeze: `03bd89fb7de56c2c6af44ab3bd26c54caf4b8274`
 Final `03bd89fb` live verdict: Intel and NUC seven-client FAIL. NUC data/cold/physical/drain checks PASS independently; [NUC report](nuc-release-03bd-group3-20261012.md). Targeted deep-path diagnostic next; candidate unaccepted.
 
 Intel03 also reports EIO/EBUSY in fsync/basic I/O cases; classification pending from retained logs. These remain explicit release blockers alongside deadlines. [Ledger](v030-tcp-direct-qualification-20261012.md).
+
+Qualification STOP checkpoint: newer human stop reported by Intel; no further launches/fixes pending resume.03bd remains unaccepted with seven-client and hard I/O blockers. [Ledger](v030-tcp-direct-qualification-20261012.md).

@@ -2171,6 +2171,8 @@ Final `03bd89fb` live verdict: Intel and NUC seven-client FAIL. NUC data/cold/ph
 
 Intel03 also reports EIO/EBUSY in fsync/basic I/O cases; classification pending from retained logs. These remain explicit release blockers alongside deadlines. [Ledger](../status/v030-tcp-direct-qualification-20261012.md).
 
+Qualification STOP checkpoint: newer human stop reported by Intel; no further launches/fixes pending resume.03bd remains unaccepted with seven-client and hard I/O blockers. [Ledger](../status/v030-tcp-direct-qualification-20261012.md).
+
 
 ## Appendix 2 — In flight — the current handoff block
 
