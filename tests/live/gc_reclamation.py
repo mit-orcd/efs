@@ -10,6 +10,7 @@ import errno
 import ctypes
 import concurrent.futures
 import struct
+import sys
 import hashlib
 import json
 import os
@@ -3101,5 +3102,17 @@ finally:
     try:
         stop()
     finally:
-        if query_work_observer:query_work_observer.__exit__(None,None,None)
-        for h in handles:h.close()
+        cleanup_primary = sys.exc_info()[1]
+        cleanup_error = None
+        try:
+            if query_work_observer:query_work_observer.__exit__(None,None,None)
+        except Exception as error:
+            cleanup_error = error
+        for h in handles:
+            try:h.close()
+            except Exception as error:
+                if cleanup_error is None:cleanup_error = error
+        if cleanup_error is not None:
+            if cleanup_primary is None:raise cleanup_error
+            try:print('fixture secondary observer/handle cleanup failure: '+str(cleanup_error),file=sys.stderr,flush=True)
+            except OSError:pass

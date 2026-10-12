@@ -11,9 +11,9 @@ static int descriptors(void) {int n=0;for(int fd=0;fd<1024;fd++)if(fcntl(fd,F_GE
 int main(int argc,char **argv) {
  assert(argc==3);if(!strcmp(argv[1],"off"))unsetenv("EFS_QUERY_WORK_SOCKET");
  else assert(!setenv("EFS_QUERY_WORK_SOCKET",argv[1],1));
- struct efs_query_capture_work w={.pins=4,.pins_ok=4,.pairs=4,.changed=1,.fast=1,
+ struct efs_query_capture_work w={.pins=4,.pins_ok=4,.pairs=4,.changed=1,.fast_eligible=1,
     .capture_ms=40,.spacing_ms=240,.dirty=256,.build_ms=0,.checkpoint_ms=0,.total_ms=41,
-    .capture_rc=EFS_ERR_BUSY,.reason="transaction-cut"};
+    .capture_rc=EFS_ERR_BUSY,.policy_interval_ms=2000,.reason="transaction-cut"};
  int before=descriptors();for(int i=0;i<atoi(argv[2]);i++)efs_query_capture_work_trace(2,EFS_ERR_BUSY,&w);
  assert(descriptors()==before);puts("nonblocking trace calls complete, descriptors balanced");
 }
@@ -40,8 +40,8 @@ with tempfile.TemporaryDirectory(prefix='efs-work-trace-', dir='/tmp') as temp:
             while not observed and time.monotonic()<deadline:time.sleep(0.001)
             row=dict(x.split('=',1) for x in observed[0].split()[1:])
             assert row==dict(node='2',pid=row['pid'],seq='1',rc='-13',capture_reason='transaction-cut',
-                capture_ms='40',source_ms='0',restore_ms='0',changed='1',fast='1',spacing_ms='240',pins='4',pins_ok='4',pairs='4',
-                dirty='256',build_ms='0',checkpoint_ms='0',total_ms='41',capture_rc='-13')
+                capture_ms='40',source_ms='0',restore_ms='0',changed='1',fast_eligible='1',spacing_ms='240',pins='4',pins_ok='4',pairs='4',
+                dirty='256',build_ms='0',checkpoint_ms='0',total_ms='41',capture_rc='-13',policy_interval_ms='2000')
             observed.clear()
             subprocess.run([str(binary),str(target),'600'],capture_output=True,check=True,timeout=2)
             time.sleep(0.1)

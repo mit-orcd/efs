@@ -202,3 +202,13 @@ Both Mac and ORCD independently pass the actual phase/sender checks; Mac also in
 Observer teardown and handle closure now run in a finally around daemon stop. A regression executes that actual shutdown AST with a controlled stop exception: original exception preserved, observer thread/socket closed. Record caps cover the planned original pressure window: 512 attempts/node allows over 100 s at the maximum five cohorts/s; four node caps fit the 2,048-record receiver limit. Caps/drop/rounding still make missing packets unknown. Pair counts are logical pair API invocations, not exact group-proof or transport RPC counts.
 
 All original safety decisions and scheduling remain unchanged. No new live run has started. Subsequent merged tests/evidence are separate from immutable b239 runs; latest source needs a new full Linux freeze.
+
+## Defect-only shared candidate: optimization quarantined
+
+The next shared candidate restores the pre-b239 scheduling implementation exactly: `query_refresh.h` is byte-identical to `95d3f1b1`; the publisher uses original `efs_query_refresh_due`, coalescing and failure backoff, with no cut-retry state or accelerated admission. Four-cut capture, authority/import/transaction fences and deadlines remain unchanged. Only the unproven retry optimization is removed; W112, namespace fixture correctness, all other true fixes, bounded diagnostics and Mac safety/audit regressions remain.
+
+The quiet-window optimization oracle and earlier b239 evidence are preserved as historical experiments, not stable acceptance. Current actual capture regressions independently retain mixed-cut refusal, ordinary atomic-update noninvalidation, balanced pin/proof counters, final authority refusal after an earlier collision, import/IO/deadline bounds and the intended fence-removal negative control.
+
+Diagnostic `fast_eligible` labels the historical experiment's eligibility only and is never read by scheduling; `policy_interval_ms` records the actual original coalescing/backoff interval. No performance comparison or tuning is authorized. A demonstrated fixture cleanup defect is also repaired: simultaneous daemon-stop and observer-summary failures preserve the primary stop exception while closing every handle; observer/handle failure without a primary remains an explicit failure. Actual shutdown-AST negative controls pass.
+
+All five owners must test one immutable shared source after safely draining/restoring earlier fixtures. Old b239 NUC/ORCD results remain valid only for that source and cannot certify the new shared candidate. Full normal/fault/sanitizer gates and one original-budget phase/work defect diagnostic are pending under the new identity; no push or promotion.

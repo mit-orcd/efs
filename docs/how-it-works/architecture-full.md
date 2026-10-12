@@ -2195,6 +2195,8 @@ Local bounded nonblocking deep-case/capture-work diagnostics now pass focused na
 
 Diagnostic follow-up preserves original stop exceptions while guaranteeing observer cleanup; separates policy whole-path capture from source/restore API intervals. [Peer scope and pending freeze](../status/v030-query-stage-diagnostic-20261012.md#peer-reviewed-diagnostic-timing-and-cleanup-follow-up). Retained Mac backlink inconsistency remains a separate blocker with guarded refusal; NUC direct ordinary gates are source-specific, not AMD pressure acceptance. Current W97 means receiver feedback/queue pressure; historical root-walk comparison is W111.
 
+Release scope is now true-defect testing/fixing only. The next shared candidate restores pre-b239 scheduling and quarantines the unproven retry optimization; all fixes/fences/diagnostics retained. Diagnostic eligibility is historical, not active policy. All owners must qualify the same immutable candidate after safe drain/restoration. [Exact inverse and remaining gates](../status/v030-query-stage-diagnostic-20261012.md#defect-only-shared-candidate-optimization-quarantined).
+
 
 ## Appendix 2 — In flight — the current handoff block
 

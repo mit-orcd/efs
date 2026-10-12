@@ -37,8 +37,8 @@ static inline void efs_query_root_stage_trace(const char *stage,int rc,uint64_t 
  * process. Missing/full observers drop records; diagnostic output is never a
  * permission, publication or scheduling input. Call only after host/query locks. */
 struct efs_query_capture_work {
-    unsigned pins,pins_ok,pairs,changed,fast;
-    uint64_t capture_ms,source_ms,restore_ms,spacing_ms,dirty,build_ms,checkpoint_ms,total_ms;
+    unsigned pins,pins_ok,pairs,changed,fast_eligible;
+    uint64_t capture_ms,source_ms,restore_ms,spacing_ms,dirty,build_ms,checkpoint_ms,total_ms,policy_interval_ms;
     int capture_rc;
     const char *reason;
 };
@@ -56,12 +56,12 @@ static inline void efs_query_capture_work_trace(int node,int rc,const struct efs
     do {if(seq>=512)return;} while(!__atomic_compare_exchange_n(&attempted,&seq,seq+1,0,__ATOMIC_RELAXED,__ATOMIC_RELAXED));
     seq++;
     char line[512];
-    int n=snprintf(line,sizeof(line),"query-work: node=%d pid=%ld seq=%u rc=%d capture_reason=%s capture_ms=%llu source_ms=%llu restore_ms=%llu changed=%u fast=%u spacing_ms=%llu pins=%u pins_ok=%u pairs=%u dirty=%llu build_ms=%llu checkpoint_ms=%llu total_ms=%llu capture_rc=%d\n",
+    int n=snprintf(line,sizeof(line),"query-work: node=%d pid=%ld seq=%u rc=%d capture_reason=%s capture_ms=%llu source_ms=%llu restore_ms=%llu changed=%u fast_eligible=%u spacing_ms=%llu pins=%u pins_ok=%u pairs=%u dirty=%llu build_ms=%llu checkpoint_ms=%llu total_ms=%llu capture_rc=%d policy_interval_ms=%llu\n",
         node,(long)getpid(),seq,rc,w->reason?w->reason:"unknown",
-        (unsigned long long)w->capture_ms,(unsigned long long)w->source_ms,(unsigned long long)w->restore_ms,w->changed,w->fast,
+        (unsigned long long)w->capture_ms,(unsigned long long)w->source_ms,(unsigned long long)w->restore_ms,w->changed,w->fast_eligible,
         (unsigned long long)w->spacing_ms,w->pins,w->pins_ok,w->pairs,
         (unsigned long long)w->dirty,(unsigned long long)w->build_ms,
-        (unsigned long long)w->checkpoint_ms,(unsigned long long)w->total_ms,w->capture_rc);
+        (unsigned long long)w->checkpoint_ms,(unsigned long long)w->total_ms,w->capture_rc,(unsigned long long)w->policy_interval_ms);
     if(n<0 || (size_t)n>=sizeof(line))return;
     int fd=socket(AF_UNIX,SOCK_DGRAM,0);
     if(fd<0)return;

@@ -90,12 +90,37 @@ try:
         def failed_stop(): raise RuntimeError('controlled daemon stop')
         try:
             exec(compile(ast.Module(body=[guard], type_ignores=[]), '<actual-shutdown>', 'exec'),
-                 dict(stop=failed_stop, query_work_observer=observer, handles=[]))
+                 dict(stop=failed_stop, query_work_observer=observer, handles=[], sys=sys))
             raise AssertionError('stop exception suppressed')
         except RuntimeError as error:
             assert str(error) == 'controlled daemon stop'
         assert not observer.path.exists() and not observer.thread.is_alive()
 
+
+        class FailedObserver:
+            def __exit__(self, *args): raise OSError('controlled observer summary write')
+        class ClosingHandle:
+            def __init__(self, fail=False): self.closed=False; self.fail=fail
+            def close(self):
+                self.closed=True
+                if self.fail:raise OSError('controlled handle close')
+        for fails_stop in (True, False):
+            first, second = ClosingHandle(), ClosingHandle()
+            action=failed_stop if fails_stop else lambda: None
+            try:
+                exec(compile(ast.Module(body=[guard], type_ignores=[]), '<actual-shutdown>', 'exec'),
+                     dict(stop=action,query_work_observer=FailedObserver(),handles=[first,second],sys=sys))
+                raise AssertionError('cleanup failure suppressed without primary')
+            except (RuntimeError, OSError) as error:
+                assert str(error)==('controlled daemon stop' if fails_stop else 'controlled observer summary write')
+            assert first.closed and second.closed
+        first, second=ClosingHandle(True),ClosingHandle()
+        try:
+            exec(compile(ast.Module(body=[guard], type_ignores=[]), '<actual-shutdown>', 'exec'),
+                 dict(stop=lambda:None,query_work_observer=None,handles=[first,second],sys=sys))
+            raise AssertionError('handle failure suppressed')
+        except OSError as error:assert str(error)=='controlled handle close'
+        assert first.closed and second.closed
 
         print('actual deep60 operations unchanged; default quiet; ordered native observer phases; missing/full sink nonblocking; failed leaf phase/status and observer cleanup PASS')
 finally:
