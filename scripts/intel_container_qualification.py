@@ -6,7 +6,7 @@ Outputs stay below the supplied local artifact directory, outside Git.
 """
 import argparse,concurrent.futures,json,shlex,subprocess,time
 from pathlib import Path
-p=argparse.ArgumentParser(description=__doc__);p.add_argument('gate',choices=['core','peer','mmap','concurrent','lifecycle-create','lifecycle-cold','lifecycle-delete']);p.add_argument('--base',default='/data1/efs/bench/container-3173be61-20261012');p.add_argument('--output',type=Path,required=True);a=p.parse_args();a.output.mkdir(parents=True,exist_ok=True)
+p=argparse.ArgumentParser(description=__doc__);p.add_argument('gate',choices=['core','peer','mmap','concurrent','lifecycle-create','lifecycle-read','lifecycle-churn','lifecycle-verify','lifecycle-cold','lifecycle-delete']);p.add_argument('--base',default='/data1/efs/bench/container-3173be61-20261012');p.add_argument('--output',type=Path,required=True);a=p.parse_args();a.output.mkdir(parents=True,exist_ok=True)
 s=a.base+'/src';remoteout=a.base+'/artifacts';rows=[]
 def run(host,index,name,argv,timeout):
  c={'name':name,'argv':argv,'timeout':timeout};cmd=['python3',a.base+'/intel_container_node.py','run','--base',a.base,'--host-index',str(index),'--command',json.dumps(c)]
@@ -25,6 +25,6 @@ for index,host in enumerate(['intel1_efs','intel2_efs']):
    jobs.append((host,index,tag,argv,600))
  elif a.gate=='peer':jobs.append((host,index,name,['python3',s+'/tests/posix/posix_2client.py','--local',m,a.base+'/mnt1','--parent',name,'--results',remoteout+'/'+name+'.tsv'],600))
  elif index==0:
-  phase={'lifecycle-create':'create','lifecycle-cold':'verify','lifecycle-delete':'delete'}[a.gate];jobs.append((host,index,name,['python3',s+'/tests/live/storage_engine_ab.py',phase,'--mount',m,'--state',remoteout+'/lifecycle-state.json','--output',remoteout+'/'+name+'.json','--seconds','0'],600))
+  phase={'lifecycle-create':'create','lifecycle-read':'read','lifecycle-churn':'churn','lifecycle-verify':'verify','lifecycle-cold':'verify','lifecycle-delete':'delete'}[a.gate];jobs.append((host,index,name,['python3',s+'/tests/live/storage_engine_ab.py',phase,'--mount',m,'--state',remoteout+'/lifecycle-state.json','--output',remoteout+'/'+name+'-workload.json','--seconds','30' if phase in ('read','churn') else '0'],600))
 with concurrent.futures.ThreadPoolExecutor(max_workers=len(jobs)) as pool:rows=list(pool.map(lambda j:run(*j),jobs))
 (a.output/(a.gate+'-summary.json')).write_text(json.dumps(rows,indent=2));raise SystemExit(1 if any(r['returncode'] for r in rows) else 0)

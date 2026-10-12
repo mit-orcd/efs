@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Unprivileged private Intel container fixture actions; raw evidence stays outside Git."""
-import argparse,hashlib,json,os,signal,socket,subprocess,time
+import argparse,hashlib,json,os,re,signal,socket,subprocess,time
 from pathlib import Path
-p=argparse.ArgumentParser(description=__doc__);p.add_argument('action',choices=['proof','start','mount','stop-clients','stop-servers','run','inventory']);p.add_argument('--base',type=Path,required=True);p.add_argument('--host-index',type=int,choices=[0,1],required=True);p.add_argument('--command');p.add_argument('--clients',type=int,default=2,choices=range(1,8));a=p.parse_args()
+p=argparse.ArgumentParser(description=__doc__);p.add_argument('action',choices=['build','proof','start','mount','stop-clients','stop-servers','run','inventory']);p.add_argument('--base',type=Path,required=True);p.add_argument('--host-index',type=int,choices=[0,1],required=True);p.add_argument('--command');p.add_argument('--source-commit');p.add_argument('--clients',type=int,default=2,choices=range(1,8));a=p.parse_args()
 b=a.base.resolve();assert b.parent==Path('/data1/efs/bench') and b.name.startswith('container-') and os.getuid()!=0
 s=b/'src';out=b/'artifacts';out.mkdir(exist_ok=True)
 env={k:v for k,v in os.environ.items() if not k.startswith('EFS_')};env.update(EFS_MD_RAFT_N='4',EFS_TRANSPORT='tcp',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_PACKED_WRITES='0')
@@ -25,7 +25,15 @@ def stop(row):
   time.sleep(.1)
  else:os.close(fd);raise RuntimeError('graceful daemon stop deadline')
  os.close(fd)
-if a.action=='proof':
+if a.action=='build':
+ assert a.source_commit and re.fullmatch('[0-9a-f]{40}',a.source_commit),'exact source commit required'
+ m=json.loads((b/'devel-container-inputs.json').read_text());assert all(hashlib.sha256((s/n).read_bytes()).hexdigest()==h for n,h in m.items()),'source mismatch'
+ with (out/'build.log').open('w') as f:
+  subprocess.run(['make','clean'],cwd=s,stdout=f,stderr=f,check=True)
+  cmd=['make','-j4','EFS_GIT_ID='+a.source_commit,'EFS_GIT_DESCRIBE='+a.source_commit,'EFS_GIT_BRANCH=devel-container','efsd','efs-fuse','efs-mgmt','efs-query','tests/test_store_containers','tests/test_store_durability','tests/test_store_gc','tests/test_store_overwrite']
+  subprocess.run(cmd,cwd=s,stdout=f,stderr=f,check=True)
+ (out/'build-identity.json').write_text(json.dumps({'source':a.source_commit,'command':cmd},indent=2));print('build PASS')
+elif a.action=='proof':
  m=json.loads((b/'devel-container-inputs.json').read_text());bad=[n for n,h in m.items() if hashlib.sha256((s/n).read_bytes()).hexdigest()!=h];assert not bad,bad
  print(json.dumps({'inputs':len(m),'all_match':True,'binaries':{n:hashlib.sha256((s/n).read_bytes()).hexdigest() for n in ('efsd','efs-fuse','efs-mgmt','efs-query')},'version':subprocess.check_output([str(s/'efsd'),'--version'],text=True)}))
 elif a.action=='start':
