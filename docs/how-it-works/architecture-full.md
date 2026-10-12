@@ -1996,6 +1996,8 @@ acceptance or new priority order.
 
 ### Maintaining this index
 
+[Project evidence rule](../../AGENTS.md#evidence-and-reproducibility): commit summaries and reproducible commands; keep raw captures outside Git. Existing raw evidence is migrated only after its conclusions and reproduction steps are preserved.
+
 Every new active finding must receive an unused W number and a row here,
 with its class, current state, evidence, next action and acceptance gate.
 A decision belongs in the D register; "decided" means an approved design,

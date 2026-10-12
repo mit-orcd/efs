@@ -78,3 +78,6 @@ __pycache__/
 /tests/test_repair_file_atomic
 
 /tests/test_repair_store_identity
+
+# Raw run artifacts: commit summaries and reproduction recipes instead.
+/artifacts/

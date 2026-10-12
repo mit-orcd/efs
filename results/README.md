@@ -1,18 +1,21 @@
-# efs test results (tracked in git)
+# EFS evidence summaries and reproduction recipes
 
-This tree records the correctness and performance runs that a live document
-cites, so a number in a doc can be checked against its raw files. Each run
-gets a UTC `run_id` directory.
+This tree holds concise committed results and instructions to reproduce them.
+The repository-wide [project rule](../AGENTS.md#evidence-and-reproducibility)
+requires raw captures to remain outside Git or under ignored `/artifacts/`.
 
-## Retention
+## Evidence policy
 
-Keep recent correctness gates, current investigations, reference baselines,
-and runs cited by active documentation, tests or scripts. An uncited recent
-report can remain while it supports work in progress. Old failed setup attempts,
-superseded runs and repetitive debug captures can be removed once their useful
-findings are recorded. Generated documentation and history-only citations do not
-require indefinite raw-log retention. When pruning a cited run's raw files, keep
-its summary and explicitly identify the evidence that was removed.
+Commit the tested source/build identity, environment and configuration, exact
+commands, workload and budgets, expected oracles, observed verdicts, limitations
+and cleanup instructions. Keep reusable reproduction scripts; do not commit
+raw logs, traces, profiler recordings, generated payloads or runtime stores.
+External capture locations and hashes may be recorded in the summary.
+
+Existing raw files below are historical and awaiting summary/reproduction
+migration. Their presence is not permission to add further raw captures.
+Remove historical evidence only after preserving its conclusions and enough
+instructions to reproduce the relevant release gate or unresolved finding.
 
 Oct 6 2026 cleanup removed two uncited older POSIX2 runs, an unused server-perf
 attempt, three superseded W23 setup attempts, and the W50 pass-3 leader logs and
@@ -28,7 +31,7 @@ final comparisons remain. Latest release qualification and open-item evidence
 remain retained. [Inventory, canonical paths and recovery hashes](measure/20261012-evidence-cleanup/manifest.json)
 and [scope](measure/20261012-evidence-cleanup/README.md) record every change.
 
-## Layout
+## Historical layout
 
 ```
 results/
@@ -62,7 +65,6 @@ tests/run_tests.sh posix2 fcstor007.ib fcstor008.ib
 tests/run_tests.sh nvme full both                 # 4-server /data1/01-06 NVMe ceiling
 tests/run_tests.sh meta fcstor007.ib              # efs-bench --meta 1/4/16 workers
 tests/run_tests.sh leaks fcstor003.ib             # valgrind gate
-COMMIT=1 tests/run_tests.sh posix                 # + git-commit the results
 
 bash tests/measure/dd_wall.sh                     # 1/4/9-client dd+fsync wall
 bash tests/stress/fio_honest_matrix.sh results/perf/<run_id>-honest
