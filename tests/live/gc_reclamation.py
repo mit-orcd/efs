@@ -113,6 +113,7 @@ p.add_argument('--mount', type=Path, help='existing empty, unmounted path allowe
 p.add_argument('--peer-mount', type=Path, help='existing empty, unmounted second policy-allowed mount')
 p.add_argument('--packing-clients',type=int,choices=(2,7),default=2,help='two or seven mounted clients for the isolated packing gate')
 p.add_argument('--ordinary-overwrite-only',action='store_true',help='ordinary span-to-full overwrite, immediate primary/peer bytes, cold restart and physical cleanup')
+p.add_argument('--disable-efs-commands', action='store_true', help='disable client/server .efs query work; use core POSIX qualification while retaining packed writes')
 p.add_argument('--mounted-packing-only', action='store_true', help='opt-in mounted tiny coalescing, mixed mutation, peer/cold hashes, POSIX and physical packed reclamation')
 p.add_argument('--posix', action='store_true')
 p.add_argument('--posix-jobs', type=int, default=4, help='parallel POSIX cases (default: 4); each case retains its own concurrent writers')
@@ -269,6 +270,9 @@ if a.replication_pressure:
 if a.mounted_packing_only:env.update(EFS_PACKED_WRITES='1',EFS_COMMANDS='1',EFS_COMMANDS_SERVER='1')
 if a.ordinary_overwrite_only:env['EFS_PACKED_WRITES']='0'
 if a.efs_commands_only:env.update(EFS_COMMANDS='1',EFS_COMMANDS_SERVER='1',EFS_QUERY_TEST_PORT=str(a.port))
+if a.disable_efs_commands:
+    assert not a.efs_commands_only, 'command-only gate conflicts with disabled .efs'
+    env.update(EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0')
 if a.storage_session_fence_fault:
     assert a.guarded_leases and not (a.put_barrier_fault or a.kv_wal_persistence_only or a.compactor_pressure), 'certificate fault must own its preload'
     subprocess.run(['cc','-Wall','-Wextra','-Werror','-shared','-fPIC',source/'tests/live/storage_session_fence_fault.c','-ldl','-o',work/'put-session-fault.so'],check=True)
@@ -645,7 +649,7 @@ try:
                 wait(lambda:os.path.ismount(target),'packing extra client '+str(i)+' mounted',40)
             def concurrent_posix(item):
                 i,target=item
-                command=['python3',source/'tests/posix/posix_suite.py',target,'--suite','all','--jobs',str(a.posix_jobs),'--timeout-s','30',
+                command=['python3',source/'tests/posix/posix_suite.py',target,'--suite',('core' if a.disable_efs_commands else 'all'),'--jobs',str(a.posix_jobs),'--timeout-s','30',
                          '--tag','pack-'+str(i),'--results',work/('posix-client-'+str(i)+'.tsv')]
                 with (work/('posix-client-'+str(i)+'.log')).open('wb') as output:
                     result=subprocess.run(list(map(str,command)),env=phase_observer.environment(env,i),stdout=output,stderr=subprocess.STDOUT,timeout=600)
@@ -659,7 +663,7 @@ try:
             extra_clients.clear()
         if a.posix:
             for label,command in (
-                ('posix',['python3',source/'tests/posix/posix_suite.py',mount,'--suite','all','--jobs',str(a.posix_jobs),'--timeout-s','30','--results',work/'posix.tsv']),
+                ('posix',['python3',source/'tests/posix/posix_suite.py',mount,'--suite',('core' if a.disable_efs_commands else 'all'),'--jobs',str(a.posix_jobs),'--timeout-s','30','--results',work/'posix.tsv']),
                 ('peer',['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,'--parent','pack-posix-peer','--results',work/'posix2.tsv'])):
                 if label=='posix' and a.packing_clients==7:continue
                 result=subprocess.run(list(map(str,command)),env=env,timeout=600)
