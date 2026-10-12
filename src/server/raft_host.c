@@ -4077,8 +4077,11 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             host_view_get(h, group, &v);
             continue;
         }
-        if (host_past_deadline(&end))
+        if (host_past_deadline(&end)) {
+            if (prof) fprintf(stderr,"raft-host: admitted-read-timeout group=%u want=%llu admitted_round=%llu admitted_term=%llu role=%d leader=%d term=%llu raw_round=%llu raw_index=%llu raw_done=%d pending=%d proven_round=%llu proven_index=%llu proven_done=%d applied=%llu commit=%llu\n",
+                group,(unsigned long long)want,(unsigned long long)round,(unsigned long long)admitted_term,v.role,v.leader,(unsigned long long)v.term,(unsigned long long)v.read_round,(unsigned long long)v.read_index,v.read_done,v.read_pending,(unsigned long long)v.proven_round,(unsigned long long)v.proven_index,v.proven_done,(unsigned long long)v.applied,(unsigned long long)v.commit);
             return EFS_ERR_BUSY;
+        }
         /* read_done lands when heartbeat replies arrive — the pump
          * publishes the view and broadcasts applied_cv each cycle. */
         pthread_mutex_lock(&h->cv_mu);
@@ -17172,7 +17175,11 @@ static int host_publication_committed(struct efs_raft_host *h, uint8_t group,
         if (!v.has || v.role!=EFS_RAFT_LEADER || v.term!=term)
             return EFS_ERR_NOT_PRIMARY;
         if (v.read_done && v.read_round>=round && v.read_index>=want) break;
-        if (host_past_deadline(&end)) return EFS_ERR_BUSY;
+        if (host_past_deadline(&end)) {
+            if (read_prof_on()) fprintf(stderr,"raft-host: publication-read-timeout group=%u want=%llu admitted_round=%llu admitted_term=%llu role=%d leader=%d term=%llu raw_round=%llu raw_index=%llu raw_done=%d pending=%d proven_round=%llu proven_index=%llu proven_done=%d applied=%llu commit=%llu\n",
+                group,(unsigned long long)want,(unsigned long long)round,(unsigned long long)term,v.role,v.leader,(unsigned long long)v.term,(unsigned long long)v.read_round,(unsigned long long)v.read_index,v.read_done,v.read_pending,(unsigned long long)v.proven_round,(unsigned long long)v.proven_index,v.proven_done,(unsigned long long)v.applied,(unsigned long long)v.commit);
+            return EFS_ERR_BUSY;
+        }
         pthread_mutex_lock(&h->mu);
         r=group_raft(h,group);
         int rc=EFS_OK;
