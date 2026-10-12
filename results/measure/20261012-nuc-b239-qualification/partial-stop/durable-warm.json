@@ -1,0 +1,9 @@
+{
+  "records": 2409,
+  "bytes": 9867264,
+  "fsync_returned_zero": true,
+  "fsync_seconds": 0.5131118349963799,
+  "primary_sha256": "43646503e86542243958ebe1391e2a5798a77800eb7585d50a926531be6d3201",
+  "peer_sha256": "43646503e86542243958ebe1391e2a5798a77800eb7585d50a926531be6d3201",
+  "gate": "Partial orderly-stop witness only; 20k NOTRUN/STOPPED"
+}

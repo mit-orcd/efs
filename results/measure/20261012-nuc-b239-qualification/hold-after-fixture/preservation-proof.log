@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/data1/efs/nuc-b239-qualification/proof.py", line 8, in <module>
+    for r in rows:assert digest(r['path'])==r['sha256'],r['path']
+                         ^^^^^^^^^^^^^^^^^
+  File "/data1/efs/nuc-b239-qualification/proof.py", line 4, in digest
+    def digest(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+                                        ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.12/pathlib.py", line 1019, in read_bytes
+    with self.open(mode='rb') as f:
+         ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.12/pathlib.py", line 1013, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/data1/efs/mnt/w52-clock-20000-before-2000-20261011/append-burst'

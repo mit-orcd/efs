@@ -1,0 +1,16 @@
+[
+  {
+    "directory": "/data1/efs/devel-nuc-20261011/catchup-w112-native-staging/catchup-base-src",
+    "before_kib": 202856,
+    "after_kib": 15396,
+    "make_clean_exit": 0,
+    "scope": "Never-installed superseded101 native inputs failed doc gate; only rebuildable compiled output removed"
+  },
+  {
+    "directory": "/data1/efs/devel-nuc-20261011/catchup-w112-native-staging/catchup-root-src",
+    "before_kib": 202876,
+    "after_kib": 15400,
+    "make_clean_exit": 0,
+    "scope": "Never-installed superseded101 native inputs failed doc gate; only rebuildable compiled output removed"
+  }
+]

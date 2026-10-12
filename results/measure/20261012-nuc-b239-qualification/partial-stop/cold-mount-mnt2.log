@@ -1,0 +1,3 @@
+Stop with: /data1/efs/nuc-b239-qualification/source/scripts/client.sh stop /data1/efs/mnt2
+Logging efs-fuse to /data1/efs/nuc-b239-qualification/partial-stop/mnt2-cold-fuse.log
+Mounted /data1/efs/mnt2
