@@ -69,3 +69,15 @@ A private candidate source on fcstor007 reads the actual mounted query snapshot:
 246111. [Live candidate output](../../results/measure/20261011-orcd-tiny-packing/w108-candidate-live.txt).
 This does not replace the running embedded command. Keep W108 open until the
 rebuilt clients serve these bytes and shared find/ls live gates pass.
+
+
+## ORCD rollout acceptance — October 12
+
+**PASS** on `devel-efs` source `0dd2a7c7912b4fec4b2ee6f6237075f2a7d3e5b5`:
+rebuilt embedded `ls` and `find` print `erbmi1:erbmi1` on all seven ORCD clients,
+warm and after orderly restart; numeric mode and JSON retain UID/GID246111.
+The 29 native formatter regressions pass. RDMA/direct-I/O/files engine,
+commands enabled, packing/containers disabled, expiry deferred. W108's formatter
+rollout gate is satisfied. [Reproduction and exact-source qualification](devel-efs-query-20261012.md)
+records binary identities, concurrent query passes and remaining broader gates.
+The preceding private-candidate checkpoint is historical.

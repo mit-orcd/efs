@@ -1,11 +1,13 @@
 # Project status — current work and index
 
 [devel-efs scope and outstanding items](devel-efs-20261012.md) records the new
-release-v0.3.2-based branch, four active direct items (expiry deferred) and the requested ORCD
+release-v0.3.2-based branch, the original four-item scope (expiry deferred) and the requested ORCD
 RDMA/direct-I/O profile with commands enabled and containers/packing disabled.
-Deployment is complete; enabled-feature acceptance retains concurrent query
-failures. [ORCD command qualification](devel-efs-query-20261012.md) records
-focused passes, mixed-load failures and the bounded retry candidate.
+Deployment and ordinary-file ORCD command gates PASS at `0dd2a7c7`: six
+focused suites, three quiet mixed rounds (4,536 POSIX + 63 query cases), peer67,
+cold queries/owner names, policy persistence and 1 GiB exact-payload/export
+verification. [ORCD command qualification](devel-efs-query-20261012.md) retains
+the failing baseline, fix and limitations. Broader scale/platform gates remain open.
 
 **Current release integration:** `release-v0.3.2-pre-alpha` merges reviewed ORCD evidence9fc5e024 into v0.3.1. Product/test inputs unchanged. AMD TCP/direct and TCP/buffered PASS; independently reviewed ORCD nativeRDMA/direct two core rounds1512/1512 and peer67/67 per round, native/fault/sanitizers/cold/physicalGC PASS. Tested SHAs remain15e2a531 AMD and40f4509d ORCD; the merge itself was not remotely executed. Packing/containers/.efs/repair remain disabled. No push/tag/deployment. [v0.3.2 review and coverage](v032-integration-review-20261012.md).
 

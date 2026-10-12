@@ -5007,9 +5007,14 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 
 ## W108 · Resolve owner names in directory-local long listings
 
-**Class/state:** Command usability; implemented with rollout gate open.
+**Class/state:** Command usability; closed (rebuilt ORCD rollout PASS Oct 12).
 
-**Oct 11 checkpoint:** names/fallback, bounded NSS cache, numeric `-n` mode and
+**Oct 12 acceptance:** `devel-efs` source `0dd2a7c7` passes all seven rebuilt
+ORCD clients, warm/cold shared ls/find names, numeric mode and JSON, plus29
+native regressions. RDMA/direct/files, commands enabled, packing/containers
+disabled. [Exact-source qualification](../status/devel-efs-query-20261012.md).
+
+**Historical Oct 11 checkpoint:** names/fallback, bounded NSS cache, numeric `-n` mode and
 safe output are implemented; 29 local regressions and the live candidate using
 ORCD's actual snapshot pass. The running clients still embed the old formatter;
 keep the rebuilt-client/shared find/ls deployment gate open.
@@ -5027,6 +5032,14 @@ ORCD virtual command. Now owned by `devel-orcd` under the user's ORCD assignment
 
 **Class/state:** liveness/performance investigation; open.
 **Assigned cluster:** `orcd-test` — native IB/RDMA, direct I/O.
+
+**Oct 12 scoped acceptance:** `devel-efs` `0dd2a7c7` fixes fresh coherent
+capture collisions without weakening transaction fences or test deadlines.
+Three quiet seven-client ordinary-file rounds pass4,536 core/63 query cases,
+peer67 and enabled cold exact-payload/path checks. The a54 baseline retains14
+query failures. Broader original namespace/pressure/scale investigations stay
+open; packing, expiry and unplanned recovery are outside this profile.
+[Fix and reproduction](../status/devel-efs-query-20261012.md).
 
 C profiles show substantial query rebuild work (42.96% inclusive on fcstor005);
 fcstor004 logs 15 apply waits of 21.668–50.117 ms. Earlier full-load gates retain

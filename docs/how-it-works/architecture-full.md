@@ -1475,11 +1475,13 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-release-v0.3.2-based branch, four active direct items (expiry deferred) and the requested ORCD
+release-v0.3.2-based branch, the original four-item scope (expiry deferred) and the requested ORCD
 RDMA/direct-I/O profile with commands enabled and containers/packing disabled.
-Deployment is complete; enabled-feature acceptance retains concurrent query
-failures. [ORCD command qualification](../status/devel-efs-query-20261012.md) records
-focused passes, mixed-load failures and the bounded retry candidate.
+Deployment and ordinary-file ORCD command gates PASS at `0dd2a7c7`: six
+focused suites, three quiet mixed rounds (4,536 POSIX + 63 query cases), peer67,
+cold queries/owner names, policy persistence and 1 GiB exact-payload/export
+verification. [ORCD command qualification](../status/devel-efs-query-20261012.md) retains
+the failing baseline, fix and limitations. Broader scale/platform gates remain open.
 
 **Current release integration:** `release-v0.3.2-pre-alpha` merges reviewed ORCD evidence9fc5e024 into v0.3.1. Product/test inputs unchanged. AMD TCP/direct and TCP/buffered PASS; independently reviewed ORCD nativeRDMA/direct two core rounds1512/1512 and peer67/67 per round, native/fault/sanitizers/cold/physicalGC PASS. Tested SHAs remain15e2a531 AMD and40f4509d ORCD; the merge itself was not remotely executed. Packing/containers/.efs/repair remain disabled. No push/tag/deployment. [v0.3.2 review and coverage](../status/v032-integration-review-20261012.md).
 
@@ -7586,9 +7588,14 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 
 ### W108 · Resolve owner names in directory-local long listings
 
-**Class/state:** Command usability; implemented with rollout gate open.
+**Class/state:** Command usability; closed (rebuilt ORCD rollout PASS Oct 12).
 
-**Oct 11 checkpoint:** names/fallback, bounded NSS cache, numeric `-n` mode and
+**Oct 12 acceptance:** `devel-efs` source `0dd2a7c7` passes all seven rebuilt
+ORCD clients, warm/cold shared ls/find names, numeric mode and JSON, plus29
+native regressions. RDMA/direct/files, commands enabled, packing/containers
+disabled. [Exact-source qualification](../status/devel-efs-query-20261012.md).
+
+**Historical Oct 11 checkpoint:** names/fallback, bounded NSS cache, numeric `-n` mode and
 safe output are implemented; 29 local regressions and the live candidate using
 ORCD's actual snapshot pass. The running clients still embed the old formatter;
 keep the rebuilt-client/shared find/ls deployment gate open.
@@ -7606,6 +7613,14 @@ ORCD virtual command. Now owned by `devel-orcd` under the user's ORCD assignment
 
 **Class/state:** liveness/performance investigation; open.
 **Assigned cluster:** `orcd-test` — native IB/RDMA, direct I/O.
+
+**Oct 12 scoped acceptance:** `devel-efs` `0dd2a7c7` fixes fresh coherent
+capture collisions without weakening transaction fences or test deadlines.
+Three quiet seven-client ordinary-file rounds pass4,536 core/63 query cases,
+peer67 and enabled cold exact-payload/path checks. The a54 baseline retains14
+query failures. Broader original namespace/pressure/scale investigations stay
+open; packing, expiry and unplanned recovery are outside this profile.
+[Fix and reproduction](../status/devel-efs-query-20261012.md).
 
 C profiles show substantial query rebuild work (42.96% inclusive on fcstor005);
 fcstor004 logs 15 apply waits of 21.668–50.117 ms. Earlier full-load gates retain
