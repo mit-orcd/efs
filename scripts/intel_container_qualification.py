@@ -20,6 +20,9 @@ if a.gate=='reclaim':
  def inventory(pair):
   index,host=pair
   cmd=['python3',a.base+'/intel_container_node.py','inventory','--base',a.base,'--host-index',str(index)]
+  check=['python3','-c',"import json,sys;from pathlib import Path;print(json.dumps([p.name for p in Path(sys.argv[1]).iterdir()]))",a.base+'/mnt0']
+  names=json.loads(subprocess.check_output(['ssh',host,shlex.join(check)],text=True,timeout=15))
+  assert not names,(host,'reclamation requires an empty private export',names)
   return {'host':host,'nodes':json.loads(subprocess.check_output(['ssh',host,shlex.join(cmd)],text=True,timeout=15))}
  begin=time.monotonic();deadline=begin+180;history=[];passed=False
  while time.monotonic()<deadline:
@@ -33,7 +36,7 @@ if a.gate=='reclaim':
  raise SystemExit(0 if passed else 1)
 if a.gate=='restart':
  # A cluster-wide phase barrier preserves quorum until EVERY client drains.
- for action,timeout in [('stop-clients',400),('stop-servers',60),('start',30),('mount',90)]:
+ for action,timeout in [('stop-clients',400),('stop-servers',60),('start',90),('mount',90)]:
   jobs=[]
   for index,host in enumerate(['intel1_efs','intel2_efs']):
    argv=['python3',a.base+'/intel_container_node.py',action,'--base',a.base,'--host-index',str(index)]

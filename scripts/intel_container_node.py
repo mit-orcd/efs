@@ -50,7 +50,19 @@ elif a.action=='start':
   cmd=[str(s/'efsd'),'--node-id',str(n),'--addr',ip,'--port',str(27432+j),'--storage',str(r),'--quota','4G','--writers','2','--storage-engine','containers','--direct-io']
   if n!=1:cmd+=['--join','10.0.0.207:27432']
   rows.append(launch(cmd,'n%d'%n))
- (out/'servers.json').write_text(json.dumps(rows,indent=2));print(json.dumps(rows))
+ (out/'servers.json').write_text(json.dumps(rows,indent=2))
+ # Popen success does not mean storage recovery has opened the listener yet.
+ deadline=time.monotonic()+60
+ for port in (27432,27433):
+  while True:
+   try:
+    with socket.create_connection((ip,port),1):pass
+    break
+   except OSError:
+    assert time.monotonic()<deadline,'daemon listener startup timeout'
+    assert all(Path('/proc',str(r['pid'])).exists() for r in rows),'daemon exited during recovery'
+    time.sleep(.2)
+ print(json.dumps(rows))
 elif a.action=='mount':
  rows=json.loads((out/'clients.json').read_text()) if (out/'clients.json').exists() else [];seed=['10.0.0.209:27432','10.0.0.207:27432'][a.host_index]
  # Existing stopped clients may be remounted; live clients retain their identities.
@@ -61,10 +73,13 @@ elif a.action=='mount':
    continue
   m=b/('mnt%d'%i);m.mkdir(exist_ok=True);assert not mounted(m)
   row=launch([str(s/'efs-fuse'),seed,'fs',str(m),'-f'],'client%d'%i);end=time.monotonic()+40
-  while not mounted(m):
-   assert time.monotonic()<end,'mount timeout';time.sleep(.1)
   if i<len(rows):rows[i]=row
   else:rows.append(row)
+  (out/'clients.json').write_text(json.dumps(rows,indent=2))
+  while not mounted(m):
+   assert time.monotonic()<end,'mount timeout';time.sleep(.1)
+  while subprocess.run(['timeout','3','stat',str(m)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode:
+   assert time.monotonic()<end,'mounted client serving timeout';time.sleep(.2)
  (out/'clients.json').write_text(json.dumps(rows,indent=2));print(json.dumps(rows))
 elif a.action=='stop-clients':
  for row in json.loads((out/'clients.json').read_text()):
