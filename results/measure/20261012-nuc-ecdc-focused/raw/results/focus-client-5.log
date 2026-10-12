@@ -1,0 +1,12 @@
+2026-10-12T13:51:21.238Z efs-fuse ecdc8c60-frozen (branch qualification-v030-tcp-direct, built 2026-10-12T13:49:48Z on nuc), build=ecdc8c60-group3-normal: starting export=default mount=/tmp/efs-focus-5-qo0mgu0d
+2026-10-12T13:51:21.239Z Discovered 4 cluster nodes from 127.0.0.1:24410
+2026-10-12T13:51:21.239Z   node id=1 127.0.0.1:24410
+2026-10-12T13:51:21.239Z   node id=2 127.0.0.1:24411
+2026-10-12T13:51:21.239Z   node id=3 127.0.0.1:24412
+2026-10-12T13:51:21.239Z   node id=4 127.0.0.1:24413
+2026-10-12T13:51:21.239Z fetching metadata...
+2026-10-12T13:51:21.239Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T13:51:21.239Z export id=1 name=default
+2026-10-12T13:51:21.239Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T13:51:21.242Z efs-fuse: workers max=10 idle=10
+2026-10-12T13:51:21.246Z fuse serving

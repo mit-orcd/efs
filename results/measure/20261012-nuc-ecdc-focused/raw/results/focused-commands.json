@@ -1,0 +1,494 @@
+[
+  {
+    "label": "mkfs",
+    "command": [
+      "/home/efs/nuc-ecdc-focus/source-normal/efs-mgmt",
+      "raft-mkfs",
+      "127.0.0.1:24410"
+    ],
+    "source": "ecdc8c6034b610a2bf69e7a79664d8a5e990de84",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "timeout": 60,
+    "returncode": 0,
+    "seconds": 0.008328766998602077
+  },
+  {
+    "label": "deep-client-0",
+    "command": [
+      "/usr/bin/python3",
+      "/home/efs/nuc-ecdc-focus/source-normal/tests/posix/posix_suite.py",
+      "/data1/efs/mnt",
+      "--suite",
+      "core",
+      "--filter",
+      "dir_deep_nesting",
+      "--jobs",
+      "16",
+      "--timeout-s",
+      "30",
+      "--tag",
+      "focus-0",
+      "--results",
+      "/home/efs/nuc-ecdc-focus/results/deep-client-0.tsv"
+    ],
+    "source": "ecdc8c6034b610a2bf69e7a79664d8a5e990de84",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "timeout": 600,
+    "returncode": 0,
+    "seconds": 2.219363711992628
+  },
+  {
+    "label": "deep-client-1",
+    "command": [
+      "/usr/bin/python3",
+      "/home/efs/nuc-ecdc-focus/source-normal/tests/posix/posix_suite.py",
+      "/data1/efs/mnt2",
+      "--suite",
+      "core",
+      "--filter",
+      "dir_deep_nesting",
+      "--jobs",
+      "16",
+      "--timeout-s",
+      "30",
+      "--tag",
+      "focus-1",
+      "--results",
+      "/home/efs/nuc-ecdc-focus/results/deep-client-1.tsv"
+    ],
+    "source": "ecdc8c6034b610a2bf69e7a79664d8a5e990de84",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "timeout": 600,
+    "returncode": 0,
+    "seconds": 2.224335238992353
+  },
+  {
+    "label": "deep-client-2",
+    "command": [
+      "/usr/bin/python3",
+      "/home/efs/nuc-ecdc-focus/source-normal/tests/posix/posix_suite.py",
+      "/tmp/efs-focus-2-54t7qe7a",
+      "--suite",
+      "core",
+      "--filter",
+      "dir_deep_nesting",
+      "--jobs",
+      "16",
+      "--timeout-s",
+      "30",
+      "--tag",
+      "focus-2",
+      "--results",
+      "/home/efs/nuc-ecdc-focus/results/deep-client-2.tsv"
+    ],
+    "source": "ecdc8c6034b610a2bf69e7a79664d8a5e990de84",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "timeout": 600,
+    "returncode": 0,
+    "seconds": 2.2190707519912394
+  },
+  {
+    "label": "deep-client-3",
+    "command": [
+      "/usr/bin/python3",
+      "/home/efs/nuc-ecdc-focus/source-normal/tests/posix/posix_suite.py",
+      "/tmp/efs-focus-3-e4j1vaue",
+      "--suite",
+      "core",
+      "--filter",
+      "dir_deep_nesting",
+      "--jobs",
+      "16",
+      "--timeout-s",
+      "30",
+      "--tag",
+      "focus-3",
+      "--results",
+      "/home/efs/nuc-ecdc-focus/results/deep-client-3.tsv"
+    ],
+    "source": "ecdc8c6034b610a2bf69e7a79664d8a5e990de84",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "timeout": 600,
+    "returncode": 0,
+    "seconds": 2.170361254000454
+  },
+  {
+    "label": "deep-client-4",
+    "command": [
+      "/usr/bin/python3",
+      "/home/efs/nuc-ecdc-focus/source-normal/tests/posix/posix_suite.py",
+      "/tmp/efs-focus-4-m6t3ecyv",
+      "--suite",
+      "core",
+      "--filter",
+      "dir_deep_nesting",
+      "--jobs",
+      "16",
+      "--timeout-s",
+      "30",
+      "--tag",
+      "focus-4",
+      "--results",
+      "/home/efs/nuc-ecdc-focus/results/deep-client-4.tsv"
+    ],
+    "source": "ecdc8c6034b610a2bf69e7a79664d8a5e990de84",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "timeout": 600,
+    "returncode": 0,
+    "seconds": 2.182889718998922
+  },
+  {
+    "label": "deep-client-5",
+    "command": [
+      "/usr/bin/python3",
+      "/home/efs/nuc-ecdc-focus/source-normal/tests/posix/posix_suite.py",
+      "/tmp/efs-focus-5-qo0mgu0d",
+      "--suite",
+      "core",
+      "--filter",
+      "dir_deep_nesting",
+      "--jobs",
+      "16",
+      "--timeout-s",
+      "30",
+      "--tag",
+      "focus-5",
+      "--results",
+      "/home/efs/nuc-ecdc-focus/results/deep-client-5.tsv"
+    ],
+    "source": "ecdc8c6034b610a2bf69e7a79664d8a5e990de84",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "timeout": 600,
+    "returncode": 0,
+    "seconds": 2.0192559900024207
+  },
+  {
+    "label": "deep-client-6",
+    "command": [
+      "/usr/bin/python3",
+      "/home/efs/nuc-ecdc-focus/source-normal/tests/posix/posix_suite.py",
+      "/tmp/efs-focus-6-wdbbjwtb",
+      "--suite",
+      "core",
+      "--filter",
+      "dir_deep_nesting",
+      "--jobs",
+      "16",
+      "--timeout-s",
+      "30",
+      "--tag",
+      "focus-6",
+      "--results",
+      "/home/efs/nuc-ecdc-focus/results/deep-client-6.tsv"
+    ],
+    "source": "ecdc8c6034b610a2bf69e7a79664d8a5e990de84",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "timeout": 600,
+    "returncode": 0,
+    "seconds": 2.1671220010030083
+  },
+  {
+    "label": "basic",
+    "command": [
+      "/usr/bin/python3",
+      "/home/efs/nuc-ecdc-focus/source-normal/tests/posix/posix_suite.py",
+      "/data1/efs/mnt",
+      "--suite",
+      "core",
+      "--filter",
+      "basic_write_read",
+      "--timeout-s",
+      "30",
+      "--results",
+      "/home/efs/nuc-ecdc-focus/results/basic.tsv"
+    ],
+    "source": "ecdc8c6034b610a2bf69e7a79664d8a5e990de84",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "timeout": 120,
+    "returncode": 0,
+    "seconds": 0.21406203199876472
+  },
+  {
+    "label": "stop-client-0",
+    "command": [
+      "/home/efs/nuc-ecdc-focus/source-normal/scripts/client.sh",
+      "stop",
+      "/data1/efs/mnt"
+    ],
+    "source": "ecdc8c6034b610a2bf69e7a79664d8a5e990de84",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "timeout": 60,
+    "returncode": 0,
+    "seconds": 0.2642145720019471
+  },
+  {
+    "label": "stop-client-1",
+    "command": [
+      "/home/efs/nuc-ecdc-focus/source-normal/scripts/client.sh",
+      "stop",
+      "/data1/efs/mnt2"
+    ],
+    "source": "ecdc8c6034b610a2bf69e7a79664d8a5e990de84",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "timeout": 60,
+    "returncode": 0,
+    "seconds": 0.2642631229973631
+  },
+  {
+    "label": "stop-client-2",
+    "command": [
+      "/home/efs/nuc-ecdc-focus/source-normal/scripts/client.sh",
+      "stop",
+      "/tmp/efs-focus-2-54t7qe7a"
+    ],
+    "source": "ecdc8c6034b610a2bf69e7a79664d8a5e990de84",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "timeout": 60,
+    "returncode": 0,
+    "seconds": 0.2640809770091437
+  },
+  {
+    "label": "stop-client-3",
+    "command": [
+      "/home/efs/nuc-ecdc-focus/source-normal/scripts/client.sh",
+      "stop",
+      "/tmp/efs-focus-3-e4j1vaue"
+    ],
+    "source": "ecdc8c6034b610a2bf69e7a79664d8a5e990de84",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "timeout": 60,
+    "returncode": 0,
+    "seconds": 0.36470396199729294
+  },
+  {
+    "label": "stop-client-4",
+    "command": [
+      "/home/efs/nuc-ecdc-focus/source-normal/scripts/client.sh",
+      "stop",
+      "/tmp/efs-focus-4-m6t3ecyv"
+    ],
+    "source": "ecdc8c6034b610a2bf69e7a79664d8a5e990de84",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "timeout": 60,
+    "returncode": 0,
+    "seconds": 0.4149947499972768
+  },
+  {
+    "label": "stop-client-5",
+    "command": [
+      "/home/efs/nuc-ecdc-focus/source-normal/scripts/client.sh",
+      "stop",
+      "/tmp/efs-focus-5-qo0mgu0d"
+    ],
+    "source": "ecdc8c6034b610a2bf69e7a79664d8a5e990de84",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "timeout": 60,
+    "returncode": 0,
+    "seconds": 0.264807750005275
+  },
+  {
+    "label": "stop-client-6",
+    "command": [
+      "/home/efs/nuc-ecdc-focus/source-normal/scripts/client.sh",
+      "stop",
+      "/tmp/efs-focus-6-wdbbjwtb"
+    ],
+    "source": "ecdc8c6034b610a2bf69e7a79664d8a5e990de84",
+    "environment": {
+      "EFS_MD_RAFT_N": "4",
+      "EFS_TRANSPORT": "tcp",
+      "EFS_COMMANDS": "0",
+      "EFS_COMMANDS_SERVER": "0",
+      "EFS_PACKED_WRITES": "1",
+      "EFS_STORAGE_ENGINE": "files",
+      "EFS_RAFT_FLOW": "0",
+      "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+      "EFS_RAFT_GROUP_DRAIN": "0",
+      "EFS_REPAIR_EXPERIMENT": "0",
+      "EFS_REPAIR_INIT_STORE": "0"
+    },
+    "timeout": 60,
+    "returncode": 0,
+    "seconds": 0.36498915500123985
+  }
+]
