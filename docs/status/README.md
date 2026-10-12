@@ -2,6 +2,8 @@
 
 ## v0.3.0-pre-alpha release integration
 
+**STOPPED at human request.** [Central checkpoint and resume requirements](v030-stop-checkpoint-20261011.md). No new work until the human resumes; execution target stays 410afed4/v2.
+
 A reviewed next-candidate CREATE fault-injection fix removes a duplicated retained hook; actual combined-path baseline six-stage failure and fixed three-stage native/sanitizer passes are preserved in the [diagnostic ledger](v030-query-stage-diagnostic-20261012.md#create-retry-fault-injection-defect). Mounted requalification remains pending.
 
 Mac normal mounted qualification is separately blocked: owner reports c2 199/216 PASS, 17 timeouts; later peer/policy/failover/cold gates are NOTRUN. See the [mounted blocker](v030-query-stage-diagnostic-20261012.md#mac-normal-mounted-qualification-blocker). Current shared execution is 410afed4 with corrected packaging-v2 (1,563 files); normal-path semantics remain unchanged by its fault-only fix.
