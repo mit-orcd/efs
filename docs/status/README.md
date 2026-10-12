@@ -689,3 +689,5 @@ Release scope is now true-defect testing/fixing only. The next shared candidate 
 October 12 qualification checkpoint: frozen `def46109909c793e58ae2c453c5de537cdb2c627` AMD normal/fault native and affected sanitizers PASS; NUC core/peer/two-client packing PASS; matched-4G seven-client Intel and NUC FAIL. Receiver drain scheduling investigation continues before a new central freeze. See [current qualification ledger](v030-tcp-direct-qualification-20261012.md).
 
 Current central qualification freeze: `03bd89fb7de56c2c6af44ab3bd26c54caf4b8274`, bounded FIFO inbox drain. New full/live gates NOTRUN; previous def failures retained. [Qualification ledger](v030-tcp-direct-qualification-20261012.md).
+
+09:10 EDT checkpoint on `03bd89fb`: AMD full native/fault/sanitizers PASS; NUC core/peer/isolated packing PASS; Intel prerequisites PASS; Intel/NUC seven-client gates RUNNING. Release acceptance pending. [Ledger](v030-tcp-direct-qualification-20261012.md).

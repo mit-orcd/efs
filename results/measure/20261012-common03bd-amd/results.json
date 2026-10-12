@@ -1,0 +1,141 @@
+[
+  {
+    "name": "normal-build",
+    "command": [
+      "make",
+      "-j8",
+      "EFS_GIT_ID=03bd89fb7de56c2c6af44ab3bd26c54caf4b8274",
+      "EFS_GIT_BRANCH=qualification-v030-tcp-direct",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "all"
+    ],
+    "cwd": "/data1/efs/amd-common03bd-20261012/source",
+    "commit": "03bd89fb7de56c2c6af44ab3bd26c54caf4b8274",
+    "exit": 0,
+    "duration_seconds": 9.43046498298645
+  },
+  {
+    "name": "normal-native",
+    "command": [
+      "make",
+      "EFS_GIT_ID=03bd89fb7de56c2c6af44ab3bd26c54caf4b8274",
+      "EFS_GIT_BRANCH=qualification-v030-tcp-direct",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "test"
+    ],
+    "cwd": "/data1/efs/amd-common03bd-20261012/source",
+    "commit": "03bd89fb7de56c2c6af44ab3bd26c54caf4b8274",
+    "exit": 0,
+    "duration_seconds": 90.73566842079163
+  },
+  {
+    "name": "early-ack-raft",
+    "command": [
+      "./tests/test_raft"
+    ],
+    "cwd": "/data1/efs/amd-common03bd-20261012/source",
+    "commit": "03bd89fb7de56c2c6af44ab3bd26c54caf4b8274",
+    "exit": 0,
+    "duration_seconds": 0.007811546325683594
+  },
+  {
+    "name": "fault-clean",
+    "command": [
+      "make",
+      "EFS_GIT_ID=03bd89fb7de56c2c6af44ab3bd26c54caf4b8274",
+      "EFS_GIT_BRANCH=qualification-v030-tcp-direct",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "clean"
+    ],
+    "cwd": "/data1/efs/amd-common03bd-20261012/fault-source",
+    "commit": "03bd89fb7de56c2c6af44ab3bd26c54caf4b8274",
+    "exit": 0,
+    "duration_seconds": 0.027048110961914062
+  },
+  {
+    "name": "fault-build",
+    "command": [
+      "make",
+      "-j8",
+      "EFS_GIT_ID=03bd89fb7de56c2c6af44ab3bd26c54caf4b8274",
+      "EFS_GIT_BRANCH=qualification-v030-tcp-direct",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "EFS_FAULTS=1",
+      "all"
+    ],
+    "cwd": "/data1/efs/amd-common03bd-20261012/fault-source",
+    "commit": "03bd89fb7de56c2c6af44ab3bd26c54caf4b8274",
+    "exit": 0,
+    "duration_seconds": 9.442917823791504
+  },
+  {
+    "name": "fault-native",
+    "command": [
+      "make",
+      "EFS_GIT_ID=03bd89fb7de56c2c6af44ab3bd26c54caf4b8274",
+      "EFS_GIT_BRANCH=qualification-v030-tcp-direct",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "EFS_FAULTS=1",
+      "test"
+    ],
+    "cwd": "/data1/efs/amd-common03bd-20261012/fault-source",
+    "commit": "03bd89fb7de56c2c6af44ab3bd26c54caf4b8274",
+    "exit": 0,
+    "duration_seconds": 89.77617740631104
+  },
+  {
+    "name": "san-test_host_inbox",
+    "command": [
+      "python3",
+      "tests/test_host_inbox.py"
+    ],
+    "cwd": "/data1/efs/amd-common03bd-20261012/source",
+    "commit": "03bd89fb7de56c2c6af44ab3bd26c54caf4b8274",
+    "exit": 0,
+    "duration_seconds": 0.14211201667785645
+  },
+  {
+    "name": "san-test_readindex_operation",
+    "command": [
+      "python3",
+      "tests/test_readindex_operation.py"
+    ],
+    "cwd": "/data1/efs/amd-common03bd-20261012/source",
+    "commit": "03bd89fb7de56c2c6af44ab3bd26c54caf4b8274",
+    "exit": 0,
+    "duration_seconds": 0.09561824798583984
+  },
+  {
+    "name": "san-test_lookup_read_group",
+    "command": [
+      "python3",
+      "tests/test_lookup_read_group.py"
+    ],
+    "cwd": "/data1/efs/amd-common03bd-20261012/source",
+    "commit": "03bd89fb7de56c2c6af44ab3bd26c54caf4b8274",
+    "exit": 0,
+    "duration_seconds": 0.09430384635925293
+  },
+  {
+    "name": "san-test_readindex_pair",
+    "command": [
+      "python3",
+      "tests/test_readindex_pair.py"
+    ],
+    "cwd": "/data1/efs/amd-common03bd-20261012/source",
+    "commit": "03bd89fb7de56c2c6af44ab3bd26c54caf4b8274",
+    "exit": 0,
+    "duration_seconds": 0.11080312728881836
+  },
+  {
+    "name": "san-test_readindex_remote_pair",
+    "command": [
+      "python3",
+      "tests/test_readindex_remote_pair.py"
+    ],
+    "cwd": "/data1/efs/amd-common03bd-20261012/source",
+    "commit": "03bd89fb7de56c2c6af44ab3bd26c54caf4b8274",
+    "exit": 0,
+    "duration_seconds": 0.1271350383758545
+  }
+]
