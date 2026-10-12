@@ -985,6 +985,57 @@ static void edge_lease_pack(const struct edge_lease *lease,uint8_t v[EDGE_VALUE]
 {
     v[0]=3;v[1]=lease->flags;edge_be64(v+2,lease->seq);edge_be64(v+10,lease->token);
 }
+/* A last close with no remaining work need not enqueue an empty GC round.
+ * This proof runs in the same serialized state-machine entry as the lease
+ * transition. Only the exact lease being closed is ignored; malformed or
+ * foreign ownership, locks, append state and transaction ownership all keep
+ * the durable deferred obligation. Existing markers are never erased here. */
+struct close_empty_scan { const uint8_t *key; uint32_t len,seen; };
+static int close_other_lease(void *ctx,const uint8_t *key,uint32_t len,
+    const uint8_t *value,uint32_t length)
+{
+    struct close_empty_scan *own=ctx;
+    if(++own->seen>64)return 1; /* bounded proof; defer a longer prefix */
+    if(len==own->len && !memcmp(key,own->key,len))return 0;
+    return any_cb(NULL,key,len,value,length);
+}
+static int close_step_present(void *,const uint8_t *,uint32_t,
+    const uint8_t *,uint32_t);
+static int close_empty_proof(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
+    const uint8_t *own_key,uint32_t own_len,const uint8_t *marker,uint32_t marker_len)
+{
+    uint32_t shard=efs_kv_inode_shard(ino),len;uint8_t key[EFS_KV_KEY_MAX];
+    uint8_t value[EFS_CLOSE_STEP_VALUE];uint32_t vl=sizeof(value);
+    int rc=efs_kv_get(kv,marker,marker_len,value,&vl);
+    if(rc==EFS_OK)return 0;
+    if(rc!=EFS_ERR_NOT_FOUND)return rc;
+    rc=efs_kv_key_inode(shard,ino,key,&len);
+    if(rc==EFS_OK)rc=efs_txn_key_exclusive(kv,key,len);
+    if(rc==EFS_ERR_BUSY)return 0;
+    if(rc!=EFS_OK)return rc;
+    struct efs_meta_row row;
+    rc=efs_meta_apply_get_inode(kv,ino,&row);
+    if(rc==EFS_ERR_NOT_FOUND)return 0;
+    if(rc!=EFS_OK)return rc;
+    if(row.generation!=gen || !row.nlink)return 0;
+    rc=efs_kv_key_lease_prefix(shard,ino,gen,key,&len);
+    struct close_empty_scan own={.key=own_key,.len=own_len};
+    if(rc==EFS_OK)rc=efs_kv_scan_prefix(kv,key,len,close_other_lease,&own);
+    if(rc==1)return 0;
+    if(rc!=EFS_OK)return rc;
+    rc=efs_lock_count(kv,ino,gen);
+    if(rc>0)return 0;
+    if(rc<0)return rc;
+    rc=efs_kv_key_append_rsv_prefix(shard,ino,gen,key,&len);
+    if(rc==EFS_OK)rc=efs_kv_scan_prefix(kv,key,len,close_step_present,NULL);
+    if(rc==1)return 0;
+    if(rc!=EFS_OK)return rc;
+    rc=efs_kv_key_append_cur(shard,ino,gen,key,&len);
+    if(rc==EFS_OK) {vl=sizeof(value);rc=efs_kv_get(kv,key,len,value,&vl);}
+    if(rc==EFS_OK)return 0;
+    return rc==EFS_ERR_NOT_FOUND?1:rc;
+}
+
 static int lease_guarded_edge(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
                           const struct efs_opid_req *q,unsigned flags,uint64_t token,int deferred)
 {
@@ -1069,10 +1120,17 @@ static int lease_guarded_edge(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
          * do not make GC repeatedly probe a newly adopted, still-open file. */
         if(!(flags&EFS_LEASE_EDGE_OPEN) &&
            (flags&(EFS_LEASE_EDGE_CLOSE|EFS_LEASE_EDGE_CLEAR_PENDING))) {
-            edge_be64(close_value,gen);memcpy(close_value+8,q->id.client_uuid,16);
-            be32(close_value+24,q->id.session_epoch);edge_be64(close_value+28,q->id.seq);
-            items[count++]=(struct efs_kv_item){EFS_KV_PUT,close_key,close_len,
-                                             close_value,sizeof(close_value)};
+            int empty=0;
+            if(flags==EFS_LEASE_EDGE_CLOSE && lease.flags==LEASE_NORMAL) {
+                empty=close_empty_proof(kv,ino,gen,lkey,lklen,close_key,close_len);
+                if(empty<0)return empty;
+            }
+            if(!empty) {
+                edge_be64(close_value,gen);memcpy(close_value+8,q->id.client_uuid,16);
+                be32(close_value+24,q->id.session_epoch);edge_be64(close_value+28,q->id.seq);
+                items[count++]=(struct efs_kv_item){EFS_KV_PUT,close_key,close_len,
+                                                 close_value,sizeof(close_value)};
+            }
         }
     }
     uint8_t lvalue[EDGE_VALUE],wvalue[EDGE_WINDOW_MAX];

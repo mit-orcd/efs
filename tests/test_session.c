@@ -642,12 +642,12 @@ static void test_deferred_adoption_no_cleanup(void)
           "adoption replay does not create a close marker");
     q.id.seq=3;q.ack=2;
     CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK,
-          "actual close creates durable cleanup obligation");
+          "empty close completes without an empty cleanup round");
     n=sizeof(value);
-    CHECK(efs_kv_get(kv,key,len,value,&n)==EFS_OK && value[35]==3 && !efs_lease_any(kv,ino,1),
-          "cleanup identity belongs to actual close");
-    CHECK(efs_close_step_apply(kv,ino,value,EFS_CLOSE_STEP_RETIRE)==EFS_OK,
-          "actual empty close retires normally");
+    CHECK(efs_kv_get(kv,key,len,value,&n)==EFS_ERR_NOT_FOUND && !efs_lease_any(kv,ino,1),
+          "empty close retains no cleanup obligation");
+    CHECK(efs_lease_guarded_probe_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0,&verdict)==1 && verdict==EFS_OK,
+          "empty close retains exact replay proof");
     q.id.seq=4;q.ack=3;
     CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_OK,
           "active owner before crash revocation");
@@ -1099,6 +1099,69 @@ static void test_bounded_session_cleanup(void)
     efs_kv_mem_free(kv);
 }
 
+static void test_deferred_close_empty_proof(void)
+{
+    for(unsigned kind=0;kind<9;kind++) {
+        struct efs_kv *kv=efs_kv_mem_create();uint8_t uuid[16],other[16]={77};efs_ino_t ino=0;
+        guarded_session_init(kv,uuid);
+        CHECK(efs_meta_apply_create_file(kv,&g_at,1,S_IFREG|0600,"empty-proof",&ino)==EFS_OK,"empty proof file");
+        struct efs_opid_req q=guarded_request(uuid,1,0);
+        CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_OK,"empty proof open");
+        uint32_t shard=efs_kv_inode_shard(ino),len=0;uint8_t key[EFS_KV_KEY_MAX],one=1;
+        if(kind==1)CHECK(efs_lease_open(kv,ino,1,other,1)==EFS_OK,"foreign live lease");
+        if(kind==2) {
+            CHECK(efs_kv_key_lease(shard,ino,1,other,1,key,&len)==EFS_OK &&
+                  efs_kv_put(kv,key,len,&one,1)==EFS_OK,"unknown foreign ownership");
+        }
+        if(kind==3)CHECK(efs_kv_key_lock(shard,ino,1,1,0,UINT64_MAX,1,1,uuid,1,key,&len)==EFS_OK &&
+                        efs_kv_put(kv,key,len,&one,1)==EFS_OK,"empty proof lock debt");
+        if(kind==4)CHECK(efs_kv_key_append_rsv(shard,ino,1,0,key,&len)==EFS_OK &&
+                        efs_kv_put(kv,key,len,&one,1)==EFS_OK,"empty proof append reservation");
+        if(kind==5)CHECK(efs_kv_key_append_cur(shard,ino,1,key,&len)==EFS_OK &&
+                        efs_kv_put(kv,key,len,&one,1)==EFS_OK,"empty proof append cursor");
+        if(kind==6) {
+            uint8_t value[512];uint32_t vl=sizeof(value);struct efs_txid tx={{111}};
+            struct efs_txn_parts parts={.n=1};parts.shard[0]=shard;
+            CHECK(efs_kv_key_inode(shard,ino,key,&len)==EFS_OK && efs_kv_get(kv,key,len,value,&vl)==EFS_OK &&
+                  efs_txn_prepare_excl_value(kv,&tx,&parts,key,len,value,vl,EFS_TXN_PUT,value,vl)==EFS_OK,"empty proof unresolved inode intent");
+        }
+        if(kind==7)CHECK(efs_meta_apply_unlink(kv,1,"empty-proof",T0)==EFS_OK,"empty proof unlinked inode");
+        if(kind==8) {
+            uint8_t closed[18]={3,0};closed[9]=1;
+            for(unsigned i=0;i<65;i++) {
+                other[0]=(uint8_t)(100+i);
+                CHECK(efs_kv_key_lease(shard,ino,1,other,1,key,&len)==EFS_OK &&
+                      efs_kv_put(kv,key,len,closed,sizeof(closed))==EFS_OK,"bounded proof closed tombstones");
+            }
+        }
+        uint8_t marker[EFS_KV_KEY_MAX],value[EFS_CLOSE_STEP_VALUE];uint32_t ml,vl=sizeof(value);
+        CHECK(efs_kv_key_reap(efs_kv_anchor_shard(shard),ino,marker,&ml)==EFS_OK,"empty proof marker key");marker[2]=EFS_KV_KIND_CLOSE_STEP;
+        q.id.seq=2;q.ack=1;
+        if(!kind) {
+            const struct efs_kv_ops *saved=kv->ops;struct efs_kv_ops fault=*saved;
+            guarded_batch_original=fault.batch;fault.batch=guarded_batch_fault;kv->ops=&fault;guarded_batch_fail=1;
+            CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_ERR_IO &&
+                  efs_lease_any(kv,ino,1)==1,"empty close batch failure retains ownership");
+            int verdict=999;
+            CHECK(efs_lease_guarded_probe_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0,&verdict)==0,"empty close failure has no false receipt");
+            guarded_batch_fail=0;kv->ops=saved;
+        }
+        CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK,"empty proof close");
+        int rc=efs_kv_get(kv,marker,ml,value,&vl);
+        CHECK(kind?rc==EFS_OK:rc==EFS_ERR_NOT_FOUND,"only proven empty live close omits cleanup");
+        int verdict=999;
+        CHECK(efs_lease_guarded_probe_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0,&verdict)==1 && verdict==EFS_OK,"all closes retain exact durable receipt");
+        if(!kind) {
+            q.id.seq=3;
+            CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_OK,"empty close reopen");
+            q.id.seq=2;
+            CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK &&
+                  efs_lease_any(kv,ino,1)==1,"old empty close replay cannot close new ownership");
+        }
+        efs_kv_mem_free(kv);
+    }
+}
+
 static void test_deferred_close_identity(void)
 {
     struct efs_kv *kv=efs_kv_mem_create();uint8_t uuid[16];efs_ino_t ino=0;
@@ -1109,6 +1172,9 @@ static void test_deferred_close_identity(void)
     uint8_t key[EFS_KV_KEY_MAX],before[EFS_CLOSE_STEP_VALUE],value[EFS_CLOSE_STEP_VALUE];uint32_t len,n;
     CHECK(efs_kv_key_reap(efs_kv_anchor_shard(efs_kv_inode_shard(ino)),ino,key,&len)==EFS_OK,"close step key");
     key[2]=EFS_KV_KIND_CLOSE_STEP;
+    uint8_t cleanup_lock[EFS_KV_KEY_MAX],cleanup_one=1;uint32_t cleanup_len;
+    CHECK(efs_kv_key_lock(efs_kv_inode_shard(ino),ino,1,1,0,UINT64_MAX,1,1,uuid,1,cleanup_lock,&cleanup_len)==EFS_OK &&
+          efs_kv_put(kv,cleanup_lock,cleanup_len,&cleanup_one,1)==EFS_OK,"real close cleanup debt");
     q.id.seq=2;q.ack=1;
     const struct efs_kv_ops *saved=kv->ops;struct efs_kv_ops ops=*saved;
     guarded_batch_original=ops.batch;ops.batch=guarded_batch_fault;kv->ops=&ops;guarded_batch_fail=1;
@@ -1158,6 +1224,7 @@ static void test_deferred_close_identity(void)
     n=sizeof(value);CHECK(efs_kv_get(kv,key,len,value,&n)==EFS_ERR_NOT_FOUND,"known close replay cannot recreate retired obligation");
     q.id.seq=5;q.ack=3;
     CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_OK,"reopen after cleanup");
+    CHECK(efs_kv_put(kv,cleanup_lock,cleanup_len,&cleanup_one,1)==EFS_OK,"later close cleanup debt");
     q.id.seq=6;q.ack=5;
     CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK,"new close after cleanup");
     n=sizeof(value);CHECK(efs_kv_get(kv,key,len,value,&n)==EFS_OK && value[35]==6,"new obligation survives old identity retirement");
@@ -1326,6 +1393,7 @@ int main(void)
     test_legacy_rejection_floor();
     test_legacy_lease_prepared();
     test_guarded_retire_cold();
+    test_deferred_close_empty_proof();
     test_deferred_close_identity();
     test_deferred_adoption_no_cleanup();
     test_bounded_session_cleanup();
