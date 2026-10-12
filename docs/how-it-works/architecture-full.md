@@ -1477,6 +1477,12 @@ this document is the invariant they are measured against.
 
 ### v0.3.0-pre-alpha release integration
 
+Shared defect-only candidate `31abdd5e` is frozen for all five owners. A
+Python 3.13 phase-fixture AST portability failure is preserved; its minimal
+next-candidate repair passes Python 3.9/3.13/3.14, including Mac peer review and a workload-change negative control.
+Central AMD full gates are running; packing jobs16 remains open. See the
+[diagnostic ledger](../status/v030-query-stage-diagnostic-20261012.md#shared-31abdd5e-fixture-portability-failure).
+
 [Release checkpoint, priorities and acceptance ledger](../status/v030-pre-alpha-release.md)
 and [candidate operator notes](../using/v030-candidate.md):
 all agent improvements are being integrated on `release-v0.3.0-pre-alpha`;

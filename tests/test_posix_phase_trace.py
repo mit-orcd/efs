@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Actual-case phase observer: quiet default, unchanged shape and failed observer isolation."""
 from pathlib import Path
-import ast, hashlib, importlib.util, json, os, socket, subprocess, sys, tempfile, threading, time
+import ast, hashlib, importlib.util, inspect, json, os, socket, subprocess, sys, tempfile, threading, time
 root = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('phase_suite', root/'tests/posix/posix_suite.py')
 suite = importlib.util.module_from_spec(spec); spec.loader.exec_module(suite)
@@ -16,7 +16,15 @@ def shape(source):
     fn = next(n for n in module.body if isinstance(n, ast.FunctionDef) and n.name == 'dir_deep_nesting')
     fn.body = [n for n in fn.body if not (isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
                and isinstance(n.value.func, ast.Name) and n.value.func.id == '_deep_phase')]
-    return ast.dump(fn, include_attributes=False)
+    # Python 3.12 adds type_params; this baseline has no generic parameters.
+    if 'type_params' in fn._fields:
+        assert not fn.type_params
+        fn._fields = tuple(field for field in fn._fields if field != 'type_params')
+    # Python 3.13 hides empty fields by default; retain the original AST schema.
+    options = dict(include_attributes=False)
+    if 'show_empty' in inspect.signature(ast.dump).parameters:
+        options['show_empty'] = True
+    return ast.dump(fn, **options)
 # Canonical AST of actual b239dc7d case, excluding only observer calls.
 assert hashlib.sha256(shape((root/'tests/posix/posix_suite.py').read_text()).encode()).hexdigest() == '1cdb1d66e21f56f3a1e03b878d8cfef6807168c7d04c026f70823b840d2357e7'
 saved = dict(os.environ)
