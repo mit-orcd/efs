@@ -34,3 +34,4 @@ Connection timed out during banner exchange
 Connection to UNKNOWN port 65535 timed out
 Connection timed out during banner exchange
 Connection to UNKNOWN port 65535 timed out
+writer state 1: cold handoff refused

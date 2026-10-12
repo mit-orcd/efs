@@ -1,0 +1,189 @@
+{
+  "elapsed_s": 90.02738625500933,
+  "window_counts": {
+    "0": {
+      "open": 1892,
+      "close": 1886,
+      "delete": 1536,
+      "read": 1536
+    },
+    "1": {
+      "open": 1674,
+      "close": 1676,
+      "delete": 1600,
+      "read": 1770
+    },
+    "2": {
+      "open": 1115,
+      "close": 1116,
+      "delete": 1152,
+      "read": 1138
+    }
+  },
+  "process_samples": [
+    {
+      "seconds": 0.002982308011269197,
+      "processes": {
+        "1147475": {
+          "rss_kib": 10516,
+          "cpu_ticks": 0
+        },
+        "1147298": {
+          "rss_kib": 7280,
+          "cpu_ticks": 12
+        },
+        "1147333": {
+          "rss_kib": 7680,
+          "cpu_ticks": 13
+        },
+        "1147369": {
+          "rss_kib": 6852,
+          "cpu_ticks": 11
+        },
+        "1147406": {
+          "rss_kib": 6456,
+          "cpu_ticks": 8
+        }
+      },
+      "tiny_closed_by_worker": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "large_synced_writes_by_worker": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "seconds": 30.025416595017305,
+      "processes": {
+        "1147475": {
+          "rss_kib": 101860,
+          "cpu_ticks": 944
+        },
+        "1147298": {
+          "rss_kib": 32540,
+          "cpu_ticks": 1575
+        },
+        "1147333": {
+          "rss_kib": 49776,
+          "cpu_ticks": 2082
+        },
+        "1147369": {
+          "rss_kib": 41220,
+          "cpu_ticks": 1649
+        },
+        "1147406": {
+          "rss_kib": 34700,
+          "cpu_ticks": 1647
+        }
+      },
+      "tiny_closed_by_worker": [
+        233,
+        255,
+        245,
+        222,
+        211,
+        251,
+        234,
+        236
+      ],
+      "large_synced_writes_by_worker": [
+        1292,
+        1388,
+        1308,
+        1368
+      ]
+    },
+    {
+      "seconds": 60.02626493401476,
+      "processes": {
+        "1147475": {
+          "rss_kib": 107544,
+          "cpu_ticks": 1887
+        },
+        "1147298": {
+          "rss_kib": 42728,
+          "cpu_ticks": 3130
+        },
+        "1147333": {
+          "rss_kib": 62728,
+          "cpu_ticks": 4063
+        },
+        "1147369": {
+          "rss_kib": 54004,
+          "cpu_ticks": 3002
+        },
+        "1147406": {
+          "rss_kib": 44444,
+          "cpu_ticks": 3303
+        }
+      },
+      "tiny_closed_by_worker": [
+        448,
+        448,
+        449,
+        437,
+        438,
+        448,
+        446,
+        448
+      ],
+      "large_synced_writes_by_worker": [
+        2632,
+        2756,
+        2640,
+        2704
+      ]
+    },
+    {
+      "seconds": 90.02695067902096,
+      "processes": {
+        "1147475": {
+          "rss_kib": 112836,
+          "cpu_ticks": 2517
+        },
+        "1147298": {
+          "rss_kib": 46028,
+          "cpu_ticks": 4217
+        },
+        "1147333": {
+          "rss_kib": 70852,
+          "cpu_ticks": 5491
+        },
+        "1147369": {
+          "rss_kib": 63740,
+          "cpu_ticks": 4152
+        },
+        "1147406": {
+          "rss_kib": 49644,
+          "cpu_ticks": 4437
+        }
+      },
+      "tiny_closed_by_worker": [
+        584,
+        603,
+        611,
+        576,
+        576,
+        576,
+        576,
+        576
+      ],
+      "large_synced_writes_by_worker": [
+        3488,
+        3584,
+        3556,
+        3516
+      ]
+    }
+  ]
+}

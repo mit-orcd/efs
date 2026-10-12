@@ -1,0 +1,33 @@
+Evidence directory: /data1/efs/amd-feedback-20261011/pressure/direct-off-1/gc-direct-bv8mopzh
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=7575656219542583418
+client serving PASS
+sustained seconds=0.0 counts={}
+sustained seconds=30.0 counts={'0': {'open': 2114, 'close': 2110, 'delete': 1872, 'read': 2023}, '1': {'open': 0, 'close': 1, 'delete': 3, 'read': 2}}
+sustained seconds=60.0 counts={'0': {'open': 2114, 'close': 2110, 'delete': 1872, 'read': 2023}, '1': {'open': 1905, 'close': 1905, 'delete': 1712, 'read': 1728}, '2': {'open': 0, 'close': 0, 'delete': 0, 'read': 1}}
+sustained seconds=90.0 counts={'0': {'open': 2114, 'close': 2110, 'delete': 1872, 'read': 2023}, '1': {'open': 1905, 'close': 1905, 'delete': 1712, 'read': 1728}, '2': {'open': 683, 'close': 681, 'delete': 832, 'read': 762}, '3': {'open': 3, 'close': 4, 'delete': 0, 'read': 2}}
+sustained seconds=120.1 counts={'0': {'open': 2114, 'close': 2110, 'delete': 1872, 'read': 2023}, '1': {'open': 1905, 'close': 1905, 'delete': 1712, 'read': 1728}, '2': {'open': 683, 'close': 681, 'delete': 832, 'read': 762}, '3': {'open': 698, 'close': 700, 'delete': 640, 'read': 598}, '4': {'open': 3, 'close': 2, 'delete': 0, 'read': 0}}
+sustained seconds=150.1 counts={'0': {'open': 2114, 'close': 2110, 'delete': 1872, 'read': 2023}, '1': {'open': 1905, 'close': 1905, 'delete': 1712, 'read': 1728}, '2': {'open': 683, 'close': 681, 'delete': 832, 'read': 762}, '3': {'open': 698, 'close': 700, 'delete': 640, 'read': 598}, '4': {'open': 616, 'close': 615, 'delete': 640, 'read': 672}, '5': {'open': 2, 'close': 2, 'delete': 0, 'read': 2}}
+both-group frozen leader cuts caught up after slow follower healed PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 1140565 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+sustained cold bytes and physical deletion drained PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 1141150 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+post-pressure cold write and physical deletion drained PASS
+overload acknowledged-byte recovery and physical reclamation PASS; refused I/O remains in verdict

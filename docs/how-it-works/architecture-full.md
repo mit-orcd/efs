@@ -1737,12 +1737,16 @@ Remaining gates: the actual 2^32-entry index build/export/cold/mutation run,
 the 400 GiB real-payload write/cold/hash/export run. Named cf4e365a Mac/Linux
 NFS and native FUSE full oracles pass, as do 96 fresh Mac queries and all
 423 retained payload hashes after cold restart; the captured
-FORGET/handle-recovery ESTALE is fixed. These isolated scale fixtures are active; their cold-verification and service
-restoration checklist is in the closure ledger. Full named 2^32 kernel-cold
+FORGET/handle-recovery ESTALE is fixed. These isolated scale fixtures have remaining cold-verification and service
+restoration gates in the closure ledger; their current runtime state is unverified. Full named 2^32 kernel-cold
 recovery is queued behind the replacement run’s successful terminal verdict
 and the retained original population proof; the
-400 GiB cold handoff is also queued behind its complete write verdict, using
-the current named-binary preflight and listener-readiness checks.
+400 GiB cold handoff has four recovered refused attempts (exit 1,
+`writer state 1: cold handoff refused`), with a finished marker dated Oct11
+04:05:07 UTC. Resolve the writer-state precondition and obtain the complete
+write verdict before retrying. [Preserved evidence and manifest](../../results/measure/20261012-leftover-evidence-review/README.md)
+replace the earlier pending status; W92 stays open and `.efs` is excluded from
+v0.3.2-pre-alpha.
 The current [W92 specification](../status/virtual-find-stats.md) and backlog reference
 the named raw-batched deployment and retain the older checkpoints as history.
 The initial capacity writer stopped on CREATE PROTO after 124983 acknowledged

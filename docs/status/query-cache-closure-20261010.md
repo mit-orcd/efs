@@ -1072,11 +1072,24 @@ per-user permission proof. Acceptance NFS and node111 mounts are retired;
 normal gateway/client mounts are commands-disabled and NFS service active.
 The user's separate standard Mac mount was not remounted or claimed fresh.
 
-The capacity handoff was advanced to local screen
-`w92-capacity-cold-handoff-cf4e365a` (PID 44782), preflighting the exact new server
-hash before its eventual private all-three cold stop. The writer and its
-acknowledged source/checkpoints were not interrupted. Full 2^32 and real 400 GiB
-terminal/cold/export/hash gates and final private-fixture/RAM cleanup are still
-open; named pilots and full native/platform repeats do not replace them.
+The capacity handoff was previously advanced to local screen
+`w92-capacity-cold-handoff-cf4e365a` (PID 44782). The subsequently recovered
+completion evidence shows four handoff attempts (1434aa83, cdc13b88, cf4e365a
+and the generic launcher) ended with exit 1 and `writer state 1: cold handoff refused`.
+The finished marker is dated 2026-10-11 04:05:07 UTC; SSH banner/time-out
+failures are retained in the logs. These attempts did not establish a successful
+private all-three cold stop or cold-recovery verdict. This refusal does not
+establish data loss. Current fixture/process state was not rechecked during
+this documentation-only review.
+
+Full 2^32 and real 400 GiB terminal/cold/export/hash gates and final
+private-fixture/RAM cleanup remain open. Named pilots and full native/platform
+repeats do not replace them. W92 remains open; `.efs` functionality is excluded
+from v0.3.2-pre-alpha. Before further cold verification, resolve the writer-state
+handoff precondition and obtain the complete write verdict.
+
+[Recovered handoff evidence](../../results/measure/20261010-w92-closure/capacity-recovery-handoff/handoff.log)
+and [preservation manifest](../../results/measure/20261012-leftover-evidence-review/manifest.json)
+record the completed attempts; the earlier queued/pending description is superseded.
 
 [Named binary, mapped runtime, native and platform evidence](../../results/measure/20261010-w92-closure/raw-batching).

@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/data1/efs/devel-amd-overload-20261011/tests/live/gc_reclamation.py", line 153, in <module>
+    assert len(parents) == 2
+           ^^^^^^^^^^^^^^^^^
+AssertionError

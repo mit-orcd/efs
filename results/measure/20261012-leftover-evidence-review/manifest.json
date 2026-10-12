@@ -1,0 +1,692 @@
+[
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/acceptance-queue.sh",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 282,
+    "blob": "274ed006b25f52aa3a208d0b1cef316601b96cca",
+    "classification": "content-in-release-history",
+    "preserved": false,
+    "sha256": "dd46a16bebbfc08d476d176fed0fd61921c3571394febee4374dc1883005a822"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/before-raft-host.c",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 689516,
+    "blob": "949b10f10622c9a68dd530e9f0eae434ebccd0d4",
+    "classification": "content-in-release-history",
+    "preserved": false,
+    "sha256": "e70db6d87e63a63ef0ec297ecfd46d76d3608acd191e027f92d45ea812972766"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/build-and-gates.sh",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 772,
+    "blob": "2d5e311cbbe015c80a2cba64a2a2882b2147f512",
+    "classification": "content-in-release-history",
+    "preserved": false,
+    "sha256": "908c59c5614276db0973fdb066586baf619b0f60cbe8193de8addb5b23298513"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/extra-queue.sh",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 248,
+    "blob": "d6c898c553919305ebbc71493ba8345432647a88",
+    "classification": "content-in-release-history",
+    "preserved": false,
+    "sha256": "bd184d9876dc59384e566eec8bc1d5c680d5f06376eb481e1fe7810f56a7b801"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/functional.sh",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 1777,
+    "blob": "916688ce1339999186de6d1d0af9aff5a2c0b3b4",
+    "classification": "content-in-release-history",
+    "preserved": false,
+    "sha256": "58a765bfce355e3dd0eb6ec186cd73ce93414f6b618843c39d036b30703928ad"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/functional/buffered/gc-buffered-01eox5sp/namespace-session-packets.bin",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 4060,
+    "blob": "fec077cc33c51c1f95df43eb0e1b99b5fc756f4b",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "d002ae486815f19fd41c44d6dcc79f3e5a466db7d2ca21b3917c07fe57aeedfc"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/functional/buffered/gc-buffered-01eox5sp/put-ticket.bin",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 216,
+    "blob": "a16e012b21663c57c8dcc17df755b4d3f868e1df",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "c7b6a14eb3cc87649494b34566220b204300c7cfbb5a03bafa99e867b06d34db"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/functional/buffered/gc-buffered-01eox5sp/report-session-packet.bin",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 1536,
+    "blob": "bc763728885c01c243a4b1dd555ae5c7aa76afc3",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "e900293c66bc2c96c95000d44c1aaaed50dd0eb2f24c7fc40c7dcda90d6174f3"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/functional/direct/gc-direct-rcon5dfh/namespace-session-packets.bin",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 4060,
+    "blob": "7b6f4ab931eafd06fd0c92825f472b6ee55b01c8",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "1c09ad4f9f77749de577f6383887e14fa5b506c6e91b564346d883ecbd1728a7"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/functional/direct/gc-direct-rcon5dfh/put-ticket.bin",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 216,
+    "blob": "b581b49c748b676f57eb400f2cb250322811734c",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "ef40c33433ef83ac7e7e033dd379137f2d08eba427c89f287237ad1548bde110"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/functional/direct/gc-direct-rcon5dfh/report-session-packet.bin",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 1536,
+    "blob": "e86bb32f86c9ed4242ccb6bdab6553fec6aa4363",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "66dab0c3896a9cc72e6c9b09f4926f8c1bfd4d6d24db1f8592289ea1cb06a898"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/lifecycle-fault.sh",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 1714,
+    "blob": "1044cac4a676abc58b274c05f8aae8f2e6e40ea7",
+    "classification": "content-in-release-history",
+    "preserved": false,
+    "sha256": "f44a082bfd23fdb626bdb659cdd438498c8fc3fe105e518912c638789c20fba2"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/namespace-session-packets.bin",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 4060,
+    "blob": "bf45806207a7efdbf331027159e39bd8460712b8",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "afaa83532b8cfc190d356c378d9976900fc396d8c9a47e47be9e6e4eb4985071"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/put-ticket.bin",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 216,
+    "blob": "987d09d5471034a2b4641059f780076e41259d3a",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "1f87b57a149358d4f03f43b2af65f8d172bf1e0f34003ff860e76ae1b3dbfa76"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/lifecycle-fault/buffered/gc-buffered-5cpgq2yg/report-session-packet.bin",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 1536,
+    "blob": "4fcf5a15c9f978572dec5d4784be5ad5cee9ba0f",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "72e05444077b381e14ae36d5c388116bf9f07f3e3c96e6fa689b659d97b26fcc"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/lifecycle-fault/direct/gc-direct-f42owwfy/namespace-session-packets.bin",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 4060,
+    "blob": "9123fe9ffbf997fac04b9adad9e859b4808b1960",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "382815e00fc30b421d7a74f8bbbb055c3ed91b922201d3d1880c7315537f26ad"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/lifecycle-fault/direct/gc-direct-f42owwfy/put-ticket.bin",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 216,
+    "blob": "7a306ec667346078998c136b2bbde5f93cef376b",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "ef07e75c96b48d179278b9a69c72776eceb99f4ecdbdaa634cc8ef90958fb4f4"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/lifecycle-fault/direct/gc-direct-f42owwfy/report-session-packet.bin",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 1536,
+    "blob": "23d84820a31fc25f33288d4e089914d280d3c1a2",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "8284322bada7c1ab8772129b07b01be07714461635566ffb4d7dcf79d9e5d5b0"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure-extra.sh",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 2739,
+    "blob": "f69f714f5d006f3246f9be89d1892f6d0c8157d4",
+    "classification": "content-in-release-history",
+    "preserved": false,
+    "sha256": "3ab697e791c158f49662045b8d1efd6acac36f7c813622615ddab160d083ad6a"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure.sh",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 2788,
+    "blob": "ffd427e0c300248360251c710a0273f2748c20c2",
+    "classification": "content-in-release-history",
+    "preserved": false,
+    "sha256": "89dd8f43e01fa9c2714b967eca1f25a1176239cbeb89f9c71172d4be6f7a0732"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/borrow.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 219,
+    "blob": "7c252f0bb7aee577b1b710ee74872ff7f1222c14",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "1e04a2c413efe785d479ee10e2b6473437692efcc7a0f7ece07b91e6350546d0"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/create-alloc-unit.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 182,
+    "blob": "8c0cb49b309808da4720205654c70a9b7d89e729",
+    "classification": "content-in-release-history",
+    "preserved": false,
+    "sha256": "b22e73adb0b53c3dff095467bbf82308ab94cee346da33127186be70f045a92e"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-off-1/gc-direct-bv8mopzh/fuse.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 159942,
+    "blob": "c58e704beb7b18ab2253438b52c1d04a0cbdb4d3",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "2ee5eb8573609b2add5f7ac03bb6b830c3295c1edd6cd34828a8074cf753f1ac"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-off-1/gc-direct-bv8mopzh/manifest.json",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 4090,
+    "blob": "924c49ce347800eecb2e393d16468bad34ee0484",
+    "classification": "content-in-release-history",
+    "preserved": false,
+    "sha256": "8bd507d415c8c71a475536400f86d1147475d9a8d19daa696c5a2a3e2f488086"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-off-1/gc-direct-bv8mopzh/n1.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 611789,
+    "blob": "f0f021c035cde96e79c48c2dd4a32050d2fb5510",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "e5b67ed20caa0ba072129053876c0c5e9bb4686abffc69137e898b40e49377c4"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-off-1/gc-direct-bv8mopzh/n2.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 726357,
+    "blob": "666964fb735bef135aa3f43ee4bddc83633aaa50",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "89a38e2804e2580787e4ac028b865d0430a1596c9620373258273bf23bed4b57"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-off-1/gc-direct-bv8mopzh/n3.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 519250,
+    "blob": "700803ee6015cddcaf8e954a67d6ef35ec63d93d",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "da6b690711e10735613e92638ff9bee202ef1fc1e54b9699527d9712c601e75f"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-off-1/gc-direct-bv8mopzh/n4.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 535692,
+    "blob": "63e6a6731ca3c49f7d44a707f07b94d63ca835b5",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "8719bf0d83c72b5d50e6904d46faef24920ad90e73077c2d9091a6e0e7c9837f"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-off-1/gc-direct-bv8mopzh/replication-catchup.json",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 2013,
+    "blob": "7a56c2c19a4c9c860a1ed6792b60739952c6e100",
+    "classification": "content-in-release-history",
+    "preserved": false,
+    "sha256": "f5d37712ea051e1067983e5d810f739f02c148cb2615606a2a776be3da940414"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-off-1/gc-direct-bv8mopzh/replication-pressure.jsonl",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 8355,
+    "blob": "79ca6eac65a2956fc90c4f6fadf5a01424bab404",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "6e1060d820883113bcfdc894b3c0fdd48949b27a778b8b6a3742fca0aa68132b"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-off-1/gc-direct-bv8mopzh/tiny-sustained.json",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 32939,
+    "blob": "ebf54a16b6d41145b313cacd3f906143bb7c3294",
+    "classification": "content-in-release-history",
+    "preserved": false,
+    "sha256": "fa4e6b9133ffae17736fcf905fc796fc796d712702e3f13ab0de50a7f9349b53"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-off-1/run.exit",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 2,
+    "blob": "573541ac9702dd3969c9bc859d2b91ec1f7e6e56",
+    "classification": "content-in-release-history",
+    "preserved": false,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-off-1/run.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 2407,
+    "blob": "5166101a0fe163085637673f01c85d7c9cd8616d",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "6db5262472d5919abfe1ef9446a073cac1c78c5b4f8d07e2fbb0077cc0bdbc75"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-on-1/gc-direct-anfgmxo_/fuse.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 154530,
+    "blob": "7a0314519e1af3f65a24a3f48e3e73fd34a549f3",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "16c57673de7766c15f22c77e6f197f2b2f004f857e1e4190db07338e0549a849"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-on-1/gc-direct-anfgmxo_/manifest.json",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 4080,
+    "blob": "f9b9389acac10d7ec4228d4d458df1b82c10d1fb",
+    "classification": "content-in-release-history",
+    "preserved": false,
+    "sha256": "1acc5472fbd1a57856f59432e5b4d916057c4ff8542ad094b3fcc86fe9dc012b"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-on-1/gc-direct-anfgmxo_/n1.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 745849,
+    "blob": "50027cc4d975ca9108c4571dca8e3795c0adea8d",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "8da7e20bdb770e7b05c4c219498db5bab474410cb43373e9092a595e38e928e0"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-on-1/gc-direct-anfgmxo_/n2.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 753150,
+    "blob": "daed155b1a87c2ea052599be672eab717f58f003",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "6641809f317fd6c3b5c94e1b4c8123017f59dc95be21b596ad11d4098ed9e49b"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-on-1/gc-direct-anfgmxo_/n3.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 582394,
+    "blob": "539d93db4ee8f0aa99ed06f3d799043b1c527069",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "6feb9515d7560730899e2b06c01039a2a3d654fedd6894c2a0288759d7447f19"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-on-1/gc-direct-anfgmxo_/n4.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 575893,
+    "blob": "69902383bd567832698e04b0a3e0b18e3ed0aef3",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "0ed53f0b7db3c3faf9a3cf40668e951248528ba04ece34fa46e37a5f59d7b9a2"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-on-1/gc-direct-anfgmxo_/replication-catchup.json",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 2005,
+    "blob": "118b8ae673bc12b30955a676852138bb374ba0fe",
+    "classification": "content-in-release-history",
+    "preserved": false,
+    "sha256": "520570e22e0ead061e98911d251a5ca170543f54adaad409527525a45e90cfcb"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-on-1/gc-direct-anfgmxo_/replication-pressure.jsonl",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 8556,
+    "blob": "f9510feaa38bf45a51fb6ed85fbd1813c93c751b",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "537518b816b1c82b8846e05befca1af6cfe60474210579b3aae8e693b1038167"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-on-1/gc-direct-anfgmxo_/tiny-sustained.json",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 32944,
+    "blob": "472ff62b40ef9da74acf23e76ae09c0508a13500",
+    "classification": "content-in-release-history",
+    "preserved": false,
+    "sha256": "ada88395fbda7ee6a68826757c0505decc48b16ab968e5d4f8bca1e1c70f3b49"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-on-1/run.exit",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 2,
+    "blob": "573541ac9702dd3969c9bc859d2b91ec1f7e6e56",
+    "classification": "content-in-release-history",
+    "preserved": false,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-on-1/run.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 2297,
+    "blob": "c387eaa9cece6401b730f2556cdd176a903f09d6",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "d59ad5f082c3c47db06fd0d93d03a94f64d0f869217f06168349e2a269c3195c"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-on-2/gc-direct-oybmm0es/fuse.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 77959,
+    "blob": "d80e4341153ad76f57ecfd27e3bac254230a1373",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "87dcd3515d1a8a405f5d90861530aeded571437ef40b1083058e065a1e07bfdd"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-on-2/gc-direct-oybmm0es/manifest.json",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 4080,
+    "blob": "4846e44849a9be8d18c1693afe8feb7d721f9639",
+    "classification": "content-in-release-history",
+    "preserved": false,
+    "sha256": "67a8ac0efdbc5112a2e6099cd00a11c8cf5ee0b849cc81615105ba6192d19f47"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-on-2/gc-direct-oybmm0es/n1.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 261475,
+    "blob": "04fec99b7beae9d75141fa3da723cbb8fb5f8112",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "3930cf74efd0172ad0fe8c923152907d9f0b8f4c6dd0601bc935260e2d371bd8"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-on-2/gc-direct-oybmm0es/n2.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 258112,
+    "blob": "7b863ad3dd64d5feb3c96f0cdeea664a59bec150",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "7d3ce96bef437d7a41a8573146d7439d3fc20e411e7f52ac8e68fba0fe978281"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-on-2/gc-direct-oybmm0es/n3.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 208752,
+    "blob": "b7e46d649a10a952f7206f30c36b7bffce32982a",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "75d0e94779b80192637faa59e8fbe264dd43a5aeb44522ecc95e74485adc2150"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-on-2/gc-direct-oybmm0es/n4.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 186610,
+    "blob": "3066d55fa89b6425fcd2d645602b605bb10c686f",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "3ccc6d11767655b2993bf0417cc79f50eb2f580db993a046b8990dd1870f5416"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-on-2/gc-direct-oybmm0es/replication-pressure.jsonl",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 5371,
+    "blob": "f3dab1ba2f07f8a14fb742d132c026098f14cacd",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "09e113952cd519868889b3494750c486057831f6fd7a78e234d1c5a9f22e3a19"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-on-2/gc-direct-oybmm0es/tiny-sustained.json",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 3419,
+    "blob": "1b755a90c85f5201e03e9c388033964a3d9665b2",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "b404f9e16f5ed7a485a773948d7dd6e1b6d3c8cd467ad511b2d128a7ccbf533b"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/direct-on-2/run.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 893,
+    "blob": "7cc5571ff032f425bc353413d1d436aa0ed0af59",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "c27cfcbe6af4001998ddb95ec74bbe843049bf8cce321c2e4fd723117c312aa0"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/progress.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 195,
+    "blob": "5999680bc00e275549c4f64c38ca584cc48ee633",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "a0c70a1dd9ad7b9346ab74f74380ed8869573109554753ae435b80921b4bcb55"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/pressure/slow-sync-unit.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 278,
+    "blob": "f6e08fa47c034bee887586b5d2174bc8cd560ba6",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "db20f812111970a6f1d0132cd3d4e6f5585e1abdc35d17c5e037244f57766f4d"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/setup-refused/borrow.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 219,
+    "blob": "771a456767f93b9a8554ccacc5127f20a4d97c5a",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "4ff2d59ed6d03050a1e488975fa5cc463bff150494155cf87991d9ada441ea35"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/setup-refused/direct/run.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 208,
+    "blob": "8956313c57dec94fd857b8b67db8563558a07596",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "d045474a7ad68003d77768657273847acc9762b2a77cbf5c564882975a74ede5"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/setup-refused/restore.exit",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 2,
+    "blob": "573541ac9702dd3969c9bc859d2b91ec1f7e6e56",
+    "classification": "content-in-release-history",
+    "preserved": false,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/setup-refused/restore.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 962,
+    "blob": "caa712b2f9c910292bb9374b09f492c810e8ce49",
+    "classification": "content-in-release-history",
+    "preserved": false,
+    "sha256": "d3ae5cd000c9d70de4955e818a6f5b45617f629545762beb7b3d1f4922d15f0e"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261011-amd-feedback/evidence/setup-refused/round.exit",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd",
+    "bytes": 2,
+    "blob": "d00491fd7e5bb6fa28c517a0bb32b8b506539d4d",
+    "classification": "content-in-release-history",
+    "preserved": false,
+    "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+  },
+  {
+    "status": " M",
+    "path": "results/measure/20261010-w92-closure/capacity-recovery-handoff/handoff-1434aa83.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-find-stats",
+    "bytes": 1656,
+    "blob": "a0647a38ab0f492c3dd1e7db47085fe9a36fc7fe",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "818da24eaa81c9910bb791e22d3948a3b19970ed36c7906bfc596c9a6044a3c1"
+  },
+  {
+    "status": " M",
+    "path": "results/measure/20261010-w92-closure/capacity-recovery-handoff/handoff-cdc13b88.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-find-stats",
+    "bytes": 1762,
+    "blob": "0eadcff57c458b53cad1294945230c861a1bb3b6",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "04a8392cc1d6468c5d4944b724117041e1532ef2424012dd25bed6c54721a354"
+  },
+  {
+    "status": " M",
+    "path": "results/measure/20261010-w92-closure/capacity-recovery-handoff/handoff-cf4e365a.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-find-stats",
+    "bytes": 1762,
+    "blob": "0eadcff57c458b53cad1294945230c861a1bb3b6",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "04a8392cc1d6468c5d4944b724117041e1532ef2424012dd25bed6c54721a354"
+  },
+  {
+    "status": " M",
+    "path": "results/measure/20261010-w92-closure/capacity-recovery-handoff/handoff.log",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-find-stats",
+    "bytes": 1759,
+    "blob": "2cb17e78de0c2dedac529e42d09ee70ba0fa3c28",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "f273a5fd8500eca69407894e57a5aa478787b608de979348a21ed2fdb4598c63"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261010-w92-closure/capacity-recovery-handoff/handoff-1434aa83.exit",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-find-stats",
+    "bytes": 2,
+    "blob": "d00491fd7e5bb6fa28c517a0bb32b8b506539d4d",
+    "classification": "content-in-release-history",
+    "preserved": true,
+    "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261010-w92-closure/capacity-recovery-handoff/handoff-cdc13b88.exit",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-find-stats",
+    "bytes": 2,
+    "blob": "d00491fd7e5bb6fa28c517a0bb32b8b506539d4d",
+    "classification": "content-in-release-history",
+    "preserved": true,
+    "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261010-w92-closure/capacity-recovery-handoff/handoff-cf4e365a.exit",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-find-stats",
+    "bytes": 2,
+    "blob": "d00491fd7e5bb6fa28c517a0bb32b8b506539d4d",
+    "classification": "content-in-release-history",
+    "preserved": true,
+    "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261010-w92-closure/capacity-recovery-handoff/handoff.exit",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-find-stats",
+    "bytes": 2,
+    "blob": "d00491fd7e5bb6fa28c517a0bb32b8b506539d4d",
+    "classification": "content-in-release-history",
+    "preserved": true,
+    "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+  },
+  {
+    "status": "??",
+    "path": "results/measure/20261010-w92-closure/capacity-recovery-handoff/handoff.finished",
+    "worktree": "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-find-stats",
+    "bytes": 29,
+    "blob": "1d1e7a2b181e17142f7b07a519220f0eba696f9a",
+    "classification": "unique",
+    "preserved": true,
+    "sha256": "ae271d259f36ab5cd28ee84358529611fff86cd8863100cace7129ee4819a259"
+  }
+]

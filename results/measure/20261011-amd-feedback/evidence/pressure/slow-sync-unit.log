@@ -1,0 +1,2 @@
+[{"node": 2, "armed": true, "elapsed": 4.358199657872319e-05}, {"node": 3, "armed": false, "elapsed": 7.905007805675268e-06}, {"node": 3, "armed": true, "elapsed": 0.2008666890033055}]
+slow follower: real fsync/fdatasync bytes, selected path/marker, real EBADF and healing PASS

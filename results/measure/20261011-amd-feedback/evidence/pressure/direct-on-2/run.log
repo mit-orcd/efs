@@ -1,0 +1,11 @@
+Evidence directory: /data1/efs/amd-feedback-20261011/pressure/direct-on-2/gc-direct-oybmm0es
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=17726158862953048843
+client serving PASS
+sustained seconds=0.0 counts={}
+sustained seconds=30.0 counts={'0': {'open': 1892, 'close': 1886, 'delete': 1536, 'read': 1536}, '1': {'open': 2, 'close': 1, 'delete': 0, 'read': 0}}
+sustained seconds=60.0 counts={'0': {'open': 1892, 'close': 1886, 'delete': 1536, 'read': 1536}, '1': {'open': 1674, 'close': 1676, 'delete': 1600, 'read': 1770}, '2': {'open': 0, 'close': 0, 'delete': 0, 'read': 5}}
+sustained seconds=90.0 counts={'0': {'open': 1892, 'close': 1886, 'delete': 1536, 'read': 1536}, '1': {'open': 1674, 'close': 1676, 'delete': 1600, 'read': 1770}, '2': {'open': 1115, 'close': 1116, 'delete': 1152, 'read': 1138}}
