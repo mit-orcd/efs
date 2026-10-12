@@ -58,6 +58,7 @@
  * bounce RPCs keep the long budget. */
 #define HOST_SEND_IO_MS    250
 #define HOST_INBOX_MAX     256
+#define HOST_INBOX_SLICE_MAX 8
 #define HOST_INBOX_BYTES   (32ull << 20)
 #define HOST_OUTBOX_BYTES  (16ull << 20)
 #define HOST_FRAME_MAX     (EFS_WIRE_RAFT_MAX_CMD + EFS_WIRE_RAFT_HDR_LEN + 12u)
@@ -6117,18 +6118,45 @@ static void host_inbox_order(const struct host_inbox_item *local, unsigned n,
     }
 }
 
+/* Process a bounded FIFO prefix before publishing apply/read progress. A
+ * follower's durable receive can block, so draining the whole admitted inbox
+ * holds h->mu and hides completed read proofs for hundreds of milliseconds.
+ * Queued tails remain ahead of new arrivals. Only the taken prefix is charged
+ * to this cycle's existing post-KV durability/credit retirement path. */
+static int host_inbox_take(struct efs_raft_host *h,
+                            struct host_inbox_item *local,
+                            unsigned *done_n, uint64_t *done_bytes)
+{
+    pthread_mutex_lock(&h->inbox_mu);
+    int n=h->inbox_n;
+    if(n>HOST_INBOX_SLICE_MAX)n=HOST_INBOX_SLICE_MAX;
+    *done_n=(unsigned)n;*done_bytes=0;
+    for(int i=0;i<n;i++)*done_bytes+=h->inbox[i].len;
+    memcpy(local,h->inbox,(size_t)n*sizeof(local[0]));
+    h->inbox_n-=n;
+    memmove(h->inbox,h->inbox+n,(size_t)h->inbox_n*sizeof(h->inbox[0]));
+    h->inbox_bytes-=*done_bytes;
+    pthread_mutex_unlock(&h->inbox_mu);
+    return n;
+}
+
+/* A drained eventfd may describe work retained by the previous slice. Do
+ * not wait for another arrival to make that already-admitted tail progress.
+ * An arrival racing an empty check still wakes the existing eventfd poll. */
+static int host_pump_poll_timeout(struct efs_raft_host *h)
+{
+    pthread_mutex_lock(&h->inbox_mu);
+    int pending=h->inbox_n;
+    pthread_mutex_unlock(&h->inbox_mu);
+    return pending ? 0 : HOST_TICK_US/1000;
+}
+
 static void drain_inbox(struct efs_raft_host *h, unsigned *done_n, uint64_t *done_bytes)
 {
     struct host_inbox_item local[HOST_INBOX_MAX];
     int n, i;
 
-    pthread_mutex_lock(&h->inbox_mu);
-    n = h->inbox_n;
-    *done_n=(unsigned)n; *done_bytes=h->inbox_bytes;
-    memcpy(local, h->inbox, (size_t)n * sizeof(local[0]));
-    h->inbox_n = 0;
-    h->inbox_bytes = 0;
-    pthread_mutex_unlock(&h->inbox_mu);
+    n=host_inbox_take(h,local,done_n,done_bytes);
 
     if (h->group_drain && n>1) {
         unsigned order[HOST_INBOX_MAX];
@@ -6924,7 +6952,7 @@ static void *host_pump(void *arg)
         memset(&pfd, 0, sizeof(pfd));
         pfd.fd = h->pump_efd;
         pfd.events = POLLIN;
-        if (poll(&pfd, 1, HOST_TICK_US / 1000) > 0 && (pfd.revents & POLLIN)) {
+        if (poll(&pfd, 1, host_pump_poll_timeout(h)) > 0 && (pfd.revents & POLLIN)) {
             ssize_t drained;
             do { drained = read(h->pump_efd, &sink, sizeof(sink)); }
             while (drained < 0 && errno == EINTR);
