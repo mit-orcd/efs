@@ -1,0 +1,1 @@
+actual experimental GC hook/helper: default zero debt scans; no delete/ACK on pending/corrupt/IO; unhosted/failed proof blocks target GC PASS

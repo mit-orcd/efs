@@ -55,3 +55,17 @@ int server_repair_receive(struct efsd_server *s,const uint8_t *body,uint32_t byt
     if(!rc)rc=efs_repair_receipt_encode(&j,seal?EFS_REPAIR_RECEIPT_SEAL:EFS_REPAIR_RECEIPT_DATA,receipt);
     return rc;
 }
+
+static int repair_inode_gc_authority(void *context,efs_ino_t ino)
+{
+    (void)context;return server_raft_host_repair_gc_inode_local_ready(ino);
+}
+int server_repair_gc_inode(struct efsd_server *s,efs_export_id_t eid,efs_ino_t ino,uint64_t generation)
+{
+    if(!s || !s->repair_experiment)return EFS_ERR_ACCES;
+    /* ReadIndex may wait for session-fence apply. Never await it while holding
+     * the inode guard: PUT holds a session stripe before taking inode RD. */
+    int rc=server_raft_host_repair_gc_ready(ino,0,0);
+    if(rc)return rc;
+    return server_gc_inode_checked(s,eid,ino,generation,repair_inode_gc_authority,s);
+}

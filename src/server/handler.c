@@ -563,8 +563,9 @@ send_reply:
             struct efs_msg_gc_inode_reply rep = {.rc=EFS_ERR_PROTO};
             if (payload_len == sizeof(struct efs_msg_gc_inode)) {
                 const struct efs_msg_gc_inode *req=payload;
-                rep.rc=g_server->repair_experiment?server_raft_host_repair_gc_ready(req->ino,0,0):EFS_OK;
-                if(!rep.rc)rep.rc=server_gc_inode(g_server,req->export_id,req->ino,req->generation);
+                rep.rc=g_server->repair_experiment?
+                    server_repair_gc_inode(g_server,req->export_id,req->ino,req->generation):
+                    server_gc_inode(g_server,req->export_id,req->ino,req->generation);
             }
             efs_iostats_add(EFS_IOSTAT_GC_DELETE, 0, efs_iostats_now_us() - start,
                             rep.rc != EFS_OK && rep.rc != EFS_ERR_BUSY);
