@@ -64,6 +64,7 @@ int main(void){pthread_mutex_init(&host.mu,NULL);pthread_mutex_init(&host.snap_m
  pin_rc=EFS_ERR_NOMEM;assert(run()==EFS_ERR_NOMEM && captures==1 && !barriers);pin_rc=0;
  puts("query capture: fresh pin/barriers on each collision, four-cut/deadline bound, import/authority/error refusal and balanced releases PASS");}
 '''
+code='#include "'+str(root/'src/common/query_stage_trace.h')+'"\n'+code
 with tempfile.TemporaryDirectory(prefix='efs-query-capture-') as t:
     p=Path(t);(p/'test.c').write_text(code)
     subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p/'test.c'),'-pthread','-o',str(p/'test')],check=True)

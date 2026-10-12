@@ -489,3 +489,38 @@ Frozen Mac/ORCD/review/NUC owner ancestry and evidence are reconciled; root core
 and actual live fixture match d26. Only NUC measure promotion recipes additionally
 require ordinary gates before acceptance. The missing Mac client combined adoption
 prerequisite is assigned separately; it is not silently certified by server ancestry.
+
+### Stage diagnosis, client reconciliation and next source
+
+Mac46609ad7 confirms release combined CREATE/OPEN behavior is already present
+with independent retained-edge bookkeeping; eight focused exact-source gates
+PASS. The earlier missing-client blocker is withdrawn, optional alternate pointer
+layout held. [Reconciliation](mac-client-reconciliation-20261012.md).
+
+NUC501205b6, ORCD1bee6f43, Intel801218f3 and Mac e7ebbd25 are merged as
+documentation/evidence checkpoints; none confers merged-cluster acceptance.
+[ORCD six-wave diagnosis](orcd-query-starvation-disposition-20261012.md) and
+[Mac boundary inspection](mac-query-stage-disposition-20261012.md) leave cut
+collision, pending transactions, authority and publication lock delay unresolved.
+
+Opt-in `EFS_QUERY_STAGE_TRACE=1` stage records are being prepared for one separate
+AMD diagnostic: pin/snapshot, authority, import and transaction-cut refusals with
+revision counters; pending-record kind/shard; capture/build/checkpoint completion
+and publication lock wait. No names/value bodies are logged. Normal mode remains
+quiet; every attempt keeps its existing budgets/refusals/receipts. Actual capture
+regressions pass normally, with tracing and under sanitizers. New frozen full
+qualification is required before deploying this diagnostic source; no additional
+correctness fix or quiet pressure acceptance is claimed.
+
+Instrumentation also records failing paged request stage/root/catalog generation
+and separates build completion from publication-lock acquisition. Pending scans
+record only shard/kind, not transaction key or values. Both production-function
+recapture and page-authority suites pass with tracing off/on and ASan/UBSan;
+failed cuts/permissions still produce no successful bytes. No deadlines, retry
+count, durability setting, fence or KV mutation was changed.
+
+ORCD880016b1 documents its exact83 normal718-input suite and ten staged builds
+PASS; fault/mounted83 remain NOTRUN. NUCf4b594fa confirms preserved f52 service
+restoration and old ba73 direct20k cold/physical PASS; repaired101 native failed
+documentation-bundle links, not equivalent to merged-source acceptance. Both
+documentation/evidence descendants are now integrated.

@@ -16,7 +16,7 @@ code=r'''
 #include <string.h>
 #define HOST_QUERY_REPLY_BYTES (64ULL<<20)
 #define HOST_QUERY_AUTH_N 8192
-struct efs_server_query_view {int unused;};
+struct efs_server_query_view {uint64_t generation;};
 struct {int query_enabled;pthread_mutex_t mu;struct {uint8_t group;} g[2];} host,*g_host=&host;
 static uint32_t query_requests;static uint64_t query_reply_bytes;
 struct query_allocation {uint64_t bytes;};
@@ -61,6 +61,7 @@ int main(void){host.query_enabled=1;host.g[0].group=0;host.g[1].group=2;pthread_
  req.limit=1;capable=0;assert(run()==EFS_ERR_BUSY && barriers==1 && !consumed);
  puts("query pages: first-page capture supplies fresh authority once; continuations recheck, failed cuts emit no bytes, fresh permission refusal and close PASS");}
 '''
+code='#include "'+str(root/'src/common/query_stage_trace.h')+'"\n'+code
 with tempfile.TemporaryDirectory(prefix='efs-query-page-barriers-') as t:
     p=Path(t);(p/'test.c').write_text(code)
     subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p/'test.c'),'-pthread','-o',str(p/'test')],check=True)

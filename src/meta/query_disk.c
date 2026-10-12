@@ -1,3 +1,4 @@
+#include "../common/query_stage_trace.h"
 /* Local, rebuildable query cache. Authoritative metadata remains in Raft/KV.
  * Immutable generation directories retain old query leases. Only changed raw
  * partitions are copied; derived records and the rollup queue live on disk.
@@ -467,7 +468,12 @@ static int save(void *ctx,const uint8_t *key,uint32_t kl,const uint8_t *val,uint
     w->offset+=bytes;w->count++;return EFS_OK;
 }
 static int pending(void *u,const uint8_t *k,uint32_t kn,const uint8_t *v,uint32_t vn)
-{ (void)u;(void)k;(void)kn;(void)v;(void)vn;return EFS_ERR_BUSY; }
+{
+    (void)u;(void)v;(void)vn;
+    if(kn>=3)efs_query_stage_trace("pending-record",EFS_ERR_BUSY,0,
+        ((uint32_t)k[0]<<8)|k[1],k[2]);
+    return EFS_ERR_BUSY;
+}
 static int make_file(const struct efs_query_disk *d,uint32_t shard,char kind)
 {
     char p[EFS_MAX_PATH];if(filename(d,shard,kind,p,sizeof(p)))return -1;

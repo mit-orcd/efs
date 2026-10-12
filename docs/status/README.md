@@ -35,7 +35,8 @@ All five frozen owner handoffs are release ancestors;
 [reconciliation ledger](v030-owner-commit-reconciliation.json) retains every submitted
 commit and explicit remaining behavior/qualification holds.
 [AMD frozen integration handoff](v030-amd-handoff-20261012.md) records `d26e6874`,
-full normal/fault plus sixteen sanitizers and both-mode ordinary cold-byte PASS at d26e6874, [per-owner commit reconciliation](v030-owner-commit-reconciliation.json), compatibility and the missing Mac client adoption prerequisite.
+full normal/fault plus sixteen sanitizers and both-mode ordinary cold-byte PASS at d26e6874, [per-owner commit reconciliation](v030-owner-commit-reconciliation.json), compatibility; [Mac reconciliation](mac-client-reconciliation-20261012.md) confirms
+existing combined adoption and withdraws the earlier missing-feature diagnosis.
 Latest Mac tag54 completion and ORCD follower-read deadline/proof checkpoints
 are integrated with the independent inherited-deadline retry repair; full merged
 AMD full normal/fault plus sixteen sanitizers PASS at `d26e6874`; both-mode
@@ -676,3 +677,10 @@ regression are applied with normal/sanitizer passes; latest full qualification
 is pending. Modern-peer jobs16 packing timeout remains separate and open. Diagnostic
 inventory counts in the release ledger are replica rows; overlapping samples
 are not summed as unique logical objects or files.
+
+Packing stage follow-up: [ORCD diagnosis](orcd-query-starvation-disposition-20261012.md)
+and [Mac boundary review](mac-query-stage-disposition-20261012.md) support separate
+opt-in stage instrumentation (capture/authority/transaction/import, pending shard/kind,
+build/checkpoint/publication lock and request root/generation). Focused normal,
+trace-enabled and sanitizer regressions pass; new full frozen gates precede one
+diagnostic run. No additional correctness fix is proven yet.

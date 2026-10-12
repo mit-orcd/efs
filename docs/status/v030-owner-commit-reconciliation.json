@@ -209,8 +209,18 @@
   "all_frozen_handoffs_are_ancestors": true,
   "held_commits_within_frozen_handoffs": [],
   "held_scope": [
-    "Mac client combined CREATE/OPEN adoption portion of f842cd37 absent from root source despite original ancestry: assigned Mac reconciliation and lifetime regressions; not qualified.",
     "Any new post-handoff branch commits excluded until submitted/reviewed; frozen tips fixed above.",
     "Mounted packing direct and buffered fail on d26; cold/GC NOTRUN, restored0, no release acceptance."
-  ]
+  ],
+  "post_freeze_evidence_checkpoints": {
+    "501205b6": "501205b6a7f8b7a48586bb768d172f27e4ec1503",
+    "1bee6f43": "1bee6f43425f01b755354a3e9713834d93282b57",
+    "46609ad7": "46609ad7fec9f3805ffb05fce4547bf2f8060517",
+    "801218f3": "801218f345fe278e643c4d01bad5d588a8e1ab9f",
+    "e7ebbd25": "e7ebbd257007b5ba1573d5ca224cd93ab5aad0cd",
+    "880016b1": "880016b1fb9417e226449d68d4fbb7ff300c3757",
+    "f4b594fa": "f4b594fae5b2e3bbae58f44ac5be0541a62e6eb4"
+  },
+  "client_adoption_disposition": "Mac46609ad7 exact-source check confirms existing independent combined adoption b9b55cba/718e2dbc/05026d42; no missing feature, keep root bookkeeping, optional alternate pointer representation held.",
+  "diagnostic_source_disposition": "Opt-in stage tracing changes source; full new frozen qualification required before one separate original-budget pressure diagnostic. No correctness fix or quiet acceptance yet."
 }

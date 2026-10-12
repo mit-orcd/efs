@@ -1,3 +1,4 @@
+#include "../common/query_stage_trace.h"
 #include "efs/query_policy.h"
 #include "server_internal.h"
 #include "efs/checksum.h"
@@ -8877,6 +8878,8 @@ static int host_query_source_once(struct efs_raft_host *h,struct efs_kv_lsm_snap
                               struct efs_server_query_view *view,uint64_t *revisions,uint64_t *import_generation,
                               int *transaction_changed)
 {
+    uint64_t capture_start=query_mono_ms();
+    const char *trace_stage="pin";
     *transaction_changed=0;
     *source=NULL;memset(view,0,sizeof(*view));
     pthread_mutex_lock(&h->mu);
@@ -8895,7 +8898,8 @@ static int host_query_source_once(struct efs_raft_host *h,struct efs_kv_lsm_snap
         view->pin_ms=query_mono_ms()-started;
     }
     pthread_mutex_unlock(&h->mu);
-    if (rc) return rc;
+    if (rc) { efs_query_stage_trace(trace_stage,rc,query_mono_ms()-capture_start,0,0);return rc; }
+    trace_stage="snapshot-revisions";
     rc=efs_kv_lsm_snapshot_revisions(*source,revisions,4096);
     uint64_t transaction_before=0,transaction_after=0;
     if (!rc) rc=efs_kv_lsm_snapshot_transaction_revision(*source,&transaction_before);
@@ -8905,16 +8909,17 @@ static int host_query_source_once(struct efs_raft_host *h,struct efs_kv_lsm_snap
      * A prepare/resolve/decision after capture changes this fence; pending
      * records already in the image independently refuse catalog construction.
      * Import transitions remain excluded by host_query_capable. */
-    if(!rc) { int hint=-1;rc=host_read_index_pair(h,h->g[0].group,h->g[1].group,&hint); }
+    if(!rc) { trace_stage="authority";int hint=-1;rc=host_read_index_pair(h,h->g[0].group,h->g[1].group,&hint); }
     pthread_mutex_lock(&h->mu);
-    if (!rc && !host_query_capable(h)) rc=EFS_ERR_NOT_PRIMARY;
+    if (!rc) { trace_stage="import";if(!host_query_capable(h))rc=EFS_ERR_NOT_PRIMARY; }
     pthread_mutex_lock(&h->snap_mu);
     for (int i=0;i<HOST_NGROUPS && !rc;i++)
         if (import_generation[i]!=h->g[i].import_gen) rc=EFS_ERR_BUSY;
     pthread_mutex_unlock(&h->snap_mu);
-    if (!rc) rc=efs_kv_lsm_transaction_revision(h->kv,&transaction_after);
+    if (!rc) { trace_stage="transaction-cut";rc=efs_kv_lsm_transaction_revision(h->kv,&transaction_after); }
     if (!rc && transaction_before!=transaction_after) { *transaction_changed=1;rc=EFS_ERR_BUSY; }
     pthread_mutex_unlock(&h->mu);
+    efs_query_stage_trace(trace_stage,rc,query_mono_ms()-capture_start,transaction_before,transaction_after);
     if (rc) { efs_kv_lsm_snapshot_release(*source);*source=NULL; }
     return rc;
 }
@@ -9034,9 +9039,12 @@ static void *host_query_thread(void *ctx)
         h->query_deadline_ms=now+HOST_QUERY_BUILD_MS;
         h->query_cancel_checks=0;
         rc=host_query_source(h,&source,&view,revisions,import_generation);
+        uint64_t capture_done=query_mono_ms();
+        const char *refresh_stage="capture";
         struct efs_query_catalog *candidate=NULL;
         uint64_t watermark[4]={view.applied[0],view.applied[1],view.terms[0],view.terms[1]};
         if(!rc && !host_query_cancel(h)) {
+            refresh_stage="build";
             if(disk_backend) {
                 int restored=EFS_ERR_NOT_FOUND;
                 if(initial)restored=efs_query_catalog_restore_disk(query_root,source,watermark,catalog_bytes,&candidate);
@@ -9056,7 +9064,7 @@ static void *host_query_thread(void *ctx)
                     pthread_mutex_unlock(&h->snap_mu);
                     pthread_mutex_unlock(&h->mu);
                 }
-                if(!rc)rc=efs_query_catalog_checkpoint(candidate,watermark);
+                if(!rc) { refresh_stage="checkpoint";rc=efs_query_catalog_checkpoint(candidate,watermark); }
                 /* The long disk build does not extend any request budget. */
                 h->query_deadline_ms=query_mono_ms()+HOST_QUERY_BUILD_MS;
             } else rc=efs_query_catalog_build(source,h->query_view.catalog,catalog_bytes,host_query_cancel,h,&candidate);
@@ -9065,8 +9073,11 @@ static void *host_query_thread(void *ctx)
         if(rc && candidate){efs_query_catalog_free(candidate);candidate=NULL;}
         h->query_cancel_checks=0; /* Always enforce the deadline before publication. */
         if (!rc && host_query_cancel(h)) { efs_query_catalog_free(candidate);candidate=NULL;rc=EFS_ERR_BUSY; }
+        efs_query_stage_trace(refresh_stage,rc,query_mono_ms()-now,capture_done-now,query_mono_ms()-capture_done);
         struct efs_query_catalog *retired=NULL;
+        uint64_t publication_wait=query_mono_ms();
         pthread_rwlock_wrlock(&h->query_lock);
+        efs_query_stage_trace("publication-lock",rc,query_mono_ms()-publication_wait,0,0);
         h->query_error=rc;failed=(int)efs_query_refresh_failures((unsigned)failed,last_error,rc);
         /* A failed disk build can itself exceed the retry interval. Start
          * its backoff at completion, otherwise a retained invalid namespace
@@ -9353,10 +9364,10 @@ static int query_consume(void *ctx,const struct efs_server_query_view *view,int 
     q->view=view;
     int rc=query_auth_dir(q,q->req->root,5,NULL);
     if (!rc) rc=query_ancestry(q,q->req->root,EFS_ROOT_INO,1);
-    if (rc) return rc;
+    if (rc) { efs_query_stage_trace("request-root-authority",rc,0,q->req->root,view->generation);return rc; }
     struct efs_meta_row *root=NULL;
     rc=query_auth_dir(q,q->req->root,5,&root);
-    if (rc) return rc;
+    if (rc) { efs_query_stage_trace("request-root-binding",rc,0,q->req->root,view->generation);return rc; }
     struct efs_msg_query_snapshot_reply *r=q->reply;
     r->boot_id=view->boot_id;r->generation=view->generation;
     r->source_ns=view->source_ns;r->built_ns=view->built_ns;
@@ -9536,11 +9547,13 @@ int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void
     if(policy_rc && req->limit)return policy_rc;
     int created=0;
     struct query_page_session *session=NULL;
+    const char *request_stage="page-admission";
     int rc=query_page_acquire(req,&session,&created);
     uint16_t primary=0;
-    if (!rc && created) rc=server_raft_host_query_read(query_page_capture,session,&primary);
+    if (!rc && created) { request_stage="page-fresh-capture";rc=server_raft_host_query_read(query_page_capture,session,&primary); }
     /* Even continuations need current quorum/ReadIndex before fresh checks. */
     if (!rc && !created && session->token && req->limit) {
+        request_stage="page-continuation-authority";
         int hint=-1;rc=host_read_index_pair(g_host,g_host->g[0].group,g_host->g[1].group,&hint);
         pthread_mutex_lock(&g_host->mu);
         if (!rc && !host_query_capable(g_host)) rc=EFS_ERR_BUSY;
@@ -9563,12 +9576,14 @@ int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void
     }
     if (!a) {
         __atomic_sub_fetch(&query_requests,1,__ATOMIC_RELAXED);
+        efs_query_stage_trace("page-reply-admission",EFS_ERR_BUSY,0,req->base.root,0);
         query_page_release(session,created);return EFS_ERR_BUSY;
     }
     a->bytes=bytes;
     struct efs_msg_query_snapshot_reply *reply=(void *)(a+1);
     reply->version=EFS_QUERY_PAGE_VERSION;reply->primary_id=primary;
     if (!rc && req->limit) {
+        request_stage="page-consume";
         struct query_request q={.h=g_host,.req=&req->base,.filters=&req->filters,.page=req,.page_token=session->token,
             .reply=reply,.text=(char *)(reply+1),.deadline=query_mono_ms()+5000};
         q.auth=calloc(HOST_QUERY_AUTH_N,sizeof(*q.auth));
@@ -9577,6 +9592,7 @@ int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void
         if(!rc)rc=host_query_policy_operation(req->base.operation);
 
     }
+    if(rc)efs_query_stage_trace(request_stage,rc,0,req->base.root,session?session->view.generation:0);
     reply->status=rc;if (rc) reply->text_len=0;
     *out=reply;*len=sizeof(*reply)+reply->text_len;
     query_page_release(session,(created && rc) || (!rc && !req->limit));
