@@ -1238,6 +1238,32 @@ static int expiry_u64(const char *text,uint64_t *out)
     *out=n;return 0;
 }
 
+static int cmd_expiry_enable(int argc,char **argv)
+{
+    if(argc!=6) {
+        fprintf(stderr,"Usage:\n  efs-mgmt expiry-enable NODE:PORT INO GENERATION PARENT NAME DEADLINE_NS\n\n"
+                       "Enable a deadline on an existing singly linked regular file.\n"
+                       "Requires current file ownership and an enabled containing scratch policy.\n"
+                       "NAME is one filename; DEADLINE_NS is an absolute Unix nanosecond value.\n");
+        return 1;
+    }
+    char host[64];uint16_t port;uint64_t ino,gen,parent,deadline;
+    size_t n=strlen(argv[4]);
+    if(parse_host_port(argv[0],host,sizeof(host),&port) ||
+       expiry_u64(argv[1],&ino) || expiry_u64(argv[2],&gen) ||
+       expiry_u64(argv[3],&parent) || expiry_u64(argv[5],&deadline) ||
+       !ino || !gen || !parent || !deadline || !n || n>=EFS_MAX_NAME || strchr(argv[4],'/'))return 1;
+    uint8_t payload[55+EFS_MAX_NAME]={0};
+    payload[0]=efs_raft_shard_group(efs_kv_inode_shard(ino));payload[1]=EFS_MD_REQ_EXPIRY_ENABLE;
+    wr64be_mgmt(payload+2,ino);wr64be_mgmt(payload+10,gen);
+    wr32be_mgmt(payload+18,(uint32_t)geteuid());wr64be_mgmt(payload+38,deadline);
+    wr64be_mgmt(payload+46,parent);payload[54]=(uint8_t)n;memcpy(payload+55,argv[4],n);
+    struct efs_msg_raft_mkfs_reply r;int rc=sess_rpc(host,port,payload,(uint32_t)(55+n),&r);
+    printf("expiry-enable rc=%d revision=%llu deadline_ns=%llu root_ino=%llu leader_hint=%d\n",
+        rc,(unsigned long long)r.index,(unsigned long long)r.salt,(unsigned long long)r.term,r.leader_hint);
+    return rc?1:0;
+}
+
 static int cmd_expiry(int argc,char **argv,int policy)
 {
     int get=argc>=2 && !strcmp(argv[1],"get");
@@ -2615,6 +2641,7 @@ int main(int argc, char **argv)
         return cmd_gc_status(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-status") == 0)
         return cmd_raft_status(argc - 2, argv + 2);
+    if (strcmp(cmd,"expiry-enable")==0)return cmd_expiry_enable(argc-2,argv+2);
     if (strcmp(cmd,"expiry-clock")==0)return cmd_expiry_clock(argc-2,argv+2);
     if (strcmp(cmd,"expiry-policy")==0)return cmd_expiry(argc-2,argv+2,1);
     if (strcmp(cmd,"expiry")==0)return cmd_expiry(argc-2,argv+2,0);

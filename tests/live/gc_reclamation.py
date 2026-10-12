@@ -615,10 +615,14 @@ try:
         def expiry_offline(group=None):
             node=3
             if group is not None:
-                status=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port}'],capture_output=True,text=True).stdout
-                match=re.search(r'group '+str(group)+r' .*?leader=(\d+)',status)
-                assert match,status
-                node=int(match.group(1));assert 0<=node<4,status
+                elected=None;status=''
+                for candidate in range(4):
+                    observed=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+candidate}'],capture_output=True,text=True).stdout
+                    match=re.search(r'group '+str(group)+r' hosted=1 role=LEADER leader=(\d+)',observed)
+                    if match:
+                        elected=int(match.group(1));status=observed;assert elected==candidate,observed;break
+                assert elected is not None,'no current group leader found'
+                node=elected
                 (work/'expiry-killed-leader.txt').write_text(status+'killed_raft_id='+str(node)+'\n')
             proc=servers[node];proc.kill();proc.wait(timeout=10)
             def rejoin():

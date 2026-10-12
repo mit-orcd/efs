@@ -60,9 +60,10 @@ Private test stores belong under `/data1/efs`; leave unrelated services alone.
 
 Integration is implemented; qualification and fault coverage remain in progress.
 Control uses the existing trusted-client UID model, not authenticated transport.
-Only born-expiring files have renewal records; enabling a deadline on legacy
-files without such a record is currently refused with NODATA. This limitation
-must remain explicit when evaluating W90 closure.
+Existing-file enablement now uses an explicit name/FileID request and an
+absent-record CAS, guarded effective policy/ancestry, current owner/type/link
+checks and the same durable index transaction as renewal. Qualification of
+this additional control is pending.
 
 Remaining acceptance: live inheritance/authorization, renewal versus deletion,
 rename/path reuse, hard links, open-FD data access, clock uncertainty/jumps,
@@ -142,3 +143,35 @@ binding and refuses reactivation after that name is removed. A cleared record
 whose name no longer matches does not block ordinary rename; focused unit and
 live regressions cover this lifetime. Pre-commit birth image contention returns
 BUSY only after confirmed abort, preserving the client's operation identity.
+
+## First complete fault-build run
+
+Commit `54b193b3` (`EFS_FAULTS=1`) PASS: inherited/default-off deadlines,
+authorization, renewal/revision refusal, cleared-link lifetime, rename/reuse,
+retention/clear refusal, open-FD reads/writes/fsync, concurrent publication,
+cold restart, actual group-0 leader loss/election, offline storage debt/rejoin,
+clock uncertainty latch/reset and 144-file bounded-page backlog. Core POSIX
+**216/216, 0 fail/skip/notrun (24.6s)**; peer **67/67, 0 fail (12.7s)**.
+Ordinary physical-GC gates, cold empty fragment inventory and zero quotas pass.
+Four nodes, 1-GiB quota each, native NUC Linux/XFS/SATA, TCP/direct/FILES,
+`.efs` and packing disabled; isolated stores and permitted mounts.
+Daemons during final POSIX used roughly 11–19 MiB RSS; this observation is not
+an independent global RSS ceiling. Worker page/attempt bounds are explicit.
+
+Reproduce from this commit using the build/configuration below and add
+`--expiry-clock-fault` with a fault-enabled build. Raw log
+`/home/efs/expiry-54b193b3-gates.log`, SHA256
+`f05db272e6d9d5d6bd7795a4fc3fe1d66ef53a08ed292da5e5fc5dbc9f23bded`.
+Fixture `/data1/efs/expiry-54b193b3/gc-direct-haqk6fan` plus sibling node3/4
+root `gc-direct-1lyow2ty`. The harness stopped all owned clients/nodes.
+Binary SHA256: daemon `63d8a3e1809c94657965608c50f8759086bde2a77327ea231d2ef883dbed0fd2`;
+FUSE `6d6524125e74be1b0d3711afdfa3fda52967c38033fc8dd1582ccc6b79e065bd`;
+management `a945e51cd220c7bad1562447f656618a7d99aef9128c2b9a50ad2fb53e367cfb`.
+
+Normal commit `a5ac58a7` also passed explicit stale-delete replay, replacement
+preservation and expiry disable/re-enable catch-up. Its leader-loss harness
+assumed the seed hosted the target group and failed on group 2 (seed only
+hosts group 0); the harness now finds an actual leader among all four nodes.
+This is not recorded as a complete passing run. Raw
+`/home/efs/expiry-a5ac58a7-gates.log` retained. New explicit existing-file
+control and the corrected full matrix must pass before final qualification.

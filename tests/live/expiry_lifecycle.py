@@ -43,6 +43,10 @@ def exercise(mount,port,work,wait,physical_files,restart,offline,clock_fault=Fal
     def record(path):return rpc(61,path.stat().st_ino)
     def renew(ino,rev,deadline,uid=None,accepted=(0,)):
         return rpc(59,ino,extra=struct.pack('>IQQQ',os.getuid() if uid is None else uid,rev,0,deadline),accepted=accepted)
+    def enable(path,deadline,uid=None,gen=1,accepted=(0,)):
+        ino=os.lstat(path).st_ino;name=path.name.encode()
+        extra=struct.pack('>IQQQQB',os.getuid() if uid is None else uid,0,0,deadline,path.parent.stat().st_ino,len(name))+name
+        return rpc(66,ino,gen,extra=extra,accepted=accepted)
     def created(path):
         with path.open('xb',buffering=0) as f:
             f.write(b'expiry payload '*400);os.fsync(f.fileno());ino=os.fstat(f.fileno()).st_ino
@@ -107,6 +111,19 @@ def exercise(mount,port,work,wait,physical_files,restart,offline,clock_fault=Fal
     renew(ino,rev,0,accepted=(-16,));renew(ino,rev,time.time_ns()+int(60e9),accepted=(-5,))
     wait(lambda:not restricted.exists(),'restricted expiry',40);mark('clear and retention policy enforced')
     policy(base,ttl=3)
+    alias=base/'legacy-alias';os.link(plain,alias)
+    enable(plain,time.time_ns()+int(4e9),accepted=(-5,));assert record(plain)[1]==0;alias.unlink()
+    enable(plain,time.time_ns()+int(4e9),uid=os.getuid()+1,accepted=(-16,))
+    enable(plain,time.time_ns()+int(4e9),gen=2,accepted=(-14,))
+    enable(plain,time.time_ns()+int(60e9),accepted=(-5,))
+    legacy_ino=plain.stat().st_ino;enable(plain,time.time_ns()+int(4e9))
+    assert record(plain)[1]==1;enable(plain,time.time_ns()+int(4e9),accepted=(-4,))
+    wait(lambda:not plain.exists(),'explicit existing-file expiry',40)
+    wait(lambda:not physical_files(legacy_ino),'existing-file physical reclaim',90)
+    enable(survivor,time.time_ns()+int(4e9),accepted=(-16,));assert record(survivor)[1]==0
+    link=base/'symlink';os.symlink('renewed',link)
+    enable(link,time.time_ns()+int(4e9),accepted=(-5,));link.unlink()
+    mark('explicit existing-file expiry and link/generation/policy/type refusals')
     raced=base/'publication';ino=created(raced);fd=os.open(raced,os.O_RDWR)
     try:
         deadline=time.monotonic()+7;writes=0
@@ -160,5 +177,5 @@ def exercise(mount,port,work,wait,physical_files,restart,offline,clock_fault=Fal
     wait(lambda:all(not physical_files(i) for i in inos),'bulk expiry physical reclamation',120)
     bulk.rmdir();mark('144-file bounded page backlog')
     # Keep ordinary regression tests outside this policy, remove only owned tree.
-    path.unlink();plain.unlink();survivor.unlink();child.rmdir();base.rmdir()
+    path.unlink();survivor.unlink();child.rmdir();base.rmdir()
     mark('owned tree cleanup')
