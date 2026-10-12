@@ -1,0 +1,44 @@
+[
+  {
+    "name": "normal-build",
+    "exit": 0,
+    "seconds": 11.29
+  },
+  {
+    "name": "normal-make-test",
+    "exit": 0,
+    "seconds": 171.98
+  },
+  {
+    "name": "normal-standalone-test_alloc_value_guard",
+    "exit": 0,
+    "seconds": 0.11
+  },
+  {
+    "name": "normal-standalone-test_append_burst_clock",
+    "exit": 0,
+    "seconds": 0.11
+  },
+  {
+    "name": "normal-standalone-test_append_flush_budget",
+    "exit": 0,
+    "seconds": 0.11
+  },
+  {
+    "name": "normal-standalone-test_append_host_authority",
+    "exit": 0,
+    "seconds": 0.62
+  },
+  {
+    "name": "normal-standalone-test_append_reserve_budget",
+    "exit": 0,
+    "seconds": 0.11
+  },
+  {
+    "name": "normal-standalone-test_append_sequence",
+    "exit": 0,
+    "status": "completed already-active child during safe stop",
+    "seconds": null,
+    "recovered_kernel_wait_status": true
+  }
+]

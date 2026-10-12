@@ -1,5 +1,7 @@
 # Intel devel-intel acceptance — 2026-10-11
 
+**Current disposition: HUMAN STOP; both hosts idle.** See the [final checkpoint](intel-stop-checkpoint-20261011.md). All progress statements below are historical; no further launches or deployment are queued.
+
 Current production build is `7bde5f43`, running TCP/direct I/O. The `devel-intel` branch contains the REPORT owner preparation, committed MKDIR reply, partition-readiness, explicit-mode/deep-fixture, request-local namespace/APPEND proof and ordered APPEND PREPARE repairs. The REGISTER apply-verdict repair passes the real pending-CREATE path; the cleanup admission repairs pass native/sanitizer checks and cold live cleanup, while complete repaired-source and production acceptance remain in progress. This ledger remains in progress, retains each prior candidate's failures, and excludes incomplete-source runs from acceptance. The [earlier 775d935c acceptance](../archive/status-20261011/intel-deployment-acceptance-775d935c-20261011.md) preserves the original failures and workload evidence.
 
 ## Deployment and test contract

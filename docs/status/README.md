@@ -1,5 +1,7 @@
 # Project status — current work and index
 
+Intel: [human-stop checkpoint, 2026-10-11](intel-stop-checkpoint-20261011.md); both hosts idle, incomplete gates explicitly stopped or unrun.
+
 [Architecture](../how-it-works/architecture.md) · [Current handoff](in-flight.md) ·
 [Decisions](decisions.md) · [Work-item details](../backlog/work-items.md) ·
 [Operations](../operations/operations.md) · [Archive](../archive/README.md)

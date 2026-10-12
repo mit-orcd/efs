@@ -1,0 +1,11 @@
+{
+  "source_revision": "410afed433b6da093bdc2acf37bec253ddbd586c",
+  "archive_hashes": {
+    "source.tar.gz": "108ffbb28825672437481db6866166956f4528e323fa4a228410cbda1e3179fa",
+    "inputs.json": "5fe84952c76413ac6ba98a3696f3267dc172f43003547926021b63100bd29b3b",
+    "dirs.json": "272154ba5370b5c23d5defaef1e4f497c4be4fbc32daf1dea788f4d0809a3110"
+  },
+  "files": 1558,
+  "directories": 52,
+  "normal_and_fault_exact": true
+}
