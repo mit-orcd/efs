@@ -2959,7 +2959,8 @@ int efs_meta_apply_rename(struct efs_kv *kv, efs_ino_t src_parent,
         struct efs_expiry_record expiry;
         rc=efs_expiry_get(kv,row.ino,row.generation,&expiry);
         if(rc!=EFS_OK)return rc;
-        if(expiry.revision && row.nlink==1) {
+        if(expiry.revision && row.nlink==1 &&
+           (expiry.deadline_ns || (expiry.parent==src_parent && !strcmp(expiry.name,src_name)))) {
             if(expiry.parent!=src_parent || strcmp(expiry.name,src_name))return EFS_ERR_STALE;
             expiry.parent=dst_parent;memset(expiry.name,0,sizeof(expiry.name));
             memcpy(expiry.name,dst_name,strlen(dst_name)+1);

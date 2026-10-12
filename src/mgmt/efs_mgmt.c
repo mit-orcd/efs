@@ -1211,6 +1211,26 @@ static int cmd_commands_policy(int argc,char **argv)
     return rc?1:0;
 }
 
+static int cmd_expiry_clock(int argc,char **argv)
+{
+    int reset=argc==2 && !strcmp(argv[1],"reset");
+    if(argc!=2 || (!reset && strcmp(argv[1],"get"))) {
+        fprintf(stderr,"Usage:\n  efs-mgmt expiry-clock NODE:PORT get|reset\n\n"
+                       "Inspect this node's current clock health. Reset requires operator uid 0\n"
+                       "after clock synchronization is restored; expiry resumes only on healthy samples.\n");
+        return 1;
+    }
+    char host[64];uint16_t port;
+    if(parse_host_port(argv[0],host,sizeof(host),&port))return 1;
+    uint8_t payload[6]={0,reset?EFS_MD_REQ_EXPIRY_CLOCK_RESET:EFS_MD_REQ_EXPIRY_CLOCK};
+    if(reset)wr32be_mgmt(payload+2,(uint32_t)geteuid());
+    struct efs_msg_raft_mkfs_reply r;int rc=sess_rpc(host,port,payload,reset?6:2,&r);
+    printf("expiry-clock rc=%d enabled=%s healthy=%s uncertain=%s wall_ns=%llu monotonic_ns=%llu\n",
+        rc,(r.index&4)?"yes":"no",(r.index&1)?"yes":"no",(r.index&2)?"yes":"no",
+        (unsigned long long)r.salt,(unsigned long long)r.term);
+    return rc?1:0;
+}
+
 static int expiry_u64(const char *text,uint64_t *out)
 {
     char *end=NULL;errno=0;unsigned long long n=strtoull(text,&end,10);
@@ -2595,6 +2615,7 @@ int main(int argc, char **argv)
         return cmd_gc_status(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-status") == 0)
         return cmd_raft_status(argc - 2, argv + 2);
+    if (strcmp(cmd,"expiry-clock")==0)return cmd_expiry_clock(argc-2,argv+2);
     if (strcmp(cmd,"expiry-policy")==0)return cmd_expiry(argc-2,argv+2,1);
     if (strcmp(cmd,"expiry")==0)return cmd_expiry(argc-2,argv+2,0);
     if (strcmp(cmd, "commands-policy") == 0)

@@ -53,6 +53,10 @@ static void inheritance_gates(void)
  assert(efs_meta_apply_expire(kv,1,"renamed",4*NS,&due)==EFS_ERR_STALE);
  due.revision=2;assert(!efs_meta_apply_expire(kv,1,"renamed",4*NS,&due));
  assert(!efs_meta_apply_reap_done(kv,first,1));assert(!efs_expiry_get(kv,first,1,&record));assert(!record.revision);
+ assert(!efs_expiry_get(kv,second,1,&record));record.deadline_ns=0;apply(kv,second,record.revision,&record);
+ assert(!efs_meta_apply_link(kv,1,"second",1,"cleared-alias",2*NS));
+ assert(!efs_meta_apply_unlink(kv,1,"second",2*NS));
+ assert(!efs_meta_apply_rename(kv,1,"cleared-alias",1,"cleared-renamed",2*NS));
  assert(!efs_meta_apply_check(kv));efs_kv_mem_free(kv);
 }
 static void namespace_gates(void)

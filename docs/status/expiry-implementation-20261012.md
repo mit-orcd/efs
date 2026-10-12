@@ -125,3 +125,20 @@ concurrent publication, offline storage/rejoin and 144-file deadline pagination.
 `--expiry-clock-fault` additionally requires a fault-enabled daemon and verifies
 latched clock uncertainty plus explicit operator recovery, without changing the
 host clock. Exact committed-source rebuild and rerun remain required.
+
+## Extended committed-build diagnostic
+
+Commit `31e1cbcb`, fault-enabled native NUC build, passed concurrent publication,
+cold restart and offline-storage debt/rejoin. The clock-fault gate failed to
+observe all nodes as uncertain: followers did not sweep and health reads only
+returned their last sample. The fix makes health inspection sample the kernel
+freshly even on followers; deletion already checks fresh health independently.
+A real operator `efs-mgmt expiry-clock NODE:PORT get|reset` is added.
+Raw diagnostic `/home/efs/expiry-31e1cbcb-gates.log`; fixture
+`/data1/efs/expiry-31e1cbcb/gc-direct-pchr9uwb`. Full acceptance remains pending.
+
+Clearing allows ordinary hard links. Renewal now guards the recorded name
+binding and refuses reactivation after that name is removed. A cleared record
+whose name no longer matches does not block ordinary rename; focused unit and
+live regressions cover this lifetime. Pre-commit birth image contention returns
+BUSY only after confirmed abort, preserving the client's operation identity.

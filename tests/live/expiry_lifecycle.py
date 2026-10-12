@@ -80,6 +80,13 @@ def exercise(mount,port,work,wait,physical_files,restart,offline,clock_fault=Fal
     else:raise AssertionError('active expiry hardlink accepted')
     mark('active hardlink refusal')
     _,rev,_,_=record(path);renew(ino,rev,0);assert record(path)[2]==0
+    # Clearing permits normal hard-link lifetime. Reactivation must not use
+    # a deleted old name to schedule deletion of a different binding.
+    alias=base/'cleared-alias';os.link(path,alias);_,rev,_,_=record(path)
+    renew(ino,rev,time.time_ns()+int(10e9),accepted=(-5,))
+    path.unlink();renew(ino,rev,time.time_ns()+int(10e9),accepted=(-3,-14))
+    assert alias.exists();alias.rename(path)
+    mark('cleared-link and stale binding refusal')
     policy(base,ttl=3)
     moving=base/'moving';ino=created(moving);_,rev,deadline,_=record(moving)
     dest=base/'renamed';moving.rename(dest);assert record(dest)[2]==deadline
@@ -111,6 +118,12 @@ def exercise(mount,port,work,wait,physical_files,restart,offline,clock_fault=Fal
         assert physical_files(ino),'offline physical debt unexpectedly gone'
     finally:rejoin()
     wait(lambda:not physical_files(ino),'offline expiry reclamation after rejoin',90);mark('offline storage retains debt until rejoin')
+    elected=base/'leader-change';ino=created(elected)
+    rejoin=offline(0 if ino&1 else 2)
+    try:wait(lambda:not elected.exists(),'expiry after actual metadata leader loss',45)
+    finally:rejoin()
+    wait(lambda:not physical_files(ino),'leader-loss expiry physical reclaim',90)
+    mark('metadata leader loss and election')
     if clock_fault:
         marker=work/'expiry-clock-uncertain';marker.touch()
         def clock(node,reset=False):

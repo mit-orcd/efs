@@ -10823,6 +10823,8 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         if(cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK_RESET && (!h->expiry_enabled || rd32be(cmd+1))) {
             out->rc=EFS_ERR_ACCES;return;
         }
+        /* Read health freshly even on followers that do not run a sweep. */
+        if(cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK)(void)host_expiry_clock_read(h,NULL);
         pthread_mutex_lock(&h->mu);
         if(cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK_RESET)efs_expiry_clock_reset(&h->expiry_clock);
         out->index=h->expiry_clock.healthy|((uint64_t)h->expiry_clock.uncertain<<1)|((uint64_t)h->expiry_enabled<<2);
@@ -16765,7 +16767,8 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     if(rc==EFS_OK && !is_dir) {
         struct efs_expiry_record expiry;
         rc=efs_expiry_get(h->kv,row.ino,row.generation,&expiry);
-        if(rc==EFS_OK && expiry.revision && row.nlink==1) {
+        if(rc==EFS_OK && expiry.revision && row.nlink==1 &&
+           (expiry.deadline_ns || (expiry.parent==old_parent && !strcmp(expiry.name,old_name)))) {
             if(expiry.parent!=old_parent || strcmp(expiry.name,old_name))rc=EFS_ERR_STALE;
             uint64_t revision=expiry.revision,deadline=expiry.deadline_ns;
             expiry.parent=new_parent;memset(expiry.name,0,sizeof(expiry.name));

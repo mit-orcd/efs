@@ -595,11 +595,18 @@ try:
         from expiry_lifecycle import exercise
         def expiry_restart():
             unmount();stop(crash=True);start();mount_client()
-        def expiry_offline():
-            proc=servers[3];proc.kill();proc.wait(timeout=10)
+        def expiry_offline(group=None):
+            node=3
+            if group is not None:
+                status=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port}'],capture_output=True,text=True).stdout
+                match=re.search(r'group '+str(group)+r' .*?leader=(\d+)',status)
+                assert match,status
+                node=int(match.group(1));assert 0<=node<4,status
+                (work/'expiry-killed-leader.txt').write_text(status+'killed_raft_id='+str(node)+'\n')
+            proc=servers[node];proc.kill();proc.wait(timeout=10)
             def rejoin():
-                log=open(work/'n4.log','ab');handles.append(log)
-                servers[3]=subprocess.Popen(proc.args,env=env,stdout=log,stderr=log)
+                log=open(work/f'n{node+1}.log','ab');handles.append(log)
+                servers[node]=subprocess.Popen(proc.args,env=env,stdout=log,stderr=log)
                 time.sleep(3)
             return rejoin
         exercise(mount,a.port,work,wait,files,expiry_restart,expiry_offline,a.expiry_clock_fault)
