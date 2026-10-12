@@ -115,6 +115,7 @@ p.add_argument('--packing-clients',type=int,choices=(2,7),default=2,help='two or
 p.add_argument('--ordinary-overwrite-only',action='store_true',help='ordinary span-to-full overwrite, immediate primary/peer bytes, cold restart and physical cleanup')
 p.add_argument('--disable-efs-commands', action='store_true', help='disable client/server .efs query work; use core POSIX qualification while retaining packed writes')
 p.add_argument('--mounted-packing-only', action='store_true', help='opt-in mounted tiny coalescing, mixed mutation, peer/cold hashes, POSIX and physical packed reclamation')
+p.add_argument('--packing-crash-after-fsync',action='store_true',help='additional mounted-packing gate: SIGKILL all four daemons after acknowledged fsync and client drain, then verify cold bytes and reclamation')
 p.add_argument('--posix', action='store_true')
 p.add_argument('--posix-jobs', type=int, default=4, help='parallel POSIX cases (default: 4); each case retains its own concurrent writers')
 p.add_argument('--storage-session-fence-fault',action='store_true',help='private certificate fsync EIO: revocation must remain incomplete, then recover and survive cold restart; requires --guarded-leases')
@@ -205,6 +206,8 @@ p.add_argument('--idle-seconds',type=int,default=0,help='measure live-table idle
 p.add_argument('--full-node',action='store_true',help='one node quota exhausted while three fragment targets remain writable')
 p.add_argument('--port', type=int, default=20190)
 a = p.parse_args()
+if a.packing_crash_after_fsync and not a.mounted_packing_only:
+    p.error('--packing-crash-after-fsync requires --mounted-packing-only')
 if not 0 <= a.tiny_sustained_large_mib_s <= 64:p.error('--tiny-sustained-large-mib-s must be 0..64')
 if not 0 <= a.tiny_sustained_seconds <= 1800:p.error('--tiny-sustained-seconds must be 0..1800')
 if not 1<=a.append_loaded_rounds<=20:p.error('--append-loaded-rounds must be 1..20')
@@ -679,7 +682,13 @@ try:
                 result=subprocess.run(list(map(str,command)),env=env,timeout=600)
                 if result.returncode:failures.append({'gate':label,'returncode':result.returncode})
         run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
-        unmount();stop(strict=True);start();mount_client()
+        unmount()
+        if a.packing_crash_after_fsync:
+            victims=list(servers);stop(crash=True)
+            assert len(victims)==4 and all(proc.returncode==-signal.SIGKILL for proc in victims), 'all four daemons must actually die by SIGKILL'
+            print('all four daemons killed after acknowledged fsync PASS',flush=True)
+        else:stop(strict=True)
+        start();mount_client()
         for name,body in expected.items():assert (mount/'mounted-pack'/name).read_bytes()==body,name
         assert not (mount/'mounted-pack'/'tiny-2').exists()
         print('mounted packed/ordinary mutations and acknowledged cold hashes PASS',flush=True)
@@ -692,7 +701,7 @@ try:
                 'source_sha256':digest.hexdigest(),'clients':a.packing_clients,'mode':a.mode,'transport':a.transport,
                 'packed_writes':env['EFS_PACKED_WRITES'],'commands':env.get('EFS_COMMANDS'),
                 'commands_server':env.get('EFS_COMMANDS_SERVER'),
-                'restart':'orderly; four status-zero daemons, no forced kill'}
+                'restart':('all four daemons SIGKILL after acknowledged fsync and client drain' if a.packing_crash_after_fsync else 'orderly; four status-zero daemons, no forced kill')}
         (work/'mounted-packing.json').write_text(json.dumps(report,indent=2))
         assert not failures,failures
         unmount();stop(strict=True)
