@@ -1,0 +1,22 @@
+{
+  "source": "6d7016be",
+  "implementation": "97944107",
+  "source_inputs_verified": 1042,
+  "source_check_exit": 0,
+  "modes": {
+    "normal": {
+      "exit": 0,
+      "status": "PASS",
+      "python_recipe_executions": 245,
+      "native_recipe_executions": 69,
+      "sha256": "1a1d8667d3c86b6dabb35e8b30c87dc79732d13dfb8426d063a7359b10e9213b"
+    },
+    "fault": {
+      "exit": 0,
+      "status": "PASS",
+      "python_recipe_executions": 245,
+      "native_recipe_executions": 69,
+      "sha256": "a078effa5cb54a33bf617c8deb45e536eace69035ca0314be4601f2f6f1032ac"
+    }
+  }
+}
