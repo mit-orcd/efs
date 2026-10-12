@@ -1,0 +1,52 @@
+sanitizer=False flag=None expected_failure=0
+quiet cut captured at 590 ms with 9 pins/18 group proofs PASS
+persistent cut contention: 5 cohorts/20 pins/40 group proofs over 1100 modeled ms, no publication; later authority refusal, general/slow/error backoff and successful coalescing PASS
+mixed distributed cut: reject A-only image after B proof, stable complete recapture and ordinary atomic update noninvalidation PASS
+query capture: fresh pin/barriers on each collision, four-cut/deadline bound, import/authority/error refusal and balanced releases PASS
+exit=0
+sanitizer=True flag=None expected_failure=0
+quiet cut captured at 590 ms with 9 pins/18 group proofs PASS
+persistent cut contention: 5 cohorts/20 pins/40 group proofs over 1100 modeled ms, no publication; later authority refusal, general/slow/error backoff and successful coalescing PASS
+mixed distributed cut: reject A-only image after B proof, stable complete recapture and ordinary atomic update noninvalidation PASS
+query capture: fresh pin/barriers on each collision, four-cut/deadline bound, import/authority/error refusal and balanced releases PASS
+exit=0
+sanitizer=False flag=--baseline-cut-backoff expected_failure=1
+Assertion failed: (success && admitted>=quiet_start && admitted<=quiet_end), function scheduler_oracle, file test.c, line 212.
+Traceback (most recent call last):
+  File "/private/tmp/efs-mac-cut-review-b239dc7d/tests/test_query_capture_retry.py", line 163, in <module>
+    subprocess.run([str(p/'test')],check=True)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 528, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-query-capture-i3ig7sdu/test']' died with <Signals.SIGABRT: 6>.
+exit=1
+sanitizer=False flag=--unsafe-all-busy-retry expected_failure=1
+Assertion failed: (!changed && !p && captures==2 && releases==2 && !efs_query_refresh_cut_retry(EFS_ERR_BUSY,changed,20)), function scheduler_oracle, file test.c, line 235.
+quiet cut captured at 590 ms with 9 pins/18 group proofs PASS
+Traceback (most recent call last):
+  File "/private/tmp/efs-mac-cut-review-b239dc7d/tests/test_query_capture_retry.py", line 163, in <module>
+    subprocess.run([str(p/'test')],check=True)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 528, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-query-capture-rasq4zrn/test']' died with <Signals.SIGABRT: 6>.
+exit=1
+sanitizer=False flag=--unsafe-no-transaction-fence expected_failure=1
+Assertion failed: (success && admitted>=quiet_start && admitted<=quiet_end), function scheduler_oracle, file test.c, line 212.
+Traceback (most recent call last):
+  File "/private/tmp/efs-mac-cut-review-b239dc7d/tests/test_query_capture_retry.py", line 163, in <module>
+    subprocess.run([str(p/'test')],check=True)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 528, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-query-capture-pck4isc9/test']' died with <Signals.SIGABRT: 6>.
+exit=1
+Isolated existing mixed-cut oracle (scheduler bypassed only in local test harness)
+mixed distributed cut: reject A-only image after B proof, stable complete recapture and ordinary atomic update noninvalidation PASS
+query capture: fresh pin/barriers on each collision, four-cut/deadline bound, import/authority/error refusal and balanced releases PASS
+args=[] exit=0
+Assertion failed: (host_query_source_once(&host,&mixed,&view,revisions,imports,&changed)==EFS_ERR_BUSY), function main, file test.c, line 268.
+Traceback (most recent call last):
+  File "/private/tmp/efs-mac-cut-review-b239dc7d/tests/test_query_capture_without_scheduler.py", line 163, in <module>
+    subprocess.run([str(p/'test')],check=True)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 528, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-query-capture-q5hbv7ug/test']' died with <Signals.SIGABRT: 6>.
+args=['--unsafe-no-transaction-fence'] exit=1
