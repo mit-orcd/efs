@@ -2,7 +2,7 @@
 """Unprivileged private Intel container fixture actions; raw evidence stays outside Git."""
 import argparse,hashlib,json,os,re,signal,socket,subprocess,time
 from pathlib import Path
-p=argparse.ArgumentParser(description=__doc__);p.add_argument('action',choices=['build','proof','start','mount','stop-clients','stop-servers','run','inventory']);p.add_argument('--base',type=Path,required=True);p.add_argument('--host-index',type=int,choices=[0,1],required=True);p.add_argument('--command');p.add_argument('--source-commit');p.add_argument('--clients',type=int,default=2,choices=range(1,8));a=p.parse_args()
+p=argparse.ArgumentParser(description=__doc__);p.add_argument('action',choices=['build','proof','start','mount','stop-clients','stop-servers','run','inventory']);p.add_argument('--base',type=Path,required=True);p.add_argument('--host-index',type=int,choices=[0,1],required=True);p.add_argument('--command');p.add_argument('--source-commit');p.add_argument('--writers',type=int,default=8,choices=range(1,33),help='private container writer slots per daemon; metadata/helper threads are separate');p.add_argument('--clients',type=int,default=2,choices=range(1,8));a=p.parse_args()
 b=a.base.resolve();assert b.parent==Path('/data1/efs/bench') and b.name.startswith('container-') and os.getuid()!=0
 s=b/'src';out=b/'artifacts';out.mkdir(exist_ok=True)
 def mounted(path):
@@ -47,7 +47,7 @@ elif a.action=='start':
  for j in range(2):
   n=1+a.host_index*2+j;r=(b if j==0 else Path('/data2/efs/bench')/b.name)/('n%d'%n);r.mkdir(parents=True,exist_ok=True)
   assert not (r/'data').exists() or (out/'servers.json').exists(),'refuse unowned nonfresh store'
-  cmd=[str(s/'efsd'),'--node-id',str(n),'--addr',ip,'--port',str(27432+j),'--storage',str(r),'--quota','4G','--writers','2','--storage-engine','containers','--direct-io']
+  cmd=[str(s/'efsd'),'--node-id',str(n),'--addr',ip,'--port',str(27432+j),'--storage',str(r),'--quota','4G','--writers',str(a.writers),'--storage-engine','containers','--direct-io']
   if n!=1:cmd+=['--join','10.0.0.207:27432']
   rows.append(launch(cmd,'n%d'%n))
  (out/'servers.json').write_text(json.dumps(rows,indent=2))
