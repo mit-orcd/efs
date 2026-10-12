@@ -1506,6 +1506,8 @@ acknowledged ordinary overwrite loss: full normal/fault, eleven sanitizer and
 both-mode primary/peer/cold/cleanup gates pass at `02b9918b`.
 Independent authority review NET fallback is implemented with normal and
 ASan/UBSan actual-caller regressions; semantic refusals and fresh guards remain.
+[AMD frozen integration handoff](../status/v030-amd-handoff-20261012.md) records `d26e6874`,
+active full gates, compatibility and the missing Mac client adoption prerequisite.
 Latest Mac tag54 completion and ORCD follower-read deadline/proof checkpoints
 are integrated with the independent inherited-deadline retry repair; full merged
 AMD qualification is pending. ORCD packing timeouts remain
