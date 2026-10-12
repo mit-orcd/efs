@@ -10196,7 +10196,8 @@ void server_raft_host_stop(void)
 /* The pump's off-lock durability tail need not park a fresh quorum ACK.
  * Try the existing mutex only. With pending inbox work, replies may note
  * current-term read quorum but MUST still enter normal recv for ordered
- * replication bookkeeping. Requests stay behind pending work. No commit,
+ * replication bookkeeping. Requests may grant only the same strict heartbeat
+ * vote; with queued work they also stay on normal recv. No commit,
  * apply, storage promise or membership change occurs on this path. */
 static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n)
 {
@@ -10210,7 +10211,12 @@ static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n
     pthread_mutex_lock(&h->inbox_mu);
     int pending=h->inbox_n;
     pthread_mutex_unlock(&h->inbox_mu);
-    if (!pending || msg.type==EFS_RAFT_MSG_AE_REP) {
+    {
+        /* A matched stable-leader probe can grant a heartbeat vote without
+         * touching queued log/apply state. The Raft core checks boot, term,
+         * membership, persisted prefix and deferred durability. Pending
+         * work always retains this frame for normal ordered receive below;
+         * only the read vote may precede unrelated inbox work. */
         struct efs_raft *r=group_raft(h,msg.group);
         handled=efs_raft_read_control(r,&msg);
         /* A pure read vote does not reorder commit/apply or replication.

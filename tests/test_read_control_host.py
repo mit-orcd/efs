@@ -34,28 +34,32 @@ int main(void) {
  assert(!host_read_control(&h,p,sizeof(p)) && !calls);decode_fail=0;
  pthread_mutex_lock(&h.mu);assert(!host_read_control(&h,p,sizeof(p)) && !calls);
  pthread_mutex_unlock(&h.mu);
- h.inbox_n=1;assert(!host_read_control(&h,p,sizeof(p)) && !calls);h.inbox_n=0;
- assert(host_read_control(&h,p,sizeof(p))==1 && calls==1 && !published && !woken);
+ h.inbox_n=1;assert(!host_read_control(&h,p,sizeof(p)) && calls==1 && h.inbox_n==1);h.inbox_n=0;
+ assert(host_read_control(&h,p,sizeof(p))==1 && calls==2 && !published && !woken);
  p[0]=EFS_RAFT_MSG_AE_REP;result=2;
- assert(!host_read_control(&h,p,sizeof(p)) && calls==2 && published==1 && woken==1);
+ assert(!host_read_control(&h,p,sizeof(p)) && calls==3 && published==1 && woken==1);
  /* A noted reply still returns fallback so normal recv owns progress. */
- result=1;assert(host_read_control(&h,p,sizeof(p)) && calls==3 && published==2 && woken==2);
+ result=1;assert(host_read_control(&h,p,sizeof(p)) && calls==4 && published==2 && woken==2);
  /* Fully accounted probe replies leave no pending bookkeeping. */
- result=0;assert(!host_read_control(&h,p,sizeof(p)) && calls==4 && published==2);
+ result=0;assert(!host_read_control(&h,p,sizeof(p)) && calls==5 && published==2);
  p[0]=EFS_RAFT_MSG_AE_REQ;result=2;
- assert(!host_read_control(&h,p,sizeof(p)) && calls==5 && published==2 && woken==2);
+ assert(!host_read_control(&h,p,sizeof(p)) && calls==6 && published==2 && woken==2);
  /* Early follower ACK leaves commit/apply on the normal ordered inbox. */
  h.inbox_n=1;p[0]=EFS_RAFT_MSG_AE_REP;result=2;
- assert(!host_read_control(&h,p,sizeof(p)) && calls==6 && published==3 && woken==3 && h.inbox_n==1);
- result=1;assert(!host_read_control(&h,p,sizeof(p)) && calls==7 && published==4 && woken==4 && h.inbox_n==1);
- result=0;assert(!host_read_control(&h,p,sizeof(p)) && calls==8 && published==4);
+ assert(!host_read_control(&h,p,sizeof(p)) && calls==7 && published==3 && woken==3 && h.inbox_n==1);
+ result=1;assert(!host_read_control(&h,p,sizeof(p)) && calls==8 && published==4 && woken==4 && h.inbox_n==1);
+ result=0;assert(!host_read_control(&h,p,sizeof(p)) && calls==9 && published==4);
  p[0]=EFS_RAFT_MSG_AE_REQ;result=1;
- assert(!host_read_control(&h,p,sizeof(p)) && calls==8 && h.inbox_n==1);
+ assert(!host_read_control(&h,p,sizeof(p)) && calls==10 && h.inbox_n==1);
+ result=2;assert(!host_read_control(&h,p,sizeof(p)) && calls==11 && h.inbox_n==1);
+ result=0;assert(!host_read_control(&h,p,sizeof(p)) && calls==12 && h.inbox_n==1);
+ /* Requests never consume pending frames, even when otherwise accounted;
+  * refusal never publishes progress or changes queue ownership. */
  h.inbox_n=0;
  assert(!pthread_mutex_trylock(&h.mu));pthread_mutex_unlock(&h.mu);
  assert(!pthread_mutex_trylock(&h.inbox_mu));pthread_mutex_unlock(&h.inbox_mu);
  pthread_mutex_destroy(&h.mu);pthread_mutex_destroy(&h.inbox_mu);
- puts("read control host: busy mutex, pending order, frame refusal and reply bookkeeping PASS");
+ puts("read control host: busy mutex, pending order, frame refusal, early request votes and reply bookkeeping PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-read-control-host-') as d:
