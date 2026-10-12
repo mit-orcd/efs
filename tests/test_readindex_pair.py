@@ -15,9 +15,6 @@ code=r'''
 struct efs_raft {int role,pending,fail;uint64_t round,term,commit;};
 struct efs_raft_host {pthread_mutex_t mu;struct efs_raft core[3];int absent;};
 struct host_read_admission {uint64_t want,round,term;};
-struct host_group {int unused;};
-static struct host_group *group_slot(struct efs_raft_host *h,uint8_t g){(void)h;(void)g;return NULL;}
-static void host_request_next_read(struct host_group *g,struct efs_raft *r,uint64_t round){(void)g;assert(round==r->round+1);}
 static int begun,waits,scalar,kicks,published,wait_error;
 static uint64_t expected[3];
 static __thread uint64_t deadline;

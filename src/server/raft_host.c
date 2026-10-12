@@ -316,8 +316,6 @@ struct host_group {
     int v_role, v_leader;
     int v_read_pending, v_read_done, v_proven_done;
     uint64_t v_stamp;   /* bumped by every publish that changed a field */
-    /* h->mu: bounded next-round demand, never read authority or a TTL. */
-    uint64_t read_requested_round, read_requested_term;
 };
 
 /* One blocked lock waiter (10.5c-34). Stack-allocated by the waiting
@@ -3996,34 +3994,6 @@ static int host_follower_read_result(int rc,int self,int peers,int remote_hint,
 
 struct host_read_admission {uint64_t want,round,term;};
 
-/* h->mu held. Record only the next round when an older one is pending.
- * The pump starts it at completion, avoiding a wake/lock/kick handoff before
- * sending fresh probes. Many readers coalesce into two bounded fields. */
-static void host_request_next_read(struct host_group *g,struct efs_raft *r,
-                                   uint64_t round)
-{
-    if(!g || !efs_raft_read_pending(r))return;
-    uint64_t term=efs_raft_term(r);
-    if(g->read_requested_term!=term || g->read_requested_round<round) {
-        g->read_requested_term=term;g->read_requested_round=round;
-    }
-}
-
-static int host_start_requested_read(struct host_group *g)
-{
-    struct efs_raft *r=g->r;
-    if(!g->read_requested_round)return EFS_OK;
-    if(!r || efs_raft_role(r)!=EFS_RAFT_LEADER ||
-       efs_raft_term(r)!=g->read_requested_term ||
-       efs_raft_read_round(r)>=g->read_requested_round) {
-        g->read_requested_round=g->read_requested_term=0;return EFS_OK;
-    }
-    if(efs_raft_read_pending(r))return EFS_OK; /* never reset outstanding ACKs */
-    int rc=efs_raft_read_begin(r);
-    if(rc==EFS_OK)g->read_requested_round=g->read_requested_term=0;
-    return rc;
-}
-
 static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
                            int *leader_hint,const struct host_read_admission *admission)
 {
@@ -4092,7 +4062,6 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             }
             round = previous + 1;
             admitted_term = efs_raft_term(r);
-            host_request_next_read(group_slot(h,group),r,round);
             pthread_mutex_unlock(&h->mu);
         }
         if (v.term != admitted_term) {
@@ -4192,7 +4161,6 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
         }
         admission[local]=(struct host_read_admission){efs_raft_commit(r[local]),
             previous+1,efs_raft_term(r[local])};
-        host_request_next_read(group_slot(h,groups[local]),r[local],previous+1);
         if(!efs_raft_read_pending(r[local]))rc=efs_raft_read_begin(r[local]);
         host_publish_group(h,groups[local]);
         pthread_mutex_unlock(&h->mu);
@@ -4216,7 +4184,6 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
         }
         admission[i]=(struct host_read_admission){efs_raft_commit(r[i]),
                                                   previous+1,efs_raft_term(r[i])};
-        host_request_next_read(group_slot(h,groups[i]),r[i],previous+1);
     }
     for(unsigned i=0;i<2;i++) {
         if(!efs_raft_read_pending(r[i]))rc=efs_raft_read_begin(r[i]);
@@ -6920,11 +6887,6 @@ static void *host_pump(void *arg)
          * otherwise a new leader with one surviving follower cannot commit
          * its no-op, and fresh reads block the first client proposal forever. */
         host_durable_synced(h);
-        /* A queued reader needs the round after the one just completed.
-         * Begin its probes before publishing/waking handlers; all replies
-         * still require the ordinary term/quorum/applied-prefix predicate. */
-        for(i=0;i<HOST_NGROUPS;i++)
-            if(h->g[i].hosted)(void)host_start_requested_read(&h->g[i]);
         host_balance_leaders(h, now_us_());
         if (obs) {
             t_tick = now_us_() - c0;
