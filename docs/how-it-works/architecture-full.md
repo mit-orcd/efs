@@ -2169,6 +2169,11 @@ collisions, zero recorded pending refusals,46.915/48.816s publication gaps.
 Separate coherent-cut/root diagnosis and foreground admission/proposal analysis
 are assigned; no safe additional repair is proven.
 
+The coherent-cut actual-helper negative control now rejects an A-only image
+after sideB delivery/revision advance; normal/sanitizer pass and fence-removal
+test mutant fails. [Oracle and limits](../status/v030-query-stage-diagnostic-20261012.md).
+No production ordering/fence repair is inferred.
+
 
 ## Appendix 2 — In flight — the current handoff block
 

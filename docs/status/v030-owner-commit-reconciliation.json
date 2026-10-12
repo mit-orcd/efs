@@ -219,8 +219,10 @@
     "801218f3": "801218f345fe278e643c4d01bad5d588a8e1ab9f",
     "e7ebbd25": "e7ebbd257007b5ba1573d5ca224cd93ab5aad0cd",
     "880016b1": "880016b1fb9417e226449d68d4fbb7ff300c3757",
-    "f4b594fa": "f4b594fae5b2e3bbae58f44ac5be0541a62e6eb4"
+    "f4b594fa": "f4b594fae5b2e3bbae58f44ac5be0541a62e6eb4",
+    "cd84edcd": "cd84edcd9959a3d06461ceec8193f87b95b33618"
   },
   "client_adoption_disposition": "Mac46609ad7 exact-source check confirms existing independent combined adoption b9b55cba/718e2dbc/05026d42; no missing feature, keep root bookkeeping, optional alternate pointer representation held.",
-  "diagnostic_source_disposition": "Opt-in stage tracing changes source; full new frozen qualification required before one separate original-budget pressure diagnostic. No correctness fix or quiet acceptance yet."
+  "diagnostic_source_disposition": "Opt-in stage tracing changes source; full new frozen qualification required before one separate original-budget pressure diagnostic. No correctness fix or quiet acceptance yet.",
+  "next_diagnostic_proposal": "Aggregate transaction kind/PUT-DEL deltas and split root refusal reasons; no filter/reorder/removal without all-participant durable coverage proof."
 }

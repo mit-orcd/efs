@@ -66,3 +66,25 @@ hypothesis or missing discriminator. Any repair gets a new immutable full-gated
 source and separate quiet same-source ON/OFF pressure acceptance. Synchronous
 tracing perturbs latency; this instrumented result is not quiet acceptance.
 No new deployment, push, tag or main promotion.
+
+## Coherent-cut negative control
+
+Mac cd84edcd supplies the counterexample; the actual production capture-helper
+regression now explicitly models sideA resolved in the pinned image while sideB
+is absent. The post-pin barrier delivers B and advances the transaction revision:
+the helper returns BUSY, frees the pin and marks a changed cut. Fresh stable
+recapture contains both sides. An ordinary atomic update does not change the
+transaction fence and retains the original coherent pin. Existing four-cut,
+import/authority/IO/deadline and balanced pin gates remain. Normal and ASan/UBSan
+executions pass. `--unsafe-no-transaction-fence` alters only extracted test code;
+it fails the mixed-image assertion (exit1), proving removal of the production
+comparison would violate this oracle. No production fence or ordering was changed.
+
+This is a controlled production-function model of asynchronous participant
+coverage, not a new real-network interleaving or full-LSM closure claim. Existing
+real snapshot/transaction tests and latest full Linux gates remain separately
+source-specific. Further discrimination should aggregate transaction revisions
+by INTENT/GUARD/REDUCE/DECISION and PUT/DEL, correlate applied vectors, and split
+root refusal branches (catalog-newroot, generation/parent, binding, live TXN read,
+expiry). These changes are a diagnostic proposal only; no unchanged pressure
+repeat or filtering DECISION/cleanup is justified yet.
