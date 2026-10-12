@@ -1,0 +1,6 @@
+publish-stalled ino=42 ci=0 gen=7 epoch=2 spans=1 cycles=8
+publish-stalled ino=42 ci=1 gen=7 epoch=2 spans=1 cycles=8
+publish-contention ino=42 ci=2 cycles=256 gen=263 epoch=2 spans=1
+publish-contention ino=42 ci=2 cycles=512 gen=519 epoch=2 spans=1
+publish-contention ino=42 ci=2 cycles=768 gen=775 epoch=2 spans=1
+D27 runtime: sent snapshots, contention, mutations, sticky descriptions and partial recovery PASS

@@ -1,0 +1,1 @@
+writer fence merge: pipeline/direct masks, absent CAS, failure retention and full overwrite PASS

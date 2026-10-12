@@ -1,0 +1,3 @@
+efs: conn pool node=1 checkout deadline reached (pool=1 per node, EFS_CLIENT_CONNS_PER_NODE; timeout #1)
+efs: conn pool node=1 checkout deadline reached (pool=1 per node, EFS_CLIENT_CONNS_PER_NODE; timeout #2)
+connection checkout: shared DNS/connect budget, TLS restoration, local resource health, spurious wakeups and cleanup PASS

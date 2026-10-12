@@ -1,0 +1,26 @@
+raft-host: apply append-res rc=-13 index=41 ino=42
+raft-host: apply append-res rc=-1 index=41 ino=42
+raft-host: apply append-res rc=-2 index=41 ino=42
+raft-host: apply append-res rc=-7 index=41 ino=42
+raft-host: apply lane-sweep rc=-13 index=41 ino=42
+raft-host: apply reap-done rc=-13 index=41 ino=42
+raft-host: apply lane-sweep rc=-1 index=41 ino=42
+raft-host: apply reap-done rc=-1 index=41 ino=42
+raft-host: apply lane-sweep rc=-2 index=41 ino=42
+raft-host: apply reap-done rc=-2 index=41 ino=42
+raft-host: apply lane-sweep rc=-7 index=41 ino=42
+raft-host: apply reap-done rc=-7 index=41 ino=42
+raft-host: apply lane-sweep rc=-15 index=41 ino=42
+raft-host: apply reap-done rc=-15 index=41 ino=42
+raft-host: apply gc-ack rc=-13 index=41 cnt=1
+raft-host: apply gc-ack rc=-1 index=41 cnt=1
+raft-host: apply gc-ack rc=-2 index=41 cnt=1
+raft-host: apply gc-ack rc=-7 index=41 cnt=1
+raft-host: apply gc-ack rc=-15 index=41 cnt=1
+raft-host: apply lane-sweep rc=-13 index=41 ino=42
+raft-host: apply reap-done rc=-13 index=41 ino=42
+raft-host: apply reap-done rc=-1 index=41 ino=42
+raft-host: apply reap-done rc=-2 index=41 ino=42
+raft-host: apply reap-done rc=-7 index=41 ino=42
+raft-host: apply reap-done rc=-15 index=41 ino=42
+GC apply decoders and durable local/forwarded verdict propagation PASS

@@ -1,0 +1,122 @@
+[
+  {
+    "name": "client-memory-sanitizers",
+    "exit": 0,
+    "seconds": 4.33
+  },
+  {
+    "name": "rollup-allocation-sanitizers",
+    "exit": 0,
+    "seconds": 0.22
+  },
+  {
+    "name": "rollup-budget-sanitizers",
+    "exit": 0,
+    "seconds": 2.27
+  },
+  {
+    "name": "address-parser-sanitizers",
+    "exit": 0,
+    "seconds": 0.16
+  },
+  {
+    "name": "publication-batch-sanitizers",
+    "exit": 0,
+    "seconds": 1.97
+  },
+  {
+    "name": "mounted-batch-sanitizers",
+    "exit": 0,
+    "seconds": 2.07
+  },
+  {
+    "name": "packed-gc-budget-sanitizers",
+    "exit": 0,
+    "seconds": 0.17
+  },
+  {
+    "name": "authority-net-sanitizers",
+    "exit": 0,
+    "seconds": 2.27
+  },
+  {
+    "name": "query-capture-sanitizers",
+    "exit": 0,
+    "seconds": 0.16
+  },
+  {
+    "name": "query-page-sanitizers",
+    "exit": 0,
+    "seconds": 0.21
+  },
+  {
+    "name": "fold-observation-sanitizers",
+    "exit": 0,
+    "seconds": 0.32
+  },
+  {
+    "name": "read-retry-sanitizers",
+    "exit": 0,
+    "seconds": 0.16
+  },
+  {
+    "name": "read-deadline-sanitizers",
+    "exit": 0,
+    "seconds": 0.27
+  },
+  {
+    "name": "peer-pool-sanitizers",
+    "exit": 0,
+    "seconds": 0.22
+  },
+  {
+    "name": "remote-pair-sanitizers",
+    "exit": 0,
+    "seconds": 0.27
+  },
+  {
+    "name": "append-cohort-sanitizers",
+    "exit": 0,
+    "seconds": 0.27
+  },
+  {
+    "name": "query-root-sanitizers",
+    "exit": 0,
+    "seconds": 0.22
+  },
+  {
+    "name": "namespace-envelope-sanitizers",
+    "exit": 0,
+    "seconds": 0.42
+  },
+  {
+    "name": "query-work-sanitizers",
+    "exit": 0,
+    "seconds": 0.42
+  },
+  {
+    "name": "retained-orphan-sanitizers",
+    "exit": 0,
+    "seconds": 0.21
+  },
+  {
+    "name": "read-errno-sanitizers",
+    "exit": 0,
+    "seconds": 0.21
+  },
+  {
+    "name": "real-lsm-build",
+    "exit": 0,
+    "seconds": 17.45
+  },
+  {
+    "name": "real-lsm-catalog",
+    "exit": 0,
+    "seconds": 2.02
+  },
+  {
+    "name": "real-lsm-namespace-audit",
+    "exit": 0,
+    "seconds": 0.16
+  }
+]

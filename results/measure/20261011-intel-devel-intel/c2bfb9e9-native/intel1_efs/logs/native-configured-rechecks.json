@@ -1,0 +1,22 @@
+[
+  {
+    "name": "normal-standalone-test_cluster_stop",
+    "exit": 0,
+    "seconds": 0.16,
+    "environment_correction": {
+      "EFS_CLUSTER_SCRIPTS": "/data1/efs/cluster-test-scripts"
+    },
+    "original_exit": 1,
+    "original_log": "normal-standalone-test_cluster_stop.log"
+  },
+  {
+    "name": "fault-standalone-test_cluster_stop",
+    "exit": 0,
+    "seconds": 0.22,
+    "environment_correction": {
+      "EFS_CLUSTER_SCRIPTS": "/data1/efs/cluster-test-scripts"
+    },
+    "original_exit": 1,
+    "original_log": "fault-standalone-test_cluster_stop.log"
+  }
+]

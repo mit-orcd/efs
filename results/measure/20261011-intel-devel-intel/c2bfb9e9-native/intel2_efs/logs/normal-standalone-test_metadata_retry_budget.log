@@ -1,0 +1,7 @@
+inode-rpc: retry type=47 attempt=0 why=no-hint from=1
+inode-rpc: retry type=47 attempt=0 why=recv rc=1
+inode-rpc: retry type=47 attempt=0 why=send
+inode-rpc: retry type=47 attempt=0 why=recv rc=1 req_len=0 recv_ms=100
+inode-rpc: retry type=47 attempt=1 why=recv rc=1
+inode-rpc: retry type=47 attempt=1 why=send
+metadata retries: shard/dual budgets, STALE/BUSY/hints, failed payload cleanup and late-output retention, lost hinted peer rerouting, concurrent leader retention and same-identity MKDIR beyond 16 attempts with shorter deadline enforcement PASS
