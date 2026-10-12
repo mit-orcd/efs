@@ -74,6 +74,8 @@ struct efs_raft {
     uint64_t read_index, read_round;
     uint64_t read_proven_index, read_proven_round, read_proven_term;
     uint32_t read_proven_cfg_old, read_proven_cfg_new;
+    uint64_t read_applied_index, read_applied_round, read_applied_term;
+    uint32_t read_applied_cfg_old, read_applied_cfg_new;
     uint32_t read_cfg_old, read_cfg_new;
     unsigned read_acks;
     int read_in_flight;
@@ -222,6 +224,8 @@ static void read_proof_forget(struct efs_raft *r)
 {
     r->read_proven_round = r->read_proven_index = r->read_proven_term = 0;
     r->read_proven_cfg_old = r->read_proven_cfg_new = 0;
+    r->read_applied_round = r->read_applied_index = r->read_applied_term = 0;
+    r->read_applied_cfg_old = r->read_applied_cfg_new = 0;
 }
 
 static void fence_storage(struct efs_raft *r)
@@ -2474,15 +2478,37 @@ int efs_raft_read_begin(struct efs_raft *r)
         return EFS_ERR_NOT_PRIMARY;
     if (r->read_round == UINT64_MAX)
         return EFS_ERR_BUSY;
-    /* Keep the completed proof for readers admitted before its send. A new
-     * round must not erase their completion while they wait to be scheduled.
-     * New arrivals still require read_round+1 and cannot use this proof. */
+    if ((r->read_proven_round && (r->read_proven_term != r->current_term ||
+         r->read_proven_cfg_old != r->log_old || r->read_proven_cfg_new != r->log_new)) ||
+        (r->read_applied_round && (r->read_applied_term != r->current_term ||
+         r->read_applied_cfg_old != r->log_old || r->read_applied_cfg_new != r->log_new)))
+        read_proof_forget(r);
+    /* Keep the first unfinished apply target, not a continuously moving latest
+     * target. Once applied, retain it separately while later proofs catch up.
+     * Both bounded records share every existing context invalidation. */
+    if (r->read_proven_round && r->read_proven_index <= r->last_applied) {
+        r->read_applied_index = r->read_proven_index;
+        r->read_applied_round = r->read_proven_round;
+        r->read_applied_term = r->read_proven_term;
+        r->read_applied_cfg_old = r->read_proven_cfg_old;
+        r->read_applied_cfg_new = r->read_proven_cfg_new;
+        r->read_proven_round = r->read_proven_index = r->read_proven_term = 0;
+        r->read_proven_cfg_old = r->read_proven_cfg_new = 0;
+    }
     if (efs_raft_read_quorum(r)) {
-        r->read_proven_index = r->read_index;
-        r->read_proven_round = r->read_round;
-        r->read_proven_term = r->current_term;
-        r->read_proven_cfg_old = r->read_cfg_old;
-        r->read_proven_cfg_new = r->read_cfg_new;
+        if (r->read_index <= r->last_applied) {
+            r->read_applied_index = r->read_index;
+            r->read_applied_round = r->read_round;
+            r->read_applied_term = r->current_term;
+            r->read_applied_cfg_old = r->read_cfg_old;
+            r->read_applied_cfg_new = r->read_cfg_new;
+        } else if (!r->read_proven_round) {
+            r->read_proven_index = r->read_index;
+            r->read_proven_round = r->read_round;
+            r->read_proven_term = r->current_term;
+            r->read_proven_cfg_old = r->read_cfg_old;
+            r->read_proven_cfg_new = r->read_cfg_new;
+        }
     }
     r->read_round++;
     r->read_cfg_old = r->log_old;
@@ -2612,15 +2638,30 @@ int efs_raft_read_proven(const struct efs_raft *r, uint64_t *round,
     if (!round || !index) return 0;
     *round = *index = 0;
     if (!r || r->storage_failed || r->role != EFS_RAFT_LEADER) return 0;
-    if (efs_raft_read_quorum(r)) {
-        *round = r->read_round; *index = r->read_index;
-        return 1;
+    int applied_valid = r->read_applied_round &&
+        r->read_applied_term == r->current_term &&
+        r->read_applied_cfg_old == r->log_old && r->read_applied_cfg_new == r->log_new;
+    int pending_valid = r->read_proven_round &&
+        r->read_proven_term == r->current_term &&
+        r->read_proven_cfg_old == r->log_old && r->read_proven_cfg_new == r->log_new;
+    int current = efs_raft_read_quorum(r);
+    if (applied_valid && r->last_applied >= r->read_applied_index) {
+        *round = r->read_applied_round; *index = r->read_applied_index;
     }
-    if (!r->read_proven_round || r->read_proven_term != r->current_term ||
-        r->read_proven_cfg_old != r->log_old ||
-        r->read_proven_cfg_new != r->log_new) return 0;
-    *round = r->read_proven_round; *index = r->read_proven_index;
-    return 1;
+    if (pending_valid && r->last_applied >= r->read_proven_index &&
+        r->read_proven_round > *round) {
+        *round = r->read_proven_round; *index = r->read_proven_index;
+    }
+    if (current && r->last_applied >= r->read_index && r->read_round > *round) {
+        *round = r->read_round; *index = r->read_index;
+    }
+    if (*round) return 1;
+    if (pending_valid) {
+        *round = r->read_proven_round; *index = r->read_proven_index;
+    } else if (current) {
+        *round = r->read_round; *index = r->read_index;
+    }
+    return *round != 0;
 }
 
 int efs_raft_read_done(const struct efs_raft *r)

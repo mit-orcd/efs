@@ -13,12 +13,15 @@ code=r'''
 #include <assert.h>
 #include <stdio.h>
 #define EFS_RAFT_LEADER 2
-struct efs_raft {int storage_failed,role,quorum;uint64_t read_round,read_index,current_term;
+struct efs_raft {int storage_failed,role,quorum;uint64_t read_round,read_index,current_term,last_applied;
  uint64_t read_proven_round,read_proven_index,read_proven_term;
- uint32_t read_proven_cfg_old,read_proven_cfg_new,log_old,log_new;};
+ uint32_t read_proven_cfg_old,read_proven_cfg_new,log_old,log_new;
+ uint64_t read_applied_round,read_applied_index,read_applied_term;
+ uint32_t read_applied_cfg_old,read_applied_cfg_new;};
 static int efs_raft_read_quorum(const struct efs_raft *r){return r->quorum;}
-'''+helper+function(raft,'efs_raft_read_proven')+host[a:b]+'\nstatic '+function(host,'host_view_covers')+r'''
+'''+helper+function(raft,'efs_raft_read_proven')+host[a:b]+'\nstatic '+function(host,'host_view_covers')+'\nstatic '+function(host,'host_view_wait_apply')+r'''
 static struct host_view view(struct efs_raft *r,uint64_t applied){
+ r->last_applied=applied;
  struct host_view v={.has=1,.role=r->role,.term=r->current_term,.read_pending=1,
    .read_round=r->read_round,.read_index=r->read_index,.applied=applied};
  v.read_done=efs_raft_read_quorum(r);
@@ -36,11 +39,14 @@ int main(void){
  assert(!host_view_covers(&v,51,11,9)); /* later committed bytes */
  assert(!host_view_covers(&v,50,11,8));
  v=view(&r,49);assert(!host_view_covers(&v,50,11,9)); /* own apply parked */
+ assert(host_view_wait_apply(&v,50,11,9));
+ assert(!host_view_wait_apply(&v,51,11,9) && !host_view_wait_apply(&v,50,12,9));
  r.quorum=1;v=view(&r,50);
  /* Newer completed quorum must not move an older admitted waiter's apply
   * target from50 to60 when its own valid quorum already applied at50. */
  assert(host_view_covers(&v,50,11,9));
  assert(!host_view_covers(&v,51,11,9) && !host_view_covers(&v,50,12,9));
+ assert(host_view_wait_apply(&v,60,12,9));
  v=view(&r,59);assert(!host_view_covers(&v,60,12,9));
  v=view(&r,60);assert(host_view_covers(&v,60,12,9));
  v.has=0;assert(!host_view_covers(&v,60,12,9));v.has=1;
@@ -50,8 +56,11 @@ int main(void){
  r.log_new=0;r.log_old=14;v=view(&r,60);assert(!v.proven_done);
  r.log_old=7;r.role=1;v=view(&r,60);assert(!v.proven_done);
  r.role=2;r.storage_failed=1;v=view(&r,60);assert(!v.proven_done);
- r.storage_failed=0;read_proof_forget(&r);v=view(&r,60);assert(!v.proven_done);
+ r.storage_failed=0;
+ r.read_applied_round=11;r.read_applied_index=50;r.read_applied_term=9;r.read_applied_cfg_old=7;
+ read_proof_forget(&r);v=view(&r,60);assert(!v.proven_done);
  assert(!r.read_proven_index && !r.read_proven_term && !r.read_proven_cfg_old && !r.read_proven_cfg_new);
+ assert(!r.read_applied_round && !r.read_applied_index && !r.read_applied_term && !r.read_applied_cfg_old && !r.read_applied_cfg_new);
  puts("completed ReadIndex: eligible waiter, post-send/new-commit refusal, apply, term/config/role/storage fences PASS");
 }
 '''

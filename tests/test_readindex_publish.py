@@ -19,7 +19,10 @@ code=r'''
 #include <stdio.h>
 #define EFS_RAFT_LEADER 2
 struct efs_raft {int role,storage_failed,quorum,leader,pending;uint64_t commit,applied,current_term,read_round,read_index;
- uint64_t read_proven_round,read_proven_index,read_proven_term;uint32_t read_proven_cfg_old,read_proven_cfg_new,log_old,log_new;};
+ uint64_t read_proven_round,read_proven_index,read_proven_term;uint32_t read_proven_cfg_old,read_proven_cfg_new,log_old,log_new;
+ uint64_t read_applied_round,read_applied_index,read_applied_term;
+ uint32_t read_applied_cfg_old,read_applied_cfg_new;};
+#define last_applied applied
 static uint64_t efs_raft_commit(struct efs_raft*r){return r->commit;}
 static uint64_t efs_raft_applied(struct efs_raft*r){return r->applied;}
 static uint64_t efs_raft_term(struct efs_raft*r){return r->current_term;}

@@ -341,7 +341,8 @@ uint64_t efs_raft_read_index(const struct efs_raft *r);
 int efs_raft_read_done(const struct efs_raft *r);
 /* Correlated fresh quorum proof only; does not authorize reading unapplied KV. */
 int efs_raft_read_quorum(const struct efs_raft *r);
-/* Latest quorum proof, including one superseded by a pending round. The
+/* Quorum completion, preferring a valid applied proof over a newer unapplied
+ * target. Two bounded records retain applied and first-unapplied proofs. The
  * caller must require round >= its PRE-SEND admission, the same current
  * term, and applied >= index. Never authority for a newly arriving read.
  * Invalid after term/configuration/role changes or storage failure. */

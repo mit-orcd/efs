@@ -3361,6 +3361,18 @@ static int host_view_covers(const struct host_view *v, uint64_t want,
            v->proven_index >= want && v->applied >= v->proven_index;
 }
 
+/* A fresh proof needs own apply, not another quorum request. Raw current-round
+ * proof remains separate from the retained completion and is coherently read. */
+static int host_view_wait_apply(const struct host_view *v, uint64_t want,
+                                uint64_t round, uint64_t term)
+{
+    return v->has && v->role == EFS_RAFT_LEADER && v->term == term &&
+        ((v->proven_done && v->proven_round >= round &&
+          v->proven_index >= want && v->applied < v->proven_index) ||
+         (v->read_done && v->read_round >= round &&
+          v->read_index >= want && v->applied < v->read_index));
+}
+
 /* Sleep until the pump wakes this waiter or `end` passes. cv_mu HELD by
  * the caller, who has just re-read the view under it and found its
  * predicate false (that order is what rules out a lost wakeup). any=0:
@@ -4060,7 +4072,7 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             return EFS_OK;
         }
         first = 0;
-        if (!v.read_pending) {
+        if (!v.read_pending && !host_view_wait_apply(&v, want, round, admitted_term)) {
             /* Begin a round — under h->mu, re-validated against the core
              * (another reader may have begun one since the view). */
             struct efs_raft *r;
@@ -4090,7 +4102,8 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
          * publishes the view and broadcasts applied_cv each cycle. */
         pthread_mutex_lock(&h->cv_mu);
         host_view_get(h, group, &v);
-        if (v.has && v.role == EFS_RAFT_LEADER && v.read_pending &&
+        if (v.has && v.role == EFS_RAFT_LEADER && v.term == admitted_term &&
+            (v.read_pending || host_view_wait_apply(&v, want, round, admitted_term)) &&
             !host_view_covers(&v, want, round, admitted_term)) {
             uint64_t s0 = now_us_();
             host_waiter_sleep(h, group, 1, 0, v.stamp, &end);
