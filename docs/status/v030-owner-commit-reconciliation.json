@@ -211,6 +211,6 @@
   "held_scope": [
     "Mac client combined CREATE/OPEN adoption portion of f842cd37 absent from root source despite original ancestry: assigned Mac reconciliation and lifetime regressions; not qualified.",
     "Any new post-handoff branch commits excluded until submitted/reviewed; frozen tips fixed above.",
-    "Mounted packing direct still failed on d26; buffered running, no release acceptance."
+    "Mounted packing direct and buffered fail on d26; cold/GC NOTRUN, restored0, no release acceptance."
   ]
 }

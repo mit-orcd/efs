@@ -479,7 +479,11 @@ normal/fault binary identities](../../results/measure/20261012-v030-merged-nativ
 include33 retrieved hash-verified artifacts. Both direct/buffered ordinary
 overwrite gates pass all four primary/peer/cold exact SHA256 oracles and physical/
 queue cleanup, restore0; [raw both-mode evidence](../../results/measure/20261012-v030-ordinary-overwrite/d26e6874/).
-Original seven-client/jobs16 packing pressure is still running. No release acceptance.
+Original seven-client/jobs16 pressure fails both modes: direct seven209/4/1/7;
+buffered six209/4/1/7, one210/3/1/7 (PASS/FAIL/SKIP/NOTRUN).
+Busy extra-client stop aborts later cold/GC phases; round1, restore0.
+[Exact14 client records and41 hash-verified raw artifacts](../../results/measure/20261012-v030-seven-packing/d26e6874/acceptance-summary.json).
+No release acceptance.
 
 Frozen Mac/ORCD/review/NUC owner ancestry and evidence are reconciled; root core
 and actual live fixture match d26. Only NUC measure promotion recipes additionally

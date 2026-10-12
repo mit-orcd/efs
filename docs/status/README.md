@@ -39,7 +39,8 @@ full normal/fault plus sixteen sanitizers and both-mode ordinary cold-byte PASS 
 Latest Mac tag54 completion and ORCD follower-read deadline/proof checkpoints
 are integrated with the independent inherited-deadline retry repair; full merged
 AMD full normal/fault plus sixteen sanitizers PASS at `d26e6874`; both-mode
-ordinary immediate/cold/cleanup PASS, original pressure pending. ORCD packing timeouts remain
+ordinary immediate/cold/cleanup PASS; original seven-client/jobs16 pressure
+fails both modes, cold/GC NOTRUN, normal mounts restored0. ORCD packing timeouts remain
 a release blocker. Small-file packing and code-review correctness have priority. Branch checkpoints
 are not final release acceptance. Shared devel/main and pushes remain unchanged
 until a frozen merged candidate passes its recorded gates.
