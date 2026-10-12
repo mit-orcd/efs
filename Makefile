@@ -365,6 +365,7 @@ test: all
 	python3 tests/test_readindex_completion.py
 	python3 tests/test_readindex_publish.py
 	python3 tests/test_readindex_pair.py
+	python3 tests/test_readindex_next_round.py
 	python3 tests/test_readindex_remote_pair.py
 	python3 tests/test_read_retry_budget.py
 	python3 tests/test_host_read_deadline.py
