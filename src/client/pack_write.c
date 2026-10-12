@@ -70,14 +70,14 @@ static uint64_t pack_capability_checked;
 static int pack_capability_batch;
 static int pack_batch_peer_unsupported(void);
 /* Opt-in phase evidence only; never changes ownership or retry decisions. */
-static uint64_t pack_profile_start(void)
+static inline uint64_t pack_profile_start(void)
 {
     const char *v=getenv("EFS_PACK_PROF");
     if(!v || strcmp(v,"1"))return 0;
     struct timespec ts;clock_gettime(CLOCK_MONOTONIC,&ts);
     return (uint64_t)ts.tv_sec*1000000000ull+(uint64_t)ts.tv_nsec;
 }
-static void pack_profile_end(const char *phase,uint64_t start,uint32_t group,uint32_t count,int rc)
+static inline void pack_profile_end(const char *phase,uint64_t start,uint32_t group,uint32_t count,int rc)
 {
     if(!start)return;
     struct timespec ts;clock_gettime(CLOCK_MONOTONIC,&ts);
