@@ -1,0 +1,9 @@
+Evidence directory: /data1/efs/gc-direct-a1kmj9hw
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=10940610194004653091
+client serving PASS
+append burst peer mounted PASS
+append burst 833 / 20000 elapsed 30.034
