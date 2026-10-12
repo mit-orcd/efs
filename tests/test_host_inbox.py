@@ -46,12 +46,12 @@ int main(void) {
   * tail behind new arrivals, or sleep waiting for a drained eventfd. */
  struct efs_raft_host h={.inbox_mu=PTHREAD_MUTEX_INITIALIZER};
  struct host_inbox_item prefix[256];unsigned done;uint64_t bytes;
- unsigned next=40,expected=0;uint64_t accounted=0;
+ unsigned next=200,expected=0;uint64_t accounted=0;
  for(unsigned i=0;i<next;i++) {
   h.inbox[i]=(struct host_inbox_item){.buf=(void*)(uintptr_t)(i+1),.len=80+17*i,.queued_us=i};
   h.inbox_bytes+=h.inbox[i].len;
  }
- h.inbox_n=40;h.inbox_work_n=64;h.inbox_work_bytes=999999;
+ h.inbox_n=200;h.inbox_work_n=64;h.inbox_work_bytes=999999;
  assert(host_pump_poll_timeout(&h)==0);
  while(h.inbox_n) {
   int n=host_inbox_take(&h,prefix,&done,&bytes);
@@ -66,7 +66,7 @@ int main(void) {
   uint64_t remaining=0;for(int i=0;i<h.inbox_n;i++)remaining+=h.inbox[i].len;
   assert(h.inbox_bytes==remaining);
   assert(host_pump_poll_timeout(&h)==(h.inbox_n?0:5));
-  if(next<64) {
+  if(next<256) {
    /* Arrival after the pop appends behind every older retained frame. */
    pthread_mutex_lock(&h.inbox_mu);
    h.inbox[h.inbox_n++]=(struct host_inbox_item){.buf=(void*)(uintptr_t)(next+1),.len=80+17*next,.queued_us=next};
@@ -75,7 +75,7 @@ int main(void) {
    assert(host_pump_poll_timeout(&h)==0);
   }
  }
- assert(expected==64 && accounted==64*80+17*(63*64/2));
+ assert(expected==256 && accounted==256*80+17*(255*256/2));
  assert(!host_inbox_take(&h,prefix,&done,&bytes) && !done && !bytes);
  assert(host_pump_poll_timeout(&h)==5);
  pthread_mutex_destroy(&h.inbox_mu);

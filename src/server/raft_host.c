@@ -58,7 +58,7 @@
  * bounce RPCs keep the long budget. */
 #define HOST_SEND_IO_MS    250
 #define HOST_INBOX_MAX     256
-#define HOST_INBOX_SLICE_MAX 32
+#define HOST_INBOX_SLICE_MAX 64
 #define HOST_INBOX_BYTES   (32ull << 20)
 #define HOST_OUTBOX_BYTES  (16ull << 20)
 #define HOST_FRAME_MAX     (EFS_WIRE_RAFT_MAX_CMD + EFS_WIRE_RAFT_HDR_LEN + 12u)
