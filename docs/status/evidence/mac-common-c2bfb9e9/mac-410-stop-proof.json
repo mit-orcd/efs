@@ -1,0 +1,12 @@
+{
+  "source": "410afed433b6da093bdc2acf37bec253ddbd586c",
+  "input_count": 1563,
+  "changed_inputs": [],
+  "owned_processes": [],
+  "native": "STOPPED exit143",
+  "fault": "NOTRUN",
+  "mounted": "NOTRUN",
+  "installed_efsd_pid": 165163,
+  "installed_endpoint": "192.168.2.11:17432",
+  "installed_stores": "untouched"
+}
