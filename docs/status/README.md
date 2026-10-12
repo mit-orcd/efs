@@ -685,3 +685,5 @@ Diagnostic follow-up preserves original stop exceptions while guaranteeing obser
 Release scope is now true-defect testing/fixing only. The next shared candidate restores pre-b239 scheduling and quarantines the unproven retry optimization; all fixes/fences/diagnostics retained. Diagnostic eligibility is historical, not active policy. All owners must qualify the same immutable candidate after safe drain/restoration. [Exact inverse and remaining gates](v030-query-stage-diagnostic-20261012.md#defect-only-shared-candidate-optimization-quarantined).
 
 - [NUC repair gap: source trace, initial-scope fencing dependencies and strict protection gates](nuc-repair-gap-design-20261012.md) — W74 remains open; no repaired-protection claim.
+
+October 12 qualification checkpoint: frozen `def46109909c793e58ae2c453c5de537cdb2c627` AMD normal/fault native and affected sanitizers PASS; NUC core/peer/two-client packing PASS; matched-4G seven-client Intel and NUC FAIL. Receiver drain scheduling investigation continues before a new central freeze. See [current qualification ledger](v030-tcp-direct-qualification-20261012.md).

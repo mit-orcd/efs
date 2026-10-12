@@ -1,0 +1,130 @@
+[
+  {
+    "name": "normal-build",
+    "command": [
+      "make",
+      "-j8",
+      "EFS_GIT_ID=def46109909c793e58ae2c453c5de537cdb2c627",
+      "EFS_GIT_BRANCH=qualification-v030-tcp-direct",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "all"
+    ],
+    "cwd": "/data1/efs/amd-commondef-20261012/source",
+    "commit": "def46109909c793e58ae2c453c5de537cdb2c627",
+    "exit": 0,
+    "duration_seconds": 9.449838161468506
+  },
+  {
+    "name": "normal-native",
+    "command": [
+      "make",
+      "EFS_GIT_ID=def46109909c793e58ae2c453c5de537cdb2c627",
+      "EFS_GIT_BRANCH=qualification-v030-tcp-direct",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "test"
+    ],
+    "cwd": "/data1/efs/amd-commondef-20261012/source",
+    "commit": "def46109909c793e58ae2c453c5de537cdb2c627",
+    "exit": 0,
+    "duration_seconds": 90.97624611854553
+  },
+  {
+    "name": "early-ack-raft",
+    "command": [
+      "./tests/test_raft"
+    ],
+    "cwd": "/data1/efs/amd-commondef-20261012/source",
+    "commit": "def46109909c793e58ae2c453c5de537cdb2c627",
+    "exit": 0,
+    "duration_seconds": 0.00704193115234375
+  },
+  {
+    "name": "fault-clean",
+    "command": [
+      "make",
+      "EFS_GIT_ID=def46109909c793e58ae2c453c5de537cdb2c627",
+      "EFS_GIT_BRANCH=qualification-v030-tcp-direct",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "clean"
+    ],
+    "cwd": "/data1/efs/amd-commondef-20261012/fault-source",
+    "commit": "def46109909c793e58ae2c453c5de537cdb2c627",
+    "exit": 0,
+    "duration_seconds": 0.027304649353027344
+  },
+  {
+    "name": "fault-build",
+    "command": [
+      "make",
+      "-j8",
+      "EFS_GIT_ID=def46109909c793e58ae2c453c5de537cdb2c627",
+      "EFS_GIT_BRANCH=qualification-v030-tcp-direct",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "EFS_FAULTS=1",
+      "all"
+    ],
+    "cwd": "/data1/efs/amd-commondef-20261012/fault-source",
+    "commit": "def46109909c793e58ae2c453c5de537cdb2c627",
+    "exit": 0,
+    "duration_seconds": 9.46038031578064
+  },
+  {
+    "name": "fault-native",
+    "command": [
+      "make",
+      "EFS_GIT_ID=def46109909c793e58ae2c453c5de537cdb2c627",
+      "EFS_GIT_BRANCH=qualification-v030-tcp-direct",
+      "EFS_GIT_DESCRIBE=v0.3.0-pre-alpha-candidate",
+      "EFS_FAULTS=1",
+      "test"
+    ],
+    "cwd": "/data1/efs/amd-commondef-20261012/fault-source",
+    "commit": "def46109909c793e58ae2c453c5de537cdb2c627",
+    "exit": 0,
+    "duration_seconds": 88.83352160453796
+  },
+  {
+    "name": "san-test_readindex_operation",
+    "command": [
+      "python3",
+      "tests/test_readindex_operation.py"
+    ],
+    "cwd": "/data1/efs/amd-commondef-20261012/source",
+    "commit": "def46109909c793e58ae2c453c5de537cdb2c627",
+    "exit": 0,
+    "duration_seconds": 0.09380531311035156
+  },
+  {
+    "name": "san-test_lookup_read_group",
+    "command": [
+      "python3",
+      "tests/test_lookup_read_group.py"
+    ],
+    "cwd": "/data1/efs/amd-commondef-20261012/source",
+    "commit": "def46109909c793e58ae2c453c5de537cdb2c627",
+    "exit": 0,
+    "duration_seconds": 0.0885777473449707
+  },
+  {
+    "name": "san-test_readindex_pair",
+    "command": [
+      "python3",
+      "tests/test_readindex_pair.py"
+    ],
+    "cwd": "/data1/efs/amd-commondef-20261012/source",
+    "commit": "def46109909c793e58ae2c453c5de537cdb2c627",
+    "exit": 0,
+    "duration_seconds": 0.11106514930725098
+  },
+  {
+    "name": "san-test_readindex_remote_pair",
+    "command": [
+      "python3",
+      "tests/test_readindex_remote_pair.py"
+    ],
+    "cwd": "/data1/efs/amd-commondef-20261012/source",
+    "commit": "def46109909c793e58ae2c453c5de537cdb2c627",
+    "exit": 0,
+    "duration_seconds": 0.12821674346923828
+  }
+]
