@@ -1,0 +1,206 @@
+[
+  {
+    "path": "command.json",
+    "bytes": 1138,
+    "sha256": "1d9862b80abebb844de9aac1cba2f83b11d70b05b94c656b99c6df266a91d6e6"
+  },
+  {
+    "path": "finished",
+    "bytes": 21,
+    "sha256": "b5efe302ebe9afaf71a34d4eaaf55ab6143fe73b8ef549b0fc7511daf8eaf80c"
+  },
+  {
+    "path": "gc-direct-kq20zujx/n3/mdraft/log/raft.log",
+    "bytes": 42991616,
+    "sha256": "ea3536516b6f34478ba9830bdc46d2e88e9a21bf2b6d05abd19dd9308436dd1e",
+    "stored_path": "gc-direct-kq20zujx/n3/mdraft/log/raft.log.gz"
+  },
+  {
+    "path": "gc-direct-kq20zujx/n4/mdraft/log/raft.log",
+    "bytes": 22020096,
+    "sha256": "f91313e767aab96fa4d3e6074d31a31cf0a28eafba08b0e4e0e5cc04f51030df",
+    "stored_path": "gc-direct-kq20zujx/n4/mdraft/log/raft.log.gz"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/failed-status.json",
+    "bytes": 5210,
+    "sha256": "7cf699806751104e5b0ab560b117846952c52a50c906b87172f5c4cd7c1179dd"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/fuse.log",
+    "bytes": 93487,
+    "sha256": "a612d718b02f414ce0797a743bd711891169eef42732613ab195eff3e708cbe5"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/manifest.json",
+    "bytes": 4313,
+    "sha256": "4ed53cb6f9b891b8076418ce8d5bf95e5934acae69b30045cf7e6ac4c5fd4eb4"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/mounted-pack-before.json",
+    "bytes": 95,
+    "sha256": "96ebefbd48283d7f0ff336939524e689b0de652150db5888b8f9103317e0eb1b"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/n1/mdraft/log/raft.log",
+    "bytes": 20971520,
+    "sha256": "6f15e24b81941536023424aa729322fbad780823459c63d1c5c6839bde2b3f91",
+    "stored_path": "gc-direct-ox24gjxt/n1/mdraft/log/raft.log.gz"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/n1.log",
+    "bytes": 592193,
+    "sha256": "050dc00ad78f6e78f6ffa0d3d6fdafb6ef00f50e9e9cd9144f2db17e324d8e1b"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/n2/mdraft/log/raft.log",
+    "bytes": 42991616,
+    "sha256": "af718f940f00ea54945f889669bbf979fe9373028525679af32b8eef00e38ac8",
+    "stored_path": "gc-direct-ox24gjxt/n2/mdraft/log/raft.log.gz"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/n2.log",
+    "bytes": 636630,
+    "sha256": "430aab6c8187fe58ae0c7d3cf412a22929ef0d3f22770f5b563a8f7aadeb7653"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/n3.log",
+    "bytes": 519385,
+    "sha256": "9246296d1927d37fa6175fa9a7bb03f652f2d4ba0568523cd3fbd9cfb092087d"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/n4.log",
+    "bytes": 466053,
+    "sha256": "b0d9032cea2476de83acca22e92124031763f0c4b76035d6c773b91b2b678d1f"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/pack-client-2.log",
+    "bytes": 91122,
+    "sha256": "119c40c03e82ce7750c3a95513289bd8271ec8bad2d17bcde975c2fc6ba7b715"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/pack-client-3.log",
+    "bytes": 102611,
+    "sha256": "c8f918ffacc10ea2f5a6f28ad2d1501b541632b8764f5658050304ca3fa59e17"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/pack-client-4.log",
+    "bytes": 80590,
+    "sha256": "ede1a651aec6cb977c17d73bfbf854b1512369dd5430cd1bfe369ea467966cff"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/pack-client-5.log",
+    "bytes": 84196,
+    "sha256": "a46b77ddbb238ca64ec3c67daedaeea6f37da46aaecd931d7f992f1c2fafd244"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/pack-client-6.log",
+    "bytes": 84494,
+    "sha256": "c6b9c05a077ab86f8a247ac0be89ca6bd746b491681cfdf16ae08cc619788ec8"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/peer-fuse.log",
+    "bytes": 99283,
+    "sha256": "0032f3b698b338248b094dfb51cbad85eb6e3cc359ee08d4a479d3d3e8ed16a1"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/posix-case-phases-summary.json",
+    "bytes": 192,
+    "sha256": "5a311dcb36ca8d426ea51d104da07d99ddeedd89938b68574d39c63426a52e1f"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/posix-case-phases.log",
+    "bytes": 8932,
+    "sha256": "bcb6a2fac2143a7d91bb0b80f9e5a10d7bddacadce8333003f408913adfc303c"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/posix-client-0.log",
+    "bytes": 9206,
+    "sha256": "a61ebdb7558a2bac6d17f98a2cdf64f80f1156e914563213c2c44bbc8986689e"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/posix-client-0.tsv",
+    "bytes": 13694,
+    "sha256": "267804f2cf2b1e002e2d2131a797bfeee0196cf0f372c56c39f0df7689124c29"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/posix-client-1.log",
+    "bytes": 9207,
+    "sha256": "3c41625b206ac07a8a9204e345a9117f657c31764327cc489829cf50649bc989"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/posix-client-1.tsv",
+    "bytes": 13695,
+    "sha256": "26ef2dc7e9a2acc42782bb8a5a019d3de7a09223b2c67cfda31d51d5046f24e1"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/posix-client-2.log",
+    "bytes": 9197,
+    "sha256": "cc6292a583e498f4dfb3affbeff4fd028aeeb8fcbbbb38fd0a594c98fa3ade63"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/posix-client-2.tsv",
+    "bytes": 13685,
+    "sha256": "a57d1df216af48cd549af58c5326406af9ba324124dcebc818e3dcef9c907743"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/posix-client-3.log",
+    "bytes": 9197,
+    "sha256": "757bce82be693049ad74beb678176efd83fa8f5a43083a4f43ce3a57c399e7c1"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/posix-client-3.tsv",
+    "bytes": 13685,
+    "sha256": "d61c4c4ec9efa5d43552963f6e7805615021900c544dd6fce4e773e48629ba16"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/posix-client-4.log",
+    "bytes": 9197,
+    "sha256": "6a6f06326643d0e54f5d38920bcd3f66793668e283c537ffc0292541b9d9aecb"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/posix-client-4.tsv",
+    "bytes": 13685,
+    "sha256": "3fc59b38621f0eb7ceee5008bbe2605543611243907d99bb14961f513094166e"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/posix-client-5.log",
+    "bytes": 9197,
+    "sha256": "d360f094a95c6dedd952bbe2f196ee05db90431f72b8265710753efb268cd2be"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/posix-client-5.tsv",
+    "bytes": 13685,
+    "sha256": "0308a60415ca7456fe27eefabc2747689d26ceb53f9e412d5edf3eda1511c891"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/posix-client-6.log",
+    "bytes": 9197,
+    "sha256": "308a5ecff11c6cdb5f6c3a784a8989e7f677cd781379d1e1c67903ce64c22316"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/posix-client-6.tsv",
+    "bytes": 13685,
+    "sha256": "c4ffc99ddbc93fff4f21e27fcf038c26dbf5ee7000032e75d9c647f99b151219"
+  },
+  {
+    "path": "gc-direct-ox24gjxt/posix2.tsv",
+    "bytes": 4371,
+    "sha256": "7d1126fa498ef22b3b54349aaf9a71ec3660d68d0e978b60f7d5ff47adc47021"
+  },
+  {
+    "path": "result.json",
+    "bytes": 124,
+    "sha256": "925d0cc09b79629e1f72a747405436a6f258edb00a6f6fdd53603aa8093761b7"
+  },
+  {
+    "path": "run.exit",
+    "bytes": 2,
+    "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+  },
+  {
+    "path": "run.log",
+    "bytes": 5411,
+    "sha256": "0967274931c0b1f7bda756ed6d0e1646f72c0d234272cd8341d6e3d249fc7020"
+  }
+]
