@@ -113,6 +113,8 @@ LIB = libefs.a
 TEST_SRCS = tests/test_query_policy.c tests/test_query_refresh.c tests/test_txn_resolve_faults.c tests/test_namespace_session.c tests/test_admission.c tests/test_store_containers.c tests/test_principles_index_fault.c tests/test_principles_index.c tests/test_query_catalog.c tests/test_name_index.c tests/test_append_transaction.c tests/test_store_durability.c tests/test_append_receipt.c tests/test_put_ticket.c tests/test_store_gc.c tests/test_bench_latency.c tests/test_store_overwrite.c tests/test_writer_routing.c tests/test_kv_snapshot_tail.c tests/test_kv_seg_index.c tests/test_mtime_barrier.c tests/test_publication_session.c tests/test_publication_ack.c tests/test_publication_recovery.c tests/test_lane_bootstrap_recovery.c tests/test_fence_view.c tests/test_reply_buffers.c tests/test_bufpool.c tests/test_erasure.c tests/test_placement.c tests/test_rdma_xprt.c tests/test_wire.c tests/test_data.c tests/test_kv.c tests/test_kv_lsm.c tests/test_raft_store.c tests/test_meta_apply.c tests/test_raft.c tests/test_sim.c tests/test_txn.c tests/test_session.c tests/test_lock.c tests/test_stage_evict.c tests/test_conn_fd.c tests/test_query_disk.c tests/test_query_delta.c tests/test_query_disk_io.c
 TEST_BINS = tests/test_query_policy tests/test_query_refresh tests/test_txn_resolve_faults tests/test_namespace_session tests/test_admission tests/test_store_containers tests/test_principles_index_fault tests/test_principles_index tests/test_query_catalog tests/test_name_index tests/test_append_transaction tests/test_store_durability tests/test_append_receipt tests/test_put_ticket tests/test_store_gc tests/test_bench_latency tests/test_store_overwrite tests/test_writer_routing tests/test_kv_snapshot_tail tests/test_kv_seg_index tests/test_mtime_barrier tests/test_publication_session tests/test_publication_ack tests/test_publication_recovery tests/test_lane_bootstrap_recovery tests/test_fence_view tests/test_reply_buffers tests/test_bufpool tests/test_erasure tests/test_placement tests/test_rdma_xprt tests/test_wire tests/test_data tests/test_kv tests/test_kv_lsm tests/test_raft_store tests/test_meta_apply tests/test_raft tests/test_sim tests/test_txn tests/test_session tests/test_lock tests/test_stage_evict tests/test_conn_fd tests/test_query_disk tests/test_query_delta tests/test_query_disk_io
 TEST_SRCS += tests/test_pack_cohort.c tests/test_packed_reader.c tests/test_packed_publication.c tests/test_packed_upload.c tests/test_pack_admission.c tests/test_pack_snapshot.c tests/test_pack_mapping.c tests/test_packed_metadata.c tests/test_small_segment.c tests/test_packed_segment.c tests/test_packed_store.c tests/test_pack_ledger.c tests/test_pack_ledger_recovery.c tests/test_kv_reader_gate.c
+TEST_SRCS += tests/test_retained_namespace_audit.c
+TEST_BINS += tests/test_retained_namespace_audit
 
 TEST_BINS += tests/test_pack_cohort tests/test_packed_reader tests/test_packed_publication tests/test_packed_upload tests/test_pack_admission tests/test_pack_snapshot tests/test_pack_mapping tests/test_packed_metadata tests/test_small_segment tests/test_packed_segment tests/test_packed_store tests/test_pack_ledger tests/test_pack_ledger_recovery tests/test_kv_reader_gate
 
@@ -475,6 +477,7 @@ test: all
 	python3 tests/test_meta_cmd_namespace.py
 	python3 tests/test_append_catchup_host.py
 	./tests/test_meta_apply
+	./tests/test_retained_namespace_audit
 	./tests/test_lane_bootstrap_recovery
 	./tests/test_raft
 	EFS_TEST_EARLY_READ_ACK=1 ./tests/test_raft
@@ -818,3 +821,6 @@ tests/test_pack_cohort: tests/test_pack_cohort.c $(LIB)
 src/server/raft_host.o: src/server/packed_gc.h src/server/pack_authority.h
 
 src/server/raft_host.o: src/server/publication_session_fast.h
+# Read-only pinned snapshot audit; isolated real-LSM fixtures only.
+tests/test_retained_namespace_audit: tests/test_retained_namespace_audit.c tests/retained_namespace_audit.h $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(LIB) $(LDFLAGS)
