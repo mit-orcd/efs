@@ -592,3 +592,69 @@ leak detection/halt-on-error PASS (backend/store instrumented, common/writer
 normal); empty-lane host extractor sanitizer PASS locally. Exact781-input
 builds and loaded qualification follow. No successful native/diagnostic run
 closes the outstanding full directory or physical deadline gates.
+
+
+### Redundant-GC loaded qualification and queued-vote candidate
+
+Exact `ae5a177831b26290fd34e63b4e5daccf9b4eabe0`, same preserved private
+Intel fixture, containers/TCP/direct,8 writers/node, GC progress yield20ms,
+4G/node, four plus three opposite-host mounts, disabled commands/`.efs`,
+expiry-date feature and packed writes, unchanged test deadlines:
+
+| Gate | Result |
+| --- | --- |
+| Seven clients,216 core cases each,jobs16 | **1450/1512 PASS,62 FAIL** |
+| Immediate physical reclamation,180s | **PASS100.630s**; zero snapshot100.619s |
+| Two clients core216 each,jobs16 | **430/432 PASS,2 FAIL**, both deep60 |
+| Peer coherence,67 cases/host | **134/134 PASS** |
+| mmap extras | Private2 PASS; shared writable2 ENODEV SKIP |
+| Lifecycle256 files,512KiB,4 workers;30s read and30s durable churn | Create/read/churn/warm verify **PASS** |
+| Tiny files100/host,300 total durable generations/host,4 workers | **PASS** both hosts,8.970/9.004s |
+| Cluster-wide graceful cold restart; lifecycle and tiny hashes | **PASS**; both tiny sets verified/deleted |
+| Lifecycle deletion; immediate final physical observer | **PASS11.462s**, all ordinary mappings/body allocation zero |
+
+Full-load failures: deep60/deep100, many-files, crazy roundtrip/directories,
+concurrent creates and appends on all7; create/unlink6, mtime6, write/readdir1.
+Initial immediate-observer mappings23064/22359/23152/22431 and allocated
+body bytes1573298176/1542881280/1579315200/1548599296 become zero. No
+competing build/workload overlaps either physical observer. Different failed
+full-run workloads produce different backlog sizes; this does not establish
+a causal performance ratio or close the previously larger backlog by proxy.
+
+Reproduce with `intel_container_qualification.py <gate> --run-id <unique>
+--output <external-dir>` in this order: concurrent,reclaim,core,peer,mmap,
+lifecycle-create/read/churn/verify,tiny-create,restart,lifecycle-cold,
+tiny-cold,lifecycle-delete,reclaim. For this evidence controller, independent
+concurrent/reclaim/core/peer/mmap failures are recorded while later functional
+gates continue; dependent lifecycle/tiny/restart failures stop progression.
+Raw output is external `artifacts/container-20261012/gcae5-qualification`;
+source781 and version/hash proofs at `gcae5-deploy`. The preserved stores,
+metadata history and original deadlines are retained; no reset/deadline
+extension changes acceptance. Both hosts build with exact `EFS_GIT_ID`,
+`EFS_GIT_DESCRIBE` and `EFS_GIT_BRANCH=devel-container` as recorded earlier.
+
+| Host | efsd SHA256 | efs-fuse SHA256 |
+| --- | --- | --- |
+| intel1 | `4706dd1408df70ee31fc84bf6ee366a31aeba903253a5d0f46d662a96bf1792d` | `07cbca82073fe086a19dc6444d3c7b5d1d1e68f2a9ec592c3221cebf1a6b6065` |
+| intel2 | `bedcf1721b55a39c491b6138125d56ec79b5394de560a8970709b89707ec8e0c` | `7f4b2a454744221a3ec9b87fb06bf18250e522454ac50566609d71378462e189` |
+
+`c3bcffd1a91c9c5dac5f4f730d2f5b03f6ebcc78` addresses eligible queued
+container read votes whose network trylock previously failed. The sole pump
+snapshots at most256 existing80-byte fresh-context request/reply headers
+before durable inbox work and invokes the unchanged core term/boot/voter/
+known-leader/persisted-prefix filters. Every frame still enters normal receive
+in original order, with credits and commit/apply/replication work intact. A
+per-frame note prevents repeatedly granting the same early vote; enqueue
+resets it, FIFO movement preserves it, and failed core checks retry normally.
+No new queue, assembly delay, stale proof reuse or clock authority is added.
+Ordinary files and zero-context/data/config/vote frames retain prior handling.
+The empty-lane GC hint now runs before normal selection to avoid scanning
+already-cleared lanes twice; its fresh proof and post-proof checks remain.
+
+Actual helper, bounded headers, refused/retried votes, note reset, FIFO and
+credit ownership regressions PASS on both Intel hosts, along with actual
+Raft/disk/simulator and host publication/admission/pair controls. Old no-op
+pump negative control aborts at the accepted-vote assertion; local extractor
+ASan/UBSan PASS. Exact782-input native builds and live qualification follow.
+The directory gate is still open; ae5a's cold/physical successes do not qualify
+this new runtime.
