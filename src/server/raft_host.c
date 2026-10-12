@@ -4021,8 +4021,10 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             }
             if (prof)
                 read_prof_add(&g_read_prof.ri_remote_wait, now_us_() - p1);
-            if (rc != EFS_OK)
+            if (rc != EFS_OK) {
+                if (prof) fprintf(stderr,"raft-host: admitted-read-remote group=%u rc=%d leader=%d returned_hint=%d remote_index=%llu term=%llu applied=%llu\n",group,rc,v.leader,rhint,(unsigned long long)ridx,(unsigned long long)v.term,(unsigned long long)v.applied);
                 return rc;
+            }
             if (leader_hint && rhint >= 0)
                 *leader_hint = rhint;
             return EFS_OK;
@@ -4046,8 +4048,10 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             admitted_term = efs_raft_term(r);
             pthread_mutex_unlock(&h->mu);
         }
-        if (v.term != admitted_term)
+        if (v.term != admitted_term) {
+            if (prof) fprintf(stderr,"raft-host: admitted-read-term group=%u admitted_term=%llu term=%llu admitted_round=%llu raw_round=%llu proven_round=%llu role=%d leader=%d\n",group,(unsigned long long)admitted_term,(unsigned long long)v.term,(unsigned long long)round,(unsigned long long)v.read_round,(unsigned long long)v.proven_round,v.role,v.leader);
             return EFS_ERR_NOT_PRIMARY;
+        }
         if (host_view_covers(&v, want, round, admitted_term)) {
             if (prof)
                 read_prof_add(first ? &g_read_prof.ri_leader_covered
@@ -17172,8 +17176,10 @@ static int host_publication_committed(struct efs_raft_host *h, uint8_t group,
     pthread_mutex_unlock(&h->mu);
     for (;;) {
         host_view_get(h,group,&v);*hint=v.leader;
-        if (!v.has || v.role!=EFS_RAFT_LEADER || v.term!=term)
+        if (!v.has || v.role!=EFS_RAFT_LEADER || v.term!=term) {
+            if (read_prof_on()) fprintf(stderr,"raft-host: publication-read-fence group=%u admitted_term=%llu term=%llu admitted_round=%llu raw_round=%llu proven_round=%llu role=%d leader=%d has=%d\n",group,(unsigned long long)term,(unsigned long long)v.term,(unsigned long long)round,(unsigned long long)v.read_round,(unsigned long long)v.proven_round,v.role,v.leader,v.has);
             return EFS_ERR_NOT_PRIMARY;
+        }
         if (v.read_done && v.read_round>=round && v.read_index>=want) break;
         if (host_past_deadline(&end)) {
             if (read_prof_on()) fprintf(stderr,"raft-host: publication-read-timeout group=%u want=%llu admitted_round=%llu admitted_term=%llu role=%d leader=%d term=%llu raw_round=%llu raw_index=%llu raw_done=%d pending=%d proven_round=%llu proven_index=%llu proven_done=%d applied=%llu commit=%llu\n",
