@@ -219,3 +219,11 @@ Subsequent human authority permits packing-timeout and repair-gap implementation
 
 
 **Subsequent authority conflict — October12:** Intel reports a newer direct stop answer; root requested whether it applies here and paused launches pending clarification. This checkpoint supersedes the preceding running task description, not original immutable verdicts.
+
+
+**Parallel qualification assignment (documented, not launched):** AMD groups1/4
+(read-progress safety and final native qualification), Intel group2 (direct TCP
+packing/query), NUC group3 (direct TCP files POSIX/peer/mutation/GC). All agents
+start from full baseline8b7391b3f3edcf9fc99440d9aad3c240325acb83 and must use the
+same centrally published candidate SHA, including any intended read-progress
+fix, before execution. [Freeze/dependency contract](v030-release-scope-20261012.md#common-source-and-parallel-execution-contract).

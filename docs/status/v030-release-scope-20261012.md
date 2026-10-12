@@ -14,14 +14,43 @@ excluded from the release plan and activation remains disabled.
 Small-file packing and query progress remain release priorities. Four planning
 gate groups remain; this is not an exact command count:
 
-1. Review and qualify the read-progress fix: affected actual Raft/context-fence
-   regressions and sanitizers before integration.
-2. Pass original-budget seven-client packing/query acceptance on TCP/direct I/O,
-   including stats/find and deep paths. Do not extend deadlines to obtain a pass.
-3. Pass direct-I/O files correctness: core POSIX, concurrent/peer, packing
-   mutations, deletion/GC and physical reclamation with an unconfounded oracle.
-4. Freeze one reviewed merged revision and run normal/fault native suites plus
-   applicable affected sanitizers and TCP/direct-I/O live qualification.
+| Gate group | Owner / cluster | Required coverage |
+| --- | --- | --- |
+| 1 — Read-progress safety | AMD | Actual Raft/context-fence regressions, fresh-arrival and own-apply checks, affected sanitizers and integration review. |
+| 2 — Packing/query acceptance | Intel | TCP/direct I/O, original-budget seven-client workload, stats/find, deep paths and packed writes. No competing build/profile workload during quiet acceptance. |
+| 3 — Files correctness and reclamation | NUC | TCP/direct I/O/files core POSIX, concurrent/peer, packing mutations, deletion/GC and physical reclamation using an unconfounded oracle. |
+| 4 — Final merged qualification | AMD | Freeze accepted merged source, full normal/fault native suites and final affected sanitizer checks; reconcile Intel/NUC live results at that exact freeze. |
+
+## Common source and parallel execution contract
+
+All three agents start from release baseline
+`8b7391b3f3edcf9fc99440d9aad3c240325acb83` on `release-v0.3.0-pre-alpha`.
+Later documentation-only assignment commits do not change this implementation
+baseline. No agent starts testing from its divergent Intel/NUC/AMD fix branch.
+The read-progress candidatea9f158ce is not in this baseline and has not been
+accepted: the coordinator must prepare a reviewed common candidate containing
+only intended changes, then publish its full commit SHA before launches.
+All three clusters test that same frozen candidate SHA; no independently
+cherry-picked equivalent trees, moving branch tips or inherited branch passes.
+
+Groups1–3 may run in parallel on their separate clusters after that common
+candidate is prepared and testing is explicitly resumed. Each owner verifies
+source inputs and normal/fault binary identities, records exact command,
+configuration, commit, result and evidence, and uses isolated test stores.
+Live fixtures use TCP/direct I/O/files; experimental repair remains disabled.
+Any implementation correction creates a new common candidate SHA and affected
+passes must be rerun on that SHA. Do not change deadlines or classify failed
+prerequisites as passing dependent gates.
+
+Group4 follows review/integration rather than running against a moving source.
+If the accepted final implementation differs from the groups1–3 candidate,
+Intel reruns group2 and NUC group3 on the final SHA while AMD runs group4.
+This makes final native and live qualification parallel across three clusters
+without mixing source revisions. If implementation is identical, retain the
+verified source-specific evidence and avoid unnecessary duplicate runs.
+
+Assignments are documented only; execution remains STOPPED until explicitly
+resumed. No push, tag or shared branch promotion is authorized.
 
 Retain existing durability protections and normal regression coverage that
 checks acknowledged-write correctness. Dedicated repair, crash-recovery,

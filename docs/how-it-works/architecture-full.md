@@ -1477,7 +1477,7 @@ this document is the invariant they are measured against.
 
 ### v0.3.0-pre-alpha release integration
 
-**Execution STOPPED**, confirmed by the human's October12 “Document, commit, and stop” reply. [Accepted release scope](../status/v030-release-scope-20261012.md): **TCP/direct I/O/files engine**. Containers, buffered/RDMA and dedicated repair/recovery qualification are deferred and no longer release blockers; their gaps remain open. Four planning gate groups remain: read-progress fix safety/sanitizers, seven-client packing/query acceptance, direct-I/O files POSIX/peer/mutation/GC, and final frozen merged-source native/fault/affected live qualification. This is not an exact invocation count.
+**Execution STOPPED**, confirmed by the human's October12 “Document, commit, and stop” reply. [Accepted release scope](../status/v030-release-scope-20261012.md): **TCP/direct I/O/files engine**. Containers, buffered/RDMA and dedicated repair/recovery qualification are deferred and no longer release blockers; their gaps remain open. Four planning gate groups remain: read-progress fix safety/sanitizers, seven-client packing/query acceptance, direct-I/O files POSIX/peer/mutation/GC, and final frozen merged-source native/fault/affected live qualification. Owners: **AMD groups1/4, Intel group2, NUC group3**. All start from full baseline8b7391b3 and test one centrally frozen candidate SHA; see the scope page for parallel execution and final-source rerun rules. This is not an exact invocation count.
 
 Integrated inactive repair prerequisites pass full normal/fault native at exact94bd2e52 (implementation2b216427); no activation or restored-redundancy claim. Excluded privatea9f158ce passes build/affected Raft tests but still needs broader safety/sanitizer/mounted acceptance. Quiet scheduler17d218d7 remainsFAIL (stats/find all7, deep client5), excluded. Clean64-file cold/reclamation diagnosticPASS; global reclamation failures with retained live POSIX trees are confounded. Original services/mounts preserved. See [execution ledger](../status/amd-all-suites-20261011.md). No tag, push or shared branch promotion.
 
@@ -2380,6 +2380,14 @@ Subsequent human authority permits packing-timeout and repair-gap implementation
 
 
 **Subsequent authority conflict — October12:** Intel reports a newer direct stop answer; root requested whether it applies here and paused launches pending clarification. This checkpoint supersedes the preceding running task description, not original immutable verdicts.
+
+
+**Parallel qualification assignment (documented, not launched):** AMD groups1/4
+(read-progress safety and final native qualification), Intel group2 (direct TCP
+packing/query), NUC group3 (direct TCP files POSIX/peer/mutation/GC). All agents
+start from full baseline8b7391b3f3edcf9fc99440d9aad3c240325acb83 and must use the
+same centrally published candidate SHA, including any intended read-progress
+fix, before execution. [Freeze/dependency contract](../status/v030-release-scope-20261012.md#common-source-and-parallel-execution-contract).
 
 
 ## Appendix 3 — Decisions — taken and pending (register D1–D31)
