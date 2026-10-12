@@ -1,0 +1,17 @@
+{
+  "dropped_reply_types": [
+    45,
+    51,
+    65,
+    87
+  ],
+  "replayed_types": [
+    45,
+    51,
+    65,
+    87
+  ],
+  "unchanged_request_identity": true,
+  "crash_restart_between_commit_and_replay": false,
+  "leader_death_after_create_commit": true
+}

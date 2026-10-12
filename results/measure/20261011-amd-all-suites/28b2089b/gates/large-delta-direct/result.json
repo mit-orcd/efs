@@ -1,0 +1,20 @@
+{
+  "name": "large-delta-direct",
+  "command": [
+    "python3",
+    "-u",
+    "tests/live/query_publication.py",
+    "/data1/efs/release-v030-results-20261012-28b2089b/live-approved/large-delta-direct",
+    "--mode",
+    "direct",
+    "--mount",
+    "/data1/efs/mnt",
+    "--peer-mount",
+    "/data1/efs/mnt2"
+  ],
+  "source": "28b2089be6a5df835cc7bb46b9c2a9e2f10df190",
+  "started": "2026-10-12T03:05:28Z",
+  "returncode": 0,
+  "seconds": 32.516,
+  "status": "PASS"
+}

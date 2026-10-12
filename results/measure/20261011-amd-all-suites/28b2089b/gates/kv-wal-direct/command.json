@@ -1,0 +1,29 @@
+{
+  "name": "kv-wal-direct",
+  "command": [
+    "python3",
+    "-u",
+    "/data1/efs/release-v030-results-20261012-28b2089b/fault-live-src/tests/live/gc_reclamation.py",
+    "--mode",
+    "direct",
+    "--transport",
+    "tcp",
+    "--root",
+    "/data1/efs/release-v030-results-20261012-28b2089b/live-approved/kv-wal-direct",
+    "--root",
+    "/data1/efs/release-v030-results-20261012-28b2089b/live-approved/kv-wal-direct",
+    "--port",
+    "24210",
+    "--mount",
+    "/data1/efs/mnt",
+    "--peer-mount",
+    "/data1/efs/mnt2",
+    "--kv-wal-persistence-only",
+    "--server-binary",
+    "/data1/efs/release-v030-results-20261012-28b2089b/fault-live-src/efsd",
+    "--client-binary",
+    "/data1/efs/release-v030-results-20261012-28b2089b/fault-live-src/efs-fuse"
+  ],
+  "source": "28b2089be6a5df835cc7bb46b9c2a9e2f10df190",
+  "started": "2026-10-12T03:36:40Z"
+}

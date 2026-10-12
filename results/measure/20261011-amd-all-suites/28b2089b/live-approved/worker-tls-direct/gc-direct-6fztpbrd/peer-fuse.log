@@ -1,0 +1,21 @@
+2026-10-12T03:54:33.037Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:55:26Z on amd-395), build=28b2089b-release-fault: starting export=default mount=/data1/efs/mnt2
+2026-10-12T03:54:33.037Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:54:33.037Z   node id=1 127.0.0.1:24210
+2026-10-12T03:54:33.037Z   node id=2 127.0.0.1:24211
+2026-10-12T03:54:33.037Z   node id=3 127.0.0.1:24212
+2026-10-12T03:54:33.037Z   node id=4 127.0.0.1:24213
+2026-10-12T03:54:33.037Z fetching metadata...
+2026-10-12T03:54:33.037Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:54:33.037Z export id=1 name=default
+2026-10-12T03:54:33.037Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:54:33.039Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:54:33.040Z fuse serving
+2026-10-12T03:54:33.300Z reply-buffer new owner=0x74f558123960 read=0 readdir=0 pid=1723427
+2026-10-12T03:54:33.300Z reply-buffer grow owner=0x74f558123960 read=4096 readdir=0 pid=1723427
+2026-10-12T03:54:33.303Z reply-buffer new owner=0x74f558124ab0 read=0 readdir=0 pid=1723427
+2026-10-12T03:54:33.303Z reply-buffer grow owner=0x74f558124ab0 read=196608 readdir=0 pid=1723427
+2026-10-12T03:54:33.310Z reply-buffer new owner=0x74f560113c20 read=0 readdir=0 pid=1723427
+2026-10-12T03:54:33.310Z reply-buffer grow owner=0x74f560113c20 read=196608 readdir=0 pid=1723427
+2026-10-12T03:54:33.415Z reply-buffer retire owner=0x74f558123960 read=4096 readdir=0 pid=1723427
+2026-10-12T03:54:33.415Z reply-buffer retire owner=0x74f558124ab0 read=196608 readdir=0 pid=1723427
+2026-10-12T03:54:33.415Z reply-buffer retire owner=0x74f560113c20 read=196608 readdir=0 pid=1723427

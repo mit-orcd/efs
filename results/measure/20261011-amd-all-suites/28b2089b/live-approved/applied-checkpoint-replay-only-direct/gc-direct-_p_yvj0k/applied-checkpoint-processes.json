@@ -1,0 +1,30 @@
+[
+  {
+    "pid": 1589262,
+    "command": "/data1/efs/release-v030-28b2089b/efsd --node-id 1 --addr 127.0.0.1 --port 24210 --storage /data1/efs/release-v030-results-20261012-28b2089b/live-approved/applied-checkpoint-replay-only-direct/gc-direct-_p_yvj0k/n1 --quota 1G --direct-io ",
+    "applied_interval_ms": "10",
+    "fault_scope": null,
+    "preload": null
+  },
+  {
+    "pid": 1589299,
+    "command": "/data1/efs/release-v030-28b2089b/efsd --node-id 2 --addr 127.0.0.1 --port 24211 --storage /data1/efs/release-v030-results-20261012-28b2089b/live-approved/applied-checkpoint-replay-only-direct/gc-direct-_p_yvj0k/n2 --quota 1G --direct-io --join 127.0.0.1:24210 ",
+    "applied_interval_ms": "10",
+    "fault_scope": null,
+    "preload": null
+  },
+  {
+    "pid": 1589345,
+    "command": "/data1/efs/release-v030-28b2089b/efsd --node-id 4 --addr 127.0.0.1 --port 24213 --storage /data1/efs/release-v030-results-20261012-28b2089b/live-approved/applied-checkpoint-replay-only-direct/gc-direct-wwyq60k0/n4 --quota 1G --direct-io --join 127.0.0.1:24210 ",
+    "applied_interval_ms": "10",
+    "fault_scope": null,
+    "preload": null
+  },
+  {
+    "pid": 1589401,
+    "command": "/data1/efs/release-v030-28b2089b/efsd --node-id 3 --addr 127.0.0.1 --port 24212 --storage /data1/efs/release-v030-results-20261012-28b2089b/live-approved/applied-checkpoint-replay-only-direct/gc-direct-wwyq60k0/n3 --quota 1G --direct-io --join 127.0.0.1:24210 ",
+    "applied_interval_ms": "10",
+    "fault_scope": "/data1/efs/release-v030-results-20261012-28b2089b/live-approved/applied-checkpoint-replay-only-direct/gc-direct-_p_yvj0k/applied-marker-fault",
+    "preload": "/data1/efs/release-v030-results-20261012-28b2089b/live-approved/applied-checkpoint-replay-only-direct/gc-direct-_p_yvj0k/applied-checkpoint-fault.so"
+  }
+]

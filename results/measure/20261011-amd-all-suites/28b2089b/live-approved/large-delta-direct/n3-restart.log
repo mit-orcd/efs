@@ -1,0 +1,18 @@
+2026-10-12T03:05:58.132Z storage-engine=files direct_io=on
+2026-10-12T03:05:58.132Z Data GC admission: experimental
+2026-10-12T03:05:58.132Z Loaded 4 persisted cluster node(s) from /data1/efs/release-v030-results-20261012-28b2089b/live-approved/large-delta-direct/n3/meta/cluster_nodes.bin
+2026-10-12T03:05:58.132Z   persisted node 1: 127.0.0.1:24804
+2026-10-12T03:05:58.132Z   persisted node 2: 127.0.0.1:24805
+2026-10-12T03:05:58.132Z   persisted node 3: 127.0.0.1:24806
+2026-10-12T03:05:58.132Z   persisted node 4: 127.0.0.1:24807
+2026-10-12T03:05:58.137Z Storage quota: explicit 1.00 GiB (safe maximum 111.36 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T03:05:58.139Z Joined cluster with 4 nodes
+2026-10-12T03:05:58.140Z heartbeat: enabled (2000 ms interval)
+2026-10-12T03:05:58.159Z raft-host: up raft_id=2 n=4 boot=6834063483487831 salt=13150579192063075134 g0=hosted g2=hosted
+2026-10-12T03:05:58.159Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: node 3 listening on 127.0.0.1:24806, storage=/data1/efs/release-v030-results-20261012-28b2089b/live-approved/large-delta-direct/n3 (1 paths, stripe=none), used=11599872, quota=1073741824, direct_io=on, writers=0 shared
+2026-10-12T03:05:58.159Z kv-obs: mt_bytes=964814 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:05:58.666Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=406
+2026-10-12T03:06:00.140Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=967 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:06:00.684Z query-catchup: rc=0 backend=disk
+2026-10-12T03:06:00.684Z query-restore: rc=0 backend=disk
+2026-10-12T03:06:00.685Z query-publish: generation=1 g0=115 g2=11442 rebuilt=2 refolded=1 edge_reused=0 bytes=3858492 pin_ms=2 build_ms=14 root_rc=0 files=758 dirs=7 logical=2451

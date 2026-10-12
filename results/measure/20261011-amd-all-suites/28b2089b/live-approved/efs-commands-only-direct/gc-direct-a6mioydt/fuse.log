@@ -1,0 +1,14 @@
+2026-10-12T03:11:38.466Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:11:38.466Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:11:38.466Z   node id=1 127.0.0.1:24210
+2026-10-12T03:11:38.466Z   node id=2 127.0.0.1:24211
+2026-10-12T03:11:38.466Z   node id=3 127.0.0.1:24212
+2026-10-12T03:11:38.466Z   node id=4 127.0.0.1:24213
+2026-10-12T03:11:38.466Z fetching metadata...
+2026-10-12T03:11:38.466Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:11:38.466Z export id=1 name=default
+2026-10-12T03:11:38.466Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:11:38.469Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:11:38.470Z fuse serving
+2026-10-12T03:11:43.531Z efs commands: real .efs takes precedence in directory 2706
+2026-10-12T03:11:49.381Z efs commands: real .efs takes precedence in directory 2706

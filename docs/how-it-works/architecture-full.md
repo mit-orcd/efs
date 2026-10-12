@@ -1477,9 +1477,9 @@ this document is the invariant they are measured against.
 
 ### v0.3.0-pre-alpha release integration
 
-**Execution is stopped.** The human subsequently authorized branch reconciliation and this documentation review only; neither restarts cluster work. All committed local/remote-tracking branch tips were integrated at `15ff4de7`. `devel` and `main` were not advanced. The release tag has not been created; nothing has been pushed.
+**AMD complete-suite testing is authorized and running** on frozen `28b2089b`; see [execution ledger](../status/amd-all-suites-20261011.md). Intel and NUC are now authorized for the assigned three-way test split at the same frozen commit and subsequent packing/repair fixes on separate worktrees; other owners remain stopped. See the execution ledger for ownership. The earlier stop applied before these new human testing requests. All committed local/remote-tracking branch tips were integrated at `15ff4de7`. `devel` and `main` were not advanced. The release tag has not been created; nothing has been pushed.
 
-Frozen qualification source: `410afed433b6da093bdc2acf37bec253ddbd586c`, corrected packaging-v2 (1,563 files, 52 directories). Later integration/documentation commits are not new execution identities. AMD full normal/fault native, 20 focused sanitizer and fully sanitized real-LSM catalog/audit gates PASS. Fixed mounted CREATE three-stage/cold ownership and targeted query diagnosis remain NOTRUN centrally.
+Previous qualification source: `410afed433b6da093bdc2acf37bec253ddbd586c`, corrected packaging-v2 (1,563 files, 52 directories). The new AMD all-suite run explicitly freezes `28b2089b`; its verdicts are recorded separately. Later integration/documentation commits are not new execution identities. AMD full normal/fault native, 20 focused sanitizer and fully sanitized real-LSM catalog/audit gates PASS. Fixed mounted CREATE three-stage/cold ownership and targeted query diagnosis remain NOTRUN centrally.
 
 Release blockers:
 
@@ -1492,7 +1492,7 @@ Release blockers:
 
 [Superseded release-index narrative](../archive/v030-index-checkpoints-20261011.md) preserves the older source-specific checkpoints removed from this running summary.
 
-Owner stop records: [Mac](../status/mac-common-candidate-c2bfb9e9.md#manager-requested-stop-checkpoint), [NUC](../status/nuc-common-c2-qualification-20261012.md#human-stop-checkpoint), [ORCD](../status/orcd-stop-checkpoint-20261011.md). [Intel final stop checkpoint](../status/intel-stop-checkpoint-20261011.md) is now integrated: both410/v2 normal Make suites PASS, partial standalone4/88 and6/88 PASS; fault/sanitizer/mounted NOTRUN. Its [acceptance ledger](../status/intel-deployment-acceptance-20261011.md) preserves earlier c2 failures. No cluster execution is resumed.
+Owner stop records: [Mac](../status/mac-common-candidate-c2bfb9e9.md#manager-requested-stop-checkpoint), [NUC](../status/nuc-common-c2-qualification-20261012.md#human-stop-checkpoint), [ORCD](../status/orcd-stop-checkpoint-20261011.md). [Intel final stop checkpoint](../status/intel-stop-checkpoint-20261011.md) is now integrated: both410/v2 normal Make suites PASS, partial standalone4/88 and6/88 PASS; fault/sanitizer/mounted NOTRUN. Its [acceptance ledger](../status/intel-deployment-acceptance-20261011.md) preserves earlier c2 failures. AMD execution is resumed by the complete-suite request; the subsequent explicit test split resumes only the assigned Intel/NUC qualification. Other cluster execution remains stopped.
 
 [Architecture](#architecture) · [agent handoff](#appendix-2--in-flight--the-current-handoff-block) · [decisions](#appendix-3--decisions--taken-and-pending-register-d1d31) · [work-item details](#appendix-4--work-items--long-form-text-for-the-open-w-items-and-the-queue-rows) · [operations](../operations/operations.md) · [archive](../archive/README.md).
 
@@ -2160,7 +2160,7 @@ Release scope is now true-defect testing/fixing only. The next shared candidate 
 
 *Source: `status/in-flight.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-**Current state:** all release engineering execution is stopped at human request. Later authorization covers branch reconciliation and documentation review only. Frozen test source is 410afed4/v2; no further rollout, diagnostic, test controller or performance work is authorized. See [release stop checkpoint](../status/v030-stop-checkpoint-20261011.md) and [current release index](#v030-pre-alpha-release-integration). Owner-specific final states override all historical running/next statements below.
+**Current state:** the human authorized AMD to run all test suites and report all issues on frozen `28b2089b`. See [AMD execution ledger](../status/amd-all-suites-20261011.md). This resumes isolated AMD testing only; other release owners remain stopped. No code fix, rollout to installed stores, tag, promotion or push follows from this qualification request. The [earlier release stop checkpoint](../status/v030-stop-checkpoint-20261011.md) remains historical; [current release index](#v030-pre-alpha-release-integration) records the new authority.
 
 ### Superseded assignments and evidence (before human stop)
 
@@ -2364,6 +2364,10 @@ being inferred closed from clean repeats.
 folded identity can be evicted and its old retry reintroduced over a later
 base. Actual host/FUSE byte and lost-ACK/restart gates remain open. Keep the
 durable identity/retirement primitives separate from bounded trailer hints.
+
+Human-authorized three-way qualification split: AMD remaining direct/overload/RXE, Intel buffered first-stage matrix, NUC additional recovery/query and storage-engine matrix. All use release-v0.3.0-pre-alpha source `28b2089be6a5df835cc7bb46b9c2a9e2f10df190`; see [current execution ledger](../status/amd-all-suites-20261011.md#authorized-three-cluster-split--october-11-2026). Other owner stops remain effective. No source fixes, promotion or pushes authorized by this testing split.
+
+Subsequent human authority permits packing-timeout and repair-gap implementation fixes on separate frozen28-based worktrees, review/integration into release-v0.3.0-pre-alpha and affected reruns. Intel owns packing, NUC repair, AMD integration. Earlier testing-only prohibition is superseded for these fixes; no push/tag/promotion authorization.
 
 
 ## Appendix 3 — Decisions — taken and pending (register D1–D31)

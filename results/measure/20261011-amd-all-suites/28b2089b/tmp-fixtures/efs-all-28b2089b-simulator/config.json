@@ -1,0 +1,9 @@
+{
+  "seed": 101,
+  "transport": "tcp",
+  "integrate": false,
+  "mode": "buffered",
+  "replay": "bash tests/faults/run_faults.sh /tmp/efs-all-28b2089b-simulator --mode buffered",
+  "live_cluster": "not used; ports 19810 and 19820 are refused",
+  "repair": "gap"
+}

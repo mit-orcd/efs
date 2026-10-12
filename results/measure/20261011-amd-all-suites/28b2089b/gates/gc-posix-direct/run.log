@@ -1,0 +1,20 @@
+Evidence directory: /data1/efs/release-v030-results-20261012-28b2089b/live/gc-posix-direct/gc-direct-r_ek96wh
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=2617906229481317511
+Traceback (most recent call last):
+  File "/data1/efs/release-v030-28b2089b/tests/live/gc_reclamation.py", line 576, in <module>
+    mount_client()
+    ~~~~~~~~~~~~^^
+  File "/data1/efs/release-v030-28b2089b/tests/live/gc_reclamation.py", line 438, in mount_client
+    wait(ready,'client serving',40)
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data1/efs/release-v030-28b2089b/tests/live/gc_reclamation.py", line 356, in wait
+    if predicate():
+       ~~~~~~~~~^^
+  File "/data1/efs/release-v030-28b2089b/tests/live/gc_reclamation.py", line 435, in ready
+    if client.poll() is not None:raise AssertionError('FUSE exited')
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: FUSE exited

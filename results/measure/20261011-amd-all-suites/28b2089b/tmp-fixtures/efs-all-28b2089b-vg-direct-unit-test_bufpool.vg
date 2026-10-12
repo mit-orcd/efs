@@ -1,0 +1,61 @@
+==1749678== Memcheck, a memory error detector
+==1749678== Copyright (C) 2002-2024, and GNU GPL'd, by Julian Seward et al.
+==1749678== Using Valgrind-3.26.0 and LibVEX; rerun with -h for copyright info
+==1749678== Command: ./tests/test_bufpool
+==1749678== Parent PID: 1749677
+==1749678== 
+vex amd64->IR: unhandled instruction bytes: 0x62 0xF2 0xFD 0x48 0x7C 0xC3 0x62 0xF1 0xFD 0x48
+vex amd64->IR:   REX=0 REX.W=0 REX.R=0 REX.X=0 REX.B=0
+vex amd64->IR:   VEX=0 VEX.L=0 VEX.nVVVV=0x0 ESC=NONE
+vex amd64->IR:   PFX.66=0 PFX.F2=0 PFX.F3=0
+==1749678== valgrind: Unrecognised instruction at address 0x4004acf.
+==1749678==    at 0x4004ACF: buf_alloc.constprop.0 (bufpool.c:228)
+==1749678==    by 0x4002636: efs_buf_alloc (bufpool.c:253)
+==1749678==    by 0x4002636: main (test_bufpool.c:246)
+==1749678== Your program just tried to execute an instruction that Valgrind
+==1749678== did not recognise.  There are two possible reasons for this.
+==1749678== 1. Your program has a bug and erroneously jumped to a non-code
+==1749678==    location.  If you are running Memcheck and you just saw a
+==1749678==    warning about a bad jump, it's probably your program's fault.
+==1749678== 2. The instruction is legitimate but Valgrind doesn't handle it,
+==1749678==    i.e. it's Valgrind's fault.  If you think this is the case or
+==1749678==    you are not sure, please let us know and we'll try to fix it.
+==1749678== Either way, Valgrind will now raise a SIGILL signal which will
+==1749678== probably kill your program.
+==1749678== 
+==1749678== Process terminating with default action of signal 4 (SIGILL)
+==1749678==  Illegal opcode at address 0x4004ACF
+==1749678==    at 0x4004ACF: buf_alloc.constprop.0 (bufpool.c:228)
+==1749678==    by 0x4002636: efs_buf_alloc (bufpool.c:253)
+==1749678==    by 0x4002636: main (test_bufpool.c:246)
+==1749678== 
+==1749678== HEAP SUMMARY:
+==1749678==     in use at exit: 33,555,119 bytes in 12 blocks
+==1749678==   total heap usage: 13 allocs, 1 frees, 34,603,695 bytes allocated
+==1749678== 
+==1749678== 24 bytes in 1 blocks are possibly lost in loss record 7 of 12
+==1749678==    at 0x487D858: malloc (vg_replace_malloc.c:447)
+==1749678==    by 0x49DDE38: __tsearch (tsearch.c:338)
+==1749678==    by 0x49DDE38: tsearch (tsearch.c:291)
+==1749678==    by 0x48F42CB: __add_to_environ (setenv.c:264)
+==1749678==    by 0x488DEB6: setenv (vg_replace_strmem.c:2528)
+==1749678==    by 0x40024F5: main (test_bufpool.c:225)
+==1749678== 
+==1749678== 33,554,432 bytes in 1 blocks are possibly lost in loss record 12 of 12
+==1749678==    at 0x487D858: malloc (vg_replace_malloc.c:447)
+==1749678==    by 0x4004AC2: test_malloc (test_bufpool.c:9)
+==1749678==    by 0x4004AC2: buf_alloc.constprop.0 (bufpool.c:225)
+==1749678==    by 0x4002636: efs_buf_alloc (bufpool.c:253)
+==1749678==    by 0x4002636: main (test_bufpool.c:246)
+==1749678== 
+==1749678== LEAK SUMMARY:
+==1749678==    definitely lost: 0 bytes in 0 blocks
+==1749678==    indirectly lost: 0 bytes in 0 blocks
+==1749678==      possibly lost: 33,554,456 bytes in 2 blocks
+==1749678==    still reachable: 663 bytes in 10 blocks
+==1749678==         suppressed: 0 bytes in 0 blocks
+==1749678== Reachable blocks (those to which a pointer was found) are not shown.
+==1749678== To see them, rerun with: --leak-check=full --show-leak-kinds=all
+==1749678== 
+==1749678== For lists of detected and suppressed errors, rerun with: -s
+==1749678== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)

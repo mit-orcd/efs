@@ -1,0 +1,19 @@
+2026-10-12T03:02:54.237Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/tmp/efs-pack-client-3-9_dzgtcl
+2026-10-12T03:02:54.238Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:02:54.238Z   node id=1 127.0.0.1:24210
+2026-10-12T03:02:54.238Z   node id=2 127.0.0.1:24211
+2026-10-12T03:02:54.238Z   node id=3 127.0.0.1:24212
+2026-10-12T03:02:54.238Z   node id=4 127.0.0.1:24213
+2026-10-12T03:02:54.238Z fetching metadata...
+2026-10-12T03:02:54.238Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:02:54.238Z export id=1 name=default
+2026-10-12T03:02:54.238Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:02:54.241Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:02:54.242Z fuse serving
+2026-10-12T03:02:55.760Z efs: read hole ino=4361 ci=1 holes=1
+2026-10-12T03:02:56.919Z efs: rename_at 724/a -> 724/b rc=-12 after 1 tries
+2026-10-12T03:03:04.577Z fsync-split ino=13703 flush_ms=110 report_ms=0 rc=0
+2026-10-12T03:03:08.922Z efs: read hole ino=6893 ci=2 holes=3
+2026-10-12T03:03:11.540Z efs: read hole ino=9002 ci=1 holes=12
+2026-10-12T03:03:20.012Z efs: read hole ino=20111 ci=0 holes=13
+2026-10-12T03:03:23.081Z efs: read hole ino=8234 ci=0 holes=14

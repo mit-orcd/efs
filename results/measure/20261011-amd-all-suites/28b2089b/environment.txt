@@ -1,0 +1,7 @@
+Linux amd-395 7.0.0-38-generic #38-Ubuntu SMP PREEMPT_DYNAMIC Fri Sep  4 09:10:14 UTC 2026 x86_64 GNU/Linux
+cc (Ubuntu 15.2.0-16ubuntu1) 15.2.0
+Python 3.14.4
+3.18.2
+    device          	   node GUID
+    ------          	----------------
+    rxe0            	f268e3fffe63149e

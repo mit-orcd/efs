@@ -1,0 +1,14 @@
+parallel 5 tests jobs=4 (serial 0 after)
+SKIP mmap_write_read                  mmap unsupported: [Errno 19] No such device
+pass mmap_private_not_visible        
+pass virt_find_not_a_real_dir        
+Showing 1 results; no more results. Total matches were not counted.
+Results as of just now; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 6828243386713758:24; no refresh error recorded; expiry unavailable.
+Results as of just now; validated against this snapshot. Background refresh may lag recent writes.
+Snapshot 6828243386713758:24; no refresh error recorded; expiry unavailable.
+pass virt_stats_readable             
+pass virt_find_query                 
+============================================================
+POSIX suite: 4/5 pass, 0 fail, 1 skip, 0 notrun  (2.6s)
+wrote /data1/efs/release-v030-results-20261012-28b2089b/live-approved/query-direct/posix-extras.tsv

@@ -1,0 +1,8 @@
+efsd: fatal SIGILL (4)
+./efsd(+0xa725) [0x400a725]
+/usr/lib/x86_64-linux-gnu/libc.so.6(+0x45cb0) [0x4e0ecb0]
+./efsd(+0x822d4) [0x40822d4]
+./efsd(+0x6e58) [0x4006e58]
+/usr/lib/x86_64-linux-gnu/libc.so.6(+0x2a601) [0x4df3601]
+/usr/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x88) [0x4df3718]
+./efsd(+0x8b35) [0x4008b35]

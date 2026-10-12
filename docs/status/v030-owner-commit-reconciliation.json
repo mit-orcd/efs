@@ -1,6 +1,6 @@
 {
   "audited_release_head": "acaed0ae0e11eafeb4f17058a4daba546b4241ee",
-  "frozen_amd_test_source": "410afed433b6da093bdc2acf37bec253ddbd586c",
+  "frozen_amd_test_source": "28b2089be6a5df835cc7bb46b9c2a9e2f10df190",
   "scope": "every nonancestor commit of frozen owner tips; integrated ancestor history retained in Git",
   "owners": {
     "amd": {
@@ -308,5 +308,8 @@
     "fault_sanitizer_mounted": "NOTRUN",
     "integrated": true,
     "merge_commit": "acaed0ae0e11eafeb4f17058a4daba546b4241ee"
-  }
+  },
+  "previous_frozen_amd_test_source": "410afed433b6da093bdc2acf37bec253ddbd586c",
+  "amd_execution_request": "Human authorized complete AMD test suites and issue reporting on October 11; no push or source fixes.",
+  "amd_execution_ledger": "amd-all-suites-20261011.md"
 }

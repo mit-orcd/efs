@@ -1,0 +1,8 @@
+namespace cold restart: all seven pre-revocation receipts remain STALE PASS
+cold namespace case=0 status=11
+cold namespace case=1 status=11
+cold namespace case=2 status=11
+cold namespace case=3 status=11
+cold namespace case=4 status=11
+cold namespace case=5 status=11
+cold namespace case=6 status=11

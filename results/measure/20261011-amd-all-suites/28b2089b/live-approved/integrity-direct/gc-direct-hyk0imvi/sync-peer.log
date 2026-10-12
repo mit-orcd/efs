@@ -1,0 +1,55 @@
+2026-10-12T03:15:18.926Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt2
+2026-10-12T03:15:18.926Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:15:18.926Z   node id=1 127.0.0.1:24210
+2026-10-12T03:15:18.926Z   node id=2 127.0.0.1:24211
+2026-10-12T03:15:18.926Z   node id=3 127.0.0.1:24212
+2026-10-12T03:15:18.926Z   node id=4 127.0.0.1:24213
+2026-10-12T03:15:18.926Z fetching metadata...
+2026-10-12T03:15:18.926Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:15:18.926Z export id=1 name=default
+2026-10-12T03:15:18.926Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:15:18.929Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:15:18.931Z fuse serving
+2026-10-12T03:15:19.211Z release ino=4097 begin
+2026-10-12T03:15:19.211Z release ino=4097 rc=0
+2026-10-12T03:15:19.280Z release ino=8193 begin
+2026-10-12T03:15:19.280Z release ino=8193 rc=0
+2026-10-12T03:15:19.312Z release ino=12289 begin
+2026-10-12T03:15:19.313Z release ino=12289 rc=0
+2026-10-12T03:15:19.608Z release ino=16385 begin
+2026-10-12T03:15:19.608Z release ino=16385 rc=0
+2026-10-12T03:15:19.646Z release ino=20481 begin
+2026-10-12T03:15:19.647Z release ino=20481 rc=0
+2026-10-12T03:15:19.683Z release ino=24577 begin
+2026-10-12T03:15:19.683Z release ino=24577 rc=0
+2026-10-12T03:15:19.716Z release ino=28673 begin
+2026-10-12T03:15:19.717Z release ino=28673 rc=0
+2026-10-12T03:15:19.796Z release ino=32769 begin
+2026-10-12T03:15:19.796Z release ino=32769 rc=0
+2026-10-12T03:15:19.822Z release ino=36865 begin
+2026-10-12T03:15:19.822Z release ino=36865 rc=0
+2026-10-12T03:15:19.852Z release ino=40961 begin
+2026-10-12T03:15:19.853Z release ino=40961 rc=0
+2026-10-12T03:15:19.885Z release ino=45057 begin
+2026-10-12T03:15:19.885Z release ino=45057 rc=0
+2026-10-12T03:15:19.975Z release ino=49153 begin
+2026-10-12T03:15:19.976Z release ino=49153 rc=0
+2026-10-12T03:15:19.993Z dcache ino=53249 ci=5 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=1 r=
+2026-10-12T03:15:19.996Z dcache ino=53249 ci=5 put-record obj=ba8911ebaec8ea8a seq=1 | dirty=0 hb=1 bg=ffffffffffffffff obj=ba8911ebaec8ea8a oseq=1 sseq=1 r=
+2026-10-12T03:15:19.996Z dcache ino=53249 ci=5 install len=131072 seq=1 | dirty=0 hb=1 bg=ffffffffffffffff obj=ba8911ebaec8ea8a oseq=1 sseq=1 r=
+2026-10-12T03:15:19.998Z report ino=53249 ci=5 only=53249 sync=1 rc=0
+2026-10-12T03:15:19.998Z report-irec ino=53249 size=786432 only=53249 sync=1 rc=0
+2026-10-12T03:15:19.998Z release ino=53249 begin
+2026-10-12T03:15:19.999Z release ino=53249 rc=0
+2026-10-12T03:15:20.009Z efs: read hole ino=53249 ci=1 holes=1
+2026-10-12T03:15:20.010Z release ino=53249 begin
+2026-10-12T03:15:20.010Z release ino=53249 rc=0
+2026-10-12T03:15:20.016Z dcache ino=57345 ci=6 snap-copy | dirty=1 hb=1 bg=ffffffffffffffff obj=0 oseq=0 sseq=2 r=
+2026-10-12T03:15:20.018Z dcache ino=57345 ci=6 put-record obj=4c5a0f36b3231cf3 seq=2 | dirty=0 hb=1 bg=ffffffffffffffff obj=4c5a0f36b3231cf3 oseq=2 sseq=2 r=
+2026-10-12T03:15:20.018Z dcache ino=57345 ci=6 install len=131072 seq=2 | dirty=0 hb=1 bg=ffffffffffffffff obj=4c5a0f36b3231cf3 oseq=2 sseq=2 r=
+2026-10-12T03:15:20.018Z report ino=57345 ci=6 only=57345 sync=1 rc=0
+2026-10-12T03:15:20.018Z report-irec ino=57345 size=917504 only=57345 sync=1 rc=0
+2026-10-12T03:15:20.018Z release ino=57345 begin
+2026-10-12T03:15:20.019Z release ino=57345 rc=0
+2026-10-12T03:15:20.031Z release ino=57345 begin
+2026-10-12T03:15:20.031Z release ino=57345 rc=0

@@ -1,0 +1,11 @@
+2026-10-12T02:59:48.998Z storage-engine=files direct_io=on
+2026-10-12T02:59:48.998Z Data GC admission: experimental
+2026-10-12T02:59:48.998Z Storage quota: explicit 1.00 GiB (safe maximum 112.28 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T02:59:49.000Z Joined cluster with 4 nodes
+2026-10-12T02:59:49.001Z heartbeat: enabled (2000 ms interval)
+2026-10-12T02:59:49.003Z raft-host: up raft_id=3 n=4 boot=6876274001541068 salt=2131906221459857486 g0=off g2=hosted
+2026-10-12T02:59:49.003Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: node 4 listening on 127.0.0.1:24803, storage=/data1/efs/release-v030-results-20261012-28b2089b/live/query-direct/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=0 shared
+2026-10-12T02:59:49.003Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T02:59:51.002Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=980 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T02:59:54.008Z kv-obs: mt_bytes=130 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:00:07.011Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=689 passes=18 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0

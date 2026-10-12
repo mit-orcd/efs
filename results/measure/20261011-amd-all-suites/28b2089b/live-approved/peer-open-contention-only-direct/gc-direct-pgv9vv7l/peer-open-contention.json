@@ -1,0 +1,6 @@
+{
+  "iterations": 20,
+  "records_per_iteration": 800,
+  "cold_bytes": 4800,
+  "sha256": "781cfc60502af5ccf4268df93b6284092209a306fc1bd5a780e2a19c78c61354"
+}

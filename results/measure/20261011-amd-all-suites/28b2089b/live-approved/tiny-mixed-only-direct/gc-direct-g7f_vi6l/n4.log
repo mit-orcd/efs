@@ -1,0 +1,34 @@
+2026-10-12T03:09:46.480Z storage-engine=files direct_io=on
+2026-10-12T03:09:46.481Z Data GC admission: experimental
+2026-10-12T03:09:46.481Z Storage quota: explicit 1.00 GiB (safe maximum 111.10 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T03:09:46.483Z Joined cluster with 4 nodes
+2026-10-12T03:09:46.484Z heartbeat: enabled (2000 ms interval)
+2026-10-12T03:09:46.486Z raft-host: up raft_id=3 n=4 boot=6807163790233377 salt=12295854639760182743 g0=off g2=hosted
+2026-10-12T03:09:46.486Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: node 4 listening on 127.0.0.1:24213, storage=/data1/efs/release-v030-results-20261012-28b2089b/live-approved/tiny-mixed-only-direct/gc-direct-6lx9myy3/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=28 shared
+2026-10-12T03:09:46.486Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:09:48.484Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=981 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:09:50.003Z raft-host: applied session index=3 kind=1 shard=0 ino=0
+2026-10-12T03:09:50.014Z store: put O_DIRECT bounce copy (buf align=2368 len=65536)
+2026-10-12T03:09:50.022Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=9 bytes=589824 errors=0 avg_us=3156 p50_us=3439 max_us=3784 wdisk ops=9 bytes=589824 errors=0 avg_us=3101 p50_us=3358 max_us=3725
+2026-10-12T03:09:50.048Z raft-host: applied session index=6 kind=1 shard=0 ino=0
+2026-10-12T03:09:50.080Z raft-host: applied session index=39 kind=1 shard=0 ino=0
+2026-10-12T03:09:51.488Z kv-obs: mt_bytes=451857 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:09:53.420Z storage-engine=files direct_io=on
+2026-10-12T03:09:53.420Z Data GC admission: experimental
+2026-10-12T03:09:53.420Z Loaded 4 persisted cluster node(s) from /data1/efs/release-v030-results-20261012-28b2089b/live-approved/tiny-mixed-only-direct/gc-direct-6lx9myy3/n4/meta/cluster_nodes.bin
+2026-10-12T03:09:53.420Z   persisted node 1: 127.0.0.1:24210
+2026-10-12T03:09:53.420Z   persisted node 2: 127.0.0.1:24211
+2026-10-12T03:09:53.420Z   persisted node 3: 127.0.0.1:24212
+2026-10-12T03:09:53.420Z   persisted node 4: 127.0.0.1:24213
+2026-10-12T03:09:53.442Z Storage quota: explicit 1.00 GiB (safe maximum 110.22 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T03:09:53.444Z Joined cluster with 4 nodes
+2026-10-12T03:09:53.445Z heartbeat: enabled (2000 ms interval)
+2026-10-12T03:09:53.455Z raft-host: up raft_id=3 n=4 boot=6807163790233378 salt=13040360793735574914 g0=off g2=hosted
+2026-10-12T03:09:53.455Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: node 4 listening on 127.0.0.1:24213, storage=/data1/efs/release-v030-results-20261012-28b2089b/live-approved/tiny-mixed-only-direct/gc-direct-6lx9myy3/n4 (1 paths, stripe=none), used=333774848, quota=1073741824, direct_io=on, writers=28 shared
+2026-10-12T03:09:53.455Z kv-obs: mt_bytes=645441 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:09:55.446Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=971 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:09:56.942Z iostats: get ops=1 bytes=65536 errors=0 avg_us=415 p50_us=415 max_us=415 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T03:09:58.456Z kv-obs: mt_bytes=651133 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:10:01.942Z iostats: get ops=996 bytes=65273856 errors=0 avg_us=328 p50_us=351 max_us=917 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T03:10:06.945Z iostats: get ops=996 bytes=65273856 errors=0 avg_us=328 p50_us=351 max_us=917 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T03:10:08.457Z kv-obs: mt_bytes=295869 l0_bytes=0 l0=0 l1=0

@@ -1,0 +1,11 @@
+[
+  "test_alloc_value_guard.py",
+  "test_cluster_stop.py",
+  "test_commands_load_payloads.py",
+  "test_gate_rounds_cancel.py",
+  "test_live_ticket_retry.py",
+  "test_nuc_block_analysis.py",
+  "test_nuc_controller_timeout.py",
+  "test_query_unavailable.py",
+  "test_runtime_exe_identity.py"
+]

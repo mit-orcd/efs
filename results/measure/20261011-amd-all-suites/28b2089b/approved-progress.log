@@ -1,0 +1,80 @@
+2026-10-12T03:01:20Z fault-simulator-approved START
+2026-10-12T03:01:20Z fault-simulator-approved FAIL 2
+2026-10-12T03:01:20Z gc-posix-direct-approved START
+2026-10-12T03:02:48Z gc-posix-direct-approved PASS 0
+2026-10-12T03:02:48Z packing-seven-direct-approved START
+2026-10-12T03:03:43Z packing-seven-direct-approved FAIL 1
+2026-10-12T03:03:43Z ordinary-overwrite-direct-approved START
+2026-10-12T03:04:00Z ordinary-overwrite-direct-approved PASS 0
+2026-10-12T03:04:00Z query-direct-approved START
+2026-10-12T03:05:28Z query-direct-approved FAIL 1
+2026-10-12T03:05:28Z large-delta-direct START
+2026-10-12T03:06:00Z large-delta-direct PASS 0
+2026-10-12T03:06:00Z peer-mkdir-race-only-direct START
+2026-10-12T03:06:25Z peer-mkdir-race-only-direct PASS 0
+2026-10-12T03:06:25Z peer-open-contention-only-direct START
+2026-10-12T03:08:01Z peer-open-contention-only-direct PASS 0
+2026-10-12T03:08:01Z append-truncate-only-direct START
+2026-10-12T03:08:24Z append-truncate-only-direct PASS 0
+2026-10-12T03:08:24Z mount-sync-direct START
+2026-10-12T03:08:34Z mount-sync-direct PASS 0
+2026-10-12T03:08:34Z namespace-session-only-direct START
+2026-10-12T03:08:43Z namespace-session-only-direct PASS 0
+2026-10-12T03:08:43Z applied-checkpoint-replay-only-direct START
+2026-10-12T03:09:23Z applied-checkpoint-replay-only-direct FAIL 1
+2026-10-12T03:09:23Z tiny-create-only-direct START
+2026-10-12T03:09:45Z tiny-create-only-direct PASS 0
+2026-10-12T03:09:45Z tiny-mixed-only-direct START
+2026-10-12T03:10:10Z tiny-mixed-only-direct PASS 0
+2026-10-12T03:10:10Z append-loaded-only-direct START
+2026-10-12T03:11:34Z append-loaded-only-direct FAIL 1
+2026-10-12T03:11:34Z efs-commands-only-direct START
+2026-10-12T03:11:50Z efs-commands-only-direct PASS 0
+2026-10-12T03:11:50Z append-burst-direct START
+2026-10-12T03:12:30Z append-burst-direct PASS 0
+2026-10-12T03:12:30Z namespace-direct START
+2026-10-12T03:14:58Z namespace-direct PASS 0
+2026-10-12T03:14:58Z integrity-direct START
+2026-10-12T03:16:56Z integrity-direct PASS 0
+2026-10-12T03:16:56Z cache-direct START
+2026-10-12T03:19:09Z cache-direct PASS 0
+2026-10-12T03:19:09Z sessions-direct START
+2026-10-12T03:23:51Z sessions-direct PASS 0
+2026-10-12T03:23:51Z create-direct START
+2026-10-12T03:25:20Z create-direct PASS 0
+2026-10-12T03:25:20Z shutdown-direct START
+2026-10-12T03:26:45Z shutdown-direct PASS 0
+2026-10-12T03:26:45Z opid-restart-direct START
+2026-10-12T03:28:05Z opid-restart-direct PASS 0
+2026-10-12T03:28:05Z opid-failover-direct START
+2026-10-12T03:29:14Z opid-failover-direct PASS 0
+2026-10-12T03:29:14Z full-node-direct START
+2026-10-12T03:30:18Z full-node-direct PASS 0
+2026-10-12T03:30:18Z two-roots-direct START
+2026-10-12T03:31:15Z two-roots-direct PASS 0
+2026-10-12T03:31:15Z create-retry-direct START
+2026-10-12T03:32:22Z create-retry-direct PASS 0
+2026-10-12T03:32:22Z create-adopt-negative-direct START
+2026-10-12T03:33:26Z create-adopt-negative-direct PASS 0
+2026-10-12T03:33:26Z create-adopt-reply-loss-direct START
+2026-10-12T03:34:35Z create-adopt-reply-loss-direct PASS 0
+2026-10-12T03:34:35Z fuse-reply-failure-direct START
+2026-10-12T03:35:33Z fuse-reply-failure-direct PASS 0
+2026-10-12T03:35:33Z put-barrier-direct START
+2026-10-12T03:36:40Z put-barrier-direct PASS 0
+2026-10-12T03:36:40Z kv-wal-direct START
+2026-10-12T03:36:57Z kv-wal-direct PASS 0
+2026-10-12T03:36:57Z transaction-apply-direct START
+2026-10-12T03:38:07Z transaction-apply-direct PASS 0
+2026-10-12T03:38:07Z compactor-direct START
+2026-10-12T03:39:54Z compactor-direct PASS 0
+2026-10-12T03:39:54Z lookup-direct START
+2026-10-12T03:40:53Z lookup-direct PASS 0
+2026-10-12T03:40:53Z put-reply-direct START
+2026-10-12T03:41:52Z put-reply-direct PASS 0
+2026-10-12T03:41:52Z storage-session-fence-direct START
+2026-10-12T03:44:07Z storage-session-fence-direct PASS 0
+2026-10-12T03:44:07Z publication-pressure-direct START
+2026-10-12T03:45:10Z publication-pressure-direct PASS 0
+2026-10-12T03:45:10Z drain-pressure-direct START
+2026-10-12T03:46:11Z drain-pressure-direct PASS 0 split-handoff

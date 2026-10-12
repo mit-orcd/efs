@@ -1,0 +1,385 @@
+2026-10-12T03:12:35.097Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:12:35.098Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:12:35.098Z   node id=1 127.0.0.1:24210
+2026-10-12T03:12:35.098Z   node id=2 127.0.0.1:24211
+2026-10-12T03:12:35.098Z   node id=3 127.0.0.1:24212
+2026-10-12T03:12:35.098Z   node id=4 127.0.0.1:24213
+2026-10-12T03:12:35.098Z fetching metadata...
+2026-10-12T03:12:35.098Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:12:35.098Z export id=1 name=default
+2026-10-12T03:12:35.098Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:12:35.101Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:12:35.102Z fuse serving
+2026-10-12T03:12:39.865Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:12:39.866Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:12:39.866Z   node id=1 127.0.0.1:24210
+2026-10-12T03:12:39.866Z   node id=2 127.0.0.1:24211
+2026-10-12T03:12:39.866Z   node id=3 127.0.0.1:24212
+2026-10-12T03:12:39.866Z   node id=4 127.0.0.1:24213
+2026-10-12T03:12:39.866Z fetching metadata...
+2026-10-12T03:12:39.866Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:12:39.866Z export id=1 name=default
+2026-10-12T03:12:39.866Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:12:39.869Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:12:39.871Z fuse serving
+2026-10-12T03:12:46.235Z inode-rpc: slow-ok type=43 attempts=6 saw_busy=1 status=0 us=6107247
+2026-10-12T03:12:50.628Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:12:50.629Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:12:50.629Z   node id=1 127.0.0.1:24210
+2026-10-12T03:12:50.629Z   node id=2 127.0.0.1:24211
+2026-10-12T03:12:50.629Z   node id=3 127.0.0.1:24212
+2026-10-12T03:12:50.629Z   node id=4 127.0.0.1:24213
+2026-10-12T03:12:50.629Z fetching metadata...
+2026-10-12T03:12:50.629Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:12:50.629Z export id=1 name=default
+2026-10-12T03:12:50.629Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:12:50.632Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:12:50.633Z fuse serving
+2026-10-12T03:12:55.388Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:12:55.388Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:12:55.388Z   node id=1 127.0.0.1:24210
+2026-10-12T03:12:55.388Z   node id=2 127.0.0.1:24211
+2026-10-12T03:12:55.388Z   node id=3 127.0.0.1:24212
+2026-10-12T03:12:55.388Z   node id=4 127.0.0.1:24213
+2026-10-12T03:12:55.388Z fetching metadata...
+2026-10-12T03:12:55.389Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:12:55.389Z export id=1 name=default
+2026-10-12T03:12:55.389Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:12:55.392Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:12:55.393Z fuse serving
+2026-10-12T03:13:00.209Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:00.209Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:00.209Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:00.209Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:00.209Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:00.209Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:00.209Z fetching metadata...
+2026-10-12T03:13:00.210Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:00.210Z export id=1 name=default
+2026-10-12T03:13:00.210Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:00.212Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:00.214Z fuse serving
+2026-10-12T03:13:04.967Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:04.967Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:04.967Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:04.967Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:04.967Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:04.967Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:04.967Z fetching metadata...
+2026-10-12T03:13:04.968Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:04.968Z export id=1 name=default
+2026-10-12T03:13:04.968Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:04.970Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:04.971Z fuse serving
+2026-10-12T03:13:09.726Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:09.727Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:09.727Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:09.727Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:09.727Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:09.727Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:09.727Z fetching metadata...
+2026-10-12T03:13:09.728Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:09.728Z export id=1 name=default
+2026-10-12T03:13:09.728Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:09.731Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:09.733Z fuse serving
+2026-10-12T03:13:18.020Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:18.021Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:18.021Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:18.021Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:18.021Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:18.021Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:18.021Z fetching metadata...
+2026-10-12T03:13:18.021Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:18.021Z export id=1 name=default
+2026-10-12T03:13:18.021Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:18.023Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:18.025Z fuse serving
+2026-10-12T03:13:18.625Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:18.625Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:18.625Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:18.625Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:18.625Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:18.625Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:18.625Z fetching metadata...
+2026-10-12T03:13:18.625Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:18.625Z export id=1 name=default
+2026-10-12T03:13:18.625Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:18.628Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:18.629Z fuse serving
+2026-10-12T03:13:19.231Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:19.232Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:19.232Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:19.232Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:19.232Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:19.232Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:19.232Z fetching metadata...
+2026-10-12T03:13:19.232Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:19.232Z export id=1 name=default
+2026-10-12T03:13:19.232Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:19.235Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:19.236Z fuse serving
+2026-10-12T03:13:19.839Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:19.840Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:19.840Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:19.840Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:19.840Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:19.840Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:19.840Z fetching metadata...
+2026-10-12T03:13:19.840Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:19.840Z export id=1 name=default
+2026-10-12T03:13:19.840Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:19.842Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:19.844Z fuse serving
+2026-10-12T03:13:20.451Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:20.452Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:20.452Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:20.452Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:20.452Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:20.452Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:20.452Z fetching metadata...
+2026-10-12T03:13:20.452Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:20.452Z export id=1 name=default
+2026-10-12T03:13:20.452Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:20.455Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:20.456Z fuse serving
+2026-10-12T03:13:21.056Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:21.057Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:21.057Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:21.057Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:21.057Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:21.057Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:21.057Z fetching metadata...
+2026-10-12T03:13:21.057Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:21.057Z export id=1 name=default
+2026-10-12T03:13:21.057Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:21.059Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:21.061Z fuse serving
+2026-10-12T03:13:21.669Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:21.669Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:21.669Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:21.669Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:21.669Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:21.669Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:21.669Z fetching metadata...
+2026-10-12T03:13:21.670Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:21.670Z export id=1 name=default
+2026-10-12T03:13:21.670Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:21.672Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:21.673Z fuse serving
+2026-10-12T03:13:22.277Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:22.277Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:22.277Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:22.277Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:22.277Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:22.277Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:22.277Z fetching metadata...
+2026-10-12T03:13:22.277Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:22.277Z export id=1 name=default
+2026-10-12T03:13:22.277Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:22.280Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:22.282Z fuse serving
+2026-10-12T03:13:22.884Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:22.885Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:22.885Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:22.885Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:22.885Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:22.885Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:22.885Z fetching metadata...
+2026-10-12T03:13:22.885Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:22.885Z export id=1 name=default
+2026-10-12T03:13:22.885Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:22.887Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:22.889Z fuse serving
+2026-10-12T03:13:23.487Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:23.488Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:23.488Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:23.488Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:23.488Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:23.488Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:23.488Z fetching metadata...
+2026-10-12T03:13:23.488Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:23.488Z export id=1 name=default
+2026-10-12T03:13:23.488Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:23.491Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:23.492Z fuse serving
+2026-10-12T03:13:24.091Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:24.091Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:24.091Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:24.091Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:24.091Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:24.091Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:24.091Z fetching metadata...
+2026-10-12T03:13:24.092Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:24.092Z export id=1 name=default
+2026-10-12T03:13:24.092Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:24.095Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:24.096Z fuse serving
+2026-10-12T03:13:24.704Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:24.704Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:24.704Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:24.704Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:24.704Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:24.704Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:24.704Z fetching metadata...
+2026-10-12T03:13:24.704Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:24.704Z export id=1 name=default
+2026-10-12T03:13:24.704Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:24.707Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:24.709Z fuse serving
+2026-10-12T03:13:25.310Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:25.310Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:25.310Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:25.310Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:25.310Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:25.310Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:25.310Z fetching metadata...
+2026-10-12T03:13:25.311Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:25.311Z export id=1 name=default
+2026-10-12T03:13:25.311Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:25.313Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:25.315Z fuse serving
+2026-10-12T03:13:25.920Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:25.921Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:25.921Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:25.921Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:25.921Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:25.921Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:25.921Z fetching metadata...
+2026-10-12T03:13:25.921Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:25.921Z export id=1 name=default
+2026-10-12T03:13:25.921Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:25.924Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:25.925Z fuse serving
+2026-10-12T03:13:26.529Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:26.529Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:26.529Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:26.529Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:26.529Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:26.529Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:26.529Z fetching metadata...
+2026-10-12T03:13:26.530Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:26.530Z export id=1 name=default
+2026-10-12T03:13:26.530Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:26.532Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:26.533Z fuse serving
+2026-10-12T03:13:27.135Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:27.135Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:27.135Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:27.135Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:27.135Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:27.135Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:27.135Z fetching metadata...
+2026-10-12T03:13:27.135Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:27.135Z export id=1 name=default
+2026-10-12T03:13:27.135Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:27.138Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:27.140Z fuse serving
+2026-10-12T03:13:27.803Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:27.803Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:27.803Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:27.803Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:27.803Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:27.803Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:27.803Z fetching metadata...
+2026-10-12T03:13:27.803Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:27.803Z export id=1 name=default
+2026-10-12T03:13:27.803Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:27.805Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:27.807Z fuse serving
+2026-10-12T03:13:28.513Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:28.514Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:28.514Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:28.514Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:28.514Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:28.514Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:28.514Z fetching metadata...
+2026-10-12T03:13:28.514Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:28.514Z export id=1 name=default
+2026-10-12T03:13:28.514Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:28.516Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:28.518Z fuse serving
+2026-10-12T03:13:29.156Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:29.157Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:29.157Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:29.157Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:29.157Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:29.157Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:29.157Z fetching metadata...
+2026-10-12T03:13:29.157Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:29.157Z export id=1 name=default
+2026-10-12T03:13:29.157Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:29.159Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:29.160Z fuse serving
+2026-10-12T03:13:32.349Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:32.350Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:32.350Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:32.350Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:32.350Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:32.350Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:32.350Z fetching metadata...
+2026-10-12T03:13:32.350Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:32.350Z export id=1 name=default
+2026-10-12T03:13:32.350Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:32.352Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:32.354Z fuse serving
+2026-10-12T03:13:37.568Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:13:37.569Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:13:37.569Z   node id=1 127.0.0.1:24210
+2026-10-12T03:13:37.569Z   node id=2 127.0.0.1:24211
+2026-10-12T03:13:37.569Z   node id=3 127.0.0.1:24212
+2026-10-12T03:13:37.569Z   node id=4 127.0.0.1:24213
+2026-10-12T03:13:37.569Z fetching metadata...
+2026-10-12T03:13:37.570Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:13:37.570Z export id=1 name=default
+2026-10-12T03:13:37.570Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:13:37.572Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:13:37.573Z fuse serving
+2026-10-12T03:13:59.443Z efs: rename_at 7969/moved -> 7318/moved rc=-22 after 1 tries
+2026-10-12T03:14:03.958Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:14:03.958Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:14:03.958Z   node id=1 127.0.0.1:24210
+2026-10-12T03:14:03.958Z   node id=2 127.0.0.1:24211
+2026-10-12T03:14:03.958Z   node id=3 127.0.0.1:24212
+2026-10-12T03:14:03.958Z   node id=4 127.0.0.1:24213
+2026-10-12T03:14:03.958Z fetching metadata...
+2026-10-12T03:14:03.958Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:14:03.958Z export id=1 name=default
+2026-10-12T03:14:03.958Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:14:03.962Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:14:03.963Z fuse serving
+2026-10-12T03:14:05.600Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-12T03:14:05.607Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-12T03:14:05.615Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-12T03:14:05.622Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-12T03:14:05.629Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-12T03:14:05.636Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-12T03:14:05.644Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-12T03:14:05.651Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-12T03:14:05.658Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-12T03:14:05.662Z efs: report rec ino=4097 ci=0 rejected unowned staging observation nodes=1,2,3 (putid miss, n=1)
+2026-10-12T03:14:18.252Z dcache-pressure live=33685504 reserved=0 backing=67108864 limit=335544320 request=5242880 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=high-water
+2026-10-12T03:14:35.034Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:14:35.034Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:14:35.034Z   node id=1 127.0.0.1:24210
+2026-10-12T03:14:35.034Z   node id=2 127.0.0.1:24211
+2026-10-12T03:14:35.034Z   node id=3 127.0.0.1:24212
+2026-10-12T03:14:35.034Z   node id=4 127.0.0.1:24213
+2026-10-12T03:14:35.034Z fetching metadata...
+2026-10-12T03:14:35.034Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:14:35.035Z export id=1 name=default
+2026-10-12T03:14:35.035Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:14:35.037Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:14:35.038Z fuse serving
+2026-10-12T03:14:51.795Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/mnt
+2026-10-12T03:14:51.796Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:14:51.796Z   node id=1 127.0.0.1:24210
+2026-10-12T03:14:51.796Z   node id=2 127.0.0.1:24211
+2026-10-12T03:14:51.796Z   node id=3 127.0.0.1:24212
+2026-10-12T03:14:51.796Z   node id=4 127.0.0.1:24213
+2026-10-12T03:14:51.796Z fetching metadata...
+2026-10-12T03:14:51.796Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:14:51.796Z export id=1 name=default
+2026-10-12T03:14:51.796Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:14:51.798Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:14:51.800Z fuse serving

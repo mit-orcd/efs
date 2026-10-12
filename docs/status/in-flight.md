@@ -1,9 +1,9 @@
-# Agent handoff — execution stopped
+# Agent handoff — AMD qualification resumed
 
 [Status index](README.md) · [Decisions](decisions.md) ·
 [Architecture](../how-it-works/architecture.md)
 
-**Current state:** all release engineering execution is stopped at human request. Later authorization covers branch reconciliation and documentation review only. Frozen test source is 410afed4/v2; no further rollout, diagnostic, test controller or performance work is authorized. See [release stop checkpoint](v030-stop-checkpoint-20261011.md) and [current release index](README.md#v030-pre-alpha-release-integration). Owner-specific final states override all historical running/next statements below.
+**Current state:** the human authorized AMD to run all test suites and report all issues on frozen `28b2089b`. See [AMD execution ledger](amd-all-suites-20261011.md). This resumes isolated AMD testing only; other release owners remain stopped. No code fix, rollout to installed stores, tag, promotion or push follows from this qualification request. The [earlier release stop checkpoint](v030-stop-checkpoint-20261011.md) remains historical; [current release index](README.md#v030-pre-alpha-release-integration) records the new authority.
 
 ## Superseded assignments and evidence (before human stop)
 
@@ -207,3 +207,7 @@ being inferred closed from clean repeats.
 folded identity can be evicted and its old retry reintroduced over a later
 base. Actual host/FUSE byte and lost-ACK/restart gates remain open. Keep the
 durable identity/retirement primitives separate from bounded trailer hints.
+
+Human-authorized three-way qualification split: AMD remaining direct/overload/RXE, Intel buffered first-stage matrix, NUC additional recovery/query and storage-engine matrix. All use release-v0.3.0-pre-alpha source `28b2089be6a5df835cc7bb46b9c2a9e2f10df190`; see [current execution ledger](amd-all-suites-20261011.md#authorized-three-cluster-split--october-11-2026). Other owner stops remain effective. No source fixes, promotion or pushes authorized by this testing split.
+
+Subsequent human authority permits packing-timeout and repair-gap implementation fixes on separate frozen28-based worktrees, review/integration into release-v0.3.0-pre-alpha and affected reruns. Intel owns packing, NUC repair, AMD integration. Earlier testing-only prohibition is superseded for these fixes; no push/tag/promotion authorization.

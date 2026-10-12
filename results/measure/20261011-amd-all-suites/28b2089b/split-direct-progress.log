@@ -1,0 +1,20 @@
+2026-10-12T03:46:11Z sync-write-fault-direct START
+2026-10-12T03:48:22Z sync-write-fault-direct PASS 0
+2026-10-12T03:48:22Z stop-dirty-direct START
+2026-10-12T03:49:55Z stop-dirty-direct PASS 0
+2026-10-12T03:49:55Z namespace-boundary-fault-direct START
+2026-10-12T03:51:34Z namespace-boundary-fault-direct PASS 0
+2026-10-12T03:51:34Z namespace-max-fault-direct START
+2026-10-12T03:53:20Z namespace-max-fault-direct PASS 0
+2026-10-12T03:53:20Z worker-allocation-direct START
+2026-10-12T03:54:23Z worker-allocation-direct PASS 0
+2026-10-12T03:54:23Z worker-tls-direct START
+2026-10-12T03:55:26Z worker-tls-direct PASS 0
+2026-10-12T03:55:26Z worker-growth-direct START
+2026-10-12T03:56:29Z worker-growth-direct PASS 0
+2026-10-12T03:56:29Z fault-integration-direct START
+2026-10-12T03:56:43Z fault-integration-direct FAIL 2
+2026-10-12T03:56:43Z valgrind-direct START
+2026-10-12T03:59:46Z valgrind-direct FAIL 2
+2026-10-12T03:59:46Z rdma-posix START
+2026-10-12T03:59:46Z rdma-posix FAIL 1

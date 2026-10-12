@@ -1,0 +1,12 @@
+{
+  "files": 128,
+  "allocated_bytes": 524288,
+  "elapsed_seconds": [
+    0.008425358042586595,
+    0.007677266024984419,
+    0.007297664997167885,
+    0.007409304031170905,
+    0.007359470997471362
+  ],
+  "tool": "GNU du; not the unidentified Spark workload"
+}

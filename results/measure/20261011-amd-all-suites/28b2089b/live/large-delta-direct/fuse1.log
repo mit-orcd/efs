@@ -1,0 +1,12 @@
+2026-10-12T03:00:19.068Z efs-fuse: legacy export label 'w92-private' is ignored; mounting the single export 'default' (id=1)
+2026-10-12T03:00:19.068Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: starting export=default mount=/data1/efs/release-v030-results-20261012-28b2089b/live/large-delta-direct/mnt1
+2026-10-12T03:00:19.068Z Discovered 4 cluster nodes from 127.0.0.1:24804
+2026-10-12T03:00:19.068Z   node id=1 127.0.0.1:24804
+2026-10-12T03:00:19.068Z   node id=2 127.0.0.1:24805
+2026-10-12T03:00:19.068Z   node id=3 127.0.0.1:24806
+2026-10-12T03:00:19.068Z   node id=4 127.0.0.1:24807
+2026-10-12T03:00:19.068Z fetching metadata...
+2026-10-12T03:00:19.068Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:00:19.068Z export id=1 name=default
+2026-10-12T03:00:19.068Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+fusermount3: mount failed: Permission denied

@@ -1,0 +1,12 @@
+2026-10-12T03:41:00.019Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:55:26Z on amd-395), build=28b2089b-release-fault: starting export=default mount=/data1/efs/mnt2
+2026-10-12T03:41:00.020Z Discovered 4 cluster nodes from 127.0.0.1:24210
+2026-10-12T03:41:00.020Z   node id=1 127.0.0.1:24210
+2026-10-12T03:41:00.020Z   node id=2 127.0.0.1:24211
+2026-10-12T03:41:00.020Z   node id=3 127.0.0.1:24212
+2026-10-12T03:41:00.020Z   node id=4 127.0.0.1:24213
+2026-10-12T03:41:00.020Z fetching metadata...
+2026-10-12T03:41:00.020Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T03:41:00.020Z export id=1 name=default
+2026-10-12T03:41:00.020Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T03:41:00.023Z efs-fuse: workers max=10 idle=10
+2026-10-12T03:41:00.024Z fuse serving

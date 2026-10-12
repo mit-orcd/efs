@@ -1,0 +1,9 @@
+{
+  "name": "standalone-normal-test_nuc_block_analysis",
+  "command": [
+    "python3",
+    "/data1/efs/release-v030-28b2089b/tests/test_nuc_block_analysis.py"
+  ],
+  "source": "28b2089be6a5df835cc7bb46b9c2a9e2f10df190",
+  "started": "2026-10-12T02:59:11Z"
+}

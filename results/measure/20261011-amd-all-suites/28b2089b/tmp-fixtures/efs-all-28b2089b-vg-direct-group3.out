@@ -1,0 +1,20 @@
+2026-10-12T03:57:43.783Z storage-engine=files direct_io=on
+2026-10-12T03:57:43.783Z Data GC admission: experimental
+2026-10-12T03:57:43.783Z Storage quota: explicit 1.00 GiB (safe maximum 40.31 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T03:57:43.783Z Joined cluster with 2 nodes
+2026-10-12T03:57:43.783Z heartbeat: enabled (2000 ms interval)
+2026-10-12T03:57:43.783Z raft-host: up raft_id=2 n=3 boot=7557091392959383 salt=10591550287841915931 g0=hosted g2=hosted
+2026-10-12T03:57:43.783Z efsd (no git metadata, branch unknown, built 2026-10-12T03:56:43Z on amd-395), build=unknown: node 3 listening on 127.0.0.1:26322, storage=/tmp/efs-all-28b2089b-vg-direct/storage/s3 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=0 shared
+2026-10-12T03:57:43.783Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:57:44.287Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=403
+2026-10-12T03:57:45.783Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=987 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:57:46.296Z query-restore: rc=-3 backend=disk
+2026-10-12T03:57:46.300Z query-publish: generation=1 g0=2 g2=2 rebuilt=4096 refolded=1 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=5 root_rc=0 files=0 dirs=0 logical=0
+2026-10-12T03:57:48.783Z kv-obs: mt_bytes=506 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:58:01.788Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=775 passes=18 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:58:17.792Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=558 passes=34 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:58:33.796Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=361 passes=50 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:58:49.799Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=177 passes=66 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:59:05.802Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=983 passes=81 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:59:21.807Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=756 passes=97 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:59:37.811Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=520 passes=113 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0

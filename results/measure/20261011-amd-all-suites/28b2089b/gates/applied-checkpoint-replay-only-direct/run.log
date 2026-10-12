@@ -1,0 +1,21 @@
+Evidence directory: /data1/efs/release-v030-results-20261012-28b2089b/live-approved/applied-checkpoint-replay-only-direct/gc-direct-_p_yvj0k
+node 1 listening PASS
+node 2 listening PASS
+node 4 listening PASS
+node 3 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=559434798823667680
+client serving PASS
+checkpoint follower initial apply PASS
+checkpoint follower applied all retained-tail mutations PASS
+Traceback (most recent call last):
+  File "/data1/efs/release-v030-28b2089b/tests/live/gc_reclamation.py", line 830, in <module>
+    exercise(a,work,roots,mount,run,start,stop,mount_client,unmount,wait,drained)
+    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data1/efs/release-v030-28b2089b/tests/live/applied_checkpoint_replay.py", line 48, in exercise
+    wait(lambda:'test-applied-marker: retaining checkpoint' in (work/'n3.log').read_text(),
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+         'actual applied-marker write refused after candidate cadence',30)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data1/efs/release-v030-28b2089b/tests/live/gc_reclamation.py", line 360, in wait
+    raise AssertionError(label+' timed out')
+AssertionError: actual applied-marker write refused after candidate cadence timed out

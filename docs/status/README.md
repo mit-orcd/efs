@@ -2,9 +2,9 @@
 
 ## v0.3.0-pre-alpha release integration
 
-**Execution is stopped.** The human subsequently authorized branch reconciliation and this documentation review only; neither restarts cluster work. All committed local/remote-tracking branch tips were integrated at `15ff4de7`. `devel` and `main` were not advanced. The release tag has not been created; nothing has been pushed.
+**AMD complete-suite testing is authorized and running** on frozen `28b2089b`; see [execution ledger](amd-all-suites-20261011.md). Intel and NUC are now authorized for the assigned three-way test split at the same frozen commit and subsequent packing/repair fixes on separate worktrees; other owners remain stopped. See the execution ledger for ownership. The earlier stop applied before these new human testing requests. All committed local/remote-tracking branch tips were integrated at `15ff4de7`. `devel` and `main` were not advanced. The release tag has not been created; nothing has been pushed.
 
-Frozen qualification source: `410afed433b6da093bdc2acf37bec253ddbd586c`, corrected packaging-v2 (1,563 files, 52 directories). Later integration/documentation commits are not new execution identities. AMD full normal/fault native, 20 focused sanitizer and fully sanitized real-LSM catalog/audit gates PASS. Fixed mounted CREATE three-stage/cold ownership and targeted query diagnosis remain NOTRUN centrally.
+Previous qualification source: `410afed433b6da093bdc2acf37bec253ddbd586c`, corrected packaging-v2 (1,563 files, 52 directories). The new AMD all-suite run explicitly freezes `28b2089b`; its verdicts are recorded separately. Later integration/documentation commits are not new execution identities. AMD full normal/fault native, 20 focused sanitizer and fully sanitized real-LSM catalog/audit gates PASS. Fixed mounted CREATE three-stage/cold ownership and targeted query diagnosis remain NOTRUN centrally.
 
 Release blockers:
 
@@ -17,7 +17,7 @@ Release blockers:
 
 [Superseded release-index narrative](../archive/v030-index-checkpoints-20261011.md) preserves the older source-specific checkpoints removed from this running summary.
 
-Owner stop records: [Mac](mac-common-candidate-c2bfb9e9.md#manager-requested-stop-checkpoint), [NUC](nuc-common-c2-qualification-20261012.md#human-stop-checkpoint), [ORCD](orcd-stop-checkpoint-20261011.md). [Intel final stop checkpoint](intel-stop-checkpoint-20261011.md) is now integrated: both410/v2 normal Make suites PASS, partial standalone4/88 and6/88 PASS; fault/sanitizer/mounted NOTRUN. Its [acceptance ledger](intel-deployment-acceptance-20261011.md) preserves earlier c2 failures. No cluster execution is resumed.
+Owner stop records: [Mac](mac-common-candidate-c2bfb9e9.md#manager-requested-stop-checkpoint), [NUC](nuc-common-c2-qualification-20261012.md#human-stop-checkpoint), [ORCD](orcd-stop-checkpoint-20261011.md). [Intel final stop checkpoint](intel-stop-checkpoint-20261011.md) is now integrated: both410/v2 normal Make suites PASS, partial standalone4/88 and6/88 PASS; fault/sanitizer/mounted NOTRUN. Its [acceptance ledger](intel-deployment-acceptance-20261011.md) preserves earlier c2 failures. AMD execution is resumed by the complete-suite request; the subsequent explicit test split resumes only the assigned Intel/NUC qualification. Other cluster execution remains stopped.
 
 [Architecture](../how-it-works/architecture.md) · [agent handoff](in-flight.md) · [decisions](decisions.md) · [work-item details](../backlog/work-items.md) · [operations](../operations/operations.md) · [archive](../archive/README.md).
 

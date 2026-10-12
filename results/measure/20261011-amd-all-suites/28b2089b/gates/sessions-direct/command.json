@@ -1,0 +1,29 @@
+{
+  "name": "sessions-direct",
+  "command": [
+    "python3",
+    "-u",
+    "/data1/efs/release-v030-28b2089b/tests/live/gc_reclamation.py",
+    "--mode",
+    "direct",
+    "--transport",
+    "tcp",
+    "--root",
+    "/data1/efs/release-v030-results-20261012-28b2089b/live-approved/sessions-direct",
+    "--root",
+    "/data1/efs/release-v030-results-20261012-28b2089b/live-approved/sessions-direct",
+    "--port",
+    "24210",
+    "--mount",
+    "/data1/efs/mnt",
+    "--peer-mount",
+    "/data1/efs/mnt2",
+    "--session-append",
+    "--session-cleanup",
+    "--deferred-close",
+    "--typed-writeback",
+    "--guarded-leases"
+  ],
+  "source": "28b2089be6a5df835cc7bb46b9c2a9e2f10df190",
+  "started": "2026-10-12T03:19:09Z"
+}

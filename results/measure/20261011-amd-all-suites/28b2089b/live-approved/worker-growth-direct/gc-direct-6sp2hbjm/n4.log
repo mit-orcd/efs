@@ -1,0 +1,70 @@
+2026-10-12T03:55:26.893Z storage-engine=files direct_io=on
+2026-10-12T03:55:26.893Z Data GC admission: experimental
+2026-10-12T03:55:26.893Z Storage quota: explicit 1.00 GiB (safe maximum 110.23 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T03:55:26.895Z Joined cluster with 4 nodes
+2026-10-12T03:55:26.896Z heartbeat: enabled (2000 ms interval)
+2026-10-12T03:55:26.898Z raft-host: up raft_id=3 n=4 boot=7388638400785879 salt=492994745104388722 g0=off g2=hosted
+2026-10-12T03:55:26.898Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:55:26Z on amd-395), build=28b2089b-release-fault: node 4 listening on 127.0.0.1:24213, storage=/data1/efs/release-v030-results-20261012-28b2089b/live-approved/worker-growth-direct/gc-direct-006y6y8a/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=28 shared
+2026-10-12T03:55:26.898Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:55:28.896Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=981 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:55:30.900Z store: put O_DIRECT bounce copy (buf align=2368 len=65536)
+2026-10-12T03:55:30.906Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=22 bytes=1441792 errors=0 avg_us=1720 p50_us=1878 max_us=3197 wdisk ops=22 bytes=1441792 errors=0 avg_us=1659 p50_us=1838 max_us=3160
+2026-10-12T03:55:31.902Z kv-obs: mt_bytes=43451 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:55:34.917Z raft-host: applied session index=264 kind=1 shard=0 ino=0
+2026-10-12T03:55:35.906Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=54 bytes=3538944 errors=0 avg_us=1302 p50_us=1157 max_us=3197 wdisk ops=54 bytes=3538944 errors=0 avg_us=1249 p50_us=1076 max_us=3160
+2026-10-12T03:55:36.288Z raft-host: applied session index=408 kind=1 shard=0 ino=0
+2026-10-12T03:55:36.904Z kv-obs: mt_bytes=50534 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:55:40.909Z iostats: get ops=112 bytes=7340032 errors=0 avg_us=349 p50_us=331 max_us=617 put ops=109 bytes=7143424 errors=0 avg_us=1198 p50_us=922 max_us=3197 wdisk ops=109 bytes=7143424 errors=0 avg_us=1149 p50_us=883 max_us=3160
+2026-10-12T03:55:41.908Z kv-obs: mt_bytes=51190 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:55:44.904Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=834 passes=18 sampled=0 pending=0,0 reap=0,0 removed=55 file_bytes=3829760 payload_bytes=3604480 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:55:45.910Z iostats: get ops=112 bytes=7340032 errors=0 avg_us=349 p50_us=331 max_us=617 put ops=109 bytes=7143424 errors=0 avg_us=1198 p50_us=922 max_us=3197 wdisk ops=109 bytes=7143424 errors=0 avg_us=1149 p50_us=883 max_us=3160
+2026-10-12T03:55:50.914Z iostats: get ops=114 bytes=7471104 errors=0 avg_us=374 p50_us=334 max_us=1784 put ops=164 bytes=10747904 errors=0 avg_us=1335 p50_us=1014 max_us=4128 wdisk ops=164 bytes=10747904 errors=0 avg_us=1287 p50_us=970 max_us=4042
+2026-10-12T03:55:51.910Z kv-obs: mt_bytes=69974 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:55:55.058Z storage-engine=files direct_io=on
+2026-10-12T03:55:55.058Z Data GC admission: experimental
+2026-10-12T03:55:55.058Z Loaded 4 persisted cluster node(s) from /data1/efs/release-v030-results-20261012-28b2089b/live-approved/worker-growth-direct/gc-direct-006y6y8a/n4/meta/cluster_nodes.bin
+2026-10-12T03:55:55.058Z   persisted node 1: 127.0.0.1:24210
+2026-10-12T03:55:55.058Z   persisted node 2: 127.0.0.1:24211
+2026-10-12T03:55:55.058Z   persisted node 3: 127.0.0.1:24212
+2026-10-12T03:55:55.058Z   persisted node 4: 127.0.0.1:24213
+2026-10-12T03:55:55.059Z Storage quota: explicit 1.00 GiB (safe maximum 110.21 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T03:55:55.060Z Joined cluster with 4 nodes
+2026-10-12T03:55:55.062Z heartbeat: enabled (2000 ms interval)
+2026-10-12T03:55:55.064Z raft-host: up raft_id=3 n=4 boot=7544592601604999 salt=3251564782228205617 g0=off g2=hosted
+2026-10-12T03:55:55.064Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:55:26Z on amd-395), build=28b2089b-release-fault: node 4 listening on 127.0.0.1:24213, storage=/data1/efs/release-v030-results-20261012-28b2089b/live-approved/worker-growth-direct/gc-direct-006y6y8a/n4 (1 paths, stripe=none), used=3538944, quota=1073741824, direct_io=on, writers=28 shared
+2026-10-12T03:55:55.064Z kv-obs: mt_bytes=69942 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:55:57.062Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=983 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:56:00.064Z kv-obs: mt_bytes=65910 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:56:05.095Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T03:56:07.409Z store: put O_DIRECT bounce copy (buf align=1920 len=65536)
+2026-10-12T03:56:11.466Z storage-engine=files direct_io=on
+2026-10-12T03:56:11.466Z Data GC admission: experimental
+2026-10-12T03:56:11.466Z Loaded 4 persisted cluster node(s) from /data1/efs/release-v030-results-20261012-28b2089b/live-approved/worker-growth-direct/gc-direct-006y6y8a/n4/meta/cluster_nodes.bin
+2026-10-12T03:56:11.466Z   persisted node 1: 127.0.0.1:24210
+2026-10-12T03:56:11.466Z   persisted node 2: 127.0.0.1:24211
+2026-10-12T03:56:11.466Z   persisted node 3: 127.0.0.1:24212
+2026-10-12T03:56:11.466Z   persisted node 4: 127.0.0.1:24213
+2026-10-12T03:56:11.467Z Storage quota: explicit 1.00 GiB (safe maximum 110.21 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T03:56:11.469Z Joined cluster with 4 nodes
+2026-10-12T03:56:11.470Z heartbeat: enabled (2000 ms interval)
+2026-10-12T03:56:11.473Z raft-host: up raft_id=3 n=4 boot=7544592601605000 salt=4231461483095804371 g0=off g2=hosted
+2026-10-12T03:56:11.473Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:55:26Z on amd-395), build=28b2089b-release-fault: node 4 listening on 127.0.0.1:24213, storage=/data1/efs/release-v030-results-20261012-28b2089b/live-approved/worker-growth-direct/gc-direct-006y6y8a/n4 (1 paths, stripe=none), used=7077888, quota=1073741824, direct_io=on, writers=28 shared
+2026-10-12T03:56:11.473Z kv-obs: mt_bytes=79734 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:56:13.471Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=982 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:56:16.473Z kv-obs: mt_bytes=77686 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:56:21.613Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-12T03:56:26.346Z storage-engine=files direct_io=on
+2026-10-12T03:56:26.346Z Data GC admission: experimental
+2026-10-12T03:56:26.347Z Loaded 4 persisted cluster node(s) from /data1/efs/release-v030-results-20261012-28b2089b/live-approved/worker-growth-direct/gc-direct-006y6y8a/n4/meta/cluster_nodes.bin
+2026-10-12T03:56:26.347Z   persisted node 1: 127.0.0.1:24210
+2026-10-12T03:56:26.347Z   persisted node 2: 127.0.0.1:24211
+2026-10-12T03:56:26.347Z   persisted node 3: 127.0.0.1:24212
+2026-10-12T03:56:26.347Z   persisted node 4: 127.0.0.1:24213
+2026-10-12T03:56:26.347Z Storage quota: explicit 1.00 GiB (safe maximum 110.22 GiB; reserve 20%, minimum 1 GiB per filesystem)
+2026-10-12T03:56:26.350Z Joined cluster with 4 nodes
+2026-10-12T03:56:26.351Z heartbeat: enabled (2000 ms interval)
+2026-10-12T03:56:26.354Z raft-host: up raft_id=3 n=4 boot=7544592601605001 salt=7619911393403731391 g0=off g2=hosted
+2026-10-12T03:56:26.354Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:55:26Z on amd-395), build=28b2089b-release-fault: node 4 listening on 127.0.0.1:24213, storage=/data1/efs/release-v030-results-20261012-28b2089b/live-approved/worker-growth-direct/gc-direct-006y6y8a/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=28 shared
+2026-10-12T03:56:26.354Z kv-obs: mt_bytes=71606 l0_bytes=0 l0=0 l1=0
+2026-10-12T03:56:28.352Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=980 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-12T03:56:29.613Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=0 errors=1 avg_us=377 p50_us=377 max_us=377 wdisk ops=1 bytes=65536 errors=1 avg_us=190 p50_us=190 max_us=190

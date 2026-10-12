@@ -1,0 +1,17 @@
+Evidence directory: /data1/efs/release-v030-results-20261012-28b2089b/live-approved/namespace-session-only-direct/gc-direct-5tyeojjp
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=17414242442383215984
+client serving PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 1588867 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+namespace session deletion queues drained PASS
+namespace wire admission/revocation, first-touch refusal and seven cold stale receipts PASS
