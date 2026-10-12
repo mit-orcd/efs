@@ -20,10 +20,22 @@
 #define MAX_SEGS 1024u
 #define CACHED_SEGS 8u
 #define DURABLE_DIRS 128u
+struct body_barrier_waiter {
+    struct body_barrier_waiter *next;
+    int done, rc;
+};
+struct body_barrier_state {
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    struct body_barrier_waiter *pending;
+    int active;
+};
 struct target {
     pthread_mutex_t mu, durable_mu;
-    struct { int fd; dev_t dev; ino_t ino; } durable[DURABLE_DIRS];
+    struct { int fd; dev_t dev; ino_t ino; uint64_t touched; } durable[DURABLE_DIRS];
+    uint64_t durable_clock;
     unsigned durable_slots;
+    struct body_barrier_state sync[CACHED_SEGS];
     char root[4096], dir[8192];
     int lockfd, rootfd, failed;
     int direct_io, data_fds[CACHED_SEGS];
@@ -68,30 +80,40 @@ static int barrier(int fd){
 /* A pinned directory descriptor prevents inode-number reuse from turning a
  * cache hit into a durability guess. Entries are admitted only after the full
  * ancestry barrier succeeds. GC may remove directories: a newly created one
- * cannot match the pinned, unlinked inode. Collisions simply evict a hint. */
-static unsigned durable_slot(struct target *t,const struct stat *st)
-{
-    return (unsigned)((uint64_t)st->st_ino ^ (uint64_t)st->st_dev) % t->durable_slots;
-}
+ * cannot match the pinned, unlinked inode. Capacity pressure evicts a hint. */
 static int durable_known(struct target *t, const struct stat *st)
 {
-    unsigned i=durable_slot(t,st);
+    int known=0;
     pthread_mutex_lock(&t->durable_mu);
-    int known=t->durable[i].fd>=0 && t->durable[i].dev==st->st_dev &&
-              t->durable[i].ino==st->st_ino;
+    for(unsigned i=0;i<t->durable_slots;i++)if(t->durable[i].fd>=0 &&
+        t->durable[i].dev==st->st_dev && t->durable[i].ino==st->st_ino){
+        t->durable[i].touched=++t->durable_clock;known=1;break;
+    }
     pthread_mutex_unlock(&t->durable_mu);
     return known;
 }
 static void durable_remember(struct target *t,int fd,const struct stat *st)
 {
-    unsigned i=durable_slot(t,st);
+    unsigned slot=0;int dispose=-1;
     pthread_mutex_lock(&t->durable_mu);
-    if(t->durable[i].fd>=0)close(t->durable[i].fd);
-    t->durable[i].fd=fd;t->durable[i].dev=st->st_dev;t->durable[i].ino=st->st_ino;
+    for(unsigned i=0;i<t->durable_slots;i++){
+        if(t->durable[i].fd>=0 && t->durable[i].dev==st->st_dev &&
+           t->durable[i].ino==st->st_ino){
+            t->durable[i].touched=++t->durable_clock;dispose=fd;goto done;
+        }
+        if(t->durable[i].fd<0){slot=i;break;}
+        if(t->durable[i].touched<t->durable[slot].touched)slot=i;
+    }
+    dispose=t->durable[slot].fd;
+    t->durable[slot].fd=fd;t->durable[slot].dev=st->st_dev;
+    t->durable[slot].ino=st->st_ino;t->durable[slot].touched=++t->durable_clock;
+done:
     pthread_mutex_unlock(&t->durable_mu);
+    if(dispose>=0)close(dispose);
 }
-/* Startup makes the root path durable. Runtime publication must sync every
- * directory below it and the root itself, but never unrelated ancestors. */
+/* Startup seals the root path. Runtime publication syncs the changed
+ * namespace and any unknown ancestry to a pinned durability boundary or the
+ * root itself, never unrelated ancestors. */
 static int parents_at(const char *path, struct target *t)
 {
     const char *root=t?t->root:NULL;
@@ -105,8 +127,8 @@ static int parents_at(const char *path, struct target *t)
     if(!slash)return EFS_ERR_IO;
     if(slash==p)slash[1]=0;
     else *slash=0;
-    int retained=-1;
-    struct stat retained_st={0};
+    int retained[16];unsigned retained_n=0;
+    struct stat retained_st[16];
     for(;;){
         int is_root=t && !strcmp(p,t->root);
         int fd=is_root?t->rootfd:t?openat(t->rootfd,p+strlen(t->root)+1,O_RDONLY|O_DIRECTORY|O_CLOEXEC):open(p,O_RDONLY|O_DIRECTORY|O_CLOEXEC);
@@ -119,9 +141,9 @@ static int parents_at(const char *path, struct target *t)
             if(t && !is_root){
                 if(fstat(fd,&st)){close(fd);rc=EFS_ERR_IO;goto failed;}
                 known=durable_known(t,&st);
-                if(!known && retained<0){
-                    retained=fcntl(fd,F_DUPFD_CLOEXEC,0);
-                    retained_st=st;
+                if(!known && retained_n<16){
+                    int pin=fcntl(fd,F_DUPFD_CLOEXEC,0);
+                    if(pin>=0){retained[retained_n]=pin;retained_st[retained_n++]=st;}
                 }
             }
             /* A hit elides only unchanged ancestry. The namespace operation's
@@ -137,10 +159,14 @@ static int parents_at(const char *path, struct target *t)
         else *slash=0;
         continue;
 failed:
-        if(retained>=0)close(retained);
+        for(unsigned i=0;i<retained_n;i++)close(retained[i]);
         return rc;
     }
-    if(retained>=0)durable_remember(t,retained,&retained_st);
+    /* Remember every successfully sealed ancestor, not just the temporary
+     * per-inode leaf: sibling publication/deletion can reuse shared ancestry.
+     * The fixed LRU descriptor budget preserves hot shared parents despite
+     * inode-number/hash collisions; no failed barrier admits any entry. */
+    for(unsigned i=retained_n;i>0;i--)durable_remember(t,retained[i-1],&retained_st[i-1]);
     return EFS_OK;
 }
 static int parents(const char *path) { return parents_at(path, NULL); }
@@ -267,6 +293,34 @@ static int body_open(struct target *t, unsigned seg, int *owned)
     pthread_mutex_unlock(&t->mu);
     return fd;
 }
+/* Admission follows completed positional I/O. A cohort is detached BEFORE
+ * its fsync starts, so later writes/punches cannot borrow that barrier. No
+ * assembly delay or background ownership: every stack waiter is completed
+ * before its caller returns. Failed cohorts keep their own failure even if
+ * a later cohort succeeds, and existing callers retain uncertain allocations.
+ * Uncached descriptors use the original independent barrier. */
+static int body_barrier(struct target *t,unsigned seg,int fd)
+{
+    if(seg>=CACHED_SEGS)return barrier(fd);
+    struct body_barrier_state *b=&t->sync[seg];
+    struct body_barrier_waiter me={0};
+    pthread_mutex_lock(&b->mu);
+    me.next=b->pending;b->pending=&me;
+    while(!me.done){
+        if(b->active){pthread_cond_wait(&b->cv,&b->mu);continue;}
+        struct body_barrier_waiter *cohort=b->pending;
+        b->pending=NULL;b->active=1;
+        pthread_mutex_unlock(&b->mu);
+        int rc=barrier(fd);
+        pthread_mutex_lock(&b->mu);
+        for(struct body_barrier_waiter *w=cohort;w;w=w->next){w->rc=rc;w->done=1;}
+        b->active=0;
+        pthread_cond_broadcast(&b->cv);
+    }
+    int rc=me.rc;
+    pthread_mutex_unlock(&b->mu);
+    return rc;
+}
 static int body_close(int fd,int owned) { return owned?close(fd):0; }
 static int marked(struct target *t,unsigned seg,unsigned block){
     return (t->bits[seg][block/8]>>(block%8))&1;
@@ -379,7 +433,7 @@ static int release_extent(struct target *t,struct mapping *m)
 {
     int owned;int fd=body_open(t,m->seg,&owned);
     if(fd<0)return EFS_ERR_IO;
-    int rc=fallocate(fd,FALLOC_FL_PUNCH_HOLE|FALLOC_FL_KEEP_SIZE,(off_t)m->off*PAGE,(off_t)m->span*PAGE)?EFS_ERR_IO:barrier(fd);
+    int rc=fallocate(fd,FALLOC_FL_PUNCH_HOLE|FALLOC_FL_KEEP_SIZE,(off_t)m->off*PAGE,(off_t)m->span*PAGE)?EFS_ERR_IO:body_barrier(t,m->seg,fd);
     if(body_close(fd,owned))rc=EFS_ERR_IO;
     if(!rc){
         pthread_mutex_lock(&t->mu);
@@ -424,7 +478,7 @@ static int container_put_known(struct target *t,const char *path,const uint8_t *
     int owned;int fd=body_open(t,m.seg,&owned);
     rc=fd<0?EFS_ERR_IO:full_io(fd,buf,bytes,(off_t)m.off*PAGE,1);
     if(fd>=0){
-        if(!rc)rc=barrier(fd);
+        if(!rc)rc=body_barrier(t,m.seg,fd);
         if(body_close(fd,owned))rc=EFS_ERR_IO;
     }
     free(buf);
@@ -578,7 +632,7 @@ int server_container_gc_directory(struct efsd_server *s,const char *path,
     for(unsigned seg=0;seg<MAX_SEGS;seg++)if(touched[seg]){
         int owned,fd=body_open(t,seg,&owned);
         if(fd<0){rc=EFS_ERR_IO;goto done;}
-        rc=barrier(fd);
+        rc=body_barrier(t,seg,fd);
         if(body_close(fd,owned))rc=EFS_ERR_IO;
         if(rc)goto done;
     }
@@ -775,6 +829,10 @@ int server_storage_engine_init(struct efsd_server *s)
         for(unsigned j=0;j<CACHED_SEGS;j++)t->data_fds[j]=-1;
         pthread_mutex_init(&t->mu,NULL);
         pthread_mutex_init(&t->durable_mu,NULL);
+        for(unsigned j=0;j<CACHED_SEGS;j++){
+            pthread_mutex_init(&t->sync[j].mu,NULL);
+            pthread_cond_init(&t->sync[j].cv,NULL);
+        }
         /* Bound retained hints across the whole fixed target set, not per
          * root: normal sockets/metadata still need descriptor headroom. */
         t->durable_slots=DURABLE_DIRS/s->storage_path_count;
@@ -837,6 +895,10 @@ void server_storage_engine_close(struct efsd_server *s)
         if(t->lockfd>=0)close(t->lockfd);
         for(unsigned j=0;j<MAX_SEGS;j++)free(t->bits[j]);
         for(unsigned j=0;j<DURABLE_DIRS;j++)if(t->durable[j].fd>=0)close(t->durable[j].fd);
+        for(unsigned j=0;j<CACHED_SEGS;j++){
+            pthread_cond_destroy(&t->sync[j].cv);
+            pthread_mutex_destroy(&t->sync[j].mu);
+        }
         pthread_mutex_destroy(&t->durable_mu);
         pthread_mutex_destroy(&t->mu);
         free(t);
