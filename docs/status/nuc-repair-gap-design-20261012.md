@@ -119,3 +119,11 @@ Required takeover before worker activation: cancel old pending job in committed 
 ## Allocated alias expansion bounds
 
 Realpath now uses its allocated form with explicit free on every success/error branch, rather than relying on configured-path bounds for alias expansion. Unsupported anonymous-init build classification remains INVAL instead of being overwritten as IO. ASan/UBSan actual incarnation tests PASS with short alias hops resolving to about 3.4 KiB of directory ancestry; a direct long symlink target initially exceeded this filesystem's symlink limit, so the fixture uses short hops. Raw first failure retained. On NUC both EFS_MAX_PATH and reported PATH_MAX are 4096, so an actual path above EFS_MAX_PATH+80 within PATH_MAX is not representable by that particular requested bound; this test covers substantial expansion and allocated memory ownership without claiming that impossible threshold.
+
+## Clipped repair-source liveness
+
+Repair capture now uses the bounded authoritative chunk view rather than treating retained raw chunk/delta placement as proof of live bytes. A fully fenced base or span is STALE even when no GC record exists; a surviving base prefix remains eligible. Capture and its raw source hash must remain within the same host mutex/serialized lane-apply authority boundary.
+
+Exact staged source passed memory, real synced-LSM, cold restart, compaction, bounded admission and admission/retirement WAL-sync EIO tests on isolated NUC scratch state. The new regression retains raw base/span rows, commits actual content fences, proves no span GC key, rejects the dead span/base and accepts a surviving prefix. Two initial fixture errors are preserved: a legacy lane fence without bootstrap did not publish history; an unfilled selector was not a canonical admission job. Neither is counted as a successful gate. Raw evidence: `results/measure/20261012-repair-journal/clipped-liveness/`, final `clipped-liveness-staged-only.log`.
+
+This remains an inactive repair prerequisite. Receiver/receipt/worker changes are not part of this checkpoint; no physical restoration, full W52/W112 closure or W97 slowdown improvement is claimed.

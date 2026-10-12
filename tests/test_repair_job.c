@@ -164,6 +164,28 @@ static void cold(void)
     assert(!efs_repair_retire(kv,&j,1));efs_kv_lsm_close(kv);
     printf("repair journal cold: admitted debt after abrupt process exit; terminal floor after flush/compaction/reopen PASS\n");
 }
+static void fenced_liveness(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();assert(kv);efs_ino_t ino=create(kv);
+    struct efs_meta_pub p=pub(kv,ino,102,101);p.delta_off=4096;p.delta_len=1024;
+    assert(!efs_meta_apply_publish(kv,&p));
+    struct efs_meta_row row;assert(!efs_meta_apply_get_inode(kv,ino,&row));
+    struct efs_repair_job q={.ino=ino,.inode_gen=row.generation,.object=102,.fragment_len=65536,.span_off=4096,.span_len=1024,.epoch=1,.owner=1},j;
+    q.uuid[0]=92;q.target_store[0]=7;assert(!efs_repair_capture(kv,&q,&j));q=j;assert(!efs_repair_admit(kv,&j));
+    assert(!efs_meta_apply_content_fence(kv,ino,row.generation,0,0,1,1000,103));
+    struct efs_meta_chunk_view view;assert(!efs_meta_get_chunk_view(kv,ino,row.generation,0,131072,&view));
+    assert(view.ndelta==1 && view.deltas[0].generation==102 && view.bytes.parts[1].len==0 && view.bytes.parts[0].len==1000);
+    uint8_t gk[EFS_KV_KEY_MAX],gv[EFS_META_GC_VAL];uint32_t kl=0,n=sizeof(gv);
+    assert(!efs_kv_key_gc(efs_kv_anchor_shard(efs_kv_lane_shard(ino,0)),ino,102,0,0,gk,&kl));assert(efs_kv_get(kv,gk,kl,gv,&n)==EFS_ERR_NOT_FOUND);
+    assert(efs_repair_capture(kv,&q,&j)==EFS_ERR_STALE);
+    q.uuid[0]=93;assert(efs_repair_admit(kv,&q)==EFS_ERR_STALE);
+    /* Partial live base is eligible; wholly fenced retained raw base is not. */
+    q.object=101;q.span_off=q.span_len=0;assert(!efs_repair_capture(kv,&q,&j));
+    assert(!efs_meta_apply_content_fence(kv,ino,row.generation,0,1,2,0,104));
+    assert(!efs_meta_get_chunk_view(kv,ino,row.generation,0,131072,&view));assert(view.base.generation==101 && !view.bytes.parts[0].len);
+    assert(efs_repair_capture(kv,&q,&j)==EFS_ERR_STALE);efs_kv_mem_free(kv);
+    puts("repair selector clipped liveness: retained fully fenced span/base refused without GC key; partial live base allowed PASS");
+}
 static void sync_faults(void)
 {
     const char *marker=getenv("EFS_REPAIR_SYNC_MARKER");if(!marker)return;
@@ -201,6 +223,6 @@ int main(void)
 {
     struct efs_kv *kv=efs_kv_mem_create();assert(kv);journal(kv,0);efs_kv_mem_free(kv);
     char path[]="/tmp/efs-repair-apply-XXXXXX";assert(mkdtemp(path));
-    kv=efs_kv_lsm_open(path,NULL);assert(kv);journal(kv,1);efs_kv_lsm_close(kv);cold();bounded();sync_faults();
+    kv=efs_kv_lsm_open(path,NULL);assert(kv);journal(kv,1);efs_kv_lsm_close(kv);cold();bounded();fenced_liveness();sync_faults();
     puts("inactive repair-journal prerequisite PASS; physical repair and distributed authority NOTRUN");return 0;
 }

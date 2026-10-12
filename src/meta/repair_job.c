@@ -84,19 +84,20 @@ static int source_hash(struct efs_kv *kv,const struct efs_repair_job *j,uint8_t 
 }
 int efs_repair_capture(struct efs_kv *kv,const struct efs_repair_job *sel,struct efs_repair_job *out)
 {
-    struct efs_meta_chunk ch;struct efs_meta_delta ds[EFS_CHUNK_DELTA_MAX];uint32_t n=0;
+    struct efs_meta_chunk_view view;struct efs_meta_chunk ch;uint32_t n=0;
     struct efs_repair_job j;
     if(!kv || !sel || !out)return EFS_ERR_INVAL;
     j=*sel;j.state=EFS_REPAIR_ADMITTED;j.flags=0;
     /* Selector validation does not require its yet-to-be-filled placement. */
     for(unsigned i=0;i<3;i++)j.nodes[i]=i+1;
     int rc=valid(&j);if(rc)return rc;
-    rc=efs_meta_apply_get_chunk_row(kv,j.ino,j.inode_gen,j.ci,&ch,ds,EFS_CHUNK_DELTA_MAX,&n,NULL);
+    rc=efs_meta_get_chunk_view(kv,j.ino,j.inode_gen,j.ci,j.fragment_len*2u,&view);
     if(rc)return rc;
+    ch=view.base;n=view.ndelta;const struct efs_meta_delta *ds=view.deltas;
     if(n>EFS_CHUNK_DELTA_MAX || ch.packed.segment_id || ch.coding_profile_id!=EFS_META_PROFILE_K2F1)return EFS_ERR_INVAL;
     int found=0;
-    if(!j.span_len && ch.generation==j.object){memcpy(j.nodes,ch.nodes,sizeof(j.nodes));memcpy(j.sums,ch.checksums,sizeof(j.sums));found=1;}
-    for(uint32_t i=0;i<n && !found;i++)if(j.span_len && ds[i].generation==j.object && ds[i].off==j.span_off && ds[i].len==j.span_len){
+    if(!j.span_len && ch.generation==j.object && view.bytes.parts[0].len){memcpy(j.nodes,ch.nodes,sizeof(j.nodes));memcpy(j.sums,ch.checksums,sizeof(j.sums));found=1;}
+    for(uint32_t i=0;i<n && !found;i++)if(j.span_len && ds[i].generation==j.object && ds[i].off==j.span_off && ds[i].len==j.span_len && view.bytes.parts[i+1].len){
         memcpy(j.nodes,ds[i].nodes,sizeof(j.nodes));memcpy(j.sums,ds[i].checksums,sizeof(j.sums));found=1;
     }
     if(!found)return EFS_ERR_STALE;
