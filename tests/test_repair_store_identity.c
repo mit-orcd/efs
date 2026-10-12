@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 static int fail_file,fail_linked_dir,linked;
 static int identity_sync(int fd){struct stat st;assert(!fstat(fd,&st));if((S_ISREG(st.st_mode)&&fail_file)||(S_ISDIR(st.st_mode)&&linked&&fail_linked_dir)){errno=EIO;return -1;}return fsync(fd);}
@@ -31,6 +32,12 @@ int main(void)
  struct result a={0},b={0};pthread_t one,two;assert(!pthread_create(&one,NULL,initialize,&a)&&!pthread_create(&two,NULL,initialize,&b));assert(!pthread_join(one,NULL)&&!pthread_join(two,NULL));assert(!a.rc&&!b.rc&&!memcmp(a.id,b.id,16)&&!memcmp(id,a.id,16));
  struct efsd_server cold={.storage_path_count=1};strcpy(cold.storage_paths[0],root);assert(!server_repair_store_matches(&cold,id));
  char fresh[]="/tmp/efs-repair-newdisk-XXXXXX";assert(mkdtemp(fresh));strcpy(cold.storage_paths[0],fresh);assert(server_repair_store_matches(&cold,id)==EFS_ERR_STALE);assert(!server_repair_store_initialize(&cold,0,again));assert(memcmp(id,again,16));assert(server_repair_store_matches(&cold,id)==EFS_ERR_STALE);
+ char race_root[]="/tmp/efs-repair-process-init-XXXXXX";assert(mkdtemp(race_root));struct efsd_server race={.storage_path_count=1};strcpy(race.storage_paths[0],race_root);
+ int pipes[2][2];pid_t children[2];for(unsigned i=0;i<2;i++){assert(!pipe(pipes[i]));children[i]=fork();assert(children[i]>=0);if(!children[i]){close(pipes[i][0]);struct result r={0};r.rc=server_repair_store_initialize(&race,1,r.id);assert(r.rc==EFS_OK || r.rc==EFS_ERR_BUSY);assert(write(pipes[i][1],&r,sizeof(r))==sizeof(r));_exit(0);}close(pipes[i][1]);}
+ struct result process[2];for(unsigned i=0;i<2;i++){assert(read(pipes[i][0],&process[i],sizeof(process[i]))==sizeof(process[i]));close(pipes[i][0]);int status;assert(waitpid(children[i],&status,0)==children[i]&&WIFEXITED(status)&&!WEXITSTATUS(status));}
+ assert(!server_repair_store_initialize(&race,1,again));for(unsigned i=0;i<2;i++)if(!process[i].rc)assert(!memcmp(process[i].id,again,16));else {uint8_t zero[16]={0};assert(!memcmp(process[i].id,zero,16));}
+ char alias[8192];snprintf(alias,sizeof(alias),"%s-alias",root);assert(!symlink(root,alias));strcpy(cold.storage_paths[0],alias);assert(!server_repair_store_matches(&cold,id));assert(!server_repair_store_initialize(&cold,1,again)&&!memcmp(id,again,16));assert(!unlink(alias));
+ char fake[]="/tmp/efs-repair-meta-alias-XXXXXX";assert(mkdtemp(fake));char fake_meta[8192],real_meta[8192];snprintf(fake_meta,sizeof(fake_meta),"%s/meta",fake);snprintf(real_meta,sizeof(real_meta),"%s/meta",root);assert(!symlink(real_meta,fake_meta));strcpy(cold.storage_paths[0],fake);assert(server_repair_store_identity(&cold,again)==EFS_ERR_IO);assert(server_repair_store_matches(&cold,id)==EFS_ERR_IO);assert(server_repair_store_initialize(&cold,1,again)==EFS_ERR_IO);
  char path[EFS_MAX_PATH+80];assert(!repair_store_path(&s,path));int fd=open(path,O_WRONLY);assert(fd>=0);uint8_t bad=255;assert(pwrite(fd,&bad,1,4)==1&&!close(fd));assert(server_repair_store_identity(&s,again)==EFS_ERR_IO);assert(server_repair_store_initialize(&s,1,again)==EFS_ERR_IO);fd=open(path,O_WRONLY);assert(fd>=0&&!ftruncate(fd,4)&&!close(fd));assert(server_repair_store_identity(&s,again)==EFS_ERR_IO);assert(server_repair_store_initialize(&s,1,again)==EFS_ERR_IO);
  puts("inactive repair store identity: unprivileged durable init, failed file/name sync noACK and barrier retry, concurrent agreement, nonempty missing/corrupt refusal, cold/new disk old-job mismatch PASS");return 0;
 }

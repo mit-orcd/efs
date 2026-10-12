@@ -2179,7 +2179,7 @@ int server_repair_file_atomic(struct efsd_server *s,struct efs_export *ex,
                              efs_ino_t ino,uint32_t ci,uint32_t fi,uint64_t object,
                              const uint8_t *data,uint32_t len,const uint8_t sum[EFS_HASH_SIZE])
 {
-#ifdef EFS_BENCH_BUILD
+#if defined(EFS_BENCH_BUILD) || !defined(O_TMPFILE)
     (void)s;(void)ex;(void)ino;(void)ci;(void)fi;(void)object;(void)data;(void)len;(void)sum;
     return EFS_ERR_INVAL;
 #else

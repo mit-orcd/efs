@@ -144,7 +144,17 @@ int server_repair_store_identity(struct efsd_server *s,uint8_t uuid[16])
 {
     if(!uuid)return EFS_ERR_INVAL;
     memset(uuid,0,16);char path[EFS_MAX_PATH+80];int rc=repair_store_path(s,path);if(rc)return rc;
-    int fd=open(path,O_RDONLY|O_CLOEXEC|O_NOFOLLOW);if(fd<0)return errno==ENOENT?EFS_ERR_STALE:EFS_ERR_IO;
+    /* The configured root may be an operator symlink, but meta never may. */
+    int root=open(s->storage_paths[0],O_RDONLY|O_DIRECTORY|O_CLOEXEC);
+    if(root<0)return EFS_ERR_IO;
+    int meta=openat(root,"meta",O_RDONLY|O_DIRECTORY|O_CLOEXEC|O_NOFOLLOW);
+    int missing=meta<0 && errno==ENOENT;
+    if(close(root)){if(meta>=0)close(meta);return EFS_ERR_IO;}
+    if(meta<0)return missing?EFS_ERR_STALE:EFS_ERR_IO;
+    int fd=openat(meta,"repair-store",O_RDONLY|O_CLOEXEC|O_NOFOLLOW);
+    missing=fd<0 && errno==ENOENT;
+    if(close(meta)){if(fd>=0)close(fd);return EFS_ERR_IO;}
+    if(fd<0)return missing?EFS_ERR_STALE:EFS_ERR_IO;
     uint8_t b[52],sum[32];struct stat st;size_t off=0;
     if(fstat(fd,&st) || !S_ISREG(st.st_mode) || st.st_size!=sizeof(b))rc=EFS_ERR_IO;
     while(!rc && off<sizeof(b)){ssize_t n=pread(fd,b+off,sizeof(b)-off,(off_t)off);
@@ -168,6 +178,15 @@ static int repair_store_seal_identity(struct efsd_server *s)
     for(;;){char *slash=strrchr(path,'/');if(!slash)return EFS_ERR_IO;
         if(slash==path){rc=put_session_sync_dir("/",1);break;}
         *slash=0;rc=put_session_sync_dir(path,level==1);if(rc)return rc;level++;
+    }
+    if(rc)return rc;
+    /* Also seal the actual root's naming ancestry when configuration uses an
+     * alias: lexical ancestor sync alone cannot persist the target name. */
+    char resolved[EFS_MAX_PATH+80];
+    if(!realpath(s->storage_paths[0],resolved))return EFS_ERR_IO;
+    for(;;){rc=put_session_sync_dir(resolved,1);if(rc)return rc;
+        char *slash=strrchr(resolved,'/');if(!slash)return EFS_ERR_IO;
+        if(slash==resolved){rc=put_session_sync_dir("/",1);break;}*slash=0;
     }
     return rc;
 }
@@ -201,7 +220,11 @@ int server_repair_store_initialize(struct efsd_server *s,int trusted_existing,ui
         if(n<=0){rc=EFS_ERR_IO;break;}off+=(size_t)n;}
     if(random>=0 && close(random))rc=EFS_ERR_IO;
     efs_hash(b,20,b+20);
+#ifdef O_TMPFILE
     int fd=rc==EFS_OK?open(dir,O_TMPFILE|O_RDWR|O_CLOEXEC,0600):-1;
+#else
+    int fd=-1;rc=EFS_ERR_INVAL;
+#endif
     if(fd<0)rc=EFS_ERR_IO;
     off=0;while(!rc && off<sizeof(b)){ssize_t n=write(fd,b+off,sizeof(b)-off);
         if(n<0 && errno==EINTR)continue;
