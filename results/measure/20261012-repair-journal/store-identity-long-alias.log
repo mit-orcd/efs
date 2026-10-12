@@ -1,0 +1,1 @@
+test_repair_store_identity_asan: tests/test_repair_store_identity.c:43: main: Assertion `!symlink(expanded,deep_alias)' failed.

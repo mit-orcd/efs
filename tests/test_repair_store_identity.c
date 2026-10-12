@@ -38,6 +38,12 @@ int main(void)
  assert(!server_repair_store_initialize(&race,1,again));for(unsigned i=0;i<2;i++)if(!process[i].rc)assert(!memcmp(process[i].id,again,16));else {uint8_t zero[16]={0};assert(!memcmp(process[i].id,zero,16));}
  char alias[8192];snprintf(alias,sizeof(alias),"%s-alias",root);assert(!symlink(root,alias));strcpy(cold.storage_paths[0],alias);assert(!server_repair_store_matches(&cold,id));assert(!server_repair_store_initialize(&cold,1,again)&&!memcmp(id,again,16));assert(!unlink(alias));
  char fake[]="/tmp/efs-repair-meta-alias-XXXXXX";assert(mkdtemp(fake));char fake_meta[8192],real_meta[8192];snprintf(fake_meta,sizeof(fake_meta),"%s/meta",fake);snprintf(real_meta,sizeof(real_meta),"%s/meta",root);assert(!symlink(real_meta,fake_meta));strcpy(cold.storage_paths[0],fake);assert(server_repair_store_identity(&cold,again)==EFS_ERR_IO);assert(server_repair_store_matches(&cold,id)==EFS_ERR_IO);assert(server_repair_store_initialize(&cold,1,again)==EFS_ERR_IO);
+ char deep[]="/tmp/efs-repair-long-root-XXXXXX";assert(mkdtemp(deep));char expanded[4096];strcpy(expanded,deep);char part[181];memset(part,'a',180);part[180]=0;
+ for(unsigned i=0;i<19;i++){
+  char hop[4096],target[192];assert(snprintf(hop,sizeof(hop),"%s/hop",expanded)<(int)sizeof(hop));
+  snprintf(target,sizeof(target),i==18?"%s":"%s/hop",part);assert(!symlink(target,hop));
+  size_t n=strlen(expanded);assert(n+182<sizeof(expanded));expanded[n]='/';memcpy(expanded+n+1,part,sizeof(part));assert(!mkdir(expanded,0700));}
+ char deep_alias[256],first_hop[256];snprintf(deep_alias,sizeof(deep_alias),"%s-alias",deep);snprintf(first_hop,sizeof(first_hop),"%s/hop",deep);assert(!symlink(first_hop,deep_alias));strcpy(cold.storage_paths[0],deep_alias);assert(!server_repair_store_initialize(&cold,0,again));assert(!server_repair_store_matches(&cold,again));assert(!unlink(deep_alias));
  char path[EFS_MAX_PATH+80];assert(!repair_store_path(&s,path));int fd=open(path,O_WRONLY);assert(fd>=0);uint8_t bad=255;assert(pwrite(fd,&bad,1,4)==1&&!close(fd));assert(server_repair_store_identity(&s,again)==EFS_ERR_IO);assert(server_repair_store_initialize(&s,1,again)==EFS_ERR_IO);fd=open(path,O_WRONLY);assert(fd>=0&&!ftruncate(fd,4)&&!close(fd));assert(server_repair_store_identity(&s,again)==EFS_ERR_IO);assert(server_repair_store_initialize(&s,1,again)==EFS_ERR_IO);
  puts("inactive repair store identity: unprivileged durable init, failed file/name sync noACK and barrier retry, concurrent agreement, nonempty missing/corrupt refusal, cold/new disk old-job mismatch PASS");return 0;
 }

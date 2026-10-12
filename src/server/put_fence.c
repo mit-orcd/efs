@@ -182,13 +182,13 @@ static int repair_store_seal_identity(struct efsd_server *s)
     if(rc)return rc;
     /* Also seal the actual root's naming ancestry when configuration uses an
      * alias: lexical ancestor sync alone cannot persist the target name. */
-    char resolved[EFS_MAX_PATH+80];
-    if(!realpath(s->storage_paths[0],resolved))return EFS_ERR_IO;
-    for(;;){rc=put_session_sync_dir(resolved,1);if(rc)return rc;
-        char *slash=strrchr(resolved,'/');if(!slash)return EFS_ERR_IO;
+    char *resolved=realpath(s->storage_paths[0],NULL);
+    if(!resolved)return EFS_ERR_IO;
+    for(;;){rc=put_session_sync_dir(resolved,1);if(rc)break;
+        char *slash=strrchr(resolved,'/');if(!slash){rc=EFS_ERR_IO;break;}
         if(slash==resolved){rc=put_session_sync_dir("/",1);break;}*slash=0;
     }
-    return rc;
+    free(resolved);return rc;
 }
 int server_repair_store_initialize(struct efsd_server *s,int trusted_existing,uint8_t uuid[16])
 {
@@ -225,7 +225,7 @@ int server_repair_store_initialize(struct efsd_server *s,int trusted_existing,ui
 #else
     int fd=-1;rc=EFS_ERR_INVAL;
 #endif
-    if(fd<0)rc=EFS_ERR_IO;
+    if(fd<0 && !rc)rc=EFS_ERR_IO;
     off=0;while(!rc && off<sizeof(b)){ssize_t n=write(fd,b+off,sizeof(b)-off);
         if(n<0 && errno==EINTR)continue;
         if(n<=0){rc=EFS_ERR_IO;break;}off+=(size_t)n;}
