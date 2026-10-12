@@ -89,9 +89,12 @@ static void *actor(void *arg)
 }
 static int remove_owned(const char *p,const struct stat *st,int type,struct FTW *f)
 {(void)st;(void)f;return type==FTW_DP?rmdir(p):unlink(p);}
-int main(void)
+int main(int argc, char **argv)
 {
-    for(int direct=0;direct<=1;direct++) {
+    int first_direct=0;
+    if(argc==2 && !strcmp(argv[1],"--direct-only"))first_direct=1;
+    else if(argc!=1){fprintf(stderr,"usage: %s [--direct-only]\n",argv[0]);return 2;}
+    for(int direct=first_direct;direct<=1;direct++) {
         char base[]="/tmp/efs-containers-XXXXXX";assert(mkdtemp(base));
         memset(&server,0,sizeof(server));server.id=1;server.node_count=1;server.nodes[0].id=1;
         server.storage_engine=1;server.direct_io=direct;server.quota=1ull<<30;server.storage_path_count=2;
@@ -251,6 +254,6 @@ int main(void)
     assert(server_storage_engine_init(&server)==EFS_ERR_IO);server.storage_engine=0;assert(!server_storage_engine_init(&server));
     server_storage_engine_close(&server);server.storage_engine=1;assert(server_storage_engine_init(&server)==EFS_ERR_IO);
     assert(!nftw(legacy,remove_owned,32,FTW_DEPTH|FTW_PHYS));
-    puts("containers: buffered/direct, multi-root, quota, same-range concurrency, conditional/inode GC, restart, crash boundaries and corruption PASS");
+    printf("containers: %s, multi-root, quota, same-range concurrency, conditional/inode GC, restart, crash boundaries and corruption PASS\n",first_direct?"direct":"buffered/direct");
     return 0;
 }
