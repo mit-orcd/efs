@@ -506,3 +506,89 @@ publication and pair regressions PASS on both hosts. Host negative control
 using the former blocking fails at the new pending-probe assertion; Intel1
 ASan/UBSan actual host extractor PASS. Exact-source live qualification is still
 required; this is a candidate, not closure of the21 directory timeouts.
+
+
+### Fresh-probe loaded result and distinct-ACK correction
+
+Exact `df29de986661fbc81243cf015285499a297e748c`, unchanged private
+4-node Intel containers/TCP/direct configuration, 8 writers/node, GC progress
+yield20ms, four plus three opposite-host mounts, 4G/node, commands/`.efs`,
+expiry-date feature and packed writes disabled: seven-client core **1451/1512
+PASS,61 FAIL**. Each client runs216 core cases at jobs16 with original
+case deadlines; use `intel_container_qualification.py concurrent --run-id
+df29-full --output <external-dir>`. Deep60/deep100, many-files, crazy
+roundtrip/directories, concurrent creates and appends fail on all7; mtime6,
+create/unlink4 and write/readdir2 also fail. Subsequent two-client core
+**430/432 PASS,2 FAIL**, both deep60 timeouts. Controller stops at this failed
+gate; peer/mmap and later lifecycle/tiny/cold phases were NOTRUN on this SHA.
+
+Immediate unchanged180s physical observer **PASS135.966s**: initial ordinary
+mappings23139/22628/23251/22525 and body allocation
+1589133312/1571684352/1597583360/1565351936 bytes become zero on all four
+nodes while exports stay mounted and empty; no competing workload/build
+overlap. Raw evidence remains outside Git at local
+`artifacts/container-20261012/df29-qualification`, and private host fixture
+`artifacts/`. Binary identities are those of the exact df29 build recorded
+in the external proof; this result does not qualify another source.
+
+`5ce632dd9f1dca3fa8c06b3ce7af70913414df99` corrects container outbox
+coalescing: read-probe votes cannot overwrite entry-retirement ACKs, and
+different term/boot/read context/status/matched prefix retain separate frames
+in the existing bounded queue. Only semantically identical frames coalesce.
+Ordinary-file scheduling and vote-at-capacity eviction remain unchanged.
+Actual production-helper regression verifies both request/reply classes,
+old/new contexts, prefix/status/boot/term, byte bounds and buffer ownership.
+Old-coalescer negative control aborts at the probe-overwrites-progress
+assertion; local ASan/UBSan PASS. Both Intel host helper/outbox/inbox/flow
+and actual Raft/disk/simulator controls PASS. Exact780-input build and live
+qualification follow; native proof alone does not close directory timeouts.
+
+
+### Distinct-ACK qualification and redundant-GC correction
+
+Exact `5ce632dd9f1dca3fa8c06b3ce7af70913414df99`, same four-node
+containers/TCP/direct fixture and seven-client original-deadline core:
+**1478/1512 PASS,34 FAIL**. Deep60/deep100/crazy-directories fail on all7;
+crazy roundtrip6, many-files4 and concurrent creates3 also fail. Full runs
+finish153.879–172.228s. Immediate physical180s observer **FAIL**: initial
+ordinary mappings28033/27938/28026/28023, last179.691s
+3422/3434/3426/3427 with238071808/238907392/238538752/238481408 allocated
+body bytes. No competing build/workload overlapped this observer. It is not
+closed by df29's earlier smaller-backlog pass. The controller stops here;
+quiet/peer/mmap/lifecycle/tiny/cold gates are NOTRUN on this SHA. Source780
+manifest and both host binary/version proofs are retained externally at
+`artifacts/container-20261012/outbox5ce-deploy`; raw qualification at
+`artifacts/container-20261012/outbox5ce-qualification`.
+
+After the backlog drained, an explicitly diagnostic single-mount jobs1
+`--filter dir_deep_nesting` run passes both original30s cases in5.0s; existing
+nonblocking phase markers show deep60 setup/create/leaf/read/recursive
+cleanup/absence all completing. This is not seven-client acceptance.
+
+`ae5a177831b26290fd34e63b4e5daccf9b4eabe0` removes two sources of
+container-only redundant GC work. Death-page publication uses the pinned
+ancestry proof, with every completed/failed barrier still going through GC
+syscall accounting. A known sealed containing directory still syncs on every
+retry; newly created/unknown ancestors all sync before cache admission. The
+ordinary-file three-barrier path remains unchanged. Native regression
+requires one accounted repeat-fence barrier rather than three, rejects a
+failed callback without caching ancestry, and verifies retry/root sealing.
+The old path aborts134 at the repeat-fence assertion.
+
+A partial reap no longer proposes a durable empty-lane deletion when a fresh
+request-local group ReadIndex proves both the lane row absent and the source
+chunk prefix empty. An unfenced absence hint cannot authorize skipping:
+both checks repeat after the proof, and any error/new row/remaining chunks
+retain normal work. Coverage is reset for each inode reap attempt, never
+shared across requests/time; physical all-node inode fencing and final reap
+retirement remain mandatory. Ordinary files retain original processing.
+The production-helper regression tests failed authority, newly visible rows,
+remaining chunks, independent group coverage and fresh subsequent attempts;
+ignoring a failed proof aborts at its refusal assertion.
+
+Complete container buffered/direct, metadata apply, GC verdict propagation
+and storage controls PASS on both Intel hosts. Intel1 direct ASan/UBSan with
+leak detection/halt-on-error PASS (backend/store instrumented, common/writer
+normal); empty-lane host extractor sanitizer PASS locally. Exact781-input
+builds and loaded qualification follow. No successful native/diagnostic run
+closes the outstanding full directory or physical deadline gates.
