@@ -1,0 +1,31 @@
+2026-10-12T02:01:28.995Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T01:57:49Z on amd-395), build=c2bfb9e9-release-normal: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/release-v030-results-20261012-c2bfb9e9/mounted/direct/gc-direct-mma6bxhx/n3 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-12T02:01:29.381Z query-publish: generation=1 g0=0 g2=0 rebuilt=4096 refolded=0 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=285 root_rc=-3 files=0 dirs=0 logical=0
+2026-10-12T02:01:33.099Z query-refresh: rc=-13 cap_mib=256 initial=0 elapsed_ms=5
+2026-10-12T02:02:05.155Z query-refresh: rc=-13 cap_mib=256 initial=0 elapsed_ms=66
+2026-10-12T02:02:25.069Z query-publish: generation=2 g0=61631 g2=65077 rebuilt=2476 refolded=8263 edge_reused=0 bytes=6316092 pin_ms=3 build_ms=13803 root_rc=0 files=5440 dirs=2899 logical=123926045
+2026-10-12T02:02:25.219Z query-refresh: rc=-13 cap_mib=256 initial=0 elapsed_ms=48
+2026-10-12T02:02:37.395Z query-publish: generation=3 g0=75852 g2=80620 rebuilt=2507 refolded=1 edge_reused=0 bytes=3858492 pin_ms=3 build_ms=5880 root_rc=0 files=63 dirs=1 logical=293411
+2026-10-12T02:02:39.125Z query-publish: generation=4 g0=77782 g2=83311 rebuilt=529 refolded=153 edge_reused=0 bytes=3858492 pin_ms=3 build_ms=1416 root_rc=0 files=137 dirs=80 logical=68456855
+2026-10-12T02:02:40.169Z query-publish: generation=5 g0=78522 g2=85611 rebuilt=123 refolded=29 edge_reused=0 bytes=3858492 pin_ms=7 build_ms=395 root_rc=0 files=152 dirs=82 logical=69661698
+2026-10-12T02:02:42.237Z query-publish: generation=6 g0=79329 g2=86694 rebuilt=113 refolded=32 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=383 root_rc=0 files=172 dirs=82 logical=90645156
+2026-10-12T02:02:44.559Z query-publish: generation=7 g0=79960 g2=87937 rebuilt=242 refolded=35 edge_reused=0 bytes=3858492 pin_ms=2 build_ms=658 root_rc=0 files=191 dirs=85 logical=90649765
+2026-10-12T02:02:47.187Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T01:57:49Z on amd-395), build=c2bfb9e9-release-normal: node 3 listening on 127.0.0.1:24212, storage=/data1/efs/release-v030-results-20261012-c2bfb9e9/mounted/direct/gc-direct-mma6bxhx/n3 (1 paths, stripe=none), used=1281769472, quota=4294967296, direct_io=on, writers=28 shared
+2026-10-12T02:02:47.720Z query-publish: generation=1 g0=80605 g2=89193 rebuilt=192 refolded=1 edge_reused=0 bytes=3858492 pin_ms=2 build_ms=421 root_rc=0 files=63 dirs=1 logical=293411
+2026-10-12T02:02:50.382Z query-publish: generation=2 g0=81681 g2=90240 rebuilt=200 refolded=0 edge_reused=0 bytes=3858492 pin_ms=3 build_ms=560 root_rc=0 files=63 dirs=1 logical=293411
+2026-10-12T02:02:51.931Z query-publish: generation=3 g0=82435 g2=91205 rebuilt=4 refolded=1 edge_reused=0 bytes=3858492 pin_ms=4 build_ms=89 root_rc=0 files=0 dirs=0 logical=0
+2026-10-12T02:02:59.422Z query-publish: generation=4 g0=84617 g2=93179 rebuilt=144 refolded=0 edge_reused=0 bytes=3858492 pin_ms=3 build_ms=347 root_rc=0 files=0 dirs=0 logical=0
+2026-10-12T02:03:01.554Z query-publish: generation=5 g0=85487 g2=94076 rebuilt=184 refolded=0 edge_reused=0 bytes=3858492 pin_ms=6 build_ms=411 root_rc=0 files=0 dirs=0 logical=0
+2026-10-12T02:03:03.814Z query-publish: generation=6 g0=86153 g2=94805 rebuilt=269 refolded=0 edge_reused=0 bytes=3858492 pin_ms=1 build_ms=602 root_rc=0 files=0 dirs=0 logical=0
+2026-10-12T02:03:05.818Z query-publish: generation=7 g0=87046 g2=95659 rebuilt=278 refolded=0 edge_reused=0 bytes=3858492 pin_ms=1 build_ms=576 root_rc=0 files=0 dirs=0 logical=0
+2026-10-12T02:03:07.765Z query-publish: generation=8 g0=87877 g2=96537 rebuilt=251 refolded=0 edge_reused=0 bytes=3858492 pin_ms=3 build_ms=519 root_rc=0 files=0 dirs=0 logical=0
+2026-10-12T02:03:09.656Z query-publish: generation=9 g0=88800 g2=97516 rebuilt=142 refolded=0 edge_reused=0 bytes=3858492 pin_ms=3 build_ms=363 root_rc=0 files=0 dirs=0 logical=0
+2026-10-12T02:03:11.488Z query-publish: generation=10 g0=89520 g2=98287 rebuilt=58 refolded=0 edge_reused=0 bytes=3858492 pin_ms=3 build_ms=192 root_rc=0 files=0 dirs=0 logical=0
+2026-10-12T02:03:13.511Z query-publish: generation=11 g0=90246 g2=99076 rebuilt=53 refolded=0 edge_reused=0 bytes=3858492 pin_ms=3 build_ms=183 root_rc=0 files=0 dirs=0 logical=0
+2026-10-12T02:03:15.513Z query-publish: generation=12 g0=90888 g2=99757 rebuilt=36 refolded=0 edge_reused=0 bytes=3858492 pin_ms=4 build_ms=147 root_rc=0 files=0 dirs=0 logical=0
+2026-10-12T02:03:17.635Z query-publish: generation=13 g0=91875 g2=100912 rebuilt=33 refolded=0 edge_reused=0 bytes=3858492 pin_ms=4 build_ms=179 root_rc=0 files=0 dirs=0 logical=0
+2026-10-12T02:03:19.621Z query-publish: generation=14 g0=92927 g2=101914 rebuilt=30 refolded=0 edge_reused=0 bytes=3858492 pin_ms=4 build_ms=155 root_rc=0 files=0 dirs=0 logical=0
+2026-10-12T02:03:21.606Z query-publish: generation=15 g0=93969 g2=102972 rebuilt=14 refolded=0 edge_reused=0 bytes=3858492 pin_ms=5 build_ms=94 root_rc=0 files=0 dirs=0 logical=0
+2026-10-12T02:03:23.633Z query-publish: generation=16 g0=94934 g2=103945 rebuilt=14 refolded=0 edge_reused=0 bytes=3858492 pin_ms=5 build_ms=90 root_rc=0 files=0 dirs=0 logical=0
+2026-10-12T02:03:25.640Z query-publish: generation=17 g0=95942 g2=104967 rebuilt=14 refolded=0 edge_reused=0 bytes=3858492 pin_ms=5 build_ms=86 root_rc=0 files=0 dirs=0 logical=0
+2026-10-12T02:03:27.631Z query-publish: generation=18 g0=96943 g2=106006 rebuilt=7 refolded=0 edge_reused=0 bytes=3858492 pin_ms=6 build_ms=71 root_rc=0 files=0 dirs=0 logical=0
+2026-10-12T02:03:29.717Z query-publish: generation=19 g0=97956 g2=107252 rebuilt=4 refolded=0 edge_reused=0 bytes=3858492 pin_ms=6 build_ms=63 root_rc=0 files=0 dirs=0 logical=0

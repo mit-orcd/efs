@@ -1,0 +1,26 @@
+{
+  "n2.log.query-events": {
+    "sha256": "3ea0456b2a844050cfbad5591faba4fa444053ac2fb918d5410d9ded443d7965",
+    "raw_sha256": "aead0dc3cca7cd9ae85fc65f1b127de95a100524dd1fea8d61c52dea4d918bd4",
+    "raw_bytes": 533454,
+    "records": 42
+  },
+  "n3.log.query-events": {
+    "sha256": "9eefb0649850138b9ebdea6f77b7ea47eccc28c15d768b8f34e862bfd64dee7e",
+    "raw_sha256": "3e8cb853f265684584153c3f043baf7fead4c25134297af9a78468338a8be135",
+    "raw_bytes": 777662,
+    "records": 31
+  },
+  "fuse.log.query-events": {
+    "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "raw_sha256": "cf521a83d6f31be0fb716d79ed82053a4a3e87bc27ebd732569772df6809fe56",
+    "raw_bytes": 11703,
+    "records": 0
+  },
+  "peer-fuse.log.query-events": {
+    "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "raw_sha256": "291bac10e7d94571edaa6f4d42755d1e844e9ff26aab7c31b4f247f92c6ba154",
+    "raw_bytes": 11704,
+    "records": 0
+  }
+}
