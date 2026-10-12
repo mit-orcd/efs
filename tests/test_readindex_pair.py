@@ -29,12 +29,18 @@ static int efs_raft_read_pending(struct efs_raft*r){return r->pending;}
 static int efs_raft_read_begin(struct efs_raft*r){begun++;if(r->fail)return r->fail;r->round++;r->pending=1;return 0;}
 static void host_publish_group(struct efs_raft_host*h,uint8_t g){(void)h;(void)g;published++;}
 static void host_pump_kick(struct efs_raft_host*h){(void)h;kicks++;}
-static int host_read_index(struct efs_raft_host*h,uint8_t g,int*hint){(void)h;(void)g;(void)hint;__atomic_add_fetch(&scalar,1,__ATOMIC_RELAXED);return wait_error;}
+static int host_read_index(struct efs_raft_host*h,uint8_t g,int*hint){(void)hint;
+ if(h->core[g].role!=2 && h->core[2-g].role==2)
+  assert(h->core[2-g].pending && begun<=1); /* local probe sent before remote wait */
+ __atomic_add_fetch(&scalar,1,__ATOMIC_RELAXED);return wait_error;}
 static int host_read_index_admitted(struct efs_raft_host*h,uint8_t g,int*hint,const struct host_read_admission*a){
  (void)hint;assert(a->round==expected[g]+1 && a->term==h->core[g].term && a->want==h->core[g].commit);
  /* Both rounds must already be pending before the first wait. Their old
   * contexts are less than the captured minimum eligible round. */
- assert(h->core[0].pending && h->core[2].pending);waits++;return wait_error;
+ assert(h->core[g].pending);
+ if(h->core[0].role==2 && h->core[2].role==2)
+  assert(h->core[0].pending && h->core[2].pending);
+ waits++;return wait_error;
 }
 ''' + (root/'src/server/read_index_pair_remote.h').read_text() + s[a:b]+r'''
 static void host_need_both(uint8_t groups[2]){groups[0]=0;groups[1]=2;}
@@ -57,7 +63,18 @@ int main(void){struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER};int hint=-
  reset(&h);h.core[0].pending=h.core[2].pending=1;
  assert(!host_read_index_pair(&h,0,2,&hint));assert(!begun && waits==2); /* waiters own next eligible rounds */
  reset(&h);h.core[2].pending=1;assert(!host_read_index_pair(&h,0,2,&hint));assert(begun==1 && waits==2);
- reset(&h);h.core[2].role=0;assert(!host_read_index_pair(&h,0,2,&hint));assert(scalar==2 && !begun && !waits);
+ reset(&h);h.core[2].role=0;assert(!host_read_index_pair(&h,0,2,&hint));assert(scalar==1 && begun==1 && waits==1 && kicks==1);
+ reset(&h);h.core[0].role=0;assert(!host_read_index_pair(&h,0,2,&hint));assert(scalar==1 && begun==1 && waits==1);
+ reset(&h);h.core[2].role=0;h.core[0].pending=1;
+ assert(!host_read_index_pair(&h,0,2,&hint) && !begun && scalar==1 && waits==1);
+ assert(host_read_pair_count==0); /* mixed leadership never needs helper capacity */
+ reset(&h);h.core[0].role=h.core[2].role=0;assert(!host_read_index_pair(&h,0,2,&hint));assert(scalar==2 && !begun && !waits);
+ reset(&h);h.core[2].role=0;h.core[0].round=UINT64_MAX;
+ assert(host_read_index_pair(&h,0,2,&hint)==EFS_ERR_BUSY && !begun && !scalar);
+ reset(&h);h.core[2].role=0;h.core[0].fail=EFS_ERR_IO;
+ assert(host_read_index_pair(&h,0,2,&hint)==EFS_ERR_IO && begun==1 && !scalar && !waits);
+ reset(&h);h.core[2].role=0;wait_error=EFS_ERR_NOT_PRIMARY;
+ assert(host_read_index_pair(&h,0,2,&hint)==EFS_ERR_NOT_PRIMARY && begun==1 && scalar==1 && !waits);
  reset(&h);h.absent=3;wait_error=EFS_ERR_NOT_PRIMARY;
  assert(host_read_index_pair(&h,0,2,&hint)==EFS_ERR_NOT_PRIMARY && scalar==1 && !begun);
  reset(&h);assert(!host_read_index_pair(&h,2,2,&hint));assert(scalar==1 && !begun);

@@ -4144,6 +4144,32 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
     struct efs_raft *r[2];struct host_read_admission admission[2];
     uint8_t groups[2]={first,second};int rc=EFS_OK;
     pthread_mutex_lock(&h->mu);
+    r[0]=group_raft(h,first);r[1]=group_raft(h,second);
+    if(r[0] && r[1] &&
+       ((efs_raft_role(r[0])==EFS_RAFT_LEADER) !=
+        (efs_raft_role(r[1])==EFS_RAFT_LEADER))) {
+        /* The common split-leader case needs no helper thread: start the
+         * locally led proof before blocking for the remote proof. The old
+         * eight-helper pool fell back to serial proofs under concurrent
+         * path walks. Capture a fresh admission under the normal Raft lock;
+         * a previously pending round still cannot cover this new request. */
+        unsigned local=efs_raft_role(r[0])==EFS_RAFT_LEADER?0:1;
+        unsigned remote=1-local;
+        uint64_t previous=efs_raft_read_round(r[local]);
+        if(previous==UINT64_MAX) {
+            pthread_mutex_unlock(&h->mu);return EFS_ERR_BUSY;
+        }
+        admission[local]=(struct host_read_admission){efs_raft_commit(r[local]),
+            previous+1,efs_raft_term(r[local])};
+        if(!efs_raft_read_pending(r[local]))rc=efs_raft_read_begin(r[local]);
+        host_publish_group(h,groups[local]);
+        pthread_mutex_unlock(&h->mu);
+        host_pump_kick(h);
+        if(rc!=EFS_OK)return rc;
+        rc=host_read_index(h,groups[remote],hint);
+        if(rc!=EFS_OK)return rc;
+        return host_read_index_admitted(h,groups[local],hint,&admission[local]);
+    }
     for(unsigned i=0;i<2;i++) {
         r[i]=group_raft(h,groups[i]);
         if(!r[i] || efs_raft_role(r[i])!=EFS_RAFT_LEADER) {
