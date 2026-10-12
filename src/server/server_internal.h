@@ -47,6 +47,7 @@ struct efs_ino_hold {
 
 struct efsd_server {
     efs_node_id_t id;
+    int repair_experiment; /* explicit default-off single-root FILES experiment */
     char addr[64];
     uint16_t port;
 
@@ -138,6 +139,7 @@ struct efs_repair_job;
 /* Trusted local coordinator only; not an RPC endpoint. */
 int server_raft_host_repair_record(unsigned,const struct efs_repair_job *,uint32_t,const uint8_t *,uint32_t);
 int server_repair_receive(struct efsd_server *,const uint8_t *,uint32_t,int seal,uint8_t *receipt);
+int server_repair_activation(struct efsd_server *,int trusted_create);
 int server_repair_store_matches(struct efsd_server *,const uint8_t expected[16]);
 int server_repair_store_identity(struct efsd_server *,uint8_t uuid[16]);
 int server_repair_store_initialize(struct efsd_server *,int trusted_existing,uint8_t uuid[16]);

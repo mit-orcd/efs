@@ -200,6 +200,14 @@ enum efs_msg_type {
     EFS_MSG_PUBLICATION_BATCH_REPLY = 142,
     EFS_MSG_PACK_AUTHORITY = 143,
     EFS_MSG_PACK_AUTHORITY_REPLY = 144,
+    /* Narrow default-off repair experiment; exact version/build envelope is
+     * mandatory. No legacy reinterpretation or RPC store initializer. */
+    EFS_MSG_REPAIR_STORE_ID = 145,
+    EFS_MSG_REPAIR_STORE_ID_REPLY = 146,
+    EFS_MSG_REPAIR_TARGET = 147,
+    EFS_MSG_REPAIR_TARGET_REPLY = 148,
+    EFS_MSG_REPAIR_REQUEST = 149, /* reserved: manual coordinator not yet wired */
+    EFS_MSG_REPAIR_REQUEST_REPLY = 150,
 };
 
 /* Storage session seal/check. Reply echoes the exact identity and floor.

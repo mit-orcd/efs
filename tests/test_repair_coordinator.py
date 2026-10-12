@@ -15,7 +15,7 @@ code=r'''
 #include <pthread.h>
 #include <string.h>
 #include <stdio.h>
-struct server {uint32_t id;};
+struct server {uint32_t id;int repair_experiment;};
 struct efs_raft_host {struct efs_kv *kv;int running;pthread_mutex_t mu;struct server *s;};
 struct host_group {struct efs_raft *r;};
 static struct efs_raft_host *g_host;static struct host_group group_slot_value;
@@ -29,10 +29,11 @@ void server_raft_host_writer_view(const struct efs_msg_inode_writer_view *q,stru
 static int host_propose_wait_idx(struct efs_raft_host *h,uint8_t g,const uint8_t *cmd,uint32_t n,int *hint,uint64_t *idx){(void)hint;(void)idx;proposals++;if(proposal_rc)return proposal_rc;int rc=efs_repair_apply_command_term(h->kv,g,entry_term?entry_term:term,cmd,n);return !rc&&lost_reply?EFS_ERR_BUSY:rc;}
 '''+fn+r'''
 int main(void){
- struct efs_kv *kv=efs_kv_mem_create();assert(kv);struct server node={1};struct efs_raft_host h={.kv=kv,.running=1,.s=&node};pthread_mutex_init(&h.mu,NULL);g_host=&h;group_slot_value.r=(void*)&h;
+ struct efs_kv *kv=efs_kv_mem_create();assert(kv);struct server node={1,1};struct efs_raft_host h={.kv=kv,.running=1,.s=&node};pthread_mutex_init(&h.mu,NULL);g_host=&h;group_slot_value.r=(void*)&h;
  struct efs_meta_attrs at={0,0,1};efs_ino_t ino;assert(!efs_meta_apply_init(kv,1));assert(!efs_meta_apply_create_file(kv,&at,EFS_ROOT_INO,S_IFREG|0644,"coordinator",&ino));
  struct efs_meta_row row;assert(!efs_meta_apply_get_inode(kv,ino,&row));struct efs_meta_pub p={.ino=ino,.candidate_gen=101,.new_size=131072,.coding_profile_id=EFS_META_PROFILE_K2F1};for(unsigned i=0;i<3;i++){p.ch.nodes[i]=i+1;memset(p.ch.checksums[i],10+i,32);}assert(!efs_meta_apply_publish(kv,&p));
  struct efs_repair_job q={.ino=ino,.inode_gen=row.generation,.object=101,.fragment_len=65536,.epoch=1,.owner=1},j,got;q.uuid[0]=1;q.target_store[0]=7;assert(!efs_repair_capture(kv,&q,&j));
+ node.repair_experiment=0;assert(server_raft_host_repair_record(EFS_REPAIR_OP_ADMIT,&j,0,NULL,0)==EFS_ERR_ACCES&&!proposals&&!reads);node.repair_experiment=1;
  read_rc=EFS_ERR_IO;assert(server_raft_host_repair_record(EFS_REPAIR_OP_ADMIT,&j,0,NULL,0)==EFS_ERR_IO&&!proposals);read_rc=0;
  role=EFS_RAFT_FOLLOWER;assert(server_raft_host_repair_record(EFS_REPAIR_OP_ADMIT,&j,0,NULL,0)==EFS_ERR_NOT_PRIMARY&&!proposals);role=EFS_RAFT_LEADER;
  node.id=2;assert(server_raft_host_repair_record(EFS_REPAIR_OP_ADMIT,&j,0,NULL,0)==EFS_ERR_STALE&&!proposals);node.id=1;

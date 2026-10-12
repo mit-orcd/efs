@@ -44,6 +44,16 @@ int main(void)
   snprintf(target,sizeof(target),i==18?"%s":"%s/hop",part);assert(!symlink(target,hop));
   size_t n=strlen(expanded);assert(n+182<sizeof(expanded));expanded[n]='/';memcpy(expanded+n+1,part,sizeof(part));assert(!mkdir(expanded,0700));}
  char deep_alias[256],first_hop[256];snprintf(deep_alias,sizeof(deep_alias),"%s-alias",deep);snprintf(first_hop,sizeof(first_hop),"%s/hop",deep);assert(!symlink(first_hop,deep_alias));strcpy(cold.storage_paths[0],deep_alias);assert(!server_repair_store_initialize(&cold,0,again));assert(!server_repair_store_matches(&cold,again));assert(!unlink(deep_alias));
+ char active_root[]="/tmp/efs-repair-active-XXXXXX";assert(mkdtemp(active_root));struct efsd_server active={.storage_path_count=1};strcpy(active.storage_paths[0],active_root);
+ char active_meta[8192],active_path[8192];snprintf(active_meta,sizeof(active_meta),"%s/meta",active_root);assert(!mkdir(active_meta,0700));snprintf(active_path,sizeof(active_path),"%s/meta/repair-active",active_root);
+ assert(server_repair_activation(&active,0)==EFS_ERR_STALE);
+ fail_file=1;assert(server_repair_activation(&active,1)==EFS_ERR_IO);assert(access(active_path,F_OK)&&errno==ENOENT);fail_file=0;
+ fail_linked_dir=1;linked=0;assert(server_repair_activation(&active,1)==EFS_ERR_IO&&linked);assert(server_repair_activation(&active,0)==EFS_ERR_IO);fail_linked_dir=0;
+ assert(!server_repair_activation(&active,0));assert(!server_repair_activation(&active,1));
+ fail_file=1;assert(server_repair_activation(&active,0)==EFS_ERR_IO);fail_file=0;
+ int afd=open(active_path,O_WRONLY);assert(afd>=0);uint8_t bad_active=255;assert(pwrite(afd,&bad_active,1,0)==1&&!close(afd));assert(server_repair_activation(&active,0)==EFS_ERR_IO);assert(server_repair_activation(&active,1)==EFS_ERR_IO);
+ assert(!symlink(first_hop,deep_alias));strcpy(cold.storage_paths[0],deep_alias);assert(server_repair_activation(&cold,1)==EFS_OK);assert(!unlink(deep_alias)); /* expanded configured-root alias ancestry */
+ puts("repair activation marker: actual file/name EIO noACK; ambiguous link repeated barriers on readonly startup; corruption cannot reset latch PASS");
  char path[EFS_MAX_PATH+80];assert(!repair_store_path(&s,path));int fd=open(path,O_WRONLY);assert(fd>=0);uint8_t bad=255;assert(pwrite(fd,&bad,1,4)==1&&!close(fd));assert(server_repair_store_identity(&s,again)==EFS_ERR_IO);assert(server_repair_store_initialize(&s,1,again)==EFS_ERR_IO);fd=open(path,O_WRONLY);assert(fd>=0&&!ftruncate(fd,4)&&!close(fd));assert(server_repair_store_identity(&s,again)==EFS_ERR_IO);assert(server_repair_store_initialize(&s,1,again)==EFS_ERR_IO);
  puts("inactive repair store identity: unprivileged durable init, failed file/name sync noACK and barrier retry, concurrent agreement, nonempty missing/corrupt refusal, cold/new disk old-job mismatch PASS");return 0;
 }

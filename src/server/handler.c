@@ -1,3 +1,4 @@
+#include "efs/repair_job.h"
 #include "efs/common.h"
 #include "efs/protocol.h"
 #include "efs/network.h"
@@ -399,6 +400,30 @@ send_reply:
                 server_export_put(g_server, ex);
             }
             break;
+        }
+        case EFS_MSG_REPAIR_STORE_ID: {
+            uint8_t reply[28+EFS_BUILD_ID_LEN]={0};int rc=EFS_ERR_ACCES;
+            const uint8_t *request=payload;
+            if(g_server->repair_experiment && server_raft_host_active()) {
+                if(payload_len!=4+EFS_BUILD_ID_LEN || efs_put_upload_rd32(request)!=EFS_VERSION_PACK ||
+                   strncmp((const char *)request+4,EFS_BUILD_ID,EFS_BUILD_ID_LEN))rc=EFS_ERR_PROTO;
+                else rc=server_repair_store_identity(g_server,reply+12);
+            }
+            efs_put_upload_wr32(reply,(uint32_t)rc);
+            if(!rc){efs_put_upload_wr32(reply+4,1);efs_put_upload_wr32(reply+8,g_server->id);strncpy((char *)reply+28,EFS_BUILD_ID,EFS_BUILD_ID_LEN-1);}
+            efs_conn_send_msg(conn,EFS_MSG_REPAIR_STORE_ID_REPLY,reply,sizeof(reply));break;
+        }
+        case EFS_MSG_REPAIR_TARGET: {
+            uint8_t reply[4+EFS_REPAIR_RECEIPT_BYTES]={0};int rc=EFS_ERR_ACCES;
+            const uint8_t *request=payload;uint32_t header=4+EFS_BUILD_ID_LEN;
+            if(g_server->repair_experiment && server_raft_host_active()) {
+                if(payload_len<header+1 || efs_put_upload_rd32(request)!=EFS_VERSION_PACK ||
+                   strncmp((const char *)request+4,EFS_BUILD_ID,EFS_BUILD_ID_LEN))rc=EFS_ERR_PROTO;
+                else if(request[header]!=1 && request[header]!=2)rc=EFS_ERR_INVAL;
+                else rc=server_repair_receive(g_server,request+header+1,payload_len-header-1,request[header]==2,reply+4);
+            }
+            efs_put_upload_wr32(reply,(uint32_t)rc);
+            efs_conn_send_msg(conn,EFS_MSG_REPAIR_TARGET_REPLY,reply,sizeof(reply));break;
         }
         case EFS_MSG_PACK_AUTHORITY: {
             struct efs_msg_pack_authority_reply reply={.rc=EFS_ERR_INVAL};
