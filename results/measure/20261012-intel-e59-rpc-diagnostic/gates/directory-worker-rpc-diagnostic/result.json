@@ -1,0 +1,139 @@
+{
+  "name": "directory-worker-rpc-diagnostic",
+  "command": [
+    "python3",
+    "-u",
+    "/data1/efs/intel-e59-rpc-diag-20261012/intel-e59-rpc-fixture.py"
+  ],
+  "cwd": "/data1/efs/intel-e59-rpc-diag-20261012/normal",
+  "variant": "normal",
+  "environment": {
+    "EFS_RAFT_FLOW": "0",
+    "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+    "EFS_RAFT_GROUP_DRAIN": "0",
+    "EFS_RAFT_BATCH_NOOP": "0",
+    "EFS_RAFT_BATCH_OVERLAP": "0",
+    "EFS_TRANSPORT": "tcp",
+    "EFS_DATA_GC_ADMISSION": "1",
+    "EFS_GC_BACKLOG_IDLE_MS": "20",
+    "EFS_CLUSTER_SCRIPTS": "/data1/efs/intel-e59-rpc-diag-20261012/evidence/cluster-scripts",
+    "TMPDIR": "/tmp/efs-intel-e59-rpc-diag-20261012-intel1_efs/temp",
+    "EFS_RPC_PROF": "1",
+    "EFS_READ_PROF": "1",
+    "EFS_FAULTS": "0",
+    "EFS_GIT_ID": "e59e815fab2916340baad585dc08712ed182b7ea",
+    "EFS_GIT_BRANCH": "qualification-v030-tcp-direct",
+    "EFS_GIT_DESCRIBE": "v0.3.0-pre-alpha-candidate"
+  },
+  "timeout": 600,
+  "host": "intel1_efs",
+  "source": "e59e815fab2916340baad585dc08712ed182b7ea",
+  "started_utc": "2026-10-12T14:42:47Z",
+  "before_binaries": {
+    "efsd": "87dde5906184992c50833743ea7b01f6ed6a64228d89c13bd9300d890a9ab409",
+    "efs-fuse": "bf0bee3c104433fa1d26c4469d9fa5ff60ce6dcc8c31cff20e8a65419dc74d92",
+    "efs-mgmt": "b28a96caf032a79321469f2b0621f4e6af79571d66470640ff9b0ea3c03c419c",
+    "libefs.a": "f73532b67afb99b53cbc34fd53c1c14032a9cfd312ae1ccc2a19a82a653709f8",
+    "efs-bench": "0ac498e8de6565d32f8ae81b54f8b9bab00e76f315d908373de8c994d0be6dc1",
+    "efs-query": "e41c11b2d56eb87270ce49ce193ff038f839691d26fbc55e0a3ecbac53e2f707"
+  },
+  "before_owned_processes": [],
+  "pid": 2314721,
+  "returncode": 1,
+  "seconds": 42.117,
+  "status": "FAIL",
+  "after_binaries": {
+    "efsd": "87dde5906184992c50833743ea7b01f6ed6a64228d89c13bd9300d890a9ab409",
+    "efs-fuse": "bf0bee3c104433fa1d26c4469d9fa5ff60ce6dcc8c31cff20e8a65419dc74d92",
+    "efs-mgmt": "b28a96caf032a79321469f2b0621f4e6af79571d66470640ff9b0ea3c03c419c",
+    "libefs.a": "f73532b67afb99b53cbc34fd53c1c14032a9cfd312ae1ccc2a19a82a653709f8",
+    "efs-bench": "0ac498e8de6565d32f8ae81b54f8b9bab00e76f315d908373de8c994d0be6dc1",
+    "efs-query": "e41c11b2d56eb87270ce49ce193ff038f839691d26fbc55e0a3ecbac53e2f707"
+  },
+  "cleanup": {
+    "before_processes": [
+      {
+        "pid": 2314722,
+        "argv": [
+          "/data1/efs/intel-e59-rpc-diag-20261012/normal/efsd",
+          "--node-id",
+          "1",
+          "--addr",
+          "127.0.0.1",
+          "--port",
+          "34510",
+          "--storage",
+          "/data1/efs/intel-e59-rpc-diag-20261012/evidence/live/n1",
+          "--quota",
+          "4G",
+          "--direct-io"
+        ],
+        "start": "8123541"
+      },
+      {
+        "pid": 2314733,
+        "argv": [
+          "/data1/efs/intel-e59-rpc-diag-20261012/normal/efsd",
+          "--node-id",
+          "2",
+          "--addr",
+          "127.0.0.1",
+          "--port",
+          "34511",
+          "--storage",
+          "/data1/efs/intel-e59-rpc-diag-20261012/evidence/live/n2",
+          "--quota",
+          "4G",
+          "--direct-io",
+          "--join",
+          "127.0.0.1:34510"
+        ],
+        "start": "8123621"
+      },
+      {
+        "pid": 2314750,
+        "argv": [
+          "/data1/efs/intel-e59-rpc-diag-20261012/normal/efsd",
+          "--node-id",
+          "3",
+          "--addr",
+          "127.0.0.1",
+          "--port",
+          "34512",
+          "--storage",
+          "/data1/efs/intel-e59-rpc-diag-20261012/evidence/live/n3",
+          "--quota",
+          "4G",
+          "--direct-io",
+          "--join",
+          "127.0.0.1:34510"
+        ],
+        "start": "8123701"
+      },
+      {
+        "pid": 2314773,
+        "argv": [
+          "/data1/efs/intel-e59-rpc-diag-20261012/normal/efsd",
+          "--node-id",
+          "4",
+          "--addr",
+          "127.0.0.1",
+          "--port",
+          "34513",
+          "--storage",
+          "/data1/efs/intel-e59-rpc-diag-20261012/evidence/live/n4",
+          "--quota",
+          "4G",
+          "--direct-io",
+          "--join",
+          "127.0.0.1:34510"
+        ],
+        "start": "8123781"
+      }
+    ],
+    "before_mounts": [],
+    "remaining_processes": [],
+    "remaining_mounts": [],
+    "idle": true
+  }
+}

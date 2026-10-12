@@ -1,0 +1,9 @@
+# posix-suite host=intel1 mnt=/tmp/efs-intel-e59-rpc-diag-20261012-intel1_efs/deep-mnt6 2026-10-12T14:43:25Z
+# suite=core
+# select	dir_readdir_listing
+# select	names_crazy_dirs
+test	result	detail
+dir_readdir_listing	FAIL	timeout after 30s
+names_crazy_dirs	FAIL	timeout after 30s
+# summary pass=0 fail=2 skip=0 notrun=0 total=2 dur=30.2
+# complete
