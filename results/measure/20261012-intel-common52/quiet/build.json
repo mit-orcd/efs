@@ -1,0 +1,26 @@
+{
+  "command": [
+    "make",
+    "-j4",
+    "EFS_FAULTS=0",
+    "EFS_GIT_ID=52bcfd3570b0a59076c225caad9157b0825954d8",
+    "EFS_GIT_BRANCH=qualification-v030-tcp-direct",
+    "efsd",
+    "efs-fuse",
+    "efs-mgmt",
+    "efs-query",
+    "efs-bench",
+    "libefs.a",
+    "tests/test_raft"
+  ],
+  "returncode": 0,
+  "binaries": {
+    "efsd": "4c4116cd776df46ce6d5f0dfe7f0d07b0110ae1244de5952be41ab2ca1c2b308",
+    "efs-fuse": "e8c4272960c9b08e806f8030226ed4ad733653cea898f43626025f336b49a1be",
+    "efs-mgmt": "781354eebf251a226e4abf86e20297375bcff2ba41e60e7c53030412512669cc",
+    "efs-query": "ec6a779b362da1655ee4a5a84174589830de37d993d81ea05f27d823c2eae924",
+    "efs-bench": "5bc221c7eb64a4dc185b7a8f84bdcaad50349ca3663f50fe9a9c76208e6a904c",
+    "libefs.a": "df0b0e68c321b0f82650e6f4121238b954c75658f6e4d659627ccfa893f7a532"
+  },
+  "version": "efsd (no git metadata, branch qualification-v030-tcp-direct, built 2026-10-12T12:34:29Z on intel1)\n"
+}
