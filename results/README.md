@@ -21,6 +21,13 @@ Current Oct 6 gates/reviews, XFS references and cited performance results remain
 Removed tracked evidence is recoverable from Git before this cleanup; this does
 not rewrite repository history. Cursor runtime logs are ignored separately.
 
+Oct 12 2026 cleanup consolidated 37 byte-identical large logs using relative
+symlinks and removed 72 repetitive server/restart logs from historical container
+profiling rounds 1–6. Source identities, phase oracles, traces, CPU reports and
+final comparisons remain. Latest release qualification and open-item evidence
+remain retained. [Inventory, canonical paths and recovery hashes](measure/20261012-evidence-cleanup/manifest.json)
+and [scope](measure/20261012-evidence-cleanup/README.md) record every change.
+
 ## Layout
 
 ```

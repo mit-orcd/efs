@@ -10,7 +10,7 @@ commits, failures and remaining gates. No push has occurred.
 
 ## Current qualification state
 
-Execution is stopped. Source410afed4/v2 passes AMD full normal/fault native and focused/real-LSM sanitizer prerequisites, but release acceptance is blocked by the c2 AMD stats/find deadlines, Mac c2 mounted timeouts, uncompleted final-source mounted/cold/ownership gates and unresolved retained Mac namespace ownership. The duplicate CREATE fault injector is fixed in410; its strict mounted three-stage/cold gate remains pending. Historical results below do not certify this candidate. [Stop checkpoint](../status/v030-stop-checkpoint-20261011.md).
+Execution is stopped. Source410afed4/v2 passes AMD full normal/fault native and focused/real-LSM sanitizer prerequisites, but release acceptance is blocked by the c2 AMD stats/find deadlines, Mac c2 mounted timeouts, uncompleted final-source mounted/cold/ownership gates and unresolved retained Mac namespace ownership. The duplicate CREATE fault injector is fixed in410; its strict mounted three-stage/cold gate remains pending. Historical results below do not certify this candidate. [Stop checkpoint](../archive/status-20261012/v030-stop-checkpoint-20261011.md).
 
 ## Included changes
 

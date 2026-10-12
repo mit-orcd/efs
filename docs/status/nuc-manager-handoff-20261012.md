@@ -161,7 +161,7 @@ new archive deliberately omitted tracked results referenced by those docs.
 This input-packaging mistake is not a production-code failure or a native pass.
 Both raw native/failure/provenance attempts are retained in the handoff evidence
 native-base/native-root folders. No restart, skip or new live gate is launched.
-The [merged qualification plan](nuc-merged-qualification-plan-20261012.md)
+The [merged qualification plan](../archive/status-20261012/nuc-merged-qualification-plan-20261012.md)
 requires a complete source/evidence archive and full rerun on the manager's
 approved input. Source remains frozen101598d2. No repaired image is deployed.
 

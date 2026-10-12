@@ -167,3 +167,16 @@ Superseded deployment and integration checkpoints retain their raw evidence and 
 Intel historical CREATE refusal and READDIR cursor repairs: [authoritative EXIST](status-20261011/intel-create-exist-verdict-20261011.md), [source-only cursor](status-20261011/intel-readdir-source-cursor-20261011.md). Final-candidate and broader work-item obligations remain in the current queue.
 
 - [Superseded v0.3.0 release-index checkpoints](v030-index-checkpoints-20261011.md): preserved before the active-index consistency repair; source-specific PASS/FAIL retained, historical running/next text is not current authority.
+
+## Superseded release plans and checkpoints archived Oct 12, 2026
+
+Historical execution instructions do not govern current work. Current qualification and unresolved obligations remain in the status index.
+
+- [intel-merged-qualification-plan-20261012.md](status-20261012/intel-merged-qualification-plan-20261012.md)
+- [nuc-merged-qualification-plan-20261012.md](status-20261012/nuc-merged-qualification-plan-20261012.md)
+- [orcd-b239-qualification-plan-20261011.md](status-20261012/orcd-b239-qualification-plan-20261011.md)
+- [intel-stop-checkpoint-20261011.md](status-20261012/intel-stop-checkpoint-20261011.md)
+- [intel-stop-checkpoint-20261012.md](status-20261012/intel-stop-checkpoint-20261012.md)
+- [orcd-stop-checkpoint-20261011.md](status-20261012/orcd-stop-checkpoint-20261011.md)
+- [v030-stop-checkpoint-20261011.md](status-20261012/v030-stop-checkpoint-20261011.md)
+- [release-index-chronology-20261012.md](status-20261012/release-index-chronology-20261012.md)

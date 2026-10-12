@@ -1,10 +1,10 @@
 # Superseded release-index checkpoints
 
-Preserved from the pre-review index. These successive source-specific checkpoints are historical; running/next/frozen statements do not describe current execution. See the [current status index](../status/../status/README.md) and [stop checkpoint](../status/../status/v030-stop-checkpoint-20261011.md). Link targets are rebased for this archive location; no evidence or original verdict is discarded.
+Preserved from the pre-review index. These successive source-specific checkpoints are historical; running/next/frozen statements do not describe current execution. See the [current status index](../status/../status/README.md) and [stop checkpoint](status-20261012/v030-stop-checkpoint-20261011.md). Link targets are rebased for this archive location; no evidence or original verdict is discarded.
 
 ## v0.3.0-pre-alpha release integration
 
-**Execution STOPPED at human request; subsequent user-authorized branch reconciliation is complete.** All committed local/remote-tracking branch tips are integrated, with no new code delta or cluster run. [Central checkpoint and resume requirements](../status/v030-stop-checkpoint-20261011.md). No new work until the human resumes; execution target stays 410afed4/v2.
+**Execution STOPPED at human request; subsequent user-authorized branch reconciliation is complete.** All committed local/remote-tracking branch tips are integrated, with no new code delta or cluster run. [Central checkpoint and resume requirements](status-20261012/v030-stop-checkpoint-20261011.md). No new work until the human resumes; execution target stays 410afed4/v2.
 
 A reviewed next-candidate CREATE fault-injection fix removes a duplicated retained hook; actual combined-path baseline six-stage failure and fixed three-stage native/sanitizer passes are preserved in the [diagnostic ledger](../status/v030-query-stage-diagnostic-20261012.md#create-retry-fault-injection-defect). Mounted requalification remains pending.
 
