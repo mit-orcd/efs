@@ -3,7 +3,13 @@
 /* Fixed, reusable helpers overlap two independently fresh hosted-group
  * proofs when their leaders differ. No queue or per-request thread creation:
  * saturation and failed initialization keep the ordinary scalar path. */
-#define HOST_READ_PAIR_WORKERS 8
+#define HOST_READ_PAIR_WORKERS 32
+#ifndef HOST_READ_PAIR_LIMIT
+#define HOST_READ_PAIR_LIMIT() 8u
+#endif
+#ifndef HOST_READ_PAIR_NOTE
+#define HOST_READ_PAIR_NOTE(parallel) ((void)(parallel))
+#endif
 #define HOST_READ_PAIR_STACK (128u << 10)
 struct host_read_pair_task {
     struct efs_raft_host *host;
@@ -52,7 +58,9 @@ static void host_read_pair_init(void)
     if(pthread_attr_setdetachstate(&attr,PTHREAD_CREATE_DETACHED)) {
         pthread_attr_destroy(&attr);return;
     }
-    for(unsigned i=0;i<HOST_READ_PAIR_WORKERS;i++) {
+    unsigned limit=HOST_READ_PAIR_LIMIT();
+    if(!limit || limit>HOST_READ_PAIR_WORKERS)limit=8;
+    for(unsigned i=0;i<limit;i++) {
         struct host_read_pair_worker *worker=&host_read_pair_workers[i];
         if(pthread_cond_init(&worker->cv,NULL))break;
         pthread_t tid;
@@ -83,6 +91,7 @@ static int host_read_index_remote_pair(struct efs_raft_host *host,uint8_t first,
         pthread_cond_signal(&worker->cv);break;
     }
     pthread_mutex_unlock(&host_read_pair_mu);
+    HOST_READ_PAIR_NOTE(worker!=NULL);
     if(!worker)return host_read_index_scalar_pair(host,first,second,hint);
     int first_hint=-1,rc=host_read_index(host,first,&first_hint);
     /* Even a failed first proof waits for the second task's bounded existing

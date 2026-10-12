@@ -800,3 +800,41 @@ Exact dual-group placement candidate is
 Native build/affected controls are underway on both Intel hosts, and live
 validation follows only after both exit successfully. Every preceding
 private store and metadata history remains preserved.
+
+
+### Bounded container paired-proof capacity candidate
+
+Exact dual-group sourceb0ba3819 compiled and passed both-host affected
+native controls; 783 matching inputs and node2/group0, node3/group2 dual
+leaders verified before unchanged seven-client load. Full **1459/1512 PASS,
+53 FAIL**: deep60/deep100/crazy roundtrip/crazy dirs/concurrent creates all
+seven, manyfiles five, create-unlink five, mtime five, appends two, write-
+readdir one. Immediate ordinary physical reclamation **PASS86.035s**,
+all four maps/allocated bodies zero at86.028s. Quiet core FAIL; peer/mmap,
+lifecycle warm gates PASS; tiny/cold/final cleanup are continuing.
+Intel1 efsd SHA256
+`e752c5fd819e32fb433e35487660ed0e6918649f93d7f984aa65c0cd42c04559`,
+FUSE `7166b0f89f9ac1eab2c5c872dc94f7fa30ffa9f1dddc4d45848f6ae485e880ba`;
+Intel2 efsd `771f922c354e06a1929615ac75d37e5dd1f889b5f5886e7f071ee8d1323006f2`,
+FUSE `e2bf145025fe51575a498ddf4e32fdaeae0e44d674865bd4f2b3d4d24f96f724`.
+Existing GC timing samples show32-inode reaper passes around746–908ms,
+mostly547–653ms physical fencing; they are diagnostic samples, not evidence
+that directory failure is caused by a particular GC stage.
+
+The next scoped candidate keeps the existing persistent paired-read design
+but initializes32 bounded128KiB helpers for containers (4MiB stack budget),
+and keeps eight for ordinary files (1MiB). A saturated eight-slot pool falls
+back to serial independently fresh proofs; increasing this resource bound
+is a performance hypothesis, not yet a demonstrated cause of all timeouts.
+No queue, per-RPC thread creation, proof reuse, new deadline or concurrency
+change to the POSIX workload is introduced. Partial/failed initialization
+and saturation retain scalar fallback; both proofs finish before a handler
+can release its host or stack. Existing EFS_READ_PROF now reports parallel
+and scalar counts for future diagnostics; profiling remains off for acceptance.
+Native production helper/header controls PASS locally and under ASan/UBSan:
+eight ordinary-file and32 container slots, partial/zero initialization, every
+real slot simultaneously occupied by a distinct caller/deadline, overflow
+fallback, repeated reuse, hard refusal and joined lifetimes. Original eight
+container slots fail the capacity assertion/SIGABRT negative control. Local
+fresh-round paired admission controls also PASS. Both-host native/live
+validation is still required, and earlier physical passes do not qualify it.

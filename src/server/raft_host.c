@@ -3852,7 +3852,7 @@ static struct {
     struct read_prof_acc ri_remote_wait; /* host_wait_applied after it */
     struct read_prof_acc lk_total, lk_ri_parent, lk_kv, lk_lanes, lk_getattr;
     struct read_prof_acc ga_total, ga_lanes, ga_getattr;
-    uint64_t lk_fwd, ga_fwd;
+    uint64_t lk_fwd, ga_fwd, pair_parallel, pair_scalar;
     uint64_t ticks;
 } g_read_prof;
 
@@ -3916,11 +3916,13 @@ static void read_prof_tick(void)
     line[0] = '\0';
     for (i = 0; i < 12; i++)
         strncat(line, f[i], sizeof(line) - strlen(line) - 1);
-    fprintf(stderr, "read-prof:%s lk_fwd=%llu ga_fwd=%llu\n", line,
+    fprintf(stderr, "read-prof:%s lk_fwd=%llu ga_fwd=%llu pair_parallel=%llu pair_scalar=%llu\n", line,
             (unsigned long long)__atomic_load_n(&g_read_prof.lk_fwd,
                                                 __ATOMIC_RELAXED),
             (unsigned long long)__atomic_load_n(&g_read_prof.ga_fwd,
-                                                __ATOMIC_RELAXED));
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_read_prof.pair_parallel,__ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_read_prof.pair_scalar,__ATOMIC_RELAXED));
 }
 
 /* A follower's ReadIndex is one RPC to the leader per caller. The dual
@@ -4169,7 +4171,25 @@ static int host_read_index(struct efs_raft_host *h,uint8_t group,int *hint)
     return host_read_index_admitted(h,group,hint,NULL);
 }
 
+/* Container directory walks can overlap both metadata groups on every
+ * component. Eight blocked proof helpers otherwise force other admitted
+ * reads to serialize independent rounds. Bound containers at 32 persistent
+ * 128KiB helpers (4MiB total stacks); ordinary files retain eight (1MiB).
+ * Saturation/init failure still falls back, never queues or reuses a proof. */
+static unsigned host_read_pair_capacity(void)
+{
+    return g_host && g_host->s && g_host->s->storage_engine ? 32u : 8u;
+}
+static void host_read_pair_note(int parallel)
+{
+    if(read_prof_on())__atomic_fetch_add(parallel?&g_read_prof.pair_parallel:
+        &g_read_prof.pair_scalar,1,__ATOMIC_RELAXED);
+}
+#define HOST_READ_PAIR_LIMIT() host_read_pair_capacity()
+#define HOST_READ_PAIR_NOTE(parallel) host_read_pair_note(parallel)
 #include "read_index_pair_remote.h"
+#undef HOST_READ_PAIR_LIMIT
+#undef HOST_READ_PAIR_NOTE
 
 /* Overlap two independent hosted-leader read rounds. Both admissions are
  * captured before either probe is sent. A pending older round cannot cover
