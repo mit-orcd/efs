@@ -1,0 +1,28 @@
+2026-10-12T02:06:58.786Z efs-fuse: legacy export label 'fs' is ignored; mounting the single export 'default' (id=1)
+2026-10-12T02:06:58.786Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T01:58:33Z on fcstor008), build=c2bfb9e9-release-normal: starting export=default mount=/tmp/efs-c2bf-mount
+2026-10-12T02:06:58.787Z Discovered 4 cluster nodes from 172.16.223.57:19862
+2026-10-12T02:06:58.787Z   node id=1 172.16.223.57:19862
+2026-10-12T02:06:58.787Z   node id=2 172.16.223.58:19862
+2026-10-12T02:06:58.787Z   node id=3 172.16.223.59:19862
+2026-10-12T02:06:58.787Z   node id=4 172.16.223.60:19862
+2026-10-12T02:06:58.787Z fetching metadata...
+2026-10-12T02:06:58.787Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T02:06:58.787Z export id=1 name=default
+2026-10-12T02:06:58.787Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T02:06:58.787Z efs-fuse daemon pid=2741249
+2026-10-12T02:06:58.789Z efs-fuse: workers max=10 idle=10
+2026-10-12T02:06:58.791Z fuse serving
+2026-10-12T02:15:47.792Z efs-fuse: legacy export label 'fs' is ignored; mounting the single export 'default' (id=1)
+2026-10-12T02:15:47.792Z efs-fuse v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T01:58:33Z on fcstor008), build=c2bfb9e9-release-normal: starting export=default mount=/tmp/efs-c2bf-mount
+2026-10-12T02:15:47.792Z Discovered 4 cluster nodes from 172.16.223.57:19862
+2026-10-12T02:15:47.792Z   node id=1 172.16.223.57:19862
+2026-10-12T02:15:47.792Z   node id=2 172.16.223.58:19862
+2026-10-12T02:15:47.792Z   node id=3 172.16.223.59:19862
+2026-10-12T02:15:47.792Z   node id=4 172.16.223.60:19862
+2026-10-12T02:15:47.792Z fetching metadata...
+2026-10-12T02:15:47.792Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T02:15:47.792Z export id=1 name=default
+2026-10-12T02:15:47.792Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T02:15:47.792Z efs-fuse daemon pid=2741642
+2026-10-12T02:15:47.795Z efs-fuse: workers max=10 idle=10
+2026-10-12T02:15:47.796Z fuse serving

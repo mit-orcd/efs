@@ -1,0 +1,22 @@
+{
+  "source": "c2bfb9e9a281aae33dfaa01689e61866ccf60af8",
+  "scope": "completed active private fixture; superseded by410 for all new qualification",
+  "native_fault_normal": "PASS",
+  "sanitizers": 20,
+  "input_hashes": 1557,
+  "small_files": 64,
+  "bytes_per_file": 512,
+  "pack_objects": 12,
+  "header_records": 64,
+  "selected_canonical_live_refs": 6,
+  "selected_fragments": 3,
+  "partial_unlink": "PASS",
+  "offline_fourth_retention_and_online_fences": "PASS",
+  "restored_fourth_fences_and_reclamation": "PASS",
+  "cold_survivors_seven_mounts": 58,
+  "cold_selected_reclamation": "PASS",
+  "ordinary_four_overwrites_warm_and_cold": "PASS",
+  "all_objects_gc_cold": "NOT RUN after common candidate changed",
+  "concurrent_pressure_queries": "OPEN; central diagnostic failed",
+  "release_acceptance": "OPEN"
+}
