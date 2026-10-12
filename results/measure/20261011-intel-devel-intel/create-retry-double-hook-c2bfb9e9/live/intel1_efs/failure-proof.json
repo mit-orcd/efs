@@ -1,0 +1,148 @@
+[
+  {
+    "mode": "direct",
+    "row": {
+      "name": "direct-prefault-create-live-retry",
+      "command": [
+        "python3",
+        "tests/live/gc_reclamation.py",
+        "--mode",
+        "direct",
+        "--port",
+        "31010",
+        "--client-binary",
+        "/data1/efs/intel-qualification-c2bfb9e9/fault/efs-fuse",
+        "--server-binary",
+        "/data1/efs/intel-qualification-c2bfb9e9/fault/efsd",
+        "--create-live-retry"
+      ],
+      "kind": "fault",
+      "timeout": 1800,
+      "environment": {},
+      "expected_exits": [
+        0
+      ],
+      "exit": 1,
+      "seconds": 4.97,
+      "source_revision": "c2bfb9e9a281aae33dfaa01689e61866ccf60af8",
+      "cleanup_incomplete": false
+    },
+    "fixture": "/data1/efs/gc-direct-7u1abcq3",
+    "stages": [
+      {
+        "line": 13,
+        "text": "2026-10-12T02:10:13.524Z test-create-retry: stage=0 seq=1 ino=4097 identical=1"
+      },
+      {
+        "line": 15,
+        "text": "2026-10-12T02:10:13.626Z test-create-retry: stage=1 seq=1 ino=4097 identical=1"
+      },
+      {
+        "line": 16,
+        "text": "2026-10-12T02:10:13.627Z test-create-retry: stage=2 seq=1 ino=4097 identical=1"
+      },
+      {
+        "line": 17,
+        "text": "2026-10-12T02:10:13.627Z test-create-retry: stage=0 seq=1 ino=4097 identical=1 retained=1"
+      },
+      {
+        "line": 18,
+        "text": "2026-10-12T02:10:13.628Z test-create-retry: stage=1 seq=1 ino=4097 identical=1 retained=1"
+      },
+      {
+        "line": 19,
+        "text": "2026-10-12T02:10:13.629Z test-create-retry: stage=2 seq=1 ino=4097 identical=1 retained=1"
+      }
+    ],
+    "fuse_log_single_file": {
+      "device": 66305,
+      "inode": 1953850865,
+      "sha256": "417349ea1e69d96a4106bc9c481b68676f2203ac78fc114dd48a3ceb919971d1"
+    },
+    "owned_remaining_processes": [],
+    "original_client_daemon_pids": "NOTRECORDED by original fixture; all retired now",
+    "cold_byte_inode_token_oracle": "NOTRUN: stage assertion failed first",
+    "files": {
+      "/data1/efs/intel-qualification-c2bfb9e9/live/direct-prefault-create-live-retry.log": "6ed7885beb2b3c36bdd75006cdc6cc6b3cab5833cec3ff17d47ace95f1439ee7",
+      "/data1/efs/gc-direct-7u1abcq3/fuse.log": "417349ea1e69d96a4106bc9c481b68676f2203ac78fc114dd48a3ceb919971d1",
+      "/data1/efs/gc-direct-7u1abcq3/n1.log": "9494b3abc02f1166c1e994a976f4d01e984c3f59281ba788c3723f78f47ceb0c",
+      "/data1/efs/gc-direct-7u1abcq3/n2.log": "4717deb404587558756eed9c1afc7b91bd5aeae914bb778a94cbf55c113aada3",
+      "/data1/efs/gc-direct-7u1abcq3/n3.log": "959ea595d0eaa198ca7a91a27f4850f6d8efb7044b4f02ec742b05dd78380585",
+      "/data1/efs/gc-direct-7u1abcq3/n4.log": "06d8b43e9ca96a0435e8f969f07f2718f13b5460d70587be78101a7961e2209b",
+      "/data1/efs/gc-direct-7u1abcq3/manifest.json": "a32620d1b09ecf4ec02079677486b6fc88955ab101b92c0a30bb99d67800357e"
+    }
+  },
+  {
+    "mode": "buffered",
+    "row": {
+      "name": "buffered-prefault-create-live-retry",
+      "command": [
+        "python3",
+        "tests/live/gc_reclamation.py",
+        "--mode",
+        "buffered",
+        "--port",
+        "31010",
+        "--client-binary",
+        "/data1/efs/intel-qualification-c2bfb9e9/fault/efs-fuse",
+        "--server-binary",
+        "/data1/efs/intel-qualification-c2bfb9e9/fault/efsd",
+        "--create-live-retry"
+      ],
+      "kind": "fault",
+      "timeout": 1800,
+      "environment": {},
+      "expected_exits": [
+        0
+      ],
+      "exit": 1,
+      "seconds": 4.97,
+      "source_revision": "c2bfb9e9a281aae33dfaa01689e61866ccf60af8",
+      "cleanup_incomplete": false
+    },
+    "fixture": "/data1/efs/gc-buffered-ykyqtqzo",
+    "stages": [
+      {
+        "line": 13,
+        "text": "2026-10-12T02:08:45.097Z test-create-retry: stage=0 seq=1 ino=4097 identical=1"
+      },
+      {
+        "line": 15,
+        "text": "2026-10-12T02:08:45.198Z test-create-retry: stage=1 seq=1 ino=4097 identical=1"
+      },
+      {
+        "line": 16,
+        "text": "2026-10-12T02:08:45.199Z test-create-retry: stage=2 seq=1 ino=4097 identical=1"
+      },
+      {
+        "line": 17,
+        "text": "2026-10-12T02:08:45.199Z test-create-retry: stage=0 seq=1 ino=4097 identical=1 retained=1"
+      },
+      {
+        "line": 18,
+        "text": "2026-10-12T02:08:45.201Z test-create-retry: stage=1 seq=1 ino=4097 identical=1 retained=1"
+      },
+      {
+        "line": 19,
+        "text": "2026-10-12T02:08:45.201Z test-create-retry: stage=2 seq=1 ino=4097 identical=1 retained=1"
+      }
+    ],
+    "fuse_log_single_file": {
+      "device": 66305,
+      "inode": 583906463,
+      "sha256": "eb002dcab0e2523c0c26cca4d1f53235639dee55419e2c0347d9ad34d8b840df"
+    },
+    "owned_remaining_processes": [],
+    "original_client_daemon_pids": "NOTRECORDED by original fixture; all retired now",
+    "cold_byte_inode_token_oracle": "NOTRUN: stage assertion failed first",
+    "files": {
+      "/data1/efs/intel-qualification-c2bfb9e9/live/buffered-prefault-create-live-retry.log": "3c0336eec2ff83ffc0f68396587a7e96621c0c23c15d31fa1501918f60da1f02",
+      "/data1/efs/gc-buffered-ykyqtqzo/fuse.log": "eb002dcab0e2523c0c26cca4d1f53235639dee55419e2c0347d9ad34d8b840df",
+      "/data1/efs/gc-buffered-ykyqtqzo/n1.log": "275b5a369af5127c6c8629efc34fd23dd527f4d72bc36eca82ee9f17e0db1058",
+      "/data1/efs/gc-buffered-ykyqtqzo/n2.log": "db87fb3e17524a7e584282e23a8babf4f1f309158f1a9bc154499e28dd82eea3",
+      "/data1/efs/gc-buffered-ykyqtqzo/n3.log": "cf7693e7afe6fb7773b044ab14af9dc9f92f21235303542a7b63d2e4977428aa",
+      "/data1/efs/gc-buffered-ykyqtqzo/n4.log": "b23949fefdca582a13286c17dd8113f7b880365bc0497519a8c2c1291a280447",
+      "/data1/efs/gc-buffered-ykyqtqzo/manifest.json": "4cc4625b007bf5f7e7656614e37a8550900072cc5634608e32036af0a391deb5"
+    }
+  }
+]

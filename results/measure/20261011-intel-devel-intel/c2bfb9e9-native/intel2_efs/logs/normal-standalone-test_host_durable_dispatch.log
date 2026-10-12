@@ -1,0 +1,1 @@
+host durability: only synced hosted leader prefixes noted; handler never applies, pump applies under KV hold PASS

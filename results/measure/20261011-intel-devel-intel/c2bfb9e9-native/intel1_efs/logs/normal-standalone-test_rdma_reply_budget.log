@@ -1,0 +1,2 @@
+RDMA wrapper: shared deadline, late-frame repost, TCP fallback and malformed ownership PASS
+RDMA slots: serial reuse, reserved ownership, full 32-slot pipeline, finite stall and registration refusal PASS

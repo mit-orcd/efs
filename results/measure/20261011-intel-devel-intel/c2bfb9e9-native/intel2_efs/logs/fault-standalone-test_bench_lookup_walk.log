@@ -1,0 +1,1 @@
+benchmark walker: bounds/root/slashes, shallow/deep batches, malformed/error fallback, owner errors and leaf overlay PASS

@@ -1,0 +1,1 @@
+connect: parent deadline, EINTR, late success, flag restoration and errno cleanup PASS

@@ -1,0 +1,30 @@
+{
+  "actual_source": "c2bfb9e9a281aae33dfaa01689e61866ccf60af8",
+  "delta": "Remove duplicate 27-line EFS_FAULTS retained block; no running source edited",
+  "removed_lines": 27,
+  "records": [
+    {
+      "name": "baseline",
+      "exit": 1,
+      "expected_exit": 1,
+      "source_sha256": "7d226d564a8d5459c9513a972ead0a031d85c47a3c8835aba7685c04bb588202",
+      "output_sha256": "860f4671ed1cf4a759b285a0446709c93d1c3d79b4a1a522154765d8f9411c92"
+    },
+    {
+      "name": "fixed",
+      "exit": 0,
+      "expected_exit": 0,
+      "source_sha256": "3ceee8a18b996e4fe9ecc5a9e5d7a4e44f2851c0e0f31651eb45a216c85657bf",
+      "output_sha256": "2d918c3f9578f3cca9f3977e3671a6133422c20e5673c3c1b2a6ef7ac1e3737b"
+    },
+    {
+      "name": "fixed-sanitizers",
+      "exit": 0,
+      "expected_exit": 0,
+      "source_sha256": "3ceee8a18b996e4fe9ecc5a9e5d7a4e44f2851c0e0f31651eb45a216c85657bf",
+      "output_sha256": "2d918c3f9578f3cca9f3977e3671a6133422c20e5673c3c1b2a6ef7ac1e3737b"
+    }
+  ],
+  "sanitizers": "Mac ASan/UBSan; leak detection unsupported on this platform and explicitly disabled. Initial leak-enabled setup abort retained separately. Linux leak-enabled gate still needed on integrated shared candidate.",
+  "scope": "actual commonhook+retainedcaller with controlled receipt/transport, not live cold/token acceptance"
+}

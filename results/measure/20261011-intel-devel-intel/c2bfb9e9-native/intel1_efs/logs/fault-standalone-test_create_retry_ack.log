@@ -1,0 +1,2 @@
+opid-admission: BUSY oldest=1 next=17 live=1 window=16
+CREATE retry ACK: full durable cache, pinned old operation, same identity, no self-ACK and replay recovery PASS

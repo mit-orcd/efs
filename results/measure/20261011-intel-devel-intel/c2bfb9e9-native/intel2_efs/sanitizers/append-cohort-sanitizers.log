@@ -1,0 +1,1 @@
+append cohort: captured identities, bounded batches, verdict-before-COMMIT, pre-decision ABORT, ambiguous COMMIT and TLS cleanup PASS

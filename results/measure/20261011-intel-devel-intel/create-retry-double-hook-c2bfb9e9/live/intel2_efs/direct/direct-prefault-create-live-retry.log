@@ -1,0 +1,12 @@
+Evidence directory: /data1/efs/gc-direct-hl83w_gi
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=3602462193027692936
+client serving PASS
+Traceback (most recent call last):
+  File "/data1/efs/intel-qualification-c2bfb9e9/fault/tests/live/gc_reclamation.py", line 860, in <module>
+    assert len(stages)==3 and [int(x[0]) for x in stages]==[0,1,2],stages
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [('0', '1', '4097'), ('1', '1', '4097'), ('2', '1', '4097'), ('0', '1', '4097'), ('1', '1', '4097'), ('2', '1', '4097')]

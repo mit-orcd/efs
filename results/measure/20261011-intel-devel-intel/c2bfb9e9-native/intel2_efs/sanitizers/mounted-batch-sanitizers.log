@@ -1,0 +1,2 @@
+FIX PASS: fresh scalar-only capability enables publication and retirement fallback without releasing ownership
+mounted batch: 16 exact intents, no rebind after lost reply, independent rejection/BUSY retention, once-only consumption, oldest ACK retry/partial credits, scalar fallback and retained rejected bytes PASS

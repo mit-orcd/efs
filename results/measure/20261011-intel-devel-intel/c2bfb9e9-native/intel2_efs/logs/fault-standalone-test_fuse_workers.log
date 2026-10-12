@@ -1,0 +1,4 @@
+efs-fuse: workers max=32 idle=8
+efs-fuse: workers max=4 idle=4
+efs-fuse: workers max=128 idle=16
+FUSE workers: active bound, option handling, idle clamp and allocation failure PASS
