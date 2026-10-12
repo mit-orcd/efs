@@ -155,6 +155,16 @@ static void replay_tests(void) {
             assert(sent[i]==(i>=500 && i<4756 ? 'P' : ranges && i>=100 && i<164 ? 'N' : 'A'));
         free(slot.data);
     }
+    /* A new full overwrite owns every byte even when STALE repulls an
+     * older 512-byte span on generation zero. Rebase its whole image
+     * against the freshly observed base/list, rather than publishing old bytes. */
+    reset();slot.base_gen=EFS_CHUNK_BASE_UNCOND;slot.object_gen=42;
+    map.generation=remote.generation=0;remote.deltas[0].len=512;
+    memset(slot.data,'N',CS);memset(remote_bytes,0,CS);memset(remote_bytes,'O',512);
+    assert(dcache_replay_stale_ex_budgeted(1,0,0)==EFS_OK && captures==1);
+    for(unsigned i=0;i<CS;++i)assert(sent[i]=='N');
+    assert(sent_bg==0 && sent_obs.ndelta==1 && sent_obs.delta_seq==9);
+    free(slot.data);
     reset();remote.deltas[0].len=0;memset(slot.data,'N',CS);
     assert(dcache_replay_stale_ex_budgeted(1,0,0)==EFS_OK && sent[0]=='N');
     assert(sent_obs.ndelta==1);free(slot.data); /* tombstone carries no bytes */
