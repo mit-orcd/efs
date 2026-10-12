@@ -1,0 +1,11 @@
+{
+  "commit": "410afed433b6da093bdc2acf37bec253ddbd586c",
+  "bundle": "v2",
+  "files": 1563,
+  "directories": 52,
+  "all_included_exact_git": true,
+  "archive_matches_manifest": true,
+  "local_docs_gate_exit": 0,
+  "post_gate_inputs_unchanged": true,
+  "prior_scope": "Central v1 missing5linkedJSON failed; v1 never attempted onNUC"
+}

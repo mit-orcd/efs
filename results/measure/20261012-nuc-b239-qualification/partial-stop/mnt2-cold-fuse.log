@@ -1,0 +1,14 @@
+2026-10-12T01:50:12.824Z efs-fuse: legacy export label 'fs' is ignored; mounting the single export 'default' (id=1)
+2026-10-12T01:50:12.824Z efs-fuse b239dc7de104-release-fault (branch approved-merged, built 2026-10-12T01:24:22Z on nuc), build=b239dc7de104-release-fault: starting export=default mount=/data1/efs/mnt2
+2026-10-12T01:50:12.824Z Discovered 4 cluster nodes from 127.0.0.1:26591
+2026-10-12T01:50:12.824Z   node id=1 127.0.0.1:26590
+2026-10-12T01:50:12.824Z   node id=2 127.0.0.1:26591
+2026-10-12T01:50:12.824Z   node id=3 127.0.0.1:26592
+2026-10-12T01:50:12.824Z   node id=4 127.0.0.1:26593
+2026-10-12T01:50:12.824Z fetching metadata...
+2026-10-12T01:50:12.825Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-12T01:50:12.825Z export id=1 name=default
+2026-10-12T01:50:12.825Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=93472 root_get=0 mode=40755
+2026-10-12T01:50:12.825Z efs-fuse daemon pid=198399
+2026-10-12T01:50:12.826Z efs-fuse: workers max=10 idle=10
+2026-10-12T01:50:12.830Z fuse serving

@@ -1,0 +1,2 @@
+bounded sweep: exact-key retry after ungraceful KV recovery PASS
+append durable receipt: atomic reservation, bounded ACK retirement, payload binding and crash recovery PASS

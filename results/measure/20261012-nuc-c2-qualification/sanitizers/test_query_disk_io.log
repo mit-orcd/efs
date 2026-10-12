@@ -1,0 +1,15 @@
+query-disk: unlinked directory ino=859 parent=1098 nlink=2
+query-disk: build-failed rc=-1 initial=1 index_ms=77 stats_ms=0 persist_ms=0 rebuilt=4096 refolded=3 rows=3
+query-disk: unlinked directory preflight ino=859 parent=1098 nlink=2
+query-disk: unlinked directory preflight ino=859 parent=1098 nlink=2
+query-disk: nodes shard=1 previous=28673 rc=-1
+query-disk: raw shard=419 rc=-1 errno=5
+query-disk: raw shard=419 rc=-1 errno=5
+query-disk: raw shard=419 rc=-1 errno=5
+orphan preflight: actual failed graph, no repeated scratch writes/syncs, immutable repair, prepared refusal and fresh rebuild PASS
+alias batch: shards=64 ids=256 opens=16384->64 reads=32768->128
+merge names: rows=6098 reads=10 writes=9
+merge aliases: rows=6098 reads=10 writes=9
+raw batch: records=10000 writes=16
+raw sync batch: writing_handles_high=16 bound=16 retained=0
+query disk I/O: windows, lookup, packed records, partial ENOSPC, FD reuse and fsync refusal PASS
