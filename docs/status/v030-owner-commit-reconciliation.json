@@ -1,6 +1,6 @@
 {
-  "audited_release_head": "40fa182b558dcc304cbdda82f0e0b6ea4f6d17a6",
-  "frozen_amd_test_source": "d26e6874",
+  "audited_release_head": "15ff4de794d19833a0704b01420f66fa9f21cae1",
+  "frozen_amd_test_source": "410afed433b6da093bdc2acf37bec253ddbd586c",
   "scope": "every nonancestor commit of frozen owner tips; integrated ancestor history retained in Git",
   "owners": {
     "amd": {
@@ -197,7 +197,7 @@
       ]
     }
   },
-  "latest_ancestry_reconciliation_head": "9613249497e7d26282a5b2e3250ab3b2c798fee5",
+  "latest_ancestry_reconciliation_head": "15ff4de794d19833a0704b01420f66fa9f21cae1",
   "frozen_owner_handoffs": {
     "amd": "f1babb1ceac859c700507aa17b042eab3f6c4237",
     "mac": "51b67e96b6b235ad7c0bc2bfa603c62c2c1a598f",
@@ -209,8 +209,8 @@
   "all_frozen_handoffs_are_ancestors": true,
   "held_commits_within_frozen_handoffs": [],
   "held_scope": [
-    "Any new post-handoff branch commits excluded until submitted/reviewed; frozen tips fixed above.",
-    "Latest b239 quiet original-budget direct packing fails; buffered/cold packing/shared GC NOTRUN. No release promotion or inherited cross-host acceptance."
+    "All branch tips known at15ff4de7 were integrated. New post-audit devel-intel documentation/evidence checkpoint aaaeaa38 is not integrated; no uncommitted owner edits imported.",
+    "Qualification incomplete, execution stopped; no promotion/push/tag."
   ],
   "post_freeze_evidence_checkpoints": {
     "501205b6": "501205b6a7f8b7a48586bb768d172f27e4ec1503",
@@ -233,9 +233,79 @@
     "ce328004": "ce3280047ca53de6ad6988089df96cfd6f64f093"
   },
   "client_adoption_disposition": "Mac46609ad7 exact-source check confirms existing independent combined adoption b9b55cba/718e2dbc/05026d42; no missing feature, keep root bookkeeping, optional alternate pointer representation held.",
-  "diagnostic_source_disposition": "b239 full normal/fault +18focus +sanitizedLSM PASS1517unchanged; ordinarybothmodePASS; quietdirect7/jobs16 FAIL209/4/1/7 allseven, restore0/nojobs, buffered/coldpackingGCNOTRUN. Short retry does not close pressure gate.",
-  "next_diagnostic_proposal": "No unchanged pressure repeat; peer-reviewed safe catalog freshness remedy with baseline-failing controlled oracle, plus separate foreground phase discriminator; no fence removal or stale subtree fallback.",
-  "latest_frozen_amd_test_source": "b239dc7de104ff8437e49d9333a529790601464c",
-  "latest_frozen_amd_input_count": 1517,
-  "frozen_source_archive_sha256": "24f6ca3ec7d509a24c74de4b6a746d033bef872b7145eec9beb2e387a5caa548"
+  "diagnostic_source_disposition": "410/v2 AMD full normal/fault/20 focused sanitizers and real-LSM audit PASS, post1563 unchanged; fixed mounted CREATE/query diagnostic NOTRUN. Earlier c2 seven-client stats/find FAIL, deep60/cold bytes PASS independently; Mac c2 mounted199/216 PASS17timeouts. No release acceptance.",
+  "next_diagnostic_proposal": "Only after human resumption: smallest original-budget root/refusal/publication and Mac blocked-operation discriminator. No unchanged pressure repeat, scheduler tuning or weakened fences.",
+  "latest_frozen_amd_test_source": "410afed433b6da093bdc2acf37bec253ddbd586c",
+  "latest_frozen_amd_input_count": 1563,
+  "frozen_source_archive_sha256": "e5685d586e1de93335d1ff339f22cb24ba64600949980b3386e1b07f556d732e",
+  "historical_reconciliation_snapshot": {
+    "audited_release_head": "40fa182b558dcc304cbdda82f0e0b6ea4f6d17a6",
+    "frozen_amd_test_source": "d26e6874",
+    "latest_ancestry_reconciliation_head": "9613249497e7d26282a5b2e3250ab3b2c798fee5",
+    "latest_frozen_amd_test_source": "b239dc7de104ff8437e49d9333a529790601464c",
+    "latest_frozen_amd_input_count": 1517,
+    "frozen_source_archive_sha256": "24f6ca3ec7d509a24c74de4b6a746d033bef872b7145eec9beb2e387a5caa548",
+    "diagnostic_source_disposition": "b239 full normal/fault +18focus +sanitizedLSM PASS1517unchanged; ordinarybothmodePASS; quietdirect7/jobs16 FAIL209/4/1/7 allseven, restore0/nojobs, buffered/coldpackingGCNOTRUN. Short retry does not close pressure gate.",
+    "next_diagnostic_proposal": "No unchanged pressure repeat; peer-reviewed safe catalog freshness remedy with baseline-failing controlled oracle, plus separate foreground phase discriminator; no fence removal or stale subtree fallback.",
+    "held_scope": [
+      "Any new post-handoff branch commits excluded until submitted/reviewed; frozen tips fixed above.",
+      "Latest b239 quiet original-budget direct packing fails; buffered/cold packing/shared GC NOTRUN. No release promotion or inherited cross-host acceptance."
+    ]
+  },
+  "frozen_source_manifest_sha256": "8939a4e679f5a431e4fb72a76248abc1867b5ec45a19fdf3d1e7c921f0b7bee6",
+  "execution_state": "STOPPED at human request; merge/documentation review only subsequently authorized",
+  "latest_branch_tip_audit": {
+    "devel": {
+      "commit": "48a2719d19fb5a6b0464935c70a967a1f1a86236",
+      "is_ancestor": true
+    },
+    "devel-amd": {
+      "commit": "19f7efb374f7cc7323f25721c23908cdd138f855",
+      "is_ancestor": true
+    },
+    "devel-code-review": {
+      "commit": "b713a7c614c1621b52a295a780948661f47c9913",
+      "is_ancestor": true
+    },
+    "devel-intel": {
+      "commit": "aaaeaa38f77003865e17e5be34efc3e6a0ff9fe4",
+      "is_ancestor": false
+    },
+    "devel-mac": {
+      "commit": "f3359da53b0bead5e439c6dcd29df789ff0f0f80",
+      "is_ancestor": true
+    },
+    "devel-nuc": {
+      "commit": "8f9adb9a2755644774fbd2c56f730ad856005ea2",
+      "is_ancestor": true
+    },
+    "devel-orcd": {
+      "commit": "3cf6f69c59fa4a54b7890207b528a360e2519fa3",
+      "is_ancestor": true
+    },
+    "fix-orcd-capacity-15975da0": {
+      "commit": "60f3628238d3a2fd69be0ce7a329540256234b7e",
+      "is_ancestor": true
+    },
+    "main": {
+      "commit": "53be1da7f19045f406a05f4f78f6cf44f5c92212",
+      "is_ancestor": true
+    },
+    "release-v0.3.0-pre-alpha": {
+      "commit": "15ff4de794d19833a0704b01420f66fa9f21cae1",
+      "is_ancestor": true
+    }
+  },
+  "branch_only_stop_checkpoint": {
+    "commit": "aaaeaa38f77003865e17e5be34efc3e6a0ff9fe4",
+    "branch": "devel-intel",
+    "source": "410afed4/v2",
+    "normal_make": "PASS both hosts",
+    "standalone_passes": [
+      4,
+      6
+    ],
+    "fault_sanitizer_mounted": "NOTRUN",
+    "integrated": false
+  }
 }

@@ -1,5 +1,7 @@
 # Packing query stage diagnostic — d485afbf
 
+**Status precedence:** This page is a chronological diagnostic ledger. Earlier running/next/pending statements are source-specific history. Current shared qualification is410afed4/v2, stopped; AMD full normal/fault and sanitizer prerequisites PASS, mounted CREATE/cold and targeted query transcript NOTRUN centrally. c2 query deadlines and Mac mounted timeouts remain unresolved. See the [final checkpoint](v030-stop-checkpoint-20261011.md).
+
 Status: diagnosis, no additional correctness fix; packing closure remains open.
 AMD isolated four-daemon TCP/direct fixture, seven clients/jobs16, original30s
 case and180s GC budgets. Source `d485afbf`, instrumentation only; normal production

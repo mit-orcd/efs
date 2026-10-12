@@ -1,5 +1,7 @@
 # NUC common release candidate qualification (stopped; superseded)
 
+**Status precedence:** Current state is the final Human stop checkpoint below: c2 full native/fault/16 sanitizer PASS and partial mounted evidence; active full-direct STOPPED, remainder NOTRUN.410/v2 execution NOTRUN on NUC. Earlier all-pending/running statements describe the initial launch, not the final state.
+
 Sole manager-approved candidate `c2bfb9e9a281aae33dfaa01689e61866ccf60af8`, shared by all five owners. No performance/optimization work or production rollout. Old b239 full-direct/partial-stop results do not qualify this candidate.31ab and b3 launch plans were superseded before tests launched.
 
 ## Immutable input and safe handoff

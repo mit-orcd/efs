@@ -1,5 +1,7 @@
 # Mac common candidate c2bfb9e9 qualification
 
+**Status precedence:** Current state is the final Manager-requested stop checkpoint below: c2 full native/fault PASS but mounted199/216 with17timeouts FAIL;410 native STOPPED, fault/mounted NOTRUN. Initial bounded-checkpoint NOTRUN and running statements are superseded, not contradictions in source-specific raw evidence.
+
 Manager-authorized defect-only qualification on exact c2bfb9e9a281aae33dfaa01689e61866ccf60af8. No production deployment, installed-store mutation, optimization or moving-HEAD execution.
 
 ## Identity and preservation

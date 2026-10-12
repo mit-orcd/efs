@@ -1,9 +1,15 @@
-# In flight — current agent handoff
+# Agent handoff — execution stopped
 
 [Status index](README.md) · [Decisions](decisions.md) ·
 [Architecture](../how-it-works/architecture.md)
 
-**Current ORCD assignment — Oct 11:** user authorizes source transfer, builds,
+**Current state:** all release engineering execution is stopped at human request. Later authorization covers branch reconciliation and documentation review only. Frozen test source is 410afed4/v2; no further rollout, diagnostic, test controller or performance work is authorized. See [release stop checkpoint](v030-stop-checkpoint-20261011.md) and [current release index](README.md#v030-pre-alpha-release-integration). Owner-specific final states override all historical running/next statements below.
+
+## Superseded assignments and evidence (before human stop)
+
+The following dated rollout/next-task statements are historical. They are not current deployment proof or authorization to resume.
+
+**Historical ORCD assignment — Oct 11:** user authorizes source transfer, builds,
 tests and coordinated deployment on ORCD until resolved. Work on `devel-orcd`;
 W95/P4.1 production tiny-payload packing is first, followed by ORCD W109/W97,
 W108, W110 and remaining W99/W42/W106 gates. The fcstor007 `tiny-files` screen
@@ -39,7 +45,7 @@ Reviewed Oct 8, 2026. Historical rollout facts are in the
 previous handoff text is [archived](../archive/handoff-20261007.md).
 Do not use a historical cluster address, binary hash or mount as current state.
 
-## Authorized next packages
+## Historical next-package authorization
 
 The user authorized replay/writeback correctness followed by durability and
 production activation readiness while offline. Follow the
@@ -57,7 +63,7 @@ commands, W81 sustained-contention spreading. Preserve all linked gates;
 acceptance is not implementation or activation. These supersede older open-policy
 wording without cancelling replay/readiness priorities.
 
-## Active correctness work
+## Historical correctness-work checkpoint
 
 Follow-up round 1 implements W82 fresh read rounds and correlated acknowledgements.
 NUC real-daemon partition GETATTR acceptance passes; wider W82 RPC/configuration

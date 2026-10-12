@@ -1,5 +1,7 @@
 # EFS release coordination — 2026-10-11
 
+**Status precedence:** Release execution is stopped. The initial inventory/dispatch below is historical and superseded by the final human stop and [central stop checkpoint](v030-stop-checkpoint-20261011.md). Later user-authorized all-branch reconciliation is complete on the release branch; it does not authorize resumed tests or deployment.
+
 Manager: efs-coding 6 - mgr, explicitly assigned by Mike. Human instruction: document current owner state first, reconcile all five coding branches, then dispatch stability work. No main promotion or push is authorized at this stage.
 
 ## Coordination boundaries

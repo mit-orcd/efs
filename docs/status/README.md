@@ -2,88 +2,26 @@
 
 ## v0.3.0-pre-alpha release integration
 
-**Execution STOPPED at human request; subsequent user-authorized branch reconciliation is complete.** All committed local/remote-tracking branch tips are integrated, with no new code delta or cluster run. [Central checkpoint and resume requirements](v030-stop-checkpoint-20261011.md). No new work until the human resumes; execution target stays 410afed4/v2.
+**Execution is stopped.** The human subsequently authorized branch reconciliation and this documentation review only; neither restarts cluster work. All committed local/remote-tracking branch tips were integrated at `15ff4de7`. `devel` and `main` were not advanced. The release tag has not been created; nothing has been pushed.
 
-A reviewed next-candidate CREATE fault-injection fix removes a duplicated retained hook; actual combined-path baseline six-stage failure and fixed three-stage native/sanitizer passes are preserved in the [diagnostic ledger](v030-query-stage-diagnostic-20261012.md#create-retry-fault-injection-defect). Mounted requalification remains pending.
+Frozen qualification source: `410afed433b6da093bdc2acf37bec253ddbd586c`, corrected packaging-v2 (1,563 files, 52 directories). Later integration/documentation commits are not new execution identities. AMD full normal/fault native, 20 focused sanitizer and fully sanitized real-LSM catalog/audit gates PASS. Fixed mounted CREATE three-stage/cold ownership and targeted query diagnosis remain NOTRUN centrally.
 
-Mac normal mounted qualification is separately blocked: owner reports c2 199/216 PASS, 17 timeouts; later peer/policy/failover/cold gates are NOTRUN. See the [mounted blocker](v030-query-stage-diagnostic-20261012.md#mac-normal-mounted-qualification-blocker). Current shared execution is 410afed4 with corrected packaging-v2 (1,563 files); normal-path semantics remain unchanged by its fault-only fix.
+Release blockers:
 
-Previous execution target was shared `c2bfb9e9`: AMD full normal/fault suites,
-20 focused sanitizer gates and fully sanitized real-LSM catalog/audit pass;
-original direct/buffered overwrite and cold-byte/physical cleanup gates pass.
-The single original-budget diagnostic fails stats/find deadlines on all seven clients; deep60 and independent cold bytes pass. Normal mounts are restored. Read-only correlation finds publication gaps beyond the query deadlines, without per-root causal proof. See
-[common candidate evidence](v030-query-stage-diagnostic-20261012.md#common-c2bfb9e9-amd-prerequisites).
+- AMD c2 seven-client/jobs16 diagnostic: stats/find 30-second deadline FAIL on all seven clients; deep60 and independent cold bytes PASS. Publication gaps correlate with timeouts, but request/root causal proof is missing.
+- Mac c2 mounted POSIX: 199/216 PASS and 17 timeouts; peer/policy/failover/cold NOTRUN. The fault-only 410 CREATE change does not repair normal-path failures.
+- Final-source qualification is incomplete: Mac 410 native STOPPED; ORCD 410 fault PASS/normal STOPPED/sanitizers and mounted NOTRUN; NUC 410 execution NOTRUN. Older candidate passes do not transfer.
+- Retained Mac inode4091 creating writer/ownership and a safe repair remain unproven. The CREATE duplicate fault hook is fixed and locally regressed; strict live/cold acceptance remains pending.
 
-Shared defect-only candidate `31abdd5e` is frozen for all five owners. A
-Python 3.13 phase-fixture AST portability failure is preserved; its minimal
-next-candidate repair passes Python 3.9/3.13/3.14, including Mac peer review and a workload-change negative control.
-Central AMD full gates are running; packing jobs16 remains open. See the
-[diagnostic ledger](v030-query-stage-diagnostic-20261012.md#shared-31abdd5e-fixture-portability-failure).
+[Release ledger](v030-pre-alpha-release.md) · [central stop/merge checkpoint](v030-stop-checkpoint-20261011.md) · [query/fault diagnostic history](v030-query-stage-diagnostic-20261012.md) · [reconciliation JSON](v030-owner-commit-reconciliation.json) · [candidate operator notes](../using/v030-candidate.md) · [documentation consistency review](status-consistency-review-20261011.md).
 
-[Release checkpoint, priorities and acceptance ledger](v030-pre-alpha-release.md)
-and [candidate operator notes](../using/v030-candidate.md):
-all agent improvements are being integrated on `release-v0.3.0-pre-alpha`;
-Mac authority/APPEND reconciliation and review pipeline/bounds/recorder fixes
-are included, together with bounded packed receipt retirement. Completed AMD
-feedback comparisons remain opt-in and do not close global W97. Full merged
-AMD normal/fault native qualification passes at `d1197381`; mounted packing
-two-client packing passes in direct/buffered (cold bytes and physical GC).
-Final parser/sanitizer gates pass at `f1c322e1`. Seven-client AMD file-operation
-and cold-byte checks pass both modes, but physical packed GC exceeds 180s.
-Scheduler repair `6146f264` and typed FUSE read-error repair pass complete merged
-normal/fault native, sanitizers and both-mode seven-client/jobs4 acceptance at
-`bbb84e41`, including zero remaining packed-object rows and restored mounts.
-The newer batch-integrated `f0bb0208` passes full merged normal/fault native and
-seven sanitizer gates, but reproduces the jobs16 packing timeout in both modes.
-Individual failed cases, phase limits and the bounded profile are indexed in the
-release ledger; repaired jobs4 GC is separate from this open blocker.
-Bounded transport batching, whole-cohort authority143/144 and Mac tag53/CREATE
-adoption/routing are integrated; full merged AMD normal/fault native and eight sanitizer gates pass at
-`cfa103dc`; quiet seven-client/jobs16 mounted qualification fails both modes (directory
-and stats/find timeouts; cold/GC NOTRUN). Normal mount restoration passes.
-Bounded query-cut/barrier candidate `d9d39acc` passes full merged normal/fault
-native and ten sanitizer gates; buffered seven-client/jobs16 cold/GC acceptance
-passes. Direct packing remains blocked; ordinary pressure controls pass both
-modes. [W112](w112-full-overwrite-replay-20261012.md) records the repaired
-acknowledged ordinary overwrite loss: full normal/fault, eleven sanitizer and
-both-mode primary/peer/cold/cleanup gates pass at `02b9918b`.
-Independent authority review NET fallback is implemented with normal and
-ASan/UBSan actual-caller regressions; semantic refusals and fresh guards remain.
-All five frozen owner handoffs are release ancestors;
-[reconciliation ledger](v030-owner-commit-reconciliation.json) retains every submitted
-commit and explicit remaining behavior/qualification holds.
-[AMD frozen integration handoff](v030-amd-handoff-20261012.md) records `d26e6874`,
-full normal/fault plus sixteen sanitizers and both-mode ordinary cold-byte PASS at d26e6874, [per-owner commit reconciliation](v030-owner-commit-reconciliation.json), compatibility; [Mac reconciliation](mac-client-reconciliation-20261012.md) confirms
-existing combined adoption and withdraws the earlier missing-feature diagnosis.
-Latest Mac tag54 completion and ORCD follower-read deadline/proof checkpoints
-are integrated with the independent inherited-deadline retry repair; full merged
-AMD full normal/fault plus sixteen sanitizers PASS at `d26e6874`; both-mode
-ordinary immediate/cold/cleanup PASS; original seven-client/jobs16 pressure
-fails both modes, cold/GC NOTRUN, normal mounts restored0. ORCD packing timeouts remain
-a release blocker. Small-file packing and code-review correctness have priority. Branch checkpoints
-are not final release acceptance. Shared devel/main and pushes remain unchanged
-until a frozen merged candidate passes its recorded gates.
+[Superseded release-index narrative](../archive/v030-index-checkpoints-20261011.md) preserves the older source-specific checkpoints removed from this running summary.
 
+Owner stop records: [Mac](mac-common-candidate-c2bfb9e9.md#manager-requested-stop-checkpoint), [NUC](nuc-common-c2-qualification-20261012.md#human-stop-checkpoint), [ORCD](orcd-stop-checkpoint-20261011.md). Intel's committed c2 evidence and failures remain in its [acceptance ledger](intel-deployment-acceptance-20261011.md); a new final410 checkpoint at devel-intel commit aaaeaa38 appeared after the merge audit and is not integrated here: both normal Make suites PASS, fault/sanitizer/mounted NOTRUN. See the consistency review's branch-only evidence note; do not infer current runtime from old prose.
 
-Production tiny-file packing is the first ORCD priority on `devel-orcd`: see
-[W95/P4.1 plan and allocation baseline](orcd-tiny-packing-20261011.md). The
-408× calculation is for 512-byte payloads in separate full-sized fragments.
-[Mounted coalescing and shared lifetime rollout](orcd-mounted-coalescing-20261011.md)
-records native RDMA packing, exact cold reads, and automatic shared-fragment GC
-with an offline captured member. Concurrent packed/query acceptance and matched
-physical savings remain open.
-[ORCD integration and retained writer checkpoint](orcd-branch-integration-20261011.md)
-records the latest captured branch batch, bounded packed-read scratch and exact
-packed publication retries. Loaded query capacity/refold failures remain open;
-fresh-namespace regression results are reported separately.
-[W108 owner-name rendering](w108-owner-name-display-20261011.md) is retained
-in the ORCD queue after the packing priority.
+[Architecture](../how-it-works/architecture.md) · [agent handoff](in-flight.md) · [decisions](decisions.md) · [work-item details](../backlog/work-items.md) · [operations](../operations/operations.md) · [archive](../archive/README.md).
 
-[Architecture](../how-it-works/architecture.md) · [Current handoff](in-flight.md) ·
-[Decisions](decisions.md) · [Work-item details](../backlog/work-items.md) ·
-[Operations](../operations/operations.md) · [Archive](../archive/README.md)
-
-## NUC integration session — October 11
+## Historical NUC integration session — October 11
 
 [Current two-hour integration and repair ledger](devel-nuc-integration-20261011.md)
 records the captured all-branch merge, W72 fresh-mount admission fixes, a bounded
@@ -95,7 +33,7 @@ hardware ceiling is claimed. Long 20k append gates remain incomplete. Enabled
 command/options gates pass in both modes, final native passes, and the original
 installed runtime and retained sample bytes are verified after restoration.
 
-## NUC closure session — October 10–11
+## Historical NUC closure session — October 10–11
 
 [Current NUC acceptance](devel-nuc-closure-20261010.md) closes W70, W78, W79
 and W80 for their named operator-correctness scopes, plus W96's isolated
@@ -378,7 +316,7 @@ reflect placement/quorum availability and preserve authoritative metadata. The
 note explicitly corrects the assumed any-two-of-four guarantee. Thresholds and escalation details remain
 open; this new item is outside the dated grouped count below.
 
-## 1. The task right now
+## Historical package reconciliation and work queue
 
 [AMD W73/W64 RXE completion](amd-rxe-gate-closure-20261009.md): integrated
 source passes direct/buffered RXE core POSIX, peer, mount-sync, replay/recovery
@@ -571,7 +509,7 @@ old "next" instructions or cluster claims govern current work.
 W57's NUC implementation/gates are complete; its detail remains in the work-item
 ledger, and the previous status row is retained in the archive. W56 is closed; W60 retains its original large-tree verification obligation.
 
-## Latest queue reconciliation
+## October 7 documentation-review checkpoint
 
 The [final review ledger](../archive/final-documentation-review-20261007.md)
 records the completed active-documentation review, final corrections and
@@ -623,7 +561,7 @@ Spark performance measurement still owed. Grouped open counts are now
 
 ## Intel follow-ups — W100–W106 (indexed Oct 11, 2026)
 
-Current [devel-intel acceptance ledger](intel-deployment-acceptance-20261011.md) retains failures alongside reruns. Frozen `0ae7e480` retains the certified APPEND cleanup repair and corrects exact salted namespace and physical compactor-drain fixtures. All corrected namespace/compactor live reviews pass on both hosts; the confirmed worker allocation errno repair passes all six focused direct/buffered fault fixtures on each host before fresh complete qualification with six standalone cold-safety gates and TCP/direct and TCP/buffered acceptance on both Intel hosts; preceding real namespace/compactor failures remain retained. Its four targeted live APPEND reviews pass. The preceding retained-CREATE candidate passed all four 214/214 POSIX cores but failed Intel2 APPEND cleanup; its unfinished remainder remains required. The superseded 1,000 ms trial passed 110 main checks and 30 canonical rounds on each host but failed the supplemental CREATE injection. Earlier candidates and partial checkpoints are archived; no partial or failed trial establishes deployment acceptance.
+Historical Intel results below are source-specific, not current execution or acceptance. The [acceptance ledger](intel-deployment-acceptance-20261011.md) retains later c2 failures. Superseded `0ae7e480` retains the certified APPEND cleanup repair and corrects exact salted namespace and physical compactor-drain fixtures. All corrected namespace/compactor live reviews pass on both hosts; the confirmed worker allocation errno repair passes all six focused direct/buffered fault fixtures on each host before fresh complete qualification with six standalone cold-safety gates and TCP/direct and TCP/buffered acceptance on both Intel hosts; preceding real namespace/compactor failures remain retained. Its four targeted live APPEND reviews pass. The preceding retained-CREATE candidate passed all four 214/214 POSIX cores but failed Intel2 APPEND cleanup; its unfinished remainder remains required. The superseded 1,000 ms trial passed 110 main checks and 30 canonical rounds on each host but failed the supplemental CREATE injection. Earlier candidates and partial checkpoints are archived; no partial or failed trial establishes deployment acceptance.
 
 This index adds traceable IDs to the Intel acceptance follow-ups; it does not change the existing queue order or accepted design decisions. Existing sustained tiny-file performance remains W97, protection/repair W74/W66, durability W71/W73 and capacity W99.
 
@@ -675,7 +613,9 @@ failed, and the fresh tiny-file benchmark is running.
 
 - [NUC W52/W97 deployed continuation](nuc-w52-w97-resume-20261011.md): preserved-store rollout, repeated phase/storage latency measurements, staged bounded completion transactions and pending placement controls.
 
-## ORCD mounted packing continuation
+## Historical ORCD mounted packing continuation
+
+This chronology precedes the human stop and current 410/v2 checkpoint; running/next/deployment statements below are historical, not authority to resume.
 
 [Mounted coalescer and shared-fragment lifetime coordinator](orcd-mounted-coalescing-20261011.md)
 records mounted native RDMA/direct-I/O coalescing, bounded lost-ACK ownership,

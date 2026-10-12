@@ -165,3 +165,5 @@ Superseded deployment and integration checkpoints retain their raw evidence and 
 - [Historical Intel candidate observations](status-20261011/intel-candidate-history-20261011.md) — preceding candidate counterexamples and partial results moved from the active Intel ledger; all unresolved current acceptance obligations remain active.
 
 Intel historical CREATE refusal and READDIR cursor repairs: [authoritative EXIST](status-20261011/intel-create-exist-verdict-20261011.md), [source-only cursor](status-20261011/intel-readdir-source-cursor-20261011.md). Final-candidate and broader work-item obligations remain in the current queue.
+
+- [Superseded v0.3.0 release-index checkpoints](v030-index-checkpoints-20261011.md): preserved before the active-index consistency repair; source-specific PASS/FAIL retained, historical running/next text is not current authority.

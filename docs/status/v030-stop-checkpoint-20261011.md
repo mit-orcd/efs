@@ -1,6 +1,6 @@
 # v0.3.0-pre-alpha central stop checkpoint
 
-Human STOP received through the coordinator. No new test, build, deployment, diagnostic, merge or feature is authorized until the human resumes work. Nothing pushed, tagged, promoted or merged to main.
+Human STOP received through the coordinator. Cluster execution remains stopped. Subsequent human instructions authorized repository branch reconciliation and documentation review only; no new test, build, deployment, diagnostic or feature work is authorized by those instructions. Nothing pushed, tagged, promoted or merged to main.
 
 ## Branch and source
 

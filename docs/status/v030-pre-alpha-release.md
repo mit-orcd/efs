@@ -1,6 +1,6 @@
 # v0.3.0-pre-alpha integration and acceptance
 
-Status: integration in progress; not release accepted, tagged, deployed as a
+Status: execution STOPPED; committed branch reconciliation complete, qualification incomplete. Not release accepted, tagged, deployed as a
 release or pushed. User authorization, Oct 11: create an isolated integration
 branch, coordinate all agents, add and test all improvements, prioritize
 small-file packing and code-review findings. Release owner: agent 2 / AMD.
@@ -14,17 +14,23 @@ latest existing tag is `v0.2.2-pre-alpha`. Only a frozen, accepted release
 revision may be promoted and tagged. Push remains outside business hours in
 America/New_York; no schedule or push is created by this checkpoint.
 
-## Agent checkpoint contract
+## Current authoritative checkpoint
+
+Qualification source remains `410afed4` with corrected v2 packaging (1,563 files/52 directories), not the moving integration HEAD. AMD full normal/fault native, 20 focused sanitizers and fully sanitized real-LSM catalog/audit PASS; fixed mounted CREATE/cold ownership and targeted query transcript NOTRUN centrally. AMD c2 stats/find deadlines and Mac c2 17 mounted timeouts remain blockers; retained Mac orphan ownership/cause is unresolved. Mac 410 native STOPPED, ORCD 410 fault PASS/normal STOPPED and later gates NOTRUN, NUC 410 execution NOTRUN. Intel's new branch-only stop checkpoint aaaeaa38 reports410 normal full Make PASS on both hosts, partial standalone4/88 and6/88, fault/sanitizer/mounted NOTRUN; that post-audit commit is not yet integrated.
+
+All local/remote-tracking branch tips were reconciled at `15ff4de7`, with source unchanged by that last documentation/evidence-only batch. Cluster execution remains stopped. Latest source-specific evidence and resume prerequisites are in the [stop checkpoint](v030-stop-checkpoint-20261011.md); [consistency review](status-consistency-review-20261011.md) distinguishes superseded narratives below. No push/tag/main or devel promotion occurred.
+
+## Agent checkpoint contract (on human-authorized resumption)
 
 Commit logical work before submission. Supply exact checkpoint and tested
 source/binary SHA, changes since devel, passed/failed/not-run gates and evidence,
 deployed revision/configuration, wire/on-disk/upgrade implications, remaining
 blockers and uncommitted work. Continue assigned work on the owner branch and
-cluster. Do not merge/push shared devel/main, replace another owner's binaries,
+cluster only after explicit resumption. Do not merge/push shared devel/main, replace another owner's binaries,
 wipe retained data or interrupt another owner's workload. Later checkpoints are
 integrated explicitly; moving branch tips are not test identities.
 
-## Checkpoint ledger
+## Historical implementation handoff ledger
 
 | Owner / branch | Submitted checkpoint | Integration state | Acceptance limits |
 | --- | --- | --- | --- |
@@ -124,7 +130,7 @@ log whitespace; source/current-doc whitespace gates are checked separately.
    window. No failed packing gate, branch-native pass or earlier deployment
    proves that the final merged release passes.
 
-## Current release-branch gates
+## Initial release-branch gates (historical)
 
 Focused merged command namespace, ordered APPEND PREPARE/cohort semantics,
 APPEND_CATCHUP20k shape/refusal and rollup allocation-failure regressions pass.
@@ -543,6 +549,10 @@ fix or quiet ON/OFF acceptance. Mac/ORCD now own bounded design/admission analys
 
 [Exact evidence](v030-query-stage-diagnostic-20261012.md#second-frozen-amd-diagnostic-95d3f1b1) records full normal/fault/17 focused sanitizer/real-LSM sanitizer PASS and both-mode ordinary overwrite PASS on unchanged inputs. One instrumented direct seven-client run remains failing. Fourteen roots absent from retained generation 2 explain the logged query refusals; 145 cut mismatches and 47–48 second publication gaps are measured. Foreground deep-nesting causation remains unresolved. Cold packing/GC NOTRUN, mounts restored, no jobs, no release acceptance. Intel's newly diagnosed older-source namespace fixture incorrectly crossed the participant bound before its ancestry oracle; its test-only repair requires separate integration/qualification, never retroactive acceptance.
 
-### Latest quiet candidate, b239dc7d
+### Superseded quiet candidate, b239dc7d
 
 Full normal/fault/18 focused sanitizer/real-LSM sanitizer gates and direct/buffered ordinary warm/peer/cold/physical gates PASS on unchanged frozen inputs. One quiet original-budget direct seven-client packing attempt remains FAIL (all seven 209/4/1/7). The reviewed shorter cut-only capture retry does not close acceptance; publication gaps remain approximately 46.5 s. Buffered packing and cold/shared-GC gates NOTRUN, mounts restored/no jobs. [Exact evidence](v030-query-stage-diagnostic-20261012.md#reviewed-candidate-quiet-result-b239dc7d-still-blocked). Next is phase/in-flight evidence, with no unchanged repeat, deadline increase or stale-snapshot fallback.
+
+## Supersession of earlier running/next checkpoints
+
+Sections above retain chronological evidence. Present-tense running, planned retry tuning and next-test statements in those dated checkpoints ended at the human stop. The b239 cut-retry optimization was removed before shared31/c2/410; it is not current release policy. The current checkpoint at the top and owner stop records govern status. No historical PASS transfers to another source or host.
