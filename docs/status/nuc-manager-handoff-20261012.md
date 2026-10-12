@@ -144,3 +144,23 @@ why promotion was held.
 After this committed handoff, freeze code, preserve/finish existing jobs, report
 final evidence separately and wait for a specific stability assignment. Do not
 promote main, push, merge shared branches or deploy an unreconciled candidate.
+
+## Completed-job follow-up — 00:37 UTC
+
+Oldba73 direct20k completes with exit0:20000 unique4096-byte records,
+81920000 exact bytes, writes5534.208s and finalfsync0 in0.283547s. Primary,
+peer and cold SHA all1075295d16ff4f24d1548ba048cd3fc46e986163a833f7ef9f622b5b10a647d4;
+physical fragment inventory, queues and quota zero PASS. The following empty
+buffered fixture was stopped before children/mounts/writes; exact receipt is
+retained. Controller is normally restoring installedf52 service; restoration
+is still pending. This accepts that old direct gate only, not repaired101598d2.
+
+Both new isolated native controllers finish with clean/all0, but native2/run1:
+full native stops at the architecture documentation link check because the
+new archive deliberately omitted tracked results referenced by those docs.
+This input-packaging mistake is not a production-code failure or a native pass.
+Both raw native/failure/provenance attempts are retained in the handoff evidence
+native-base/native-root folders. No restart, skip or new live gate is launched.
+The [merged qualification plan](nuc-merged-qualification-plan-20261012.md)
+requires a complete source/evidence archive and full rerun on the manager's
+approved input. Source remains frozen101598d2. No repaired image is deployed.

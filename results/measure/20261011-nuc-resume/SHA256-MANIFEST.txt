@@ -94,6 +94,15 @@ ae3b020cd6267054e79a1adfd8de72bbb4bcc4132d4ceffea54a0d5a7d6004ef  catchup-base-l
 de0d7572f47addef2bb0fbad2d6ec63eda5b0702e09c99f79a2d59881ba9cdc0  catchup-base-live/full-direct-evidence/wal-tail-recovery.json
 9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa  catchup-base-live/full-direct-exit.txt
 1729528a2b9fb9e74e7e06d0792a22cb20fd479cb51c74dc251b32c82b4b6c15  catchup-base-live/full-direct.log
+ae83ba1b6522f55222fb5811ec1db5976406ea600eb894d27d9785f0095d7d1f  catchup-base-live/long-direct-evidence/append-burst-progress.json
+f8fd4207445a2c93324a51b3c0e355b591193b45079e4a794922ca33a52c897a  catchup-base-live/long-direct-evidence/append-burst.json
+a14652202898c105c28a104d36efde97b2688c86f8c998082c99609b5bda270d  catchup-base-live/long-direct-evidence/fuse.log
+c13e54154eec9573b47b941350c8cc9aa617dc1345bb071555436a272e34b42f  catchup-base-live/long-direct-evidence/manifest.json
+923ae450f609a606dd12e5e0cb0db9c92a8696f207907e78d60790cb7df0a83b  catchup-base-live/long-direct-evidence/n1.log
+cf673364a92b53e3341e006e0e55b9c6a242dc6320d37b04d7c4d3cdffa0f556  catchup-base-live/long-direct-evidence/n2.log
+e7541fe7b063659fae45f9b521d9d3ac0b4f238cadbb22cc5fccfe4b7ba2609d  catchup-base-live/long-direct-evidence/n3.log
+9d0d90fd5c8c7d4226611ddbe32641b38a1b663c2ae4fd1ffa2241d20390a298  catchup-base-live/long-direct-evidence/n4.log
+30cfc10a185537363a5cb509912ce26300bd9a2af458479c011b2d7b3a96e6ef  catchup-base-live/long-direct-evidence/peer-fuse.log
 f8f9388064b82c448764e3c2c6d802e24dc6b320a3680a2571b3c5ebee346edd  catchup-base-live/mnt-stop-command.json
 9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa  catchup-base-live/mnt-stop-exit.txt
 dcb44ff796b07a010d65474f27a2b1ff6ee70a912f1bd9a5c82570996fa38969  catchup-base-live/mnt-stop.log
