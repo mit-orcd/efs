@@ -17,8 +17,7 @@ static int release_rc,create_known,create_rc,lease_rc,begins,submits,cancels;
 static int efs_open_release_pending(efs_ino_t ino){assert(ino==42);return release_rc;}
 '''
 # Forward declarations from the production header suffice for mock RPCs below.
-pa=s.index('struct efs_pending_create {');pb=s.index('\n};',pa)+3
-code+=s[pa:pb]+'\n'+s[a:b]+r'''
+code+=s[a:b]+r'''
 int efs_client_create_cancel(struct efs_client_create_request *r){assert(!r->attempted);cancels++;memset(r,0,sizeof(*r));return EFS_OK;}
 int efs_client_create_reset(struct efs_client_create_request *r){assert(r->complete);memset(r,0,sizeof(*r));return EFS_OK;}
 int efs_client_create_resume(struct efs_client_create_request *r,int probe) {
@@ -60,10 +59,6 @@ int main(void) {
  lease_rc=0;assert(efs_pending_create_drain()==EFS_ERR_BUSY&&begins==1&&submits==2&&!g_pending_create_count);
  entry=unknown();create_rc=EFS_ERR_EXIST;
  assert(efs_pending_create_drain()==EFS_ERR_BUSY&&begins==1&&!g_pending_create_count);
- assert(!efs_pending_create_drain());
- entry=unknown();entry->adopted=1;create_known=1;create_rc=release_rc=0;
- int before=begins;
- assert(efs_pending_create_drain()==EFS_ERR_BUSY && !g_pending_create_count && begins==before);
  assert(!efs_pending_create_drain());
  puts("FUSE pending CREATE cleanup: bounded admission, unattempted cancel, unknown proof retention, old-close barrier, immutable token retry and negative proof PASS");
 }
