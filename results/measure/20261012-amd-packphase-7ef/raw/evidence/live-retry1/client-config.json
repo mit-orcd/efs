@@ -1,0 +1,79 @@
+[
+  {
+    "pid": 2015863,
+    "environment": [
+      "EFS_PACK_PROF=1",
+      "EFS_TRANSPORT=tcp",
+      "EFS_MD_RAFT_N=4",
+      "EFS_PACKED_WRITES=1",
+      "EFS_COMMANDS=0",
+      "EFS_COMMANDS_SERVER=0"
+    ]
+  },
+  {
+    "pid": 2015882,
+    "environment": [
+      "EFS_PACK_PROF=1",
+      "EFS_TRANSPORT=tcp",
+      "EFS_MD_RAFT_N=4",
+      "EFS_PACKED_WRITES=1",
+      "EFS_COMMANDS=0",
+      "EFS_COMMANDS_SERVER=0"
+    ]
+  },
+  {
+    "pid": 2015900,
+    "environment": [
+      "EFS_PACK_PROF=1",
+      "EFS_TRANSPORT=tcp",
+      "EFS_MD_RAFT_N=4",
+      "EFS_PACKED_WRITES=1",
+      "EFS_COMMANDS=0",
+      "EFS_COMMANDS_SERVER=0"
+    ]
+  },
+  {
+    "pid": 2015918,
+    "environment": [
+      "EFS_PACK_PROF=1",
+      "EFS_TRANSPORT=tcp",
+      "EFS_MD_RAFT_N=4",
+      "EFS_PACKED_WRITES=1",
+      "EFS_COMMANDS=0",
+      "EFS_COMMANDS_SERVER=0"
+    ]
+  },
+  {
+    "pid": 2015936,
+    "environment": [
+      "EFS_PACK_PROF=1",
+      "EFS_TRANSPORT=tcp",
+      "EFS_MD_RAFT_N=4",
+      "EFS_PACKED_WRITES=1",
+      "EFS_COMMANDS=0",
+      "EFS_COMMANDS_SERVER=0"
+    ]
+  },
+  {
+    "pid": 2015954,
+    "environment": [
+      "EFS_PACK_PROF=1",
+      "EFS_TRANSPORT=tcp",
+      "EFS_MD_RAFT_N=4",
+      "EFS_PACKED_WRITES=1",
+      "EFS_COMMANDS=0",
+      "EFS_COMMANDS_SERVER=0"
+    ]
+  },
+  {
+    "pid": 2015972,
+    "environment": [
+      "EFS_PACK_PROF=1",
+      "EFS_TRANSPORT=tcp",
+      "EFS_MD_RAFT_N=4",
+      "EFS_PACKED_WRITES=1",
+      "EFS_COMMANDS=0",
+      "EFS_COMMANDS_SERVER=0"
+    ]
+  }
+]

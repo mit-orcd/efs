@@ -1,0 +1,3 @@
+Unmounting /tmp/efs-amd-packphase-7ef/deep-mnt3
+Retiring drained efs-fuse PID 2015918 for /tmp/efs-amd-packphase-7ef/deep-mnt3
+Unmounted /tmp/efs-amd-packphase-7ef/deep-mnt3

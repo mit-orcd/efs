@@ -1,0 +1,25 @@
+{
+  "admit": {
+    "calls": 528,
+    "sum_ms": 1818.272,
+    "median_ms": 3.351,
+    "p95_ms": 6.018,
+    "max_ms": 15.204
+  },
+  "put": {
+    "calls": 1584,
+    "sum_ms": 20548.169,
+    "median_ms": 6.6655,
+    "p95_ms": 43.796,
+    "max_ms": 81.662
+  },
+  "publish-load": {
+    "calls": 540,
+    "sum_ms": 1612.151,
+    "median_ms": 2.8120000000000003,
+    "p95_ms": 5.657,
+    "max_ms": 7.29
+  },
+  "nonzero_rc": [],
+  "evidence_files_verified": 74
+}

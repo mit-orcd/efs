@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/tmp/amd-packphase-7ef-fixture.py", line 3, in <module>
+    base=Path('/data1/efs/amd-packphase-7ef-20261012');source=base/'source';out=base/'evidence/live';out.mkdir();tmp=Path(os.environ['TMPDIR']).parent
+                                                                                                     ~~~~~~~~~^^
+  File "/usr/lib/python3.14/pathlib/__init__.py", line 1012, in mkdir
+    os.mkdir(self, mode)
+    ~~~~~~~~^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/data1/efs/amd-packphase-7ef-20261012/evidence/live'

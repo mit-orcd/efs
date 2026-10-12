@@ -1,0 +1,61 @@
+[
+  {
+    "name": "normal-build",
+    "command": [
+      "make",
+      "-j8",
+      "EFS_GIT_ID=7ef2cd9bc41a3571801f9f1528cb57eafc71cbde",
+      "EFS_GIT_BRANCH=diag-release-pack-phases",
+      "EFS_GIT_DESCRIBE=diagnostic-not-acceptance",
+      "all"
+    ],
+    "cwd": "/data1/efs/amd-packphase-7ef-20261012/source",
+    "commit": "7ef2cd9bc41a3571801f9f1528cb57eafc71cbde",
+    "exit": 0,
+    "duration_seconds": 9.524327278137207
+  },
+  {
+    "name": "test_mounted_pack_retry",
+    "command": [
+      "python3",
+      "tests/test_mounted_pack_retry.py"
+    ],
+    "cwd": "/data1/efs/amd-packphase-7ef-20261012/source",
+    "commit": "7ef2cd9bc41a3571801f9f1528cb57eafc71cbde",
+    "exit": 0,
+    "duration_seconds": 0.5675544738769531
+  },
+  {
+    "name": "test_mounted_pack_parallel",
+    "command": [
+      "python3",
+      "tests/test_mounted_pack_parallel.py"
+    ],
+    "cwd": "/data1/efs/amd-packphase-7ef-20261012/source",
+    "commit": "7ef2cd9bc41a3571801f9f1528cb57eafc71cbde",
+    "exit": 0,
+    "duration_seconds": 0.07674670219421387
+  },
+  {
+    "name": "test_mounted_pack_batch",
+    "command": [
+      "python3",
+      "tests/test_mounted_pack_batch.py"
+    ],
+    "cwd": "/data1/efs/amd-packphase-7ef-20261012/source",
+    "commit": "7ef2cd9bc41a3571801f9f1528cb57eafc71cbde",
+    "exit": 0,
+    "duration_seconds": 0.5915307998657227
+  },
+  {
+    "name": "packphase-live",
+    "command": [
+      "python3",
+      "/tmp/amd-packphase-7ef-fixture.py"
+    ],
+    "cwd": "/data1/efs/amd-packphase-7ef-20261012/source",
+    "commit": "7ef2cd9bc41a3571801f9f1528cb57eafc71cbde",
+    "exit": 1,
+    "duration_seconds": 0.07827138900756836
+  }
+]

@@ -1,0 +1,6 @@
+parallel 2 tests jobs=16 (serial 0 after)
+pass names_crazy_dirs                
+pass dir_readdir_listing             
+============================================================
+POSIX suite: 2/2 pass, 0 fail, 0 skip, 0 notrun  (4.5s)
+wrote /data1/efs/amd-packphase-7ef-20261012/evidence/live-retry1/deep-4.tsv
