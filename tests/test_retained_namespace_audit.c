@@ -12,6 +12,44 @@ static struct retained_audit audit(struct efs_kv *kv,efs_ino_t ino) {
     assert(r.local_scan_complete && r.ownership_inconclusive && !r.repair_eligible && !r.distributed_coherence_proven);
     efs_kv_lsm_snapshot_release(s);return r;
 }
+/* Lower-level transaction retirement model, not the full POSIX host path.
+ * A half-resolved committed transaction can look like the retained graph.
+ * Pending ownership must therefore remain inconclusive across cold reopen. */
+static struct efs_kv *partial_replacement(struct efs_kv *kv,const char *path,
+    const struct efs_kv_lsm_cfg *cfg,const struct efs_meta_attrs *at) {
+    efs_ino_t parent,source,victim;
+    assert(!efs_meta_apply_mkdir(kv,at,1,S_IFDIR|0755,"txn-parent",&parent));
+    assert(!efs_meta_apply_mkdir(kv,at,parent,S_IFDIR|0755,"source",&source));
+    assert(!efs_meta_apply_mkdir(kv,at,parent,S_IFDIR|0755,"target",&victim));
+    uint8_t src[EFS_KV_KEY_MAX],dst[EFS_KV_KEY_MAX],dead[EFS_KV_KEY_MAX],pk[EFS_KV_KEY_MAX];
+    uint32_t sn,dn,kn,pn;uint32_t ps=efs_kv_inode_shard(parent),vs=efs_kv_inode_shard(victim);
+    assert(ps!=vs);assert(!efs_kv_key_dentry(ps,parent,"source",src,&sn));
+    assert(!efs_kv_key_dentry(ps,parent,"target",dst,&dn));
+    assert(!efs_kv_key_inode(vs,victim,dead,&kn));assert(!efs_kv_key_inode(ps,parent,pk,&pn));
+    struct efs_meta_dentry dent;assert(!efs_meta_apply_lookup(kv,parent,"source",&dent));
+    uint8_t value[EFS_META_DENT_BYTES];assert(!efs_meta_pack_dentry(&dent,value,sizeof(value)));
+    struct efs_txid tx={{2}};struct efs_txn_parts parts={.n=2,.shard={ps,vs}};
+    uint64_t ver;assert(!efs_txn_ver_get(kv,src,sn,&ver));
+    assert(!efs_txn_prepare_excl(kv,&tx,&parts,src,sn,ver,EFS_TXN_DEL,NULL,0));
+    assert(!efs_txn_ver_get(kv,dst,dn,&ver));
+    assert(!efs_txn_prepare_excl(kv,&tx,&parts,dst,dn,ver,EFS_TXN_PUT,value,sizeof(value)));
+    assert(!efs_txn_ver_get(kv,dead,kn,&ver));
+    assert(!efs_txn_prepare_excl(kv,&tx,&parts,dead,kn,ver,EFS_TXN_DEL,NULL,0));
+    struct efs_txn_ino_delta delta={.d_nlink=-1,.d_nents=-1};
+    assert(!efs_txn_prepare_ino_delta(kv,&tx,&parts,pk,pn,&delta));
+    assert(audit(kv,victim).binding_inconclusive);
+    assert(!efs_txn_decide(kv,efs_txn_coordinator(&tx,&parts),&tx,EFS_TXN_COMMIT));
+    assert(!efs_txn_resolve(kv,&tx,ps,EFS_TXN_COMMIT));
+    struct retained_audit r=audit(kv,victim);
+    assert(r.inode.nlink==2 && r.binding_inconsistent && r.binding_inconclusive && !r.authoritative_backlinks);
+    efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(path,cfg);assert(kv);
+    r=audit(kv,victim);assert(r.binding_inconsistent && r.binding_inconclusive && r.kinds[EFS_KV_KIND_INTENT]);
+    assert(!efs_txn_resolve(kv,&tx,vs,EFS_TXN_COMMIT));
+    struct efs_meta_row row;assert(efs_meta_apply_get_inode(kv,victim,&row)==EFS_ERR_NOT_FOUND);
+    r=audit(kv,source);assert(!r.binding_inconsistent && !r.binding_inconclusive && r.authoritative_backlinks==1);
+    puts("partial committed replacement: live orphan shape stays inconclusive across cold reopen, final victim retirement restores graph PASS");
+    return kv;
+}
 int main(void) {
     char path[]="/tmp/efs-retained-audit-XXXXXX";assert(mkdtemp(path));
     struct efs_kv_lsm_cfg cfg={0,0,4};struct efs_kv *kv=efs_kv_lsm_open(path,&cfg);assert(kv);
@@ -58,5 +96,6 @@ int main(void) {
     printf("readonly real-LSM audit: parent=%llu child=%llu replacement=%llu records=%llu lineage=%llu/%llu; cold graph/ownership inconclusive and no repair PASS\n",
       (unsigned long long)parent,(unsigned long long)child,(unsigned long long)replacement,(unsigned long long)r.records,
       (unsigned long long)r.lineage[0],(unsigned long long)r.lineage[1]);
+    kv=partial_replacement(kv,path,&cfg,&at);
     efs_kv_lsm_close(kv);return 0;
 }
