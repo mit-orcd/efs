@@ -7,3 +7,7 @@ Use the `files` backend for required qualification. Do not schedule container-sp
 This is a scope decision, not a claim that containers are correct, faster or production-ready. Existing implementation, evidence and unresolved gaps remain preserved. Do not mark skipped container coverage PASS or remove its gaps from historical records. No production deployment or engine migration is authorized by this policy.
 
 Tiny-file/segment packing is distinct from the container backend. The later [alpha packing exclusion](v030-packing-exclusion-20261012.md) also excludes packing from this release; ordinary durable writes, metadata, POSIX, concurrency and GC remain required for files. Shared code affecting files still needs the relevant files correctness checks. A generic native command may incidentally execute a bundled container check; that does not make container qualification required or justify a separate run. No test-runner changes are made by this documentation decision.
+
+## Dedicated Intel exception
+
+The user subsequently explicitly authorized [container investigation on devel-container](container-intel-sprint.md), based on release-v0.3.2-pre-alpha, using Intel/TCP/direct with .efs and small-file packing disabled. Container tests are authorized within that dedicated sprint. This does not make containers required for other release gates or production-approved.
