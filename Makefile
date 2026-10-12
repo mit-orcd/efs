@@ -118,7 +118,7 @@ TEST_BINS += tests/test_retained_namespace_audit
 
 TEST_BINS += tests/test_pack_cohort tests/test_packed_reader tests/test_packed_publication tests/test_packed_upload tests/test_pack_admission tests/test_pack_snapshot tests/test_pack_mapping tests/test_packed_metadata tests/test_small_segment tests/test_packed_segment tests/test_packed_store tests/test_pack_ledger tests/test_pack_ledger_recovery tests/test_kv_reader_gate
 
-SERVER_SRCS = src/server/packed_upload.c src/server/put_fence.c src/server/put_upload.c src/server/efsd.c src/server/store.c src/server/store_nvme.c src/server/store_containers.c \
+SERVER_SRCS = src/server/repair_upload.c src/server/packed_upload.c src/server/put_fence.c src/server/put_upload.c src/server/efsd.c src/server/store.c src/server/store_nvme.c src/server/store_containers.c \
               src/server/handler.c \
               src/server/cluster.c \
               src/server/peer_pool.c src/server/writer.c \
@@ -466,6 +466,8 @@ test: all
 	./tests/test_store_durability
 	$(MAKE) tests/test_repair_file_atomic
 	./tests/test_repair_file_atomic
+	$(MAKE) tests/test_repair_receiver
+	./tests/test_repair_receiver
 	./tests/test_put_ticket
 	./tests/test_repair_job
 	python3 tests/test_repair_job_faults.py
@@ -699,7 +701,7 @@ clean:
 	rm -f src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o src/sim/opid.o
 	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt efs-query blake3-bench
 	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim
-	rm -f $(TEST_BINS) tests/test_repair_store_identity tests/test_repair_file_atomic tests/test_repair_storage_fence tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_upload_client tests/principles_index_fault.o
+	rm -f $(TEST_BINS) tests/test_repair_store_identity tests/test_repair_file_atomic tests/test_repair_receiver tests/test_repair_storage_fence tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_upload_client tests/principles_index_fault.o
 	rm -f .build_id.stamp
 
 $(BLAKE3_DIR)/blake3_sse2.o: $(BLAKE3_DIR)/blake3_sse2.c
@@ -847,3 +849,8 @@ tests/test_repair_file_atomic: tests/test_repair_file_atomic.c src/server/store.
 
 tests/test_repair_store_identity: tests/test_repair_store_identity.c src/server/put_fence.c src/server/server_internal.h $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ $< $(LIB) $(LDFLAGS)
+
+# Actual inactive FILES receiver; metadata authority RPCs are explicit adapter
+# stubs. No distributed repair or live worker acceptance is inferred.
+tests/test_repair_receiver: tests/test_repair_receiver.c src/server/store.c src/server/repair_upload.c src/server/put_fence.c src/server/server_internal.h include/efs/repair_job.h src/bench/writer.o src/bench/store_containers.o $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/server/repair_upload.c src/server/put_fence.c src/bench/writer.o src/bench/store_containers.o $(LIB) $(LDFLAGS)

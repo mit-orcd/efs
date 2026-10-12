@@ -1,0 +1,5 @@
+In file included from tests/test_repair_receiver.c:23:
+tests/../src/server/store.c:2:10: fatal error: store_containers.h: No such file or directory
+    2 | #include "store_containers.h"
+      |          ^~~~~~~~~~~~~~~~~~~~
+compilation terminated.

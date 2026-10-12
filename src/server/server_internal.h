@@ -134,6 +134,7 @@ int server_put_session_fence(struct efsd_server *, const uint8_t uuid[16],
 /* Inactive repair-only certificate domain. Authority must be checked before
  * taking this guard, and GC must wait for committed seal receipt. These are
  * local storage barriers, never repair admission or durable data receipts. */
+int server_repair_receive(struct efsd_server *,const uint8_t *,uint32_t,int seal,uint8_t *receipt);
 int server_repair_store_matches(struct efsd_server *,const uint8_t expected[16]);
 int server_repair_store_identity(struct efsd_server *,uint8_t uuid[16]);
 int server_repair_store_initialize(struct efsd_server *,int trusted_existing,uint8_t uuid[16]);
