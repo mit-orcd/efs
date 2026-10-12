@@ -130,7 +130,6 @@ static int run(void){captures=releases=barriers=0;clock_ms=100;host.query_deadli
  assert(captures==releases || pin_rc);return rc;}
 int main(void){pthread_mutex_init(&host.mu,NULL);pthread_mutex_init(&host.snap_mu,NULL);
  host.boot_id=42;host.g[0].group=0;host.g[1].group=2;
- scheduler_oracle();
  /* A post-admission transaction can resolve A before B is locally applied.
   * The pinned image has A only; fresh proof delivers B and advances revision.
   * Accepting that old pin would publish a mixed distributed transaction. */
@@ -144,6 +143,7 @@ int main(void){pthread_mutex_init(&host.mu,NULL);pthread_mutex_init(&host.snap_m
  model=2;ordinary=0;assert(!run() && captures==1 && ordinary==1 && pins[0].ordinary==0);
  model=0;
  puts("mixed distributed cut: reject A-only image after B proof, stable complete recapture and ordinary atomic update noninvalidation PASS");
+ scheduler_oracle();
 
  assert(!run() && captures==1 && barriers==1);
  collisions=2;assert(!run() && captures==3 && barriers==3);

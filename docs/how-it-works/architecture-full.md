@@ -2187,6 +2187,8 @@ Release `95d3f1b1`: full normal/fault suites, 17 focused sanitizers and fully sa
 
 A local cut-only retry proposal now has baseline-fail/candidate-pass and unsafe-all-BUSY negative controls, preserving transaction/authority/import fences and existing budgets. It increases proof load and is not deployed or accepted. [Policy and evidence](../status/v030-query-stage-diagnostic-20261012.md#local-scheduling-remedy-proposal-not-deployed). Reviewed Intel namespace fixture repair is integrated, repaired live qualification NOTRUN.
 
+Reviewed frozen `b239dc7d` (1,517 verified inputs) handed to NUC/ORCD; AMD full prerequisites and gated quiet packing qualification underway. A separate test-only mixed-cut oracle order correction isolates the safety negative control, without changing executing inputs. [Handoff and qualification scope](../status/v030-query-stage-diagnostic-20261012.md#frozen-qualification-handoff-and-separate-oracle-checkpoint).
+
 
 ## Appendix 2 — In flight — the current handoff block
 

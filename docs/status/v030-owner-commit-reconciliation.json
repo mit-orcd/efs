@@ -224,11 +224,18 @@
     "c9a974c8": "c9a974c899a73ff5e98ff978fbf45eca7be55007",
     "aaf6a3e8": "aaf6a3e8a4dcc38bec755fc18cf7132193b1ae1f",
     "79adbf22": "79adbf22a3a190f537e0e366af6474a659227847",
-    "daa3f35a": "daa3f35affc251d0c17b241fa742c536ab2306be"
+    "daa3f35a": "daa3f35affc251d0c17b241fa742c536ab2306be",
+    "dcd0d8be": "dcd0d8be719c683d491f23726c4a0bf3f666f173",
+    "610bc3bf": "610bc3bf611028522de28ca8b7ed74e81b6cdb9c",
+    "0bde74a6": "0bde74a688f5d40fb35fcbc26fa8b095eb43c930",
+    "0e24f213": "0e24f213f64c335f1ad0228704c645e8ee81fa3c",
+    "e57f4293": "e57f42939fe193fc8908fa49718d927670dc0a9f",
+    "ce328004": "ce3280047ca53de6ad6988089df96cfd6f64f093"
   },
   "client_adoption_disposition": "Mac46609ad7 exact-source check confirms existing independent combined adoption b9b55cba/718e2dbc/05026d42; no missing feature, keep root bookkeeping, optional alternate pointer representation held.",
-  "diagnostic_source_disposition": "95d3f1b1 full normal/fault +17focused +fullysanitizedLSM pass; both ordinary modes pass; instrumented direct7/jobs16 still fails, roots absent from retained gen2; no quiet acceptance. Frozen source inputs unchanged.",
+  "diagnostic_source_disposition": "Reviewed cheap final transaction-cut-only retry scheduler; b239 native/live prerequisite qualification underway. Earlier95 full/ordinary pass but instrumented pressure fails; no inherited acceptance.",
   "next_diagnostic_proposal": "No unchanged pressure repeat; peer-reviewed safe catalog freshness remedy with baseline-failing controlled oracle, plus separate foreground phase discriminator; no fence removal or stale subtree fallback.",
-  "latest_frozen_amd_test_source": "95d3f1b1",
-  "latest_frozen_amd_input_count": 1506
+  "latest_frozen_amd_test_source": "b239dc7de104ff8437e49d9333a529790601464c",
+  "latest_frozen_amd_input_count": 1517,
+  "frozen_source_archive_sha256": "24f6ca3ec7d509a24c74de4b6a746d033bef872b7145eec9beb2e387a5caa548"
 }
