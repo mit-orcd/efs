@@ -8881,7 +8881,8 @@ static int host_query_source_once(struct efs_raft_host *h,struct efs_kv_lsm_snap
     uint64_t capture_start=query_mono_ms();
     const char *trace_stage="pin";
     int trace=efs_query_stage_enabled();
-    uint64_t activity_before[8]={0},activity_after[8]={0};
+    uint64_t activity_before[8]={0},activity_after[8]={0},applied_after[2]={0};
+    int trace_activity=0;
     *transaction_changed=0;
     *source=NULL;memset(view,0,sizeof(*view));
     pthread_mutex_lock(&h->mu);
@@ -8922,14 +8923,19 @@ static int host_query_source_once(struct efs_raft_host *h,struct efs_kv_lsm_snap
     if (!rc) { trace_stage="transaction-cut";rc=efs_kv_lsm_transaction_revision(h->kv,&transaction_after); }
     if (!rc && transaction_before!=transaction_after) { *transaction_changed=1;rc=EFS_ERR_BUSY; }
     if(trace && *transaction_changed && !efs_kv_lsm_transaction_activity(h->kv,activity_after)) {
+        trace_activity=1;
+        applied_after[0]=efs_raft_applied(h->g[0].r);
+        applied_after[1]=efs_raft_applied(h->g[1].r);
+    }
+    pthread_mutex_unlock(&h->mu);
+    if(trace_activity) {
         static const char *labels[8]={"txn-intent-put","txn-intent-del","txn-guard-put","txn-guard-del",
             "txn-reduce-put","txn-reduce-del","txn-decision-put","txn-decision-del"};
         for(unsigned i=0;i<8;i++)if(activity_before[i]!=activity_after[i])
             efs_query_stage_trace(labels[i],rc,query_mono_ms()-capture_start,activity_before[i],activity_after[i]);
-        efs_query_stage_trace("apply-g0",rc,0,view->applied[0],efs_raft_applied(h->g[0].r));
-        efs_query_stage_trace("apply-g2",rc,0,view->applied[1],efs_raft_applied(h->g[1].r));
+        efs_query_stage_trace("apply-g0",rc,0,view->applied[0],applied_after[0]);
+        efs_query_stage_trace("apply-g2",rc,0,view->applied[1],applied_after[1]);
     }
-    pthread_mutex_unlock(&h->mu);
     efs_query_stage_trace(trace_stage,rc,query_mono_ms()-capture_start,transaction_before,transaction_after);
     if (rc) { efs_kv_lsm_snapshot_release(*source);*source=NULL; }
     return rc;
@@ -9034,7 +9040,7 @@ static void *host_query_thread(void *ctx)
         else if (!first_dirty) first_dirty=now;
         uint64_t lag_lock_start=query_mono_ms();
         pthread_rwlock_wrlock(&h->query_lock);
-        efs_query_stage_trace("lag-lock",0,query_mono_ms()-lag_lock_start,0,0);
+        uint64_t lag_lock_ms=query_mono_ms()-lag_lock_start;
         struct efs_server_query_view *lag=&h->query_view;
         int was_overdue=lag->pending_changes && lag->lag_sample_ms-lag->pending_since_ms>=HOST_QUERY_T_MS;
         int overdue=dirty && now-first_dirty>=HOST_QUERY_T_MS;
@@ -9043,6 +9049,7 @@ static void *host_query_thread(void *ctx)
             lag->lag_sample_ms=now;lag->lag_sample_ns=now_ns();
         }
         pthread_rwlock_unlock(&h->query_lock);
+        if(lag_lock_ms)efs_query_stage_trace("lag-lock",0,lag_lock_ms,0,0);
         if (!efs_query_refresh_due(now,first_dirty,last_attempt,dirty,initial,failed,
                                    HOST_QUERY_N,HOST_QUERY_T_MS)) continue;
         last_attempt=now;

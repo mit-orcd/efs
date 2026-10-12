@@ -703,3 +703,5 @@ Second bounded query discriminator is prepared: fixed txn-kind PUT/DEL activity
 hints with applied vectors, precise root/binding leaf reasons/durations and initial
 lag-lock timing. [Definition and pending qualification](v030-query-stage-diagnostic-20261012.md).
 No fence filtering, source promotion or quiet acceptance.
+
+Release diagnostic update: peer reviews `aaf6a3e8` / `79adbf22` integrated; cut activity and nonzero initial lag-lock events now emit after unlock. [Diagnostic limits and pending gates](v030-query-stage-diagnostic-20261012.md#reviewed-diagnostic-freeze-preparation). Packing pressure acceptance remains blocked.

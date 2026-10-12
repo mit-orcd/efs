@@ -115,3 +115,9 @@ ordinary-write noninvalidation, snapshot immutability and disabled tracking.
 Linux execution of that regression and complete candidate qualification are
 pending. Mac/ORCD review labels and sampling limits before any expensive run.
 This remains a diagnostic source, not a proven repair or quiet acceptance.
+
+## Reviewed diagnostic freeze preparation
+
+Mac review `aaf6a3e8` and ORCD review `79adbf22` are integrated. Typed transaction counters are process-local successful memtable mutation records, not durable acknowledgements, pending occupancy, unique transactions or participant coverage. Live revision and activity are sampled under separate KV mutex acquisitions. Root live-read labels identify call sites and must be interpreted with their return codes; catalog absence precedes type/access validation. Nested events and cumulative timings are not independent failures or exclusive backend time.
+
+The follow-up source captures typed activity and applied vectors under the host mutex, then emits after releasing it. Initial lag writer-lock timing is captured at acquisition and emitted after unlocking, only for waits of at least one millisecond. This removes routine zero-wait records and logging under these locks without changing refusals, fences or retry budgets. Other synchronous trace sites still perturb timing; instrumented results are diagnostic evidence only. Foreground admission/proposal attribution remains uninstrumented. Actual capture-helper normal and ASan/UBSan checks pass; full Linux real-LSM and merged native gates remain required before the single original-budget diagnostic.
