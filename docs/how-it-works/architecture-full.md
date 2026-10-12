@@ -1475,12 +1475,14 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-**Current release candidate:** `release-v0.3.1-pre-alpha`, frozen **15e2a5310df1dd0fd4e307a9508c95d513d14672**, contains all captured known branch tips. AMD ordinary-files **TCP/direct and TCP/buffered** qualification PASS: full normal/fault native, sanitizers, core1512/1512, peer67/67, seven stops and ordinary overwrite/cold/reclamation per mode. Packing, containers, .efs and repair activation disabled. Root alone; private fixtures stopped; no push/tag. [Direct ledger](../status/v031-qualification-20261012.md) · [buffered rerun and preserved setup failures](../status/v031-buffered-qualification-20261012.md). Earlier v0.3.0 results remain historical.
+**Current release integration:** `release-v0.3.2-pre-alpha` merges reviewed ORCD evidence9fc5e024 into v0.3.1. Product/test inputs unchanged. AMD TCP/direct and TCP/buffered PASS; independently reviewed ORCD nativeRDMA/direct two core rounds1512/1512 and peer67/67 per round, native/fault/sanitizers/cold/physicalGC PASS. Tested SHAs remain15e2a531 AMD and40f4509d ORCD; the merge itself was not remotely executed. Packing/containers/.efs/repair remain disabled. No push/tag/deployment. [v0.3.2 review and coverage](../status/v032-integration-review-20261012.md).
 
 **Latest alpha scope:** ordinary files/TCP/direct only, `EFS_PACKED_WRITES=0`, `EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`. Small-file packing is excluded alongside containers, `.efs`, RDMA, buffered and dedicated repair/recovery. Earlier packing qualification requirements below are historical. [Binding packing exclusion](../status/v030-packing-exclusion-20261012.md).
 
 **Standing testing scope:** containers are experimental and excluded from required tests and release gates. Use files for required qualification; container-only investigation requires explicit new user authorization. [Binding policy](../status/container-testing-policy-20261012.md).
 **Current scope (user decision): repair and recovery for unplanned events are deferred; focus on normal operations, clean shutdown and orderly restart.** Existing durability safeguards and fault-test evidence remain in place. The historical standalone two-repair-GAP/TCP-only item is closed on the isolated fix branch; automatic and packed-segment failure repair remain deferred. [Scope and qualification](../status/orcd-default-repair-20261012.md#current-work-scope--user-decision).
+
+[ORCD v0.3.1 RDMA/direct-I/O requalification](../status/orcd-v031-rdma-direct-20261012.md) tests the frozen `release-v0.3.1-pre-alpha` snapshot with packing, containers and `.efs` excluded.
 
 [ORCD ordinary-file RDMA/direct-I/O deployment and newer-commit review](../status/orcd-profile-review-20261012.md): `.efs`, containers and small-file packing disabled and excluded; normal operations and orderly restart qualify separately from the release branch.
 
