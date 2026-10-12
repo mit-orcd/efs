@@ -18,7 +18,11 @@
  * so this is the hard ceiling on server->server concurrency. At 4 it capped the
  * parallel metadata flush at 4-way no matter how many shard tables were fanned
  * out, which is most of why flushing 62 tables still took ~65 ms. */
-#define EFS_PEER_CONNS_PER_NODE 32
+#define EFS_PEER_DATA_CONNS 32
+/* At most one coalesced remote proof per hosted metadata group. Do not let
+ * forwarded mutations consume the connections needed to finish those reads. */
+#define EFS_PEER_READ_CONNS 2
+#define EFS_PEER_CONNS_PER_NODE (EFS_PEER_DATA_CONNS + EFS_PEER_READ_CONNS)
 /* After this many consecutive connect failures, stop reconnecting for the
  * cooldown window so a dead peer does not stall every caller on connect(). */
 #define EFS_PEER_DOWN_FAILS 3
@@ -34,6 +38,7 @@ struct peer_slot {
     uint32_t fail_streak;
     pthread_mutex_t lock;
     pthread_cond_t cv;
+    pthread_cond_t read_cv;
 };
 
 static uint64_t peer_now_ms(void)
@@ -58,6 +63,7 @@ void server_peer_pool_init(void)
         memset(&g_peers[i], 0, sizeof(g_peers[i]));
         pthread_mutex_init(&g_peers[i].lock, NULL);
         pthread_cond_init(&g_peers[i].cv, NULL);
+        pthread_cond_init(&g_peers[i].read_cv, NULL);
     }
     g_peers_inited = 1;
     pthread_mutex_unlock(&g_peers_mu);
@@ -156,13 +162,16 @@ struct efs_conn *server_peer_conn_new(const char *host, uint16_t port)
     return peer_connect(host, port);
 }
 
-struct efs_conn *server_peer_conn_get(const char *host, uint16_t port)
+static struct efs_conn *peer_conn_get(const char *host, uint16_t port, int read)
 {
     struct peer_slot *p = peer_slot_for(host, port);
     if (!p)
         return NULL;
 
     uint64_t now = peer_now_ms();
+    int begin = read ? EFS_PEER_DATA_CONNS : 0;
+    int end = read ? EFS_PEER_CONNS_PER_NODE : EFS_PEER_DATA_CONNS;
+    pthread_cond_t *cv = read ? &p->read_cv : &p->cv;
     pthread_mutex_lock(&p->lock);
     /* Down-cooldown: don't even try to connect to a peer that has failed
      * repeatedly; the caller treats NULL as "peer down" and skips it fast. */
@@ -175,7 +184,7 @@ struct efs_conn *server_peer_conn_get(const char *host, uint16_t port)
             pthread_mutex_unlock(&p->lock);return NULL;
         }
         int free_s = -1;
-        for (int s = 0; s < EFS_PEER_CONNS_PER_NODE; s++) {
+        for (int s = begin; s < end; s++) {
             if (!p->busy[s]) {
                 free_s = s;
                 break;
@@ -191,7 +200,7 @@ struct efs_conn *server_peer_conn_get(const char *host, uint16_t port)
             ts.tv_sec+=wait_ms/1000;
             ts.tv_nsec+=(long)(wait_ms%1000)*1000000;
             if(ts.tv_nsec>=1000000000L) { ts.tv_sec++;ts.tv_nsec-=1000000000L; }
-            int wrc = pthread_cond_timedwait(&p->cv, &p->lock, &ts);
+            int wrc = pthread_cond_timedwait(cv, &p->lock, &ts);
             if (wrc == ETIMEDOUT) {
                 pthread_mutex_unlock(&p->lock);
                 return NULL;
@@ -215,7 +224,7 @@ struct efs_conn *server_peer_conn_get(const char *host, uint16_t port)
                     p->fail_streak++;
                 if (p->fail_streak >= EFS_PEER_DOWN_FAILS)
                     p->down_until_ms = peer_now_ms() + EFS_PEER_DOWN_MS;
-                pthread_cond_signal(&p->cv);
+                pthread_cond_signal(cv);
                 pthread_mutex_unlock(&p->lock);
                 return NULL;
             }
@@ -240,6 +249,16 @@ struct efs_conn *server_peer_conn_get(const char *host, uint16_t port)
     }
 }
 
+struct efs_conn *server_peer_conn_get(const char *host, uint16_t port)
+{
+    return peer_conn_get(host, port, 0);
+}
+
+struct efs_conn *server_peer_read_conn_get(const char *host, uint16_t port)
+{
+    return peer_conn_get(host, port, 1);
+}
+
 void server_peer_conn_release(const char *host, uint16_t port,
                               struct efs_conn *c)
 {
@@ -254,7 +273,7 @@ void server_peer_conn_release(const char *host, uint16_t port,
     for (int s = 0; s < EFS_PEER_CONNS_PER_NODE; s++) {
         if (p->conn[s] == c) {
             p->busy[s] = 0;
-            pthread_cond_signal(&p->cv);
+            pthread_cond_signal(s >= EFS_PEER_DATA_CONNS ? &p->read_cv : &p->cv);
             pthread_mutex_unlock(&p->lock);
             return;
         }
@@ -277,7 +296,7 @@ void server_peer_conn_drop(const char *host, uint16_t port, struct efs_conn *c)
         if (p->conn[s] == c) {
             p->conn[s] = NULL;
             p->busy[s] = 0;
-            pthread_cond_signal(&p->cv);
+            pthread_cond_signal(s >= EFS_PEER_DATA_CONNS ? &p->read_cv : &p->cv);
             pthread_mutex_unlock(&p->lock);
             efs_conn_destroy(c);
             return;

@@ -3619,7 +3619,9 @@ static int host_rpc_submit(struct efs_raft_host *h, int rid, uint8_t group,
         rc = EFS_ERR_NOT_PRIMARY;
         goto out;
     }
-    pc = server_peer_conn_get(host, port);
+    /* A read proof must not queue behind mutation RPCs that themselves
+     * need metadata authority before they can finish. Budgets are unchanged. */
+    pc = clen ? server_peer_conn_get(host, port) : server_peer_read_conn_get(host, port);
     if (!pc) {
         rc = EFS_ERR_BUSY;
         goto out;
