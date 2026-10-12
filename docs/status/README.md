@@ -2,6 +2,12 @@
 
 ## v0.3.0-pre-alpha release integration
 
+Current execution target is shared `c2bfb9e9`: AMD full normal/fault suites,
+20 focused sanitizer gates and fully sanitized real-LSM catalog/audit pass;
+original direct/buffered overwrite and cold-byte/physical cleanup gates pass.
+The single original-budget diagnostic fails stats/find deadlines on all seven clients; deep60 and independent cold bytes pass. Normal mounts are restored. See
+[common candidate evidence](v030-query-stage-diagnostic-20261012.md#common-c2bfb9e9-amd-prerequisites).
+
 Shared defect-only candidate `31abdd5e` is frozen for all five owners. A
 Python 3.13 phase-fixture AST portability failure is preserved; its minimal
 next-candidate repair passes Python 3.9/3.13/3.14, including Mac peer review and a workload-change negative control.
