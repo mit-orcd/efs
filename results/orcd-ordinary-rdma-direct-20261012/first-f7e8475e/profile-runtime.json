@@ -1,0 +1,376 @@
+[
+  {
+    "host": "fcstor003",
+    "source": "f7e8475e21a23ba0037f2f562d96417b6b6ab40e",
+    "processes": [
+      {
+        "pid": 1669193,
+        "comm": "efsd",
+        "uid": 246111,
+        "args": "/tmp/efs/efsd --node-id 1 --addr 172.16.223.57 --port 17432 --storage /data1/01/efs-orcd-test-erbmi1,/data1/02/efs-orcd-test-erbmi1,/data1/03/efs-orcd-test-erbmi1,/data1/04/efs-orcd-test-erbmi1,/data1/05/efs-orcd-test-erbmi1,/data1/06/efs-orcd-test-erbmi1 --storage-engine files --direct-io ",
+        "exe": "/tmp/efs/efsd",
+        "exe_sha256": "3b652dd06c90b6d884d6916729f26c4d133fbc0873fbb4c4293a28a586932f9b",
+        "rdma_device_fds": [
+          "/dev/infiniband/uverbs0",
+          "/dev/infiniband/uverbs2"
+        ],
+        "environment": {
+          "EFS_TRANSPORT": "rdma",
+          "EFS_RDMA_DEV": "mlx5_2",
+          "EFS_PACKED_WRITES": "0",
+          "EFS_COMMANDS": null,
+          "EFS_COMMANDS_SERVER": "0",
+          "EFS_QUERY_DISK_MAX_MIB": null,
+          "EFS_QUERY_DISK_TOTAL_MIB": null,
+          "EFS_RAFT_FLOW": "0",
+          "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+          "EFS_RAFT_GROUP_DRAIN": "0",
+          "EFS_ADMISSION_PRESSURE": "0",
+          "EFS_REPAIR_EXPERIMENT": "0",
+          "EFS_REPAIR_INIT_STORE": "0"
+        }
+      }
+    ],
+    "mount": ""
+  },
+  {
+    "host": "fcstor004",
+    "source": "f7e8475e21a23ba0037f2f562d96417b6b6ab40e",
+    "processes": [
+      {
+        "pid": 1515048,
+        "comm": "efsd",
+        "uid": 246111,
+        "args": "/tmp/efs/efsd --node-id 2 --addr 172.16.223.58 --port 17432 --storage /data1/01/efs-orcd-test-erbmi1,/data1/02/efs-orcd-test-erbmi1,/data1/03/efs-orcd-test-erbmi1,/data1/04/efs-orcd-test-erbmi1,/data1/05/efs-orcd-test-erbmi1,/data1/06/efs-orcd-test-erbmi1 --storage-engine files --direct-io --join 172.16.223.57:17432 ",
+        "exe": "/tmp/efs/efsd",
+        "exe_sha256": "3b652dd06c90b6d884d6916729f26c4d133fbc0873fbb4c4293a28a586932f9b",
+        "rdma_device_fds": [
+          "/dev/infiniband/uverbs0",
+          "/dev/infiniband/uverbs2"
+        ],
+        "environment": {
+          "EFS_TRANSPORT": "rdma",
+          "EFS_RDMA_DEV": "mlx5_2",
+          "EFS_PACKED_WRITES": "0",
+          "EFS_COMMANDS": null,
+          "EFS_COMMANDS_SERVER": "0",
+          "EFS_QUERY_DISK_MAX_MIB": null,
+          "EFS_QUERY_DISK_TOTAL_MIB": null,
+          "EFS_RAFT_FLOW": "0",
+          "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+          "EFS_RAFT_GROUP_DRAIN": "0",
+          "EFS_ADMISSION_PRESSURE": "0",
+          "EFS_REPAIR_EXPERIMENT": "0",
+          "EFS_REPAIR_INIT_STORE": "0"
+        }
+      }
+    ],
+    "mount": ""
+  },
+  {
+    "host": "fcstor005",
+    "source": "f7e8475e21a23ba0037f2f562d96417b6b6ab40e",
+    "processes": [
+      {
+        "pid": 1524975,
+        "comm": "efsd",
+        "uid": 246111,
+        "args": "/tmp/efs/efsd --node-id 3 --addr 172.16.223.59 --port 17432 --storage /data1/01/efs-orcd-test-erbmi1,/data1/02/efs-orcd-test-erbmi1,/data1/03/efs-orcd-test-erbmi1,/data1/04/efs-orcd-test-erbmi1,/data1/05/efs-orcd-test-erbmi1,/data1/06/efs-orcd-test-erbmi1 --storage-engine files --direct-io --join 172.16.223.57:17432 ",
+        "exe": "/tmp/efs/efsd",
+        "exe_sha256": "3b652dd06c90b6d884d6916729f26c4d133fbc0873fbb4c4293a28a586932f9b",
+        "rdma_device_fds": [
+          "/dev/infiniband/uverbs0",
+          "/dev/infiniband/uverbs2"
+        ],
+        "environment": {
+          "EFS_TRANSPORT": "rdma",
+          "EFS_RDMA_DEV": "mlx5_2",
+          "EFS_PACKED_WRITES": "0",
+          "EFS_COMMANDS": null,
+          "EFS_COMMANDS_SERVER": "0",
+          "EFS_QUERY_DISK_MAX_MIB": null,
+          "EFS_QUERY_DISK_TOTAL_MIB": null,
+          "EFS_RAFT_FLOW": "0",
+          "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+          "EFS_RAFT_GROUP_DRAIN": "0",
+          "EFS_ADMISSION_PRESSURE": "0",
+          "EFS_REPAIR_EXPERIMENT": "0",
+          "EFS_REPAIR_INIT_STORE": "0"
+        }
+      }
+    ],
+    "mount": ""
+  },
+  {
+    "host": "fcstor006",
+    "source": "f7e8475e21a23ba0037f2f562d96417b6b6ab40e",
+    "processes": [
+      {
+        "pid": 1948273,
+        "comm": "efsd",
+        "uid": 246111,
+        "args": "/tmp/efs/efsd --node-id 4 --addr 172.16.223.60 --port 17432 --storage /data1/01/efs-orcd-test-erbmi1,/data1/02/efs-orcd-test-erbmi1,/data1/03/efs-orcd-test-erbmi1,/data1/04/efs-orcd-test-erbmi1,/data1/05/efs-orcd-test-erbmi1,/data1/06/efs-orcd-test-erbmi1 --storage-engine files --direct-io --join 172.16.223.57:17432 ",
+        "exe": "/tmp/efs/efsd",
+        "exe_sha256": "821bd4a5dc1f5ecb93b07556eb2654968f217e895da52cc359efec7ed7b85b29",
+        "rdma_device_fds": [
+          "/dev/infiniband/uverbs0",
+          "/dev/infiniband/uverbs2"
+        ],
+        "environment": {
+          "EFS_TRANSPORT": "rdma",
+          "EFS_RDMA_DEV": "mlx5_2",
+          "EFS_PACKED_WRITES": "0",
+          "EFS_COMMANDS": null,
+          "EFS_COMMANDS_SERVER": "0",
+          "EFS_QUERY_DISK_MAX_MIB": null,
+          "EFS_QUERY_DISK_TOTAL_MIB": null,
+          "EFS_RAFT_FLOW": "0",
+          "EFS_RAFT_FLOW_EARLY_RETIRE": "0",
+          "EFS_RAFT_GROUP_DRAIN": "0",
+          "EFS_ADMISSION_PRESSURE": "0",
+          "EFS_REPAIR_EXPERIMENT": "0",
+          "EFS_REPAIR_INIT_STORE": "0"
+        }
+      }
+    ],
+    "mount": ""
+  },
+  {
+    "host": "fcstor007",
+    "source": "f7e8475e21a23ba0037f2f562d96417b6b6ab40e",
+    "processes": [
+      {
+        "pid": 1772606,
+        "comm": "efs-fuse",
+        "uid": 246111,
+        "args": "./efs-fuse 172.16.223.57:17432 fs /tmp/efs-mount ",
+        "exe": "/tmp/efs/efs-fuse",
+        "exe_sha256": "c98a1cb68187ade962e7cecdbdbb3e60d4bf9fdbf9a0684a36e791f953495341",
+        "rdma_device_fds": [
+          "/dev/infiniband/uverbs0",
+          "/dev/infiniband/uverbs2"
+        ],
+        "environment": {
+          "EFS_TRANSPORT": "rdma",
+          "EFS_RDMA_DEV": "mlx5_2",
+          "EFS_PACKED_WRITES": "0",
+          "EFS_COMMANDS": "0",
+          "EFS_COMMANDS_SERVER": null,
+          "EFS_QUERY_DISK_MAX_MIB": null,
+          "EFS_QUERY_DISK_TOTAL_MIB": null,
+          "EFS_RAFT_FLOW": null,
+          "EFS_RAFT_FLOW_EARLY_RETIRE": null,
+          "EFS_RAFT_GROUP_DRAIN": null,
+          "EFS_ADMISSION_PRESSURE": null,
+          "EFS_REPAIR_EXPERIMENT": null,
+          "EFS_REPAIR_INIT_STORE": null
+        }
+      }
+    ],
+    "mount": "/tmp/efs-mount efs-fuse fuse.efs-fuse rw,nosuid,nodev,relatime,user_id=246111,group_id=246111"
+  },
+  {
+    "host": "fcstor008",
+    "source": "f7e8475e21a23ba0037f2f562d96417b6b6ab40e",
+    "processes": [
+      {
+        "pid": 2755023,
+        "comm": "efs-fuse",
+        "uid": 246111,
+        "args": "./efs-fuse 172.16.223.57:17432 fs /tmp/efs-mount ",
+        "exe": "/tmp/efs/efs-fuse",
+        "exe_sha256": "c98a1cb68187ade962e7cecdbdbb3e60d4bf9fdbf9a0684a36e791f953495341",
+        "rdma_device_fds": [
+          "/dev/infiniband/uverbs0",
+          "/dev/infiniband/uverbs2"
+        ],
+        "environment": {
+          "EFS_TRANSPORT": "rdma",
+          "EFS_RDMA_DEV": "mlx5_2",
+          "EFS_PACKED_WRITES": "0",
+          "EFS_COMMANDS": "0",
+          "EFS_COMMANDS_SERVER": null,
+          "EFS_QUERY_DISK_MAX_MIB": null,
+          "EFS_QUERY_DISK_TOTAL_MIB": null,
+          "EFS_RAFT_FLOW": null,
+          "EFS_RAFT_FLOW_EARLY_RETIRE": null,
+          "EFS_RAFT_GROUP_DRAIN": null,
+          "EFS_ADMISSION_PRESSURE": null,
+          "EFS_REPAIR_EXPERIMENT": null,
+          "EFS_REPAIR_INIT_STORE": null
+        }
+      }
+    ],
+    "mount": "/tmp/efs-mount efs-fuse fuse.efs-fuse rw,nosuid,nodev,relatime,user_id=246111,group_id=246111"
+  },
+  {
+    "host": "fcstor009",
+    "source": "f7e8475e21a23ba0037f2f562d96417b6b6ab40e",
+    "processes": [
+      {
+        "pid": 2605139,
+        "comm": "efs-fuse",
+        "uid": 246111,
+        "args": "./efs-fuse 172.16.223.57:17432 fs /tmp/efs-mount ",
+        "exe": "/tmp/efs/efs-fuse",
+        "exe_sha256": "f67dacce803db5f9667059c22d352c85d4aae02ea134197bb87bcc35d93197bc",
+        "rdma_device_fds": [
+          "/dev/infiniband/uverbs0",
+          "/dev/infiniband/uverbs2"
+        ],
+        "environment": {
+          "EFS_TRANSPORT": "rdma",
+          "EFS_RDMA_DEV": "mlx5_2",
+          "EFS_PACKED_WRITES": "0",
+          "EFS_COMMANDS": "0",
+          "EFS_COMMANDS_SERVER": null,
+          "EFS_QUERY_DISK_MAX_MIB": null,
+          "EFS_QUERY_DISK_TOTAL_MIB": null,
+          "EFS_RAFT_FLOW": null,
+          "EFS_RAFT_FLOW_EARLY_RETIRE": null,
+          "EFS_RAFT_GROUP_DRAIN": null,
+          "EFS_ADMISSION_PRESSURE": null,
+          "EFS_REPAIR_EXPERIMENT": null,
+          "EFS_REPAIR_INIT_STORE": null
+        }
+      }
+    ],
+    "mount": "/tmp/efs-mount efs-fuse fuse.efs-fuse rw,nosuid,nodev,relatime,user_id=246111,group_id=246111"
+  },
+  {
+    "host": "fcstor010",
+    "source": "f7e8475e21a23ba0037f2f562d96417b6b6ab40e",
+    "processes": [
+      {
+        "pid": 2300600,
+        "comm": "efs-fuse",
+        "uid": 246111,
+        "args": "./efs-fuse 172.16.223.57:17432 fs /tmp/efs-mount ",
+        "exe": "/tmp/efs/efs-fuse",
+        "exe_sha256": "f67dacce803db5f9667059c22d352c85d4aae02ea134197bb87bcc35d93197bc",
+        "rdma_device_fds": [
+          "/dev/infiniband/uverbs0",
+          "/dev/infiniband/uverbs2"
+        ],
+        "environment": {
+          "EFS_TRANSPORT": "rdma",
+          "EFS_RDMA_DEV": "mlx5_2",
+          "EFS_PACKED_WRITES": "0",
+          "EFS_COMMANDS": "0",
+          "EFS_COMMANDS_SERVER": null,
+          "EFS_QUERY_DISK_MAX_MIB": null,
+          "EFS_QUERY_DISK_TOTAL_MIB": null,
+          "EFS_RAFT_FLOW": null,
+          "EFS_RAFT_FLOW_EARLY_RETIRE": null,
+          "EFS_RAFT_GROUP_DRAIN": null,
+          "EFS_ADMISSION_PRESSURE": null,
+          "EFS_REPAIR_EXPERIMENT": null,
+          "EFS_REPAIR_INIT_STORE": null
+        }
+      }
+    ],
+    "mount": "/tmp/efs-mount efs-fuse fuse.efs-fuse rw,nosuid,nodev,relatime,user_id=246111,group_id=246111"
+  },
+  {
+    "host": "fcstor011",
+    "source": "f7e8475e21a23ba0037f2f562d96417b6b6ab40e",
+    "processes": [
+      {
+        "pid": 2536495,
+        "comm": "efs-fuse",
+        "uid": 246111,
+        "args": "./efs-fuse 172.16.223.57:17432 fs /tmp/efs-mount ",
+        "exe": "/tmp/efs/efs-fuse",
+        "exe_sha256": "5e19cad125bbdb6df18b450fb16ab6640beafa20fb7fb2f2ab55223e292aecdc",
+        "rdma_device_fds": [
+          "/dev/infiniband/uverbs0",
+          "/dev/infiniband/uverbs2"
+        ],
+        "environment": {
+          "EFS_TRANSPORT": "rdma",
+          "EFS_RDMA_DEV": "mlx5_2",
+          "EFS_PACKED_WRITES": "0",
+          "EFS_COMMANDS": "0",
+          "EFS_COMMANDS_SERVER": null,
+          "EFS_QUERY_DISK_MAX_MIB": null,
+          "EFS_QUERY_DISK_TOTAL_MIB": null,
+          "EFS_RAFT_FLOW": null,
+          "EFS_RAFT_FLOW_EARLY_RETIRE": null,
+          "EFS_RAFT_GROUP_DRAIN": null,
+          "EFS_ADMISSION_PRESSURE": null,
+          "EFS_REPAIR_EXPERIMENT": null,
+          "EFS_REPAIR_INIT_STORE": null
+        }
+      }
+    ],
+    "mount": "/tmp/efs-mount efs-fuse fuse.efs-fuse rw,nosuid,nodev,relatime,user_id=246111,group_id=246111"
+  },
+  {
+    "host": "fcstor012",
+    "source": "f7e8475e21a23ba0037f2f562d96417b6b6ab40e",
+    "processes": [
+      {
+        "pid": 2710213,
+        "comm": "efs-fuse",
+        "uid": 246111,
+        "args": "./efs-fuse 172.16.223.57:17432 fs /tmp/efs-mount ",
+        "exe": "/tmp/efs/efs-fuse",
+        "exe_sha256": "9384b5b0c5942dacf252b4b1fc1b0f439a9e1d069f2ee29e4613abb480d58aa0",
+        "rdma_device_fds": [
+          "/dev/infiniband/uverbs0",
+          "/dev/infiniband/uverbs2"
+        ],
+        "environment": {
+          "EFS_TRANSPORT": "rdma",
+          "EFS_RDMA_DEV": "mlx5_2",
+          "EFS_PACKED_WRITES": "0",
+          "EFS_COMMANDS": "0",
+          "EFS_COMMANDS_SERVER": null,
+          "EFS_QUERY_DISK_MAX_MIB": null,
+          "EFS_QUERY_DISK_TOTAL_MIB": null,
+          "EFS_RAFT_FLOW": null,
+          "EFS_RAFT_FLOW_EARLY_RETIRE": null,
+          "EFS_RAFT_GROUP_DRAIN": null,
+          "EFS_ADMISSION_PRESSURE": null,
+          "EFS_REPAIR_EXPERIMENT": null,
+          "EFS_REPAIR_INIT_STORE": null
+        }
+      }
+    ],
+    "mount": "/tmp/efs-mount efs-fuse fuse.efs-fuse rw,nosuid,nodev,relatime,user_id=246111,group_id=246111"
+  },
+  {
+    "host": "fcstor013",
+    "source": "f7e8475e21a23ba0037f2f562d96417b6b6ab40e",
+    "processes": [
+      {
+        "pid": 2612489,
+        "comm": "efs-fuse",
+        "uid": 246111,
+        "args": "./efs-fuse 172.16.223.57:17432 fs /tmp/efs-mount ",
+        "exe": "/tmp/efs/efs-fuse",
+        "exe_sha256": "2a4f04062f3a048502f9400ff00e34eca2e54010b53424da852661a1df0ecfdc",
+        "rdma_device_fds": [
+          "/dev/infiniband/uverbs0",
+          "/dev/infiniband/uverbs2"
+        ],
+        "environment": {
+          "EFS_TRANSPORT": "rdma",
+          "EFS_RDMA_DEV": "mlx5_2",
+          "EFS_PACKED_WRITES": "0",
+          "EFS_COMMANDS": "0",
+          "EFS_COMMANDS_SERVER": null,
+          "EFS_QUERY_DISK_MAX_MIB": null,
+          "EFS_QUERY_DISK_TOTAL_MIB": null,
+          "EFS_RAFT_FLOW": null,
+          "EFS_RAFT_FLOW_EARLY_RETIRE": null,
+          "EFS_RAFT_GROUP_DRAIN": null,
+          "EFS_ADMISSION_PRESSURE": null,
+          "EFS_REPAIR_EXPERIMENT": null,
+          "EFS_REPAIR_INIT_STORE": null
+        }
+      }
+    ],
+    "mount": "/tmp/efs-mount efs-fuse fuse.efs-fuse rw,nosuid,nodev,relatime,user_id=246111,group_id=246111"
+  }
+]

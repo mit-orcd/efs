@@ -1,0 +1,59 @@
+fcstor012 pass dir_mkdir_umask                 
+pass attr_umask_respected            
+pass perm_dir_no_x_search            
+pass err_chdir_into_file             
+pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 216/221 pass, 1 fail, 4 skip, 0 notrun  (48.4s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor012/profile-posix-f7e8475e21a2.tsv
+fcstor009 pass dir_mkdir_umask                 
+pass attr_umask_respected            
+pass perm_dir_no_x_search            
+pass err_chdir_into_file             
+pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 216/221 pass, 1 fail, 4 skip, 0 notrun  (48.4s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor009/profile-posix-f7e8475e21a2.tsv
+fcstor008 pass dir_mkdir_umask                 
+pass attr_umask_respected            
+pass perm_dir_no_x_search            
+pass err_chdir_into_file             
+pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 216/221 pass, 1 fail, 4 skip, 0 notrun  (48.7s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor008/profile-posix-f7e8475e21a2.tsv
+fcstor010 pass dir_mkdir_umask                 
+pass attr_umask_respected            
+pass perm_dir_no_x_search            
+pass err_chdir_into_file             
+pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 216/221 pass, 1 fail, 4 skip, 0 notrun  (48.8s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor010/profile-posix-f7e8475e21a2.tsv
+fcstor011 pass dir_mkdir_umask                 
+pass attr_umask_respected            
+pass perm_dir_no_x_search            
+pass err_chdir_into_file             
+pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 216/221 pass, 1 fail, 4 skip, 0 notrun  (48.8s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor011/profile-posix-f7e8475e21a2.tsv
+fcstor013 pass dir_mkdir_umask                 
+pass attr_umask_respected            
+pass perm_dir_no_x_search            
+pass err_chdir_into_file             
+pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 216/221 pass, 1 fail, 4 skip, 0 notrun  (48.9s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor013/profile-posix-f7e8475e21a2.tsv
+fcstor007 pass dir_mkdir_umask                 
+pass attr_umask_respected            
+pass perm_dir_no_x_search            
+pass err_chdir_into_file             
+pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 216/221 pass, 1 fail, 4 skip, 0 notrun  (49.0s)
+wrote /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor007/profile-posix-f7e8475e21a2.tsv
+seven-client POSIX completed
+ERROR: /tmp/efs-mount/profile-peer-f7e8475e21a2 not visible on fcstor008 — remount B after --prepare
+erbmi1@fcstor008: Permission denied (publickey,gssapi-keyex,gssapi-with-mic,password).
