@@ -3,7 +3,7 @@
 [Status index](README.md) · [Decisions](decisions.md) ·
 [Architecture](../how-it-works/architecture.md)
 
-**Current state:** resumed fixes have reached a checkpoint; further launches are provisionally paused because Intel reports a newer direct human “Document, commit, and stop” answer. Root requested scope clarification. Release2ecd00f9 remains tested normal/fault; private read-progress candidatea9f158ce passes build/affected regressions but is excluded. Scheduler17quietFAIL remains excluded. NUC repair GC race/lock correction is being checkpointed, not activated. Original AMD services/mounts intact, no owned private screens. No push/tag/promotion. See [execution ledger](amd-all-suites-20261011.md#latest-private-packing-checkpoint--october-12).
+**Current state:** execution STOPPED by confirmed human reply. [Accepted release scope](v030-release-scope-20261012.md) is TCP/direct I/O/files only; containers and dedicated repair/recovery are deferred. Next authorized session should qualify read-progressa9f158ce, resolve original-budget packing/query failures, run direct-I/O files correctness/GC and final frozen-source tests. No repair activation, test launch, deployment, promotion, tag or push is authorized now. See [execution ledger](amd-all-suites-20261011.md).
 
 ## Superseded assignments and evidence (before human stop)
 

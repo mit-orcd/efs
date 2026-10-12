@@ -20,6 +20,13 @@ in project-history.md "START-HERE closed items". **D28, D29 and D30 were
 accepted Oct 8, 2026.** Their current contracts and remaining gates are below;
 former ASK descriptions are historical.
 
+## Release scope — v0.3.0-pre-alpha (accepted October12)
+
+The user limits this release to TCP/direct I/O/files and defers containers and
+repair/recovery qualification. This is a release scheduling decision, not a
+change to the numbered architectural protection contracts. [Exact decision,
+remaining gates and limits](v030-release-scope-20261012.md). Execution stays stopped.
+
 ## D36 — node-count protection contract (accepted Oct 9)
 
 Three nodes are the minimum deployment; four provide maximum two-node-loss

@@ -16,9 +16,18 @@ America/New_York; no schedule or push is created by this checkpoint.
 
 ## Current authoritative checkpoint
 
-Qualification source remains `410afed4` with corrected v2 packaging (1,563 files/52 directories), not the moving integration HEAD. AMD full normal/fault native, 20 focused sanitizers and fully sanitized real-LSM catalog/audit PASS; fixed mounted CREATE/cold ownership and targeted query transcript NOTRUN centrally. AMD c2 stats/find deadlines and Mac c2 17 mounted timeouts remain blockers; retained Mac orphan ownership/cause is unresolved. Mac 410 native STOPPED, ORCD 410 fault PASS/normal STOPPED and later gates NOTRUN, NUC 410 execution NOTRUN. Intel's integrated stop checkpoint aaaeaa38 reports410 normal full Make PASS on both hosts, partial standalone4/88 and6/88, fault/sanitizer/mounted NOTRUN.
+Execution STOPPED. The [October12 scope decision](v030-release-scope-20261012.md)
+limits qualification to TCP/direct I/O/files. Containers and dedicated repair/
+recovery gates are deferred; their failures/gaps remain open. Packing/query
+progress, applicable direct-I/O correctness and final merged-source qualification
+remain required. Latest documentation/evidence checkpoint before this scope
+update is affbd1b6; implementation2b216427 full normal/fault nativePASS at exact
+94bd2e52. Private read-progressa9f158ce and experimental NUC repair stages remain
+excluded. See the [current execution ledger](amd-all-suites-20261011.md).
 
-All local/remote-tracking branch tips were reconciled at `15ff4de7`, with source unchanged by that last documentation/evidence-only batch. Cluster execution remains stopped. Latest source-specific evidence and resume prerequisites are in the [stop checkpoint](v030-stop-checkpoint-20261011.md); [consistency review](status-consistency-review-20261011.md) distinguishes superseded narratives below. No push/tag/main or devel promotion occurred.
+The source410/frozen28 and multi-mode rollout statements below are historical;
+older passes do not qualify the next merged candidate. No resumption, push, tag
+or shared devel/main promotion is authorized by documenting this decision.
 
 ## Agent checkpoint contract (on human-authorized resumption)
 

@@ -184,3 +184,12 @@ late-DATA buffered/direct racePASS (STALE,zero receipt,no resurrection).
 Actual quorum PUT + SESSION_FENCE_LOC + GC overlap, priorDATA/journal cancellation
 and restored redundancy remainNOTRUN. No149/default activation; four original
 NUC daemons and both original mounts preserved. This stage is not root-integrated.
+
+
+### Confirmed stop and narrowed release scope — October12
+
+Human confirmed “Document, commit, and stop”, then accepted TCP/direct I/O-only
+release scope, excluding containers and repair/recovery. [Scope and four planning
+gate groups](v030-release-scope-20261012.md) now govern release scheduling; original
+broader-scope matrix failures/gaps remain evidence, not current blockers when
+explicitly deferred. No new execution or candidate integration occurred.

@@ -1477,13 +1477,13 @@ this document is the invariant they are measured against.
 
 ### v0.3.0-pre-alpha release integration
 
-**Packing and repair fixes and affected testing RESUMED** by the human's October 12 reply, “Resume fixes and affected testing.” AMD investigates packing with Intel readonly review; NUC owns repair; AMD handles release review/integration and affected reruns. Original qualification failures on frozen `28b2089b` remain unchanged; the unfinished original matrix is not automatically restarted. Corrected inactive repair-journal prerequisite passes independent AMD build and focused regressions; full normal and fault native suites pass checkpoint `94bd2e52` (implementation `2b216427`; exact execution counts in its retained verdict). Readonly authority/GC-admission, anonymous missing-role writer, target-store identity/current-owner and clipped-liveness stages pass independent AMD focused checks, and inactive receiver/terminal-receipt checks pass, with no physical repair activation. Physical repair and packing fixed-source acceptance remain unproven. Latest excluded AMD admission diagnostic passes peer67/67 and acknowledged cold hashes but fails stats/find; global packed-empty oracle is confounded by retained live POSIX trees; separate fresh64-file cold/physical-reclaim/queue-drain diagnostic nowPASS. Seven-client query acceptance remainsFAIL; query-stage traces identify new-root catalog absence and transaction-cut refresh starvation under namespace churn. See [execution ledger](../status/amd-all-suites-20261011.md). `devel` and `main` have not been advanced; no tag or push.
+**Execution STOPPED**, confirmed by the human's October12 “Document, commit, and stop” reply. [Accepted release scope](../status/v030-release-scope-20261012.md): **TCP/direct I/O/files engine**. Containers, buffered/RDMA and dedicated repair/recovery qualification are deferred and no longer release blockers; their gaps remain open. Four planning gate groups remain: read-progress fix safety/sanitizers, seven-client packing/query acceptance, direct-I/O files POSIX/peer/mutation/GC, and final frozen merged-source native/fault/affected live qualification. This is not an exact invocation count.
 
-**Latest checkpoint:** further launches are provisionally paused after Intel relayed a newer direct human “Document, commit, and stop” answer; root has requested scope clarification. Already-running AMD a9f158ce build and affected normal/earlyACK Raft/completion/publication testsPASS; candidate remains excluded pending mounted/sanitizer/context review. Quiet scheduler17d218d7 remainsFAIL (stats/find all7, deep client5), excluded. No active AMD private screens; original services/mounts preserved. See [latest checkpoint](../status/amd-all-suites-20261011.md#latest-private-packing-checkpoint--october-12).
+Integrated inactive repair prerequisites pass full normal/fault native at exact94bd2e52 (implementation2b216427); no activation or restored-redundancy claim. Excluded privatea9f158ce passes build/affected Raft tests but still needs broader safety/sanitizer/mounted acceptance. Quiet scheduler17d218d7 remainsFAIL (stats/find all7, deep client5), excluded. Clean64-file cold/reclamation diagnosticPASS; global reclamation failures with retained live POSIX trees are confounded. Original services/mounts preserved. See [execution ledger](../status/amd-all-suites-20261011.md). No tag, push or shared branch promotion.
 
 Previous qualification source: `410afed433b6da093bdc2acf37bec253ddbd586c`, corrected packaging-v2 (1,563 files, 52 directories). The new AMD all-suite run explicitly freezes `28b2089b`; its verdicts are recorded separately. Later integration/documentation commits are not new execution identities. AMD full normal/fault native, 20 focused sanitizer and fully sanitized real-LSM catalog/audit gates PASS. Fixed mounted CREATE three-stage/cold ownership and targeted query diagnosis remain NOTRUN centrally.
 
-Release blockers:
+Historical broader-scope blockers (superseded for release scheduling by the scope decision above):
 
 - AMD c2 seven-client/jobs16 diagnostic: stats/find 30-second deadline FAIL on all seven clients; deep60 and independent cold bytes PASS. Publication gaps correlate with timeouts, but request/root causal proof is missing.
 - Mac c2 mounted POSIX: 199/216 PASS and 17 timeouts; peer/policy/failover/cold NOTRUN. The fault-only 410 CREATE change does not repair normal-path failures.
@@ -1494,7 +1494,7 @@ Release blockers:
 
 [Superseded release-index narrative](../archive/v030-index-checkpoints-20261011.md) preserves the older source-specific checkpoints removed from this running summary.
 
-Owner stop records: [Mac](../status/mac-common-candidate-c2bfb9e9.md#manager-requested-stop-checkpoint), [NUC](../status/nuc-common-c2-qualification-20261012.md#human-stop-checkpoint), [ORCD](../status/orcd-stop-checkpoint-20261011.md). [Intel final stop checkpoint](../status/intel-stop-checkpoint-20261011.md) is now integrated: both410/v2 normal Make suites PASS, partial standalone4/88 and6/88 PASS; fault/sanitizer/mounted NOTRUN. Its [acceptance ledger](../status/intel-deployment-acceptance-20261011.md) preserves earlier c2 failures. The resumed complete-suite request and Intel/NUC split were subsequently stopped. AMD fixtures are idle and original mounts restored. Frozen28 owner stop checkpoints are Intel `6acd3bdd` and NUC `68901f73`; the latest human reply permits coordinated fixes and affected testing.
+Owner stop records: [Mac](../status/mac-common-candidate-c2bfb9e9.md#manager-requested-stop-checkpoint), [NUC](../status/nuc-common-c2-qualification-20261012.md#human-stop-checkpoint), [ORCD](../status/orcd-stop-checkpoint-20261011.md). [Intel final stop checkpoint](../status/intel-stop-checkpoint-20261011.md) is now integrated: both410/v2 normal Make suites PASS, partial standalone4/88 and6/88 PASS; fault/sanitizer/mounted NOTRUN. Its [acceptance ledger](../status/intel-deployment-acceptance-20261011.md) preserves earlier c2 failures. The resumed complete-suite request and Intel/NUC split were subsequently stopped. AMD fixtures are idle and original mounts restored. Frozen28 owner stop checkpoints are Intel `6acd3bdd` and NUC `68901f73`; the subsequent human reply confirms execution stopped.
 
 [Architecture](#architecture) · [agent handoff](#appendix-2--in-flight--the-current-handoff-block) · [decisions](#appendix-3--decisions--taken-and-pending-register-d1d31) · [work-item details](#appendix-4--work-items--long-form-text-for-the-open-w-items-and-the-queue-rows) · [operations](../operations/operations.md) · [archive](../archive/README.md).
 
@@ -2164,7 +2164,7 @@ Release scope is now true-defect testing/fixing only. The next shared candidate 
 
 *Source: `status/in-flight.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-**Current state:** resumed fixes have reached a checkpoint; further launches are provisionally paused because Intel reports a newer direct human “Document, commit, and stop” answer. Root requested scope clarification. Release2ecd00f9 remains tested normal/fault; private read-progress candidatea9f158ce passes build/affected regressions but is excluded. Scheduler17quietFAIL remains excluded. NUC repair GC race/lock correction is being checkpointed, not activated. Original AMD services/mounts intact, no owned private screens. No push/tag/promotion. See [execution ledger](../status/amd-all-suites-20261011.md#latest-private-packing-checkpoint--october-12).
+**Current state:** execution STOPPED by confirmed human reply. [Accepted release scope](../status/v030-release-scope-20261012.md) is TCP/direct I/O/files only; containers and dedicated repair/recovery are deferred. Next authorized session should qualify read-progressa9f158ce, resolve original-budget packing/query failures, run direct-I/O files correctness/GC and final frozen-source tests. No repair activation, test launch, deployment, promotion, tag or push is authorized now. See [execution ledger](../status/amd-all-suites-20261011.md).
 
 ### Superseded assignments and evidence (before human stop)
 
@@ -2405,6 +2405,13 @@ assigned. D15/D16 (closed Oct 2) and the Sep 28/29 ordering tables are
 in project-history.md "START-HERE closed items". **D28, D29 and D30 were
 accepted Oct 8, 2026.** Their current contracts and remaining gates are below;
 former ASK descriptions are historical.
+
+### Release scope — v0.3.0-pre-alpha (accepted October12)
+
+The user limits this release to TCP/direct I/O/files and defers containers and
+repair/recovery qualification. This is a release scheduling decision, not a
+change to the numbered architectural protection contracts. [Exact decision,
+remaining gates and limits](../status/v030-release-scope-20261012.md). Execution stays stopped.
 
 ### D36 — node-count protection contract (accepted Oct 9)
 
