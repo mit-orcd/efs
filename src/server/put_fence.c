@@ -1,6 +1,7 @@
 #include "server_internal.h"
 #include "efs/checksum.h"
 #include <errno.h>
+#include <dirent.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
@@ -129,3 +130,96 @@ int server_repair_storage_begin(struct efsd_server *s,const uint8_t uuid[16],uin
 {return storage_fence_begin(s,1,uuid,epoch,guard);}
 int server_repair_storage_seal(struct efsd_server *s,const uint8_t uuid[16],uint32_t floor)
 {return storage_fence_seal(s,1,uuid,floor);}
+
+/* Target incarnation is read-only to receivers. Missing/corrupt identity never
+ * means a fresh authority; only trusted offline/opt-in storage initialization
+ * may create a new random identity. Losing it invalidates every old job. */
+static int repair_store_path(struct efsd_server *s,char path[EFS_MAX_PATH+80])
+{
+    if(!s || s->storage_path_count!=1 || !s->storage_paths[0][0])return EFS_ERR_INVAL;
+    int n=snprintf(path,EFS_MAX_PATH+80,"%s/meta/repair-store",s->storage_paths[0]);
+    return n<0 || n>=EFS_MAX_PATH+80?EFS_ERR_INVAL:EFS_OK;
+}
+int server_repair_store_identity(struct efsd_server *s,uint8_t uuid[16])
+{
+    if(!uuid)return EFS_ERR_INVAL;
+    memset(uuid,0,16);char path[EFS_MAX_PATH+80];int rc=repair_store_path(s,path);if(rc)return rc;
+    int fd=open(path,O_RDONLY|O_CLOEXEC|O_NOFOLLOW);if(fd<0)return errno==ENOENT?EFS_ERR_STALE:EFS_ERR_IO;
+    uint8_t b[52],sum[32];struct stat st;size_t off=0;
+    if(fstat(fd,&st) || !S_ISREG(st.st_mode) || st.st_size!=sizeof(b))rc=EFS_ERR_IO;
+    while(!rc && off<sizeof(b)){ssize_t n=pread(fd,b+off,sizeof(b)-off,(off_t)off);
+        if(n<0 && errno==EINTR)continue;
+        if(n<=0){rc=EFS_ERR_IO;break;}off+=(size_t)n;}
+    if(close(fd))rc=EFS_ERR_IO;
+    if(rc)return rc;
+    efs_hash(b,20,sum);uint8_t any=0;for(unsigned i=0;i<16;i++)any|=b[4+i];
+    if(memcmp(b,"ERS1",4) || !any || memcmp(sum,b+20,32))return EFS_ERR_IO;
+    memcpy(uuid,b+4,16);return EFS_OK;
+}
+static int repair_store_seal_identity(struct efsd_server *s)
+{
+    char path[EFS_MAX_PATH+80];int rc=repair_store_path(s,path);if(rc)return rc;
+    int fd=open(path,O_RDONLY|O_CLOEXEC|O_NOFOLLOW);if(fd<0)return EFS_ERR_IO;
+    int sr;do{sr=fsync(fd);}while(sr<0 && errno==EINTR);
+    int closed=close(fd);if(sr<0 || closed)return EFS_ERR_IO;
+    /* Seal meta, configured root and its ancestry; an empty new root itself
+     * may have been newly named. Existing configured-root symlinks are allowed. */
+    int level=0;
+    for(;;){char *slash=strrchr(path,'/');if(!slash)return EFS_ERR_IO;
+        if(slash==path){rc=put_session_sync_dir("/",1);break;}
+        *slash=0;rc=put_session_sync_dir(path,level==1);if(rc)return rc;level++;
+    }
+    return rc;
+}
+int server_repair_store_initialize(struct efsd_server *s,int trusted_existing,uint8_t uuid[16])
+{
+    if(!uuid || (trusted_existing!=0 && trusted_existing!=1))return EFS_ERR_INVAL;
+    pthread_once(&put_session_once,put_session_init);pthread_mutex_t *mu=&put_session_mu[0];
+    pthread_mutex_lock(mu);int rc=server_repair_store_identity(s,uuid);
+    if(rc==EFS_OK){
+        /* A prior link can survive failed directory sync: repeat all barriers. */
+        rc=repair_store_seal_identity(s);if(rc)memset(uuid,0,16);
+        pthread_mutex_unlock(mu);return rc;
+    }
+    if(rc!=EFS_ERR_STALE){pthread_mutex_unlock(mu);return rc;}
+    if(!trusted_existing){
+        DIR *d=opendir(s->storage_paths[0]);if(!d){pthread_mutex_unlock(mu);return EFS_ERR_IO;}
+        struct dirent *e;int nonempty=0;errno=0;
+        while((e=readdir(d)))if(strcmp(e->d_name,".") && strcmp(e->d_name,"..")){nonempty=1;break;}
+        int err=errno;if(closedir(d))err=EIO;
+        if(nonempty || err){pthread_mutex_unlock(mu);return err?EFS_ERR_IO:EFS_ERR_STALE;}
+    }
+    char path[EFS_MAX_PATH+80],dir[EFS_MAX_PATH+80];rc=repair_store_path(s,path);
+    if(rc){pthread_mutex_unlock(mu);return rc;}strcpy(dir,path);*strrchr(dir,'/')=0;
+    if(mkdir(dir,0755) && errno!=EEXIST){pthread_mutex_unlock(mu);return EFS_ERR_IO;}
+    if(put_session_sync_dir(dir,0)){pthread_mutex_unlock(mu);return EFS_ERR_IO;}
+    uint8_t b[52]={0};memcpy(b,"ERS1",4);
+    int random=open("/dev/urandom",O_RDONLY|O_CLOEXEC);size_t off=0;
+    if(random<0)rc=EFS_ERR_IO;
+    while(!rc && off<16){ssize_t n=read(random,b+4+off,16-off);
+        if(n<0 && errno==EINTR)continue;
+        if(n<=0){rc=EFS_ERR_IO;break;}off+=(size_t)n;}
+    if(random>=0 && close(random))rc=EFS_ERR_IO;
+    efs_hash(b,20,b+20);
+    int fd=rc==EFS_OK?open(dir,O_TMPFILE|O_RDWR|O_CLOEXEC,0600):-1;
+    if(fd<0)rc=EFS_ERR_IO;
+    off=0;while(!rc && off<sizeof(b)){ssize_t n=write(fd,b+off,sizeof(b)-off);
+        if(n<0 && errno==EINTR)continue;
+        if(n<=0){rc=EFS_ERR_IO;break;}off+=(size_t)n;}
+    if(!rc){int sr;do{sr=fsync(fd);}while(sr<0 && errno==EINTR);if(sr<0)rc=EFS_ERR_IO;}
+    if(!rc){char proc[64];snprintf(proc,sizeof(proc),"/proc/self/fd/%d",fd);
+        if(linkat(AT_FDCWD,proc,AT_FDCWD,path,AT_SYMLINK_FOLLOW))rc=errno==EEXIST?EFS_ERR_BUSY:EFS_ERR_IO;}
+    if(fd>=0 && close(fd))rc=EFS_ERR_IO;
+    if(!rc)rc=repair_store_seal_identity(s);
+    if(!rc)rc=server_repair_store_identity(s,uuid);
+    if(rc)memset(uuid,0,16);
+    pthread_mutex_unlock(mu);return rc;
+}
+int server_repair_store_matches(struct efsd_server *s,const uint8_t expected[16])
+{
+    if(!expected)return EFS_ERR_INVAL;
+    uint8_t any=0,current[16];for(unsigned i=0;i<16;i++)any|=expected[i];
+    if(!any)return EFS_ERR_INVAL;
+    int rc=server_repair_store_identity(s,current);
+    return rc?rc:memcmp(current,expected,16)?EFS_ERR_STALE:EFS_OK;
+}

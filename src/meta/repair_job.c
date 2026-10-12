@@ -12,10 +12,10 @@ static uint32_t r32(const uint8_t *p){uint32_t v=0;for(unsigned i=0;i<4;i++)v=(v
 static uint64_t r64(const uint8_t *p){uint64_t v=0;for(unsigned i=0;i<8;i++)v=(v<<8)|p[i];return v;}
 static int valid(const struct efs_repair_job *j)
 {
-    uint8_t any=0;
+    uint8_t any=0,store=0;
     if(!j)return EFS_ERR_INVAL;
-    for(unsigned i=0;i<16;i++)any|=j->uuid[i];
-    if(!any || j->ino<=EFS_ROOT_INO || efs_ino_is_meta_table(j->ino) || !j->inode_gen ||
+    for(unsigned i=0;i<16;i++){any|=j->uuid[i];store|=j->target_store[i];}
+    if(!any || !store || j->ino<=EFS_ROOT_INO || efs_ino_is_meta_table(j->ino) || !j->inode_gen ||
        !j->object || !j->epoch || j->epoch==UINT32_MAX || !j->owner || j->fi>=3 ||
        !efs_chunk_size_valid(j->fragment_len*2u) || j->fragment_len>EFS_MAX_FRAGMENT_SIZE ||
        (!j->span_len && j->span_off) || (uint64_t)j->span_off+j->span_len>2ull*j->fragment_len ||
@@ -31,23 +31,24 @@ static int valid(const struct efs_repair_job *j)
 int efs_repair_job_encode(const struct efs_repair_job *j,uint8_t out[EFS_REPAIR_JOB_BYTES])
 {
     if(!out || valid(j))return EFS_ERR_INVAL;
-    memset(out,0,EFS_REPAIR_JOB_BYTES);memcpy(out,"EFR1",4);memcpy(out+4,j->uuid,16);
+    memset(out,0,EFS_REPAIR_JOB_BYTES);memcpy(out,"EFR2",4);memcpy(out+4,j->uuid,16);
     w64(out+20,j->ino);w64(out+28,j->inode_gen);w64(out+36,j->object);w32(out+44,j->ci);
     w32(out+48,j->fragment_len);w32(out+52,j->span_off);w32(out+56,j->span_len);
     w32(out+60,j->epoch);w32(out+64,j->owner);
     for(unsigned i=0;i<3;i++)w32(out+68+4*i,j->nodes[i]);
     memcpy(out+80,j->sums,96);memcpy(out+176,j->source,32);
-    out[208]=j->fi;out[209]=j->state;out[210]=j->flags;efs_hash(out,212,out+212);return EFS_OK;
+    out[208]=j->fi;out[209]=j->state;out[210]=j->flags;
+    memcpy(out+212,j->target_store,16);efs_hash(out,228,out+228);return EFS_OK;
 }
 int efs_repair_job_decode(const uint8_t *in,uint32_t n,struct efs_repair_job *out)
 {
     uint8_t h[32];struct efs_repair_job j={0};
-    if(!in || !out || n!=EFS_REPAIR_JOB_BYTES || memcmp(in,"EFR1",4) || in[211])return EFS_ERR_PROTO;
-    efs_hash(in,212,h);if(memcmp(h,in+212,32))return EFS_ERR_PROTO;
+    if(!in || !out || n!=EFS_REPAIR_JOB_BYTES || memcmp(in,"EFR2",4) || in[211])return EFS_ERR_PROTO;
+    efs_hash(in,228,h);if(memcmp(h,in+228,32))return EFS_ERR_PROTO;
     memcpy(j.uuid,in+4,16);j.ino=r64(in+20);j.inode_gen=r64(in+28);j.object=r64(in+36);
     j.ci=r32(in+44);j.fragment_len=r32(in+48);j.span_off=r32(in+52);j.span_len=r32(in+56);
     j.epoch=r32(in+60);j.owner=r32(in+64);for(unsigned i=0;i<3;i++)j.nodes[i]=r32(in+68+4*i);
-    memcpy(j.sums,in+80,96);memcpy(j.source,in+176,32);j.fi=in[208];j.state=in[209];j.flags=in[210];
+    memcpy(j.sums,in+80,96);memcpy(j.source,in+176,32);j.fi=in[208];j.state=in[209];j.flags=in[210];memcpy(j.target_store,in+212,16);
     if(valid(&j))return EFS_ERR_PROTO;
     *out=j;return EFS_OK;
 }

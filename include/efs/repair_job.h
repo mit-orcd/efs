@@ -7,7 +7,7 @@
  * owning lane group. Capture needs current lane read authority; inode/export
  * authority and actual durable target receipts are the coordinator's job.
  * Floor records are retained: no unsafe receipt pruning is provided here. */
-#define EFS_REPAIR_JOB_BYTES 244u
+#define EFS_REPAIR_JOB_BYTES 260u
 #define EFS_REPAIR_COMMAND_BYTES (2u + EFS_REPAIR_JOB_BYTES + 4u)
 #define EFS_REPAIR_OP_ADMIT 1u
 #define EFS_REPAIR_OP_DATA 2u
@@ -22,7 +22,7 @@ int efs_repair_apply_command(struct efs_kv *, uint32_t group, const uint8_t *, u
 #define EFS_REPAIR_DATA_DURABLE 1u
 #define EFS_REPAIR_CANCELLED 2u
 struct efs_repair_job {
-    uint8_t uuid[16];
+    uint8_t uuid[16], target_store[16];
     efs_ino_t ino;
     uint64_t inode_gen, object;
     uint32_t ci, fragment_len, span_off, span_len, epoch, owner;

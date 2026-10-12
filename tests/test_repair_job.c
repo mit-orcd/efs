@@ -35,7 +35,7 @@ static struct efs_repair_job capture(struct efs_kv *kv,efs_ino_t ino,uint64_t ob
 {
     struct efs_meta_row row;assert(!efs_meta_apply_get_inode(kv,ino,&row));
     struct efs_repair_job q={0},j;q.uuid[0]=uuid;q.ino=ino;q.inode_gen=row.generation;
-    q.object=object;q.fragment_len=65536;q.epoch=1;q.owner=1;
+    q.target_store[0]=7;q.object=object;q.fragment_len=65536;q.epoch=1;q.owner=1;
     assert(!efs_repair_capture(kv,&q,&j));return j;
 }
 static void fail(struct efs_kv *kv,int lsm)
@@ -55,7 +55,10 @@ static void journal(struct efs_kv *kv,int lsm)
     efs_ino_t ino=create(kv);struct efs_repair_job j=capture(kv,ino,101,17),got;
     unsigned group=efs_raft_shard_group(efs_kv_lane_shard(ino,0));
     uint8_t wire[EFS_REPAIR_JOB_BYTES];assert(!efs_repair_job_encode(&j,wire));
-    assert(!efs_repair_job_decode(wire,sizeof(wire),&got));wire[44]^=1;
+    assert(!efs_repair_job_decode(wire,sizeof(wire),&got));
+    assert(efs_repair_job_decode(wire,244,&got)==EFS_ERR_PROTO); /* legacy v1 never reinterpreted */
+    wire[3]='1';assert(efs_repair_job_decode(wire,sizeof(wire),&got)==EFS_ERR_PROTO);wire[3]='2';
+    wire[44]^=1;
     assert(efs_repair_job_decode(wire,sizeof(wire),&got)==EFS_ERR_PROTO);
     assert(command(kv,&j,EFS_REPAIR_OP_ADMIT,0,group^2)==EFS_ERR_INVAL);
     /* GC-scheduled object still visible in source row: ADMIT must refuse.
@@ -76,6 +79,8 @@ static void journal(struct efs_kv *kv,int lsm)
     struct efs_repair_job conflict=j;conflict.sums[0][0]^=1;
     assert(efs_repair_admit(kv,&conflict)==EFS_ERR_STALE);
     conflict=j;conflict.owner=2;assert(efs_repair_admit(kv,&conflict)==EFS_ERR_STALE);
+    conflict=j;conflict.target_store[0]^=1;assert(efs_repair_admit(kv,&conflict)==EFS_ERR_STALE);
+    assert(efs_repair_write_authority(kv,&conflict)==EFS_ERR_STALE);
     conflict=j;conflict.uuid[0]=18;assert(efs_repair_admit(kv,&conflict)==EFS_ERR_BUSY);
     assert(efs_repair_gc_ready(kv,ino,j.inode_gen,0,101)==EFS_ERR_BUSY);
     assert(efs_repair_gc_object_ready(kv,ino,0,101)==EFS_ERR_BUSY);
@@ -122,7 +127,7 @@ static void bounded(void)
     for(unsigned i=0;i<=EFS_REPAIR_PENDING_MAX;i++){
         if(i){struct efs_meta_pub p=pub(kv,ino,101+i,0);p.chunk_index=i*64;p.new_size=((uint64_t)p.chunk_index+1)*131072;assert(!efs_meta_apply_publish(kv,&p));}
         struct efs_repair_job q={0},j;q.uuid[0]=100;q.uuid[1]=i;q.uuid[2]=i>>8;
-        q.ino=ino;q.inode_gen=row.generation;q.ci=i*64;q.object=101+i;q.fragment_len=65536;q.epoch=1;q.owner=1;
+        q.target_store[0]=7;q.ino=ino;q.inode_gen=row.generation;q.ci=i*64;q.object=101+i;q.fragment_len=65536;q.epoch=1;q.owner=1;
         assert(!efs_repair_capture(kv,&q,&j));int rc=efs_repair_admit(kv,&j);
         assert(rc==(i==EFS_REPAIR_PENDING_MAX?EFS_ERR_BUSY:EFS_OK));
         if(!i)first=j;
