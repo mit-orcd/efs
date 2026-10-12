@@ -1,0 +1,28 @@
+In file included from tests/test_repair_file_atomic.c:21:
+tests/../src/server/store.c: In function ‘server_add_storage_paths’:
+tests/../src/server/store.c:1709:33: warning: ‘%s’ directive output may be truncated writing up to 98303 bytes into a region of size 8192 [-Wformat-truncation=]
+ 1709 |     snprintf(sub, sizeof(sub), "%s/data", root);
+      |                                 ^~
+In function ‘prepare_storage_root’,
+    inlined from ‘server_add_storage_paths’ at tests/../src/server/store.c:1784:56:
+tests/../src/server/store.c:1709:5: note: ‘snprintf’ output between 6 and 98309 bytes into a destination of size 8192
+ 1709 |     snprintf(sub, sizeof(sub), "%s/data", root);
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+tests/../src/server/store.c: In function ‘server_add_storage_paths’:
+tests/../src/server/store.c:1711:33: warning: ‘%s’ directive output may be truncated writing up to 98303 bytes into a region of size 8192 [-Wformat-truncation=]
+ 1711 |     snprintf(sub, sizeof(sub), "%s/meta", root);
+      |                                 ^~
+In function ‘prepare_storage_root’,
+    inlined from ‘server_add_storage_paths’ at tests/../src/server/store.c:1784:56:
+tests/../src/server/store.c:1711:5: note: ‘snprintf’ output between 6 and 98309 bytes into a destination of size 8192
+ 1711 |     snprintf(sub, sizeof(sub), "%s/meta", root);
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+tests/../src/server/store.c: In function ‘server_add_storage_paths’:
+tests/../src/server/store.c:1713:33: warning: ‘%s’ directive output may be truncated writing up to 98303 bytes into a region of size 8192 [-Wformat-truncation=]
+ 1713 |     snprintf(sub, sizeof(sub), "%s/log", root);
+      |                                 ^~
+In function ‘prepare_storage_root’,
+    inlined from ‘server_add_storage_paths’ at tests/../src/server/store.c:1784:56:
+tests/../src/server/store.c:1713:5: note: ‘snprintf’ output between 5 and 98308 bytes into a destination of size 8192
+ 1713 |     snprintf(sub, sizeof(sub), "%s/log", root);
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

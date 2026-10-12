@@ -1,0 +1,8 @@
+src/server/repair_upload.c:11:45: error: argument 5 of type ‘uint8_t[132]’ {aka ‘unsigned char[132]’} with mismatched bound [-Werror=array-parameter=]
+   11 |                            int seal,uint8_t receipt[EFS_REPAIR_RECEIPT_BYTES])
+      |                                     ~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from src/server/repair_upload.c:1:
+src/server/server_internal.h:137:91: note: previously declared as ‘uint8_t *’ {aka ‘unsigned char *’}
+  137 | int server_repair_receive(struct efsd_server *,const uint8_t *,uint32_t,int seal,uint8_t *receipt);
+      |                                                                                  ~~~~~~~~~^~~~~~~
+cc1: all warnings being treated as errors
