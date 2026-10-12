@@ -81,6 +81,21 @@ try:
                         time.sleep(0.001)
         bound = json.loads((work/'posix-case-phases-summary.json').read_text())
         assert bound['received'] == 140 and bound['retained'] == 128
+        # Execute the actual fixture's shutdown guard with a failing stop.
+        outer = next(n for n in tree.body if isinstance(n, ast.Try) and n.finalbody)
+        guard = next(n for n in outer.finalbody if isinstance(n, ast.Try) and
+                     any(isinstance(x, ast.Call) and isinstance(x.func, ast.Name) and x.func.id == 'stop'
+                         for x in ast.walk(n)))
+        observer = Collector(work, True); observer.__enter__()
+        def failed_stop(): raise RuntimeError('controlled daemon stop')
+        try:
+            exec(compile(ast.Module(body=[guard], type_ignores=[]), '<actual-shutdown>', 'exec'),
+                 dict(stop=failed_stop, query_work_observer=observer, handles=[]))
+            raise AssertionError('stop exception suppressed')
+        except RuntimeError as error:
+            assert str(error) == 'controlled daemon stop'
+        assert not observer.path.exists() and not observer.thread.is_alive()
+
 
         print('actual deep60 operations unchanged; default quiet; ordered native observer phases; missing/full sink nonblocking; failed leaf phase/status and observer cleanup PASS')
 finally:

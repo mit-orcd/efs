@@ -39,8 +39,8 @@ with tempfile.TemporaryDirectory(prefix='efs-work-trace-', dir='/tmp') as temp:
             deadline=time.monotonic()+1
             while not observed and time.monotonic()<deadline:time.sleep(0.001)
             row=dict(x.split('=',1) for x in observed[0].split()[1:])
-            assert row==dict(node='2',pid=row['pid'],seq='1',rc='-13',reason='transaction-cut',
-                capture_ms='40',changed='1',fast='1',spacing_ms='240',pins='4',pins_ok='4',pairs='4',
+            assert row==dict(node='2',pid=row['pid'],seq='1',rc='-13',capture_reason='transaction-cut',
+                capture_ms='40',source_ms='0',restore_ms='0',changed='1',fast='1',spacing_ms='240',pins='4',pins_ok='4',pairs='4',
                 dirty='256',build_ms='0',checkpoint_ms='0',total_ms='41',capture_rc='-13')
             observed.clear()
             subprocess.run([str(binary),str(target),'600'],capture_output=True,check=True,timeout=2)

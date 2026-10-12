@@ -2193,6 +2193,8 @@ Frozen `b239dc7d` full normal/fault, 18 focused sanitizers, fully sanitized LSM 
 
 Local bounded nonblocking deep-case/capture-work diagnostics now pass focused native/sanitizer/failure-observer checks; workload/fences/deadlines unchanged. Peer/full Linux gates pending, no new live run. [Next discriminating plan](../status/v030-query-stage-diagnostic-20261012.md#local-nonblocking-phasework-diagnostic-proposal).
 
+Diagnostic follow-up preserves original stop exceptions while guaranteeing observer cleanup; separates policy whole-path capture from source/restore API intervals. [Peer scope and pending freeze](../status/v030-query-stage-diagnostic-20261012.md#peer-reviewed-diagnostic-timing-and-cleanup-follow-up). Retained Mac backlink inconsistency remains a separate blocker with guarded refusal; NUC direct ordinary gates are source-specific, not AMD pressure acceptance. Current W97 means receiver feedback/queue pressure; historical root-walk comparison is W111.
+
 
 ## Appendix 2 — In flight — the current handoff block
 

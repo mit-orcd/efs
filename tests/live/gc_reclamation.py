@@ -3098,6 +3098,8 @@ finally:
         peer.terminate()
         try:peer.wait(timeout=5)
         except subprocess.TimeoutExpired:peer.kill();peer.wait()
-    stop()
-    if query_work_observer:query_work_observer.__exit__(None,None,None)
-    for h in handles:h.close()
+    try:
+        stop()
+    finally:
+        if query_work_observer:query_work_observer.__exit__(None,None,None)
+        for h in handles:h.close()

@@ -9070,10 +9070,12 @@ static void *host_query_thread(void *ctx)
         struct efs_query_capture_work work={0};
         if(work_enabled){work.dirty=dirty;uint64_t admitted=query_mono_ms();
             work.spacing_ms=work_completed?admitted-work_completed:0;}
+        uint64_t source_start=work_enabled?query_mono_ms():0;
         rc=host_query_source(h,&source,&view,revisions,import_generation,&final_transaction_changed,work_enabled?&work:NULL);
         uint64_t capture_done=query_mono_ms();
         cut_retry=efs_query_refresh_cut_retry(rc,final_transaction_changed,capture_done-now);
-        if(work_enabled){work.capture_ms=capture_done-now;work.changed=final_transaction_changed;work.fast=cut_retry;work.capture_rc=rc;}
+        if(work_enabled){work.capture_ms=capture_done-now;work.source_ms=capture_done-source_start;
+            work.changed=final_transaction_changed;work.fast=cut_retry;work.capture_rc=rc;}
         const char *refresh_stage="capture";
         struct efs_query_catalog *candidate=NULL;
         uint64_t watermark[4]={view.applied[0],view.applied[1],view.terms[0],view.terms[1]};
@@ -9081,11 +9083,13 @@ static void *host_query_thread(void *ctx)
             refresh_stage="build";
             if(disk_backend) {
                 int restored=EFS_ERR_NOT_FOUND;
+                uint64_t restore_start=work_enabled && initial?query_mono_ms():0;
                 if(initial)restored=efs_query_catalog_restore_disk(query_root,source,watermark,catalog_bytes,&candidate);
                 if(initial && restored==EFS_ERR_STALE){
                     restored=efs_query_catalog_catchup_disk(query_root,source,catalog_bytes,host_query_disk_cancel,h,&candidate);
                     fprintf(stderr,"query-catchup: rc=%d backend=disk\n",restored);
                 }
+                if(work_enabled && initial)work.restore_ms=query_mono_ms()-restore_start;
                 if(initial)fprintf(stderr,"query-restore: rc=%d backend=disk\n",restored);
                 uint64_t build_start=work_enabled?query_mono_ms():0;
                 if(restored)rc=efs_query_catalog_build_disk_checked(query_root,source,h->query_view.catalog,
