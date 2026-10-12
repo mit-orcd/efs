@@ -4,7 +4,9 @@
 
 A reviewed next-candidate CREATE fault-injection fix removes a duplicated retained hook; actual combined-path baseline six-stage failure and fixed three-stage native/sanitizer passes are preserved in the [diagnostic ledger](v030-query-stage-diagnostic-20261012.md#create-retry-fault-injection-defect). Mounted requalification remains pending.
 
-Current execution target is shared `c2bfb9e9`: AMD full normal/fault suites,
+Mac normal mounted qualification is separately blocked: owner reports c2 199/216 PASS, 17 timeouts; later peer/policy/failover/cold gates are NOTRUN. See the [mounted blocker](v030-query-stage-diagnostic-20261012.md#mac-normal-mounted-qualification-blocker). Current shared execution is 410afed4 with corrected packaging-v2 (1,563 files); normal-path semantics remain unchanged by its fault-only fix.
+
+Previous execution target was shared `c2bfb9e9`: AMD full normal/fault suites,
 20 focused sanitizer gates and fully sanitized real-LSM catalog/audit pass;
 original direct/buffered overwrite and cold-byte/physical cleanup gates pass.
 The single original-budget diagnostic fails stats/find deadlines on all seven clients; deep60 and independent cold bytes pass. Normal mounts are restored. Read-only correlation finds publication gaps beyond the query deadlines, without per-root causal proof. See
