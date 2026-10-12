@@ -247,6 +247,9 @@ int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export
                                         const uint8_t *data, uint32_t data_len,
                                         const uint8_t checksum[EFS_HASH_SIZE]);
 
+int server_repair_file_atomic(struct efsd_server *,struct efs_export *,efs_ino_t,
+    uint32_t ci,uint32_t fi,uint64_t object,const uint8_t *,uint32_t,const uint8_t sum[EFS_HASH_SIZE]);
+
 /* Queue fragment write onto the writer pool (or run inline if pool is off). */
 /* Fragment data + checksum sidecar as one pooled job. */
 int server_write_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,

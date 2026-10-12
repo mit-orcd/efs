@@ -2172,6 +2172,68 @@ int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export
     return rc;
 }
 
+/* Inactive repair primitive for ordinary single-root files. The receiver must
+ * already own the repair storage guard and verified fresh authority. Never
+ * overwrite in place: durable temporary bytes precede atomic name replacement.
+ * No RPC or worker calls this primitive yet. */
+int server_repair_file_atomic(struct efsd_server *s,struct efs_export *ex,
+                             efs_ino_t ino,uint32_t ci,uint32_t fi,uint64_t object,
+                             const uint8_t *data,uint32_t len,const uint8_t sum[EFS_HASH_SIZE])
+{
+    #ifdef EFS_BENCH_BUILD
+    return EFS_ERR_INVAL; /* Benchmark-only sync semantics cannot issue repair receipts. */
+    #endif
+    if(!s || !ex || s->storage_engine || s->storage_path_count!=1 ||
+       !efs_chunk_size_valid(ex->chunk_size) || ex->id!=1 || efs_ino_is_meta_table(ino) || ino<=EFS_ROOT_INO || !object ||
+       fi>=EFS_NUM_FRAGMENTS || !data || !sum || len!=server_frag_len(ex,ino))return EFS_ERR_INVAL;
+    uint8_t actual[EFS_HASH_SIZE];efs_hash(data,len,actual);
+    if(memcmp(actual,sum,EFS_HASH_SIZE))return EFS_ERR_CHECKSUM;
+    uint64_t saved_gen=efs_tls_chunk_gen;efs_tls_chunk_gen=object;
+    char path[8192],tmp[8192];server_fragment_path(s,ex,ino,ci,fi,path,sizeof(path));
+    efs_tls_chunk_gen=saved_gen;
+    int n=snprintf(tmp,sizeof(tmp),"%s.repair-XXXXXX",path);
+    if(n<0 || (size_t)n>=sizeof(tmp))return EFS_ERR_INVAL;
+    pthread_rwlock_t *im=inode_gc_lock(ex->id,ino);pthread_rwlock_rdlock(im);
+    int dead=inode_is_dead(s,ex->id,ino);
+    if(dead){pthread_rwlock_unlock(im);return dead>0?EFS_ERR_STALE:EFS_ERR_IO;}
+    pthread_mutex_t *mu=fragment_mutex(ex->id,ino,ci,fi);pthread_mutex_lock(mu);
+    struct stat st;int rc=EFS_OK,reserved=0,published=0;
+    if(lstat(path,&st)){
+        if(errno!=ENOENT){rc=EFS_ERR_IO;goto out;}
+        pthread_mutex_lock(&s->lock);struct efs_node *local=server_local_node(s);
+        if(!local)rc=EFS_ERR_INVAL;
+        else if(local->used>UINT64_MAX-len || (s->quota && (local->used>s->quota || len>s->quota-local->used)))rc=EFS_ERR_QUOTA;
+        else if(server_data_gc_busy(s,local->used,len))rc=EFS_ERR_BUSY;
+        else {local->used+=len;reserved=1;}
+        pthread_mutex_unlock(&s->lock);if(rc)goto out;
+    } else {
+        uint64_t payload=0;
+        if(!S_ISREG(st.st_mode) || st.st_size<0 || fragment_payload_bytes((uint64_t)st.st_size,&payload) || payload!=len){rc=EFS_ERR_IO;goto out;}
+    }
+    make_dir_for_file(path);
+    int fd=mkstemp(tmp);
+    if(fd<0){rc=EFS_ERR_IO;goto rollback;}
+    if(close(fd)){rc=EFS_ERR_IO;goto cleanup;}
+    struct shard_io_arg arg={.s=s,.buf=(uint8_t *)data,.len=len,.is_write=1,
+        .direct=s->direct_io,.no_create=1,.sum=sum,.result=EFS_ERR_IO};
+    memcpy(arg.path,tmp,(size_t)n+1);
+    shard_io_thread(&arg);rc=arg.result;if(rc)goto cleanup;
+    if(rename(tmp,path)){rc=EFS_ERR_IO;goto cleanup;}
+    published=1;rc=sync_fragment_parents(s,path);
+    goto rollback;
+cleanup:
+    if(unlink(tmp) && errno!=ENOENT){server_usage_mark_dirty(s);goto out;}
+rollback:
+    /* Failed name sync after rename is ambiguous: retain charge and job debt.
+     * Retry replaces the same identity atomically and repeats all barriers. */
+    if(reserved && !published){pthread_mutex_lock(&s->lock);struct efs_node *local=server_local_node(s);
+        if(local)local->used=local->used>=len?local->used-len:0;
+        pthread_mutex_unlock(&s->lock);}
+    if(reserved)server_usage_mark_dirty(s);
+out:
+    pthread_mutex_unlock(mu);pthread_rwlock_unlock(im);return rc;
+}
+
 #define EFS_NODES_MAGIC "EFSN"
 #define EFS_NODES_VERSION 1
 

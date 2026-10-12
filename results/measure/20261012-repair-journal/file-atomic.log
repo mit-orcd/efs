@@ -1,0 +1,2 @@
+store: put O_DIRECT bounce copy (buf align=2336 len=65536)
+ordinary single-root atomic repair: buffered/direct, actual checksum, pre-rename EIO preserves old bytes, post-rename EIO unacked, quota/retry/cold read PASS
