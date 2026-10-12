@@ -170,3 +170,20 @@ in response. Their result remains **NOT RUN / transfer pending**, not PASS or
 a source regression. The live4fe deployment and committed prior passing gates
 remain the last qualified runtime evidence. Manager has been notified; exact
 pending sessions2189/80869 remain available for recovery or final evidence.
+
+## Final completion of existing jobs
+
+Both existing83 pipelines subsequently resumed and completed EXIT0. The ten
+staged builds passed without installing or changing runtime trees. The full
+normal Linux `make all`/`make test` passed; the source manifest proves all718
+tracked build/header/source/gate inputs exactly match
+`83cff8043ab0d9f03506dd55572e57cb33398d52`. Full log and hashes are retained as
+`unit-83cff8043ab0-full-pass.log` and
+`unit-83cff8043ab0-source-manifest.json`; ten source markers/build tails are in
+`staged-builds-83cff8043ab0.json` under the evidence base.
+The earlier transfer-pending observations remain historical, not final results.
+No owned qualification job remains running. Source83 full fault and mounted
+acceptance remain NOT RUN; no further deployment occurred during the hold.
+Live source remains4fe. Mac now owns the manager-assigned bounded stage
+instrumentation/diagnosis; ORCD shared the missing stage discriminator and
+avoids duplicating that work. No additional production repair was made.
