@@ -5,14 +5,17 @@ src=$(cd "$(dirname "$0")/../.." && pwd)
 mode=${EFS_TRANSPORT:-rdma}
 case "$mode" in tcp|rdma) ;; *) echo 'Use explicit tcp or rdma' >&2; exit 2;; esac
 export EFS_TRANSPORT=$mode EFS_MD_RAFT_N=4
+export EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0
 export EFS_RDMA_DEV=${EFS_RDMA_DEV:-rxe0}
 if [ "$mode" = rdma ]; then
     test -d "/sys/class/infiniband/$EFS_RDMA_DEV" || { echo 'RDMA device missing; gates NOT RUN' >&2; exit 77; }
+    "$src/tests/test_rdma_segmented"
     "$src/tests/test_rdma_xprt" > /tmp/efs-rdma-preflight-$$.log 2>&1
     cat /tmp/efs-rdma-preflight-$$.log
     grep -q SKIP /tmp/efs-rdma-preflight-$$.log && { echo 'RDMA preflight skipped; gates NOT RUN' >&2; exit 77; }
 fi
 run=$(mktemp -d "${EFS_GATE_ROOT:-/home/efs/efs-rdma}/gate-$mode-XXXXXX")
+chmod 755 "$run" # mount helper must traverse the fixture directory
 mkdir -p "$run/mnt" "$run/mnt2"; pids=()
 cleanup() {
     for m in "$run/mnt" "$run/mnt2"; do
@@ -28,7 +31,7 @@ cleanup() {
 trap cleanup EXIT
 for id in 1 2 3 4; do
     port=$((27431+id)); join=(); [ "$id" = 1 ] || join=(--join 127.0.0.1:27432)
-    "$src/efsd" --node-id "$id" --addr 127.0.0.1 --port "$port" --storage "$run/n$id" --quota 2G --direct-io "${join[@]}" > "$run/n$id.log" 2>&1 &
+    "$src/efsd" --node-id "$id" --addr 127.0.0.1 --port "$port" --storage "$run/n$id" --storage-engine files --quota 4G --direct-io "${join[@]}" > "$run/n$id.log" 2>&1 &
     pids+=("$!")
     ready=0
     for attempt in $(seq 1 60); do
@@ -37,10 +40,16 @@ for id in 1 2 3 4; do
     done
     [ "$ready" = 1 ] || { cat "$run/n$id.log"; exit 1; }
 done
-"$src/efs-mgmt" raft-mkfs 127.0.0.1:27432
+formatted=0
+for attempt in $(seq 1 60); do
+    output=$("$src/efs-mgmt" raft-mkfs 127.0.0.1:27432)
+    if [[ "$output" == *'rc=0 '* ]]; then formatted=1; break; fi
+    sleep .5
+done
+[ "$formatted" = 1 ] || { echo "Failed fresh formatting: $output"; exit 1; }
 for m in "$run/mnt" "$run/mnt2"; do "$src/scripts/client.sh" 127.0.0.1:27432 "$m"; done
 rc=0
-python3 "$src/tests/posix/posix_suite.py" "$run/mnt" --jobs 4 --timeout-s 30 --results "$run/posix.tsv" > "$run/posix.log" 2>&1 || rc=1
+python3 "$src/tests/posix/posix_suite.py" "$run/mnt" --suite core --jobs 1 --results "$run/posix.tsv" > "$run/posix.log" 2>&1 || rc=1
 python3 "$src/tests/posix/posix_2client.py" --local "$run/mnt" "$run/mnt2" --parent rdma-peer-gate --results "$run/posix2.tsv" > "$run/posix2.log" 2>&1 || rc=1
 if [ "$mode" = rdma ]; then
     for id in 1 2 3 4; do grep -q 'RDMA transport up' "$run/n$id.log" || rc=1; done

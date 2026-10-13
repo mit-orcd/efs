@@ -16,6 +16,7 @@
 #include "efs/network.h"
 #include "efs/protocol.h"
 #include "efs/rdma.h"
+#include "efs/rdma_message.h"
 #include "efs/wire.h"
 
 #include <errno.h>
@@ -253,7 +254,7 @@ static void *conn_thread(void *arg)
         return NULL;
     }
     if (type == EFS_MSG_RDMA_SETUP) {
-        struct efs_msg_rdma_setup_reply rep;
+        uint8_t rep[EFS_RMSG_SETUP_BYTES];
         uint32_t rlen = sizeof(rep);
         int arc = efs_rdma_server_accept(c, payload, plen, &rep, &rlen);
         free(payload);

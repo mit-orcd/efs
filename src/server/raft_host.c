@@ -741,7 +741,7 @@ static int host_sender_depth(struct efs_conn *pc)
     int d = HOST_SENDER_PIPE_MAX;
 
     if (pc && pc->kind == EFS_CONN_RDMA && pc->rc) {
-        int n = efs_rdma_conn_nrecv(pc->rc) - 1;
+        int n = (int)efs_rdma_message_capacity(pc->rc);
 
         if (n < d)
             d = n;
@@ -937,21 +937,9 @@ static void *host_sender(void *arg)
          * the frames popped if the conn changed kind. Send what fits. */
         depth = host_sender_depth(pc);
         {
-            /* A frame larger than the RDMA buffer (72 KiB) goes over the
-             * conn's TCP side-channel and its RAFT_REPLY comes back on
-             * TCP; the rest are answered on RDMA. efs_conn_send_msg
-             * leaves recv_chan at the LAST message's channel, so a batch
-             * of [AE_REP (RDMA), big AE (TCP)] used to read TCP only,
-             * leave the RDMA reply in the ring, and time out — every
-             * batch, on the one lane that mixes the two (the dual-group
-             * hosts, fcstor004<->fcstor005: one group's AppendEntries
-             * plus the other group's replies). Under a 100 GiB dd the
-             * publish batches made every AE big, the lane failed at
-             * HOST_SEND_IO_MS forever (fail=2399 in 10 min), and the
-             * follower it fed sat 700 entries behind while every
-             * follower-served read returned BUSY (Sep 30 2026,
-             * results/measure/20260930-060000-dd-wedge). Count the
-             * expected replies per channel and read each on its own. */
+            /* One homogeneous application channel after setup. Count only
+             * complete transport replies; DATA segments/CREDIT records are
+             * consumed internally and never become consensus ACKs. */
             int n_rdma = 0, n_tcp = 0;
             uint64_t read_wire_begin = 0;
             int read_wire_type = 0;
@@ -996,9 +984,8 @@ static void *host_sender(void *arg)
                 void *reply = NULL;
                 uint32_t rlen = 0;
 
-                /* With replies pending on both, the RDMA wait drains the
-                 * ring first and falls through to TCP when a byte is
-                 * there; with only TCP pending, read TCP directly. */
+                /* Channel counts validate complete RPC replies; strict RDMA
+                 * never switches to TCP for an oversized request/reply. */
                 pc->recv_chan = n_rdma > 0 ? EFS_CONN_RDMA : EFS_CONN_TCP;
                 if (efs_conn_recv_msg(pc, &rtype, &reply, &rlen) != 0 ||
                     rtype != EFS_MSG_RAFT_REPLY) {
