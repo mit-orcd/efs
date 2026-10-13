@@ -14,12 +14,12 @@ code=r'''
 #include <stdio.h>
 #define EFS_RAFT_LEADER 2
 struct efs_raft {int storage_failed,role,quorum;uint64_t read_round,read_index,current_term,last_applied;
- uint64_t read_proven_round,read_proven_index,read_proven_term;
+ uint64_t read_epoch,read_proven_round,read_proven_index,read_proven_term;
  uint32_t read_proven_cfg_old,read_proven_cfg_new,log_old,log_new;
  uint64_t read_applied_round,read_applied_index,read_applied_term;
  uint32_t read_applied_cfg_old,read_applied_cfg_new;};
 static int efs_raft_read_quorum(const struct efs_raft *r){return r->quorum;}
-'''+helper+function(raft,'efs_raft_read_proven')+host[a:b]+'\nstatic '+function(host,'host_view_covers')+'\nstatic '+function(host,'host_view_wait_apply')+r'''
+'''+helper+raft[raft.index('uint64_t efs_raft_read_context('):raft.index('\n}',raft.index('uint64_t efs_raft_read_context('))+2]+function(raft,'efs_raft_read_proven')+host[a:b]+'\nstatic '+function(host,'host_view_covers')+'\nstatic '+function(host,'host_view_wait_apply')+r'''
 static struct host_view view(struct efs_raft *r,uint64_t applied){
  r->last_applied=applied;
  struct host_view v={.has=1,.role=r->role,.term=r->current_term,.read_pending=1,
@@ -58,9 +58,10 @@ int main(void){
  r.role=2;r.storage_failed=1;v=view(&r,60);assert(!v.proven_done);
  r.storage_failed=0;
  r.read_applied_round=11;r.read_applied_index=50;r.read_applied_term=9;r.read_applied_cfg_old=7;
- read_proof_forget(&r);v=view(&r,60);assert(!v.proven_done);
+ uint64_t epoch=r.read_epoch;read_proof_forget(&r);assert(r.read_epoch==epoch+1);v=view(&r,60);assert(!v.proven_done);
  assert(!r.read_proven_index && !r.read_proven_term && !r.read_proven_cfg_old && !r.read_proven_cfg_new);
  assert(!r.read_applied_round && !r.read_applied_index && !r.read_applied_term && !r.read_applied_cfg_old && !r.read_applied_cfg_new);
+ r.read_epoch=UINT64_MAX;read_proof_forget(&r);assert(!r.storage_failed&&r.read_epoch==UINT64_MAX&&!efs_raft_read_context(&r));read_proof_forget(&r);assert(!efs_raft_read_context(&r));
  puts("completed ReadIndex: eligible waiter, post-send/new-commit refusal, apply, term/config/role/storage fences PASS");
 }
 '''

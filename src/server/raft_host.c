@@ -313,7 +313,7 @@ struct host_group {
      * taken by a handler only to mutate raft (propose, read_begin). */
     uint64_t v_seq; /* odd while publishing; protects the entire read predicate */
     uint64_t v_commit, v_applied, v_read_index, v_read_round, v_term;
-    uint64_t v_proven_index, v_proven_round;
+    uint64_t v_proven_index, v_proven_round, v_read_context;
     int v_has;          /* 1 when a local replica exists */
     int v_role, v_leader;
     int v_read_pending, v_read_done, v_proven_done;
@@ -340,11 +340,13 @@ struct host_lock_wait {
 /* One sleeping handler (see the waiters[] comment in efs_raft_host). All
  * fields are read and written under cv_mu. */
 #define HOST_WAITERS 512
+struct host_read_floor {uint64_t index,context;};
 struct host_waiter {
     pthread_cond_t cv;
     uint64_t idx;   /* wake once the group's applied >= idx */
     uint64_t seen;  /* any=1: wake once the group's view stamp != seen */
     uint64_t round, term; /* any=2: request-scoped fresh read */
+    struct host_read_floor floor; /* first sufficient proof for this sleeper */
     uint8_t notified, proof_only;
     uint8_t group;
     uint8_t active;
@@ -3271,6 +3273,7 @@ static void host_publish_view(struct efs_raft_host *h, int gi)
         V_STORE(g->v_proven_done, 0);
         V_STORE(g->v_proven_round, 0);
         V_STORE(g->v_proven_index, 0);
+        V_STORE(g->v_read_context, 0);
         __atomic_add_fetch(&g->v_seq, 1, __ATOMIC_RELEASE);
         return;
     }
@@ -3284,7 +3287,8 @@ static void host_publish_view(struct efs_raft_host *h, int gi)
     rpend = efs_raft_read_pending(r);
     rdone = efs_raft_read_quorum(r);
     proven_done = efs_raft_read_proven(r, &proven_round, &proven_index);
-    changed = !V_LOAD(g->v_has) || V_LOAD(g->v_commit) != commit ||
+    uint64_t read_context=efs_raft_read_context(r);
+    changed = V_LOAD(g->v_read_context)!=read_context || !V_LOAD(g->v_has) || V_LOAD(g->v_commit) != commit ||
               V_LOAD(g->v_applied) != applied || V_LOAD(g->v_term) != term ||
               V_LOAD(g->v_role) != role || V_LOAD(g->v_leader) != leader ||
               V_LOAD(g->v_read_index) != ridx || V_LOAD(g->v_read_round) != round ||
@@ -3300,6 +3304,7 @@ static void host_publish_view(struct efs_raft_host *h, int gi)
     if (!changed)
         return;
     __atomic_add_fetch(&g->v_seq, 1, __ATOMIC_SEQ_CST);
+    V_STORE(g->v_read_context, read_context);
     V_STORE(g->v_commit, commit);
     V_STORE(g->v_applied, applied);
     V_STORE(g->v_term, term);
@@ -3331,7 +3336,7 @@ static void host_publish_group(struct efs_raft_host *h, uint8_t group)
 struct host_view {
     int has, role, leader, read_pending, read_done, proven_done;
     uint64_t commit, applied, read_index, read_round, term;
-    uint64_t proven_index, proven_round;
+    uint64_t proven_index, proven_round, read_context;
     uint64_t stamp; /* wake generation from the same coherent publish */
 };
 
@@ -3357,6 +3362,7 @@ retry:
     v->read_round = V_LOAD(g->v_read_round);
     v->proven_round = V_LOAD(g->v_proven_round);
     v->proven_index = V_LOAD(g->v_proven_index);
+    v->read_context = V_LOAD(g->v_read_context);
     v->term = V_LOAD(g->v_term);
     v->role = V_LOAD(g->v_role);
     v->leader = V_LOAD(g->v_leader);
@@ -3425,6 +3431,25 @@ static int host_read_wait_ready(const struct host_view *v,
            !host_view_wait_apply(v, want, round, term);
 }
 
+/* Freeze the first eligible quorum while it still owes own apply. Later
+ * rounds must not turn this request's target into a moving write suffix.
+ * Configuration, term, role and failed-storage invalidation still refuse. */
+static int host_read_floor_ready(const struct host_view *v,
+                                 struct host_read_floor *floor,
+                                 uint64_t want,uint64_t round,uint64_t term,
+                                 int proof_only)
+{
+    if(floor->context && v->read_context!=floor->context)return 1;
+    if(!floor->context)floor->context=v->read_context;
+    if (!floor->index && floor->context)
+        (void)host_view_quorum_index(v,want,round,term,&floor->index);
+    if (floor->index)
+        return !v->has || v->role!=EFS_RAFT_LEADER || v->term!=term ||
+               v->read_context!=floor->context || proof_only ||
+               v->applied>=floor->index;
+    return host_read_wait_ready(v,want,round,term,proof_only);
+}
+
 /* Sleep until the pump wakes this waiter or `end` passes. cv_mu HELD by
  * the caller, who has just re-read the view under it and found its
  * predicate false (that order is what rules out a lost wakeup). any=0:
@@ -3435,7 +3460,7 @@ static int host_read_wait_ready(const struct host_view *v,
 static void host_waiter_sleep(struct efs_raft_host *h, uint8_t group, int any,
                               uint64_t idx, uint64_t seen,
                               const struct timespec *end, uint64_t round, uint64_t term,
-                              int proof_only)
+                              int proof_only, struct host_read_floor *floor)
 {
     uint32_t i, n = HOST_WAITERS;
     struct host_waiter *w = NULL;
@@ -3461,10 +3486,12 @@ static void host_waiter_sleep(struct efs_raft_host *h, uint8_t group, int any,
     w->round = round;
     w->term = term;
     w->proof_only = (uint8_t)proof_only;
+    w->floor = floor ? *floor : (struct host_read_floor){0};
     w->notified = 0;
     w->active = 1;
     pthread_cond_timedwait(&w->cv, &h->cv_mu, end);
     w->active = 0;
+    if(floor)*floor=w->floor;
 }
 
 /* Pump side: after publishing every hosted group's view, wake the waiters
@@ -3481,7 +3508,8 @@ static void host_waiters_wake(struct efs_raft_host *h)
         struct host_group *g;
         int wake;
 
-        if (!w->active || w->notified)
+        if (!w->active || (w->notified &&
+            (w->any!=2 || w->floor.index || !w->floor.context)))
             continue;
         g = group_slot(h, w->group);
         if (!g || !V_LOAD(g->v_has))
@@ -3492,13 +3520,13 @@ static void host_waiters_wake(struct efs_raft_host *h)
                 host_view_get(h, w->group, &view[gi]);
                 loaded |= (uint8_t)(1u << gi);
             }
-            wake = host_read_wait_ready(&view[gi], w->idx, w->round, w->term,
-                                        w->proof_only);
+            wake = host_read_floor_ready(&view[gi], &w->floor, w->idx, w->round, w->term,
+                                         w->proof_only);
         } else if (w->any)
             wake = V_LOAD(g->v_stamp) != w->seen;
         else
             wake = V_LOAD(g->v_applied) >= w->idx;
-        if (wake) {
+        if (wake && !w->notified) {
             w->notified = 1;
             pthread_cond_signal(&w->cv);
         }
@@ -4115,6 +4143,7 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
 {
     struct timespec end;
     struct host_view v;
+    struct host_read_floor floor={0};
     uint64_t want, round = 0, admitted_term = 0;
     int prof = read_prof_on();
     uint64_t p0 = prof ? now_us_() : 0;
@@ -4194,6 +4223,15 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             if (prof) fprintf(stderr,"raft-host: admitted-read-term group=%u admitted_term=%llu term=%llu admitted_round=%llu raw_round=%llu proven_round=%llu role=%d leader=%d\n",group,(unsigned long long)admitted_term,(unsigned long long)v.term,(unsigned long long)round,(unsigned long long)v.read_round,(unsigned long long)v.proven_round,v.role,v.leader);
             return EFS_ERR_NOT_PRIMARY;
         }
+        (void)host_read_floor_ready(&v,&floor,want,round,admitted_term,proof_only);
+        if(floor.context && v.read_context!=floor.context)return EFS_ERR_NOT_PRIMARY;
+        if(floor.index) {
+            if(proof_only || v.applied>=floor.index) {
+                if(proof_index)*proof_index=floor.index;
+                if(prof)read_prof_add(first?&g_read_prof.ri_leader_covered:&g_read_prof.ri_leader,now_us_()-p0);
+                return EFS_OK;
+            }
+        }
         if (proof_only && proof_index &&
             host_view_quorum_index(&v, want, round, admitted_term, proof_index)) {
             if (prof)
@@ -4212,7 +4250,7 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             return EFS_OK;
         }
         first = 0;
-        if ((!v.read_pending || v.read_done) &&
+        if (!floor.index && (!v.read_pending || v.read_done) &&
             !host_view_wait_apply(&v, want, round, admitted_term)) {
             /* Begin a round — under h->mu, re-validated against the core
              * (another reader may have begun one since the view). */
@@ -4246,10 +4284,10 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
         /* Registration and wake use the same predicate under cv_mu. A
          * quorum arriving just before registration must not park an already
          * satisfied proof RPC until another pump/view change. */
-        if (!host_read_wait_ready(&v, want, round, admitted_term, proof_only)) {
+        if (!host_read_floor_ready(&v, &floor, want, round, admitted_term, proof_only)) {
             uint64_t s0 = now_us_();
             host_waiter_sleep(h, group, 2, want, v.stamp, &end,
-                              round, admitted_term, proof_only);
+                              round, admitted_term, proof_only, &floor);
             s0 = now_us_() - s0;
             if (s0 > 20000)
                 fprintf(stderr, "raft-host: read-sleep us=%llu group=%u "
@@ -4367,7 +4405,7 @@ static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
         host_view_get(h, group, &v);
         if (v.has && v.applied < idx) {
             uint64_t s0 = now_us_();
-            host_waiter_sleep(h, group, 0, idx, 0, &end, 0, 0, 0);
+            host_waiter_sleep(h, group, 0, idx, 0, &end, 0, 0, 0, NULL);
             s0 = now_us_() - s0;
             if (s0 > 20000)
                 fprintf(stderr, "raft-host: apply-sleep us=%llu group=%u "
@@ -17612,7 +17650,7 @@ static int host_publication_committed(struct efs_raft_host *h, uint8_t group,
         host_view_get(h,group,&v);
         if (v.has && v.role==EFS_RAFT_LEADER && v.term==term &&
             !(v.read_done && v.read_round>=round && v.read_index>=want))
-            host_waiter_sleep(h,group,1,0,v.stamp,&end,0,0,0);
+            host_waiter_sleep(h,group,1,0,v.stamp,&end,0,0,0,NULL);
         pthread_mutex_unlock(&h->cv_mu);
     }
     uint8_t digest[EFS_HASH_SIZE];

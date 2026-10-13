@@ -852,6 +852,34 @@ static void test_read_probe_committed_prefix(void)
     }
 }
 
+static void test_read_context_epoch(void)
+{
+    struct net n={.n=3};struct app app[3]={{0}};
+    struct efs_raft_store *st[3];struct efs_raft_cfg cfg={0};
+    cfg.n=3;cfg.send=send_now;cfg.net=&n;cfg.apply=apply_cmd;
+    for(int i=0;i<3;i++) {
+        st[i]=efs_raft_mem_create();cfg.id=i;cfg.store=st[i];cfg.store_ctx=st[i];
+        cfg.app=&app[i];cfg.election_ticks=8+i*8;n.r[i]=efs_raft_new(&cfg);
+    }
+    CHECK(elect(&n,40)==1,"read context fixture elects");
+    int lid=leader_id(&n);uint64_t initial=efs_raft_read_context(n.r[lid]);
+    CHECK(initial && !efs_raft_read_context(NULL),"healthy leader has invalidation stamp");
+    for(int i=0;i<3;i++) {
+        CHECK(efs_raft_read_begin(n.r[lid])==EFS_OK,"independent context read begins");
+        CHECK(efs_raft_read_context(n.r[lid])==initial,"fresh rounds do not invalidate earlier admitted proof");
+    }
+    CHECK(efs_raft_change(n.r[lid],3)==EFS_OK,"first context configuration transition");
+    elect(&n,40);uint64_t changed=efs_raft_read_context(n.r[lid]);
+    CHECK(changed>initial && efs_raft_voters(n.r[lid])==3,"configuration invalidates parked proof");
+    CHECK(efs_raft_change(n.r[lid],7)==EFS_OK,"restore original voter mask");
+    elect(&n,40);
+    CHECK(efs_raft_read_context(n.r[lid])>changed && efs_raft_voters(n.r[lid])==7,
+          "configuration ABA cannot restore old proof identity");
+    CHECK(efs_raft_step_down(n.r[lid])==EFS_OK && !efs_raft_read_context(n.r[lid]),
+          "stepdown refuses parked leader proof");
+    for(int i=0;i<3;i++){efs_raft_free(n.r[i]);efs_raft_mem_free(st[i]);}
+}
+
 static int pressure_send_ready(void *net, int peer, uint8_t group)
 { (void)peer;(void)group;return !((struct net *)net)->flow_refuse_data; }
 
@@ -2624,6 +2652,7 @@ int main(void)
     test_replicate_and_readindex();
     test_readindex_outstanding_batch();
     test_read_probe_committed_prefix();
+    test_read_context_epoch();
     test_transport_pressure_zero_probe();
     test_i3_i4_and_restart();
     test_snapshot();

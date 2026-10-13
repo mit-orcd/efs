@@ -72,6 +72,7 @@ struct efs_raft {
     uint32_t hb_elapsed;
     uint32_t heartbeat_ticks;
     uint64_t read_index, read_round;
+    uint64_t read_epoch; /* advances on every proof-context invalidation */
     uint64_t read_proven_index, read_proven_round, read_proven_term;
     uint32_t read_proven_cfg_old, read_proven_cfg_new;
     uint64_t read_applied_index, read_applied_round, read_applied_term;
@@ -222,6 +223,9 @@ static int is_cfg_cmd(const uint8_t *cmd, uint32_t clen)
 
 static void read_proof_forget(struct efs_raft *r)
 {
+    /* Saturation disables retained host certificates permanently; canonical
+     * fresh quorum reads remain available without a wrapping identity. */
+    if(r->read_epoch<UINT64_MAX)r->read_epoch++;
     r->read_proven_round = r->read_proven_index = r->read_proven_term = 0;
     r->read_proven_cfg_old = r->read_proven_cfg_new = 0;
     r->read_applied_round = r->read_applied_index = r->read_applied_term = 0;
@@ -2652,6 +2656,14 @@ int efs_raft_read_pending(const struct efs_raft *r)
 uint64_t efs_raft_read_index(const struct efs_raft *r)
 {
     return r ? r->read_index : 0;
+}
+
+uint64_t efs_raft_read_context(const struct efs_raft *r)
+{
+    if (!r || r->storage_failed || r->role!=EFS_RAFT_LEADER ||
+        r->read_epoch==UINT64_MAX)
+        return 0;
+    return r->read_epoch;
 }
 
 int efs_raft_read_quorum(const struct efs_raft *r)

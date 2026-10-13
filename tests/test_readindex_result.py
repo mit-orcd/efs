@@ -20,6 +20,8 @@ struct host_read_admission {uint64_t want,round,term;};
 struct read_prof_acc {int unused;};
 static struct {struct read_prof_acc ri_remote,ri_remote_wait,ri_leader_covered,ri_leader;} g_read_prof;
 '''+view+r'''
+struct host_read_floor {uint64_t index,context;};
+static int delayed_floor;
 static struct host_view current;
 static int remote_rc,apply_rc,admissions,deadline=1,cv_progress,views;
 static int read_prof_on(void){return 0;}
@@ -41,8 +43,13 @@ int efs_raft_read_pending(const struct efs_raft*r){(void)r;assert(0);return 0;}
 int efs_raft_read_quorum(const struct efs_raft*r){(void)r;assert(0);return 0;}
 int efs_raft_read_covers(const struct efs_raft*r,uint64_t n){(void)r;(void)n;assert(0);return 0;}
 int efs_raft_read_begin(struct efs_raft*r){(void)r;assert(0);return EFS_OK;}
-static void host_waiter_sleep(struct efs_raft_host*h,uint8_t g,int any,uint64_t i,uint64_t seen,const struct timespec*t,uint64_t r,uint64_t term,int proof_only){(void)h;(void)g;(void)any;(void)i;(void)seen;(void)t;(void)r;(void)term;(void)proof_only;assert(0);}
-'''+fn('host_view_covers')+fn('host_view_wait_apply')+fn('host_view_quorum_index')+fn('host_read_wait_ready')+fn('host_read_index_admitted')+r'''
+static void host_waiter_sleep(struct efs_raft_host*h,uint8_t g,int any,uint64_t i,uint64_t seen,const struct timespec*t,uint64_t r,uint64_t term,int proof_only,struct host_read_floor *floor){(void)floor;(void)h;(void)g;(void)any;(void)i;(void)seen;(void)t;(void)r;(void)term;(void)proof_only;
+ if(delayed_floor){deadline=1;assert(any==2&&r==11&&term==2);*floor=(struct host_read_floor){110,7};
+ current.read_done=1;current.read_round=12;current.read_index=900;
+ current.proven_done=1;current.proven_round=10;current.proven_index=100;
+ current.applied=110;current.read_context=delayed_floor==2?8:delayed_floor==3?0:7;
+ return;}assert(0);}
+'''+fn('host_view_covers')+fn('host_view_wait_apply')+fn('host_view_quorum_index')+fn('host_read_wait_ready')+fn('host_read_floor_ready')+fn('host_read_index_admitted')+r'''
 int main(void){
  struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.cv_mu=PTHREAD_MUTEX_INITIALIZER,.n=4};
  struct host_read_admission a={101,11,2};int hint;uint64_t proof=9999;
@@ -70,6 +77,15 @@ int main(void){
  current=(struct host_view){.has=1,.role=EFS_RAFT_LEADER,.leader=0,.term=2,.commit=110,.applied=109,.proven_done=0,.proven_index=110,.proven_round=11,.read_pending=1,.read_done=0,.read_round=11,.read_index=110};
  assert(host_read_index_admitted(&h,0,&hint,&a,&proof,1)==EFS_OK&&proof==110&&views>=2);
  pthread_mutex_destroy(&h.mu);pthread_mutex_destroy(&h.cv_mu);return 0;
+ for(delayed_floor=1;delayed_floor<=3;delayed_floor++) {
+  deadline=0;cv_progress=0;
+  current=(struct host_view){.has=1,.role=EFS_RAFT_LEADER,.leader=0,.term=2,.commit=110,.applied=109,
+    .read_context=7,.read_pending=1,.read_round=11,.read_index=110};
+  int rc=host_read_index_admitted(&h,0,&hint,&a,&proof,0);
+  assert(rc==(delayed_floor==1?EFS_OK:EFS_ERR_NOT_PRIMARY));
+  assert(proof==(delayed_floor==1?110u:0u));
+ }
+
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-read-result-') as d:

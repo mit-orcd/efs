@@ -3,7 +3,7 @@
 from pathlib import Path
 import os, shlex, subprocess, tempfile
 root = Path(__file__).resolve().parents[1]
-s = (root/'src/server/raft_host.c').read_text()
+s = Path(os.environ.get('EFS_RAFT_HOST_SOURCE',root/'src/server/raft_host.c')).read_text()
 def section(start, end):
     a=s.index(start); return s[a:s.index(end,a)]
 def structure(name):
@@ -17,7 +17,7 @@ code = r'''
 #define HOST_WAITERS 512
 #define HOST_NGROUPS 2
 #define V_LOAD(x) (x)
-''' + structure('host_view') + structure('host_waiter') + r'''
+''' + structure('host_view') + section('struct host_read_floor {', 'struct host_waiter {') + structure('host_waiter') + r'''
 struct host_group {int v_has; uint64_t v_stamp,v_applied;};
 struct efs_raft_host {pthread_mutex_t cv_mu;struct host_waiter waiters[HOST_WAITERS];
  struct host_group g[HOST_NGROUPS];struct host_view view,other_view;uint32_t waiter_hint;int cv_overflow;pthread_cond_t applied_cv;};
@@ -61,6 +61,28 @@ int main(void){
  reset(&h);h.view.read_done=1;h.view.read_round=11;h.view.read_index=60;
  host_waiters_wake(&h);assert(signals==0);
  h.waiters[0].proof_only=1;host_waiters_wake(&h);assert(signals==1);
+ /* A proof for this reader is observed before own apply catches up.
+  * An older retained proof and a newer raw proof must not replace its floor. */
+ reset(&h);h.view.read_context=7;h.view.read_done=1;
+ h.view.read_round=11;h.view.read_index=60;
+ host_waiters_wake(&h);assert(!signals && h.waiters[0].floor.index==60);
+ h.view.read_round=12;h.view.read_index=900;
+ h.view.proven_done=1;h.view.proven_round=10;h.view.proven_index=55;h.view.applied=60;
+ host_waiters_wake(&h);assert(signals==1 && h.waiters[0].floor.index==60);
+ assert(host_read_floor_ready(&h.view,&h.waiters[0].floor,50,11,9,0));
+ reset(&h);h.view.read_context=7;h.view.read_done=1;h.view.read_round=11;h.view.read_index=60;
+ host_waiters_wake(&h);assert(!signals && h.waiters[0].floor.context==7);
+ h.view.read_context=8;host_waiters_wake(&h);assert(signals==1); /* refuse changed cfg */
+ reset(&h);h.view.read_context=7;h.view.read_done=1;h.view.read_round=11;h.view.read_index=60;
+ host_waiters_wake(&h);h.view.read_context=0;host_waiters_wake(&h);assert(signals==1); /* storage failure */
+ /* A scheduling wake for the next round is not completion. Capture its
+  * later eligible proof even if that first signal has not been consumed. */
+ reset(&h);h.waiters[0].floor.context=7;h.view.read_context=7;
+ h.view.read_done=1;host_waiters_wake(&h);assert(signals==1&&!h.waiters[0].floor.index);
+ h.view.read_round=11;h.view.read_index=60;host_waiters_wake(&h);
+ assert(signals==1 && h.waiters[0].floor.index==60);
+ h.view.read_round=12;h.view.read_index=900;h.view.applied=60;host_waiters_wake(&h);
+ assert(signals==1 && h.waiters[0].floor.index==60);
  reset(&h);h.view.term++;host_waiters_wake(&h);assert(signals==1);
  reset(&h);h.view.role=1;host_waiters_wake(&h);assert(signals==1);
  reset(&h);h.view.has=0;host_waiters_wake(&h);assert(signals==1);
@@ -89,7 +111,7 @@ int main(void){
  for(unsigned i=0;i<HOST_WAITERS;i++)h.waiters[i].active=0;
  h.waiter_hint=0;h.waiters[0].notified=1;registration=&h;
  struct timespec end={0};pthread_mutex_lock(&h.cv_mu);
- host_waiter_sleep(&h,0,2,50,0,&end,11,9,1);
+ host_waiter_sleep(&h,0,2,50,0,&end,11,9,1,NULL);
  pthread_mutex_unlock(&h.cv_mu);assert(!h.waiters[0].active && !h.waiters[0].notified);
  puts("read waiters: fresh proof, pending apply, old round, invalidation and single signal PASS");
 }

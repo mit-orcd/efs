@@ -339,6 +339,9 @@ int efs_raft_read_covers(const struct efs_raft *r, uint64_t want);
  * index and whether it has its quorum (ready once applied >= that index). */
 uint64_t efs_raft_read_index(const struct efs_raft *r);
 int efs_raft_read_done(const struct efs_raft *r);
+/* Current leader's monotonic proof-context identity, zero when unavailable/failed.
+ * This is an invalidation stamp, never proof or permission to read. */
+uint64_t efs_raft_read_context(const struct efs_raft *r);
 /* Correlated fresh quorum proof only; does not authorize reading unapplied KV. */
 int efs_raft_read_quorum(const struct efs_raft *r);
 /* Quorum completion, preferring a valid applied proof over a newer unapplied

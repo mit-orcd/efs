@@ -19,7 +19,7 @@ code=r'''
 #include <stdio.h>
 #define EFS_RAFT_LEADER 2
 struct efs_raft {int role,storage_failed,quorum,leader,pending;uint64_t commit,applied,current_term,read_round,read_index;
- uint64_t read_proven_round,read_proven_index,read_proven_term;uint32_t read_proven_cfg_old,read_proven_cfg_new,log_old,log_new;
+ uint64_t read_epoch,read_proven_round,read_proven_index,read_proven_term;uint32_t read_proven_cfg_old,read_proven_cfg_new,log_old,log_new;
  uint64_t read_applied_round,read_applied_index,read_applied_term;
  uint32_t read_applied_cfg_old,read_applied_cfg_new;};
 #define last_applied applied
@@ -39,7 +39,7 @@ static int efs_raft_read_quorum(const struct efs_raft*r){
  if(slow_quorum){entered=1;pthread_cond_broadcast(&slow_cv);while(!released)pthread_cond_wait(&slow_cv,&slow_mu);}
  pthread_mutex_unlock(&slow_mu);return r->quorum;
 }
-''' +func(r,'efs_raft_read_proven')+'\nstruct host_group {struct efs_raft*r;\n'+group+r'''
+''' +func(r,'efs_raft_read_context')+func(r,'efs_raft_read_proven')+'\nstruct host_group {struct efs_raft*r;\n'+group+r'''
 };
 struct efs_raft_host {struct host_group g[1];};
 static struct host_group *group_slot(struct efs_raft_host*h,uint8_t g){assert(!g);return h->g;}
@@ -52,7 +52,7 @@ static struct efs_raft_host host;
 static int done;
 static void set_view(int ready){
  core=(struct efs_raft){.role=2,.leader=0,.quorum=ready,.pending=!ready,
- .current_term=9,.commit=60,.applied=ready?60:50,.read_round=12,.read_index=60,
+ .read_epoch=7,.current_term=9,.commit=60,.applied=ready?60:50,.read_round=12,.read_index=60,
  .read_proven_round=11,.read_proven_index=50,.read_proven_term=9,
  .read_proven_cfg_old=7,.log_old=7};
  host.g[0].r=&core;host_publish_view(&host,0);
@@ -70,7 +70,7 @@ int main(void){struct host_view v;set_view(0);host_view_get(&host,0,&v);
  assert(host_view_covers(&v,60,12,9)&&publication_ready(v,12,60));
  assert(!publication_ready(v,13,60));
  core.storage_failed=1;core.quorum=0;host_publish_view(&host,0);host_view_get(&host,0,&v);
- assert(!v.proven_done&&!host_view_covers(&v,50,11,9));
+ assert(!v.read_context&&!v.proven_done&&!host_view_covers(&v,50,11,9));
  host.g[0].r=NULL;host_publish_view(&host,0);host_view_get(&host,0,&v);
  assert(!v.has&&!v.read_done&&!v.proven_done&&!v.proven_index&&!v.proven_round);
  set_view(1);
