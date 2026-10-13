@@ -642,8 +642,25 @@ until its applied index covers the read before reading the KV. There are
 Implementation acceptance requires a fresh authority round for each admitted
 request/batch: an old completed quorum cannot authorize indefinitely later
 reads. The isolated-core/source finding is [W82](../backlog/work-items.md#w82).
+A forwarded proof response carries the exact index that satisfied its admitted
+read, not a later live applied index containing unrelated concurrent commits.
+The quorum-only proof issuer returns no KV rows and need not catch up its own
+KV before replying. The data-serving replica must apply that exact proof index
+before reading its KV; local leader data reads also retain their own apply
+barrier. This separation does not relax fresh quorum or data-owner apply
+requirements, and the proof-only endpoint refuses after leader role change.
 Read authority is **amortized**: one quorum round serves a whole batch of
-requests — the read-side analog of publication batching (§7.3).
+requests — the read-side analog of publication batching (§7.3). Coalesced callers retain their first
+sufficient completion index under the coordinator mutex; a later caller's proof
+cannot increase an already completed caller's apply target. Fresh read probes
+contact a peer's acknowledged committed prefix without carrying pending write
+entries or postponing the ordinary data replication heartbeat. Each waiting
+data reader retains its first sufficient request-fresh quorum index until its
+own apply covers that index. A local monotonic context epoch invalidates this
+retention on term/role/configuration changes and storage failure, including
+configuration ABA; epoch saturation disables retention without reusing an
+identity. This state belongs only to the active request and is never a lease
+or permission for a later admission.
 
 Invariants: I1–I4, I9, I10, I18.
 

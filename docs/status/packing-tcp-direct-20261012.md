@@ -13,16 +13,20 @@ independently of inherited command-enabled environment. Its summary records the
 packing and command flags. Physical packing, mutation, peer, cold-byte and
 reclamation assertions and original deadlines remain unchanged.
 
-Retained code: **5568306c** reverts the unproven queued read-vote experiment;
-all tracked product/build/test inputs match tested
-**f0dd1a2d8d0f7d70eb5839a1139bac9b2556cd4f** exactly. Full normal/fault native
-and twelve focused normal/sanitizer checks PASS. First retained-code quiet round
-**1498/1512 PASS,14 timeouts** (all seven deep60 and unusual-name directories);
-peer67/67, orderly shutdown, cold acknowledged bytes, physical reclamation and
-metadata drain PASS. Second quiet retained-code round **1502/1512 PASS,10 timeouts**: seven deep60
-and unusual-name directories on clients1/4/5. Both retained rounds pass peer,
-shutdown, cold bytes, physical reclamation and metadata drain. No owned fixture
-is running. W95 packing repeatability remains FAIL, with original budgets.
+**Qualified source: 8151debe7810b5f5814dd18513608fefd8073bbd — PASS on AMD.**
+Full normal/fault native, nineteen focused normal/ASan/UBSan and fully
+instrumented actual Raft normal/early-ACK checks PASS. Three consecutive quiet
+seven-client/jobs16 rounds each PASS1512/1512 core and67/67 peer, with no
+skip/notrun in the selected core. Every deep60, deep100 and unusual-name case
+passes the original30s budget. Each round also passes orderly shutdown, cold
+acknowledged bytes, physical packed reclamation and metadata queue drain.
+The focused all-four-daemon SIGKILL-after-acknowledged-fsync/cold gate PASS.
+
+This closes the observed AMD deep-directory/unusual-name timeout acceptance
+gate for this source and workload. W95 remains partial for production-format,
+migration and matched packing-on/off performance decisions. Fresh quorum,
+configuration/term/role/storage invalidation and serving-owner apply fences
+remain; no quota, timeout, lease, wire format or release/tag/push change.
 
 Historical baseline source: **0dcce384fa442479070a31464777f104c1fe7829**.
 Memtable insertion optimization and GC shutdown correction pass normal/fault
@@ -30,7 +34,7 @@ native, fully instrumented LSM/model/GC safety gates, focused orderly packing
 and acknowledged-fsync crash/cold/reclamation gates on AMD. The isolated insertion
 benchmark improves 13.8x; this is not an end-to-end throughput claim.
 
-Full seven-client packing remains **FAIL**: clients 2 and 6 exceed the unchanged
+At the historical0dcce384 checkpoint, full seven-client packing was **FAIL**: clients 2 and 6 exceed the unchanged
 30s deep-directory deadline (1510/1512 core PASS; peer67/67 PASS). All four
 daemons then stop cleanly within 20s. That full run's cold restart is **NOTRUN**
 after an explicit 4G reserve refusal, separately from the core timeout failures.
@@ -76,11 +80,12 @@ Inspect cleanup output before deleting only those private fixture directories.
 
 ## Remaining gates
 
-Focused mounted lifecycle; full seven-client quiet acceptance; meaningful fault
-and sanitizer regressions for identified defects; repeated current-source cold
-and shared-object reclamation; matched packing-on/off throughput, durable-close
-latency, allocation and CPU comparison. Record exact executed commit, binary
-hashes, host/configuration, verdicts, raw location and limitations here.
+The original-budget AMD safety, quiet repeatability and focused cold/crash
+acceptance above are PASS on the named source. Remaining W95 work is matched
+packing-on/off throughput, durable-close latency, allocation/CPU comparison,
+and the P4.1 production-format/migration decision. Single-host functional
+acceptance does not establish multi-host/network/hardware failure behavior or
+a production packaging rollout. The release branch/tag is unchanged.
 
 ## AMD checkpoint: first complete quiet run
 
@@ -1038,3 +1043,488 @@ tests/test_net_receive_deadline.py` and `python3 tests/test_small_frame_receive.
 use the documented sanitizer compiler wrapper for ASan/UBSan. Erase only stopped
 EFS fixture stores under the authorized AMD waiver if capacity requires it;
 preserve the useful summaries/logs externally. No push or release promotion.
+
+
+### Fresh metadata waits — exact remote proof floor
+
+A new low-overhead diagnostic on f0dd1a2d retained the exact four4G, seven×16
+core, TCP/direct/packing, commands-disabled workload and original deadlines;
+only EFS_READ_PROF/EFS_RPC_PROF/EFS_RAFT_OBS/EFS_POSIX_PHASE_TRACE were enabled.
+Raw `fresh-read-diag.*` and `root-a/gc-direct-d1m6voav` are external. Core1497/1512
+PASS,15 timeouts; this instrumented result is diagnostic. Last observed deep60
+phase is create on all seven clients (missing datagrams remain unknown).
+Final cumulative read-prof averages: node1 parent fence4308us versus KV26us;
+node2 parent fence7216us versus KV26us, remote proof6352us and local post-proof
+apply1690us. During the busy window those means were5278,8354,8327 and2209us,
+respectively. These are stage aggregates across the workload, not per-case
+causal percentages. Fresh proof and catch-up dominate row lookup CPU.
+
+Inspection found the zero-command ReadIndex RPC called host_read_index, then
+sampled a later `v.applied` for its reply. That later index can include unrelated
+concurrent commits beyond the proof that already covered this admission.
+The requester must then apply that unnecessary suffix before reading its KV.
+fc76dd52 adds an optional exact proof output to the actual admitted reader:
+leader completion returns its coherent proven_index; follower completion
+returns the remote index only after its own applied barrier succeeds. Errors
+clear the output. Ordinary local/paired reads retain their existing predicates.
+Only the zero-command remote proof reply uses the output rather than sampling
+later live state. No fresh round, quorum, own-term commitment, own apply,
+transaction, routing or failure fence is relaxed; the wire format is unchanged.
+
+The focused actual-reader regression uses proof110 with later applied900 and
+commit1000 and requires returned110. It also refuses older rounds, missing
+quorum, insufficient own apply, term change, remote failure and requesting-host
+apply failure; actual scalar admission and paired regressions PASS. This is
+exact target selection, not authority caching. Native normal/fault and thirteen
+focused normal/ASan/UBSan checks on exactfc76dd52 PASS. Exact input775 files,
+aggregate `21e753204d36e235316902fa2f092be335670150ff35cdd1d7dcf9cc289cb705`,
+external `efs-floor-inputs.json`, source `floor-src`, build IDsfc76dd52/devel.
+The frozen live suite does not include the separately committed7c56c70b opt-in
+unusual-name phase extension (local observer/unchanged-workload regression PASS).
+
+First quiet core1512/1512 PASS and peer67/67 PASS, orderly exits0 within20s,
+cold acknowledged hashes, physical GC and metadata drain PASS. Raw first fixture
+`root-a/gc-direct-n45qfmd1`, output `floor-quiet-1.log`. Sequential repeat2/3 and
+focused fsync crash are pending under screen `packing-floor`. No simultaneous
+profiler/build is active in quiet runs. Do not infer repeatability from round1.
+Reproduce via the existing quiet command with this exact source/build, fresh
+ports37510/37520/37530 and focused37550. Original4G and30/75/20/180s budgets,
+TCP/direct, packing enabled and `.efs` disabled at client/server are unchanged.
+
+
+### Exact-index repeat failure and quorum-only proof endpoint
+
+fc76dd52 full normal/fault and thirteen focused normal/sanitizer checks PASS.
+Quiet rounds1/2 core1512/1512 and peer67/67 PASS, with orderly shutdown, cold
+hashes, physical GC and metadata drain PASS. Client suite wall ranges were
+44.5–48.9s and47.2–64.2s, versus retained f0dd1a2d repeat76.5–79.0s; these are
+suite totals, not individual directory times. Round3 **1467/1512 PASS,45
+unchanged-budget timeouts**, including deep/unusual-name cases and four75s
+many-file cases. Peer67/67, shutdown/cold/reclamation/drain PASS independently.
+Focused crash NOTRUN after failed round3. Source/budgets did not change between
+rounds; two successes do not close repeatability. Raw failed fixture
+`root-a/gc-direct-isvekdt3` (n3/n4 companion `root-b/gc-direct-l1bseml3`),
+`floor-quiet-3.log`, `floor-run.exit=1`. Existing logs contain apply waits in the
+20–70ms range during the later load. A post-core iostat snapshot showed NVMe
+93.1% utilization, about10.5k writes/s and4930 flushes/s; that snapshot is a
+storage-pressure lead, not a measurement of the entire failed case window.
+No thermal throttling conclusion is made from raw temperature readings.
+
+The remaining RPC path waited for leader KV apply before returning a proof,
+then the data-serving requester waited for its own KV apply. 6b0324e7 introduces
+an explicit proof-only mode used only by the zero-command leader index RPC.
+It returns a request-fresh, matching-term quorum certificate with its exact
+index; it never reads or returns KV rows. The core already validates current
+term commitment, correlated round, membership/configuration, boot/persisted
+prefix and storage health. A proof endpoint that becomes a follower refuses
+NOT_PRIMARY rather than forwarding into a chain. Ordinary local and paired
+metadata reads keep the existing own-apply predicate; remote requesters still
+call host_wait_applied before reading their data. This removes duplicate
+apply waiting at the certificate issuer, not the data-owner apply requirement.
+No clock lease, cached authority, wire change or timeout increase.
+
+Actual admitted-reader regression PASS: a quorum-only certificate may return
+110 while leader apply is109, but the same local data read remains BUSY.
+Missing/older proofs, insufficient floor, term change and proof-endpoint
+stepdown refuse; remote requester apply failure also refuses. Current raw
+quorum can satisfy a fresh floor while an older retained applied proof cannot.
+Paired-read regression asserts its calls stay in normal data-reading mode.
+Actual Raft test_read_quorum_before_apply separately verifies fresh quorum
+with parked apply never satisfies read_ready/read_covers, and old replies or
+stepdown cannot grant proof. Fully instrumented actual library normal and
+EFS_TEST_EARLY_READ_ACK=1 runs PASS on this source, plus full normal native PASS.
+Fault and thirteen focused normal/ASan/UBSan gates are still pending at this
+checkpoint, followed by the unchanged three quiet rounds and fsync crash.
+
+Exact source6b0324e7 input775 files, aggregate
+`e377c1917b4d71bafff14987d9e5993d19e9fd5568b72ac9b510e5cb69c11613`,
+external `efs-certificate-inputs.json`, source `certificate-src`, build IDs
+6b0324e7/devel. It includes the opt-in unusual-name phase markers; the AST
+regression verifies the original case I/O operations are unchanged, with default
+quiet operation and nonblocking observer failure isolation. Raw output uses
+`certificate-*`, screen `packing-certificate`; actual-core sanitizer outputs
+use `certificate-core-san-*` and finished with exit0 before quiet measurement.
+Reproduce with the common quiet command using fresh37610/37620/37630 ports and
+focused37650; diagnostics remain separate and explicitly non-qualification.
+
+
+### Fresh-read completion and waiter corrections
+
+These commits address distinct waits, without granting cached read authority:
+
+| Commit | Correction | Exact-source verdict |
+|---|---|---|
+| 6b0324e7 | Quorum-only issuer returns an exact index without its own KV catch-up; data owner still applies it | Full normal/fault native, thirteen focused normal/sanitizer and actual-core normal/early-ACK sanitizer PASS; quiet1497/1512 FAIL (15 timeouts); peer/shutdown/cold/reclamation/drain PASS |
+| e47262cb | Typed actionable read wakeups, one notification per registered sleeper, coherent group snapshot | Live measurement interrupted and excluded: replacement build briefly overlapped; retained diagnostic, not qualification |
+| 75592aad | Same proof-only readiness predicate at wake and under CV registration, closing a missed-ready race | Full normal/fault native, fourteen focused normal/sanitizer and actual-core normal/early-ACK sanitizer PASS; quiet1496/1512 FAIL (16 timeouts); peer/shutdown/cold/reclamation/drain PASS |
+| 570f49ea | Freeze each coalesced caller's first sufficient completion rather than chase later callers' index | Build PASS; normal native stopped on two test-harness GCC misleading-indentation errors; fault/live NOTRUN |
+| a262e71b | Brace those test wait loops, retaining strict GCC warnings | Full normal/fault native and fifteen focused normal/sanitizer PASS; quiet1498/1512 FAIL (14 timeouts); peer/shutdown/cold/reclamation/drain PASS |
+
+The coalescer test runs actual extracted functions with real threads: first
+proof100, next110, later900. A deliberately delayed caller must retain110 after
+the later caller completes900. Exact75592aad code fails that regression; fixed
+code passes. Frozen errors, timeout unlink and counter exhaustion are covered.
+Reproduce with `python3 tests/test_readindex_coalescer.py`; the legacy comparison
+accepts `EFS_RAFT_HOST_SOURCE` and `EFS_TEST_LEGACY_COALESCER=1`. Read waiter
+regression: `python3 tests/test_read_waiters.py`. The actual admitted-reader test
+also injects readiness between the outer check and CV registration; the old
+registration predicate fails, corrected code passes.
+
+Raw external prefixes are certificate, wake, ready, first and delivery under
+`amd_efs:/data1/efs/packing-qualification-20261012`. Completed quiet fixtures:
+certificate `root-a/gc-direct-7mayo4o2`, ready `root-a/gc-direct-86c06hqo`,
+delivery `root-a/gc-direct-dgb0dlyo`. Wake exit130 and its measurement note retain
+the excluded overlap; subsequent runners wait for predecessor cleanup before
+building. Additional repeats and crash tests were NOTRUN after quiet failure.
+The user authorized deletion of stopped synthetic stores; logs, manifests and
+summaries remain externally. Ordinary AMD services were not modified.
+
+Exact a262e71b input787 files (including tracked vendor dependencies), aggregate
+`33e4998a425afd1d11f0970e801f8087b7273a50a0ebfa70ce4a0b28bd225d5e`,
+external `efs-delivery-inputs.json`, source `delivery-src`, build IDs a262e71b/devel.
+Binary SHA-256 efsd `70acf6c0d93b42d8ce5e0081665746f077c91c33ea63791cf8fc909acde8fbcf`,
+efs-fuse `f9224ed604156f6d5000b36bd1d6bea7b6ca1f65a0fbda3c779dac8ad5654cdf`,
+efs-mgmt `01a1fcffd6658bbe9a7466e16e5529c33e9b1c3944db1e19e82fa09fe39ecbc6`.
+Use the common quiet command with fresh38010/38020/38030 ports and focused38050.
+
+### Committed-prefix probes and heartbeat progress
+
+429e320d changes only fresh read contacts: a zero-entry probe carries at most
+the peer's already acknowledged committed prefix. Compacted hints fall back to
+zero. The existing term, boot, configuration, durability and request-round checks
+still decide quorum; normal data-serving reads still require their own applied
+index. These contacts never clear outstanding write batches and do not reset
+`hb_elapsed`, so read storms cannot postpone ordinary replication heartbeats.
+This removes read contact's coupling to unrelated future WAL writes.
+
+The actual-core `test_read_probe_committed_prefix` runs group0 and group2,
+queues a locally durable but uncommitted tail, requires fresh quorum to cover
+only the prior committed point without applying that tail, then starts repeated
+reads immediately before ticks and requires ordinary heartbeat replication to
+complete. `./tests/test_raft` and `EFS_TEST_EARLY_READ_ACK=1 ./tests/test_raft`
+PASS with the change. Rebuilding the same tests with exact a262e71b raft.c yields
+eight failures: probe shape, committed-prefix readiness and heartbeat progress.
+That negative comparison is retained externally as `probe-negative-*`.
+
+Exact committed input787 aggregate
+`af101cde8c0e338a7b1d41c2117ce9c1c962d3e77b0602fdc088c570aaa04c82`,
+manifest `efs-probe-inputs.json`, source `probe-src`, build IDs429e320d/devel.
+Full normal/fault native, fifteen focused normal/sanitizer, fully instrumented
+actual-core normal/early-ACK, three quiet repeats and focused acknowledged-fsync
+crash gates are RUNNING/NOTRUN pending their markers. Reproduce the full native
+checks with `make test`, then a separate clean `EFS_FAULTS=1` build and test;
+use the common quiet command at38110/38120/38130 and focused38150. The unchanged
+four4G, seven×16 core and30/75/20/180s budgets apply. No profilers/builds overlap
+accepted quiet measurements. W95 remains open; production-format/migration and
+matched packing-on/off performance decisions also remain separate obligations.
+
+
+### Committed-prefix result and accounted reply follow-up
+
+Exact429e320d full normal/fault native, fifteen focused normal/ASan/UBSan and
+fully instrumented actual-core normal/early-ACK PASS. Quiet round1 at38110
+fails1505/1512: deep60 timeout on each client; unusual-name and deep100 cases
+PASS. Peer67/67, four orderly zero exits, cold acknowledged bytes, physical
+reclamation and metadata drain PASS. Further quiet rounds/crash NOTRUN after
+failure. External `probe-run.exit=1`, `probe-quiet-1.log`, fixture
+`root-a/gc-direct-v0rt9ju3`. Binary SHA-256 efsd
+`5a89be009a504546d0a53018e745fc4b5b50a7091f7078c5a4d141c9ed92c900`,
+efs-fuse `9987914f4cbe622acf70dfbaa5fbec0aeea1cf499de9206e13b68dfd8d981938`,
+efs-mgmt `09701a5dacdfc39ffbabb317eed43b18d94a3320ab9e0337e727c02049919a0d`.
+
+Sequential low-rate diagnostic on the same binaries: enable
+`EFS_POSIX_PHASE_TRACE=1 EFS_READ_PROF=1 EFS_RPC_PROF=1 EFS_RAFT_OBS=1` with the
+common seven×16 command at38210. Fixture `root-a/gc-direct-6_mzxsu8`, external
+`probe-read-diag.*`. All deep60/deep100/unusual-name directory cases PASS,
+but seven ordinary I/O failures across five clients prevent acceptance:
+client0 concurrent write/readdir; client1 many-files and concurrent same-dir
+creates; client2 rename-to-self; client3 concurrent same-dir creates; client5
+many-files. Observer overhead and varying leadership prohibit treating this
+as a quiet repeat. Active metadata leader cumulative final lookup parent fence
+1385us versus KV32us, local leader read1007us; these are workload stage means,
+not per-directory causal percentages. Node3 accumulated100900 inbox refusals
+and13 PUT errors in the diagnostic. This is a feedback/queue-pressure lead,
+not proof that every refusal caused an application error. Preserve failures.
+
+Inspection found already-known-prefix probe replies fell through to normal
+receive whenever an unrelated local write suffix existed; the host also
+requeued accounted replies when other inbox work existed. e301bc3f consumes
+only successful same-term/boot/group/voter probe replies whose match is no
+newer than the peer's already-known match. It records liveness and only the
+matching fresh round's vote, without changing next/inflight, commit or apply.
+Real new-prefix progress replies still return to ordered receive; pending
+requests remain ordered. This preserves the existing early vote behavior,
+while removing useless queue/replication work. No new quorum, lease, wire or
+cached-authority rule is introduced.
+
+Actual-core normal and early-ACK PASS; exact429e320d core fails six new runtime
+assertions about known-prefix consumption. The regression also checks fresh
+versus stale round authority, no unrelated commit/apply, and new-prefix reply
+fallback. `python3 tests/test_read_control_host.py` verifies pending requests,
+progress replies and fully accounted replies separately. Working diagnostic
+build results are preliminary; exact committed input787 aggregate
+`28a266dfa31899adf74bff551479b06e8285f28c06155d3d8c2d9f844e23d920`,
+manifest `efs-accounted-inputs.json`, source `accounted-src`, build IDse301bc3f/devel.
+Exact native/fault, focused and actual-core sanitizer gates RUNNING; quiet
+rounds38310/38320/38330 and focused38350 NOTRUN until safety finishes. Same
+scope and original budgets apply; no push or release promotion. Raw outputs
+remain outside Git under the common external base with `accounted-*` names.
+
+
+### Accounted-probe exact-source checkpoint
+
+Exact e301bc3f full normal/fault native, fifteen focused normal/ASan/UBSan and
+fully instrumented actual Raft normal/early-ACK PASS. Quiet38310 core1505/1512
+FAIL: deep60 on all seven clients times out at30s; unusual-name/deep100 and all
+other core cases PASS. Peer67/67, four zero orderly exits, acknowledged cold
+hashes, physical packed reclamation and metadata queue drain PASS. Further
+repeats and focused crash NOTRUN after failure. Raw fixture
+`root-a/gc-direct-eo4sfvfk`, `accounted-quiet-1.log`, `accounted-run.exit=1`.
+Executing binaries' flags were inspected: packing1, commands0/server0, repair0
+on all four daemons and seven FUSE clients.
+
+Binary SHA-256 efsd `296b57e9241d22c9ee306ae285fe7681dc3fd8daac469a17dae1627bc862ea9f`,
+efs-fuse `bf962970e32ec689848035517ebba59b6d7101c4509f089ee6e1f0f3199653de`,
+efs-mgmt `73981f14c7f8490d7433c921d967a9c7c00bb25b6ed96dcc9c4ba1efe67ac3cb`.
+
+A sequential lower-overhead diagnostic enables only EFS_POSIX_PHASE_TRACE and
+EFS_READ_PROF on the same binaries, port38410, `accounted-read-diag.*`, fixture
+`root-a/gc-direct-hi6ef9v0`. All deep60 cases again stop during create, with no
+later phase observed; all seven are30s timeouts, other core cases PASS. Missing
+datagrams remain unknown. During load, node1 parent fence4291us versus KV38us;
+node2 parent fence7499us versus KV42us, remote proof6670us and post-proof own
+apply4839us. These stage means overlap different call populations and must not
+be summed into a claimed per-case breakdown. Unlike the prior instrumented
+run, no ordinary core I/O errors were observed. W95 remains open.
+
+Next experiment changes only HOST_INBOX_SLICE_MAX8 to32 on an external copy of
+this source, retaining bounded FIFO order and original admission/retirement
+accounting. Purpose: test whether fewer durability cycles reduce fresh
+metadata/apply waits; no timeout, quorum, wire or durability change. Working
+source is `slice32-dev-src`, parent e301bc3f plus the one constant delta; it is
+not exact committed-source qualification. Build and actual inbox FIFO regression
+precede the common quiet workload at38510, with no concurrent diagnostic/build.
+Do not retain the tuning without demonstrated benefit and final source gates.
+
+
+### Bounded FIFO batching candidate
+
+The initial working experiment e301bc3f plus HOST_INBOX_SLICE_MAX32 passes
+1512/1512 core at38510, including all seven deep60, deep100 and unusual-name
+cases; no core skip/notrun. It uses default quiet flags and the unchanged
+four4G, seven×16 workload. Source `slice32-dev-src`, build label
+e301bc3f-slice32, raw `slice32-dev.*`, fixture `root-a/gc-direct-cyl2qfvr`.
+This comparison is one preliminary run; exact-source and repeated acceptance
+are still required. The effect is consistent with amortizing the pump's
+existing KV durability tail over more admitted FIFO frames, but no per-syscall
+causal percentage or throughput speedup is claimed.
+
+ac2133fb commits only8→32. The host still takes a bounded FIFO prefix, retains
+tails ahead of new arrivals, preserves control/config boundaries, and retires
+only taken credits through the existing post-KV durable checkpoint path.
+No user or internal operation deadline changes. Actual inbox/read-control
+regressions PASS. Exact input787 aggregate
+`1502bc2bdc79f6cfe26eabf346a62879a13ec2e3ed1fd36b396c2c3b5af54d5e`,
+external `efs-batch32-inputs.json`, source `batch32-src`, build IDsac2133fb/devel.
+The runner waits for the preliminary fixture's full cleanup before building.
+Full normal/fault native, fifteen focused normal/sanitizer and actual-core
+normal/early-ACK sanitizer are RUNNING/NOTRUN; then three quiet rounds at
+38610/38620/38630 and focused acknowledged-fsync crash at38650. No concurrent
+build/profiler in quiet measurements. No push or release promotion.
+
+
+Current focused regression commands (run from the exact named source):
+
+```sh
+for t in readindex_admission readindex_result readindex_coalescer read_waiters \
+  readindex_pair readindex_completion readindex_remote_pair read_control_host \
+  readindex_operation readindex_publish host_inbox peer_pool_deadline \
+  host_read_deadline net_receive_deadline small_frame_receive; do
+  python3 "tests/test_$t.py" || exit 1
+done
+```
+
+Repeat that loop with a temporary `cc` wrapper placed first in PATH, executing
+`/usr/bin/gcc -fsanitize=address,undefined -fno-omit-frame-pointer -g "$@"`;
+set `EFS_TEST_SANITIZE=1 ASAN_OPTIONS=detect_leaks=1:abort_on_error=1
+UBSAN_OPTIONS=halt_on_error=1`. For the actual core, use a separate clean source
+copy and compile/link `libefs.a tests/test_raft` with the same wrapper via CC,
+then run `./tests/test_raft` normally and with `EFS_TEST_EARLY_READ_ACK=1` under
+those sanitizer environment settings. Keep safety builds separate from the
+unmodified quiet binaries and finish all builds before starting live workloads.
+To reproduce the negative comparisons, overlay the prior commit's raft.c in a
+separate copy containing the newer tests/test_raft.c and rebuild the core test;
+the documented assertions must fail. Never run that mixed negative source as
+live acceptance. All raw outputs belong outside Git.
+
+
+### Exact bounded-batching repeats and transient packed flush
+
+Exact ac2133fb full normal/fault native, fifteen focused normal/ASan/UBSan and
+fully instrumented actual-core normal/early-ACK PASS. Quiet round1 at38610
+PASS1512/1512 core,67/67 peer, orderly zero exits, cold bytes, physical
+reclamation and metadata drain. Quiet round2 at38620 **FAIL1511/1512**: client3
+concurrent_write_and_readdir reports EIO; all deep60, deep100 and unusual-name
+cases PASS on every client in both rounds. Round2 peer67/67, orderly exits,
+cold bytes, physical reclamation and metadata drain PASS independently.
+Round3/focused crash NOTRUN after round2 failure; full repeatability not closed.
+Raw first fixture `root-a/gc-direct-b26eei0a`, second `root-a/gc-direct-jhlfwovt`,
+external `batch32-*`, exit1. The preliminary larger-slice run also finished
+all lifecycle gates PASS, but does not substitute for exact-source acceptance.
+
+Binary SHA-256 efsd `f465e920fbe738e242fee15a8a8c47b9d8553a110df7f7b876215ae7de00b679`,
+efs-fuse `6a8e6d6f2031d253409c51e1ee2a3fdd7c857ea758eb9897c2300da5625837a3`,
+efs-mgmt `2d59840deb331cdefef4ac889501a9516e0ad3df350a9481df9be2bc9cee56c3`.
+Raw hashes: quiet1 `1cfd6b1260b337f1a4a8e69ab10ccfa6e0bbdd16d07d227bbf3e82bdfa99599c`,
+normal native `575d5c58c070c252fd64f62b524550ec29ab451eb0435c66a899e0414d9d5f88`,
+fault native `9683c1956b6a4aa37aedc3ce03f956aa674402d012bb89a0c00487a7fa9300dc`.
+
+The round2 FUSE client3 records `flush-meta ... efs_rc=-15 ino=154178` at
+06:11:57.690Z. EFS_ERR_NOT_PRIMARY is a metadata-authority refusal, not a disk
+I/O error. Node3 PUT error counts also rose during that window; aggregate
+counters alone do not prove one-to-one causal mapping. Inspection identifies
+a concrete client defect: pack_flush_run retains the immutable object, ACK
+mask and writers after pack_progress refuses authority, but returns every
+status except BUSY immediately. FUSE therefore maps a retryable NOT_PRIMARY
+to permanent close EIO. a2c2ee5e allows that status through the existing retry
+pause and deadline. It changes neither fragment placement/identity nor ACK
+requirements, and never manufactures authority or publication success.
+
+`python3 tests/test_mounted_pack_flush_retry.py` executes the actual flush loop
+and deadline wrapper. It checks NOT_PRIMARY→NOT_PRIMARY→success on the same
+object77 and ACK mask5, BUSY retry, deadline exhaustion/restoration, clean
+inode fast exit, and immediate IO/PROTO/STALE/INVAL/NET failure. Overlaying
+exact ac2133fb pack_write.c through EFS_PACK_WRITE_SOURCE fails the new test;
+fixed source PASS. The pre-existing mounted cohort test requires libefs.a and
+could not link in the unbuilt Mac checkout; Linux native/focused checks will
+run it against the built exact source. No warning or safety rule is disabled.
+
+Exact input788 aggregate
+`1fd54809c67fa6e0ee7b774e4551d367cb4c364e4735b0c615e69b0a9fe8f318`,
+external `efs-flush-inputs.json`, source `flush-src`, build IDsa2c2ee5e/devel.
+Full normal/fault native and nineteen focused normal/sanitizer (the prior
+fifteen plus mounted_pack_flush_retry, mounted_pack_retry, mounted_pack_batch,
+mounted_pack_parallel), plus actual-core sanitizer checks RUNNING/NOTRUN.
+Then fresh quiet38710/38720/38730 and focused38750, all original budgets and
+scope. Runner waits for batch32 cleanup; raw `flush-*` is outside Git. No push.
+
+
+### Packed-flush repeats and per-reader quorum target
+
+Exact a2c2ee5e full normal/fault native, nineteen focused normal/ASan/UBSan and
+fully instrumented actual Raft normal/early-ACK PASS. Quiet rounds1/2 PASS
+1512/1512 core and67/67 peer, orderly shutdown, cold acknowledged bytes,
+physical reclamation and metadata drain. Round3 **FAIL1511/1512**: client2
+only deep60 times out at30s; all other core cases, unusual-name/deep100,
+peer67/67 and every lifecycle gate PASS. Thus the EIO regression is fixed in
+these runs, but timeout repeatability is not closed. Focused crash NOTRUN
+after round3 failure. Raw external `flush-*`, exit1; fixtures
+`root-a/gc-direct-cqkj14yb`, `root-a/gc-direct-44s0sdfj`,
+`root-a/gc-direct-xoohuiiy`. No accepted run overlaps any build/profiler.
+
+Binary SHA-256 efsd `30c59d624a67d358aefa5c778d9f6479509665143df4bc5037d394b56ef9f71f`,
+efs-fuse `e8917c13edf759b9b6c38a1084494c6b53561f4d24feae400f25af862aedff15`,
+efs-mgmt `8b4ebbf7b1a47d75b81bbdec5f706ef0485c145e846c6593abdd52f1f490d64a`.
+
+A deterministic additional wait is reproduced: a reader admitted for round11
+observes sufficient quorum index60 while apply is50. The group's oldest
+retained proof can still be round10/index55, and later raw round12/index900
+can supersede round11 before this reader catches up. Once apply reaches60,
+the old wake predicate still waits for900. A scheduling wake for an older
+completed round can also prevent recording the later sufficient proof before
+the handler reacquires its CV mutex. This is a concrete target-selection defect,
+not proof that it accounts for the entire last live timeout.
+
+8151debe stores the first sufficient proof index in the existing bounded
+waiter slot and copies it back to that reader. Capture and wake occur under
+cv_mu; already signalled slots can still capture their first eligible proof,
+without repeat signals. A data reader must apply that captured index before
+reading rows; proof-only replies still return no rows. No cross-request cache,
+lease, extra helper thread, heap allocation or new wire field is added.
+
+The coherent host view additionally publishes a local invalidation epoch.
+The Raft core increments it whenever existing proof context is forgotten;
+normal new read rounds do not increment it. Configuration A→B→A cannot restore
+an old epoch. Role/term changes, failed storage or a missing replica refuse
+retention. Epoch saturation never wraps: it disables this retained-certificate
+optimization and leaves canonical fresh quorum reads available. This is not
+persisted authority; host restart has no surviving waiter scopes.
+
+`python3 tests/test_read_waiters.py` checks first index60 remains sufficient
+when raw proof becomes900 and apply reaches60, including the already-signalled
+scheduling case, while context/storage invalidation still wakes refusal.
+Replacing only the wake predicate with the prior host_read_wait_ready behavior
+fails the new runtime assertion. `test_readindex_result.py` executes the actual
+reader with captured110, newer raw900 and applied110; it returns110, but changed
+or unavailable context refuses. Coherent publication and completed-proof
+regressions PASS. Actual `test_read_context_epoch` runs elections/configuration
+transitions A→B→A and stepdown, requiring non-reused epoch identities; normal
+and early-read-ACK Raft runs PASS on the preliminary working build.
+
+Exact committed input788 aggregate
+`096fcc7178f1f4e042ccb35ce355bdc2c78e09a004bfb2feede99126b5e22ecf`,
+external `efs-frozen-inputs.json`, source `frozen-src`, build IDs8151debe/devel.
+Full normal/fault native, nineteen focused normal/sanitizer, actual-core
+normal/early-ACK sanitizer RUNNING/NOTRUN, then quiet38810/38820/38830 and
+focused38850. Same common commands, four4G, seven×16 and30/75/20/180s budgets.
+Raw `frozen-*` remains external. W95 stays open pending current-source acceptance
+and its separate production-format/migration/performance obligations.
+
+
+### Final current-source acceptance — PASS
+
+Exact **8151debe7810b5f5814dd18513608fefd8073bbd**, with the788-input digest
+above and build IDs8151debe/devel. All owned fixtures and screens have exited;
+unrelated ordinary AMD services remain untouched. Logs, traces, manifests and
+per-case output are external; no raw artifacts are committed.
+
+| Gate | Verdict | Evidence / unchanged workload |
+|---|---|---|
+| Full native, normal | PASS | `frozen-exact-native.exit=0`, `make test` |
+| Full native, EFS_FAULTS=1 | PASS | `frozen-fault-native.exit=0`, separate clean fault build/test |
+| Nineteen focused regressions, normal and ASan/UBSan | PASS | Read admission/result/coalescer/waiters/pairs/control/completion/publish, inbox and deadlines/receive; mounted flush retry/cohort/batch/parallel |
+| Fully instrumented actual Raft, normal and early-read-ACK | PASS | `frozen-core-san.exit=0`, including configuration ABA, stepdown, pending-suffix and heartbeat progress |
+| Quiet round1, ports38810–38813 | PASS | core1512/1512, peer67/67; orderly/cold/physical/drain PASS; `gc-direct-f000jaj_` |
+| Quiet round2, ports38820–38823 | PASS | same complete verdicts; `gc-direct-cgs8j9yb` |
+| Quiet round3, ports38830–38833 | PASS | same complete verdicts; `gc-direct-ro016xli` |
+| Focused acknowledged-fsync crash, ports38850–38853 | PASS | all four daemons actually SIGKILL after client drain; cold hashes, packed reclamation/drain PASS; `gc-direct-4zk4rwp3` |
+
+All21 per-client TSVs were parsed: exactly216 selected core cases per client,
+all PASS, including deep60/deep100/names_crazy_dirs. Total4536 core plus201
+peer passes across the three quiet repeats. All four mounted-packing summaries
+have no failures, cold_verified=true and physical_packed_empty=true, with
+mode=direct, transport=tcp, packing1 and commands0/server0. Final runner exit0.
+No profiler, build or other owned fixture overlaps an accepted quiet run.
+Four4G, seven×16 and original30/75/20/180s budgets are unchanged. This is
+functional/repeatability evidence, not an isolated per-fix speedup estimate.
+
+Binary SHA-256:
+
+- efsd: `095d885ea4fd547cd2cf43c60cb81fdf3f5506d99af6aa1031bf902eea66c65c`.
+- efs-fuse: `554cebc084bf81703af2c10b0d3c0ce1c78e063dd36fba1791d27cb1686cd0b1`.
+- efs-mgmt: `c9737280ac2f815c392953cec86ec55e179b16e94603f10be7779682fbb59c40`.
+
+External gate SHA-256 under the common `amd_efs:/data1/efs/packing-qualification-20261012` base:
+
+- normal native `frozen-exact-native.log`: `11b16ba912f49f1f9d759029a8077f31c67d280aaeae99157acd0df32284a848`.
+- fault native `frozen-fault-native.log`: `edf2a66673b283b7ef89c7a1ea6a9084260d5091094978dab6fd1efd93491bed`.
+- actual-core normal/early sanitizer logs (each): `6d5a0e475c33ea6abcdf753bbbfa2d556d4b0998d269589838fb7cd8d8e6f40d`.
+- quiet1: `0e7f6e00fb71d177bda1bc4261893e71df7ed0cc1b17cde1c44953cad98db9dc`.
+- quiet2: `3ca73b751da6f140f4e78e73d03f5ac4ffc1341bcf42a4fa2f02fb305354f130`.
+- quiet3: `921d7155daaa84d8f1214b1f0ef623d8999603f8136ebca2d1c4962779a3eeb7`.
+- focused crash: `c50bd0a6baa2669dfcde9f2c65c3357fa6678bad6101dd433327cd9e846c4796`.
+
+Reproduce using the common commands above at this exact commit: clean normal
+and separate clean fault builds first, then the focused loop plus
+`python3 tests/test_mounted_pack_flush_retry.py`, `test_mounted_pack_retry.py`,
+`test_mounted_pack_batch.py`, `test_mounted_pack_parallel.py`, all four under the
+same normal and sanitizer compiler wrapper. Run the actual core from a fully
+sanitized library as documented. Only after all builds finish, run three fresh
+quiet seven-client/jobs16 fixtures at38810/38820/38830. For focused crash use
+the common focused command at38850 with `--packing-crash-after-fsync` (without
+`--posix --packing-clients 7 --posix-jobs 16`). Expected final runner and fixture
+checks are those in the table. Never relax deadlines to reproduce this pass.
+After the harness finally exits and unmounts owned clients, remove only stopped
+synthetic node directories identified by each manifest; retain useful external
+logs/summaries. Capacity cleanup is authorized on AMD, but unrelated paths and
+services must not be touched. No push or production activation.

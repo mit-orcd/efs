@@ -672,8 +672,25 @@ until its applied index covers the read before reading the KV. There are
 Implementation acceptance requires a fresh authority round for each admitted
 request/batch: an old completed quorum cannot authorize indefinitely later
 reads. The isolated-core/source finding is [W82](../backlog/work-items.md#w82).
+A forwarded proof response carries the exact index that satisfied its admitted
+read, not a later live applied index containing unrelated concurrent commits.
+The quorum-only proof issuer returns no KV rows and need not catch up its own
+KV before replying. The data-serving replica must apply that exact proof index
+before reading its KV; local leader data reads also retain their own apply
+barrier. This separation does not relax fresh quorum or data-owner apply
+requirements, and the proof-only endpoint refuses after leader role change.
 Read authority is **amortized**: one quorum round serves a whole batch of
-requests — the read-side analog of publication batching (§7.3).
+requests — the read-side analog of publication batching (§7.3). Coalesced callers retain their first
+sufficient completion index under the coordinator mutex; a later caller's proof
+cannot increase an already completed caller's apply target. Fresh read probes
+contact a peer's acknowledged committed prefix without carrying pending write
+entries or postponing the ordinary data replication heartbeat. Each waiting
+data reader retains its first sufficient request-fresh quorum index until its
+own apply covers that index. A local monotonic context epoch invalidates this
+retention on term/role/configuration changes and storage failure, including
+configuration ABA; epoch saturation disables retention without reusing an
+identity. This state belongs only to the active request and is never a lease
+or permission for a later admission.
 
 Invariants: I1–I4, I9, I10, I18.
 
@@ -1475,7 +1492,7 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-**Current development work:** [W95 packing TCP/direct-I/O](../status/packing-tcp-direct-20261012.md) on `devel`, solo/exclusive AMD with `.efs` disabled. Retained `5568306c` matches safety-tested `f0dd1a2d` product inputs after reverting unproven queued-vote scheduling. Full native/fault and twelve normal/sanitizer checks PASS; quiet rounds1498/1512 and1502/1512 (14/10 timeouts), peer67/cold/reclamation/drain/shutdown PASS. Syscall/stack diagnostics and two TCP receive optimizations are documented. Deep60 and unusual-name directory deadlines remain unresolved; repeatability FAIL. Owned fixtures stopped, original quotas/deadlines unchanged; no push or release promotion.
+**Current development work:** [W95 packing TCP/direct-I/O](../status/packing-tcp-direct-20261012.md) on `devel`, solo/exclusive AMD with `.efs` disabled. Exact `8151debe`: full normal/fault native, nineteen focused normal/sanitizer and actual-core sanitizers PASS; three quiet rounds each1512/1512 core +67/67 peer, all orderly/cold/reclamation/drain PASS; focused acknowledged-fsync SIGKILL/cold PASS. Deep-directory/unusual-name timeout acceptance closed for this source/workload. W95 production-format/migration and matched packing-on/off performance remain open. Original quotas/deadlines unchanged; no push or release promotion.
 
 **Current release integration:** `release-v0.3.2-pre-alpha` merges reviewed ORCD evidence9fc5e024 into v0.3.1. Product/test inputs unchanged. AMD TCP/direct and TCP/buffered PASS; independently reviewed ORCD nativeRDMA/direct two core rounds1512/1512 and peer67/67 per round, native/fault/sanitizers/cold/physicalGC PASS. Tested SHAs remain15e2a531 AMD and40f4509d ORCD; the merge itself was not remotely executed. Packing/containers/.efs/repair remain disabled. No push/tag/deployment. [v0.3.2 review and coverage](../status/v032-integration-review-20261012.md).
 
@@ -1960,7 +1977,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | tiny-create | **W94** · atomic CREATE plus open lease | performance / lifecycle | **Closed Oct 11: CREATE/adoption scope approved by user.** Measured lease/throughput savings, actual allocation/competing-OPEN barriers, both-mode full native/live/fault/cold and sustained admission acceptance pass. Broader production flush/PUT-ticket integration remains W72/W86/W88; no D25 activation | [closure](../status/amd-feedback-integration-20261011.md#w94--createadoption-closed-by-user-scoped-decision) · [work item](#w94) |
 | scratch-expiry | **W90** · scratch-file expiry metadata and safe lifecycle | feature | design accepted D33; opt-in fixed deadlines and safe lifecycle; implementation/gates open | [work item](#w90) · [design](../status/scratch-expiry-interface.md) |
 | virtual-commands | **W91** · directory-local virtual `.efs/` command interface | usability feature | design accepted D34; `.efs/` commands and bounded query paths; implementation/compatibility gates remain | [work item](#w91) · [design](../status/scratch-expiry-interface.md) |
-| tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | partial — independent indexed packing, publication/GC fault and 24-sample AMD churn gates pass; retained raw-field/index-cost review completed ([review](../status/amd-sustained-20261011.md#w95-retained-amd-experiment-review-completed)); P4.1 production-format and migration decision remain; [TCP/direct with .efs disabled](../status/packing-tcp-direct-20261012.md) has historical safety/focused cold gates PASS; retained5568306c equals safety-testedf0dd1a2d after queued-vote experiment reverted; quiet core1498/1512 and1502/1512 with14/10 timeouts, peer/cold/reclamation/drain/shutdown PASS; syscall and stack diagnostics completed; owned fixtures stopped; repeatability remains FAIL | [work item](#w95) |
+| tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | partial — independent indexed packing, publication/GC fault and 24-sample AMD churn gates pass; retained raw-field/index-cost review completed ([review](../status/amd-sustained-20261011.md#w95-retained-amd-experiment-review-completed)); P4.1 production-format and migration decision remain; [TCP/direct with .efs disabled](../status/packing-tcp-direct-20261012.md): exact8151debe normal/fault native, nineteen focused/actual-core sanitizer gates, three quiet1512/1512+67/67 rounds and focused fsync-crash/cold all PASS; directory-timeout acceptance closed on AMD; production/migration/performance decisions remain | [work item](#w95) |
 | tiny-kv | **W96** · bounded KV WAL preallocation | performance experiment | Closed Oct11: isolated SATA/NVMe repeated matrix, exact replay/reset/reservation, full native/POSIX/peer/fault/cold and WAL sanitizer gates pass; conditional benefit and SATA tails retained | [closure](../status/devel-nuc-closure-20261010.md) |
 | decisions | **D28** client-death loss policy · **D29** durable publication receipts · **D30** bounded admission/pacing | accepted design | accepted Oct 8: salvage deferred; D29/W88 implementation first, then D30/W23/W89; implementation and acceptance remain open | [contracts and gates](#d28d30--accepted-oct-8-2026) |
 | op1 | **W70** · shrink-quota falsely reports background migration | operator observability bug | Closed Oct11: current NUC direct/buffered × one/two-root accepted/refused reductions, truthful running quota and exact retained bytes pass; no migration/persistence claim | [closure](../status/devel-nuc-closure-20261010.md) |
