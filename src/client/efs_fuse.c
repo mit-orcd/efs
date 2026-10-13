@@ -2076,29 +2076,6 @@ static int efs_open_release_pending(efs_ino_t ino)
     return EFS_OK;
 }
 
-/* One retained release per iteration, with no RPC under the table mutex. */
-static int efs_open_drain_pending(void)
-{
-    efs_ino_t ino = 0;
-    uint64_t oldest = UINT64_MAX;
-    pthread_mutex_lock(&g_open_mu);
-    for (struct efs_open_ref *r = g_open_refs; r; r = r->next)
-        if (r->close_pending && (!ino || r->retry_order < oldest)) {
-            ino = r->ino;
-            oldest = r->retry_order;
-        }
-    pthread_mutex_unlock(&g_open_mu);
-    if (!ino) return EFS_OK;
-    pthread_mutex_t *edge = open_edge_mu(ino);
-    pthread_mutex_lock(edge);
-    int rc = efs_open_release_pending(ino);
-    pthread_mutex_unlock(edge);
-    return rc == EFS_OK ? EFS_ERR_BUSY : rc;
-}
-
-/* Every returned regular descriptor, including CREATE, owns a server lease.
- * The edge stripe prevents a second open returning before proven OPEN,
- * and prevents a delayed last-close release deleting a new lease. */
 static int wb_lock_budget(pthread_mutex_t *mu)
 {
     if (!efs_client_rpc_deadline_ms())
@@ -2114,6 +2091,32 @@ static int wb_lock_budget(pthread_mutex_t *mu)
         usleep(1000);
     }
 }
+
+/* One retained release per iteration, with no RPC under the table mutex. */
+static int efs_open_drain_pending(void)
+{
+    efs_ino_t ino = 0;
+    uint64_t oldest = UINT64_MAX;
+    pthread_mutex_lock(&g_open_mu);
+    for (struct efs_open_ref *r = g_open_refs; r; r = r->next)
+        if (r->close_pending && (!ino || r->retry_order < oldest)) {
+            ino = r->ino;
+            oldest = r->retry_order;
+        }
+    pthread_mutex_unlock(&g_open_mu);
+    if (!ino) return EFS_OK;
+    pthread_mutex_t *edge = open_edge_mu(ino);
+    int rc = wb_lock_budget(edge);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_open_release_pending(ino);
+    pthread_mutex_unlock(edge);
+    return rc == EFS_OK ? EFS_ERR_BUSY : rc;
+}
+
+/* Every returned regular descriptor, including CREATE, owns a server lease.
+ * The edge stripe prevents a second open returning before proven OPEN,
+ * and prevents a delayed last-close release deleting a new lease. */
 
 /* BUSY without durable result proof owns the same OPEN edge. Wait within the
  * caller's single budget rather than return a transient contention as EBUSY
@@ -2344,7 +2347,8 @@ static int efs_pending_create_drain(void)
         if(!request->complete)goto pending;
         if(request->result==EFS_OK) {
             pthread_mutex_t *stripe=open_edge_mu(request->inode.ino);
-            pthread_mutex_lock(stripe);
+            rc=wb_lock_budget(stripe);
+            if(rc!=EFS_OK)goto pending;
             rc=efs_open_release_pending(request->inode.ino);
             if(rc==EFS_OK && !entry->cleanup.active)
                 rc=efs_client_lease_begin(&entry->cleanup,request->inode.ino,
@@ -2375,9 +2379,13 @@ static int efs_open_retry_pass(uint64_t deadline)
     uint64_t previous = efs_client_rpc_deadline_ms();
     if (previous && previous < deadline)
         deadline = previous;
-    uint64_t split = stats_now_ms() + 500;
-    if (deadline < split)
-        split = deadline;
+    uint64_t now = stats_now_ms();
+    if (deadline <= now)
+        return EFS_ERR_BUSY;
+    uint64_t share = (deadline - now) / 2;
+    if (share > 500)
+        share = 500;
+    uint64_t split = now + share;
     efs_client_rpc_set_deadline_ms(split);
     int lease_rc = efs_open_drain_pending();
     efs_client_rpc_set_deadline_ms(deadline);

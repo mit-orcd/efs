@@ -8,7 +8,8 @@ a code fix, redeployment and same-profile latency qualification. A Raft-only
 rewrite optimization and fair retained-CREATE/lease retry correction have
 regression evidence; live qualification is pending. The initial Linux
 prerequisite run stopped on a missing extracted-harness dependency, now fixed;
-the complete prerequisite run is being repeated. Old clients 010/011 also
+the complete prerequisite run is being repeated. Deadline-aware cleanup locks
+and fair sharing of shorter inherited deadlines have deterministic regressions. Old clients 010/011 also
 refused orderly drain with an exhausted identity window; explicit authorized
 discard was used for the diagnostic redeploy. The separate
 application fork/direct-read platform gate and broader W92 scale gates remain

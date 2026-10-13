@@ -86,6 +86,7 @@ code=r'''
 #include <stdio.h>
 #include <pthread.h>
 #define EFS_OK 0
+#define EFS_ERR_BUSY -13
 struct efs_report_pressure {uint64_t pending_records,inflight_records,reserved_records;};
 static struct {int ready,count,inflight;pthread_mutex_t mu;} g_wb;
 static uint64_t now,deadline;static unsigned rounds,flight_rounds;static int body_pending,lease_pending;

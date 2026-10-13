@@ -84,7 +84,7 @@ static void *fixture_calloc(size_t n,size_t size) {
 }
 #define calloc fixture_calloc
 '''
-for name in ('efs_open_note','efs_open_set_leased','efs_close_note','efs_open_release_pending','efs_open_drain_pending','wb_lock_budget','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid_mode','efs_open_acquire_fileid','efs_open_acquire','efs_open_adopt','efs_open_acquire_created'):
+for name in ('wb_lock_budget','efs_open_note','efs_open_set_leased','efs_close_note','efs_open_release_pending','efs_open_drain_pending','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid_mode','efs_open_acquire_fileid','efs_open_acquire','efs_open_adopt','efs_open_acquire_created'):
  source+='\n'+function(name)
 w=s.index('/* A lost last-close reply must not pin')
 x=s.index('/* Client-cache design Part A, pin rule 2:',w)

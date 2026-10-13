@@ -24,7 +24,9 @@ int main(void) {
  assert(efs_open_retry_pass(1100)==EFS_ERR_BUSY);
  assert(now==600 && creates==1 && leases==1 && budget==0);
  now=100;budget=900;consume=1;
- assert(efs_open_retry_pass(2000)==EFS_ERR_BUSY && budget==900 && now==600);
+ assert(efs_open_retry_pass(2000)==EFS_ERR_BUSY && budget==900 && now==500);
+ now=100;budget=200;consume=1;
+ assert(efs_open_retry_pass(2000)==EFS_ERR_BUSY && now==150 && budget==200);
  now=100;budget=0;consume=0;create_rc=EFS_ERR_BUSY;
  assert(efs_open_retry_pass(1100)==EFS_ERR_BUSY);
  create_rc=0;assert(efs_open_retry_pass(1100)==EFS_OK);
@@ -35,7 +37,7 @@ with tempfile.TemporaryDirectory(prefix='efs-open-retry-fairness-') as directory
  p=Path(directory)/'t.c';p.write_text(code)
  subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror',str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True)
- legacy=code.replace('uint64_t split = stats_now_ms() + 500;', '(void)stats_now_ms(); uint64_t split = deadline;')
+ legacy=code.replace('uint64_t split = now + share;', 'uint64_t split = deadline;')
  p.write_text(legacy)
  subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra',str(p),'-o',str(p.with_suffix(''))],check=True)
  resource.setrlimit(resource.RLIMIT_CORE,(0,0))
