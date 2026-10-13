@@ -274,3 +274,18 @@ source/build/profile. Successful owned fixtures are removed. Apply any
 shared-core fix first under package3's Intel disabled-feature profile, then
 requalify ORCD RDMA/direct-I/O with commands enabled. Human authorizes Intel
 coordination after its current network workload finishes; do not interrupt it.
+
+The committed wrapper77e922fc is qualified separately from the installed9b
+source, without changing its858 deployed inputs. SHA256
+`ee4e60168b7b7e7193d1b4d989a4236b30fe7e2beb66c7383acba758ca1d6c13`.
+A second160-case/16-worker run on all7 existing mounts finds **12/1120 FAIL**:
+nine chunk-rounded EOFs, one EOF shrink to1,048,577 and two cleanup EBUSY with
+correct size. The shrunk file is inode13242869 at
+`/tmp/efs-mount/extend-eof-x9n53rmk/124/f`; later readonly checks on fcstor012
+and007 agree on size1,048,577, low byte0x4c and empty high-offset read.
+Do not call this only an oversize issue or a transient local stat. Traced fresh
+clients pass another960 cases while each also writes/deletes2GiB; all three
+temporary mounts drain normally. Those passes do not clear long-lived-client
+failures. Intel has this qualified handoff and must finish its current work
+before applying shared-core fixes on Intel/devel with the disabled-feature
+profile. Raw wrapper JSON and traces remain in operations/BULK, outside Git.

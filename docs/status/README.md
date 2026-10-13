@@ -25,7 +25,9 @@ subtree stats PASS. Initial build-time stats timeout retained as FAIL;
 focused commands/options/virtual/load FAIL, pages/large-delta PASS; tiny
 recursive subtrees scan unrelated catalogue entries. Owner/numeric and
 human/default/JSON stats PASS all7. Concurrent query21/21 PASS, accompanying core1501/1512 FAIL
-(10EBUSY, one EOF); EOF repeats4/1120 FAIL. Cold/full-payload gates OPEN.
+(10EBUSY, one EOF); EOF repeats4/1120 FAIL and the committed wrapper
+finds12/1120 failures including persistent shrink. Intel handoff queued after
+current work. Cold/full-payload gates OPEN.
 
 [Intel package 3 execution](intel-package3-20261013.md): files/TCP/direct,
 client/server commands, packing and expiry OFF; container fixture stopped.
