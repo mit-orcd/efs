@@ -47,11 +47,15 @@ static const uint8_t kinds[KINDS]={EFS_KV_KIND_INODE,EFS_KV_KIND_DENTRY,
 struct slot { uint64_t offset;uint32_t key_len,value_len; };
 struct disk_part { uint64_t revision,count,inodes,names,dependencies,begin[KINDS],end[KINDS];uint8_t digest[5][32]; };
 struct disk_alias { efs_ino_t child,parent;uint64_t ordinal; };
+/* Directory names already belong to the immutable alias/raw indexes.
+ * Regular files need no directory link, so do not duplicate a max-name
+ * record in every derived inode. The shard is a validated lookup hint. */
+struct disk_link { efs_ino_t parent;uint32_t shard; };
 struct disk_node {
     struct efs_meta_row row;
     struct efs_meta_stat stat;
     struct efs_query_rollup rollup;
-    struct efs_name_entry link;
+    struct disk_link link;
     uint64_t children;
 };
 /* One candidate-only accumulator; never retained across generations. */
@@ -863,7 +867,7 @@ static int fold_edge(struct efs_query_disk *d,uint32_t shard,const struct efs_na
     struct efs_query_rollup *r=&parent->rollup;int has=r->imm_files+r->imm_dirs!=0;
     if(S_ISDIR(child.row.mode)) {
         if(child.link.parent || child.row.parent!=e->parent)return EFS_ERR_PROTO;
-        child.link=*e;r->imm_dirs++;parent->children++;
+        child.link=(struct disk_link){e->parent,shard};r->imm_dirs++;parent->children++;
         rc=node_at(d,efs_kv_inode_shard(child.row.ino),ca,&child,1);if(rc)return rc;
     } else {
         if(UINT64_MAX-r->imm_bytes<child.stat.size)return EFS_ERR_QUOTA;
@@ -1219,7 +1223,7 @@ int efs_query_disk_build_checked(const char *root,struct efs_kv_lsm_snapshot *so
         if(n<0 || (size_t)n>=sizeof(path))rc=EFS_ERR_NAMETOOLONG;
         int fd=rc?-1:open(path,O_CREAT|O_EXCL|O_RDWR|O_CLOEXEC,0600);
         if(fd<0)rc=EFS_ERR_IO;
-        uint64_t header[]={UINT64_C(0x454653514449534b),5,sizeof(struct slot),sizeof(struct disk_node),d->count,SHARDS,0,0,0,0,d->lineage[0],d->lineage[1]};
+        uint64_t header[]={UINT64_C(0x454653514449534b),6,sizeof(struct slot),sizeof(struct disk_node),d->count,SHARDS,0,0,0,0,d->lineage[0],d->lineage[1]};
         if(!rc)rc=io_at(fd,header,sizeof(header),0,1);
         if(!rc)rc=io_at(fd,d->part,sizeof(d->part),sizeof(header),1);
         if(!rc && fsync(fd))rc=EFS_ERR_IO;
@@ -1264,10 +1268,36 @@ int efs_query_disk_stats(const struct efs_query_disk *cd,efs_ino_t ino,struct ef
 }
 int efs_query_disk_link(const struct efs_query_disk *cd,efs_ino_t ino,struct efs_name_entry *out)
 {
-    struct disk_node n;int rc=locate((struct efs_query_disk *)cd,ino,&n,NULL);
+    struct efs_query_disk *d=(struct efs_query_disk *)cd;
+    struct disk_node n;int rc=locate(d,ino,&n,NULL);
     if(!rc && (!S_ISDIR(n.row.mode) || !n.link.parent))rc=EFS_ERR_NOT_FOUND;
-    if(!rc)*out=n.link;
-    return rc;
+    if(rc)return rc;
+    if(n.link.shard>=SHARDS || n.link.parent!=n.row.parent)return EFS_ERR_PROTO;
+    uint32_t shard=n.link.shard;uint64_t lo=0,hi=d->part[shard].names;
+    struct disk_alias alias;struct disk_node parent;
+    rc=locate(d,n.link.parent,&parent,NULL);if(rc)return rc;
+    while(lo<hi){
+        uint64_t mid=lo+(hi-lo)/2;
+        rc=disk_io(d,shard,'a',&alias,sizeof(alias),mid*sizeof(alias),0);if(rc)return rc;
+        if(alias.child<ino)lo=mid+1;else hi=mid;
+    }
+    for(;lo<d->part[shard].names;lo++){
+        rc=disk_io(d,shard,'a',&alias,sizeof(alias),lo*sizeof(alias),0);if(rc)return rc;
+        if(alias.child!=ino)break;
+        if(alias.parent!=n.link.parent)continue;
+        if(alias.ordinal>=d->part[shard].names)return EFS_ERR_PROTO;
+        struct slot slot;uint8_t key[EFS_KV_KEY_MAX],val[VALUE_MAX];
+        struct efs_name_entry entry;uint32_t chosen;
+        rc=read_record(d,shard,d->part[shard].begin[1]+alias.ordinal,&slot,key,val);
+        if(!rc)rc=entry_from(key,slot.key_len,val,slot.value_len,&entry);
+        if(rc)return rc;
+        if(entry.parent!=n.link.parent || entry.dentry.ino!=ino)return EFS_ERR_PROTO;
+        rc=chosen_shard(d,&parent.row,&entry,&chosen);if(rc)return rc;
+        if(chosen!=shard)continue;
+        if(entry.dentry.generation!=n.row.generation || entry.dentry.type==EFS_META_DENT_TOMBSTONE)return EFS_ERR_IO;
+        *out=entry;return EFS_OK;
+    }
+    return EFS_ERR_NOT_FOUND;
 }
 int efs_query_disk_path(const struct efs_query_disk *d,efs_ino_t dir,efs_ino_t root,char *out,size_t cap)
 {
@@ -1493,7 +1523,7 @@ int efs_query_disk_restore(const char *root,const uint64_t watermark[4],uint64_t
     int fd=n>0 && (size_t)n<sizeof(manifest)?open(manifest,O_RDONLY|O_CLOEXEC):-1;
     uint64_t header[12];int rc=fd<0?EFS_ERR_IO:io_at(fd,header,sizeof(header),0,0);
     if(!rc && d->disk_bytes>d->disk_limit)rc=EFS_ERR_QUOTA;
-    if(!rc && (header[0]!=UINT64_C(0x454653514449534b) || header[1]!=5 || header[2]!=sizeof(struct slot) ||
+    if(!rc && (header[0]!=UINT64_C(0x454653514449534b) || header[1]!=6 || header[2]!=sizeof(struct slot) ||
        header[3]!=sizeof(struct disk_node) || header[5]!=SHARDS))rc=EFS_ERR_PROTO;
     if(!rc && watermark && memcmp(header+6,watermark,4*sizeof(uint64_t)))rc=EFS_ERR_STALE;
     if(!rc){memcpy(d->lineage,header+10,sizeof(d->lineage));memcpy(d->watermark,header+6,sizeof(d->watermark));}
