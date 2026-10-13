@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Execute production lease bookkeeping through ambiguous sequenced replies."""
 from pathlib import Path
-import os,re,shlex,subprocess,tempfile
+import os,re,resource,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 s=Path(os.environ.get('EFS_FUSE_SOURCE',root/'src/client/efs_fuse.c')).read_text()
 def function(name):
- m=re.search(r'^static (?:int|void) '+name+r'\([^;]+?\)\n\{',s,re.M)
+ m=re.search(r'^static (?:int|void|uint64_t) '+name+r'\([^;]+?\)\n\{',s,re.M)
  assert m,name
  return s[m.start():s.index('\n}',m.end())+2]
 a=s.index('static pthread_mutex_t g_open_mu')
@@ -84,7 +84,7 @@ static void *fixture_calloc(size_t n,size_t size) {
 }
 #define calloc fixture_calloc
 '''
-for name in ('wb_lock_budget','efs_open_note','efs_open_set_leased','efs_close_note','efs_open_release_pending','efs_open_drain_pending','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid_mode','efs_open_acquire_fileid','efs_open_acquire','efs_open_adopt','efs_open_acquire_created'):
+for name in ('wb_lock_budget','efs_open_note','efs_open_set_leased','efs_open_retry_order','efs_close_note','efs_open_release_pending_run','efs_open_release_pending','efs_open_drain_pending','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid_mode','efs_open_acquire_fileid','efs_open_acquire','efs_open_adopt','efs_open_acquire_created'):
  source+='\n'+function(name)
 w=s.index('/* A lost last-close reply must not pin')
 x=s.index('/* Client-cache design Part A, pin rule 2:',w)
@@ -159,6 +159,24 @@ int main(void) {
  assert(!efs_open_acquire(42));assert(efs_close_note(42,&leased));
  close_rc=EFS_ERR_NOT_FOUND;assert(efs_open_release_pending(42)==EFS_ERR_NOT_FOUND&&g_open_refs&&server_hold);
  close_rc=0;assert(!efs_open_release_pending(42)&&!g_open_refs&&!server_hold);
+ /* A CLOSE allocated after close_note must outrank a later CLOSE that
+  * needs admission. This is the live one-inflight/window-full deadlock. */
+ assert(!efs_open_acquire(42));assert(efs_close_note(42,&leased));
+ assert(g_open_refs->retry_order==UINT64_MAX);
+ close_rc=EFS_ERR_NET;assert(efs_open_release_pending(42)==EFS_ERR_NET);
+ assert(g_open_refs->edge.q.id.seq==55 && g_open_refs->retry_order==55);
+ struct efs_open_ref *unallocated=calloc(1,sizeof(*unallocated));assert(unallocated);
+ unallocated->ino=43;unallocated->close_pending=1;
+ unallocated->retry_order=efs_open_retry_order(unallocated);
+ unallocated->next=g_open_refs;g_open_refs=unallocated;
+ close_rc=0;assert(efs_open_drain_pending()==EFS_ERR_BUSY);
+ assert(g_open_refs==unallocated && !unallocated->next && !server_hold);
+ g_open_refs=NULL;free(unallocated);
+ /* Adoption's identity also owns admission even when edge is empty. */
+ struct efs_open_ref adoption_only={0};adoption_only.adoption.active=1;
+ adoption_only.adoption.q.id.seq=7;
+ assert(efs_open_retry_order(&adoption_only)==7);
+ adoption_only.adoption.complete=1;assert(efs_open_retry_order(&adoption_only)==UINT64_MAX);
  assert(!efs_open_acquire(42));assert(efs_close_note(42,&leased));
  g_open_refs->retry_order=1;
  struct efs_open_ref *newer=calloc(1,sizeof(*newer));assert(newer);
@@ -243,3 +261,14 @@ with tempfile.TemporaryDirectory(prefix='efs-lease-retention-') as d:
  p=Path(d)/'test.c';p.write_text(source)
  subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-pthread','-I'+str(root/'include'),'-I'+str(root/'src/client'),str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=15)
+
+ # Reject the old scheduling key that never published newly allocated CLOSE.
+ legacy=re.sub(r'^            r->retry_order = efs_open_retry_order\(r\);$',
+               '            (void)efs_open_retry_order(r);',source,flags=re.M)
+ assert legacy!=source
+ p.write_text(legacy)
+ subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-pthread','-I'+str(root/'include'),'-I'+str(root/'src/client'),str(p),'-o',str(p.with_suffix(''))],check=True)
+ resource.setrlimit(resource.RLIMIT_CORE,(0,0))
+ rejected=subprocess.run([str(p.with_suffix(''))],capture_output=True,timeout=15)
+ assert rejected.returncode!=0,'stale cleanup scheduling key must fail'
+ print('unallocated CLOSE starvation negative control rejected PASS')

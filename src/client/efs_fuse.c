@@ -1967,6 +1967,17 @@ static void efs_open_set_leased(efs_ino_t ino)
 
 /* Returns 1 when this was the last close. *leased is 1 when that close
  * must release the HOLD taken on the first open. */
+static uint64_t efs_open_retry_order(const struct efs_open_ref *r)
+{
+    uint64_t order = UINT64_MAX;
+    if (r->edge.active && !r->edge.complete && r->edge.q.id.seq)
+        order = r->edge.q.id.seq;
+    if (r->adoption.active && !r->adoption.complete &&
+        r->adoption.q.id.seq && r->adoption.q.id.seq < order)
+        order = r->adoption.q.id.seq;
+    return order;
+}
+
 static int efs_close_note(efs_ino_t ino, int *leased)
 {
     struct efs_open_ref **pp, *r;
@@ -1984,7 +1995,7 @@ static int efs_close_note(efs_ino_t ino, int *leased)
                     *leased = r->leased;
                 if (r->leased) {
                     r->close_pending = 1;
-                    r->retry_order = r->edge.q.id.seq;
+                    r->retry_order = efs_open_retry_order(r);
                 } else {
                     *pp = r->next;
                     free(r);
@@ -2000,7 +2011,7 @@ static int efs_close_note(efs_ino_t ino, int *leased)
 
 /* Caller holds the inode edge stripe. A failed reply retains the old
  * ownership, preventing a fresh OPEN from racing its delayed release. */
-static int efs_open_release_pending(efs_ino_t ino)
+static int efs_open_release_pending_run(efs_ino_t ino)
 {
     struct efs_open_ref *owner = NULL;
     pthread_mutex_lock(&g_open_mu);
@@ -2074,6 +2085,23 @@ static int efs_open_release_pending(efs_ino_t ino)
     }
     pthread_mutex_unlock(&g_open_mu);
     return EFS_OK;
+}
+
+/* The caller's inode stripe protects request bodies; the table mutex
+ * publishes only their scheduling key. A new CLOSE may acquire an identity
+ * after close_note. Publish it before returning an ambiguous reply, so a
+ * newer unallocated CLOSE cannot starve the identity holding admission. */
+static int efs_open_release_pending(efs_ino_t ino)
+{
+    int rc = efs_open_release_pending_run(ino);
+    pthread_mutex_lock(&g_open_mu);
+    for (struct efs_open_ref *r = g_open_refs; r; r = r->next)
+        if (r->ino == ino && r->close_pending) {
+            r->retry_order = efs_open_retry_order(r);
+            break;
+        }
+    pthread_mutex_unlock(&g_open_mu);
+    return rc;
 }
 
 static int wb_lock_budget(pthread_mutex_t *mu)
