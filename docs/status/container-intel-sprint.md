@@ -1743,3 +1743,16 @@ can perturb performance and is never normal acceptance. Local memo/callback
 controls and fixture syntax PASS; Linux compile/native and live diagnostic
 NOTRUN until the executing06b4624b gate sequence finishes. No cache lifetime,
 scoped authority, expired-proof reuse or test workload relaxation introduced.
+
+Exact06b4624b normal all15 gates finished: concurrent FAIL14 as above, all
+remaining gates PASS. Peer134/134PASS45.047/47.081s; mmap private PASS and
+shared ENODEV skips. All lifecycle/tiny warm, global graceful restart, cold
+hashes and deletion PASS; final strict physical9.027s PASS,zero9.024. Existing
+production PIDs5945/5953/6602 and10086/10094/10331, production mount and
+opposite-host17432 seeds reverified; no immutable payload baseline claim.
+Next frozen53db7b7f7769e6321eda062b7ed476f7e8884684 callback diagnostic:
+792-input fresh builds complete on both Intel hosts, same complete native and
+sanitizer/fault controls PASS. Build2026-10-13T07:06:21Z, branchdevel-container,
+fullSHA version; both deployed source proofs PASS. Explicit diagnostic run
+now in progress, profiling ON/path-prof ON, folding OFF, all requested feature
+settings unchanged. Diagnostics are not normal loaded acceptance.
