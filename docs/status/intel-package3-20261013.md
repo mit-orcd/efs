@@ -64,15 +64,18 @@ source; run `make -j8 test` under the four disabled feature variables.
 
 Driver:
 `python3 scripts/intel_package3_tests.py core --output OUT --run-id UNIQUE`.
-Repeat with `extras`, `runtime`, `latency --seconds 600`.
+Repeat with `extras`, `runtime`, `concurrent`, `latency --seconds 600`.
+Concurrent creates five temporary clients in addition to the two real mounts,
+uses4+3 clients/jobs16, then cleanly drains only those temporary mounts.
 Core/extras use existing30s case budgets and16 jobs on both real mounts
 concurrently, unique tags, original suite-specific deadlines and900s outer
 bound. Raw TSV/log/JSON output must remain outside Git. Failed test directories
 are retained by the original suite, not deleted to conceal failures.
 Peer suite: prepare a unique parent on Intel1, wait for Intel2 visibility, then
-run `tests/posix/posix_2client.py --remote intel1_efs intel2_efs --mnt
-/data1/efs/mnt --ssh /usr/bin/ssh --script /data1/efs/src/tests/posix/posix_2client.py
---parent UNIQUE --results OUT.tsv` from the driver. Existing peer deadlines apply.
+run `python3 /Users/mike/git/devops/nuc-efs/intel-smoke2.py ''`
+from the driver. The helper loads the deployed suite and runs its actual remote
+steps on both production mounts with existing120s peer-step deadlines. Its TSV
+path is printed; keep raw output outside Git. The preparation is automatic.
 
 W106 small-fixture preparation: `python3 scripts/intel_package3_fork_fixture.py
 prepare /data1/efs/mnt/package3-fork-UNIQUE --count 128` on Intel1. Compile
