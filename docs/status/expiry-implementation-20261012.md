@@ -327,3 +327,11 @@ Fault source `3b873839` passed 25 expiry gates and a 30-minute soak (137 rounds,
 1,644 expirations, six restarts); final reporting source `2da7a70a` passed
 24 normal gates and short-soak integration. Both core 216/216, peer 67/67,
 physical GC and cold cleanup PASS; exact identities and limitations are linked above.
+
+
+## Readable policy arguments and large backlog follow-up
+
+October 12–13: [W90 large backlog qualification](expiry-backlog-20261012.md)
+records new duration arguments, 30,000 expirations, mid-drain restart/off-on,
+24 lifecycle/core 216/peer 67 PASS, and the observed default scheduling limit
+and rising sampled RSS. It does not claim instantaneous expiry or a memory plateau.

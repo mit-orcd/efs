@@ -51,6 +51,25 @@ For sustained two-mount churn/restart validation, add `--soak-seconds 1800`.
 See [inspection/status and soak details](expiry-inspection-soak-20261012.md).
 A single `--root` is accepted and used for both node pairs.
 
+For large finite backlogs, append `--backlog-files 10000`: three phases each
+create 10,000 files with 1-KiB real payloads and eight workers, then schedule
+staggered deadlines, restart with a partially drained common-deadline queue,
+and disable expiry
+across a common deadline before re-enabling. The test records namespace and
+physical drain, a renewed survivor, cold inventories, RSS/capacity, and
+foreground create/write/fsync/read/unlink latency before and during cleanup.
+Deadlines have 180 seconds lead time; staggered groups differ by 10 seconds.
+Namespace drain is bounded by max(1800 seconds, file count / 4): 2,500 seconds
+for 10,000 files. Physical drain has another 300 seconds. The default expiry
+worker attempts at most
+eight files/group/pass and normally yields one second, so a single-group
+10,000-file queue took about 22–23 minutes in this qualification; this is an asynchronous cleanup
+test, not an immediate-deletion promise.
+Counts must be 1000..100000; zero omits this opt-in gate. Larger counts need
+adequate private quota and deadline preparation time; the default fixture is
+not a claimed 100,000-file capacity qualification. See
+[backlog results](expiry-backlog-20261012.md).
+
 ## Results and cleanup
 
 The harness prints `Evidence directory: ...` beneath a private root. That

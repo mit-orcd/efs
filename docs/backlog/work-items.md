@@ -4048,6 +4048,16 @@ separate from all-cause physical GC totals. Normal 24/24 and fault 25/25 gates,
 30-minute two-mount soak (1,644 expirations, six restarts), and both core/peer
 matrices PASS. [Evidence, limitations and commands](../status/expiry-inspection-soak-20261012.md).
 
+**Oct 12–13 follow-up PASS:** `--expire-after`/`--renewal-limit` plus duration/help
+regressions; three 10,000-file queues including mid-drain restart and global
+disable/re-enable, physical/cold checks, core 216/216 and peer 67/67. Default
+single-group cleanup took 22–23 minutes per 10,000 due files (eight attempts/pass,
+normal 1s yield); this is asynchronous eligibility, not immediate disappearance.
+Peak sampled RSS rose 185→263→392 MiB across phases, within the 512 MiB fixture guard
+but not proof of a memory plateau. Worker cadence and retained-metadata/memory
+investigation remain performance follow-ups, without attributing an expiry leak
+or claiming a hardware ceiling. [Exact-source evidence and reproduction](../status/expiry-backlog-20261012.md).
+
 **Gate:** focused renewal/deletion, path-reuse, rename, hard-link, open-file and
 concurrent-publication tests; clock jumps, leader change, restart, retries and
 offline storage-member fault gates. Bound worker/index resource use, verify
