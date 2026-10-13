@@ -916,6 +916,56 @@ static void test_four_voter_permanent_loss(void)
     }
 }
 
+/* A large record must bypass the rotation buffer without reordering the
+ * small buffered prefix/suffix. Compare every byte after a cold reopen. */
+static void test_rotation_mixed_record_sizes(void)
+{
+    const uint32_t lengths[] = {17, 1048543, 17, 2097152, 31};
+    uint8_t *payload = malloc(2097152), *actual = malloc(2097152);
+    struct efs_raft_disk *d;
+    struct efs_raft_store *store;
+    unsigned i;
+    CHECK(payload && actual, "mixed rotation buffers allocated");
+    if (!payload || !actual) { free(payload); free(actual); return; }
+    rmtree(g_dir);
+    d = efs_raft_disk_open(g_dir, EFS_RAFT_DISK_SYNC);
+    CHECK(d != NULL, "mixed rotation disk opens");
+    if (!d) goto out;
+    store = efs_raft_disk_group(d, 0);
+    for (i = 0; i < 5; i++) {
+        memset(payload, (int)i + 1, lengths[i]);
+        CHECK(store->append(store, i + 1, 7, payload, lengths[i]) == EFS_OK,
+              "append mixed record sizes");
+    }
+    CHECK(efs_raft_disk_rotate(d) == EFS_OK, "rotate mixed record sizes");
+    efs_raft_disk_close(d);
+    d = efs_raft_disk_open(g_dir, EFS_RAFT_DISK_SYNC);
+    CHECK(d != NULL, "mixed rotation cold reopen");
+    if (!d) goto out;
+    CHECK(efs_raft_disk_rotate(d) == EFS_OK, "rotate replayed mixed record sizes");
+    store = efs_raft_disk_group(d, 0);
+    for (i = 0; i < 5; i++) {
+        uint32_t length = 2097152;
+        uint64_t term = 0;
+        memset(payload, (int)i + 1, lengths[i]);
+        int rc = store->get(store, i + 1, &term, actual, &length);
+        CHECK(rc == EFS_OK && term == 7 && length == lengths[i] &&
+              !memcmp(payload, actual, lengths[i]), "mixed rotation exact replay");
+    }
+    CHECK(st_append(store, 6, 8, "post-rotation") == EFS_OK,
+          "append after mixed rotation");
+    efs_raft_disk_close(d);
+    d = efs_raft_disk_open(g_dir, EFS_RAFT_DISK_SYNC);
+    CHECK(d != NULL, "mixed rotation second cold reopen");
+    if (d) {
+        CHECK(st_check(efs_raft_disk_group(d, 0), 6, 8, "post-rotation"),
+              "mixed rotation append remains durable");
+        efs_raft_disk_close(d);
+    }
+out:
+    free(payload); free(actual); rmtree(g_dir);
+}
+
 int main(void)
 {
     snprintf(g_dir, sizeof(g_dir), "/tmp/efs-raftstore-test-%d", (int)getpid());
@@ -934,6 +984,7 @@ int main(void)
     test_crash_durability();
     test_reserved_tail();
     test_rotation();
+    test_rotation_mixed_record_sizes();
     test_raft_on_disk_store();
 
     rmtree(g_dir);

@@ -2366,15 +2366,31 @@ pending:
  * unmount. Retry oldest ownership first, with bounded per-pass RPC time. */
 static pthread_t g_open_retry_thread;
 static int g_open_retry_running, g_open_retry_started;
+/* Both queues share the bounded identity window. A lease admission wait
+ * can consume the entire pass while an older abandoned CREATE owns the
+ * slot that would unblock it. Reserve half the pass for CREATE proof;
+ * neither queue may starve the other or extend the caller's deadline. */
+static int efs_open_retry_pass(uint64_t deadline)
+{
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    if (previous && previous < deadline)
+        deadline = previous;
+    uint64_t split = stats_now_ms() + 500;
+    if (deadline < split)
+        split = deadline;
+    efs_client_rpc_set_deadline_ms(split);
+    int lease_rc = efs_open_drain_pending();
+    efs_client_rpc_set_deadline_ms(deadline);
+    int create_rc = efs_pending_create_drain();
+    efs_client_rpc_set_deadline_ms(previous);
+    return lease_rc != EFS_OK ? lease_rc : create_rc;
+}
+
 static void *efs_open_retry_worker(void *unused)
 {
     (void)unused;
     while (__atomic_load_n(&g_open_retry_running,__ATOMIC_ACQUIRE)) {
-        uint64_t previous=efs_client_rpc_deadline_ms();
-        efs_client_rpc_set_deadline_ms(stats_now_ms()+1000);
-        (void)efs_open_drain_pending();
-        (void)efs_pending_create_drain();
-        efs_client_rpc_set_deadline_ms(previous);
+        (void)efs_open_retry_pass(stats_now_ms()+1000);
         usleep(100000);
     }
     return NULL;
@@ -4772,14 +4788,16 @@ static int efs_control_drain(uint64_t deadline, int force)
             continue;
         }
         efs_buf_drain_enter();
+        uint64_t ownership_deadline = stats_now_ms() + 1000;
+        if (deadline < ownership_deadline)
+            ownership_deadline = deadline;
+        int ownership_rc = efs_open_retry_pass(ownership_deadline);
         int data_rc = efs_dcache_drain_pending();
         int report_rc = efs_client_report_dirty(1);
-        int lease_rc = efs_open_drain_pending();
-        int create_rc = efs_pending_create_drain();
         efs_buf_drain_leave();
         struct efs_report_pressure pressure;
         efs_client_report_pressure_stats(&pressure);
-        if (data_rc == EFS_OK && report_rc == EFS_OK && lease_rc == EFS_OK && create_rc == EFS_OK &&
+        if (data_rc == EFS_OK && report_rc == EFS_OK && ownership_rc == EFS_OK &&
             !pressure.pending_records && !pressure.reserved_records &&
             !pressure.inflight_records &&
             !efs_dcache_pending_records(NULL)) {

@@ -57,6 +57,7 @@ struct raft_log_ent {
     uint64_t prefix_bytes; /* cumulative command bytes; local index, not disk format */
     uint64_t end_off; /* file offset after this record; 0 = replayed */
     uint32_t clen;
+    uint32_t record_crc; /* immutable entry frame checksum; no disk format change */
     uint8_t *cmd;
 };
 
@@ -117,7 +118,7 @@ struct efs_raft_disk {
  * it is durable; concurrent appends across groups share one fsync. */
 int raft_log_append(struct efs_raft_disk *d, uint8_t type,
                     struct raft_disk_group *g, uint64_t a, uint64_t b,
-                    const uint8_t *cmd, uint32_t clen);
+                    const uint8_t *cmd, uint32_t clen, uint32_t *record_crc);
 /* This thread's appends skip the fsync. defer_end fsyncs them once,
  * even if other threads still hold the shared sync. Nested. */
 void raft_log_defer_begin(void);

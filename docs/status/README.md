@@ -1,10 +1,14 @@
 Current ORCD `.efs` real 400 GiB subset PASS: exact deployed daemon source
 `62770d5c3bfd`, strict no-fork oracle `3539917e`, 1,638,400 complete payloads
 and paths, 1,608 directory inventories, pre/post concurrent suites and same-code
-orderly restart. All seven original benchmarks resumed and advancing.
+orderly restart. Seven original benchmarks were resumed; they are now paused for stall diagnostics.
 Foreground latency remains under active investigation: successful 5.57s and
 22.04s create/fsync/unlink outliers overlap Raft snapshot activity. User requests
-a code fix, redeployment and same-profile latency qualification. The separate
+a code fix, redeployment and same-profile latency qualification. A Raft-only
+rewrite optimization and fair retained-CREATE/lease retry correction have
+regression evidence; live qualification is pending. Old clients 010/011 also
+refused orderly drain with an exhausted identity window; explicit authorized
+discard was used for the diagnostic redeploy. The separate
 application fork/direct-read platform gate and broader W92 scale gates remain
 open. See the [400 GiB evidence](orcd-efs-400g-20261012.md).
 

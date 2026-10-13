@@ -404,6 +404,7 @@ test: all
 	python3 tests/test_create_request.py
 	python3 tests/test_retained_create_authority.py
 	python3 tests/test_pending_create_cleanup.py
+	python3 tests/test_open_retry_fairness.py
 	python3 tests/test_mount_identity_rpc.py
 	python3 tests/test_pending_create_command.py
 	python3 tests/test_lock_apply_verdict.py

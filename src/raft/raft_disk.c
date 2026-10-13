@@ -218,7 +218,7 @@ static int disk_save_hard(void *ctx, uint64_t current_term, int32_t voted_for)
         return EFS_ERR_INVAL;
     pthread_mutex_lock(&g->d->mu);
     rc = raft_log_append(g->d, RAFT_REC_HARD, g, current_term,
-                         (uint32_t)voted_for, NULL, 0);
+                         (uint32_t)voted_for, NULL, 0, NULL);
     if (rc == EFS_OK) {
         g->term = current_term;
         g->voted_for = voted_for;
@@ -246,6 +246,7 @@ static int disk_append(void *ctx, uint64_t index, uint64_t term,
 {
     struct raft_disk_group *g = group_of(ctx);
     uint8_t *copy = NULL;
+    uint32_t record_crc;
     int rc;
 
     if (!g)
@@ -266,7 +267,7 @@ static int disk_append(void *ctx, uint64_t index, uint64_t term,
     rc = raft_group_reserve(g);
     if (rc != EFS_OK)
         goto out;
-    rc = raft_log_append(g->d, RAFT_REC_ENTRY, g, index, term, cmd, clen);
+    rc = raft_log_append(g->d, RAFT_REC_ENTRY, g, index, term, cmd, clen, &record_crc);
     if (rc != EFS_OK)
         goto out;
     raft_group_install(g, index, term, copy, clen);
@@ -275,6 +276,8 @@ static int disk_append(void *ctx, uint64_t index, uint64_t term,
 
         if (off < g->n)
             g->log[off].end_off = g->d->bytes;
+        if (off < g->n)
+            g->log[off].record_crc = record_crc;
     }
     copy = NULL;
     raft_log_maybe_rotate_locked(g->d);
@@ -301,7 +304,7 @@ static int disk_truncate_from(void *ctx, uint64_t index)
         pthread_mutex_unlock(&g->d->mu);
         return EFS_OK;
     }
-    rc = raft_log_append(g->d, RAFT_REC_TRUNC, g, index, 0, NULL, 0);
+    rc = raft_log_append(g->d, RAFT_REC_TRUNC, g, index, 0, NULL, 0, NULL);
     if (rc == EFS_OK) {
         rc = raft_group_truncate(g, index);
         raft_log_maybe_rotate_locked(g->d);
@@ -396,7 +399,7 @@ static int disk_save_snap(void *ctx, uint64_t last_index, uint64_t last_term)
         return EFS_ERR_INVAL;
     }
     rc = raft_log_append(g->d, RAFT_REC_SNAP, g, last_index, last_term, NULL,
-                         0);
+                         0, NULL);
     if (rc == EFS_OK) {
         rc = raft_group_snap(g, last_index, last_term, RAFT_SNAP_NO_HINT);
         /* A snapshot can drop almost the whole file. The usual check
@@ -430,7 +433,7 @@ static int disk_save_cfg(void *ctx, uint32_t cfg_old, uint32_t cfg_new)
     if (!g)
         return EFS_ERR_INVAL;
     pthread_mutex_lock(&g->d->mu);
-    rc = raft_log_append(g->d, RAFT_REC_CFG, g, cfg_old, cfg_new, NULL, 0);
+    rc = raft_log_append(g->d, RAFT_REC_CFG, g, cfg_old, cfg_new, NULL, 0, NULL);
     if (rc == EFS_OK) {
         g->cfg_old = cfg_old;
         g->cfg_new = cfg_new;
