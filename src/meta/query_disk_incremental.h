@@ -239,25 +239,33 @@ static int changed_dentries(struct efs_query_disk *d,struct efs_query_disk *old,
     }
     return rc;
 }
-/* Process one fixed changed-ID batch per parent shard. Keeping the alias
- * index hot avoids reopening every shard for every changed inode when the
- * namespace spans more shards than the bounded FD cache. Search/placement
- * semantics and complete hard-link coverage stay unchanged. */
-static int aliases_dirty_batch(struct efs_query_disk *d,struct incremental *s,
-                               const efs_ino_t *changed,unsigned count)
+/* Visit each shard with ascending changed IDs. Once its alias index ends,
+ * the remaining larger IDs cannot have links there. Keep the lower bound
+ * between searches instead of restarting every ID from zero. The fixed
+ * journal batch is private scratch and needs no additional allocation. */
+static int changed_ino_compare(const void *ap,const void *bp)
 {
+    efs_ino_t a=*(const efs_ino_t *)ap,b=*(const efs_ino_t *)bp;
+    return a<b ? -1 : a>b ? 1 : 0;
+}
+static int aliases_dirty_batch(struct efs_query_disk *d,struct incremental *s,
+                               efs_ino_t *changed,unsigned count)
+{
+    qsort(changed,count,sizeof(*changed),changed_ino_compare);
     for(uint32_t shard=0;shard<SHARDS;shard++){
         if(cancelled(d))return EFS_ERR_BUSY;
-        if(!d->part[shard].names)continue;
-        for(unsigned i=0;i<count;i++){
+        uint64_t at=0;
+        for(unsigned i=0;i<count && at<d->part[shard].names;i++){
             if(cancelled(d))return EFS_ERR_BUSY;
+            if(i && changed[i]==changed[i-1])continue;
             efs_ino_t ino=changed[i];
-            uint64_t lo=0,hi=d->part[shard].names;struct disk_alias alias;int rc=EFS_OK;
+            uint64_t lo=at,hi=d->part[shard].names;struct disk_alias alias;int rc=EFS_OK;
             while(lo<hi){uint64_t mid=lo+(hi-lo)/2;
                 rc=disk_io(d,shard,'a',&alias,sizeof(alias),mid*sizeof(alias),0);if(rc)return rc;
                 if(alias.child<ino)lo=mid+1;else hi=mid;}
-            for(;lo<d->part[shard].names;lo++){
-                rc=disk_io(d,shard,'a',&alias,sizeof(alias),lo*sizeof(alias),0);if(rc)return rc;
+            at=lo;
+            for(;at<d->part[shard].names;at++){
+                rc=disk_io(d,shard,'a',&alias,sizeof(alias),at*sizeof(alias),0);if(rc)return rc;
                 if(alias.child!=ino)break;
                 if(alias.ordinal>=d->part[shard].names)return EFS_ERR_PROTO;
                 rc=dirty_add(d,s,alias.parent);if(rc)return rc;

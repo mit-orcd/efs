@@ -44,6 +44,14 @@ int main(void)
             CHECK(!efs_kv_put(kv,key,kn,lane,sizeof(lane)));
         }
     }
+    /* Alias discovery must preserve all parents after sorting journal batches,
+     * including links across parent shards and links outside the delta tree. */
+    for(unsigned i=0;i<32;i++){
+        char name[32],alias[32];snprintf(name,sizeof(name),"file-%04u",i);
+        snprintf(alias,sizeof(alias),"alias-%04u",i);
+        CHECK(!efs_meta_apply_link(kv,parents?parent_ids[i%parents]:dir,name,
+            parents?parent_ids[(i+1)%parents]:EFS_ROOT_INO,alias,101));
+    }
     struct efs_kv_lsm_snapshot *source=NULL;
     struct efs_query_catalog *old=NULL,*next=NULL,*oracle=NULL;
     CHECK(!efs_kv_lsm_snapshot_pin(kv,16<<20,&source));
@@ -119,9 +127,10 @@ int main(void)
         if(next && oracle){
             struct efs_query_rollup a,b;
             CHECK(!efs_query_catalog_stats(next,dir,&a));CHECK(!efs_query_catalog_stats(oracle,dir,&b));CHECK(!memcmp(&a,&b,sizeof(a)));
-            CHECK(a.tree_files==files+(phase?0:2048));
+            CHECK(a.tree_files==files+(parents?32:0)+(phase?0:2048));
             if(!getenv("EFS_QUERY_DELTA_BASELINE"))CHECK(efs_query_catalog_refolded(next)<files);
-            printf("phase=%s refolded=%u tree_files=%llu\n",phase?"delete":"create",efs_query_catalog_refolded(next),(unsigned long long)a.tree_files);
+            struct efs_query_build_times timing=efs_query_catalog_build_times(next);
+            printf("phase=%s refolded=%u tree_files=%llu stats_ms=%.3f\n",phase?"delete":"create",efs_query_catalog_refolded(next),(unsigned long long)a.tree_files,timing.stats_ns/1e6);
         }
         efs_query_catalog_free(oracle);oracle=NULL;efs_query_catalog_free(old);old=next;next=NULL;
         efs_kv_lsm_snapshot_release(source);source=NULL;

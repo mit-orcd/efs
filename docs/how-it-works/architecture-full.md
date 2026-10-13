@@ -1478,8 +1478,9 @@ this document is the invariant they are measured against.
 RDMA/direct/files, commands enabled and packing/containers disabled. Full writes,
 all 1,638,400 cold payloads and exported paths, and human/default/JSON stats on
 all seven clients PASS at `254a4a295c66`. Overall follow-up acceptance is FAIL:
-command options, virtual interfaces and loaded concurrent publication are being
-fixed. Passing basic commands/pages/large deltas and all failing logs are retained.
+full-catalog simultaneous seven-client queries remain open at `fd6583a4`;
+scoped searches/options/loaded publication now pass, and bounded alias folding
+is being optimized without extending test deadlines. Passing basic commands/pages/large deltas and all failing logs are retained.
 Orderly shutdown/remount and cold markers PASS after correcting startup readiness.
 Seven screen benchmarks remain cleanly stopped pending successful follow-up gates,
 then will resume with their existing files. Contended-write freshness and host
