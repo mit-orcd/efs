@@ -1504,6 +1504,21 @@ three quiet loads PASS (31,392 exact peer payloads). AMD runs this source with
 commands enabled, files/TCP/direct and unchanged caps; global W91/W92/W109 and
 non-LOCAL/larger-tree scale acceptance remain OPEN. No helper/deadline tuning.
 
+[ORCD passive network observation](../status/orcd-network-passive-20261013.md):
+120s on all11 unchanged9b2fac55 processes under existing I/O; no cluster changes.
+No mlx5_2 IB/RDMA error/retry or NIC drop increments. Host TCP retransmissions
+663/64 on004/005; subsequent EFS-owned IPoIB sockets on004 show102 in30s.
+124 successful slow multi-attempt client RPCs logged, no logged transport retry
+or terminal failure pattern. Root cause OPEN; no payload/acceptance verification.
+
+[Intel cross-host network workloads](../status/intel-network-workloads-20261013.md):
+large32-file/2GiB and small20,000-file/4KiB peer-byte/rename/unlink correctness
+PASS on deployed1a737143 files/TCP/direct with all requested features OFF.
+Host TCP retransmissions35/51, NIC receive misses10/6 observed; no timeout/reset
+increments or logged transport retries; seven large-writer RPC backoffs per host.
+Diagnostic mounts/fixtures cleaned normally. Receive-loss cause remains OPEN;
+no performance tuning and no transfer of this result to broader acceptance.
+
 [AMD integrated package 2 qualification](../status/amd-package2-integrated-20261013.md):
 **PASS on 9b2fac55** — full normal/fault native, six full-library query sanitizers,
 clean-cluster transition/retained reader, commands/options/pages and three quiet
@@ -1522,11 +1537,20 @@ Human scope is correctness only; no performance tuning or further compression.
 [ORCD package 1 deployment and open gates](../status/orcd-package1-20261013.md):
 Current scope is feature correctness/acceptance; latency/resources are measured
 evidence and existing bounds, with no additional performance tuning.
-Historical `d54949ec` checkpoint installed native RDMA/direct/files, `.efs` client/server on,
-packing/containers/expiry off. Full normal native and six full-library query
-ASan/UBSan plus root inventory PASS. Normal deployment/marker integrity PASS,
-readiness85.091s (300s limit); full catalogue still QUOTA near13.5M inodes.
-AMD transient sort-reservation proof/fix and remaining scale gates OPEN.
+`9b2fac55` integrates Intel checked cleanup and AMD measured temporary-peak
+accounting, installed native RDMA/direct/files, `.efs` client/server on,
+packing/containers/expiry off. Full native and full-library query sanitizer
+gates PASS; deployment markers PASS, server readiness92.003s. Both complete
+15.2M-inode catalogues publish within unchanged16/32GiB limits; exact400GiB
+subtree stats PASS. Initial build-time stats timeout retained as FAIL;
+focused commands/options/virtual/load FAIL, pages/large-delta PASS; tiny
+recursive subtrees scan unrelated catalogue entries. Owner/numeric and
+human/default/JSON stats PASS all7. Concurrent query21/21 PASS, accompanying core1501/1512 FAIL
+(10EBUSY, one EOF); EOF repeats4/1120 FAIL and the committed wrapper
+finds12/1120 failures including persistent shrink. Intel handoff queued after
+current work. Subtree correction e77f6030 is merged into a candidate;
+helper retry-window regression34/34 and its negative control PASS locally.
+Combined candidate native/mounted, cold and full-payload gates OPEN.
 
 [Intel package 3 execution](../status/intel-package3-20261013.md): files/TCP/direct,
 client/server commands, packing and expiry OFF; container fixture stopped.

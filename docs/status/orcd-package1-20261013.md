@@ -197,3 +197,114 @@ failure, daemon diagnostics and resource samples remain outside Git under
 `operations/devel-efs` and `/home/erbmi1/orcd/scratch/efs/orcd-test`. Existing
 scripts there reproduce deployment orchestration; native regression sources
 and the three-package profile are committed. No raw artifacts are committed.
+
+## Integrated Intel and AMD acceptance attempt
+
+Deployed source `9b2fac55fc69732999c33929f319d6ef78507b68` combines Intel
+`5f8ec779`/`0eab1309` checked cleanup with AMD `d17f940f` measured sort-peak
+accounting. Conflicting sort test hooks were reconciled so both fault oracles
+remain active. The Intel helper tuning and read-admission experiment are absent.
+Budgets and cache format are unchanged from the compact-index correction.
+
+All eleven hosts match the 858 committed build inputs and requested live
+RDMA/direct-I/O/files profile, with commands enabled and packing/expiry disabled.
+Full native `make -j4 test` and six full-library query ASan/UBSan/leak checks,
+plus the inventory helper sanitizer, PASS on ORCD. Orderly deployment and seven
+acknowledged-byte markers PASS; initial server readiness is 92.003 seconds.
+
+Both publishers subsequently publish complete v6 catalogues with 15,208,532
+inodes and 14,473,155,513 file bytes per generation. Observed aggregate bytes
+remain below 32 GiB. The real 400 GiB subtree stats returns exactly 1,638,400
+files and 429,496,729,600 bytes, with refresh error zero. This is catalogue
+coverage, not full payload verification.
+
+The first stats preflight during catalogue construction **FAILS** its unchanged
+30-second timeout. Its logs are retained separately. A post-publication attempt
+passes the same stats deadline and proceeds to focused commands, concurrent
+queries, orderly cold restart and full payload verification. Those gates remain
+OPEN until completed; this later probe does not erase the initial failure.
+
+The post-publication focused attempt finds two additional **FAIL** results:
+`efs_commands` (34.004 s) and `efs_command_options` (33.153 s) each exceed
+an individual peer `find` 30-second deadline; `efs_command_pages` PASS (60.984 s).
+A read-only syscall trace of the options query shows successful continuation
+reads, not a single blocked call: consecutive opens take 5.864, 6.736, 2.815,
+2.058 and 3.170 seconds. The source selects a parent-key range only for LOCAL
+immediate listings or recursive leaf directories. Recursive directories with
+children use the global name-index cursor, scanning unrelated entries in the
+15.2-million-inode catalogue even for this 13-file subtree. Bounded recursive
+subtree continuation is an open acceptance correction; no deadline widening or
+helper tuning has been applied. AMD has the exact reproducer and trace finding.
+
+The six-suite attempt finishes with commands/options/virtual/load FAIL and
+pages/large-delta PASS; temporary peer drains and unmounts normally. Virtual
+mutation and nested-authorization checks do not observe changes within their
+bounds; load readers return BUSY throughout. Logs show refresh QUOTA while an
+older catalogue remains pinned. Conservative aggregate accounting may correctly
+refuse a third approximately14.48GB generation; investigate retained stream
+lifetime alongside subtree continuation, preserving the32GiB limit.
+
+Independent owner-name/numeric checks PASS on all seven clients. Default,
+human-readable, help and JSON stats checks also PASS on all seven after fixing
+an operations-harness oracle that incorrectly required the2TB export root to
+use GiB rather than TiB. The400GiB fixture oracle remains exact. Seven active DD
+workloads appear in resource samples; concurrent acceptance runs under that
+ordinary I/O, separately from the paused tiny-file screen launchers.
+
+Seven-client concurrent pre-cold gate: all21 `.efs` query cases PASS (3/client,
+jobs3, unchanged30s), but the accompanying core gate **FAIL**:1501/1512 PASS,
+11 failures. Ten are EBUSY in deep mkdir, name creation, concurrent create/unlink
+or unlink; one concurrent high/low extension reports EOF8,519,680 rather than
+8,388,609 on fcstor010. These are ordinary POSIX acceptance failures under
+jobs16/client and the active DD workload; do not label the overall concurrent
+gate PASS or hide them behind the query-only result. A separate same-profile
+EOF reproducer repeats the existing POSIX oracle160times/client with16workers:
+4/1120 FAIL on fcstor008/009/012, all the same chunk-rounded EOF; failed
+fixtures remain. Seven isolated single-case reruns PASS but do not clear it.
+Existing cache/publication tracing on temporary clients gives960/960 PASS and
+normal drains; a traced concurrent bulk-I/O reproduction is running. Post-cold and full payload gates remain NOTRUN.
+
+Reproduce the shared-core EOF defect independently of `.efs` with
+`python3 tests/live/concurrent_extend_eof.py /tmp/efs-mount --cases 160 --workers 16`
+on each client simultaneously. The script reuses the committed POSIX high/low
+extension oracle, forks no reader, retries no operation and preserves failed
+fixtures. Requires an active ordinary-file mount and the source tree's
+`tests/posix/posix_suite.py`; run against a qualified native binary, recording
+source/build/profile. Successful owned fixtures are removed. Apply any
+shared-core fix first under package3's Intel disabled-feature profile, then
+requalify ORCD RDMA/direct-I/O with commands enabled. Human authorizes Intel
+coordination after its current network workload finishes; do not interrupt it.
+
+The committed wrapper77e922fc is qualified separately from the installed9b
+source, without changing its858 deployed inputs. SHA256
+`ee4e60168b7b7e7193d1b4d989a4236b30fe7e2beb66c7383acba758ca1d6c13`.
+A second160-case/16-worker run on all7 existing mounts finds **12/1120 FAIL**:
+nine chunk-rounded EOFs, one EOF shrink to1,048,577 and two cleanup EBUSY with
+correct size. The shrunk file is inode13242869 at
+`/tmp/efs-mount/extend-eof-x9n53rmk/124/f`; later readonly checks on fcstor012
+and007 agree on size1,048,577, low byte0x4c and empty high-offset read.
+Do not call this only an oversize issue or a transient local stat. Traced fresh
+clients pass another960 cases while each also writes/deletes2GiB; all three
+temporary mounts drain normally. Those passes do not clear long-lived-client
+failures. Intel has this qualified handoff and must finish its current work
+before applying shared-core fixes on Intel/devel with the disabled-feature
+profile. Raw wrapper JSON and traces remain in operations/BULK, outside Git.
+
+## Helper retry window correction
+
+The initial stats timeout also exposes a helper-bound gap: `read_result` retries
+up to8 transient refusals, each backed by the existing8-second client RPC budget.
+The candidate keeps those request budgets and short-refusal retry count, but
+stops retrying after one8-second monotonic window; a sleep cannot start another
+attempt after that window expires. It does not interrupt a filesystem call or
+claim a new end-to-end hard timeout. Busy catalogue startup now has a bounded
+retry window rather than multiplying the RPC budget across8 refusals.
+
+All34 command-source/protocol/helper tests PASS locally. New deterministic
+oracles cover a slow refusal, expiry during sleep and successful short transient
+recovery. Restoring the old helper fails the slow-refusal oracle (8 opens rather
+than1), so its negative control PASSes. The embedded source header is regenerated.
+ORCD native/mounted qualification of this combined candidate remains NOTRUN;
+all11 builds of earlier subtree-only integration8743e699 PASS but are not deployed.
+Native request limits, query16/32GiB caps, cache format and feature flags are
+unchanged. The original live9b failures stay recorded until final-source gates.

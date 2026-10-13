@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Command bytes, path protocol, scope and malformed-result gates; no FUSE needed."""
+import errno
 import importlib.util
 import json
 import os
@@ -9,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import mock_open, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/client/commands/command.py"
@@ -35,6 +36,36 @@ def envelope(op, paths=()):
 
 
 class Commands(unittest.TestCase):
+    def test_retry_stops_after_one_slow_refusal(self):
+        error = OSError(errno.EBUSY, "catalogue building")
+        with patch("builtins.open", side_effect=error) as opened, \
+                patch.object(commands.time, "monotonic", side_effect=[0, 9]), \
+                patch.object(commands.time, "sleep") as sleep:
+            with self.assertRaises(OSError) as refused:
+                commands.read_result(self.directory, "stats")
+            self.assertIs(refused.exception, error)
+            self.assertEqual(opened.call_count, 1)
+            sleep.assert_not_called()
+
+    def test_retry_does_not_restart_after_sleep_expires_window(self):
+        error = OSError(errno.ESTALE, "refresh pending")
+        with patch("builtins.open", side_effect=error) as opened, \
+                patch.object(commands.time, "monotonic", side_effect=[0, 0, 9]), \
+                patch.object(commands.time, "sleep"):
+            with self.assertRaises(OSError) as refused:
+                commands.read_result(self.directory, "stats")
+            self.assertIs(refused.exception, error)
+            self.assertEqual(opened.call_count, 1)
+
+    def test_short_transient_refusal_still_recovers(self):
+        stream = mock_open(read_data=b"{}").return_value
+        with patch("builtins.open", side_effect=[OSError(errno.EAGAIN, "retry"), stream]) as opened, \
+                patch.object(commands.time, "monotonic", side_effect=[0, .1, .2]), \
+                patch.object(commands.time, "sleep") as sleep:
+            self.assertEqual(commands.read_result(self.directory, "stats"), {})
+            self.assertEqual(opened.call_count, 2)
+            sleep.assert_called_once_with(.025)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name).resolve() / "scope with spaces"
