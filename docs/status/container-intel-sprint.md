@@ -2511,3 +2511,37 @@ External evidence separate7f0c611c-{deploy,workers64-normal,workers64-qualificat
 Reproduce via committed qualification standard15 gates and live flock ownership
 helper. Same-source diagnostic now measuring receive-cohort effectiveness;
 no diagnostic result yet. No push/merge/production promotion. W100 open.
+
+
+### Receive overlap7f0c611c diagnostic; completed queued-probe consumption candidate
+
+Same exact7f0c611c diagnostic1505/1512 PASS, seven deep30s FAIL;
+immediate physical101.153s PASS, zero101.129 before raw collection.
+Follower valid overlap counts n1/n2/n4 8285/15874/10207, but completed
+cohort message means1.117/1.057/1.107. Follower n2 still6099suffix_read
+frames and762read-boundary cohort ends. Queued canonical request means
+n1/n2/n4 9.911/8.838/3.303ms; leader queued reply1906samples3.087ms;
+58188request wire frames117us. Leader KV release8717mean2.763ms;
+read-quorum sleeps360087mean2208us, apply samples0. Windows span mixed
+workloads and start0.20–2.51s before first deep mkdir; no per-case causal
+attribution or robust performance gain follows. External receive-window and
+queue summaries are under separate7f0c611c-workers64-diagnostic.
+
+Next candidate extends the already-existing network consumption rule to its
+queued equivalent: after unchanged core result1 fully handles an exact
+canonical prefix-zero request and sends its vote, the sole pump removes only
+that unchanged80-byte frame. Partial result2, replies, ordinary/progress
+frames, refused controls and all flow-enabled admission retain their original
+normal receive path. No entry/term/config/boot/quorum/own-apply decision or
+credit promise is bypassed. One compaction under inbox_mu preserves retained
+FIFO and arrivals appended during handling, updates only actual inbox bytes,
+and frees owned completed frames exactly once. Flow work/credit counters
+remain unchanged; no expiry, timer, new worker, reset or deadline change.
+
+Actual pending helper tests PASS normal/ASan/UBSan: core refusal, fully handled
+request/free, repeated call, partial-request/reply/flow exclusion, exact retained
+byte accounting, two completed requests around old data plus a raced new
+arrival, unchanged credits and negative disabling consumption. Real allocations
+are freed under sanitizer (no stack-free adapter). Inline handler/outbox controls
+PASS. Both-host complete native and loaded qualification are pending; no deep
+closure claimed. Containers experimental and W100 open.

@@ -32,7 +32,7 @@ static const char *cn[BO_COUNTER_N] = {
     "overlap_bytes", "overlap_read_boundary", "flow_retire_early",
     "applied_sync", "applied_error", "applied_throttle", "applied_entry_cap",
     "read_control_request", "read_control_reply", "inbox_read_duplicate", "ack_older_window",
-    "read_req_inline", "read_reply_inline"
+    "read_req_inline", "read_reply_inline", "inbox_read_consumed"
 };
 static const char *hn[BH_HIST_N] = {
     "wal_entries", "wal_bytes", "sync_us", "sync_wait_us", "sync_waiters",

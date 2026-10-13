@@ -7011,11 +7011,12 @@ static int host_checkpoint_stop(struct host_checkpoint_worker *w)
  * failure must not hide an otherwise eligible fresh vote behind unrelated
  * durable receive work. Snapshot bounded headers without removing frames;
  * the unchanged core checks term/boot/voters/leader/persisted prefix. Every
- * frame still enters normal recv in order and retains its admission credits. */
+ * progress-bearing frame still enters normal recv in order and retains its
+ * admission credits; fully handled canonical requests may retire without flow. */
 static void host_container_pending_reads(struct efs_raft_host *h)
 {
-    struct pending_read {uint8_t p[EFS_WIRE_RAFT_HDR_LEN];uint8_t *identity;uint64_t queued_us;int slot;};
-    struct pending_read frames[HOST_INBOX_MAX];unsigned n=0;uint8_t published=0;
+    struct pending_read {uint8_t p[EFS_WIRE_RAFT_HDR_LEN];uint8_t *identity;uint64_t queued_us;int slot,consume;};
+    struct pending_read frames[HOST_INBOX_MAX];unsigned n=0,consume_n=0;uint8_t published=0;
     if(!h->s || !h->s->storage_engine)return;
     pthread_mutex_lock(&h->inbox_mu);
     for(int i=0;i<h->inbox_n && i<HOST_INBOX_MAX;i++){
@@ -7024,14 +7025,19 @@ static void host_container_pending_reads(struct efs_raft_host *h)
            (item->buf[0]!=EFS_RAFT_MSG_AE_REQ && item->buf[0]!=EFS_RAFT_MSG_AE_REP) ||
            !rd64be(item->buf+28))continue;
         memcpy(frames[n].p,item->buf,EFS_WIRE_RAFT_HDR_LEN);
-        frames[n].identity=item->buf;frames[n].queued_us=item->queued_us;frames[n++].slot=i;
+        frames[n].identity=item->buf;frames[n].queued_us=item->queued_us;frames[n].consume=0;frames[n++].slot=i;
     }
     pthread_mutex_unlock(&h->inbox_mu);
     for(unsigned i=0;i<n;i++){
         struct efs_raft_msg msg;
         if(efs_wire_raft_decode(frames[i].p,EFS_WIRE_RAFT_HDR_LEN,&msg,NULL,0)!=EFS_OK)continue;
         struct efs_raft *r=group_raft(h,msg.group);
-        if(!efs_raft_read_control(r,&msg))continue;
+        int handled=efs_raft_read_control(r,&msg);
+        if(!handled)continue;
+        frames[i].consume=handled==1 && !h->flow_enabled &&
+            msg.type==EFS_RAFT_MSG_AE_REQ &&
+            outbox_pure_read_control(frames[i].p,EFS_WIRE_RAFT_HDR_LEN);
+        if(frames[i].consume)consume_n++;
         /* Time only the first accepted canonical queued control; retained
          * receive/credits and all core refusal rules remain unchanged. */
         if(BO_ON() && frames[i].queued_us &&
@@ -7045,6 +7051,28 @@ static void host_container_pending_reads(struct efs_raft_host *h)
         if(msg.type==EFS_RAFT_MSG_AE_REP){
             published|=(uint8_t)(1u<<msg.group);BO_COUNT(BO_READ_CONTROL_REPLY);
         }else BO_COUNT(BO_READ_CONTROL_REQUEST);
+    }
+    /* The same fully-accounted prefix-zero request is already consumed by
+     * the network fast path. After its queued equivalent has sent its vote,
+     * remove only the exact unchanged frame: no receive or durable work is
+     * owed. Flow-controlled admission/retirement stays entirely unchanged.
+     * Compact once, preserving every retained tail and raced arrival. */
+    if(consume_n){
+        pthread_mutex_lock(&h->inbox_mu);
+        int out=0;
+        for(int j=0;j<h->inbox_n;j++){
+            struct host_inbox_item item=h->inbox[j];int consume=0;
+            for(unsigned i=0;i<n;i++)
+                if(frames[i].consume && item.buf==frames[i].identity &&
+                   item.len==EFS_WIRE_RAFT_HDR_LEN &&
+                   !memcmp(item.buf,frames[i].p,EFS_WIRE_RAFT_HDR_LEN)){
+                    consume=1;break;
+                }
+            if(consume){h->inbox_bytes-=item.len;free(item.buf);BO_COUNT(BO_INBOX_READ_CONSUMED);}
+            else h->inbox[out++]=item;
+        }
+        h->inbox_n=out;
+        pthread_mutex_unlock(&h->inbox_mu);
     }
     for(unsigned i=0;i<HOST_NGROUPS;i++)
         if(published&(1u<<h->g[i].group))host_publish_group(h,h->g[i].group);
