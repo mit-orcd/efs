@@ -2252,3 +2252,40 @@ feedback, ACK, authority, own-apply or durability ordering changes.
 Local actual host-outbox/ASan/negative, host-flow (Linux asynchronous portion
 not run on macOS), read-probe/control/pending-read checks PASS. Fresh Linux
 full sender compilation/execution and live measurement remain pending.
+
+
+### Completed unlock checkpoint and reproduced description-ownership bug
+
+Frozen e664d2181d1fc478dfbae952ec41a8bf0a12de40 completed all15 normal
+gates: concurrent1505/1512 PASS7FAIL, only deep60timeouts; immediate physical
+PASS98.585s; all quiet/peer/mmap/lifecycle/tiny/restart/cold/delete gates PASS,
+final physical8.909s PASS. Both post-restart actual runtime proofs PASS. The
+prior LOCK_UN EBUSY did not recur; original flock EAGAIN remains unattributed.
+External unlocke664d218-{deploy,workers64-normal,workers64-qualification}.
+
+After that controller finished, an isolated mounted reproducer showed a child
+acquiring EX despite the parent still holding EX. Closing its inherited fd
+causes FUSE FLUSH: preserve_inherited_fd=False => acquired; True => blocked.
+The committed container_flock_ownership.py reproducer passes all6 controls on
+the native /tmp filesystem, but the unmodified Intel container client fails
+exactly `closing inherited copy preserves parent lock` with acquired.
+No native build or mounted qualification overlapped this focused reproducer.
+
+The fix removes inode-keyed64-slot flock bookkeeping and unlock-on-FLUSH.
+FLUSH still performs its existing write durability/error handling. RELEASE
+uses fi.flock_release and its valid per-description fi.lock_owner, even while
+other descriptions keep this inode open. Unlock runs under the existing OPEN
+edge before closing the description, independently of last-inode HOLD cleanup;
+release errors are logged/returned after cleanup. Blocking SH/EX adds existing
+EFS_FLOCK_WAIT; NB and UN preserve their original flags. No new protocol,
+lease/expiry, session or authority relaxation. POSIX record-lock owner/close
+semantics are not qualified by this flock fix. Installed Intel fuse3 headers
+and [libfuse's owner/release contract](https://github.com/libfuse/libfuse/blob/master/include/fuse_common.h)
+require flock release only on final RELEASE, not on dup/fork FLUSH.
+
+Actual callback regression PASS normal and ASan/UBSan: no FLUSH unlock, correct
+per-description RELEASE owner with other opens,100owners, visible error, WAIT
+versus NB/UN. Original e664d218 fails the exact no-FLUSH-unlock assertion.
+Lookup-memo and full mount identity RPC regressions PASS. Fresh Linux/native,
+new mounted reproducer and unchanged full normal qualification remain pending;
+aa496a7b wire-batch observation has not yet been remotely executed.

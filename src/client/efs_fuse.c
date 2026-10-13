@@ -1902,64 +1902,6 @@ static pthread_mutex_t *open_edge_mu(efs_ino_t ino)
     return &g_open_edge_mu[efs_ino_lock_slot(ino, OPEN_EDGE_SHARDS)];
 }
 
-/* Inodes this client has actually locked. Last close otherwise sent
- * LOCK_UN for every file (a Raft round trip) so a skipped hold could
- * not leave flock_unlock_on_close stuck. */
-#define FLOCK_ARMED_MAX 64
-struct flock_arm_slot {
-    efs_ino_t ino;
-    uint64_t owner;
-};
-static struct flock_arm_slot g_flock_armed[FLOCK_ARMED_MAX];
-static int g_flock_armed_n;
-static int g_flock_arm_all;
-static pthread_mutex_t g_flock_armed_mu = PTHREAD_MUTEX_INITIALIZER;
-
-static void flock_arm(efs_ino_t ino, uint64_t owner)
-{
-    int i;
-
-    if (!ino)
-        return;
-    pthread_mutex_lock(&g_flock_armed_mu);
-    for (i = 0; i < g_flock_armed_n; i++) {
-        if (g_flock_armed[i].ino == ino) {
-            g_flock_armed[i].owner = owner;
-            pthread_mutex_unlock(&g_flock_armed_mu);
-            return;
-        }
-    }
-    if (g_flock_armed_n < FLOCK_ARMED_MAX) {
-        g_flock_armed[g_flock_armed_n].ino = ino;
-        g_flock_armed[g_flock_armed_n].owner = owner;
-        g_flock_armed_n++;
-    } else {
-        g_flock_arm_all = 1;
-    }
-    pthread_mutex_unlock(&g_flock_armed_mu);
-}
-
-/* 1 when this close must LOCK_UN. Writes the owner that took the lock. */
-static int flock_armed_take(efs_ino_t ino, uint64_t *owner_out)
-{
-    int i, hit = 0;
-
-    pthread_mutex_lock(&g_flock_armed_mu);
-    if (g_flock_arm_all)
-        hit = 1;
-    for (i = 0; i < g_flock_armed_n; i++) {
-        if (g_flock_armed[i].ino == ino) {
-            if (owner_out)
-                *owner_out = g_flock_armed[i].owner;
-            g_flock_armed[i] = g_flock_armed[--g_flock_armed_n];
-            hit = 1;
-            break;
-        }
-    }
-    pthread_mutex_unlock(&g_flock_armed_mu);
-    return hit;
-}
-
 /* Returns 1 when this is the first open (caller must acquire the HOLD). */
 static int efs_open_note(efs_ino_t ino)
 {
@@ -4084,20 +4026,10 @@ static int efs_fuse_flush_ino(fuse_ino_t ino, struct fuse_file_info *fi)
         efs_fuse_log_err("flush-meta", rc, ino, 0, 0, NULL);
         return rc == EFS_ERR_QUOTA ? -ENOSPC : -EIO;
     }
-    /* close() flushes before the syscall returns. Drop a lock this fd
-     * took here; release can run after the next open already locked. */
-    {
-        efs_ino_t fh = efs_file_ino(fi, (efs_ino_t)ino);
-        uint64_t locked_owner = 0;
-        int hit = flock_armed_take(fh, &locked_owner);
-
-        if (!hit && ino && (efs_ino_t)ino != fh)
-            hit = flock_armed_take((efs_ino_t)ino, &locked_owner);
-        if (hit) {
-            (void)efs_client_rpc_flock(g_client.export_id, fh, EFS_FLOCK_UN,
-                                       locked_owner);
-        }
-    }
+    /* FLUSH also runs when one dup/fork copy is closed. Flock belongs to
+     * the open file description; only RELEASE's flock_release flag permits
+     * dropping it. Releasing here lets a child close its inherited copy and
+     * silently unlock the descriptor its parent still holds. */
     return 0;
 }
 
@@ -4740,40 +4672,29 @@ static int efs_fuse_release_ino(fuse_ino_t ino, struct fuse_file_info *fi)
     efs_ino_t fh = efs_file_ino(fi, (efs_ino_t)ino);
     if (virt_kind(fh)) { efs_file_close(fi); return 0; }
     int leased = 0;
+    int lock_rc = EFS_OK;
     efs_client_note_meta_change(0);
-    efs_file_close(fi);
-    if (!fh)
-        return 0;
+    if (!fh) { efs_file_close(fi); return 0; }
     pthread_mutex_t *edge = open_edge_mu(fh);
     pthread_mutex_lock(edge);
-    if (!efs_close_note(fh, &leased)) {
-        pthread_mutex_unlock(edge);
-        return 0;
+    /* The kernel supplies this open description's valid owner at final
+     * RELEASE. Other opens of the inode must neither delay its unlock nor
+     * select a different owner's lock. Serialize with the existing OPEN edge. */
+    if (fi && fi->flock_release) {
+        uint64_t owner = g_client.flock_token ^ fi->lock_owner;
+        lock_rc = efs_client_rpc_flock(g_client.export_id, fh,
+                                       EFS_FLOCK_UN, owner);
+        if (lock_rc != EFS_OK)
+            efs_fuse_log_err("release-flock", lock_rc, fh, 0, 0, NULL);
     }
-    {
-        uint64_t lk = fi ? fi->lock_owner : 0;
-        uint64_t owner = g_client.flock_token ^
-                         (lk ? lk : ((uint64_t)(uintptr_t)fi << 8));
-
-        /* The kernel does not send LOCK_UN on close. Only an inode
-         * this client locked pays the Raft unlock, with the owner that
-         * took the lock (release's fi->lock_owner is not that one). */
-        {
-            uint64_t locked_owner = owner;
-            int hit = flock_armed_take(fh, &locked_owner);
-            if (!hit && ino && (efs_ino_t)ino != fh)
-                hit = flock_armed_take((efs_ino_t)ino, &locked_owner);
-            if (hit) {
-                (void)efs_client_rpc_flock(g_client.export_id, fh,
-                                           EFS_FLOCK_UN, locked_owner);
-            }
-        }
+    efs_file_close(fi);
+    if (efs_close_note(fh, &leased)) {
         if (leased)
             (void)efs_open_release_pending(fh);
         efs_client_stage_evict_ino(fh);
     }
     pthread_mutex_unlock(edge);
-    return 0;
+    return efs_rc_to_errno(lock_rc);
 }
 
 /* Runs before unmount with mutations quiesced. Timeout of the control
@@ -5238,7 +5159,6 @@ static int efs_fuse_setlk_ino(fuse_ino_t ino, struct fuse_file_info *fi,
         n->next = g_plocks;
         g_plocks = n;
         pthread_mutex_unlock(&g_plock_mu);
-        flock_arm(inum, plock_rpc_owner(fi));
         return 0;
     }
 }
@@ -5246,23 +5166,19 @@ static int efs_fuse_setlk_ino(fuse_ino_t ino, struct fuse_file_info *fi,
 static int efs_fuse_flock_ino(fuse_ino_t ino, struct fuse_file_info *fi, int op)
 {
     efs_ino_t fh = efs_file_ino(fi, (efs_ino_t)ino);
-    uint64_t lk = fi ? fi->lock_owner : 0;
-    uint64_t owner = g_client.flock_token ^
-                     (lk ? lk : ((uint64_t)(uintptr_t)fi << 8));
+    if (!fi) return -EBADF;
+    uint64_t owner = g_client.flock_token ^ fi->lock_owner;
+    uint32_t rpc_op = (uint32_t)op;
+    if (!(op & (LOCK_UN | LOCK_NB))) rpc_op |= EFS_FLOCK_WAIT;
     int rc;
     if (getenv("EFS_FLOCK_DBG"))
         fprintf(stderr, "flock: ino=%llu op=%u owner=%llu\n",
                 (unsigned long long)fh, op, (unsigned long long)owner);
-    rc = efs_client_rpc_flock(g_client.export_id, fh, (uint32_t)op, owner);
+    rc = efs_client_rpc_flock(g_client.export_id, fh, rpc_op, owner);
     if (rc == EFS_ERR_BUSY)
         return -EAGAIN;
     if (rc != EFS_OK)
         return -EIO;
-    if (!(op & LOCK_UN)) {
-        flock_arm(fh, owner);
-        if ((efs_ino_t)ino != fh)
-            flock_arm((efs_ino_t)ino, owner);
-    }
     return 0;
 }
 
