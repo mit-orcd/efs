@@ -1096,3 +1096,28 @@ floor change is safety-tested but has not improved the loaded directory
 verdict. Physical passes apply to this failed-directory workload only.
 Separate same-source diagnostic next enables existing read/Raft/batch
 counters and flushes phase observations; it cannot replace acceptance.
+
+
+Same0f85 diagnostic (read/Raft/batch counters ON, not acceptance) full
+1496/1512PASS16FAIL: deep60/crazy all7,deep100two. Flushed deep markers
+show every worker enters creation after0.17–0.38s setup; none reaches
+leaf-write or recursive cleanup before its original30s deadline. This
+supports creation-phase delay, not recursive cleanup as the failing phase.
+Leader lookup average5.51ms, fresh authority5.17ms, KV0.237ms; no remote
+proof routing. Cumulative all-frame inbox age averages n1=5.31ms,n2=47.19ms,
+n3=8.49ms,n4=3.22ms; these are not read-only latency histograms and cannot
+prove an individual vote delay. Diagnostic physical cleanup PASS126.557s;
+no reset. Raw diagnostic slices/phases retained outside Git safe0f85-diagnostic.
+
+Next bounded container vote worker services already admitted80-byte fresh
+read-context headers while the pump is in its off-lock durability tail.
+One event-driven helper per container daemon, no new timer or queue; h->mu
+still serializes unchanged core eligibility and pins snapshot identities.
+FIFO receive, bytes and deferred durability credits stay owned by the pump;
+no entry apply, persistence, term/config/boot/quorum/own-apply change. Files
+start no helper. Eventfd/thread failure retains existing pump fallback;
+shutdown atomically stops/wakes/joins before freeing host/core/inbox state.
+Local pending-read/probe/inbox/pair/completion/operation authority controls
+PASS. Actual Linux eventfd lifecycle control NOTRUN on macOS; local txn
+control NOTRUN because libefs.a is absent. Both require fresh Linux native
+validation before deployment; no performance or acceptance claim yet.

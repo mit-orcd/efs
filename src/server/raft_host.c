@@ -438,6 +438,8 @@ struct efs_raft_host {
      * fresh applied index without polling; used with h->mu (no I/O under
      * that wait). */
     int pump_efd;
+    int read_efd,read_running,read_started;
+    pthread_t read_tid;
     /* applied_cv waiters (host_wait_applied, host_read_index) sleep under
      * cv_mu, not h->mu: their predicate is the published view above, and
      * the pump takes cv_mu only for the broadcast. */
@@ -6896,7 +6898,7 @@ static int host_checkpoint_stop(struct host_checkpoint_worker *w)
     w->started=0;return rc;
 }
 
-/* Called by the sole inbox consumer with h->mu held. A network trylock
+/* Called with h->mu held by the pump or bounded container vote worker. A network trylock
  * failure must not hide an otherwise eligible fresh vote behind unrelated
  * durable receive work. Snapshot bounded headers without removing frames;
  * the unchanged core checks term/boot/voters/leader/persisted prefix. Every
@@ -6932,6 +6934,54 @@ static void host_container_pending_reads(struct efs_raft_host *h)
     for(unsigned i=0;i<HOST_NGROUPS;i++)
         if(published&(1u<<h->g[i].group))host_publish_group(h,h->g[i].group);
     if(published)host_waiters_wake(h);
+}
+
+/* One container-only event-driven helper services already admitted read
+ * headers during the pump's off-lock durability tail. It never removes a
+ * frame, releases credits, applies entries, or performs durable receive.
+ * h->mu serializes the core and pins inbox identities against the pump. */
+static void host_container_read_kick(struct efs_raft_host *h)
+{
+    uint64_t one=1;
+    if(h->read_efd<0)return;
+    ssize_t n;
+    do {n=write(h->read_efd,&one,sizeof(one));}while(n<0 && errno==EINTR);
+}
+static void *host_container_read_work(void *arg)
+{
+    struct efs_raft_host *h=arg;
+    while(__atomic_load_n(&h->read_running,__ATOMIC_ACQUIRE)){
+        struct pollfd p={.fd=h->read_efd,.events=POLLIN};int rc;
+        do {rc=poll(&p,1,-1);}while(rc<0 && errno==EINTR);
+        if(rc<0 || !(p.revents&POLLIN))break;
+        uint64_t sink;ssize_t n;
+        do {n=read(h->read_efd,&sink,sizeof(sink));}while(n<0 && errno==EINTR);
+        pthread_mutex_lock(&h->mu);
+        if(__atomic_load_n(&h->read_running,__ATOMIC_ACQUIRE))
+            host_container_pending_reads(h);
+        pthread_mutex_unlock(&h->mu);
+    }
+    return NULL;
+}
+static void host_container_read_start(struct efs_raft_host *h)
+{
+    if(!h->s || !h->s->storage_engine)return;
+    h->read_efd=eventfd(0,EFD_NONBLOCK|EFD_CLOEXEC);
+    if(h->read_efd<0)return; /* Existing pump remains the fallback. */
+    __atomic_store_n(&h->read_running,1,__ATOMIC_RELEASE);
+    if(efsd_pthread_create(&h->read_tid,host_container_read_work,h)){
+        __atomic_store_n(&h->read_running,0,__ATOMIC_RELEASE);
+        close(h->read_efd);h->read_efd=-1;return;
+    }
+    h->read_started=1;
+}
+static void host_container_read_stop(struct efs_raft_host *h)
+{
+    if(!h->read_started)return;
+    __atomic_store_n(&h->read_running,0,__ATOMIC_RELEASE);
+    host_container_read_kick(h);
+    pthread_join(h->read_tid,NULL);
+    close(h->read_efd);h->read_efd=-1;h->read_started=0;
 }
 
 static void *host_pump(void *arg)
@@ -10187,6 +10237,7 @@ int server_raft_host_start(struct efsd_server *s)
         }
         pthread_condattr_destroy(&attr);
     }
+    h->read_efd=-1;
     h->pump_efd = eventfd(0, EFD_NONBLOCK);
 
     snprintf(dir, sizeof(dir), "%s/mdraft",
@@ -10260,6 +10311,7 @@ int server_raft_host_start(struct efsd_server *s)
         return EFS_ERR_IO;
     }
     h->started = 1;
+    host_container_read_start(h);
     if (h->query_enabled) {
         __atomic_store_n(&h->query_running,1,__ATOMIC_RELEASE);
         if (efsd_pthread_create(&h->query_tid,host_query_thread,h)!=0) {
@@ -10354,6 +10406,7 @@ void server_raft_host_stop(void)
         pthread_join(h->fin_tid, NULL);
     free(h->fin);
     h->fin = NULL;
+    host_container_read_stop(h);
     h->running = 0;
     /* Wake the pump so shutdown does not wait out a 5 ms tick. */
     host_pump_kick(h);
@@ -10517,6 +10570,9 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen,
     if (BO_ON() && payload[0]==EFS_RAFT_MSG_AE_REQ)
         BO_COUNT(outbox_nentries(payload,plen) ? BO_ACCEPT_DATA : BO_ACCEPT_EMPTY);
     pthread_mutex_unlock(&h->inbox_mu);
+    if(plen==EFS_WIRE_RAFT_HDR_LEN &&
+       (payload[0]==EFS_RAFT_MSG_AE_REQ || payload[0]==EFS_RAFT_MSG_AE_REP) &&
+       rd64be(payload+28))host_container_read_kick(h);
     host_pump_kick(h);
     return EFS_OK;
 busy:
