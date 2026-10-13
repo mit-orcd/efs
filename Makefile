@@ -436,6 +436,7 @@ test: all
 	python3 tests/test_read_admission.py
 	python3 tests/test_read_failure_admission.py
 	python3 tests/test_read_refs_window.py
+	python3 tests/test_query_capacity_mount.py
 	python3 tests/test_client_memory.py
 	python3 tests/test_rollup_allocation_failure.py
 	python3 tests/test_rollup_budget.py

@@ -5005,6 +5005,14 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 
 <a id="w108"></a>
 
+**Oct 13 ORCD platform gate remains open:** forced FUSE direct reads and
+concurrent application `fork()` reproduce stale partial private-buffer pages.
+No-fork native controls pass 80,000 files; adding forks fails after seven.
+The W92 oracle's mount validation now uses exact in-process mount IDs so it
+can qualify all bytes without causing that separate platform race. This is
+not a general fork-safety fix or W106 closure. See the
+[400 GiB source/control ledger](../status/orcd-efs-400g-20261012.md).
+
 ## W108 · Resolve owner names in directory-local long listings
 
 **Class/state:** Command usability; closed (rebuilt ORCD rollout PASS Oct 12).

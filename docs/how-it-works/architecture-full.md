@@ -1475,45 +1475,14 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-Latest ORCD `.efs` gate: `cbcd9f7a0ff0` passes all core cases and improves
-focused pagination, but concurrent queries still miss the original deadline
-because broad publication is late. A single immutable pending proof plus
-bounded four-worker persistence passes native/sanitizer/failure controls;
-live qualification is pending. Full cold 400 GiB acceptance and benchmark
-resumption remain pending. See the [400 GiB evidence](../status/orcd-efs-400g-20261012.md).
-
-Latest ORCD `.efs` gate: `82e1d5302bc9` passes complete prerequisites and
-focused suites but still has mixed query/core failures. A LOCAL leaf/immediate
-paging optimization passes native, sanitizer, RAM/disk and old-code negative
-controls; live qualification is pending. Full cold 400 GiB acceptance and
-benchmark resumption remain pending. See the
-[400 GiB evidence](../status/orcd-efs-400g-20261012.md).
-
-Latest ORCD `.efs` gate: `4791b7938d6e` passes prerequisites, focused suites
-and 1,512 core cases; 20/21 mixed query cases pass. The remaining stale-empty
-case uses a hidden ten-second polling cutoff inside the configured thirty-second
-budget. A configured-budget harness fix is under qualification; final cold
-400 GiB verification and benchmark resumption remain pending. See the
-[400 GiB evidence](../status/orcd-efs-400g-20261012.md).
-
-Latest ORCD `.efs` gate: `f56f7cadff9d` passes prerequisites, focused suites
-and all 1,512 core cases but has four busy find continuations. Tracing isolates
-maximal reply reservations exhausting the shared budget. A smaller paged-command
-reply candidate is under qualification; final cold 400 GiB verification and
-benchmark resumption remain pending. See the
-[400 GiB evidence](../status/orcd-efs-400g-20261012.md).
-
-Latest ORCD `.efs` gate: `8c4ddc930593` passes the pre-cold mixed gate,
-same-code orderly restart and all focused prerequisites. Post-cold mixed gate
-still FAIL: two find EBUSY cases (all 1,512 core cases pass). A bounded
-pending-preflight retry candidate is under qualification; final complete
-400 GiB verification and benchmark resumption remain pending. See the
-[400 GiB evidence](../status/orcd-efs-400g-20261012.md).
-
-Current ORCD `.efs` gate: `da9ff39441115` passes full prerequisites and
-1,512 concurrent core cases, but six clients still hit helper timeouts.
-A bounded faster cut-retry candidate is under qualification; same-code restart
-and final complete 400 GiB verification remain pending. See the
+Current ORCD `.efs` gate at `62770d5c3bfd`: concurrent core and query suites
+pass before and after a same-code orderly restart. The full verifier exposed
+a fork/direct-read platform race: its concurrent `findmnt` subprocess checks
+trigger stale partial user-buffer pages. Matched native controls reproduce it.
+An in-process exact mount-ID check preserves fallback refusal without forking
+readers; strict full payload/path verification is running on restored normal
+clients. Seven tiny-file benchmarks remain stopped. W106 retains the separate
+application fork/direct-read platform gate. See the
 [400 GiB evidence](../status/orcd-efs-400g-20261012.md).
 
 ## Project status — current work and index
@@ -7648,6 +7617,14 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 **Gate:** Actual cross-host RDMA connection/device evidence plus unchanged POSIX, peer, direct-I/O, persistence and fault gates on the designated environment. Report AMD software and `orcd-test` hardware verdicts separately; neither TCP nor software-only results close hardware-specific obligations.
 
 <a id="w108"></a>
+
+**Oct 13 ORCD platform gate remains open:** forced FUSE direct reads and
+concurrent application `fork()` reproduce stale partial private-buffer pages.
+No-fork native controls pass 80,000 files; adding forks fails after seven.
+The W92 oracle's mount validation now uses exact in-process mount IDs so it
+can qualify all bytes without causing that separate platform race. This is
+not a general fork-safety fix or W106 closure. See the
+[400 GiB source/control ledger](../status/orcd-efs-400g-20261012.md).
 
 ### W108 · Resolve owner names in directory-local long listings
 
