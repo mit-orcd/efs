@@ -3039,6 +3039,12 @@ publication primitives or reclaiming state before revocation completes.
 supported software direct/buffered × TCP/RXE and mount-sync gates accepted;
 hardware power-loss acceptance remains separate under W71.
 
+**Oct 13 branch regression:** expiry memory work exposed a retained-window
+certificate base error; `e85b1b9c` uses `log_base`, preserving the unsynced append
+fence after snapshot/rotation. Native and sanitizer store regressions PASS on
+`devel-expiry`; this is not new RXE or hardware power-loss acceptance.
+[Evidence](../status/expiry-rss-cleanup-20261013.md).
+
 Both production FUSE write callbacks now flush/publish positive O_SYNC/O_DSYNC
 writes before replying, after admission credits and append locks are released
 and within the inherited call budget. Publication failure returns an error and
@@ -4057,6 +4063,15 @@ Peak sampled RSS rose 185→263→392 MiB across phases, within the 512 MiB fixt
 but not proof of a memory plateau. Worker cadence and retained-metadata/memory
 investigation remain performance follow-ups, without attributing an expiry leak
 or claiming a hardware ceiling. [Exact-source evidence and reproduction](../status/expiry-backlog-20261012.md).
+
+**Oct 13 performance follow-up:** `afbce294` bounds command-cache retention,
+uses Linux file-backed derived indices with cold residency eviction, and shortens
+progressing expiry backlog yields. All 30,000 files pass restart/off-on, physical
+and cold checks; drains 212–218s versus 22–23min, sampled peak node RSS 60–72 MiB
+versus 185–392 MiB. Foreground p95 is higher; no universal memory/hardware ceiling
+claim. Normal 24/24 and clock-fault 25/25 lifecycle gates, core 216/216 and peer
+67/67 in both builds, plus cold physical/queue/quota/fencing gates PASS.
+[Exact measurements and regression evidence](../status/expiry-rss-cleanup-20261013.md).
 
 **Gate:** focused renewal/deletion, path-reuse, rename, hard-link, open-file and
 concurrent-publication tests; clock jumps, leader change, restart, retries and

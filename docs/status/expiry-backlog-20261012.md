@@ -171,3 +171,11 @@ Help-only build /home/efs/devel-expiry-5bd5a95c-cli, with same native flags and
 build IDs 5bd5a95c. Reproduce with make efs-mgmt and both Python CLI regressions
 above. Its build log is /home/efs/expiry-5bd5a95c-cli-build.log. The matching
 byte-level legacy/named request regression PASS confirms unchanged serialization.
+
+## October 13 performance follow-up
+
+The historical results above are preserved. Retained-history RSS and cleanup
+cadence are addressed on `devel-expiry` in
+[the matched-log and new backlog report](expiry-rss-cleanup-20261013.md): all
+three 10,000-file phases pass with 212–218 second drains and 60–72 MiB sampled
+node RSS, with a measured foreground tail-latency tradeoff.

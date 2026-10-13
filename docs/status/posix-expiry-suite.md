@@ -63,12 +63,13 @@ Namespace drain is bounded by max(1800 seconds, file count / 4): 2,500 seconds
 for 10,000 files. Physical drain has another 300 seconds. The default expiry
 worker attempts at most
 eight files/group/pass and normally yields one second, so a single-group
-10,000-file queue took about 22–23 minutes in this qualification; this is an asynchronous cleanup
+10,000-file queue took about 22–23 minutes in the original October 12 qualification; this is an asynchronous cleanup
 test, not an immediate-deletion promise.
 Counts must be 1000..100000; zero omits this opt-in gate. Larger counts need
 adequate private quota and deadline preparation time; the default fixture is
 not a claimed 100,000-file capacity qualification. See
-[backlog results](expiry-backlog-20261012.md).
+[original backlog results](expiry-backlog-20261012.md) and
+[bounded-history/cadence follow-up](expiry-rss-cleanup-20261013.md).
 
 ## Results and cleanup
 

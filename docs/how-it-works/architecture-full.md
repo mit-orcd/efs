@@ -1956,7 +1956,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | meta-scale | **W66** · metadata leadership distribution and topology-independent routing | scalability | open — Oct 10 AMD unhosted namespace-coordinator read routing repaired and direct/buffered 128-race cold gates pass ([checkpoint](../status/amd-non-rdma-20261010.md#w66--unresolved-namespace-coordinator-routing)); four-voter host/engine, persistence/failover and staged leadership distribution pass; prolonged preferred-peer loss has no read errors/term churn; default two-group topology unchanged; D36 commit authority/recovery choice, routing/migration and scale remain | [evidence, phases and gates](../status/metadata-scaling.md) |
 | tiny-raft | **W93** · broader durable Raft group commit | performance | closed Oct 10 — AMD + repeated NUC batching, read-tail, atomic recovery, fault and cold gates pass; tuning opt-in | [acceptance](../status/w93-atomic-apply-20261010.md) |
 | tiny-create | **W94** · atomic CREATE plus open lease | performance / lifecycle | **Closed Oct 11: CREATE/adoption scope approved by user.** Measured lease/throughput savings, actual allocation/competing-OPEN barriers, both-mode full native/live/fault/cold and sustained admission acceptance pass. Broader production flush/PUT-ticket integration remains W72/W86/W88; no D25 activation | [closure](../status/amd-feedback-integration-20261011.md#w94--createadoption-closed-by-user-scoped-decision) · [work item](#w94) |
-| scratch-expiry | **W90** · scratch-file expiry metadata and safe lifecycle | feature | closed D33 initial scope and inspection/status follow-up; normal 24/24 and fault 25/25 expiry gates PASS; 30-minute two-mount soak, 1,644 expirations/six restarts PASS on NUC TCP/direct, `.efs` disabled, no containers/packing; each core 216/216 and peer 67/67; readable duration arguments and 30,000-file backlog/restart/off-on PASS; 22–23min per 10,000 with default worker cadence, rising sampled RSS documented | [work item](#w90) · [design](../status/scratch-expiry-interface.md) · [implementation](../status/expiry-implementation-20261012.md) · [POSIX expiry runner](../status/posix-expiry-suite.md) · [inspection and soak](../status/expiry-inspection-soak-20261012.md) · [large backlog and arguments](../status/expiry-backlog-20261012.md) |
+| scratch-expiry | **W90** · scratch-file expiry metadata and safe lifecycle | feature | closed D33 initial scope and inspection/status follow-up; normal 24/24 and fault 25/25 expiry gates PASS; 30-minute two-mount soak, 1,644 expirations/six restarts PASS on NUC TCP/direct, `.efs` disabled, no containers/packing; each core 216/216 and peer 67/67; readable duration arguments and 30,000-file backlog/restart/off-on PASS; Oct 13 bounded-history/cadence fixes: 212–218s per 10,000 and 60–72 MiB sampled node RSS; foreground p95 tradeoff documented | [work item](#w90) · [design](../status/scratch-expiry-interface.md) · [implementation](../status/expiry-implementation-20261012.md) · [POSIX expiry runner](../status/posix-expiry-suite.md) · [inspection and soak](../status/expiry-inspection-soak-20261012.md) · [large backlog and arguments](../status/expiry-backlog-20261012.md) · [RSS and cleanup](../status/expiry-rss-cleanup-20261013.md) |
 | virtual-commands | **W91** · directory-local virtual `.efs/` command interface | usability feature | design accepted D34; `.efs/` commands and bounded query paths; implementation/compatibility gates remain | [work item](#w91) · [design](../status/scratch-expiry-interface.md) · [implementation](../status/expiry-implementation-20261012.md) |
 | tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | partial — independent indexed packing, publication/GC fault and 24-sample AMD churn gates pass; retained raw-field/index-cost review completed ([review](../status/amd-sustained-20261011.md#w95-retained-amd-experiment-review-completed)); P4.1 production-format and migration decision remain | [work item](#w95) |
 | tiny-kv | **W96** · bounded KV WAL preallocation | performance experiment | Closed Oct11: isolated SATA/NVMe repeated matrix, exact replay/reset/reservation, full native/POSIX/peer/fault/cold and WAL sanitizer gates pass; conditional benefit and SATA tails retained | [closure](../status/devel-nuc-closure-20261010.md) |
@@ -5612,6 +5612,12 @@ publication primitives or reclaiming state before revocation completes.
 supported software direct/buffered × TCP/RXE and mount-sync gates accepted;
 hardware power-loss acceptance remains separate under W71.
 
+**Oct 13 branch regression:** expiry memory work exposed a retained-window
+certificate base error; `e85b1b9c` uses `log_base`, preserving the unsynced append
+fence after snapshot/rotation. Native and sanitizer store regressions PASS on
+`devel-expiry`; this is not new RXE or hardware power-loss acceptance.
+[Evidence](../status/expiry-rss-cleanup-20261013.md).
+
 Both production FUSE write callbacks now flush/publish positive O_SYNC/O_DSYNC
 writes before replying, after admission credits and append locks are released
 and within the inherited call budget. Publication failure returns an error and
@@ -6630,6 +6636,15 @@ Peak sampled RSS rose 185→263→392 MiB across phases, within the 512 MiB fixt
 but not proof of a memory plateau. Worker cadence and retained-metadata/memory
 investigation remain performance follow-ups, without attributing an expiry leak
 or claiming a hardware ceiling. [Exact-source evidence and reproduction](../status/expiry-backlog-20261012.md).
+
+**Oct 13 performance follow-up:** `afbce294` bounds command-cache retention,
+uses Linux file-backed derived indices with cold residency eviction, and shortens
+progressing expiry backlog yields. All 30,000 files pass restart/off-on, physical
+and cold checks; drains 212–218s versus 22–23min, sampled peak node RSS 60–72 MiB
+versus 185–392 MiB. Foreground p95 is higher; no universal memory/hardware ceiling
+claim. Normal 24/24 and clock-fault 25/25 lifecycle gates, core 216/216 and peer
+67/67 in both builds, plus cold physical/queue/quota/fencing gates PASS.
+[Exact measurements and regression evidence](../status/expiry-rss-cleanup-20261013.md).
 
 **Gate:** focused renewal/deletion, path-reuse, rename, hard-link, open-file and
 concurrent-publication tests; clock jumps, leader change, restart, retries and
