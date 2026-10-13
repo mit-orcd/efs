@@ -50,10 +50,13 @@ try:
         assert all(c.poll() is None for c in children), 'pressure failed before lag injection'
         assert time.monotonic()<end, 'pressure setup exceeded original30s budget'
         time.sleep(.1)
+    current = subprocess.check_output([str(mgmt), 'raft-status', f'127.0.0.1:{17431+candidate}'], text=True, timeout=15)
+    assert current.count('role=FOLLOWER') == 2, current
     os.kill(pid, signal.SIGSTOP)
     stopped = True
     print(f'Lagging follower node={candidate} pid={pid}; both natural pressure workloads active', flush=True)
-    codes = [c.wait(timeout=630) for c in children]  #600s workload + existing30s I/O allowance
+    finish = time.monotonic()+630 #600s workload + existing30s I/O allowance
+    codes = [c.wait(timeout=max(0, finish-time.monotonic())) for c in children]
     assert not any(codes), codes
 finally:
     if stopped:
@@ -71,27 +74,33 @@ finally:
         stream.close()
 # Catch-up uses the existing180s recovery gate budget, never adjusted on failure.
 end = time.monotonic()+180
-last = ''
+def status(port):
+    return subprocess.check_output([str(mgmt), 'raft-status', f'127.0.0.1:{port}'], text=True, timeout=min(15, max(.001, end-time.monotonic())))
+last = status(17431+candidate)
+targets = {}
+for line in last.splitlines():
+    if 'hosted=1' not in line:
+        continue
+    fields = dict(x.split('=', 1) for x in line.split() if '=' in x)
+    leader = int(fields['leader'])
+    assert leader >= 0, last
+    group = line.strip().split()[1]
+    remote = next(x for x in status(17432+leader).splitlines() if x.strip().startswith(f'group {group} '))
+    rf = dict(x.split('=', 1) for x in remote.split() if '=' in x)
+    targets[group] = int(rf['commit'])
+assert len(targets)==2
+# Fixed acknowledged watermark avoids chasing unrelated background GC commits.
 while True:
-    last = subprocess.check_output([str(mgmt), 'raft-status', f'127.0.0.1:{17431+candidate}'], text=True, timeout=15)
-    # Compare durable/applied indices with each group's current leader.
-    rows = []
+    last = status(17431+candidate)
+    applied = {}
     for line in last.splitlines():
-        if 'hosted=1' not in line:
-            continue
-        fields = dict(x.split('=', 1) for x in line.split() if '=' in x)
-        leader = int(fields['leader'])
-        if leader < 0:
-            rows.append(False)
-            continue
-        leader_text = subprocess.check_output([str(mgmt), 'raft-status', f'127.0.0.1:{17432+leader}'], text=True, timeout=15)
-        group = line.strip().split()[1]
-        remote = next(x for x in leader_text.splitlines() if x.strip().startswith(f'group {group} '))
-        rf = dict(x.split('=', 1) for x in remote.split() if '=' in x)
-        rows.append(int(fields['applied']) >= int(rf['commit']))
-    if len(rows) == 2 and all(rows):
+        if 'hosted=1' in line:
+            fields = dict(x.split('=', 1) for x in line.split() if '=' in x)
+            applied[line.strip().split()[1]] = int(fields['applied'])
+    if all(applied.get(g, -1)>=goal for g, goal in targets.items()):
         break
     assert time.monotonic()<end, last
     time.sleep(.5)
 (a.output/'after.txt').write_text(last)
+(a.output/'targets.json').write_text(json.dumps(targets,indent=2))
 print('PASS: both natural snapshot workloads and follower applied catch-up; inspect raft-snap import logs for actual transfer', flush=True)
