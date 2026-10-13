@@ -55,13 +55,27 @@ def inventory(version):
     assert rows, 'no actual published cache'
     return rows
 
+def wait_inventory(version):
+    # A successful routed query proves one publisher, not every publisher.
+    # Require both AMD query-capable nodes before stopping the baseline.
+    import time
+    deadline=time.monotonic()+30
+    while True:
+        try:
+            rows=inventory(version)
+            if len(rows)==2:return rows
+        except (AssertionError,FileNotFoundError,struct.error): pass
+        assert time.monotonic()<deadline, ('publisher readiness',version)
+        time.sleep(.2)
+
 result={}
 try:
     stop('initial-stop');install(a.baseline);start('v5-start');check('v5-payload')
+    wait_inventory(5)
     stop('v5-stop');result['old']=inventory(5)
     log_offsets={p:p.stat().st_size for p in (base/'logs').glob('efsd-n*.log')}
     install(a.candidate);start('v6-start');check('v6-payload')
-    result['new']=inventory(6)
+    result['new']=wait_inventory(6)
     # No intervening daemon restart may hide a leaked old-format directory.
     assert all(not Path(row['generation']).exists() for row in result['old']), 'legacy generation leaked'
     marker=base/'mnt/package2-transition-refresh'
@@ -98,6 +112,7 @@ try:
     result['verdict']='PASS'
 except BaseException:
     result['verdict']='FAIL'
+    env.pop('EFS_QUERY_DISK_MAX_MIB',None);env.pop('EFS_QUERY_DISK_TOTAL_MIB',None)
     try: stop('failure-stop');install(a.candidate);start('failure-candidate-start')
     except BaseException: result['restore_failed']=True
     raise
