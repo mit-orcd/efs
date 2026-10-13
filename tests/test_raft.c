@@ -749,7 +749,10 @@ static void test_readindex_control(void)
     CHECK(efs_raft_read_control(n.r[leader],&reply)==1 && !efs_raft_read_ready(n.r[leader]),"old known prefix may retire without fresh authority");
     reply.match_index=index;reply.last_log_index=efs_raft_read_round(n.r[leader]);
     CHECK(efs_raft_read_control(n.r[leader],&reply)==2,"new suffix progress retains normal receive");
-    reply.last_log_index--;
+    CHECK(efs_raft_commit(n.r[leader])==commit && app[leader].n==applied,
+          "noted progress cannot commit or apply before ordered receive");
+    CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"independent round after noted progress");
+    reply.last_log_index=efs_raft_read_round(n.r[leader])-1;
     /* A prefix-zero vote has no append/progress bookkeeping to re-drive.
      * In ordered receive, even an obsolete vote must not produce another
      * commit probe for an outstanding data window. */

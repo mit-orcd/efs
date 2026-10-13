@@ -4771,9 +4771,14 @@ mixed large-writer/tiny-close tails.
 remove required persistence, grow queues without bounds, wipe existing stores,
 or declare the system hardware-bound from busy percentages or sync timings.
 
-<a id="w113"></a>
+<a id="w114"></a>
 
-## W113 · Independent steady-state storage churn benchmark
+## W114 · Independent steady-state storage churn benchmark
+
+**October 13 integration numbering:** expiry branch used W113 for this benchmark,
+but devel already assigned W113 to aggregate client workload telemetry. Churn is
+now W114; telemetry retains W113 and scratch expiry retains W90. Historical
+artifact names are unchanged.
 
 **Class/state:** benchmark enhancement; implemented Oct 8, 2026 on `devel-bench`,
 starting from `53be1da7f190`. Functional gates pass; initial same-device
@@ -5284,6 +5289,8 @@ publication/fence observations. Close only after full merged normal/fault,
 sanitisers and both-mode exact immediate/cold/live gates pass.
 [Evidence and closure scope](../status/w112-full-overwrite-replay-20261012.md).
 
+
+<a id="w113"></a>
 
 ## W113 · Aggregate application workload telemetry across FUSE clients
 

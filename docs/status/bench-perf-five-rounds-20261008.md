@@ -1,4 +1,4 @@
-# W113: five container profiling rounds — October 8, 2026
+# W114: five container profiling rounds — October 8, 2026
 
 **Scope:** benchmark-only `devel-bench`, xorinox_efs private
 `/data1/efs/bench/w90-perf5-20261008`. Production storage/services, global
@@ -38,7 +38,7 @@ body flush counts match the benchmark counters. Trace parsing was corrected
 for unfinished-call whitespace while replaying saved traces; this is not an
 application fault claim.
 
-**Still open:** W113 broader lifetime/endurance gates and production promotion.
+**Still open:** W114 broader lifetime/endurance gates and production promotion.
 The volatile worker-local index is not durable recovery, reader-pin authority,
 distributed ownership or EFS GC. W44/W71/W75/W87 remain separately governed.
 See [churn contract](../how-it-works/storage-churn.md) and the earlier
@@ -50,5 +50,5 @@ checks pass; benchmark/daemon build checks have no compiler warnings; all five
 documentation gates pass. Source identities verify, every profile has zero lost
 samples, and completed scratch fixtures are removed.
 
-Numbering correction (Oct 12): this benchmark is W113. Historical `w90-*`
+Numbering correction (Oct 12): this benchmark is W114. Historical `w90-*`
 fixture and evidence paths retain their names; W90 denotes scratch expiry.

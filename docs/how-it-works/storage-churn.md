@@ -1,6 +1,6 @@
-# Independent storage churn — W113
+# Independent storage churn — W114
 
-[Performance guide](performance.md) · [W113 scope](../backlog/work-items.md#w113) ·
+[Performance guide](performance.md) · [W114 scope](../backlog/work-items.md#w114) ·
 [Storage/XFS experiment plan](../backlog/storage-engine-v2.md)
 
 `efs-bench --bench churn` is a storage laboratory, with a volatile object index.

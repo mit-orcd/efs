@@ -2,7 +2,7 @@
 
 Implementation branch: `devel-expiry`, based on release
 `3a41493591dcede820700db7d934da9dc10f07ee`. D33 governs the policy.
-W90 is expiry; the duplicate storage churn benchmark is now W113. Historical
+W90 is expiry; the duplicate storage churn benchmark is now W114. Historical
 benchmark fixture/evidence path names remain unchanged.
 
 ## Current verdict
