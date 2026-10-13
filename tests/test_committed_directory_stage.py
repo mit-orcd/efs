@@ -31,7 +31,7 @@ efs_ino_t efs_export_create_with_ino(struct efs_export *ex,efs_ino_t ino,
 }
 int efs_export_upsert_inode(struct efs_export *ex,const struct efs_inode *r){(void)ex;(void)r;return 0;}
 int efs_export_set_mtime(struct efs_export *ex,efs_ino_t ino,uint64_t t){(void)ex;(void)ino;(void)t;return 0;}
-int efs_client_report_admit(uint64_t records){assert(records==2);admitted++;return pressure?EFS_ERR_BUSY:EFS_OK;}
+int efs_client_report_admit(uint64_t records){assert(records==1);admitted++;return pressure?EFS_ERR_BUSY:EFS_OK;}
 void efs_client_report_unreserve(void){unreserved++;}
 int efs_client_rpc_create(efs_export_id_t ex,efs_ino_t parent,const char *name,
  uint32_t mode,uid_t uid,gid_t gid,uint32_t flags,efs_ino_t *ino,struct efs_inode *out){
@@ -46,7 +46,7 @@ int main(void){
  create_stage_inode(1,"dir",out.mode,1000,1000,&out);
  assert(marks==4&&!pins&&!locks);
  out.mode=S_IFREG|0644;create_stage_inode(1,"file",out.mode,1000,1000,&out);
- assert(marks==7&&!pins&&!locks);
+ assert(marks==6&&!pins&&!locks);
  pressure=1;marks=4;efs_ino_t ino=0;
  assert(!efs_client_create_result_inode(1,"dir",S_IFDIR|0755,1000,1000,0,&ino,&out));
  assert(ino==2&&S_ISDIR(out.mode)&&marks==4&&!admitted&&!unreserved);
@@ -54,7 +54,7 @@ int main(void){
  assert(!ino&&admitted==1&&!unreserved&&marks==4);
  pressure=0;
  assert(!efs_client_create_result_inode(1,"file",S_IFREG|0644,1000,1000,0,&ino,&out));
- assert(ino==2&&admitted==2&&unreserved==1&&marks==7&&!pins&&!locks);
+ assert(ino==2&&admitted==2&&unreserved==1&&marks==6&&!pins&&!locks);
  puts("committed directory stage: no new REPORT ownership, existing marks and regular data admission retained PASS");
 }
 '''

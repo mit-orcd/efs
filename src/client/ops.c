@@ -1075,12 +1075,11 @@ static void create_stage_inode(efs_ino_t parent, const char *name, uint32_t mode
      * hold — otherwise the row could be evicted in the gap and the later
      * REPORT would skip the missing row (its size/chunk recs never reach
      * the server). Peers never mark this ino dirty. */
-    /* MKDIR's returned row and parent mutation are already committed on the
-     * server. Mirroring them creates no pending file-data publication. Do not
-     * add directory REPORT work, or clear unrelated existing dirty marks. */
+    /* CREATE/MKDIR already committed the parent directory mutation. Only
+     * regular-file staging owes subsequent data publication. Do not add
+     * parent/directory REPORT work or clear existing dirty ownership. */
     if (!S_ISDIR(out->mode)) {
         efs_client_mark_ino_dirty(out->ino);
-        efs_client_mark_ino_dirty(parent);
     }
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(parent);
@@ -1092,7 +1091,7 @@ int efs_client_create_stage_result(const struct efs_client_create_request *reque
 {
     if(!request || !request->complete || request->result!=EFS_OK ||
        !request->inode.ino || !S_ISREG(request->inode.mode))return EFS_ERR_STALE;
-    int rc=efs_client_report_admit(2);
+    int rc=efs_client_report_admit(1);
     if(rc!=EFS_OK)return rc;
     create_stage_inode(request->wire.create.parent,request->wire.create.name,
         request->wire.create.mode,request->wire.create.uid,request->wire.create.gid,
@@ -1110,7 +1109,7 @@ int efs_client_create_result_inode(efs_ino_t parent, const char *name, uint32_t 
         return EFS_ERR_INVAL;
     *ino = 0;
     int publish = !S_ISDIR(mode);
-    int admission = publish ? efs_client_report_admit(2) : EFS_OK;
+    int admission = publish ? efs_client_report_admit(1) : EFS_OK;
     if (admission != EFS_OK)
         return admission;
     /* Phase 2b: the mutation runs on the metadata primary (which allocates the
