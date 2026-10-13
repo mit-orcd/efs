@@ -8362,6 +8362,48 @@ static void host_gc_record(struct efs_raft_host *h, struct efs_export *ex,
     }
 }
 
+/* A bounded page of independent durable fragment deletes. Each record owns
+ * its ACK buffer; metadata remains on the caller after every helper joins.
+ * The export and scan are pinned for that whole lifetime. Files and repair
+ * retain the serial path; failed deletes never gain an acknowledgement. */
+#define HOST_GC_RECORD_BATCH 32
+struct host_gc_record_batch {
+    struct efs_raft_host *h;
+    struct efs_export *ex;
+    struct gc_scan_ctx *scan;
+    int first, count;
+    unsigned next;
+    struct efs_gc_ack_item acks[HOST_GC_RECORD_BATCH][EFS_NUM_FRAGMENTS];
+    int nack[HOST_GC_RECORD_BATCH];
+};
+static void *host_gc_record_worker(void *arg)
+{
+    struct host_gc_record_batch *b=arg;
+    for(;;){
+        unsigned i=__atomic_fetch_add(&b->next,1,__ATOMIC_RELAXED);
+        if(i>=(unsigned)b->count)break;
+        if(!__atomic_load_n(&b->h->gc_running,__ATOMIC_ACQUIRE) ||
+           !__atomic_load_n(&b->h->running,__ATOMIC_ACQUIRE))continue;
+        int record=b->first+(int)i;
+        host_gc_record(b->h,b->ex,b->scan->keys[record],b->scan->vals[record],
+                       b->acks[i],&b->nack[i]);
+    }
+    return NULL;
+}
+static void host_gc_records_join(struct host_gc_record_batch *b)
+{
+    pthread_t workers[3];int n=0;
+    if(b->count<=0 || b->count>HOST_GC_RECORD_BATCH ||
+       !__atomic_load_n(&b->h->gc_running,__ATOMIC_ACQUIRE) ||
+       !__atomic_load_n(&b->h->running,__ATOMIC_ACQUIRE))return;
+    while(n<3 && n+1<b->count){
+        if(pthread_create(&workers[n],NULL,host_gc_record_worker,b))break;
+        n++;
+    }
+    host_gc_record_worker(b);
+    for(int i=0;i<n;i++)pthread_join(workers[i],NULL);
+}
+
 /* REAP pass over one group's anchor shard: sweep every active lane of
  * each dead inode, then finish the reap on the inode's group. A failed
  * proposal skips the marker — the next pass re-drives it. */
@@ -8685,17 +8727,36 @@ static int host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
             __atomic_fetch_add(&h->s->gc_missing_exports, 1, __ATOMIC_RELAXED);
             break;
         }
-        for (i = 0; i < c.n && h->gc_running && h->running; i++) {
-            /* Room for one whole record's acks, so a record is never
-             * split across two entries (the apply folds a record's
-             * fragments within one batch). */
-            if (nack + EFS_NUM_FRAGMENTS > GC_ACK_MAX) {
-                if (host_gc_ack_flush(h, group, acks, &nack) != EFS_OK)
-                    goto out;
-                ack_progress = 1;
+        if(h->s->storage_engine && !h->s->repair_experiment){
+            for(int first=0;first<c.n && h->gc_running && h->running;
+                first+=HOST_GC_RECORD_BATCH){
+                struct host_gc_record_batch batch={.h=h,.ex=ex,.scan=&c,.first=first,
+                    .count=c.n-first<HOST_GC_RECORD_BATCH?c.n-first:HOST_GC_RECORD_BATCH};
+                host_gc_records_join(&batch);
+                for(int record=0;record<batch.count;record++){
+                    /* Keep one record's fragments in one replicated ACK. */
+                    if(nack+EFS_NUM_FRAGMENTS>GC_ACK_MAX){
+                        if(host_gc_ack_flush(h,group,acks,&nack)!=EFS_OK)goto out;
+                        ack_progress=1;
+                    }
+                    memcpy(acks+nack,batch.acks[record],
+                           (size_t)batch.nack[record]*sizeof(acks[0]));
+                    nack+=batch.nack[record];recs++;
+                }
             }
-            host_gc_record(h, ex, c.keys[i], c.vals[i], acks, &nack);
-            recs++;
+        } else {
+            for (i = 0; i < c.n && h->gc_running && h->running; i++) {
+                /* Room for one whole record's acks, so a record is never
+                 * split across two entries (the apply folds a record's
+                 * fragments within one batch). */
+                if (nack + EFS_NUM_FRAGMENTS > GC_ACK_MAX) {
+                    if (host_gc_ack_flush(h, group, acks, &nack) != EFS_OK)
+                        goto out;
+                    ack_progress = 1;
+                }
+                host_gc_record(h, ex, c.keys[i], c.vals[i], acks, &nack);
+                recs++;
+            }
         }
         memcpy(g_gc_cur[gi], c.keys[c.n - 1], GC_KEY_LEN);
         g_gc_cur_len[gi] = GC_KEY_LEN;

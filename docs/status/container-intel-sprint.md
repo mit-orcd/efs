@@ -1384,3 +1384,19 @@ of2102–4426ms passes, with reap619–1099ms. This points to serial fragment
 delete requests as the next bounded scheduling investigation, not proof
 that it explains every directory timeout. Preserve each generation/checksum
 delete and durable reply; join all helpers before serial metadata ACKs.
+
+### 2026-10-13 — bounded fragment deletion candidate
+
+The same original per-fragment generation/checksum deletion runs in at
+most four participants over32-record slices of the existing256-record
+scan. Private per-record ACK buffers prevent shared append races. All
+helpers join before serial GC_ACK submission, record fragments remain in
+one ACK command, and failed deletes remain unacknowledged. Thread creation
+failure reduces concurrency; shutdown prevents new deletion work. Export/
+scan lifetimes span every join; existing cursor, scan/ACK budgets, physical
+durability, fences, and retry semantics remain. Only containers without
+repair use this path; files/repair retain serial deletion. Actual dispatcher
+ownership/identity/partial refusal/creation fallback/shutdown controls and
+ASan/UBSan PASS locally; disabled-parallel negative refuses as expected.
+Both-host native and full original-budget live qualification remain
+required. This scheduling hypothesis does not close either failed gate.
