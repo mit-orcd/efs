@@ -105,7 +105,7 @@ static inline int efs_mgmt_help(FILE *out,const char *command)
         {"status","NODE:PORT"},{"io-stats","NODE:PORT"},{"gc-status","NODE:PORT"},
         {"version","NODE:PORT"},{"add-node","NEW_NODE:PORT EXISTING_NODE:PORT"},
         {"shrink-quota","NODE:PORT AMOUNT[K|M|G|T]"},{"add-storage","NODE:PORT PATH[,PATH...]"},
-        {"expiry-policy","NODE:PORT get ROOT GENERATION | set ROOT GENERATION EXPECTED_REV TTL_NS MAX_NS FLAGS"},
+        {"expiry-policy","NODE:PORT get ROOT GENERATION | set ROOT GENERATION EXPECTED_REV --expire-after DURATION [--renewal-limit DURATION] --flags FLAGS"},
         {"expiry-id","NODE:PORT INO"},
         {"expiry-enable","NODE:PORT INO GENERATION PARENT NAME DEADLINE_NS"},
         {"expiry-clock","NODE:PORT get|reset"},

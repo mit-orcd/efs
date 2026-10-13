@@ -1436,26 +1436,52 @@ bad:
     free(local);free(mount);return 1;
 }
 
+/* Human durations are integer quantities with explicit units, never floats. */
+static int expiry_duration(const char *text,uint64_t *out)
+{
+    uint64_t value=0,mult=0;const char *p=text;
+    if(!*p)return -1;
+    while(*p>='0' && *p<='9') {
+        unsigned digit=(unsigned)(*p++-'0');
+        if(value>(UINT64_MAX-digit)/10)return -1;
+        value=value*10+digit;
+    }
+    if(p==text)return -1;
+    if(!strcmp(p,"ns"))mult=1;
+    else if(!strcmp(p,"s"))mult=1000000000ULL;
+    else if(!strcmp(p,"m"))mult=60*1000000000ULL;
+    else if(!strcmp(p,"h"))mult=3600*1000000000ULL;
+    else if(!strcmp(p,"d"))mult=86400*1000000000ULL;
+    if(!mult || !value || value>UINT64_MAX/mult)return -1;
+    *out=value*mult;return 0;
+}
+
 static int cmd_expiry(int argc,char **argv,int policy)
 {
     if(!policy && argc>=2 && !strcmp(argv[1],"show"))return cmd_expiry_show(argc,argv);
     int get=argc>=2 && !strcmp(argv[1],"get");
     int mutate=argc>=2 && !strcmp(argv[1],policy?"set":"renew");
-    if((get && argc!=4) || (mutate && argc!=(policy?8:6)) || (!get && !mutate)) {
-        fprintf(stderr,"Usage:\n  efs-mgmt expiry-policy NODE:PORT get ROOT_INO GENERATION\n"
-                       "  efs-mgmt expiry-policy NODE:PORT set ROOT_INO GENERATION EXPECTED_REV TTL_NS MAX_NS FLAGS\n"
-                       "  efs-mgmt expiry NODE:PORT get FILE_INO GENERATION\n"
-                       "  efs-mgmt expiry NODE:PORT renew FILE_INO GENERATION EXPECTED_REV DEADLINE_NS\n"
-                       "\nExpiry is default-off (server EFS_EXPIRY=1 enables control).\n"
-                       "FLAGS: bit 0 enables future-file defaults; bit 1 permits owner clearing.\n"
-                       "Set requires operator uid 0. Renewal requires current ownership.\n"
-                       "TTL/max/deadline use integer nanoseconds; zero deadline requests clearing.\n");
-        return 1;
-    }
+    int named=policy && mutate && argc>5 && argv[5][0]=='-';
     char host[64];uint16_t port;uint64_t n[6]={0};
+    if((get && argc!=4) || (mutate && !named && argc!=(policy?8:6)) || (!get && !mutate))goto usage;
     if(parse_host_port(argv[0],host,sizeof(host),&port))return 1;
-    for(int i=2;i<argc;i++)if(expiry_u64(argv[i],&n[i-2]))return 1;
-    if(!n[0] || !n[1] || (policy && mutate && n[5]>3))return 1;
+    for(int i=2;i<(named?5:argc);i++)if(expiry_u64(argv[i],&n[i-2]))return 1;
+    if(named) {
+        unsigned seen=0;
+        for(int i=5;i<argc;i+=2) {
+            if(i+1>=argc)goto usage;
+            unsigned bit=!strcmp(argv[i],"--expire-after")?1:
+                         !strcmp(argv[i],"--renewal-limit")?2:
+                         !strcmp(argv[i],"--flags")?4:0;
+            if(!bit || (seen&bit))goto usage;
+            seen|=bit;
+            if(bit==4) {if(expiry_u64(argv[i+1],&n[5]))goto usage;}
+            else if(expiry_duration(argv[i+1],&n[bit==1?3:4]))goto usage;
+        }
+        if(!(seen&1) || !(seen&4))goto usage;
+        if(!(seen&2))n[4]=n[3];
+    }
+    if(!n[0] || !n[1] || (policy && mutate && (n[5]>3 || n[3]>n[4])))goto usage;
     uint8_t payload[47]={0};payload[0]=efs_raft_shard_group(efs_kv_inode_shard(n[0]));
     payload[1]=policy?(get?EFS_MD_REQ_EXPIRY_POLICY:EFS_MD_CMD_EXPIRY_POLICY):
                       (get?EFS_MD_REQ_EXPIRY_RECORD:EFS_MD_CMD_EXPIRY_RENEW);
@@ -1471,6 +1497,21 @@ static int cmd_expiry(int argc,char **argv,int policy)
            policy?"ttl_ns":"deadline_ns",(unsigned long long)reply.salt,
            policy?"max_ns":"root_ino",(unsigned long long)reply.term,reply.leader_hint);
     return rc?1:0;
+usage:
+    fprintf(stderr,"Usage:\n  efs-mgmt expiry-policy NODE:PORT get ROOT_INO GENERATION\n"
+                   "  efs-mgmt expiry-policy NODE:PORT set ROOT_INO GENERATION EXPECTED_REV\n"
+                   "    --expire-after DURATION [--renewal-limit DURATION] --flags FLAGS\n"
+                   "  Legacy: set ROOT_INO GENERATION EXPECTED_REV TTL_NS MAX_NS FLAGS\n"
+                   "  efs-mgmt expiry NODE:PORT get FILE_INO GENERATION\n"
+                   "  efs-mgmt expiry NODE:PORT renew FILE_INO GENERATION EXPECTED_REV DEADLINE_NS\n\n"
+                   "DURATION: positive integer followed by ns, s, m, h or d (example: 24h).\n"
+                   "--expire-after: new-file lifetime from creation; changes affect future files.\n"
+                   "--renewal-limit: furthest deadline from renewal time; defaults to expire-after.\n"
+                   "Reading/writing does not renew expiry. Repeated explicit renewals may extend lifetime.\n"
+                   "Renewal limit must be at least expire-after; it is not a maximum lifetime.\n"
+                   "FLAGS: bit 0 enables future-file defaults; bit 1 permits owner clearing.\n"
+                   "Server EFS_EXPIRY=1 required. Set requires uid 0. Renewal requires ownership.\n");
+    return 1;
 }
 
 /* Repeating this exact monotonic certificate barrier cannot reopen a session.

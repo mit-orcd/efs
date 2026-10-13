@@ -101,6 +101,7 @@ class PosixPhaseCollector:
 
 
 p = argparse.ArgumentParser(description=__doc__)
+p.add_argument('--expiry-backlog-files',type=int,default=0,help='1000..100000 files in each of three expiry backlog/restart/off-on phases')
 p.add_argument('--expiry-clock-fault',action='store_true',help='expiry clock-health pause/reset gate; requires a fault-enabled daemon')
 p.add_argument('--expiry-soak-seconds',type=int,default=0,help='0 or 60..7200 seconds of bounded two-mount expiry churn/restarts; requires --expiry')
 p.add_argument('--expiry',action='store_true',help='expiry lifecycle before normal reclamation/POSIX gates; explicit TCP/direct/files only')
@@ -265,6 +266,8 @@ for path in sorted(inputs):
                       for name in ('efsd','efs-fuse','efs-mgmt')},
 },indent=2))
 env = dict(os.environ, EFS_MD_RAFT_N='4', EFS_TRANSPORT=a.transport)
+if a.expiry_backlog_files:
+    assert a.expiry and 1000 <= a.expiry_backlog_files <= 100000
 if a.expiry_soak_seconds:
     assert a.expiry and 60 <= a.expiry_soak_seconds <= 7200
 if a.expiry:
@@ -651,6 +654,9 @@ try:
                 if match:return int(match.group(1))
             return 0
         exercise(mount,a.port,work,wait,files,expiry_restart,expiry_offline,expiry_forward_group,a.expiry_clock_fault)
+        if a.expiry_backlog_files:
+            from expiry_backlog import exercise as backlog
+            backlog(mount,a.port,work,wait,files,expiry_restart,a.expiry_backlog_files)
         if a.expiry_soak_seconds:
             peer_log=open(work/'expiry-soak-peer.log','ab');handles.append(peer_log)
             def soak_peer_start():

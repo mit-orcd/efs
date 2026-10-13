@@ -20,6 +20,7 @@ def command(argv):
                         help='second empty, unmounted, FUSE-policy-approved mount path')
     parser.add_argument('--port', type=int, default=24410, help='first of four free node ports (default: 24410)')
     parser.add_argument('--jobs', type=int, default=4, help='core POSIX concurrency (default: 4)')
+    parser.add_argument('--backlog-files',type=int,default=0,help='1000..100000 files per expiry backlog phase')
     parser.add_argument('--soak-seconds', type=int, default=0, help='optional expiry churn soak, 60..7200 seconds')
     parser.add_argument('--clock-fault', action='store_true',
                         help='also test clock-health pause/reset; requires EFS_FAULTS=1 binaries')
@@ -28,6 +29,8 @@ def command(argv):
         parser.error('--port must leave room for four node ports')
     if args.soak_seconds and not 60 <= args.soak_seconds <= 7200:
         parser.error('--soak-seconds must be 60..7200, or zero')
+    if args.backlog_files and not 1000 <= args.backlog_files <= 100000:
+        parser.error('--backlog-files must be 1000..100000, or zero')
     if args.jobs < 1:
         parser.error('--jobs must be positive')
     if args.mount.resolve() == args.peer_mount.resolve():
@@ -45,6 +48,8 @@ def command(argv):
         cmd.extend(('--root', str(root.resolve())))
     if args.soak_seconds:
         cmd.extend(("--expiry-soak-seconds", str(args.soak_seconds)))
+    if args.backlog_files:
+        cmd.extend(('--expiry-backlog-files',str(args.backlog_files)))
     if args.clock_fault:
         cmd.append('--expiry-clock-fault')
     env = dict(os.environ, EFS_PACKED_WRITES='0', EFS_COMMANDS='0',
