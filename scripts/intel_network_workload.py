@@ -98,9 +98,13 @@ def worker(root,run_id,host_index,phase):
                 with path.open('xb',buffering=0) as stream:
                     remaining=size
                     while remaining:
-                        written=stream.write(payload[:min(remaining,len(payload))])
-                        if not written:raise OSError('zero write')
-                        remaining-=written
+                        chunk=memoryview(payload)[:min(remaining,len(payload))]
+                        length=len(chunk)
+                        while chunk:
+                            written=stream.write(chunk)
+                            if not written:raise OSError('zero write')
+                            chunk=chunk[written:]
+                        remaining-=length
                     os.fsync(stream.fileno())
                 return {'index':index,'ok':True}
             with path.open('rb',buffering=0) as stream:
