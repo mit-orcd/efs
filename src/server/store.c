@@ -744,7 +744,10 @@ int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
 static pthread_rwlock_t *inode_gc_lock(efs_export_id_t eid, efs_ino_t ino)
 {
     pthread_once(&frag_locks_once, frag_locks_init);
-    return &inode_gc_locks[(ino ^ (ino >> 32) ^ eid) & (FRAG_LOCKS - 1)];
+    /* Low inode bits identify a shard. Mixing the allocation counter prevents
+     * collection of one file from exclusively locking its whole directory. */
+    return &inode_gc_locks[efs_ino_lock_slot(ino ^ ((uint64_t)eid << 32),
+                                           FRAG_LOCKS)];
 }
 #define DEATH_PAGE_BYTES 2048u
 #define DEATH_PAGE_BITS (DEATH_PAGE_BYTES * 8u)

@@ -81,6 +81,12 @@ int main(void)
    * inode RD reproduces the ordinary PUT side of the manager's lock cycle. */
   struct efs_put_storage_guard session={0};uint8_t uuid[16]={9};assert(!server_put_session_begin(target,uuid,1,&session));
   assert(pthread_rwlock_tryrdlock(inode_gc_lock(1,4097))!=0);
+  /* Another file in the same numerical shard must not inherit this GC
+   * writer's exclusion. Previously every local-directory file collided. */
+  pthread_rwlock_t *other=inode_gc_lock(1,8193);
+  assert(other!=inode_gc_lock(1,4097));
+  assert(!pthread_rwlock_tryrdlock(other));
+  pthread_rwlock_unlock(other);
   server_put_session_end(&session);
   assert(!pthread_create(&data,NULL,data_run,NULL));
   pthread_mutex_lock(&gate);release_gc=1;pthread_cond_broadcast(&cv);pthread_mutex_unlock(&gate);

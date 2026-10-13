@@ -25,7 +25,7 @@ struct fake_server {uint64_t gc_scan_errors,gc_pending[2],gc_sampled_mask,gc_mis
 struct efs_raft_host {void *kv;struct fake_server *s;int gc_running,running;};
 '''+ctx+r'''
 static uint8_t g_gc_cur[2][GC_KEY_LEN];static uint32_t g_gc_cur_len[2];
-static uint64_t clock_us;static int64_t pending;static int full,records,scan_error,flush_error,acks_enabled,missing_export,scan_calls,flush_calls;
+static uint64_t clock_us,record_cost;static unsigned attempts;static int64_t pending;static int full,records,scan_error,flush_error,acks_enabled,missing_export,scan_calls,flush_calls;
 static struct efs_export export;
 static uint64_t now_us_(void){return clock_us;}
 static int env_on(const char *s){(void)s;return 0;}
@@ -38,17 +38,22 @@ static int gc_count_cb(void *ctx,const uint8_t *k,uint32_t kn,const uint8_t *v,u
 static int gc_scan_cb(void *ctx,const uint8_t *k,uint32_t kn,const uint8_t *v,uint32_t vn){(void)ctx;(void)k;(void)kn;(void)v;(void)vn;return 0;}
 typedef int (*cb_t)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t);
 static int efs_kv_scan_prefix(void *kv,const uint8_t *p,uint32_t n,cb_t cb,void *ctx){(void)kv;(void)p;(void)n;(void)cb;*(uint64_t *)ctx=records;return scan_error;}
-static int efs_kv_scan_from(void *kv,const uint8_t *p,uint32_t pn,const uint8_t *start,uint32_t sn,cb_t cb,void *ctx){(void)kv;(void)p;(void)pn;(void)start;(void)sn;(void)cb;scan_calls++;struct gc_scan_ctx *c=ctx;c->n=records;c->full=full;return scan_error;}
+static int efs_kv_scan_from(void *kv,const uint8_t *p,uint32_t pn,const uint8_t *start,uint32_t sn,cb_t cb,void *ctx){(void)kv;(void)p;(void)pn;(void)start;(void)sn;(void)cb;scan_calls++;struct gc_scan_ctx *c=ctx;c->n=records;c->full=full;for(int i=0;i<records;i++)c->keys[i][GC_KEY_LEN-1]=(uint8_t)(i+1);return scan_error;}
 static struct efs_export *host_gc_export(struct efs_raft_host *h){(void)h;return missing_export?NULL:&export;}
 static void server_export_put(struct fake_server *s,struct efs_export *ex){(void)s;(void)ex;}
-static void host_gc_record(struct efs_raft_host *h,struct efs_export *ex,const uint8_t *k,const uint8_t *v,struct efs_gc_ack_item *acks,int *n){(void)h;(void)ex;(void)k;(void)v;(void)acks;if(acks_enabled)(*n)+=3;}
+static void host_gc_record(struct efs_raft_host *h,struct efs_export *ex,const uint8_t *k,const uint8_t *v,struct efs_gc_ack_item *acks,int *n){(void)h;(void)ex;(void)k;(void)v;(void)acks;attempts++;clock_us+=record_cost;if(acks_enabled)(*n)+=3;}
 static int host_gc_ack_flush(struct efs_raft_host *h,uint8_t g,struct efs_gc_ack_item *acks,int *n){(void)h;(void)g;(void)acks;flush_calls++;clock_us+=GC_FRAG_BUDGET_US+1;if(flush_error)return flush_error;*n=0;return 0;}
 '''+s[a:b]+r'''
-static void reset(void){clock_us=0;pending=100;full=1;records=1;scan_error=flush_error=missing_export=scan_calls=flush_calls=0;acks_enabled=1;memset(g_gc_cur_len,0,sizeof(g_gc_cur_len));}
+static void reset(void){clock_us=record_cost=attempts=0;pending=100;full=1;records=1;scan_error=flush_error=missing_export=scan_calls=flush_calls=0;acks_enabled=1;memset(g_gc_cur_len,0,sizeof(g_gc_cur_len));}
 int main(void){struct fake_server server={0};struct efs_raft_host h={.s=&server,.gc_running=1,.running=1};
  for(unsigned group=0;group<=2;group+=2){
   reset();assert(host_gc_frag_pass(&h,group,1)==1 && scan_calls==1 && flush_calls==1);
   reset();records=4;assert(host_gc_frag_pass(&h,group,1)==1 && flush_calls==2);
+  reset();records=4;record_cost=150000;
+  assert(host_gc_frag_pass(&h,group,1)==1&&attempts==2&&flush_calls==1&&scan_calls==1);
+  assert(g_gc_cur_len[gc_gi(group)]==GC_KEY_LEN&&g_gc_cur[gc_gi(group)][GC_KEY_LEN-1]==2);
+  reset();records=4;record_cost=250000;acks_enabled=0;
+  assert(!host_gc_frag_pass(&h,group,1)&&attempts==1&&g_gc_cur[gc_gi(group)][GC_KEY_LEN-1]==1);
   reset();pending=0;assert(!host_gc_frag_pass(&h,group,1) && !scan_calls);
   reset();full=0;assert(!host_gc_frag_pass(&h,group,1));
   reset();acks_enabled=0;assert(!host_gc_frag_pass(&h,group,1));

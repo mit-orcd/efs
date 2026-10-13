@@ -53,6 +53,16 @@ a=s.index('static void host_create(');b=s.index('\nvoid server_raft_host_create(
 assert mutation.index('if(settled)*settled=0;')<mutation.index('host_fwd_create(')
 assert mutation.index('if(rc==EFS_OK && settled)*settled=(uint8_t)(1u<<dg);')>mutation.index('rc = host_wait_verdict(h, dg, idx, term, &hint);')
 assert mutation.count('*settled=')==2
+# Pending CREATE must pass namespace admission, whose first-touch protocol
+# establishes a durable floor. Established participants are fenced locally,
+# including before replay in apply; append's fresh-owner path is unnecessary.
+assert 'host_append_session_admit_covered(' not in mutation
+assert mutation.index('host_namespace_session_admit_covered(')<mutation.index('host_opid_replay(')
+apply=(root/'src/meta/meta_apply.c').read_text()
+a=apply.index('static int create_file_batch(');b=apply.index('int efs_meta_apply_create_file_log_pending(',a)
+create=apply[a:b]
+assert create.index('efs_session_accept(kv, shard, lease_uuid, lease_epoch)')<create.index('efs_meta_apply_opid_probe(')
+
 with tempfile.TemporaryDirectory(prefix='efs-create-authority-') as work:
  p=Path(work)/'t.c';p.write_text(code)
  subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)

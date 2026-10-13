@@ -30,7 +30,6 @@ static unsigned first_prepared;
 static struct efs_raft *group_raft(struct efs_raft_host *h,uint8_t g){(void)g;return &h->r;}
 int efs_raft_role(const struct efs_raft *r){return r->role;}
 uint32_t efs_raft_voters(const struct efs_raft *r){(void)r;return 7;}
-static int efs_raft_disk_sync_depth(struct efs_raft_disk *d){return d->depth;}
 static int efs_raft_disk_sync_hold(struct efs_raft_disk *d){d->depth++;holds++;return 0;}
 static int host_propose_mode(struct efs_raft_host*h,uint8_t g,const uint8_t*p,uint32_t n,uint64_t*i,uint64_t*t,int*hint,int local){
  (void)h;(void)g;(void)hint;(void)local;
