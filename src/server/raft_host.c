@@ -4031,7 +4031,8 @@ static int host_read_admit(struct efs_raft *r, struct host_read_admission *a,
 }
 
 static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
-                           int *leader_hint,const struct host_read_admission *admission)
+                           int *leader_hint,const struct host_read_admission *admission,
+                           uint64_t *proof_index)
 {
     struct timespec end;
     struct host_view v;
@@ -4040,6 +4041,8 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
     uint64_t p0 = prof ? now_us_() : 0;
     int first = 1;
 
+    if (proof_index)
+        *proof_index = 0;
     if (leader_hint)
         *leader_hint = -1;
     host_deadline_us(&end, (long)HOST_READ_TRIES * HOST_TICK_US);
@@ -4077,6 +4080,8 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
                 if (prof) fprintf(stderr,"raft-host: admitted-read-remote group=%u rc=%d leader=%d returned_hint=%d remote_index=%llu term=%llu applied=%llu\n",group,rc,v.leader,rhint,(unsigned long long)ridx,(unsigned long long)v.term,(unsigned long long)v.applied);
                 return rc;
             }
+            if (proof_index)
+                *proof_index = ridx;
             if (leader_hint && rhint >= 0)
                 *leader_hint = rhint;
             return EFS_OK;
@@ -4109,6 +4114,8 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             return EFS_ERR_NOT_PRIMARY;
         }
         if (host_view_covers(&v, want, round, admitted_term)) {
+            if (proof_index)
+                *proof_index = v.proven_index;
             if (prof)
                 read_prof_add(first ? &g_read_prof.ri_leader_covered
                                     : &g_read_prof.ri_leader,
@@ -4169,7 +4176,7 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
 
 static int host_read_index(struct efs_raft_host *h,uint8_t group,int *hint)
 {
-    return host_read_index_admitted(h,group,hint,NULL);
+    return host_read_index_admitted(h,group,hint,NULL,NULL);
 }
 
 #include "read_index_pair_remote.h"
@@ -4211,7 +4218,7 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
         if(rc!=EFS_OK)return rc;
         rc=host_read_index(h,groups[remote],hint);
         if(rc!=EFS_OK)return rc;
-        return host_read_index_admitted(h,groups[local],hint,&admission[local]);
+        return host_read_index_admitted(h,groups[local],hint,&admission[local],NULL);
     }
     for(unsigned i=0;i<2;i++) {
         r[i]=group_raft(h,groups[i]);
@@ -4237,8 +4244,8 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
     pthread_mutex_unlock(&h->mu);
     host_pump_kick(h);
     if(rc!=EFS_OK)return rc;
-    rc=host_read_index_admitted(h,first,hint,&admission[0]);
-    return rc==EFS_OK ? host_read_index_admitted(h,second,hint,&admission[1]) : rc;
+    rc=host_read_index_admitted(h,first,hint,&admission[0],NULL);
+    return rc==EFS_OK ? host_read_index_admitted(h,second,hint,&admission[1],NULL) : rc;
 }
 
 static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
@@ -11104,12 +11111,10 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         }
     }
     if (clen == 0) {
-        rc = host_read_index(h, group, &hint);
-        {
-            struct host_view v;
-            host_view_get(h, group, &v);
-            idx = v.applied;
-        }
+        /* Return the exact applied proof that covered this admission. A
+         * later view can include unrelated concurrent commits, making the
+         * follower wait for bytes beyond this read's linearization point. */
+        rc = host_read_index_admitted(h, group, &hint, NULL, &idx);
     } else if (clen >= HOST_DIR_LEN && cmd[0] == EFS_MD_CMD_DIR &&
                cmd[1] == EFS_MD_DIR_MIGRATE) {
         rc = host_dir_migrate(h, rd64be(cmd + 2), cmd, clen, &hint);
