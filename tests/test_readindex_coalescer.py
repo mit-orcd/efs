@@ -49,10 +49,12 @@ static void *reader(void*arg){
 int main(void){
  struct result r[4]={0};pthread_t t[4];for(int i=0;i<4;i++)r[i].id=i;
  assert(!pthread_create(&t[0],NULL,reader,&r[0]));pthread_mutex_lock(&test_mu);
- while(calls<1)pthread_cond_wait(&test_cv,&test_mu);pthread_mutex_unlock(&test_mu);
+ while(calls<1){pthread_cond_wait(&test_cv,&test_mu);}
+ pthread_mutex_unlock(&test_mu);
  assert(!pthread_create(&t[1],NULL,reader,&r[1]));assert(!pthread_create(&t[2],NULL,reader,&r[2]));
  pthread_mutex_lock(&test_mu);while(!entered[1]||!entered[2])pthread_cond_wait(&test_cv,&test_mu);release1=1;pthread_cond_broadcast(&test_cv);
- while(calls<2)pthread_cond_wait(&test_cv,&test_mu);pthread_mutex_unlock(&test_mu);
+ while(calls<2){pthread_cond_wait(&test_cv,&test_mu);}
+ pthread_mutex_unlock(&test_mu);
  assert(!pthread_create(&t[3],NULL,reader,&r[3]));pthread_mutex_lock(&test_mu);while(!entered[3])pthread_cond_wait(&test_cv,&test_mu);
  release2=1;pthread_cond_broadcast(&test_cv);pthread_mutex_unlock(&test_mu);
  for(int i=0;i<4;i++)assert(!pthread_join(t[i],NULL));
