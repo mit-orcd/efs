@@ -102,6 +102,22 @@ int main(void){
  assert(!append_race&&discarded==3&&h.inbox_n==2&&h.inbox_bytes==184);
  assert(h.inbox[0].buf==p[1]&&h.inbox[1].buf==p[2]&&!h.inbox[0].read_noted&&!h.inbox[1].read_noted);
  assert(h.inbox_work_n==7&&h.inbox_work_bytes==572);
+ /* A canonical request arriving during the first bounded pass is owned
+  * only by the next pass; ordinary data and credits keep their order. */
+ uint8_t *late=calloc(1,80),*first=calloc(1,80);assert(late&&first);
+ late[0]=first[0]=EFS_RAFT_MSG_AE_REQ;late[2]=first[2]=1;late[35]=9;first[35]=10;
+ h.inbox_n=2;h.inbox_bytes=172;
+ h.inbox[0]=(struct host_inbox_item){p[1],92,0,0};
+ h.inbox[1]=(struct host_inbox_item){first,80,0,0};
+ arrival=(struct host_inbox_item){late,80,0,0};append_race=1;
+ int before=calls;host_container_pending_reads(&h);
+ assert(calls==before+1&&discarded==4&&h.inbox_n==2&&h.inbox_bytes==172);
+ assert(h.inbox[0].buf==p[1]&&h.inbox[1].buf==late&&!h.inbox[1].read_noted);
+ host_container_pending_reads(&h);
+ assert(calls==before+2&&discarded==5&&h.inbox_n==1&&h.inbox_bytes==92);
+ assert(h.inbox[0].buf==p[1]&&!h.inbox[0].read_noted);
+ host_container_pending_reads(&h);assert(calls==before+2&&discarded==5);
+ assert(h.inbox_work_n==7&&h.inbox_work_bytes==572);
 #undef free
  free(partial);free(p);pthread_mutex_destroy(&h.inbox_mu);
  return 0;

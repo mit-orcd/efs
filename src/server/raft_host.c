@@ -7163,6 +7163,11 @@ static void *host_pump(void *arg)
         (void)efs_kv_lsm_sync_hold(h->kv);
         if (batch_obs) phase_us = efs_batch_obs_now_us();
         drain_inbox(h,&done_n,&done_bytes);
+        /* Network trylocks can fail while this bounded drain holds h->mu.
+         * Account eligible new read-only votes before the KV durability
+         * tail; their unchanged core checks do not apply replication work.
+         * Progress-bearing/refused frames retain FIFO and durable credits. */
+        host_container_pending_reads(h);
         if (batch_obs) BO_HIST(BH_PUMP_DRAIN_US, efs_batch_obs_now_us() - phase_us);
         if (obs) {
             t_drain = now_us_() - c0;

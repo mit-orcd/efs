@@ -2659,3 +2659,42 @@ allows; root/export-root, nondirectory, BUSY/ACCES propagation covered.
 Original3cb226f2 source via EFS_FUSE_SOURCE fails intended EACCES assertion.
 RPC/fetch dependencies are stubbed; this is not full server authority proof.
 Fresh both-host native and complete mounted qualification remain pending.
+
+
+## Fresh directory DAC full qualification; late-read scheduling candidate
+
+Exact deployed/tested `5b88e8cc5e182600644a3f18cb9406eacdfac914`: both Intel
+container native/affected sanitizer suites,795-input/runtime proofs and mounted
+ownership12/12 PASS. All15 normal gates complete: concurrent1505/1512 PASS,
+only seven deep-directory30s timeouts (115.301–127.777s). All seven
+perm_dir_wx_no_r and flock_basic PASS. Namespace EBUSY findings did not recur;
+intermittent closure is not established. Immediate physical109.321s PASS,
+zero109.313; quiet432/43253.114/54.055s, peer134/13441.999/42.125s PASS.
+Lifecycle256x512KiB/4workers/read30/churn30/warm/cold, tiny100files+300durable
+generations/host, graceful restart, cold hashes/deletes PASS. Final physical
+7.451s PASS, zero7.449. Shared mmap ENODEV skip. Post-restart64worker/GC20ms/
+TCP/direct/container/4G-node/profileOFF/disabled-feature proofs PASS. Same
+standard15-gate committed reproduction and preserved stores; no reset. External
+permission5b88e8cc-{deploy,workers64-normal,workers64-qualification}. W100/deep
+acceptance FAIL; directory DAC candidate's local and mounted affected gates PASS.
+
+Next container-only scheduling candidate: run the existing bounded pending-read
+helper a second time immediately after the32-frame inbox drain, before the
+existing KV durability tail. Canonical votes arriving while the drain holds
+h->mu otherwise wait out that tail and the next cycle despite eligibility.
+This is the same core term/boot/config/prefix/own-apply check; no extra thread,
+queue, request identity, read authority, deadline, voter, fsync or checkpoint
+ordering change. Partially handled/progress-bearing/refused frames retain FIFO
+and credits; already-accounted canonical requests can be retired only without
+flow, as before. Each pass is bounded by the existing256-header inbox.
+
+Actual pending helper fixture additionally covers a canonical arrival raced
+into the first pass: it remains untouched until the second pass, is freed
+exactly once, and leaves ordinary data FIFO and durability credits unchanged.
+Normal and ASan/UBSan PASS, including existing disabled-consumption negative.
+All core read-authority and durable receive controls remain required. A second
+pass may cost extra scanning; no performance benefit or loaded closure is yet
+claimed. Fresh both-host native and all15 mounted gates pending. The expanded
+build also runs existing namespace mapping bounds and GC unlimited native
+controls; local namespace-bound execution was NOTRUN (libefs.a absent), so
+Linux native execution is required rather than recording a local PASS.
