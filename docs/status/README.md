@@ -1,3 +1,10 @@
+Latest ORCD `.efs` gate: `f56f7cadff9d` passes prerequisites, focused suites
+and all 1,512 core cases but has four busy find continuations. Tracing isolates
+maximal reply reservations exhausting the shared budget. A smaller paged-command
+reply candidate is under qualification; final cold 400 GiB verification and
+benchmark resumption remain pending. See the
+[400 GiB evidence](orcd-efs-400g-20261012.md).
+
 Latest ORCD `.efs` gate: `8c4ddc930593` passes the pre-cold mixed gate,
 same-code orderly restart and all focused prerequisites. Post-cold mixed gate
 still FAIL: two find EBUSY cases (all 1,512 core cases pass). A bounded

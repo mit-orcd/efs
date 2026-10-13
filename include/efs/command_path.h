@@ -7,6 +7,15 @@
 #include <string.h>
 #include "efs/query_filters.h"
 #define EFS_COMMAND_MAX_TERM 120
+/* Paged commands stream across the existing cursor protocol. Reserving the
+ * full 16 MiB nonpaged limit for a small page admits only three replies under
+ * the shared 64 MiB budget. Bound each command page instead; all pages and
+ * close requests of one operation use the same cap, preserving token identity.
+ * Long names / large limits continue through further immutable pages. */
+static inline uint32_t efs_command_page_output(uint32_t operation)
+{
+    return operation==EFS_QUERY_STATS?16384u:1048576u;
+}
 static inline int efs_command_unhex(unsigned char c)
 {
     return c>='0' && c<='9' ? c-'0' : c>='a' && c<='f' ? c-'a'+10 : -1;
@@ -131,7 +140,7 @@ static inline int efs_command_path_parse_v4(const char *name,struct efs_msg_quer
         if (!raw[i] || raw[i]=='/') return EFS_ERR_INVAL;
         out->base.term[i-64]=(char)raw[i];
     }
-    out->base.max_output=EFS_QUERY_MAX_OUTPUT;out->base.visit_budget=100000;
+    out->base.max_output=efs_command_page_output(out->base.operation);out->base.visit_budget=100000;
     return EFS_OK;
 }
 #endif
