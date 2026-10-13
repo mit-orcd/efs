@@ -21,7 +21,8 @@ static pthread_mutex_t mu=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cv=PTHREAD_COND_INITIALIZER;
 static int permits,created,active,peak,arrived,participants,released,calls[32];
 static int create_worker(pthread_t *t,const pthread_attr_t *a,void *(*fn)(void *),void *v){
- if(created>=permits)return EAGAIN;created++;return pthread_create(t,a,fn,v);
+ if(created>=permits)return EAGAIN;
+ created++;return pthread_create(t,a,fn,v);
 }
 static int host_gc_inode_nodes(struct efs_raft_host *h,uint64_t ino,uint64_t gen){
  assert(h->running && h->gc_running && ino<32 && gen==100+ino);
@@ -49,7 +50,8 @@ int main(void){
  }
  memset(ready,0,sizeof(ready));created=0;host_gc_container_fences(&h,&scan,ready,result);assert(!created);
  memset(ready,1,sizeof(ready));h.gc_running=0;host_gc_container_fences(&h,&scan,ready,result);
- for(int i=0;i<32;i++)assert(result[i]==EFS_ERR_BUSY);assert(!created);
+ for(int i=0;i<32;i++)assert(result[i]==EFS_ERR_BUSY);
+ assert(!created);
  h.gc_running=1;h.running=0;host_gc_container_fences(&h,&scan,ready,result);assert(!created);
  puts("container fences: four bounded participants, join, per-inode generation/results, partial/zero creation, stop/empty PASS");
 }

@@ -917,3 +917,12 @@ four bounded participants, zero/partial thread creation, joined lifetimes,
 per-inode hard/BUSY outcomes and stop/empty batches. A masked-failure
 negative control aborts. Both-host native and fresh live qualification are
 required before claiming either failure gate closed.
+
+
+Colocate5d continuation completed: lifecycle/tiny warm/cold verification,
+graceful restart and deletes PASS; final physical PASS68.954s. Full15
+directory failures and immediate physical180 failure remain the verdict.
+Next1eb both Linux product builds succeeded but the new native fence test
+failed to compile under GCC -Werror=misleading-indentation (two test-only
+statements). No1eb deployment/live run occurred. Split the test statements
+and require fresh complete both-host native builds of the corrected SHA.
