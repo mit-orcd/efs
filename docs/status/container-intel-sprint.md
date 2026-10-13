@@ -1802,3 +1802,16 @@ ACCESS calls are not captured: efs_fuse_access_ino uses a local inode row
 caller permission checks. Do not describe every ACCESS as a fresh RPC.
 Next optional diagnostic includes ACCESS in the same PID selection/bound;
 permission logic and reply unchanged. No scoped memo/cache change justified.
+
+Explicit worker-count diagnostic control now available: node mount
+--client-max-threads32(default unchanged) or64 passes the installed libfuse
+-o max_threads=64 option; qualification restart propagates the requested
+count, default32. A real installed Intel libfuse parser probe returned rc0,
+max_threads64, remainingargc2; no mount was created. Worker count changes
+operational service capacity, not original seven-client/jobs16 workloads,
+case deadlines, metadata authority or feature settings. First measure all
+selected ACCESS/LOOKUP/GETATTR/MKDIR at32; only if substantial between-callback
+time remains, compare64 with the same frozen binary/config/history and full
+workload, explicit diagnostic flags. Retained history/order can confound a
+single trial; do not infer a causal improvement from unmatched historical runs.
+Neither worker tuning nor ACCESS timing has live results yet.
