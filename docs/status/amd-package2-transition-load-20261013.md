@@ -235,8 +235,9 @@ acceptance remains OPEN.
 
 ### Final checked-sort qualification — 2026-10-13
 
-**PASS on source `d17f940f8ceabd354e24506cc87af03ffa01b3cc`.** AMD currently runs
-this implementation. This closes the checked-sort cleanup/accounting follow-up,
+**PASS on source `d17f940f8ceabd354e24506cc87af03ffa01b3cc`.** AMD ran
+this implementation at that checkpoint, later superseded by the combined and
+[LOCAL-subtree qualification](query-subtree-continuation-20261013.md). This closes the checked-sort cleanup/accounting follow-up,
 not global W92 or ORCD footprint/scale acceptance. This change reduces steady
 admission forecast and separately accounts for temporary sort bytes; it does
 not reduce the physical size of an already-built v6 generation or change its ABI.
