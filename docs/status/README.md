@@ -1,8 +1,9 @@
 [Reviewed all-branch devel integration](devel-reviewed-integration-20261013.md):
 172 missing commits integrated from Mac/release, container and expiry branches;
-parallel CLOSE, KV, GC and Raft overlaps resolved explicitly. Private Linux
-build PASS; combined native qualification is in progress. No deployed-source
-verdict is superseded. Churn numbering is W114; client telemetry retains W113.
+parallel CLOSE, KV, GC and Raft overlaps resolved explicitly. Private AMD Linux
+build and full normal native suite PASS at `986b4ec0`; 849 product/test input
+hashes match. Mounted/fault/full-sanitizer/RDMA/scale gates remain separate.
+No deployed-source verdict is superseded. Churn numbering is W114; client telemetry retains W113.
 
 Current ORCD `.efs` source `419aa90f367a` passes complete native/fault/sanitizer
 prerequisites, exact-source/profile deployment and acknowledged payload markers

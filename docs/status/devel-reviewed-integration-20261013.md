@@ -4,8 +4,9 @@ User requested merging all other committed work into `devel`, with review of
 purpose and overlapping parallel fixes. Starting source is `6b554814` (already
 contains `devel-efs` through `52571794`). The inventory includes local branches,
 remote-tracking refs and detached managed-worktree tips. All missing detached
-tips were covered by the three branches below. This is a local-ref inventory;
-no upstream fetch, push, service deployment or release promotion is claimed.
+tips were covered by the three branches below. The final inventory includes a successful `git fetch origin`; no branch,
+remote-tracking or managed-worktree tip remains ahead of devel. No push,
+service deployment or release promotion is claimed.
 
 ## Review and overlap decisions
 
@@ -52,19 +53,42 @@ qualification profile; release branches and existing deployments are untouched.
 
 ## Validation
 
-Combined source at `17c93a02`, with a subsequent test-round isolation correction,
-is being qualified in an isolated AMD Linux directory as nonroot `efs`. This
-host has x86_64 and libfuse 3.18.2. Native builds use system GCC, `make -j2` and
-private temporary stores; no mounted application suite is being run. Diagnostic
-build identity is `unknown` because upload excludes Git; exact input checksums
-and final source identity must accompany the verdict. No binary is deployed.
+Exact combined source `986b4ec02083a8d561612627cccad7130c93a4c9` PASSes the
+complete normal Linux build and `make -j2 test` on AMD as nonroot `efs`. The
+suite executes 285 distinct Makefile-listed Python regression programs plus
+its native binaries and subtargets. Every failure from the earlier independent
+270/286 sweep is exercised successfully by the final full suite; the added
+concurrent append-offset test also passes its old-behavior negative control.
+All 849 product/test input checksums match the committed source, zero missing
+or mismatched inputs. Kernel `7.0.0-38-generic`, GCC Ubuntu 15.2.0-16ubuntu1,
+x86_64, libfuse 3.18.2; `make -j2`, default native synthetic fixture sizes and
+private temporary stores. No mounted application suite runs in this gate.
+Diagnostic binary build strings are `unknown` because upload excludes Git;
+verified inputs and the following hashes establish the tested build identity.
 
-Full Linux build PASS. The first independent sweep was 270/286 PASS and exposed
-adapter dependencies and conflicting test expectations, which are being fixed.
-Full sequential native qualification and final-source hash verification are
-pending. Fault-enabled full native, full sanitizer, mounted POSIX, RDMA/direct-I/O
-and cross-cluster performance qualification are NOTRUN for this combined source.
-Historical branch passes do not transfer automatically.
+| Artifact | SHA256 |
+| --- | --- |
+| efsd | `2365abdcc29168dc28dfee80105cb7bd0c85a72b8a7453ca7b2ac1bfafef19f2` |
+| efs-fuse | `70d3fefc3f578a5e5535d6ca6f1d094562af07db64168f1211b06d8c37bc0ddf` |
+| efs-mgmt | `63fe8a9003317fbe26cfb31c3f11db97f02c416ca9c86f1874453cacbbd27730` |
+| libefs.a | `9eebd0de9fd2f8ac03e7d3f42e91648e61d5b37c545ce595f7012aab2c947d22` |
+| full native log | `fd01d07d47960a665234e6b99d26a3d735b50064ef82009abf0d3a6b1e1ad08f` |
+| build log | `dc11b8cef65d8c6c2eb405a29918e0c3b90764278f6022f2e44e2da774c70c5c` |
+
+Full fault-enabled native, full sanitizer, mounted POSIX and performance,
+RDMA/direct-I/O and ORCD scale qualification are NOTRUN for this combined
+source. Some native gates include individual fault/sanitizer controls; those
+are not full configuration qualification. Historical branch passes do not
+transfer automatically. Documentation-only follow-up commits do not change
+these tested product/test inputs. No binary is deployed.
+
+AMD can also run the remaining full fault/sanitizer suites, isolated mounted
+ordinary-file `.efs` behavior, smaller quota/footprint regressions, concurrent
+mutation/query, clean unmount/restart, exact payload integrity, GC and
+small-file/snapshot latency investigations. Intel is another Linux development
+target. Reserve ORCD for final native hardware RDMA/direct-I/O, full catalogue,
+seven-client concurrency, complete 400 GiB cold verification and real scale
+latency/resource gates. This integration started no ORCD test or service action.
 
 Reproduce on an isolated Linux source checkout:
 
