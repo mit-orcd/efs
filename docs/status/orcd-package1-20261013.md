@@ -289,3 +289,22 @@ temporary mounts drain normally. Those passes do not clear long-lived-client
 failures. Intel has this qualified handoff and must finish its current work
 before applying shared-core fixes on Intel/devel with the disabled-feature
 profile. Raw wrapper JSON and traces remain in operations/BULK, outside Git.
+
+## Helper retry window correction
+
+The initial stats timeout also exposes a helper-bound gap: `read_result` retries
+up to8 transient refusals, each backed by the existing8-second client RPC budget.
+The candidate keeps those request budgets and short-refusal retry count, but
+stops retrying after one8-second monotonic window; a sleep cannot start another
+attempt after that window expires. It does not interrupt a filesystem call or
+claim a new end-to-end hard timeout. Busy catalogue startup now has a bounded
+retry window rather than multiplying the RPC budget across8 refusals.
+
+All34 command-source/protocol/helper tests PASS locally. New deterministic
+oracles cover a slow refusal, expiry during sleep and successful short transient
+recovery. Restoring the old helper fails the slow-refusal oracle (8 opens rather
+than1), so its negative control PASSes. The embedded source header is regenerated.
+ORCD native/mounted qualification of this combined candidate remains NOTRUN;
+all11 builds of earlier subtree-only integration8743e699 PASS but are not deployed.
+Native request limits, query16/32GiB caps, cache format and feature flags are
+unchanged. The original live9b failures stay recorded until final-source gates.

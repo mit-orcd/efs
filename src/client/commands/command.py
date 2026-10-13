@@ -179,6 +179,10 @@ def safe_text(value):
 
 def read_result(directory, name):
     path = os.path.join(directory, ".query", name)
+    # Keep transient refusals inside one RPC-sized retry window. A single
+    # blocking filesystem call still has the client RPC deadline; retries
+    # must not multiply that deadline by eight during catalogue startup.
+    deadline = time.monotonic() + 8
     for attempt in range(8):
         try:
             with open(path, "rb") as stream:
@@ -187,9 +191,13 @@ def read_result(directory, name):
                 raise ValueError("query exceeds 16 MiB output limit")
             return json.loads(data)
         except OSError as exc:
-            if exc.errno not in (errno.EAGAIN, errno.EBUSY, errno.ESTALE) or attempt == 7:
+            remaining = deadline - time.monotonic()
+            if (exc.errno not in (errno.EAGAIN, errno.EBUSY, errno.ESTALE) or
+                    attempt == 7 or remaining <= 0):
                 raise
-            time.sleep(0.025 * (attempt + 1))
+            time.sleep(min(0.025 * (attempt + 1), remaining))
+            if time.monotonic() >= deadline:
+                raise
     raise AssertionError("unreachable")
 
 

@@ -1537,7 +1537,9 @@ recursive subtrees scan unrelated catalogue entries. Owner/numeric and
 human/default/JSON stats PASS all7. Concurrent query21/21 PASS, accompanying core1501/1512 FAIL
 (10EBUSY, one EOF); EOF repeats4/1120 FAIL and the committed wrapper
 finds12/1120 failures including persistent shrink. Intel handoff queued after
-current work. Cold/full-payload gates OPEN.
+current work. Subtree correction e77f6030 is merged into a candidate;
+helper retry-window regression34/34 and its negative control PASS locally.
+Combined candidate native/mounted, cold and full-payload gates OPEN.
 
 [Intel package 3 execution](../status/intel-package3-20261013.md): files/TCP/direct,
 client/server commands, packing and expiry OFF; container fixture stopped.
