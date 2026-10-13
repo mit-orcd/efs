@@ -3,6 +3,7 @@
 Current user scope is feature correctness/acceptance; latency/resources are
 measurements and existing bounded gates, with no new performance tuning.
 
+Current live frozen devel source is `f7e3c81e2d5bd4715b6c6dc86debb10b093c0d03`.
 Package 1 remains OPEN; all-gates acceptance is not yet PASS. See the
 [three-package assignment](three-work-packages-20261013.md). Package 2 fixes
 are being qualified on AMD; ordinary-file Intel work is independent.
@@ -308,3 +309,88 @@ ORCD native/mounted qualification of this combined candidate remains NOTRUN;
 all11 builds of earlier subtree-only integration8743e699 PASS but are not deployed.
 Native request limits, query16/32GiB caps, cache format and feature flags are
 unchanged. The original live9b failures stay recorded until final-source gates.
+
+## Combined f7e3c81e ORCD deployment and acceptance
+
+The frozen devel revision combines the bounded LOCAL subtree correction and
+helper retry-window fix. All11 staged/installed hosts match863 committed build
+inputs. Full native `make -j4 test`, all six full-library query ASan/UBSan/leak
+harnesses and startup-inventory sanitizer PASS on exactf7 source. Native fcstor006
+efsd SHA256 `035a3b5c9a6f20cf439e6936e6f5fdcbae36fe0b046fbf0d67b868433b4ee45b`;
+efs-fuse `016fc6642a266b5172823418d47127ac70046cbaca4357a0e9e6c788fad896ca`.
+Candidate f7 is an ancestor of integrated devel5cf9fb40; only later diagnostic
+script/docs distinguish that integration head, with no source/include/deps/
+Makefile production difference. No working-tree mixture was deployed.
+
+Stopped seven identified nonroot DD processes with SIGINT and stable pidfd/
+UID/start-time/argv checks. Partial outputs75.95–85.92GB remain; no output was
+deleted or truncated. Seven clients drain/unmount normally before four daemons
+stop. Installed/startup/profile, remount and acknowledged large/512-byte marker
+verification PASS on all7. Initial server readiness88.131s. Actual profile is
+native RDMA/mlx5_2, server direct-I/O/files, client/server commands enabled,
+packing/containers/expiry disabled. Real400GiB subtree stats is exact with
+refresh_error0; full payload verification is still NOTRUN.
+
+| Focused suite on f7e3c81e | Verdict | Seconds |
+| --- | --- | ---: |
+| commands | PASS | 8.773 |
+| options | PASS | 5.871 |
+| pages | PASS | 14.279 |
+| virtual interfaces | PASS | 85.247 |
+| loaded commands | PASS | 22.690 |
+| large delta, payload | FAIL: EIO during write/flush/fsync | 12.077 |
+
+The temporary peer drains normally. The payload failure stops the aggregate
+gate driver; it is not relabelled by the five successes. Main-client log records
+REPORT type67 resource-busy after8016ms, one chunk, inode8562082, then fsync
+EFS_ERR_BUSY; the application sees EIO. Preceding opid-admission messages show
+oldest12431/next12447/live3 and oldest12433/next12449/live4 at unchanged window16.
+Source has a fixed1000×1ms opid admission poll and unchanged8s sync REPORT budget.
+Intel has the evidence for correctness investigation, without budget/window
+widening. Earlier EOF growth/shrink and ordinary EBUSY findings remain OPEN.
+
+Separately labelled metadata-only large delta PASS:1025 exact creations, updates
+and mtime/zero-size fields, followed by512 deletions, rename and hardlink. Both
+peer syscall and query count/byte oracles agree with refresh_error0. Phases take
+5.158/8.586s; temporary peer stop PASS. It isolates query functionality but does
+not replace payload qualification. Independent all7 stats/owner and concurrent
+checks continue; post-test cold and complete payload/path gates remain OPEN.
+
+## Work on hold — 2026-10-13
+
+The user explicitly paused `.efs` work. Package 1 is **ON HOLD, acceptance
+OPEN/FAIL**, not complete. No further tests, fixes, deployment or restart are
+authorized under this paused work. Intel and AMD have been asked to wrap up
+safely, preserve candidates/evidence, document their exact status and pause the
+coordinated work. Their wrap-up commits are not yet received or integrated.
+
+Last deployed source remains f7e3c81e2d5bd4715b6c6dc86debb10b093c0d03, with
+the RDMA/direct-I/O/files profile and `.efs` client/server enabled; packing,
+containers and expiry disabled. The running cluster and preserved stores are
+left intact. Resource/cache observers receive their normal stop flags; no
+daemons are killed or storage erased. Seven tiny-file launchers remain paused;
+seven DD processes were stopped cleanly and their partial outputs preserved.
+Resume instructions and stable process identities remain in
+`operations/devel-efs/package1-paused-screen-launchers.json`, benchmark screen
+state and DD clean-stop records. Do not blindly resume the queued root-directory
+benchmark command on fcstor010; preserve historical invalid fixtures.
+
+The completed final concurrent attempt has **1511/1512 ordinary cases PASS,
+one FAIL on fcstor013; all21/21 virtual query cases PASS**. Some queries expose
+stale snapshots with refresh_error -13, so successful query cases do not prove
+refresh health. Raw per-host TSV/logs remain at
+`/home/erbmi1/orcd/scratch/efs/orcd-test/fcstor007` through `fcstor013`, prefix
+`profile-posix-f7e3c81e2d5b-400g-pre-cold`; local aggregate is
+`operations/devel-efs/400g-posix-pre-cold.json`. The exact failing ordinary case
+needs log review on resumption. Concurrent human-readable/JSON stats and owner
+checks also FAIL EBUSY on fcstor013 while overlapping this workload. This differs
+from the intended sequential gate order; causation is unproven and the failures
+are retained. Sequential reruns are NOTRUN.
+
+Resume priorities: review Intel's qualified admission correction (currently an
+uncommitted candidate, preserving receipt window16 and REPORT8s); obtain AMD's
+exact-f7 helper qualification; resolve payload/fsync EIO and ordinary EOF/EBUSY
+failures; rerun all focused and concurrent gates on one frozen source; then
+verify same-source orderly cold restart within300s and every byte/path of the
+real400GiB fixture. Final-source complete payload/path and post-test cold gates
+remain NOTRUN. No final acceptance latency/resource result is claimed.
