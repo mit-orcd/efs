@@ -49,9 +49,12 @@ assert 'backlog_capped |= host_gc_frag_pass(' in thread
 assert 'pack_capped = host_gc_pack_pass(' in thread
 assert 'host_gc_packed_idle(idle_ms, packed_capped, packed_deleted)' in thread
 assert 'expiry_progress |= host_gc_expiry_pass(' in thread
-assert 'host_gc_expiry_idle(idle_ms, expiry_progress)' in thread
+assert 'idle_ms = host_gc_expiry_idle' not in thread
+assert 'expiry_progress = host_gc_expiry_groups(h)' in thread
+assert 'now_us_() < idle_end' in thread
+assert 'host_gc_expiry_idle(GC_LOOP_MS, expiry_progress)' in thread
 assert 'removed_before' in thread and 'removed_after' in thread
-assert 'host_snap_export_pass(h)' in thread and 'usleep(20 * 1000)' in thread
+assert 'host_snap_export_pass(h)' in thread and 'if (sleep_us > 20000) sleep_us = 20000' in thread
 with tempfile.TemporaryDirectory(prefix='efs-gc-idle-') as temp:
  p=Path(temp)/'test.c';p.write_text(code)
  command=shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))]

@@ -8844,6 +8844,24 @@ static int host_gc_expiry_pass(struct efs_raft_host *h,uint8_t group,uint32_t an
     return progress && (processed<page.count || page.more);
 }
 
+/* Expiry can progress between full GC passes without multiplying orphan,
+ * fragment and transaction-recovery scans. Recheck leadership for each pass;
+ * a clock pause/no-progress reply stops acceleration until the next full pass. */
+static int host_gc_expiry_groups(struct efs_raft_host *h)
+{
+    int progress = 0;
+    for (int g = 0; g < HOST_NGROUPS && h->gc_running; g++) {
+        if (!h->g[g].hosted) continue;
+        pthread_mutex_lock(&h->mu);
+        int leader = h->g[g].r && efs_raft_role(h->g[g].r) == EFS_RAFT_LEADER;
+        pthread_mutex_unlock(&h->mu);
+        if (leader)
+            progress |= host_gc_expiry_pass(h, h->g[g].group,
+                                            h->g[g].group == 0 ? 1u : 2u);
+    }
+    return progress;
+}
+
 static void *host_gc_thread(void *arg)
 {
     struct efs_raft_host *h = arg;
@@ -8978,17 +8996,29 @@ static void *host_gc_thread(void *arg)
          * a full second asleep after a saturated page made durable deletion
          * progress. This also covers remote-only placement. */
         idle_ms = host_gc_packed_idle(idle_ms, packed_capped, packed_deleted);
-        idle_ms = host_gc_expiry_idle(idle_ms, expiry_progress);
         if (idle_ms < GC_LOOP_MS && env_on("EFS_RAFT_OBS"))
             fprintf(stderr, "raft-host: gc-backlog-idle ms=%u removed=%llu\n", idle_ms,
                     (unsigned long long)(removed_after - removed_before));
-        /* Idle/blocked passes wait 1s; progressing packed backlog yields 20ms.
-         * Sleep in 20ms slices so shutdown is prompt.
-         * A snapshot export queued by the pump starts on the next slice. */
-        for (g = 0; g < (int)((idle_ms + 19) / 20) && h->gc_running; g++) {
+        /* Full GC keeps its ordinary/backlog cadence. Expiry-only passes
+         * run during that fair yield instead of accelerating every scan.
+         * Their time counts toward the yield; snapshot/shutdown checks remain
+         * at <=20ms sleep intervals (work itself keeps its existing budgets). */
+        uint64_t idle_end = now_us_() + (uint64_t)idle_ms * 1000;
+        uint64_t expiry_at = now_us_() +
+                            (uint64_t)host_gc_expiry_idle(GC_LOOP_MS, expiry_progress) * 1000;
+        while (h->gc_running && now_us_() < idle_end) {
             host_snap_export_pass(h);
             host_snap_import_pass(h);
-            usleep(20 * 1000);
+            if (expiry_progress && now_us_() >= expiry_at) {
+                expiry_progress = host_gc_expiry_groups(h);
+                expiry_at = now_us_() +
+                            (uint64_t)host_gc_expiry_idle(GC_LOOP_MS, expiry_progress) * 1000;
+            }
+            uint64_t now = now_us_();
+            if (now >= idle_end) break;
+            uint64_t sleep_us = idle_end - now;
+            if (sleep_us > 20000) sleep_us = 20000;
+            usleep((useconds_t)sleep_us);
         }
     }
     return NULL;
