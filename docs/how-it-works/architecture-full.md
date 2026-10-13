@@ -1492,6 +1492,8 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**Proposed feature:** [W113 — aggregate client workload telemetry](#w113--aggregate-application-workload-telemetry-across-fuse-clients): ORCD seven-client read/write ops/s and human-friendly bytes/s, separate from server/internal traffic. Discussion recorded; implementation and acceptance NOTRUN.
+
 **Current development work:** [W95 packing TCP/direct-I/O](../status/packing-tcp-direct-20261012.md) on `devel`, solo/exclusive AMD with `.efs` disabled. Exact `8151debe`: full normal/fault native, nineteen focused normal/sanitizer and actual-core sanitizers PASS; three quiet rounds each1512/1512 core +67/67 peer, all orderly/cold/reclamation/drain PASS; focused acknowledged-fsync SIGKILL/cold PASS. Deep-directory/unusual-name timeout acceptance closed for this source/workload. W95 production-format/migration and matched packing-on/off performance remain open. Next: [three alternating off/on pairs, lifecycle coverage audit, and P4.1 decision](../status/packing-tcp-direct-20261012.md#next-work-toward-w95-closure--oct-13). Fresh-store-only opt-in packing is a recommendation, not an approved rollout. Original quotas/deadlines unchanged; no push or release promotion.
 
 **Current release integration:** `release-v0.3.2-pre-alpha` merges reviewed ORCD evidence9fc5e024 into v0.3.1. Product/test inputs unchanged. AMD TCP/direct and TCP/buffered PASS; independently reviewed ORCD nativeRDMA/direct two core rounds1512/1512 and peer67/67 per round, native/fault/sanitizers/cold/physicalGC PASS. Tested SHAs remain15e2a531 AMD and40f4509d ORCD; the merge itself was not remotely executed. Packing/containers/.efs/repair remain disabled. No push/tag/deployment. [v0.3.2 review and coverage](../status/v032-integration-review-20261012.md).
@@ -7805,6 +7807,53 @@ primary/peer/cold bytes plus physical cleanup; input and binary identities are r
 publication/fence observations. Close only after full merged normal/fault,
 sanitisers and both-mode exact immediate/cold/live gates pass.
 [Evidence and closure scope](../status/w112-full-overwrite-replay-20261012.md).
+
+
+### W113 · Aggregate application workload telemetry across FUSE clients
+
+**Status:** proposed feature; implementation and live acceptance NOTRUN.
+**Requested:** October 13, 2026. Initial target: ORCD, four storage nodes and
+seven test clients. Documented on devel; no deployment or C changes authorized
+by this note.
+
+The portal should show the aggregate workload clients produce onto EFS,
+separately from server storage activity, replication, erasure-coded fragments,
+retries, background writeback and GC. Existing portal peaks select the largest
+single-node sample; they are not simultaneous cluster or client totals.
+
+**Recommended design:** inspect existing FUSE telemetry first. If it does not
+expose application-boundary counters, add cumulative completed read/write
+request counts and actual successful bytes returned/accepted at the FUSE
+request/reply boundary. Record failures separately; optionally add metadata
+operation counts. Do not count internal RPCs, retries or background flushes as
+new application requests. Label writes as accepted application bytes, not
+necessarily durably committed bytes. FUSE caching means these represent
+requests reaching FUSE, not every userspace syscall or cached mmap access;
+application benchmarking remains a separate measurement.
+
+Expose per-mount identity, process/boot identity, monotonic sample time and
+cumulative counters through a lightweight bounded interface. The portal polls
+all configured test clients, derives rates from counter deltas and elapsed time,
+and sums contemporaneous client samples by operation class. Handle restarts,
+counter resets, multiple mounts, missing/stale samples and clock alignment
+explicitly. Inspect existing interfaces before choosing a file or management
+endpoint; the portal should not need to parse verbose logs.
+
+**Display:** a minimal Client workload section with current aggregate read/write
+ops/s and throughput, simultaneous peaks since portal start, peak timestamps
+and coverage such as 7/7 clients reporting. Format bytes/s automatically as
+B/s, KiB/s, MiB/s or GiB/s, with consistent IEC units. Keep Server storage I/O
+and internal traffic separate. Sum the same interval's rates before recording a
+peak; never add independently recorded per-client maxima. Mark incomplete
+samples partial (for example 6/7) and exclude them from complete aggregate peaks.
+
+**Acceptance:** deterministic counter/rate/format tests plus an ORCD seven-client
+known-byte workload. Check exact successful/short/failed read/write accounting,
+client restarts/resets, duplicate mount discovery, missing clients and peaks
+occurring at different times. Demonstrate retries and replication do not inflate
+client totals. Validate direct/TCP first; extend transport/mode coverage only if
+the implementation touches those paths. No implementation or performance claim
+is made by this discussion note.
 
 
 ## Appendix 5 — Naming

@@ -5213,3 +5213,50 @@ primary/peer/cold bytes plus physical cleanup; input and binary identities are r
 publication/fence observations. Close only after full merged normal/fault,
 sanitisers and both-mode exact immediate/cold/live gates pass.
 [Evidence and closure scope](../status/w112-full-overwrite-replay-20261012.md).
+
+
+## W113 · Aggregate application workload telemetry across FUSE clients
+
+**Status:** proposed feature; implementation and live acceptance NOTRUN.
+**Requested:** October 13, 2026. Initial target: ORCD, four storage nodes and
+seven test clients. Documented on devel; no deployment or C changes authorized
+by this note.
+
+The portal should show the aggregate workload clients produce onto EFS,
+separately from server storage activity, replication, erasure-coded fragments,
+retries, background writeback and GC. Existing portal peaks select the largest
+single-node sample; they are not simultaneous cluster or client totals.
+
+**Recommended design:** inspect existing FUSE telemetry first. If it does not
+expose application-boundary counters, add cumulative completed read/write
+request counts and actual successful bytes returned/accepted at the FUSE
+request/reply boundary. Record failures separately; optionally add metadata
+operation counts. Do not count internal RPCs, retries or background flushes as
+new application requests. Label writes as accepted application bytes, not
+necessarily durably committed bytes. FUSE caching means these represent
+requests reaching FUSE, not every userspace syscall or cached mmap access;
+application benchmarking remains a separate measurement.
+
+Expose per-mount identity, process/boot identity, monotonic sample time and
+cumulative counters through a lightweight bounded interface. The portal polls
+all configured test clients, derives rates from counter deltas and elapsed time,
+and sums contemporaneous client samples by operation class. Handle restarts,
+counter resets, multiple mounts, missing/stale samples and clock alignment
+explicitly. Inspect existing interfaces before choosing a file or management
+endpoint; the portal should not need to parse verbose logs.
+
+**Display:** a minimal Client workload section with current aggregate read/write
+ops/s and throughput, simultaneous peaks since portal start, peak timestamps
+and coverage such as 7/7 clients reporting. Format bytes/s automatically as
+B/s, KiB/s, MiB/s or GiB/s, with consistent IEC units. Keep Server storage I/O
+and internal traffic separate. Sum the same interval's rates before recording a
+peak; never add independently recorded per-client maxima. Mark incomplete
+samples partial (for example 6/7) and exclude them from complete aggregate peaks.
+
+**Acceptance:** deterministic counter/rate/format tests plus an ORCD seven-client
+known-byte workload. Check exact successful/short/failed read/write accounting,
+client restarts/resets, duplicate mount discovery, missing clients and peaks
+occurring at different times. Demonstrate retries and replication do not inflate
+client totals. Validate direct/TCP first; extend transport/mode coverage only if
+the implementation touches those paths. No implementation or performance claim
+is made by this discussion note.
