@@ -60,7 +60,7 @@
 #define HOST_INBOX_MAX     256
 /* Bound lock-held receive work: completed read proofs must be published
  * between short FIFO prefixes, not hidden behind thirty-two durable frames. */
-#define HOST_INBOX_SLICE_MAX 8
+#define HOST_INBOX_SLICE_MAX 32
 #define HOST_INBOX_BYTES   (32ull << 20)
 #define HOST_OUTBOX_BYTES  (16ull << 20)
 #define HOST_FRAME_MAX     (EFS_WIRE_RAFT_MAX_CMD + EFS_WIRE_RAFT_HDR_LEN + 12u)
