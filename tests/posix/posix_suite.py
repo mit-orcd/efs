@@ -45,6 +45,7 @@ import sys
 import tempfile
 import threading
 import time
+import traceback
 
 # --------------------------------------------------------------------------
 # Test registry + result tracking
@@ -3860,6 +3861,9 @@ def invoke(fn, tdir):
     except TestTimeout as e:
         return "FAIL", str(e)
     except Exception as e:  # noqa: BLE001
+        # Preserve the failing syscall in the worker log; the TSV verdict and
+        # deadlines stay unchanged. Limit output to the relevant stack tail.
+        traceback.print_exc(limit=8)
         try:
             return "FAIL", "%s: %s" % (type(e).__name__, e)
         except TestTimeout:

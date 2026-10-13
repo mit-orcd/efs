@@ -2175,3 +2175,26 @@ matching the original phase emitter. Missing/full observer queues may lose
 samples but cannot make sendto wait inside a tested syscall. This is an
 observer correction only; ordinary qualification does not load the observer.
 It precedes the next source freeze, not a change to previously tested binaries.
+
+
+### Completed normal checkpoint 24243a74
+
+Frozen 24243a74975fe4e21425a9e066926672142d6158: both-host complete Linux
+native/affected sanitizer/792-input and live source/runtime proofs PASS. All
+15 normal controller gates finished; concurrent FAIL1504/1512 PASS8FAIL: seven
+deep60 directory timeouts and Intel1 client2 flock_unlock_on_close with generic
+BlockingIOError/EAGAIN. No causal attribution to the background cohort change
+is established. Immediate physical reclamation PASS94.111s. Every quiet, peer,
+mmap, lifecycle, tiny-file, orderly restart, cold verification/deletion and final
+physical gate PASS (final first-zero8.994s); shared mmap retains its ENODEV skip. Both post-restart
+actual process/binary/environment proofs PASS with 64 FUSE workers, containers,
+TCP/direct, 4G/node, commands and packing OFF, all diagnostics/folding OFF.
+Expiry-date activation remains unavailable/disabled. Production was not promoted.
+
+External raw evidence: artifacts/container-20261012/
+bgcohort24243a74-{deploy,workers64-normal,workers64-qualification}. Loaded
+acceptance remains FAIL. Unexpected-exception tracebacks are now retained in
+worker logs (eight frames maximum); TSV verdicts, budgets and test operations
+are unchanged. This runner-only diagnostic has not yet been remotely executed.
+The generic flock error is outside the test's wrapped second-lock assertion;
+its syscall origin must be observed before changing release/lock behavior.
