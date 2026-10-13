@@ -687,6 +687,7 @@ void efs_client_dirty_sets_free(void)
 #define PUB_SLOTS 64
 struct pub_slot {
     int used;
+    unsigned acceptors; /* writes installing bodies and their logical EOF */
     efs_ino_t ino;       /* single-inode REPORT */
     uint64_t *keys;      /* whole-set REPORT: alias of ds->ino_keys */
     uint64_t mask;
@@ -741,6 +742,7 @@ static void pub_release(int slot)
         return;
     pthread_mutex_lock(&g_client.dirty_mu);
     pub_slots[slot].used = 0;
+    pub_slots[slot].acceptors = 0;
     pub_slots[slot].ino = 0;
     pub_slots[slot].keys = NULL;
     pub_slots[slot].mask = 0;
@@ -748,6 +750,67 @@ static void pub_release(int slot)
     pub_slots[slot].since_ms = 0;
     pthread_cond_broadcast(&pub_cv);
     pthread_mutex_unlock(&g_client.dirty_mu);
+}
+
+/* A reclaim PUT may finish as soon as a dirty body becomes visible. Keep
+ * REPORT from snapshotting that body before its matching logical EOF is
+ * installed. Share a bounded slot across simultaneous writers of one inode;
+ * no cache/table mutex is held while waiting or doing data I/O. */
+static uint64_t report_clock_ms(void);
+static void meta_flush_enqueue(efs_ino_t ino);
+static int write_accept_begin(efs_ino_t ino)
+{
+    uint64_t deadline = report_clock_ms() + 30000;
+    uint64_t outer = efs_client_rpc_deadline_ms();
+    if (outer && outer < deadline)
+        deadline = outer;
+    pthread_mutex_lock(&g_client.dirty_mu);
+    for (;;) {
+        if (report_clock_ms() >= deadline) {
+            pthread_mutex_unlock(&g_client.dirty_mu);
+            return -1;
+        }
+        for (int i = 0; i < PUB_SLOTS; i++)
+            if (pub_slots[i].used && pub_slots[i].ino == ino &&
+                pub_slots[i].acceptors) {
+                pub_slots[i].acceptors++;
+                pthread_mutex_unlock(&g_client.dirty_mu);
+                return i;
+            }
+        if (!pub_has_locked(ino)) {
+            int slot = pub_take_locked(ino, NULL, 0);
+            if (slot >= 0) {
+                pub_slots[slot].acceptors = 1;
+                pthread_mutex_unlock(&g_client.dirty_mu);
+                return slot;
+            }
+        }
+        struct timespec until;
+        clock_gettime(CLOCK_REALTIME, &until);
+        uint64_t now = report_clock_ms();
+        if (now >= deadline)
+            continue;
+        uint64_t remaining = deadline - now;
+        if (remaining > 50) remaining = 50;
+        until.tv_nsec += (long)remaining * 1000000;
+        until.tv_sec += until.tv_nsec / 1000000000;
+        until.tv_nsec %= 1000000000;
+        pthread_cond_timedwait(&pub_cv, &g_client.dirty_mu, &until);
+    }
+}
+
+static void write_accept_end(int slot)
+{
+    efs_ino_t ino = 0;
+    pthread_mutex_lock(&g_client.dirty_mu);
+    if (--pub_slots[slot].acceptors == 0) {
+        ino = pub_slots[slot].ino;
+        pub_slots[slot] = (struct pub_slot){0};
+        pthread_cond_broadcast(&pub_cv);
+    }
+    pthread_mutex_unlock(&g_client.dirty_mu);
+    if (ino)
+        meta_flush_enqueue(ino);
 }
 
 /* Admission counts live marks, detached REPORTs and concurrent requests.
@@ -4899,7 +4962,7 @@ static int dcache_store_full_chunk(efs_ino_t ino, uint32_t ci,
 /* Whole-chunk body. `chunk` is a pool buffer. Stolen on success.
  * libfuse's request buffer does not outlive the write reply, so the
  * caller copies into `chunk` once and hands that pointer here. */
-int efs_dcache_store_full_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
+static int dcache_store_full_owned_run(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
                                 uint32_t cs)
 {
     if (!chunk || !cs)
@@ -4917,7 +4980,18 @@ int efs_dcache_store_full_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
     return 0;
 }
 
-int efs_dcache_try_patch(efs_ino_t ino, uint64_t offset, uint32_t len,
+int efs_dcache_store_full_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
+                                uint32_t cs)
+{
+    int slot = write_accept_begin(ino);
+    if (slot < 0)
+        return -1;
+    int rc = dcache_store_full_owned_run(ino, ci, chunk, cs);
+    write_accept_end(slot);
+    return rc;
+}
+
+static int dcache_try_patch_run(efs_ino_t ino, uint64_t offset, uint32_t len,
                          const uint8_t *src)
 {
     if (!src || !len)
@@ -4943,12 +5017,23 @@ int efs_dcache_try_patch(efs_ino_t ino, uint64_t offset, uint32_t len,
             rc = dcache_load_and_patch(ino, ci, off, p, n, cs);
         if (rc != 0)
             return -1;
+        dcache_note_size(ino, pos + n);
         pos += n;
         p += n;
         remaining -= n;
     }
-    dcache_note_size(ino, offset + len);
     return 0;
+}
+
+int efs_dcache_try_patch(efs_ino_t ino, uint64_t offset, uint32_t len,
+                         const uint8_t *src)
+{
+    int slot = write_accept_begin(ino);
+    if (slot < 0)
+        return -1;
+    int rc = dcache_try_patch_run(ino, offset, len, src);
+    write_accept_end(slot);
+    return rc;
 }
 
 static int dcache_patch_sparse(efs_ino_t ino, uint32_t ci, uint32_t off,
@@ -5033,7 +5118,7 @@ static int dcache_load_sparse(efs_ino_t ino, uint32_t ci, uint32_t off,
     return 0;
 }
 
-int efs_dcache_try_patch_sparse(efs_ino_t ino, uint64_t offset, uint32_t len,
+static int dcache_try_patch_sparse_run(efs_ino_t ino, uint64_t offset, uint32_t len,
                                 const uint8_t *src)
 {
     if (!src || !len)
@@ -5052,12 +5137,23 @@ int efs_dcache_try_patch_sparse(efs_ino_t ino, uint64_t offset, uint32_t len,
             n = (uint32_t)remaining;
         if (dcache_load_sparse(ino, ci, off, p, n, cs) != 0)
             return -1;
+        dcache_note_size(ino, pos + n);
         pos += n;
         p += n;
         remaining -= n;
     }
-    dcache_note_size(ino, offset + len);
     return 0;
+}
+
+int efs_dcache_try_patch_sparse(efs_ino_t ino, uint64_t offset, uint32_t len,
+                                const uint8_t *src)
+{
+    int slot = write_accept_begin(ino);
+    if (slot < 0)
+        return -1;
+    int rc = dcache_try_patch_sparse_run(ino, offset, len, src);
+    write_accept_end(slot);
+    return rc;
 }
 
 static int dcache_fill(struct dcache_ent *e, efs_ino_t ino, uint32_t ci,
@@ -7427,7 +7523,13 @@ int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *bu
     int rc = efs_client_report_admit(2 * (size / cs + 2) + 1);
     if (rc != EFS_OK)
         return rc;
+    int slot = write_accept_begin(ino);
+    if (slot < 0) {
+        efs_client_report_unreserve();
+        return EFS_ERR_BUSY;
+    }
     rc = client_write_run(ino, offset, size, buf);
+    write_accept_end(slot);
     efs_client_report_unreserve();
     return rc;
 }
@@ -7455,7 +7557,12 @@ int efs_client_write_no_replicate(efs_ino_t ino, uint64_t offset, size_t size, c
     /* No pack staging: the KV row has no pack fields and chunks cannot
      * publish under a directory ino, so small writes take the chunk path
      * like everything else. */
-    return write_chunks_no_replicate(ino, offset, size, buf, old_size);
+    int slot = write_accept_begin(ino);
+    if (slot < 0)
+        return EFS_ERR_BUSY;
+    int rc = write_chunks_no_replicate(ino, offset, size, buf, old_size);
+    write_accept_end(slot);
+    return rc;
 }
 
 static int write_chunks_no_replicate(efs_ino_t ino, uint64_t offset, size_t size,
