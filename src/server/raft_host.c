@@ -3260,8 +3260,8 @@ static void host_publish_view(struct efs_raft_host *h, int gi)
     uint64_t commit, applied, term, ridx, round, proven_index, proven_round;
     int role, leader, rpend, rdone, proven_done, changed;
 
-    __atomic_add_fetch(&g->v_seq, 1, __ATOMIC_SEQ_CST);
     if (!r) {
+        __atomic_add_fetch(&g->v_seq, 1, __ATOMIC_SEQ_CST);
         if (V_LOAD(g->v_has))
             V_STORE(g->v_stamp, V_LOAD(g->v_stamp) + 1);
         V_STORE(g->v_has, 0);
@@ -3291,6 +3291,13 @@ static void host_publish_view(struct efs_raft_host *h, int gi)
               V_LOAD(g->v_proven_done) != proven_done ||
               V_LOAD(g->v_proven_round) != proven_round ||
               V_LOAD(g->v_proven_index) != proven_index;
+    /* Core getters can wait for the shared disk-log mutex. Keep the old
+     * coherent view readable while collecting state under h->mu; mark the
+     * sequence odd only for the bounded atomic copy. Unchanged state needs
+     * neither a sequence write nor cache-line invalidation. */
+    if (!changed)
+        return;
+    __atomic_add_fetch(&g->v_seq, 1, __ATOMIC_SEQ_CST);
     V_STORE(g->v_commit, commit);
     V_STORE(g->v_applied, applied);
     V_STORE(g->v_term, term);

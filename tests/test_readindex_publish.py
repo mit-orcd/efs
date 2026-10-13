@@ -31,7 +31,14 @@ static int efs_raft_leader(struct efs_raft*r){return r->leader;}
 static uint64_t efs_raft_read_index(struct efs_raft*r){return r->read_index;}
 static uint64_t efs_raft_read_round(struct efs_raft*r){return r->read_round;}
 static int efs_raft_read_pending(struct efs_raft*r){return r->pending;}
-static int efs_raft_read_quorum(const struct efs_raft*r){return r->quorum;}
+static pthread_mutex_t slow_mu=PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t slow_cv=PTHREAD_COND_INITIALIZER;
+static int slow_quorum,entered,released;
+static int efs_raft_read_quorum(const struct efs_raft*r){
+ pthread_mutex_lock(&slow_mu);
+ if(slow_quorum){entered=1;pthread_cond_broadcast(&slow_cv);while(!released)pthread_cond_wait(&slow_cv,&slow_mu);}
+ pthread_mutex_unlock(&slow_mu);return r->quorum;
+}
 ''' +func(r,'efs_raft_read_proven')+'\nstruct host_group {struct efs_raft*r;\n'+group+r'''
 };
 struct efs_raft_host {struct host_group g[1];};
@@ -54,6 +61,7 @@ static void *publish(void *unused){(void)unused;
  for(int i=0;i<100000;i++)set_view(i&1);
  __atomic_store_n(&done,1,__ATOMIC_RELEASE);return NULL;
 }
+static void *slow_publish(void *u){(void)u;host_publish_view(&host,0);return NULL;}
 int main(void){struct host_view v;set_view(0);host_view_get(&host,0,&v);
  assert(host_view_covers(&v,50,11,9));
  assert(!host_view_covers(&v,60,12,9));
@@ -65,6 +73,22 @@ int main(void){struct host_view v;set_view(0);host_view_get(&host,0,&v);
  assert(!v.proven_done&&!host_view_covers(&v,50,11,9));
  host.g[0].r=NULL;host_publish_view(&host,0);host_view_get(&host,0,&v);
  assert(!v.has&&!v.read_done&&!v.proven_done&&!v.proven_index&&!v.proven_round);
+ set_view(1);
+ uint64_t seq=host.g[0].v_seq,stamp=host.g[0].v_stamp;
+ host_publish_view(&host,0);assert(host.g[0].v_seq==seq && host.g[0].v_stamp==stamp);
+ /* A blocked core/storage getter must not leave readers spinning on odd
+  * sequence. The old coherent proof cannot cover an arrival after its send. */
+ core.current_term=10;core.quorum=0;core.pending=1;core.read_round=13;
+ pthread_mutex_lock(&slow_mu);slow_quorum=1;pthread_mutex_unlock(&slow_mu);
+ pthread_t slow;assert(!pthread_create(&slow,NULL,slow_publish,NULL));
+ pthread_mutex_lock(&slow_mu);while(!entered)pthread_cond_wait(&slow_cv,&slow_mu);pthread_mutex_unlock(&slow_mu);
+ assert(!(__atomic_load_n(&host.g[0].v_seq,__ATOMIC_ACQUIRE)&1));
+ host_view_get(&host,0,&v);assert(v.term==9 && v.read_round==12);
+ assert(!host_view_covers(&v,60,13,9));
+ pthread_mutex_lock(&slow_mu);released=1;pthread_cond_broadcast(&slow_cv);pthread_mutex_unlock(&slow_mu);
+ assert(!pthread_join(slow,NULL));slow_quorum=0;
+ host_view_get(&host,0,&v);assert(v.term==10 && v.read_round==13 && !v.proven_done);
+ assert(!host_view_covers(&v,60,12,9));
  set_view(0);pthread_t t;assert(!pthread_create(&t,NULL,publish,NULL));
  unsigned reads=0;do {host_view_get(&host,0,&v);reads++;
  assert(v.has&&v.proven_done&&v.term==9&&v.read_round==12);
@@ -78,4 +102,4 @@ int main(void){struct host_view v;set_view(0);host_view_get(&host,0,&v);
 with tempfile.TemporaryDirectory(prefix='efs-read-publish-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-pthread',str(p),'-o',str(p.with_suffix(''))],check=True)
- subprocess.run([str(p.with_suffix(''))],check=True)
+ subprocess.run([str(p.with_suffix(''))],check=True,timeout=30)
