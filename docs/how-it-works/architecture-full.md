@@ -1494,13 +1494,22 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**Package 2 ON HOLD; affected gates PASS on f7e3c81e** — 34 helper tests, old-helper negative control,
+commands/options/pages and one quiet loaded refresh round (8,940 exact peer
+payloads). AMD now runs this enabled files/TCP/direct source, 17G data quota,
+unchanged 16/32 GiB caps and disabled packing/containers/expiry. Retry window
+limits repeated transient attempts; one live paused-publisher open took 14.38s
+and succeeded after restoration, so no eight-second end-to-end claim. Existing
+e77 C-suite evidence stays source-labelled; global W91/W92/W109 acceptance OPEN.
+
+[W92/W109 bounded LOCAL recursive continuation](../status/query-subtree-continuation-20261013.md):
 **Implemented/AMD-qualified on e77f6030** — immutable parent-range merge preserves
 global cursor ordering/bounds and spends the existing candidate budget. A tiny
 nested tree beside 20,004 unrelated names completes in five pages; global-only
 negative control fails. Fixed 28,208-byte reader state, replay/alias/tombstone,
 retained-generation/cold restore and concurrent readers PASS. Full normal/fault
 native, six full-library query sanitizers, mounted commands/options/pages and
-three quiet loads PASS (31,392 exact peer payloads). AMD runs this source with
+three quiet loads PASS (31,392 exact peer payloads). AMD ran this checkpoint with
 commands enabled, files/TCP/direct and unchanged caps; global W91/W92/W109 and
 non-LOCAL/larger-tree scale acceptance remain OPEN. No helper/deadline tuning.
 

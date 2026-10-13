@@ -97,7 +97,8 @@ These are correctness/functional short runs, not performance tuning or ORCD
 large-catalogue acceptance. Existing 14-second load admission, 12/30-second
 command/future deadlines and 30-second command/options budgets stay unchanged.
 The v5→v6 physical reduction is from the earlier compact inode representation;
-this query fix does not compress cache files. AMD remains running e77f6030.
+this query fix does not compress cache files. AMD ran e77f6030 at this checkpoint; it now runs the
+[qualified f7 helper integration](amd-package2-helper-integration-20261013.md).
 
 All 859 Makefile/src/include/deps/scripts/tests inputs match across full native,
 complete-library sanitizer and live candidate source. Sorted JSON manifest
