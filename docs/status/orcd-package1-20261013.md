@@ -43,7 +43,7 @@ and transport setup, followed by roughly13 seconds of Raft initialization.
 Operational readiness/remount afterward restores service but does not replace
 this failed deadline with a PASS. Resource samples cover all eleven hosts.
 
-## Startup correction under development
+## Startup correction qualification
 
 `server_init_local_usage` always reconciles the advisory usage counter by a
 full scan; startup then separately rescans every root for safe quota. The
@@ -58,17 +58,57 @@ barrier or quota reserve is removed.
 Actual extracted helper regression PASS locally: zero/default, one, two, six
 and maximum roots; exact once per root, max4 overlap, complete join, unknown
 root/error and overflow refusal, serial containers, and first/partial helper
-creation failures. The serial negative fails the overlap oracle. Native Linux
-real-store/build and sanitizer qualification and a new full-size300-second
-orderly cold gate remain pending. `tests/test_server_processes.py` cannot qualify
-its Linux /proc identity fixture on this Mac; its unchanged Linux check remains
-required.
+creation failures. The serial negative fails the overlap oracle.
+
+Isolated ORCD fcstor006 Linux native qualification **PASS** at startup correction
+`dd1f4c35f43c9199a6b1daeb61e1d7ca04925aa5`: `make -j4 all`, storage-capacity
+extracted regression, real store GC/durability/overwrite, root-inventory normal
+and ASan/UBSan with leak detection, and unchanged Linux /proc server/perf owner
+fixtures. Binary efsd SHA256
+`c50e4af718e181eb6934561518c4ed3ef08bbe4e993ee9ec96ec4a8e63828ee6`;
+RHEL9.8 on fcstor006, GCC system compiler with the existing private sanitizer
+runtime and libfuse3. Native tests operate only on private temporary fixtures;
+this is neither mounted-scale acceptance nor a live startup timing result.
+The first runner named the Python capacity test as a native executable and
+stopped before regressions; the corrected invocation below passes all checks.
+
+From an isolated committed Linux build with `CC` selecting the configured
+compiler/runtime, reproduce with `make -j4 all`,
+`python3 tests/test_storage_capacity.py`, `./tests/test_store_gc`,
+`./tests/test_store_durability`, `./tests/test_store_overwrite`,
+`python3 tests/test_storage_root_inventory.py`, then
+`ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 CC="$CC -fsanitize=address,undefined -fno-omit-frame-pointer" python3 tests/test_storage_root_inventory.py`
+and `python3 tests/test_server_processes.py`. Tests own and clean their private
+fixtures, retain unrelated process identities and normally stop owned daemons.
+A new full-size 300-second orderly cold gate remains pending.
 
 Reproduce the new helper regression with
 `python3 tests/test_storage_root_inventory.py`; then Linux `make -j2 test`.
 Run the deployed four-daemon/seven-client orderly restart and verify actual
 `storage-inventory` phase durations, usage/quota and independently known
 acknowledged bytes. Do not increase the300-second readiness deadline.
+
+## Focused mounted baseline
+
+All six suites on deployed `19b14609` **FAIL**: `efs_commands`20.136s,
+`efs_command_options`25.292s, `efs_command_pages`0.816s,
+`virtual_interfaces`0.415s, `efs_commands_load`14.082s and
+`query_large_delta`122.891s. Query reads return ENOSPC on both main and peer
+mounts. Help/listing and selected permission cases pass, but none closes its
+suite. Private peer orderly stop **PASS**. This preserves the footprint failure
+at unchanged budgets rather than attributing it to payload disk capacity.
+Reproduce `python3 scripts/orcd_efs_commands.py /tmp/efs-mount PEER --query-host
+172.16.223.58 --output NEW_EXTERNAL_DIRECTORY`, with two same-export native
+RDMA mounts and the requested profile. Preserve failures and normally unmount
+the peer; do not widen the per-suite deadlines or delete authoritative stores.
+
+Reviewed devel ordinary-file metadata read-admission correction `2b927c1b`
+integrated into the isolated ORCD candidate. It shares only pre-admitted quorum
+rounds; storage backend no longer excludes ordinary files. Combined-source
+qualification and deployment are pending. AMD is correcting legacy retirement
+after replacement-link rename succeeds but root fsync fails: abandoning the
+candidate must retain the old checkpoint until durable replacement publication.
+Do not deploy the earlier retirement candidate as a qualified format transition.
 
 ## Remaining package 1 gates
 

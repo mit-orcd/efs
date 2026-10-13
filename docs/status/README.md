@@ -1,7 +1,8 @@
 [ORCD package 1 deployment and open gates](orcd-package1-20261013.md):
 `19b14609` is installed on all11 with native RDMA/direct/files, .efs client/server
 on, packing/containers/expiry off; normal unmount and acknowledged markers PASS.
-Initial300s startup FAIL; single bounded root inventory correction under test.
+Initial300s startup and six ENOSPC command suites FAIL; bounded single-root
+inventory correction native + ASan/UBSan + Linux process ownership PASS in isolation.
 AMD compact-index/cache-retirement handoff and full scale acceptance remain OPEN.
 
 [Intel package 3 execution](intel-package3-20261013.md): deployed `1a737143`,
