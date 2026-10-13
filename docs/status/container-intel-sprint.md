@@ -2698,3 +2698,36 @@ claimed. Fresh both-host native and all15 mounted gates pending. The expanded
 build also runs existing namespace mapping bounds and GC unlimited native
 controls; local namespace-bound execution was NOTRUN (libefs.a absent), so
 Linux native execution is required rather than recording a local PASS.
+
+
+## Late-read scheduling normal qualification (2026-10-13)
+
+Exact tested/deployed product `9145b7a3c8cd3d1bd3bbb96ef02627ea620361ce`:
+both-host container native/affected sanitizers/795-input/runtime proofs and
+mounted ownership12/12 PASS. Expanded namespace bounds and GC unlimited controls
+PASS on both hosts. Supplemental `python3 tests/test_raft_replay_reads.py`,
+`test_raft_slow_sync.py`, `test_raft_tail.py` PASS both hosts; these are replay,
+interposer and attribution fixtures, not live slow-follower quorum qualification.
+
+All15 normal gates complete. Concurrent1510/1512 PASS (123.572–128.621s),
+only Intel1client3 and Intel2client2 deep-directory30s timeouts. The other five
+clients pass all216 cases. All other215cases/client PASS. Compared with exact
+5b88e8cc's seven deep failures, this single unchanged-budget run shows progress,
+not robust all-client closure or an isolated causal timing proof. Immediate
+physical113.767s PASS (zero113.759); quiet432/43250.679/51.620s, peer134/134
+40.129/42.373s PASS. Lifecycle256x512KiB/4workers/read30/churn30/warm/cold,
+tiny100files+300durable generations/host, graceful restart/cold hashes/deletes
+PASS; final physical8.983s PASS (zero8.981). Shared mmap ENODEV skip. Actual
+post-restart config/source/runtime proofs PASS. Same isolated2x2 Intel/4G-node/
+TCP/direct/containers/64FUSEworkers/GC20ms, profilesOFF, .efs/expiry-date/packing
+OFF. No reset/history removal, no push/promotion. W100 loaded acceptance FAIL.
+
+Standard15 committed qualification gates with preceding64-worker commands
+reproduce. Raw external late9145b7a3-{deploy,workers64-normal,
+workers64-qualification}; bounded12MiB-per-node daemon tails were captured only
+AFTER immediate strict physical PASS, before restart. Capture manifest has
+sizes/SHA256. Tails can include older appended history and are not full trial
+logs. Do not infer per-case causal counts from them. Planned same-product
+phase diagnostic retains fresh byte offsets and original30s/180s budgets;
+profiling is not normal acceptance. Source product remains9145b7a3 when this
+checkpoint is committed with documentation-only changes.
