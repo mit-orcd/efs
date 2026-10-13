@@ -1959,3 +1959,38 @@ the original four-slot bound; remove that sampled probe before continuing the
 unchanged existing capacity controls, rather than increasing the bound. Strict
 compiler flags and all original guards retained. Corrected-source full Linux
 native validation required before deployment; older11e9e7cd will not deploy.
+
+### Canonical sender-queue diagnostic and reproducible runner (2026-10-13)
+
+Frozen product f0af8482b6d13e6687d1cd4edbd94958d13b6fdf completed both
+Intel native/build chains, including their final physical-inode-GC guard check;
+no compiler, sanitizer, traceback or FAIL markers in either native log. Fresh
+isolated deployment/start/mount/proof PASS on both hosts. Actual live executable,
+process-start/argv and disabled-feature environment proofs PASS on both hosts.
+The full seven-client diagnostic is in progress; no live acceptance verdict yet.
+Same preserved four-node/two-host fixture, 4G/node, TCP/direct containers,
+commands/.efs/expiry-date/packing OFF, 64 FUSE workers, folding/flow OFF.
+Profiling ON only for this diagnostic; source manifest has 792 regular inputs.
+External raw evidence: artifacts/container-20261012/queueprof2f0af8482-deploy
+and queueprof2f0af8482-workers64-diagnostic beneath the local workspace.
+No new performance or physical-reclamation claim is made for this source yet.
+
+The committed qualification runner now supports explicit --deepsteps for the
+concurrent gate only. It installs the committed observer into the private
+artifact directory before starting workers, then uses the already exercised
+phase-socket wrapper with a parameterized observer path. Default qualification
+is unchanged; test selection, seven-client/jobs16 concurrency, original
+30/75/120/180s case budgets and outer600s cleanup budget are unchanged.
+A real local Unix datagram/fresh Python child smoke check observed successful
+depth2 mkdir events; Python compilation/help and diff checks PASS. This runner
+change was not part of the frozen f0af8482 product deployed above.
+
+Reproduce on an initialized private fixture with the committed node helper:
+start/mount --diagnostics --path-prof (mount --client-max-threads64), set
+EFS_BATCH_OBS=1 in its diagnostic-only environment if sender histograms are
+needed, then python3 scripts/intel_container_qualification.py concurrent
+--deepsteps --client-max-threads64 --run-id UNIQUE --output /absolute/external
+/artifacts/diagnostic. Do not use --deepsteps or profiling for normal acceptance.
+Immediately run the same runner's reclaim gate (no --deepsteps), before heavy
+log collection. It requires empty exports and zero records/body allocation on
+all four nodes within180s; do not reset stores or extend this deadline.

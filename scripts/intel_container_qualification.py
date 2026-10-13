@@ -6,10 +6,19 @@ Outputs stay below the supplied local artifact directory, outside Git.
 """
 import argparse,concurrent.futures,json,shlex,subprocess,time,uuid
 from pathlib import Path
-p=argparse.ArgumentParser(description=__doc__);p.add_argument('gate',choices=['core','peer','mmap','concurrent','lifecycle-create','lifecycle-read','lifecycle-churn','lifecycle-verify','lifecycle-cold','lifecycle-delete','tiny-create','tiny-cold','directory','restart','reclaim']);p.add_argument('--run-id',default=uuid.uuid4().hex[:12],help='unique evidence and namespace suffix');p.add_argument('--base',default='/data1/efs/bench/container-3173be61-20261012');p.add_argument('--output',type=Path,required=True);p.add_argument('--inbox-fold',type=int,choices=[0,1],default=0);p.add_argument('--client-max-threads',type=int,choices=[32,64],default=32);a=p.parse_args();a.output.mkdir(parents=True,exist_ok=True)
+p=argparse.ArgumentParser(description=__doc__);p.add_argument('gate',choices=['core','peer','mmap','concurrent','lifecycle-create','lifecycle-read','lifecycle-churn','lifecycle-verify','lifecycle-cold','lifecycle-delete','tiny-create','tiny-cold','directory','restart','reclaim']);p.add_argument('--run-id',default=uuid.uuid4().hex[:12],help='unique evidence and namespace suffix');p.add_argument('--base',default='/data1/efs/bench/container-3173be61-20261012');p.add_argument('--output',type=Path,required=True);p.add_argument('--inbox-fold',type=int,choices=[0,1],default=0);p.add_argument('--client-max-threads',type=int,choices=[32,64],default=32);p.add_argument('--deepsteps',action='store_true',help='diagnostic phase/deep-call observer; concurrent gate only, not release acceptance');a=p.parse_args();a.output.mkdir(parents=True,exist_ok=True)
 assert a.run_id and all(c.isalnum() or c in '-_' for c in a.run_id),'invalid run id'
 s=a.base+'/src';remoteout=a.base+'/artifacts';rows=[]
+if a.deepsteps and a.gate!='concurrent':p.error('--deepsteps requires concurrent')
+if a.deepsteps:
+ # Observer setup precedes all workers; ordinary qualification is untouched.
+ observer=Path(__file__).with_name('container_deepsteps_sitecustomize.py')
+ for host in ('intel1_efs','intel2_efs'):
+  subprocess.run(['ssh',host,shlex.join(['mkdir','-p',remoteout+'/deepsteps'])],check=True)
+  subprocess.run(['scp',str(observer),host+':'+remoteout+'/deepsteps/sitecustomize.py'],check=True)
+deepsteps_wrapper="import sys,os,socket,threading,runpy\noutput=sys.argv[1];observer=sys.argv[2];suite=sys.argv[3];args=sys.argv[3:]\naddress='/tmp/efs-container-phase-'+str(os.getpid())+'.sock'\nsock=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM);sock.bind(address);sock.settimeout(.1)\nstop=threading.Event()\ndef receive():\n with open(output,'wb') as f:\n  while not stop.is_set():\n   try:f.write(sock.recv(4096));f.flush()\n   except socket.timeout:continue\nworker=threading.Thread(target=receive,daemon=True);worker.start()\nos.environ['EFS_POSIX_PHASE_SOCKET']=address;os.environ['EFS_POSIX_PHASE_CLIENT']=os.path.basename(output)\nsys.argv=args\nos.environ['PYTHONPATH']=observer+os.pathsep+os.environ.get('PYTHONPATH','')\ntry:runpy.run_path(suite,run_name='__main__')\nfinally:stop.set();worker.join(1);sock.close();os.unlink(address)\n"
 def run(host,index,name,argv,timeout):
+ if a.deepsteps:argv=['python3','-c',deepsteps_wrapper,remoteout+'/'+name+'-phases.log',remoteout+'/deepsteps',*argv[1:]]
  c={'name':name,'argv':argv,'timeout':timeout};cmd=['python3',a.base+'/intel_container_node.py','run','--base',a.base,'--host-index',str(index),'--command',json.dumps(c)]
  start=time.monotonic()
  with (a.output/(name+'.log')).open('w') as f:
