@@ -137,3 +137,12 @@ Read-only observation **PASS**. Hardware IB/RDMA error increases **not observed*
 EFS-owned TCP retransmissions and successful application retries **observed**;
 causal investigation remains **OPEN**. No Intel-style test payload was generated
 or verified, and no workload, transport, deadline or deployment was changed.
+
+## Follow-up scope correction
+
+[Matched-source TCP/RDMA investigation](orcd-rdma-tcp-cause-20261013.md)
+explains the designed84KiB oversized-frame TCP channel and reproduces repeated
+004→003 timer/loss-probe retransmissions. Its extended PHY counters show raw
+errors corrected by FEC even though this page's narrower IB/RDMA/drop counters
+stayed unchanged. Do not generalize the earlier zero counters to a physically
+error-free link. Exact loss/delay location remains OPEN; cluster unchanged.
