@@ -748,6 +748,18 @@ static pthread_rwlock_t *inode_gc_lock(efs_export_id_t eid, efs_ino_t ino)
     pthread_once(&frag_locks_once, frag_locks_init);
     return &inode_gc_locks[(ino ^ (ino >> 32) ^ eid) & (FRAG_LOCKS - 1)];
 }
+/* Container inodes share low shard bits. Include their ordinal so unrelated
+ * PUT/read/GC operations do not collapse onto one writer guard. All paths
+ * for the exact inode/export use this same selection; files stay unchanged. */
+static pthread_rwlock_t *server_inode_gc_lock(struct efsd_server *s,
+                                            efs_export_id_t eid,efs_ino_t ino)
+{
+    if(!s || !s->storage_engine)return inode_gc_lock(eid,ino);
+    pthread_once(&frag_locks_once,frag_locks_init);
+    uint64_t key=ino ^ (ino >> EFS_KV_SHARD_BITS) ^ (ino >> 32) ^ eid;
+    return &inode_gc_locks[key & (FRAG_LOCKS-1)];
+}
+
 #define DEATH_PAGE_BYTES 2048u
 #define DEATH_PAGE_BITS (DEATH_PAGE_BYTES * 8u)
 static void inode_death_path(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
@@ -1020,7 +1032,7 @@ int server_gc_inode_checked(struct efsd_server *s, efs_export_id_t eid, efs_ino_
 {
     if (!s || !eid || ino <= EFS_ROOT_INO || efs_ino_is_meta_table(ino) || !generation)
         return EFS_ERR_INVAL;
-    pthread_rwlock_t *mu = inode_gc_lock(eid, ino);
+    pthread_rwlock_t *mu = server_inode_gc_lock(s,eid,ino);
     pthread_rwlock_wrlock(mu);
     /* Keep the exact inode write guard across nonblocking repair-debt recheck and
      * durable death. An ADMIT racing after that proof cannot publish a DATA
@@ -1599,7 +1611,7 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
 {
     if (!s->storage_engine || efs_ino_is_meta_table(ino))
         return read_fragment_impl(s, ex, ino, ci, fi, data, len, sum, sum_ok);
-    pthread_rwlock_t *im = inode_gc_lock(ex->id, ino);
+    pthread_rwlock_t *im = server_inode_gc_lock(s,ex->id,ino);
     pthread_mutex_t *mu = fragment_mutex(ex->id, ino, ci, fi);
     pthread_rwlock_rdlock(im);
     pthread_mutex_lock(mu);
@@ -2159,7 +2171,7 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
     char path[8192];
     server_fragment_path(s, ex, ino, chunk_index, fragment_index, path,
                          sizeof(path));
-    pthread_rwlock_t *im = inode_gc_lock(ex->id, ino);
+    pthread_rwlock_t *im = server_inode_gc_lock(s,ex->id,ino);
     pthread_rwlock_rdlock(im);
     int dead = inode_is_dead(s, ex->id, ino);
     if (dead) { pthread_rwlock_unlock(im); return dead > 0 ? EFS_ERR_STALE : EFS_ERR_IO; }
@@ -2184,7 +2196,7 @@ int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export
     char path[8192];
     server_fragment_path(s, ex, ino, chunk_index, fragment_index, path,
                          sizeof(path));
-    pthread_rwlock_t *im = inode_gc_lock(ex->id, ino);
+    pthread_rwlock_t *im = server_inode_gc_lock(s,ex->id,ino);
     pthread_rwlock_rdlock(im);
     int dead = inode_is_dead(s, ex->id, ino);
     if (dead) { pthread_rwlock_unlock(im); return dead > 0 ? EFS_ERR_STALE : EFS_ERR_IO; }
@@ -2220,7 +2232,7 @@ int server_repair_file_atomic(struct efsd_server *s,struct efs_export *ex,
     efs_tls_chunk_gen=saved_gen;strcpy(dir,path);char *slash=strrchr(dir,'/');
     if(!slash)return EFS_ERR_INVAL;
     *slash=0;
-    pthread_rwlock_t *im=inode_gc_lock(ex->id,ino);pthread_rwlock_rdlock(im);
+    pthread_rwlock_t *im=server_inode_gc_lock(s,ex->id,ino);pthread_rwlock_rdlock(im);
     int dead=inode_is_dead(s,ex->id,ino);
     if(dead){pthread_rwlock_unlock(im);return dead>0?EFS_ERR_STALE:EFS_ERR_IO;}
     pthread_mutex_t *mu=fragment_mutex(ex->id,ino,ci,fi);pthread_mutex_lock(mu);

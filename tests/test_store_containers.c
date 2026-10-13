@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <time.h>
 static int fault;
 static const char *watched_root;
 static unsigned outside_syncs, root_syncs, directory_syncs, body_syncs, mkdir_calls, mapping_reads;
@@ -21,7 +22,7 @@ static ssize_t container_pread(int fd,void *buf,size_t n,off_t off) {
     return pread(fd,buf,n,off);
 }
 static int container_mkdir(const char *path, mode_t mode) {
-    mkdir_calls++;
+    __atomic_fetch_add(&mkdir_calls,1,__ATOMIC_RELAXED);
     return mkdir(path,mode);
 }
 static int container_sync(int fd)
@@ -30,9 +31,9 @@ static int container_sync(int fd)
     char p[64],name[8192];snprintf(p,sizeof(p),"/proc/self/fd/%d",fd);
     ssize_t n=readlink(p,name,sizeof(name)-1);assert(n>=0);name[n]=0;
     if(watched_root && S_ISDIR(st.st_mode)) {
-        directory_syncs++;
-        if(!strcmp(name,watched_root))root_syncs++;
-        else if(strncmp(name,watched_root,strlen(watched_root)))outside_syncs++;
+        __atomic_fetch_add(&directory_syncs,1,__ATOMIC_RELAXED);
+        if(!strcmp(name,watched_root))__atomic_fetch_add(&root_syncs,1,__ATOMIC_RELAXED);
+        else if(strncmp(name,watched_root,strlen(watched_root)))__atomic_fetch_add(&outside_syncs,1,__ATOMIC_RELAXED);
     }
     int body=strstr(name,".efs-containers/")&&strstr(name,".dat");
     if(body)__atomic_fetch_add(&body_syncs,1,__ATOMIC_RELAXED);
@@ -109,6 +110,27 @@ static void *actor(void *arg)
 {
     efs_tls_chunk_gen=333;efs_tls_write_root=0;
     for(unsigned i=0;i<25;i++){write_value(4242,0,(uintptr_t)arg,EFS_OK);read_value(4242,0,EFS_OK,-1);}return NULL;
+}
+static pthread_mutex_t gc_test_mu=PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t gc_test_cv=PTHREAD_COND_INITIALIZER;
+static unsigned gc_test_arrived;
+static int gc_guard_overlap(void *context,efs_ino_t ino)
+{
+    (void)context;
+    assert(pthread_rwlock_tryrdlock(server_inode_gc_lock(&server,1,ino))!=0);
+    struct timespec end;assert(!clock_gettime(CLOCK_REALTIME,&end));end.tv_sec+=3;
+    pthread_mutex_lock(&gc_test_mu);gc_test_arrived++;
+    if(gc_test_arrived==4)pthread_cond_broadcast(&gc_test_cv);
+    int rc=0;
+    while(gc_test_arrived<4 && !rc)rc=pthread_cond_timedwait(&gc_test_cv,&gc_test_mu,&end);
+    pthread_mutex_unlock(&gc_test_mu);
+    return rc?EFS_ERR_BUSY:EFS_OK;
+}
+static void *gc_guard_actor(void *arg)
+{
+    efs_ino_t ino=((9000+(uintptr_t)arg)<<EFS_KV_SHARD_BITS)|7;
+    assert(!server_gc_inode_checked(&server,1,ino,9,gc_guard_overlap,NULL));
+    return NULL;
 }
 static int remove_owned(const char *p,const struct stat *st,int type,struct FTW *f)
 {(void)st;(void)f;return type==FTW_DP?rmdir(p):unlink(p);}
@@ -218,6 +240,19 @@ int main(int argc, char **argv)
         for(unsigned i=0;i<4;i++)assert(!pthread_join(threads[i],NULL));
         efs_tls_chunk_gen=333;read_value(4242,0,EFS_OK,-1);restart();read_value(4242,0,EFS_OK,-1);
         assert(!server_gc_inode(&server,1,4242,9));read_value(4242,0,EFS_ERR_NOT_FOUND,0);write_value(4242,0,60,EFS_ERR_STALE);
+        /* Real same-shard concurrent physical GC retains each exact guard.
+         * A live sibling's bytes survive; dead siblings refuse delayed PUTs. */
+        efs_tls_chunk_gen=555;
+        for(unsigned j=0;j<5;j++)write_value(((9000ull+j)<<EFS_KV_SHARD_BITS)|7,0,70+j,EFS_OK);
+        gc_test_arrived=0;
+        for(uintptr_t j=0;j<4;j++)assert(!pthread_create(&threads[j],NULL,gc_guard_actor,(void*)j));
+        for(unsigned j=0;j<4;j++)assert(!pthread_join(threads[j],NULL));
+        for(unsigned j=0;j<4;j++){
+            efs_ino_t dead=((9000ull+j)<<EFS_KV_SHARD_BITS)|7;
+            read_value(dead,0,EFS_ERR_NOT_FOUND,0);write_value(dead,0,80,EFS_ERR_STALE);
+        }
+        efs_ino_t sibling=(9004ull<<EFS_KV_SHARD_BITS)|7;
+        read_value(sibling,0,EFS_OK,74);assert(!server_gc_inode(&server,1,sibling,9));
         /* Callback failures cannot seed the shared ancestry proof. */
         char proof[8192];snprintf(proof,sizeof(proof),"%s/gc-fence-proof/new/page",server.storage_paths[0]);
         assert(!mkdirs(proof));struct target *proof_target=server.container_targets[0];

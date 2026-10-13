@@ -926,3 +926,37 @@ Next1eb both Linux product builds succeeded but the new native fence test
 failed to compile under GCC -Werror=misleading-indentation (two test-only
 statements). No1eb deployment/live run occurred. Split the test statements
 and require fresh complete both-host native builds of the corrected SHA.
+
+
+Corrected `f28d44ca091bb44727e2ed60674133059cb21307` (785 tracked
+inputs) passed both-host complete affected native/storage/Raft/cleanup
+checks and was deployed with all input hashes matching. Full **1498/1512
+PASS,14 FAIL**, no NOTRUN: deep60 and crazy directories all seven.
+Clients113.471–131.876s. Immediate physical **FAIL180.077s**; final
+counts625/722/698/641, allocated bodies43393024/50286592/48545792/
+44646400 bytes. Four independent workers do not by themselves close the
+physical requirement; quiet/lifecycle/cold continuation still running.
+
+A concrete contention defect remains in the old inode guard hash: low12
+shard bits plus ino>>32 map distinct same-shard ordinals below2^20 to one
+RW guard. The next container-only selector includes ino>>EFS_KV_SHARD_BITS,
+so independent inodes can fence concurrently rather than blocking each
+other and unrelated PUTs. Every container GC/read/PUT storage path uses the
+same selector; exact-inode read versus exclusive death exclusion remains
+mandatory. Files/null-server callers retain the old mapping. Focused native
+and ASan/UBSan controls PASS:1024 same-shard ordinals dispersed, exact-inode
+read/write exclusion and files unchanged. Old-hash negative control aborts.
+No stronger live performance or physical pass is claimed yet; require both
+hosts' full affected storage/race controls and exact-source live rerun.
+
+
+Guard candidate additionally extends real test_store_containers: four
+same-shard inode GC calls must simultaneously reach an authority callback
+while each owns its exclusive exact-inode guard. A bounded3-second
+rendezvous fails rather than hanging if all guards alias. The callbacks
+then run real death certificates, physical punch/barriers and retirement;
+a live sibling retains its verified bytes, dead siblings return NOT_FOUND
+and refuse delayed PUTs as STALE. Runs in buffered and direct modes on
+Linux. Test hook counters are atomic for concurrent actors. This new real
+storage case requires Linux native validation; local selector/sanitizer
+controls alone do not establish successful physical storage concurrency.

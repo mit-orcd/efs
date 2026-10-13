@@ -221,6 +221,7 @@ test-create-errors: $(LIB)
 	python3 tests/test_gc_verdict.py
 	python3 tests/test_container_gc_empty_lane.py
 	python3 tests/test_container_gc_fence_batch.py
+	python3 tests/test_container_inode_guard.py
 	python3 tests/test_put_hint.py
 
 test-fold-observation:
