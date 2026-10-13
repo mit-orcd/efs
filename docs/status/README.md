@@ -1,3 +1,10 @@
+Latest ORCD `.efs` gate: `cbcd9f7a0ff0` passes all core cases and improves
+focused pagination, but concurrent queries still miss the original deadline
+because broad publication is late. A single immutable pending proof plus
+bounded four-worker persistence passes native/sanitizer/failure controls;
+live qualification is pending. Full cold 400 GiB acceptance and benchmark
+resumption remain pending. See the [400 GiB evidence](orcd-efs-400g-20261012.md).
+
 Latest ORCD `.efs` gate: `82e1d5302bc9` passes complete prerequisites and
 focused suites but still has mixed query/core failures. A LOCAL leaf/immediate
 paging optimization passes native, sanitizer, RAM/disk and old-code negative

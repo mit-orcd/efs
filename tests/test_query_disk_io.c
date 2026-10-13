@@ -1,5 +1,7 @@
 /* Exercise the production cache boundary and partial-write error behavior. */
 #include "efs/dir_layout.h"
+#include "efs/kv_lsm.h"
+#include "efs/kv_key.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
@@ -7,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <pthread.h>
 #ifdef __linux__
 #include <sys/ioctl.h>
 static int clone_error;
@@ -18,6 +21,13 @@ static unsigned write_calls;
 static unsigned read_calls;
 static unsigned alias_opens,name_opens;
 static unsigned raw_syncs,index_syncs,sync_faults;
+static unsigned thread_creates,fail_thread_create;
+static int fault_thread_create(pthread_t *thread,const pthread_attr_t *attr,void *(*fn)(void *),void *ctx)
+{
+    thread_creates++;
+    if(fail_thread_create && !--fail_thread_create)return EAGAIN;
+    return pthread_create(thread,attr,fn,ctx);
+}
 static char fail_sync_kind,fail_write_kind;
 static unsigned write_faults,fail_derived_after;
 static char descriptor_kind[4096];
@@ -47,8 +57,8 @@ static int tracked_open(const char *path,int flags,...)
             const char *name=strrchr(path,'/');if(name && !strcmp(name+1,"manifest"))kind='m';
         }
         descriptor_kind[fd]=kind;
-        if(kind=='a')alias_opens++;
-        if(kind=='n')name_opens++;
+        if(kind=='a')__atomic_add_fetch(&alias_opens,1,__ATOMIC_RELAXED);
+        if(kind=='n')__atomic_add_fetch(&name_opens,1,__ATOMIC_RELAXED);
         if((flags&O_CREAT) && (kind=='r' || kind=='i')){
             writing_raw[fd]=1;raw_handles++;
             if(raw_handles>raw_handles_high)raw_handles_high=raw_handles;
@@ -67,13 +77,13 @@ static int tracked_close(int fd)
 static int fault_fsync(int fd)
 {
     char kind=fd>=0 && fd<(int)sizeof(descriptor_kind)?descriptor_kind[fd]:0;
-    if(kind=='r')raw_syncs++;
-    if(kind=='i')index_syncs++;
-    if(kind && kind==fail_sync_kind){sync_faults++;errno=EIO;return -1;}
+    if(kind=='r')__atomic_add_fetch(&raw_syncs,1,__ATOMIC_RELAXED);
+    if(kind=='i')__atomic_add_fetch(&index_syncs,1,__ATOMIC_RELAXED);
+    if(kind && kind==fail_sync_kind){__atomic_add_fetch(&sync_faults,1,__ATOMIC_RELAXED);errno=EIO;return -1;}
     return fsync(fd);
 }
 static ssize_t counted_pread(int fd,void *buf,size_t size,off_t offset)
-{ read_calls++;return pread(fd,buf,size,offset); }
+{ __atomic_add_fetch(&read_calls,1,__ATOMIC_RELAXED);return pread(fd,buf,size,offset); }
 static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
 {
     write_calls++;
@@ -87,6 +97,16 @@ static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
     if(partial_write==1){partial_write=2;return pwrite(fd,buf,size<3?size:3,offset);}
     return pwrite(fd,buf,size,offset);
 }
+static unsigned pending_scans;
+static int counted_snapshot_scan(struct efs_kv_lsm_snapshot *source,
+    const uint8_t *prefix,uint32_t pn,const uint8_t *start,uint32_t sn,
+    int (*cb)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *user)
+{
+    if(pn==3 && (prefix[2]==EFS_KV_KIND_INTENT || prefix[2]==EFS_KV_KIND_GUARD || prefix[2]==EFS_KV_KIND_REDUCE))pending_scans++;
+    return efs_kv_lsm_snapshot_scan(source,prefix,pn,start,sn,cb,user);
+}
+#define efs_kv_lsm_snapshot_scan counted_snapshot_scan
+#define pthread_create fault_thread_create
 #ifdef __linux__
 #define ioctl fault_clone
 #endif
@@ -99,6 +119,8 @@ static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
 #define sync_file_range fault_writeback
 #endif
 #include "../src/meta/query_disk.c"
+#undef pthread_create
+#undef efs_kv_lsm_snapshot_scan
 #undef pwrite
 #undef pread
 #undef fsync
@@ -167,10 +189,30 @@ static void local_page_test(void)
     CHECK(!efs_meta_apply_mkdir(kv,&attrs,EFS_ROOT_INO,S_IFDIR|0755,"outside",&outside));
     for(unsigned i=0;i<5;i++){char name[32];snprintf(name,sizeof(name),"report-%02u",i);CHECK(!efs_meta_apply_create_file(kv,&attrs,leaf,S_IFREG|0644,name,&file));}
     for(unsigned i=0;i<2048;i++){char name[32];snprintf(name,sizeof(name),"unrelated-%04u",i);CHECK(!efs_meta_apply_create_file(kv,&attrs,outside,S_IFREG|0644,name,&file));}
+    /* Historical inactive lanes populate enough physical partitions to
+     * exercise the parallel barrier threshold without changing file totals. */
+    struct efs_meta_row lane_owner;CHECK(!efs_meta_apply_get_inode(kv,file,&lane_owner));
+    for(unsigned lane=0;lane<64;lane++){
+        uint8_t key[EFS_KV_KEY_MAX],value[EFS_META_LANE_BYTES]={0};uint32_t kn;
+        CHECK(!efs_kv_key_lane(efs_kv_lane_shard(file,(uint8_t)lane),file,lane_owner.generation,(uint8_t)lane,key,&kn));
+        CHECK(!efs_kv_put(kv,key,kn,value,sizeof(value)));
+    }
     struct efs_kv_lsm_snapshot *source=NULL;struct efs_query_disk *disk=NULL;
-    CHECK(!efs_kv_lsm_snapshot_pin(kv,16<<20,&source));CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&disk));
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,16<<20,&source));pending_scans=0;thread_creates=0;
+    CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&disk));
+    CHECK(pending_scans==3*SHARDS); /* One complete immutable proof, not a second raw-copy scan. */
+    CHECK(thread_creates==PERSIST_WORKERS);
     if(disk){
         struct efs_meta_row row;CHECK(!efs_query_disk_inode(disk,leaf,&row,NULL));CHECK(row.layout==EFS_META_LAYOUT_LOCAL);
+        uint64_t watermark[4]={101,102,103,104};CHECK(!efs_query_disk_checkpoint(disk,watermark));
+        struct efs_query_disk *failed=NULL,*restored=NULL;
+        thread_creates=0;fail_thread_create=3;
+        CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&failed)==EFS_ERR_NOMEM && !failed);
+        CHECK(!fail_thread_create && thread_creates==3); /* Started workers joined before failed-candidate cleanup. */
+        fail_thread_create=0;
+        CHECK(!efs_query_disk_restore(cache,watermark,4<<20,&restored));
+        CHECK(restored);if(restored){struct efs_query_rollup total;CHECK(!efs_query_disk_stats(restored,leaf,&total));CHECK(total.tree_files==5);}
+        efs_query_disk_free(restored);
         for(unsigned match=EFS_NAME_EXACT;match<=EFS_NAME_CONTAINS;match++){
             const char *term=match==EFS_NAME_EXACT?"report-02":match==EFS_NAME_SUFFIX?"02":"report";
             struct local_page_output output={.limit=8};uint64_t position=0;close_cache(disk);name_opens=0;
@@ -853,7 +895,7 @@ int main(void)
                 fail_sync_kind=kinds_to_fail[i];sync_faults=0;
                 CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&next)==EFS_ERR_IO && !next);
                 CHECK(raw_handles==0 && raw_handles_high<=RAW_SYNC_FILES);
-                CHECK(sync_faults==1);fail_sync_kind=0;
+                CHECK(sync_faults>=1 && sync_faults<=PERSIST_WORKERS);fail_sync_kind=0;
                 CHECK(!efs_query_disk_inode(old,file,NULL,NULL));
                 CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
                 CHECK(!efs_query_disk_inode(next,file,NULL,NULL));efs_query_disk_free(next);next=NULL;

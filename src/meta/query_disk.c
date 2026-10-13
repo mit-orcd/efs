@@ -521,10 +521,9 @@ static int raw_build(struct efs_query_disk *d,struct efs_kv_lsm_snapshot *source
         int rc=raw_sync_finish(d,sync,EFS_OK);if(rc)return rc;
     }
     uint8_t prefix[3]={(uint8_t)(shard>>8),(uint8_t)shard,0};
-    const uint8_t refuse[]={EFS_KV_KIND_INTENT,EFS_KV_KIND_GUARD,EFS_KV_KIND_REDUCE};
-    for(unsigned i=0;i<sizeof(refuse);i++){
-        prefix[2]=refuse[i];int rc=efs_kv_lsm_snapshot_scan(source,prefix,3,NULL,0,pending,NULL);if(rc)return rc;
-    }
+    /* The sole caller completed pending_preflight on this same immutable
+     * source before opening candidate files. Repeating three prefix seeks per
+     * rebuilt shard cannot discover new inputs in a retained snapshot. */
     struct writer w={.d=d,.shard=shard,.raw=-1,.index=-1};
     w.buffer=malloc(2*RAW_WRITE_WINDOW);if(!w.buffer)return EFS_ERR_NOMEM;
     int rc=EFS_OK;
@@ -909,6 +908,83 @@ static int file_digest(int fd,uint8_t out[32])
     }
     blake3_hasher_finalize(&h,out,32);return EFS_OK;
 }
+#define PERSIST_WORKERS 4
+_Static_assert(PERSIST_WORKERS*(65536+sizeof(blake3_hasher)+EFS_MAX_PATH)<SORT_ROWS*sizeof(struct efs_name_entry),
+               "parallel digest scratch must fit the already admitted sort scratch");
+struct persist_work {
+    struct efs_query_disk *d;
+    const struct efs_query_disk *old;
+    const uint64_t *revisions;
+    pthread_mutex_t mutex;
+    unsigned next;
+    int rc;
+};
+static int persist_needed(const struct persist_work *w,uint32_t shard,unsigned i)
+{
+    const struct efs_query_disk *d=w->d;
+    if(!d->part[shard].count || ((i==2 || i==4) && !d->part[shard].names) ||
+       (i==3 && !d->part[shard].inodes))return 0;
+    return !((i!=3 && w->old && w->old->part[shard].revision==w->revisions[shard]) ||
+        (i==3 && d->shared_d[shard]) || ((i==2 || i==4) && d->shared_names[shard]));
+}
+static int persist_file(struct persist_work *w,uint32_t shard,unsigned i)
+{
+    static const char kinds[]={'r','i','n','d','a'};
+    char path[EFS_MAX_PATH];int rc=filename(w->d,shard,kinds[i],path,sizeof(path));
+    if(rc)return rc;
+    int fd=open(path,O_RDONLY|O_CLOEXEC);if(fd<0)return EFS_ERR_IO;
+    /* Raw/index retain their checked original writing-handle barrier.
+     * Every private derived file still has its own fsync before hashing. */
+    if(i>=2 && fsync(fd))rc=EFS_ERR_IO;
+    if(!rc)rc=file_digest(fd,w->d->part[shard].digest[i]);
+    close(fd);return rc;
+}
+static void *persist_worker(void *ctx)
+{
+    struct persist_work *w=ctx;
+    for(;;){
+        pthread_mutex_lock(&w->mutex);
+        if(!w->rc && cancelled(w->d))w->rc=EFS_ERR_BUSY;
+        unsigned job=w->next;
+        while(!w->rc && job<SHARDS*5 && !persist_needed(w,job/5,job%5))job++;
+        w->next=job+1;
+        int done=w->rc || job>=SHARDS*5;
+        pthread_mutex_unlock(&w->mutex);
+        if(done)break;
+        int rc=persist_file(w,job/5,job%5);
+        if(rc){pthread_mutex_lock(&w->mutex);if(!w->rc)w->rc=rc;pthread_mutex_unlock(&w->mutex);}
+    }
+    return NULL;
+}
+static int persist_files(struct efs_query_disk *d,const struct efs_query_disk *old,const uint64_t *revisions)
+{
+    struct persist_work w={.d=d,.old=old,.revisions=revisions};
+    unsigned count=0;
+    for(unsigned job=0;job<SHARDS*5;job++)count+=persist_needed(&w,job/5,job%5);
+    if(count<32){
+        for(unsigned job=0;job<SHARDS*5 && !w.rc;job++)if(persist_needed(&w,job/5,job%5)){
+            w.rc=cancelled(d)?EFS_ERR_BUSY:persist_file(&w,job/5,job%5);
+        }
+        return w.rc;
+    }
+    if(pthread_mutex_init(&w.mutex,NULL))return EFS_ERR_NOMEM;
+    pthread_attr_t attr;
+    if(pthread_attr_init(&attr)){pthread_mutex_destroy(&w.mutex);return EFS_ERR_NOMEM;}
+    if(pthread_attr_setstacksize(&attr,1024*1024)){
+        pthread_attr_destroy(&attr);pthread_mutex_destroy(&w.mutex);return EFS_ERR_NOMEM;
+    }
+    pthread_t workers[PERSIST_WORKERS];unsigned started=0;
+    for(;started<PERSIST_WORKERS;started++){
+        if(pthread_create(&workers[started],&attr,persist_worker,&w)){
+            pthread_mutex_lock(&w.mutex);if(!w.rc)w.rc=EFS_ERR_NOMEM;pthread_mutex_unlock(&w.mutex);break;
+        }
+    }
+    pthread_attr_destroy(&attr);
+    for(unsigned i=0;i<started;i++)pthread_join(workers[i],NULL);
+    pthread_mutex_destroy(&w.mutex);
+    /* All readers/writers are joined before manifest publication or cleanup. */
+    return w.rc;
+}
 static int source_get(void *ctx,const uint8_t *key,uint32_t kl,uint8_t *value,uint32_t *vl)
 { return efs_kv_lsm_snapshot_get(ctx,key,kl,value,vl); }
 static int source_prefix(void *ctx,const uint8_t *p,uint32_t pn,
@@ -978,7 +1054,7 @@ static int orphan_preflight(struct efs_kv_lsm_snapshot *source,
 }
 
 /* Reject an immutable image with pending transaction inputs before creating
- * candidate files. Keep raw_build's checks as defense in depth. Only prefixes
+ * candidate files. This complete immutable proof also admits raw_build. Only prefixes
  * the old revision proof would rebuild are examined; no authority proof is
  * relaxed and callback-confirmed blockers are distinguished from scan errors. */
 static int pending_preflight(struct efs_kv_lsm_snapshot *source,const struct efs_query_disk *old,
@@ -1104,30 +1180,9 @@ int efs_query_disk_build_checked(const char *root,struct efs_kv_lsm_snapshot *so
     if(times)times->stats_ns=query_build_elapsed(phase_start);
     phase_start=query_build_clock();
     close_cache(d);
-    /* Derived node files are private to this candidate; fsync before the
-     * completed manifest. A failed build never changes the published view. */
-    for(uint32_t shard=0;shard<SHARDS && !rc;shard++) {
-        const char files[]={'r','i','n','d','a'};
-        for(unsigned i=0;i<sizeof(files) && !rc;i++) {
-            if(!d->part[shard].count || ((files[i]=='n' || files[i]=='a') && !d->part[shard].names) ||
-                (files[i]=='d' && !d->part[shard].inodes))continue;
-            /* These immutable inodes were already synced and digested in the
-             * old completed generation. Only their new directory links need
-             * persistence (the candidate-directory fsync below). Derived rows
-             * and every changed raw/index/name file still require both steps. */
-            if((i!=3 && old && old->part[shard].revision==revisions[shard]) || (i==3 && d->shared_d[shard]) ||
-               ((i==2 || i==4) && d->shared_names[shard]))continue;
-            char path[EFS_MAX_PATH];rc=filename(d,shard,files[i],path,sizeof(path));if(rc)break;
-            int fd=open(path,O_RDONLY|O_CLOEXEC);if(fd<0){rc=EFS_ERR_IO;break;}
-            /* raw_build already checked fsync on the writing descriptors for
-             * raw/index; no later stage writes those inodes. Preserve that
-             * first barrier (and its writeback error observation), then hash
-             * here without syncing the same unchanged bytes a second time. */
-            if(i>=2 && fsync(fd))rc=EFS_ERR_IO;
-            if(!rc)rc=file_digest(fd,d->part[shard].digest[i]);
-            close(fd);
-        }
-    }
+    /* Immutable reused files keep their verified digests; private files retain
+     * every barrier/hash. Bounded independent checks finish before manifest. */
+    if(!rc)rc=persist_files(d,old,revisions);
     if(!rc) {
         char path[EFS_MAX_PATH];n=snprintf(path,sizeof(path),"%s/manifest",d->path);
         if(n<0 || (size_t)n>=sizeof(path))rc=EFS_ERR_NAMETOOLONG;
