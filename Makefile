@@ -370,6 +370,7 @@ test: all
 	python3 tests/test_readindex_pair.py
 	python3 tests/test_readindex_admission.py
 	python3 tests/test_readindex_result.py
+	python3 tests/test_readindex_coalescer.py
 	python3 tests/test_read_waiters.py
 	python3 tests/test_readindex_remote_pair.py
 	python3 tests/test_read_retry_budget.py

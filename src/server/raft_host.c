@@ -3962,69 +3962,91 @@ static void read_prof_tick(void)
  * would be missed), so any number of concurrent followers' reads cost
  * two leader RPCs per round trip. Errors are shared by that round's
  * waiters; each caller keeps its own deadline. */
+struct host_ri_wait {
+    struct host_ri_wait *next;
+    uint64_t need, index;
+    int done, rc, hint;
+};
 struct host_ri_coal {
     pthread_mutex_t mu;
     pthread_cond_t cv;
     int inflight;
-    uint64_t started, finished;
-    uint64_t last_idx;
-    int last_rc, last_hint;
+    uint64_t started;
+    struct host_ri_wait *waiters; /* Caller stacks, linked only under mu. */
 };
 
 /* Group ids are EFS_RAFT_GROUP_SHARD (0) and EFS_RAFT_GROUP_SHARD2 (2). */
 static struct host_ri_coal g_ri_coal[HOST_NGROUPS] = {
-    {PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER, 0, 0, 0, 0, 0, -1},
-    {PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER, 0, 0, 0, 0, 0, -1},
+    {.mu=PTHREAD_MUTEX_INITIALIZER,.cv=PTHREAD_COND_INITIALIZER},
+    {.mu=PTHREAD_MUTEX_INITIALIZER,.cv=PTHREAD_COND_INITIALIZER},
 };
+
+static void host_ri_complete(struct host_ri_coal *c, uint64_t round, int rc,
+                              uint64_t index, int hint)
+{
+    /* Freeze each caller's FIRST sufficient reply. A newer completion must
+     * not replace it with an unrelated suffix while that caller reacquires
+     * mu; doing so makes its subsequent own-apply wait chase future writes. */
+    for (struct host_ri_wait *w=c->waiters; w; w=w->next) {
+        if (!w->done && w->need<=round) {
+            w->index=rc==EFS_OK ? index : 0;
+            w->hint=rc==EFS_OK ? hint : -1;
+            w->rc=rc;
+            w->done=1;
+        }
+    }
+}
+
+static void host_ri_remove(struct host_ri_coal *c, struct host_ri_wait *w)
+{
+    struct host_ri_wait **p=&c->waiters;
+    while (*p && *p!=w) p=&(*p)->next;
+    if (*p) *p=w->next;
+}
 
 static int host_remote_read_index(struct efs_raft_host *h, uint8_t group,
                                   int leader, const struct timespec *end,
                                   uint64_t *idx, int *hint)
 {
     struct host_ri_coal *c;
-    uint64_t need;
     int rc;
 
     if ((group >> 1) >= HOST_NGROUPS || (group & 1u)) {
         struct efs_msg_raft_mkfs_reply rep;
-
         rc = host_remote_cmd(h, group, NULL, 0, &rep, leader);
-        if (rc == EFS_OK) {
-            *idx = rep.index;
-            *hint = rep.leader_hint;
-        }
+        if (rc == EFS_OK) { *idx=rep.index; *hint=rep.leader_hint; }
         return rc;
     }
-    c = &g_ri_coal[group >> 1];
+    c=&g_ri_coal[group >> 1];
     pthread_mutex_lock(&c->mu);
-    need = c->started + 1;
+    if (c->started==UINT64_MAX) {
+        pthread_mutex_unlock(&c->mu);
+        return EFS_ERR_BUSY;
+    }
+    struct host_ri_wait w={.need=c->started+1,.next=c->waiters};
+    c->waiters=&w;
     for (;;) {
-        if (c->finished >= need) {
-            rc = c->last_rc;
-            *idx = c->last_idx;
-            *hint = c->last_hint;
+        if (w.done) {
+            rc=w.rc; *idx=w.index; *hint=w.hint;
+            host_ri_remove(c,&w);
             pthread_mutex_unlock(&c->mu);
             return rc;
         }
         if (!c->inflight) {
             struct efs_msg_raft_mkfs_reply rep;
-            uint64_t round = ++c->started;
-
-            c->inflight = 1;
+            uint64_t round=++c->started;
+            c->inflight=1;
             pthread_mutex_unlock(&c->mu);
-            memset(&rep, 0, sizeof(rep));
-            rc = host_remote_cmd(h, group, NULL, 0, &rep, leader);
+            memset(&rep,0,sizeof(rep));
+            rc=host_remote_cmd(h,group,NULL,0,&rep,leader);
             pthread_mutex_lock(&c->mu);
-            c->inflight = 0;
-            c->finished = round;
-            c->last_rc = rc;
-            c->last_idx = rc == EFS_OK ? rep.index : 0;
-            c->last_hint = rc == EFS_OK ? rep.leader_hint : -1;
+            c->inflight=0;
+            host_ri_complete(c,round,rc,rep.index,rep.leader_hint);
             pthread_cond_broadcast(&c->cv);
             continue;
         }
-        if (pthread_cond_timedwait(&c->cv, &c->mu, end) == ETIMEDOUT &&
-            c->finished < need) {
+        if (pthread_cond_timedwait(&c->cv,&c->mu,end)==ETIMEDOUT && !w.done) {
+            host_ri_remove(c,&w);
             pthread_mutex_unlock(&c->mu);
             return EFS_ERR_BUSY;
         }
