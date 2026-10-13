@@ -10356,15 +10356,16 @@ static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n
         /* A matched stable-leader probe can grant a heartbeat vote without
          * touching queued log/apply state. The Raft core checks boot, term,
          * membership, persisted prefix and deferred durability. Pending
-         * work always retains this frame for normal ordered receive below;
-         * only the read vote may precede unrelated inbox work. */
+         * work retains requests for normal ordered receive below; only the
+         * read vote may precede unrelated inbox work. */
         struct efs_raft *r=group_raft(h,msg.group);
         handled=efs_raft_read_control(r,&msg);
         /* A pure read vote does not reorder commit/apply or replication.
          * Queued higher-term/config frames have made no durable promise yet;
          * the core's current boot/term/config and own apply checks still rule.
-         * Pending work forbids consuming even an accounted reply. */
-        if(pending && handled==1)handled=2;
+         * Pending requests remain ordered; fully accounted replies carry
+         * no commit/apply or replication progress to reorder. */
+        if(pending && handled==1 && msg.type==EFS_RAFT_MSG_AE_REQ)handled=2;
         if (handled && msg.type==EFS_RAFT_MSG_AE_REQ) BO_COUNT(BO_READ_CONTROL_REQUEST);
         if (handled && msg.type==EFS_RAFT_MSG_AE_REP) BO_COUNT(BO_READ_CONTROL_REPLY);
         if (handled && msg.type==EFS_RAFT_MSG_AE_REP) {

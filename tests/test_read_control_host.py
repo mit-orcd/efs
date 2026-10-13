@@ -47,14 +47,14 @@ int main(void) {
  /* Early follower ACK leaves commit/apply on the normal ordered inbox. */
  h.inbox_n=1;p[0]=EFS_RAFT_MSG_AE_REP;result=2;
  assert(!host_read_control(&h,p,sizeof(p)) && calls==7 && published==3 && woken==3 && h.inbox_n==1);
- result=1;assert(!host_read_control(&h,p,sizeof(p)) && calls==8 && published==4 && woken==4 && h.inbox_n==1);
+ result=1;assert(host_read_control(&h,p,sizeof(p)) && calls==8 && published==4 && woken==4 && h.inbox_n==1);
  result=0;assert(!host_read_control(&h,p,sizeof(p)) && calls==9 && published==4);
  p[0]=EFS_RAFT_MSG_AE_REQ;result=1;
  assert(!host_read_control(&h,p,sizeof(p)) && calls==10 && h.inbox_n==1);
  result=2;assert(!host_read_control(&h,p,sizeof(p)) && calls==11 && h.inbox_n==1);
  result=0;assert(!host_read_control(&h,p,sizeof(p)) && calls==12 && h.inbox_n==1);
  /* Requests never consume pending frames, even when otherwise accounted;
-  * refusal never publishes progress or changes queue ownership. */
+  * accounted replies consume no queue slot; refusal never publishes progress. */
  h.inbox_n=0;
  assert(!pthread_mutex_trylock(&h.mu));pthread_mutex_unlock(&h.mu);
  assert(!pthread_mutex_trylock(&h.inbox_mu));pthread_mutex_unlock(&h.inbox_mu);

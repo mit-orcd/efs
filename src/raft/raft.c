@@ -2598,14 +2598,20 @@ int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *in)
      * already-applied full prefix, normal recv would neither advance match,
      * send catch-up entries, commit nor apply. Account peer liveness here so
      * a late completed-round ACK need not obstruct the next fresh round.
-     * A different prefix or any outstanding local suffix stays on recv. */
-    int accounted=(in->vote_granted || !r->ae_inflight[in->from]) &&
+     * Ordinary replies with new progress stay on recv. */
+    /* A matched-prefix probe reply acknowledges no new entries, changes no
+     * next/inflight state and carries no commit/apply work. Its current-term
+     * contact is fully accounted even while an unrelated local tail exists.
+     * Real progress replies retain the ordinary receive path. */
+    int known_probe=in->vote_granted &&
+        in->match_index<=r->match_index[in->from];
+    int accounted=known_probe || ((in->vote_granted || !r->ae_inflight[in->from]) &&
         in->match_index==r->commit_index &&
         r->last_applied==r->commit_index &&
         r->match_index[r->id]==r->commit_index &&
         r->match_index[in->from]==in->match_index &&
         r->next_index[in->from]==in->match_index+1 &&
-        last_log(r,&last,&last_term)==EFS_OK && last==r->commit_index;
+        last_log(r,&last,&last_term)==EFS_OK && last==r->commit_index);
     int current=r->read_in_flight==1 && in->last_log_index==r->read_round &&
         r->read_cfg_old==r->log_old && r->read_cfg_new==r->log_new;
     if (!accounted && !current)return 0;

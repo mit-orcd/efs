@@ -698,15 +698,23 @@ static void test_readindex_control(void)
         CHECK(efs_raft_commit(n.r[leader])==commit && app[leader].n==applied,
               "consumed control ACK never commits or applies");
     }
-    /* Even a probe must retain normal bookkeeping when a local suffix can
-     * advance replication or commit. Hold replies so the suffix stays live. */
+    /* Hold data replies so an unrelated suffix stays live. Known-prefix
+     * probes carry no progress; a reply proving the new suffix still does. */
     CHECK(efs_raft_propose(n.r[leader],&cmd,1,&index)==EFS_OK,"control uncommitted suffix");
     CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"fresh read during outstanding suffix");
     reply.last_log_index=efs_raft_read_round(n.r[leader]);
-    CHECK(efs_raft_read_control(n.r[leader],&reply)==2,
-          "uncommitted suffix retains normal reply bookkeeping");
+    CHECK(efs_raft_read_control(n.r[leader],&reply)==1,
+          "known prefix probe consumes no unrelated suffix bookkeeping");
     CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"another suffix round");
-    CHECK(!efs_raft_read_control(n.r[leader],&reply),"old suffix probe stays on pump");
+    CHECK(efs_raft_read_control(n.r[leader],&reply)==1 && !efs_raft_read_ready(n.r[leader]),
+          "old known prefix consumed without fresh authority");
+    uint64_t known=reply.match_index;
+    reply.match_index=index;reply.last_log_index=efs_raft_read_round(n.r[leader]);
+    CHECK(efs_raft_read_control(n.r[leader],&reply)==2,
+          "new prefix progress reply retains normal replication bookkeeping");
+    CHECK(efs_raft_commit(n.r[leader])==commit && app[leader].n==applied,
+          "noted progress cannot commit or apply before ordered receive");
+    reply.match_index=known;
     n.hold_ae_replies=0;elect(&n,4);
     app[follower].park_apply=1;
     CHECK(efs_raft_propose(n.r[leader],&cmd,1,&index)==EFS_OK,"follower parked new durable prefix");
@@ -816,7 +824,12 @@ static void test_read_probe_committed_prefix(void)
                 CHECK(efs_raft_read_control(n.r[i],p)>0,"known durable prefix votes without new log work");
                 struct efs_raft_msg *reply=n.read_reply[i];
                 CHECK(reply && reply->last_log_index==p->last_log_index,"fresh prefix vote correlated");
-                if(reply)(void)efs_raft_read_control(n.r[lid],reply);
+                if(reply) {
+                    CHECK(efs_raft_read_control(n.r[lid],reply)==1,
+                          "known prefix reply leaves no queued replication work");
+                    CHECK(efs_raft_commit(n.r[lid])==committed,
+                          "known prefix reply cannot commit unrelated suffix");
+                }
             }
         }
         CHECK(efs_raft_read_ready(n.r[lid]) && efs_raft_read_index(n.r[lid])==committed,
