@@ -1803,13 +1803,14 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
     uint64_t *cseq = NULL;
     struct efs_ino_size_rec *irecs = NULL;
     uint32_t cn = 0, in = 0;
-    /* A chunk rec whose ino has no irec makes the server guess the size
-     * as the chunk end ((ci+1) × 128 KiB, raft_host.c "sz == 0"), and a
-     * later irec cannot shrink it: ecopy's mpfr Makefile.in was 32398
-     * bytes on XFS and 131072 on efs (Sep 30 03:18:27, ecopy.strace).
-     * The ino mark trails the chunk mark on every write path, so a
-     * snapshot taken between the two ships the chunk alone. Count the
-     * chunk inos that are not in the ino set and reserve irecs for them. */
+    /* A chunk rec whose ino has no irec is REJECTED by the server
+     * (raft_host.c report loop, "pack-nosize"): an EOF guessed from the
+     * chunk end would commit to the grow-only lane MAX and a later irec
+     * could not shrink it — ecopy's mpfr Makefile.in was 32398 bytes on
+     * XFS and 131072 on efs (Sep 30 03:18:27, ecopy.strace). The ino mark
+     * trails the chunk mark on every write path, so a snapshot taken
+     * between the two would ship the chunk alone. Count the chunk inos
+     * that are not in the ino set and reserve irecs for them. */
     uint64_t extra_cap = 0;
     for (uint64_t i = 0; i < ds.chunk_count; i++) {
         if (ds.chunk_inos[i] &&
@@ -1909,7 +1910,8 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
                 logged++;
                 fprintf(stderr,
                         "efs: report chunk rec ino=%llu ci=%u has no staged "
-                        "row; server will size it to the chunk end\n",
+                        "row; server rejects the batch, fsync fails and the "
+                        "report is retried\n",
                         (unsigned long long)cino, crecs[c].chunk_index);
             }
             continue;

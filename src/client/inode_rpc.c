@@ -2419,6 +2419,22 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
     return saw_busy ? EFS_ERR_BUSY : EFS_ERR_NOT_PRIMARY;
 }
 
+#if defined(EFS_FAULTS) && EFS_FAULTS
+/* Private EOF-contract fault: omit one size record after valid construction.
+ * File contains OMIT_SIZE <ino>; OFF or a missing file disables it. */
+static uint64_t report_fault_omit_size(void)
+{
+    const char *path = getenv("EFS_FAULT_REPORT_SIZE_FILE");
+    unsigned long long ino = 0;
+    if (!path || !*path) return 0;
+    FILE *f = fopen(path, "r");
+    if (!f) return 0;
+    if (fscanf(f, "OMIT_SIZE %llu", &ino) != 1) ino = 0;
+    fclose(f);
+    return (uint64_t)ino;
+}
+#endif
+
 int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
                                      const struct efs_chunk_rec *recs,
                                      uint32_t count,
@@ -2475,10 +2491,22 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
             p += n;
         }
     }
+#if defined(EFS_FAULTS) && EFS_FAULTS
+    uint64_t omit = report_fault_omit_size();
+    hdr->ino_count = 0;
+    for (i = 0; i < ino_count; i++) {
+        if (omit && irecs[i].ino == omit) continue;
+        memcpy(p, &irecs[i], sizeof(*irecs));
+        p += sizeof(*irecs);
+        hdr->ino_count++;
+    }
+#else
     if (ino_count)
         memcpy(p, irecs, (size_t)ino_count * sizeof(*irecs));
     p += (size_t)ino_count * sizeof(*irecs);
+#endif
     efs_report_session_pack(p, &session);
+    uint32_t wire_len = (uint32_t)(p + EFS_REPORT_SESSION_LEN - buf);
     struct efs_msg_inode_reply r;
     /* Reply wait sized to the work: the server packs, publishes and
      * waits for a Raft commit per record (13 us/rec alone, 8 concurrent
@@ -2486,7 +2514,7 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
      * default; D24's periodic REPORT keeps a sequential writer's close
      * near 8192 records, so this is the bound for the rest. */
     int recv_ms = EFS_IO_TIMEOUT_MS + (int)(count / 2u);
-    int rc = rpc_send_recv_dual(EFS_MSG_REPORT_CHUNKS, buf, (uint32_t)len,
+    int rc = rpc_send_recv_dual(EFS_MSG_REPORT_CHUNKS, buf, wire_len,
                                 EFS_MSG_REPORT_CHUNKS_REPLY, &r, sizeof(r),
                                 recv_ms);
     free(buf);
