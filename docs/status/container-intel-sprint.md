@@ -1815,3 +1815,34 @@ time remains, compare64 with the same frozen binary/config/history and full
 workload, explicit diagnostic flags. Retained history/order can confound a
 single trial; do not infer a causal improvement from unmatched historical runs.
 Neither worker tuning nor ACCESS timing has live results yet.
+
+### 2026-10-13 — complete ACCESS baseline and same-source worker comparison
+
+Frozen39464077ca8be5bbda784ba5cf512567fbc6aeb2 both Intel complete affected
+native/sanitizer/fault suite and792-input deployed source proofs PASS;
+fullSHA/devel-container build. Normal worker limit32, profiling/path/batch
+ON for this diagnostic; all requested features OFF, container/TCP/direct,
+preserved four-node4G/node history/seven clients/jobs16/original case limits.
+32-worker full1498/1512PASS14FAIL (deep60/crazy all7),115.831–135.669s;
+immediate strict physical101.901s PASS,zero101.893. External raw
+pathprof339464077-{deploy,diagnostic}. First30s selected deep caller:
+1003–1151 LOOKUPs,8.346–9.784s;38–41 MKDIRs,3.971–5.220s; one GETATTR,
+0.215–11.437ms; zero ACCESS. Completed mkdir syscalls25.831–27.598s,
+depth38–41; last three1.257–1.820s, LOOKUP0.287–0.474s+MKDIR0.023–0.125s.
+Substantial time remains between measured callback service and syscall time.
+Service measurements stop before reply/logging, which remains a limitation;
+this alone does not prove kernel queue or worker cap as the cause. Prior
+GETATTR/memo/ACCESS hypotheses are not grounds for changing read authority.
+
+Same frozen39464077 capacity comparison now executing, only private client
+mount --client-max-threads64 differs, existing max_idle8 retained. Original
+seven-client/jobs16 workload, features/transport/storage/deadlines and bounded
+profiling/observer unchanged. Both stores/history and fixed membership kept;
+32-worker immediate cleanup finished before64 launch. Reproduce with node
+stop-clients barrier then stop-servers/start --diagnostics --path-prof and
+mount --diagnostics --path-prof --clients4/3 --client-max-threads64, normal
+source proof, original concurrent qualification through the transparent phase
+harness/sitecustomize observer, followed immediately by strict reclaim180.
+The earlier installed real libfuse parser probe confirmed -o max_threads=64.
+No normal profiling-OFF or final capacity acceptance for this source/config
+exists yet; any promising result requires that independent full15-gate rerun.
