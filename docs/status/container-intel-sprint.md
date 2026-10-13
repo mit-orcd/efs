@@ -1603,3 +1603,23 @@ fixture and preserves its existing credit and async Linux sender controls;
 older external source comparisons still work without the absent helper.
 Local admission/default-OFF controls PASS; Linux async sender remains NOTRUN
 locally and must PASS in the fresh corrected both-host native build.
+
+
+Corrected frozen015b55c384c6e6ed2cce7a591863ae77a27c3355:791 inputs,
+both-host complete affected native PASS including real Linux async sender,
+new enqueue/default-OFF/fences/allocation/full-capacity controls and ASan/UBSan,
+real Raft duplicate-vote controls and existing physical/KV fault/cold negatives.
+No stores/history reset. Fresh controlled deployment and791-input/binary
+proofs PASS on both hosts; actual2 daemons/host and4+3 clients verified,
+containers/TCP/direct4G/node, .efs/expiry-date/packing/profiling/flow OFF,
+only explicit EFS_CONTAINER_INBOX_FOLD1 candidate ON. Build identity is exact
+source SHA/branch devel-container, both built2026-10-13T06:25:47Z.
+Intel1 efsd SHA256bd253b35193b1f6ae4d069c573ac63589aa68ff8e58e9af601b3b9735cb046bd;
+Intel2 efsd SHA25611bfff66c8af53e2c053058d2ba8273fc2fa8f29b4ad752aed37abac4b9ad507.
+Raw external artifacts/container-20261012/inboxfold2015b55c3-{deploy,qualification}.
+Reproduction: helper start/mount --inbox-fold1 after global graceful stop and
+proof; qualification each original15 gates --inbox-fold1 (including restart).
+Seven-client jobs16 with unchanged30/75/120/180case and600outer limits;
+full/removal/reclaim then quiet/peer/mmap/lifecycle/tiny/cold/global restart/
+final physical as earlier. Native PASS does not qualify loaded performance;
+full exact-source live sequence is running, no all-passing acceptance yet.
