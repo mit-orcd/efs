@@ -355,3 +355,42 @@ peer syscall and query count/byte oracles agree with refresh_error0. Phases take
 5.158/8.586s; temporary peer stop PASS. It isolates query functionality but does
 not replace payload qualification. Independent all7 stats/owner and concurrent
 checks continue; post-test cold and complete payload/path gates remain OPEN.
+
+## Work on hold — 2026-10-13
+
+The user explicitly paused `.efs` work. Package 1 is **ON HOLD, acceptance
+OPEN/FAIL**, not complete. No further tests, fixes, deployment or restart are
+authorized under this paused work. Intel and AMD have been asked to wrap up
+safely, preserve candidates/evidence, document their exact status and pause the
+coordinated work. Their wrap-up commits are not yet received or integrated.
+
+Last deployed source remains f7e3c81e2d5bd4715b6c6dc86debb10b093c0d03, with
+the RDMA/direct-I/O/files profile and `.efs` client/server enabled; packing,
+containers and expiry disabled. The running cluster and preserved stores are
+left intact. Resource/cache observers receive their normal stop flags; no
+daemons are killed or storage erased. Seven tiny-file launchers remain paused;
+seven DD processes were stopped cleanly and their partial outputs preserved.
+Resume instructions and stable process identities remain in
+`operations/devel-efs/package1-paused-screen-launchers.json`, benchmark screen
+state and DD clean-stop records. Do not blindly resume the queued root-directory
+benchmark command on fcstor010; preserve historical invalid fixtures.
+
+The completed final concurrent attempt has **1511/1512 ordinary cases PASS,
+one FAIL on fcstor013; all21/21 virtual query cases PASS**. Some queries expose
+stale snapshots with refresh_error -13, so successful query cases do not prove
+refresh health. Raw per-host TSV/logs remain at
+`/home/erbmi1/orcd/scratch/efs/orcd-test/fcstor007` through `fcstor013`, prefix
+`profile-posix-f7e3c81e2d5b-400g-pre-cold`; local aggregate is
+`operations/devel-efs/400g-posix-pre-cold.json`. The exact failing ordinary case
+needs log review on resumption. Concurrent human-readable/JSON stats and owner
+checks also FAIL EBUSY on fcstor013 while overlapping this workload. This differs
+from the intended sequential gate order; causation is unproven and the failures
+are retained. Sequential reruns are NOTRUN.
+
+Resume priorities: review Intel's qualified admission correction (currently an
+uncommitted candidate, preserving receipt window16 and REPORT8s); obtain AMD's
+exact-f7 helper qualification; resolve payload/fsync EIO and ordinary EOF/EBUSY
+failures; rerun all focused and concurrent gates on one frozen source; then
+verify same-source orderly cold restart within300s and every byte/path of the
+real400GiB fixture. Final-source complete payload/path and post-test cold gates
+remain NOTRUN. No final acceptance latency/resource result is claimed.

@@ -1542,6 +1542,8 @@ next-refresh and ASan/UBSan gates PASS. Full ORCD mounted/scale acceptance NOTRU
 Human scope is correctness only; no performance tuning or further compression.
 
 [ORCD package 1 deployment and open gates](../status/orcd-package1-20261013.md):
+**ON HOLD by user request 2026-10-13; acceptance remains OPEN/FAIL.**
+Intel and AMD requested to wrap up and document their status.
 Current scope is feature correctness/acceptance; latency/resources are measured
 evidence and existing bounds, with no additional performance tuning.
 Frozen devel f7e3c81e deployed native RDMA/direct/files, `.efs` client/server on,
