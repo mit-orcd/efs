@@ -97,6 +97,7 @@ COMMON_SRCS = src/common/admission.c src/meta/append_plan.c $(COMMON_DIR)/public
               $(COMMON_DIR)/checksum.c \
               $(COMMON_DIR)/network.c \
               $(COMMON_DIR)/rdma.c \
+              $(COMMON_DIR)/rdma_message.c \
               $(BLAKE3_DIR)/blake3.c \
               $(BLAKE3_DIR)/blake3_portable.c \
               $(BLAKE3_DIR)/blake3_dispatch.c \
@@ -931,3 +932,10 @@ tests/test_repair_worker: tests/test_repair_worker.c src/server/repair_worker.c 
 src/meta/query_catalog.o src/meta/query_disk.o: src/meta/query_walk.h
 # Profiler launches and child retirement share one implementation.
 src/server/efsd.o src/client/efs_fuse.o src/client/efs_bench.o: src/common/recorder_start.h src/common/recorder_stop.h
+
+.PHONY: test-rdma-message
+test-rdma-message:
+	@bin=$$(mktemp /tmp/efs-rdma-message.XXXXXX); trap 'rm -f "$$bin"' EXIT; \
+	$(CC) -std=c99 -O2 -g -Wall -Wextra -Werror -Iinclude tests/test_rdma_message.c src/common/rdma_message.c -pthread -o "$$bin" && "$$bin"
+
+test: test-rdma-message
