@@ -1574,3 +1574,23 @@ a same-group nonidentical pure frame is also a boundary, including a different
 context, peer, boot or term. Only independent-group pure frames may intervene
 between identical duplicates. This prevents folding around a possible
 same-group role/liveness transition; the context fence control was strengthened.
+
+
+### 2026-10-13 — lock diagnostic source, complete normal qualification
+
+Exacte8f04e2766e416f42d7378ea455e190e3911dd20 all15 profiling-OFF gates
+finished on retained Intel fixture with preceding identical configuration,
+features OFF. Full1494/1512PASS18FAIL as recorded above; immediate physical
+96.342s PASS. Quiet core432/432PASS52.924/56.652s; peer134/134PASS43.477/
+45.077s; private mmap PASS/shared ENODEV skips. Lifecycle/tiny create, warm
+verify, global controlled restart, cold hashes and deletion PASS. Final physical
+9.188s PASS,zero9.175. All stores/history retained; no release acceptance.
+Raw external artifacts/container-20261012/lockwaite8f04e27-qualification.
+The duplicate inbox candidate's actual next frozen build is
+9610602abd688f26b7f041a56323a320f83b2c5b with791 tracked inputs, explicit
+--inbox-fold1. Reproduce affected new safety controls using
+python3 tests/test_container_inbox_duplicate.py; repeat with EFS_TEST_CFLAGS=
+'-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer'. Real tests/test_raft
+and all existing container/host/authority/physical/fault/cold controls remain
+required on both Linux hosts. Default-OFF flag control is retained; no live
+candidate result is claimed before its own deploy/proof and15-gate sequence.
