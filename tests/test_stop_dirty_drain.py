@@ -78,6 +78,8 @@ print('stop dirty drain: partial bodies, bounded pages, duplicate inodes, unlock
 s=(root/'src/client/efs_fuse.c').read_text()
 m=re.search(r'^static int efs_control_drain\([^;]+?\)\n\{',s,re.M)
 control=s[m.start():s.index('\n}',m.end())+2]
+retry_start=s.index('static int efs_open_retry_pass(')
+retry=s[retry_start:s.index('static void *efs_open_retry_worker(',retry_start)]
 code=r'''
 #include <assert.h>
 #include <stdint.h>
@@ -102,7 +104,7 @@ static uint64_t efs_dcache_pending_records(const char *reason) {(void)reason;ret
 static void efs_client_report_pressure_stats(struct efs_report_pressure *p) {
  *p=(struct efs_report_pressure){.inflight_records=rounds<=flight_rounds};
 }
-'''+control+r'''
+'''+retry+control+r'''
 int main(void) {
  deadline=777;flight_rounds=3;
  assert(!efs_control_drain(100,0) && rounds==4 && deadline==777);

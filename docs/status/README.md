@@ -6,7 +6,9 @@ Foreground latency remains under active investigation: successful 5.57s and
 22.04s create/fsync/unlink outliers overlap Raft snapshot activity. User requests
 a code fix, redeployment and same-profile latency qualification. A Raft-only
 rewrite optimization and fair retained-CREATE/lease retry correction have
-regression evidence; live qualification is pending. Old clients 010/011 also
+regression evidence; live qualification is pending. The initial Linux
+prerequisite run stopped on a missing extracted-harness dependency, now fixed;
+the complete prerequisite run is being repeated. Old clients 010/011 also
 refused orderly drain with an exhausted identity window; explicit authorized
 discard was used for the diagnostic redeploy. The separate
 application fork/direct-read platform gate and broader W92 scale gates remain
