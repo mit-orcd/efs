@@ -22,16 +22,23 @@ def launch(cmd,name):
 def stop(row):
  try:
   now=actual(row['pid']);assert now['argv']==row['argv'] and now['start']==row['start'],'PID identity changed'
- except FileNotFoundError:return
- fd=os.pidfd_open(row['pid']);signal.pidfd_send_signal(fd,signal.SIGTERM)
- end=time.monotonic()+30
- while time.monotonic()<end:
+  fd=os.pidfd_open(row['pid'])
+ except (FileNotFoundError,ProcessLookupError):return
+ try:
+  # Recheck after pinning: a PID reused between inspection and pidfd_open
+  # must never receive the old daemon's signal.
   try:
-   if (Path('/proc')/str(row['pid'])/'stat').read_text().rsplit(')',1)[1].split()[0]=='Z':break
-  except FileNotFoundError:break
-  time.sleep(.1)
- else:os.close(fd);raise RuntimeError('graceful daemon stop deadline')
- os.close(fd)
+   now=actual(row['pid']);assert now['argv']==row['argv'] and now['start']==row['start'],'PID identity changed'
+   signal.pidfd_send_signal(fd,signal.SIGTERM)
+  except (FileNotFoundError,ProcessLookupError):return
+  end=time.monotonic()+30
+  while time.monotonic()<end:
+   try:
+    if (Path('/proc')/str(row['pid'])/'stat').read_text().rsplit(')',1)[1].split()[0]=='Z':return
+   except (FileNotFoundError,ProcessLookupError):return
+   time.sleep(.1)
+  raise RuntimeError('graceful daemon stop deadline')
+ finally:os.close(fd)
 if a.action=='build':
  assert a.source_commit and re.fullmatch('[0-9a-f]{40}',a.source_commit),'exact source commit required'
  m=json.loads((b/'devel-container-inputs.json').read_text());assert all(hashlib.sha256((s/n).read_bytes()).hexdigest()==h for n,h in m.items()),'source mismatch'

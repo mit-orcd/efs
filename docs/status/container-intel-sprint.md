@@ -1061,3 +1061,15 @@ Actual paired helper controls, unknown/follower/term fallbacks, regression
 refusal, ASan/UBSan and restoring the late-floor negative PASS locally.
 Both-host native and fresh live qualification remain required for this
 candidate;2065 results cannot qualify it.
+
+
+Paired-floor5aa743b175db0ef651cf63759a7aeb43e51c4136: both-host
+complete affected native/storage/Raft/self-test controls PASS. Initial
+private deployment NOTRUN after shutdown-helper ESRCH race on Intel2 n3:
+process exited during /proc/stat read; no copy/start/mount phase occurred.
+Production processes remain alive. Follow-up helper treats ProcessLookupError
+as exited during inspection/open/signal/poll, closes pidfd in finally and
+rechecks argv/start after pinning before signalling. Actual helper mock
+controls exercise every ESRCH stage, reused-PID refusal, zombie return and
+FD cleanup PASS locally. No forced daemon kill or private-store reset.
+Exact corrected source will be rebuilt/proved before renewed live testing.
