@@ -2169,3 +2169,9 @@ Production read-only verification this turn: Intel1 daemon PIDs5945/5953 and
 FUSE6602; Intel2 daemon10086/10094 and FUSE10331. Both/data1/efs/mnt mounts
 retain opposite-host17432 seeds and400G/direct production daemons. No
 immutable payload baseline exists; this is process/mount verification only.
+
+The diagnostic deep-call emitter now explicitly uses nonblocking datagrams,
+matching the original phase emitter. Missing/full observer queues may lose
+samples but cannot make sendto wait inside a tested syscall. This is an
+observer correction only; ordinary qualification does not load the observer.
+It precedes the next source freeze, not a change to previously tested binaries.

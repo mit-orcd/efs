@@ -13,6 +13,7 @@ _original_stat=os.stat
 def _send_step(op,event,depth,elapsed=0):
  try:
   emitter=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM)
+  emitter.setblocking(False)  # A full observer queue must not stall the case.
   emitter.sendto(('deepstep op=%s event=%s depth=%d pid=%d mono_ns=%d elapsed_ns=%d\n'%(op,event,depth,os.getpid(),time.monotonic_ns(),elapsed)).encode(),address)
   emitter.close()
  except OSError:pass
