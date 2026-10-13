@@ -20,6 +20,7 @@ int main(void)
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t dir;
     unsigned files=6000;const char *n=getenv("EFS_QUERY_DELTA_FILES");
     if(n){unsigned long value=strtoul(n,NULL,10);if(value<6000 || value>100000)return 2;files=(unsigned)value;}
+    unsigned lane_count=getenv("EFS_QUERY_DELTA_MULTI_LANES")?4:1;
     unsigned parents=0;efs_ino_t parent_ids[512];
     const char *p=getenv("EFS_QUERY_DELTA_PARENTS");
     if(p){unsigned long value=strtoul(p,NULL,10);if(value<1 || value>512)return 2;parents=(unsigned)value;}
@@ -35,13 +36,15 @@ int main(void)
         CHECK(!efs_meta_apply_create_file(kv,&attrs,parents?parent_ids[i%parents]:dir,S_IFREG|0644,name,&ids[i]));
         if(getenv("EFS_QUERY_DELTA_LANES")){
             struct efs_meta_row row;uint8_t key[EFS_KV_KEY_MAX],value[EFS_META_INO_BYTES],lane[EFS_META_LANE_BYTES]={0};uint32_t kn;
-            CHECK(!efs_meta_apply_get_inode(kv,ids[i],&row));row.active_lanes=1;
+            CHECK(!efs_meta_apply_get_inode(kv,ids[i],&row));row.active_lanes=(UINT64_C(1)<<lane_count)-1;
             CHECK(!efs_kv_key_inode(efs_kv_inode_shard(ids[i]),ids[i],key,&kn));
             CHECK(!efs_meta_pack_inode(&row,value,sizeof(value)));CHECK(!efs_kv_put(kv,key,kn,value,sizeof(value)));
             /* Canonical committed lane: EOF 8192, seq 1, one allocated chunk. */
             lane[6]=32;lane[31]=1;lane[63]=1;
-            CHECK(!efs_kv_key_lane(efs_kv_lane_shard(ids[i],0),ids[i],row.generation,0,key,&kn));
-            CHECK(!efs_kv_put(kv,key,kn,lane,sizeof(lane)));
+            for(unsigned l=0;l<lane_count;l++){
+                CHECK(!efs_kv_key_lane(efs_kv_lane_shard(ids[i],l),ids[i],row.generation,l,key,&kn));
+                CHECK(!efs_kv_put(kv,key,kn,lane,sizeof(lane)));
+            }
         }
     }
     /* Alias discovery must preserve all parents after sorting journal batches,
@@ -94,7 +97,7 @@ int main(void)
             efs_ino_t target=ids[files-1-phase];struct efs_meta_row row;
             uint8_t key[EFS_KV_KEY_MAX],lane[EFS_META_LANE_BYTES]={0};uint32_t kn;
             CHECK(!efs_meta_apply_get_inode(kv,target,&row));
-            CHECK(!efs_kv_key_lane(efs_kv_lane_shard(target,0),target,row.generation,0,key,&kn));
+            CHECK(!efs_kv_key_lane(efs_kv_lane_shard(target,lane_count-1),target,row.generation,lane_count-1,key,&kn));
             if(!phase){lane[6]=64;lane[14]=1;lane[15]=44;lane[31]=2;lane[63]=2;CHECK(!efs_kv_put(kv,key,kn,lane,sizeof(lane)));}
             else CHECK(!efs_kv_del(kv,key,kn));
             CHECK(!efs_kv_lsm_snapshot_pin(kv,16<<20,&source));
@@ -103,7 +106,7 @@ int main(void)
             if(next && oracle){
                 struct efs_meta_stat a,b;struct efs_query_rollup x,y;
                 CHECK(!efs_query_catalog_inode(next,target,NULL,&a));CHECK(!efs_query_catalog_inode(oracle,target,NULL,&b));CHECK(!memcmp(&a,&b,sizeof(a)));
-                CHECK(a.size==(phase?0:16384) && a.alloc==(phase?0:2));
+                CHECK(a.size==(phase?(lane_count>1?8192:0):16384) && a.alloc==lane_count-1+(phase?0:2));
                 if(!getenv("EFS_QUERY_DELTA_BASELINE"))CHECK(efs_query_catalog_refolded(next)==1);
                 CHECK(!efs_query_catalog_stats(next,dir,&x));CHECK(!efs_query_catalog_stats(oracle,dir,&y));CHECK(!memcmp(&x,&y,sizeof(x)));
                 printf("lane-only=%s refolded=%u size=%llu alloc=%llu\n",phase?"absent":"changed",efs_query_catalog_refolded(next),(unsigned long long)a.size,(unsigned long long)a.alloc);

@@ -5,6 +5,7 @@
 #define DIRTY_HEAP_MAX (16u << 20)
 #define CHANGE_BATCH 256
 struct dirty_dir { struct disk_node node;uint64_t at;unsigned pending,done; };
+struct stat_change_range { efs_ino_t first,last; };
 struct incremental {
     uint64_t changed_partitions,changes,change_bytes;
     int changes_fd;
@@ -13,6 +14,7 @@ struct incremental {
     size_t heap_bytes;
     efs_ino_t changed[CHANGE_BATCH];
     struct dirty_dir initial[DIRTY_MAX];
+    struct stat_change_range stat_changes[SHARDS][3];
 };
 /* Each inode is visited once in the candidate stream; removed IDs occur only
  * in the old-only pass. No namespace-sized deduplication set is needed.
@@ -83,16 +85,56 @@ static int inputs_changed(const struct efs_query_disk *d,const struct efs_query_
     }
     return 0;
 }
+/* Compare complete immutable stat-input families once. These inclusive inode
+ * bounds are conservative: a hole within a changed range still uses the exact
+ * lookup below. Outside the range, all generations/lanes of that inode,
+ * including absence, are proven unchanged by a complete sorted stream merge.
+ * Fixed scratch is included in sizeof(incremental) working admission. */
+static int stat_family_changes(struct efs_query_disk *d,struct efs_query_disk *old,
+                               struct incremental *state,uint32_t shard,unsigned family)
+{
+    const unsigned indexes[]={2,4,5};unsigned kind=indexes[family];
+    struct stat_change_range *range=&state->stat_changes[shard][family];
+    uint64_t a=d->part[shard].begin[kind],b=old->part[shard].begin[kind];
+    uint64_t ae=d->part[shard].end[kind],be=old->part[shard].end[kind];
+    uint8_t ak[EFS_KV_KEY_MAX],bk[EFS_KV_KEY_MAX],av[VALUE_MAX],bv[VALUE_MAX];
+    struct slot as={0},bs={0};int have_a=0,have_b=0;
+    while(a<ae || b<be){
+        if(cancelled(d))return EFS_ERR_BUSY;
+        int rc=EFS_OK;
+        if(a<ae && !have_a){rc=read_record(d,shard,a,&as,ak,av);have_a=1;}
+        if(!rc && b<be && !have_b){rc=read_record(old,shard,b,&bs,bk,bv);have_b=1;}
+        if(rc)return rc;
+        if((a<ae && as.key_len<11) || (b<be && bs.key_len<11))return EFS_ERR_PROTO;
+        int order=a==ae?1:b==be?-1:cmpkey(ak,as.key_len,bk,bs.key_len);
+        int changed=order || as.value_len!=bs.value_len || memcmp(av,bv,as.value_len);
+        if(changed){
+            const uint8_t *key=order>0?bk:ak;efs_ino_t ino=0;
+            for(unsigned i=3;i<11;i++)ino=(ino<<8)|key[i];
+            if(!ino)return EFS_ERR_PROTO;
+            if(!range->first || ino<range->first)range->first=ino;
+            if(ino>range->last)range->last=ino;
+        }
+        if(order<=0){a++;have_a=0;}
+        if(order>=0){b++;have_b=0;}
+    }
+    return EFS_OK;
+}
 /* Whole-partition revisions are conservative invalidation hints. For regular
  * files, getattr reads the canonical inode, active lane records and append
  * cursor. Pending transaction/guard/reduction rows were excluded when the raw
  * snapshot was built. Prove those exact inputs unchanged before reusing stat;
  * compare PVER conservatively as well for publication-view evolution. */
 static int stat_value_same(struct efs_query_disk *d,struct efs_query_disk *old,
+                          const struct incremental *state,
                           const uint8_t *key,uint32_t length,int *same)
 {
     uint32_t shard=((uint32_t)key[0]<<8)|key[1];
     if(d->part[shard].revision==old->part[shard].revision){*same=1;return EFS_OK;}
+    unsigned family=key[2]==EFS_KV_KIND_LANE?0:key[2]==EFS_KV_KIND_APPEND_CUR?1:2;
+    const struct stat_change_range *range=&state->stat_changes[shard][family];
+    efs_ino_t ino=0;for(unsigned i=3;i<11;i++)ino=(ino<<8)|key[i];
+    if(!range->first || ino<range->first || ino>range->last){*same=1;return EFS_OK;}
     int kind=kind_at(key[2]);
     if(kind>=0 && d->part[shard].begin[kind]==d->part[shard].end[kind] &&
        old->part[shard].begin[kind]==old->part[shard].end[kind]){
@@ -102,12 +144,14 @@ static int stat_value_same(struct efs_query_disk *d,struct efs_query_disk *old,
     int ar=raw_get(d,key,length,a,&an),br=raw_get(old,key,length,b,&bn);
     if(ar && ar!=EFS_ERR_NOT_FOUND)return ar;
     if(br && br!=EFS_ERR_NOT_FOUND)return br;
-    /* An absent active lane is not evidence for stat reuse. */
+    /* Within a changed range, absent active lanes retain the conservative
+     * exact-lookup behavior. The complete stream proof above is stronger. */
     *same=ar==br && ((ar==EFS_ERR_NOT_FOUND && key[2]!=EFS_KV_KIND_LANE) ||
                     (!ar && an==bn && !memcmp(a,b,an)));
     return EFS_OK;
 }
 static int file_stat_same(struct efs_query_disk *d,struct efs_query_disk *old,
+                          const struct incremental *state,
                           const struct efs_meta_row *row,int *same)
 {
     uint8_t key[EFS_KV_KEY_MAX];uint32_t length;int rc=EFS_OK;
@@ -117,15 +161,15 @@ static int file_stat_same(struct efs_query_disk *d,struct efs_query_disk *old,
         if(cancelled(d))return EFS_ERR_BUSY;
         unsigned lane=(unsigned)__builtin_ctzll(lanes);lanes&=lanes-1;
         rc=efs_kv_key_lane(efs_kv_lane_shard(row->ino,(uint8_t)lane),row->ino,row->generation,(uint8_t)lane,key,&length);
-        if(!rc)rc=stat_value_same(d,old,key,length,same);
+        if(!rc)rc=stat_value_same(d,old,state,key,length,same);
     }
     if(!rc && *same){
         rc=efs_kv_key_append_cur(efs_kv_inode_shard(row->ino),row->ino,row->generation,key,&length);
-        if(!rc)rc=stat_value_same(d,old,key,length,same);
+        if(!rc)rc=stat_value_same(d,old,state,key,length,same);
     }
     if(!rc && *same){
         rc=efs_kv_key_pver(efs_kv_inode_shard(row->ino),row->ino,key,&length);
-        if(!rc)rc=stat_value_same(d,old,key,length,same);
+        if(!rc)rc=stat_value_same(d,old,state,key,length,same);
     }
     return rc;
 }
@@ -187,7 +231,7 @@ static int incremental_nodes(struct efs_query_disk *d,struct efs_query_disk *old
         }
         if(!rc && !same)d->part[shard].dependencies|=dependency_bits(&n.row);
         if(!rc && fold && found && S_ISREG(n.row.mode) && !memcmp(&n.row,&before.row,sizeof(n.row))){
-            int unchanged=0;rc=file_stat_same(d,old,&n.row,&unchanged);
+            int unchanged=0;rc=file_stat_same(d,old,s,&n.row,&unchanged);
             if(!rc && unchanged)fold=0;
         }
         if(!rc && fold){rc=efs_meta_apply_getattr(&d->kv,n.row.ino,refuse_coord,NULL,&n.stat);if(!rc && d->refolded<UINT32_MAX)d->refolded++;}
@@ -313,14 +357,22 @@ static int parent_fold_entry(void *user,const uint8_t *key,uint32_t kn,const uin
 }
 static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old)
 {
+    uint64_t started=query_build_clock(),ranges_done=0,nodes_done=0,edges_done=0,aliases_done=0;
     struct incremental s={.changes_fd=-1,.capacity=DIRTY_MAX};s.dirs=s.initial;int rc=EFS_OK;
     for(uint32_t shard=0;shard<SHARDS;shard++)if(d->part[shard].revision!=old->part[shard].revision)s.changed_partitions|=UINT64_C(1)<<(shard%64);
+    for(uint32_t shard=0;shard<SHARDS && !rc;shard++){
+        if(d->part[shard].revision==old->part[shard].revision)continue;
+        for(unsigned family=0;family<3 && !rc;family++)rc=stat_family_changes(d,old,&s,shard,family);
+    }
+    ranges_done=query_build_clock();
     for(uint32_t shard=0;shard<SHARDS && !rc;shard++)rc=incremental_nodes(d,old,&s,shard);
+    nodes_done=query_build_clock();
     for(uint32_t shard=0;shard<SHARDS && !rc;shard++){
         if(d->part[shard].revision==old->part[shard].revision)continue;
         /* Old-only IDs were journaled during the inode-stream merge. */
         if(!rc)rc=changed_dentries(d,old,&s,shard);
     }
+    edges_done=query_build_clock();
     if(!rc)rc=changed_flush(&s);
     /* Candidate derived files must all exist before aliases/parents are
      * resolved. Stream the journal with fixed scratch instead of falling
@@ -338,6 +390,7 @@ static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old
         if(!rc)rc=aliases_dirty_batch(d,&s,s.changed,n);
         at+=n;
     }
+    aliases_done=query_build_clock();
     /* Sorted insertion can move the current entry: process an explicit done
      * bit rather than an index walk that could skip newly inserted ancestors. */
     while(!rc){
@@ -404,5 +457,14 @@ static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old
         else d->disk_bytes-=s.change_bytes;
     }
     if(s.heap_bytes)free(s.dirs);
+    uint64_t finished=query_build_clock();
+    if(finished-started>=UINT64_C(1000000000))
+        fprintf(stderr,"query-disk: incremental rc=%d ranges_ms=%llu nodes_ms=%llu edges_ms=%llu aliases_ms=%llu folds_ms=%llu changes=%llu dirs=%u\n",
+            rc,(unsigned long long)((ranges_done-started)/1000000),
+            (unsigned long long)((nodes_done-ranges_done)/1000000),
+            (unsigned long long)((edges_done-nodes_done)/1000000),
+            (unsigned long long)((aliases_done-edges_done)/1000000),
+            (unsigned long long)((finished-aliases_done)/1000000),
+            (unsigned long long)s.changes,s.count);
     return rc;
 }
