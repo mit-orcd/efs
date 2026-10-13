@@ -74,4 +74,11 @@ with tempfile.TemporaryDirectory(prefix='efs-owner-') as work:
             if proc.poll() is None:proc.terminate();proc.wait(5)
 # Real launch coverage lives outside TemporaryDirectory so a failed retirement
 # preserves its owned stores/logs rather than removing a live daemon's root.
-subprocess.run(['python3',str(root/'tests/live/server_wrapper_start.py')],check=True,timeout=360)
+# Quota admission may require more headroom than a small VM tmpfs provides.
+# Scope the real daemon's storage fixture override to this subprocess; other
+# tests keep their ordinary temporary-directory behavior.
+fixture_env=dict(os.environ)
+if os.environ.get('EFS_TEST_STORAGE_TMPDIR'):
+    fixture_env['TMPDIR']=os.environ['EFS_TEST_STORAGE_TMPDIR']
+subprocess.run(['python3',str(root/'tests/live/server_wrapper_start.py')],
+               env=fixture_env,check=True,timeout=360)

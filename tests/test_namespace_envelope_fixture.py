@@ -56,7 +56,11 @@ static void exercise(uint64_t salt,int selected) {
     if((!used[shard])==fresh)break;
    }
    assert(attempt<65536);
-  } else {strcpy(name,prefix);shard=efs_kv_mkdir_shard(parent,name,salt);}
+  } else {
+   /* Preserve the original failure proof against its original selector;
+    * selected cases exercise current production placement below. */
+   strcpy(name,prefix);shard=efs_kv_mkdir_scattered_shard(parent,name,salt);
+  }
   efs_ino_t destination=allocate(shard,parent);used[shard]=1;
   if(index<0){moving=destination;assert(cardinality(used)==2);continue;}
   struct efs_txn_parts parts={0};int hint=0,n=0;

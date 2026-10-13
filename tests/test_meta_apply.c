@@ -511,6 +511,60 @@ static void test_log_delete_busy_under_intent(void)
     efs_kv_mem_free(kv);
 }
 
+/* Placement saves cross-group durability waves without collapsing numeric
+ * shard spread. Recorded legacy choices remain authoritative on replay. */
+static void test_mkdir_group_affinity(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    efs_ino_t parent = 0, child = 0, want = 0;
+    uint64_t salt = 0;
+    unsigned roots = 0, different = 0, i;
+    char name[32];
+    CHECK(kv && efs_meta_apply_init(kv, T0) == EFS_OK, "affinity init");
+    CHECK(efs_meta_apply_export_salt(kv, &salt) == EFS_OK, "affinity salt");
+    CHECK(efs_meta_apply_mkdir(kv, &g_at, EFS_ROOT_INO, S_IFDIR|0755,
+                               "project", &parent) == EFS_OK, "project");
+    for (i = 0; i < 128; i++) {
+        uint32_t sh;
+        snprintf(name, sizeof(name), "dir%u", i);
+        sh = efs_kv_mkdir_shard(EFS_ROOT_INO, name, salt);
+        roots |= 1u << efs_raft_shard_group(sh);
+        CHECK(sh == efs_kv_mkdir_scattered_shard(EFS_ROOT_INO, name, salt),
+              "root remains fully scattered");
+        sh = efs_kv_mkdir_shard(parent, name, salt);
+        CHECK(efs_raft_shard_group(sh) ==
+                  efs_raft_shard_group(efs_kv_inode_shard(parent)),
+              "nested directory retains parent group");
+        different += sh != efs_kv_inode_shard(parent);
+        CHECK(efs_meta_apply_mkdir(kv, &g_at, parent, S_IFDIR|0755,
+                                   name, &child) == EFS_OK &&
+                  efs_kv_inode_shard(child) == sh, "actual nested allocation");
+    }
+    CHECK(roots == ((1u<<EFS_RAFT_GROUP_SHARD)|(1u<<EFS_RAFT_GROUP_SHARD2)),
+          "top-level projects cover both groups");
+    CHECK(different > 120, "nested directories retain numeric shard spread");
+    for (i = 0; i < 128; i++) {
+        snprintf(name, sizeof(name), "legacy%u", i);
+        if (efs_kv_mkdir_scattered_shard(parent,name,salt) !=
+            efs_kv_mkdir_shard(parent,name,salt)) break;
+    }
+    CHECK(i < 128, "find legacy other-group allocation");
+    CHECK(efs_meta_apply_peek_alloc(kv,
+          efs_kv_mkdir_scattered_shard(parent,name,salt), &want) == EFS_OK,
+          "legacy allocation");
+    CHECK(efs_meta_apply_mkdir_at(kv,&g_at,parent,S_IFDIR|0755,name,want,
+          EFS_META_LAYOUT_LOCAL,&child) == EFS_OK && child == want,
+          "replay preserves recorded legacy FileID");
+    CHECK(efs_meta_apply_peek_alloc(kv,
+          (efs_kv_mkdir_shard(parent,"invalid",salt)+2u)&EFS_KV_SHARD_MASK,
+          &want) == EFS_OK, "unrelated allocation");
+    CHECK(efs_meta_apply_mkdir_at(kv,&g_at,parent,S_IFDIR|0755,"invalid",want,
+          EFS_META_LAYOUT_LOCAL,&child) == EFS_ERR_PROTO,
+          "unrelated FileID rejected");
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "affinity metadata invariant");
+    efs_kv_mem_free(kv);
+}
+
 static void test_mkdir_log_at_matches(void)
 {
     struct efs_kv *have = efs_kv_mem_create();
@@ -5912,6 +5966,7 @@ int main(void)
     test_create_lookup_unlink();
     test_xattr();
     test_mkdir();
+    test_mkdir_group_affinity();
     test_create_remote_parent();
     test_create_log_at_matches();
     test_alloc_skips_live();

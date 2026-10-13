@@ -21,6 +21,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include "../common/recorder_stop.h"
+#include "../common/recorder_start.h"
 #include <sys/resource.h>
 #include <time.h>
 
@@ -149,85 +150,13 @@ static int mkdir_p(const char *path)
 
 static pid_t g_perf_pid = -1;
 
-static pid_t start_perf_recorder(pid_t target, const char *perf_path)
-{
-    char log_dir[8192];
-    strncpy(log_dir, perf_path, sizeof(log_dir) - 1);
-    log_dir[sizeof(log_dir) - 1] = '\0';
-    char *slash = strrchr(log_dir, '/');
-    if (slash) {
-        *slash = '\0';
-        mkdir_p(log_dir);
-    }
-
-    pid_t pid = fork();
-    if (pid < 0) {
-        perror("fork perf");
-        return -1;
-    }
-    if (pid == 0) {
-        char pid_str[32];
-        snprintf(pid_str, sizeof(pid_str), "%d", (int)target);
-        /* -g uses frame pointers (binaries are built with
-         * -fno-omit-frame-pointer) so perf report can show call stacks. */
-        execlp("perf", "perf", "record", "-g", "-F", "999", "-p", pid_str, "-o",
-               perf_path, NULL);
-        perror("exec perf");
-        _exit(1);
-    }
-    return pid;
-}
-
-static pid_t g_strace_pid = -1;
-
 /* --strace: `strace -f -tt -T -o <path> -p <pid>`. ptrace stops every
  * syscall of every thread, so this is for one node and a wall question
  * (where did a REPORT's finish_ms go), never for a bandwidth number.
  * Needs kernel.yama.ptrace_scope=0 (runtime on the test hosts).
  * EFS_STRACE_EXPR narrows it, e.g. "trace=fsync,fdatasync,pwrite64,futex"
  * (passed as -e). */
-static pid_t start_strace_recorder(pid_t target, const char *path)
-{
-    char log_dir[8192];
-    strncpy(log_dir, path, sizeof(log_dir) - 1);
-    log_dir[sizeof(log_dir) - 1] = '\0';
-    char *slash = strrchr(log_dir, '/');
-    if (slash) {
-        *slash = '\0';
-        mkdir_p(log_dir);
-    }
-
-    pid_t pid = fork();
-    if (pid < 0) {
-        perror("fork strace");
-        return -1;
-    }
-    if (pid == 0) {
-        char pid_str[32];
-        snprintf(pid_str, sizeof(pid_str), "%d", (int)target);
-        const char *expr = getenv("EFS_STRACE_EXPR");
-        const char *av[16];
-        int n = 0;
-        av[n++] = "strace";
-        av[n++] = "-f";
-        av[n++] = "-tt";
-        av[n++] = "-T";
-        av[n++] = "-qq";
-        av[n++] = "-o";
-        av[n++] = path;
-        av[n++] = "-p";
-        av[n++] = pid_str;
-        if (expr && *expr) {
-            av[n++] = "-e";
-            av[n++] = expr;
-        }
-        av[n] = NULL;
-        execvp("strace", (char *const *)av);
-        perror("exec strace");
-        _exit(1);
-    }
-    return pid;
-}
+static pid_t g_strace_pid = -1;
 
 /* SIGINT/SIGTERM makes perf finalize perf.data and strace detach; wait
  * up to ~5 s, then SIGKILL. */
@@ -343,7 +272,7 @@ int main(int argc, char **argv)
     memset(&server, 0, sizeof(server));
     server.persist_nodes = 1;
     server.direct_io = 0; /* default: page cache; opt in with --direct-io */
-    server.nwriters = -1; /* auto: nproc minus standing helper threads */
+    server.nwriters = -1; /* auto: helper reservation with a bounded I/O-worker floor */
     server.listen_fd = -1;
     g_server = &server;
     pthread_mutex_init(&server.lock, NULL);
@@ -666,13 +595,13 @@ int main(int argc, char **argv)
     fflush(stdout);
 
     if (server.perf) {
-        g_perf_pid = start_perf_recorder(getpid(), perf_path);
+        g_perf_pid = efs_start_perf_recorder(getpid(), perf_path);
         if (g_perf_pid < 0) {
             fprintf(stderr, "Warning: could not start perf recorder; continuing without profiling\n");
         }
     }
     if (server.strace) {
-        g_strace_pid = start_strace_recorder(getpid(), strace_path);
+        g_strace_pid = efs_start_strace_recorder(getpid(), strace_path);
         if (g_strace_pid < 0)
             fprintf(stderr, "Warning: could not start strace; continuing without it\n");
         else

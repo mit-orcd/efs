@@ -181,6 +181,7 @@ BLAKE3_OBJS = $(BLAKE3_DIR)/blake3.o \
 .PHONY: test-fence-read test-fence-view test-lookup-memo test-fold-observation test-create-errors test-report-pressure
 test-report-pressure:
 	python3 tests/test_report_pressure.py
+	python3 tests/test_report_snapshot_locks.py
 	python3 tests/test_report_retry_budget.py
 	python3 tests/test_write_queue.py
 	python3 tests/test_conn_checkout_budget.py
@@ -216,6 +217,7 @@ test-report-pressure:
 test-create-errors: $(LIB)
 	python3 tests/test_kv_wal_faults.py
 	python3 tests/test_create_errors.py
+	python3 tests/test_committed_directory_stage.py
 	python3 tests/test_create_retry_identity.py
 	python3 tests/test_create_retry_ack.py
 	python3 tests/test_open_lease.py
@@ -295,6 +297,7 @@ test-wb-runtime:
 	python3 tests/test_report_session_apply.py
 	python3 tests/test_report_activation.py
 	python3 tests/test_report_log_coverage.py
+	python3 tests/test_propose_hold_ownership.py
 	python3 tests/test_host_durable_dispatch.py
 
 test-wb-recovery:
@@ -379,6 +382,7 @@ test: all
 	python3 tests/test_lookup_group_plan.py
 	python3 tests/test_lookup_path_authority.py
 	python3 tests/test_read_control_host.py
+	python3 tests/test_queued_read_control.py
 	python3 tests/test_prepare_cohort.py
 	python3 tests/test_append_cohort.py
 	python3 tests/test_atomic_append_host.py
@@ -398,15 +402,18 @@ test: all
 	python3 tests/test_session_fence_finish.py
 	python3 tests/test_publication_host.py
 	python3 tests/test_txn_read_authority.py
+	python3 tests/test_txn_read_reuse.py
 	python3 tests/test_publication_rpc.py
 	python3 tests/test_publication_batch_rpc.py
 	python3 tests/test_publication_session_rpc.py
 	python3 tests/test_publication_session_reuse.py
 	python3 tests/test_lease_edge_rpc.py
+	python3 tests/test_lease_submission_proof.py
 	python3 tests/test_lease_request.py
 	python3 tests/test_identity_revocation.py
 	python3 tests/test_put_ticket_rpc.py
 	python3 tests/test_put_ticket_owner.py
+	python3 tests/test_put_submission_proof.py
 	python3 tests/test_put_identity.py
 	python3 tests/test_create_request.py
 	python3 tests/test_retained_create_authority.py
@@ -451,6 +458,7 @@ test: all
 	python3 tests/test_rollup_allocation_failure.py
 	python3 tests/test_rollup_budget.py
 	python3 tests/test_recorder_stop.py
+	python3 tests/test_recorder_start.py
 	python3 tests/test_address_parser.py
 	python3 tests/test_publication_writeback.py
 	python3 tests/test_lane_bootstrap_export.py
@@ -466,6 +474,7 @@ test: all
 	python3 tests/test_host_inbox.py
 	python3 tests/test_host_checkpoint.py
 	python3 tests/test_checkpoint_worker.py
+	python3 tests/test_kv_prefix_worker.py
 	python3 tests/test_host_retire.py
 	python3 tests/test_recv_overlap.py
 	python3 tests/test_kv_mtab_batch.py
@@ -513,6 +522,7 @@ test: all
 	python3 tests/test_append_prepare_batch.py
 	python3 tests/test_meta_cmd_namespace.py
 	python3 tests/test_append_catchup_host.py
+	python3 tests/test_append_single_host.py
 	./tests/test_meta_apply
 	./tests/test_retained_namespace_audit
 	./tests/test_lane_bootstrap_recovery
@@ -536,6 +546,7 @@ test: all
 	python3 tests/test_feature_discovery_status.py
 	python3 tests/test_close_inspector_scope.py
 	python3 tests/test_close_retire_fastpath.py
+	python3 tests/test_close_retire_batch.py
 	python3 tests/test_store_tls.py
 	python3 tests/test_report_session_admission.py
 	python3 tests/test_namespace_owner_once.py
@@ -543,6 +554,7 @@ test: all
 	python3 tests/test_gc_fragment_backlog.py
 	python3 tests/test_gc_inode_fanout.py
 	python3 tests/test_gc_reap_shutdown.py
+	python3 tests/test_reap_fairness.py
 	python3 tests/test_tiny_overload_oracle.py
 	python3 tests/test_session_register_verdict.py
 	python3 tests/test_namespace_session_apply.py
@@ -645,6 +657,7 @@ tests/test_bufpool: tests/test_bufpool.c src/common/common.c src/client/publicat
 
 test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	python3 tests/test_fuse_workers.py
+	python3 tests/test_fuse_worker_options.py
 	python3 tests/test_fuse_open_reply.py
 	python3 tests/test_fuse_lease_retention.py
 	python3 tests/test_inode_lock_stripes.py
@@ -659,6 +672,7 @@ test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	python3 tests/test_rollup_allocation_failure.py
 	python3 tests/test_rollup_budget.py
 	python3 tests/test_recorder_stop.py
+	python3 tests/test_recorder_start.py
 	python3 tests/test_address_parser.py
 	python3 tests/test_publication_writeback.py
 	python3 tests/test_lane_bootstrap_export.py
@@ -895,3 +909,5 @@ tests/test_repair_worker: tests/test_repair_worker.c src/server/repair_worker.c 
 
 # Broad subtree queries share the bounded immutable-KV traversal.
 src/meta/query_catalog.o src/meta/query_disk.o: src/meta/query_walk.h
+# Profiler launches and child retirement share one implementation.
+src/server/efsd.o src/client/efs_fuse.o src/client/efs_bench.o: src/common/recorder_start.h src/common/recorder_stop.h

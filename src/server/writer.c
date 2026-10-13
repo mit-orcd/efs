@@ -64,14 +64,16 @@ static __thread int tls_in_writer;
  * waits on that slot; there is no shared queue mutex on the PUT path
  * (Oct 1: ~27 futex per fragment was this hand-off). */
 /* Separate writer and owning-caller conditions avoid waking the wrong class.
- * Fallback admission uses a FIFO list with a private condition per waiter.
- * EMPTY is reserved for its head, including while that caller is waking;
- * new fast-path submissions cannot bypass it. Fairness is per slot, not a
- * global scheduling order across all writers. */
+ * Fallback admission preserves FIFO within a file and alternates an older
+ * queued stream with other queued files. New fast-path submissions
+ * cannot bypass queued ownership. Fairness is per slot, not a global order
+ * across all writers; one busy stream must not delay every tiny PUT. */
 enum { WSLOT_EMPTY = 0, WSLOT_QUEUED = 1, WSLOT_DONE = 2 };
 struct slot_waiter {
     pthread_cond_t ready;
     struct slot_waiter *next;
+    efs_ino_t ino;
+    efs_export_id_t export_id;
 };
 struct writer_slot {
     pthread_mutex_t mu;
@@ -119,9 +121,14 @@ int server_default_writer_threads(void)
     long n = sysconf(_SC_NPROCESSORS_ONLN);
     if (n < 1)
         n = EFS_DEFAULT_WRITERS;
+    /* These workers wait on durable file/directory I/O. Reserving all four
+     * CPUs on a small VM left one writer and serialized every concurrent
+     * PUT behind streamed writes. Retain the helper reservation on larger
+     * hosts, but allow up to four overlapping barriers on smaller ones. */
+    long io_floor = n < 4 ? n : 4;
     n -= EFS_WRITERS_RESERVED;
-    if (n < 1)
-        n = 1;
+    if (n < io_floor)
+        n = io_floor;
     if (n > EFS_MAX_WRITERS)
         n = EFS_MAX_WRITERS;
     return (int)n;
@@ -274,6 +281,29 @@ static void *writer_thread(void *arg)
     return NULL;
 }
 
+/* After serving a file, rotate its remaining waiters behind other files.
+ * Stable partition preserves FIFO within each FileID. Existing other files
+ * get a turn before the stream's next chunk; new arrivals append afterward
+ * and cannot starve already queued ownership. No extra admission allocation. */
+static void slot_waiter_rotate(struct writer_slot *sl,efs_ino_t ino,
+                                efs_export_id_t export_id)
+{
+    struct slot_waiter *other=NULL,*other_tail=NULL,*same=NULL,*same_tail=NULL;
+    for(struct slot_waiter *w=sl->wait_head,*next;w;w=next) {
+        next=w->next;w->next=NULL;
+        if(w->ino==ino && w->export_id==export_id) {
+            if(same_tail)same_tail->next=w;else same=w;
+            same_tail=w;
+        } else {
+            if(other_tail)other_tail->next=w;else other=w;
+            other_tail=w;
+        }
+    }
+    if(other_tail)other_tail->next=same;
+    sl->wait_head=other ? other : same;
+    sl->wait_tail=same_tail ? same_tail : other_tail;
+}
+
 /* Caller holds sl->mu and found the slot EMPTY: queue the job, wake the
  * writer, wait for DONE, free the slot for the fallback waiters. */
 static int slot_run_locked(struct writer_slot *sl, struct writer_job *job)
@@ -287,10 +317,10 @@ static int slot_run_locked(struct writer_slot *sl, struct writer_job *job)
     while (sl->state != WSLOT_DONE)
         pthread_cond_wait(&sl->cv_done, &sl->mu);
     rc = job->result;
+    slot_waiter_rotate(sl,job->ino,job->ex ? job->ex->id : 0);
     sl->state = WSLOT_EMPTY;
     sl->job = NULL;
-    if (sl->wait_head)
-        pthread_cond_signal(&sl->wait_head->ready);
+    if(sl->wait_head)pthread_cond_signal(&sl->wait_head->ready);
     return rc;
 }
 
@@ -329,9 +359,10 @@ static int slot_handoff(struct writer_job *job, int nw, int *queued)
             job->fallback = 1;
             job->lock_us += efs_iostats_now_us() - lock_start;
         }
-        /* Reserve EMPTY for the oldest fallback waiter. Fast-path callers
+        /* Reserve EMPTY for the eligible queued file. Fast-path callers
          * must not steal it before the signalled thread reacquires the mutex. */
-        struct slot_waiter waiter = {0};
+        struct slot_waiter waiter = {.ino=job->ino,
+            .export_id=job->ex ? job->ex->id : 0};
         if (pthread_cond_init(&waiter.ready, NULL) != 0) {
             pthread_mutex_unlock(&sl->mu);
             return EFS_ERR_IO;

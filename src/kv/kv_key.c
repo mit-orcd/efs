@@ -179,7 +179,7 @@ int efs_kv_key_opid(uint32_t shard, const uint8_t uuid[EFS_OPID_UUID_LEN],
     return EFS_OK;
 }
 
-uint32_t efs_kv_mkdir_shard(efs_ino_t parent, const char *name, uint64_t salt)
+uint32_t efs_kv_mkdir_scattered_shard(efs_ino_t parent, const char *name, uint64_t salt)
 {
     uint32_t h = 2166136261u;
     uint8_t b[8];
@@ -207,6 +207,19 @@ uint32_t efs_kv_mkdir_shard(efs_ino_t parent, const char *name, uint64_t salt)
         h *= 16777619u;
     }
     return h & EFS_KV_SHARD_MASK;
+}
+
+uint32_t efs_kv_mkdir_shard(efs_ino_t parent, const char *name, uint64_t salt)
+{
+    uint32_t shard = efs_kv_mkdir_scattered_shard(parent, name, salt);
+
+    /* Root children distribute projects across both metadata groups. Nested
+     * directories retain salted shard spread within their parent's group;
+     * LOCAL mkdir can then commit parent, child and dentry in one Raft entry.
+     * Odd/even is the canonical efs_raft_shard_group mapping. */
+    if (parent != EFS_ROOT_INO)
+        shard = (shard & ~1u) | (efs_kv_inode_shard(parent) & 1u);
+    return shard;
 }
 
 static int wrap(uint8_t kind, const uint8_t *orig, uint32_t olen, uint8_t *out,

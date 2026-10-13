@@ -32,6 +32,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include "../common/recorder_stop.h"
+#include "../common/recorder_start.h"
 #include <sys/statvfs.h>
 #include <poll.h>
 #include <time.h>
@@ -1848,6 +1849,7 @@ struct efs_open_ref {
     int close_pending; /* retain ownership until release is confirmed */
     uint64_t lease_generation;
     uint64_t retry_order; /* published under g_open_mu; edge is stripe-owned */
+    uint64_t retry_turn; /* fair retry visits, protected by g_open_mu */
     struct efs_client_lease_request edge; /* immutable OPEN or CLOSE identity */
     struct efs_client_lease_request adoption; /* clear pending before CLOSE */
     struct efs_open_ref *next;
@@ -1996,6 +1998,7 @@ static int efs_close_note(efs_ino_t ino, int *leased)
                 if (r->leased) {
                     r->close_pending = 1;
                     r->retry_order = efs_open_retry_order(r);
+                    r->retry_turn = 0;
                 } else {
                     *pp = r->next;
                     free(r);
@@ -2123,14 +2126,31 @@ static int wb_lock_budget(pthread_mutex_t *mu)
 /* One retained release per iteration, with no RPC under the table mutex. */
 static int efs_open_drain_pending(void)
 {
+    static uint64_t counter; /* protected by g_open_mu */
     efs_ino_t ino = 0;
-    uint64_t oldest = UINT64_MAX;
+    uint64_t oldest = UINT64_MAX, turn = UINT64_MAX;
+    struct efs_open_ref *selected = NULL;
     pthread_mutex_lock(&g_open_mu);
     for (struct efs_open_ref *r = g_open_refs; r; r = r->next)
-        if (r->close_pending && (!ino || r->retry_order < oldest)) {
+        if (r->close_pending && (!ino || (r->retry_order != UINT64_MAX && oldest == UINT64_MAX) ||
+            ((r->retry_order == UINT64_MAX) == (oldest == UINT64_MAX) &&
+            (r->retry_turn < turn ||
+            (r->retry_turn == turn && r->retry_order < oldest))))) {
             ino = r->ino;
             oldest = r->retry_order;
+            turn = r->retry_turn;
+            selected = r;
         }
+    if (selected) {
+        if (counter == UINT64_MAX) {
+            for (struct efs_open_ref *r = g_open_refs; r; r = r->next)
+                r->retry_turn = 0;
+            counter = 0;
+        }
+        /* Give every retained identity a turn even when an older CLOSE has
+         * an unresolved or negative verdict. Never discard that old owner. */
+        selected->retry_turn = ++counter;
+    }
     pthread_mutex_unlock(&g_open_mu);
     if (!ino) return EFS_OK;
     pthread_mutex_t *edge = open_edge_mu(ino);
@@ -2161,6 +2181,9 @@ static int efs_open_lease_resume_wait(struct efs_client_lease_request *request)
     return rc;
 }
 
+/* Every returned regular descriptor, including CREATE, owns a server lease.
+ * The edge stripe prevents a second open returning before proven OPEN,
+ * and prevents a delayed last-close release deleting a new lease. */
 static int efs_open_acquire_fileid_run(efs_ino_t ino, uint64_t create_generation,
                                       uint64_t pending_token, int *handed_off,
                                       int *admission_busy)
@@ -4231,7 +4254,6 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
     if(create_rc==EFS_OK && pending_create->request.complete) {
         ino=pending_create->request.inode.ino;
         if(created)*created=pending_create->request.inode;
-        create_rc=efs_client_create_stage_result(&pending_create->request);
     } else if(create_rc==EFS_OK)create_rc=EFS_ERR_BUSY;
     if(create_rc!=EFS_OK) {
         if(pending_create->request.complete && pending_create->request.result!=EFS_OK) {
@@ -4298,8 +4320,15 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
             return fuse_stat_errno(hrc);
         }
         if(pending_create) {
+            /* Stage only after the open owner pins the committed empty row.
+             * Do not invent dirty work solely to prevent cache eviction. */
+            int stage_rc=efs_client_create_stage_open_result(&pending_create->request);
             (void)efs_client_create_reset(&pending_create->request);
             efs_pending_create_free(pending_create);
+            if(stage_rc!=EFS_OK) {
+                (void)efs_fuse_release_ino(ino,fi);
+                return fuse_stat_errno(stage_rc);
+            }
         }
     } else if(pending_create)efs_pending_create_queue(pending_create);
     if (out_ino)
@@ -6852,58 +6881,9 @@ static void numa_pin_startup(const char *host, uint16_t port)
             node, ncpu, hca, mrc == 0 ? "preferred" : strerror(errno));
 }
 
-static int mkdir_p(const char *path)
-{
-    char tmp[8192];
-    strncpy(tmp, path, sizeof(tmp) - 1);
-    tmp[sizeof(tmp) - 1] = '\0';
-
-    for (char *p = tmp + 1; *p; p++) {
-        if (*p == '/') {
-            *p = '\0';
-            mkdir(tmp, 0755);
-            *p = '/';
-        }
-    }
-    return mkdir(tmp, 0755);
-}
-
 static pid_t g_perf_pid = -1;
 static int g_perf_want;           /* --perf given; start after the fork */
 static char g_perf_path[512];
-
-static pid_t start_perf_recorder(pid_t target, const char *perf_path)
-{
-    char perf_dir[8192];
-    strncpy(perf_dir, perf_path, sizeof(perf_dir) - 1);
-    perf_dir[sizeof(perf_dir) - 1] = '\0';
-    char *slash = strrchr(perf_dir, '/');
-    if (slash) {
-        *slash = '\0';
-        mkdir_p(perf_dir);
-    }
-
-    pid_t pid = fork();
-    if (pid < 0) {
-        perror("fork perf");
-        return -1;
-    }
-    if (pid == 0) {
-        char pid_str[32];
-        snprintf(pid_str, sizeof(pid_str), "%d", (int)target);
-        /* -g uses frame pointers (binaries are built with
-         * -fno-omit-frame-pointer) so perf report can show call stacks. */
-        execlp("perf", "perf", "record", "-g", "-F", "999", "-p", pid_str, "-o",
-               perf_path, NULL);
-        perror("exec perf");
-        _exit(1);
-    }
-    return pid;
-}
-
-static pid_t g_strace_pid = -1;
-static int g_strace_want;         /* --strace given; start after the fork */
-static char g_strace_path[512];
 
 /* --strace: `strace -f -tt -T -o <path> -p <pid>` on the daemon. ptrace
  * stops every syscall of every thread, so this is for one client and a
@@ -6911,48 +6891,9 @@ static char g_strace_path[512];
  * number. Needs kernel.yama.ptrace_scope=0 (runtime on the test hosts).
  * EFS_STRACE_EXPR narrows it, e.g. "trace=fsync,writev,recvfrom,futex"
  * (passed as -e). */
-static pid_t start_strace_recorder(pid_t target, const char *path)
-{
-    char dir[8192];
-    strncpy(dir, path, sizeof(dir) - 1);
-    dir[sizeof(dir) - 1] = '\0';
-    char *slash = strrchr(dir, '/');
-    if (slash) {
-        *slash = '\0';
-        mkdir_p(dir);
-    }
-
-    pid_t pid = fork();
-    if (pid < 0) {
-        perror("fork strace");
-        return -1;
-    }
-    if (pid == 0) {
-        char pid_str[32];
-        snprintf(pid_str, sizeof(pid_str), "%d", (int)target);
-        const char *expr = getenv("EFS_STRACE_EXPR");
-        const char *av[16];
-        int n = 0;
-        av[n++] = "strace";
-        av[n++] = "-f";
-        av[n++] = "-tt";
-        av[n++] = "-T";
-        av[n++] = "-qq";
-        av[n++] = "-o";
-        av[n++] = path;
-        av[n++] = "-p";
-        av[n++] = pid_str;
-        if (expr && *expr) {
-            av[n++] = "-e";
-            av[n++] = expr;
-        }
-        av[n] = NULL;
-        execvp("strace", (char *const *)av);
-        perror("exec strace");
-        _exit(1);
-    }
-    return pid;
-}
+static pid_t g_strace_pid = -1;
+static int g_strace_want;         /* --strace given; start after the fork */
+static char g_strace_path[512];
 
 /* SIGTERM makes perf finalize perf.data and strace detach; wait up to
  * ~5 s, then SIGKILL. */
@@ -7478,7 +7419,7 @@ static int efs_fuse_bench_run(const char *kind, double time_sec)
     }
     pid_t bench_perf = -1;
     if (g_perf_want) {
-        bench_perf = start_perf_recorder(getpid(), g_perf_path);
+        bench_perf = efs_start_perf_recorder(getpid(), g_perf_path);
         if (bench_perf < 0)
             fprintf(stderr, "Warning: could not start perf; continuing\n");
     }
@@ -7758,6 +7699,27 @@ int main(int argc, char **argv)
     return ret;
 }
 
+/* libfuse supplies max_threads=10 and an unset idle sentinel itself,
+ * so zero-value fallbacks cannot establish our bounded defaults. Insert them
+ * first; later explicit user options retain ordinary last-option precedence. */
+static int efs_fuse_parse_cmdline(struct fuse_args *args,
+                                  struct fuse_cmdline_opts *opts)
+{
+    if(!args || args->argc<1 || !args->argv)return -1;
+    struct fuse_args configured=FUSE_ARGS_INIT(0,NULL);
+    for(int i=0;i<args->argc;i++) {
+        if(fuse_opt_add_arg(&configured,args->argv[i])!=0)goto failed;
+        if(i==0 && fuse_opt_add_arg(&configured,
+            "-omax_threads=32,max_idle_threads=8")!=0)goto failed;
+    }
+    fuse_opt_free_args(args);
+    *args=configured;
+    return fuse_parse_cmdline(args,opts);
+failed:
+    fuse_opt_free_args(&configured);
+    return -1;
+}
+
 static int efs_fuse_main_mt(int argc, char *argv[])
 {
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
@@ -7765,7 +7727,7 @@ static int efs_fuse_main_mt(int argc, char *argv[])
     struct fuse_loop_config *config = NULL;
     int ret = -1;
 
-    if (fuse_parse_cmdline(&args, &opts) != 0)
+    if (efs_fuse_parse_cmdline(&args, &opts) != 0)
         return 1;
 
     if (opts.show_version) {
@@ -7829,7 +7791,7 @@ static int efs_fuse_main_mt(int argc, char *argv[])
      * process under -f). Attach the recorder to it; the parent above has
      * already been excluded. */
     if (g_perf_want) {
-        g_perf_pid = start_perf_recorder(getpid(), g_perf_path);
+        g_perf_pid = efs_start_perf_recorder(getpid(), g_perf_path);
         if (g_perf_pid < 0)
             fprintf(stderr, "Warning: could not start perf recorder; continuing without profiling\n");
         else
@@ -7837,7 +7799,7 @@ static int efs_fuse_main_mt(int argc, char *argv[])
         fflush(stderr);
     }
     if (g_strace_want) {
-        g_strace_pid = start_strace_recorder(getpid(), g_strace_path);
+        g_strace_pid = efs_start_strace_recorder(getpid(), g_strace_path);
         if (g_strace_pid < 0)
             fprintf(stderr, "Warning: could not start strace; continuing without it\n");
         else

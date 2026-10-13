@@ -288,6 +288,8 @@ int efs_client_publication_id(uint64_t sequence, struct efs_opid *);
 int efs_client_rpc_lease_edge(efs_ino_t,uint64_t,const struct efs_opid_req *,
     unsigned flags,uint64_t pending_token,int probe,uint64_t *known);
 int efs_client_rpc_publication_session(uint32_t shard,const struct efs_opid *);
+/* Established-floor scheduling cache; never continuing mutation permission. */
+int efs_client_session_admit(uint32_t shard,const struct efs_opid *);
 /* ReadIndex of global owner: ACTIVE newer epoch proves completed revocation.
  * Missing owner/fencing state/transport failure never proves revocation. */
 int efs_client_rpc_identity_revoked(const struct efs_opid *,int *);
@@ -314,7 +316,8 @@ int efs_client_create_begin(struct efs_client_create_request *,efs_ino_t,
 int efs_client_create_resume(struct efs_client_create_request *,int probe_only);
 int efs_client_create_reset(struct efs_client_create_request *);
 int efs_client_create_cancel(struct efs_client_create_request *);
-int efs_client_create_stage_result(const struct efs_client_create_request *);
+int efs_client_create_stage_open_result(const struct efs_client_create_request *);
+int efs_client_stage_is_open(efs_ino_t);
 int efs_client_lease_begin(struct efs_client_lease_request *,efs_ino_t,
                            uint64_t,unsigned,uint64_t);
 int efs_client_lease_resume(struct efs_client_lease_request *,int probe_only);
@@ -371,7 +374,6 @@ int efs_client_pull_chunks_range(efs_ino_t ino, uint32_t start_ci,
  * has no row for (caller zeroes (end - start + 7) / 8 bytes). */
 int efs_client_pull_chunks_range_absent(efs_ino_t ino, uint32_t start_ci,
                                         uint32_t end_ci, uint8_t *absent);
-int efs_dcache_replay_stale(efs_ino_t ino, uint32_t ci);
 int efs_client_rpc_unlink(efs_export_id_t export_id, efs_ino_t parent,
                           const char *name, int is_dir);
 int efs_client_rpc_rename_at(efs_export_id_t export_id, efs_ino_t old_parent,
@@ -472,7 +474,6 @@ int efs_client_note_meta_change(int force);
  * used to block every FUSE flush on REPORT_CHUNKS (unlink-storm create
  * ran at ~4 files/s). posix2 still sees the report: B starts only after
  * A's SSH step returns, which is far longer than one async REPORT. */
-void efs_client_kick_meta_flush(void);
 void efs_client_stop_meta_flush(void);
 
 /* Decoded-chunk cache for sub-chunk reads and RMW. */
@@ -714,8 +715,6 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
 int efs_client_rpc_query_snapshot(const struct efs_msg_query_snapshot *req,
                                     struct efs_msg_query_snapshot_reply *reply,char **text);
 
-int efs_client_rpc_query_snapshot_v3(const struct efs_msg_query_snapshot_v3 *req,
-                                    struct efs_msg_query_snapshot_reply *reply,char **text);
 
 int efs_client_rpc_query_snapshot_v4(const struct efs_msg_query_snapshot_v4 *req,
                                     struct efs_msg_query_snapshot_reply *reply,char **text);

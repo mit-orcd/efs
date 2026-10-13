@@ -1019,12 +1019,14 @@ Full protocol: [protocols/data.md](protocols/data.md)
 
 A dentry lives on its **parent's shard** as a small projection
 `(ino, gen, type)`; the inode row is the only mutable copy of anything else.
-**CREATE co-location:** a file's inode row lands on its directory's shard
-(file CREATE = dentry + inode row in **one Raft entry**); **every MKDIR
-scatters** — `inode_shard(new_dir) = hash(parent, name, export_salt) &
-0xFFF` — paying one 2-shard transaction to buy an independently scalable
-subtree for the directory's lifetime. `EFS_DIR_SPREAD_MIN` is a scalability
-bound on the co-located file set, not just a space threshold.
+**CREATE co-location:** a LOCAL file's inode row shares its directory shard.
+New root directories scatter across all numerical shards; nested directories
+retain salted numerical spread within their parent's odd/even metadata group.
+A LOCAL nested MKDIR then commits in one atomic Raft entry; cross-group and
+spread-directory cases retain transactions. This reduces transaction waves at
+the cost of group-level distribution within a narrow subtree. Recorded old
+CREATE FileIDs replay unchanged. See [directory placement](protocols/directory.md).
+`EFS_DIR_SPREAD_MIN` remains a scalability bound on co-located files.
 
 A directory spreads (one-way) on **entry count OR op pressure**, through a
 layout-epoch protocol `LOCAL → SPLITTING(e) → HASHED(e)`: during SPLITTING,
@@ -1513,6 +1515,8 @@ and the [400 GiB evidence](../status/orcd-efs-400g-20261012.md). Expiry, packing
 and unplanned-event repair/recovery remain outside the current profile.
 
 ## Project status — current work and index
+
+**Mac checkpoint committed; native qualification remains open:** implementation `32f71f27`, full regression PASS; latest native **213/216**, three small-file timeouts, best fresh 214/216. Current-source persistence **27/27 prepare + 27/27 verify** after clean same-store restart PASS. Proposed 64-entry durable-ancestry cache is **undeployed**, awaiting approval and real-storage safety gates. [Results and small-file durability investigation](../status/mac-v032-posix-20261012.md).
 
 **Proposed feature:** [W113 — aggregate client workload telemetry](#w113--aggregate-application-workload-telemetry-across-fuse-clients): ORCD seven-client read/write ops/s and human-friendly bytes/s, separate from server/internal traffic. Discussion recorded; implementation and acceptance NOTRUN.
 
@@ -9630,39 +9634,38 @@ shard) then an inode get (inode shard) — two point-gets, possibly two shards.
 That is the price of not duplicating mutable state, and it is paid only on
 the attribute path, not the name-exists path.
 
-### The CREATE co-location rule (load-bearing) — files local, directories scatter
+### CREATE co-location and directory group affinity
 
-Parent-shard dentries only make CREATE single-shard if the new inode lands
-on the *same* shard as the dentry. So inode allocation is constrained by
-placement (P2). But a naive "child inherits the parent's shard" rule has a
-fatal consequence: a directory's children inherit its shard, *their* children
-inherit it again, and an entire subtree funnels into one Raft leader until
-each directory individually grows hot enough to spread — "many independent
-directories → near-linear" would be false for exactly the common case. So
-the rule distinguishes files from directories:
+Regular files in LOCAL directories share their parent's numerical shard.
+New directories retain a salted numerical shard of their own, while nested
+LOCAL directories stay in their parent's metadata Raft group. Root children
+continue to distribute independently across both groups.
 
 ```text
 CREATE regular file:
     normal directory:  inode_shard(new_ino) = inode_shard(parent_ino)
     spread directory:  inode_shard(new_ino) = dentry_shard(parent_ino, name)
-                                              (the 64-shard permutation below)
 
-MKDIR (any directory, always):
-    inode_shard(new_dir)  = hash(parent_ino, name, export_salt) & 0xFFF
+MKDIR:
+    scattered = hash(parent_ino, name, export_salt) & 0xFFF
+    root child:   inode_shard(new_dir) = scattered
+    nested child: inode_shard(new_dir) = (scattered & ~1) | (parent_ino & 1)
 ```
 
-**Files are local; directories scatter.** A new file shares its directory's
-shard, so file CREATE writes dentry + inode row in **one Raft entry on one
-shard** — the dominant namespace op stays a single log append. A new
-*directory* is deliberately placed on its own hash shard: MKDIR pays one
-two-shard transaction (dentry on the parent shard, inode row on the home
-shard, via [transactions](#appendix-8--protocol--cross-shard-transactions)) and in return buys **an
-independently scalable subtree for the directory's entire lifetime** —
-`/projectA/*` and `/projectB/*` live on different shards from birth, not
-after a spread event. Directory creation is rare next to file creation, so
-the transaction cost is amortized to nothing; the parallelism it buys is
-permanent. The per-export `salt` (chosen at mkfs) prevents correlated names
-from clustering across exports.
+With the current odd/even metadata-group mapping, LOCAL nested MKDIR commits
+its parent update, dentry and new inode in one atomic Raft entry even when
+those rows occupy different numerical shards. Cross-group and spread-directory
+mutations still use [transactions](#appendix-8--protocol--cross-shard-transactions). Recorded CREATE FileIDs
+remain authoritative during replay: the exact old scattered choice is accepted
+alongside the new selector; unrelated shard hints are rejected. Existing
+identities and directories do not move.
+
+This trades group-level distribution within a narrow subtree for fewer durable
+transaction waves. Independent top-level projects still distribute across both
+groups, and nested directories retain numerical shard spread. Numerical spread
+does **not** imply independent current leaders: arbitrary nested projects can
+share a group. Hot-directory dentry spreading and file-data placement remain
+unchanged. A future group-map expansion must explicitly revisit this policy.
 
 The allocator picks an ino whose low 12 bits equal the required shard (inos
 are allocated per-shard — §5 of the spec — so this is free: the shard's

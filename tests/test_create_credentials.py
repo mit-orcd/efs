@@ -34,6 +34,7 @@ static gid_t captured_gid;
 static struct {uint64_t export_id;} g_client={1};
 struct request {struct efs_inode inode;int complete,result,attempted;uint64_t generation;struct {struct {struct {uint64_t seq;} id;} q;} wire;};
 struct efs_pending_create {struct request request;};
+static int open_acquired,stage_rc,releases;
 static int name_is_reserved(const char *name){(void)name;return 0;}
 static int check_dir_wx(const struct efs_inode *p){(void)p;return 0;}
 static int efs_client_stat_ino(efs_ino_t ino,struct efs_inode *p){memset(p,0,sizeof(*p));p->ino=ino;p->mode=parent_mode;p->gid=3001;return EFS_OK;}
@@ -41,9 +42,10 @@ static struct efs_pending_create *efs_pending_create_alloc(void){return calloc(1
 static void efs_pending_create_free(struct efs_pending_create *p){free(p);}
 static void efs_pending_create_queue(struct efs_pending_create *p){free(p);}
 static void capture(mode_t mode,uid_t uid,gid_t gid){captured_mode=mode;captured_uid=uid;captured_gid=gid;}
-static int efs_fuse_create_begin_wait(struct request *r,efs_ino_t p,const char *name,mode_t mode,uid_t uid,gid_t gid){(void)p;(void)name;capture(mode,uid,gid);r->complete=1;r->generation=1;r->inode.ino=42;return EFS_OK;}
+static int efs_fuse_create_begin_wait(struct request *r,efs_ino_t p,const char *name,mode_t mode,uid_t uid,gid_t gid){(void)p;(void)name;capture(mode,uid,gid);open_acquired=0;r->complete=1;r->generation=1;r->inode.ino=42;return EFS_OK;}
 static int efs_fuse_create_resume_wait(struct request *r){(void)r;return EFS_OK;}
-static int efs_client_create_stage_result(struct request *r){(void)r;return EFS_OK;}
+static int efs_client_create_stage_open_result(struct request *r){(void)r;assert(open_acquired);return stage_rc;}
+static int efs_fuse_release_ino(fuse_ino_t ino,struct fuse_file_info *fi){(void)fi;assert(ino==42);releases++;open_acquired=0;return 0;}
 static int efs_client_create_reset(struct request *r){(void)r;return EFS_OK;}
 static int efs_client_create_cancel(struct request *r){(void)r;return EFS_OK;}
 static int efs_client_rpc_lookup(uint64_t ex,efs_ino_t p,const char*n,struct efs_inode*out){(void)ex;(void)p;(void)n;if(out){out->ino=42;out->mode=S_IFDIR|0755;}return lookup_rc;}
@@ -52,7 +54,7 @@ static int efs_file_open(struct fuse_file_info *fi,efs_ino_t ino){(void)fi;(void
 static void efs_file_close(struct fuse_file_info *fi){(void)fi;}
 static void fuse_fi_direct_io(struct fuse_file_info *fi){(void)fi;}
 static int efs_open_acquire_fileid(efs_ino_t ino,uint64_t gen){(void)ino;(void)gen;return EFS_OK;}
-static int efs_open_acquire_created(efs_ino_t ino,uint64_t gen,uint64_t token,int *handoff){(void)ino;(void)gen;(void)token;*handoff=1;return EFS_OK;}
+static int efs_open_acquire_created(efs_ino_t ino,uint64_t gen,uint64_t token,int *handoff){(void)ino;(void)gen;(void)token;*handoff=1;open_acquired=1;return EFS_OK;}
 static int efs_client_create_result(efs_ino_t p,const char *name,mode_t mode,uid_t uid,gid_t gid,int flags,efs_ino_t *out){(void)p;(void)name;(void)flags;capture(mode,uid,gid);if(create_rc)return create_rc;*out=42;return EFS_OK;}
 static int efs_client_create_result_inode(efs_ino_t p,const char *name,mode_t mode,uid_t uid,gid_t gid,int flags,efs_ino_t *out,struct efs_inode *created){int rc=efs_client_create_result(p,name,mode,uid,gid,flags,out);if(created){memset(created,0,sizeof(*created));if(!rc){created->ino=*out;created->mode=mode;created->uid=uid;created->gid=gid;}}return rc;}
 static int efs_client_write(efs_ino_t ino,uint64_t off,size_t n,const void *data){(void)ino;(void)off;(void)n;(void)data;return EFS_OK;}
@@ -71,7 +73,9 @@ static void check_all(int setgid,int context){
 }
 int main(void){
  check_all(1,1);check_all(0,1);check_all(1,0);check_all(0,0);
- efs_ino_t ino=999;create_rc=EFS_ERR_EXIST;
+ struct fuse_file_info fi={0};efs_ino_t ino=999;
+ stage_rc=EFS_ERR_BUSY;assert(efs_fuse_create_at(1,"stage-refused",0640,&fi,&ino,NULL)==-EBUSY&&releases==1&&!open_acquired);stage_rc=0;
+ create_rc=EFS_ERR_EXIST;
  assert(efs_fuse_mkdir_at(1,"raced",0755,&ino,NULL)==-EEXIST && ino==999);
  create_rc=EFS_ERR_BUSY;
  assert(efs_fuse_mkdir_at(1,"raced",0755,&ino,NULL)==-EBUSY && ino==999);

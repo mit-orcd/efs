@@ -1078,7 +1078,7 @@ void efs_client_mark_ino_dirty(efs_ino_t ino)
         r->ino_marked = 1;
         g_client.dirty_ino_count++;
     }
-    int stripe = (int)((uint64_t)ino % EFS_DIR_LOCKS);
+    int stripe = (int)efs_ino_lock_slot(ino, EFS_DIR_LOCKS);
     g_client.last_dirty_stripe = stripe;
     g_client.dirty_stripe_ops[stripe]++;
     pthread_mutex_unlock(&g_client.dirty_mu);
@@ -1701,6 +1701,27 @@ static int report_retry_pause(unsigned delay_us)
     return efs_client_rpc_past_deadline() ? EFS_ERR_BUSY : EFS_OK;
 }
 
+/* A single-file REPORT snapshots only that inode's marks and rows. Taking
+ * every directory stripe lets an unrelated long write stall every close.
+ * The index mutex still protects shared table/slab allocation; the global
+ * client mutex retains eviction and whole-snapshot exclusion. No RPC runs
+ * under these guards. Whole-set snapshots retain their original coverage. */
+static void report_snapshot_lock(efs_ino_t ino)
+{
+    if (!ino) { efs_client_table_lock(); return; }
+    pthread_mutex_lock(&g_client.lock);
+    efs_client_lock_dir(ino);
+    pthread_mutex_lock(&g_client.idx_mu);
+}
+
+static void report_snapshot_unlock(efs_ino_t ino)
+{
+    if (!ino) { efs_client_table_unlock(); return; }
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_unlock_dir(ino);
+    pthread_mutex_unlock(&g_client.lock);
+}
+
 static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
 {
     if (efs_client_rpc_past_deadline())
@@ -1730,18 +1751,18 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
      * lock, then dirty_mu; the wait drops both (the in-flight REPORT
      * needs the table lock to finish). */
     for (;;) {
-        efs_client_table_lock();
+        report_snapshot_lock(only_ino);
         pthread_mutex_lock(&g_client.dirty_mu);
         if (!(only_ino && pub_has_locked(only_ino)) &&
             (pub = pub_take_locked(only_ino, NULL, 0)) >= 0)
             break;
         if (!sync) {
             pthread_mutex_unlock(&g_client.dirty_mu);
-            efs_client_table_unlock();
+            report_snapshot_unlock(only_ino);
             return EFS_OK;
         }
         pthread_mutex_unlock(&g_client.dirty_mu);
-        efs_client_table_unlock();
+        report_snapshot_unlock(only_ino);
         pthread_mutex_lock(&g_client.dirty_mu);
         while ((only_ino && pub_has_locked(only_ino)) || pub_full_locked()) {
             if (efs_client_rpc_past_deadline()) {
@@ -1811,7 +1832,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
         dirty_snap_remark_locked(&ds);
         pub_release(pub);
         dirty_snap_free(&ds);
-        efs_client_table_unlock();
+        report_snapshot_unlock(only_ino);
         return EFS_ERR_NOMEM;
     }
     /* W41: a per-inode snapshot holds only only_ino's marks (the old
@@ -1903,7 +1924,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
         in++;
         extra_cap--;
     }
-    efs_client_table_unlock();
+    report_snapshot_unlock(only_ino);
 
     /* A flush of a clean fd (the rd() after wr() already published)
      * used to send a sync REPORT with no records. That is a Raft
@@ -2005,7 +2026,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
                 hit_budget = 1;
                 break;
             }
-            efs_client_table_lock();
+            report_snapshot_lock(only_ino);
             cn = 0;
             for (uint64_t i = 0; i < ds.chunk_count; i++) {
                 struct efs_chunk_entry ce;
@@ -2040,7 +2061,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
                 }
                 cn++;
             }
-            efs_client_table_unlock();
+            report_snapshot_unlock(only_ino);
             continue;
         }
         /* NOT_FOUND here is not a missing inode: the server skips a
@@ -2118,11 +2139,11 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
          * read clean in between (the evictor would drop a row with
          * unpublished chunks). The slot's alias of ds.ino_keys is
          * dropped before the snapshot is freed. */
-        efs_client_table_lock();
+        report_snapshot_lock(only_ino);
         dirty_snap_remark_locked(&ds);
         pub_release(pub);
         dirty_snap_free(&ds);
-        efs_client_table_unlock();
+        report_snapshot_unlock(only_ino);
         g_client.report_flush_failed = 1;
     }
     return rc;
@@ -2266,11 +2287,6 @@ void efs_client_stop_meta_flush(void)
     pthread_mutex_unlock(&g_client.dirty_mu);
     if (left)
         (void)efs_client_report_dirty_ino(0, 1);
-}
-
-void efs_client_kick_meta_flush(void)
-{
-    meta_flush_enqueue(0);
 }
 
 int efs_client_note_meta_change(int force)
@@ -6545,11 +6561,6 @@ static int report_replay_stale(efs_ino_t ino)
      * staging table and the next REPORT republished never-PUT gens. */
     (void)ino;
     return EFS_OK;
-}
-
-int efs_dcache_replay_stale(efs_ino_t ino, uint32_t ci)
-{
-    return dcache_replay_stale_ex(ino, ci, 0);
 }
 
 /* The host has no row for this chunk (the repull said so): the table's

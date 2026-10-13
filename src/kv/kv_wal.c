@@ -335,6 +335,37 @@ int kv_wal_hold(struct kv_wal *w, int on)
     return rc;
 }
 
+/* Transfer one outer hold to a bounded persistence job. The token names
+ * records already appended, never records that arrive during its barrier. */
+int kv_wal_detach(struct kv_wal *w,uint64_t *prefix)
+{
+    if(!w || !prefix)return EFS_ERR_INVAL;
+    pthread_mutex_lock(&w->mu);
+    int rc=w->io_failed?EFS_ERR_IO:w->hold!=1?EFS_ERR_BUSY:EFS_OK;
+    if(!rc){*prefix=w->appended;w->hold=0;}
+    pthread_mutex_unlock(&w->mu);return rc;
+}
+
+int kv_wal_sync_prefix(struct kv_wal *w,uint64_t prefix)
+{
+    if(!w)return EFS_ERR_INVAL;
+    pthread_mutex_lock(&w->mu);
+    int rc=prefix>w->appended?EFS_ERR_INVAL:w->io_failed?EFS_ERR_IO:EFS_OK;
+    if(!rc && w->sync_mode!=EFS_KV_LSM_NOSYNC)rc=kv_wal_fsync_to_locked(w,prefix);
+    pthread_mutex_unlock(&w->mu);return rc;
+}
+
+int kv_wal_sync_covered(struct kv_wal *w,uint64_t prefix,int *covered)
+{
+    if(!covered)return EFS_ERR_INVAL;
+    *covered=0;
+    if(!w)return EFS_ERR_INVAL;
+    pthread_mutex_lock(&w->mu);
+    int rc=w->io_failed?EFS_ERR_IO:prefix>w->appended?EFS_ERR_INVAL:EFS_OK;
+    if(!rc)*covered=prefix<=w->synced;
+    pthread_mutex_unlock(&w->mu);return rc;
+}
+
 int kv_wal_reset(struct kv_wal *w, uint64_t applied)
 {
     int rc = EFS_OK;

@@ -31,7 +31,7 @@ static uint32_t efs_kv_lane_shard(efs_ino_t ino,uint8_t lane){(void)ino;return l
 static int host_read_index(struct efs_raft_host *h,uint8_t group,int *hint){(void)h;reads[group]++;*hint=group+1;return read_error;}
 static int efs_meta_apply_get_inode(void *kv,efs_ino_t ino,struct efs_meta_row *out){(void)kv;(void)ino;*out=scheduling_hint;return hint_error;}
 static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,uint8_t second,int *hint){if(pair_error)return pair_error;int rc=host_read_index(h,first,hint);return rc?rc:host_read_index(h,second,hint);}
-struct host_txn_read_context {struct efs_raft_host *host;int unhosted_coordinator;};
+struct host_txn_read_context {struct efs_raft_host *host;int unhosted_coordinator;uint8_t covered;};
 static int host_txn_read_coord;
 static int efs_meta_apply_get_inode_tx(void *kv,efs_ino_t ino,int coord,void *h,struct efs_meta_row *out){(void)kv;(void)ino;(void)coord;((struct host_txn_read_context *)h)->unhosted_coordinator=coordinator_unhosted;inode_reads++;*out=row;return inode_error;}
 static int host_hosts(struct efs_raft_host *h,uint8_t group){(void)h;return !(unhosted&(1u<<group));}

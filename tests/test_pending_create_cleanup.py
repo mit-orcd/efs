@@ -58,7 +58,9 @@ int main(void) {
  assert(efs_pending_create_drain()==EFS_ERR_BUSY && g_pending_create_count==1 && !begins);
  lock_rc=0;release_rc=EFS_ERR_BUSY;
  assert(efs_pending_create_drain()==EFS_ERR_BUSY&&!begins&&entry->request.complete);
- release_rc=0;lease_rc=EFS_ERR_NET;
+ release_rc=0;lock_rc=EFS_ERR_BUSY;
+ assert(efs_pending_create_drain()==EFS_ERR_BUSY&&entry->request.complete&&!begins&&g_pending_creates==entry);
+ lock_rc=0;lease_rc=EFS_ERR_NET;
  assert(efs_pending_create_drain()==EFS_ERR_NET&&begins==1&&entry->cleanup.active&&g_pending_create_count==1);
  lease_rc=0;assert(efs_pending_create_drain()==EFS_ERR_BUSY&&begins==1&&submits==2&&!g_pending_create_count);
  entry=unknown();create_rc=EFS_ERR_EXIST;

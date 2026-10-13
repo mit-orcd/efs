@@ -94,7 +94,6 @@ static int host_resize_resolve(void *user,const struct efs_txid *t,const struct 
 static struct efs_raft *group_raft(struct efs_raft_host *h,uint8_t group){return &h->r[group];}
 static int efs_raft_role(const struct efs_raft *r){return r->role;}
 static unsigned efs_raft_voters(const struct efs_raft *r){return r->voters;}
-static unsigned efs_raft_disk_sync_depth(struct efs_raft_disk *d){return d->depth;}
 static int efs_raft_disk_sync_hold(struct efs_raft_disk *d){d->depth++;return 0;}
 static int host_report_release(struct efs_raft_host *h,int held){assert(held&&h->disk->depth==1);h->disk->depth--;return 0;}
 static int host_propose_mode(struct efs_raft_host *h,uint8_t group,const uint8_t *cmd,uint32_t n,uint64_t *idx,uint64_t *term,int *hint,int local){assert(local);return host_propose(h,group,cmd,n,idx,term,hint);}

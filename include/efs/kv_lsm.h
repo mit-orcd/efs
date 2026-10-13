@@ -89,6 +89,14 @@ int efs_kv_lsm_l0_hot(struct efs_kv *kv);
  * holds across the entry so 256 pubs share one durable boundary. */
 int efs_kv_lsm_sync_hold(struct efs_kv *kv);
 int efs_kv_lsm_sync_release(struct efs_kv *kv);
+/* Detach exactly one outer hold without claiming durability. A successful
+ * sync_prefix is required before publishing its captured recovery cursor.
+ * Nested holds return BUSY unchanged, permitting synchronous fallback. */
+int efs_kv_lsm_sync_detach(struct efs_kv *kv,uint64_t *prefix);
+int efs_kv_lsm_sync_prefix(struct efs_kv *kv,uint64_t prefix);
+/* Nonblocking probe of the actual durable WAL frontier. Unknown/future
+ * prefixes and sticky storage failures never produce covered=true. */
+int efs_kv_lsm_sync_covered(struct efs_kv *kv,uint64_t prefix,int *covered);
 
 /* One bounded Raft entry: reads/scans see this thread's staged changes;
  * other readers see the old committed table. Writers are excluded until end.

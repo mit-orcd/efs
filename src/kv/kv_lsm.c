@@ -1607,6 +1607,32 @@ int efs_kv_lsm_sync_release(struct efs_kv *kv)
     return kv_wal_hold(l->wal, 0);
 }
 
+int efs_kv_lsm_sync_detach(struct efs_kv *kv,uint64_t *prefix)
+{
+    if(!prefix)return EFS_ERR_INVAL;
+    *prefix=0;
+    if(!kv || kv->ops!=&lsm_ops || !kv->ctx)return EFS_OK;
+    struct kv_lsm *l=kv->ctx;
+    return l->magic!=KV_LSM_MAGIC || !l->wal?EFS_OK:kv_wal_detach(l->wal,prefix);
+}
+
+int efs_kv_lsm_sync_prefix(struct efs_kv *kv,uint64_t prefix)
+{
+    if(!kv || kv->ops!=&lsm_ops || !kv->ctx)return EFS_OK;
+    struct kv_lsm *l=kv->ctx;
+    return l->magic!=KV_LSM_MAGIC || !l->wal?EFS_OK:kv_wal_sync_prefix(l->wal,prefix);
+}
+
+int efs_kv_lsm_sync_covered(struct efs_kv *kv,uint64_t prefix,int *covered)
+{
+    if(!covered)return EFS_ERR_INVAL;
+    *covered=1;
+    if(!kv || kv->ops!=&lsm_ops || !kv->ctx)return EFS_OK;
+    struct kv_lsm *l=kv->ctx;
+    return l->magic!=KV_LSM_MAGIC || !l->wal?EFS_OK:
+        kv_wal_sync_covered(l->wal,prefix,covered);
+}
+
 struct efs_kv_lsm_view {
     struct kv_seg **seg;
     uint32_t n;

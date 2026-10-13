@@ -1744,6 +1744,13 @@ static int mkdir_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
         return rc;
     psh = efs_kv_inode_shard(parent);
     csh = efs_kv_mkdir_shard(parent, name, salt);
+    /* A committed CREATE records the chosen FileID. Replay older scattered
+     * allocations exactly, rather than relocating an inode or selecting a
+     * different offset on a follower. Reject unrelated shard hints below. */
+    if (from_log && want_ino && efs_kv_inode_shard(want_ino) != csh &&
+        efs_kv_inode_shard(want_ino) ==
+            efs_kv_mkdir_scattered_shard(parent, name, salt))
+        csh = efs_kv_inode_shard(want_ino);
     dseq_lane = lay == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(name);
     if (want_ino) {
         rc = alloc_hint_or_next(kv, csh, want_ino, &ino, &next);

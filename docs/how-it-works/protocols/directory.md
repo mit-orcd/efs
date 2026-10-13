@@ -54,39 +54,38 @@ shard) then an inode get (inode shard) — two point-gets, possibly two shards.
 That is the price of not duplicating mutable state, and it is paid only on
 the attribute path, not the name-exists path.
 
-## The CREATE co-location rule (load-bearing) — files local, directories scatter
+## CREATE co-location and directory group affinity
 
-Parent-shard dentries only make CREATE single-shard if the new inode lands
-on the *same* shard as the dentry. So inode allocation is constrained by
-placement (P2). But a naive "child inherits the parent's shard" rule has a
-fatal consequence: a directory's children inherit its shard, *their* children
-inherit it again, and an entire subtree funnels into one Raft leader until
-each directory individually grows hot enough to spread — "many independent
-directories → near-linear" would be false for exactly the common case. So
-the rule distinguishes files from directories:
+Regular files in LOCAL directories share their parent's numerical shard.
+New directories retain a salted numerical shard of their own, while nested
+LOCAL directories stay in their parent's metadata Raft group. Root children
+continue to distribute independently across both groups.
 
 ```text
 CREATE regular file:
     normal directory:  inode_shard(new_ino) = inode_shard(parent_ino)
     spread directory:  inode_shard(new_ino) = dentry_shard(parent_ino, name)
-                                              (the 64-shard permutation below)
 
-MKDIR (any directory, always):
-    inode_shard(new_dir)  = hash(parent_ino, name, export_salt) & 0xFFF
+MKDIR:
+    scattered = hash(parent_ino, name, export_salt) & 0xFFF
+    root child:   inode_shard(new_dir) = scattered
+    nested child: inode_shard(new_dir) = (scattered & ~1) | (parent_ino & 1)
 ```
 
-**Files are local; directories scatter.** A new file shares its directory's
-shard, so file CREATE writes dentry + inode row in **one Raft entry on one
-shard** — the dominant namespace op stays a single log append. A new
-*directory* is deliberately placed on its own hash shard: MKDIR pays one
-two-shard transaction (dentry on the parent shard, inode row on the home
-shard, via [transactions](transactions.md)) and in return buys **an
-independently scalable subtree for the directory's entire lifetime** —
-`/projectA/*` and `/projectB/*` live on different shards from birth, not
-after a spread event. Directory creation is rare next to file creation, so
-the transaction cost is amortized to nothing; the parallelism it buys is
-permanent. The per-export `salt` (chosen at mkfs) prevents correlated names
-from clustering across exports.
+With the current odd/even metadata-group mapping, LOCAL nested MKDIR commits
+its parent update, dentry and new inode in one atomic Raft entry even when
+those rows occupy different numerical shards. Cross-group and spread-directory
+mutations still use [transactions](transactions.md). Recorded CREATE FileIDs
+remain authoritative during replay: the exact old scattered choice is accepted
+alongside the new selector; unrelated shard hints are rejected. Existing
+identities and directories do not move.
+
+This trades group-level distribution within a narrow subtree for fewer durable
+transaction waves. Independent top-level projects still distribute across both
+groups, and nested directories retain numerical shard spread. Numerical spread
+does **not** imply independent current leaders: arbitrary nested projects can
+share a group. Hot-directory dentry spreading and file-data placement remain
+unchanged. A future group-map expansion must explicitly revisit this policy.
 
 The allocator picks an ino whose low 12 bits equal the required shard (inos
 are allocated per-shard — §5 of the spec — so this is free: the shard's

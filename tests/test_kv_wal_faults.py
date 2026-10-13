@@ -12,12 +12,20 @@ source=r'''
 #include <stdlib.h>
 #include <unistd.h>
 static int write_fail, sync_fail, calls;
+static pthread_mutex_t sync_gate=PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t sync_cv=PTHREAD_COND_INITIALIZER;
+static int sync_pause,sync_entered;
 static ssize_t fault_pwrite(int fd,const void *p,size_t n,off_t off) {
     if (write_fail && ++calls == 1) return pwrite(fd,p,n>3?3:n,off);
     if (write_fail) {errno=ENOSPC;return -1;}
     return pwrite(fd,p,n,off);
 }
-static int fault_sync(int fd) {if(sync_fail){errno=EIO;return -1;}return fdatasync(fd);}
+static int fault_sync(int fd) {
+ pthread_mutex_lock(&sync_gate);sync_entered++;pthread_cond_broadcast(&sync_cv);
+ while(sync_pause)pthread_cond_wait(&sync_cv,&sync_gate);
+ pthread_mutex_unlock(&sync_gate);
+ if(sync_fail){errno=EIO;return -1;}return fdatasync(fd);
+}
 #ifdef __linux__
 static int allocation_fail, allocation_calls;
 static int fault_fallocate(int fd,int mode,off_t start,off_t len) {
@@ -134,7 +142,43 @@ static void interior_damage(void) {
         assert(pread(fd,&key,1,(off_t)end+(gap?8:0)-2)==1 && key=='B');close(fd);unlink(path);
     }
 }
-int main(void){run(0);run(1);malformed_batch();interior_damage();reservation();allocation_fallback();puts("WAL sticky failures and reopen recovery PASS");}
+struct prefix_job {struct kv_wal *w;uint64_t prefix;int rc;};
+static void *flush_prefix(void *p){struct prefix_job *j=p;j->rc=kv_wal_sync_prefix(j->w,j->prefix);return NULL;}
+static void detached_prefix(void) {
+ char path[]="/tmp/efs-wal-prefix-XXXXXX";int fd=mkstemp(path);assert(fd>=0);close(fd);
+ struct kv_wal *w;uint64_t seq,prefix;assert(!kv_wal_open(path,EFS_KV_LSM_SYNC,&w));
+ struct efs_kv_item item={EFS_KV_PUT,(const uint8_t*)"P",1,(const uint8_t*)"V",1};
+ assert(!kv_wal_hold(w,1));assert(!kv_wal_hold(w,1));
+ assert(kv_wal_detach(w,&prefix)==EFS_ERR_BUSY && w->hold==2);
+ assert(!kv_wal_hold(w,0));assert(!kv_wal_append(w,&item,1,&seq));
+ assert(!kv_wal_detach(w,&prefix)&&prefix==1&&!w->hold&&!w->synced);
+ int covered=7;assert(!kv_wal_sync_covered(w,prefix,&covered)&&!covered);
+ pthread_mutex_lock(&sync_gate);sync_pause=1;sync_entered=0;pthread_mutex_unlock(&sync_gate);
+ struct prefix_job job={w,prefix,0};pthread_t thread;assert(!pthread_create(&thread,NULL,flush_prefix,&job));
+ pthread_mutex_lock(&sync_gate);while(!sync_entered)pthread_cond_wait(&sync_cv,&sync_gate);pthread_mutex_unlock(&sync_gate);
+ /* New held records arrive during the older fsync. They are not its proof. */
+ assert(!kv_wal_hold(w,1));assert(!kv_wal_append(w,&item,1,&seq)&&seq==2);
+ pthread_mutex_lock(&sync_gate);sync_pause=0;pthread_cond_broadcast(&sync_cv);pthread_mutex_unlock(&sync_gate);
+ pthread_join(thread,NULL);assert(!job.rc&&w->synced==1&&w->appended==2);
+ assert(!kv_wal_detach(w,&prefix)&&prefix==2);assert(!kv_wal_sync_prefix(w,prefix)&&w->synced==2);
+ assert(kv_wal_sync_prefix(w,3)==EFS_ERR_INVAL);
+ /* Two detached cycles arriving before a barrier share its physical sync,
+  * while the worker still publishes only each captured cursor separately. */
+ assert(!kv_wal_hold(w,1));assert(!kv_wal_append(w,&item,1,&seq));uint64_t first_prefix;
+ assert(!kv_wal_detach(w,&first_prefix));
+ assert(!kv_wal_hold(w,1));assert(!kv_wal_append(w,&item,1,&seq));assert(!kv_wal_detach(w,&prefix));
+ unsigned sync_before=(unsigned)sync_entered;
+ assert(!kv_wal_sync_prefix(w,first_prefix)&&w->synced==prefix);
+ assert(!kv_wal_sync_covered(w,prefix,&covered)&&covered);
+ assert(kv_wal_sync_covered(w,prefix+1,&covered)==EFS_ERR_INVAL&&!covered);
+ assert(!kv_wal_sync_prefix(w,prefix)&&(unsigned)sync_entered==sync_before+1);
+ assert(!kv_wal_hold(w,1));assert(!kv_wal_append(w,&item,1,&seq));assert(!kv_wal_detach(w,&prefix));
+ sync_fail=1;assert(kv_wal_sync_prefix(w,prefix)==EFS_ERR_IO && w->synced==4);sync_fail=0;
+ assert(kv_wal_sync_prefix(w,prefix)==EFS_ERR_IO);
+ assert(kv_wal_sync_covered(w,first_prefix,&covered)==EFS_ERR_IO&&!covered);
+ kv_wal_close(w);unlink(path);
+}
+int main(void){run(0);run(1);malformed_batch();interior_damage();reservation();allocation_fallback();detached_prefix();puts("WAL sticky failures and reopen recovery PASS");}
 '''
 with tempfile.TemporaryDirectory(prefix='efs-wal-faults-') as directory:
     p=Path(directory)/'test.c';p.write_text(source)

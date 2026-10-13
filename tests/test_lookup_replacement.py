@@ -26,6 +26,7 @@ static int host_read_index_pair(struct efs_raft_host*p,uint8_t first,uint8_t sec
 static void host_fwd_lookup(struct efs_raft_host*p,efs_ino_t i,const char*n,struct efs_msg_inode_reply*r,const uint8_t*g,int c){(void)p;(void)g;(void)c;forwarded_lookups++;r->status=EFS_INODE_RPC_OK;r->inode.ino=2;r->inode.parent=i;strcpy(r->inode.name,n);}
 static void host_fwd_getattr(struct efs_raft_host*p,efs_ino_t i,struct efs_msg_inode_reply*r,const uint8_t*g,int c){(void)p;(void)g;(void)c;r->status=missing_inode?EFS_INODE_RPC_NOT_FOUND:EFS_INODE_RPC_OK;r->inode.ino=i;}
 static int host_txn_coord(void*u,const struct efs_txid*t,uint32_t sh,int*d){(void)t;if(!host_hosts(u,efs_raft_shard_group(sh)))return EFS_ERR_IO;*d=EFS_TXN_COMMIT;return coord_error;}
+int efs_txn_decision_get(struct efs_kv*k,uint32_t sh,const struct efs_txid*t,int*d){(void)k;(void)sh;(void)t;*d=EFS_TXN_COMMIT;return coord_error;}
 int efs_meta_apply_get_inode(struct efs_kv*k,efs_ino_t i,struct efs_meta_row*r){(void)k;(void)i;memset(r,0,sizeof(*r));r->layout=EFS_META_LAYOUT_LOCAL;return 0;}
 int efs_meta_apply_lookup_tx(struct efs_kv*k,efs_ino_t i,const char*n,efs_txn_coord_fn f,void*u,struct efs_meta_dentry*r){(void)k;(void)i;(void)n;r->ino=pending_phase==2?3:2;if(pending_phase==1){struct efs_txid t={{0}};int d;int rc=f(u,&t,2,&d);if(rc)return rc;}return missing_name?EFS_ERR_NOT_FOUND:0;}
 static int host_read_inode_lanes_covered(struct efs_raft_host*p,efs_ino_t i,int*h,uint8_t covered){(void)p;(void)i;(void)h;assert(covered);return missing_inode?EFS_ERR_NOT_FOUND:0;}

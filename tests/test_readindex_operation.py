@@ -17,7 +17,7 @@ struct efs_raft_host {struct efs_kv *kv;};
 struct host_view {int has,leader;};
 static void host_view_get(struct efs_raft_host *h,uint8_t g,struct host_view *v){(void)h;v->has=1;v->leader=g+1;}
 
-struct host_txn_read_context {struct efs_raft_host *host;int unhosted_coordinator;};
+struct host_txn_read_context {struct efs_raft_host *host;int unhosted_coordinator;uint8_t covered;};
 static struct efs_meta_row row;
 static int calls[3], read_fail, inode_fail, unhosted, coordinator,pair_fail,hint_empty;
 static int host_read_index(struct efs_raft_host *h,uint8_t g,int *hint) {
@@ -39,7 +39,7 @@ static int host_pick_peer(struct efs_raft_host *h,const uint8_t *need,int n,int 
 }
 int efs_meta_apply_get_inode(struct efs_kv*k,efs_ino_t i,struct efs_meta_row*r){(void)k;(void)i;*r=row;if(hint_empty)r->active_lanes=r->used_shards=0;return inode_fail;}
 static int host_read_index_pair(struct efs_raft_host*h,uint8_t a,uint8_t b,int*hint){if(pair_fail)return pair_fail;int rc=host_read_index(h,a,hint);return rc?rc:host_read_index(h,b,hint);}
-''' + function('host_read_inode_lanes_reuse') + function('host_read_inode_lanes_covered') + function('host_read_inode_lanes') + r'''
+''' + function('host_read_inode_lanes_reuse') + function('host_read_inode_lanes_covered') + function('host_read_inode_lanes_mask') + function('host_read_inode_lanes') + r'''
 int main(void) {
  struct efs_raft_host h={0};int hint=-1;row.mode=S_IFREG;
  assert(!host_read_inode_lanes(&h,1,&hint));assert(calls[0]==1 && !calls[2]);

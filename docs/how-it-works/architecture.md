@@ -989,12 +989,14 @@ Full protocol: [protocols/data.md](protocols/data.md)
 
 A dentry lives on its **parent's shard** as a small projection
 `(ino, gen, type)`; the inode row is the only mutable copy of anything else.
-**CREATE co-location:** a file's inode row lands on its directory's shard
-(file CREATE = dentry + inode row in **one Raft entry**); **every MKDIR
-scatters** — `inode_shard(new_dir) = hash(parent, name, export_salt) &
-0xFFF` — paying one 2-shard transaction to buy an independently scalable
-subtree for the directory's lifetime. `EFS_DIR_SPREAD_MIN` is a scalability
-bound on the co-located file set, not just a space threshold.
+**CREATE co-location:** a LOCAL file's inode row shares its directory shard.
+New root directories scatter across all numerical shards; nested directories
+retain salted numerical spread within their parent's odd/even metadata group.
+A LOCAL nested MKDIR then commits in one atomic Raft entry; cross-group and
+spread-directory cases retain transactions. This reduces transaction waves at
+the cost of group-level distribution within a narrow subtree. Recorded old
+CREATE FileIDs replay unchanged. See [directory placement](protocols/directory.md).
+`EFS_DIR_SPREAD_MIN` remains a scalability bound on co-located files.
 
 A directory spreads (one-way) on **entry count OR op pressure**, through a
 layout-epoch protocol `LOCAL → SPLITTING(e) → HASHED(e)`: during SPLITTING,

@@ -1,6 +1,12 @@
 /* Exercise the actual writer implementation with an in-memory disk boundary. */
-#include "../src/server/writer.c"
 #include <assert.h>
+#include <unistd.h>
+static long writer_test_cpus = 4;
+static long writer_test_sysconf(int name)
+{ assert(name == _SC_NPROCESSORS_ONLN); return writer_test_cpus; }
+#define sysconf writer_test_sysconf
+#include "../src/server/writer.c"
+#undef sysconf
 #include <stdio.h>
 
 __thread uint64_t efs_tls_chunk_gen;
@@ -48,7 +54,7 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
     efs_ino_t ino, uint32_t ci, uint32_t fi, const uint8_t *data, uint32_t len)
 { return server_write_fragment_with_sum_sync(s, ex, ino, ci, fi, data, len, NULL); }
 
-struct producer { struct efsd_server *s; struct efs_export *ex; unsigned first, span, passes; };
+struct producer { struct efsd_server *s; struct efs_export *ex; unsigned first, span, passes; efs_ino_t ino; };
 static void *produce(void *arg)
 {
     struct producer *p = arg;
@@ -56,7 +62,7 @@ static void *produce(void *arg)
     for (unsigned pass = 0; pass < p->passes; pass++) {
         efs_tls_path_hint = pass ? -1 : EFS_PATH_HINT_SKIP;
         for (unsigned ci = p->first; ci < p->first + p->span; ci++)
-            assert(server_write_fragment_with_sum(p->s, p->ex, 123, ci, 0,
+            assert(server_write_fragment_with_sum(p->s, p->ex, p->ino ? p->ino : 123, ci, 0,
                    data, sizeof(data), sum) == EFS_OK);
     }
     return NULL;
@@ -64,6 +70,13 @@ static void *produce(void *arg)
 
 int main(void)
 {
+    const long cpus[] = {-1,0,1,2,4,6,8,12,256};
+    const int expected[] = {4,4,1,2,4,4,4,8,EFS_MAX_WRITERS};
+    for (unsigned i=0;i<sizeof(cpus)/sizeof(cpus[0]);i++) {
+        writer_test_cpus=cpus[i];
+        assert(server_default_writer_threads()==expected[i]);
+    }
+    writer_test_cpus=4;
     struct efsd_server s = {0}; struct efs_export ex = {0};
     uint8_t data[64] = {1}, sum[EFS_HASH_SIZE] = {1};
     s.storage_path_count = 2; s.id = 250;
@@ -74,7 +87,7 @@ int main(void)
         server_writer_stats_reset(1);
         pthread_t threads[4]; struct producer producers[4];
         for (unsigned i = 0; i < 4; i++) {
-            producers[i] = (struct producer){ &s, &ex, i * 16, 16, 2 };
+            producers[i] = (struct producer){ .s=&s,.ex=&ex,.first=i*16,.span=16,.passes=2 };
             assert(pthread_create(&threads[i], NULL, produce, &producers[i]) == 0);
         }
         for (unsigned i = 0; i < 4; i++) pthread_join(threads[i], NULL);
@@ -97,7 +110,7 @@ int main(void)
         server_writer_stats_reset(1);
         pthread_t threads[32]; struct producer producers[32];
         for (unsigned i = 0; i < 32; i++) {
-            producers[i] = (struct producer){ &s, &ex, i * 2, 2, 32 };
+            producers[i] = (struct producer){ .s=&s,.ex=&ex,.first=i*2,.span=2,.passes=32 };
             assert(pthread_create(&threads[i], NULL, produce, &producers[i]) == 0);
         }
         for (unsigned i = 0; i < 32; i++) pthread_join(threads[i], NULL);
@@ -115,7 +128,7 @@ int main(void)
     assert(server_writer_pool_start(&s) == 0);
     pthread_t ordered[9]; struct producer ordered_args[9];
     for (unsigned i = 0; i < 9; i++) {
-        ordered_args[i] = (struct producer){ &s, &ex, i, 1, 1 };
+        ordered_args[i] = (struct producer){ .s=&s,.ex=&ex,.first=i,.span=1,.passes=1 };
         assert(pthread_create(&ordered[i], NULL, produce, &ordered_args[i]) == 0);
         for (;;) {
             pthread_mutex_lock(&g_slots[0].mu);
@@ -133,11 +146,39 @@ int main(void)
     for (unsigned i = 0; i < 9; i++) assert(service_order[i] == i);
     assert(!g_slots[0].wait_head && !g_slots[0].wait_tail);
     record_order = 0; server_writer_pool_stop(&s);
+    /* A queued stream cannot monopolize an admission slot. Different
+     * FileIDs get turns, including the same inode number in another export;
+     * the stream resumes immediately afterward and preserves its FIFO. */
+    memset(roots,-1,sizeof(roots));
+    s.nwriters=1;gate_hold=1;record_order=1;service_count=0;
+    assert(server_writer_pool_start(&s)==0);
+    struct efs_export other_export={.id=2};
+    pthread_t mixed[11];struct producer mixed_args[11];
+    for(unsigned i=0;i<11;i++) {
+        mixed_args[i]=(struct producer){.s=&s,.ex=i==10?&other_export:&ex,
+            .first=i,.span=1,.passes=1,.ino=i==9?456:(i>=5&&i<=8?789:123)};
+        assert(!pthread_create(&mixed[i],NULL,produce,&mixed_args[i]));
+        for(;;) {
+            pthread_mutex_lock(&g_slots[0].mu);unsigned count=0;
+            for(struct slot_waiter *w=g_slots[0].wait_head;w;w=w->next)count++;
+            int ready=i?count==i:g_slots[0].state==WSLOT_QUEUED;
+            pthread_mutex_unlock(&g_slots[0].mu);
+            if(ready)break;
+            usleep(100);
+        }
+    }
+    __atomic_store_n(&gate_hold,0,__ATOMIC_RELEASE);
+    for(unsigned i=0;i<11;i++)assert(!pthread_join(mixed[i],NULL));
+    const unsigned expected_order[]={0,5,9,10,1,6,2,7,3,8,4};
+    assert(service_count==11);
+    for(unsigned i=0;i<11;i++)assert(service_order[i]==expected_order[i]);
+    assert(!g_slots[0].wait_head&&!g_slots[0].wait_tail);
+    record_order=0;server_writer_pool_stop(&s);
     s.nwriters = 2; fail_thread = 1;
     assert(server_writer_pool_start(&s) != 0);
     fail_thread = 0; s.nwriters = 0;
     assert(server_writer_pool_start(&s) == 0);
     server_writer_pool_stop(&s);
-    puts("writer routing: inline/pool spread, overwrite identity, statistics and lifecycle PASS");
+    puts("writer routing: inline/pool spread, overwrite identity, statistics, per-file fair admission and lifecycle PASS");
     return 0;
 }

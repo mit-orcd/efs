@@ -17,17 +17,17 @@ struct efs_raft {int role;unsigned voters;};
 struct efs_raft_disk {unsigned depth;};
 struct efs_raft_host {pthread_mutex_t mu;struct efs_raft_disk *disk;struct efs_raft r[3];};
 struct host_idx_ref {uint8_t group;uint64_t idx,term;};
-static unsigned sequence,holds,releases,fail_call,sync_fail;
+static unsigned sequence,holds,releases,fail_call,sync_fail,external_drop;
 static unsigned ids[256],groups[256],modes[256];
 static int decide_rc,wait_rc;static unsigned decided,finished,waited;
 static struct efs_raft *group_raft(struct efs_raft_host *h,uint8_t g){return &h->r[g];}
 int efs_raft_role(const struct efs_raft *r){return r->role;}
 uint32_t efs_raft_voters(const struct efs_raft *r){return r->voters;}
-static int efs_raft_disk_sync_depth(struct efs_raft_disk *d){return d->depth;}
 static int efs_raft_disk_sync_hold(struct efs_raft_disk *d){d->depth++;holds++;return 0;}
 static int host_propose_mode(struct efs_raft_host *h,uint8_t group,const uint8_t *cmd,
  uint32_t n,uint64_t *idx,uint64_t *term,int *hint,int local){
  (void)hint;assert(n==1 || n==22);assert(sequence<256);
+ if(external_drop){assert(local&&h->disk->depth==2);h->disk->depth--;external_drop=0;}
  ids[sequence]=cmd[0];groups[sequence]=group;modes[sequence]=local;sequence++;
  if(h->r[group].role!=EFS_RAFT_LEADER)assert(!h->disk->depth); /* Never forward inside hold. */
  if(fail_call==sequence)return EFS_ERR_NOT_PRIMARY;
@@ -80,9 +80,9 @@ int main(void){
  reset();host_command_cohort_begin(&c,&h);uint8_t cmd=1;
  assert(!host_command_cohort_add(&h,&refs[0],&cmd,1,&hint));
  assert(host_command_cohort_end(&c,EFS_ERR_BUSY,&hint)==EFS_ERR_BUSY && !sequence && !disk.depth);
- reset();disk.depth=1;host_command_cohort_begin(&c,&h);
+ reset();disk.depth=1;external_drop=1;host_command_cohort_begin(&c,&h);
  for(unsigned i=0;i<2;i++)assert(!host_command_cohort_add(&h,&refs[i],&cmd,1,&hint));
- assert(!host_command_cohort_end(&c,0,&hint) && !holds && !releases && disk.depth==1);disk.depth=0;
+ assert(!host_command_cohort_end(&c,0,&hint) && holds==1 && releases==1 && !disk.depth && !external_drop);
  assert(!host_command_cohort_add(&h,&refs[0],&cmd,1,&hint)); /* Ordinary callers unchanged. */
  struct efs_txid tx={0};struct efs_txn_parts parts={0};parts.n=EFS_TXN_MAX_PART;
  for(unsigned i=0;i<parts.n;i++)parts.shard[i]=i+1;

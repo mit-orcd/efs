@@ -24,16 +24,16 @@ source = '#define HOST_LOCK_LEN '+lock_len+'\n#define HOST_APPEND_RSV_LEN '+appe
 struct efs_raft {int leader;};
 struct server {uint64_t gc_sweep_errors,gc_reap_errors,gc_ack_errors;};
 struct efs_raft_host {int gc_running;pthread_mutex_t mu;struct efs_raft r;struct server *s;struct efs_kv *kv;};
-static int verdict, waits, forwards, durable;
+static int verdict, waits, forwards, durable, settled_rc;
 static struct efs_raft *group_raft(struct efs_raft_host*h,uint8_t g){(void)g;return &h->r;}
 static int efs_raft_role(struct efs_raft*r){return r->leader;}
 static int efs_raft_leader(struct efs_raft*r){(void)r;return 2;}
-static int efs_raft_propose(struct efs_raft*r,const uint8_t*c,uint32_t n,uint64_t*i){(void)r;(void)c;(void)n;*i=41;return 0;}
-static uint64_t efs_raft_term(struct efs_raft*r){(void)r;return 7;}
-static int efs_raft_durable(struct efs_raft*r,uint64_t i){(void)r;assert(i==41);return durable;}
-static int host_mark_durable_covered(struct efs_raft_host*h,uint8_t g,struct efs_raft*r,uint64_t i){(void)h;(void)g;return efs_raft_durable(r,i);}
-static void host_pump_kick(struct efs_raft_host*h){(void)h;}
-static int host_wait_settled(struct efs_raft_host*h,uint8_t g,uint64_t i,uint64_t t,int*p){(void)h;(void)g;(void)i;(void)t;(void)p;assert(0);return 0;}
+static int host_propose_impl(struct efs_raft_host*h,uint8_t g,const uint8_t*c,uint32_t n,uint64_t*i,uint64_t*t,int*hint,int local){
+ (void)g;(void)c;(void)n;assert(!hint&&!local);
+ assert(pthread_mutex_trylock(&h->mu)==0);pthread_mutex_unlock(&h->mu);
+ *i=41;*t=7;return durable;
+}
+static int host_wait_settled(struct efs_raft_host*h,uint8_t g,uint64_t i,uint64_t t,int*p){(void)h;(void)g;(void)p;assert(i==41&&t==7);waits++;return settled_rc;}
 static int host_wait_verdict(struct efs_raft_host*h,uint8_t g,uint64_t i,uint64_t t,int*p){(void)h;(void)g;(void)p;assert(i==41&&t==7);waits++;return verdict;}
 static int host_wait_applied(struct efs_raft_host*h,uint8_t g,uint64_t i,int*p){(void)h;(void)g;(void)p;assert(i==41);waits++;return 0;}
 static int host_remote_cmd(struct efs_raft_host*h,uint8_t g,const uint8_t*c,uint32_t n,struct efs_msg_raft_mkfs_reply*p,int lid){(void)h;(void)g;(void)c;(void)n;assert(lid==2);forwards++;p->index=41;return verdict;}
@@ -125,6 +125,9 @@ int main(void){
  assert(core_result(EFS_MD_CMD_APPEND_RSV,EFS_ERR_BUSY,53)==EFS_OK);
  assert(core_result(EFS_MD_CMD_APPEND_RSV,EFS_ERR_IO,45)==EFS_OK);
  verdict=0;durable=EFS_ERR_IO;assert(host_gc_propose(&h,0,cmd,18)==EFS_ERR_IO);
+ durable=0;settled_rc=EFS_ERR_NOT_PRIMARY;
+ assert(host_bg_propose(&h,0,cmd,18,0)==EFS_ERR_NOT_PRIMARY);
+ settled_rc=0;assert(host_bg_propose(&h,0,cmd,18,0)==EFS_OK);
  __atomic_store_n(&h.gc_running,0,__ATOMIC_RELEASE);
  int stopped_waits=waits,stopped_forwards=forwards;
  assert(host_gc_propose(&h,0,cmd,18)==EFS_ERR_BUSY);

@@ -29,6 +29,8 @@ static struct efs_conn *rpc_owner_conn_shard(uint32_t shard,efs_node_id_t *nid)
 static void efs_client_conn_drop(efs_node_id_t n,struct efs_conn *c){(void)n;(void)c;drops++;}
 static void efs_client_conn_release(efs_node_id_t n,struct efs_conn *c){(void)n;(void)c;}
 static int rpc_writer_retry_pause(unsigned n){(void)n;return EFS_OK;}
+static unsigned leader_notes;static efs_node_id_t noted_leader;
+static void rpc_note_leader(uint8_t g,efs_node_id_t n){assert(g==0 || g==2);leader_notes++;noted_leader=n;}
 static uint64_t number(const uint8_t *b,unsigned n){uint64_t v=0;while(n--)v=v<<8|*b++;return v;}
 int efs_conn_send_msg(struct efs_conn *c,uint8_t type,const void *data,uint32_t n)
 {
@@ -58,7 +60,12 @@ int main(void)
 {
  identity.id.client_uuid[0]=93;identity.id.session_epoch=1;identity.id.seq=5;identity.ack=4;
  const struct efs_opid_req original=identity;uint64_t known=99;
- reset();assert(invoke(&known)==EFS_OK && known==1 && calls==1);
+ reset();assert(invoke(&known)==EFS_OK && known==1 && calls==1 && !leader_notes);
+ reset();hint=2;assert(invoke(&known)==EFS_OK && known==1 && leader_notes==1 && noted_leader==3);
+ reset();hint=EFS_MAX_NODES;assert(invoke(&known)==EFS_OK && leader_notes==1);
+ reset();hint=2;expire_receive=1;assert(invoke(&known)==EFS_ERR_BUSY && leader_notes==1);
+ reset();hint=2;malformed=1;assert(invoke(&known)==EFS_ERR_PROTO && leader_notes==1);
+ reset();hint=2;result=EFS_ERR_STALE;assert(invoke(&known)==EFS_ERR_STALE && leader_notes==1);
  reset();salt=0;assert(invoke(&known)==EFS_ERR_PROTO && !known && calls==1);
  reset();result=EFS_ERR_BUSY;assert(invoke(&known)==EFS_ERR_BUSY && known==1 && calls==1);
  reset();query=1;salt=0;result=EFS_ERR_BUSY;assert(invoke(&known)==EFS_ERR_BUSY && !known && calls==1);

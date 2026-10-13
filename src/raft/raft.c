@@ -2487,12 +2487,9 @@ static int broadcast_read_probe(struct efs_raft *r)
         struct efs_raft_msg m={0};
         m.type=EFS_RAFT_MSG_AE_REQ; m.to=to;
         m.vote_granted=1; /* Never clear an outstanding data batch. */
-        m.prev_index=r->match_index[to]<r->commit_index ?
-                     r->match_index[to] : r->commit_index;
-        int rc=log_term(r,m.prev_index,&m.prev_term);
-        if (rc==EFS_ERR_NOT_FOUND) {m.prev_index=0;m.prev_term=0;}
-        else if (rc!=EFS_OK) return rc;
-        m.leader_commit=m.prev_index;
+        /* Universal empty prefix grants only a fresh leadership vote. */
+        m.leader_commit=r->read_index;
+        int rc;
         rc=send_msg(r,&m); /* stamps this newly admitted read-round context */
         if (rc!=EFS_OK) return rc;
     }
