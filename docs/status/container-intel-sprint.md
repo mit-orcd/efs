@@ -1132,3 +1132,37 @@ files/eventfd/thread-failure fallback, stopped-before-core and join cleanup;
 ASan/UBSan and worker-disabled timeout/SIGABRT negative PASS. Corrected
 mock adapter receives those hooks; complete corrected-source native remains
 required. This is native progress evidence, not loaded performance closure.
+
+
+### Extra vote workere9fbb5bd — completed, REJECTED for loaded regression
+
+Exacte9fbb5bd819556fcfb77b757ce63dd297a8b04ff, both-host complete
+native controls and788 deployed input proofs PASS. Same retained Intel
+four-node4G/node containers/TCP/direct fixture and unchanged seven-client
+16jobs/216case/deadline limits,8writers/20msGC; commands/.efs/expiry-date/
+packing/profiling OFF. Full1490/1512PASS22FAIL: deep60/deep100/crazy dirs
+all7 plus one crazy roundtrip;128.019–139.480s. Immediate physical
+PASS175.345s,zero175.313; quietcore432/432PASS60.560/61.372s;
+peer134/134PASS40.095/42.464s. Private mmap PASS/shared ENODEV skips;
+lifecycle/tiny/warm/cold/global restart/deletion PASS; finalphysical
+PASS17.258s,zero17.255. Reproduce same intel_container_qualification.py
+gates/order and exact-source build procedure as prior attempts. Raw
+vote2e9fb-deploy/vote2e9fb-qualification retained outside Git. Physical
+pass is only this failed-directory load; extra worker does not improve
+loaded acceptance and is retired, along with its current-only adapter/test.
+Its controls remain reproducible frome9fbb5bd history.
+
+Next container-only candidate filters wake selection using each admitted
+waiter's actual wanted floor/round/term. Unrelated commit/stamp updates do
+not signal a pending read. Fresh applied quorum proof, term/role/missing
+view changes, or completion of an old round requiring a new begin wake
+promptly. The outer waiter retains every existing authority predicate and
+original deadline; condition registration and publish/wake still share
+cv_mu. Ordinary stamp/index waits and files policy unchanged; saturated
+slots retain original shared-condition fallback. No helper/thread/queue,
+lease, read-index reduction or placement change. Actual registration/no-
+lost-wake,1000 unrelated publications, fresh proof/full own apply, old
+round/wrong floor refusal, next-round progress, term/role/missing views,
+files/index controls and ASan/UBSan PASS locally. Restoring stamp wakeups
+fails negative control. Both-host native and exact-source live remain
+required; this is a candidate, not directory closure.

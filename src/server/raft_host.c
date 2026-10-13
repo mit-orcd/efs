@@ -349,6 +349,8 @@ struct host_waiter {
     uint8_t group;
     uint8_t active;
     uint8_t any;
+    uint8_t read_proof;
+    uint64_t read_want,read_round,read_term;
 };
 
 struct efs_raft_host {
@@ -438,8 +440,6 @@ struct efs_raft_host {
      * fresh applied index without polling; used with h->mu (no I/O under
      * that wait). */
     int pump_efd;
-    int read_efd,read_running,read_started;
-    pthread_t read_tid;
     /* applied_cv waiters (host_wait_applied, host_read_index) sleep under
      * cv_mu, not h->mu: their predicate is the published view above, and
      * the pump takes cv_mu only for the broadcast. */
@@ -3425,9 +3425,10 @@ static int host_view_wait_apply(const struct host_view *v, uint64_t want,
  * wake when the group's applied >= idx (or the replica goes away); any=1:
  * wake when the group's view stamp moves past `seen`. Falls back to the
  * shared applied_cv when all slots are busy. Returns with cv_mu held. */
-static void host_waiter_sleep(struct efs_raft_host *h, uint8_t group, int any,
+static void host_waiter_sleep_impl(struct efs_raft_host *h, uint8_t group, int any,
                               uint64_t idx, uint64_t seen,
-                              const struct timespec *end)
+                              const struct timespec *end,int read_proof,
+                              uint64_t want,uint64_t round,uint64_t term)
 {
     uint32_t i, n = HOST_WAITERS;
     struct host_waiter *w = NULL;
@@ -3450,9 +3451,36 @@ static void host_waiter_sleep(struct efs_raft_host *h, uint8_t group, int any,
     w->any = (uint8_t)any;
     w->idx = idx;
     w->seen = seen;
+    w->read_proof=(uint8_t)read_proof;
+    w->read_want=want;w->read_round=round;w->read_term=term;
     w->active = 1;
     pthread_cond_timedwait(&w->cv, &h->cv_mu, end);
     w->active = 0;
+}
+
+static void host_waiter_sleep(struct efs_raft_host *h,uint8_t group,int any,
+                              uint64_t idx,uint64_t seen,const struct timespec *end)
+{
+    host_waiter_sleep_impl(h,group,any,idx,seen,end,0,0,0,0);
+}
+static void host_read_waiter_sleep(struct efs_raft_host *h,uint8_t group,
+                              uint64_t want,uint64_t round,uint64_t term,
+                              uint64_t seen,const struct timespec *end)
+{
+    host_waiter_sleep_impl(h,group,1,0,seen,end,
+                          h->s && h->s->storage_engine,want,round,term);
+}
+/* A queued read needs a useful transition, not every unrelated write's
+ * stamp. This is only wake selection: the waiter still checks the unchanged
+ * fresh proof and full own-apply predicates after waking. Missing/changed
+ * authority and a completed old round requiring a new begin wake promptly. */
+static int host_read_waiter_ready(const struct host_view *v,
+                                  const struct host_waiter *w)
+{
+    return !v->has || v->role!=EFS_RAFT_LEADER || v->term!=w->read_term ||
+           host_view_covers(v,w->read_want,w->read_round,w->read_term) ||
+           (!v->read_pending &&
+            !host_view_wait_apply(v,w->read_want,w->read_round,w->read_term));
 }
 
 /* Pump side: after publishing every hosted group's view, wake the waiters
@@ -3472,6 +3500,10 @@ static void host_waiters_wake(struct efs_raft_host *h)
         g = group_slot(h, w->group);
         if (!g || !V_LOAD(g->v_has))
             wake = 1;
+        else if(w->read_proof){
+            struct host_view v;host_view_get(h,w->group,&v);
+            wake=host_read_waiter_ready(&v,w);
+        }
         else if (w->any)
             wake = V_LOAD(g->v_stamp) != w->seen;
         else
@@ -4198,7 +4230,7 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             (v.read_pending || host_view_wait_apply(&v, want, round, admitted_term)) &&
             !host_view_covers(&v, want, round, admitted_term)) {
             uint64_t s0 = now_us_();
-            host_waiter_sleep(h, group, 1, 0, v.stamp, &end);
+            host_read_waiter_sleep(h,group,want,round,admitted_term,v.stamp,&end);
             s0 = now_us_() - s0;
             if (s0 > 20000)
                 fprintf(stderr, "raft-host: read-sleep us=%llu group=%u "
@@ -6898,7 +6930,7 @@ static int host_checkpoint_stop(struct host_checkpoint_worker *w)
     w->started=0;return rc;
 }
 
-/* Called with h->mu held by the pump or bounded container vote worker. A network trylock
+/* Called by the sole inbox consumer with h->mu held. A network trylock
  * failure must not hide an otherwise eligible fresh vote behind unrelated
  * durable receive work. Snapshot bounded headers without removing frames;
  * the unchanged core checks term/boot/voters/leader/persisted prefix. Every
@@ -6934,54 +6966,6 @@ static void host_container_pending_reads(struct efs_raft_host *h)
     for(unsigned i=0;i<HOST_NGROUPS;i++)
         if(published&(1u<<h->g[i].group))host_publish_group(h,h->g[i].group);
     if(published)host_waiters_wake(h);
-}
-
-/* One container-only event-driven helper services already admitted read
- * headers during the pump's off-lock durability tail. It never removes a
- * frame, releases credits, applies entries, or performs durable receive.
- * h->mu serializes the core and pins inbox identities against the pump. */
-static void host_container_read_kick(struct efs_raft_host *h)
-{
-    uint64_t one=1;
-    if(h->read_efd<0)return;
-    ssize_t n;
-    do {n=write(h->read_efd,&one,sizeof(one));}while(n<0 && errno==EINTR);
-}
-static void *host_container_read_work(void *arg)
-{
-    struct efs_raft_host *h=arg;
-    while(__atomic_load_n(&h->read_running,__ATOMIC_ACQUIRE)){
-        struct pollfd p={.fd=h->read_efd,.events=POLLIN};int rc;
-        do {rc=poll(&p,1,-1);}while(rc<0 && errno==EINTR);
-        if(rc<0 || !(p.revents&POLLIN))break;
-        uint64_t sink;ssize_t n;
-        do {n=read(h->read_efd,&sink,sizeof(sink));}while(n<0 && errno==EINTR);
-        pthread_mutex_lock(&h->mu);
-        if(__atomic_load_n(&h->read_running,__ATOMIC_ACQUIRE))
-            host_container_pending_reads(h);
-        pthread_mutex_unlock(&h->mu);
-    }
-    return NULL;
-}
-static void host_container_read_start(struct efs_raft_host *h)
-{
-    if(!h->s || !h->s->storage_engine)return;
-    h->read_efd=eventfd(0,EFD_NONBLOCK|EFD_CLOEXEC);
-    if(h->read_efd<0)return; /* Existing pump remains the fallback. */
-    __atomic_store_n(&h->read_running,1,__ATOMIC_RELEASE);
-    if(efsd_pthread_create(&h->read_tid,host_container_read_work,h)){
-        __atomic_store_n(&h->read_running,0,__ATOMIC_RELEASE);
-        close(h->read_efd);h->read_efd=-1;return;
-    }
-    h->read_started=1;
-}
-static void host_container_read_stop(struct efs_raft_host *h)
-{
-    if(!h->read_started)return;
-    __atomic_store_n(&h->read_running,0,__ATOMIC_RELEASE);
-    host_container_read_kick(h);
-    pthread_join(h->read_tid,NULL);
-    close(h->read_efd);h->read_efd=-1;h->read_started=0;
 }
 
 static void *host_pump(void *arg)
@@ -10237,7 +10221,6 @@ int server_raft_host_start(struct efsd_server *s)
         }
         pthread_condattr_destroy(&attr);
     }
-    h->read_efd=-1;
     h->pump_efd = eventfd(0, EFD_NONBLOCK);
 
     snprintf(dir, sizeof(dir), "%s/mdraft",
@@ -10311,7 +10294,6 @@ int server_raft_host_start(struct efsd_server *s)
         return EFS_ERR_IO;
     }
     h->started = 1;
-    host_container_read_start(h);
     if (h->query_enabled) {
         __atomic_store_n(&h->query_running,1,__ATOMIC_RELEASE);
         if (efsd_pthread_create(&h->query_tid,host_query_thread,h)!=0) {
@@ -10406,7 +10388,6 @@ void server_raft_host_stop(void)
         pthread_join(h->fin_tid, NULL);
     free(h->fin);
     h->fin = NULL;
-    host_container_read_stop(h);
     h->running = 0;
     /* Wake the pump so shutdown does not wait out a 5 ms tick. */
     host_pump_kick(h);
@@ -10570,9 +10551,6 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen,
     if (BO_ON() && payload[0]==EFS_RAFT_MSG_AE_REQ)
         BO_COUNT(outbox_nentries(payload,plen) ? BO_ACCEPT_DATA : BO_ACCEPT_EMPTY);
     pthread_mutex_unlock(&h->inbox_mu);
-    if(plen==EFS_WIRE_RAFT_HDR_LEN &&
-       (payload[0]==EFS_RAFT_MSG_AE_REQ || payload[0]==EFS_RAFT_MSG_AE_REP) &&
-       rd64be(payload+28))host_container_read_kick(h);
     host_pump_kick(h);
     return EFS_OK;
 busy:

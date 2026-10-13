@@ -58,8 +58,6 @@ struct efs_raft_host {
 };
 static struct efs_raft_host *g_host;
 static void host_pump_kick(struct efs_raft_host *h) {(void)h;}
-static void host_container_read_kick(struct efs_raft_host *h) {(void)h;}
-static uint64_t rd64be(const uint8_t*p) {return efs_raft_flow_rd64(p);}
 /* Pure read control is gated separately; exercise the admission fallback. */
 static int host_read_control(struct efs_raft_host *h,const uint8_t*p,uint32_t n)
 {(void)h;(void)p;(void)n;return 0;}
