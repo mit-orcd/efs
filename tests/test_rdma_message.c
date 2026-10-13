@@ -130,9 +130,12 @@ static void failures(void)
     assert(efs_rmsg_rx_feed(&r,p,segment(p,1,40,0,40,body))==1);
     assert(b.used==120);
     assert(efs_rmsg_rx_feed(&r,p,segment(p,2,40,0,40,body))==-1);
-    assert(b.used==80); /* other owner's two messages preserved */
+    assert(b.used==120); /* completed views preserved until owner releases */
+    efs_rmsg_rx_destroy(&r);assert(b.used==80);
     assert(efs_rmsg_rx_feed(&a,p,segment(p,3,40,0,40,body))==-1);
-    assert(!b.used);efs_rmsg_rx_destroy(&a);efs_rmsg_rx_destroy(&r);
+    assert(b.used==80); /* borrowed head survives failed send-side progress */
+    assert(efs_rmsg_rx_peek(&a) && !memcmp(efs_rmsg_rx_peek(&a)->frame,body,40));
+    efs_rmsg_rx_destroy(&a);efs_rmsg_rx_destroy(&r);assert(!b.used);
 }
 static void credits(void)
 {

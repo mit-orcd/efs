@@ -118,7 +118,15 @@ void efs_rmsg_rx_destroy(struct efs_rmsg_rx *r)
     r->active_total=r->received=0; r->broken=1;
 }
 static int fail(struct efs_rmsg_rx *r)
-{ efs_rmsg_rx_destroy(r); return -1; }
+{
+    /* A synchronous handler may borrow the FIFO head while send-side
+     * progress encounters a corrupt later message. Preserve complete views
+     * until explicit release/destruction; never free beneath that borrower. */
+    if (r->active) {
+        r->dealloc(r->active); unreserve(r,r->active_total); r->active=NULL;
+    }
+    r->active_total=r->received=0; r->broken=1; return -1;
+}
 int efs_rmsg_rx_init(struct efs_rmsg_rx *r, struct efs_rmsg_budget *global,
                      uint64_t limit, uint32_t physical_cap,
                      uint32_t logical_cap, unsigned capacity)
