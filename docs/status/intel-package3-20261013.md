@@ -146,3 +146,27 @@ production helper fails intended file_ticket==4 assertion with the new fixture.
 new-source deployment and loaded requalification are NOTRUN for this candidate.
 Baseline600s normal snapshot-pressure/foreground/resource gate is running on
 unchanged deployed1a737143. Complete it before native builds or redeployment.
+
+## Baseline pressure and candidate prerequisite correction
+
+1a737143 baseline600s pressure PASS on both hosts: foreground600 cycles each,
+all512-byte payloads checked, zero failures, existing1s syscall limit retained.
+Maximum create/write/fsync/close/unlink ms: Intel1 75.377/0.286/108.295/0.258/
+109.476; Intel2 150.393/0.311/369.747/0.294/81.568. Snapshot xattr pressure
+64551(group0)/64392(group2) verified updates, zero errors, maximum452.413/
+472.124ms. These normal-budget loaded samples do not reproduce or close the
+original5.569/22.044s tails. Fresh captured daemon logs contain no snapshot/
+rotation marker, so a triggered full rotation is NOT established by this run.
+Use the standalone retained-log rotation/replay fixture and retain broader
+snapshot-pressure qualification as open if no trigger proof is captured.
+
+Candidate2b927c1b first complete native attempts FAIL at documentation checks,
+not a reported runtime regression: the historical-results symlink resolves
+outside the candidate tree and is correctly rejected; my status README update
+also required regeneration of architecture-full.md/architecture.html.
+Regenerate the artifacts using `python3 docs/gen-architecture-full.py`; local
+`python3 docs/check-architecture.py` PASS all5 checks. Supply real files (a
+same-filesystem hardlinked copy is suitable for unchanged historical results),
+not an escaping symlink, in native test trees. Both-host complete candidate
+native reruns are pending. First failed native evidence is retained, and no
+candidate was deployed before its prerequisites passed.

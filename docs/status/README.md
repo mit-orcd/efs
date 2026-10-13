@@ -4,7 +4,9 @@ container fixture stopped. Durable query mask0/version1 survives restart.
 Complete normal native and six affected ASan/UBSan harnesses PASS on both hosts;
 core432/432 and peer67/67 PASS; seven-client normal1511/1512 FAIL
 (one deep30s timeout), phase diagnostic exposes unlink EBUSY. Files read-admission
-candidate locally regressed, not yet deployed; pressure/cold gates pending.
+candidate locally regressed, not yet deployed; baseline600s pressure PASS,
+original long tails not reproduced. Candidate native doc/input gate corrected;
+full reruns and cold gates pending.
 W97/D30/W106 OPEN.
 
 [Three required work packages and feature matrix](three-work-packages-20261013.md):
