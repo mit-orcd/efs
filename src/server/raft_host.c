@@ -19053,6 +19053,7 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
         }
         for (i = 0; i < count && rc == EFS_OK; i++) {
             struct efs_meta_row *cached = NULL;
+            int have_size = 0;
 
             sz = 0;
             clen = 0;
@@ -19060,10 +19061,14 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
             for (j = 0; j < ino_count && irecs; j++) {
                 if (irecs[j].ino == recs[i].ino) {
                     sz = irecs[j].size;
+                    have_size = 1;
                     break;
                 }
             }
-            if (sz == 0)
+            /* Zero is an explicit logical EOF, not a missing size record.
+             * Inferring a chunk end here permanently pads the lane MAX;
+             * later grow-only reports cannot undo that fabricated extent. */
+            if (!have_size)
                 sz = ((uint64_t)recs[i].chunk_index + 1) * EFS_MIN_CHUNK_SIZE;
             for (k = 0; k < nic; k++) {
                 if (ic[k].have && ic[k].ino == recs[i].ino) {
