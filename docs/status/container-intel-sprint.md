@@ -1701,3 +1701,45 @@ sanitizers and explicit old-retirement negative); no raw fixture artifacts
 committed. Both-host Linux native and full exact-source live15-gate rerun
 remain required. This fixes a reproduced protocol bookkeeping defect; its
 Intel directory performance benefit is not established yet.
+
+### 2026-10-13 — older-ACK candidate Intel gates and next path diagnostic
+
+Frozen06b4624ba05c0a28ab969b0a0f3c2277b9b96856:792 tracked regular build
+inputs. Both Intel complete native build/affected Python and Raft dual-policy
+checks, explicit sanitizer controls and native storage/durability/GC/overwrite,
+KV, snapshot/tail/index, simulation, metadata and physical late-PUT guards PASS.
+Build identity06b4624b/devel-container,2026-10-13T06:56:49Z both hosts.
+All four private daemons/seven cross-host clients deployed; both source proofs
+PASS and actual argv/start/executable hashes match current binaries. TCP/direct,
+containers4G/node/eight writers, preserved stores/history, existing balanced
+leaders and20ms GC progress yield; .efs/expiry-date/packing OFF, profiling and
+experimental inbox-fold OFF. No production replacement or acceptance promotion.
+External raw artifacts/container-20261012/ackwindow06b4624b-deploy and
+ackwindow06b4624b-qualification.
+Original concurrent core seven clients/jobs16/216 cases each/unchanged original
+30/75/120/180s case budgets:1498/1512PASS14FAIL,128.931–136.069s. Deep60
+and names_crazy_dirs timeout all seven. Deep100 and concurrent unlink PASS in
+this run. Immediate strict physical PASS93.336s (zero93.331), all four maps
+and container bodies zero; reserved metadata excluded as in the tracked gate.
+Quiet core432/432PASS56.706/57.210s. Remaining peer/lifecycle/tiny/restart/cold/
+final reclamation gates still executing at this checkpoint. Earlier runs are
+not evidence for those exact-source remaining gates. No causal speed benefit
+claim; retained older-ACK fix solves the native reproduced bookkeeping bug.
+Reproduce using scripts/intel_container_node.py fresh exact-source build,
+normal start/mount four/three clients, then scripts/intel_container_qualification.py
+concurrent/reclaim/core/peer/mmap/lifecycle-create/read/churn/verify/tiny-create/
+restart/lifecycle-cold/tiny-cold/lifecycle-delete/reclaim with unique run IDs
+and output outside Git; original committed workloads/limits unchanged.
+
+Next diagnostic adds only explicit --diagnostics --path-prof callback timings:
+EFS_CONTAINER_PATH_PROF requires RPC profiling. Exact d[0-9]{2} LOOKUP/MKDIR
+callbacks record caller PID, parent, monotonic start/service duration and result,
+maximum16384 records/client with saturating admission. Normal callbacks do not
+read diagnostic clocks/write lines; namespace resolution, reply, authority,
+mutation fences and deadlines unchanged. Join these records to fresh-child
+scripts/container_deepsteps_sitecustomize.py syscall observations by PID/time.
+Callback duration excludes kernel queue and reply logging overhead; profiling
+can perturb performance and is never normal acceptance. Local memo/callback
+controls and fixture syntax PASS; Linux compile/native and live diagnostic
+NOTRUN until the executing06b4624b gate sequence finishes. No cache lifetime,
+scoped authority, expired-proof reuse or test workload relaxation introduced.
