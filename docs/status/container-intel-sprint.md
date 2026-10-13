@@ -2390,3 +2390,43 @@ failed-receive controls; Linux/native and sanitizer coverage is pending. Local
 outbox/read-control tests PASS; async sender cannot execute on macOS.
 The preceding tested4f deployment and disabled-feature runtime are restored
 and verified. This observer is for diagnosis only, not directory acceptance.
+
+
+### TCP frame timing1af4c703 — complete native, diagnostic and normal qualification
+
+Exact source1af4c7039c0fb27b89d7b0d5b7cf5c3db52293ab on
+devel-container; both Intel full native, actual async sender normal/ASan/UBSan
+and794-input/source/runtime proofs PASS. Diagnostic concurrent1505/1512
+PASS, seven deep30s FAIL. In the leader n3 first30s window,50018 canonical
+request frames averaged118us send-to-own-transport-ACK, request queue40us;
+reply frame means50–140us. Homogeneous request batches still0 samples,
+but the new per-frame samples cover mixed traffic. These are transport
+intervals including pipeline work, not Raft votes/quorum or link-only RTT.
+Queue windows start1.97–4.73s before local first deep mkdir, so they include
+other workload and are not per-directory causal traces.
+
+Leader KV release10871 samples mean2.157ms (23.448747s accumulated),
+pump drain296us, pump lock86us; cumulative maxima are not window-only.
+Monotonic read-phase window29.925664s:183889 lock acquisitions mean346us,
+22371 begins mean13.895us,390707 quorum sleeps mean2356us; apply sleeps0.
+Concurrent accumulated thread time is not exclusive wall time. The diagnostic
+controller did not invoke an immediate physical gate before log collection;
+**diagnostic physical NOTRUN**, no passing physical claim for that profile run.
+
+Fresh profile-OFF normal qualification then ran every15 standard gates.
+Concurrent1505/1512 PASS, only seven dir_deep_nesting30s FAIL; other215
+cases/client PASS,114.336–134.095s. Immediate physical173.197s PASS,
+zero173.189s — materially narrower margin than earlier samples, not a robust
+performance improvement. Quiet432/432 PASS54.278/55.404s, peer134/134
+PASS40.689/42.830s, private mmap PASS/shared ENODEV skip. All lifecycle
+256x512KiB/4workers/read30/churn30/warm/cold, tiny100files+300durable
+generations/host, graceful restart, deletes PASS. Final physical7.191s PASS.
+Mounted flock ownership12/12 PASS; both post-restart actual64-worker,
+GC20ms, containers/TCP/direct/4G-node/profiling-OFF/.efs-packing-OFF runtime
+proofs PASS. Expiry-date feature stays inactive; operational deadlines remain.
+History/stores retained, no reset. Reproduction uses committed qualification
+concurrent --deepsteps only for diagnostic; ordinary concurrent/reclaim/core/peer/
+mmap/lifecycle/tiny/restart gates for acceptance and live/flock ownership helper.
+External evidence wire1af4c703-{deploy,workers64-diagnostic,workers64-normal,
+workers64-qualification}; no raw profiles/logs in Git. Loaded acceptance FAIL,
+W100/deep-directory blocker open; no push/merge/production promotion.
