@@ -8,7 +8,12 @@ AMD compact-index/cache-retirement handoff and full scale acceptance remain OPEN
 files/TCP/direct, client/server commands, packing and expiry verified OFF;
 container fixture stopped. Durable query mask0/version1 survives restart.
 Complete normal native and six affected ASan/UBSan harnesses PASS on both hosts;
-mounted qualification in progress, W97/D30/W106 OPEN.
+core432/432 and peer67/67 PASS; seven-client normal1511/1512 FAIL
+(one deep30s timeout), phase diagnostic exposes unlink EBUSY. Files read-admission
+candidate locally regressed, not yet deployed; baseline600s pressure PASS,
+original long tails not reproduced. Candidate native doc/input gate corrected;
+full reruns and cold gates pending.
+W97/D30/W106 OPEN.
 
 [Three required work packages and feature matrix](three-work-packages-20261013.md):
 ORCD `.efs` enabled for final RDMA/direct scale acceptance; AMD `.efs` enabled
