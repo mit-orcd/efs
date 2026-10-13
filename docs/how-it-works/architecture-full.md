@@ -1494,15 +1494,11 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-files/TCP/direct, client/server commands, packing and expiry verified OFF;
-container fixture stopped. Durable query mask0/version1 survives restart.
-Complete normal native and six affected ASan/UBSan harnesses PASS on both hosts;
-core432/432 and peer67/67 PASS; seven-client normal1511/1512 FAIL
-(one deep30s timeout), phase diagnostic exposes unlink EBUSY. Files read-admission
-candidate locally regressed, not yet deployed; baseline600s pressure PASS,
-original long tails not reproduced. Candidate native doc/input gate corrected;
-full reruns and cold gates pending.
-W97/D30/W106 OPEN.
+client/server commands, packing and expiry OFF; container fixture stopped.
+Baseline1a737143 core432/432, peer67/67 and600s snapshot/foreground pressure PASS;
+seven-client1511/1512 FAIL. Files-admission candidate72416530 passes both-host
+native/sanitizer and upgrade hashes but REGRESSES loaded tests; rejected and
+code reverted, baseline restoration in progress. W97/D30/W106 remain OPEN.
 
 [Three required work packages and feature matrix](../status/three-work-packages-20261013.md):
 ORCD `.efs` enabled for final RDMA/direct scale acceptance; AMD `.efs` enabled
