@@ -1354,3 +1354,33 @@ late-context and request-bound-disabled negatives fail as expected. Actual
 core control adds latest-only zero-prefix request echo and unchanged
 follower apply before proving exactly its current context; Linux native
 and fresh complete live remain required. No performance/closure claim.
+
+### 2026-10-13 — canonical request queue complete run
+
+Exact source206a0548c217c5be4e6675157b424fa3868bc596: both-host complete
+affected native, KV sanitizer/fault/cold and outbox negative controls PASS.
+All788 deployed inputs match, version/build identity is the full SHA on
+devel-container. Intel2 efsd SHA25689681bc040721273d9fe5bc95d614060ce5be272bc53f926b9fc7e9af50680e8;
+FUSE2d25b7e816bdd11dc25a1ce3f62e10d6758f614d1ca07ded1d437e130b435d6d.
+Same retained private four-node4G/node Intel containers/TCP/direct fixture,
+8writers/20msGC, seven clients/jobs16/original deadlines; commands/.efs,
+expiry-date, packing and profiling OFF. Reproduce the15 gates in the
+previous procedure with intel_container_qualification.py, unique run IDs.
+Full1498/1512PASS14FAIL: deep60/crazy directories on all7 clients,
+118.537–132.286s. Immediate physical FAIL180.273s: records5559/5392/5561/5424,
+allocated bodies386056192/375132160/386199552/377139200 bytes. Quiet core
+432/432PASS52.149/53.927s;peer134/134PASS38.876/40.227s;private mmap PASS,
+shared ENODEV skips. Lifecycle/tiny/warm/cold/global restart/deletion PASS.
+Final physical PASS72.263s,zero72.256. All15 gates finished; final cleanup
+is not a replacement for the failed immediate gate. Raw external evidence:
+artifacts/container-20261012/probequeue206a0548-{deploy,qualification}
+below the workspace artifact root. No reset, production change, release
+acceptance or directory/physical closure. Queue capacity correctness is
+verified; performance benefit and causation of the reclamation difference
+are not established by these unmatched runs.
+
+Existing GC logs after restart show fragment deletion consuming1067–3415ms
+of2102–4426ms passes, with reap619–1099ms. This points to serial fragment
+delete requests as the next bounded scheduling investigation, not proof
+that it explains every directory timeout. Preserve each generation/checksum
+delete and durable reply; join all helpers before serial metadata ACKs.
