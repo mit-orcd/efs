@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Quorum notes may bypass tail I/O; queued replication still receives ACKs."""
 from pathlib import Path
-import subprocess, tempfile
+import os, shlex, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
 source=(root/'src/server/raft_host.c').read_text()
 start=source.index('static int host_read_control(')
@@ -15,12 +15,13 @@ void efs_batch_obs_count(enum efs_batch_counter k){(void)k;}
 #include <pthread.h>
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 struct efsd_server {int storage_engine;};
 struct efs_raft_host {pthread_mutex_t mu,inbox_mu;int inbox_n;struct efsd_server *s;};
 static int result,calls,published,woken,decode_fail;
 static uint64_t read_context;
 int efs_wire_raft_decode(const uint8_t *p,uint32_t n,struct efs_raft_msg *m,uint8_t *b,uint32_t z) {
- (void)n;(void)b;(void)z;m->group=0;m->type=p[0];m->last_log_index=read_context;return decode_fail?EFS_ERR_PROTO:EFS_OK;
+ (void)n;(void)b;(void)z;memset(m,0,sizeof(*m));m->group=0;m->type=p[0];m->last_log_index=read_context;m->vote_granted=p[2];m->success=p[3];m->prev_index=p[36];m->prev_term=p[44];m->leader_commit=p[52];m->match_index=p[60];m->last_log_term=p[68];m->nentries=p[76];return decode_fail?EFS_ERR_PROTO:EFS_OK;
 }
 static struct efs_raft *group_raft(struct efs_raft_host *h,uint8_t g){(void)h;(void)g;return NULL;}
 int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *m){(void)r;(void)m;calls++;return result;}
@@ -54,7 +55,7 @@ int main(void) {
  p[0]=EFS_RAFT_MSG_AE_REQ;result=1;
  assert(!host_read_control(&h,p,sizeof(p)) && calls==8 && h.inbox_n==1);
  /* Only container fresh-context probes can note an early vote behind
-  * queued work. EVERY such request remains queued for normal recv: even
+  * queued work. Progress-bearing requests remain queued for normal recv: even
   * a fully accounted core result must not consume/reorder replication. */
  struct efsd_server server={0};h.s=&server;read_context=42;
  assert(!host_read_control(&h,p,sizeof(p)) && calls==8 && h.inbox_n==1);
@@ -67,6 +68,21 @@ int main(void) {
  assert(published==4 && woken==4);
  pthread_mutex_lock(&h.mu);assert(!host_read_control(&h,p,sizeof(p)) && calls==11);
  pthread_mutex_unlock(&h.mu);
+ /* Exact read-only prefix-zero probes can retire after result1, without
+  * touching queued bytes/credits. All other headers still owe receive. */
+ p[2]=1;result=1;
+ assert(host_read_control(&h,p,sizeof(p)) && h.inbox_n==1);
+ result=2;assert(!host_read_control(&h,p,sizeof(p)) && h.inbox_n==1);
+ result=0;assert(!host_read_control(&h,p,sizeof(p)) && h.inbox_n==1);
+ result=1;
+ const int fields[]={3,36,44,52,60,68,76};
+ for(unsigned i=0;i<sizeof(fields)/sizeof(fields[0]);i++){
+  p[fields[i]]=1;assert(!host_read_control(&h,p,sizeof(p)) && h.inbox_n==1);p[fields[i]]=0;
+ }
+ p[2]=2;assert(!host_read_control(&h,p,sizeof(p)));p[2]=0;
+ assert(!host_read_control(&h,p,sizeof(p)));p[2]=1;
+ assert(host_read_control(&h,p,sizeof(p)) && h.inbox_n==1);
+ assert(published==4 && woken==4);
  h.inbox_n=0;
  assert(!pthread_mutex_trylock(&h.mu));pthread_mutex_unlock(&h.mu);
  assert(!pthread_mutex_trylock(&h.inbox_mu));pthread_mutex_unlock(&h.inbox_mu);
@@ -77,5 +93,11 @@ int main(void) {
 with tempfile.TemporaryDirectory(prefix='efs-read-control-host-') as d:
     c=Path(d)/'test.c';c.write_text(code);binary=c.with_suffix('')
     subprocess.run(['cc','-std=c99','-D_GNU_SOURCE','-Wall','-Wextra','-Werror',
-                    '-I'+str(root/'include'),str(c),'-pthread','-o',str(binary)],check=True)
+                    *shlex.split(os.environ.get('EFS_TEST_CFLAGS','')), '-I'+str(root/'include'),str(c),'-pthread','-o',str(binary)],check=True)
     subprocess.run([str(binary)],check=True)
+    c.write_text(code.replace('if(pending && handled==1 && !pure_probe)', '(void)pure_probe; if(pending && handled==1)'))
+    subprocess.run(['cc','-std=c99','-D_GNU_SOURCE','-Wall','-Wextra','-Werror',
+                    '-I'+str(root/'include'),str(c),'-pthread','-o',str(binary)],check=True)
+    negative=subprocess.run([str(binary)],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    assert negative.returncode, 'forced FIFO retention negative unexpectedly passed'
+    print('forced pure-probe FIFO retention negative refused as expected')

@@ -19,6 +19,7 @@ struct net {
     struct efs_raft *r[EFS_RAFT_MAX_PEERS];
     int n;
     int drop[EFS_RAFT_MAX_PEERS];
+    int ae_requests[EFS_RAFT_MAX_PEERS]; /* every append/commit probe, including empty */
     int batches[EFS_RAFT_MAX_PEERS]; /* AE_REQ with entries delivered/dropped per peer */
     struct efs_raft_msg *keep;       /* deep copy of the last AE_REQ to keep_to */
     int keep_to;
@@ -212,6 +213,8 @@ static int send_now(void *net, const struct efs_raft_msg *msg)
         n->transfer = msg_copy_deep(msg);
         return EFS_OK;
     }
+    if(msg->type==EFS_RAFT_MSG_AE_REQ && msg->to>=0 && msg->to<EFS_RAFT_MAX_PEERS)
+        n->ae_requests[msg->to]++;
     if (msg->to >= 0 && msg->to < EFS_RAFT_MAX_PEERS &&
         msg->type == EFS_RAFT_MSG_AE_REQ && msg->nentries > 0) {
         n->batches[msg->to]++;
@@ -724,6 +727,24 @@ static void test_readindex_control(void)
           "uncommitted suffix retains normal reply bookkeeping");
     CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"another suffix round");
     CHECK(!efs_raft_read_control(n.r[leader],&reply),"old suffix probe stays on pump");
+    /* A prefix-zero vote has no append/progress bookkeeping to re-drive.
+     * In ordered receive, even an obsolete vote must not produce another
+     * commit probe for an outstanding data window. */
+    reply.match_index=0;
+    int append_sends=n.ae_requests[follower];
+    uint64_t suffix_commit=efs_raft_commit(n.r[leader]);
+    CHECK(efs_raft_recv(n.r[leader],&reply)==EFS_OK && !efs_raft_read_ready(n.r[leader]),
+          "obsolete pure vote in ordered receive lends no fresh authority");
+    CHECK(n.ae_requests[follower]==append_sends,
+          "pure read vote must not re-drive replication or commit probes");
+    reply.last_log_index=efs_raft_read_round(n.r[leader]);
+    CHECK(efs_raft_recv(n.r[leader],&reply)==EFS_OK && efs_raft_read_ready(n.r[leader]),
+          "current ordered pure vote proves only its own fully applied read");
+    CHECK(n.ae_requests[follower]==append_sends &&
+          efs_raft_commit(n.r[leader])==suffix_commit &&
+          efs_raft_applied(n.r[leader])==suffix_commit,
+          "pure vote preserves outstanding suffix without replication progress");
+    reply.match_index=index;
     n.hold_ae_replies=0;elect(&n,4);
     app[follower].park_apply=1;
     CHECK(efs_raft_propose(n.r[leader],&cmd,1,&index)==EFS_OK,"follower parked new durable prefix");

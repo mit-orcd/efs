@@ -10511,7 +10511,8 @@ void server_raft_host_stop(void)
  * Try the existing mutex only. With pending inbox work, replies may note
  * current-term read quorum but MUST still enter normal recv for ordered
  * replication bookkeeping. Container fresh-context requests may note a
- * heartbeat vote while work is pending, but MUST still enter ordered recv.
+ * heartbeat vote while work is pending. Only fully accounted prefix-zero
+ * read-only requests can then be consumed; progress stays on ordered recv.
  * The core requires a known current-term leader and matching durable prefix;
  * no commit, apply, storage promise or membership change occurs here. */
 static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n)
@@ -10534,9 +10535,17 @@ static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n
         /* A pure read vote does not reorder commit/apply or replication.
          * Queued higher-term/config frames have made no durable promise yet;
          * the core's current boot/term/config and own apply checks still rule.
-         * Pending work forbids consuming any frame, even an accounted
-         * reply or a container probe whose early vote was already sent. */
-        if(pending && handled==1)handled=2;
+         * Pending work retains ordinary/progress-bearing frames and replies.
+         * The exact fully accounted read-only request below owes no receive
+         * bookkeeping beyond its already sent vote. */
+        /* A successful fully accounted prefix-zero read-only request has
+         * no replication/commit/apply work left for FIFO receive. Keeping it
+         * there repeats the already sent vote and occupies inbox credits.
+         * Every progress-bearing request and every result2 remains ordered. */
+        int pure_probe=container_probe && msg.vote_granted==1 && !msg.success &&
+            !msg.prev_index && !msg.prev_term && !msg.leader_commit &&
+            !msg.match_index && !msg.last_log_term && !msg.nentries;
+        if(pending && handled==1 && !pure_probe)handled=2;
         if (handled && msg.type==EFS_RAFT_MSG_AE_REQ) BO_COUNT(BO_READ_CONTROL_REQUEST);
         if (handled && msg.type==EFS_RAFT_MSG_AE_REP) BO_COUNT(BO_READ_CONTROL_REPLY);
         if (handled && msg.type==EFS_RAFT_MSG_AE_REP) {

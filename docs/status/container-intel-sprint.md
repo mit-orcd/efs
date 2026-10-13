@@ -1425,3 +1425,39 @@ metadata history and failed case counts mean these sequential runs do not
 establish a matched performance comparison or cause for the two extra
 deep100 timeouts. Next diagnostic uses this same source with bounded
 existing counters and phase markers, separately from profiling-OFF verdict.
+
+### 2026-10-13 — current-source traffic diagnostic and pure request retirement
+
+Diagnostic source17f7db68e5999e005ec9aded168fe8bba85b748a, same retained
+fixture/original workload/deadlines, explicit bounded existing RPC/read/
+Raft/batch counters ON, commands/.efs/expiry-date/packing OFF. Full1495PASS
+17FAIL: deep60/crazy all7, one deep100, one flock/shared-exclusive and one
+byte-range-lock timeout. Profiling-OFF1496/1512 verdict above remains
+separate. Deep60 phase markers enter CREATE promptly, with no leaf-write
+before deadline on any client. Leader LOOKUP6.025ms average, parent fresh
+proof5.522ms; RI4.055ms over264266 leader calls; KV.380ms. Peak apply24.831ms,
+pump-hold39.665ms, lock-wait73.965ms. Six214–344ms sampled flushes are
+now off the Raft apply mutex; the former hundreds-of-ms apply/flush
+correlation is absent in this sample. Leader partial replies243854 versus
+covered22314; wire sends946436. Followers' early request votes115016/
+214071/136491, with inbox drops1601/48413/462. These counters describe
+traffic/pressure, not proof of the directory cause. Diagnostic strict
+physical PASS57.667s,zero57.649; raw external
+artifacts/container-20261012/fragparallel17f7db68-diagnostic.
+
+A proposed pure-vote replication-send diagnosis was NOT reproduced: real
+updated test_raft against deployed17f7db68 archive PASS because the existing
+in-flight guard suppresses the tested resend. Core replication logic is
+unchanged; retain the explicit boundary control to prevent repeating that
+unsupported diagnosis. The narrower host defect is forced FIFO retention
+after a read-only request already completed its control work. For exact
+container80-byte prefix-zero class1/nonzero-context requests only, consume
+a successful core result1 even with pending inbox. The core already sent
+the fresh vote and reports no commit/apply bookkeeping owed. Every result2,
+progress field, ordinary frame and reply remains ordered. No authority,
+boot/term/config/quorum, own-apply, data durability or credit rule changes.
+Local host positive/header/refusal/pending-order controls and ASan/UBSan
+PASS; forcing old FIFO retention fails the new positive control as expected.
+A first negative-control build hit a Clang tautological-expression warning;
+its adapter was corrected before any freeze/deployment. Both-host fresh
+native and full profiling-OFF live qualification remain required.
