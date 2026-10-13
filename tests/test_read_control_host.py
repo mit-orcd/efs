@@ -34,7 +34,6 @@ int main(void) {
  assert(!host_read_control(&h,p,sizeof(p)) && !calls);decode_fail=0;
  pthread_mutex_lock(&h.mu);assert(!host_read_control(&h,p,sizeof(p)) && !calls);
  pthread_mutex_unlock(&h.mu);
- h.inbox_n=1;assert(!host_read_control(&h,p,sizeof(p)) && !calls);h.inbox_n=0;
  assert(host_read_control(&h,p,sizeof(p))==1 && calls==1 && !published && !woken);
  p[0]=EFS_RAFT_MSG_AE_REP;result=2;
  assert(!host_read_control(&h,p,sizeof(p)) && calls==2 && published==1 && woken==1);
@@ -50,7 +49,11 @@ int main(void) {
  result=1;assert(!host_read_control(&h,p,sizeof(p)) && calls==7 && published==4 && woken==4 && h.inbox_n==1);
  result=0;assert(!host_read_control(&h,p,sizeof(p)) && calls==8 && published==4);
  p[0]=EFS_RAFT_MSG_AE_REQ;result=1;
- assert(!host_read_control(&h,p,sizeof(p)) && calls==8 && h.inbox_n==1);
+ /* Matched persisted-prefix probes may vote early, but pending work
+  * always retains this request for ordinary ordered receive. */
+ assert(!host_read_control(&h,p,sizeof(p)) && calls==9 && h.inbox_n==1);
+ result=2;assert(!host_read_control(&h,p,sizeof(p)) && calls==10 && h.inbox_n==1);
+ result=0;assert(!host_read_control(&h,p,sizeof(p)) && calls==11 && h.inbox_n==1);
  h.inbox_n=0;
  assert(!pthread_mutex_trylock(&h.mu));pthread_mutex_unlock(&h.mu);
  assert(!pthread_mutex_trylock(&h.inbox_mu));pthread_mutex_unlock(&h.inbox_mu);
