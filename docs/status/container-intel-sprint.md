@@ -2783,3 +2783,30 @@ controls remain intact. Local unprivileged socket execution was NOTRUN due to
 sandbox restrictions and then PASS in the approved local validation context.
 Fresh both-host native and corrected diagnostic validation pending. W100's
 normal two timeouts remain open; earlier cleanup attribution is withdrawn.
+
+
+## October 13, 2026 — committed work and status checkpoint
+
+User requested committing the work and status. Implementation is committed as
+`1c86ac81286e3d21030a1e2a011678f5c80d9a21` on `devel-container`; its local
+observer regression checks PASS as recorded above. No additional remote tests
+or deployment were run for this checkpoint. The Intel candidate build,
+deployment and corrected phase diagnostic for this source are **NOTRUN**.
+
+Latest tested/deployed product remains
+`9145b7a3c8cd3d1bd3bbb96ef02627ea620361ce`, with the source/build/runtime proofs
+and original deadlines recorded above. Normal concurrent acceptance remains
+**FAIL: 1510/1512 PASS**, with deep-directory timeouts on Intel1client3 and
+Intel2client2. Physical reclamation, selected native/sanitizer, ownership, quiet
+POSIX/peer, lifecycle/tiny integrity, restart and cold checks PASS at that source.
+This is the isolated four-daemon Intel container fixture (4G per daemon),
+TCP/direct I/O, 64 FUSE workers, GC idle20ms; `.efs`, expiry-date feature and
+small-file packing disabled. Last completed diagnostic left expensive profiles
+enabled on the private fixture; restore them OFF before normal qualification.
+
+W100 remains open. Next: build the frozen `1c86ac81` candidate on both hosts,
+deploy, run corrected phase-only diagnostics with expensive profiles OFF, fix
+the remaining normal failures, then repeat acceptance and commit the results.
+Historical observer cleanup attribution is withdrawn; normal results remain
+valid. No root action or user decision is currently required. No push, merge,
+release promotion or production replacement is part of this checkpoint.
