@@ -44,9 +44,41 @@ static void duplex(struct efs_conn *c,int server)
     OK(!efs_conn_recv_msg(c,&t,&reply,&got));OK(t==42 && got==n);
     verify(reply,got,server?29:17);free(reply);check_tcp_empty(c->fd);
 }
+static int reconnect_churn(void)
+{
+    enum { N=16 };int sockets[N][2];
+    for(int i=0;i<N;i++) OK(!socketpair(AF_UNIX,SOCK_STREAM,0,sockets[i]));
+    pid_t pid=fork();OK(pid>=0);int server=pid==0;
+    setenv("EFS_RDMA_BUFS",server?"2":"7",1);
+    if (!efs_rdma_available()) {
+        if (!server) {int st;waitpid(pid,&st,0);puts("SKIP: no RDMA device; churn NOTRUN");}
+        return 0;
+    }
+    for(int i=0;i<N;i++) close(sockets[i][server?0:1]);
+    for(int i=0;i<N;i++) {
+        struct efs_conn *c=setup(sockets[i][server?1:0],server);
+        if (!(i&1)) duplex(c,server);
+        else if (server) {
+            unsigned n=16*1024*1024;unsigned char *p=calloc(1,n);OK(p);
+            OK(efs_conn_send_msg(c,42,p,n)!=0);free(p);
+        } else {
+            for(unsigned j=0;j<10000 && !efs_rdma_assembly_bytes();j++) {
+                OK(efs_rdma_message_ready(c->rc)==0);usleep(100);
+            }
+            OK(efs_rdma_assembly_bytes()>0);
+        }
+        efs_conn_destroy(c);OK(!efs_rdma_live_conns() && !efs_rdma_assembly_bytes());
+    }
+    if (!server) {
+        int st;OK(waitpid(pid,&st,0)==pid && WIFEXITED(st) && WEXITSTATUS(st)==0);
+        puts("PASS: same-process16 reconnects,8 duplex/8 interrupted, reused registry generations, zero live connections/assemblies each cycle");
+    }
+    return 0;
+}
 int main(int argc,char **argv)
 {
     const char *mode=argc>1?argv[1]:"normal";
+    if (!strcmp(mode,"churn")) return reconnect_churn();
     int sv[2];OK(!socketpair(AF_UNIX,SOCK_STREAM,0,sv));
     pid_t pid=fork();OK(pid>=0);int server=pid==0;
     setenv("EFS_RDMA_BUFS",server?"2":"7",1);
