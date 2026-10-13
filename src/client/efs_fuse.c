@@ -1803,7 +1803,10 @@ static int efs_fuse_readdir_ino(fuse_ino_t ino, struct readdir_collect_arg *col,
         return -ENOTDIR;
 
     struct efs_inode parent;
-    int rc = efs_client_stat_ino((efs_ino_t)ino, &parent);
+    /* Local directory rows may be overwritten by an older LOOKUP reply.
+     * Listing permission must come from a fresh authority read, including
+     * peer chmod; the local cache cannot authorize enumeration. */
+    int rc = efs_client_stat_refresh((efs_ino_t)ino, &parent);
     if (rc == EFS_ERR_ACCES)
         return -EACCES;
     if (rc != EFS_OK)

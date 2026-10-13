@@ -2619,3 +2619,43 @@ true conflicts, files/null server compatibility and primary hint. Original
 client2a negative fails the intended three-attempt success assertion. Full
 server-handler integration and native/mounted Intel validation remain pending;
 the classification fixture does not substitute for fresh authority tests.
+
+
+## Typed-admission full qualification and directory DAC candidate
+
+Exact deployed/tested `3cb226f28a0a8c5dc5bd22f6c3d0c79eee0b6fd9`:
+both-host native/affected sanitizers/794-input/runtime proofs and mounted
+ownership12/12 PASS. All15 normal gates complete, concurrent1501/1512 PASS
+(122.181–133.773s). Seven deep30s timeouts, Intel1client0 names_crazy_dirs30s
+and mkdirat_unlinkat EBUSY instead of ENOTEMPTY, Intel1client2
+names_crazy_roundtrip unlink EBUSY, Intel2client0 perm_dir_wx_no_r listdir
+succeeded instead of EACCES. No flock_basic failures in this run; one run does
+not establish broad loaded closure. Immediate physical99.750s zero PASS;
+quiet432/43252.417/55.239s, peer134/13441.713/42.777s PASS. Lifecycle256x512KiB,
+read30/churn30, tiny100files+300durable generations/host, warm/cold hashes,
+graceful restart and deletes PASS; final physical9.031s PASS. Shared mmap
+ENODEV skip. Post-restart64-worker/GC20ms/config/disabled-feature proofs PASS.
+No data reset; same isolated2x2 Intel containers/TCP/direct/4G-node environment.
+Raw external admission3cb226f2-{deploy,workers64-normal,workers64-qualification}.
+Committed qualification script's standard15 gates reproduce with the preceding
+64-worker commands. W100 loaded acceptance remains FAIL.
+
+Directory permission candidate: production efs_fuse_readdir_ino used local
+stat_ino for its R_OK check. A concurrent older LOOKUP reply can replace the
+cached directory mode after chmod, and peer chmod also cannot be authorized
+from that cache. Use existing stat_refresh (fresh GETATTR authority) instead;
+its directory return preserves the RPC permissions rather than local dirty
+attributes. This applies to directory DAC shared by both storage engines, found
+through the authorized container workload. Virtual .efs and export-root policy
+remain unchanged. No kernel cache TTL, timer, transaction, read-fence or timeout
+changes. This adds one authoritative GETATTR when an existing local row would
+have served enumeration; performance must be requalified.
+
+Actual production listing and check_access bodies in
+`python3 tests/test_readdir_permission_authority.py` PASS normal and with
+`EFS_TEST_CFLAGS='-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer'`.
+Stale0755/fresh0300 denies before any enumeration RPC; stale0300/fresh0400
+allows; root/export-root, nondirectory, BUSY/ACCES propagation covered.
+Original3cb226f2 source via EFS_FUSE_SOURCE fails intended EACCES assertion.
+RPC/fetch dependencies are stubbed; this is not full server authority proof.
+Fresh both-host native and complete mounted qualification remain pending.
