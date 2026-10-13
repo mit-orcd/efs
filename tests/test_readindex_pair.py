@@ -34,7 +34,7 @@ static int host_read_index(struct efs_raft_host*h,uint8_t g,int*hint){(void)hint
  if(h->core[g].role!=2 && h->core[2-g].role==2)
   assert(h->core[2-g].pending && begun<=1); /* local probe sent before remote wait */
  __atomic_add_fetch(&scalar,1,__ATOMIC_RELAXED);return wait_error;}
-static int host_read_index_admitted(struct efs_raft_host*h,uint8_t g,int*hint,const struct host_read_admission*a,uint64_t *proof){(void)proof;
+static int host_read_index_admitted(struct efs_raft_host*h,uint8_t g,int*hint,const struct host_read_admission*a,uint64_t *proof,int proof_only){assert(!proof && !proof_only);
  (void)hint;assert(a->round==expected[g]+1 && a->term==h->core[g].term && a->want==h->core[g].commit);
  /* Both rounds must already be pending before the first wait. Their old
   * contexts are less than the captured minimum eligible round. */

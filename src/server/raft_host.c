@@ -3376,6 +3376,25 @@ static int host_view_covers(const struct host_view *v, uint64_t want,
 
 /* A fresh proof needs own apply, not another quorum request. Raw current-round
  * proof remains separate from the retained completion and is coherently read. */
+/* A proof RPC returns an index, never KV rows. Its receiver must apply that
+ * exact prefix before reading. Prefer an eligible retained proof; a current
+ * fresh quorum is also sufficient even while the leader's own apply lags. */
+static int host_view_quorum_index(const struct host_view *v, uint64_t want,
+                                  uint64_t round, uint64_t term, uint64_t *idx)
+{
+    if (!v->has || v->role != EFS_RAFT_LEADER || v->term != term)
+        return 0;
+    if (v->proven_done && v->proven_round >= round && v->proven_index >= want) {
+        *idx = v->proven_index;
+        return 1;
+    }
+    if (v->read_done && v->read_round >= round && v->read_index >= want) {
+        *idx = v->read_index;
+        return 1;
+    }
+    return 0;
+}
+
 static int host_view_wait_apply(const struct host_view *v, uint64_t want,
                                 uint64_t round, uint64_t term)
 {
@@ -4032,7 +4051,7 @@ static int host_read_admit(struct efs_raft *r, struct host_read_admission *a,
 
 static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
                            int *leader_hint,const struct host_read_admission *admission,
-                           uint64_t *proof_index)
+                           uint64_t *proof_index, int proof_only)
 {
     struct timespec end;
     struct host_view v;
@@ -4059,6 +4078,8 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
         if (leader_hint)
             *leader_hint = v.leader;
         if (v.role != EFS_RAFT_LEADER) {
+            if (proof_only)
+                return EFS_ERR_NOT_PRIMARY;
             uint64_t ridx = 0;
             int rhint = -1;
             uint64_t p1;
@@ -4112,6 +4133,14 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
         if (v.term != admitted_term) {
             if (prof) fprintf(stderr,"raft-host: admitted-read-term group=%u admitted_term=%llu term=%llu admitted_round=%llu raw_round=%llu proven_round=%llu role=%d leader=%d\n",group,(unsigned long long)admitted_term,(unsigned long long)v.term,(unsigned long long)round,(unsigned long long)v.read_round,(unsigned long long)v.proven_round,v.role,v.leader);
             return EFS_ERR_NOT_PRIMARY;
+        }
+        if (proof_only && proof_index &&
+            host_view_quorum_index(&v, want, round, admitted_term, proof_index)) {
+            if (prof)
+                read_prof_add(first ? &g_read_prof.ri_leader_covered
+                                    : &g_read_prof.ri_leader,
+                              now_us_() - p0);
+            return EFS_OK;
         }
         if (host_view_covers(&v, want, round, admitted_term)) {
             if (proof_index)
@@ -4176,7 +4205,7 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
 
 static int host_read_index(struct efs_raft_host *h,uint8_t group,int *hint)
 {
-    return host_read_index_admitted(h,group,hint,NULL,NULL);
+    return host_read_index_admitted(h,group,hint,NULL,NULL,0);
 }
 
 #include "read_index_pair_remote.h"
@@ -4218,7 +4247,7 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
         if(rc!=EFS_OK)return rc;
         rc=host_read_index(h,groups[remote],hint);
         if(rc!=EFS_OK)return rc;
-        return host_read_index_admitted(h,groups[local],hint,&admission[local],NULL);
+        return host_read_index_admitted(h,groups[local],hint,&admission[local],NULL,0);
     }
     for(unsigned i=0;i<2;i++) {
         r[i]=group_raft(h,groups[i]);
@@ -4244,8 +4273,8 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
     pthread_mutex_unlock(&h->mu);
     host_pump_kick(h);
     if(rc!=EFS_OK)return rc;
-    rc=host_read_index_admitted(h,first,hint,&admission[0],NULL);
-    return rc==EFS_OK ? host_read_index_admitted(h,second,hint,&admission[1],NULL) : rc;
+    rc=host_read_index_admitted(h,first,hint,&admission[0],NULL,0);
+    return rc==EFS_OK ? host_read_index_admitted(h,second,hint,&admission[1],NULL,0) : rc;
 }
 
 static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
@@ -11113,8 +11142,10 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     if (clen == 0) {
         /* Return the exact applied proof that covered this admission. A
          * later view can include unrelated concurrent commits, making the
-         * follower wait for bytes beyond this read's linearization point. */
-        rc = host_read_index_admitted(h, group, &hint, NULL, &idx);
+         * follower wait for bytes beyond this read's linearization point.
+         * This replies with a quorum certificate only; the data-serving
+         * replica still waits for its own apply before touching KV rows. */
+        rc = host_read_index_admitted(h, group, &hint, NULL, &idx, 1);
     } else if (clen >= HOST_DIR_LEN && cmd[0] == EFS_MD_CMD_DIR &&
                cmd[1] == EFS_MD_DIR_MIGRATE) {
         rc = host_dir_migrate(h, rd64be(cmd + 2), cmd, clen, &hint);

@@ -42,20 +42,27 @@ int efs_raft_read_quorum(const struct efs_raft*r){(void)r;assert(0);return 0;}
 int efs_raft_read_covers(const struct efs_raft*r,uint64_t n){(void)r;(void)n;assert(0);return 0;}
 int efs_raft_read_begin(struct efs_raft*r){(void)r;assert(0);return EFS_OK;}
 static void host_waiter_sleep(struct efs_raft_host*h,uint8_t g,int any,uint64_t i,uint64_t seen,const struct timespec*t){(void)h;(void)g;(void)any;(void)i;(void)seen;(void)t;assert(0);}
-'''+fn('host_view_covers')+fn('host_view_wait_apply')+fn('host_read_index_admitted')+r'''
+'''+fn('host_view_covers')+fn('host_view_wait_apply')+fn('host_view_quorum_index')+fn('host_read_index_admitted')+r'''
 int main(void){
  struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.cv_mu=PTHREAD_MUTEX_INITIALIZER,.n=4};
  struct host_read_admission a={101,11,2};int hint;uint64_t proof=9999;
  current=(struct host_view){.has=1,.role=EFS_RAFT_LEADER,.leader=0,.term=2,.commit=1000,.applied=900,.proven_done=1,.proven_index=110,.proven_round=11,.read_pending=1};
- assert(host_read_index_admitted(&h,0,&hint,&a,&proof)==EFS_OK&&proof==110); /* concurrent suffix never extends this proof target */
- current.proven_round=10;assert(host_read_index_admitted(&h,0,&hint,&a,&proof)==EFS_ERR_BUSY&&proof==0);
- current.proven_round=11;current.proven_done=0;assert(host_read_index_admitted(&h,0,&hint,&a,&proof)==EFS_ERR_BUSY&&proof==0);
- current.proven_done=1;current.applied=109;assert(host_read_index_admitted(&h,0,&hint,&a,&proof)==EFS_ERR_BUSY&&proof==0);
- current.applied=900;current.term=3;assert(host_read_index_admitted(&h,0,&hint,&a,&proof)==EFS_ERR_NOT_PRIMARY&&proof==0);
- current.term=2;current.proven_round=10;assert(host_read_index_admitted(&h,0,&hint,NULL,&proof)==EFS_OK&&proof==110&&admissions==1);
- current.role=EFS_RAFT_FOLLOWER;current.leader=1;assert(host_read_index_admitted(&h,0,&hint,NULL,&proof)==EFS_OK&&proof==222);
- apply_rc=EFS_ERR_BUSY;assert(host_read_index_admitted(&h,0,&hint,NULL,&proof)==EFS_ERR_BUSY&&proof==0);
- apply_rc=0;remote_rc=EFS_ERR_IO;assert(host_read_index_admitted(&h,0,&hint,NULL,&proof)==EFS_ERR_IO&&proof==0);
+ assert(host_read_index_admitted(&h,0,&hint,&a,&proof,0)==EFS_OK&&proof==110); /* concurrent suffix never extends this proof target */
+ current.proven_round=10;assert(host_read_index_admitted(&h,0,&hint,&a,&proof,0)==EFS_ERR_BUSY&&proof==0);
+ current.proven_round=11;current.proven_done=0;assert(host_read_index_admitted(&h,0,&hint,&a,&proof,0)==EFS_ERR_BUSY&&proof==0);assert(host_read_index_admitted(&h,0,&hint,&a,&proof,1)==EFS_ERR_BUSY&&proof==0);
+ a.want=111;current.proven_done=1;assert(host_read_index_admitted(&h,0,&hint,&a,&proof,1)==EFS_ERR_BUSY&&proof==0);a.want=101;
+ current.proven_done=1;current.applied=109;assert(host_read_index_admitted(&h,0,&hint,&a,&proof,0)==EFS_ERR_BUSY&&proof==0);
+ assert(host_read_index_admitted(&h,0,&hint,&a,&proof,1)==EFS_OK&&proof==110); /* certificate is not a KV read */
+ current.proven_round=10;current.read_done=1;current.read_round=11;current.read_index=111;
+ assert(host_read_index_admitted(&h,0,&hint,&a,&proof,1)==EFS_OK&&proof==111);
+ current.read_done=0;assert(host_read_index_admitted(&h,0,&hint,&a,&proof,1)==EFS_ERR_BUSY&&proof==0);
+ current.proven_round=11;
+ current.applied=900;current.term=3;assert(host_read_index_admitted(&h,0,&hint,&a,&proof,0)==EFS_ERR_NOT_PRIMARY&&proof==0);assert(host_read_index_admitted(&h,0,&hint,&a,&proof,1)==EFS_ERR_NOT_PRIMARY&&proof==0);
+ current.term=2;current.proven_round=10;assert(host_read_index_admitted(&h,0,&hint,NULL,&proof,0)==EFS_OK&&proof==110&&admissions==1);
+ current.role=EFS_RAFT_FOLLOWER;current.leader=1;assert(host_read_index_admitted(&h,0,&hint,NULL,&proof,0)==EFS_OK&&proof==222);
+ assert(host_read_index_admitted(&h,0,&hint,NULL,&proof,1)==EFS_ERR_NOT_PRIMARY&&proof==0); /* proof server never forwards during role change */
+ apply_rc=EFS_ERR_BUSY;assert(host_read_index_admitted(&h,0,&hint,NULL,&proof,0)==EFS_ERR_BUSY&&proof==0);
+ apply_rc=0;remote_rc=EFS_ERR_IO;assert(host_read_index_admitted(&h,0,&hint,NULL,&proof,0)==EFS_ERR_IO&&proof==0);
  pthread_mutex_destroy(&h.mu);pthread_mutex_destroy(&h.cv_mu);return 0;
 }
 '''
@@ -63,4 +70,4 @@ with tempfile.TemporaryDirectory(prefix='efs-read-result-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-pthread','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
-print('ReadIndex result: exact proof floor, fresh admission, term/quorum/own apply and remote failure refusal PASS')
+print('ReadIndex result: exact certificate floor, fresh admission, quorum/term refusal, local/requester apply barriers and proof endpoint role refusal PASS')
