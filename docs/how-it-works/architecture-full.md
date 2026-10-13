@@ -1494,6 +1494,14 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**PASS on 9b2fac55** — full normal/fault native, six full-library query sanitizers,
+clean-cluster transition/retained reader, commands/options/pages and three quiet
+load rounds (29,331 exact peer payloads). AMD now runs this enabled files/TCP/direct
+source, 17G data quota and unchanged 16/32 GiB query limits. Global W91/W92/W109
+remain OPEN: large-catalogue recursive-subtree continuation needs a bounded
+correctness fix; small AMD passes do not close ORCD's reported 30-second failures.
+
+[W92 sort scratch follow-up](../status/amd-package2-transition-load-20261013.md#w92-follow-up-sort-scratch-accounting-and-unchecked-deletion):
 FIXED/AMD-qualified on **d17f940f**: measured scratch peak/negative control,
 close/unlink/rename faults, full normal/fault native and six full-library query
 sanitizers PASS. Genuine transition/next refresh, retained reader, commands/pages
