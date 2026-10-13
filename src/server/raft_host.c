@@ -3894,6 +3894,7 @@ static struct {
     struct read_prof_acc ri_leader_covered; /* ... and no new round needed */
     struct read_prof_acc ri_remote;   /* host_read_index, forwarded */
     struct read_prof_acc ri_remote_wait; /* host_wait_applied after it */
+    struct read_prof_acc ri_lock, ri_begin, ri_sleep_quorum, ri_sleep_apply;
     struct read_prof_acc lk_total, lk_ri_parent, lk_kv, lk_lanes, lk_getattr;
     struct read_prof_acc ga_total, ga_lanes, ga_getattr;
     uint64_t lk_fwd, ga_fwd, pair_parallel, pair_scalar;
@@ -3967,6 +3968,20 @@ static void read_prof_tick(void)
                                                 __ATOMIC_RELAXED),
             (unsigned long long)__atomic_load_n(&g_read_prof.pair_parallel,__ATOMIC_RELAXED),
             (unsigned long long)__atomic_load_n(&g_read_prof.pair_scalar,__ATOMIC_RELAXED));
+    const struct read_prof_acc *phase[] = {&g_read_prof.ri_lock,
+        &g_read_prof.ri_begin, &g_read_prof.ri_sleep_quorum,
+        &g_read_prof.ri_sleep_apply};
+    const char *names[] = {"lock", "begin", "sleep_quorum", "sleep_apply"};
+    snprintf(line, sizeof(line), "read-phase-prof mono_us=%llu",
+            (unsigned long long)efs_batch_obs_now_us());
+    for (i=0; i<4; i++) {
+        size_t used = strlen(line);
+        snprintf(line+used, sizeof(line)-used, " %s=%llu/%llu/%llu", names[i],
+            (unsigned long long)__atomic_load_n(&phase[i]->n,__ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&phase[i]->sum,__ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&phase[i]->max,__ATOMIC_RELAXED));
+    }
+    fprintf(stderr, "%s\n", line);
 }
 
 /* A follower's ReadIndex is one RPC to the leader per caller. The dual
@@ -4177,7 +4192,9 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
         if (!round) {
             /* Admit this request BEFORE any heartbeat eligible to cover it.
              * Readers arriving during an existing round queue for the next. */
+            uint64_t lock_begin = prof ? now_us_() : 0;
             pthread_mutex_lock(&h->mu);
+            if (prof) read_prof_add(&g_read_prof.ri_lock, now_us_() - lock_begin);
             struct efs_raft *r = group_raft(h, group);
             if (!r || efs_raft_role(r) != EFS_RAFT_LEADER) {
                 pthread_mutex_unlock(&h->mu);
@@ -4210,14 +4227,20 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
              * (another reader may have begun one since the view). */
             struct efs_raft *r;
 
+            uint64_t lock_begin = prof ? now_us_() : 0;
             pthread_mutex_lock(&h->mu);
+            if (prof) read_prof_add(&g_read_prof.ri_lock, now_us_() - lock_begin);
             r = group_raft(h, group);
             rc = EFS_OK;
             if (r && efs_raft_role(r) == EFS_RAFT_LEADER &&
                 !efs_raft_read_pending(r) &&
                 !(efs_raft_read_round(r) >= round &&
                   efs_raft_read_covers(r, want)))
+            {
+                uint64_t begin_us = prof ? now_us_() : 0;
                 rc = host_read_begin_tracked(h,group,r);
+                if (prof) read_prof_add(&g_read_prof.ri_begin, now_us_() - begin_us);
+            }
             host_publish_group(h, group);
             pthread_mutex_unlock(&h->mu);
             if (rc != EFS_OK)
@@ -4238,9 +4261,12 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
         if (v.has && v.role == EFS_RAFT_LEADER && v.term == admitted_term &&
             (v.read_pending || host_view_wait_apply(&v, want, round, admitted_term)) &&
             !host_view_covers(&v, want, round, admitted_term)) {
+            int waiting_apply = prof && host_view_wait_apply(&v, want, round, admitted_term);
             uint64_t s0 = now_us_();
             host_waiter_sleep(h, group, 1, 0, v.stamp, &end);
             s0 = now_us_() - s0;
+            if (prof) read_prof_add(waiting_apply ? &g_read_prof.ri_sleep_apply :
+                                                   &g_read_prof.ri_sleep_quorum, s0);
             if (s0 > 20000)
                 fprintf(stderr, "raft-host: read-sleep us=%llu group=%u "
                         "want=%llu read_idx=%llu applied=%llu pending=%d\n",

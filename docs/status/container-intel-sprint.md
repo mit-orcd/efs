@@ -2074,3 +2074,43 @@ causal performance claim, capacity promotion or release acceptance. Extra
 probe retains its purpose and safety controls but does not close deep timeout.
 Next same-source diagnostic will measure canonical request and reply queues
 with the committed --deepsteps runner; no new product change is made yet.
+
+### Same-source42316531 diagnostic and next authority-phase observations
+
+Committed --deepsteps runner exercised on both Intel hosts with exact deployed
+42316531 and792-input/live runtime proofs PASS. Diagnostic FAIL1505/1512
+PASS7FAIL (deep60all7),124.534–130.611s; immediate physical PASS99.143s,
+first zero99.141s. Original workload/limits/retained fixture unchanged, profiling
+ON distinct from the normal15-gate result above. Six children create60levels
+in25.411–27.687s; one reaches59 by30s. Aggregate first30 callback LOOKUP
+service19.149–20.709s and MKDIR8.496–10.543s include later case phases.
+Canonical requests now measured on leader n3:51798samples/42us mean;
+canonical replies on followers10721–20690samples/25–62us mean. Five-second
+snapshots bracket windows starting0.261–3.908s early/ending0.182–3.809s
+early; discarded/replaced frames are not sampled, max is cumulative, own
+send/receive RTT excluded, no PID-specific causal attribution. First leader
+LOOKUP mean5.713ms, parent proof5.596ms, KV81us, fresh RI4.408ms.
+These queue measurements do not justify a dedicated sender. Raw external
+artifacts/container-20261012/pureprobe42316531-workers64-diagnostic.
+
+Next diagnostic adds EFS_READ_PROF-only admission/begin mutex waiting, actual
+new-round begin duration and condition-sleep accumulators classified by the
+published apply-wait predicate immediately before sleep. These classify
+entry state, not exclusive causal durations if state changes while sleeping.
+No floor/round/authority/locking/order/deadline/thread change. Normal mode adds
+no diagnostic clock/accumulator/log. Separate read-phase-prof line retains the
+existing read-prof format and reports monotonic snapshot time and n/sum_us/
+max_us for lock,begin,sleep_quorum,sleep_apply at the existing1000-operation
+cadence. Relaxed counters are nontransactional, max remains cumulative.
+A single bounded formatted line avoids interleaving its per-field writes.
+Local real admission/operation/pair/completion/remote-pair/read-control/probe
+controls PASS, including existing sanitizer/negative tests; fresh both-host
+native and live checks pending. This instrumentation is not a timeout fix.
+
+The node helper now explicitly supports --batch-prof, requiring --diagnostics;
+normal startup continues to purge inherited profiling variables. Reproduction
+no longer needs editing a temporary node helper: start/mount --diagnostics
+--batch-prof --path-prof (mount --client-max-threads64), then the committed
+qualification runner concurrent --deepsteps, followed immediately by reclaim
+(no --deepsteps). Keep logs outside Git and preserve stores. The new helper/
+phase observation is not part of tested42316531 and needs a new frozen source.
