@@ -3,6 +3,8 @@
 #include "efs/kv_lsm.h"
 #include "efs/kv_key.h"
 #include <errno.h>
+#include <dirent.h>
+#include <sys/stat.h>
 #include <fcntl.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -16,6 +18,33 @@ static int clone_error;
 static int fault_clone(int fd,unsigned long request,int source)
 { if(clone_error){errno=clone_error;return -1;}return ioctl(fd,request,source); }
 #endif
+static const char *peak_path;
+static uint64_t peak_bytes,*peak_charge;
+static unsigned peak_overcharge,peak_samples;
+static void sample_temporary_peak(void)
+{
+    if(!peak_path)return;
+    DIR *dir=opendir(peak_path);if(!dir){peak_overcharge++;return;}
+    uint64_t bytes=0;struct dirent *entry;
+    while((entry=readdir(dir))){
+        if(!strcmp(entry->d_name,".") || !strcmp(entry->d_name,".."))continue;
+        char path[1024];snprintf(path,sizeof(path),"%s/%s",peak_path,entry->d_name);
+        struct stat st;if(stat(path,&st) || st.st_size<0){peak_overcharge++;continue;}
+        if(S_ISREG(st.st_mode))bytes+=(uint64_t)st.st_size;
+    }
+    closedir(dir);peak_samples++;
+    if(bytes>peak_bytes)peak_bytes=bytes;
+    if(bytes>*peak_charge)peak_overcharge++;
+}
+static unsigned fail_sort_unlink,sort_unlinks,fail_sort_close;
+static int fault_unlink(const char *path)
+{
+    if(strstr(path,".tmp")){
+        sort_unlinks++;
+        if(fail_sort_unlink && !--fail_sort_unlink){errno=EIO;return -1;}
+    }
+    return unlink(path);
+}
 static int partial_write;
 static unsigned write_calls;
 static int fail_directory_open;
@@ -58,6 +87,7 @@ static int tracked_open(const char *path,int flags,...)
             if(n>=2 && path[n-2]=='.')kind=path[n-1];
             const char *name=strrchr(path,'/');if(name && !strcmp(name+1,"manifest"))kind='m';
         }
+        if(strstr(path,".tmp"))kind='T';
         descriptor_kind[fd]=kind;
         if(kind=='a')__atomic_add_fetch(&alias_opens,1,__ATOMIC_RELAXED);
         if(kind=='n')__atomic_add_fetch(&name_opens,1,__ATOMIC_RELAXED);
@@ -70,11 +100,12 @@ static int tracked_open(const char *path,int flags,...)
 }
 static int tracked_close(int fd)
 {
+    int fail=fd>=0 && fd<(int)sizeof(descriptor_kind) && descriptor_kind[fd]=='T' && fail_sort_close && !--fail_sort_close;
     if(fd>=0 && fd<(int)sizeof(writing_raw)){
         if(writing_raw[fd]){writing_raw[fd]=0;raw_handles--;}
         descriptor_kind[fd]=0;
     }
-    return close(fd);
+    int rc=close(fd);if(fail){errno=EIO;return -1;}return rc;
 }
 static int fault_fsync(int fd)
 {
@@ -97,7 +128,8 @@ static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
     }
     if(partial_write==2){partial_write=0;errno=ENOSPC;return -1;}
     if(partial_write==1){partial_write=2;return pwrite(fd,buf,size<3?size:3,offset);}
-    return pwrite(fd,buf,size,offset);
+    ssize_t result=pwrite(fd,buf,size,offset);
+    sample_temporary_peak();return result;
 }
 static unsigned pending_scans;
 static int counted_snapshot_scan(struct efs_kv_lsm_snapshot *source,
@@ -120,7 +152,9 @@ static int counted_snapshot_scan(struct efs_kv_lsm_snapshot *source,
 #ifdef __linux__
 #define sync_file_range fault_writeback
 #endif
+#define unlink fault_unlink
 #include "../src/meta/query_disk.c"
+#undef unlink
 #undef pthread_create
 #undef efs_kv_lsm_snapshot_scan
 #undef pwrite
@@ -431,10 +465,69 @@ static void alias_batch_test(void)
     pthread_mutex_destroy(&d->mutex);free(d);CHECK(!rmdir(root));
 }
 
+static void names_peak_test(void)
+{
+    const unsigned count=2*SORT_ROWS+17;
+    for(unsigned kind=0;kind<2;kind++)for(unsigned mode=0;mode<7;mode++){
+        char root[]="/tmp/efs-query-names-XXXXXX";CHECK(mkdtemp(root));
+        struct efs_query_disk *d=calloc(1,sizeof(*d));CHECK(d);if(!d)return;
+        d->budget_fd=-1;d->disk_limit=UINT64_MAX;strcpy(d->path,root);
+        pthread_mutex_init(&d->mutex,NULL);
+        for(unsigned i=0;i<FD_CACHE;i++)d->fds[i].fd=-1;
+        struct writer w={.d=d,.shard=0,.raw=-1,.index=-1};
+        w.buffer=malloc(2*RAW_WRITE_WINDOW);CHECK(w.buffer);
+        for(unsigned i=0;i<count;i++){
+            char name[32];snprintf(name,sizeof(name),"item-%08u",count-i);
+            uint8_t key[EFS_KV_KEY_MAX],value[EFS_META_DENT_BYTES];uint32_t kn,vn=sizeof(value);
+            struct efs_meta_dentry entry={.ino=count-i,.generation=1,.type=S_IFREG};
+            CHECK(!efs_kv_key_dentry(0,EFS_ROOT_INO,name,key,&kn));
+            CHECK(!efs_meta_pack_dentry(&entry,value,vn));
+            CHECK(!save(&w,key,kn,value,vn));
+        }
+        CHECK(!writer_flush(&w));close(w.raw);close(w.index);free(w.buffer);
+        d->part[0].names=d->part[0].count=count;
+        size_t width=kind?sizeof(struct disk_alias):sizeof(struct efs_name_entry);
+        uint64_t before=d->disk_bytes,temporary=count*width;
+        /* Exact generation and aggregate boundaries admit; one byte less
+         * refuses before any run exists. No global permanent scratch charge. */
+        d->disk_limit=before+temporary-(mode==1);
+        d->root_bytes=12345;d->root_limit=d->root_bytes+before+temporary-(mode==2);
+        if(mode==3)fail_sort_unlink=1;
+        if(mode==4)partial_write=1;
+        if(mode==5)d->stop=cancel_budget;
+        if(mode==6)fail_sort_close=1;
+        sort_unlinks=0;
+        peak_path=root;peak_charge=&d->disk_bytes;peak_bytes=0;peak_samples=peak_overcharge=0;
+        int rc=names_build(d,0,kind?'a':'n');
+        sample_temporary_peak();peak_path=NULL;
+        CHECK(!peak_overcharge && peak_samples);
+        if(!mode)printf("sort peak %s: actual_logical=%llu reserved=%llu samples=%u\n",
+            kind?"aliases":"names",(unsigned long long)peak_bytes,
+            (unsigned long long)(before+temporary),peak_samples);
+        CHECK(rc==(mode==1 || mode==2?EFS_ERR_QUOTA:mode==5?EFS_ERR_BUSY:mode?EFS_ERR_IO:EFS_OK));
+        CHECK(d->disk_bytes==before+((mode>=3)?temporary:0));
+        CHECK(!partial_write && !fail_sort_unlink && !fail_sort_close);
+        if(!mode){
+            CHECK(sort_unlinks==4);
+            char path[EFS_MAX_PATH];CHECK(!filename(d,0,kind?'a':'n',path,sizeof(path)));
+            int fd=open(path,O_RDONLY);CHECK(fd>=0);
+            uint8_t previous[sizeof(struct efs_name_entry)],row[sizeof(struct efs_name_entry)];
+            for(unsigned i=0;i<count;i++){
+                CHECK(!io_at(fd,row,width,i*width,0));
+                if(i)CHECK((kind?alias_compare(previous,row):name_compare(previous,row))<0);
+                memcpy(previous,row,width);
+            }
+            close(fd);
+        }
+        d->stop=NULL;efs_query_disk_free(d);CHECK(access(root,F_OK)<0);
+    }
+    puts("name/alias sort: exact temporary peak admission, cleanup refusal, partial ENOSPC and cancellation PASS");
+}
+
 static void changed_journal_test(void)
 {
     const unsigned count=2*SORT_ROWS+17,shards=FD_CACHE*2;
-    for(unsigned mode=0;mode<5;mode++){
+    for(unsigned mode=0;mode<7;mode++){
         char root[]="/tmp/efs-query-changes-XXXXXX";CHECK(mkdtemp(root));
         struct efs_query_disk *d=calloc(1,sizeof(*d));struct incremental *state=calloc(1,sizeof(*state));
         CHECK(d && state);if(!d || !state){free(d);free(state);continue;}
@@ -452,7 +545,10 @@ static void changed_journal_test(void)
         if(mode==2)partial_write=1;
         if(mode==3)d->stop=cancel_budget;
         if(mode==4)CHECK(!ftruncate(state->changes_fd,state->change_bytes-1));
+        if(mode==5)fail_sort_unlink=1;
+        if(mode==6)fail_sort_close=1;
         int rc=changes_sort(d,state);
+        CHECK(!fail_sort_unlink && !fail_sort_close);
         CHECK(rc==(mode==1?EFS_ERR_QUOTA:mode==3?EFS_ERR_BUSY:mode?EFS_ERR_IO:EFS_OK));
         CHECK(!partial_write);d->stop=NULL;d->disk_limit=UINT64_MAX;
         if(!mode){
@@ -694,6 +790,7 @@ int main(void)
 
     budget_test();
     merge_test();
+    names_peak_test();
     struct efs_query_disk *d=calloc(1,sizeof(*d));if(!d)return 1;
     d->budget_fd=-1;
     d->disk_limit=UINT64_MAX;

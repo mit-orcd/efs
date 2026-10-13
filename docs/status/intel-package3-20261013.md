@@ -180,10 +180,10 @@ fork-fixture files checked through both mounts and all256 lifecycle hashes
 PASS after upgrade. These are upgrade integrity, not new-source same-source
 cold acceptance.
 
-Normal seven-client/jobs16 candidate run FAIL:44 failed cases (verify exact TSV
-count in subsequent checkpoint), broad deep/name/append/mtime timeouts plus
-EBUSY in create/unlink and mkdirat/unlinkat. This is a performance regression,
-not accepted merely because native correctness controls pass. Reject the
+Normal seven-client/jobs16 candidate run FAIL1472/1512 PASS:40 failed cases, broad deep/name/append/mtime timeouts plus
+EBUSY in create/unlink and mkdirat/unlinkat. This is a failed loaded result,
+not accepted merely because native correctness controls pass. A subsequent
+rollback control also fails; the worsening is not isolated to this code change. Reject the
 ordinary-files tracking extension and restore the exact prior production
 read-admission behavior; retain all source/test/failed evidence in history.
 Restore Intel binaries to1a737143 under package3 feature settings, preserve all
@@ -197,3 +197,45 @@ approximately643–651MiB,903–2299ms. Foreground1s gate PASS during them. Thus
 normal snapshots were triggered; original5.569/22.044s foreground tails remain
 unreproduced in this bounded run. Do not confuse exporter duration with a
 foreground blocked interval or claim the original stall is globally fixed.
+
+
+## Rollback control and measured helper saturation
+
+Rollback1a737143 actual disabled-profile/membership checks PASS; no storage reset
+or forced stop. Fresh normal seven-client control FAIL1461/1512 (51 failures).
+This prevents attributing the earlier40 failures entirely to the rejected
+admission change. Read-admission behavior remains reverted while investigating
+state/GC/routing effects. Bounded post-run tails show heavy incremental
+lane-sweep/reaping; BUSY lane-sweep is normal partial progress, not by itself
+a physical-GC failure or permission to discard state.
+
+Diagnostic source1a737143, EFS_READ_PROF=1, no Python observer, original jobs16/
+case deadlines: FAIL1473/1512 (39). This is NOT normal acceptance. Actual daemon
+profile flags verified; fresh offsets recorded and bounded tails collected
+after timed workers and temporary-client drain. n2 final cumulative pair
+parallel14471/scalar2414; its LOOKUP parent proof mean25.372ms, remote proof
+mean6.893ms plus own-apply wait1.880ms. Leader n1/n4 freshness mean3.594/3.846ms,
+maximum329ms. Counts demonstrate helper saturation but do not establish that
+capacity alone explains all observed failures. Local KV lookup/getattr means
+are tens of microseconds in this diagnostic. Profiling explicitly turned OFF
+again via a clean all-host restart before normal qualification.
+
+Next candidate: initialized ordinary-file hosts use the existing fixed32
+paired-proof helpers instead of8. Maximum32 persistent128KiB stacks (4MiB per
+process, previously1MiB for files); no queue or per-call thread creation.
+Existing scalar fallback on saturation/initialization failure, independent
+fresh proofs, inherited deadlines, failure propagation and joined task/host
+lifetime unchanged. No admission tracking, quorum, voter, storage, feature
+or deadline modification. This is a measured-capacity candidate, not accepted
+yet. Source now also contains independently merged query/quota changes from
+other packages; freeze and qualify its exact full inputs rather than silently
+treating it as the old1a737143 image.
+
+Actual production pool fixture `test_readindex_remote_pair.py` normal+ASan/UBSan
+PASS locally for files and containers, full32 occupancy, overflow scalar path,
+partial/failed initialization, distinct deadlines, first-proof failure waiting
+for bounded second task, no growth during reuse and128KiB stack bound. Old
+1a737143 production capacity fails the new files-capacity assertion. Both-host
+full native/build, new-source live qualification and same-source cold/physical
+gates are pending. Optional validated read-profiler forwarding committed in
+devops `a140b51`; unset settings preserve normal defaults.

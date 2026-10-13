@@ -148,8 +148,8 @@ static int disk_reserve(int fd)
     if(block && fs.f_bavail<reserve_bytes/block+(reserve_bytes%block!=0))return EFS_ERR_IO;
     return EFS_OK;
 }
-/* Conservative logical storage admission: raw/index bytes, two name-sort
- * copies, derived inode rows and a queue entry per inode. Shared hard links
+/* Conservative logical storage admission: raw/index bytes, final name/alias indexes,
+ * derived inode rows and a queue entry per inode. Shared hard links
  * are charged to each generation. Filesystem allocation overhead and other
  * retained generations remain separate from this per-generation limit. */
 static int charge_disk(struct efs_query_disk *d,uint64_t bytes)
@@ -164,7 +164,7 @@ static int charge_disk(struct efs_query_disk *d,uint64_t bytes)
 static uint64_t derived_charge(uint64_t inodes,uint64_t names)
 {
     return inodes*(sizeof(struct disk_node)+sizeof(efs_ino_t))+
-           names*(2*sizeof(struct efs_name_entry)+2*sizeof(struct disk_alias));
+           names*(sizeof(struct efs_name_entry)+sizeof(struct disk_alias));
 }
 static int io_at(int fd,void *buf,size_t n,uint64_t off,int write)
 {
@@ -220,11 +220,15 @@ static int private_derived(struct efs_query_disk *d,uint32_t shard)
             rc=io_at(dst,buf,(size_t)n,off,1);off+=(uint64_t)n;
         }
     }
-    if(src>=0)close(src);
-    if(dst>=0)close(dst);
+    if(src>=0 && close(src) && !rc)rc=EFS_ERR_IO;
+    if(dst>=0 && close(dst) && !rc)rc=EFS_ERR_IO;
     if(!rc && rename(tmp,path))rc=EFS_ERR_IO;
+    if(rc){
+        /* Release the copy reservation only after its pathname is gone. */
+        if(!unlink(tmp) || errno==ENOENT)d->disk_bytes-=temporary;
+        return rc;
+    }
     d->disk_bytes-=temporary;
-    if(rc){unlink(tmp);return rc;}
     /* Any cached descriptor/windows refer to the old immutable inode. */
     uint8_t slot=d->fd_index[shard][3];
     if(slot){close(d->fds[slot-1].fd);d->fds[slot-1].fd=-1;d->fd_index[shard][3]=0;}
@@ -642,6 +646,12 @@ static int names_build(struct efs_query_disk *d,uint32_t shard,char kind)
     uint64_t count=d->part[shard].names;if(!count)return EFS_OK;
     size_t width=kind=='n'?sizeof(struct efs_name_entry):sizeof(struct disk_alias);
     int (*compare)(const void *,const void *)=kind=='n'?name_compare:alias_compare;
+    /* The final index is already reserved by derived_charge. Run inputs plus
+     * merge output occupy at most twice that size, only for this one sort.
+     * Keep the extra reservation on failure until candidate cleanup. */
+    if(count>UINT64_MAX/width)return EFS_ERR_OVERFLOW;
+    uint64_t temporary=count*width;
+    int admitted=charge_disk(d,temporary);if(admitted)return admitted;
     uint8_t *rows=malloc(SORT_ROWS*width);if(!rows)return EFS_ERR_NOMEM;
     uint64_t runs=0;int rc=EFS_OK;char path[EFS_MAX_PATH];
     for(uint64_t at=0;at<count && !rc;at+=SORT_ROWS) {
@@ -661,7 +671,7 @@ static int names_build(struct efs_query_disk *d,uint32_t shard,char kind)
         if(rc)break;
         int fd=open(path,O_CREAT|O_EXCL|O_RDWR|O_CLOEXEC,0600);
         if(fd<0){rc=EFS_ERR_IO;break;}
-        rc=io_at(fd,rows,n*width,0,1);close(fd);
+        rc=io_at(fd,rows,n*width,0,1);if(close(fd) && !rc)rc=EFS_ERR_IO;
     }
     unsigned pass=0;
     while(runs>1 && !rc) {
@@ -679,10 +689,13 @@ static int names_build(struct efs_query_disk *d,uint32_t shard,char kind)
             if(!rc && (sa.st_size<0 || sb.st_size<0 ||
                        (uint64_t)sa.st_size%width || (uint64_t)sb.st_size%width))rc=EFS_ERR_IO;
             if(!rc)rc=merge_names(d,fa,fb,fo,na,nb,width,compare,rows);
-            if(fa>=0)close(fa);
-            if(fb>=0)close(fb);
-            if(fo>=0)close(fo);
-            if(!rc){unlink(a);unlink(b);}
+            if(fa>=0 && close(fa) && !rc)rc=EFS_ERR_IO;
+            if(fb>=0 && close(fb) && !rc)rc=EFS_ERR_IO;
+            if(fo>=0 && close(fo) && !rc)rc=EFS_ERR_IO;
+            if(!rc){
+                int ua=unlink(a),ub=unlink(b);
+                if(ua || ub)rc=EFS_ERR_IO;
+            }
         }
         runs=(runs+1)/2;pass++;
     }
@@ -691,6 +704,7 @@ static int names_build(struct efs_query_disk *d,uint32_t shard,char kind)
         if(!rc)rc=filename(d,shard,kind,final,sizeof(final));
         if(!rc && rename(path,final))rc=EFS_ERR_IO;
     }
+    if(!rc)d->disk_bytes-=temporary;
     free(rows);return rc;
 }
 static int node_at(struct efs_query_disk *d,uint32_t shard,uint64_t at,struct disk_node *n,int write)
