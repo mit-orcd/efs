@@ -9003,18 +9003,18 @@ static void *host_gc_thread(void *arg)
          * run during that fair yield instead of accelerating every scan.
          * Their time counts toward the yield; snapshot/shutdown checks remain
          * at <=20ms sleep intervals (work itself keeps its existing budgets). */
-        uint64_t idle_end = now_us_() + (uint64_t)idle_ms * 1000;
-        uint64_t expiry_at = now_us_() +
+        uint64_t idle_end = efs_iostats_now_us() + (uint64_t)idle_ms * 1000;
+        uint64_t expiry_at = efs_iostats_now_us() +
                             (uint64_t)host_gc_expiry_idle(GC_LOOP_MS, expiry_progress) * 1000;
-        while (h->gc_running && now_us_() < idle_end) {
+        while (h->gc_running && efs_iostats_now_us() < idle_end) {
             host_snap_export_pass(h);
             host_snap_import_pass(h);
-            if (expiry_progress && now_us_() >= expiry_at) {
+            if (expiry_progress && efs_iostats_now_us() >= expiry_at) {
                 expiry_progress = host_gc_expiry_groups(h);
-                expiry_at = now_us_() +
+                expiry_at = efs_iostats_now_us() +
                             (uint64_t)host_gc_expiry_idle(GC_LOOP_MS, expiry_progress) * 1000;
             }
-            uint64_t now = now_us_();
+            uint64_t now = efs_iostats_now_us();
             if (now >= idle_end) break;
             uint64_t sleep_us = idle_end - now;
             if (sleep_us > 20000) sleep_us = 20000;
