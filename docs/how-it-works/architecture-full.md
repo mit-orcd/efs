@@ -1495,7 +1495,8 @@ this document is the invariant they are measured against.
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
 `9daee617`/`0412e5b7` reduce derived rows 584→312 bytes; comparable native
-generation 17.96% smaller. Enabled files/TCP/direct command, options, retained
+generation 17.96% smaller; at fixed private 5 MiB baseline refuses while candidate
+passes the full native oracle. Enabled files/TCP/direct command, options, retained
 paging, small concurrent payload and orderly-restart gates PASS. Package remains
 OPEN for genuine legacy-cache transition, wider enabled faults/load and ORCD scale.
 Packing, containers and expiry remain disabled; no budget/deadline increase.

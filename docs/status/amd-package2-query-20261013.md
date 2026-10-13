@@ -55,6 +55,7 @@ formats and query budgets are unchanged.
 | Default/human/JSON stats and known-owner/numeric names | PASS fixture checks; live `ls -l`, `find '' -l`, and corresponding `-n` include efs owner names / numeric IDs. Native command suite 31 tests PASS, including fallback/rendering coverage. |
 | Page session, authority barrier, retained orphan native regressions | PASS `test_query_page_sessions.py`, `test_query_page_barriers.py`, `test_query_retained_orphan.py`. |
 | 4 MiB/8 MiB private quota reproducer | Still refuses during raw copying before inode construction; NOT a demonstrated fix at that tiny budget. Both complete native fixtures pass at private 8/16 MiB. Live budgets never raised. |
+| Fixed private quota ladder, baseline vs candidate | PASS: at 5 MiB generation / 16 MiB aggregate baseline fails admission, candidate completes the full RAM/rename/restore/retained-reader oracle; both pass at 6 and 7 MiB. This is synthetic admission evidence, not ORCD scale closure. |
 | ORCD full catalogue/loaded pressure/300-second cold/RDMA | NOTRUN on AMD; still required on final integrated source. |
 
 ## Reproduce and cache transition
@@ -79,7 +80,7 @@ python3 tests/test_efs_commands.py
 python3 tests/test_query_page_sessions.py
 python3 tests/test_query_page_barriers.py
 python3 tests/test_query_retained_orphan.py
-EFS_QUERY_DISK_MAX_MIB=8 EFS_QUERY_DISK_TOTAL_MIB=16 ./tests/test_query_disk
+EFS_QUERY_DISK_MAX_MIB=5 EFS_QUERY_DISK_TOTAL_MIB=16 ./tests/test_query_disk
 export EFS_QUERY_TEST_PORT=17432
 python3 tests/live/efs_commands.py /data1/efs/mnt /data1/efs/mnt2
 # options script owns a fixed efs-options-gates directory: remove only its prior fixture.
@@ -93,6 +94,14 @@ python3 tests/live/efs_query_small_lifecycle.py /data1/efs/mnt /data1/efs/mnt2 c
 # Only after collecting verdicts:
 python3 tests/live/efs_query_small_lifecycle.py /data1/efs/mnt /data1/efs/mnt2 cleanup
 ```
+
+For the admission baseline, build `tests/test_query_disk` in a separate clean
+checkout of `19b14609` on the same AMD host, then run the same 5/16 MiB command.
+Expected: nonzero exit / EFS_ERR_QUOTA. Candidate expected: full oracle PASS.
+The baseline may refuse in raw construction because admission also charges
+planned derived rows; the smaller derived-row charge is already effective there.
+Keep stdout/stderr outside Git. Repeat at 6 and 7 MiB to reproduce both passes.
+Do not run this private override on live daemons.
 
 Sanitizer reproduction, after normal library build:
 
