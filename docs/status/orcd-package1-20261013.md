@@ -197,3 +197,29 @@ failure, daemon diagnostics and resource samples remain outside Git under
 `operations/devel-efs` and `/home/erbmi1/orcd/scratch/efs/orcd-test`. Existing
 scripts there reproduce deployment orchestration; native regression sources
 and the three-package profile are committed. No raw artifacts are committed.
+
+## Integrated Intel and AMD acceptance attempt
+
+Deployed source `9b2fac55fc69732999c33929f319d6ef78507b68` combines Intel
+`5f8ec779`/`0eab1309` checked cleanup with AMD `d17f940f` measured sort-peak
+accounting. Conflicting sort test hooks were reconciled so both fault oracles
+remain active. The Intel helper tuning and read-admission experiment are absent.
+Budgets and cache format are unchanged from the compact-index correction.
+
+All eleven hosts match the 858 committed build inputs and requested live
+RDMA/direct-I/O/files profile, with commands enabled and packing/expiry disabled.
+Full native `make -j4 test` and six full-library query ASan/UBSan/leak checks,
+plus the inventory helper sanitizer, PASS on ORCD. Orderly deployment and seven
+acknowledged-byte markers PASS; initial server readiness is 92.003 seconds.
+
+Both publishers subsequently publish complete v6 catalogues with 15,208,532
+inodes and 14,473,155,513 file bytes per generation. Observed aggregate bytes
+remain below 32 GiB. The real 400 GiB subtree stats returns exactly 1,638,400
+files and 429,496,729,600 bytes, with refresh error zero. This is catalogue
+coverage, not full payload verification.
+
+The first stats preflight during catalogue construction **FAILS** its unchanged
+30-second timeout. Its logs are retained separately. A post-publication attempt
+passes the same stats deadline and proceeds to focused commands, concurrent
+queries, orderly cold restart and full payload verification. Those gates remain
+OPEN until completed; this later probe does not erase the initial failure.

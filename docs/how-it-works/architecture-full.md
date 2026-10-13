@@ -1503,11 +1503,13 @@ Human scope is correctness only; no performance tuning or further compression.
 [ORCD package 1 deployment and open gates](../status/orcd-package1-20261013.md):
 Current scope is feature correctness/acceptance; latency/resources are measured
 evidence and existing bounds, with no additional performance tuning.
-`d54949ec` installed native RDMA/direct/files, `.efs` client/server on,
-packing/containers/expiry off. Full normal native and six full-library query
-ASan/UBSan plus root inventory PASS. Normal deployment/marker integrity PASS,
-readiness85.091s (300s limit); full catalogue still QUOTA near13.5M inodes.
-AMD transient sort-reservation proof/fix and remaining scale gates OPEN.
+`9b2fac55` integrates Intel checked cleanup and AMD measured temporary-peak
+accounting, installed native RDMA/direct/files, `.efs` client/server on,
+packing/containers/expiry off. Full native and full-library query sanitizer
+gates PASS; deployment markers PASS, server readiness92.003s. Both complete
+15.2M-inode catalogues publish within unchanged16/32GiB limits; exact400GiB
+subtree stats PASS. Initial build-time stats timeout retained as FAIL;
+command/concurrent/cold/full-payload acceptance remains OPEN.
 
 [Intel package 3 execution](../status/intel-package3-20261013.md): files/TCP/direct,
 client/server commands, packing and expiry OFF; container fixture stopped.
