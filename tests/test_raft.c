@@ -33,6 +33,8 @@ struct net {
     int snap_restart_seen;
     int flow_zero_probe, flow_refuse_data; /* transport pressure fixture */
     int hold_ae_replies; /* deliver append bytes but delay their acknowledgements */
+    int capture_read;
+    struct efs_raft_msg *read_req[EFS_RAFT_MAX_PEERS], *read_reply[EFS_RAFT_MAX_PEERS];
     int hold_transfer;
     int refuse_transfer;
     struct efs_raft_msg *transfer;
@@ -205,6 +207,16 @@ static int send_now(void *net, const struct efs_raft_msg *msg)
 {
     struct net *n = net;
 
+    if (n->capture_read && msg->last_log_index && msg->type==EFS_RAFT_MSG_AE_REQ) {
+        msg_free_deep(n->read_req[msg->to]);
+        n->read_req[msg->to]=msg_copy_deep(msg);
+        return EFS_OK;
+    }
+    if (n->capture_read && msg->last_log_index && msg->type==EFS_RAFT_MSG_AE_REP) {
+        msg_free_deep(n->read_reply[msg->from]);
+        n->read_reply[msg->from]=msg_copy_deep(msg);
+        return EFS_OK;
+    }
     if (msg->type == EFS_RAFT_MSG_TIMEOUT_NOW && n->refuse_transfer)
         return EFS_ERR_IO;
     if (msg->type == EFS_RAFT_MSG_TIMEOUT_NOW && n->hold_transfer) {
@@ -768,6 +780,62 @@ static void test_readindex_outstanding_batch(void)
     for (i=0;i<3;i++) {
         CHECK(n.batches[i]==batches[i],"fresh read does not resend outstanding entries");
         efs_raft_free(n.r[i]);efs_raft_mem_free(st[i]);
+    }
+}
+
+/* Read quorum contacts must not require persisting the next write suffix.
+ * Read storms also must not keep resetting the ordinary replication timer. */
+static void test_read_probe_committed_prefix(void)
+{
+    for (int group=0;group<=2;group+=2) {
+        struct net n={.n=3};struct app app[3]={{0}};
+        struct efs_raft_store *st[3];struct efs_raft_cfg cfg={0};
+        cfg.n=3;cfg.group=(uint8_t)group;cfg.send=send_now;cfg.net=&n;
+        cfg.apply=apply_cmd;cfg.heartbeat_ticks=4;
+        for(int i=0;i<3;i++) {
+            st[i]=efs_raft_mem_create();cfg.id=i;cfg.store=st[i];cfg.store_ctx=st[i];
+            cfg.app=&app[i];cfg.election_ticks=8+i*8;n.r[i]=efs_raft_new(&cfg);
+        }
+        CHECK(elect(&n,40)==1,"read prefix fixture elects");
+        int lid=leader_id(&n);uint64_t committed=efs_raft_commit(n.r[lid]),index=0;
+        int applied=app[lid].n;uint8_t cmd='Q';
+        efs_raft_arm_durable(n.r[lid]);
+        CHECK(efs_raft_propose_local(n.r[lid],&cmd,1,&index)==EFS_OK,"prefix queues unrelated local tail");
+        CHECK(efs_raft_submit(n.r[lid],index)==EFS_OK &&
+              efs_raft_durable(n.r[lid],index)==EFS_OK,"prefix tail admitted durable but unsent");
+        CHECK(index>committed && efs_raft_commit(n.r[lid])==committed,"prefix tail not yet committed");
+        n.capture_read=1;
+        CHECK(efs_raft_read_begin(n.r[lid])==EFS_OK,"pure fresh read begins");
+        CHECK(!efs_raft_read_quorum(n.r[lid]),"captured requests alone grant no proof");
+        for(int i=0;i<3;i++)if(i!=lid) {
+            struct efs_raft_msg *p=n.read_req[i];
+            CHECK(p && !p->nentries && p->vote_granted && p->prev_index<=committed &&
+                  p->leader_commit<=p->prev_index &&
+                  p->last_log_index==efs_raft_read_round(n.r[lid]),"fresh contact contains only known committed prefix");
+            if(p && !p->nentries) {
+                CHECK(efs_raft_read_control(n.r[i],p)>0,"known durable prefix votes without new log work");
+                struct efs_raft_msg *reply=n.read_reply[i];
+                CHECK(reply && reply->last_log_index==p->last_log_index,"fresh prefix vote correlated");
+                if(reply)(void)efs_raft_read_control(n.r[lid],reply);
+            }
+        }
+        CHECK(efs_raft_read_ready(n.r[lid]) && efs_raft_read_index(n.r[lid])==committed,
+              "fresh committed-prefix quorum serves already applied rows");
+        CHECK(efs_raft_commit(n.r[lid])==committed && app[lid].n==applied,
+              "fresh contact neither commits nor applies unrelated write tail");
+        /* Keep starting read rounds just before ticks. Data progress must
+         * still happen by the ordinary heartbeat interval, not be postponed. */
+        for(int t=0;t<4;t++) {
+            n.capture_read=1;
+            CHECK(efs_raft_read_begin(n.r[lid])==EFS_OK,"read storm begins fresh contact");
+            n.capture_read=0;
+            CHECK(efs_raft_tick(n.r[lid])==EFS_OK,"ordinary heartbeat tick continues");
+        }
+        CHECK(efs_raft_commit(n.r[lid])>=index,"read storm cannot starve ordinary data replication");
+        for(int i=0;i<3;i++) {
+            msg_free_deep(n.read_req[i]);msg_free_deep(n.read_reply[i]);
+            efs_raft_free(n.r[i]);efs_raft_mem_free(st[i]);
+        }
     }
 }
 
@@ -2542,6 +2610,7 @@ int main(void)
     test_step_down_no_campaign();
     test_replicate_and_readindex();
     test_readindex_outstanding_batch();
+    test_read_probe_committed_prefix();
     test_transport_pressure_zero_probe();
     test_i3_i4_and_restart();
     test_snapshot();

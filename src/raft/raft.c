@@ -2470,6 +2470,33 @@ void efs_raft_allow_campaign(struct efs_raft *r, int on)
         r->allow_campaign = on ? 1 : 0;
 }
 
+/* Fresh read contact is not a request to persist an unrelated write tail.
+ * Probe only a prefix this peer has acknowledged. Normal receive caps commit
+ * to that matched prefix; an old/compacted hint safely falls back to zero.
+ * Data replication and heartbeat timing remain on their ordinary paths. */
+static int broadcast_read_probe(struct efs_raft *r)
+{
+    uint32_t mask=peer_mask(r);
+    for (int to=0;to<EFS_RAFT_MAX_PEERS;to++) {
+        if (to==r->id || !(mask&(1u<<to)))
+            continue;
+        struct efs_raft_msg m={0};
+        m.type=EFS_RAFT_MSG_AE_REQ; m.to=to;
+        m.vote_granted=1; /* Never clear an outstanding data batch. */
+        m.prev_index=r->match_index[to]<r->commit_index ?
+                     r->match_index[to] : r->commit_index;
+        int rc=log_term(r,m.prev_index,&m.prev_term);
+        if (rc==EFS_ERR_NOT_FOUND) {m.prev_index=0;m.prev_term=0;}
+        else if (rc!=EFS_OK) return rc;
+        m.leader_commit=m.prev_index;
+        rc=send_msg(r,&m); /* stamps this newly admitted read-round context */
+        if (rc!=EFS_OK) return rc;
+    }
+    /* In particular do not reset hb_elapsed: read storms must not postpone
+     * the ordinary data/commit heartbeat indefinitely. */
+    return EFS_OK;
+}
+
 int efs_raft_read_begin(struct efs_raft *r)
 {
     if (!r)
@@ -2518,7 +2545,7 @@ int efs_raft_read_begin(struct efs_raft *r)
     r->read_in_flight = 1;
     if (solo(r))
         return apply_committed(r);
-    return broadcast_ae(r);
+    return broadcast_read_probe(r);
 }
 
 /* Service matched durable-prefix stable-leader probes without waiting for
