@@ -17,6 +17,21 @@ static int fault_clone(int fd,unsigned long request,int source)
 { if(clone_error){errno=clone_error;return -1;}return ioctl(fd,request,source); }
 #endif
 static int partial_write;
+static int peak_enabled,sort_unlink_fault,sort_rename_fault,sort_close_fault;
+static void check_sort_peak(void);
+static int sort_unlink(const char *path)
+{
+    if(sort_unlink_fault && strstr(path,".tmp")){sort_unlink_fault=0;errno=EIO;return -1;}
+    int rc=unlink(path);if(peak_enabled)check_sort_peak();return rc;
+}
+static int sort_rename(const char *from,const char *to)
+{
+    if(sort_rename_fault && strstr(from,".tmp") &&
+       (sort_rename_fault==1 ? strstr(to,".tmp")!=NULL : strstr(to,".tmp")==NULL)){
+        sort_rename_fault=0;errno=EIO;return -1;
+    }
+    int rc=rename(from,to);if(peak_enabled)check_sort_peak();return rc;
+}
 static unsigned write_calls;
 static int fail_directory_open;
 static unsigned read_calls;
@@ -74,7 +89,9 @@ static int tracked_close(int fd)
         if(writing_raw[fd]){writing_raw[fd]=0;raw_handles--;}
         descriptor_kind[fd]=0;
     }
-    return close(fd);
+    int rc=close(fd);
+    if(peak_enabled && sort_close_fault && !--sort_close_fault){errno=EIO;return -1;}
+    return rc;
 }
 static int fault_fsync(int fd)
 {
@@ -86,7 +103,7 @@ static int fault_fsync(int fd)
 }
 static ssize_t counted_pread(int fd,void *buf,size_t size,off_t offset)
 { __atomic_add_fetch(&read_calls,1,__ATOMIC_RELAXED);return pread(fd,buf,size,offset); }
-static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
+static ssize_t fault_pwrite_impl(int fd,const void *buf,size_t size,off_t offset)
 {
     write_calls++;
     if(fail_derived_after && fd>=0 && fd<(int)sizeof(descriptor_kind) && descriptor_kind[fd]=='d' && !--fail_derived_after){
@@ -98,6 +115,11 @@ static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
     if(partial_write==2){partial_write=0;errno=ENOSPC;return -1;}
     if(partial_write==1){partial_write=2;return pwrite(fd,buf,size<3?size:3,offset);}
     return pwrite(fd,buf,size,offset);
+}
+static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
+{
+    ssize_t rc=fault_pwrite_impl(fd,buf,size,offset);
+    if(peak_enabled)check_sort_peak();return rc;
 }
 static unsigned pending_scans;
 static int counted_snapshot_scan(struct efs_kv_lsm_snapshot *source,
@@ -112,6 +134,8 @@ static int counted_snapshot_scan(struct efs_kv_lsm_snapshot *source,
 #ifdef __linux__
 #define ioctl fault_clone
 #endif
+#define unlink sort_unlink
+#define rename sort_rename
 #define pwrite fault_pwrite
 #define pread counted_pread
 #define fsync fault_fsync
@@ -123,6 +147,8 @@ static int counted_snapshot_scan(struct efs_kv_lsm_snapshot *source,
 #include "../src/meta/query_disk.c"
 #undef pthread_create
 #undef efs_kv_lsm_snapshot_scan
+#undef unlink
+#undef rename
 #undef pwrite
 #undef pread
 #undef fsync
@@ -136,6 +162,106 @@ static int counted_snapshot_scan(struct efs_kv_lsm_snapshot *source,
 #endif
 static int failures;
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"FAIL %d: %s\n",__LINE__,#x);failures++;}}while(0)
+static struct efs_query_disk *peak_disk;
+static char peak_root[EFS_MAX_PATH];
+static uint64_t peak_file_bytes,peak_checks;
+static uint64_t directory_bytes(const char *path,int recurse)
+{
+    uint64_t bytes=0;DIR *dir=opendir(path);CHECK(dir);if(!dir)return 0;
+    struct dirent *entry;
+    while((entry=readdir(dir))){
+        if(!strcmp(entry->d_name,".") || !strcmp(entry->d_name,".."))continue;
+        char file[EFS_MAX_PATH];snprintf(file,sizeof(file),"%s/%s",path,entry->d_name);
+        struct stat st;CHECK(!lstat(file,&st));
+        if(S_ISREG(st.st_mode))bytes+=(uint64_t)st.st_size;
+        else if(S_ISDIR(st.st_mode) && recurse)bytes+=directory_bytes(file,0);
+    }
+    closedir(dir);return bytes;
+}
+static void check_sort_peak(void)
+{
+    uint64_t bytes=directory_bytes(peak_disk->path,0),root=directory_bytes(peak_root,1);
+    CHECK(bytes<=peak_disk->disk_bytes && peak_disk->disk_bytes<=peak_disk->disk_limit);
+    CHECK(root<=peak_disk->root_bytes+peak_disk->disk_bytes);
+    CHECK(!peak_disk->root_limit || peak_disk->root_bytes+peak_disk->disk_bytes<=peak_disk->root_limit);
+    if(bytes>peak_file_bytes)peak_file_bytes=bytes;
+    peak_checks++;
+}
+static int sort_cancel(void *ctx){unsigned *left=ctx;return !--*left;}
+static void sort_budget_test(void)
+{
+    unsigned before=failures;
+    for(unsigned scenario=0;scenario<13;scenario++){
+        unsigned count=scenario==9?0:scenario==10?1:SORT_ROWS*4+1;
+        char store[]="/tmp/efs-sort-kv-XXXXXX",root[]="/tmp/efs-sort-budget-XXXXXX";
+        CHECK(mkdtemp(store));CHECK(mkdtemp(root));
+        struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
+        CHECK(kv);if(!kv)continue;
+        for(unsigned i=0;i<count;i++){
+            char name[32];snprintf(name,sizeof(name),"name-%08u",i);
+            uint8_t key[EFS_KV_KEY_MAX],val[EFS_META_DENT_BYTES];uint32_t kn;
+            struct efs_meta_dentry dent={UINT64_C(100000)+count-i,1,S_IFREG};
+            CHECK(!efs_kv_key_dentry(1,1,name,key,&kn));CHECK(!efs_meta_pack_dentry(&dent,val,sizeof(val)));
+            CHECK(!efs_kv_put(kv,key,kn,val,sizeof(val)));
+        }
+        struct efs_kv_lsm_snapshot *source=NULL;CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));
+        struct efs_query_disk *d=calloc(1,sizeof(*d));CHECK(d);if(!d)continue;
+        d->budget_fd=-1;d->disk_limit=UINT64_MAX;d->disk_bytes=sizeof(d->part)+96;
+        pthread_mutex_init(&d->mutex,NULL);for(unsigned i=0;i<FD_CACHE;i++)d->fds[i].fd=-1;
+        snprintf(d->path,sizeof(d->path),"%s/view-XXXXXX",root);CHECK(mkdtemp(d->path));CHECK(!register_disk(d));
+        struct raw_sync_batch sync={0};CHECK(!raw_build(d,source,1,&sync));CHECK(!raw_sync_finish(d,&sync,0));
+        /* Retained generation is real on disk and remains unchanged while
+         * the candidate sorts. root_bytes includes this old immutable view. */
+        char retained[EFS_MAX_PATH],oldfile[EFS_MAX_PATH];
+        snprintf(retained,sizeof(retained),"%s/view-retained",root);CHECK(!mkdir(retained,0700));
+        snprintf(oldfile,sizeof(oldfile),"%s/old",retained);int oldfd=open(oldfile,O_CREAT|O_RDWR,0600);
+        CHECK(oldfd>=0);if(oldfd>=0){CHECK(!ftruncate(oldfd,65536));close(oldfd);}
+        d->root_bytes=65536;d->root_limit=d->root_bytes+d->disk_bytes+(uint64_t)count*sizeof(struct efs_name_entry);
+        uint64_t baseline=d->disk_bytes,temp=(uint64_t)count*sizeof(struct efs_name_entry);
+        if(scenario==1)sort_unlink_fault=1;
+        if(scenario==2)sort_rename_fault=1;
+        if(scenario==3)sort_rename_fault=2;
+        if(scenario==4)partial_write=1;
+        unsigned calls=2;
+        if(scenario==5){d->stop=sort_cancel;d->stop_ctx=&calls;}
+        if(scenario==6)d->disk_limit=baseline+temp-1;
+        if(scenario==7)d->root_limit=d->root_bytes+baseline+temp-1;
+        if(scenario==8)d->part[1].names=UINT64_MAX;
+        if(scenario==11)sort_close_fault=1; /* Initial run close. */
+        if(scenario==12)sort_close_fault=8; /* First merge output close. */
+        peak_disk=d;strcpy(peak_root,root);peak_file_bytes=peak_checks=0;peak_enabled=1;
+        int rc=names_build(d,1,'n');peak_enabled=0;
+        int expected=(scenario>=1 && scenario<=4) || scenario>=11?EFS_ERR_IO:scenario==5?EFS_ERR_BUSY:
+            scenario==6 || scenario==7?EFS_ERR_QUOTA:scenario==8?EFS_ERR_OVERFLOW:EFS_OK;
+        CHECK(rc==expected);
+        CHECK(d->disk_bytes==baseline+(((scenario>=1 && scenario<=5) || scenario>=11)?temp:0));
+        if(!rc && count){
+            peak_enabled=1;CHECK(!names_build(d,1,'a'));check_sort_peak();peak_enabled=0;
+            CHECK(d->disk_bytes==baseline);
+            char path[EFS_MAX_PATH];CHECK(!filename(d,1,'n',path,sizeof(path)));
+            int fd=open(path,O_RDONLY);CHECK(fd>=0);
+            for(unsigned i=0;i<count && fd>=0;i++){
+                struct efs_name_entry e;char name[32];snprintf(name,sizeof(name),"name-%08u",i);
+                CHECK(pread(fd,&e,sizeof(e),(off_t)i*sizeof(e))==sizeof(e));CHECK(!strcmp(e.name,name));
+            }
+            if(fd>=0)close(fd);
+            CHECK(!filename(d,1,'a',path,sizeof(path)));fd=open(path,O_RDONLY);CHECK(fd>=0);
+            for(unsigned i=0;i<count && fd>=0;i++){
+                struct disk_alias alias;CHECK(pread(fd,&alias,sizeof(alias),(off_t)i*sizeof(alias))==sizeof(alias));
+                CHECK(alias.child==UINT64_C(100001)+i && alias.ordinal==count-1-i);
+            }
+            if(fd>=0)close(fd);
+        }
+        if(scenario==0)CHECK(peak_file_bytes>baseline); /* Scratch is genuinely required. */
+        if(scenario==0)printf("sort peak: rows=%u measured=%llu baseline_charge=%llu checks=%llu\n",count,
+            (unsigned long long)peak_file_bytes,(unsigned long long)baseline,(unsigned long long)peak_checks);
+        sort_unlink_fault=sort_rename_fault=sort_close_fault=partial_write=0;d->stop=NULL;
+        char path[EFS_MAX_PATH];strcpy(path,d->path);efs_query_disk_free(d);CHECK(access(path,F_OK)!=0);
+        CHECK(!access(oldfile,F_OK));CHECK(!unlink(oldfile));CHECK(!rmdir(retained));
+        peak_disk=NULL;efs_kv_lsm_snapshot_release(source);efs_kv_lsm_close(kv);
+    }
+    printf("sort budget: actual per-generation/root peaks, odd merges, checked cleanup, rename, ENOSPC, cancellation, exact quota and overflow %s\n",failures==before?"PASS":"FAIL");
+}
 /* Exercise the full-rebuild boundary after a partial attempt has retained
  * directory rows with already-folded links. Replacing .d files must make
  * subsequent lookups read the new zeroed rows, not those retained links. */
@@ -670,6 +796,7 @@ done:
 }
 int main(void)
 {
+    sort_budget_test();
     legacy_retirement_test();
     raw_sync_batch_test();
     orphan_preflight_test();
