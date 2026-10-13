@@ -1690,12 +1690,54 @@ uint64_t server_compute_usage(const char *path)
     return mode < 0 ? UINT64_MAX : compute_dir_usage(data_path, mode, strlen(path));
 }
 
+/* Full inventory remains mandatory. Ordinary-file roots are independent;
+ * at most three helpers plus the caller overlap their read-only walks.
+ * Every helper is joined before publishing counts or returning an error. */
+struct usage_scan_batch {
+    struct efsd_server *server;
+    uint64_t *usage;
+    uint32_t count, next;
+};
+static void *usage_scan_worker(void *arg)
+{
+    struct usage_scan_batch *batch = arg;
+    for (;;) {
+        uint32_t root = __atomic_fetch_add(&batch->next, 1, __ATOMIC_RELAXED);
+        if (root >= batch->count) break;
+        batch->usage[root] = server_compute_usage(batch->server->storage_paths[root]);
+    }
+    return NULL;
+}
+
+int server_compute_roots_usage(struct efsd_server *s, uint64_t *usage)
+{
+    if (!s || !usage) return EFS_ERR_INVAL;
+    uint32_t count = s->storage_path_count ? s->storage_path_count : 1;
+    if (count > EFS_MAX_STORAGE_PATHS) return EFS_ERR_INVAL;
+    for (uint32_t i = 0; i < count; i++) usage[i] = UINT64_MAX;
+    struct usage_scan_batch batch = { .server = s, .usage = usage, .count = count };
+    pthread_t helpers[3];
+    unsigned created = 0;
+    /* Container allocation accounting keeps its existing serial policy. */
+    while (!s->storage_engine && created < 3 && created + 1 < count) {
+        if (pthread_create(&helpers[created], NULL, usage_scan_worker, &batch)) break;
+        created++;
+    }
+    usage_scan_worker(&batch);
+    for (unsigned i = 0; i < created; i++) pthread_join(helpers[i], NULL);
+    for (uint32_t i = 0; i < count; i++)
+        if (usage[i] == UINT64_MAX) return EFS_ERR_IO;
+    return EFS_OK;
+}
+
 uint64_t server_compute_local_usage(struct efsd_server *s)
 {
+    uint64_t usage[EFS_MAX_STORAGE_PATHS];
+    if (server_compute_roots_usage(s, usage) != EFS_OK) return UINT64_MAX;
     uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
     uint64_t raw = 0;
     for (uint32_t i = 0; i < n; i++) {
-        uint64_t bytes = server_compute_usage(s->storage_paths[i]);
+        uint64_t bytes = usage[i];
         if (bytes == UINT64_MAX || bytes > UINT64_MAX - raw)
             return UINT64_MAX;
         raw += bytes;

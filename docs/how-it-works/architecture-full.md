@@ -1494,6 +1494,18 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+`19b14609` is installed on all11 with native RDMA/direct/files, .efs client/server
+on, packing/containers/expiry off; normal unmount and acknowledged markers PASS.
+Initial300s startup FAIL; single bounded root inventory correction under test.
+AMD compact-index/cache-retirement handoff and full scale acceptance remain OPEN.
+
+[Intel package 3 execution](../status/intel-package3-20261013.md): deployed `1a737143`,
+files/TCP/direct, client/server commands, packing and expiry verified OFF;
+container fixture stopped. Durable query mask0/version1 survives restart.
+Complete normal native and six affected ASan/UBSan harnesses PASS on both hosts;
+mounted qualification in progress, W97/D30/W106 OPEN.
+
+[Three required work packages and feature matrix](../status/three-work-packages-20261013.md):
 ORCD `.efs` enabled for final RDMA/direct scale acceptance; AMD `.efs` enabled
 for fixes and functional qualification; Intel `.efs` client/server disabled for
 ordinary-file correctness/performance. Packing, containers and expiry disabled
@@ -1529,7 +1541,7 @@ and unplanned-event repair/recovery remain outside the current profile.
 
 ## Project status — current work and index
 
-**Explicitly authorized experimental work:** [Intel container sprint](../status/container-intel-sprint.md), `devel-container`, containers/TCP/direct; `.efs`, expiry-date and packing OFF. Latest exact tested/deployed product **9145b7a3**: container native/sanitizers/runtime, ownership12/12 and all15 normal gates complete. Concurrent **1510/1512 PASS**; deep-directory30s timeouts remain on Intel1client3 and Intel2client2, other five clients216/216 PASS. Immediate physical113.767s/final8.983s and all quiet432/peer134/lifecycle/tiny/restart/cold gates PASS (shared mmap ENODEV skip). Loaded acceptance FAIL; one-run improvement does not close W100. Historical --deepsteps cleanup attribution is withdrawn: observer capability wrapping selected pathname-based rmtree. Capability-preserving descriptor observer committed as `1c86ac81286e3d21030a1e2a011678f5c80d9a21`: local regression checks PASS; Intel build, deployment and corrected diagnostic rerun NOTRUN; normal1510/1512 is unaffected; no release promotion.
+**Historical experimental work, superseded by package 3; fixture stopped:** [Intel container sprint](../status/container-intel-sprint.md), `devel-container`, containers/TCP/direct; `.efs`, expiry-date and packing OFF. Latest exact tested/deployed product **9145b7a3**: container native/sanitizers/runtime, ownership12/12 and all15 normal gates complete. Concurrent **1510/1512 PASS**; deep-directory30s timeouts remain on Intel1client3 and Intel2client2, other five clients216/216 PASS. Immediate physical113.767s/final8.983s and all quiet432/peer134/lifecycle/tiny/restart/cold gates PASS (shared mmap ENODEV skip). Loaded acceptance FAIL; one-run improvement does not close W100. Historical --deepsteps cleanup attribution is withdrawn: observer capability wrapping selected pathname-based rmtree. Capability-preserving descriptor observer committed as `1c86ac81286e3d21030a1e2a011678f5c80d9a21`: local regression checks PASS; Intel build, deployment and corrected diagnostic rerun NOTRUN; normal1510/1512 is unaffected; no release promotion.
 **Mac checkpoint committed; native qualification remains open:** implementation `32f71f27`, full regression PASS; latest native **213/216**, three small-file timeouts, best fresh 214/216. Current-source persistence **27/27 prepare + 27/27 verify** after clean same-store restart PASS. Proposed 64-entry durable-ancestry cache is **undeployed**, awaiting approval and real-storage safety gates. [Results and small-file durability investigation](../status/mac-v032-posix-20261012.md).
 
 **Proposed feature:** [W113 — aggregate client workload telemetry](#w113--aggregate-application-workload-telemetry-across-fuse-clients): ORCD seven-client read/write ops/s and human-friendly bytes/s, separate from server/internal traffic. Discussion recorded; implementation and acceptance NOTRUN.

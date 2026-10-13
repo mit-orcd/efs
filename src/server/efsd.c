@@ -457,14 +457,30 @@ int main(int argc, char **argv)
     /* Refresh this process's row by id — never smash nodes[0], which may be a peer
      * after load (that bug duplicated one id and dropped another). */
     server_sync_local_membership(&server);
-    /* Prefer meta/usage.bin; fall back to one full data/ scan. */
-    server_init_local_usage(&server);
-
     /* Fail closed before exposing an endpoint. Existing fragment usage is
-     * inventoried per root so external occupancy reduces the safe allowance. */
+     * inventoried once per root for both the local counter and safe quota.
+     * usage.bin is advisory, so neither result may skip the full inventory. */
+    struct timespec inventory_start, inventory_end;
+    clock_gettime(CLOCK_MONOTONIC, &inventory_start);
     uint64_t root_usage[EFS_MAX_STORAGE_PATHS], safe_quota;
-    for (uint32_t i = 0; i < server.storage_path_count; i++)
-        root_usage[i] = server_compute_usage(server.storage_paths[i]);
+    if (server_compute_roots_usage(&server, root_usage) != EFS_OK) {
+        fprintf(stderr, "Storage quota: cannot inventory storage roots; refusing startup\n");
+        return 1;
+    }
+    uint64_t local_usage = 0;
+    for (uint32_t i = 0; i < server.storage_path_count; i++) {
+        if (root_usage[i] >= UINT64_MAX - local_usage) {
+            fprintf(stderr, "Storage quota: inventory overflow; refusing startup\n");
+            return 1;
+        }
+        local_usage += root_usage[i];
+    }
+    clock_gettime(CLOCK_MONOTONIC, &inventory_end);
+    int64_t inventory_ms = (int64_t)(inventory_end.tv_sec - inventory_start.tv_sec) * 1000 +
+                           (inventory_end.tv_nsec - inventory_start.tv_nsec) / 1000000;
+    fprintf(stderr, "storage-inventory: roots=%u used=%llu elapsed_ms=%lld\n",
+            server.storage_path_count, (unsigned long long)local_usage,
+            (long long)inventory_ms);
     if (efs_storage_safe_quota(server.storage_paths, root_usage,
                                server.storage_path_count, &safe_quota)) {
         fprintf(stderr, "Storage quota: cannot establish safe headroom; refusing startup\n");
@@ -488,7 +504,17 @@ int main(int argc, char **argv)
         quota_unit = maximum_unit;
         quota_scale = maximum_scale;
     }
+    pthread_mutex_lock(&server.lock);
+    struct efs_node *local = server_local_node(&server);
+    if (!local) {
+        pthread_mutex_unlock(&server.lock);
+        fprintf(stderr, "Storage quota: local member unavailable; refusing startup\n");
+        return 1;
+    }
+    local->used = local_usage;
+    pthread_mutex_unlock(&server.lock);
     server_sync_local_membership(&server);
+    server_usage_save(&server);
     fprintf(stderr, "Storage quota: %s %.2f %s (safe maximum %.2f %s; reserve 20%%, minimum 1 GiB per filesystem)\n",
             automatic_quota ? "automatic" : "explicit",
             (double)server.quota / quota_scale, quota_unit,

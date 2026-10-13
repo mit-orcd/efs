@@ -1,3 +1,9 @@
+[ORCD package 1 deployment and open gates](orcd-package1-20261013.md):
+`19b14609` is installed on all11 with native RDMA/direct/files, .efs client/server
+on, packing/containers/expiry off; normal unmount and acknowledged markers PASS.
+Initial300s startup FAIL; single bounded root inventory correction under test.
+AMD compact-index/cache-retirement handoff and full scale acceptance remain OPEN.
+
 [Intel package 3 execution](intel-package3-20261013.md): deployed `1a737143`,
 files/TCP/direct, client/server commands, packing and expiry verified OFF;
 container fixture stopped. Durable query mask0/version1 survives restart.

@@ -319,6 +319,8 @@ int efsd_pthread_create(pthread_t *tid, void *(*fn)(void *), void *arg);
 
 /* Compute total bytes used under one storage root's data/. */
 uint64_t server_compute_usage(const char *path);
+/* Exact per-root inventory, joined and fail-closed; at most four file walks. */
+int server_compute_roots_usage(struct efsd_server *s, uint64_t *usage);
 
 /* Bytes used across all local data roots (sum of on-disk sizes). */
 uint64_t server_compute_local_usage(struct efsd_server *s);
