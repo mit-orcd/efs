@@ -20,6 +20,7 @@ struct efs_raft {
     int storage_failed; /* failed deferred persistence requires restart */
     int batch_noop;
     int batch_overlap;
+    int preserve_ack_window;
     int role;
     int leader;
     uint8_t group;
@@ -1424,7 +1425,16 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
     if (!in->vote_granted) {
         if (in->success && r->ae_inflight[in->from])
             BO_COUNT(in->match_index < r->ae_inflight_end[in->from] ? BO_REPLY_PARTIAL : BO_REPLY_COVERED);
-        r->ae_inflight[in->from] = 0;
+        /* A delayed/duplicated successful reply for a prefix below this
+         * window accepted none of its entries. Preserve its retransmit age
+         * and outstanding bytes; ordinary progress and refusals still clear.
+         * Peer liveness, read context, match/next and commit/apply below are
+         * unchanged. This is not a replication or read-authority shortcut. */
+        if (!r->preserve_ack_window || !in->success ||
+            in->match_index >= r->ae_inflight[in->from])
+            r->ae_inflight[in->from] = 0;
+        else
+            BO_COUNT(BO_ACK_OLDER_WINDOW);
     }
     if (in->success) {
         uint64_t prev_commit = r->commit_index;
@@ -1742,6 +1752,7 @@ struct efs_raft *efs_raft_new(const struct efs_raft_cfg *cfg)
     r->send_ready = cfg->send_ready;
     r->batch_noop = cfg->batch_noop;
     r->batch_overlap = cfg->batch_overlap;
+    r->preserve_ack_window = cfg->preserve_ack_window;
     r->net = cfg->net;
     r->apply = cfg->apply;
     r->app = cfg->app;

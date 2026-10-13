@@ -1661,3 +1661,43 @@ Local actual memo/callback normal and MEMO_TEST_CFLAGS sanitizers PASS.
 Both-host complete native checks in progress, live diagnostics NOTRUN yet.
 Original seven-client workload/deadlines and transparent path observer stay
 unchanged, folding OFF; .efs/expiry-date/packing OFF and TCP/direct retained.
+
+
+### 2026-10-13 — memo diagnostic complete and reproduced older-ACK defect
+
+Exact3213688badf141ab2ee4b3d3140fa62f0f2d3e59 both-host complete affected
+native, memo/callback sanitizers and791-input proofs PASS. Folding OFF;
+retained Intel four-node4G/node containers/TCP/direct/seven clients/jobs16,
+features OFF, explicit diagnostic profiling ON, original deadlines/observer.
+Full1490/1512PASS22FAIL: deep60/crazy/deep100 all7 plus one concurrent
+create/unlink child unlink EBUSY (Intel2client0,c1-5).138.444–146.805s.
+Immediate physical55.160s PASS,zero55.132. Raw external
+artifacts/container-20261012/memoprof3213688b-diagnostic. No acceptance claim.
+Memo samples reach2048 attempts/client:931–939 hits,640–653 active misses,
+464–470 missing,zero expired;2525–2858 inserts and8989–9223 active suppressed
+inserts. First1024 samples occur after the deep60 deadline, so aggregate memo
+suppression is not proof of the deep-path bottleneck. No cache lifetime,
+scoped mutation or namespace authority change is justified/implemented.
+The new unlink EBUSY is an additional loaded diagnostic failure to retest.
+
+A real native old-core reproducer now FAILs at duplicate older ACK retirement:
+ACK prefixA starts the newer windowA+1..B; an identical delayed ACKA then
+clears that newer window and sends it again. This is not a timing assumption.
+Container host startup enables preserve_ack_window; ordinary files retain
+cfg default0. Only a successful ordinary ACK whose match index lies strictly
+below the outstanding window's FIRST index preserves that window and its
+original heartbeat age. Progress ACKs, refusals, liveness, match/next,
+current read context, commit/apply and all term/boot/config/quorum guards stay
+unchanged. No context folding, credit retirement or expiry/lease shortcut.
+Profiling-only ack_older_window records this case; transport/disk formats
+unchanged. All real tests/test_raft invariants now run in legacy and container
+policies. New controls prove partial progress/new window, duplicate retention,
+original-age lost-ACK retransmission, covering ACK commit/apply, old-context
+read refusal and fresh applied quorum success; normal and ASan/UBSan PASS.
+Forcing original unconditional retirement FAILs exactly the new window
+control in both fixture rounds. Reproduce via
+python3 tests/test_container_ack_window.py (actual core/test sources,
+sanitizers and explicit old-retirement negative); no raw fixture artifacts
+committed. Both-host Linux native and full exact-source live15-gate rerun
+remain required. This fixes a reproduced protocol bookkeeping defect; its
+Intel directory performance benefit is not established yet.

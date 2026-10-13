@@ -6,6 +6,14 @@
 #include <string.h>
 
 static int failures = 0;
+static int ack_window_fixture_mode;
+static struct efs_raft *test_raft_new(const struct efs_raft_cfg *cfg)
+{
+    struct efs_raft_cfg copy=*cfg;
+    if (ack_window_fixture_mode) copy.preserve_ack_window=1;
+    return efs_raft_new(&copy);
+}
+
 
 #define CHECK(cond, msg)                                                      \
     do {                                                                      \
@@ -339,7 +347,7 @@ static void test_election_i1(void)
         cfg.election_ticks = (uint32_t)(4 + i * 4);
         cfg.heartbeat_ticks = 1;
         cfg.app = &app[i];
-        n.r[i] = efs_raft_new(&cfg);
+        n.r[i] = test_raft_new(&cfg);
         CHECK(n.r[i] != NULL, "raft");
     }
     leaders = elect(&n, 20);
@@ -378,7 +386,7 @@ static void test_replicate_and_readindex(void)
         cfg.election_ticks = (uint32_t)(4 + i * 4);
         cfg.heartbeat_ticks = 1;
         cfg.app = &app[i];
-        n.r[i] = efs_raft_new(&cfg);
+        n.r[i] = test_raft_new(&cfg);
     }
     CHECK(elect(&n, 20) == 1, "elect");
     lid = leader_id(&n);
@@ -484,7 +492,7 @@ static void test_read_quorum_before_apply(void)
     cfg.n=3;cfg.send=send_now;cfg.net=&n;cfg.apply=apply_cmd;cfg.heartbeat_ticks=1;
     for(int i=0;i<3;i++) {
         store[i]=efs_raft_mem_create();cfg.id=i;cfg.store=store[i];cfg.store_ctx=store[i];
-        cfg.election_ticks=4+i*4;cfg.app=&app[i];n.r[i]=efs_raft_new(&cfg);
+        cfg.election_ticks=4+i*4;cfg.app=&app[i];n.r[i]=test_raft_new(&cfg);
     }
     CHECK(elect(&n,20)==1,"proof fixture elects");
     int leader=leader_id(&n);uint64_t index=0;uint8_t cmd='P';
@@ -535,7 +543,7 @@ static void test_read_applied_floor(void)
     cfg.apply=apply_cmd;cfg.heartbeat_ticks=1;
     for(int i=0;i<3;i++){
         store[i]=efs_raft_mem_create();cfg.id=i;cfg.store=store[i];cfg.store_ctx=store[i];
-        cfg.election_ticks=4+i*4;cfg.app=&app[i];n.r[i]=efs_raft_new(&cfg);
+        cfg.election_ticks=4+i*4;cfg.app=&app[i];n.r[i]=test_raft_new(&cfg);
     }
     CHECK(elect(&n,20)==1,"apply-floor fixture elects");
     int leader=leader_id(&n);uint64_t first=0,round=0,got=0,idx=0,last=0;
@@ -579,7 +587,7 @@ static void test_note_durable_without_apply(void)
     cfg.apply=apply_cmd;cfg.heartbeat_ticks=1;
     for(int i=0;i<2;i++) {
         store[i]=efs_raft_mem_create();cfg.id=i;cfg.store=store[i];cfg.store_ctx=store[i];
-        cfg.election_ticks=4+i*4;cfg.app=&app[i];n.r[i]=efs_raft_new(&cfg);
+        cfg.election_ticks=4+i*4;cfg.app=&app[i];n.r[i]=test_raft_new(&cfg);
     }
     CHECK(elect(&n,20)==1,"durable-note fixture elects");
     int leader=leader_id(&n),follower=1-leader;uint64_t index=0;
@@ -614,7 +622,7 @@ static void test_readindex_control(void)
     cfg.n=3;cfg.send=send_now;cfg.net=&n;cfg.apply=apply_cmd;cfg.heartbeat_ticks=1;
     for(int i=0;i<3;i++) {
         store[i]=efs_raft_mem_create();cfg.id=i;cfg.store=store[i];cfg.store_ctx=store[i];
-        cfg.election_ticks=4+i*4;cfg.app=&app[i];n.r[i]=efs_raft_new(&cfg);
+        cfg.election_ticks=4+i*4;cfg.app=&app[i];n.r[i]=test_raft_new(&cfg);
     }
     CHECK(elect(&n,20)==1,"control fixture elects");
     int leader=leader_id(&n),follower=(leader+1)%3;
@@ -810,7 +818,7 @@ static void test_readindex_outstanding_batch(void)
     for (i=0;i<3;i++) {
         st[i]=efs_raft_mem_create();cfg.id=i;cfg.store=st[i];
         cfg.store_ctx=st[i];cfg.app=&app[i];cfg.election_ticks=4+i*4;
-        n.r[i]=efs_raft_new(&cfg);
+        n.r[i]=test_raft_new(&cfg);
     }
     CHECK(elect(&n,20)==1,"elect outstanding read fixture");
     lid=leader_id(&n);
@@ -843,7 +851,7 @@ static void test_transport_pressure_zero_probe(void)
         cfg.apply=apply_cmd;cfg.heartbeat_ticks=1;
         for(int i=0;i<3;i++) {
             st[i]=efs_raft_mem_create();cfg.id=i;cfg.store=st[i];cfg.store_ctx=st[i];
-            cfg.app=&app[i];cfg.election_ticks=4+i*4;n.r[i]=efs_raft_new(&cfg);
+            cfg.app=&app[i];cfg.election_ticks=4+i*4;n.r[i]=test_raft_new(&cfg);
         }
         CHECK(elect(&n,20)==1,"elect transport-pressure fixture");
         int lid=leader_id(&n);uint64_t committed=efs_raft_commit(n.r[lid]);
@@ -892,7 +900,7 @@ static void test_i3_i4_and_restart(void)
         cfg.election_ticks = (uint32_t)(4 + i * 4);
         cfg.heartbeat_ticks = 1;
         cfg.app = &app[i];
-        n.r[i] = efs_raft_new(&cfg);
+        n.r[i] = test_raft_new(&cfg);
     }
     CHECK(elect(&n, 20) == 1, "elect");
     lid = leader_id(&n);
@@ -914,7 +922,7 @@ static void test_i3_i4_and_restart(void)
     cfg.store = st[lid];
     cfg.store_ctx = st[lid];
     cfg.app = &app[lid];
-    n.r[lid] = efs_raft_new(&cfg);
+    n.r[lid] = test_raft_new(&cfg);
     CHECK(n.r[lid] && efs_raft_term(n.r[lid]) == term + 5, "restart term");
 
     /* I4: drop follower traffic — the partitioned leader cannot
@@ -935,7 +943,7 @@ static void test_i3_i4_and_restart(void)
             cfg.election_ticks = (uint32_t)(4 + i * 4);
             cfg.app = &app[i];
             n.drop[i] = 0;
-            n.r[i] = efs_raft_new(&cfg);
+            n.r[i] = test_raft_new(&cfg);
         }
         CHECK(elect(&n, 20) == 1, "re-elect");
         lid = leader_id(&n);
@@ -975,7 +983,7 @@ static void test_snapshot(void)
     cfg.apply = apply_cmd;
     cfg.app = &app;
     cfg.election_ticks = 1;
-    r = efs_raft_new(&cfg);
+    r = test_raft_new(&cfg);
     n.r[0] = r;
     CHECK(r, "new");
     CHECK(efs_raft_tick(r) == EFS_OK, "tick1");
@@ -986,7 +994,7 @@ static void test_snapshot(void)
     CHECK(efs_raft_applied(r) >= idx, "applied");
     CHECK(efs_raft_snapshot(r) == EFS_OK, "snap");
     efs_raft_free(r);
-    r = efs_raft_new(&cfg);
+    r = test_raft_new(&cfg);
     CHECK(r && efs_raft_applied(r) >= 1, "reload snap idx");
     efs_raft_free(r);
     efs_raft_mem_free(st);
@@ -1015,7 +1023,7 @@ static void boot_n(struct net *n, struct efs_raft_store **st, struct app *app,
         cfg->election_ticks = (uint32_t)(4 + i * 4);
         cfg->heartbeat_ticks = 1;
         cfg->app = &app[i];
-        n->r[i] = efs_raft_new(cfg);
+        n->r[i] = test_raft_new(cfg);
         CHECK(n->r[i] != NULL, "raft new");
     }
 }
@@ -1133,7 +1141,7 @@ static void test_grow_3_to_5(void)
     cfg.app = &app[3];
     cfg.voters = 0x7;
     cfg.n = 3;
-    n.r[3] = efs_raft_new(&cfg);
+    n.r[3] = test_raft_new(&cfg);
     CHECK(n.r[3] && efs_raft_voters(n.r[3]) == 0x1f, "cfg survives snap");
     free_n(&n, st, 5);
 }
@@ -1264,7 +1272,7 @@ static void test_leadership_transfer(void)
             /* Reopen the caught-up target with the production admission callback. */
             efs_raft_free(n.r[target]);
             cfg.id=target;cfg.store=st[target];cfg.app=&app[target];cfg.admit=pressure_admit;
-            n.r[target]=efs_raft_new(&cfg);app[target].owner=n.r[target];
+            n.r[target]=test_raft_new(&cfg);app[target].owner=n.r[target];
             elect(&n,2);app[target].pressure_mask=1u<<EFS_RAFT_ADMIT_LEAD;
             term=efs_raft_term(n.r[target]);
         }
@@ -1316,7 +1324,7 @@ static void test_membership_persistence(void)
     cfg.id = 0; cfg.n = 1; cfg.voters = 1; cfg.store = st;
     cfg.store_ctx = st; cfg.send = discard_send; cfg.apply = apply_cmd;
     cfg.app = &app; cfg.election_ticks = 2; cfg.heartbeat_ticks = 1;
-    r = efs_raft_new(&cfg);
+    r = test_raft_new(&cfg);
     CHECK(r != NULL, "membership persistence fixture");
     if (!r) { efs_raft_mem_free(st); return; }
     for (i = 0; i < 8; i++) efs_raft_tick(r);
@@ -1331,22 +1339,22 @@ static void test_membership_persistence(void)
 
     st = efs_raft_mem_create(); cfg.store = st; cfg.store_ctx = st;
     CHECK(st->save_cfg(st, 0, 0) == EFS_OK, "seed invalid empty membership");
-    r = efs_raft_new(&cfg);
+    r = test_raft_new(&cfg);
     CHECK(r == NULL, "cold bootstrap rejects invalid stored membership");
     efs_raft_free(r);
     CHECK(st->save_cfg(st, 1, 1u << EFS_RAFT_MAX_PEERS) == EFS_OK,
           "seed invalid joint membership");
-    r = efs_raft_new(&cfg);
+    r = test_raft_new(&cfg);
     CHECK(r == NULL, "cold bootstrap rejects invalid stored joint membership");
     efs_raft_free(r);
     st->load_cfg = fail_cfg_load;
-    r = efs_raft_new(&cfg);
+    r = test_raft_new(&cfg);
     CHECK(r == NULL, "membership load IO cannot silently use bootstrap config");
     efs_raft_free(r); efs_raft_mem_free(st);
 
     st = efs_raft_mem_create(); cfg.store = st; cfg.store_ctx = st;
     cfg.id = 1; cfg.n = 4; cfg.voters = 0x7; cfg.snap_chunk = snap_chunk;
-    r = efs_raft_new(&cfg);
+    r = test_raft_new(&cfg);
     CHECK(r != NULL, "follower membership fixture");
     if (r) {
         struct efs_raft_msg m = {0};
@@ -1473,7 +1481,7 @@ static void test_four_voters(void)
                 continue;
             cfg.id = i; cfg.store = st[i]; cfg.store_ctx = st[i];
             cfg.app = &app[i]; cfg.boot_id++;
-            n.r[i] = efs_raft_new(&cfg);
+            n.r[i] = test_raft_new(&cfg);
             CHECK(n.r[i] != NULL, "cold four-voter restart");
         }
         CHECK(elect(&n, 60) == 0, "two cold survivors cannot elect a leader");
@@ -1506,7 +1514,7 @@ static void test_grow_3_to_4(void)
     CHECK(efs_raft_snapshot(n.r[3]) == EFS_OK, "snapshot four-voter membership");
     efs_raft_free(n.r[3]);
     cfg.id = 3; cfg.store = st[3]; cfg.store_ctx = st[3]; cfg.app = &app[3];
-    n.r[3] = efs_raft_new(&cfg); /* Bootstrap says three; snapshot is authoritative. */
+    n.r[3] = test_raft_new(&cfg); /* Bootstrap says three; snapshot is authoritative. */
     CHECK(n.r[3] && efs_raft_voters(n.r[3]) == 0xf,
           "cold snapshot restores four-voter membership");
     lid = wait_voters(&n, 0x7, 80);
@@ -1584,7 +1592,7 @@ static void test_stale_boot_id(void)
     cfg.boot_id = 2;
     cfg.n = 3;
     cfg.voters = 0x7;
-    n.r[1] = efs_raft_new(&cfg);
+    n.r[1] = test_raft_new(&cfg);
     CHECK(n.r[1], "restart boot 2");
     elect(&n, 6);
     lid = leader_id(&n);
@@ -1629,7 +1637,7 @@ static void test_ae_batch_catchup(void)
         cfg.election_ticks = (uint32_t)(4 + i * 4);
         cfg.heartbeat_ticks = 1;
         cfg.app = &app[i];
-        n.r[i] = efs_raft_new(&cfg);
+        n.r[i] = test_raft_new(&cfg);
     }
     CHECK(elect(&n, 20) == 1, "elect");
     lid = leader_id(&n);
@@ -1699,7 +1707,7 @@ static void test_ae_catchup_flow_control(void)
         cfg.election_ticks = (uint32_t)(4 + i * 4);
         cfg.heartbeat_ticks = 1;
         cfg.app = &app[i];
-        n.r[i] = efs_raft_new(&cfg);
+        n.r[i] = test_raft_new(&cfg);
     }
     CHECK(elect(&n, 20) == 1, "elect");
     lid = leader_id(&n);
@@ -1718,7 +1726,7 @@ static void test_ae_catchup_flow_control(void)
     cfg.store_ctx = st[fol];
     cfg.election_ticks = 100; /* never campaigns during the test */
     cfg.app = &app[fol];
-    n.r[fol] = efs_raft_new(&cfg);
+    n.r[fol] = test_raft_new(&cfg);
     CHECK(n.r[fol] != NULL, "fol re-new");
 
     /* (1) Drop fol, propose 200 WITHOUT ticking: exactly one batch may be
@@ -1788,7 +1796,7 @@ static void test_install_snapshot(void)
         cfg.app = &app[i];
         cfg.election_ticks = (uint32_t)(4 + i * 4);
         cfg.heartbeat_ticks = 1;
-        n.r[i] = efs_raft_new(&cfg);
+        n.r[i] = test_raft_new(&cfg);
         CHECK(n.r[i] != NULL, "raft with snap hooks");
     }
     CHECK(elect(&n, 20) == 1, "elect");
@@ -1878,7 +1886,7 @@ static void test_install_snapshot_restarted_leader(void)
         cfg.app = &app[i];
         cfg.election_ticks = (uint32_t)(4 + i * 4);
         cfg.heartbeat_ticks = 1;
-        n.r[i] = efs_raft_new(&cfg);
+        n.r[i] = test_raft_new(&cfg);
         CHECK(n.r[i] != NULL, "raft with snap hooks");
     }
     CHECK(elect(&n, 20) == 1, "elect");
@@ -1911,7 +1919,7 @@ static void test_install_snapshot_restarted_leader(void)
     cfg.heartbeat_ticks = 1;
     cfg.voters = 0x7;
     cfg.n = 3;
-    n.r[lid] = efs_raft_new(&cfg);
+    n.r[lid] = test_raft_new(&cfg);
     CHECK(n.r[lid] != NULL, "leader restarted");
     for (t = 0; t < 60 && leader_id(&n) != lid; t++)
         if (elect(&n, 1) < 0)
@@ -1957,7 +1965,7 @@ static void test_snap_chunks(void)
         cfg.app = &app[i];
         cfg.election_ticks = (uint32_t)(4 + i * 4);
         cfg.heartbeat_ticks = 1;
-        n.r[i] = efs_raft_new(&cfg);
+        n.r[i] = test_raft_new(&cfg);
         CHECK(n.r[i] != NULL, "raft with chunked snap");
     }
     CHECK(elect(&n, 20) == 1, "elect");
@@ -1986,7 +1994,7 @@ static void test_snap_chunks(void)
     cfg.election_ticks = 40;
     cfg.voters = 0x7;
     cfg.n = 3;
-    n.r[fol] = efs_raft_new(&cfg);
+    n.r[fol] = test_raft_new(&cfg);
     CHECK(n.r[fol] != NULL, "empty follower");
     efs_raft_allow_campaign(n.r[fol], 0);
     n.snap_chunks = 0;
@@ -2007,7 +2015,7 @@ static void test_snap_chunks(void)
     st[fol] = efs_raft_mem_create();
     cfg.store = st[fol];
     cfg.store_ctx = st[fol];
-    n.r[fol] = efs_raft_new(&cfg);
+    n.r[fol] = test_raft_new(&cfg);
     CHECK(n.r[fol] != NULL, "follower after crash");
     efs_raft_allow_campaign(n.r[fol], 0);
     efs_raft_allow_campaign(n.r[lid], 0);
@@ -2063,7 +2071,7 @@ static void test_ae_reply_match_stops_at_prev(void)
     cfg.election_ticks = 10;
     cfg.heartbeat_ticks = 2;
     n.drop[0] = 1;
-    n.r[1] = efs_raft_new(&cfg);
+    n.r[1] = test_raft_new(&cfg);
     CHECK(n.r[1] != NULL, "follower");
     efs_raft_allow_campaign(n.r[1], 0);
     memset(&ae, 0, sizeof(ae));
@@ -2128,7 +2136,7 @@ static void test_noop_over_stale_tail(void)
         cfg.store_ctx = st[i];
         cfg.election_ticks = (uint32_t)(4 + i * 4);
         cfg.app = &app[i];
-        n.r[i] = efs_raft_new(&cfg);
+        n.r[i] = test_raft_new(&cfg);
         CHECK(n.r[i] != NULL, "raft");
         efs_raft_arm_durable(n.r[i]);
     }
@@ -2166,6 +2174,56 @@ static void test_noop_over_stale_tail(void)
  * carries the same entries again: 300 KiB entries × N proposes to a
  * silent follower must stay at one window per heartbeat interval, not
  * one per propose. Small entries keep the replacement behaviour. */
+/* A duplicate old prefix ACK must not retire the newer window that the
+ * first ACK already started. Delayed replies are normal pipelined traffic. */
+static void test_ae_duplicate_ack_preserves_newer_window(void)
+{
+    for (int protect=0; protect<2; protect++) {
+        struct net n = {.n=3};
+        struct efs_raft_store *st[3];
+        struct app app[3] = {{0}};
+        struct efs_raft_cfg cfg = {0};
+        cfg.n=3;cfg.send=send_now;cfg.net=&n;cfg.apply=apply_cmd;
+        cfg.heartbeat_ticks=1;cfg.preserve_ack_window=protect;
+        for (int i=0;i<3;i++) {
+            st[i]=efs_raft_mem_create();cfg.id=i;cfg.store=st[i];cfg.store_ctx=st[i];
+            cfg.election_ticks=(uint32_t)(4+i*4);cfg.app=&app[i];
+            n.r[i]=efs_raft_new(&cfg);CHECK(n.r[i]!=NULL,"ack window raft");
+        }
+        CHECK(elect(&n,20)==1,"ack window election");
+        int leader=leader_id(&n),follower=(leader+1)%3;
+        n.hold_ae_replies=1;
+        uint8_t a='a',b='b';uint64_t first=0,last=0;
+        CHECK(efs_raft_propose(n.r[leader],&a,1,&first)==EFS_OK,"first pending window");
+        CHECK(efs_raft_propose(n.r[leader],&b,1,&last)==EFS_OK&&last>first,"extended window");
+        struct efs_raft_msg reply={0};reply.type=EFS_RAFT_MSG_AE_REP;
+        reply.from=follower;reply.to=leader;reply.term=efs_raft_term(n.r[leader]);
+        reply.boot_id=1;reply.success=1;reply.match_index=first;
+        int before=n.batches[follower];
+        CHECK(efs_raft_recv(n.r[leader],&reply)==EFS_OK,"partial ACK advances window");
+        CHECK(n.batches[follower]>before,"remaining suffix sent after partial ACK");
+        before=n.batches[follower];uint64_t committed=efs_raft_commit(n.r[leader]);
+        CHECK(efs_raft_recv(n.r[leader],&reply)==EFS_OK,"duplicate older ACK received");
+        CHECK(protect ? n.batches[follower]==before : n.batches[follower]>before,
+              "container duplicate preserves newer window; files retain legacy default");
+        CHECK(efs_raft_commit(n.r[leader])==committed,"duplicate does not advance commit");
+        before=n.batches[follower];
+        CHECK(efs_raft_tick(n.r[leader])==EFS_OK && n.batches[follower]>before,
+              "lost newer-window ACK still retransmits at original heartbeat age");
+        reply.match_index=last;
+        CHECK(efs_raft_recv(n.r[leader],&reply)==EFS_OK&&
+              efs_raft_commit(n.r[leader])==last&&efs_raft_applied(n.r[leader])==last,
+              "covering ACK retains replication and apply progress");
+        CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"fresh read after window");
+        CHECK(efs_raft_recv(n.r[leader],&reply)==EFS_OK&&!efs_raft_read_ready(n.r[leader]),
+              "old-context ACK does not grant fresh read authority");
+        reply.last_log_index=efs_raft_read_round(n.r[leader]);
+        CHECK(efs_raft_recv(n.r[leader],&reply)==EFS_OK&&efs_raft_read_ready(n.r[leader]),
+              "current context still grants fully applied quorum read");
+        for(int i=0;i<3;i++){efs_raft_free(n.r[i]);efs_raft_mem_free(st[i]);}
+    }
+}
+
 static void test_ae_full_window_not_resent_per_propose(void)
 {
     struct net n = { .n = 3 };
@@ -2190,7 +2248,7 @@ static void test_ae_full_window_not_resent_per_propose(void)
         cfg.store_ctx = st[i];
         cfg.election_ticks = (uint32_t)(4 + i * 4);
         cfg.app = &app[i];
-        n.r[i] = efs_raft_new(&cfg);
+        n.r[i] = test_raft_new(&cfg);
         CHECK(n.r[i] != NULL, "raft");
     }
     CHECK(elect(&n, 20) == 1, "elect");
@@ -2298,7 +2356,7 @@ static void test_follower_apply_retry(void)
         ops.batch_begin=recv_test_begin;ops.batch_end=recv_test_end;
         struct efs_raft_cfg cfg={0};cfg.id=1;cfg.n=3;cfg.election_ticks=10;cfg.heartbeat_ticks=1;
         cfg.store=&ops;cfg.store_ctx=store;cfg.send=recv_test_send;cfg.apply=recv_test_apply;
-        struct efs_raft *r=efs_raft_new(&cfg);CHECK(r!=NULL,"apply retry follower");
+        struct efs_raft *r=test_raft_new(&cfg);CHECK(r!=NULL,"apply retry follower");
         struct efs_raft_msg m={0};m.type=EFS_RAFT_MSG_AE_REQ;m.from=0;m.to=1;m.term=2;
         CHECK(efs_raft_recv(r,&m)==EFS_OK,"retry follower leader");
         m.nentries=1;m.entries[0].term=2;m.entries[0].cmd=(const uint8_t*)"c";m.entries[0].clen=1;m.leader_commit=1;
@@ -2324,7 +2382,7 @@ static void test_recv_batch(void)
         struct efs_raft_cfg cfg={0};
         cfg.id=1;cfg.n=3;cfg.election_ticks=10;cfg.heartbeat_ticks=1;
         cfg.store=&ops;cfg.store_ctx=store;cfg.send=recv_test_send;cfg.apply=recv_test_apply;
-        struct efs_raft *r=efs_raft_new(&cfg);
+        struct efs_raft *r=test_raft_new(&cfg);
         CHECK(r!=NULL,"receive fixture");
         struct efs_raft_msg msgs[3];memset(msgs,0,sizeof(msgs));
         msgs[0].type=EFS_RAFT_MSG_AE_REQ;msgs[0].from=0;msgs[0].to=1;msgs[0].term=2;
@@ -2408,7 +2466,7 @@ static void test_recv_batch_noop(void)
         cfg.election_ticks=10;cfg.heartbeat_ticks=1;cfg.store=&ops;
         cfg.store_ctx=store;cfg.send=recv_test_send;cfg.apply=recv_test_apply;
         cfg.batch_noop=(int)enabled;
-        struct efs_raft *r=efs_raft_new(&cfg);CHECK(r!=NULL,"noop fixture");
+        struct efs_raft *r=test_raft_new(&cfg);CHECK(r!=NULL,"noop fixture");
         struct efs_raft_msg m[3];memset(m,0,sizeof(m));
         m[0].type=EFS_RAFT_MSG_AE_REQ;m[0].from=0;m[0].to=1;
         m[0].group=2;m[0].term=2;
@@ -2466,7 +2524,7 @@ static void test_recv_batch_overlap(void)
         struct efs_raft_cfg cfg={0};cfg.id=1;cfg.n=3;cfg.group=2;cfg.election_ticks=10;cfg.heartbeat_ticks=1;
         cfg.store=&ops;cfg.store_ctx=store;cfg.send=recv_test_send;cfg.apply=recv_test_apply;
         cfg.batch_overlap=(int)enabled;cfg.admit=overlap_admit;
-        struct efs_raft *r=efs_raft_new(&cfg);CHECK(r!=NULL,"overlap fixture");
+        struct efs_raft *r=test_raft_new(&cfg);CHECK(r!=NULL,"overlap fixture");
         struct efs_raft_msg m[3];memset(m,0,sizeof(m));
         m[0].type=EFS_RAFT_MSG_AE_REQ;m[0].from=0;m[0].to=1;m[0].group=2;m[0].term=2;m[0].boot_id=2;
         CHECK(efs_raft_recv(r,m)==EFS_OK,"overlap leader established");recv_test.replies=0;
@@ -2541,7 +2599,7 @@ static void test_pressure_quorum_and_owned_backlog(void)
     for (int i=0;i<3;i++) {
         store[i]=efs_raft_mem_create();cfg.id=i;cfg.store=store[i];cfg.store_ctx=store[i];
         cfg.app=&app[i];cfg.election_ticks=4+i*4;cfg.heartbeat_ticks=2;
-        net.r[i]=efs_raft_new(&cfg);app[i].owner=net.r[i];
+        net.r[i]=test_raft_new(&cfg);app[i].owner=net.r[i];
     }
     CHECK(elect(&net,40)==1,"pressure cluster elects");
     leader=leader_id(&net);follower=(leader+1)%3;
@@ -2587,39 +2645,42 @@ static void test_pressure_quorum_and_owned_backlog(void)
 
 int main(void)
 {
-    test_note_durable_without_apply();
-    test_readindex_control();
-    test_read_quorum_before_apply();
-    test_read_applied_floor();
-    test_pressure_quorum_and_owned_backlog();
-    test_follower_apply_retry();
-    test_recv_batch();
-    test_recv_batch_noop();
-    test_recv_batch_overlap();
-    test_election_i1();
-    test_ae_full_window_not_resent_per_propose();
-    test_step_down_no_campaign();
-    test_replicate_and_readindex();
-    test_readindex_outstanding_batch();
-    test_transport_pressure_zero_probe();
-    test_i3_i4_and_restart();
-    test_snapshot();
-    test_grow_3_to_5();
-    test_four_voters();
-    test_membership_persistence();
-    test_leadership_transfer();
-    test_grow_3_to_4();
-    test_solo_durable_cap_then_grow();
-    test_i18_joint_quorum();
-    test_stale_boot_id();
-    test_ae_reply_match_stops_at_prev();
-    test_noop_over_stale_tail();
-    test_ae_batch_catchup();
-    test_ae_catchup_flow_control();
-    test_install_snapshot();
-    test_install_snapshot_needs_blob();
-    test_install_snapshot_restarted_leader();
-    test_snap_chunks();
+    for (ack_window_fixture_mode=0;ack_window_fixture_mode<2;ack_window_fixture_mode++) {
+        test_note_durable_without_apply();
+        test_readindex_control();
+        test_read_quorum_before_apply();
+        test_read_applied_floor();
+        test_pressure_quorum_and_owned_backlog();
+        test_follower_apply_retry();
+        test_recv_batch();
+        test_recv_batch_noop();
+        test_recv_batch_overlap();
+        test_election_i1();
+        test_ae_duplicate_ack_preserves_newer_window();
+        test_ae_full_window_not_resent_per_propose();
+        test_step_down_no_campaign();
+        test_replicate_and_readindex();
+        test_readindex_outstanding_batch();
+        test_transport_pressure_zero_probe();
+        test_i3_i4_and_restart();
+        test_snapshot();
+        test_grow_3_to_5();
+        test_four_voters();
+        test_membership_persistence();
+        test_leadership_transfer();
+        test_grow_3_to_4();
+        test_solo_durable_cap_then_grow();
+        test_i18_joint_quorum();
+        test_stale_boot_id();
+        test_ae_reply_match_stops_at_prev();
+        test_noop_over_stale_tail();
+        test_ae_batch_catchup();
+        test_ae_catchup_flow_control();
+        test_install_snapshot();
+        test_install_snapshot_needs_blob();
+        test_install_snapshot_restarted_leader();
+        test_snap_chunks();
+    }
     if (failures) {
         fprintf(stderr, "test_raft: %d failure(s)\n", failures);
         return 1;

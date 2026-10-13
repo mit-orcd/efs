@@ -7328,6 +7328,7 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
     cfg.store_ctx = st;
     cfg.send = host_send;
     cfg.send_ready = h->flow_enabled ? host_send_ready : NULL;
+    cfg.preserve_ack_window = h->s && h->s->storage_engine;
     {
         const char *mode = getenv("EFS_RAFT_BATCH_NOOP");
         if (mode && strcmp(mode, "0") && strcmp(mode, "1"))
