@@ -356,8 +356,17 @@ int efs_recv_all(int fd, void *buf, size_t len)
     size_t got = 0;
     while (got < len) {
         int bounded = net_deadline_ms != 0;
-        if (bounded) {
-            int remaining = efs_net_remaining_ms(INT_MAX);
+        int remaining = bounded ? efs_net_remaining_ms(INT_MAX) : -1;
+        if (bounded && !remaining) {
+            errno = ETIMEDOUT;
+            return -1;
+        }
+        /* Reply type/body bytes commonly follow an already received length.
+         * Try queued bytes first; poll only when the nonblocking receive
+         * actually needs readiness. Never change shared descriptor flags. */
+        ssize_t n = recv(fd, p + got, len - got, bounded ? MSG_DONTWAIT : 0);
+        if (n < 0 && bounded && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            remaining = efs_net_remaining_ms(INT_MAX);
             if (!remaining) {
                 errno = ETIMEDOUT;
                 return -1;
@@ -370,11 +379,10 @@ int efs_recv_all(int fd, void *buf, size_t len)
                 if (!ready) errno = ETIMEDOUT;
                 return -1;
             }
+            continue;
         }
-        ssize_t n = recv(fd, p + got, len - got, bounded ? MSG_DONTWAIT : 0);
         if (n <= 0) {
-            if (n < 0 && (errno == EINTR ||
-                (bounded && (errno == EAGAIN || errno == EWOULDBLOCK))))
+            if (n < 0 && errno == EINTR)
                 continue;
             if (n == 0)
                 errno = ECONNRESET;

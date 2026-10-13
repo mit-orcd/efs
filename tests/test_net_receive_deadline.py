@@ -18,7 +18,12 @@ code=r'''
 #include <unistd.h>
 #include <pthread.h>
 #include <fcntl.h>
-'''+s[a:b]+fn(s,'int efs_recv_all(')+fn(r,'void efs_client_rpc_set_deadline_ms(')+fn(r,'uint64_t efs_client_rpc_deadline_ms(')+fn(r,'static int rpc_past_deadline(')+r'''
+'''+s[a:b]+r'''
+static unsigned polls;
+static int counted_poll(struct pollfd *p,nfds_t n,int ms) {polls++;return poll(p,n,ms);}
+#define poll counted_poll
+'''+fn(s,'int efs_recv_all(')+fn(r,'void efs_client_rpc_set_deadline_ms(')+fn(r,'uint64_t efs_client_rpc_deadline_ms(')+fn(r,'static int rpc_past_deadline(')+r'''
+#undef poll
 static uint64_t now_ms(void) {struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000+t.tv_nsec/1000000;}
 static void *drip(void *p) {int fd=*(int *)p;assert(!efs_net_deadline_ms());for(int i=0;i<40;i++){assert(send(fd,"x",1,0)==1);usleep(4000);}return NULL;}
 int main(void) {
@@ -36,11 +41,16 @@ int main(void) {
  assert(!efs_recv_all(f[0],buf,1)&&buf[0]=='z');
  assert(efs_net_remaining_ms(-1)==-1&&efs_net_remaining_ms(30)==30);
  efs_net_set_deadline_ms(UINT64_MAX);assert(efs_net_remaining_ms(-1)==INT_MAX&&efs_net_remaining_ms(5)==5);
- efs_net_set_deadline_ms(0);close(f[0]);close(f[1]);return 0;
+ efs_net_set_deadline_ms(now_ms()+1000);polls=0;
+ assert(send(f[1],"abc",3,0)==3);
+ for(int i=0;i<3;i++)assert(!efs_recv_all(f[0],buf+i,1)&&buf[i]=="abc"[i]);
+ assert(polls==0); /* Already queued framing bytes need no readiness syscall. */
+ close(f[1]);assert(efs_recv_all(f[0],buf,1)==-1&&errno==ECONNRESET);
+ efs_net_set_deadline_ms(0);close(f[0]);return 0;
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-net-recv-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-pthread','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
-print('network receive: slow-drip and idle deadlines, RPC binding, TLS isolation and fd flag preservation PASS')
+print('network receive: slow-drip and idle deadlines, RPC binding, TLS isolation and fd flag preservation and queued-byte fast path PASS')
