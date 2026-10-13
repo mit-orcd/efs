@@ -250,3 +250,16 @@ an operations-harness oracle that incorrectly required the2TB export root to
 use GiB rather than TiB. The400GiB fixture oracle remains exact. Seven active DD
 workloads appear in resource samples; concurrent acceptance runs under that
 ordinary I/O, separately from the paused tiny-file screen launchers.
+
+Seven-client concurrent pre-cold gate: all21 `.efs` query cases PASS (3/client,
+jobs3, unchanged30s), but the accompanying core gate **FAIL**:1501/1512 PASS,
+11 failures. Ten are EBUSY in deep mkdir, name creation, concurrent create/unlink
+or unlink; one concurrent high/low extension reports EOF8,519,680 rather than
+8,388,609 on fcstor010. These are ordinary POSIX acceptance failures under
+jobs16/client and the active DD workload; do not label the overall concurrent
+gate PASS or hide them behind the query-only result. A separate same-profile
+EOF reproducer repeats the existing POSIX oracle160times/client with16workers:
+4/1120 FAIL on fcstor008/009/012, all the same chunk-rounded EOF; failed
+fixtures remain. Seven isolated single-case reruns PASS but do not clear it.
+Existing cache/publication tracing on temporary clients gives960/960 PASS and
+normal drains; a traced concurrent bulk-I/O reproduction is running. Post-cold and full payload gates remain NOTRUN.
