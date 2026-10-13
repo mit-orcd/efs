@@ -1,3 +1,10 @@
+[ORCD RDMA/TCP cause investigation](orcd-rdma-tcp-cause-20261013.md):
+matched9b source explicitly sends oversized frames via retained TCP channel;
+actual RDMA pool84KiB. Read-only004→003 samples reproduce five then two
+51-segment timeout/loss-probe episodes. Sampled drop/uncorrected-error counters
+stay0; extended PHY counters show FEC-corrected raw bit errors. Exact loss/delay
+point OPEN. No cluster or product-code changes, no payload acceptance claim.
+
 [ORCD passive network observation](orcd-network-passive-20261013.md):
 120s on all11 unchanged9b2fac55 processes under existing I/O; no cluster changes.
 No mlx5_2 IB/RDMA error/retry or NIC drop increments. Host TCP retransmissions

@@ -1494,6 +1494,13 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+matched9b source explicitly sends oversized frames via retained TCP channel;
+actual RDMA pool84KiB. Read-only004→003 samples reproduce five then two
+51-segment timeout/loss-probe episodes. Sampled drop/uncorrected-error counters
+stay0; extended PHY counters show FEC-corrected raw bit errors. Exact loss/delay
+point OPEN. No cluster or product-code changes, no payload acceptance claim.
+
+[ORCD passive network observation](../status/orcd-network-passive-20261013.md):
 120s on all11 unchanged9b2fac55 processes under existing I/O; no cluster changes.
 No mlx5_2 IB/RDMA error/retry or NIC drop increments. Host TCP retransmissions
 663/64 on004/005; subsequent EFS-owned IPoIB sockets on004 show102 in30s.
