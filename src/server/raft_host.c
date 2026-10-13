@@ -3998,6 +3998,28 @@ static int host_follower_read_result(int rc,int self,int peers,int remote_hint,
 
 struct host_read_admission {uint64_t want,round,term;};
 
+/* Capture the pre-send floor and start an idle leader round in the same
+ * critical section. A separate admission lock followed by a begin lock makes
+ * every reader contend twice on the pump mutex. An already active round still
+ * cannot cover this arrival: it records the NEXT round and starts nothing. */
+static int host_read_admit(struct efs_raft *r, struct host_read_admission *a,
+                           int *started)
+{
+    *started = 0;
+    if (!r || efs_raft_role(r) != EFS_RAFT_LEADER)
+        return EFS_ERR_NOT_PRIMARY;
+    uint64_t previous = efs_raft_read_round(r);
+    if (previous == UINT64_MAX)
+        return EFS_ERR_BUSY;
+    *a = (struct host_read_admission){efs_raft_commit(r), previous + 1,
+                                     efs_raft_term(r)};
+    if (efs_raft_read_pending(r))
+        return EFS_OK;
+    int rc = efs_raft_read_begin(r);
+    *started = rc == EFS_OK;
+    return rc;
+}
+
 static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
                            int *leader_hint,const struct host_read_admission *admission)
 {
@@ -4052,21 +4074,25 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
         if (!round) {
             /* Admit this request BEFORE any heartbeat eligible to cover it.
              * Readers arriving during an existing round queue for the next. */
+            struct host_read_admission fresh;
+            int started;
             pthread_mutex_lock(&h->mu);
-            struct efs_raft *r = group_raft(h, group);
-            if (!r || efs_raft_role(r) != EFS_RAFT_LEADER) {
-                pthread_mutex_unlock(&h->mu);
+            rc = host_read_admit(group_raft(h, group), &fresh, &started);
+            if (started)
+                host_publish_group(h, group);
+            pthread_mutex_unlock(&h->mu);
+            if (rc == EFS_ERR_NOT_PRIMARY) {
                 host_view_get(h, group, &v);
                 continue;
             }
-            uint64_t previous = efs_raft_read_round(r);
-            if (previous == UINT64_MAX) {
-                pthread_mutex_unlock(&h->mu);
-                return EFS_ERR_BUSY;
-            }
-            round = previous + 1;
-            admitted_term = efs_raft_term(r);
-            pthread_mutex_unlock(&h->mu);
+            if (rc != EFS_OK)
+                return rc;
+            want = fresh.want;
+            round = fresh.round;
+            admitted_term = fresh.term;
+            if (started)
+                host_pump_kick(h);
+            host_view_get(h, group, &v);
         }
         if (v.term != admitted_term) {
             if (prof) fprintf(stderr,"raft-host: admitted-read-term group=%u admitted_term=%llu term=%llu admitted_round=%llu raw_round=%llu proven_round=%llu role=%d leader=%d\n",group,(unsigned long long)admitted_term,(unsigned long long)v.term,(unsigned long long)round,(unsigned long long)v.read_round,(unsigned long long)v.proven_round,v.role,v.leader);
