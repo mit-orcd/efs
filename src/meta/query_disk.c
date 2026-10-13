@@ -1553,11 +1553,13 @@ int efs_query_disk_checkpoint(struct efs_query_disk *d,const uint64_t watermark[
     if(n<0 || (size_t)n>=sizeof(current))return EFS_ERR_NAMETOOLONG;
     n=snprintf(temp,sizeof(temp),"%s.new",current);
     if(n<0 || (size_t)n>=sizeof(temp))return EFS_ERR_NAMETOOLONG;
-    if(!d->legacy.path[0])legacy_checkpoint_pin(current,&d->legacy);
-    unlink(temp);if(symlink(base+1,temp))return EFS_ERR_IO;
-    if(rename(temp,current)){unlink(temp);return EFS_ERR_IO;}
+    /* Acquire the publication barrier descriptor before mutating current.
+     * EMFILE/IO must leave the original checkpoint and retirement owner intact. */
     char root[EFS_MAX_PATH];memcpy(root,d->path,(size_t)(base-d->path));root[base-d->path]=0;
     fd=open(root,O_RDONLY|O_DIRECTORY|O_CLOEXEC);if(fd<0)return EFS_ERR_IO;
+    if(!d->legacy.path[0])legacy_checkpoint_pin(current,&d->legacy);
+    unlink(temp);if(symlink(base+1,temp)){close(fd);return EFS_ERR_IO;}
+    if(rename(temp,current)){unlink(temp);close(fd);return EFS_ERR_IO;}
     if(fsync(fd)){
         rc=EFS_ERR_IO;
         /* The new symlink is not a durable publication certificate. Restore
