@@ -2430,3 +2430,19 @@ mmap/lifecycle/tiny/restart gates for acceptance and live/flock ownership helper
 External evidence wire1af4c703-{deploy,workers64-diagnostic,workers64-normal,
 workers64-qualification}; no raw profiles/logs in Git. Loaded acceptance FAIL,
 W100/deep-directory blocker open; no push/merge/production promotion.
+
+
+### Canonical queued-read age diagnostic candidate
+
+After1af4c703 establishes short request transport-ACK intervals, add opt-in
+canonical inline acceptance counters and separate request/reply inbox-age
+histograms. Age is enqueue timestamp to first successful unchanged core
+read-control handling by the pump. Refused, already-noted, noncanonical and
+zero-timestamp controls produce no sample. Frames remain queued and all
+receive/durability credits remain pump-owned. Normal diagnostic-OFF adds
+no classification or clock; no worker or changed receive policy is introduced.
+Local actual pending-reader and inline-handler fixtures PASS normal and
+ASan/UBSan, including refusal, single-note, ordinary/header exclusion,
+zero stamp, files/off controls and unchanged credits. Sender control PASS
+locally (Linux async NOTRUN on macOS). Both-host full native required before
+deploy; no new measured age or directory acceptance claimed yet. W100 open.

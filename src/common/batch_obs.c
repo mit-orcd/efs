@@ -31,7 +31,8 @@ static const char *cn[BO_COUNTER_N] = {
     "end_log", "end_config", "batch_overlap", "overlap_admit",
     "overlap_bytes", "overlap_read_boundary", "flow_retire_early",
     "applied_sync", "applied_error", "applied_throttle", "applied_entry_cap",
-    "read_control_request", "read_control_reply", "inbox_read_duplicate", "ack_older_window"
+    "read_control_request", "read_control_reply", "inbox_read_duplicate", "ack_older_window",
+    "read_req_inline", "read_reply_inline"
 };
 static const char *hn[BH_HIST_N] = {
     "wal_entries", "wal_bytes", "sync_us", "sync_wait_us", "sync_waiters",
@@ -40,7 +41,8 @@ static const char *hn[BH_HIST_N] = {
     "inbox_age_us", "pump_lock_us", "pump_drain_us",
     "kv_release_us", "applied_persist_us", "read_req_queue_us", "read_reply_queue_us",
     "read_req_wire_batch_us", "read_reply_wire_batch_us",
-    "read_req_wire_frame_us", "read_reply_wire_frame_us"
+    "read_req_wire_frame_us", "read_reply_wire_frame_us",
+    "read_req_inbox_us", "read_reply_inbox_us"
 };
 static void init_once(void)
 {

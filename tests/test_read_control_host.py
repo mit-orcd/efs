@@ -6,12 +6,14 @@ root=Path(__file__).resolve().parents[1]
 source=(root/'src/server/raft_host.c').read_text()
 start=source.index('static int host_read_control(')
 helper=source[start:source.index('\n}',start)+2]
+pure=source.index('static int outbox_pure_read_control(');pure_end=source.index('\n}',pure)+2
 code=r'''
 #include "efs/raft.h"
 #include "efs/wire.h"
 #include "efs/batch_obs.h"
 int efs_batch_obs_on;
-void efs_batch_obs_count(enum efs_batch_counter k){(void)k;}
+static unsigned counts[BO_COUNTER_N];
+void efs_batch_obs_count(enum efs_batch_counter k){counts[k]++;}
 #include <pthread.h>
 #include <assert.h>
 #include <stdio.h>
@@ -27,7 +29,8 @@ static struct efs_raft *group_raft(struct efs_raft_host *h,uint8_t g){(void)h;(v
 int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *m){(void)r;(void)m;calls++;return result;}
 static void host_publish_group(struct efs_raft_host *h,uint8_t g){(void)h;(void)g;published++;}
 static void host_waiters_wake(struct efs_raft_host *h){(void)h;woken++;}
-'''+helper+r'''
+static uint64_t rd64be(const uint8_t*p){uint64_t v=0;for(int i=0;i<8;i++)v=(v<<8)|p[i];return v;}
+'''+source[pure:pure_end]+helper+r'''
 int main(void) {
  struct efs_raft_host h={0};uint8_t p[EFS_WIRE_RAFT_HDR_LEN]={EFS_RAFT_MSG_AE_REQ};
  pthread_mutex_init(&h.mu,NULL);pthread_mutex_init(&h.inbox_mu,NULL);result=1;
@@ -86,6 +89,13 @@ int main(void) {
  h.inbox_n=0;
  assert(!pthread_mutex_trylock(&h.mu));pthread_mutex_unlock(&h.mu);
  assert(!pthread_mutex_trylock(&h.inbox_mu));pthread_mutex_unlock(&h.inbox_mu);
+ memset(p,0,sizeof(p));p[0]=EFS_RAFT_MSG_AE_REQ;p[2]=1;p[35]=7;read_context=7;result=1;
+ efs_batch_obs_on=1;server.storage_engine=1;h.s=&server;
+ assert(host_read_control(&h,p,sizeof(p)) && counts[BO_READ_REQ_INLINE]==1);
+ p[0]=EFS_RAFT_MSG_AE_REP;p[3]=1;assert(host_read_control(&h,p,sizeof(p)) && counts[BO_READ_REPLY_INLINE]==1);
+ efs_batch_obs_on=0;assert(host_read_control(&h,p,sizeof(p)) && counts[BO_READ_REPLY_INLINE]==1);
+ efs_batch_obs_on=1;server.storage_engine=0;assert(host_read_control(&h,p,sizeof(p)) && counts[BO_READ_REPLY_INLINE]==1);
+ server.storage_engine=1;result=0;assert(!host_read_control(&h,p,sizeof(p)) && counts[BO_READ_REPLY_INLINE]==1);
  pthread_mutex_destroy(&h.mu);pthread_mutex_destroy(&h.inbox_mu);
  puts("read control host: busy mutex, pending order, frame refusal and reply bookkeeping PASS");
 }

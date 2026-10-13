@@ -7009,7 +7009,7 @@ static int host_checkpoint_stop(struct host_checkpoint_worker *w)
  * frame still enters normal recv in order and retains its admission credits. */
 static void host_container_pending_reads(struct efs_raft_host *h)
 {
-    struct pending_read {uint8_t p[EFS_WIRE_RAFT_HDR_LEN];uint8_t *identity;int slot;};
+    struct pending_read {uint8_t p[EFS_WIRE_RAFT_HDR_LEN];uint8_t *identity;uint64_t queued_us;int slot;};
     struct pending_read frames[HOST_INBOX_MAX];unsigned n=0;uint8_t published=0;
     if(!h->s || !h->s->storage_engine)return;
     pthread_mutex_lock(&h->inbox_mu);
@@ -7019,7 +7019,7 @@ static void host_container_pending_reads(struct efs_raft_host *h)
            (item->buf[0]!=EFS_RAFT_MSG_AE_REQ && item->buf[0]!=EFS_RAFT_MSG_AE_REP) ||
            !rd64be(item->buf+28))continue;
         memcpy(frames[n].p,item->buf,EFS_WIRE_RAFT_HDR_LEN);
-        frames[n].identity=item->buf;frames[n++].slot=i;
+        frames[n].identity=item->buf;frames[n].queued_us=item->queued_us;frames[n++].slot=i;
     }
     pthread_mutex_unlock(&h->inbox_mu);
     for(unsigned i=0;i<n;i++){
@@ -7027,6 +7027,12 @@ static void host_container_pending_reads(struct efs_raft_host *h)
         if(efs_wire_raft_decode(frames[i].p,EFS_WIRE_RAFT_HDR_LEN,&msg,NULL,0)!=EFS_OK)continue;
         struct efs_raft *r=group_raft(h,msg.group);
         if(!efs_raft_read_control(r,&msg))continue;
+        /* Time only the first accepted canonical queued control; retained
+         * receive/credits and all core refusal rules remain unchanged. */
+        if(BO_ON() && frames[i].queued_us &&
+           outbox_pure_read_control(frames[i].p,EFS_WIRE_RAFT_HDR_LEN))
+            BO_HIST(msg.type==EFS_RAFT_MSG_AE_REQ ? BH_READ_REQ_INBOX_US :
+                    BH_READ_REPLY_INBOX_US,efs_batch_obs_now_us()-frames[i].queued_us);
         pthread_mutex_lock(&h->inbox_mu);
         int slot=frames[i].slot;
         if(slot<h->inbox_n && h->inbox[slot].buf==frames[i].identity)h->inbox[slot].read_noted=1;
@@ -10646,6 +10652,9 @@ static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n
             !msg.prev_index && !msg.prev_term && !msg.leader_commit &&
             !msg.match_index && !msg.last_log_term && !msg.nentries;
         if(pending && handled==1 && !pure_probe)handled=2;
+        if(handled && h->s && h->s->storage_engine && BO_ON() &&
+           outbox_pure_read_control(p,n))
+            BO_COUNT(msg.type==EFS_RAFT_MSG_AE_REQ ? BO_READ_REQ_INLINE : BO_READ_REPLY_INLINE);
         if (handled && msg.type==EFS_RAFT_MSG_AE_REQ) BO_COUNT(BO_READ_CONTROL_REQUEST);
         if (handled && msg.type==EFS_RAFT_MSG_AE_REP) BO_COUNT(BO_READ_CONTROL_REPLY);
         if (handled && msg.type==EFS_RAFT_MSG_AE_REP) {

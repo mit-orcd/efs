@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Early container inbox votes retain ordered receive and credit ownership."""
 from pathlib import Path
-import os, subprocess,tempfile
+import os, shlex, subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text();a=s.index('static void host_container_pending_reads(');b=s.index('\n}',a)+2
+pure=s.index('static int outbox_pure_read_control(');pure_end=s.index('\n}',pure)+2
 code=r'''
 #include "efs/raft.h"
 #include "efs/wire.h"
@@ -19,14 +20,18 @@ struct server{int storage_engine;};
 struct host_inbox_item{uint8_t*buf;uint32_t len;uint64_t queued_us;int read_noted;};
 struct efs_raft_host{struct server*s;pthread_mutex_t inbox_mu;int inbox_n;uint64_t inbox_bytes,inbox_work_n,inbox_work_bytes;struct host_inbox_item inbox[HOST_INBOX_MAX];struct{uint8_t group;}g[2];};
 static struct efs_raft_host *current;
-static int calls,decoded,published,woken,expected_result;
+static int calls,decoded,published,woken,expected_result,forced_result=-1;
+static unsigned clocks, samples[BH_HIST_N];
+static uint64_t last_value;
+uint64_t efs_batch_obs_now_us(void){clocks++;return 1000;}
+void efs_batch_obs_hist(enum efs_batch_hist h,uint64_t v){samples[h]++;last_value=v;}
 static uint64_t rd64be(const uint8_t*p){uint64_t v=0;for(unsigned i=0;i<8;i++)v=(v<<8)|p[i];return v;}
-int efs_wire_raft_decode(const uint8_t*p,uint32_t n,struct efs_raft_msg*m,uint8_t*c,uint32_t z){(void)n;(void)c;(void)z;decoded++;if(p[2]==255)return EFS_ERR_PROTO;memset(m,0,sizeof(*m));m->type=p[0];m->group=p[1];m->last_log_index=rd64be(p+28);expected_result=p[3];return EFS_OK;}
+int efs_wire_raft_decode(const uint8_t*p,uint32_t n,struct efs_raft_msg*m,uint8_t*c,uint32_t z){(void)n;(void)c;(void)z;decoded++;if(p[2]==255)return EFS_ERR_PROTO;memset(m,0,sizeof(*m));m->type=p[0];m->group=p[1];m->last_log_index=rd64be(p+28);expected_result=forced_result>=0?forced_result:p[3];return EFS_OK;}
 static struct efs_raft*group_raft(struct efs_raft_host*h,uint8_t g){(void)h;return (struct efs_raft*)(uintptr_t)(g+1);}
 int efs_raft_read_control(struct efs_raft*r,const struct efs_raft_msg*m){(void)r;(void)m;assert(!pthread_mutex_trylock(&current->inbox_mu));pthread_mutex_unlock(&current->inbox_mu);calls++;return expected_result;}
 static void host_publish_group(struct efs_raft_host*h,uint8_t g){assert(h==current&&g==2);published++;}
 static void host_waiters_wake(struct efs_raft_host*h){assert(h==current);woken++;}
-'''+s[a:b]+r'''
+'''+s[pure:pure_end]+s[a:b]+r'''
 int main(void){
  struct server s={0};struct efs_raft_host h={.s=&s,.inbox_n=7,.inbox_bytes=572,.inbox_work_n=7,.inbox_work_bytes=572};current=&h;h.g[1].group=2;
  assert(!pthread_mutex_init(&h.inbox_mu,NULL));uint8_t p[HOST_INBOX_MAX][92]={{0}},saved[HOST_INBOX_MAX][92];
@@ -56,11 +61,24 @@ int main(void){
  host_container_pending_reads(&h);assert(calls==HOST_INBOX_MAX&&decoded==HOST_INBOX_MAX&&!published&&!woken);
  for(int i=0;i<HOST_INBOX_MAX;i++)assert(h.inbox[i].read_noted&&h.inbox[i].buf==p[i]);
  assert(h.inbox_n==HOST_INBOX_MAX&&h.inbox_work_n==7&&h.inbox_work_bytes==572);
+ /* Accepted queued controls are timed once; refusal and diagnostics off
+  * must not consume a sample or clock, and bytes/credits stay untouched. */
+ h.inbox_n=1;memset(p[0],0,92);p[0][0]=EFS_RAFT_MSG_AE_REQ;p[0][2]=1;p[0][35]=7;
+ h.inbox[0]=(struct host_inbox_item){p[0],80,100,0};efs_batch_obs_on=1;forced_result=0;
+ host_container_pending_reads(&h);assert(!clocks&&!samples[BH_READ_REQ_INBOX_US]&&!h.inbox[0].read_noted);
+ forced_result=1;host_container_pending_reads(&h);assert(clocks==1&&samples[BH_READ_REQ_INBOX_US]==1&&last_value==900);
+ host_container_pending_reads(&h);assert(clocks==1&&samples[BH_READ_REQ_INBOX_US]==1);
+ p[0][0]=EFS_RAFT_MSG_AE_REP;p[0][1]=2;p[0][3]=1;h.inbox[0].read_noted=0;
+ host_container_pending_reads(&h);assert(clocks==2&&samples[BH_READ_REPLY_INBOX_US]==1);
+ efs_batch_obs_on=0;h.inbox[0].read_noted=0;host_container_pending_reads(&h);assert(clocks==2);
+ efs_batch_obs_on=1;p[0][67]=1;h.inbox[0].read_noted=0;host_container_pending_reads(&h);assert(clocks==2);
+ p[0][67]=0;h.inbox[0].queued_us=0;h.inbox[0].read_noted=0;host_container_pending_reads(&h);assert(clocks==2);
+ assert(h.inbox_work_n==7&&h.inbox_work_bytes==572);
  return 0;
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-container-pending-read-') as d:
  p=Path(d)/'test.c';p.write_text(code);binary=p.with_suffix('')
- subprocess.run([os.environ.get('CC','cc'),'-std=c99','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-lpthread','-o',str(binary)],check=True)
+ subprocess.run([os.environ.get('CC','cc'),*shlex.split(os.environ.get('EFS_TEST_CFLAGS','')),'-std=c99','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-lpthread','-o',str(binary)],check=True)
  subprocess.run([str(binary)],check=True)
 print('container pending reads: bounded headers, core refusal/retry, retained FIFO/credits, single note and no inbox lock across core PASS')
