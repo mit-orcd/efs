@@ -192,6 +192,7 @@ test-report-pressure:
 	python3 tests/test_connect_deadline.py
 	python3 tests/test_resolver_deadline.py
 	python3 tests/test_rdma_reply_budget.py
+	python3 tests/test_rdma_setup_reentry.py
 	python3 tests/test_wb_worker_budget.py
 	python3 tests/test_wb_drain_budget.py
 	python3 tests/test_append_flush_budget.py

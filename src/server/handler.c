@@ -1164,6 +1164,13 @@ send_reply:
             break;
         }
         case EFS_MSG_RDMA_SETUP: {
+            /* Bootstrap is valid only on a not-yet-upgraded TCP connection.
+             * An application envelope cannot reopen setup or emit raw TCP. */
+            if (chan != EFS_CONN_TCP || conn->rc) {
+                if (rdma_frame) efs_rdma_message_release(conn->rc);
+                free(to_free);
+                return;
+            }
             /* Arrived over TCP (the QP does not exist yet); the reply goes
              * back over TCP because recv_chan is TCP for this frame. */
             uint8_t rep[EFS_RMSG_SETUP_BYTES];
