@@ -1215,6 +1215,55 @@ static int name_seek(struct efs_query_disk *d,uint32_t shard,const char *term,ui
     }
     *at=lo;return EFS_OK;
 }
+/* LOCAL immediate listings and recursive leaf queries need only one immutable
+ * parent-key range. A cursor remains a shard/record ordinal, but names and raw
+ * ordinals are selected deterministically from this retained catalog's layout
+ * and rollup. Neither live layout changes nor another publication can switch
+ * the cursor interpretation within a pinned stream. Other layouts/subtrees
+ * retain the existing global-name cursor. No extra retained state or ABI change. */
+static int local_directory_page(struct efs_query_disk *d,const struct efs_meta_row *root,
+    enum efs_name_match match,const char *term,uint64_t *position,uint32_t budget,
+    int (*stop)(void *),void *stop_ctx,
+    int (*emit)(void *,const struct efs_name_entry *,const char *),void *user)
+{
+    uint32_t shard=efs_kv_inode_shard(root->ino),pn=0;
+    if((*position>>32)>shard){*position=UINT64_C(4096)<<32;return EFS_OK;}
+    uint8_t prefix[EFS_KV_KEY_MAX];uint64_t first=0;
+    int rc=efs_kv_key_dentry_prefix(shard,root->ino,prefix,&pn);
+    uint8_t lower[EFS_KV_KEY_MAX];uint32_t ln=pn;
+    if(!rc){
+        memcpy(lower,prefix,pn);
+        if(match==EFS_NAME_EXACT || match==EFS_NAME_PREFIX){
+            size_t length=strnlen(term,EFS_MAX_NAME);
+            if(length>=EFS_MAX_NAME || length>EFS_KV_KEY_MAX-pn){*position=UINT64_C(4096)<<32;return EFS_OK;}
+            memcpy(lower+pn,term,length);ln+=(uint32_t)length;
+        }
+        rc=seek(d,lower,ln,&first,NULL);
+    }
+    if(rc)return rc;
+    uint64_t at=(*position>>32)==shard?(uint32_t)*position:0;
+    if(at<first)at=first;
+    int kind=kind_at(EFS_KV_KIND_DENTRY);
+    for(;at<d->part[shard].end[kind];at++){
+        *position=((uint64_t)shard<<32)|at;
+        if(!budget)return EFS_OK;
+        if(stop && stop(stop_ctx))return EFS_ERR_BUSY;
+        struct slot slot;uint8_t key[EFS_KV_KEY_MAX],value[VALUE_MAX];
+        rc=read_record(d,shard,at,&slot,key,value);if(rc)return rc;
+        if(slot.key_len<pn || memcmp(key,prefix,pn))break;
+        budget--;
+        struct efs_name_entry e;rc=entry_from(key,slot.key_len,value,slot.value_len,&e);if(rc)return rc;
+        if(!matches(e.name,match,term)){
+            if(match==EFS_NAME_EXACT || match==EFS_NAME_PREFIX)break;
+            continue;
+        }
+        if(!e.dentry.ino || e.dentry.type==EFS_META_DENT_TOMBSTONE)continue;
+        rc=emit(user,&e,e.name);
+        if(rc==EFS_ERR_AGAIN)return EFS_OK;
+        if(rc)return rc; /* Authorization/cancellation BUSY is never partial success. */
+    }
+    *position=UINT64_C(4096)<<32;return EFS_OK;
+}
 int efs_query_disk_page(const struct efs_query_disk *cd,efs_ino_t root,enum efs_name_match match,const char *term,int immediate,
     uint64_t *position,uint32_t budget,int (*stop)(void *),void *stop_ctx,
     int (*emit)(void *,const struct efs_name_entry *,const char *),void *user)
@@ -1222,6 +1271,12 @@ int efs_query_disk_page(const struct efs_query_disk *cd,efs_ino_t root,enum efs_
     if(!cd || !position || !term || !emit || !budget || *position>(UINT64_C(4096)<<32) || match>EFS_NAME_CONTAINS)return EFS_ERR_INVAL;
     struct efs_query_disk *d=(struct efs_query_disk *)cd;struct efs_meta_row row;
     int rc=efs_query_disk_inode(d,root,&row,NULL);if(rc)return rc;if(!S_ISDIR(row.mode))return EFS_ERR_INVAL;
+    if(row.layout==EFS_META_LAYOUT_LOCAL){
+        struct efs_query_rollup rollup;
+        if(immediate)return local_directory_page(d,&row,match,term,position,budget,stop,stop_ctx,emit,user);
+        rc=efs_query_disk_stats(d,root,&rollup);if(rc)return rc;
+        if(!rollup.tree_dirs)return local_directory_page(d,&row,match,term,position,budget,stop,stop_ctx,emit,user);
+    }
     uint32_t shard=(uint32_t)(*position>>32);uint64_t at=(uint32_t)*position;
     for(;shard<SHARDS;shard++,at=0){
         if(!at && (match==EFS_NAME_EXACT || match==EFS_NAME_PREFIX)){rc=name_seek(d,shard,term,&at);if(rc)return rc;}

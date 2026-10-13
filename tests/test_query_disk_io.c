@@ -16,7 +16,7 @@ static int fault_clone(int fd,unsigned long request,int source)
 static int partial_write;
 static unsigned write_calls;
 static unsigned read_calls;
-static unsigned alias_opens;
+static unsigned alias_opens,name_opens;
 static unsigned raw_syncs,index_syncs,sync_faults;
 static char fail_sync_kind,fail_write_kind;
 static unsigned write_faults,fail_derived_after;
@@ -48,6 +48,7 @@ static int tracked_open(const char *path,int flags,...)
         }
         descriptor_kind[fd]=kind;
         if(kind=='a')alias_opens++;
+        if(kind=='n')name_opens++;
         if((flags&O_CREAT) && (kind=='r' || kind=='i')){
             writing_raw[fd]=1;raw_handles++;
             if(raw_handles>raw_handles_high)raw_handles_high=raw_handles;
@@ -139,6 +140,80 @@ static void rebuild_cache_test(void)
         CHECK(!folds_build(disk));
         struct efs_query_rollup totals;CHECK(!efs_query_disk_stats(disk,EFS_ROOT_INO,&totals));
         CHECK(totals.tree_files==1 && totals.tree_dirs==1);
+    }
+    efs_query_disk_free(disk);efs_kv_lsm_snapshot_release(source);efs_kv_lsm_close(kv);
+}
+struct local_page_output {unsigned emitted,limit,allow_nested;char name[8][EFS_MAX_NAME];};
+static int local_page_emit(void *ctx,const struct efs_name_entry *entry,const char *path)
+{
+    struct local_page_output *p=ctx;
+    if(p->emitted==p->limit)return EFS_ERR_AGAIN;
+    CHECK(p->emitted<8 && (p->allow_nested || !strcmp(entry->name,path)));
+    if(p->emitted<8)strcpy(p->name[p->emitted],path);
+    p->emitted++;return EFS_OK;
+}
+static int local_page_busy(void *ctx,const struct efs_name_entry *entry,const char *path)
+{(void)ctx;(void)entry;(void)path;return EFS_ERR_BUSY;}
+static int local_page_stop(void *ctx){(void)ctx;return 1;}
+static void local_page_test(void)
+{
+    char store[]="/tmp/efs-query-local-kv-XXXXXX",cache[]="/tmp/efs-query-local-cache-XXXXXX";
+    CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
+    CHECK(kv);if(!kv)return;
+    struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t leaf,outside,file;
+    CHECK(!efs_meta_apply_init(kv,100));
+    CHECK(!efs_meta_apply_mkdir(kv,&attrs,EFS_ROOT_INO,S_IFDIR|0755,"leaf",&leaf));
+    CHECK(!efs_meta_apply_mkdir(kv,&attrs,EFS_ROOT_INO,S_IFDIR|0755,"outside",&outside));
+    for(unsigned i=0;i<5;i++){char name[32];snprintf(name,sizeof(name),"report-%02u",i);CHECK(!efs_meta_apply_create_file(kv,&attrs,leaf,S_IFREG|0644,name,&file));}
+    for(unsigned i=0;i<2048;i++){char name[32];snprintf(name,sizeof(name),"unrelated-%04u",i);CHECK(!efs_meta_apply_create_file(kv,&attrs,outside,S_IFREG|0644,name,&file));}
+    struct efs_kv_lsm_snapshot *source=NULL;struct efs_query_disk *disk=NULL;
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,16<<20,&source));CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&disk));
+    if(disk){
+        struct efs_meta_row row;CHECK(!efs_query_disk_inode(disk,leaf,&row,NULL));CHECK(row.layout==EFS_META_LAYOUT_LOCAL);
+        for(unsigned match=EFS_NAME_EXACT;match<=EFS_NAME_CONTAINS;match++){
+            const char *term=match==EFS_NAME_EXACT?"report-02":match==EFS_NAME_SUFFIX?"02":"report";
+            struct local_page_output output={.limit=8};uint64_t position=0;close_cache(disk);name_opens=0;
+            CHECK(!efs_query_disk_page(disk,leaf,match,term,0,&position,100,NULL,NULL,local_page_emit,&output));
+            CHECK(position==(UINT64_C(4096)<<32) && !name_opens);
+            CHECK(output.emitted==((match==EFS_NAME_EXACT || match==EFS_NAME_SUFFIX)?1:5));
+            if(match==EFS_NAME_EXACT || match==EFS_NAME_SUFFIX)CHECK(!strcmp(output.name[0],"report-02"));
+        }
+        uint64_t position=0,first=0;struct local_page_output one={.limit=1};
+        CHECK(!efs_query_disk_page(disk,leaf,EFS_NAME_CONTAINS,"report",0,&position,1,NULL,NULL,local_page_emit,&one));
+        CHECK(one.emitted==1 && !strcmp(one.name[0],"report-00") && position<(UINT64_C(4096)<<32));first=position;
+        struct local_page_output replay={.limit=8};uint64_t again=0;
+        CHECK(!efs_query_disk_page(disk,leaf,EFS_NAME_CONTAINS,"report",0,&again,1,NULL,NULL,local_page_emit,&replay));
+        CHECK(again==first && replay.emitted==1 && !strcmp(replay.name[0],one.name[0]));
+        struct local_page_output rest={.limit=8};
+        CHECK(!efs_query_disk_page(disk,leaf,EFS_NAME_CONTAINS,"report",0,&position,100,NULL,NULL,local_page_emit,&rest));
+        CHECK(position==(UINT64_C(4096)<<32) && rest.emitted==4 && !strcmp(rest.name[0],"report-01"));
+        position=0;CHECK(efs_query_disk_page(disk,leaf,EFS_NAME_CONTAINS,"report",0,&position,100,NULL,NULL,local_page_busy,NULL)==EFS_ERR_BUSY);
+        position=0;CHECK(efs_query_disk_page(disk,leaf,EFS_NAME_CONTAINS,"report",0,&position,100,local_page_stop,NULL,local_page_emit,&rest)==EFS_ERR_BUSY);
+        struct local_page_output missing={.limit=8};position=0;
+        CHECK(!efs_query_disk_page(disk,leaf,EFS_NAME_CONTAINS,"absent",0,&position,100,NULL,NULL,local_page_emit,&missing));
+        CHECK(!missing.emitted && position==(UINT64_C(4096)<<32));
+        /* A later live mutation cannot change the old stream's traversal.
+         * A new catalog with descendants falls back to global names for find,
+         * while an immediate LOCAL listing still uses only its parent range. */
+        efs_ino_t child;CHECK(!efs_meta_apply_mkdir(kv,&attrs,leaf,S_IFDIR|0755,"child",&child));
+        CHECK(!efs_meta_apply_create_file(kv,&attrs,child,S_IFREG|0644,"report-inner",&file));
+        struct local_page_output unchanged={.limit=8};position=0;
+        CHECK(!efs_query_disk_page(disk,leaf,EFS_NAME_CONTAINS,"report",0,&position,100,NULL,NULL,local_page_emit,&unchanged));
+        CHECK(unchanged.emitted==5 && position==(UINT64_C(4096)<<32));
+        struct efs_kv_lsm_snapshot *fresh=NULL;struct efs_query_disk *newer=NULL;
+        CHECK(!efs_kv_lsm_snapshot_pin(kv,16<<20,&fresh));CHECK(!efs_query_disk_build(cache,fresh,disk,4<<20,NULL,NULL,NULL,&newer));
+        if(newer){
+            close_cache(newer);name_opens=0;position=0;struct local_page_output nested={.limit=8,.allow_nested=1};
+            CHECK(!efs_query_disk_page(newer,leaf,EFS_NAME_CONTAINS,"report",0,&position,100000,NULL,NULL,local_page_emit,&nested));
+            CHECK(nested.emitted==6 && position==(UINT64_C(4096)<<32) && name_opens>0);
+            unsigned inner=0;for(unsigned i=0;i<nested.emitted && i<8;i++)inner+=!strcmp(nested.name[i],"child/report-inner");CHECK(inner==1);
+            close_cache(newer);name_opens=0;position=0;struct local_page_output immediate={.limit=8};
+            CHECK(!efs_query_disk_page(newer,leaf,EFS_NAME_CONTAINS,"report",1,&position,100,NULL,NULL,local_page_emit,&immediate));
+            CHECK(immediate.emitted==5 && position==(UINT64_C(4096)<<32) && !name_opens);
+        }
+        efs_query_disk_free(newer);efs_kv_lsm_snapshot_release(fresh);
+        printf("local page: unrelated=2048 names_index_opens=%u all match modes, bounded continuation/replay, absent and BUSY/cancel controls PASS\n",name_opens);
     }
     efs_query_disk_free(disk);efs_kv_lsm_snapshot_release(source);efs_kv_lsm_close(kv);
 }
@@ -478,6 +553,7 @@ int main(void)
     changed_journal_test();
     pending_preflight_test();
     rebuild_cache_test();
+    local_page_test();
     {
         struct efs_query_rollup r={.tree_files=UINT64_MAX-1,.tree_dirs=7,.tree_bytes=9};
         CHECK(!rollup_tree_add(&r,1,2,3));

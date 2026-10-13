@@ -1475,6 +1475,13 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+Latest ORCD `.efs` gate: `82e1d5302bc9` passes complete prerequisites and
+focused suites but still has mixed query/core failures. A LOCAL leaf/immediate
+paging optimization passes native, sanitizer, RAM/disk and old-code negative
+controls; live qualification is pending. Full cold 400 GiB acceptance and
+benchmark resumption remain pending. See the
+[400 GiB evidence](../status/orcd-efs-400g-20261012.md).
+
 Latest ORCD `.efs` gate: `4791b7938d6e` passes prerequisites, focused suites
 and 1,512 core cases; 20/21 mixed query cases pass. The remaining stale-empty
 case uses a hidden ten-second polling cutoff inside the configured thirty-second
