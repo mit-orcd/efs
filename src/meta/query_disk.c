@@ -8,6 +8,7 @@
  */
 #include "query_disk.h"
 #include "query_build_time.h"
+#include "query_walk.h"
 #include "efs/txn.h"
 #include "blake3.h"
 #include <dirent.h>
@@ -1206,12 +1207,12 @@ int efs_query_disk_page(const struct efs_query_disk *cd,efs_ino_t root,enum efs_
     }
     *position=UINT64_C(4096)<<32;return EFS_OK;
 }
-struct bounded_scan { struct efs_query_disk *d;uint64_t remaining;int (*stop)(void *);void *stop_ctx;
+struct bounded_scan { int exhausted;struct efs_query_disk *d;uint64_t remaining;int (*stop)(void *);void *stop_ctx;
     int (*cb)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t);void *user; };
 static int bounded_record(void *ctx,const uint8_t *k,uint32_t kn,const uint8_t *v,uint32_t vn)
 {
     struct bounded_scan *s=ctx;if(s->stop && s->stop(s->stop_ctx))return EFS_ERR_BUSY;
-    if(!s->remaining)return EFS_ERR_OVERFLOW;
+    if(!s->remaining){s->exhausted=1;return EFS_ERR_OVERFLOW;}
     s->remaining--;return s->cb(s->user,k,kn,v,vn);
 }
 static int bounded_get(void *ctx,const uint8_t *k,uint32_t kn,uint8_t *v,uint32_t *vn)
@@ -1226,6 +1227,18 @@ static int bounded_prefix(void *ctx,const uint8_t *p,uint32_t pn,
     int (*cb)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *user)
 { return bounded_from(ctx,p,pn,NULL,0,cb,user); }
 static const struct efs_kv_ops bounded_ops={.get=bounded_get,.scan_prefix=bounded_prefix,.scan_from=bounded_from};
+int efs_query_disk_find(const struct efs_query_disk *cd,efs_ino_t root,enum efs_name_match match,
+    const char *term,uint64_t budget,int (*emit)(void *,const struct efs_name_entry *,const char *),void *user)
+{
+    struct efs_meta_row row;int rc=efs_query_disk_inode(cd,root,&row,NULL);
+    if (rc) return rc;
+    if (!S_ISDIR(row.mode)) return EFS_ERR_INVAL;
+    struct bounded_scan scan={.d=(struct efs_query_disk *)cd,.remaining=budget};
+    struct efs_kv kv={.ops=&bounded_ops,.ctx=&scan};
+    rc=query_walk(&kv,root,match,term,emit,user);
+    return scan.exhausted ? EFS_ERR_BUSY : rc;
+}
+
 int efs_query_disk_ls(const struct efs_query_disk *cd,efs_ino_t root,uint64_t budget,int (*stop)(void *),void *stop_ctx,
     int (*emit)(void *,const struct efs_name_entry *,const char *),void *user)
 {

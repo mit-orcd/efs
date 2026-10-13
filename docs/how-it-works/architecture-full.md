@@ -1475,10 +1475,15 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-`devel-efs`, RDMA/direct/files with commands enabled and packing/containers
-disabled. Full writes, resource/latency measurements and cold complete payload/
-export verification are required; no full-size PASS yet. The requested stats
-`--human-readable` option passes 30 native command cases; live rollout is pending.
+RDMA/direct/files, commands enabled and packing/containers disabled. Full writes,
+all 1,638,400 cold payloads and exported paths, and human/default/JSON stats on
+all seven clients PASS at `254a4a295c66`. Overall follow-up acceptance is FAIL:
+command options, virtual interfaces and loaded concurrent publication are being
+fixed. Passing basic commands/pages/large deltas and all failing logs are retained.
+Orderly shutdown/remount and cold markers PASS after correcting startup readiness.
+Seven screen benchmarks remain cleanly stopped pending successful follow-up gates,
+then will resume with their existing files. Contended-write freshness and host
+resource limitations remain documented.
 
 [devel-efs scope and outstanding items](../status/devel-efs-20261012.md) records the new
 release-v0.3.2-based branch, the original four-item scope (expiry deferred) and the requested ORCD

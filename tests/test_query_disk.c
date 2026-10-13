@@ -25,6 +25,10 @@ static int compare(struct efs_kv_lsm_snapshot *s,struct efs_query_catalog *memor
     do { int rc=efs_query_catalog_page(memory,ino,EFS_NAME_PREFIX,"",0,&mc,7,NULL,NULL,collect,&ma);CHECK(!rc);if(rc)return rc; }while(mc!=(UINT64_C(4096)<<32));
     do { int rc=efs_query_catalog_page(disk,ino,EFS_NAME_PREFIX,"",0,&dc,7,NULL,NULL,collect,&da);CHECK(!rc);if(rc)return rc; }while(dc!=(UINT64_C(4096)<<32));
     CHECK(ma.count==da.count && ma.hash==da.hash);
+    ma=(struct result){0};da=(struct result){0};
+    CHECK(!efs_query_catalog_find(memory,ino,EFS_NAME_CONTAINS,"",100000,collect,&ma));
+    CHECK(!efs_query_catalog_find(disk,ino,EFS_NAME_CONTAINS,"",100000,collect,&da));
+    CHECK(ma.count==da.count && ma.hash==da.hash);
     return 0;
 }
 static int cancel(void *p){(void)p;return 1;}
@@ -84,6 +88,8 @@ int main(void)
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t dir,sub,file;
     CHECK(!efs_meta_apply_init(kv,100));CHECK(!efs_meta_apply_mkdir(kv,&attrs,EFS_ROOT_INO,S_IFDIR|0755,"dir",&dir));
     CHECK(!efs_meta_apply_mkdir(kv,&attrs,dir,S_IFDIR|0755,"sub",&sub));
+    efs_ino_t empty;
+    CHECK(!efs_meta_apply_mkdir(kv,&attrs,EFS_ROOT_INO,S_IFDIR|0755,"empty",&empty));
     unsigned files=3000;
     const char *size=getenv("EFS_QUERY_TEST_FILES");
     if(size){unsigned long count=strtoul(size,NULL,10);if(count<1 || count>200000)return 2;files=(unsigned)count;}
@@ -113,6 +119,10 @@ int main(void)
     }
     CHECK(!rc && disk);if(!disk){fprintf(stderr,"disk build rc=%d\n",rc);return 1;}
     compare(source,memory,disk,EFS_ROOT_INO);compare(source,memory,disk,dir);compare(source,memory,disk,sub);
+    struct result scoped={0};
+    CHECK(!efs_query_catalog_find(memory,empty,EFS_NAME_CONTAINS,"",4,collect,&scoped) && !scoped.count);
+    CHECK(!efs_query_catalog_find(disk,empty,EFS_NAME_CONTAINS,"",4,collect,&scoped) && !scoped.count);
+    CHECK(efs_query_catalog_find(disk,sub,EFS_NAME_CONTAINS,"",1,collect,&scoped)==EFS_ERR_BUSY);
     uint64_t bytes=efs_query_catalog_bytes(disk);CHECK(bytes<(4<<20));
     struct efs_query_build_times times=efs_query_catalog_build_times(disk);
     CHECK(!times.restored && times.index_ns && times.stats_ns && times.persist_ns && !times.restore_ns);

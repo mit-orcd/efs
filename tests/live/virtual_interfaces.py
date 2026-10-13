@@ -155,7 +155,13 @@ def name_limits():
         assert time.monotonic()<deadline,'deep indexed query did not converge';time.sleep(.2)
 def fd_capacity():
     d=root/'capacity';d.mkdir(exist_ok=True);(d/'capacity-file').write_bytes(b'x')
-    q=query_path(d,'capacity-*');expected=contents(q);fds=[];bounded=False
+    q=query_path(d,'capacity-*');deadline=time.monotonic()+a.freshness_s
+    while True:
+        expected=contents(q)
+        if [bytes.fromhex(e['path_hex']) for e in json.loads(expected)['entries']]==[b'capacity-file']:break
+        assert time.monotonic()<deadline,'capacity fixture did not publish'
+        time.sleep(.2)
+    fds=[];bounded=False
     try:
         for _ in range(80):
             try:fds.append(os.open(query_path(d,f'absent-capacity-{_:03}*'),os.O_RDONLY))

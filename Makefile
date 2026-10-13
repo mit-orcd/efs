@@ -876,3 +876,6 @@ tests/faults/repair_request: tests/faults/repair_request.c $(LIB)
 
 tests/test_repair_worker: tests/test_repair_worker.c src/server/repair_worker.c $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< src/server/repair_worker.c $(LIB) $(LDFLAGS)
+
+# Broad subtree queries share the bounded immutable-KV traversal.
+src/meta/query_catalog.o src/meta/query_disk.o: src/meta/query_walk.h
