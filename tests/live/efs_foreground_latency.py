@@ -56,7 +56,14 @@ with (a.output/'latency.jsonl').open('w',buffering=1) as log:
    measured('close',lambda:os.close(closing_fd))
    t=time.monotonic()
    with target.open('rb',buffering=0) as stream:actual=stream.read()
-   assert actual==payload,'payload mismatch'
+   if actual!=payload:
+    stem='payload-failure-%09d'%sequence
+    (a.output/(stem+'-expected.bin')).write_bytes(payload)
+    (a.output/(stem+'-actual.bin')).write_bytes(actual)
+    record.update(path=str(target),expected_bytes=len(payload),actual_bytes=len(actual),
+                  expected_sha256=hashlib.sha256(payload).hexdigest(),
+                  actual_sha256=hashlib.sha256(actual).hexdigest())
+    raise AssertionError('payload mismatch; exact bytes retained outside mount')
    record['verify_seconds']=time.monotonic()-t
    measured('unlink',target.unlink)
    record['combined_seconds']=sum(record['operations'].values())
