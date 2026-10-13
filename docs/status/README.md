@@ -2,7 +2,7 @@ Current ORCD `.efs` source `419aa90f367a` passes complete native/fault/sanitizer
 prerequisites, exact-source/profile deployment and acknowledged payload markers
 on all seven clients. Orderly redeployment used no force; server readiness took
 284.704 seconds of the unchanged 300-second budget. Mounted acceptance FAIL:
-all six focused command suites encounter ENOSPC reading query files. Later
+all six focused command suites encounter ENOSPC reading query files. The generation-size ceiling also reproduces with 3,000 synthetic files and a private 4 MiB test budget; compact derived-directory links are a proposed small-target optimization. Later
 concurrent/restart/full-400-GiB/loaded-latency gates are NOTRUN on this source.
 The earlier strict full 400 GiB PASS at `62770d5c3bfd` remains source-specific.
 
