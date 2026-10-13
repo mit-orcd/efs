@@ -51,6 +51,7 @@ try:
             log = output.with_suffix('.log').open('w')
             streams.append(log)
             children.append(subprocess.Popen(['python3', str(a.source/'tests/live/efs_snapshot_pressure.py'), str(a.mount), str(output), '--group', str(group)], stdout=log, stderr=subprocess.STDOUT))
+    (a.output/'children.json').write_text(json.dumps([c.pid for c in children]))
     # Files and initial data fsync must complete before pausing a data holder.
     end = time.monotonic()+30
     while not all((output/'latency.jsonl').exists() for output in outputs):
@@ -68,14 +69,28 @@ finally:
     if stopped:
         os.kill(pid, signal.SIGCONT)
         print(f'Restored follower node={candidate}', flush=True)
+    # Signal every owned worker before waiting: one blocked FUSE operation must
+    # not prevent termination of the remaining workers or mask the gate error.
     for c in children:
         if c.poll() is None:
             c.terminate()
+    cleanup_end = time.monotonic()+30
+    for c in children:
+        if c.poll() is None:
             try:
-                c.wait(timeout=30)
+                c.wait(timeout=max(0, cleanup_end-time.monotonic()))
             except subprocess.TimeoutExpired:
-                c.kill()
-                c.wait(timeout=5)
+                pass
+    for c in children:
+        if c.poll() is None:
+            c.kill()
+    cleanup_end = time.monotonic()+5
+    for c in children:
+        if c.poll() is None:
+            try:
+                c.wait(timeout=max(0, cleanup_end-time.monotonic()))
+            except subprocess.TimeoutExpired:
+                print(f'Cleanup incomplete: owned worker pid={c.pid}', flush=True)
     for stream in streams:
         stream.close()
 # Catch-up uses the existing180s recovery gate budget, never adjusted on failure.
