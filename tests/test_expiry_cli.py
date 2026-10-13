@@ -27,7 +27,7 @@ def request(args):
     return received[0]
 help_result=subprocess.run([str(binary),'expiry-policy','--help'],capture_output=True,text=True,timeout=5)
 assert help_result.returncode==0 and all(text in help_result.stdout for text in
-    ('--expire-after','--renewal-limit','ns, s, m, h or d','does not renew','future files','not a maximum lifetime'))
+    ('--expire-after','--renewal-limit','ns, s, m, h or d','does not renew','future files','not a maximum lifetime','current limits'))
 legacy=request(['86400000000000','604800000000000','3'])
 assert request(['--expire-after','24h','--renewal-limit','7d','--flags','3'])==legacy
 assert request(['--flags','3','--renewal-limit','10080m','--expire-after','86400s'])==legacy

@@ -142,7 +142,9 @@ static inline int efs_mgmt_help(FILE *out,const char *command)
             "Durations: positive integer with ns, s, m, h or d (example: 24h).\n"
             "Renewal limit defaults to expire-after and must be at least that duration.\n"
             "Reading/writing does not renew. Repeated renewal can extend total lifetime.\n"
-            "Policy changes affect future files; this is not a maximum lifetime rule.\n"
+            "--expire-after affects future files; existing deadlines remain unchanged.\n"
+            "Renewal checks the current limits at the file's saved policy source.\n"
+            "The renewal limit is not a maximum lifetime rule.\n"
             "Set requires operator UID 0 and server EFS_EXPIRY=1.\n"
             "Legacy set ROOT GENERATION EXPECTED_REV TTL_NS MAX_NS FLAGS is supported.\n"
             "Node addresses use HOST:PORT." :
