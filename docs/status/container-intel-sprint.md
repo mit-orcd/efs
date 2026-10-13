@@ -1461,3 +1461,42 @@ PASS; forcing old FIFO retention fails the new positive control as expected.
 A first negative-control build hit a Clang tautological-expression warning;
 its adapter was corrected before any freeze/deployment. Both-host fresh
 native and full profiling-OFF live qualification remain required.
+
+### 2026-10-13 — pure request retirement complete profiling-OFF run
+
+Exact326da5be9d418075bc8f3d957793848cd671168e both-host complete affected
+native, host-control ASan/UBSan/old-retention negative, physical late-DATA/
+death/checksum and KV failure/cold controls PASS. All789 frozen inputs
+match; full source SHA is build/version identity, branch devel-container.
+Intel2 efsd SHA256706f12426437af2ec2a9edcf990455a30fb571ceea55ef635c0491322fc2a50c.
+Same retained private four-node4G/node Intel containers/TCP/direct fixture,
+8writers/20msGC/seven clients/jobs16/original deadlines and15-gate sequence;
+commands/.efs/expiry-date/packing/profiling OFF. Raw external
+artifacts/container-20261012/pureconsume326da5be-{deploy,qualification}.
+Full1498/1512PASS14FAIL: deep60/crazy all7;117.435–137.150s. Immediate
+physical PASS115.146s,zero115.144. Quiet core432/432PASS55.548/58.143s;
+peer134/134PASS44.340/45.849s;private mmap PASS/shared ENODEV skips.
+Lifecycle/tiny/warm/cold/global restart/deletion PASS; final physical
+PASS10.644s,zero10.641. All15 gates finished, no reset. Runtime checks
+confirmed2 daemons/host,4+3 private mounts and zero feature/profiling flags.
+Production PIDs remain5945/5953/6602 Intel1 and10086/10094/10331 Intel2;
+no payload immutability claim without a prior baseline. Both tested
+parallel-fragment candidates pass immediate physical cleanup on their
+failed-directory load. Directory/all-passing loaded gate remains FAIL;
+no release acceptance. Read-only retirement correctness controls pass,
+but its workload speed benefit is not established by unmatched runs.
+
+Next diagnostic observes original stat/mkdir calls without substituting
+a different path algorithm. The POSIX harness launches fresh Python
+workers; parent-only monkeypatches do not propagate. Use committed
+scripts/container_deepsteps_sitecustomize.py copied as sitecustomize.py
+into BASE/artifacts/deepsteps on both hosts. Prepend that directory to
+PYTHONPATH only in the existing phase-socket wrapper before it launches
+workers. Same TCP/direct/features/deadlines/concurrency; explicit existing
+profiling counters ON, separate from acceptance. Record offsets before
+launch, retain at most12MB per daemon and bounded deep60 phase/step markers
+externally, then run the strict reclaim gate with the diagnostic run ID.
+Local fresh-child original os.makedirs socket smoke PASS after ordinary
+sandbox denied Unix-socket bind; escalated check succeeded. This observer
+is a diagnostic-only addition after the tested product freeze; no product
+input or binary change is claimed for326da5be.
