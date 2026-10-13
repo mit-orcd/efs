@@ -47,6 +47,19 @@ void raft_group_index_trim(struct raft_disk_group *g)
 #endif
 }
 
+static void index_reset_residency(struct raft_disk_group *g)
+{
+    g->index_advised=0;raft_group_index_trim(g);
+#if defined(__linux__)
+    if(g->log) {
+        size_t page=(size_t)sysconf(_SC_PAGESIZE);
+        size_t end=((size_t)g->n*sizeof(*g->log)+page-1)/page*page;
+        size_t capacity=(size_t)g->cap*sizeof(*g->log);
+        if(end<capacity)madvise((uint8_t *)g->log+end,capacity-end,MADV_DONTNEED);
+    }
+#endif
+}
+
 static void index_cold_read(struct raft_disk_group *g,uint32_t off)
 {
 #if defined(__linux__)
@@ -189,6 +202,7 @@ int raft_group_truncate(struct raft_disk_group *g, uint64_t index)
         cache_free(g,&g->log[i]);
     }
     g->n = off;
+    index_reset_residency(g);
     return EFS_OK;
 }
 
@@ -252,7 +266,7 @@ int raft_group_snap(struct raft_disk_group *g, uint64_t last_index,
     }
     g->snap_idx = last_index;
     g->snap_term = last_term;
-    g->index_advised=0;raft_group_index_trim(g);
+    index_reset_residency(g);
     return EFS_OK;
 }
 
