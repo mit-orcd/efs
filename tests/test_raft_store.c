@@ -20,6 +20,8 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <signal.h>
+#include <sys/resource.h>
 
 static int failures = 0;
 
@@ -917,6 +919,27 @@ static void test_four_voter_permanent_loss(void)
     }
 }
 
+static void test_index_reserve_failure(void)
+{
+#if defined(__linux__)
+    rmtree(g_dir);pid_t pid=fork();CHECK(pid>=0,"fork index reservation failure");
+    if(pid==0) {
+        signal(SIGXFSZ,SIG_IGN);struct rlimit limit={10,10};
+        if(setrlimit(RLIMIT_FSIZE,&limit))_exit(2);
+        struct efs_raft_disk *d=efs_raft_disk_open(g_dir,EFS_RAFT_DISK_SYNC);
+        if(!d)_exit(3);
+        struct efs_raft_store *s=efs_raft_disk_group(d,0);
+        struct raft_disk_group *g=(struct raft_disk_group *)s;
+        uint8_t b=42;int rc=s->append(s,1,1,&b,1);uint64_t index=99,term=99;
+        int ok=rc!=EFS_OK && g->index_fd>=0 && g->cap==0 &&
+               s->last(s,&index,&term)==EFS_OK && index==0 && efs_raft_disk_bytes(d)==8;
+        efs_raft_disk_close(d);_exit(ok?0:4);
+    }
+    int status=0;if(pid>0){waitpid(pid,&status,0);CHECK(WIFEXITED(status)&&WEXITSTATUS(status)==0,"index space failure precedes durable append");}
+    rmtree(g_dir);
+#endif
+}
+
 /* Cache eviction must preserve the entire retained log across replay,
  * rotation and conflicting suffix replacement. Cold reads validate frames. */
 static void test_bounded_history_cache(void)
@@ -979,6 +1002,7 @@ int main(void)
     snprintf(g_dir, sizeof(g_dir), "/tmp/efs-raftstore-test-%d", (int)getpid());
     rmtree(g_dir);
 
+    test_index_reserve_failure();
     test_bounded_history_cache();
     test_four_voter_permanent_loss();
     test_backlog_byte_accounting();

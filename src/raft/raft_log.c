@@ -583,7 +583,8 @@ int raft_log_rotate_locked(struct efs_raft_disk *d)
                     if(!p){rc=EFS_ERR_NOMEM;break;}scratch=p;scratch_cap=len;
                 }
                 rc=raft_log_read_command(g,k,old_fd,scratch);
-                if(rc)break;command=scratch;
+                if(rc)break;
+                command=scratch;
             }
             rc=log_write_locked(d,RAFT_REC_ENTRY,g->group,g->log_base+1+k,
                                 g->log[k].term,command,len);

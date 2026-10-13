@@ -15,6 +15,9 @@ int main(int argc,char **argv)
         for(unsigned j=0;j<g->n;j++){commands+=g->log[j].clen;if(g->log[j].cmd)cached+=g->log[j].clen;}
         printf("group=%u entries=%u command_bytes=%llu snapshot=%llu\n",i,g->n,
                (unsigned long long)g->bytes_all,(unsigned long long)g->snap_idx);
+#ifdef RAFT_INDEX_RESIDENT_BYTES
+        g->index_advised=0;raft_group_index_trim(g);
+#endif
         uint8_t *buf=malloc(RAFT_CMD_MAX);if(!buf)return 1;
         for(unsigned j=0;j<g->n;j+=g->n/16+1) {
             uint32_t len=RAFT_CMD_MAX;uint64_t term=0;
