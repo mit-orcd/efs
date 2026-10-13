@@ -73,6 +73,7 @@ struct legacy_checkpoint { char path[EFS_MAX_PATH];dev_t device;ino_t inode; };
 static int legacy_checkpoint_retire(const struct legacy_checkpoint *old);
 struct efs_query_disk {
     struct legacy_checkpoint legacy;
+    int legacy_published;
     char path[EFS_MAX_PATH];
     struct efs_query_disk *live_next;
     dev_t view_device;ino_t view_inode;int registered;
@@ -359,7 +360,7 @@ void efs_query_disk_free(struct efs_query_disk *d)
         closedir(dir);rmdir(d->path);
     }
     pthread_mutex_unlock(&live_mutex);
-    (void)legacy_checkpoint_retire(&d->legacy);
+    if(d->legacy_published)(void)legacy_checkpoint_retire(&d->legacy);
     if(d->budget_fd>=0)close(d->budget_fd);
     pthread_mutex_destroy(&d->mutex);free(d);
 }
@@ -1557,9 +1558,23 @@ int efs_query_disk_checkpoint(struct efs_query_disk *d,const uint64_t watermark[
     if(rename(temp,current)){unlink(temp);return EFS_ERR_IO;}
     char root[EFS_MAX_PATH];memcpy(root,d->path,(size_t)(base-d->path));root[base-d->path]=0;
     fd=open(root,O_RDONLY|O_DIRECTORY|O_CLOEXEC);if(fd<0)return EFS_ERR_IO;
-    if(fsync(fd))rc=EFS_ERR_IO;
+    if(fsync(fd)){
+        rc=EFS_ERR_IO;
+        /* The new symlink is not a durable publication certificate. Restore
+         * the known legacy current before abandoning the candidate, so the
+         * next attempt finds its retirement owner and never charges an orphan.
+         * Even a rollback failure must preserve old files and report IO. */
+        if(d->legacy.path[0]){
+            const char *old=strrchr(d->legacy.path,'/');int rollback=EFS_OK;
+            unlink(temp);
+            if(!old || symlink(old+1,temp) || rename(temp,current))rollback=EFS_ERR_IO;
+            else if(fsync(fd))rollback=EFS_ERR_IO;
+            if(rollback)fprintf(stderr,"query-checkpoint: legacy rollback not durable rc=%d\n",rollback);
+        }
+    }
     close(fd);
     if(!rc){
+        d->legacy_published=1;
         memcpy(d->watermark,watermark,sizeof(d->watermark));
         rc=legacy_checkpoint_retire(&d->legacy);
         if(!rc)d->legacy.path[0]=0;

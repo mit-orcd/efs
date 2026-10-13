@@ -643,8 +643,11 @@ static void legacy_retirement_test(void)
             CHECK(!access(abandoned,F_OK));
             if(!mode){CHECK(!efs_query_disk_checkpoint(next,wm));CHECK(access(abandoned,F_OK)!=0);}
             else {
-                efs_query_disk_free(next);next=NULL;CHECK(access(abandoned,F_OK)!=0);
-                CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
+                efs_query_disk_free(next);next=NULL;CHECK(!access(abandoned,F_OK));
+                CHECK(efs_query_disk_restore(cache,wm,4<<20,&next)==EFS_ERR_PROTO && !next);
+                CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&next));
+                if(next){CHECK(!efs_query_disk_checkpoint(next,wm));CHECK(access(abandoned,F_OK)!=0);}
+
             }
         }
     }
