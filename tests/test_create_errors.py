@@ -48,9 +48,9 @@ int efs_client_rpc_lookup(efs_export_id_t ex, efs_ino_t parent,
 int efs_client_report_admit(uint64_t records) { (void)records; return EFS_OK; }
 void efs_client_report_unreserve(void) {}
 static void create_stage_inode(efs_ino_t parent, const char *name, uint32_t mode,
-    uid_t uid, gid_t gid, const struct efs_inode *out) {
+    uid_t uid, gid_t gid, const struct efs_inode *out, int publish) {
     (void)parent; (void)name; (void)mode; (void)uid; (void)gid;
-    assert(out->ino == 42);
+    assert(out->ino == 42 && publish);
 }
 ''' + '\n'.join([function(ops, 'efs_client_create_result_inode'),
                    function(ops, 'efs_client_create_result'),

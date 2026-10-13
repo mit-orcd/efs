@@ -12,6 +12,7 @@ code=r'''
 #include <string.h>
 #include <stdio.h>
 struct efs_client g_client;
+static pthread_mutex_t opid_mu=PTHREAD_MUTEX_INITIALIZER;
 static int allocation_fail,probe_rc=EFS_ERR_NOT_FOUND,send_rc,session_rc;
 static uint32_t observed=EFS_PUT_TICKET_ADMITTED;
 static unsigned allocations,frees,probes,sends,sessions;
@@ -43,15 +44,19 @@ int main(void){
  assert(efs_client_put_free(r)==EFS_ERR_BUSY);assert(efs_client_put_retire(r)==EFS_ERR_BUSY && !retirements);
  p.ch.checksums[0][0]^=1;struct efs_put_ticket copy;
  assert(!efs_client_put_manifest(r,&copy) && !memcmp(&copy,&expected,sizeof(copy)));copy.body_digest[0]^=1;
- probe_rc=0;assert(!efs_client_put_resume(r,0,&state) && state==1 && sends==1);
+ /* Warm establishment does not grant permission after server revocation. */
+ assert(sessions==2);send_rc=EFS_ERR_STALE;
+ assert(efs_client_put_resume(r,0,&state)==EFS_ERR_STALE && !state && sends==2 && sessions==2);
+ assert(efs_client_put_free(r)==EFS_ERR_BUSY);
+ send_rc=0;probe_rc=0;assert(!efs_client_put_resume(r,0,&state) && state==1 && sends==2);
  /* Never cache ADMITTED as continuing permission. */
- probe_rc=EFS_ERR_STALE;assert(efs_client_put_resume(r,0,&state)==EFS_ERR_STALE && !state && sends==1);
+ probe_rc=EFS_ERR_STALE;assert(efs_client_put_resume(r,0,&state)==EFS_ERR_STALE && !state && sends==2);
  probe_rc=0;unsigned before=probes;g_client.nodes[0].id=4;g_client.nodes[3].id=1;
  assert(efs_client_put_resume(r,0,&state)==EFS_ERR_STALE && !state && probes==before);
  g_client.nodes[0].id=1;g_client.nodes[3].id=4;g_client.node_count=3;
  assert(efs_client_put_resume(r,1,&state)==EFS_ERR_STALE && !state && probes==before);g_client.node_count=4;
  observed=3;assert(!efs_client_put_resume(r,1,&state) && state==3);assert(efs_client_put_free(r)==EFS_ERR_BUSY);
- observed=2;assert(efs_client_put_resume(r,0,&state)==EFS_ERR_STALE && state==2 && sends==1);
+ observed=2;assert(efs_client_put_resume(r,0,&state)==EFS_ERR_STALE && state==2 && sends==2);
  assert(efs_client_put_free(r)==EFS_ERR_BUSY);
  assert(efs_client_put_retire(r)==EFS_ERR_NET && retirements==1);
  assert(efs_client_put_free(r)==EFS_ERR_BUSY);
@@ -65,6 +70,9 @@ int main(void){
  puts("retained PUT owner: budget-before-send, immutable manifest, lost admission replies, fresh probes, exact membership and revocation retention PASS");
 }
 '''
+inode_source=(root/'src/client/inode_rpc.c').read_text()
+a=inode_source.index('int efs_client_session_admit(');b=inode_source.index('\n}',a)+2
+code=code.replace('#include "put_ticket_owner.c"',inode_source[a:b]+'\n#include "put_ticket_owner.c"')
 with tempfile.TemporaryDirectory(prefix='efs-put-owner-') as d:
  p=Path(d)/'test.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),'-I'+str(root/'src/client'),str(p),str(root/'libefs.a'),'-pthread','-lm','-o',str(p.with_suffix(''))],check=True)

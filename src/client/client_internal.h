@@ -288,6 +288,8 @@ int efs_client_publication_id(uint64_t sequence, struct efs_opid *);
 int efs_client_rpc_lease_edge(efs_ino_t,uint64_t,const struct efs_opid_req *,
     unsigned flags,uint64_t pending_token,int probe,uint64_t *known);
 int efs_client_rpc_publication_session(uint32_t shard,const struct efs_opid *);
+/* Established-floor scheduling cache; never continuing mutation permission. */
+int efs_client_session_admit(uint32_t shard,const struct efs_opid *);
 /* ReadIndex of global owner: ACTIVE newer epoch proves completed revocation.
  * Missing owner/fencing state/transport failure never proves revocation. */
 int efs_client_rpc_identity_revoked(const struct efs_opid *,int *);
@@ -314,7 +316,8 @@ int efs_client_create_begin(struct efs_client_create_request *,efs_ino_t,
 int efs_client_create_resume(struct efs_client_create_request *,int probe_only);
 int efs_client_create_reset(struct efs_client_create_request *);
 int efs_client_create_cancel(struct efs_client_create_request *);
-int efs_client_create_stage_result(const struct efs_client_create_request *);
+int efs_client_create_stage_open_result(const struct efs_client_create_request *);
+int efs_client_stage_is_open(efs_ino_t);
 int efs_client_lease_begin(struct efs_client_lease_request *,efs_ino_t,
                            uint64_t,unsigned,uint64_t);
 int efs_client_lease_resume(struct efs_client_lease_request *,int probe_only);

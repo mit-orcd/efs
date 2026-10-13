@@ -6,6 +6,9 @@ import os, subprocess, tempfile
 root = Path(__file__).resolve().parents[1]
 source = (root / 'src/client/efs_fuse.c').read_text()
 sections = []
+ops = Path(os.environ.get('EFS_DIR_LOCK_SOURCE', root / 'src/client/ops.c')).read_text()
+a = ops.index('static int dir_stripe(')
+sections.append('#define EFS_DIR_LOCKS 64\n' + ops[a:ops.index('\n}', a)+2])
 for start, end in [('#define OPEN_EDGE_SHARDS', '/* Inodes this client'),
                    ('#define EFS_WB_INO_STRIPES', '\nstatic struct {'),
                    ('#define APPEND_MU_N', '/* Close: flush')]:
@@ -38,6 +41,17 @@ int main(void){
  pthread_mutex_lock(&start_mu);while(ready!=16)pthread_cond_wait(&start_cv,&start_mu);
  go=1;pthread_cond_broadcast(&start_cv);pthread_mutex_unlock(&start_mu);
  for(unsigned i=0;i<16;i++)assert(!pthread_join(threads[i],NULL));assert(counter==16000);
+ /* Exercise the remaining production directory-lock mapping. All local
+  * files differ in allocation counter but retain the same shard bits. */
+ for(unsigned shard=0;shard<4096;shard+=17){
+  unsigned char seen[EFS_DIR_LOCKS]={0};unsigned count=0;
+  for(unsigned i=1;i<=256;i++){
+   efs_ino_t ino=((uint64_t)i<<EFS_KV_SHARD_BITS)|shard;
+   int slot=dir_stripe(ino);assert(slot>=0&&slot<EFS_DIR_LOCKS&&slot==dir_stripe(ino));
+   if(!seen[slot]){seen[slot]=1;count++;}
+  }
+  assert(count>=48);
+ }
  pthread_mutex_t *(*tables[])(efs_ino_t)={open_edge_mu,efs_wb_ino_lock,append_mu};
  for(unsigned table=0;table<3;table++)for(unsigned shard=0;shard<4096;shard+=17){
   pthread_mutex_t *distinct[64];unsigned count=0;
@@ -54,7 +68,7 @@ int main(void){
   assert(!pthread_mutex_trylock(distinct[1]));pthread_mutex_unlock(distinct[1]);
   pthread_mutex_unlock(distinct[0]);
  }
- puts("inode locks: same-shard files spread across all three production tables; stable same-file exclusion and concurrent initialization PASS");
+ puts("inode locks: same-shard files spread across the directory and three FUSE production tables; stable same-file exclusion and concurrent initialization PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-inode-stripes-') as directory:

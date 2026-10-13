@@ -48,13 +48,13 @@ void efs_client_ensure_dir_locks(void)
 
 static int dir_stripe(efs_ino_t parent)
 {
-    return (int)((uint64_t)parent % EFS_DIR_LOCKS);
+    return (int)efs_ino_lock_slot(parent, EFS_DIR_LOCKS);
 }
 
 /* The dir locks are plain (non-recursive) mutexes and the client flush thread
  * takes every stripe at once, so a stripe taken twice on one thread — or one
  * left held when an op returns — wedges the whole mount. Stripes are shared
- * by ino modulo, so nesting two *different* inodes can collide too. Track what
+ * by mixed inode identity, so nesting two *different* inodes can collide too. Track what
  * this thread holds and say so loudly instead of deadlocking silently. */
 static __thread unsigned char t_dir_held[EFS_DIR_LOCKS];
 
@@ -1039,9 +1039,10 @@ efs_ino_t efs_client_create_ex(efs_ino_t parent, const char *name, uint32_t mode
 }
 
 static void create_stage_inode(efs_ino_t parent, const char *name, uint32_t mode,
-                                uid_t uid, gid_t gid, const struct efs_inode *out)
+                                uid_t uid, gid_t gid, const struct efs_inode *out,
+                                int publish)
 {
-    /* Pin across the local insert. Regular-file staging retains dirty rows
+    /* Pin across the local insert. Generic regular-file staging retains dirty rows
      * for later data publication; committed directory mirrors may evict. */
     efs_client_stage_pin(out->ino);
     efs_client_stage_pin(parent);
@@ -1075,10 +1076,10 @@ static void create_stage_inode(efs_ino_t parent, const char *name, uint32_t mode
      * hold — otherwise the row could be evicted in the gap and the later
      * REPORT would skip the missing row (its size/chunk recs never reach
      * the server). Peers never mark this ino dirty. */
-    /* CREATE/MKDIR already committed the parent directory mutation. Only
-     * regular-file staging owes subsequent data publication. Do not add
-     * parent/directory REPORT work or clear existing dirty ownership. */
-    if (!S_ISDIR(out->mode)) {
+    /* CREATE/MKDIR already committed these rows. Generic regular-file
+     * staging retains dirty protection; FUSE's adopted open pin protects
+     * its clean mirror. Never clear existing dirty ownership. */
+    if (publish && !S_ISDIR(out->mode)) {
         efs_client_mark_ino_dirty(out->ino);
     }
     pthread_mutex_unlock(&g_client.idx_mu);
@@ -1087,16 +1088,23 @@ static void create_stage_inode(efs_ino_t parent, const char *name, uint32_t mode
     efs_client_stage_unpin(out->ino);
 }
 
-int efs_client_create_stage_result(const struct efs_client_create_request *request)
+/* FUSE calls this only after retained adoption owns the open pin. CREATE's
+ * returned empty row is already committed; an empty close owes no REPORT.
+ * Real writes establish dirty ownership normally. Generic library CREATE
+ * keeps its old dirty protection because it may have no open-pin hooks. */
+int efs_client_create_stage_open_result(const struct efs_client_create_request *request)
 {
     if(!request || !request->complete || request->result!=EFS_OK ||
        !request->inode.ino || !S_ISREG(request->inode.mode))return EFS_ERR_STALE;
-    int rc=efs_client_report_admit(1);
-    if(rc!=EFS_OK)return rc;
+    if(!efs_client_stage_is_open(request->inode.ino))return EFS_ERR_BUSY;
     create_stage_inode(request->wire.create.parent,request->wire.create.name,
         request->wire.create.mode,request->wire.create.uid,request->wire.create.gid,
-        &request->inode);
-    efs_client_report_unreserve();return EFS_OK;
+        &request->inode,0);
+    /* A failed cache allocation must not acknowledge a descriptor whose
+     * first write cannot find its pinned row. The caller retains CLOSE. */
+    struct efs_inode staged;
+    return efs_client_stat_local(request->inode.ino,&staged)==EFS_OK ?
+        EFS_OK : EFS_ERR_NOMEM;
 }
 
 int efs_client_create_result_inode(efs_ino_t parent, const char *name, uint32_t mode,
@@ -1119,7 +1127,7 @@ int efs_client_create_result_inode(efs_ino_t parent, const char *name, uint32_t 
     int rc = efs_client_rpc_create(g_client.export_id, parent, name, mode,
                                    uid, gid, flags, NULL, &out);
     if (rc == EFS_OK) {
-        create_stage_inode(parent, name, mode, uid, gid, &out);
+        create_stage_inode(parent, name, mode, uid, gid, &out,1);
         *ino = out.ino;
         if (created)
             *created = out;

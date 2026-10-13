@@ -4202,7 +4202,6 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
     if(create_rc==EFS_OK && pending_create->request.complete) {
         ino=pending_create->request.inode.ino;
         if(created)*created=pending_create->request.inode;
-        create_rc=efs_client_create_stage_result(&pending_create->request);
     } else if(create_rc==EFS_OK)create_rc=EFS_ERR_BUSY;
     if(create_rc!=EFS_OK) {
         if(pending_create->request.complete && pending_create->request.result!=EFS_OK) {
@@ -4269,8 +4268,15 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
             return fuse_stat_errno(hrc);
         }
         if(pending_create) {
+            /* Stage only after the open owner pins the committed empty row.
+             * Do not invent dirty work solely to prevent cache eviction. */
+            int stage_rc=efs_client_create_stage_open_result(&pending_create->request);
             (void)efs_client_create_reset(&pending_create->request);
             efs_pending_create_free(pending_create);
+            if(stage_rc!=EFS_OK) {
+                (void)efs_fuse_release_ino(ino,fi);
+                return fuse_stat_errno(stage_rc);
+            }
         }
     } else if(pending_create)efs_pending_create_queue(pending_create);
     if (out_ino)

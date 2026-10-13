@@ -75,7 +75,7 @@ void efs_client_stage_set_pin_hooks(int (*is_open)(efs_ino_t),
     g_pin_has_plock_fn = has_plock;
 }
 
-static int stage_ino_is_open(efs_ino_t ino)
+int efs_client_stage_is_open(efs_ino_t ino)
 {
     return g_pin_is_open_fn ? g_pin_is_open_fn(ino) : 0;
 }
@@ -377,7 +377,7 @@ static int stage_pinned(efs_ino_t ino)
         return 1;
     if (efs_dcache_ino_pinned(ino))
         return 1;
-    if (stage_ino_is_open(ino))
+    if (efs_client_stage_is_open(ino))
         return 1;
     if (stage_op_pinned(ino))
         return 1;
@@ -399,7 +399,7 @@ static int evict_one(efs_ino_t ino, uint64_t tick)
      * mark_*_dirty takes dirty_mu (held) and every row mutation takes a
      * stripe (all held by the table lock). */
     if (efs_client_ino_is_dirty_locked(ino) || efs_dcache_ino_pinned(ino) ||
-        stage_ino_is_open(ino) || stage_op_pinned(ino) ||
+        efs_client_stage_is_open(ino) || stage_op_pinned(ino) ||
         stage_ino_has_plock(ino))
         goto out;
     pthread_mutex_lock(&g_lru_mu);
@@ -548,7 +548,7 @@ static int tab_pin_cb(efs_ino_t ino, void *arg)
     (void)arg;
     /* Caller holds table + idx_mu + dirty_mu (evict_one's set). */
     if (efs_client_ino_is_dirty_locked(ino) || efs_dcache_ino_pinned(ino) ||
-        stage_ino_is_open(ino) || stage_op_pinned(ino) ||
+        efs_client_stage_is_open(ino) || stage_op_pinned(ino) ||
         stage_ino_has_plock(ino))
         return 1;
     return 0;
@@ -758,7 +758,7 @@ void efs_client_stage_evict_ino(efs_ino_t ino)
     struct efs_inode cur;
     if (efs_export_get_inode(&g_client.export, ino, &cur) == EFS_OK &&
         cur.nlink == 0 && !efs_client_ino_is_dirty(ino) &&
-        !efs_dcache_ino_pinned(ino) && !stage_ino_is_open(ino) &&
+        !efs_dcache_ino_pinned(ino) && !efs_client_stage_is_open(ino) &&
         !stage_op_pinned(ino) && !stage_ino_has_plock(ino)) {
         efs_export_forget_ino(&g_client.export, ino);
         pthread_mutex_lock(&g_lru_mu);

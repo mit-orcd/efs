@@ -922,24 +922,30 @@ int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
     return EFS_OK;
 }
 
-static int session_shard_admit(uint32_t shard,const struct efs_opid_req *q)
+/* Remember established participant floors, not ACTIVE authority or ticket
+ * permission. Every mutation still validates its server-side fence; PUT
+ * STATUS/ADMIT additionally checks fresh owner authority on every request. */
+int efs_client_session_admit(uint32_t shard,const struct efs_opid *identity)
 {
-    if(shard>=4096 || !q)return EFS_ERR_INVAL;
+    if(shard>=4096 || !identity || !identity->session_epoch)return EFS_ERR_INVAL;
+    unsigned nonzero=0;
+    for(unsigned i=0;i<EFS_OPID_UUID_LEN;i++)nonzero|=identity->client_uuid[i];
+    if(!nonzero)return EFS_ERR_INVAL;
     uint32_t byte=shard/8;uint8_t bit=(uint8_t)(1u<<(shard%8));
     pthread_mutex_lock(&opid_mu);
-    int same=g_client.append_session_epoch==q->id.session_epoch &&
-        !memcmp(g_client.append_session_uuid,q->id.client_uuid,EFS_OPID_UUID_LEN);
+    int same=g_client.append_session_epoch==identity->session_epoch &&
+        !memcmp(g_client.append_session_uuid,identity->client_uuid,EFS_OPID_UUID_LEN);
     int established=same && (g_client.append_session_shards[byte]&bit);
     pthread_mutex_unlock(&opid_mu);
     if(established)return EFS_OK;
-    int rc=efs_client_rpc_publication_session(shard,&q->id);
+    int rc=efs_client_rpc_publication_session(shard,identity);
     if(rc!=EFS_OK)return rc;
     pthread_mutex_lock(&opid_mu);
-    if(g_client.append_session_epoch!=q->id.session_epoch ||
-       memcmp(g_client.append_session_uuid,q->id.client_uuid,EFS_OPID_UUID_LEN)) {
+    if(g_client.append_session_epoch!=identity->session_epoch ||
+       memcmp(g_client.append_session_uuid,identity->client_uuid,EFS_OPID_UUID_LEN)) {
         memset(g_client.append_session_shards,0,sizeof(g_client.append_session_shards));
-        memcpy(g_client.append_session_uuid,q->id.client_uuid,EFS_OPID_UUID_LEN);
-        g_client.append_session_epoch=q->id.session_epoch;
+        memcpy(g_client.append_session_uuid,identity->client_uuid,EFS_OPID_UUID_LEN);
+        g_client.append_session_epoch=identity->session_epoch;
     }
     g_client.append_session_shards[byte]|=bit;
     pthread_mutex_unlock(&opid_mu);return EFS_OK;
@@ -1015,7 +1021,7 @@ int efs_client_create_resume(struct efs_client_create_request *r,int probe_only)
      * Retain the identity and let the caller retry without submitting. */
     if(!r->wire.routed)return EFS_ERR_BUSY;
     if(!r->admitted) {
-        rc=session_shard_admit(r->wire.shard,&r->wire.q);
+        rc=efs_client_session_admit(r->wire.shard,&r->wire.q.id);
         if(rc!=EFS_OK)return create_request_revocation(r,rc);
         r->admitted=1;
     }
@@ -1265,6 +1271,12 @@ static int session_command_reply(uint32_t shard,const uint8_t *command,uint32_t 
         }
         struct efs_msg_raft_mkfs_reply reply;memcpy(&reply,payload,sizeof(reply));free(payload);
         if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
+        /* Session/lease commands name their authoritative group as inode
+         * replies do. Retain only a validated successful routing hint; this
+         * cache is never session authority or proof of a stored verdict. */
+        if (reply.rc==EFS_OK && reply.leader_hint>=0 &&
+            reply.leader_hint<EFS_MAX_NODES)
+            rpc_note_leader(body[0],(efs_node_id_t)(reply.leader_hint+1));
         if(probe==2 && reply.rc==EFS_OK){*known=reply.salt;return EFS_OK;}
         if(known && probe!=2) {
             if(reply.salt>1 || (reply.salt &&
@@ -1363,6 +1375,13 @@ int efs_client_rpc_publication_session(uint32_t shard,const struct efs_opid *ide
     } else return rc;
     lease_command_be(command+18,identity->session_epoch,4);
     lease_command_be(command+22,shard,4);
+    if(!registered && efs_raft_shard_group(owner)==efs_raft_shard_group(shard)) {
+        /* One replicated transition checks the owner epoch and participant
+         * rejection floor atomically. Cross-group admission must still register
+         * durably before establishing the participant. */
+        command[1]=EFS_MD_SESS_REGISTER_ESTABLISH;
+        return publication_session_command(shard,command,sizeof(command));
+    }
     if(!registered) {
         command[1]=EFS_MD_SESS_REGISTER;
         rc=publication_session_command(owner,command,sizeof(command));
@@ -1444,7 +1463,7 @@ int efs_client_lease_resume(struct efs_client_lease_request *r,int probe_only)
     if (!r->admitted) {
         /* Reuse only a completed establishment for this exact UUID, epoch
          * and shard. The guarded edge still validates server revocation. */
-        rc=session_shard_admit(efs_kv_inode_shard(r->ino),&r->q);
+        rc=efs_client_session_admit(efs_kv_inode_shard(r->ino),&r->q.id);
         if (rc!=EFS_OK) return lease_request_result(r,rc,0);
         r->admitted=1;
     }
@@ -2048,7 +2067,7 @@ int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
 
     if (!efs_opid_req_valid(q) || q->ack >= q->id.seq)
         return EFS_ERR_INVAL;
-    rc=session_shard_admit(efs_kv_inode_shard(ino),q);
+    rc=efs_client_session_admit(efs_kv_inode_shard(ino),&q->id);
     if(rc!=EFS_OK)return rc;
     memset(buf, 0, sizeof(buf));
     req->export_id = export_id;
