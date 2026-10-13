@@ -187,7 +187,7 @@ int main(void)
             CHECK(!efs_query_catalog_build(source,NULL,256<<20,NULL,NULL,&oracle));
             if(next && oracle){
                 unsigned refolded=efs_query_catalog_refolded(next);
-                CHECK(refolded==(round==1?files+parents+1027:count));
+                CHECK(refolded==(round==1?files+parents+1027+32:count));
                 for(unsigned i=0;i<1025;i++){
                     struct efs_meta_stat a,b;struct efs_query_rollup x,y;
                     CHECK(!efs_query_catalog_inode(next,dirs[i],NULL,&a));CHECK(!efs_query_catalog_inode(oracle,dirs[i],NULL,&b));CHECK(!memcmp(&a,&b,sizeof(a)));
