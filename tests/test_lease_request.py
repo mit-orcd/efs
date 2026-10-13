@@ -18,7 +18,9 @@ code=r'''
 #include <unistd.h>
 struct efs_client g_client;
 static pthread_mutex_t opid_mu=PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t opid_cv=PTHREAD_COND_INITIALIZER;
 int efs_client_rpc_past_deadline(void) {return 0;}
+uint64_t efs_client_rpc_deadline_ms(void) {return 0;}
 static void opid_seed_locked(void) {if(!g_client.opid_next){g_client.opid_uuid[0]=17;g_client.opid_epoch=4;g_client.opid_next=1;}}
 static int admits,calls,probe_rc,submit_rc,admit_rc;
 static uint64_t probe_known,submit_known;

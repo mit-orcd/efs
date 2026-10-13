@@ -22,11 +22,14 @@ source=r'''
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
+#include <stdatomic.h>
 struct efs_client g_client;
 static pthread_mutex_t opid_mu=PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t opid_cv=PTHREAD_COND_INITIALIZER;
 static uint64_t test_deadline;
+static atomic_int cancelled;
 static uint64_t mono_ms(void) {struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000+t.tv_nsec/1000000;}
-int efs_client_rpc_past_deadline(void) {return test_deadline && mono_ms()>=test_deadline;}
+int efs_client_rpc_past_deadline(void) {return atomic_load(&cancelled) || (test_deadline && mono_ms()>=test_deadline);}
 uint64_t efs_client_rpc_deadline_ms(void) {return test_deadline;}
 static unsigned calls;
 static uint64_t last_ack,last_seq;
@@ -66,6 +69,9 @@ static void *hold_identity(void *value) {
 static void *release_oldest(void *value) {
     struct timespec delay={1,250000000};nanosleep(&delay,NULL);
     opid_end((int)(intptr_t)value);return NULL;
+}
+static void *cancel_waiter(void *unused) {
+    (void)unused;usleep(80000);atomic_store(&cancelled,1);return NULL;
 }
 int main(void) {
     struct efs_opid_req held[EFS_OPID_REPLY_CACHE],q;
@@ -120,10 +126,28 @@ int main(void) {
     assert(mono_ms()-begin>=1200 && mono_ms()-begin<3000);
     assert(calls==before+1 && last_seq==admission_next && g_client.opid_next==admission_next+1);
     assert(last_ack==admission_next-1);test_deadline=0;
+    /* Direct admission (also used by UNLINK/LINK/lease/append) has no
+     * CREATE wrapper retry to hide premature one-second refusal. */
+    for(int i=0;i<EFS_OPID_REPLY_CACHE;i++)assert(opid_begin(&held[i])>=0);
+    for(int i=1;i<EFS_OPID_REPLY_CACHE;i++)opid_end(i);
+    admission_next=g_client.opid_next;
+    assert(!pthread_create(&releaser,NULL,release_oldest,(void *)(intptr_t)0));
+    begin=mono_ms();test_deadline=begin+3000;
+    int admitted=opid_begin(&q);
+    assert(admitted>=0 && q.id.seq==admission_next && q.ack==admission_next-1);
+    assert(!pthread_join(releaser,NULL));
+    assert(mono_ms()-begin>=1200 && mono_ms()-begin<3000);
+    opid_end(admitted);test_deadline=0;
     for(int i=0;i<EFS_OPID_REPLY_CACHE;i++)assert(opid_begin(&held[i])>=0);
     admission_next=g_client.opid_next;before=calls;begin=mono_ms();test_deadline=begin+20;
     assert(efs_client_rpc_create(1,1,"test",S_IFDIR|0700,0,0,0,NULL,NULL)==EFS_ERR_BUSY);
     assert(mono_ms()-begin<200 && calls==before && g_client.opid_next==admission_next);
+    test_deadline=mono_ms()+3000;admission_next=g_client.opid_next;
+    assert(!pthread_create(&releaser,NULL,cancel_waiter,NULL));
+    begin=mono_ms();assert(opid_begin(&q)<0 && !q.id.seq);
+    assert(!pthread_join(releaser,NULL));
+    assert(mono_ms()-begin<300 && g_client.opid_next==admission_next);
+    assert(g_client.opid_inflight[0]);atomic_store(&cancelled,0);
     for(int i=0;i<EFS_OPID_REPLY_CACHE;i++)opid_end(i);
     test_deadline=0;
     puts("namespace admission: waits before allocation, exact one identity, inherited deadline sends nothing PASS");

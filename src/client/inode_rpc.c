@@ -184,6 +184,7 @@ static int stale_retryable(uint8_t type)
  * ACK as older operations finish. Table full = the op
  * receives BUSY before any RPC; no mutation loses its identity. */
 static pthread_mutex_t opid_mu = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t opid_cv = PTHREAD_COND_INITIALIZER;
 
 static void opid_seed_locked(void)
 {
@@ -242,8 +243,16 @@ static int opid_begin(struct efs_opid_req *q)
      * unresolved identity finishes. Reserve space for that oldest identity:
      * never issue more sequence positions than the smallest receipt cache.
      * Otherwise later replies fill it and the missing oldest cannot commit. */
-    for(unsigned attempt=0;attempt<1000;attempt++) {
-        if (efs_client_rpc_past_deadline()) break;
+    struct timespec started;
+    clock_gettime(CLOCK_MONOTONIC, &started);
+    uint64_t deadline = efs_client_rpc_deadline_ms();
+    if (!deadline)
+        deadline = (uint64_t)started.tv_sec * 1000 + started.tv_nsec / 1000000 + 1000;
+    for (;;) {
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        uint64_t now_ms = (uint64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
+        if (now_ms >= deadline || efs_client_rpc_past_deadline()) break;
         int slot=-1;uint64_t low=0;
         pthread_mutex_lock(&opid_mu);
         opid_seed_locked();
@@ -262,9 +271,24 @@ static int opid_begin(struct efs_opid_req *q)
             q->ack=(low?low:seq)-1;
             pthread_mutex_unlock(&opid_mu);return slot;
         }
+        if (exhausted) {
+            pthread_mutex_unlock(&opid_mu);
+            return -2; /* sequence exhaustion is permanent */
+        }
+        /* No identity has been issued. Wait for an owner to finish within
+         * the caller's existing budget, rather than exhausting an unrelated
+         * one-second poll count while a valid older operation still runs.
+         * Periodic wakeups recheck cancellation/deadline without holding
+         * the mutex needed by the finishing owner. */
+        uint64_t wait_ms = deadline - now_ms;
+        if (wait_ms > 50) wait_ms = 50;
+        struct timespec until;
+        clock_gettime(CLOCK_REALTIME, &until);
+        until.tv_nsec += (long)wait_ms * 1000000;
+        until.tv_sec += until.tv_nsec / 1000000000;
+        until.tv_nsec %= 1000000000;
+        pthread_cond_timedwait(&opid_cv, &opid_mu, &until);
         pthread_mutex_unlock(&opid_mu);
-        if(exhausted)return -2; /* sequence exhaustion is permanent */
-        usleep(1000);
     }
     uint64_t oldest=0,next;unsigned live=0;
     pthread_mutex_lock(&opid_mu);
@@ -285,6 +309,7 @@ static void opid_end(int slot)
         return;
     pthread_mutex_lock(&opid_mu);
     g_client.opid_inflight[slot] = 0;
+    pthread_cond_broadcast(&opid_cv);
     pthread_mutex_unlock(&opid_mu);
 }
 
