@@ -1223,3 +1223,26 @@ only this failed-directory workload, not hypothetical all-passing load.
 No directory closure or release acceptance; narrow queue bound retained,
 its performance benefit remains unproven. Next investigate the directory
 creation/authority latency with separately labelled diagnostics.
+
+
+Queuecb39a4f6 separate profiling diagnostic (not acceptance): full1498
+PASS14FAIL,119.031–131.184s; all7 deep60 workers enter directory creation
+within0.084–0.434s of spawn and never emit leaf-write/recursive-cleanup
+before their original30s deadline. Latest sampled leader LOOKUP6.296ms,
+parent fresh authority5.913ms,KV0.259ms,lanes0.050ms,getattr0.072ms;
+ReadIndex leader4.376ms average. This identifies the expensive authority
+path, not the cause of an individual timeout. Raw bounded slices/phases
+are outside Git votequeuecb39a4f6-diagnostic. Diagnostic cleanup pending.
+
+Next candidate hands off a completed tracked read round in the pump before
+its off-lock durability tail, only when container callers registered after
+the pre-send watermark. Requires unchanged current role/term/context,
+nonpending quorum completion and own apply through the actual proof index.
+The next begin captures its watermark before sends; late send arrivals
+remain eligible only for a later round. Existing core retains the settled
+proof for previously admitted readers; a fresh pending round does not
+inherit its quorum. No timer/worker/queue/lease or new permission to read;
+no pending-round resets, files change or deadline change. Failure preserves
+the tracked watermark and normal caller fallback. Actual helper guards,
+late arrivals, demand bound, ASan/UBSan and incomplete-apply negative PASS
+locally; real core retained-proof controls and both-host native/live pending.

@@ -703,6 +703,18 @@ static void test_readindex_control(void)
           "latest vote retains normal ordered bookkeeping");
     CHECK(efs_raft_commit(n.r[leader])==commit && app[leader].n==applied,
           "zero-prefix supersession never advances commit or apply");
+    uint64_t settled_round=efs_raft_read_round(n.r[leader]), retained_round=0,retained_index=0;
+    CHECK(efs_raft_read_covers(n.r[leader],efs_raft_read_index(n.r[leader])),
+          "handoff requires complete own apply for the settled proof");
+    CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"demand handoff starts a fresh pending round");
+    CHECK(efs_raft_read_pending(n.r[leader]) && !efs_raft_read_ready(n.r[leader]),
+          "handoff never inherits old quorum into the new round");
+    CHECK(efs_raft_read_proven(n.r[leader],&retained_round,&retained_index) &&
+          retained_round==settled_round && retained_index<=efs_raft_applied(n.r[leader]),
+          "settled fully applied proof survives handoff for previously admitted readers");
+    CHECK(!efs_raft_read_control(n.r[leader],&reply),"old settled vote cannot prove handoff round");
+    CHECK(efs_raft_commit(n.r[leader])==commit && app[leader].n==applied,
+          "handoff changes no commit or metadata apply");
     reply.match_index=index;
     /* Even a probe must retain normal bookkeeping when a local suffix can
      * advance replication or commit. Hold replies so the suffix stays live. */
