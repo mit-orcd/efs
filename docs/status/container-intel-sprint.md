@@ -2289,3 +2289,32 @@ versus NB/UN. Original e664d218 fails the exact no-FLUSH-unlock assertion.
 Lookup-memo and full mount identity RPC regressions PASS. Fresh Linux/native,
 new mounted reproducer and unchanged full normal qualification remain pending;
 aa496a7b wire-batch observation has not yet been remotely executed.
+
+
+### Complete normal qualification 4f8d4ad7
+
+Frozen4f8d4ad77953deabddc7a1cdf0de93ab4ed8d004 deployed privately after
+both-host complete native/affected sanitizer/794-input proofs PASS. Actual
+callback original-source negative also PASS both Linux hosts; all6 mounted
+ownership controls PASS each host (12/12), including inherited-copy close,
+other-description close, explicit unlock, blocking wait and last-description
+release with another open remaining. No lock-related core failures in this run.
+
+All15 normal gates completed. Concurrent FAIL1503/1512 PASS9FAIL: seven
+deep60timeouts; Intel1 client3 names_crazy_roundtrip unlink `with space` EBUSY
+at posix_suite.py:1819, and concurrent_create_unlink_two_proc child unlink
+`c0-4` EBUSY at snippet line7. Stack traces establish unlink, not creation or
+flock, as the failing syscalls; no causal attribution to the ownership change.
+Immediate physical PASS103.563s; quiet432/432, peer134/134, private mmap,
+all lifecycle/tiny/graceful-restart/cold/delete gates PASS; shared mmap retains
+ENODEV skip. Final physical9.107s PASS; both actual post-restart64-worker,
+profile/folding-OFF/container/TCP/direct/disabled-feature proofs PASS. Quota
+4G/node; all retained stores/history preserved. Loaded acceptance stays FAIL.
+
+External evidence flock4f8d4ad7-{deploy,workers64-normal,workers64-qualification};
+small ownership result JSON files are in deploy evidence, raw worker traces
+remain on the private hosts. Reproduction uses committed qualification.py
+concurrent/reclaim/core/peer/etc and tests/live/container_flock_ownership.py
+--mount <isolated-mount>. No push, shared-branch merge or production promotion.
+Same-source opt-in batch/path/read/raft/RPC diagnostics and --deepsteps are
+starting; no diagnostic result is yet claimed.
