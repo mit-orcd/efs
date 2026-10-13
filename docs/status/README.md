@@ -1,3 +1,9 @@
+[Agreed RDMA large-message design](rdma-segmented-messages-plan-20261013.md):
+whole-cluster stop/install/start; no rolling-upgrade compatibility. Segment large
+metadata/data/replication messages over bounded RDMA buffers. Strict RDMA uses
+TCP only for setup and rejects incompatible peers. AMD Soft-RoCE then ORCD-test
+native IB qualification required; implementation and tests NOTRUN. No cluster changes.
+
 [ORCD RDMA/TCP cause investigation](orcd-rdma-tcp-cause-20261013.md):
 matched9b source explicitly sends oversized frames via retained TCP channel;
 actual RDMA pool84KiB. Read-only004→003 samples reproduce five then two

@@ -1494,6 +1494,12 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+whole-cluster stop/install/start; no rolling-upgrade compatibility. Segment large
+metadata/data/replication messages over bounded RDMA buffers. Strict RDMA uses
+TCP only for setup and rejects incompatible peers. AMD Soft-RoCE then ORCD-test
+native IB qualification required; implementation and tests NOTRUN. No cluster changes.
+
+[ORCD RDMA/TCP cause investigation](../status/orcd-rdma-tcp-cause-20261013.md):
 matched9b source explicitly sends oversized frames via retained TCP channel;
 actual RDMA pool84KiB. Read-only004→003 samples reproduce five then two
 51-segment timeout/loss-probe episodes. Sampled drop/uncorrected-error counters
