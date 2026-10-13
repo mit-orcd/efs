@@ -4073,6 +4073,16 @@ claim. Normal 24/24 and clock-fault 25/25 lifecycle gates, core 216/216 and peer
 67/67 in both builds, plus cold physical/queue/quota/fencing gates PASS.
 [Exact measurements and regression evidence](../status/expiry-rss-cleanup-20261013.md).
 
+**Oct 13 foreground fairness follow-up:** `99f6ef0c` retains fast physical GC,
+spreads expiry into two-file bursts, and schedules broader housekeeping at its
+ordinary cadence using monotonic deadlines. Matched 30,000-file restart/off-on
+run PASS: p95 29.2/32.9/33.0 → 23.3/19.7/21.2ms, physical drain
+216/212/219 → 153/159/165s; normal 24/24, POSIX 216/216 and peer 67/67 PASS.
+Clock-fault 25/25, core 216/216, peer 67/67 and cold physical/queue/quota/fencing
+gates also PASS. Peak RSS 76.1 MiB; isolated maximum-latency outliers remain. Fully separating
+physical GC was tested and rejected because reclamation lagged.
+[Measurements, rejected experiment and reproduction](../status/expiry-foreground-latency-20261013.md).
+
 **Gate:** focused renewal/deletion, path-reuse, rename, hard-link, open-file and
 concurrent-publication tests; clock jumps, leader change, restart, retries and
 offline storage-member fault gates. Bound worker/index resource use, verify

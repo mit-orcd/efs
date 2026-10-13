@@ -241,3 +241,12 @@ private evidence stores retained and existing user stores preserved.
 | expiry-lifecycle.json | 7b54b1de4128bd6a603b214a6f58e394ec22b7666c0cda7e332c1568b697ff5a |
 | posix.tsv | fcc06493a28a42380e8f1ecfe55f326bb3b54b0f3f91229e2dd382e3f75ab7f2 |
 | posix2.tsv | c694f6024d69c70c75ae76fbb655f25a0d72c1d76f49a4cc717af02bf21fd1d6 |
+
+## Foreground latency follow-up
+
+Historical results above are preserved. The subsequent
+[foreground fairness investigation](expiry-foreground-latency-20261013.md)
+measures smaller expiry bursts plus separate broad housekeeping cadence while
+keeping physical GC fast: p95 improves 20–40% and physical drain improves
+25–29% in the matched 30,000-file run. It records the rejected experiment,
+remaining maximum-latency outliers and exact source/configuration.
