@@ -871,7 +871,13 @@ int kv_maybe_flush_locked(struct kv_lsm *l)
     l->bp_logged = 0;
     if (l->io_failed)
         return EFS_ERR_IO;
+    const char *observe=getenv("EFS_RAFT_OBS");
+    int prof=observe && !strcmp(observe,"1");
+    uint64_t started=prof?mono_ms():0,bytes_before=l->mt.bytes;
     rc = kv_flush_locked(l);
+    if(prof && mono_ms()-started>=20)
+        fprintf(stderr,"kv-flush-prof: bytes=%llu ms=%llu l0=%u rc=%d\n",
+                (unsigned long long)bytes_before,(unsigned long long)(mono_ms()-started),l->n_l0,rc);
     if (rc == EFS_ERR_BUSY) {
         /* Not enough L0 slots for this memtable's ranges. The keys are
          * in the memtable and the WAL; the apply must not fail. */

@@ -1232,7 +1232,7 @@ before their original30s deadline. Latest sampled leader LOOKUP6.296ms,
 parent fresh authority5.913ms,KV0.259ms,lanes0.050ms,getattr0.072ms;
 ReadIndex leader4.376ms average. This identifies the expensive authority
 path, not the cause of an individual timeout. Raw bounded slices/phases
-are outside Git votequeuecb39a4f6-diagnostic. Diagnostic cleanup pending.
+are outside Git votequeuecb39a4f6-diagnostic. Diagnostic cleanup PASS178.460s,zero178.447s (profiling enabled, not acceptance).
 
 Next candidate hands off a completed tracked read round in the pump before
 its off-lock durability tail, only when container callers registered after
@@ -1246,3 +1246,32 @@ no pending-round resets, files change or deadline change. Failure preserves
 the tracked watermark and normal caller fallback. Actual helper guards,
 late arrivals, demand bound, ASan/UBSan and incomplete-apply negative PASS
 locally; real core retained-proof controls and both-host native/live pending.
+
+
+### Demand handoffa0ecf931 — completed, rejected
+
+Exacta0ecf931a5970a5da59ea45bb061a8251ffecda9 both-host complete
+native controls and788-input deployment proofs PASS. Same retained Intel
+four-node4G/node containers/TCP/direct, seven clients/jobs16/original
+deadlines,8writers/20msGC, commands/.efs/expiry-date/packing/profiling OFF.
+Full1495/1512PASS17FAIL: deep60/crazy directories all7 plus deep100
+Intel1 clients1/2 and Intel2client1;122.770–135.752s. Immediate physical
+PASS168.246s,zero168.236s. Quiet core432/432PASS53.945/55.230s;
+peer134/134PASS39.635/40.731s,private mmap PASS/shared ENODEV skips.
+Lifecycle/tiny/warm/cold/global restart/deletion PASS;finalphysical
+PASS33.408s,zero33.391s. Raw handoffa0ecf931-deploy and qualification
+stay outside Git; reproduce established committed gates/order. Handoff
+regresses loaded directory acceptance and is retired, including current
+test/Make entry. Its native safety controls remain reproducible in history.
+
+Review of queuecb39a4f6 diagnostic identifies individual slow applies,
+not just large batches: one leader cycle apply768.853ms over2entries
+(pump hold768.890ms); another463.641ms over2entries. These sampled
+cycles do not identify command type or prove flush causality. Next source
+restores queue-bound product behavior and adds observational logs only:
+container apply command/group/index/elapsed for existing EFS_RAFT_OBS
+runs over20ms, plus existing KV flush elapsed/bytes/L0 under that same
+explicit profiling flag. Normal configuration emits neither diagnostic.
+No apply budget, memtable size, authority, durability or placement change.
+Both-host native including actual KV LSM and diagnostic investigation
+remain required; no new performance fix/acceptance claim.

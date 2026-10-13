@@ -2836,8 +2836,13 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         (cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_APPEND_RSV))
         host_clear_incomplete(g);
     if (a0) {
+        uint64_t elapsed=now_us_()-a0;
         h->obs_apply_cnt++;
-        h->obs_apply_cycle_us += now_us_() - a0;
+        h->obs_apply_cycle_us += elapsed;
+        if(h->s && h->s->storage_engine && elapsed>=20000)
+            fprintf(stderr,"container-apply-prof: group=%u index=%llu term=%llu tag=%u bytes=%u us=%llu rc=%d\n",
+                    g->group,(unsigned long long)index,(unsigned long long)term,
+                    cmd[0],clen,(unsigned long long)elapsed,rc);
     }
     /* Record the apply verdict BEFORE the raft core bumps last_applied, so a
      * waiter that observes applied >= index always finds the slot. The pump
@@ -6954,28 +6959,6 @@ static void host_container_pending_reads(struct efs_raft_host *h)
     if(published)host_waiters_wake(h);
 }
 
-/* h->mu held: hand off a completed, fully applied tracked round to readers
- * already registered after its pre-send watermark. Starting here avoids a
- * handler's next mutex acquisition sitting behind this cycle's durability
- * tail. This is demand-driven scheduling, never permission to read: the core
- * retains the completed proof and every caller checks its own round/floor. */
-static void host_container_read_handoff(struct efs_raft_host *h)
-{
-    if(!h->s || !h->s->storage_engine)return;
-    for(unsigned i=0;i<HOST_NGROUPS;i++) {
-        struct host_group *g=&h->g[i];struct efs_raft *r=g->r;
-        if(!r || efs_raft_role(r)!=EFS_RAFT_LEADER ||
-           !g->read_begin_round || g->read_begin_round!=efs_raft_read_round(r) ||
-           g->read_begin_term!=efs_raft_term(r) ||
-           efs_raft_read_round(r)==UINT64_MAX || efs_raft_read_pending(r) ||
-           !efs_raft_read_done(r) ||
-           !efs_raft_read_covers(r,efs_raft_read_index(r)))continue;
-        uint64_t admitted=__atomic_load_n(&g->read_admit_count,__ATOMIC_ACQUIRE);
-        if(admitted>g->read_begin_admits)
-            (void)host_read_begin_tracked(h,g->group,r);
-    }
-}
-
 static void *host_pump(void *arg)
 {
     struct efs_raft_host *h = arg;
@@ -7081,7 +7064,6 @@ static void *host_pump(void *arg)
          * its no-op, and fresh reads block the first client proposal forever. */
         host_durable_synced(h);
         host_balance_leaders(h, now_us_());
-        host_container_read_handoff(h);
         if (obs) {
             t_tick = now_us_() - c0;
             c0 = now_us_();
