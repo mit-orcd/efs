@@ -21,7 +21,8 @@ static void verify(const unsigned char *p,unsigned n,unsigned seed)
 static void check_tcp_empty(int fd)
 {
     unsigned char b;errno=0;
-    OK(recv(fd,&b,1,MSG_PEEK|MSG_DONTWAIT)==-1 && (errno==EAGAIN || errno==EWOULDBLOCK));
+    ssize_t n=recv(fd,&b,1,MSG_PEEK|MSG_DONTWAIT);
+    OK(n==0 || (n==-1 && (errno==EAGAIN || errno==EWOULDBLOCK))); /* FIN is not application payload */
 }
 static struct efs_conn *setup(int fd,int server)
 {
