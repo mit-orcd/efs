@@ -256,6 +256,25 @@ int main(void)
     ssize_t len=readlink(current,base,sizeof(base)-1);CHECK(len>0);
     if(len>0) {
         base[len]=0;snprintf(generation,sizeof(generation),"%s/%s",root,base);
+        /* Cache ABI changes must reject old checkpoints, never reinterpret
+         * their larger inode rows. This cache is rebuilt from authoritative KV. */
+        char manifest[1024];snprintf(manifest,sizeof(manifest),"%s/manifest",generation);
+        int manifest_fd=open(manifest,O_RDWR);uint64_t version=0,legacy=5;
+        CHECK(manifest_fd>=0);
+        if(manifest_fd>=0){
+            CHECK(pread(manifest_fd,&version,sizeof(version),8)==sizeof(version));
+            CHECK(version==6);
+            uint64_t row_bytes=0;
+            CHECK(pread(manifest_fd,&row_bytes,sizeof(row_bytes),24)==sizeof(row_bytes));
+            CHECK(row_bytes==312); /* Previously 584: no max-name per regular file. */
+            CHECK(pwrite(manifest_fd,&legacy,sizeof(legacy),8)==sizeof(legacy));
+            CHECK(efs_query_catalog_restore_disk(root,source,wm,4<<20,&next)==EFS_ERR_PROTO && !next);
+            CHECK(pwrite(manifest_fd,&version,sizeof(version),8)==sizeof(version));
+            close(manifest_fd);
+            CHECK(!efs_query_catalog_restore_disk(root,source,wm,4<<20,&next));
+            if(next)compare(source,memory,next,EFS_ROOT_INO);
+            efs_query_catalog_free(next);next=NULL;
+        }
         DIR *directory=opendir(generation);CHECK(directory);struct dirent *entry;
         while(directory && (entry=readdir(directory))) {
             size_t size=strlen(entry->d_name);

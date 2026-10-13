@@ -1510,6 +1510,13 @@ candidate locally regressed, not yet deployed; baseline600s pressure PASS,
 original long tails not reproduced. Candidate native doc/input gate corrected;
 full reruns and cold gates pending.
 W97/D30/W106 OPEN.
+[AMD package 2 compact-cache qualification](../status/amd-package2-query-20261013.md):
+`9daee617`/`0412e5b7` reduce derived rows 584→312 bytes; comparable native
+generation 17.96% smaller; at fixed private 5 MiB baseline refuses while candidate
+passes the full native oracle. Enabled files/TCP/direct command, options, retained
+paging, small concurrent payload and orderly-restart gates PASS. Package remains
+OPEN for genuine legacy-cache transition, wider enabled faults/load and ORCD scale.
+Packing, containers and expiry remain disabled; no budget/deadline increase.
 
 [Three required work packages and feature matrix](../status/three-work-packages-20261013.md):
 ORCD `.efs` enabled for final RDMA/direct scale acceptance; AMD `.efs` enabled

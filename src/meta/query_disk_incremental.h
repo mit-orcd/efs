@@ -462,7 +462,16 @@ static int parent_fold_entry(void *user,const uint8_t *key,uint32_t kn,const uin
     if(!S_ISDIR(p.row.mode) || c.row.generation!=e.dentry.generation || c.row.ino==e.parent){rc=EFS_ERR_PROTO;return rc;}
     if(S_ISDIR(c.row.mode) && child_dir){
         if(child_dir->node.link.parent || c.row.parent!=e.parent){rc=EFS_ERR_PROTO;return rc;}
-        child_dir->node.link=e;
+        child_dir->node.link=(struct disk_link){e.parent,ctx->shard};
+    }else if(S_ISDIR(c.row.mode)){
+        /* Parent layout changes can select a different immutable alias
+         * partition even without changing the child's own inode row. */
+        if(c.row.parent!=e.parent)return EFS_ERR_PROTO;
+        if(c.link.parent!=e.parent || c.link.shard!=ctx->shard){
+            uint64_t at;rc=locate(d,c.row.ino,&c,&at);if(rc)return rc;
+            c.link=(struct disk_link){e.parent,ctx->shard};
+            rc=node_at(d,efs_kv_inode_shard(c.row.ino),at,&c,1);if(rc)return rc;
+        }
     }
     if(!parent)return EFS_OK;
     struct efs_query_rollup *r=&parent->node.rollup;int has=r->imm_files+r->imm_dirs!=0;
