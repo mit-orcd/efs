@@ -1,5 +1,10 @@
 # Intel package 3 — ordinary files, October 13, 2026
 
+Current checkpoint: [EOF/admission wrap-up](intel-eof-admission-checkpoint-20261013.md).
+The human coordinated hold pauses this dependency work. Corrections04f4c8c7 and
+1b3844d7 are committed but not installed; original1a737143 daemons retained and
+main mounts restored. Candidate mounted/loaded qualification remains NOTRUN.
+
 W97/D30/W106 and shared-core dependencies remain OPEN. User explicitly assigned
 Intel the disabled-feature profile in [the three packages](three-work-packages-20261013.md).
 This supersedes the experimental container sprint on this cluster.
@@ -8,7 +13,7 @@ This supersedes the experimental container sprint on this cluster.
 
 Exact deployed product: `1a737143e5437e0f4315e86b7ef51e38a989b811` (`devel`).
 Intel1/Intel2 Core Ultra 7 256V, eight CPUs and approximately 15 GiB RAM per host;
-Fedora/Linux, two storage roots per host. Four files-engine daemons at
+Rocky Linux10.2, two storage roots per host. Four files-engine daemons at
 10.0.0.207/209 ports17432/17433; quotas400G each. `/data1/efs/mnt` on each host
 seeds the opposite host17432. Existing roughly92GiB/node payload and metadata
 were preserved. No reset, force-unmount or root change. The separate four-node

@@ -1,3 +1,10 @@
+[Intel EOF/admission wrap-up](intel-eof-admission-checkpoint-20261013.md):
+PAUSED after verified human hold. Committed04f4c8c7 admission progress wait and
+1b3844d7 explicit-zero EOF correction, preserved candidate only; not deployed.
+Original Intel1a737143 daemons retained and mounts restored. Baseline loaded
+EOF/fsync passes do not close ORCD failures; core1475/1512 with37 timeouts.
+Missing-size/lost-high EOF, REPORT EIO and loaded acceptance remain OPEN.
+
 [Agreed RDMA large-message design](rdma-segmented-messages-plan-20261013.md):
 whole-cluster stop/install/start; no rolling-upgrade compatibility. Segment large
 metadata/data/replication messages over bounded RDMA buffers. Strict RDMA uses
