@@ -1525,3 +1525,46 @@ mutex order, ownership, deadline and workload. Profiling-OFF behavior has no
 clock/logging calls. This instrumentation is not a performance fix; build/native
 and exact diagnostic deployment remain required. Directory gate stays FAIL;
 physical success still covers only the named failed-directory workload.
+
+
+### 2026-10-13 — lock-wait findings and default-OFF duplicate inbox candidate
+
+Exacte8f04e2766e416f42d7378ea455e190e3911dd20 both-host complete native
+and790 frozen-input proofs PASS. Diagnostic same retained four-node4G/node
+Intel containers/TCP/direct/seven clients/jobs16/original deadlines, features
+OFF/profiling ON:1498/1512PASS14FAIL (deep60/crazy all7),131.589–138.965s.
+No DIRLOCK-WAIT >=20ms on any of seven clients; RPC profiling was active on
+all7 (64–79 samples each). Immediate physical PASS102.856s,zero102.849.
+Raw external artifacts/container-20261012/lockwaite8f04e27-diagnostic;
+original path observer reproduction as above. First approximately30seconds
+leader batch counters show inbox age mean13.999ms/199.157ms maximum,
+KV release mean2.192ms/197.480ms maximum. These are diagnostic correlations,
+not proof that a particular queue change fixes directory deadlines.
+Normal configuration restored with all features/profiling OFF and no reset.
+Its separate full qualification currently1494/1512PASS18FAIL: deep60/crazy
+all7 and deep100 on4;125.591–136.967s. Immediate physical PASS96.342s,
+zero96.325. Remaining quiet/peer/mmap/lifecycle/tiny/restart gates running;
+no all-passing loaded acceptance or performance improvement claim.
+
+A new default-OFF EFS_CONTAINER_INBOX_FOLD candidate considers only exact
+80-byte canonical read-only requests/successful probe replies. It folds only
+byte-for-byte duplicates within the pure-control suffix; ordinary, progress,
+configuration and different-context traffic cannot be replaced. Remove the
+older duplicate and append the newest arrival at the normal tail. Every
+retained message keeps FIFO order; no newer read context is substituted.
+Only containers with flow admission OFF are eligible, so no work/durability
+credits are discarded. Allocate first: failure preserves the older frame.
+No Raft authority, term/boot/config/quorum, own-apply or expiry rule changes.
+--inbox-fold1 explicitly activates the private helper and survives controlled
+qualification restart through its matching argument; both default0.
+Native actual-enqueue controls cover flags/files/flow refusal, all80 header
+bytes, fences/different contexts, tail order, full capacity and allocation
+failure; normal and ASan/UBSan PASS, disabled-fold negative fails as expected.
+Real core duplicate successful zero-prefix votes with an outstanding suffix
+preserve current-round readiness, commit/apply and send counts; minimal native
+and ASan/UBSan PASS. Generic macOS Makefile target could not compile existing
+Linux fopencookie logging; direct unchanged real-core build avoids that
+platform-only dependency. Full Linux native and live qualification are still
+required before activation; this is a bounded queue candidate, not an
+established directory-timeout fix. New profiling-only inbox_read_duplicate
+counter measures actual folding, never admission or authority.

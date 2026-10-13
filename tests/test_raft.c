@@ -744,6 +744,15 @@ static void test_readindex_control(void)
           efs_raft_commit(n.r[leader])==suffix_commit &&
           efs_raft_applied(n.r[leader])==suffix_commit,
           "pure vote preserves outstanding suffix without replication progress");
+    int before_duplicate_apply=app[leader].n;
+    CHECK(efs_raft_recv(n.r[leader],&reply)==EFS_OK &&
+          efs_raft_recv(n.r[leader],&reply)==EFS_OK &&
+          efs_raft_read_ready(n.r[leader]) &&
+          n.ae_requests[follower]==append_sends &&
+          efs_raft_commit(n.r[leader])==suffix_commit &&
+          efs_raft_applied(n.r[leader])==suffix_commit &&
+          app[leader].n==before_duplicate_apply,
+          "identical pure votes remain idempotent with outstanding suffix");
     reply.match_index=index;
     n.hold_ae_replies=0;elect(&n,4);
     app[follower].park_apply=1;

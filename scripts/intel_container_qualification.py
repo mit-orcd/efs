@@ -6,7 +6,7 @@ Outputs stay below the supplied local artifact directory, outside Git.
 """
 import argparse,concurrent.futures,json,shlex,subprocess,time,uuid
 from pathlib import Path
-p=argparse.ArgumentParser(description=__doc__);p.add_argument('gate',choices=['core','peer','mmap','concurrent','lifecycle-create','lifecycle-read','lifecycle-churn','lifecycle-verify','lifecycle-cold','lifecycle-delete','tiny-create','tiny-cold','directory','restart','reclaim']);p.add_argument('--run-id',default=uuid.uuid4().hex[:12],help='unique evidence and namespace suffix');p.add_argument('--base',default='/data1/efs/bench/container-3173be61-20261012');p.add_argument('--output',type=Path,required=True);a=p.parse_args();a.output.mkdir(parents=True,exist_ok=True)
+p=argparse.ArgumentParser(description=__doc__);p.add_argument('gate',choices=['core','peer','mmap','concurrent','lifecycle-create','lifecycle-read','lifecycle-churn','lifecycle-verify','lifecycle-cold','lifecycle-delete','tiny-create','tiny-cold','directory','restart','reclaim']);p.add_argument('--run-id',default=uuid.uuid4().hex[:12],help='unique evidence and namespace suffix');p.add_argument('--base',default='/data1/efs/bench/container-3173be61-20261012');p.add_argument('--output',type=Path,required=True);p.add_argument('--inbox-fold',type=int,choices=[0,1],default=0);a=p.parse_args();a.output.mkdir(parents=True,exist_ok=True)
 assert a.run_id and all(c.isalnum() or c in '-_' for c in a.run_id),'invalid run id'
 s=a.base+'/src';remoteout=a.base+'/artifacts';rows=[]
 def run(host,index,name,argv,timeout):
@@ -44,6 +44,7 @@ if a.gate=='restart':
   jobs=[]
   for index,host in enumerate(['intel1_efs','intel2_efs']):
    argv=['python3',a.base+'/intel_container_node.py',action,'--base',a.base,'--host-index',str(index)]
+   if a.inbox_fold:argv+=['--inbox-fold','1']
    if action=='mount':argv+=['--clients',str(4 if index==0 else 3)]
    jobs.append((host,index,'restart-'+action+'-intel'+str(index+1)+'-'+a.run_id,argv,timeout))
   with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:phase=list(pool.map(lambda j:run(*j),jobs))

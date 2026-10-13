@@ -10557,6 +10557,28 @@ static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n
     return handled==1;
 }
 
+/* Candidate container optimization, opt-in until loaded qualification.
+ * Only an identical queued read-only frame can be folded; do not substitute
+ * a newer read context or cross an ordinary/progress/configuration frame.
+ * The newest arrival stays at the tail, so every retained frame keeps order.
+ * Flow admission owns durability credits and is deliberately excluded. */
+static int host_inbox_duplicate_read(struct efs_raft_host *h,
+                                      const uint8_t *payload, uint32_t plen)
+{
+    if (!h->s || !h->s->storage_engine || h->flow_enabled ||
+        !env_on("EFS_CONTAINER_INBOX_FOLD") ||
+        !outbox_pure_read_control(payload, plen))
+        return -1;
+    for (int i = h->inbox_n - 1; i >= 0; --i) {
+        struct host_inbox_item *item = &h->inbox[i];
+        if (!outbox_pure_read_control(item->buf, item->len))
+            break;
+        if (!memcmp(item->buf, payload, plen))
+            return i;
+    }
+    return -1;
+}
+
 int server_raft_host_inbox(const uint8_t *payload, uint32_t plen,
                            struct efs_raft_flow_reply *feedback)
 {
@@ -10596,10 +10618,20 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen,
             h->inbox_work_n>=HOST_INBOX_MAX || plen>HOST_INBOX_BYTES-h->inbox_work_bytes)
             goto busy;
     }
-    if (h->inbox_n>=HOST_INBOX_MAX || plen>HOST_INBOX_BYTES-h->inbox_bytes) goto busy;
+    int duplicate=host_inbox_duplicate_read(h,payload,plen);
+    if (duplicate<0 && (h->inbox_n>=HOST_INBOX_MAX ||
+                        plen>HOST_INBOX_BYTES-h->inbox_bytes)) goto busy;
     copy = malloc(plen);
     if (!copy) { pthread_mutex_unlock(&h->inbox_mu); return EFS_ERR_NOMEM; }
     memcpy(copy,payload,plen);
+    if (duplicate>=0) {
+        BO_COUNT(BO_INBOX_READ_DUPLICATE);
+        free(h->inbox[duplicate].buf);
+        h->inbox_bytes-=h->inbox[duplicate].len;
+        memmove(h->inbox+duplicate,h->inbox+duplicate+1,
+                (size_t)(h->inbox_n-duplicate-1)*sizeof(h->inbox[0]));
+        h->inbox_n--;
+    }
     h->inbox_bytes+=plen;
     if (h->inbox_bytes>h->inbox_bytes_hi) h->inbox_bytes_hi=h->inbox_bytes;
     h->inbox[h->inbox_n].buf=copy; h->inbox[h->inbox_n].len=plen;
