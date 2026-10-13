@@ -1497,7 +1497,9 @@ this document is the invariant they are measured against.
 whole-cluster stop/install/start; no rolling-upgrade compatibility. Segment large
 metadata/data/replication messages over bounded RDMA buffers. Strict RDMA uses
 TCP only for setup and rejects incompatible peers. AMD Soft-RoCE then ORCD-test
-native IB qualification required; implementation and tests NOTRUN. No cluster changes.
+native IB qualification required. Code-review instructions now map negotiation,
+credits, complete-message APIs, buffer lifetimes and Raft pipelining to exact
+functions and ordered gates; implementation and tests NOTRUN. No cluster changes.
 
 [ORCD RDMA/TCP cause investigation](../status/orcd-rdma-tcp-cause-20261013.md):
 matched9b source explicitly sends oversized frames via retained TCP channel;
