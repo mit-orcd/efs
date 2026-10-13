@@ -8825,8 +8825,10 @@ static int host_gc_expiry_pass(struct efs_raft_host *h,uint8_t group,uint32_t an
     __atomic_store_n(&h->expiry_last_pass_us,now_us_(),__ATOMIC_RELAXED);
     if(!page.count){h->expiry_resuming[slot]=0;return 0;}
     struct timespec begin;clock_gettime(CLOCK_MONOTONIC,&begin);
+    /* Spread the previous eight-file burst across short fair yields. The
+     * existing 50ms ceiling still bounds a slow operation between checks. */
     unsigned processed=0;int progress=0;
-    for(unsigned i=0;i<page.count && i<8 && h->gc_running;i++) {
+    for(unsigned i=0;i<page.count && i<2 && h->gc_running;i++) {
         if(!host_expiry_clock_read(h,&wall))return 0;
         rc=host_expiry_delete(h,group,&page.rows[i]);
         if(rc==EFS_OK)progress=1; /* Receiver records confirmed removals. */
@@ -8844,8 +8846,8 @@ static int host_gc_expiry_pass(struct efs_raft_host *h,uint8_t group,uint32_t an
     return progress && (processed<page.count || page.more);
 }
 
-/* Expiry can progress between full GC passes without multiplying orphan,
- * fragment and transaction-recovery scans. Recheck leadership for each pass;
+/* Small expiry bursts progress between GC passes without multiplying
+ * broad housekeeping scans. Recheck leadership for each pass;
  * a clock pause/no-progress reply stops acceleration until the next full pass. */
 static int host_gc_expiry_groups(struct efs_raft_host *h)
 {
@@ -8866,8 +8868,10 @@ static void *host_gc_thread(void *arg)
 {
     struct efs_raft_host *h = arg;
     int g;
+    uint64_t maintenance_at = 0;
 
     while (h->gc_running) {
+        int maintenance = efs_iostats_now_us() >= maintenance_at;
         uint64_t t0, t_orphan = 0, t_reap = 0, t_frag = 0, t_spread, t_rec, t_all;
         struct efs_kv_scan_stats sc_frag, sc_all;
         struct reap_times reap_times = {0};
@@ -8911,9 +8915,11 @@ static void *host_gc_thread(void *arg)
             __atomic_store_n(&h->s->gc_group, h->g[g].group, __ATOMIC_RELAXED);
             __atomic_store_n(&h->s->gc_stage, 3, __ATOMIC_RELAXED);
             expiry_progress |= host_gc_expiry_pass(h,h->g[g].group,anchor);
-            host_gc_close_step_pass(h, h->g[g].group, anchor);
-            host_gc_close_pass(h, h->g[g].group, anchor);
-            host_gc_orphan_pass(h, h->g[g].group, anchor);
+            if (maintenance) {
+                host_gc_close_step_pass(h, h->g[g].group, anchor);
+                host_gc_close_pass(h, h->g[g].group, anchor);
+                host_gc_orphan_pass(h, h->g[g].group, anchor);
+            }
             int pack_deleted = 0;
             int pack_capped = host_gc_pack_pass(h,h->g[g].group,anchor,&pack_deleted);
             packed_capped |= pack_capped && pack_deleted;
@@ -8942,11 +8948,14 @@ static void *host_gc_thread(void *arg)
         }
         t_spread = now_us_();
         __atomic_store_n(&h->s->gc_stage, 5, __ATOMIC_RELAXED);
-        host_dir_spread_pass(h);
+        if (maintenance) host_dir_spread_pass(h);
         t_spread = now_us_() - t_spread;
         t_rec = now_us_();
         __atomic_store_n(&h->s->gc_stage, 6, __ATOMIC_RELAXED);
-        host_txn_recover_pass(h);
+        if (maintenance) {
+            host_txn_recover_pass(h);
+            maintenance_at = efs_iostats_now_us() + (uint64_t)GC_LOOP_MS * 1000;
+        }
         t_rec = now_us_() - t_rec;
         t_all = now_us_() - t0;
         efs_kv_lsm_scan_stats(&sc_all, 1);
@@ -8996,23 +9005,25 @@ static void *host_gc_thread(void *arg)
          * a full second asleep after a saturated page made durable deletion
          * progress. This also covers remote-only placement. */
         idle_ms = host_gc_packed_idle(idle_ms, packed_capped, packed_deleted);
+        idle_ms = host_gc_expiry_idle(idle_ms, expiry_progress);
         if (idle_ms < GC_LOOP_MS && env_on("EFS_RAFT_OBS"))
             fprintf(stderr, "raft-host: gc-backlog-idle ms=%u removed=%llu\n", idle_ms,
                     (unsigned long long)(removed_after - removed_before));
-        /* Full GC keeps its ordinary/backlog cadence. Expiry-only passes
-         * run during that fair yield instead of accelerating every scan.
+        /* Reap/fragment work must keep up with expiry. Broader housekeeping
+         * stays at ordinary cadence above; two-file expiry bursts are spread
+         * through the yield, rather than eight adjacent transactions.
          * Their time counts toward the yield; snapshot/shutdown checks remain
          * at <=20ms sleep intervals (work itself keeps its existing budgets). */
         uint64_t idle_end = efs_iostats_now_us() + (uint64_t)idle_ms * 1000;
         uint64_t expiry_at = efs_iostats_now_us() +
-                            (uint64_t)host_gc_expiry_idle(GC_LOOP_MS, expiry_progress) * 1000;
+                            20000;
         while (h->gc_running && efs_iostats_now_us() < idle_end) {
             host_snap_export_pass(h);
             host_snap_import_pass(h);
             if (expiry_progress && efs_iostats_now_us() >= expiry_at) {
                 expiry_progress = host_gc_expiry_groups(h);
                 expiry_at = efs_iostats_now_us() +
-                            (uint64_t)host_gc_expiry_idle(GC_LOOP_MS, expiry_progress) * 1000;
+                            20000;
             }
             uint64_t now = efs_iostats_now_us();
             if (now >= idle_end) break;
