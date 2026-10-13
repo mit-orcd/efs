@@ -9155,12 +9155,12 @@ static void *host_query_thread(void *ctx)
         else fprintf(stderr,"query-config: invalid EFS_QUERY_CATALOG_MIB; using 256 (allowed 64..1024)\n");
     }
     while (__atomic_load_n(&h->query_running,__ATOMIC_ACQUIRE)) {
-        usleep(100000);
+        usleep(efs_query_refresh_poll_ms(cut_retry)*1000u);
         query_page_sweep(0);
         uint64_t policy_version;uint32_t policy_mask;
         if(efs_query_policy_get(h->kv,&policy_version,&policy_mask) || !policy_mask) {cut_retry=0;continue;}
         uint64_t now=query_mono_ms(),dirty=0;
-        if (now-last_attempt<200) continue;
+        if (now-last_attempt<efs_query_refresh_admit_ms(cut_retry)) continue;
         int rc=efs_kv_lsm_metadata_revisions(h->kv,current,4096);
         if (rc) {
             cut_retry=0;

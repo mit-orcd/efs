@@ -1,3 +1,9 @@
+Current ORCD `.efs` gate: `da9ff39441115` passes full prerequisites and
+1,512 concurrent core cases, but six clients still hit helper timeouts.
+A bounded faster cut-retry candidate is under qualification; same-code restart
+and final complete 400 GiB verification remain pending. See the
+[400 GiB evidence](orcd-efs-400g-20261012.md).
+
 # Project status — current work and index
 
 [ORCD real 400 GiB command gate](orcd-efs-400g-20261012.md) uses `devel-efs`,

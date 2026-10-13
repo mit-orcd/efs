@@ -1475,6 +1475,15 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+Current ORCD `.efs` gate: `da9ff39441115` passes full prerequisites and
+1,512 concurrent core cases, but six clients still hit helper timeouts.
+A bounded faster cut-retry candidate is under qualification; same-code restart
+and final complete 400 GiB verification remain pending. See the
+[400 GiB evidence](../status/orcd-efs-400g-20261012.md).
+
+## Project status — current work and index
+
+[ORCD real 400 GiB command gate](../status/orcd-efs-400g-20261012.md) uses `devel-efs`,
 RDMA/direct/files, commands enabled and packing/containers disabled. Full writes,
 all 1,638,400 cold payloads and exported paths, and human/default/JSON stats on
 all seven clients PASS at `254a4a295c66`. Overall follow-up acceptance is FAIL:
