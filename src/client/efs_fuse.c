@@ -5685,8 +5685,15 @@ static int deep_callback_name(const char *name)
            name[2] >= '0' && name[2] <= '9' && name[3] == '\0';
 }
 
-static uint64_t deep_callback_begin(fuse_req_t req, const char *name)
+struct deep_callback_sample {
+    uint64_t begin, service_end;
+    long pid;
+    char name[6];
+};
+
+static struct deep_callback_sample deep_callback_begin(fuse_req_t req, const char *name)
 {
+    struct deep_callback_sample sample = {0};
     static int enabled;
     static unsigned samples;
     static pid_t callers[128];
@@ -5696,10 +5703,10 @@ static uint64_t deep_callback_begin(fuse_req_t req, const char *name)
         __atomic_store_n(&enabled, state, __ATOMIC_RELEASE);
     }
     if (state != 2)
-        return 0;
+        return sample;
     const struct fuse_ctx *ctx = fuse_req_ctx(req);
     if (!ctx || ctx->pid <= 0)
-        return 0;
+        return sample;
     int selected = deep_callback_name(name), found = 0;
     for (unsigned i = 0; i < 128; ++i) {
         pid_t pid = __atomic_load_n(&callers[i], __ATOMIC_RELAXED);
@@ -5711,45 +5718,58 @@ static uint64_t deep_callback_begin(fuse_req_t req, const char *name)
         }
     }
     if (!found)
-        return 0;
-    unsigned sample = __atomic_load_n(&samples, __ATOMIC_RELAXED);
+        return sample;
+    unsigned slot = __atomic_load_n(&samples, __ATOMIC_RELAXED);
     do {
-        if (sample >= 16384)
-            return 0;
-    } while (!__atomic_compare_exchange_n(&samples, &sample, sample + 1, 0,
+        if (slot >= 16384)
+            return sample;
+    } while (!__atomic_compare_exchange_n(&samples, &slot, slot + 1, 0,
                                          __ATOMIC_RELAXED, __ATOMIC_RELAXED));
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * UINT64_C(1000000000) + (uint64_t)ts.tv_nsec;
+    sample.begin = (uint64_t)ts.tv_sec * UINT64_C(1000000000) + (uint64_t)ts.tv_nsec;
+    sample.pid = (long)ctx->pid;
+    memcpy(sample.name, selected ? name : "other", selected ? 4 : 6);
+    return sample;
 }
 
-static void deep_callback_end(fuse_req_t req, const char *op,
-                              fuse_ino_t parent, const char *name,
-                              uint64_t begin, int rc)
+/* Capture before reply without logging; the after-reply record never
+ * dereferences a freed fuse_req or its message/name buffer. */
+static void deep_callback_reply_begin(struct deep_callback_sample *sample)
 {
-    if (!begin)
+    if (!sample->begin)
+        return;
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    sample->service_end = (uint64_t)ts.tv_sec * UINT64_C(1000000000) + (uint64_t)ts.tv_nsec;
+}
+
+static void deep_callback_end(struct deep_callback_sample sample, const char *op,
+                              fuse_ino_t parent, int rc)
+{
+    if (!sample.begin)
         return;
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     uint64_t end = (uint64_t)ts.tv_sec * UINT64_C(1000000000) + (uint64_t)ts.tv_nsec;
-    const struct fuse_ctx *ctx = fuse_req_ctx(req);
-    fprintf(stderr, "PATH-PROF op=%s pid=%ld parent=%llu name=%s mono_ns=%llu elapsed_ns=%llu rc=%d\n",
-            op, ctx ? (long)ctx->pid : -1L, (unsigned long long)parent,
-            deep_callback_name(name) ? name : "other",
-            (unsigned long long)begin, (unsigned long long)(end - begin), rc);
+    fprintf(stderr, "PATH-PROF op=%s pid=%ld parent=%llu name=%s mono_ns=%llu elapsed_ns=%llu rc=%d reply_ns=%llu\n",
+            op, sample.pid, (unsigned long long)parent, sample.name,
+            (unsigned long long)sample.begin,
+            (unsigned long long)(sample.service_end - sample.begin), rc,
+            (unsigned long long)(end - sample.service_end));
 }
 
 static void ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
     struct fuse_entry_param e;
     int rc;
-    uint64_t path_begin = deep_callback_begin(req, name);
+    struct deep_callback_sample path_sample = deep_callback_begin(req, name);
     t_lookup_memo_serial = lookup_memo_start();
     t_req = req;
     rc = efs_fuse_lookup_at(parent, name, &e);
     t_lookup_memo_serial = 0;
     t_req = NULL;
-    deep_callback_end(req, "LOOKUP", parent, name, path_begin, rc);
+    deep_callback_reply_begin(&path_sample);
     if (rc)
         fuse_reply_err(req, -rc);
     else {
@@ -5760,6 +5780,7 @@ static void ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
         if (virt_kind(e.ino) == 3)
             ll_inval_entry(parent, name);
     }
+    deep_callback_end(path_sample, "LOOKUP", parent, rc);
 }
 
 static void ll_forget(fuse_req_t req, fuse_ino_t ino, uint64_t nlookup)
@@ -5784,15 +5805,16 @@ static void ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
 {
     struct stat st;
     int rc;
-    uint64_t path_begin = deep_callback_begin(req, NULL);
+    struct deep_callback_sample path_sample = deep_callback_begin(req, NULL);
     t_req = req;
     rc = efs_fuse_getattr_ino(ino, &st, fi);
     t_req = NULL;
-    deep_callback_end(req, "GETATTR", ino, NULL, path_begin, rc);
+    deep_callback_reply_begin(&path_sample);
     if (rc)
         fuse_reply_err(req, -rc);
     else
         fuse_reply_attr(req, &st, 0.0);
+    deep_callback_end(path_sample, "GETATTR", ino, rc);
 }
 
 static void ll_setattr_run(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
@@ -5854,7 +5876,7 @@ static void ll_mkdir_run(fuse_req_t req, fuse_ino_t parent, const char *name,
     struct fuse_entry_param e;
     struct efs_inode created = {0};
     int rc;
-    uint64_t path_begin = deep_callback_begin(req, name);
+    struct deep_callback_sample path_sample = deep_callback_begin(req, name);
     lookup_memo_mutation_begin();
     t_req = req;
     uint64_t previous = efs_client_rpc_deadline_ms();
@@ -5875,11 +5897,12 @@ static void ll_mkdir_run(fuse_req_t req, fuse_ino_t parent, const char *name,
     efs_client_rpc_set_deadline_ms(previous);
     lookup_memo_mutation_end();
     t_req = NULL;
-    deep_callback_end(req, "MKDIR", parent, name, path_begin, rc);
+    deep_callback_reply_begin(&path_sample);
     if (rc)
         fuse_reply_err(req, -rc);
     else
         fuse_reply_entry(req, &e);
+    deep_callback_end(path_sample, "MKDIR", parent, rc);
 }
 
 static void ll_unlink_run(fuse_req_t req, fuse_ino_t parent, const char *name)
@@ -6354,12 +6377,13 @@ static void ll_statfs(fuse_req_t req, fuse_ino_t ino)
 static void ll_access(fuse_req_t req, fuse_ino_t ino, int mask)
 {
     int rc;
-    uint64_t path_begin = deep_callback_begin(req, NULL);
+    struct deep_callback_sample path_sample = deep_callback_begin(req, NULL);
     t_req = req;
     rc = efs_fuse_access_ino(ino, mask);
     t_req = NULL;
-    deep_callback_end(req, "ACCESS", ino, NULL, path_begin, rc);
+    deep_callback_reply_begin(&path_sample);
     fuse_reply_err(req, rc ? -rc : 0);
+    deep_callback_end(path_sample, "ACCESS", ino, rc);
 }
 
 /* nfsd creates through vfs_create, which the FUSE kernel module turns

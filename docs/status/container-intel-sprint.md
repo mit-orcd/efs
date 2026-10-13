@@ -1846,3 +1846,37 @@ harness/sitecustomize observer, followed immediately by strict reclaim180.
 The earlier installed real libfuse parser probe confirmed -o max_threads=64.
 No normal profiling-OFF or final capacity acceptance for this source/config
 exists yet; any promising result requires that independent full15-gate rerun.
+
+### 2026-10-13 — 64-worker progress is informative, not acceptance
+
+Same frozen39464077ca8be5bbda784ba5cf512567fbc6aeb2, same four private
+container nodes/TCP/direct4G/eight writers, features OFF, original seven-client
+jobs16/case limits, explicit64-worker/profiling/path/batch ON. Both runtime
+proofs PASS, exact current executables/argv/start/features, max_threads64.
+Full1497/1512PASS15FAIL,128.096–141.019s: deep60 all7, crazydirs6, one
+concurrent unlink EBUSY (Intel2client1,c0-6), one crazy-roundtrip Unicode-name
+EBUSY (Intel1client1). Deep100 all7PASS. Immediate physical71.057s PASS,
+zero71.051. External raw pathprof339464077-workers64-diagnostic.
+First30s selected callers reach59–60 completed mkdir depths, compared38–41
+at32. Last three mkdir syscalls0.356–2.137s, mostly accounted for by measured
+LOOKUP+MKDIR service, unlike the large unmeasured gaps at32. More progress
+also produces more server service work: LOOKUP counts2125–2665/service16.005–
+17.451s and MKDIR59–60/service11.496–13.204s, not a decrease in their aggregate
+sum. ACCESS absent. This suggests capacity-related service gaps, but fixed
+order/retained history/profiling overhead confound a single comparison.
+No authority/cache relaxation or default worker change is accepted.
+
+Independent normal profiling-OFF full15-gate sequence at64 on the same frozen
+39464077 now executing. Runtime proofs PASS: all diagnostic flags absent,
+all requested features OFF, source/binaries and explicit64 mount args match.
+No earlier-source or diagnostic result substitutes for this acceptance run.
+
+Next local-only diagnostic improvement logs after replying and records reply
+service separately. It copies only caller PID/fixed six-byte name label and
+monotonic start into owned stack state before reply; no fuse_req/message/name
+memory is inspected after the reply frees it. elapsed_ns remains callback
+service before reply; reply_ns covers reply dispatch, with logging afterward.
+Normal path does not inspect context/read clocks/log. Local memo controls PASS;
+fresh Linux/native and live gates NOTRUN, and no deployment/build overlaps the
+executing normal mounted/reclamation sequence. This closes a measurement
+limitation; it is not a product performance fix or new read proof.
