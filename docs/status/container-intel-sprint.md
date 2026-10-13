@@ -1400,3 +1400,28 @@ ownership/identity/partial refusal/creation fallback/shutdown controls and
 ASan/UBSan PASS locally; disabled-parallel negative refuses as expected.
 Both-host native and full original-budget live qualification remain
 required. This scheduling hypothesis does not close either failed gate.
+
+### 2026-10-13 — parallel fragment deletion full qualification
+
+Exact17f7db68e5999e005ec9aded168fe8bba85b748a both-host complete affected
+native, actual dispatcher ASan/UBSan/disabled-parallel negative, durable
+late-DATA/death/checksum and KV failure/cold controls PASS. All789 frozen
+inputs match on both hosts; full source SHA is build/version identity,
+branch devel-container. Intel2 efsd SHA2569b82aefd0ab158f15c43e1896f2d59de745f97823399e6602778f58e891db6be.
+Same retained four-node4G/node private Intel containers/TCP/direct,
+8writers/20msGC/seven clients/jobs16/original case deadlines and15-gate
+sequence. Commands/.efs/expiry-date/packing/profiling OFF. Raw external
+artifacts/container-20261012/fragparallel17f7db68-{deploy,qualification}.
+Full1496/1512PASS16FAIL: deep60/crazy all7, deep100 two clients;
+133.001–139.341s. Immediate physical PASS101.715s,zero101.707; quiet core
+432/432PASS58.810/59.540s,peer134/134PASS43.890/45.474s;private mmap PASS,
+shared ENODEV skips. Lifecycle/tiny/warm/cold/global restart/deletion PASS;
+final physical PASS9.009s,zero8.996. All15 gates finished without reset.
+Physical pass applies only to this failed-directory load; no all-passing
+load or release acceptance. Bounded fragment parallelism is retained on
+this experimental branch with its exact-source safety evidence and
+reclamation pass. It does not fix directory latency. Different retained
+metadata history and failed case counts mean these sequential runs do not
+establish a matched performance comparison or cause for the two extra
+deep100 timeouts. Next diagnostic uses this same source with bounded
+existing counters and phase markers, separately from profiling-OFF verdict.
