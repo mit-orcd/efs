@@ -2114,3 +2114,7 @@ no longer needs editing a temporary node helper: start/mount --diagnostics
 qualification runner concurrent --deepsteps, followed immediately by reclaim
 (no --deepsteps). Keep logs outside Git and preserve stores. The new helper/
 phase observation is not part of tested42316531 and needs a new frozen source.
+
+Phase duration clocks use monotonic time as well as the snapshot timestamp;
+existing wall-time read-sleep logging remains unchanged. Instrumentation
+source0d8ae026 was not deployed; this correction precedes its source freeze.

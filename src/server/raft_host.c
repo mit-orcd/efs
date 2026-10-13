@@ -4192,9 +4192,9 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
         if (!round) {
             /* Admit this request BEFORE any heartbeat eligible to cover it.
              * Readers arriving during an existing round queue for the next. */
-            uint64_t lock_begin = prof ? now_us_() : 0;
+            uint64_t lock_begin = prof ? efs_batch_obs_now_us() : 0;
             pthread_mutex_lock(&h->mu);
-            if (prof) read_prof_add(&g_read_prof.ri_lock, now_us_() - lock_begin);
+            if (prof) read_prof_add(&g_read_prof.ri_lock, efs_batch_obs_now_us() - lock_begin);
             struct efs_raft *r = group_raft(h, group);
             if (!r || efs_raft_role(r) != EFS_RAFT_LEADER) {
                 pthread_mutex_unlock(&h->mu);
@@ -4227,9 +4227,9 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
              * (another reader may have begun one since the view). */
             struct efs_raft *r;
 
-            uint64_t lock_begin = prof ? now_us_() : 0;
+            uint64_t lock_begin = prof ? efs_batch_obs_now_us() : 0;
             pthread_mutex_lock(&h->mu);
-            if (prof) read_prof_add(&g_read_prof.ri_lock, now_us_() - lock_begin);
+            if (prof) read_prof_add(&g_read_prof.ri_lock, efs_batch_obs_now_us() - lock_begin);
             r = group_raft(h, group);
             rc = EFS_OK;
             if (r && efs_raft_role(r) == EFS_RAFT_LEADER &&
@@ -4237,9 +4237,9 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
                 !(efs_raft_read_round(r) >= round &&
                   efs_raft_read_covers(r, want)))
             {
-                uint64_t begin_us = prof ? now_us_() : 0;
+                uint64_t begin_us = prof ? efs_batch_obs_now_us() : 0;
                 rc = host_read_begin_tracked(h,group,r);
-                if (prof) read_prof_add(&g_read_prof.ri_begin, now_us_() - begin_us);
+                if (prof) read_prof_add(&g_read_prof.ri_begin, efs_batch_obs_now_us() - begin_us);
             }
             host_publish_group(h, group);
             pthread_mutex_unlock(&h->mu);
@@ -4262,11 +4262,12 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             (v.read_pending || host_view_wait_apply(&v, want, round, admitted_term)) &&
             !host_view_covers(&v, want, round, admitted_term)) {
             int waiting_apply = prof && host_view_wait_apply(&v, want, round, admitted_term);
+            uint64_t sleep_begin = prof ? efs_batch_obs_now_us() : 0;
             uint64_t s0 = now_us_();
             host_waiter_sleep(h, group, 1, 0, v.stamp, &end);
             s0 = now_us_() - s0;
             if (prof) read_prof_add(waiting_apply ? &g_read_prof.ri_sleep_apply :
-                                                   &g_read_prof.ri_sleep_quorum, s0);
+                                                   &g_read_prof.ri_sleep_quorum, efs_batch_obs_now_us() - sleep_begin);
             if (s0 > 20000)
                 fprintf(stderr, "raft-host: read-sleep us=%llu group=%u "
                         "want=%llu read_idx=%llu applied=%llu pending=%d\n",
