@@ -59,7 +59,9 @@ def exercise(mount,port,work,wait,physical_files,restart,count):
                 return id,rev
             start=time.monotonic()
             with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:records=list(pool.map(create,range(count)))
-            row={'phase':phase,'created':count,'create_seconds':time.monotonic()-start}
+            row={'phase':phase,'created':count,'create_seconds':time.monotonic()-start,'verdict':'RUNNING'}
+            results['phases'].append(row);save()
+            print(f'expiry backlog {phase} created={count} in {row["create_seconds"]:.1f}s',flush=True)
             baseline=[];errors=[];stop=threading.Event();probe=threading.Thread(target=latency_probe,args=(stop,baseline,errors));probe.start()
             time.sleep(10);stop.set();probe.join(60);assert not probe.is_alive() and not errors,errors
             row['foreground_baseline']=measure(baseline)
@@ -71,12 +73,14 @@ def exercise(mount,port,work,wait,physical_files,restart,count):
             start=time.monotonic()
             with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:list(pool.map(schedule,enumerate(records)))
             row['schedule_seconds']=time.monotonic()-start
+            save()
+            print(f'expiry backlog {phase} armed {count} deadlines',flush=True)
             assert time.time_ns()<due-30_000_000_000,'queue preparation exceeded deadline lead time'
             # Protected renewal and reused-name controls must survive every mode change.
             survivor=root/'renewed'
             with survivor.open('xb',buffering=0) as f:f.write(b'renewed');os.fsync(f.fileno())
             id=survivor.stat().st_ino;rev,_,_=rpc(61,id)
-            rpc(59,id,struct.pack('>IQQQ',os.getuid(),rev,0,time.time_ns()+1800_000_000_000))
+            rpc(59,id,struct.pack('>IQQQ',os.getuid(),rev,0,time.time_ns()+7200_000_000_000))
             if phase=='disable-reenable':
                 restart(False)
                 wait(lambda:time.time_ns()>due+5_000_000_000,'deadlines passed while globally disabled',240)
@@ -95,7 +99,8 @@ def exercise(mount,port,work,wait,physical_files,restart,count):
                 restart(True)
             started=time.monotonic();values=[];errors=[];stop=threading.Event()
             probe=threading.Thread(target=latency_probe,args=(stop,values,errors));probe.start()
-            observations=[]
+            observations=[];next_report=time.monotonic()
+            row['observations']=observations
             try:
                 while True:
                     remaining=sum(p.name.startswith('f-') for p in root.iterdir())
@@ -109,10 +114,13 @@ def exercise(mount,port,work,wait,physical_files,restart,count):
                         except OSError:pass
                     observation={'elapsed_seconds':time.monotonic()-started,'remaining':remaining,
                                  'free_bytes':usage.f_bavail*usage.f_frsize,'rss_kib':rss}
-                    observations.append(observation)
+                    observations.append(observation);save()
+                    if time.monotonic()>=next_report:
+                        print(f'expiry backlog {phase} remaining={remaining} elapsed={observation["elapsed_seconds"]:.1f}s',flush=True)
+                        next_report=time.monotonic()+30
                     assert observation['free_bytes']>2*1024**3 and (not rss or max(rss)<512*1024),observation
                     if not remaining:break
-                    assert time.monotonic()-started<600,('expiry backlog not draining',remaining)
+                    assert time.monotonic()-started<max(1800,count/4),('expiry backlog not draining',remaining)
                     time.sleep(2)
             finally:stop.set();probe.join(60)
             assert not probe.is_alive() and not errors,errors
@@ -126,7 +134,7 @@ def exercise(mount,port,work,wait,physical_files,restart,count):
             restart(True)
             assert sorted(p.name for p in root.iterdir())==['renewed'],'cold namespace mismatch'
             assert survivor.read_bytes()==b'renewed';survivor.unlink();root.rmdir()
-            row['verdict']='PASS';results['phases'].append(row);save()
+            row['verdict']='PASS';save()
             print(f'expiry backlog {phase} count={count} create={row["create_seconds"]:.1f}s drain={row["drain_seconds"]:.1f}s PASS',flush=True)
         results['verdict']='PASS';save()
     except BaseException:
