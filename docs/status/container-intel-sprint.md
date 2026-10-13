@@ -2036,3 +2036,41 @@ required before acceptance. Reproduce python3 tests/test_container_read_probe.py
 (with EFS_TEST_CFLAGS sanitizer flags), tests/test_read_control_host.py,
 tests/test_container_pending_reads.py and tests/test_host_outbox.py; source
 override EFS_RAFT_HOST_SOURCE permits checking the original failure.
+
+### 42316531 complete normal qualification (2026-10-13)
+
+Exact42316531fc762eb47d79557c7b111e4f4dfc5273 complete both-host native,
+ASan/UBSan, original-ACK negative and all11 container-named controls PASS.
+All792 deployed regular build inputs match; full SHA/version/devel-container
+build identity. efsd SHA256 Intel1=3761ae8dcfcd369d1dc8e5296317f94410dc0ae55c9cbaf8fbf264ac079aae39;
+Intel2=623fcebff554459fa94a385ad99056ba804ec81e02b527f32db894305934f90d.
+Actual process/start/argv/executable/config proofs PASS before and after
+global graceful restart. Same retained Intel four-node4G/node containers/
+TCP/direct,8writers/20ms progress-GC, seven cross-host FUSE clients with
+64 workers; commands/.efs/expiry-date/packing/flow/folding/profiling OFF.
+
+All15 normal gates completed: concurrent FAIL1505/1512 PASS7FAIL, only
+dir_deep_nesting on all7,113.109–140.536s. Immediate physical PASS105.730s.
+Quiet432/432 PASS55.817/57.486s; peer134/134 PASS43.973/45.670s. Private
+mmap PASS, shared ENODEV skips (not full mmap support). Lifecycle create/
+read/churn/warm verification, tiny100files/300durable generations per host,
+global client-then-daemon restart barriers, cold byte/hash verification and
+deletion PASS. Final strict physical PASS10.763s; all four nodes zero maps
+and container-body allocation. No stores reset and original case budgets/
+cleanup deadlines unchanged. Loaded acceptance remains FAIL.
+
+Reproduce the committed qualification runner on the initialized fixture:
+concurrent,reclaim,core,peer,mmap,lifecycle-create,lifecycle-read,
+lifecycle-churn,lifecycle-verify,tiny-create,restart,lifecycle-cold,
+tiny-cold,lifecycle-delete,reclaim; each --client-max-threads64, unique
+run-id, absolute external output. Use the same run-id for the first pair,
+then a separate quiet id for the rest. No --deepsteps/profiling for acceptance.
+Physical requires empty exports/zero allocation within180s; cleanup preserves
+all store history. Native/deploy/workload evidence retained externally under
+artifacts/container-20261012/pureprobe42316531-{deploy,workers64-normal,
+workers64-qualification}. Retained-history and scheduling differences limit
+comparison with39464077 (10failures) and f0 diagnostics (7failures); no matched
+causal performance claim, capacity promotion or release acceptance. Extra
+probe retains its purpose and safety controls but does not close deep timeout.
+Next same-source diagnostic will measure canonical request and reply queues
+with the committed --deepsteps runner; no new product change is made yet.
