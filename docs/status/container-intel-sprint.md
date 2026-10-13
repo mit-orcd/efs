@@ -2318,3 +2318,33 @@ concurrent/reclaim/core/peer/etc and tests/live/container_flock_ownership.py
 --mount <isolated-mount>. No push, shared-branch merge or production promotion.
 Same-source opt-in batch/path/read/raft/RPC diagnostics and --deepsteps are
 starting; no diagnostic result is yet claimed.
+
+
+### Completed 4f diagnostic and GC scheduling control; bounded container slice candidate
+
+Same-source opt-in diagnostic 4f8d4ad7: concurrent1505/1512 PASS, seven
+deep-directory deadlines FAIL; physical reclamation104.487s PASS. The first
+30-second leader window had canonical request queue mean41us, KV release
+mean2.202ms (23.756s accumulated on the pump), and pump drain mean345us.
+Homogeneous request wire batches produced **zero samples**; request send-to-ACK
+latency remains unmeasured. Reply batch means50–141us are not request RTT.
+Deep observers completed60mkdirs in26.779–28.604s; original30s includes the
+remaining leaf operations and recursive cleanup. No authority shortcut follows
+from these aggregate measurements. Raw evidence remains external under
+flock4f8d4ad7-diagnostic.
+
+A normal same-source GC progress-yield1000ms control failed1498/1512 PASS,
+14FAIL: deep_nesting and names_crazy_dirs timed out on all seven clients.
+Original physical180s gate also FAIL180.095s, with3342/3167/3329/3203
+remaining data records across n1–n4. This setting is rejected; the tested20ms
+progress yield was restored on both hosts and source/runtime proofs passed.
+No reset or payload deletion was used. External GC1000 evidence is separate
+from acceptance; only concurrent and reclamation gates ran for that control.
+
+Next candidate increases only the container bounded inbox prefix32→64 to
+amortize post-drain KV release. Ordinary files retain32. Hard256-frame inbox,
+byte bounds, stable retained-tail FIFO, group receive bounds, read/control/config
+fences, and existing post-KV durability/credit retirement remain unchanged.
+The actual scheduler fixture exercises both policies, exact initial limits,
+arrival ordering, unchanged credits and backlog wakeup. This is a hypothesis,
+not a passing directory claim; native and mounted qualification are pending.

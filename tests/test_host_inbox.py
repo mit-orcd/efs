@@ -7,6 +7,7 @@ s=(root/'src/server/raft_host.c').read_text()
 a=s.index('static void host_inbox_order(');b=s.index('\n}',a)+2
 take=s.index('static int host_inbox_take(');take_end=s.index('\n}',take)+2
 poll=s.index('static int host_pump_poll_timeout(');poll_end=s.index('\n}',poll)+2
+container_limit=int(re.search(r'#define HOST_CONTAINER_INBOX_SLICE_MAX\s+(\d+)',s).group(1))
 limit=int(re.search(r'#define HOST_INBOX_SLICE_MAX\s+(\d+)',s).group(1))
 assert 'n=host_inbox_take(h,local,done_n,done_bytes);' in s
 assert 'poll(&pfd, 1, host_pump_poll_timeout(h))' in s
@@ -24,8 +25,9 @@ code=r'''
 struct host_drain_view { uint64_t applied, term; int leader, ready; };
 static struct host_drain_view view[2]={{0,0,0,1},{0,0,0,1}};
 struct host_inbox_item {uint8_t *buf;uint32_t len;uint64_t queued_us;int read_noted;};
-struct efs_raft_host {pthread_mutex_t inbox_mu;int inbox_n;uint64_t inbox_bytes,inbox_work_n,inbox_work_bytes;struct host_inbox_item inbox[HOST_INBOX_MAX];};
-'''+f'#define HOST_INBOX_SLICE_MAX {limit}\n'+s[a:b]+s[take:take_end]+s[poll:poll_end]+r'''
+struct efsd_server {int storage_engine;};
+struct efs_raft_host {struct efsd_server *s;pthread_mutex_t inbox_mu;int inbox_n;uint64_t inbox_bytes,inbox_work_n,inbox_work_bytes;struct host_inbox_item inbox[HOST_INBOX_MAX];};
+'''+f'#define HOST_INBOX_SLICE_MAX {limit}\n#define HOST_CONTAINER_INBOX_SLICE_MAX {container_limit}\n'+s[a:b]+s[take:take_end]+s[poll:poll_end]+r'''
 static struct host_inbox_item frame(unsigned group,unsigned bytes) {
  struct host_inbox_item m={0};m.len=92+bytes;m.buf=calloc(1,m.len);assert(m.buf);
  m.buf[0]=3;m.buf[1]=group;m.buf[11]=1;m.buf[79]=1;
@@ -44,7 +46,10 @@ static void check(struct host_inbox_item *m,unsigned n) {
 int main(void) {
  /* A popped FIFO prefix cannot release durability credits, reorder an old
   * tail behind new arrivals, or sleep waiting for a drained eventfd. */
- struct efs_raft_host h={.inbox_mu=PTHREAD_MUTEX_INITIALIZER};
+ for(int engine=0;engine<2;engine++) {
+ struct efsd_server server={.storage_engine=engine};
+ int limit=engine ? HOST_CONTAINER_INBOX_SLICE_MAX : HOST_INBOX_SLICE_MAX;
+ struct efs_raft_host h={.s=&server,.inbox_mu=PTHREAD_MUTEX_INITIALIZER};
  struct host_inbox_item prefix[256];unsigned done;uint64_t bytes;
  unsigned next=200,expected=0;uint64_t accounted=0;
  for(unsigned i=0;i<next;i++) {
@@ -55,7 +60,8 @@ int main(void) {
  assert(host_pump_poll_timeout(&h)==0);
  while(h.inbox_n) {
   int n=host_inbox_take(&h,prefix,&done,&bytes);
-  assert(n>0 && n<=HOST_INBOX_SLICE_MAX && done==(unsigned)n);
+  assert(n>0 && n<=limit && done==(unsigned)n);
+  if(!expected)assert(n==limit);
   uint64_t want=0;
   for(int i=0;i<n;i++) {
    assert(prefix[i].queued_us==expected && prefix[i].buf==(void*)(uintptr_t)(expected+1));
@@ -80,6 +86,7 @@ int main(void) {
  assert(!host_inbox_take(&h,prefix,&done,&bytes) && !done && !bytes);
  assert(host_pump_poll_timeout(&h)==5);
  pthread_mutex_destroy(&h.inbox_mu);
+ }
  struct host_inbox_item m[256];unsigned o[256];
  for(unsigned i=0;i<256;i++)m[i]=frame(i%2?2:0,1);
  host_inbox_order(m,4,view,o);assert(o[0]==0&&o[1]==2&&o[2]==1&&o[3]==3);
