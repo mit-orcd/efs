@@ -178,6 +178,30 @@ int efs_recv_msg(int fd, uint8_t *type, void **payload, uint32_t *payload_len)
     if (efs_wire_frame_check_nlen(nlen) != EFS_OK)
         return EFS_ERR_PROTO;
 
+    /* Metadata and Raft control frames are small. Read type and payload
+     * together instead of a separate one-byte socket receive. Validate the
+     * length first, and keep bulk payloads landing directly at malloc base. */
+    if (nlen <= 2048) {
+        uint8_t raw[2048];
+        if (efs_recv_all(fd, raw, nlen) != 0)
+            return EFS_ERR_NET;
+        *type = raw[0];
+        plen = nlen - 1;
+        if (payload_len)
+            *payload_len = plen;
+        if (payload) {
+            *payload = NULL;
+            if (plen) {
+                uint8_t *buf = malloc(plen);
+                if (!buf)
+                    return EFS_ERR_NOMEM;
+                memcpy(buf, raw + 1, plen);
+                *payload = buf;
+            }
+        }
+        return EFS_OK;
+    }
+
     if (efs_recv_all(fd, &t, 1) != 0)
         return EFS_ERR_NET;
     *type = t;
