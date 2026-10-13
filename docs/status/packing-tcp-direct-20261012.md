@@ -13,13 +13,16 @@ independently of inherited command-enabled environment. Its summary records the
 packing and command flags. Physical packing, mutation, peer, cold-byte and
 reclamation assertions and original deadlines remain unchanged.
 
-Current candidate: **59534b9ae9eb47694214fd3ee4740e23758921d5** adds a
-queued-byte TCP receive fast path. Local absolute-deadline regression PASS;
-exact-source AMD full safety is RUNNING, quiet live repeats NOTRUN until safety
-finishes. Previous dc4ad1ed quiet core **1494/1512 PASS,18 timeouts**, peer67/67,
-cold acknowledged bytes, physical reclamation and metadata drain PASS. Three
-repeat rounds and the additional crash gate were not completed after that
-failure. Packing repeatability remains FAIL; no deadline or authority change.
+Retained code: **5568306c** reverts the unproven queued read-vote experiment;
+all tracked product/build/test inputs match tested
+**f0dd1a2d8d0f7d70eb5839a1139bac9b2556cd4f** exactly. Full normal/fault native
+and twelve focused normal/sanitizer checks PASS. First retained-code quiet round
+**1498/1512 PASS,14 timeouts** (all seven deep60 and unusual-name directories);
+peer67/67, orderly shutdown, cold acknowledged bytes, physical reclamation and
+metadata drain PASS. Second quiet retained-code round **1502/1512 PASS,10 timeouts**: seven deep60
+and unusual-name directories on clients1/4/5. Both retained rounds pass peer,
+shutdown, cold bytes, physical reclamation and metadata drain. No owned fixture
+is running. W95 packing repeatability remains FAIL, with original budgets.
 
 Historical baseline source: **0dcce384fa442479070a31464777f104c1fe7829**.
 Memtable insertion optimization and GC shutdown correction pass normal/fault
@@ -887,3 +890,151 @@ Inspect attach stderr for capture failures. For acceptance, run the documented
 quiet gc_reclamation command without this helper or observation flags. Test
 stores may be erased after processes stop under the user's AMD data waiver;
 retain diagnostic summaries/reproduction and external logs as useful.
+
+
+### Quiet receive rerun and small-frame follow-up
+
+59534b9a full normal/fault native suites, ten focused normal/sanitizer checks
+and the changed network deadline regression with ASan/UBSan PASS. Quiet round1
+is FAIL:1489/1512 core pass,23 unchanged30s timeouts (all seven deep60,
+unusual-name directories and deep100 cases, plus unusual-name roundtrip on
+clients4/5). Peer67/67, all four orderly exits0 within20s, cold acknowledged
+hashes, physical fragments and metadata drain PASS. Further repeat/crash gates
+NOTRUN after failure. Raw fixture `root-a/gc-direct-sl85cr4t`, `recv-quiet-1.log`
+and `recv-run.exit=1`; the optimization has not demonstrated end-to-end gain.
+
+The same traces showed separate socket receives for frame length, one-byte
+type and body. f0dd1a2d retains length validation before reading any type/body,
+then co-receives type+payload for frames at most2048bytes, copying at most2047
+payload bytes from a bounded stack buffer. Large data frames retain the existing
+malloc-base direct receive with no added bulk copy. No wire changes, extra
+receive buffering across messages, timeout changes or authority caching.
+The actual receiver regression checks2 receive helper calls for small frames
+versus3 for large frames, exact boundary2048/2049, empty/discarded bodies,
+fragmented delivery, header-only invalid refusal and truncated peer. Local PASS.
+
+Candidate f0dd1a2d exact input manifest774 files, aggregate
+`9123f427256fe82eb7e5988ab5b66d5e8353b327625f22534e7dbb2fc8865d26`;
+external `efs-frame-inputs.json`, source `frame-src`, build IDs f0dd1a2d/devel.
+Screen `packing-frame` sequences full normal/fault native, twelve targeted
+normal/sanitizer checks (including both network regressions), then three quiet
+rounds and focused acknowledged-fsync crash if all quiet rounds pass. Original
+4G and30/75/20/180s budgets and all disabled features are retained. Results are
+pending; no throughput or timeout-closure claim is made.
+
+
+### Small-frame quiet result and queued read-vote scheduling
+
+f0dd1a2d full native normal/fault and twelve focused normal/ASan/UBSan checks
+PASS. Quiet core1498/1512 PASS,14 unchanged30s timeouts: deep60 and
+unusual-name directories on all seven clients. Deep100 and unusual-name
+roundtrip pass in this round, but one round is no repeatability proof. Peer67/67,
+all four orderly exits0, cold hashes, physical reclamation and metadata drain
+PASS. Further repeated/crash rounds NOTRUN after failure. Raw fixture
+`root-a/gc-direct-yr4hvp__`, external `frame-quiet-1.log` and `frame-run.exit=1`.
+Normal binary hashes: efsd
+`2ae5ad52600dac6783456f6c4c95eaf9aa046ed3067494596278a97e9ba2ce2d`,
+efs-fuse `fd106455f641ed75c72617feafb51152b315ce66b6c064f0756026e0712c9bd4`,
+efs-mgmt `3042ddfdba5ef69ef397f0e13c1e2fd707036c77fe523c012a3e574614facd64`.
+These rounds compare the same quotas, hardware, concurrency and deadlines;
+18→23→14 timeouts are observations, not a statistically demonstrated gain.
+
+Code review of the traced quorum waiting path found a scheduling gap: the
+handler's existing early-control path uses trylock; a busy pump sends that
+fresh frame to ordinary FIFO slices. 4f54bd9a adds a bounded scan of at most256
+already-admitted frames under the pump's existing core mutex, noting only
+nonzero-context, header-only AE request/reply votes through the unchanged
+`efs_raft_read_control`. Successful notes are marked once. Frames are never
+removed, reordered or credited early; append/commit/apply stays on normal recv.
+Core storage-failure, boot, term, membership, persisted-prefix, current-round
+and own-apply requirements remain authoritative. A declined vote remains
+eligible for a later cycle. The snapshot releases inbox_mu before core send,
+and only the pump removes queue entries while holding h->mu; concurrent
+arrivals append after the stable snapshot indices.
+
+Focused actual-helper regression PASS for once-only notes, full256-frame bound,
+malformed/non-read/zero-context filtering, core refusal, late arrival and
+unchanged FIFO pointers/bytes/work credits. Existing FIFO regression now also
+checks the note flag survives slicing. Host flow and inbox normal checks PASS.
+Candidate input775 files, aggregate
+`e3832068a17807886444e47c7757ff8468edcd7bf588550ae044d240624373ed`;
+external `efs-votes-inputs.json`, source `votes-src`, build IDs4f54bd9a/devel.
+Screen `packing-votes` runs full native normal/fault, thirteen targeted normal
+and sanitizer checks, then the same three quiet rounds/focused crash sequence.
+Raw output `votes-*` remains external. Live outcome pending, W95 remains open.
+
+
+### Queued read-vote experiment rejected
+
+4f54bd9a full normal/fault native and thirteen focused normal/ASan/UBSan checks
+PASS, but quiet core1495/1512 PASS,17 timeouts: seven deep60, seven unusual-name
+directories, deep100 on clients3/4 and unusual-name roundtrip on client3.
+Peer67/67, orderly all-four exits0 and cold hashes PASS; physical/drain still
+running at this checkpoint. The result provides no demonstrated end-to-end
+benefit over retained small-frame code. **5568306c** reverts the pump scan,
+per-frame note field and extra scheduling regression, retaining FIFO semantics
+and the two small TCP receive improvements. `git diff --exit-code f0dd1a2d HEAD
+-- src include tests scripts Makefile` passes after revert: product inputs are
+identical to the previously safety-tested source. The experimental source and
+failure evidence remain external in `votes-*`/`gc-direct-bjrqk4yg` for diagnosis;
+no experimental scheduling machinery is retained.
+
+A sequential quiet retained-code repeat (`frame-src`, same f0dd1a2d binaries,
+port37310) waits for `votes-run.exit` before starting; external output
+`frame-quiet-recheck.log`, markers `frame-recheck.exit`/`.finished`. No concurrent
+profiling/build is performed. Its outcome is pending; no timeout is increased.
+
+
+### Final diagnostic checkpoint — retained TCP code, not qualified
+
+Retained5568306c product/build/test inputs match f0dd1a2d exactly. Full native
+normal/fault and twelve focused normal/ASan/UBSan checks PASS. Two quiet rounds
+use that same source and identified binaries, with `.efs` disabled, TCP/direct,
+packing enabled, four4G nodes and seven clients×16 jobs. No tracer/profiler/build
+runs concurrently with either round. The original30/75s cases,20s shutdown and
+180s reclamation/drain budgets are unchanged.
+
+| Exact code / run | Core PASS | Core timeout FAIL | Peer / shutdown / cold bytes / physical GC / metadata drain |
+| --- | ---: | ---: | --- |
+| dc4ad1ed baseline |1494/1512|18|PASS |
+|59534b9a queued receive |1489/1512|23|PASS |
+|f0dd1a2d small-frame, round1 |1498/1512|14|PASS |
+|4f54bd9a queued-vote experiment, reverted |1495/1512|17|PASS |
+|f0dd1a2d retained-code quiet repeat |1502/1512|10|PASS |
+
+The repeat fails deep60 on every client and unusual-name directories on
+clients1/4/5. No core test is skipped/notrun inside either216-case client core.
+Peer67/67, four orderly zero-status daemon exits, acknowledged cold hashes,
+physical fragment reclamation and metadata queue drain all PASS in both
+retained rounds. The experimental votes run also completed physical/drain PASS.
+The three-consecutive-pass acceptance and additional focused fsync crash gate
+remain NOTRUN after failures; **W95 stays open**. Counts vary across runs, so
+these data do not establish a statistical speedup. The receive changes retain
+concrete queued/framing syscall-count regressions, while unproven additional
+pump scheduling is removed to keep the runtime lean.
+
+The lower-overhead diagnostic's last observed deep60 phase is `create` on all
+seven clients; no leaf-write or recursive-cleanup phase was recorded. Collector
+errors are empty, but missing datagrams remain unknown. The next unresolved
+investigation is request-correlated fresh metadata/quorum and mutation latency
+while constructing that path, plus unusual-name directory create/read/remove
+phase timing. Aggregate idle futex/receive sums are not a causal explanation,
+and the traces do not justify weakening freshness or durability.
+
+Quiet repeat raw fixture `root-a/gc-direct-4wyz2rkg`; external
+`frame-quiet-recheck.log`, `frame-recheck.exit=1` and `.finished`. All owned
+screens, captures and private fixture processes finished; unrelated ordinary
+AMD services were untouched. Raw artifacts stay outside Git. SHA-256:
+
+- First retained quiet log: `a3d48ccbaebf2bdd793a4dc96ba3a4fbfbe065ef411bf64dc05defe11688085d`.
+- Retained quiet repeat: `fad74a58bf347b694cf5c29840e9ee3bdee52bb406563a41f512dadd02529c97`.
+- Full normal native: `953e1b35bbb60b41850de307710f0b3151a946a77f6d0ae6ebc1898af03b6c34`.
+- Full fault native: `15df864c775f0815dc9d15c23119c8fe3df9388cb273943841bb1c9bceb41678`.
+
+Reproduce retained quiet tests with the earlier common gc_reclamation command,
+fresh ports (e.g.37110 then37310), exact f0dd1a2d build identity and no diagnostic
+observation flags. Run targeted regressions with `python3
+tests/test_net_receive_deadline.py` and `python3 tests/test_small_frame_receive.py`;
+use the documented sanitizer compiler wrapper for ASan/UBSan. Erase only stopped
+EFS fixture stores under the authorized AMD waiver if capacity requires it;
+preserve the useful summaries/logs externally. No push or release promotion.
