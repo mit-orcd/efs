@@ -82,7 +82,8 @@ print(json.dumps({'hostname':os.uname().nodename,'processes_before':identity,'pr
 def main():
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('--output',type=pathlib.Path,required=True)
  p.add_argument('--seconds',type=int,default=120);p.add_argument('--interval',type=int,default=10)
- a=p.parse_args();assert 10<=a.seconds<=600 and 1<=a.interval<=60
+ p.add_argument('--jobs',type=int,default=4,help='Bound SSH session pressure; cohorts may have different observation windows')
+ a=p.parse_args();assert 10<=a.seconds<=600 and 1<=a.interval<=60 and 1<=a.jobs<=8
  a.output.mkdir(parents=True,exist_ok=True)
  source=REMOTE.replace('seconds=SECONDS;interval=INTERVAL','seconds='+str(a.seconds)+';interval='+str(a.interval))
  def one(index):
@@ -100,6 +101,6 @@ def main():
    'process_ids_after':[x['pid'] for x in row['processes_after']]}
   print(json.dumps({'host':host,'seconds':summary['seconds'],'errors':summary['collection_errors']}),flush=True)
   return summary
- with concurrent.futures.ThreadPoolExecutor(11) as pool:rows=list(pool.map(one,range(3,14)))
+ with concurrent.futures.ThreadPoolExecutor(a.jobs) as pool:rows=list(pool.map(one,range(3,14)))
  (a.output/'summary.json').write_text(json.dumps(rows,indent=2)+'\n')
 if __name__=='__main__':main()

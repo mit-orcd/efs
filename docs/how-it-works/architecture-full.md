@@ -1494,6 +1494,13 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+120s on all11 unchanged9b2fac55 processes under existing I/O; no cluster changes.
+No mlx5_2 IB/RDMA error/retry or NIC drop increments. Host TCP retransmissions
+663/64 on004/005; subsequent EFS-owned IPoIB sockets on004 show102 in30s.
+124 successful slow multi-attempt client RPCs logged, no logged transport retry
+or terminal failure pattern. Root cause OPEN; no payload/acceptance verification.
+
+[Intel cross-host network workloads](../status/intel-network-workloads-20261013.md):
 large32-file/2GiB and small20,000-file/4KiB peer-byte/rename/unlink correctness
 PASS on deployed1a737143 files/TCP/direct with all requested features OFF.
 Host TCP retransmissions35/51, NIC receive misses10/6 observed; no timeout/reset
