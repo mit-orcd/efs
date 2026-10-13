@@ -11,7 +11,7 @@ code=r'''
 #include <stdint.h>
 #include <stdio.h>
 #define EFS_RAFT_LEADER 2
-struct efs_raft {int role,pending,error;uint64_t round,commit,term;};
+struct efs_raft {int role,pending,error,quorum;uint64_t round,commit,term;};
 struct host_read_admission {uint64_t want,round,term;};
 static unsigned starts;
 static int efs_raft_role(struct efs_raft*r){return r->role;}
@@ -19,7 +19,8 @@ static uint64_t efs_raft_read_round(struct efs_raft*r){return r->round;}
 static uint64_t efs_raft_commit(struct efs_raft*r){return r->commit;}
 static uint64_t efs_raft_term(struct efs_raft*r){return r->term;}
 static int efs_raft_read_pending(struct efs_raft*r){return r->pending;}
-static int efs_raft_read_begin(struct efs_raft*r){starts++;if(r->error)return r->error;r->round++;r->pending=1;return EFS_OK;}
+static int efs_raft_read_quorum(struct efs_raft*r){return r->quorum;}
+static int efs_raft_read_begin(struct efs_raft*r){starts++;if(r->error)return r->error;r->round++;r->pending=1;r->quorum=0;return EFS_OK;}
 '''+s[a:b]+r'''
 int main(void){
  struct efs_raft r={.role=2,.round=10,.commit=40,.term=7};
@@ -35,12 +36,17 @@ int main(void){
  r.pending=0;r.commit=200;
  assert(!host_read_admit(&r,&a,&started) && started && starts==2);
  assert(a.round==12 && a.want==200 && r.round==12);
+ /* Quorum12 is complete but own apply is parked. A fresh arrival starts
+  * round13; it does not borrow round12 or return rows from pending apply. */
+ r.quorum=1;
+ assert(!host_read_admit(&r,&a,&started) && started && starts==3);
+ assert(a.round==13 && r.round==13 && r.pending && !r.quorum);
  r.pending=0;r.error=EFS_ERR_IO;
- assert(host_read_admit(&r,&a,&started)==EFS_ERR_IO && !started && starts==3);
+ assert(host_read_admit(&r,&a,&started)==EFS_ERR_IO && !started && starts==4);
  r.error=0;r.round=UINT64_MAX;
- assert(host_read_admit(&r,&a,&started)==EFS_ERR_BUSY && !started && starts==3);
+ assert(host_read_admit(&r,&a,&started)==EFS_ERR_BUSY && !started && starts==4);
  r.role=1;r.round=20;
- assert(host_read_admit(&r,&a,&started)==EFS_ERR_NOT_PRIMARY && !started && starts==3);
+ assert(host_read_admit(&r,&a,&started)==EFS_ERR_NOT_PRIMARY && !started && starts==4);
  assert(host_read_admit(NULL,&a,&started)==EFS_ERR_NOT_PRIMARY && !started);
  puts("scalar ReadIndex admission: atomic fresh start, pending floor, fresh commit, refusal and overflow PASS");
 }

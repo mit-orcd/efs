@@ -4007,7 +4007,7 @@ struct host_read_admission {uint64_t want,round,term;};
 
 /* Capture the pre-send floor and start an idle leader round in the same
  * critical section. A separate admission lock followed by a begin lock makes
- * every reader contend twice on the pump mutex. An already active round still
+ * every reader contend twice on the pump mutex. An unproven active round still
  * cannot cover this arrival: it records the NEXT round and starts nothing. */
 static int host_read_admit(struct efs_raft *r, struct host_read_admission *a,
                            int *started)
@@ -4020,7 +4020,10 @@ static int host_read_admit(struct efs_raft *r, struct host_read_admission *a,
         return EFS_ERR_BUSY;
     *a = (struct host_read_admission){efs_raft_commit(r), previous + 1,
                                      efs_raft_term(r)};
-    if (efs_raft_read_pending(r))
+    /* Quorum and own apply are distinct. A completed quorum can be retained
+     * by read_begin while a later admission starts its fresh probe. Returning
+     * rows still requires host_view_covers and the old target's own apply. */
+    if (efs_raft_read_pending(r) && !efs_raft_read_quorum(r))
         return EFS_OK;
     int rc = efs_raft_read_begin(r);
     *started = rc == EFS_OK;
@@ -4113,7 +4116,8 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             return EFS_OK;
         }
         first = 0;
-        if (!v.read_pending && !host_view_wait_apply(&v, want, round, admitted_term)) {
+        if ((!v.read_pending || v.read_done) &&
+            !host_view_wait_apply(&v, want, round, admitted_term)) {
             /* Begin a round — under h->mu, re-validated against the core
              * (another reader may have begun one since the view). */
             struct efs_raft *r;
@@ -4122,7 +4126,7 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             r = group_raft(h, group);
             rc = EFS_OK;
             if (r && efs_raft_role(r) == EFS_RAFT_LEADER &&
-                !efs_raft_read_pending(r) &&
+                (!efs_raft_read_pending(r) || efs_raft_read_quorum(r)) &&
                 !(efs_raft_read_round(r) >= round &&
                   efs_raft_read_covers(r, want)))
                 rc = efs_raft_read_begin(r);
@@ -4144,7 +4148,8 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
         pthread_mutex_lock(&h->cv_mu);
         host_view_get(h, group, &v);
         if (v.has && v.role == EFS_RAFT_LEADER && v.term == admitted_term &&
-            (v.read_pending || host_view_wait_apply(&v, want, round, admitted_term)) &&
+            ((v.read_pending && !v.read_done) ||
+             host_view_wait_apply(&v, want, round, admitted_term)) &&
             !host_view_covers(&v, want, round, admitted_term)) {
             uint64_t s0 = now_us_();
             host_waiter_sleep(h, group, 1, 0, v.stamp, &end);
@@ -4198,7 +4203,8 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
         }
         admission[local]=(struct host_read_admission){efs_raft_commit(r[local]),
             previous+1,efs_raft_term(r[local])};
-        if(!efs_raft_read_pending(r[local]))rc=efs_raft_read_begin(r[local]);
+        if(!efs_raft_read_pending(r[local]) || efs_raft_read_quorum(r[local]))
+            rc=efs_raft_read_begin(r[local]);
         host_publish_group(h,groups[local]);
         pthread_mutex_unlock(&h->mu);
         host_pump_kick(h);
@@ -4223,7 +4229,8 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
                                                   previous+1,efs_raft_term(r[i])};
     }
     for(unsigned i=0;i<2;i++) {
-        if(!efs_raft_read_pending(r[i]))rc=efs_raft_read_begin(r[i]);
+        if(!efs_raft_read_pending(r[i]) || efs_raft_read_quorum(r[i]))
+            rc=efs_raft_read_begin(r[i]);
         host_publish_group(h,groups[i]);
         if(rc!=EFS_OK)break;
     }

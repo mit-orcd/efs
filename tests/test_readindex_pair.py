@@ -12,7 +12,7 @@ code=r'''
 #include <assert.h>
 #include <stdio.h>
 #define EFS_RAFT_LEADER 2
-struct efs_raft {int role,pending,fail;uint64_t round,term,commit;};
+struct efs_raft {int role,pending,fail,quorum;uint64_t round,term,commit;};
 struct efs_raft_host {pthread_mutex_t mu;struct efs_raft core[3];int absent;};
 struct host_read_admission {uint64_t want,round,term;};
 static int begun,waits,scalar,kicks,published,wait_error;
@@ -26,7 +26,8 @@ static uint64_t efs_raft_read_round(struct efs_raft*r){return r->round;}
 static uint64_t efs_raft_term(struct efs_raft*r){return r->term;}
 static uint64_t efs_raft_commit(struct efs_raft*r){return r->commit;}
 static int efs_raft_read_pending(struct efs_raft*r){return r->pending;}
-static int efs_raft_read_begin(struct efs_raft*r){begun++;if(r->fail)return r->fail;r->round++;r->pending=1;return 0;}
+static int efs_raft_read_quorum(struct efs_raft*r){return r->quorum;}
+static int efs_raft_read_begin(struct efs_raft*r){begun++;if(r->fail)return r->fail;r->round++;r->pending=1;r->quorum=0;return 0;}
 static void host_publish_group(struct efs_raft_host*h,uint8_t g){(void)h;(void)g;published++;}
 static void host_pump_kick(struct efs_raft_host*h){(void)h;kicks++;}
 static int host_read_index(struct efs_raft_host*h,uint8_t g,int*hint){(void)hint;
@@ -62,6 +63,11 @@ int main(void){struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER};int hint=-
  assert(!host_read_index_pair(&h,0,2,&hint));assert(begun==4 && waits==4); /* new RPC needs newer rounds */
  reset(&h);h.core[0].pending=h.core[2].pending=1;
  assert(!host_read_index_pair(&h,0,2,&hint));assert(!begun && waits==2); /* waiters own next eligible rounds */
+ reset(&h);h.core[0].pending=h.core[2].pending=1;h.core[0].quorum=h.core[2].quorum=1;
+ assert(!host_read_index_pair(&h,0,2,&hint));assert(begun==2 && waits==2);
+ assert(!h.core[0].quorum && !h.core[2].quorum); /* fresh probes, not old proof authority */
+ reset(&h);h.core[2].role=0;h.core[0].pending=h.core[0].quorum=1;
+ assert(!host_read_index_pair(&h,0,2,&hint) && begun==1 && waits==1 && scalar==1);
  reset(&h);h.core[2].pending=1;assert(!host_read_index_pair(&h,0,2,&hint));assert(begun==1 && waits==2);
  reset(&h);h.core[2].role=0;assert(!host_read_index_pair(&h,0,2,&hint));assert(scalar==1 && begun==1 && waits==1 && kicks==1);
  reset(&h);h.core[0].role=0;assert(!host_read_index_pair(&h,0,2,&hint));assert(scalar==1 && begun==1 && waits==1);
