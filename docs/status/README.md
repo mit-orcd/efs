@@ -9,7 +9,11 @@ rewrite optimization and fair retained-CREATE/lease retry correction have
 regression evidence; live qualification is pending. The initial Linux
 prerequisite run stopped on a missing extracted-harness dependency, now fixed;
 the complete prerequisite run is being repeated. Deadline-aware cleanup locks
-and fair sharing of shorter inherited deadlines have deterministic regressions. Old clients 010/011 also
+and fair sharing of shorter inherited deadlines have deterministic regressions.
+`11e35f89` deployed after full native/fault/sanitizer PASS, but mounted command
+gates FAILED: startup catch-up leaked a retired ~13 GB catalogue and exhausted
+the unchanged aggregate quota. Its retirement/reader-safety fix has a native
+negative control; complete mounted and latency qualification remain pending. Old clients 010/011 also
 refused orderly drain with an exhausted identity window; explicit authorized
 discard was used for the diagnostic redeploy. The separate
 application fork/direct-read platform gate and broader W92 scale gates remain

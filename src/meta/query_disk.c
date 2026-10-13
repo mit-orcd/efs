@@ -67,6 +67,8 @@ struct fd_slot {
 struct inode_cache { struct disk_node node;uint64_t at,tick;uint32_t shard;int valid; };
 struct efs_query_disk {
     char path[EFS_MAX_PATH];
+    struct efs_query_disk *live_next;
+    dev_t view_device;ino_t view_inode;int registered;
     struct disk_part part[SHARDS];
     struct fd_slot fds[FD_CACHE];
     struct inode_cache inode_cache[INODE_CACHE];
@@ -83,6 +85,24 @@ struct efs_query_disk {
     int (*stop)(void *);void *stop_ctx;
     struct efs_query_build_failure *failure;
 };
+/* Restoring the same checkpoint can create independent handles. A private
+ * catch-up input must not unlink a generation still held by a query reader.
+ * This list tracks live handles, not namespace rows; inode identity also
+ * handles equivalent spellings of the cache root. */
+static pthread_mutex_t live_mutex=PTHREAD_MUTEX_INITIALIZER;
+static struct efs_query_disk *live_disks;
+static int register_disk(struct efs_query_disk *d)
+{
+    struct stat st;int rc=EFS_OK;
+    pthread_mutex_lock(&live_mutex);
+    if(lstat(d->path,&st))rc=EFS_ERR_IO;
+    else if(!S_ISDIR(st.st_mode))rc=EFS_ERR_PROTO;
+    else {
+        d->view_device=st.st_dev;d->view_inode=st.st_ino;d->registered=1;
+        d->live_next=live_disks;live_disks=d;
+    }
+    pthread_mutex_unlock(&live_mutex);return rc;
+}
 static int cancelled(const struct efs_query_disk *d) { return d->stop && d->stop(d->stop_ctx); }
 static int kind_at(uint8_t kind) { for(int i=0;i<KINDS;i++)if(kinds[i]==kind)return i;return -1; }
 static pthread_once_t reserve_once=PTHREAD_ONCE_INIT;
@@ -308,10 +328,18 @@ void efs_query_disk_free(struct efs_query_disk *d)
     close_cache(d);
     char current[EFS_MAX_PATH],target[EFS_MAX_PATH];
     const char *base=strrchr(d->path,'/');int keep=0;
+    pthread_mutex_lock(&live_mutex);
+    if(d->registered) {
+        struct efs_query_disk **at=&live_disks;
+        while(*at && *at!=d)at=&(*at)->live_next;
+        if(*at)*at=d->live_next;
+        for(struct efs_query_disk *other=live_disks;other;other=other->live_next)
+            if(other->view_device==d->view_device && other->view_inode==d->view_inode){keep=1;break;}
+    }
     if(base) {
         int n=snprintf(current,sizeof(current),"%.*s/current",(int)(base-d->path),d->path);
         ssize_t len=n>0 && (size_t)n<sizeof(current)?readlink(current,target,sizeof(target)-1):-1;
-        if(len>0){target[len]=0;keep=!strcmp(target,base+1);}
+        if(len>0){target[len]=0;keep=keep || !strcmp(target,base+1);}
     }
     DIR *dir=keep?NULL:opendir(d->path);
     if(dir) {
@@ -323,6 +351,7 @@ void efs_query_disk_free(struct efs_query_disk *d)
         }
         closedir(dir);rmdir(d->path);
     }
+    pthread_mutex_unlock(&live_mutex);
     if(d->budget_fd>=0)close(d->budget_fd);
     pthread_mutex_destroy(&d->mutex);free(d);
 }
@@ -1108,6 +1137,8 @@ int efs_query_disk_build_checked(const char *root,struct efs_kv_lsm_snapshot *so
     if(admitted){efs_query_disk_free(d);return admitted;}
     int n=snprintf(d->path,sizeof(d->path),"%s/view-XXXXXX",root);
     if(n<0 || (size_t)n>=sizeof(d->path) || !mkdtemp(d->path)){efs_query_disk_free(d);return EFS_ERR_IO;}
+    int registered=register_disk(d);
+    if(registered){efs_query_disk_free(d);return registered;}
     memcpy(d->lineage,lineage,sizeof(lineage));int rc=EFS_OK;
     struct raw_sync_batch sync={0};
     for(uint32_t shard=0;shard<SHARDS && !rc;shard++) {
@@ -1456,6 +1487,8 @@ int efs_query_disk_restore(const char *root,const uint64_t watermark[4],uint64_t
     d->bytes=bytes;d->limit=max_bytes;d->kv=(struct efs_kv){.ops=&raw_ops,.ctx=d};
     n=snprintf(d->path,sizeof(d->path),"%s/%s",root,base);
     if(n<0 || (size_t)n>=sizeof(d->path)){efs_query_disk_free(d);return EFS_ERR_NAMETOOLONG;}
+    int registered=register_disk(d);
+    if(registered){efs_query_disk_free(d);return registered;}
     char manifest[EFS_MAX_PATH];n=snprintf(manifest,sizeof(manifest),"%s/manifest",d->path);
     int fd=n>0 && (size_t)n<sizeof(manifest)?open(manifest,O_RDONLY|O_CLOEXEC):-1;
     uint64_t header[12];int rc=fd<0?EFS_ERR_IO:io_at(fd,header,sizeof(header),0,0);

@@ -37,6 +37,46 @@ static int check_path(void *ctx,const struct efs_name_entry *e,const char *path)
 {
     struct expected_path *p=ctx;CHECK(!strcmp(p->path,path) && p->ino==e->dentry.ino);p->count++;return 0;
 }
+static unsigned view_count(const char *root)
+{
+    unsigned count=0;DIR *dir=opendir(root);CHECK(dir);if(!dir)return 0;
+    struct dirent *entry;
+    while((entry=readdir(dir)))if(!strncmp(entry->d_name,"view-",5))count++;
+    closedir(dir);return count;
+}
+static void test_catchup_retirement(void)
+{
+    char store[]="/tmp/efs-query-retire-kv-XXXXXX",root[]="/tmp/efs-query-retire-cache-XXXXXX";
+    CHECK(mkdtemp(store));CHECK(mkdtemp(root));
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_SYNC,0,4};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
+    CHECK(kv);if(!kv)return;
+    struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t file;
+    CHECK(!efs_meta_apply_init(kv,100));
+    CHECK(!efs_meta_apply_create_file(kv,&attrs,EFS_ROOT_INO,S_IFREG|0644,"before",&file));
+    CHECK(!efs_kv_lsm_flush(kv));
+    struct efs_kv_lsm_snapshot *source=NULL;struct efs_query_catalog *catalog=NULL,*next=NULL;
+    uint64_t watermark[4]={1,2,3,4};
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));
+    CHECK(!efs_query_catalog_build_disk(root,source,NULL,4<<20,NULL,NULL,&catalog));
+    CHECK(catalog && !efs_query_catalog_checkpoint(catalog,watermark));
+    efs_query_catalog_free(catalog);catalog=NULL;efs_kv_lsm_snapshot_release(source);source=NULL;
+    CHECK(view_count(root)==1);
+    CHECK(!efs_meta_apply_rename(kv,EFS_ROOT_INO,"before",EFS_ROOT_INO,"after",200));
+    CHECK(!efs_kv_lsm_flush(kv) && !efs_kv_lsm_snapshot_pin(kv,8<<20,&source));
+    CHECK(!efs_query_catalog_catchup_disk(root,source,4<<20,NULL,NULL,&next));
+    CHECK(view_count(root)==2);
+    /* An abandoned catch-up must preserve the existing checkpoint. */
+    efs_query_catalog_free(next);next=NULL;CHECK(view_count(root)==1);
+    CHECK(!efs_query_catalog_catchup_disk(root,source,4<<20,NULL,NULL,&next));
+    watermark[0]++;CHECK(next && !efs_query_catalog_checkpoint(next,watermark));
+    CHECK(view_count(root)==1); /* The unreferenced startup input is retired. */
+    struct expected_path expected={"after",file,0};uint64_t cursor=0;
+    CHECK(next && !efs_query_catalog_page(next,EFS_ROOT_INO,EFS_NAME_EXACT,"after",0,&cursor,4096,NULL,NULL,check_path,&expected) && expected.count==1);
+    CHECK(!efs_query_catalog_build_disk(root,source,next,4<<20,NULL,NULL,&catalog));
+    CHECK(catalog && !efs_query_catalog_checkpoint(catalog,watermark));
+    efs_query_catalog_free(next);next=NULL;CHECK(view_count(root)==1);
+    efs_query_catalog_free(catalog);efs_kv_lsm_snapshot_release(source);efs_kv_lsm_close(kv);
+}
 static void test_restart_catchup(void)
 {
     char store[]="/tmp/efs-query-catchup-kv-XXXXXX",root[]="/tmp/efs-query-catchup-cache-XXXXXX";
@@ -68,6 +108,9 @@ static void test_restart_catchup(void)
     expected=(struct expected_path){"dir/new",file,0};cursor=0;
     CHECK(next && !efs_query_catalog_page(next,EFS_ROOT_INO,EFS_NAME_EXACT,"new",0,&cursor,4096,NULL,NULL,check_path,&expected) && expected.count==1);
     wm[1]++;CHECK(next && !efs_query_catalog_checkpoint(next,wm));
+    /* The independently retained old handle still serves its original cut. */
+    expected=(struct expected_path){"dir/old",file,0};cursor=0;
+    CHECK(!efs_query_catalog_page(old,EFS_ROOT_INO,EFS_NAME_EXACT,"old",0,&cursor,4096,NULL,NULL,check_path,&expected) && expected.count==1);
     efs_query_catalog_free(next);next=NULL;efs_query_catalog_free(old);old=NULL;
     efs_kv_lsm_snapshot_release(source);source=NULL;efs_kv_lsm_close(kv);
     /* Corrupt derived revisions: authority still opens, and equal numeric
@@ -82,7 +125,7 @@ static void test_restart_catchup(void)
 }
 int main(void)
 {
-    if(!getenv("EFS_QUERY_TEST_QUOTA") && !getenv("EFS_QUERY_TEST_NOSPACE"))test_restart_catchup();
+    if(!getenv("EFS_QUERY_TEST_QUOTA") && !getenv("EFS_QUERY_TEST_NOSPACE")){test_restart_catchup();test_catchup_retirement();}
     char store[256],root[256];snprintf(store,sizeof(store),"/tmp/efs-query-disk-kv-%d",getpid());snprintf(root,sizeof(root),"/tmp/efs-query-disk-cache-%d",getpid());
     struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);CHECK(kv);if(!kv)return 1;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t dir,sub,file;
