@@ -1880,3 +1880,32 @@ Normal path does not inspect context/read clocks/log. Local memo controls PASS;
 fresh Linux/native and live gates NOTRUN, and no deployment/build overlaps the
 executing normal mounted/reclamation sequence. This closes a measurement
 limitation; it is not a product performance fix or new read proof.
+
+### 2026-10-13 — complete normal64 qualification, directory gate remains open
+
+Exact39464077ca8be5bbda784ba5cf512567fbc6aeb2, explicit private64-worker
+mounts, all profiling/folding/flow flags absent, requested features OFF,
+retained four-node containers/TCP/direct4G/eight writers/20msGC/original
+seven clients/jobs16/deadlines. Both actual runtime/source proofs PASS;
+all15 normal gates completed. Loaded1502/1512PASS10FAIL: deep60 all7 and
+crazydirs3,133.153–140.125s. Diagnostic unlink/Unicode EBUSY failures did
+not recur in this normal run; that does not independently close their cause.
+Immediate strict physical115.680s PASS,zero115.652. Quiet core432/432PASS
+56.066/60.018s;peer134/134PASS45.146/47.714s; private mmap PASS/shared
+ENODEV skips. Lifecycle256x512KiB/four workers/read30/churn30/warm hashes,
+tiny100 files+300 durable generations/host/four workers/warm hashes, global
+graceful restart, all cold hashes/deletes PASS; final strict physical10.694s
+PASS,zero10.679. Global restart explicitly propagated64 and both mounts
+returned with serving clients. No production replacement or data/history reset.
+External raw pathprof339464077-workers64-{normal,qualification}; native/build
+identity remains frozen39464077 as above. Same tracked15-gate reproduction
+with --client-max-threads64, unique run IDs/output outsideGit. Worker default
+stays32;64 is a partially promising private control, not all-passing acceptance.
+Physical success covers this named failed-directory load, not a passed load.
+
+Next frozena879fac0c9b5744d7f35aa71b39c5347a8810332 has792 inputs and
+safe after-reply timing only, no authority/performance policy change. Fresh
+both-host Linux/native validation executing after every normal64 gate finished.
+Explicit diagnostic will retain64 to distinguish reply dispatch from server
+service after the prior capacity comparison. New-source loaded/cold acceptance
+NOTRUN; prior-source normal64 does not qualify a879fac0.
