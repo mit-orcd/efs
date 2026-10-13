@@ -1,4 +1,6 @@
 [ORCD package 1 deployment and open gates](orcd-package1-20261013.md):
+Current scope is feature correctness/acceptance; latency/resources are measured
+evidence and existing bounds, with no additional performance tuning.
 `d54949ec` installed native RDMA/direct/files, `.efs` client/server on,
 packing/containers/expiry off. Full normal native and six full-library query
 ASan/UBSan plus root inventory PASS. Normal deployment/marker integrity PASS,

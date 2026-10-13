@@ -17,6 +17,16 @@ later frozen-source qualification. See the
 [reviewed integration evidence](devel-reviewed-integration-20261013.md) and
 [ORCD gate ledger](orcd-efs-400g-20261012.md).
 
+## Current acceptance scope
+
+The user's subsequent clarification is **feature correctness and acceptance**.
+Latency and resource usage are measured evidence; existing deadlines and limits
+remain acceptance conditions. Do not introduce performance tuning or additional
+format compression. Fix reproducible failures that prevent the required features
+and gates from working, including catalogue admission and checked cleanup.
+Historical performance findings remain traceable without turning this acceptance
+run into an optimization project. The enabled/disabled feature matrix is unchanged.
+
 ## Features and required work
 
 | Package | Cluster | `.efs` client commands | `.efs` server queries | Small-file packing | Containers | Expiry | Transport / I/O | Required work and completion gate |

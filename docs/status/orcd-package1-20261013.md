@@ -1,5 +1,8 @@
 # ORCD package 1 — deployment and open scale gates, October 13
 
+Current user scope is feature correctness/acceptance; latency/resources are
+measurements and existing bounded gates, with no new performance tuning.
+
 Package 1 remains OPEN; all-gates acceptance is not yet PASS. See the
 [three-package assignment](three-work-packages-20261013.md). Package 2 fixes
 are being qualified on AMD; ordinary-file Intel work is independent.

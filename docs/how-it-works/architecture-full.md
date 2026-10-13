@@ -1494,6 +1494,8 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+Current scope is feature correctness/acceptance; latency/resources are measured
+evidence and existing bounds, with no additional performance tuning.
 `d54949ec` installed native RDMA/direct/files, `.efs` client/server on,
 packing/containers/expiry off. Full normal native and six full-library query
 ASan/UBSan plus root inventory PASS. Normal deployment/marker integrity PASS,
