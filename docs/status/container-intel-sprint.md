@@ -1756,3 +1756,34 @@ sanitizer/fault controls PASS. Build2026-10-13T07:06:21Z, branchdevel-container,
 fullSHA version; both deployed source proofs PASS. Explicit diagnostic run
 now in progress, profiling ON/path-prof ON, folding OFF, all requested feature
 settings unchanged. Diagnostics are not normal loaded acceptance.
+
+### 2026-10-13 — callback diagnostic exposes an unmeasured interval
+
+Exact53db7b7f7769e6321eda062b7ed476f7e8884684 diagnostic/runtime proof PASS:
+profiling/path-prof ON, folding OFF, requested features OFF, original workload.
+Full1498/1512PASS14FAIL (deep60/crazy all7),133.468–139.196s. Immediate strict
+physical95.857s PASS,zero95.850. Raw external pathprof53db7b7f-diagnostic,
+including bounded fresh log offsets, exact current TSVs and syscall phase markers.
+Logging prepends timestamps: match PATH-PROF anywhere in the line, not only at
+column zero. Initial column-zero marker check returned zero incorrectly; actual
+samples were present and runtime binary/source/settings proof was valid.
+Join deepcase create PID/monotonic interval through30s, counting only completed
+callbacks wholly inside that window:735–931 dXX LOOKUPs/client,6.852–7.569s
+service;36–41 dXX MKDIR callbacks,4.644–6.376s service. Initial recursive stat
+1.061–1.663s; completed full-path mkdir26.715–27.921s, depths36–41. Last three
+mkdir syscalls1.485–2.724s each; dXX LOOKUP service0.289–0.438s and MKDIR
+0.038–0.213s. These callbacks alone do not account for full syscall duration.
+This evidence does not justify changing cache/authority or prove kernel queue
+as cause; GETATTR and non-dXX components are not sampled in this candidate.
+
+Next diagnostic extends the explicit bounded callback observer: first exact
+dXX callback registers its positive caller PID in128 atomic diagnostic slots,
+then captures LOOKUP/GETATTR/MKDIR from those callers (GETATTR's parent field
+is its inode). Non-dXX names are labelled other to avoid multiline names.
+Saturating16384-record/client bound retained; registry saturation drops only
+samples, and normal callbacks still avoid clocks/context inspection/logging.
+No mutation fences/cache lifetime/read quorum/reply/deadline change. Local
+memo/callback controls PASS; fresh Linux/native/live gates required. Repeat the
+same original seven-client diagnostic then immediate strict reclamation, and
+join every callback to syscall intervals by PID/monotonic time; keep all raw
+logs and analysis outside Git. No acceptance claim.

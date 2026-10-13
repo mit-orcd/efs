@@ -5679,18 +5679,38 @@ static int dirbuf_add(fuse_req_t req, char *buf, size_t bufsize, size_t *used,
 /* Explicit bounded deep-path diagnostics. Normal callbacks do not read a
  * clock or write a line. This records callback service, not kernel queue time;
  * join caller PID/monotonic time to the transparent syscall observer. */
-static uint64_t deep_callback_begin(const char *name)
+static int deep_callback_name(const char *name)
+{
+    return name && name[0] == 'd' && name[1] >= '0' && name[1] <= '9' &&
+           name[2] >= '0' && name[2] <= '9' && name[3] == '\0';
+}
+
+static uint64_t deep_callback_begin(fuse_req_t req, const char *name)
 {
     static int enabled;
     static unsigned samples;
+    static pid_t callers[128];
     int state = __atomic_load_n(&enabled, __ATOMIC_ACQUIRE);
     if (!state) {
         state = getenv("EFS_RPC_PROF") && getenv("EFS_CONTAINER_PATH_PROF") ? 2 : 1;
         __atomic_store_n(&enabled, state, __ATOMIC_RELEASE);
     }
-    if (state != 2 || !name || name[0] != 'd' ||
-        name[1] < '0' || name[1] > '9' ||
-        name[2] < '0' || name[2] > '9' || name[3] != '\0')
+    if (state != 2)
+        return 0;
+    const struct fuse_ctx *ctx = fuse_req_ctx(req);
+    if (!ctx || ctx->pid <= 0)
+        return 0;
+    int selected = deep_callback_name(name), found = 0;
+    for (unsigned i = 0; i < 128; ++i) {
+        pid_t pid = __atomic_load_n(&callers[i], __ATOMIC_RELAXED);
+        if (pid == ctx->pid) { found = 1; break; }
+        if (!pid && selected) {
+            if (__atomic_compare_exchange_n(&callers[i], &pid, ctx->pid, 0,
+                                             __ATOMIC_RELAXED, __ATOMIC_RELAXED) ||
+                pid == ctx->pid) { found = 1; break; }
+        }
+    }
+    if (!found)
         return 0;
     unsigned sample = __atomic_load_n(&samples, __ATOMIC_RELAXED);
     do {
@@ -5714,7 +5734,8 @@ static void deep_callback_end(fuse_req_t req, const char *op,
     uint64_t end = (uint64_t)ts.tv_sec * UINT64_C(1000000000) + (uint64_t)ts.tv_nsec;
     const struct fuse_ctx *ctx = fuse_req_ctx(req);
     fprintf(stderr, "PATH-PROF op=%s pid=%ld parent=%llu name=%s mono_ns=%llu elapsed_ns=%llu rc=%d\n",
-            op, ctx ? (long)ctx->pid : -1L, (unsigned long long)parent, name,
+            op, ctx ? (long)ctx->pid : -1L, (unsigned long long)parent,
+            deep_callback_name(name) ? name : "other",
             (unsigned long long)begin, (unsigned long long)(end - begin), rc);
 }
 
@@ -5722,7 +5743,7 @@ static void ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
     struct fuse_entry_param e;
     int rc;
-    uint64_t path_begin = deep_callback_begin(name);
+    uint64_t path_begin = deep_callback_begin(req, name);
     t_lookup_memo_serial = lookup_memo_start();
     t_req = req;
     rc = efs_fuse_lookup_at(parent, name, &e);
@@ -5763,9 +5784,11 @@ static void ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
 {
     struct stat st;
     int rc;
+    uint64_t path_begin = deep_callback_begin(req, NULL);
     t_req = req;
     rc = efs_fuse_getattr_ino(ino, &st, fi);
     t_req = NULL;
+    deep_callback_end(req, "GETATTR", ino, NULL, path_begin, rc);
     if (rc)
         fuse_reply_err(req, -rc);
     else
@@ -5831,7 +5854,7 @@ static void ll_mkdir_run(fuse_req_t req, fuse_ino_t parent, const char *name,
     struct fuse_entry_param e;
     struct efs_inode created = {0};
     int rc;
-    uint64_t path_begin = deep_callback_begin(name);
+    uint64_t path_begin = deep_callback_begin(req, name);
     lookup_memo_mutation_begin();
     t_req = req;
     uint64_t previous = efs_client_rpc_deadline_ms();
