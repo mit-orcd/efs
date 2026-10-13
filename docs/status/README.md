@@ -1,3 +1,10 @@
+[Query temporary-peak correctness](query-sort-peak-correctness-20261013.md):
+`5f8ec779` checks sort cleanup and charges temporary copies only for their
+simultaneous lifetime, retaining unchanged16/32GiB limits and cache format.
+Bounded Linux query, quota/peak refusal, fault/cancellation, retained-reader,
+next-refresh and ASan/UBSan gates PASS. Full ORCD mounted/scale acceptance NOTRUN.
+Human scope is correctness only; no performance tuning or further compression.
+
 [ORCD package 1 deployment and open gates](orcd-package1-20261013.md):
 `19b14609` is installed on all11 with native RDMA/direct/files, .efs client/server
 on, packing/containers/expiry off; normal unmount and acknowledged markers PASS.
@@ -11,8 +18,10 @@ Baseline1a737143 core432/432, peer67/67 and600s snapshot/foreground pressure PAS
 seven-client1511/1512 FAIL. Files-admission candidate72416530 passes both-host
 native/sanitizer and upgrade hashes but REGRESSES loaded tests; rejected and
 code reverted, baseline restored (normal control1461/1512 FAIL).
-Read-only diagnostic finds paired-proof helper saturation; bounded32-helper
-files candidate locally regressed, not yet deployed. Profilers restored OFF. W97/D30/W106 remain OPEN.
+Read-only diagnostic finds paired-proof helper saturation; the unaccepted32-helper
+experiment was withdrawn by5f8ec779 after the human correctness-only scope
+clarification. Further Intel performance work is paused. Profilers restored OFF.
+W97/D30/W106 remain OPEN.
 
 [AMD package 2 compact-cache qualification](amd-package2-query-20261013.md):
 `9daee617`/`0412e5b7` reduce derived rows 584→312 bytes; comparable native
