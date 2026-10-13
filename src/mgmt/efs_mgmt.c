@@ -1437,7 +1437,7 @@ bad:
 }
 
 /* Human durations are integer quantities with explicit units, never floats. */
-static int expiry_duration(const char *text,uint64_t *out)
+static int expiry_parse_duration(const char *text,uint64_t *out)
 {
     uint64_t value=0,mult=0;const char *p=text;
     if(!*p)return -1;
@@ -1476,7 +1476,7 @@ static int cmd_expiry(int argc,char **argv,int policy)
             if(!bit || (seen&bit))goto usage;
             seen|=bit;
             if(bit==4) {if(expiry_u64(argv[i+1],&n[5]))goto usage;}
-            else if(expiry_duration(argv[i+1],&n[bit==1?3:4]))goto usage;
+            else if(expiry_parse_duration(argv[i+1],&n[bit==1?3:4]))goto usage;
         }
         if(!(seen&1) || !(seen&4))goto usage;
         if(!(seen&2))n[4]=n[3];
