@@ -16,7 +16,10 @@ int main(void)
     assert(!efs_query_refresh_due(2999,0,1000,0,1,1,256,2000));
     assert(efs_query_refresh_due(3000,0,1000,0,1,1,256,2000));
     assert(efs_query_refresh_preflight_retry(EFS_ERR_BUSY,1,199));
-    assert(!efs_query_refresh_preflight_retry(EFS_ERR_BUSY,1,200));
+    assert(efs_query_refresh_preflight_retry(EFS_ERR_BUSY,1,200));
+    assert(efs_query_refresh_preflight_retry(EFS_ERR_BUSY,1,1691));
+    assert(efs_query_refresh_preflight_retry(EFS_ERR_BUSY,1,1999));
+    assert(!efs_query_refresh_preflight_retry(EFS_ERR_BUSY,1,2000));
     assert(!efs_query_refresh_preflight_retry(EFS_ERR_BUSY,0,1));
     assert(!efs_query_refresh_preflight_retry(EFS_ERR_IO,1,1));
     assert(!efs_query_refresh_preflight_retry(EFS_ERR_NOT_PRIMARY,1,1));

@@ -9203,6 +9203,7 @@ static void *host_query_thread(void *ctx)
         uint64_t revisions[4096],import_generation[HOST_NGROUPS];
         h->query_deadline_ms=now+HOST_QUERY_BUILD_MS;
         h->query_cancel_checks=0;
+        build_failure.pending=0;
         int final_transaction_changed=0,work_enabled=efs_query_work_enabled();
         struct efs_query_capture_work work={0};
         if(work_enabled){work.dirty=dirty;uint64_t admitted=query_mono_ms();
@@ -9275,9 +9276,10 @@ static void *host_query_thread(void *ctx)
          * retain their start-to-start coalescing and pending-age reporting. */
         if (failed) last_attempt=query_mono_ms();
         if (rc && rc!=EFS_ERR_NOT_PRIMARY && (rc!=last_error || now-last_error_log>=30000)) {
-            fprintf(stderr,"query-refresh: rc=%d cap_mib=%llu initial=%d elapsed_ms=%llu\n",
+            fprintf(stderr,"query-refresh: rc=%d cap_mib=%llu initial=%d elapsed_ms=%llu stage=%s pending=%d capture_ms=%llu\n",
                     rc,(unsigned long long)(catalog_bytes>>20),initial,
-                    (unsigned long long)(query_mono_ms()-now));
+                    (unsigned long long)(query_mono_ms()-now),refresh_stage,build_failure.pending,
+                    (unsigned long long)(capture_done-now));
             last_error_log=now;
         }
         last_error=rc;

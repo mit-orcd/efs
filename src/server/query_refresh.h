@@ -45,6 +45,7 @@ static inline int efs_query_refresh_due(uint64_t now,uint64_t pending_since,
  * retains fresh pin/proofs/fences, the bounded capture burst and original deadline. */
 #define EFS_QUERY_CUT_RETRY_MS 20u
 #define EFS_QUERY_CUT_CHEAP_MS 200u
+#define EFS_QUERY_PENDING_CHEAP_MS 2000u
 /* Cheap refusals acquire no candidate disk files. Poll more frequently only
  * while seeking a coherent cut; success, authority loss and expensive errors
  * restore normal publisher polling. Neither safety proof nor request deadline
@@ -62,11 +63,14 @@ static inline int efs_query_refresh_cut_retry(int rc,int transaction_changed,uin
     return rc==EFS_ERR_BUSY && transaction_changed && capture_ms<EFS_QUERY_CUT_CHEAP_MS;
 }
 /* A confirmed pending-row preflight also rejects without candidate I/O.
- * Only cheap BUSY refusals use the same bounded fresh-capture schedule; errors,
- * shutdown/scan BUSY and expensive checks retain the existing backoff. */
+ * Confirmed blockers create no candidate files. Their prefix scan can exceed
+ * a cheap capture on large catalogs; allow up to the normal freshness interval
+ * before restoring normal backoff. Errors, shutdown/scan BUSY and still more
+ * expensive checks retain normal scheduling; the sole publisher bounds CPU
+ * concurrency and every retry acquires a new immutable source. */
 static inline int efs_query_refresh_preflight_retry(int rc,int pending,uint64_t build_ms)
 {
-    return rc==EFS_ERR_BUSY && pending && build_ms<EFS_QUERY_CUT_CHEAP_MS;
+    return rc==EFS_ERR_BUSY && pending && build_ms<EFS_QUERY_PENDING_CHEAP_MS;
 }
 static inline int efs_query_refresh_due_reason(uint64_t now,uint64_t pending_since,
     uint64_t last_attempt,uint64_t dirty,int initial,int failed,int cut_retry,
