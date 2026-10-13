@@ -22,11 +22,15 @@ if a.gate=='reclaim':
   cmd=['python3',a.base+'/intel_container_node.py','inventory','--base',a.base,'--host-index',str(index)]
   check=['python3','-c',"import json,sys;from pathlib import Path;assert any(l.split()[4]==sys.argv[1] for l in Path('/proc/self/mountinfo').read_text().splitlines()),'private export is not mounted';print(json.dumps([p.name for p in Path(sys.argv[1]).iterdir()]))",a.base+'/mnt0']
   names=json.loads(subprocess.check_output(['ssh',host,shlex.join(check)],text=True,timeout=15))
-  assert not names,(host,'reclamation requires an empty private export',names)
+  if names:raise ValueError((host,'reclamation requires an empty private export',names))
   return {'host':host,'nodes':json.loads(subprocess.check_output(['ssh',host,shlex.join(cmd)],text=True,timeout=15))}
  begin=time.monotonic();deadline=begin+180;history=[];passed=False
  while time.monotonic()<deadline:
-  with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:snapshot=list(pool.map(inventory,enumerate(['intel1_efs','intel2_efs'])))
+  try:
+   with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:snapshot=list(pool.map(inventory,enumerate(['intel1_efs','intel2_efs'])))
+  except (ValueError,subprocess.SubprocessError) as exc:
+   print(json.dumps({'gate':'reclaim','status':'NOTRUN','reason':str(exc)}),flush=True)
+   raise SystemExit(2)
   elapsed=time.monotonic()-begin;history.append({'seconds':round(elapsed,3),'hosts':snapshot})
   passed=elapsed<=180 and all(n['inventory']['data_records']==0 and n['inventory']['container_allocated']==0 for h in snapshot for n in h['nodes'])
   (a.output/('reclaim-'+a.run_id+'-history.json')).write_text(json.dumps(history,indent=2))

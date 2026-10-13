@@ -855,3 +855,30 @@ Exact capacity candidate is
 Native builds/affected controls are now running on both Intel hosts after
 the preceding qualification completed. Profiling remains off; no overlapping
 remote native work will run during live qualification or physical observers.
+
+
+Capacity c23 qualification completed incompletely: **1451 PASS,54 FAIL,
+7 NOTRUN /1512**. One runner stopped after it could not confirm worker-group
+termination; its owned test namespace remained. Immediate physical gate was
+NOTRUN because the private export was not empty, not a reclamation pass.
+Quiet core430/432 PASS with two deep60 timeouts. Remaining peer/mmap/lifecycle/
+tiny/restart/cold gates were cancelled; no success from an older SHA qualifies
+this candidate. All four private daemons stayed alive and Raft progressed.
+After workers exited, only the explicitly owned leftover test directory was
+removed; stores and metadata history were retained. Production remains separate.
+
+Normal POSIX timeout cleanup now uses the existing bounded shutdown state
+inspection: zombie-only groups are stopped; live, D-state and unknown groups
+remain failures. Original case deadlines and TERM/KILL grace are unchanged.
+Focused actual-helper positive/negative controls and full local harness self-test
+PASS. The observed live failure was not proven zombie-only. Reclamation now
+reports an invalid empty-export precondition as NOTRUN/exit2, so controllers
+can stop rather than continue with an invalid fixture.
+
+Next container placement candidate colocates both metadata leaders on the
+same committed dual-group voter when such an intersection exists. Intel
+intersection nodes2/3 prefers node3; disjoint/unknown membership retains
+fallback/refusal, and files retain their original policy. Existing settling,
+catch-up, backoff, quorum and independently fresh read checks remain mandatory.
+This is a hypothesis based on earlier colocated quiet432/432 versus split
+quiet430/432 results; native and exact-source live validation are required.

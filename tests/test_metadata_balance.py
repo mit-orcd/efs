@@ -61,13 +61,13 @@ int main(void) {
   * unhosted local group's committed mask; it never changes the voter set. */
  struct efs_server server={1};struct efs_raft r2={EFS_RAFT_FOLLOWER,7,0xe};
  memset(&h,0,sizeof(h));h.s=&server;h.g[0].r=&r;h.g[1].r=&r2;r.voters=7;
- assert(host_container_balanced_voter(&h,7,0)==1);
+ assert(host_container_balanced_voter(&h,7,0)==2);
  assert(host_container_balanced_voter(&h,0xe,1)==2);
- h.g[1].r=NULL;h.g[1].voters=0xe;assert(host_container_balanced_voter(&h,7,0)==1);
+ h.g[1].r=NULL;h.g[1].voters=0xe;assert(host_container_balanced_voter(&h,7,0)==2);
  h.g[1].voters=0;assert(host_container_balanced_voter(&h,7,0)==-1);
  h.g[1].voters=4;r.voters=1;assert(host_container_balanced_voter(&h,1,0)==0);
  assert(host_container_balanced_voter(&h,4,1)==2);
- r.voters=0xf;h.g[1].voters=0xf;assert(host_container_balanced_voter(&h,0xf,0)==0);
+ r.voters=0xf;h.g[1].voters=0xf;assert(host_container_balanced_voter(&h,0xf,0)==1);
  assert(host_container_balanced_voter(&h,0xf,1)==1);
  server.storage_engine=0;r.voters=7;h.g[1].voters=0xe;
  assert(host_container_balanced_voter(&h,7,0)==0);
@@ -75,8 +75,8 @@ int main(void) {
  server.storage_engine=1;h.balance_enabled=1;h.raft_id=0;r.role=EFS_RAFT_LEADER;
  transfer_rc=EFS_ERR_BUSY;unsigned before=calls;
  host_balance_leaders(&h,60000000);host_balance_leaders(&h,62000000);
- assert(calls==before+1&&target==1&&!h.g[0].balance_attempt_us);
- transfer_rc=EFS_OK;host_balance_leaders(&h,62010000);assert(calls==before+2&&target==1);
+ assert(calls==before+1&&target==2&&!h.g[0].balance_attempt_us);
+ transfer_rc=EFS_OK;host_balance_leaders(&h,62010000);assert(calls==before+2&&target==2);
  puts("metadata balance: opt-in, actual voter placement, grace, lag refusal and cross-term backoff PASS");
  return 0;
 }

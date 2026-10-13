@@ -6691,7 +6691,9 @@ static int host_container_balanced_voter(struct efs_raft_host *h,uint32_t voters
         if(!mask)return -1;
         common&=mask;
     }
-    return efs_raft_preferred_voter(common?common:voters,ordinal);
+    /* Colocate related fresh proofs on one committed dual-group voter.
+     * Disjoint groups still require their independent placement policy. */
+    return efs_raft_preferred_voter(common?common:voters,common?HOST_NGROUPS-1:ordinal);
 }
 
 /* Shared pump, bounded state per hosted group; no extra timer/thread/lease.
