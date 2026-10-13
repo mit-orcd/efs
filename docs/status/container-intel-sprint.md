@@ -1316,3 +1316,24 @@ the existing sst_names helper's64-byte snprintf triggers GCC format-
 truncation under Werror. No deployment. Bounded63-character precision
 retains the helper's original truncation behavior and fixes that adapter
 warning; full corrected-source native and live remain required.
+
+
+### Deferred-held flush034c04ee — all gates completed
+
+Exact034c04ee5857642a183bc185f51bc3407e4adede both-host complete
+affected native, actual KV ASan/UBSan/old-inline negative, nested holds/
+failed SST publication/real crash preserving newer unapplied WAL tail
+controls PASS. All788 deployed inputs match; full version/build identity
+set as prior procedure. Intel2 efsd SHA256191be4eae35866e55db229568045c3353b8b690e6015bb35b23bb0600ab50edf,
+FUSEa139884c35055937d5f49c7124065a7df2e9910b551001faa0c990655649d65d.
+Same retained Intel four-node4G/node containers/TCP/direct, seven clients/
+jobs16/original deadlines,8writers/20msGC; commands/.efs/expiry-date/
+packing/profiling OFF. Full1498/1512PASS14FAIL: deep60 and crazy directories
+on all7;129.569–133.110s. Immediate physical PASS158.318s,zero158.283.
+Quiet core432/432PASS56.510/57.431s;peer134/134PASS41.528/42.489s;
+private mmap PASS/shared ENODEV skips. Lifecycle/tiny/warm/cold/global
+restart/deletion PASS;finalphysical PASS40.851s,zero40.849. All15 gates
+recorded in established order; raw flush2034c04ee-deploy/qualification
+remain outside Git. No reset or production change. Safe flush scheduling
+retained, directory closure remains unproven. Physical results qualify
+only this named failed-directory workload; no release acceptance.
