@@ -561,6 +561,7 @@ test: all
 	python3 tests/test_namespace_fixture.py
 	python3 tests/test_namespace_envelope_fixture.py
 	python3 tests/test_posix_phase_trace.py
+	python3 tests/test_deepsteps_transparent.py
 	python3 tests/test_query_work_trace.py
 	python3 tests/test_gc_fixture_drain.py
 	python3 tests/test_rename_budget.py

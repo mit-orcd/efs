@@ -5838,12 +5838,15 @@ static void ll_unlink_run(fuse_req_t req, fuse_ino_t parent, const char *name)
 static void ll_rmdir_run(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
     int rc;
+    struct deep_callback_sample path_sample = deep_callback_begin(req, name);
     lookup_memo_mutation_begin();
     t_req = req;
     rc = efs_fuse_rmdir_at(parent, name);
     lookup_memo_mutation_end();
     t_req = NULL;
+    deep_callback_reply_begin(&path_sample);
     fuse_reply_err(req, rc ? -rc : 0);
+    deep_callback_end(path_sample, "RMDIR", parent, rc);
 }
 
 static void ll_symlink_run(fuse_req_t req, const char *link, fuse_ino_t parent,

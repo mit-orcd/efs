@@ -1,5 +1,17 @@
 # Intel container investigation
 
+**Diagnostic correction (2026-10-13):** historical `--deepsteps` runs using
+the observer before its capability fix wrapped `os.stat` without preserving
+Python's `os.supports_*` identity sets. A fresh Intel interpreter confirms
+`shutil.rmtree.avoids_symlink_attacks` changes from True to False: those runs
+used pathname-based cleanup rather than the normal descriptor-safe algorithm.
+Retain their measurements as instrumented-workload history, not normal-case
+cleanup timing or acceptance. This also changes cleanup across the diagnostic
+suite, even where individual calls are not traced. Normal profiling-OFF runs
+without `--deepsteps` are unaffected, including9145b7a3's1510/1512 result.
+The case AST/deadlines being unchanged was insufficient to prove observer
+transparency. Corrected capability and fresh-interpreter tests are now required.
+
 User explicitly reopened container-specific work on devel-container based on release-v0.3.2-pre-alpha, base3a41493591dcede820700db7d934da9dc10f07ee. This authorizes container investigation on this branch; the experimental backend remains excluded from unrelated release qualification and is not production-approved.
 
 Scope: Intel intel1_efs/intel2_efs, four daemon topology (two per physical host), containers engine, TCP/direct I/O, EFS_COMMANDS=0 and EFS_COMMANDS_SERVER=0, EFS_PACKED_WRITES=0. Use fresh private container roots and ports, never switch existing files roots in place. Required quota/fixture sizing follows available capacity, recorded explicitly before tests.
@@ -2731,3 +2743,43 @@ logs. Do not infer per-case causal counts from them. Planned same-product
 phase diagnostic retains fresh byte offsets and original30s/180s budgets;
 profiling is not normal acceptance. Source product remains9145b7a3 when this
 checkpoint is committed with documentation-only changes.
+
+
+## Cleanup diagnostic correction and descriptor observer
+
+Same-product9145b7a3 diagnostic completed1503/1512 PASS: all seven deep timeouts,
+plus Intel2clients1/2 names_crazy_dirs timeouts. Strict physical PASS, zero at
+112.750s before bounded collection. All seven deep workers reached leaf write/
+read and recursive cleanup; creation15.338–21.372s. Mixed leader30s window:
+124576 canonical request frames111us mean, queued reply3989mean1.478ms,
+KV release10680mean2.320ms; quorum279064mean1072us, own-apply0. Queued follower
+request means n1 9.374ms/n2 5.969ms/n4 1.888ms. These values describe the
+altered diagnostic workload identified above; they cannot establish normal
+cleanup causality or a matched normal performance improvement. External
+late9145b7a3-workers64-diagnostic contains exact source/config/offsets/verdicts
+and compact summaries; raw profiles remain outside Git.
+
+Correct the observer by preserving original function membership in supports_fd,
+supports_dir_fd, supports_follow_symlinks and supports_effective_ids for every
+replacement. Existing original functions remain supported as well. Extend
+optional timing to descriptor-relative open/lstat/fstat/rmdir/unlink and
+scandir construction using LOCAL `/proc/self/fd` attribution. Original calls,
+arguments, returned iterator/result and exception objects remain intact;
+scandir iteration is deliberately not intercepted or timed by its constructor.
+Missing/full observer sinks remain nonblocking and explicitly close sockets.
+FUSE RMDIR gains existing opt-in callback timing with its actual reply rc.
+Profiles and observers remain OFF in normal acceptance; no deadline/voter/
+storage/fsync/reclamation/permission changes are part of this candidate.
+
+`python3 tests/test_deepsteps_transparent.py` PASS locally, including capability
+identity preservation, fresh-interpreter real shutil selection, FD-relative
+attribution/delegation, result/iterator/exception identity and missing/full sink
+cleanup. Original9145b7a3 observer fails intended stat/supports_fd assertion;
+real Intel read-only startup probe shows original True capabilities become
+False/False and descriptor-safe rmtree False. Existing
+`python3 tests/test_posix_phase_trace.py` PASS with Unix-socket execution;
+its original workload AST, disabled/full/missing socket and failure/cleanup
+controls remain intact. Local unprivileged socket execution was NOTRUN due to
+sandbox restrictions and then PASS in the approved local validation context.
+Fresh both-host native and corrected diagnostic validation pending. W100's
+normal two timeouts remain open; earlier cleanup attribution is withdrawn.
