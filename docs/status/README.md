@@ -1,3 +1,8 @@
+[Merged devel ordinary-file AMD qualification](amd-devel-merged-posix-20261013.md):
+**PASS on 96f40602** — all local branch tips integrated; fresh four-node files/TCP/direct
+cluster with .efs, packing, containers and expiry disabled. Core POSIX216/216
+passes in44.0s at original deadlines. No broader acceptance claim or push.
+
 [Intel EOF/admission wrap-up](intel-eof-admission-checkpoint-20261013.md):
 PAUSED after verified human hold. Committed04f4c8c7 admission progress wait and
 1b3844d7 explicit-zero EOF correction, preserved candidate only; not deployed.
