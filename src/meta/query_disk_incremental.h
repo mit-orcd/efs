@@ -15,6 +15,8 @@ struct incremental {
     efs_ino_t changed[CHANGE_BATCH];
     struct dirty_dir initial[DIRTY_MAX];
     struct stat_change_range stat_changes[SHARDS][3];
+    struct stat_change_range alias_bounds[SHARDS];
+    uint8_t alias_known[SHARDS];
 };
 /* Each inode is visited once in the candidate stream; removed IDs occur only
  * in the old-only pass. No namespace-sized deduplication set is needed.
@@ -84,6 +86,24 @@ static int inputs_changed(const struct efs_query_disk *d,const struct efs_query_
         if(d->part[dep].revision!=old->part[dep].revision)return 1;
     }
     return 0;
+}
+/* Revisions include non-dentry edits. Reuse immutable name/alias files only
+ * after proving the entire sorted dentry family byte-identical. Counts alone
+ * never prove equality; errors/cancellation abort the candidate. */
+static int dentry_family_same(struct efs_query_disk *d,struct efs_query_disk *old,
+                              uint32_t shard,int *same)
+{
+    *same=0;if(d->part[shard].names!=old->part[shard].names)return EFS_OK;
+    uint8_t ak[EFS_KV_KEY_MAX],bk[EFS_KV_KEY_MAX],av[VALUE_MAX],bv[VALUE_MAX];
+    for(uint64_t i=0;i<d->part[shard].names;i++){
+        if(cancelled(d))return EFS_ERR_BUSY;
+        struct slot a,b;int rc=read_record(d,shard,d->part[shard].begin[1]+i,&a,ak,av);
+        if(!rc)rc=read_record(old,shard,old->part[shard].begin[1]+i,&b,bk,bv);
+        if(rc)return rc;
+        if(a.key_len!=b.key_len || a.value_len!=b.value_len ||
+           memcmp(ak,bk,a.key_len) || memcmp(av,bv,a.value_len))return EFS_OK;
+    }
+    *same=1;return EFS_OK;
 }
 /* Compare complete immutable stat-input families once. These inclusive inode
  * bounds are conservative: a hole within a changed range still uses the exact
@@ -295,14 +315,30 @@ static int changed_ino_compare(const void *ap,const void *bp)
 static int aliases_dirty_batch(struct efs_query_disk *d,struct incremental *s,
                                efs_ino_t *changed,unsigned count)
 {
+    if(!count)return cancelled(d)?EFS_ERR_BUSY:EFS_OK;
     qsort(changed,count,sizeof(*changed),changed_ino_compare);
     for(uint32_t shard=0;shard<SHARDS;shard++){
         if(cancelled(d))return EFS_ERR_BUSY;
+        if(!d->part[shard].names)continue;
+        if(!s->alias_known[shard]){
+            struct disk_alias first,last;int rc=disk_io(d,shard,'a',&first,sizeof(first),0,0);
+            if(rc)return rc;
+            if(d->part[shard].names>1)rc=disk_io(d,shard,'a',&last,sizeof(last),(d->part[shard].names-1)*sizeof(last),0);
+            else last=first;
+            if(rc)return rc;
+            if(first.child>last.child || first.ordinal>=d->part[shard].names || last.ordinal>=d->part[shard].names)return EFS_ERR_PROTO;
+            s->alias_bounds[shard]=(struct stat_change_range){first.child,last.child};
+            s->alias_known[shard]=1;
+        }
+        const struct stat_change_range *bounds=&s->alias_bounds[shard];
+        if(changed[0]>bounds->last || changed[count-1]<bounds->first)continue;
         uint64_t at=0;
         for(unsigned i=0;i<count && at<d->part[shard].names;i++){
             if(cancelled(d))return EFS_ERR_BUSY;
             if(i && changed[i]==changed[i-1])continue;
             efs_ino_t ino=changed[i];
+            if(ino<bounds->first)continue;
+            if(ino>bounds->last)break;
             uint64_t lo=at,hi=d->part[shard].names;struct disk_alias alias;int rc=EFS_OK;
             while(lo<hi){uint64_t mid=lo+(hi-lo)/2;
                 rc=disk_io(d,shard,'a',&alias,sizeof(alias),mid*sizeof(alias),0);if(rc)return rc;
@@ -371,7 +407,7 @@ static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old
     for(uint32_t shard=0;shard<SHARDS && !rc;shard++)rc=incremental_nodes(d,old,s,shard);
     nodes_done=query_build_clock();
     for(uint32_t shard=0;shard<SHARDS && !rc;shard++){
-        if(d->part[shard].revision==old->part[shard].revision)continue;
+        if(d->part[shard].revision==old->part[shard].revision || d->shared_names[shard])continue;
         /* Old-only IDs were journaled during the inode-stream merge. */
         if(!rc)rc=changed_dentries(d,old,s,shard);
     }

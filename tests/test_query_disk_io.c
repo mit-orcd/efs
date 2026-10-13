@@ -288,8 +288,14 @@ static void alias_batch_test(void)
     unsigned batch_opens=alias_opens,batch_reads=read_calls;
     CHECK(batch_opens==shards && batch_reads==2*shards && !state.count);
     close_cache(d);alias_opens=read_calls=0;
-    /* Equivalent original traversal exhausts the FD cache between IDs. */
+    /* Proven endpoints eliminate repeated opens even across separate batches. */
     for(unsigned i=0;i<CHANGE_BATCH;i++)CHECK(!aliases_dirty_batch(d,&state,ids+i,1));
+    CHECK(!alias_opens && !read_calls);
+    /* Fresh endpoint state models the uncached traversal between IDs. */
+    for(unsigned i=0;i<CHANGE_BATCH;i++){
+        memset(state.alias_known,0,sizeof(state.alias_known));
+        CHECK(!aliases_dirty_batch(d,&state,ids+i,1));
+    }
     CHECK(alias_opens==shards*CHANGE_BATCH && read_calls==2*alias_opens);
     printf("alias batch: shards=%u ids=%u opens=%u->%u reads=%u->%u\n",shards,CHANGE_BATCH,alias_opens,batch_opens,read_calls,batch_reads);
     close_cache(d);d->stop=cancel_budget;alias_opens=0;
@@ -297,6 +303,7 @@ static void alias_batch_test(void)
     d->stop=NULL;char path[EFS_MAX_PATH];
     CHECK(!filename(d,FD_CACHE/2,'a',path,sizeof(path)));
     CHECK(!truncate(path,sizeof(alias)-1));
+    memset(state.alias_known,0,sizeof(state.alias_known));
     CHECK(aliases_dirty_batch(d,&state,ids,CHANGE_BATCH)==EFS_ERR_IO);
     close_cache(d);
     for(unsigned i=0;i<shards;i++){
@@ -707,7 +714,39 @@ int main(void)
             struct efs_query_rollup totals;CHECK(!efs_query_disk_stats(old,EFS_ROOT_INO,&totals));CHECK(totals.tree_bytes==465);
             uint64_t wm[4]={1,2,3,4};CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
             CHECK(!efs_query_disk_stats(next,EFS_ROOT_INO,&totals));CHECK(totals.tree_bytes==465);
-            efs_query_disk_free(next);next=NULL;efs_kv_lsm_snapshot_release(changed);
+            efs_query_disk_free(next);next=NULL;
+            /* Non-dentry edits reuse the exact immutable name/alias inodes
+             * and their validated digests, without a redundant sync barrier. */
+            fail_sync_kind='n';sync_faults=0;
+            CHECK(!efs_query_disk_build(cache,changed,old,4<<20,NULL,NULL,NULL,&next));
+            CHECK(!sync_faults);fail_sync_kind=0;
+            if(next){
+                unsigned reused=0;
+                for(unsigned shard=0;shard<SHARDS;shard++)if(next->shared_names[shard]){
+                    reused++;
+                    const char kinds[]={'n','a'};
+                    for(unsigned j=0;j<sizeof(kinds);j++){
+                        char a[EFS_MAX_PATH],b[EFS_MAX_PATH];struct stat x,y;
+                        CHECK(!filename(old,shard,kinds[j],a,sizeof(a)));
+                        CHECK(!filename(next,shard,kinds[j],b,sizeof(b)));
+                        CHECK(!stat(a,&x) && !stat(b,&y));
+                        CHECK(x.st_dev==y.st_dev && x.st_ino==y.st_ino && x.st_size==y.st_size);
+                        unsigned digest=j?4:2;
+                        CHECK(!memcmp(old->part[shard].digest[digest],next->part[shard].digest[digest],32));
+                    }
+                }
+                CHECK(reused);
+                CHECK(!efs_query_disk_stats(next,EFS_ROOT_INO,&totals));CHECK(totals.tree_bytes==1464);
+                uint64_t newer_wm[4]={2,3,4,5};CHECK(!efs_query_disk_checkpoint(next,newer_wm));
+                struct efs_query_disk *restored=NULL;
+                CHECK(!efs_query_disk_restore(cache,newer_wm,4<<20,&restored));
+                if(restored){
+                    CHECK(!efs_query_disk_stats(restored,EFS_ROOT_INO,&totals));CHECK(totals.tree_bytes==1464);
+                    efs_query_disk_free(restored);
+                }
+                efs_query_disk_free(next);next=NULL;
+            }
+            efs_kv_lsm_snapshot_release(changed);
         }
         efs_query_disk_free(old);efs_kv_lsm_snapshot_release(source);efs_kv_lsm_close(kv);
     }

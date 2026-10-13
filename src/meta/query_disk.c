@@ -71,6 +71,7 @@ struct efs_query_disk {
     struct fd_slot fds[FD_CACHE];
     struct inode_cache inode_cache[INODE_CACHE];
     uint64_t inode_epoch;
+    uint8_t shared_names[SHARDS]; /* Proven unchanged immutable n/a files. */
     uint8_t shared_d[SHARDS]; /* Immutable old generation link until first write. */
     uint8_t fd_index[SHARDS][5]; /* Slot plus one; zero means absent. */
     pthread_mutex_t mutex;
@@ -1030,8 +1031,25 @@ int efs_query_disk_build_checked(const char *root,struct efs_kv_lsm_snapshot *so
             d->rebuilt++;rc=raw_build(d,source,shard,&sync);
             if(rc)fprintf(stderr,"query-disk: raw shard=%u rc=%d errno=%d\n",shard,rc,errno);
             if(!rc) {
-                rc=names_build(d,shard,'n');
-                if(!rc)rc=names_build(d,shard,'a');
+                int same_names=0;
+                if(old)rc=dentry_family_same(d,(struct efs_query_disk *)old,shard,&same_names);
+                if(!rc && same_names && d->part[shard].names){
+                    const char names[]={'n','a'};
+                    for(unsigned i=0;i<sizeof(names) && !rc;i++){
+                        char from[EFS_MAX_PATH],to[EFS_MAX_PATH];
+                        rc=filename(old,shard,names[i],from,sizeof(from));
+                        if(!rc)rc=filename(d,shard,names[i],to,sizeof(to));
+                        if(!rc && link(from,to))rc=EFS_ERR_IO;
+                    }
+                    if(!rc){
+                        d->shared_names[shard]=1;
+                        memcpy(d->part[shard].digest[2],old->part[shard].digest[2],32);
+                        memcpy(d->part[shard].digest[4],old->part[shard].digest[4],32);
+                    }
+                }else if(!rc){
+                    rc=names_build(d,shard,'n');
+                    if(!rc)rc=names_build(d,shard,'a');
+                }
                 if(rc)fprintf(stderr,"query-disk: names shard=%u count=%llu rc=%d errno=%d\n",shard,
                     (unsigned long long)d->part[shard].names,rc,errno);
             }
@@ -1069,7 +1087,8 @@ int efs_query_disk_build_checked(const char *root,struct efs_kv_lsm_snapshot *so
              * old completed generation. Only their new directory links need
              * persistence (the candidate-directory fsync below). Derived rows
              * and every changed raw/index/name file still require both steps. */
-            if((i!=3 && old && old->part[shard].revision==revisions[shard]) || (i==3 && d->shared_d[shard]))continue;
+            if((i!=3 && old && old->part[shard].revision==revisions[shard]) || (i==3 && d->shared_d[shard]) ||
+               ((i==2 || i==4) && d->shared_names[shard]))continue;
             char path[EFS_MAX_PATH];rc=filename(d,shard,files[i],path,sizeof(path));if(rc)break;
             int fd=open(path,O_RDONLY|O_CLOEXEC);if(fd<0){rc=EFS_ERR_IO;break;}
             /* raw_build already checked fsync on the writing descriptors for
