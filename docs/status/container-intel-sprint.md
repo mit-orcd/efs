@@ -2198,3 +2198,30 @@ worker logs (eight frames maximum); TSV verdicts, budgets and test operations
 are unchanged. This runner-only diagnostic has not yet been remotely executed.
 The generic flock error is outside the test's wrapped second-lock assertion;
 its syscall origin must be observed before changing release/lock behavior.
+
+
+### Observed unlock admission failure and bounded retry fix
+
+Frozen d9002ff471357ba618c25fb5f234b909c3274806 both-host native/sanitizer/
+792-input/live proofs PASS; normal concurrent1504/1512 PASS8FAIL: seven
+deep60timeouts and Intel1 client0 fcntl_byte_range_lock. New worker traceback
+identifies exactly posix_suite.py:2440 LOCK_UN,10bytes at offset50, returning
+EBUSY. Earlier24243a74 flock EAGAIN did not recur and remains unattributed.
+Immediate strict physical PASS105.531s; subsequent integrity controller still
+executing when this fix was prepared. Do not infer final acceptance.
+
+Production rpc_send_recv_shard returned every INODE_FLOCK BUSY immediately,
+including unlocks that have no reservation/conflict barrier for the caller to
+resolve. The fix lets only EFS_FLOCK_UN use the existing bounded BUSY retry
+path; grants retain immediate conflict replies. Owner/session/range bytes,
+16attempt cap, absolute deadlines, server generation/session checks, apply
+verdicts and append/retained-create behavior remain unchanged. LOCK_RELEASE
+is owner/range scoped and already-released ranges return OK; no authority is
+assumed from timeout. The actual production retry-loop fixture PASS normal
+and ASan/UBSan, exact packet equality and third-reply success, 16attempt
+exhaustion, inherited10ms deadline, and immediate blocking/nonblocking grant
+BUSY controls. Unmodified d9002ff4 fails the exact third-reply assertion.
+Read retry-budget and lock apply-verdict regressions PASS. Fresh both-host
+Linux/native and mounted qualification of this product fix remain pending.
+Raw artifacts stay outside Git under locktraced9002ff4-*; no production
+promotion or directory-timeout closure claim.

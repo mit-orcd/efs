@@ -621,6 +621,11 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
     union { struct efs_msg_inode_create create; struct efs_msg_inode_unlink unlink;
             struct efs_msg_inode_link link; struct efs_msg_inode_rename_at rename; } mutation;
     uint8_t create_retry[sizeof(mutation)+EFS_OPID_WIRE_LEN];
+    uint32_t flock_op = 0;
+    if (type == EFS_MSG_INODE_FLOCK && req &&
+        req_len >= sizeof(struct efs_msg_inode_flock))
+        memcpy(&flock_op, (const uint8_t *)req +
+               offsetof(struct efs_msg_inode_flock, op), sizeof(flock_op));
     int identified_create=(type==EFS_MSG_INODE_CREATE && req_len==sizeof(mutation.create)+EFS_OPID_WIRE_LEN) ||
         (type==EFS_MSG_INODE_UNLINK && req_len==sizeof(mutation.unlink)+EFS_OPID_WIRE_LEN) ||
         (type==EFS_MSG_INODE_LINK && req_len==sizeof(mutation.link)+EFS_OPID_WIRE_LEN) ||
@@ -711,7 +716,12 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
             /* INODE_APPEND uses BUSY as the unflushed-reservation barrier.
              * The caller must flush + report before retrying; spinning here
              * holds g_append_mu for ~10s and deadlocks concurrent O_APPEND. */
-            if (type == EFS_MSG_INODE_APPEND || type == EFS_MSG_INODE_FLOCK ||
+            /* An unlock has no reservation/conflict barrier for its caller
+             * to resolve. Retry the identical owner/session/range after
+             * transient authority/proposal BUSY, with the existing budget.
+             * Grants retain their immediate conflict response. */
+            if (type == EFS_MSG_INODE_APPEND ||
+                (type == EFS_MSG_INODE_FLOCK && !(flock_op & EFS_FLOCK_UN)) ||
                 type == EFS_MSG_CREATE_RETAINED) {
                 rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, 0);
                 return EFS_OK;
