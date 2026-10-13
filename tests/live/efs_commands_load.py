@@ -9,7 +9,21 @@ import sys
 import time
 import hashlib
 import statistics
-from query_rpc import query, request
+from query_rpc import query as raw_query, request
+
+def query(port, req):
+    # Consecutive-port four-node AMD fixture: the seed may not host both groups.
+    base = int(os.environ['EFS_QUERY_TEST_PORT'])
+    seen = set()
+    for _ in range(4):
+        assert port not in seen, ('query redirect loop', port, seen)
+        seen.add(port)
+        reply, text = raw_query(port, req)
+        if reply.status != -15:
+            return reply, text
+        assert 1 <= reply.primary_id <= 4, reply.primary_id
+        port = base + reply.primary_id - 1
+    raise AssertionError('query redirect bound exceeded')
 
 mount=Path(sys.argv[1])
 peer=Path(sys.argv[2])
