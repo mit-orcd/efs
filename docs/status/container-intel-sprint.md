@@ -2207,8 +2207,10 @@ Frozen d9002ff471357ba618c25fb5f234b909c3274806 both-host native/sanitizer/
 deep60timeouts and Intel1 client0 fcntl_byte_range_lock. New worker traceback
 identifies exactly posix_suite.py:2440 LOCK_UN,10bytes at offset50, returning
 EBUSY. Earlier24243a74 flock EAGAIN did not recur and remains unattributed.
-Immediate strict physical PASS105.531s; subsequent integrity controller still
-executing when this fix was prepared. Do not infer final acceptance.
+Immediate strict physical PASS105.531s; all15 controller gates completed.
+Every remaining quiet/peer/mmap/lifecycle/tiny/restart/cold/delete gate PASS;
+final physical PASS9.094s; actual both-host post-restart64-worker/profile-OFF
+configuration proofs PASS. Concurrent remains FAIL; no final acceptance.
 
 Production rpc_send_recv_shard returned every INODE_FLOCK BUSY immediately,
 including unlocks that have no reservation/conflict barrier for the caller to
