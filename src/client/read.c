@@ -144,6 +144,31 @@ static int get_one_reply(struct efs_conn *conn, struct frag_get_job *j)
     return 0;
 }
 
+/* Both preferred peers share the original pair deadline. Reserve admission
+ * time for the second peer: a cold blackholed first checkout must not consume
+ * the whole budget before the healthy request is even sent. */
+static int get_pair_start(struct frag_get_job *job, struct efs_conn **conn,
+                          const struct efs_msg_get_chunk *req, int reserve)
+{
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    if (reserve && previous) {
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        uint64_t now = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+        if (previous > now + 1)
+            efs_client_rpc_set_deadline_ms(now + (previous - now) / 2);
+    }
+    *conn = efs_client_conn_get(job->node);
+    if (*conn && efs_conn_send_msg(*conn, EFS_MSG_GET_CHUNK, req,
+                                  sizeof(*req)) != EFS_OK) {
+        efs_client_conn_drop(job->node, *conn);
+        efs_client_node_note_fail(job->node);
+        *conn = NULL;
+    }
+    efs_client_rpc_set_deadline_ms(previous);
+    return *conn != NULL;
+}
+
 static void get_two_parallel_run(struct frag_get_job *jobs)
 {
     struct efs_conn *conns[2] = {NULL, NULL};
@@ -160,9 +185,6 @@ static void get_two_parallel_run(struct frag_get_job *jobs)
         }
         if (jobs[i].node == 0 || efs_client_node_is_down(jobs[i].node))
             continue;
-        conns[i] = efs_client_conn_get(jobs[i].node);
-        if (!conns[i])
-            continue;
         memset(&req, 0, sizeof(req));
         req.export_id = g_client.export_id;
         req.ino = jobs[i].ino;
@@ -171,13 +193,10 @@ static void get_two_parallel_run(struct frag_get_job *jobs)
         if (jobs[i].chunk_generation &&
             jobs[i].chunk_generation != EFS_CHUNK_BASE_UNCOND)
             req.chunk_generation = jobs[i].chunk_generation;
-        if (efs_conn_send_msg(conns[i], EFS_MSG_GET_CHUNK, &req,
-                              sizeof(req)) != 0) {
-            efs_client_conn_drop(jobs[i].node, conns[i]);
-            efs_client_node_note_fail(jobs[i].node);
-            conns[i] = NULL;
+        int reserve = i == 0 && jobs[1].node != 0 &&
+                      !efs_client_node_is_down(jobs[1].node);
+        if (!get_pair_start(&jobs[i], &conns[i], &req, reserve))
             continue;
-        }
         pending[i] = 1;
     }
 
