@@ -833,6 +833,9 @@ static void host_sender_wait(struct host_outbox *tx, uint64_t now)
     pthread_cond_timedwait(&tx->cv,&tx->h->outbox_mu,&until);
 }
 
+static int
+outbox_pure_read_control(const uint8_t *buf,uint32_t len);
+
 static void *host_sender(void *arg)
 {
     struct host_outbox *tx = arg;
@@ -930,6 +933,23 @@ static void *host_sender(void *arg)
              * results/measure/20260930-060000-dd-wedge). Count the
              * expected replies per channel and read each on its own. */
             int n_rdma = 0, n_tcp = 0;
+            uint64_t read_wire_begin = 0;
+            int read_wire_type = 0;
+            /* Observe only homogeneous, canonical read-only batches.
+             * The entire send/transport-reply interval is one sample, not
+             * a per-frame RTT. Mixed and failed batches provide no sample.
+             * No clock or classification runs in normal mode. */
+            if (tx->preserve_read && BO_ON() && n > 0 && n <= depth) {
+                read_wire_type = bufs[0][0];
+                for (i = 0; i < n; i++)
+                    if (bufs[i][0] != read_wire_type ||
+                        !outbox_pure_read_control(bufs[i],lens[i])) {
+                        read_wire_type = 0;
+                        break;
+                    }
+                if (read_wire_type)
+                    read_wire_begin = efs_batch_obs_now_us();
+            }
 
             for (sent = 0; sent < n && sent < depth; sent++) {
                 if (efs_conn_send_msg(pc, EFS_MSG_RAFT, bufs[sent],
@@ -987,6 +1007,10 @@ static void *host_sender(void *arg)
                     n_tcp--;
                 }
             }
+            if (read_wire_begin && !bad && sent == n && acked == n)
+                BO_HIST(read_wire_type == EFS_RAFT_MSG_AE_REQ ?
+                        BH_READ_REQ_WIRE_BATCH_US : BH_READ_REPLY_WIRE_BATCH_US,
+                        efs_batch_obs_now_us() - read_wire_begin);
         }
         if (bad) {
             /* Everything unacked is lost with the conn; Raft resends. */

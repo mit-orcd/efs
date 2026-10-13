@@ -2227,3 +2227,28 @@ Read retry-budget and lock apply-verdict regressions PASS. Fresh both-host
 Linux/native and mounted qualification of this product fix remain pending.
 Raw artifacts stay outside Git under locktraced9002ff4-*; no production
 promotion or directory-timeout closure claim.
+
+
+### Homogeneous read-control wire-batch observation
+
+The e664d218 product fix passed complete native/affected sanitizers and
+792-input/live proofs on both Intel hosts, then normal concurrent1505/1512
+PASS7FAIL (only deep60, all seven clients); immediate physical PASS98.585s.
+Remaining normal integrity gates are still executing; not a final verdict.
+The unlock regression did not recur in this load, without attributing a
+performance change to one run.
+
+Opt-in sender diagnostics now include read_req_wire_batch_us and
+read_reply_wire_batch_us. One successful homogeneous canonical read-only
+batch gives one monotonic sample from immediately before the first send to
+after all transport replies and channel checks. Samples exclude address/
+connection setup and earlier queue residence, mix no requests/replies/data,
+and exclude mixed, failed or partially sent batches. They are batch intervals,
+not per-frame RTTs, quorum completion latency or deep-child-only latency;
+selection bias from excluded batches must be retained when interpreting them.
+Only container preserve_read plus batch profiling activates classification
+and clocks; normal mode does neither. No frame, selection, pipeline depth,
+feedback, ACK, authority, own-apply or durability ordering changes.
+Local actual host-outbox/ASan/negative, host-flow (Linux asynchronous portion
+not run on macOS), read-probe/control/pending-read checks PASS. Fresh Linux
+full sender compilation/execution and live measurement remain pending.
