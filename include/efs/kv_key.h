@@ -92,8 +92,11 @@ int efs_kv_key_lane(uint32_t shard, efs_ino_t ino, uint64_t gen, uint8_t lane,
                     uint8_t *out, uint32_t *len);
 int efs_kv_key_opid(uint32_t shard, const uint8_t uuid[EFS_OPID_UUID_LEN],
                     uint32_t epoch, uint8_t *out, uint32_t *len);
-/* MKDIR scatter: hash(parent, name, export_salt) & 0xFFF (§7.4). */
+/* Salted MKDIR placement: root children scatter; nested children retain the
+ * parent metadata group. Recorded legacy FileIDs keep their original shard. */
 uint32_t efs_kv_mkdir_shard(efs_ino_t parent, const char *name, uint64_t salt);
+uint32_t efs_kv_mkdir_scattered_shard(efs_ino_t parent, const char *name,
+                                    uint64_t salt);
 int efs_kv_key_ver(const uint8_t *orig, uint32_t olen, uint8_t *out, uint32_t *len);
 int efs_kv_key_intent(const uint8_t *orig, uint32_t olen, uint8_t *out, uint32_t *len);
 int efs_kv_key_guard(const uint8_t *orig, uint32_t olen, const uint8_t txid[16],
