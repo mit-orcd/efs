@@ -1494,6 +1494,15 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**PASS on `3409e0c6`** — full normal/fault native, six full-library query
+ASan/UBSan harnesses, genuine v5→v6 retirement/next refresh, quorum safety,
+commands/options/pages and final quiet load (10,268 exact peer payloads).
+Failed root fsync/abandonment and EMFILE/IO preserve the old checkpoint until
+certified replacement. Four daemons/two clients remain files/TCP/direct,
+commands enabled; packing, containers and expiry disabled. ORCD scale and
+hardware gates remain OPEN; no global W closure or push.
+
+[AMD package 2 compact-cache qualification](../status/amd-package2-query-20261013.md):
 `9daee617`/`0412e5b7` reduce derived rows 584→312 bytes; comparable native
 generation 17.96% smaller; at fixed private 5 MiB baseline refuses while candidate
 passes the full native oracle. Enabled files/TCP/direct command, options, retained

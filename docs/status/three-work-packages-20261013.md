@@ -1,10 +1,14 @@
 # Three required work packages — October 13, 2026
 
-User-assigned cluster ownership and feature scope. These packages remain OPEN;
-this table is a work assignment, not a deployment or new acceptance result.
-Use `devel` and ordinary-file storage. The current integration source is
-`1a737143`; complete AMD normal native qualification remains source-specific
-at `986b4ec0`, with matching product/test inputs. See the
+User-assigned cluster ownership and feature scope. This table records the
+assignment; each cluster's current evidence governs acceptance. **AMD package 2
+functional handoff subsequently PASSes on `3409e0c6`**: see the
+[final AMD transition/load/fault ledger](amd-package2-transition-load-20261013.md).
+ORCD scale/hardware and Intel acceptance stay with their respective ledgers;
+no global W closure is implied. Use integrated `devel` and ordinary-file storage.
+The original assignment source was `1a737143`, with earlier source-specific
+AMD native evidence at `986b4ec0`; those historical checkpoints do not supersede
+later frozen-source qualification. See the
 [reviewed integration evidence](devel-reviewed-integration-20261013.md) and
 [ORCD gate ledger](orcd-efs-400g-20261012.md).
 
@@ -46,6 +50,8 @@ ORCD testing time for its final hardware and scale gates. Unplanned-event
 repair/recovery remains deferred. Existing fault regressions still protect
 normal-operation durability; they do not expand this package into automatic
 power-loss repair. Historical branch passes and the earlier 400 GiB result do
-not close these packages on a newly integrated source. Expiry implementation
-in Git does not authorize runtime activation here. No service changes, cluster
-tests or deployment are performed by this documentation update.
+not close gates on a newly integrated source; AMD handoff is explicitly tied
+to its final source in the linked ledger. Expiry implementation
+in Git does not authorize runtime activation here. The original assignment-only update performed no service changes. Later AMD
+deployment/tests are recorded in its linked evidence; this feature matrix does
+not claim an ORCD or Intel result.
