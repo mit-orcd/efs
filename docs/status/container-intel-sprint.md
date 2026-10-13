@@ -1644,3 +1644,20 @@ RPC reply rejection, TTL and read-only hits), including MEMO_TEST_CFLAGS=
 hypothesis that unrelated simultaneous mutations suppress useful memo hits;
 no scoped memo or coherence change is implemented or justified yet.
 Build/native and separate original-workload diagnostics still required.
+
+
+Exact015b55c3 all15 profiling-OFF gates completed: full1491/1512PASS21FAIL
+and immediate physical105.053s PASS as above. Quiet core432/432PASS58.490/
+59.797s; peer134/134PASS44.810/45.269s; private mmap PASS/shared ENODEV
+skips. All lifecycle/tiny warm/cold/global controlled restart/deletion PASS;
+final physical8.994s PASS,zero8.991. Duplicate inbox optimization remains
+not accepted for loaded performance; disable it for the next investigation.
+
+Next frozen3213688badf141ab2ee4b3d3140fa62f0f2d3e59 has791 inputs and
+profiling-only memo counters. MEMO-PROF separates stored/active/fenced PUTs
+from hit/active/expired/missing TAKEs, logging every1024 TAKEs outside the
+memo mutex; missing entries alone are not evidence of mutation suppression.
+Local actual memo/callback normal and MEMO_TEST_CFLAGS sanitizers PASS.
+Both-host complete native checks in progress, live diagnostics NOTRUN yet.
+Original seven-client workload/deadlines and transparent path observer stay
+unchanged, folding OFF; .efs/expiry-date/packing OFF and TCP/direct retained.
