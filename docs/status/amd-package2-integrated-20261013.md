@@ -48,8 +48,8 @@ Installed binaries match candidate SHA256:
 
 Existing 14-second load admission, 12/30-second command/future deadlines,
 30-second commands/options and unchanged page limits were retained. No profiler
-or competing controller ran during quiet live measurements. AMD is left running
-this exact combined source with the specified enabled profile.
+or competing controller ran during quiet live measurements. AMD was left running this combined source at that checkpoint; it is now
+superseded by the [e77f6030 LOCAL-subtree qualification](query-subtree-continuation-20261013.md).
 
 ## Capacity failure and clean-slate limitation
 

@@ -1,3 +1,14 @@
+[W92/W109 bounded LOCAL recursive continuation](query-subtree-continuation-20261013.md):
+**Implemented/AMD-qualified on e77f6030** — immutable parent-range merge preserves
+global cursor ordering/bounds and spends the existing candidate budget. A tiny
+nested tree beside 20,004 unrelated names completes in five pages; global-only
+negative control fails. Fixed 28,208-byte reader state, replay/alias/tombstone,
+retained-generation/cold restore and concurrent readers PASS. Full normal/fault
+native, six full-library query sanitizers, mounted commands/options/pages and
+three quiet loads PASS (31,392 exact peer payloads). AMD runs this source with
+commands enabled, files/TCP/direct and unchanged caps; global W91/W92/W109 and
+non-LOCAL/larger-tree scale acceptance remain OPEN. No helper/deadline tuning.
+
 [ORCD RDMA/TCP cause investigation](orcd-rdma-tcp-cause-20261013.md):
 matched9b source explicitly sends oversized frames via retained TCP channel;
 actual RDMA pool84KiB. Read-only004→003 samples reproduce five then two
@@ -23,8 +34,8 @@ no performance tuning and no transfer of this result to broader acceptance.
 [AMD integrated package 2 qualification](amd-package2-integrated-20261013.md):
 **PASS on 9b2fac55** — full normal/fault native, six full-library query sanitizers,
 clean-cluster transition/retained reader, commands/options/pages and three quiet
-load rounds (29,331 exact peer payloads). AMD now runs this enabled files/TCP/direct
-source, 17G data quota and unchanged 16/32 GiB query limits. Global W91/W92/W109
+load rounds (29,331 exact peer payloads). AMD ran this enabled files/TCP/direct
+checkpoint, 17G data quota and unchanged 16/32 GiB query limits. Global W91/W92/W109
 remain OPEN: large-catalogue recursive-subtree continuation needs a bounded
 correctness fix; small AMD passes do not close ORCD's reported 30-second failures.
 
