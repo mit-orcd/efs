@@ -8749,6 +8749,14 @@ static unsigned host_gc_packed_idle(unsigned ordinary, int capped, int deleted)
 }
 
 
+/* Progress is confirmed by the expiry transaction reply, including remote
+ * coordination. Keep the same per-group work budget and yield to reads/writes;
+ * idle, clock-paused and blocked passes retain the ordinary one-second backoff. */
+static unsigned host_gc_expiry_idle(unsigned ordinary,int progress)
+{
+    return progress && ordinary>100 ? 100 : ordinary;
+}
+
 static int host_expiry_clock_read(struct efs_raft_host *h,uint64_t *wall)
 {
     struct timex tx;memset(&tx,0,sizeof(tx));int state=adjtimex(&tx);
@@ -8797,14 +8805,14 @@ static int host_expiry_delete(struct efs_raft_host *h,uint8_t group,
     return rc?EFS_ERR_BUSY:reply.rc;
 }
 
-static void host_gc_expiry_pass(struct efs_raft_host *h,uint8_t group,uint32_t anchor)
+static int host_gc_expiry_pass(struct efs_raft_host *h,uint8_t group,uint32_t anchor)
 {
-    if(!h->expiry_enabled)return;
-    uint64_t wall=0;if(!host_expiry_clock_read(h,&wall))return;
-    int hint=-1,rc=host_read_index(h,group,&hint);if(rc!=EFS_OK)return;
+    if(!h->expiry_enabled)return 0;
+    uint64_t wall=0;if(!host_expiry_clock_read(h,&wall))return 0;
+    int hint=-1,rc=host_read_index(h,group,&hint);if(rc!=EFS_OK)return 0;
     unsigned slot=group>>1;struct efs_expiry_page page;
     rc=efs_expiry_due_page(h->kv,anchor,wall,h->expiry_resuming[slot]?h->expiry_resume[slot]:NULL,&page);
-    if(rc!=EFS_OK){__atomic_fetch_add(&h->expiry_errors,1,__ATOMIC_RELAXED);return;}
+    if(rc!=EFS_OK){__atomic_fetch_add(&h->expiry_errors,1,__ATOMIC_RELAXED);return 0;}
     /* A fresh first page gives a bounded lower bound, not an exact backlog.
      * Cursor pages are work scheduling and must not masquerade as totals. */
     if(!h->expiry_resuming[slot]) {
@@ -8815,23 +8823,25 @@ static void host_gc_expiry_pass(struct efs_raft_host *h,uint8_t group,uint32_t a
     }
     __atomic_fetch_add(&h->expiry_passes,1,__ATOMIC_RELAXED);
     __atomic_store_n(&h->expiry_last_pass_us,now_us_(),__ATOMIC_RELAXED);
-    if(!page.count){h->expiry_resuming[slot]=0;return;}
+    if(!page.count){h->expiry_resuming[slot]=0;return 0;}
     struct timespec begin;clock_gettime(CLOCK_MONOTONIC,&begin);
+    unsigned processed=0;int progress=0;
     for(unsigned i=0;i<page.count && i<8 && h->gc_running;i++) {
-        if(!host_expiry_clock_read(h,&wall))return;
+        if(!host_expiry_clock_read(h,&wall))return 0;
         rc=host_expiry_delete(h,group,&page.rows[i]);
-        if(rc==EFS_OK) { /* Receiver records confirmed namespace removals. */ }
+        if(rc==EFS_OK)progress=1; /* Receiver records confirmed removals. */
         else if(rc==EFS_ERR_BUSY || rc==EFS_ERR_STALE || rc==EFS_ERR_NOT_FOUND ||
                 rc==EFS_ERR_NOT_PRIMARY || rc==EFS_ERR_NO_QUORUM)
             __atomic_fetch_add(&h->expiry_refused,1,__ATOMIC_RELAXED);
         else __atomic_fetch_add(&h->expiry_errors,1,__ATOMIC_RELAXED);
         efs_expiry_index_key(page.rows[i].ino,page.rows[i].generation,
                             page.rows[i].deadline_ns,h->expiry_resume[slot]);
-        h->expiry_resuming[slot]=1;
+        h->expiry_resuming[slot]=1;processed=i+1;
         struct timespec end;clock_gettime(CLOCK_MONOTONIC,&end);
         int64_t elapsed=(int64_t)(end.tv_sec-begin.tv_sec)*1000000000ll+end.tv_nsec-begin.tv_nsec;
         if(elapsed>=50000000ll)break;
     }
+    return progress && (processed<page.count || page.more);
 }
 
 static void *host_gc_thread(void *arg)
@@ -8845,7 +8855,7 @@ static void *host_gc_thread(void *arg)
         struct reap_times reap_times = {0};
         uint64_t removed_before = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED);
         int backlog_capped = 0;
-        int packed_capped = 0, packed_deleted = 0;
+        int packed_capped = 0, packed_deleted = 0, expiry_progress=0;
 
         __atomic_store_n(&h->s->gc_pass_start_us, efs_iostats_now_us(), __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_stage, 1, __ATOMIC_RELAXED);
@@ -8882,7 +8892,7 @@ static void *host_gc_thread(void *arg)
             ta = now_us_();
             __atomic_store_n(&h->s->gc_group, h->g[g].group, __ATOMIC_RELAXED);
             __atomic_store_n(&h->s->gc_stage, 3, __ATOMIC_RELAXED);
-            host_gc_expiry_pass(h,h->g[g].group,anchor);
+            expiry_progress |= host_gc_expiry_pass(h,h->g[g].group,anchor);
             host_gc_close_step_pass(h, h->g[g].group, anchor);
             host_gc_close_pass(h, h->g[g].group, anchor);
             host_gc_orphan_pass(h, h->g[g].group, anchor);
@@ -8968,6 +8978,7 @@ static void *host_gc_thread(void *arg)
          * a full second asleep after a saturated page made durable deletion
          * progress. This also covers remote-only placement. */
         idle_ms = host_gc_packed_idle(idle_ms, packed_capped, packed_deleted);
+        idle_ms = host_gc_expiry_idle(idle_ms, expiry_progress);
         if (idle_ms < GC_LOOP_MS && env_on("EFS_RAFT_OBS"))
             fprintf(stderr, "raft-host: gc-backlog-idle ms=%u removed=%llu\n", idle_ms,
                     (unsigned long long)(removed_after - removed_before));

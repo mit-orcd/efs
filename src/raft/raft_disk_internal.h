@@ -56,6 +56,7 @@ struct raft_log_ent {
     uint64_t term;
     uint64_t prefix_bytes; /* cumulative command bytes; local index, not disk format */
     uint64_t end_off; /* file offset after this record; 0 = replayed */
+    uint64_t payload_off; /* log position, distinct from durable end_off */
     uint32_t clen;
     uint8_t *cmd;
 };
@@ -84,8 +85,13 @@ struct raft_disk_group {
     struct raft_log_ent *log; /* log[i] is index log_base+1+i */
     uint32_t n;
     uint32_t cap;
+    uint64_t cache_bytes,cache_cursor;
+    int index_fd; /* unlinked, derived index backing; never recovery authority */
+    uint64_t index_advised;
 };
 
+#define RAFT_COMMAND_CACHE_BYTES (2u << 20)
+#define RAFT_INDEX_RESIDENT_BYTES (2u << 20)
 #define RAFT_DISK_MAX_GROUPS 256
 
 struct efs_raft_disk {
@@ -123,6 +129,8 @@ int raft_log_append(struct efs_raft_disk *d, uint8_t type,
 void raft_log_defer_begin(void);
 int raft_log_defer_end(struct efs_raft_disk *d);
 int raft_log_replay(struct efs_raft_disk *d);
+int raft_log_read_command(struct raft_disk_group *,uint32_t,int,uint8_t *);
+void raft_group_index_trim(struct raft_disk_group *);
 int raft_log_rotate_locked(struct efs_raft_disk *d);
 void raft_log_maybe_rotate_locked(struct efs_raft_disk *d);
 

@@ -40,6 +40,27 @@ static uint64_t get_u64(const uint8_t *p)
     return ((uint64_t)get_u32(p) << 32) | (uint64_t)get_u32(p + 4);
 }
 
+/* Read evicted commands from their checked original frame, under d->mu.
+ * Payload offsets are cache locations, never durable-watermark certificates. */
+int raft_log_read_command(struct raft_disk_group *g,uint32_t slot,int fd,uint8_t *out)
+{
+    struct raft_log_ent e=g->log[slot];
+    if(!e.clen)return EFS_OK;
+    if(!out || e.payload_off<33 || e.clen>RAFT_CMD_MAX)return EFS_ERR_PROTO;
+    uint32_t size=33+e.clen,done=0;uint8_t *record=g->d->rec;
+    while(done<size) {
+        ssize_t n=pread(fd,record+done,size-done,(off_t)(e.payload_off-33+done));
+        if(n<0 && errno==EINTR)continue;
+        if(n<=0)return EFS_ERR_IO;
+        done+=(uint32_t)n;
+    }
+    if(get_u32(record+4)!=size-8 || efs_crc32(record+8,size-8)!=get_u32(record) ||
+       record[8]!=RAFT_REC_ENTRY || get_u32(record+9)!=g->group ||
+       get_u64(record+13)!=g->log_base+slot+1 || get_u64(record+21)!=e.term ||
+       get_u32(record+29)!=e.clen)return EFS_ERR_PROTO;
+    memcpy(out,record+33,e.clen);return EFS_OK;
+}
+
 /* Serialize one record into d->rec; returns total length, 0 if too big. */
 static uint32_t rec_encode(struct efs_raft_disk *d, uint8_t type,
                            uint32_t group, uint64_t a, uint64_t b,
@@ -351,7 +372,7 @@ static int replay_read(struct replay_reader *r, uint8_t *p, size_t n,
     return EFS_OK;
 }
 
-static int replay_one(struct efs_raft_disk *d, const uint8_t *p, uint32_t len)
+static int replay_one(struct efs_raft_disk *d, const uint8_t *p, uint32_t len,uint64_t end)
 {
     struct raft_disk_group *g;
     uint32_t group, off = 0;
@@ -386,8 +407,9 @@ static int replay_one(struct efs_raft_disk *d, const uint8_t *p, uint32_t len)
         off += 20;
         if (clen > RAFT_CMD_MAX || len - off != clen)
             return EFS_ERR_PROTO;
-        return raft_group_put_entry(g, index, term, clen ? p + off : NULL,
-                                    clen);
+        int rc=raft_group_put_entry(g,index,term,clen?p+off:NULL,clen);
+        if(rc==EFS_OK && clen)g->log[index-g->log_base-1].payload_off=end-clen;
+        return rc;
     }
     case RAFT_REC_TRUNC:
         if (len - off != 8)
@@ -492,7 +514,7 @@ int raft_log_replay(struct efs_raft_disk *d)
         }
         if (efs_crc32(buf, paylen) != crc)
             break;
-        rc = replay_one(d, buf, paylen);
+        rc = replay_one(d, buf, paylen,off+8+paylen);
         if (rc != EFS_OK) {
             /* CRC passed, so the bytes are what we wrote — a record that
              * cannot apply means the log is inconsistent, not torn. */
@@ -518,6 +540,7 @@ int raft_log_rotate_locked(struct efs_raft_disk *d)
     uint64_t old_bytes, old_allocated;
     uint32_t i;
     int rc = EFS_OK;
+    uint8_t *scratch=NULL;uint32_t scratch_cap=0;
 
     if (d->io_failed)
         return EFS_ERR_IO;
@@ -552,11 +575,22 @@ int raft_log_rotate_locked(struct efs_raft_disk *d)
         if (rc == EFS_OK && g->have_cfg)
             rc = log_write_locked(d, RAFT_REC_CFG, g->group, g->cfg_old,
                                   g->cfg_new, NULL, 0);
-        for (k = 0; rc == EFS_OK && k < g->n; k++)
-            rc = log_write_locked(d, RAFT_REC_ENTRY, g->group,
-                                  g->log_base + 1 + k, g->log[k].term,
-                                  g->log[k].cmd, g->log[k].clen);
+        for (k = 0; rc == EFS_OK && k < g->n; k++) {
+            const uint8_t *command=g->log[k].cmd;uint32_t len=g->log[k].clen;
+            if(len && !command) {
+                if(len>scratch_cap) {
+                    uint8_t *p=realloc(scratch,len);
+                    if(!p){rc=EFS_ERR_NOMEM;break;}scratch=p;scratch_cap=len;
+                }
+                rc=raft_log_read_command(g,k,old_fd,scratch);
+                if(rc)break;command=scratch;
+            }
+            rc=log_write_locked(d,RAFT_REC_ENTRY,g->group,g->log_base+1+k,
+                                g->log[k].term,command,len);
+        }
     }
+    free(scratch);scratch=NULL;
+    /* offsets become visible only after the complete replacement is durable */
     if (rc == EFS_OK && fsync(fd) != 0)
         rc = EFS_ERR_IO;
     if (rc == EFS_OK && rename(tmp, final) != 0)
@@ -583,14 +617,18 @@ int raft_log_rotate_locked(struct efs_raft_disk *d)
     /* The rewritten file is synced. Offsets recorded against the old
      * file would look past synced_bytes and hide every later append
      * from the durable scan. Zero means "already in a synced file". */
-    for (i = 0; i < RAFT_DISK_MAX_GROUPS; i++) {
-        struct raft_disk_group *g = d->g[i];
-        uint32_t k;
-
-        if (!g)
-            continue;
-        for (k = 0; k < g->n; k++)
-            g->log[k].end_off = 0;
+    uint64_t position=RAFT_DISK_HDR_LEN;
+    for (i=0;i<RAFT_DISK_MAX_GROUPS;i++) {
+        struct raft_disk_group *g=d->g[i];if(!g)continue;
+        if(g->term || g->voted_for!=-1)position+=25;
+        if(g->snap_idx)position+=37;
+        if(g->have_cfg)position+=21;
+        for(uint32_t k=0;k<g->n;k++) {
+            g->log[k].end_off=0;
+            g->log[k].payload_off=g->log[k].clen?position+33:0;
+            position+=33+g->log[k].clen;
+        }
+        g->index_advised=0;raft_group_index_trim(g);
     }
     return EFS_OK;
 }
