@@ -1,3 +1,10 @@
+[Three required work packages and feature matrix](three-work-packages-20261013.md):
+ORCD `.efs` enabled for final RDMA/direct scale acceptance; AMD `.efs` enabled
+for fixes and functional qualification; Intel `.efs` client/server disabled for
+ordinary-file correctness/performance. Packing, containers and expiry disabled
+in all three. Packages remain OPEN; this assignment supersedes generic
+AMD-or-Intel placement for enabled `.efs` work.
+
 [Reviewed all-branch devel integration](devel-reviewed-integration-20261013.md):
 172 missing commits integrated from Mac/release, container and expiry branches;
 parallel CLOSE, KV, GC and Raft overlaps resolved explicitly. Private AMD Linux
@@ -18,7 +25,7 @@ have small native regressions and corrections in this deployment; their loaded
 mounted acceptance is still open. The original 5.569/22.044-second stalls,
 application fork/direct-read platform gate and broader scale gates remain open.
 All outstanding `.efs` work remains required: the [cluster assignment matrix](orcd-small-cluster-followups-20261013.md#required-outstanding-efs-work-and-cluster-assignment)
-assigns logic/regression development to AMD or Intel Linux, with full-scale
+assigns enabled `.efs` logic/regression development to AMD Linux, with full-scale
 seven-client RDMA/direct-I/O, cold restart, payload, latency and resource
 acceptance on ORCD. No new execution or passing verdict is implied.
 See [small-cluster development findings](orcd-small-cluster-followups-20261013.md)
