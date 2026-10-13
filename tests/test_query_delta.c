@@ -7,11 +7,12 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <ftw.h>
+#include <pthread.h>
 static int failures;
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"FAIL %d: %s\n",__LINE__,#x);failures++;}}while(0)
 static int clean_fixture(const char *path,const struct stat *st,int kind,struct FTW *walk)
 {(void)st;(void)kind;(void)walk;return remove(path);}
-int main(void)
+static int run_fixture(void)
 {
     char store[]="/tmp/efs-query-delta-kv-XXXXXX",cache[]="/tmp/efs-query-delta-cache-XXXXXX";
     CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
@@ -210,4 +211,20 @@ int main(void)
      * roots; physical traversal never follows a symlink outside them. */
     if(!failures){CHECK(!nftw(cache,clean_fixture,16,FTW_DEPTH|FTW_PHYS));CHECK(!nftw(store,clean_fixture,16,FTW_DEPTH|FTW_PHYS));}
     printf("query large delta: %s\n",failures?"FAIL":"PASS");return failures?1:0;
+}
+
+/* Exercise the production worker stack, rather than the process main stack.
+ * The incremental builder's admission-accounted scratch must fit independently
+ * of that stack size, including when a restored generation is updated. */
+static void *worker_fixture(void *unused)
+{ (void)unused;return (void *)(uintptr_t)run_fixture(); }
+int main(void)
+{
+    pthread_attr_t attr;pthread_t thread;void *result;
+    if(pthread_attr_init(&attr))return 1;
+    int rc=pthread_attr_setstacksize(&attr,1u<<20);
+    if(!rc)rc=pthread_create(&thread,&attr,worker_fixture,NULL);
+    pthread_attr_destroy(&attr);
+    if(rc || pthread_join(thread,&result))return 1;
+    return (int)(uintptr_t)result;
 }

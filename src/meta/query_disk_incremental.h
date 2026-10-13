@@ -358,36 +358,39 @@ static int parent_fold_entry(void *user,const uint8_t *key,uint32_t kn,const uin
 static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old)
 {
     uint64_t started=query_build_clock(),ranges_done=0,nodes_done=0,edges_done=0,aliases_done=0;
-    struct incremental s={.changes_fd=-1,.capacity=DIRTY_MAX};s.dirs=s.initial;int rc=EFS_OK;
-    for(uint32_t shard=0;shard<SHARDS;shard++)if(d->part[shard].revision!=old->part[shard].revision)s.changed_partitions|=UINT64_C(1)<<(shard%64);
+    /* Accounted fixed scratch belongs on the heap: server workers have 1MiB
+     * stacks, including the callers and KV/read buffers. */
+    struct incremental *s=calloc(1,sizeof(*s));if(!s)return EFS_ERR_NOMEM;
+    s->changes_fd=-1;s->capacity=DIRTY_MAX;s->dirs=s->initial;int rc=EFS_OK;
+    for(uint32_t shard=0;shard<SHARDS;shard++)if(d->part[shard].revision!=old->part[shard].revision)s->changed_partitions|=UINT64_C(1)<<(shard%64);
     for(uint32_t shard=0;shard<SHARDS && !rc;shard++){
         if(d->part[shard].revision==old->part[shard].revision)continue;
-        for(unsigned family=0;family<3 && !rc;family++)rc=stat_family_changes(d,old,&s,shard,family);
+        for(unsigned family=0;family<3 && !rc;family++)rc=stat_family_changes(d,old,s,shard,family);
     }
     ranges_done=query_build_clock();
-    for(uint32_t shard=0;shard<SHARDS && !rc;shard++)rc=incremental_nodes(d,old,&s,shard);
+    for(uint32_t shard=0;shard<SHARDS && !rc;shard++)rc=incremental_nodes(d,old,s,shard);
     nodes_done=query_build_clock();
     for(uint32_t shard=0;shard<SHARDS && !rc;shard++){
         if(d->part[shard].revision==old->part[shard].revision)continue;
         /* Old-only IDs were journaled during the inode-stream merge. */
-        if(!rc)rc=changed_dentries(d,old,&s,shard);
+        if(!rc)rc=changed_dentries(d,old,s,shard);
     }
     edges_done=query_build_clock();
-    if(!rc)rc=changed_flush(&s);
+    if(!rc)rc=changed_flush(s);
     /* Candidate derived files must all exist before aliases/parents are
      * resolved. Stream the journal with fixed scratch instead of falling
      * back to a full namespace fold at the 1,025th changed inode. */
-    for(uint64_t at=0;at<s.changes && !rc;){
-        unsigned n=s.changes-at>CHANGE_BATCH?CHANGE_BATCH:(unsigned)(s.changes-at);
-        rc=io_at(s.changes_fd,s.changed,n*sizeof(efs_ino_t),at*sizeof(efs_ino_t),0);
+    for(uint64_t at=0;at<s->changes && !rc;){
+        unsigned n=s->changes-at>CHANGE_BATCH?CHANGE_BATCH:(unsigned)(s->changes-at);
+        rc=io_at(s->changes_fd,s->changed,n*sizeof(efs_ino_t),at*sizeof(efs_ino_t),0);
         for(unsigned i=0;i<n && !rc;i++){
             if(cancelled(d)){rc=EFS_ERR_BUSY;break;}
-            struct disk_node node;int lookup=locate(d,s.changed[i],&node,NULL);
+            struct disk_node node;int lookup=locate(d,s->changed[i],&node,NULL);
             if(lookup && lookup!=EFS_ERR_NOT_FOUND){rc=lookup;break;}
-            if(!lookup && S_ISDIR(node.row.mode))rc=dirty_add(d,&s,node.row.ino);
+            if(!lookup && S_ISDIR(node.row.mode))rc=dirty_add(d,s,node.row.ino);
             /* Old edges for removed/renamed IDs already dirtied their parents. */
         }
-        if(!rc)rc=aliases_dirty_batch(d,&s,s.changed,n);
+        if(!rc)rc=aliases_dirty_batch(d,s,s->changed,n);
         at+=n;
     }
     aliases_done=query_build_clock();
@@ -395,47 +398,47 @@ static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old
      * bit rather than an index walk that could skip newly inserted ancestors. */
     while(!rc){
         struct dirty_dir *dir=NULL;
-        for(unsigned i=0;i<s.count;i++)if(!s.dirs[i].done){dir=&s.dirs[i];break;}
+        for(unsigned i=0;i<s->count;i++)if(!s->dirs[i].done){dir=&s->dirs[i];break;}
         if(!dir)break;
         dir->done=1;
         efs_ino_t ino=dir->node.row.ino,parent=dir->node.row.parent;
         if(ino!=EFS_ROOT_INO && dir->node.row.nlink){
             if(!parent || parent==ino){rc=EFS_ERR_PROTO;break;}
-            rc=dirty_add(d,&s,parent);
+            rc=dirty_add(d,s,parent);
         }
     }
-    for(unsigned i=0;i<s.count;i++){
-        memset(&s.dirs[i].node.rollup,0,sizeof(s.dirs[i].node.rollup));
-        memset(&s.dirs[i].node.link,0,sizeof(s.dirs[i].node.link));
-        s.dirs[i].node.children=0;s.dirs[i].done=0;
+    for(unsigned i=0;i<s->count;i++){
+        memset(&s->dirs[i].node.rollup,0,sizeof(s->dirs[i].node.rollup));
+        memset(&s->dirs[i].node.link,0,sizeof(s->dirs[i].node.link));
+        s->dirs[i].node.children=0;s->dirs[i].done=0;
     }
     /* Refold only affected parent prefixes. Inspect all possible layout
      * lanes and use the same placement rule as a fresh fold; this also
      * preserves validation when a source bitmap is incomplete. */
-    for(unsigned pi=0;pi<s.count && !rc;pi++){
-        struct efs_meta_row *row=&s.dirs[pi].node.row;
+    for(unsigned pi=0;pi<s->count && !rc;pi++){
+        struct efs_meta_row *row=&s->dirs[pi].node.row;
         unsigned lanes=row->layout==EFS_META_LAYOUT_LOCAL?1:EFS_META_LANES;
         for(unsigned lane=0;lane<lanes && !rc;lane++){
-            struct parent_fold ctx={d,&s,efs_kv_lane_shard(row->ino,(uint8_t)lane)};
+            struct parent_fold ctx={d,s,efs_kv_lane_shard(row->ino,(uint8_t)lane)};
             uint8_t prefix[EFS_KV_KEY_MAX];uint32_t length;
             rc=efs_kv_key_dentry_prefix(ctx.shard,row->ino,prefix,&length);
             if(!rc)rc=raw_prefix(d,prefix,length,parent_fold_entry,&ctx);
         }
     }
-    for(unsigned i=0;i<s.count && !rc;i++){
-        struct dirty_dir *dir=&s.dirs[i];struct efs_query_rollup *r=&dir->node.rollup;
+    for(unsigned i=0;i<s->count && !rc;i++){
+        struct dirty_dir *dir=&s->dirs[i];struct efs_query_rollup *r=&dir->node.rollup;
         if(dir->node.row.nlink && dir->node.row.ino!=EFS_ROOT_INO && !dir->node.link.parent){rc=EFS_ERR_IO;break;}
         int has=r->tree_files || r->tree_dirs;
         rc=rollup_tree_add(r,r->imm_files,r->imm_dirs,r->imm_bytes);if(rc)break;
         if(r->imm_files+r->imm_dirs)expand(&r->tree_tmin,&r->tree_tmax,r->imm_tmin,r->imm_tmax,has);
     }
     unsigned done=0;
-    while(!rc && done<s.count){
+    while(!rc && done<s->count){
         int progressed=0;
-        for(unsigned i=0;i<s.count && !rc;i++){
-            struct dirty_dir *dir=&s.dirs[i];if(dir->done || dir->pending)continue;
+        for(unsigned i=0;i<s->count && !rc;i++){
+            struct dirty_dir *dir=&s->dirs[i];if(dir->done || dir->pending)continue;
             dir->done=1;done++;progressed=1;
-            struct dirty_dir *parent=dirty_find(&s,dir->node.link.parent);
+            struct dirty_dir *parent=dirty_find(s,dir->node.link.parent);
             if(parent){
                 struct efs_query_rollup *a=&parent->node.rollup,*b=&dir->node.rollup;
                 if(!parent->pending || UINT64_MAX-a->tree_bytes<b->tree_bytes){rc=EFS_ERR_PROTO;break;}
@@ -448,15 +451,15 @@ static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old
         }
         if(!progressed && !rc)rc=EFS_ERR_PROTO;
     }
-    if(s.changes_fd>=0){
-        close(s.changes_fd);
+    if(s->changes_fd>=0){
+        close(s->changes_fd);
         char path[EFS_MAX_PATH];int cleanup=filename(d,0,'c',path,sizeof(path));
         if(!cleanup && unlink(path))cleanup=EFS_ERR_IO;
         /* A leftover temporary file must not be published or uncharged. */
         if(cleanup)rc=cleanup;
-        else d->disk_bytes-=s.change_bytes;
+        else d->disk_bytes-=s->change_bytes;
     }
-    if(s.heap_bytes)free(s.dirs);
+    if(s->heap_bytes)free(s->dirs);
     uint64_t finished=query_build_clock();
     if(finished-started>=UINT64_C(1000000000))
         fprintf(stderr,"query-disk: incremental rc=%d ranges_ms=%llu nodes_ms=%llu edges_ms=%llu aliases_ms=%llu folds_ms=%llu changes=%llu dirs=%u\n",
@@ -465,6 +468,7 @@ static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old
             (unsigned long long)((edges_done-nodes_done)/1000000),
             (unsigned long long)((aliases_done-edges_done)/1000000),
             (unsigned long long)((finished-aliases_done)/1000000),
-            (unsigned long long)s.changes,s.count);
+            (unsigned long long)s->changes,s->count);
+    free(s);
     return rc;
 }

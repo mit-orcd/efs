@@ -1480,8 +1480,11 @@ all 1,638,400 cold payloads and exported paths, and human/default/JSON stats on
 all seven clients PASS at `254a4a295c66`. Overall follow-up acceptance is FAIL:
 full-catalog simultaneous seven-client queries still fail at `dcf0ae67`;
 all focused suites and human stats pass, but refreshes take 41–44 seconds and
-query tests time out at 30 seconds. Complete immutable stat-input comparisons
-are being qualified after profiling, without extending deadlines or quotas. Passing basic commands/pages/large deltas and all failing logs are retained.
+query tests time out at 30 seconds. The next stat-input candidate `90a1d2b8`
+passes prerequisites but crashes the actual 1MiB server worker stack. A heap
+scratch correction reproduces/fixes that failure in native and sanitized
+1MiB-stack oracles; committed-source live requalification is pending.
+Deadlines and quotas stay unchanged. Passing basic commands/pages/large deltas and all failing logs are retained.
 Orderly shutdown/remount and cold markers PASS after correcting startup readiness.
 Seven screen benchmarks remain cleanly stopped pending successful follow-up gates,
 then will resume with their existing files. Contended-write freshness and host
