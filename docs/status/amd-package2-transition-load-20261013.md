@@ -170,7 +170,7 @@ and unplanned-event repair are outside this package.
 
 ## W92 follow-up: sort scratch accounting and unchecked deletion
 
-**OPEN — implementation and focused regressions PASS; full candidate qualification pending.** Inspected
+**FIXED AND QUALIFIED on `d17f940f`; ORCD full-size acceptance remains OPEN.** Inspected
 `3409e0c6` product inputs (unchanged in documentation checkpoint `4afd1f7f`).
 `names_build` calls `unlink(a); unlink(b);` after a successful merge without
 checking either result. If removal fails, an input run can remain while later
@@ -229,6 +229,97 @@ passes with the new accounting and refuses QUOTA against product source
 3409e0c6. A concentrated single-directory fixture at those limits remains QUOTA
 on both sources, an expected admission control rather than a claimed fix.
 Raw logs remain outside Git under /data1/efs/package2-sort-*.log on AMD.
-Full normal/fault native, full-library sanitizers, deployment and mounted
-transition/retained-reader/next-refresh/load gates are NOTRUN on this new patch.
-Installed AMD daemons still use 3409e0c6. ORCD full-size acceptance remains OPEN.
+At the implementation checkpoint these broader gates were NOTRUN. They are now
+PASS on the exact committed candidate as recorded below; ORCD full-size
+acceptance remains OPEN.
+
+### Final checked-sort qualification — 2026-10-13
+
+**PASS on source `d17f940f8ceabd354e24506cc87af03ffa01b3cc`.** AMD currently runs
+this implementation. This closes the checked-sort cleanup/accounting follow-up,
+not global W92 or ORCD footprint/scale acceptance. This change reduces steady
+admission forecast and separately accounts for temporary sort bytes; it does
+not reduce the physical size of an already-built v6 generation or change its ABI.
+
+Environment: AMD-395, four `efs`-owned local daemons on 17432–17435, two FUSE
+mounts /data1/efs/mnt and mnt2; files/TCP/direct, client/server commands enabled,
+packing/containers/expiry/repair experiment disabled, persisted policy version 0
+mask 3. Query limits remain 16 GiB/generation and 32 GiB/root, no live overrides.
+Actual daemon arguments/environment and installed candidate binary hashes were
+checked. The synthetic data quota is now **17 GiB/node**: the first transition
+attempt refused startup at 18 GiB against a measured safe maximum 17.76 GiB.
+That attempt is retained as FAIL (before any transition assertion); lowering
+only the data quota restored service and the complete rerun passed.
+
+| Gate | Verdict on d17f940f |
+| --- | --- |
+| Full normal native `make test` | PASS, exit0 |
+| Full fault native `make EFS_FAULTS=1 test`, clean rebuild | PASS, exit0 |
+| Six query harnesses, complete supporting library ASan/UBSan/leak instrumented | PASS, exit0: disk, catalog, delta dirs, disk_io, policy, refresh |
+| Measured scratch peak, negative control and checked failure gates | PASS, including initial-run and merge-output close failures |
+| Same-budget 64-directory/3,000-file semantic fixture | PASS at 4/16 MiB; prior 3409 source QUOTA with same fixture |
+| Genuine v5 transition, immediate retirement, second refresh | PASS on both publishers: 66,585 rows;81,750,582→63,639,462 physical bytes each; old directories absent before restart, next 66,587-row refresh passes |
+| Retained reader during orderly nodes 1/2 quorum loss | PASS: 12 v1–v4 requests BUSY/no text; 811 retained bytes unchanged; restored old token STALE; 288-file/8-directory exact payload oracle passes |
+| Mounted commands, options and pages | PASS, all exit0; immutable FD, permissions, filtering and pinned pagination included |
+| Three quiet 8-writer/2-reader load rounds | PASS:all 25,486 256-byte peer payloads exact; each reader spans 7 generations; only expected BUSY/no text accepted |
+
+| Load round | Files verified | Count+bytes convergence(s) | Writer p99(ms) | Reader p99(ms), both readers |
+| --- | ---: | ---: | ---: | --- |
+| 1 | 8,438 | 1.780 | 63.09 | 109.84 /115.52 |
+| 2 | 9,488 | 0.629 | 27.24 | 114.60 /120.13 |
+| 3 | 7,560 | 0.918 | 64.45 | 95.65 /95.92 |
+
+Load admission remains 14 seconds, eight writers and two query readers; existing
+12/30-second command/future deadlines and 40×250ms count+bytes convergence loop
+are unchanged. These are functional short runs, not ORCD capacity/performance
+acceptance. The v5→v6 physical reduction above comes from the previously
+qualified compact v6 inode layout, not this new scratch-accounting change.
+
+Reproduce the full native/sanitizer commands above, substituting d17f940f for
+3409e0c6 and using a separate clean sanitizer workspace. Export this exact commit
+including real historical result link targets for documentation gates. Build
+normal candidate efsd/efs-fuse/efs-mgmt from the same source with explicit
+EFS_GIT_ID=d17f940f8ceabd354e24506cc87af03ffa01b3cc and matching version/branch.
+On the exclusive AMD `efs` account with prebuilt genuine 19b14609 baseline:
+
+```sh
+export EFS_CLUSTER=amd EFS_COMMANDS=1 EFS_COMMANDS_SERVER=1
+export EFS_PACKED_WRITES=0 EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0
+export EFS_TRANSPORT=tcp EFS_DIRECT_IO=1
+export EFS_QUERY_TEST_HOST=127.0.0.1 EFS_QUERY_TEST_PORT=17432
+python3 tests/measure/amd_query_cache_transition.py /data1/efs/package2-v5-src /data1/efs/amd-package2-src /data1/efs/transition-fresh
+python3 tests/measure/amd_query_authority_loss.py /data1/efs/quorum-fresh
+python3 tests/live/efs_commands.py /data1/efs/mnt /data1/efs/mnt2
+# Remove only the owned efs-options-gates fixture before rerunning its mkdir.
+python3 tests/live/efs_command_options.py /data1/efs/mnt /data1/efs/mnt2
+mkdir -p /data1/efs/pages-fresh
+python3 tests/live/efs_command_pages.py /data1/efs/mnt /data1/efs/mnt2 /data1/efs/pages-fresh
+for r in 1 2 3; do
+ EFS_QUERY_TEST_FIXTURE=fresh-load-$r python3 tests/live/efs_commands_load.py /data1/efs/mnt /data1/efs/mnt2
+done
+```
+
+Output directories and load fixture names must be new; retain deterministic
+lifecycle fixture until its full path/payload checks finish. Quorum controller
+restores daemons before checking mounts. Only owned synthetic fixtures may be
+cleaned afterwards; do not remove authoritative stores for transition testing.
+No old-data compatibility waiver is used as a substitute for these assertions.
+
+All 851 source/test inputs match across native, full-library sanitizer and live
+source; sorted JSON input manifest SHA256:
+244e4dad27a820e62ef57b79ba8eafaf5ab50a3969cfa774ed276a077fa56b9e.
+Candidate SHA256: efsd 8680c45315b749a5519e940b691402666b3f9a75a8be88ac55fa46cc0a53bfef;
+efs-fuse f17ec0dc1b9433a29564b5a785cc7deccf5346922d9cdf6f95e487660ce0c868;
+efs-mgmt 555a6cabe983150ad5104a44e70ba60fb476adc6b2f90a8e847e8e17a029729c.
+Raw logs/JSON stay outside Git on AMD under /data1/efs/package2-d17-*.
+Normal/fault/sanitizer log SHA256 respectively:
+e8f8c4c0c4f4d74e58cac4cec86ac8005783577700a860013a585bb69302ad55,
+2fdd400a41cb48a812ea06587e2b541bb4034058639e47200992e4fbd61b7d43,
+17ef659906f76e31911a3f9fc37975085c935d92fafc5c1f8b302bee300f227f.
+Transition2/result.json SHA256:
+cef95b64bef6312b74755bb683ec201fde2ff6c42a519f936d832b0ee36ac328;
+quorum/result.json SHA256:
+88615bfe87a042ea1a7b662456d9bf696ddabed10a0c3db873c02f5f44d80360.
+No raw run files are committed. No push, shared-devel modification or ORCD
+full-size/hardware acceptance is claimed. Newly integrated sources containing
+other fixes require their own exact-source qualification.

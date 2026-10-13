@@ -1494,6 +1494,14 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**PASS on 9b2fac55** — full normal/fault native, six full-library query sanitizers,
+clean-cluster transition/retained reader, commands/options/pages and three quiet
+load rounds (29,331 exact peer payloads). AMD now runs this enabled files/TCP/direct
+source, 17G data quota and unchanged 16/32 GiB query limits. Global W91/W92/W109
+remain OPEN: large-catalogue recursive-subtree continuation needs a bounded
+correctness fix; small AMD passes do not close ORCD's reported 30-second failures.
+
+[Query temporary-peak correctness](../status/query-sort-peak-correctness-20261013.md):
 `5f8ec779` checks sort cleanup and charges temporary copies only for their
 simultaneous lifetime, retaining unchanged16/32GiB limits and cache format.
 Bounded Linux query, quota/peak refusal, fault/cancellation, retained-reader,
@@ -1526,10 +1534,12 @@ clarification. Further Intel performance work is paused. Profilers restored OFF.
 W97/D30/W106 remain OPEN.
 
 [W92 sort scratch follow-up](../status/amd-package2-transition-load-20261013.md#w92-follow-up-sort-scratch-accounting-and-unchecked-deletion):
-OPEN: checked close/unlink/rename and explicit scratch accounting implemented;
-AMD measured-peak, negative-control and focused fault/quota regressions PASS.
-Full new-candidate native/sanitizer and mounted gates remain NOTRUN; deployed
-3409e0c6 evidence does not qualify this patch or ORCD full-size acceptance.
+FIXED/AMD-qualified on **d17f940f**: measured scratch peak/negative control,
+close/unlink/rename faults, full normal/fault native and six full-library query
+sanitizers PASS. Genuine transition/next refresh, retained reader, commands/pages
+and three quiet load rounds PASS (25,486 exact peer payloads). Current synthetic
+quota 17G/node; query 16/32 GiB unchanged. Global W92/ORCD full-size acceptance OPEN;
+other integrated source revisions need their own qualification.
 
 [AMD package 2 final functional handoff](../status/amd-package2-transition-load-20261013.md):
 **PASS on `3409e0c6`** — full normal/fault native, six full-library query
