@@ -960,3 +960,27 @@ and refuse delayed PUTs as STALE. Runs in buffered and direct modes on
 Linux. Test hook counters are atomic for concurrent actors. This new real
 storage case requires Linux native validation; local selector/sanitizer
 controls alone do not establish successful physical storage concurrency.
+
+
+Exact guard `c4c4bb024b2a0fd817e129b25a688cffe2de3173` (786 inputs)
+passed both-host affected native controls including real same-shard GC in
+buffered/direct and file-mode guard race controls. External runner initially
+passed the file-control pathname as a meta_apply argument; corrected and
+explicitly ran the file-control binary on both hosts, both PASS before deploy.
+All source inputs match at deployment. Intel1 efsd
+`3cd00044ceddccf2496f9d315326fc6b6c7c3d329d23a9db8805b581510b3de0`,
+FUSE `49bd326c3145faa7c1b8de51213c2a974044c6a1e6f2fade90d3fd8198608993`;
+Intel2 efsd `9d54ea7a46bf495ae085a52840a90996bb39fa8c4e56edf49d94212c50b3ce53`,
+FUSE `56e758f621be19dd54c4e77ec87ca812acde7467377d3150c0117a5c98c1c6bc`.
+
+Seven-client full **1497/1512 PASS,15 FAIL**, no NOTRUN: deep60 and crazy
+directories all seven, deep100 one;110.677–132.791s. Immediate physical
+**PASS164.183s**, all-zero at164.158, original180 deadline. Initial ordinary
+mappings27852/27764/27808/27847; allocated bodies1937412096/1932292096/
+1933938688/1938317312 bytes. This closes that physical gate for this
+failed-directory full load; it does not establish a completely passing full
+workload or qualify a later source. Quiet core432/432 PASS (56.569/57.601s),
+peer134/134 PASS (39.466/42.766s), private mmap PASS/shared-write ENODEV
+skips. Lifecycle/tiny/restart/cold/final observer still running. Directory
+acceptance remains open; next work is targeted diagnostics without changing
+case deadlines, client count, fresh authority or namespace cache coherence.
