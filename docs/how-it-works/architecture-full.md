@@ -1626,6 +1626,8 @@ and unplanned-event repair/recovery remain outside the current profile.
 
 ## Project status — current work and index
 
+**Proposed health features:** [W115 storage-location availability](#w115--storage-location-availability-and-failure-domain-inventory), [W116 verified data redundancy](#w116--verified-byte-weighted-data-redundancy-coverage), [W117 portal protection charts](#w117--portal-protection-breakdown-and-failure-scenario-comparison). Hardware availability is separate from logical-byte protection. Scenario percentages are models, not ORCD measurements; implementation/acceptance NOTRUN.
+
 **Historical experimental work, superseded by package 3; fixture stopped:** [Intel container sprint](../status/container-intel-sprint.md), `devel-container`, containers/TCP/direct; `.efs`, expiry-date and packing OFF. Latest exact tested/deployed product **9145b7a3**: container native/sanitizers/runtime, ownership12/12 and all15 normal gates complete. Concurrent **1510/1512 PASS**; deep-directory30s timeouts remain on Intel1client3 and Intel2client2, other five clients216/216 PASS. Immediate physical113.767s/final8.983s and all quiet432/peer134/lifecycle/tiny/restart/cold gates PASS (shared mmap ENODEV skip). Loaded acceptance FAIL; one-run improvement does not close W100. Historical --deepsteps cleanup attribution is withdrawn: observer capability wrapping selected pathname-based rmtree. Capability-preserving descriptor observer committed as `1c86ac81286e3d21030a1e2a011678f5c80d9a21`: local regression checks PASS; Intel build, deployment and corrected diagnostic rerun NOTRUN; normal1510/1512 is unaffected; no release promotion.
 **Mac checkpoint committed; native qualification remains open:** implementation `32f71f27`, full regression PASS; latest native **213/216**, three small-file timeouts, best fresh 214/216. Current-source persistence **27/27 prepare + 27/27 verify** after clean same-store restart PASS. Proposed 64-entry durable-ancestry cache is **undeployed**, awaiting approval and real-storage safety gates. [Results and small-file durability investigation](../status/mac-v032-posix-20261012.md).
 
@@ -8098,6 +8100,101 @@ occurring at different times. Demonstrate retries and replication do not inflate
 client totals. Validate direct/TCP first; extend transport/mode coverage only if
 the implementation touches those paths. No implementation or performance claim
 is made by this discussion note.
+
+
+### W115 · Storage-location availability and failure-domain inventory
+
+**Status:** proposed feature; implementation/acceptance NOTRUN. Requested
+October 13, 2026; initial ORCD topology: four nodes, six storage locations/node.
+Documentation only; no failure injection, automatic repair or rollout.
+
+Report stable storage identities, owning node, capacity, availability and last
+observation for each location. Distinguish available, failed/unavailable,
+read-only/unhealthy and unknown/stale; an up daemon does not prove all its paths
+are working. Identify shared physical devices: 24 paths need not be 24 independent
+failure domains. Keep location-count and capacity-weighted availability separate.
+
+24/24 online is 100% location availability; 23/24 is 95.8%; losing one six-drive
+node leaves 18/24 (75%). None of these is parity coverage or a safe-loss budget.
+An unavailable drive/node is not necessarily permanently destroyed.
+
+**Gates:** individual-drive failure with the node alive, whole-node outage,
+missing/stale probes, duplicate device/path identities, unequal capacities and
+recovery. Start with read-only reporting; fencing/re-placement policy remains
+separate. Supplies observations to W116/W117; W99 still owns capacity protection.
+
+### W116 · Verified byte-weighted data redundancy coverage
+
+**Status:** proposed feature; implementation, physical inventory and live gates
+NOTRUN. Node/capacity status and healing progress currently do not supply this
+verified global percentage. Experimental repair prerequisites are not that metric.
+
+Ordinary EFS 2+1 uses three fragment roles on three distinct nodes; any two valid
+roles reconstruct a chunk. A fourth node adds placement capacity, not a second
+parity role. Classify authoritative live logical payload bytes into:
+
+- Fully protected: three accessible checksum-valid roles; one further role loss tolerable.
+- Readable, degraded: two valid roles; no remaining fragment-loss margin.
+- Unavailable: at most one valid role; not proof of permanent loss.
+- Unknown/unverified: incomplete, stale or inconsistent authority/inventory.
+
+Weight by logical payload bytes, not drives, file counts, physical fragment bytes
+or nominal capacity. Define sparse-hole treatment and the denominator explicitly;
+report verified versus total materialized live bytes. Include all required base,
+delta and fold dependencies; a healthy base cannot hide a missing published delta.
+Unused capacity is separate. Unknown bytes must not silently count as healthy.
+
+Use bounded authoritative enumeration with a coherent generation/cut, physical
+placement and integrity verification, durable store identities, scan progress and
+observation age. Placement/liveness alone can supply only an explicitly labeled
+estimate. Extra copies do not create extra independent roles. Revalidate after
+concurrent publication/deletion/repair or root reincarnation; avoid unbounded RAM
+and a full scrub on every portal poll. Do not imply automatic repair activation.
+
+Keep data coverage separate from Raft quorum, service/read/write availability,
+write admission, hardware health and repair progress. Metadata may be unavailable
+while fragments remain reconstructable. No arbitrary percentage of drives is
+safe to lose: two missing roles of the same chunk exceed its redundancy.
+
+**Gates:** known-size fixtures with 3/2/1/0 roles, corrupt/missing roles, failed or
+short probes, version races, duplicate copies, unequal root usage, sparse/overlay
+content, restarts, partial scans and stale results. Byte categories must partition
+the measured data correctly; restore protection only after verified durable
+rebuild. Preserve W71/W75 and read-authority/repair contracts; none close here.
+
+### W117 · Portal protection breakdown and failure-scenario comparison
+
+**Status:** proposed feature/mockup; implementation/measured ORCD health NOTRUN.
+Depends on W115/W116. Show separate storage availability and a compact pie/donut
+of protected, readable-degraded, unavailable and unknown logical bytes. Include
+percentages, human-friendly bytes, verified age and inventory coverage. Label
+estimates versus verified measurements; keep metadata quorum and repair progress
+separate. Do not present one overall health score or a safe-drive-loss allowance.
+
+Illustrative pre-repair model only: four nodes, six equal independent drives/node,
+uniform equal-byte groups on all three-of-four node placements and six drive
+choices/node, all three roles initially valid. Not observed ORCD values:
+
+| Failure | Drives online | Fully protected | Readable, degraded | Unavailable |
+| --- | ---: | ---: | ---: | ---: |
+| None | 24/24 (100%) | 100% | 0% | 0% |
+| One drive | 23/24 (95.8%) | 87.5% | 12.5% | 0% |
+| Three drives on one node | 21/24 (87.5%) | 62.5% | 37.5% | 0% |
+| One drive on each of three nodes | 21/24 (87.5%) | 66.55% | 29.51% | 3.94% |
+| One node | 18/24 (75%) | 25% | 75% | 0% |
+| Two nodes | 12/24 (50%) | 0% | 50% | 50% |
+
+Reproduce by enumerating four three-node subsets and 6^3 root assignments each
+(864 equal-weight groups). Fail drive indices below f[n], with vectors
+[0,0,0,0], [1,0,0,0], [3,0,0,0], [1,1,1,0], [6,0,0,0], [6,6,0,0]; classify by
+0/1/2-or-more missing roles. Actual placement, uneven usage, corruption,
+incomplete third writes and rebuilds change the results. These are data-byte
+coverage charts, not whole-file recovery or metadata/client availability.
+
+**Gates:** deterministic model/chart calculations, byte/percentage formatting,
+accessible labels, unknown/partial/stale inventories, identical drive counts with
+different failure domains, and verified rebuild transitions. Measured ORCD
+protection claims require W116 evidence first.
 
 
 ## Appendix 5 — Naming
